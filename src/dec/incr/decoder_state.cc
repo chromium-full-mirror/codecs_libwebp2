@@ -40,6 +40,8 @@ void Decoder::State::Rewind(bool output_buffer_changed) {
   skip_final_frames_before_index = 0;
   discard_frames_before_index = 0;
   // Keep the glimpsed frame position and the already decoded frame features.
+  // Note: progress.Rewind() returns a WP2Status so it cannot be called here.
+  //       It is handled in Decoder::DecodeAvailableData() instead.
 }
 
 void DecoderStateArray::Rewind(bool output_buffer_changed) {

@@ -46,11 +46,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   // Extract a random config.
   // Encoding settings are limited to guarantee a reasonable test duration.
-  const bool use_fast_config = (original.width > 64 || original.height > 64);
+  const bool use_fast_config =
+      (original.width() > 64 || original.height() > 64);
   const bool use_advanced_config = params.ExtractBool();
 
   WP2::EncoderConfig config;
-  params.ExtractSimpleConfig(/*max_speed=*/use_fast_config ? 1 : 4, &config);
+  params.ExtractSimpleConfig(/*max_effort=*/use_fast_config ? 1 : 4, &config);
   if (use_advanced_config) {
     params.ExtractAdvancedConfig(use_fast_config, &config);
   }

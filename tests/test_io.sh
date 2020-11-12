@@ -57,7 +57,7 @@ check_roundtrip() {
   echo "=== $1 ==="
   min_psnr=$2
   min_msssim=$3
-  do_cmd ${CWP2} "${1}" $4 -o "${TMP_WP2}" -psnr -short -speed 0
+  do_cmd ${CWP2} "${1}" $4 -o "${TMP_WP2}" -psnr -short -effort 0
   for fmt in ${formats_to_test}; do
     do_cmd ${DWP2} -quiet -v "${TMP_WP2}" -${fmt} -o "${TMP_IMG}.${fmt}"
     if [ "x${fmt}" != "xppm" ]; then

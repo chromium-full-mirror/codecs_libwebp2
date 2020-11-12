@@ -22,13 +22,14 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "tests/include/helpers.h"
+#include "tests/fuzz/fuzz_utils.h"
 
 namespace WP2 {
 namespace testing {
 
 int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
                       const std::vector<uint32_t>& durations_ms,
-                      uint32_t loop_count, const EncoderConfig& config,
+                      bool loop_forever, const EncoderConfig& config,
                       bool compare_after_decoding, float expected_distortion) {
   // std::cerr << config << std::endl;  // Uncomment to print config
   if (!config.IsValid()) abort();
@@ -45,7 +46,7 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
   // Encode with a reasonable config, without diving into detailed settings.
   MemoryWriter memory_writer;
   const WP2Status encoder_status =
-      animation_encoder.Encode(&memory_writer, config, (uint8_t)loop_count);
+      animation_encoder.Encode(&memory_writer, config, loop_forever);
   if (encoder_status != WP2_STATUS_OK) abort();
 
   // Verify that it decodes fine and that the result is close enough.
@@ -73,7 +74,7 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
       }
 
       // Tiny frames are not interesting to compare.
-      if (original_frames[i].width * original_frames[i].height >= 64 &&
+      if (original_frames[i].width() >= 8 && original_frames[i].height() >= 8 &&
           !Compare(original_frames[i], decoded_unoriented, "anim",
                    expected_distortion)) {
         // Uncomment to save the original and decoded frames as PNG files.

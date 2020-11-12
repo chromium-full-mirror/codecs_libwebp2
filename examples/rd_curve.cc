@@ -94,9 +94,9 @@ static void PrintHelpAndExit(int return_code) {
   opt.Add(" rd_curve [options] input_file");
   opt.Add("");
   opt.Add("Options:");
-  opt.Add("-speed", SPrintf("quality/speed trade-off "
-                            "(0 = fast .. 9 = slow, default = %d)",
-                            kDefaultConfig.speed));
+  opt.Add("-effort", SPrintf("quality/speed trade-off "
+                             "(0 = fast .. 9 = slow, default = %d)",
+                             kDefaultConfig.effort));
   opt.Add("-tile_shape <int>",
           SPrintf("tile shape (0=128, 1=256, 2=512, 3=wide, default = %d)",
                   kDefaultConfig.tile_shape));
@@ -197,7 +197,7 @@ class Task : public WP2::Worker {
         break;
     }
     // finish up
-    bpp_ = 8. * size_ / (ref_->width * ref_->height);
+    bpp_ = 8. * size_ / (ref_->width() * ref_->height());
 
     // compute distortions
     float values[5];
@@ -338,7 +338,7 @@ void Task::CompressWebP(WP2::ArgbBuffer* const decoded) {
   EXIT_IF_FALSE(WebPConfigPreset(&config, WEBP_PRESET_DEFAULT, params_.q),
                 "Can't initialize WebP. Wrong library version?");
   if (params_.use_mt) ++config.thread_level;
-  config.method = (params_.config.speed * 6 + 4) / 9;
+  config.method = (params_.config.effort * 6 + 4) / 9;
   config.segments = params_.config.segments;
   config.sns_strength = params_.config.sns;
   config.pass = params_.config.pass;
@@ -370,7 +370,7 @@ void Task::CompressAV1(WP2::ArgbBuffer* const decoded) {
   p.quality = params_.q;
   p.use_yuv444 = (params_.config.uv_mode == WP2::EncoderConfig::UVMode444);
   if (params_.config.thread_level > 1) p.threads = 4;
-  p.speed = params_.config.speed;
+  p.effort = params_.config.effort;
   p.pass = (params_.config.pass > 1) ? 2 : 1;
 
   std::string out;
@@ -389,9 +389,9 @@ void Task::CompressJPEG(WP2::ArgbBuffer* const decoded) {
 #if defined(WP2_HAVE_SJPEG)
   sjpeg::EncoderParam param;
   param.SetQuality(params_.q);
-  param.use_trellis = (params_.config.speed >= 3);
-  param.adaptive_quantization = (params_.config.speed >= 2);
-  param.Huffman_compress = (params_.config.speed >= 1);
+  param.use_trellis = (params_.config.effort >= 3);
+  param.adaptive_quantization = (params_.config.effort >= 2);
+  param.Huffman_compress = (params_.config.effort >= 1);
   param.yuv_mode =
       (params_.config.uv_mode == WP2::EncoderConfig::UVMode444)
           ? SJPEG_YUV_444
@@ -399,14 +399,14 @@ void Task::CompressJPEG(WP2::ArgbBuffer* const decoded) {
                 ? SJPEG_YUV_420
                 : params_.use_sharp_yuv ? SJPEG_YUV_SHARP : SJPEG_YUV_AUTO;
 
-  const uint32_t w = ref_->width;
-  const uint32_t h = ref_->height;
+  const uint32_t w = ref_->width();
+  const uint32_t h = ref_->height();
   const size_t stride = 3 * w;
   // Extract RGB
   WP2::Vector_u8 rgb;
   EXIT_IF_FALSE(rgb.resize(stride * h), "Malloc failure for rgb[]");
   for (uint32_t y = 0; y < h; ++y) {
-    const uint8_t* const row = (const uint8_t*)ref_->GetRow(y);
+    const uint8_t* const row = ref_->GetRow8(y);
     for (uint32_t x = 0; x < w; ++x) {
       rgb[y * stride + 3 * x + 0] = row[4 * x + 1];
       rgb[y * stride + 3 * x + 1] = row[4 * x + 2];
@@ -497,8 +497,8 @@ class TextOutputWriter : public OutputWriter {
   }
 
   void End() override {
-    report_ += SPrintf("# params: qmin:%.1f qmax:%.1f speed:%d\n\n",
-                       params_.qmin, params_.qmax, params_.config.speed);
+    report_ += SPrintf("# params: qmin:%.1f qmax:%.1f effort:%d\n\n",
+                       params_.qmin, params_.qmax, params_.config.effort);
   }
 };
 
@@ -582,8 +582,8 @@ class HtmlOutputWriter : public OutputWriter {
 
   void End() override {
     report_ += "</table>\n";
-    report_ += SPrintf("# params: qmin:%.1f qmax:%.1f speed:%d\n\n",
-                       params_.qmin, params_.qmax, params_.config.speed);
+    report_ += SPrintf("# params: qmin:%.1f qmax:%.1f effort:%d\n\n",
+                       params_.qmin, params_.qmax, params_.config.effort);
     report_ += "</p></body></html>\n";
   }
 };
@@ -652,8 +652,8 @@ class GnuplotOutputWriter : public OutputWriter {
   }
 
   void End() override {
-    report_ += SPrintf("# params: qmin:%.1f qmax:%.1f speed:%d\n\n",
-                       params_.qmin, params_.qmax, params_.config.speed);
+    report_ += SPrintf("# params: qmin:%.1f qmax:%.1f effort:%d\n\n",
+                       params_.qmin, params_.qmax, params_.config.effort);
     report_ += "EOF\n";
     report_ += "gnuplot /tmp/cmd.tmp\n";
     if (!params_.quiet) report_ += "feh /tmp/rd-curve.png\n";
@@ -773,8 +773,8 @@ static int RdCurveMain(int argc, char* argv[], std::string* output_str) {
     bool parse_error = false;
     if (!strcmp(argv[c], "-h") || !strcmp(argv[c], "-help")) {
       PrintHelpAndExit(0);
-    } else if (!strcmp(argv[c], "-speed") && c + 1 < argc) {
-      params.config.speed = ExUtilGetInt(argv[++c], &parse_error);
+    } else if (!strcmp(argv[c], "-effort") && c + 1 < argc) {
+      params.config.effort = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-tile_shape") && c + 1 < argc) {
       params.config.tile_shape =
           (WP2::TileShape)ExUtilGetInt(argv[++c], &parse_error);
@@ -918,14 +918,14 @@ static int RdCurveMain(int argc, char* argv[], std::string* output_str) {
                 "Error! Cannot read input picture file '%s'",
                 params.in_file.c_str());
 
-  ref.metadata.Clear();  // remove metadata for the test
+  ref.metadata_.Clear();  // remove metadata for the test
   if (crop) {
     EXIT_IF_ERROR(ref.SetView(ref, crop_area), "Cropping operation failed.");
   }
   if (convert_to_gray) {
-    for (uint32_t y = 0; y < ref.height; ++y) {
-      uint8_t* const row = (uint8_t*)ref.GetRow(y);
-      for (uint32_t x = 0; x < ref.width; ++x) {
+    for (uint32_t y = 0; y < ref.height(); ++y) {
+      uint8_t* const row = ref.GetRow8(y);
+      for (uint32_t x = 0; x < ref.width(); ++x) {
         const uint32_t r = row[4 * x + 1];
         const uint32_t g = row[4 * x + 2];
         const uint32_t b = row[4 * x + 3];
@@ -939,7 +939,7 @@ static int RdCurveMain(int argc, char* argv[], std::string* output_str) {
     EXIT_IF_FALSE(WP2ReadPartition(partition_file_path, /*read_only=*/false,
                                    &params.force_partition),
                   "Error: Unable to parse partition file");
-    WP2ConvertPartition(ref.width, ref.height, params.config.partition_set,
+    WP2ConvertPartition(ref.width(), ref.height(), params.config.partition_set,
                         /*ignore_invalid=*/true, &params.force_partition);
   }
 

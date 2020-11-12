@@ -40,8 +40,8 @@ uint32_t GetDisto(const ArgbBuffer& left, const ArgbBuffer& right,
                   const Rectangle& window) {
   uint64_t disto_per_channel[4] = {0, 0, 0, 0};
   for (uint32_t y = 0; y < window.height; ++y) {
-    const uint8_t* const ptr1 = (const uint8_t*)left.GetRow(window.y + y);
-    const uint8_t* const ptr2 = (const uint8_t*)right.GetRow(window.y + y);
+    const uint8_t* const ptr1 = left.GetRow8(window.y + y);
+    const uint8_t* const ptr2 = right.GetRow8(window.y + y);
     WP2SumSquaredError4x8u(&ptr1[window.x * 4], &ptr2[window.x * 4],
                            window.width, disto_per_channel);
   }
@@ -53,11 +53,11 @@ bool HasOnlyOneColor(const ArgbBuffer& input, uint32_t i, uint32_t j) {
   const uint32_t first_pix =
       ((uint32_t*)input.GetRow(j * kScreenBlockSize))[i * kScreenBlockSize];
   for (uint32_t y = 0; y < kScreenBlockSize; ++y) {
-    if (j * kScreenBlockSize + y >= input.height) break;
+    if (j * kScreenBlockSize + y >= input.height()) break;
     const uint32_t* const row =
         (uint32_t*)input.GetRow(j * kScreenBlockSize + y);
     for (uint32_t x = 0; x < kScreenBlockSize; ++x) {
-      if (i * kScreenBlockSize + x >= input.width) break;
+      if (i * kScreenBlockSize + x >= input.width()) break;
       const uint32_t pix = row[i * kScreenBlockSize + x];
       if (pix != first_pix) return false;
     }
@@ -80,16 +80,16 @@ WP2Status GetScores(const EncoderConfig& config, const ArgbBuffer& input,
   WP2_CHECK_STATUS(
       Decode(memory_writer.mem_, memory_writer.size_, &output, dec_config));
 
-  const uint32_t block_height = DivCeil(input.height, kScreenBlockSize);
-  const uint32_t block_width = DivCeil(input.width, kScreenBlockSize);
+  const uint32_t block_height = DivCeil(input.height(), kScreenBlockSize);
+  const uint32_t block_width = DivCeil(input.width(), kScreenBlockSize);
   WP2_CHECK_STATUS(scores->Resize(block_width, block_height));
   scores->Fill(0.f);
   for (uint32_t y = 0; y < block_height; ++y) {
     for (uint32_t x = 0; x < block_width; ++x) {
       const Rectangle window{
           x * kScreenBlockSize, y * kScreenBlockSize,
-          std::min(kScreenBlockSize, input.width - x * kScreenBlockSize),
-          std::min(kScreenBlockSize, input.height - y * kScreenBlockSize)};
+          std::min(kScreenBlockSize, input.width() - x * kScreenBlockSize),
+          std::min(kScreenBlockSize, input.height() - y * kScreenBlockSize)};
 
       for (uint32_t j = 0; j < window.height; ++j) {
         for (uint32_t i = 0; i < window.width; i++) {
@@ -184,8 +184,8 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input, Writer* const output,
   if (config.quality > kMaxLossyQuality || config.quality <= 50) {
     return Encode(input, output, config);
   }
-  const uint32_t block_width = DivCeil(input.width, kScreenBlockSize);
-  const uint32_t block_height = DivCeil(input.height, kScreenBlockSize);
+  const uint32_t block_width = DivCeil(input.width(), kScreenBlockSize);
+  const uint32_t block_height = DivCeil(input.height(), kScreenBlockSize);
   // Empirical value. TODO(maryla): tune.
   const float lambda = std::max(85.f, -42.f * config.quality + 3400.f);
 
@@ -246,9 +246,9 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input, Writer* const output,
     for (uint32_t x = 0; x < block_width; ++x) {
       const bool lossy = is_lossy.At(x, y);
       const uint32_t w =
-          std::min(input.width - x * kScreenBlockSize, kScreenBlockSize);
+          std::min(input.width() - x * kScreenBlockSize, kScreenBlockSize);
       for (uint32_t j = 0; j < kScreenBlockSize; ++j) {
-        if (y * kScreenBlockSize + j >= input.height) break;
+        if (y * kScreenBlockSize + j >= input.height()) break;
         uint8_t* lossless_row = (uint8_t*)(lossless_subframe.rgb_pixels.GetRow(
             y * kScreenBlockSize + j));
         uint8_t* lossy_row = (uint8_t*)(lossy_subframe.rgb_pixels.GetRow(
@@ -265,13 +265,13 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input, Writer* const output,
   }
 
   const bool has_alpha = input.HasTransparency();
-  const bool has_icc = (input.metadata.iccp.size > 0);
+  const bool has_icc = (input.metadata_.iccp.size > 0);
   const bool has_trailing_data =
-      (input.metadata.xmp.size > 0) || (input.metadata.exif.size > 0);
-  WP2_CHECK_STATUS(EncodeHeader(config, input.width, input.height, has_alpha,
-                                /*is_anim=*/true, /*loop_count=*/1,
-                                kTransparentArgb38b, GetPreviewColor(input),
-                                has_icc, has_trailing_data, output));
+      (input.metadata_.xmp.size > 0) || (input.metadata_.exif.size > 0);
+  WP2_CHECK_STATUS(EncodeHeader(
+      config, input.width(), input.height(), has_alpha, /*is_anim=*/true,
+      /*loop_forever=*/false, kDefaultBackgroundColor, GetPreviewColor(input),
+      has_icc, has_trailing_data, output));
 
   SubframeEncoder frame_encode(GetQualityHint(config.quality), has_alpha);
   WP2_CHECK_STATUS(frame_encode.EncodeSubframe(lossless_config,

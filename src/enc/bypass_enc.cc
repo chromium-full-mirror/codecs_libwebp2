@@ -17,6 +17,7 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
+#include "src/common/header_enc_dec.h"
 #include "src/dec/tile_dec.h"
 #include "src/dsp/math.h"
 #include "src/enc/wp2_enc_i.h"
@@ -47,7 +48,7 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
           WP2_CHECK_ALLOC_OK(output->Append((void*)&row[x * 4 + 1], 3));
         }
       }
-      row += tile->rgb_input.stride;
+      row += tile->rgb_input.stride();
     }
     // TODO(yguyon): Simulate ANSDebugPrefix to count these raw bytes?
   } else {
@@ -60,8 +61,7 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
     Data data;
     WP2_CHECK_STATUS(data.Resize(max_num_bytes, /*keep_bytes=*/false));
     // Use a HeaderEnc instance to easily pack sample bits (e.g. 10 by 10).
-    HeaderEnc bit_packer(data.bytes, data.size);
-    bit_packer.SetDebugPrefix("raw_px");
+    HeaderEnc bit_packer(data.bytes, data.size, "raw_pixels");
 
     for (uint32_t y = 0; y < tile->rect.height; ++y) {
       // Interleave channels to output samples line by line.

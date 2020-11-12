@@ -407,7 +407,7 @@ TEST(LargePredictors, AlphaPredictors) {
   rgb.Fill(/*window=*/{2, 2, 2, 2}, Argb32b{0, 0, 0, 0});
   YUVPlane yuv;
   ASSERT_WP2_OK(
-      yuv.Import(rgb, /*import_alpha=*/false, csp, /*resize_if_needed=*/true));
+      yuv.Import(rgb, /*import_alpha=*/true, csp, /*resize_if_needed=*/true));
   ContextCache context_cache;
   cb.SetContextInput(yuv, &context_cache);
 

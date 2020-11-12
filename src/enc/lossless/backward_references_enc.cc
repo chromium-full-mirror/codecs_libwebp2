@@ -203,30 +203,30 @@ static inline uint32_t GetPixPairHash64(const int16_t argb[8],
 }
 
 // Returns the maximum number of hash chain lookups to do for a
-// given compression speed. Return value in range [45, 126].
+// given compression effort. Return value in range [45, 126].
 // TODO(vrabaud) re-adjust those values and have a different logic (the number
 // of iteration does not necessarily matter as much as the number of lines)
-static int GetMaxItersForSpeed(int speed) {
-  return (speed == 3) ? 8 + 20 * 20 / 128 :
-         (speed == 5) ? 8 + 75 * 75 / 128 : 45 + speed * speed;
+static int GetMaxItersForSpeed(int effort) {
+  return (effort == 3) ? 8 + 20 * 20 / 128 :
+         (effort == 5) ? 8 + 75 * 75 / 128 : 45 + effort * effort;
 }
 
-static uint32_t GetWindowSizeForHashChain(int speed, uint32_t width,
+static uint32_t GetWindowSizeForHashChain(int effort, uint32_t width,
                                           const uint32_t window_size) {
-  const uint32_t max_window_size = (speed >= 7) ? window_size
-                                 : (speed >= 5) ? (width << 8)
-                                 : (speed >= 3) ? (width << 6)
+  const uint32_t max_window_size = (effort >= 7) ? window_size
+                                 : (effort >= 5) ? (width << 8)
+                                 : (effort >= 3) ? (width << 6)
                                  : (width << 4);
   assert(width > 0);
   return std::min(max_window_size, window_size);
 }
 
-WP2Status HashChain::Fill(int speed, const int16_t* const argb, uint32_t width,
+WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
                           uint32_t height) {
   const int size = width * height;
-  const int iter_max = GetMaxItersForSpeed(speed);
+  const int iter_max = GetMaxItersForSpeed(effort);
   const uint32_t window_size =
-      GetWindowSizeForHashChain(speed, width, kMaxLZ77Distance);
+      GetWindowSizeForHashChain(effort, width, kMaxLZ77Distance);
   int pos;
   // Temporarily use the offset_length_ as a hash chain.
   auto chain = reinterpret_cast<int32_t*>(offset_length_.data());
@@ -315,7 +315,7 @@ WP2Status HashChain::Fill(int speed, const int16_t* const argb, uint32_t width,
     uint32_t max_base_position;
 
     pos = chain[base_position];
-    if (speed > 0) {
+    if (effort > 0) {
       uint32_t curr_length;
       // Heuristic: use the comparison with the above line as an initialization.
       if (base_position >= width) {
@@ -695,13 +695,13 @@ WP2Status BackwardRefsWithLocalCache(const int16_t* const argb,
 // Evaluate optimal cache bits for the local color cache.
 // The input *best_cache_bits sets the maximum cache bits to use (passing 0
 // implies disabling the local color cache). The local color cache is also
-// disabled for the lower (<= 3) speed.
+// disabled for the lower (<= 3) effort.
 static WP2Status CalculateBestCacheConfig(
-    uint32_t width, const int16_t* const argb, uint32_t num_pixels, int speed,
+    uint32_t width, const int16_t* const argb, uint32_t num_pixels, int effort,
     const BackwardRefs& refs_in, BackwardRefsPool* const ref_pool,
     uint32_t cache_bits_max, const LosslessSymbolsInfo& symbols_info,
     CacheConfig* const cache_config) {
-  if (speed <= 3 || cache_bits_max == 0) {
+  if (effort <= 3 || cache_bits_max == 0) {
     cache_config->type = CacheType::kNone;
     cache_config->cache_bits = 0;
     return WP2_STATUS_OK;
@@ -841,7 +841,7 @@ extern WP2Status BackwardReferencesTraceBackwards(
     const CacheConfig& cache_config, const BackwardRefs& refs_src,
     BackwardRefs* const refs_dst, bool* const check_histogram);
 static WP2Status GetBackwardReferencesImpl(
-    uint32_t width, uint32_t height, const int16_t* const argb, int speed,
+    uint32_t width, uint32_t height, const int16_t* const argb, int effort,
     int lz77_types_to_try, uint32_t cache_bits_max, const HashChain& hash_chain,
     const LosslessSymbolsInfo& symbols_info, CacheConfig* const cache_config,
     BackwardRefsPool* ref_pool, BackwardRefsPool::RefsPtr* const refs_best) {
@@ -898,7 +898,7 @@ static WP2Status GetBackwardReferencesImpl(
     symbols_info_tmp.SetNumClusters(/*num_clusters=*/1);
     CacheConfig cache_config_tmp;
     WP2_CHECK_STATUS(CalculateBestCacheConfig(
-        width, argb, num_pixels, speed, *refs_tmp, ref_pool, cache_bits_max,
+        width, argb, num_pixels, effort, *refs_tmp, ref_pool, cache_bits_max,
         symbols_info_tmp, &cache_config_tmp));
     if (cache_config_tmp.type != CacheType::kNone) {
       symbols_info_tmp.SetCacheRange(GetColorCacheRange(cache_config_tmp));
@@ -912,9 +912,9 @@ static WP2Status GetBackwardReferencesImpl(
     WP2_CHECK_STATUS(GetStorageCost(width, *refs_tmp, symbols_info_tmp,
                                     num_pixels, &bit_cost));
 
-    // Improve on simple LZ77 but only for high speed (TraceBackwards is
+    // Improve on simple LZ77 but only for high effort (TraceBackwards is
     // costly).
-    if ((lz77_type == kLZ77Standard || lz77_type == kLZ77Box) && speed >= 3) {
+    if ((lz77_type == kLZ77Standard || lz77_type == kLZ77Box) && effort >= 3) {
       const HashChain& hash_chain_tmp =
           (lz77_type == kLZ77Standard) ? hash_chain : hash_chain_box;
       auto refs_tmp_trace = ref_pool->GetFreeBackwardRefs();
@@ -951,18 +951,18 @@ static WP2Status GetBackwardReferencesImpl(
 }
 
 WP2Status GetBackwardReferences(
-    uint32_t width, uint32_t height, const int16_t* const argb, int speed,
+    uint32_t width, uint32_t height, const int16_t* const argb, int effort,
     int lz77_types_to_try, uint32_t cache_bits_max, const HashChain& hash_chain,
     const LosslessSymbolsInfo& symbols_info, CacheConfig* const cache_config,
     BackwardRefsPool* const ref_pool, BackwardRefsPool::RefsPtr* const refs) {
-  if (speed == 0) {
+  if (effort == 0) {
     cache_config->type = CacheType::kNone;
     cache_config->cache_bits = 0;
     return GetBackwardReferencesLowEffort(width, height, argb, hash_chain,
                                           ref_pool, refs);
   } else {
     return GetBackwardReferencesImpl(
-        width, height, argb, speed, lz77_types_to_try, cache_bits_max,
+        width, height, argb, effort, lz77_types_to_try, cache_bits_max,
         hash_chain, symbols_info, cache_config, ref_pool, refs);
   }
 }

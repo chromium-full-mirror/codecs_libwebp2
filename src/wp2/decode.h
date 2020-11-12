@@ -47,14 +47,14 @@ struct BitstreamFeatures {
   bool has_preview;          // True if the bitstream has a preview image
                              // (irrespective of the preview color).
 
-  RGB12b preview_color{0xFu, 0xFu, 0xFu};  // Average color in RGB444 format.
+  RGB12b preview_color;      // Average color in RGB444 format.
   uint32_t quality_hint;     // Encoding quality setting.
 
   bool has_icc;              // Indicates the presence of ICC information.
   bool has_trailing_data;    // Trailing data is present (XMP, EXIF, ...).
   TransferFunction transfer_function;
 
-  uint8_t loop_count;        // Number of loops for animation (0 = infinite).
+  bool loop_forever;         // Play once if false, forever if true (anim only).
   Argb38b background_color;  // Color to dispose the canvas with (anim only).
 
   size_t header_size;  // Byte size of header without preview and ICC chunks.
@@ -77,7 +77,8 @@ struct BitstreamFeatures {
 // For animations.
 struct FrameFeatures {
   uint32_t duration_ms = 0;  // Milliseconds during which this frame is visible.
-  Rectangle window;          // The canvas area modified by this frame.
+  Rectangle window;          // The canvas area modified by this frame
+                             // (BitstreamFeatures::orientation included).
   bool is_last = false;      // If true, there is no frame after this one.
 
   // Index of first frame needed to decode this frame. If the value is the same

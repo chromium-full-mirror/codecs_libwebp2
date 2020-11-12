@@ -146,7 +146,7 @@ class Viewer(object):
           return
         if features.loop_count > 0:
           self._loop_index += 1
-          if self._loop_index >= features.loop_count:
+          if not features.loop_forever:
             return
         self._init_decoder()  # Rewind animation to first frame.
 

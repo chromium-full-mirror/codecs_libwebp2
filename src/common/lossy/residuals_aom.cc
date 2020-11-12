@@ -259,28 +259,28 @@ void AOMContext::Reset() {
 // Contrary to the AV1 spec, the transform size and the residual size have the
 // same size.
 int AOMResidualIO::GetTransformAllZeroContext(const AOMContext& aom_context,
-                                              Plane plane,
+                                              Channel channel,
                                               TransformSize tx_size, int x4,
                                               int y4, int w4, int h4) {
-  const int max_x4x4 = aom_context.Columns4x4(plane);
-  const int max_y4x4 = aom_context.Rows4x4(plane);
+  const int max_x4x4 = aom_context.Columns4x4(channel);
+  const int max_y4x4 = aom_context.Rows4x4(channel);
 
   int top = 0;
   int left = 0;
   const int num_top_elements = GetNumElements(w4, x4, max_x4x4);
   const int num_left_elements = GetNumElements(h4, y4, max_y4x4);
-  if (plane == kPlaneY || plane == kPlaneA) return 0;
+  if (channel == kUChannel || channel == kVChannel) return 0;
   const uint8_t* coefficient_levels =
-      &aom_context.coefficient_levels_[kEntropyContextTop][plane][x4];
+      &aom_context.coefficient_levels_[kEntropyContextTop][channel][x4];
   const int8_t* dc_categories =
-      &aom_context.dc_categories_[kEntropyContextTop][plane][x4];
+      &aom_context.dc_categories_[kEntropyContextTop][channel][x4];
   for (int i = 0; i < num_top_elements; ++i) {
     top |= coefficient_levels[i];
     top |= dc_categories[i];
   }
   coefficient_levels =
-      &aom_context.coefficient_levels_[kEntropyContextLeft][plane][y4];
-  dc_categories = &aom_context.dc_categories_[kEntropyContextLeft][plane][y4];
+      &aom_context.coefficient_levels_[kEntropyContextLeft][channel][y4];
+  dc_categories = &aom_context.dc_categories_[kEntropyContextLeft][channel][y4];
   for (int i = 0; i < num_left_elements; ++i) {
     left |= coefficient_levels[i];
     left |= dc_categories[i];
@@ -435,14 +435,14 @@ int AOMResidualIO::GetCoeffBaseRangeContextEob(int adjusted_tx_width_log2,
 }
 
 int AOMResidualIO::GetDcSignContext(const AOMContext& aom_context, int x4,
-                                    int y4, int w4, int h4, Plane plane) {
-  const int max_x4x4 = aom_context.Columns4x4(plane);
+                                    int y4, int w4, int h4, Channel channel) {
+  const int max_x4x4 = aom_context.Columns4x4(channel);
   const int8_t* dc_categories =
-      &aom_context.dc_categories_[kEntropyContextTop][plane][x4];
+      &aom_context.dc_categories_[kEntropyContextTop][channel][x4];
   int dc_sign = std::accumulate(
       dc_categories, dc_categories + GetNumElements(w4, x4, max_x4x4), 0);
-  const int max_y4x4 = aom_context.Rows4x4(plane);
-  dc_categories = &aom_context.dc_categories_[kEntropyContextLeft][plane][y4];
+  const int max_y4x4 = aom_context.Rows4x4(channel);
+  dc_categories = &aom_context.dc_categories_[kEntropyContextLeft][channel][y4];
   dc_sign = std::accumulate(
       dc_categories, dc_categories + GetNumElements(h4, y4, max_y4x4), dc_sign);
   // This return statement is equivalent to:
@@ -454,21 +454,22 @@ int AOMResidualIO::GetDcSignContext(const AOMContext& aom_context, int x4,
 }
 
 void AOMResidualIO::SetEntropyContexts(int x4, int y4, int w4, int h4,
-                                       Plane plane, uint8_t coefficient_level,
+                                       Channel channel,
+                                       uint8_t coefficient_level,
                                        int8_t dc_category,
                                        AOMContext* const aom_context) {
-  const int max_x4x4 = aom_context->Columns4x4(plane);
+  const int max_x4x4 = aom_context->Columns4x4(channel);
   const int num_top_elements = GetNumElements(w4, x4, max_x4x4);
   assert(sizeof(aom_context->coefficient_levels_[0][0][0]) == 1);
-  memset(&aom_context->coefficient_levels_[kEntropyContextTop][plane][x4],
+  memset(&aom_context->coefficient_levels_[kEntropyContextTop][channel][x4],
          coefficient_level, num_top_elements);
-  memset(&aom_context->dc_categories_[kEntropyContextTop][plane][x4],
+  memset(&aom_context->dc_categories_[kEntropyContextTop][channel][x4],
          dc_category, num_top_elements);
-  const int max_y4x4 = aom_context->Rows4x4(plane);
+  const int max_y4x4 = aom_context->Rows4x4(channel);
   const int num_left_elements = GetNumElements(h4, y4, max_y4x4);
-  memset(&aom_context->coefficient_levels_[kEntropyContextLeft][plane][y4],
+  memset(&aom_context->coefficient_levels_[kEntropyContextLeft][channel][y4],
          coefficient_level, num_left_elements);
-  memset(&aom_context->dc_categories_[kEntropyContextLeft][plane][y4],
+  memset(&aom_context->dc_categories_[kEntropyContextLeft][channel][y4],
          dc_category, num_left_elements);
 }
 

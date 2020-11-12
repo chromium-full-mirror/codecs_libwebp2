@@ -43,11 +43,6 @@
 
 namespace WP2 {
 
-// Encodes 'size' (< 'size_upper') into a variable length integer.
-// Returns the number of bytes used.
-size_t WriteVarInt(uint64_t size, uint64_t size_upper,
-                   uint8_t dst[kMaxVarIntLength]);
-
 // Resets 'EncoderConfig::info' if any. Not thread-safe.
 WP2Status SetupEncoderInfo(uint32_t width, uint32_t height,
                            const EncoderConfig& config);
@@ -55,7 +50,7 @@ WP2Status SetupEncoderInfo(uint32_t width, uint32_t height,
 // Writes WP2 header to 'output' based on 'config' and other arugments.
 WP2Status EncodeHeader(const EncoderConfig& config,
                        uint32_t width, uint32_t height,
-                       bool has_alpha, bool is_anim, uint32_t loop_count,
+                       bool has_alpha, bool is_anim, bool loop_forever,
                        Argb38b background_color, RGB12b preview_color,
                        bool has_icc, bool has_trailing_data,
                        Writer* const output);

@@ -80,15 +80,16 @@ struct AnimationFrame {
   bool blend = false;        // Blend frame into current canvas, based on alpha.
                              // Overwrite pixels (including alpha) if false.
   uint32_t duration_ms = 0;  // Milliseconds during which this frame is visible.
-  Rectangle window;          // The canvas area modified by this frame.
+                             // 0 means a preframe.
+  Rectangle window;          // Unoriented pixel boundaries of this frame.
   bool is_last = false;      // If true, there's no frame after this one.
 };
 
 // Initialize and register debug data.
 WP2Status SetupDecoderInfo(const BitstreamFeatures& features,
                            const DecoderConfig& config);
-void RegisterChunkSize(const DecoderConfig& config, uint32_t chunk_size,
-                       uint32_t chunk_size_size);
+void RegisterBitTrace(const DecoderConfig& config, uint32_t num_bytes,
+                      WP2_OPT_LABEL);
 
 // Decode steps are split into functions for incremental decoding. These
 // functions only call DataSource::MarkNumBytesAsRead(). This way the calling
@@ -110,7 +111,7 @@ WP2Status SkipPreview(DataSource* const data_source,
 WP2Status DecodeICC(DataSource* const data_source,
                     const BitstreamFeatures& features, Data* const iccp);
 
-WP2Status DecodeANMF(DataSource* const data_source,
+WP2Status DecodeANMF(const DecoderConfig& config, DataSource* const data_source,
                      const BitstreamFeatures& features, uint32_t frame_index,
                      AnimationFrame* const frame);
 
@@ -136,17 +137,6 @@ WP2Status DecodeTileChunkSize(const GlobalParams& params,
 WP2Status DecodeMetadata(DataSource* const data_source,
                          const BitstreamFeatures& features, Data* const exif,
                          Data* const xmp);
-
-// Returns true if variable is successfully read, false otherwise.
-bool ReadVarInt(DataSource* const data_source, uint64_t buf_size_upper,
-                size_t* const size);
-
-// Extracts a chunk. 'chunk_data' is not a copy and must be used before reading
-// from the 'data_source' again. If 'chunk_data' is null, only the chunk size is
-// read and the chunk itself is skipped (marked as read).
-WP2Status ReadChunk(DataSource* const data_source, DataView* const chunk_data);
-// Reads the chunk size and set that many following bytes as read.
-WP2Status SkipChunk(DataSource* const data_source);
 
 // These two Skip() functions do not attempt to read anything past the chunk
 // size; if data length check through reading is necessary but data copy should

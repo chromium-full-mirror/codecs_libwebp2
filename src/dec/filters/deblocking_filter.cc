@@ -292,18 +292,19 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
   const uint32_t half = std::min({p_block_half, q_block_half, kDblkMaxHalf});
   const uint32_t edge_length =
       vertical_edge ? edge_rect.height : edge_rect.width;
+  assert(half <= kDblkMaxHalf && edge_length <= kMaxBlockSizePix);
 
-  const bool has_lossless_alpha =
+  const bool has_lossless_alpha = has_alpha &&
       (!p_block.has_lossy_alpha || !q_block.has_lossy_alpha);
   const uint32_t sharpness_from_quality = GetSharpnessFromQuality(quality_hint);
 
-  assert(edge_length <= kMinBlockSizePix);
   // Store whether each alpha pixel line across the edge was deblocked.
-  bool deblocked_A[kMinBlockSizePix];
+  uint8_t a_halfs[kMaxBlockSizePix];
 
   const bool vd_match =
       VDMatch(config, intertile ? "intertile-filter" : "deblocking-filter");
 
+  int16_t cache[4 * (2 * kDblkMaxHalf)];  // scratch buffer.  TODO(skal): align?
   for (Channel c : {kAChannel, kYChannel, kUChannel, kVChannel}) {
     if (c == kAChannel && !has_alpha) continue;
 
@@ -321,58 +322,87 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
     const bool do_deblock = (c != kAChannel || !has_lossless_alpha);
     // TODO(maryla): also filter lossy blocks next to lossless ones?
 
-    uint32_t sharpness;
-    if (c == kAChannel && has_lossless_alpha) {
-      // We can't compute sharpness from residual density since we
-      // don't have it for lossless alpha blocks.
-      sharpness = sharpness_from_quality;
-    } else {
+    uint32_t sharpness = sharpness_from_quality;
+    if (do_deblock) {
       // The sharpness is determined by the block with more details.
-      sharpness = std::max(sharpness_from_quality,
+      sharpness = std::max(sharpness,
                            GetSharpnessFromResidualDensity(std::max(
                                p_block.res_den[c], q_block.res_den[c])));
+    } else {
+      // We can't compute sharpness from residual density since we
+      // don't have it for lossless alpha blocks.
     }
     const int32_t deblock_threshold =
         DeblockThresholdFromSharpness(sharpness, num_bits);
 
     Plane16* const plane = &pixels->GetChannel(c);
-    int16_t* q0 = &plane->At(edge_rect.x, edge_rect.y);
-    const uint32_t step_along_edge = vertical_edge ? plane->Step() : 1u;
-    const uint32_t step_across_edge = vertical_edge ? 1u : plane->Step();
-    const bool is_chroma = (c == kUChannel || c == kVChannel);
+    int16_t* const src0 = &plane->At(edge_rect.x, edge_rect.y);
+    uint32_t const src_step0 = plane->Step();
 
-    // Parse pixels of either a row or a column.
-    for (uint32_t line = 0; line < edge_length; ++line, q0 += step_along_edge) {
-      // If A is not deblocked, the remaining channels neither.
-      if (c != kAChannel && has_alpha && !deblocked_A[line]) continue;
+    // import transposed edge in a local cache if needed
+    int16_t* src = src0;
+    uint32_t src_step = src_step0;
+    if (!vertical_edge) {
+      int16_t* const q0 = cache + kDblkMaxHalf;
+      FilterCopyIn(src, src_step, q0, edge_length, half);
+      src = q0;
+      src_step = kDblCacheStep;
+    }
 
-      const uint32_t flat_half =
-          MeasureFlatLength(sharpness, half, q0, step_across_edge);
+    uint8_t halfs[kMaxBlockSizePix];
+    MeasureFlatLengths(sharpness, half, src, src_step, halfs, edge_length);
 
-      if (vd_match) {
-        RegisterPixelsForVDebug(
-            config, tile_rect.x + edge_rect.x + (vertical_edge ? 0 : line),
-            tile_rect.y + edge_rect.y + (vertical_edge ? line : 0), half,
-            flat_half, vertical_edge, c, strength, sharpness,
-            /*before_deblocking=*/true, do_deblock, num_bits, q0,
-            step_across_edge);
+    if (vd_match) {
+      for (uint32_t pos = 0; pos < edge_length; ++pos) {
+        RegisterPixelsForVDebug(config,
+            tile_rect.x + edge_rect.x + (vertical_edge ? 0 : pos),
+            tile_rect.y + edge_rect.y + (vertical_edge ? pos : 0),
+            half, halfs[pos], vertical_edge, c, strength, sharpness,
+            /*before_deblocking=*/true, do_deblock, num_bits,
+            src + pos * src_step, /*step=*/1);
       }
+    }
 
-      const bool deblocked =
-          do_deblock
-              ? DeblockLine(strength, deblock_threshold, flat_half, is_chroma,
-                            min, max, step_across_edge, q0)
-              : WouldDeblockLine(strength, deblock_threshold, flat_half,
-                                 is_chroma, min, max, step_across_edge, q0);
-      if (c == kAChannel) deblocked_A[line] = deblocked;
+    // Process the 'edge_length' rows.
+    uint8_t max_half = 0;
+    int16_t* q = src;
+    for (uint32_t pos = 0; pos < edge_length; ++pos, q += src_step) {
+      uint8_t h = halfs[pos];
+      if (!do_deblock) {
+        // just record if AChannel would be deblocked
+        a_halfs[pos] = (h > 0) && WouldDeblockLine(deblock_threshold, h, q);
+      } else {
+        if (has_alpha) {
+          if (c == kAChannel) {
+            // record if AChannel is deblocked, for later
+            a_halfs[pos] = (h > 0) && WouldDeblockLine(deblock_threshold, h, q);
+          } else {
+            // if AChannel was not deblocked, don't deblock Y/U/V either
+            if (a_halfs[pos] == 0) h = 0;
+          }
+        }
+        if (h > 0) {   // Process line.
+          DeblockLine(strength, deblock_threshold, h, min, max, q);
+          max_half = std::max(max_half, h);
+        }
+      }
+    }
 
-      if (vd_match) {
-        RegisterPixelsForVDebug(
-            config, tile_rect.x + edge_rect.x + (vertical_edge ? 0 : line),
-            tile_rect.y + edge_rect.y + (vertical_edge ? line : 0), half,
-            flat_half, vertical_edge, c, strength, sharpness,
-            /*before_deblocking=*/false, do_deblock && deblocked, num_bits, q0,
-            step_across_edge);
+    if (do_deblock && max_half > 0) {
+      // if we modified the pixels locally, bring them back
+      if (!vertical_edge) {
+        FilterCopyOut(src, src0, src_step0, edge_length, max_half);
+      }
+    }
+
+    if (vd_match) {
+      for (uint32_t pos = 0; pos < edge_length; ++pos) {
+        RegisterPixelsForVDebug(config,
+            tile_rect.x + edge_rect.x + (vertical_edge ? 0 : pos),
+            tile_rect.y + edge_rect.y + (vertical_edge ? pos : 0),
+            half, halfs[pos], vertical_edge, c, strength, sharpness,
+            /*before_deblocking=*/false, do_deblock, num_bits,
+            src + pos * src_step, /*step=*/1);
       }
     }
   }

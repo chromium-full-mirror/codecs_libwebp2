@@ -28,12 +28,12 @@ namespace WP2 {
 static WP2Status WritePPMPAM(const ArgbBuffer& buffer, int alpha,
                              FILE* const fout) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(buffer.format == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
+  WP2_CHECK_OK(buffer.format() == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
 
-  const uint32_t width = buffer.width;
-  const uint32_t height = buffer.height;
-  const uint8_t* row = (const uint8_t*)buffer.GetRow(0);
-  const uint32_t stride = buffer.stride;
+  const uint32_t width = buffer.width();
+  const uint32_t height = buffer.height();
+  const uint8_t* row = buffer.GetRow8(0);
+  const uint32_t stride = buffer.stride();
   const size_t bytes_per_px = alpha ? 4 : 3;
   WP2SampleFormat fmt;
   Vector_u8 dest;
@@ -76,12 +76,12 @@ WP2Status WritePAM(const ArgbBuffer& buffer, FILE* const fout) {
 // Save 16b mode (RGBA4444, RGB565, ...) for debugging purpose.
 WP2Status Write16bAsPGM(const ArgbBuffer& buffer, FILE* const fout) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(buffer.format == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
+  WP2_CHECK_OK(buffer.format() == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
 
-  const uint32_t width = buffer.width;
-  const uint32_t height = buffer.height;
-  const uint8_t* rgba = (const uint8_t*)buffer.GetRow(0);
-  const uint32_t stride = buffer.stride;
+  const uint32_t width = buffer.width();
+  const uint32_t height = buffer.height();
+  const uint8_t* rgba = buffer.GetRow8(0);
+  const uint32_t stride = buffer.stride();
   const uint32_t bytes_per_px = 2;
   uint32_t y;
 

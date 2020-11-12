@@ -47,7 +47,7 @@ int TestImageEncConfig(const ArgbBuffer& original, const EncoderConfig& config,
       abort();
     }
     // Tiny images are not interesting to compare.
-    if (original.width * original.height >= 64 &&
+    if (original.width() * original.height() >= 64 &&
         !Compare(original, decoded, "image", expected_distortion)) {
       // Uncomment to save the original and decoded images as PNG files.
       // WP2::testing::SaveBeforeAfter(original, decoded, "/tmp/comparison");

@@ -228,20 +228,20 @@ WP2Status Decoder::ProcessRows(uint32_t row,
     WP2_CHECK_STATUS(ApplyInverseTransforms(num_rows, num_bits_, rows));
 
     uint32_t num_rows_out;
-    if (WP2FormatBpc(buf->format) == 1) {
+    if (WP2FormatBpc(buf->format()) == 1) {
       num_rows_out =
-          EmitRows(rows_data, buf->width, num_rows, gparams_->has_alpha_,
-                   buf->GetRow8(last_out_row_), buf->stride);
+          EmitRows(rows_data, buf->width(), num_rows, gparams_->has_alpha_,
+                   buf->GetRow8(last_out_row_), buf->stride());
     } else {
       num_rows_out =
-          EmitRows(rows_data, buf->width, num_rows, gparams_->has_alpha_,
-                   buf->GetRow16(last_out_row_), buf->stride);
+          EmitRows(rows_data, buf->width(), num_rows, gparams_->has_alpha_,
+                   buf->GetRow16(last_out_row_), buf->stride());
     }
     // Update 'last_out_row_'.
     last_out_row_ += num_rows_out;
     tile_->num_decoded_rows += num_rows_out;
-    if (progress_ != nullptr) {
-      WP2_CHECK_STATUS(progress_->AdvanceBy(num_rows_out * buf->width));
+    if (progress_ != nullptr) {  // Progress does not advance for alpha rows.
+      WP2_CHECK_STATUS(progress_->AdvanceBy(num_rows_out));
     }
   }
 
@@ -482,7 +482,7 @@ static WP2Status ReadPaletteVerbatim(uint32_t num_colors,
       }
     }
   }
-  return WP2_STATUS_OK;
+  return dec->GetStatus();
 }
 
 WP2Status Decoder::ReadPalette(Transform* const transform) {
@@ -628,7 +628,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
     }
   }
   dec_->PopDebugPrefix();
-  return WP2_STATUS_OK;
+  return dec_->GetStatus();
 }
 
 WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
@@ -724,7 +724,7 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       break;
   }
 
-  return WP2_STATUS_OK;
+  return dec_->GetStatus();
 }
 
 // -----------------------------------------------------------------------------
@@ -755,7 +755,7 @@ void Decoder::Init(const WP2::DecoderConfig& config,
   last_out_row_ = 0;
   tile_ = tile;
   tile->num_decoded_rows = 0;
-  hdr_.Init(gparams.has_alpha_, tile->rgb_output.format);
+  hdr_.Init(gparams.has_alpha_, tile->rgb_output.format());
 }
 
 WP2Status Decoder::AllocateInternalBuffers(uint32_t final_width) {
@@ -835,6 +835,7 @@ WP2Status Decoder::DecodeHeader() {
         dec_->ReadRange(1, kMaxCacheBits, "color_cache_bits");
     WP2_CHECK_STATUS(hdr_.color_cache_.Init(hdr_.cache_config_));
   }
+  WP2_CHECK_STATUS(dec_->GetStatus());
 
   // Find the maximum subsampling that would result in at least 2 histograms.
   uint32_t max_sampling;
@@ -874,14 +875,12 @@ WP2Status Decoder::DecodeHeader() {
     WP2_CHECK_STATUS(DecodeNoProcess(histogram_width, histogram_height,
                                      /*last_row=*/histogram_height,
                                      &hdr_.histogram_image_));
-    WP2_CHECK_STATUS(dec_->GetStatus());
 
     hdr_.histogram_subsample_bits_ = histogram_precision;
   } else {
     num_histo = 1;
     hdr_.histogram_image_.clear();
   }
-
   WP2_CHECK_STATUS(dec_->GetStatus());
 
   // Read the ANS probabilities.

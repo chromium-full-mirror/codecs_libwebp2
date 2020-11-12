@@ -60,15 +60,14 @@ WP2Status AnimationEncoder::AddFrame(const ArgbBuffer& pixels,
   // Checks dimension validity only for the first frame. For the following ones,
   // checks dimension equality to the first frame.
   if (frames.empty()) {
-    WP2_CHECK_OK(pixels.format == WP2_Argb_32, WP2_STATUS_INVALID_COLORSPACE);
-    WP2_CHECK_OK((pixels.width > 0) && (pixels.height > 0) &&
-                     (pixels.width <= kImageDimMax) &&
-                     (pixels.height <= kImageDimMax),
+    WP2_CHECK_OK((pixels.width() > 0) && (pixels.height() > 0) &&
+                     (pixels.width() <= kImageDimMax) &&
+                     (pixels.height() <= kImageDimMax),
                  WP2_STATUS_BAD_DIMENSION);
   } else {
     WP2_CHECK_OK(frames.size() < kMaxNumFrames, WP2_STATUS_INVALID_PARAMETER);
-    WP2_CHECK_OK(pixels.width == frames.front().GetWidth() &&
-                     pixels.height == frames.front().GetHeight(),
+    WP2_CHECK_OK(pixels.width() == frames.front().GetWidth() &&
+                     pixels.height() == frames.front().GetHeight(),
                  WP2_STATUS_BAD_DIMENSION);
 
     // A mix of color spaces is currently unsupported.
@@ -77,7 +76,7 @@ WP2Status AnimationEncoder::AddFrame(const ArgbBuffer& pixels,
   }
 
   WP2_CHECK_ALLOC_OK(frames.resize(frames.size() + 1));
-  WP2Status status = frames.back().rgb_pixels.CopyFrom(pixels);
+  WP2Status status = frames.back().rgb_pixels.ConvertFrom(pixels);
   if (status != WP2_STATUS_OK) frames.pop_back();  // No-op if problem.
   WP2_CHECK_STATUS(status);
   frames.back().duration_ms = duration_ms;
@@ -154,7 +153,7 @@ WP2Status AnimationEncoder::AddFrame(
 }
 
 WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
-                                   uint8_t loop_count,
+                                   bool loop_forever,
                                    const Metadata& metadata) const {
   WP2_CHECK_ALLOC_OK(state_ != nullptr);
   const Vector<Frame>& frames = state_->frames;
@@ -162,7 +161,6 @@ WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
   WP2_CHECK_OK(!frames.empty(), WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(config.IsValid(), WP2_STATUS_INVALID_CONFIGURATION);
-  WP2_CHECK_OK(loop_count <= kMaxLoopCount, WP2_STATUS_INVALID_PARAMETER);
 
   const bool has_alpha = !AllFramesAreOpaque(frames);
   const Frame& first_frame = frames.front();
@@ -177,8 +175,8 @@ WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
   // TODO(yguyon): Actually encode frames and compute background color etc.
   WP2_CHECK_STATUS(EncodeHeader(
       config, first_frame.GetWidth(), first_frame.GetHeight(), has_alpha,
-      /*is_anim=*/true, loop_count, /*background_color=*/kTransparentArgb38b,
-      preview_color, has_icc, has_trailing_data, output));
+      /*is_anim=*/true, loop_forever, kDefaultBackgroundColor, preview_color,
+      has_icc, has_trailing_data, output));
 
   if (config.create_preview && first_frame.rgb_pixels.IsEmpty()) {
     ArgbBuffer converted;
@@ -193,8 +191,7 @@ WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
       EncodeICC({metadata.iccp.bytes, metadata.iccp.size}, output));
 
   {
-    FrameEncoder frame_encoder(config, /*background_color=*/kTransparentArgb38b,
-                               frames);
+    FrameEncoder frame_encoder(config, kDefaultBackgroundColor, frames);
     WP2_CHECK_STATUS(frame_encoder.Encode(output));
   }
 

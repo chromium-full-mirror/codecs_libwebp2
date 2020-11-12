@@ -238,15 +238,15 @@ WP2Status ConvertToWebPPicture(const WP2::ArgbBuffer& in,
                                WebPPicture* const out, bool use_yuv) {
   WP2_CHECK_OK(WebPPictureInit(out), WP2_STATUS_VERSION_MISMATCH);
   out->use_argb = 1;
-  out->width = in.width;
-  out->height = in.height;
+  out->width = in.width();
+  out->height = in.height();
   WP2_CHECK_OK(WebPPictureAlloc(out), WP2_STATUS_OUT_OF_MEMORY);
   // TODO(skal): sharp-yuv conversion ?
   // Convert from Argb_32 to WebP's ARGB
   WP2ArgbConverterInit();
   for (int y = 0; y < out->height; ++y) {
     // BGRA order for conversion from uint8_t[4] to uint32_t[1] endianness.
-    WP2ArgbConvertTo[WP2_BGRA_32]((const uint8_t*)in.GetRow(y), out->width,
+    WP2ArgbConvertTo[WP2_BGRA_32](in.GetRow8(y), out->width,
                                   (uint8_t*)(out->argb + y * out->argb_stride));
   }
   if (use_yuv) {

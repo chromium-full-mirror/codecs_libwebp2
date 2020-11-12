@@ -45,9 +45,9 @@ void Help() {
   opt.Add("-q <float>",
           SPrintf("quality factor (0:small..100:big), default=%1.1f",
                   WP2::EncoderConfig::kDefault.quality));
-  opt.Add("-speed <int>",
+  opt.Add("-effort <int>",
           SPrintf("compression effort (0:fast..9:slower/better), default=%d",
-                  WP2::EncoderConfig::kDefault.speed));
+                  WP2::EncoderConfig::kDefault.effort));
   opt.Add("-csp <int>", "color space (wp2 only)");
   opt.Add("");
   opt.Add(
@@ -137,9 +137,9 @@ int main(int argc, char* argv[]) {
     } else if (!strcmp(argv[c], "-q") && c + 1 < argc) {
       expecting_lossy_enc = true;
       wp2_enc_config.quality = ExUtilGetFloat(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-speed") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-effort") && c + 1 < argc) {
       expecting_lossy_enc = true;
-      wp2_enc_config.speed = ExUtilGetInt(argv[++c], &parse_error);
+      wp2_enc_config.effort = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-csp") && c + 1 < argc) {
       expecting_lossy_enc = true;
       expecting_wp2_enc = true;
@@ -360,7 +360,7 @@ int main(int argc, char* argv[]) {
 
         WP2::MemoryWriter writer;
         EXIT_IF_ERROR(WP2::CompressWebP(argb_buffer, wp2_enc_config.quality,
-                                        wp2_enc_config.speed, &writer),
+                                        wp2_enc_config.effort, &writer),
                       "Error! Failed to encode as WebP.");
 
         EXIT_IF_ERROR(

@@ -201,7 +201,7 @@ TEST(CspCustomTest, Simple) {
 
   EncoderConfig config = EncoderConfig::kDefault;
   config.csp_type = Csp::kCustom;
-  ASSERT_WP2_OK(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
 }
 
 //------------------------------------------------------------------------------

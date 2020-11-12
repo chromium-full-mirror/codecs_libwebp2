@@ -121,7 +121,7 @@ class HashChain {
   WP2_NO_DISCARD
   bool Allocate(uint32_t size);
   // Pre-compute the best matches for argb.
-  WP2Status Fill(int speed, const int16_t* const argb, uint32_t width,
+  WP2Status Fill(int effort, const int16_t* const argb, uint32_t width,
                  uint32_t height);
 
   inline uint32_t FindOffset(const uint32_t base_position) const {
@@ -299,14 +299,14 @@ enum LZ77Type {
   kLZ77None = 8
 };
 
-// Evaluates best possible backward references for specified speed.
+// Evaluates best possible backward references for specified effort.
 // The input cache_bits to 'GetBackwardReferences' sets the maximum cache
 // bits to use (passing 0 implies disabling the local color cache).
 // The optimal cache bits is evaluated and set for the *cache_bits parameter.
 // The return value is the pointer to the best of the two backward refs viz,
 // refs[0] or refs[1].
 WP2Status GetBackwardReferences(
-    uint32_t width, uint32_t height, const int16_t* const argb, int speed,
+    uint32_t width, uint32_t height, const int16_t* const argb, int effort,
     int lz77_types_to_try, uint32_t cache_bits_max, const HashChain& hash_chain,
     const LosslessSymbolsInfo& symbols_info, CacheConfig* const cache_config,
     BackwardRefsPool* const ref_pool, BackwardRefsPool::RefsPtr* const refs);

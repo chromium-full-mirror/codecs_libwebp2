@@ -276,8 +276,8 @@ TEST(DeblockingFilterTest, Simple) {
   decoder_config.enable_directional_filter = false;
   decoder_config.enable_restoration_filter = false;
 
-  ASSERT_WP2_OK(testing::EncodeDecodeCompare("source4.webp", encoder_config,
-                                             decoder_config));
+  ASSERT_TRUE(testing::EncodeDecodeCompare("source4.webp", encoder_config,
+                                           decoder_config));
 }
 
 // Tests that PSNR is better with the deblocking filter than without.
@@ -328,22 +328,87 @@ class FilterTestCpuInfo : public ::testing::TestWithParam<WP2CPUInfo> {
 
 TEST_P(FilterTestCpuInfo, TestMeasureLength) {
   UniformIntDistribution gen(52452);
-  const uint32_t kNumTests = 7000;
-  const uint32_t kStep = 13;
-  int16_t A[kStep * 16], *B = A + kStep * 8;
+  const uint32_t kNumTests = 10000;
+  int16_t A[32 * kDblCacheStep], *B = A + 8;
   uint32_t crc = 323452;
   for (uint32_t test = 0; test < kNumTests; ++test) {
     for (auto& a : A) a = gen.Get(-1024, 1024);
     for (uint32_t half = 1; half <= kDblkMaxHalf; ++half) {
       for (uint32_t s = 0; s <= kDblkMaxSharpness; ++s) {
-        for (uint32_t step = 0; step <= kStep; ++step) {
-          const uint32_t len = MeasureFlatLength(s, half, B, s);
-          crc = testing::SillyCRC(crc, len);
+        uint8_t out[32];
+        MeasureFlatLengths(s, half, B, kDblCacheStep, out, 32);
+        for (uint32_t o : out) crc = testing::SillyCRC(crc, o);
+      }
+    }
+  }
+  EXPECT_EQ(crc, 1059920269u);
+}
+
+TEST_P(FilterTestCpuInfo, TestWouldDeblock) {
+  UniformIntDistribution gen(86214);
+  const uint32_t kNumTests = 1000;
+  int16_t A[kDblCacheStep], * const B = A + 8;
+  uint32_t crc = 1;
+  for (uint32_t test = 0; test < kNumTests; ++test) {
+    for (auto& a : A) a = gen.Get(-1024, 1024);
+    for (uint32_t half = 1; half <= kDblkMaxHalf; ++half) {
+      for (uint32_t t = 0; t <= 220; ++t) {
+        crc = testing::SillyCRC(crc, WouldDeblockLine(t, half, B));
+      }
+    }
+  }
+  EXPECT_EQ(crc, 2237354673u);
+}
+
+TEST_P(FilterTestCpuInfo, TestDeblockLines) {
+  UniformIntDistribution gen(86214);
+  const uint32_t kNumTests = 120000;
+  int16_t A[kDblCacheStep], * const B = A + 8, C[kDblCacheStep];
+  uint32_t crc = 1;
+  for (int h = 1; h <= 8; ++h) {
+    for (uint32_t bits : {8, 10}) {
+      const int32_t min = (bits == 8) ?   0 : -1024;
+      const int32_t max = (bits == 8) ? 255 : 1024;
+      for (auto& c : C) c = gen.Get(min, max);
+      for (uint32_t test = 0; test < kNumTests; ++test) {
+        const uint32_t fstrength = 1 + (test % kDblkMaxStrength);
+        memcpy(A, C, sizeof(A));
+        for (uint32_t s = 0; s <= kDblkMaxSharpness; ++s) {
+          const uint32_t thresh = DeblockThresholdFromSharpness(s, bits);
+          DeblockLine(fstrength, thresh, h, min, max, B);
+        }
+      }
+      for (int x = -h; x < h; ++x) {
+        crc = testing::SillyCRC(crc, B[x]);
+      }
+    }
+  }
+  EXPECT_EQ(crc, 813221631u);
+}
+
+TEST_P(FilterTestCpuInfo, TestCopyTransposed) {
+  const uint32_t kNumTests = 10000;
+  for (int32_t W = 1; W <= 32; ++W) {
+    for (int32_t half = 1; half <= 8; ++half) {
+      const int32_t kStep = 37;
+      int16_t src0[kStep * kDblCacheStep], *src = src0 + 8 * kStep;
+      int16_t cache[32 * kDblCacheStep], *dst = cache + 8;
+      for (int32_t i = 0, x = 0; x < W; ++x) {
+        for (int32_t y = -half; y < half; ++y, ++i) {
+          src[y * kStep + x] = i;
+        }
+      }
+      for (uint32_t n = 0; n < kNumTests; ++n) {
+        FilterCopyIn(src, kStep, dst, W, half);
+        FilterCopyOut(dst, src, kStep, W, half);
+      }
+      for (int32_t i = 0, x = 0; x < W; ++x) {
+        for (int32_t y = -half; y < half; ++y, ++i) {
+          EXPECT_EQ(src[y * kStep + x], i);
         }
       }
     }
   }
-  EXPECT_EQ(2013140036u, crc);
 }
 
 INSTANTIATE_TEST_SUITE_P(FilterTestCpuInfoInstantiation, FilterTestCpuInfo,

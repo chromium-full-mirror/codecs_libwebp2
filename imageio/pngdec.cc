@@ -302,13 +302,13 @@ class ImageReaderPNG : public ImageReader::Impl {
     // Look for metadata at both the beginning and the end of the PNG file,
     // giving preference to the head.
     if (status == WP2_STATUS_OK) {
-      status = ExtractMetadataFromPNG(png, head_info, &buffer_->metadata,
+      status = ExtractMetadataFromPNG(png, head_info, &buffer_->metadata_,
                                       log_level_);
     }
     if (status == WP2_STATUS_OK) {
       png_read_end(png, end_info);
-      status =
-          ExtractMetadataFromPNG(png, end_info, &buffer_->metadata, log_level_);
+      status = ExtractMetadataFromPNG(png, end_info, &buffer_->metadata_,
+                                      log_level_);
     }
 
     png_destroy_read_struct((png_structpp)&png, (png_infopp)&head_info,

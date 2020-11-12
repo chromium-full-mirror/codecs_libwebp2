@@ -59,9 +59,9 @@ WP2Status Write16bAsPGM(const ArgbBuffer& buffer, FILE* fout);
 WP2Status CompressWebP(const ArgbBuffer& buffer, const WebPConfig& config,
                        Writer* const output);
 #endif
-// Same as above but maps wp2 'quality' and 'speed' to a WebPConfig.
+// Same as above but maps wp2 'quality' and 'effort' to a WebPConfig.
 // Returns WP2_STATUS_UNSUPPORTED_FEATURE unless compiled with WP2_HAVE_WEBP.
-WP2Status CompressWebP(const ArgbBuffer& buffer, float quality, int speed,
+WP2Status CompressWebP(const ArgbBuffer& buffer, float quality, int effort,
                        Writer* const output);
 
 }  // namespace WP2

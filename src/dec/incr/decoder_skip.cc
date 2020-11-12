@@ -101,7 +101,7 @@ WP2Status GlimpseTillNextANMFChunk(const DecoderConfig& config,
     }
   }
   if (!state->glimpsed_frame_anmf) {
-    WP2_CHECK_STATUS(DecodeFrameInfo(state->data_source, features,
+    WP2_CHECK_STATUS(DecodeFrameInfo(config, state->data_source, features,
                                      /*glimpse=*/true, state));
     state->glimpsed_frame_anmf = true;
     assert(!state->glimpsed_frame_glbl);

@@ -92,7 +92,7 @@ static WP2Status PrepareTiles(const DecoderConfig& config,
           config.info->bits_per_pixel->Resize(window.width, window.height));
     }
 
-    WP2_CHECK_STATUS(SetupWorkers(features, config, /*progress=*/nullptr,
+    WP2_CHECK_STATUS(SetupWorkers(features, config, &state->progress,
                                   &state->tiles_layout, &state->workers));
   }
   return WP2_STATUS_OK;
@@ -150,7 +150,7 @@ static WP2Status SetupOutputBuffer(const AnimationFrame& frame_info,
       WP2_CHECK_STATUS(state->blended_buffer.Swap(&state->raw_output_buffer));
       if (state->raw_output_buffer.IsEmpty()) {
         WP2_CHECK_STATUS(state->raw_output_buffer.Resize(
-            state->blended_buffer.width, state->blended_buffer.height));
+            state->blended_buffer.width(), state->blended_buffer.height()));
       }
       state->using_blended_buffer = true;
     } else {
@@ -160,7 +160,7 @@ static WP2Status SetupOutputBuffer(const AnimationFrame& frame_info,
         state->raw_output_buffer.Deallocate();
       }
       WP2_CHECK_STATUS(
-          state->raw_output_buffer.Resize(output->width, output->height));
+          state->raw_output_buffer.Resize(output->width(), output->height()));
       state->using_raw_output_buffer = true;
     }
   } else {
@@ -196,6 +196,17 @@ WP2Status Decoder::BlendFrame(Rectangle window, bool dispose) {
 void Decoder::DecodeAvailableData() {
   if (Failed()) return;
 
+  // Call the ProgressHook at least once per Decoder::ReadFrame() call,
+  // leaving the opportunity to the user to abort even if nothing happens.
+  const WP2Status progress_status =
+      (state_->stage == State::Stage::WAITING_FOR_HEADER_CHUNK)
+          ? state_->progress.Rewind()
+          : state_->progress.Set(state_->progress.GetProgress());
+  if (progress_status != WP2_STATUS_OK) {
+    state_->status = progress_status;
+    return;
+  }
+
   WP2DecDspInit();
   assert(state_->data_source != nullptr);
 
@@ -223,7 +234,11 @@ void Decoder::DecodeAvailableData() {
         // TODO(yguyon): If Rewind(), verify it's the same bitstream/header.
         state_->status = DecodeHeader(state_->data_source, &features_);
         if (state_->status == WP2_STATUS_OK) {
-          state_->status = SetupDecoderInfo(features_, config_);
+          state_->progress.SetAdvancementScale(1.f);
+          state_->status = state_->progress.AdvanceBy(kProgressDecHeader);
+        }
+        if (state_->status == WP2_STATUS_OK) {
+          state_->status = SetupDecoderInfo(features_, config_);  // Debugging.
         }
         if (!state_->NextStage()) break;
         WP2_FALLTHROUGH;
@@ -232,8 +247,8 @@ void Decoder::DecodeAvailableData() {
       case State::Stage::ALLOCATE_OUTPUT_BUFFER: {
         if (!state_->ShouldDiscardAllFrames()) {
           if (state_->index_of_frame_in_output_buffer < kMaxNumFrames &&
-              (output_->IsEmpty() || output_->width != features_.width ||
-               output_->height != features_.height)) {
+              (output_->IsEmpty() || output_->width() != features_.width ||
+               output_->height() != features_.height)) {
             // Either Rewind() was given a false negative parameter
             // 'output_buffer_changed', or the bitstream changed.
             state_->status = WP2_STATUS_BAD_READ;
@@ -243,7 +258,7 @@ void Decoder::DecodeAvailableData() {
           if (state_->status == WP2_STATUS_OK) {
             state_->must_use_raw_output_buffer =
                 (features_.orientation != Orientation::kOriginal ||
-                 output_->format != state_->raw_output_buffer.format ||
+                 output_->format() != state_->raw_output_buffer.format() ||
                  output_->IsSlow());
             if (state_->must_use_raw_output_buffer) {
               // Temporary buffer to store the raw (non-oriented Argb32) output.
@@ -258,12 +273,20 @@ void Decoder::DecodeAvailableData() {
       }
       case State::Stage::WAITING_FOR_PREVIEW_CHUNK: {
         state_->status = SkipPreview(state_->data_source, features_);
+        if (state_->status == WP2_STATUS_OK && features_.has_preview) {
+          state_->progress.SetAdvancementScale(1.f);
+          state_->status = state_->progress.AdvanceBy(kProgressDecPreview);
+        }
         if (!state_->NextStage()) break;
         WP2_FALLTHROUGH;
       }
       case State::Stage::WAITING_FOR_ICC_CHUNK: {
         state_->status =
-            DecodeICC(state_->data_source, features_, &output_->metadata.iccp);
+            DecodeICC(state_->data_source, features_, &output_->metadata_.iccp);
+        if (state_->status == WP2_STATUS_OK && features_.has_icc) {
+          state_->progress.SetAdvancementScale(1.f);
+          state_->status = state_->progress.AdvanceBy(kProgressDecICC);
+        }
         if (!state_->NextStage()) break;
         WP2_FALLTHROUGH;
       }
@@ -272,29 +295,63 @@ void Decoder::DecodeAvailableData() {
         if (state_->status == WP2_STATUS_OK) {
           if (DiscardTillMetadata(state_)) {
             state_->stage = State::Stage::WAITING_FOR_METADATA_CHUNKS;
+            state_->status = state_->progress.Set(
+                1.f - GetProgressionAfterFrames(features_.has_trailing_data));
             keep_decoding = true;
-            break;  // Go to WAITING_FOR_METADATA_CHUNKS part.
+            break;  // Go to the WAITING_FOR_METADATA_CHUNKS part.
           }
           if (FrameIsAlreadyInOutputBuffer(features_.tile_width,
                                            features_.tile_height, state_)) {
             state_->stage = State::Stage::WAITING_FOR_TILE_DATA;
+            if (state_->frames[state_->current_frame_index].is_last) {
+              state_->status = state_->progress.Set(
+                  1.f - GetProgressionAfterFrames(features_.has_trailing_data));
+            } else {
+              state_->status = state_->progress.Set(
+                  GetProgressAtFrame(features_.has_preview, features_.has_icc,
+                                     features_.has_trailing_data,
+                                     state_->current_frame_index + 1));
+            }
             keep_decoding = true;
-            break;  // Go to WAITING_FOR_TILE_DATA part.
+            break;  // Go to the WAITING_FOR_TILE_DATA part.
           }
           if (DiscardWholeFrames(state_)) {
             // Maybe the output buffer contains 'current_frame_index' now.
             if (FrameIsAlreadyInOutputBuffer(features_.tile_width,
                                              features_.tile_height, state_)) {
               state_->stage = State::Stage::WAITING_FOR_TILE_DATA;
+              if (state_->frames[state_->current_frame_index].is_last) {
+                state_->status = state_->progress.Set(
+                    1.f -
+                    GetProgressionAfterFrames(features_.has_trailing_data));
+              } else {
+                state_->status = state_->progress.Set(
+                    GetProgressAtFrame(features_.has_preview, features_.has_icc,
+                                       features_.has_trailing_data,
+                                       state_->current_frame_index + 1));
+              }
               keep_decoding = true;
-              break;  // Go to WAITING_FOR_TILE_DATA part.
+              break;  // Go to the WAITING_FOR_TILE_DATA part.
+            } else {
+              state_->status = state_->progress.Set(GetProgressAtFrame(
+                  features_.has_preview, features_.has_icc,
+                  features_.has_trailing_data, state_->current_frame_index));
             }
           }
         }
 
         if (state_->status == WP2_STATUS_OK) {
-          state_->status = DecodeFrameInfo(state_->data_source, features_,
-                                           /*glimpse=*/false, state_);
+          state_->status =
+              DecodeFrameInfo(config_, state_->data_source, features_,
+                              /*glimpse=*/false, state_);
+          if (state_->status == WP2_STATUS_OK && features_.is_animation) {
+            state_->progress.SetAdvancementScale(GetANMFProgression(
+                features_.has_preview, features_.has_icc,
+                features_.has_trailing_data, state_->current_frame_index,
+                state_->frames[state_->current_frame_index].is_last));
+            state_->status = state_->progress.AdvanceBy(1.f);
+          }
+
           if (state_->status == WP2_STATUS_OK &&
               state_->current_frame_index >=
                   state_->discard_frames_before_index) {
@@ -309,9 +366,14 @@ void Decoder::DecodeAvailableData() {
 
             state_->status = SetupOutputBuffer(frame_info, output_, state_);
             if (state_->status == WP2_STATUS_OK) {
+              ArgbBuffer* const buffer = state_->using_blended_buffer
+                                             ? &state_->blended_buffer
+                                         : state_->must_use_raw_output_buffer
+                                             ? &state_->raw_output_buffer
+                                             : output_;
               state_->status = FillBorders(
                   features_, state_->frames[state_->current_frame_index].info,
-                  &state_->raw_output_buffer);
+                  buffer);
             }
           }
         }
@@ -319,8 +381,16 @@ void Decoder::DecodeAvailableData() {
         WP2_FALLTHROUGH;
       }
       case State::Stage::PREPARE_TILES: {
-        state_->tiles_layout.gparams = nullptr;   // for sanity
+        state_->tiles_layout.gparams = nullptr;  // for sanity
         state_->status = PrepareTiles(config_, features_, state_);
+        if (state_->status == WP2_STATUS_OK) {
+          state_->progress.SetAdvancementScale(GetRowProgression(
+              features_.has_preview, features_.has_icc,
+              features_.has_trailing_data, features_.is_animation,
+              state_->tiles_layout.num_tiles_x, state_->current_frame_index,
+              state_->frames[state_->current_frame_index].info.window.height,
+              state_->frames[state_->current_frame_index].is_last));
+        }
         if (!state_->NextStage()) break;
         WP2_FALLTHROUGH;
       }
@@ -332,12 +402,17 @@ void Decoder::DecodeAvailableData() {
           if (DiscardTillMetadata(state_)) {
             if (partial_tile_decoder != nullptr) partial_tile_decoder->Clear();
             state_->stage = State::Stage::WAITING_FOR_METADATA_CHUNKS;
+            state_->status = state_->progress.Set(
+                1.f - GetProgressionAfterFrames(features_.has_trailing_data));
             keep_decoding = true;
             break;
           }
           if (DiscardWholeFrames(state_)) {
             if (partial_tile_decoder != nullptr) partial_tile_decoder->Clear();
             state_->stage = State::Stage::WAITING_FOR_ANMF_CHUNK;
+            state_->status = state_->progress.Set(GetProgressAtFrame(
+                features_.has_preview, features_.has_icc,
+                features_.has_trailing_data, state_->current_frame_index));
             keep_decoding = true;
             break;
           }
@@ -377,11 +452,8 @@ void Decoder::DecodeAvailableData() {
                 current_frame_features.info.duration_ms == 0;
             // Blend the preframe if necessary.
             if (is_preframe && current_frame_features.info.blend) {
-              const Rectangle window = RotateRectangle(
-                  GetInverseOrientation(features_.orientation), features_.width,
-                  features_.height, current_frame_features.window);
-              state_->status =
-                  BlendFrame(window, current_frame_features.info.dispose);
+              state_->status = BlendFrame(current_frame_features.info.window,
+                                          current_frame_features.info.dispose);
             }
             // Merge all consecutive preframes with the next regular frame,
             // forming a final frame. Don't notify for preframe readiness.
@@ -400,7 +472,11 @@ void Decoder::DecodeAvailableData() {
       case State::Stage::WAITING_FOR_METADATA_CHUNKS: {
         state_->status =
             DecodeMetadata(state_->data_source, features_,
-                           &output_->metadata.exif, &output_->metadata.xmp);
+                           &output_->metadata_.exif, &output_->metadata_.xmp);
+        if (state_->status == WP2_STATUS_OK && features_.has_trailing_data) {
+          state_->progress.SetAdvancementScale(1.f);
+          state_->status = state_->progress.AdvanceBy(kProgressDecMetadata);
+        }
         if (!state_->NextStage()) break;
         WP2_FALLTHROUGH;
       }
@@ -455,6 +531,10 @@ void Decoder::DecodeAvailableData() {
         state_->status = postprocess_status;
       }
     }
+  }
+
+  if (GetStatus() == WP2_STATUS_OK && state_->progress.GetProgress() < 1.f) {
+    state_->status = state_->progress.Finish();
   }
 }
 

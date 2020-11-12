@@ -26,6 +26,8 @@
 
 namespace WP2 {
 
+//------------------------------------------------------------------------------
+
 // Handles progress computation concurrency and user notification.
 class ProgressWatcher {
  public:
@@ -48,12 +50,48 @@ class ProgressWatcher {
   float GetProgress() const { return progress_; }
 
  private:
-  ProgressHook* hook_;
+  ProgressHook* const hook_;
   float progress_;
   float scale_;
   ThreadLock thread_lock_;
   bool aborted_;  // True if 'hook_' returned false at least once.
 };
+
+//------------------------------------------------------------------------------
+// Helper functions to compute the progression ranges reserved to header,
+// frames, metadata.
+
+// Returns the size of the progression range reserved to header, preview and ICC
+// decoding.
+float GetProgressionBeforeFrames(bool has_preview, bool has_icc);
+
+// Returns the size of the progression range reserved to XMP and EXIF decoding.
+float GetProgressionAfterFrames(bool has_trailing_data);
+
+// Returns the size of the progression range reserved to the decoding of the
+// frame at 'frame_index'.
+float GetFrameProgression(bool has_preview, bool has_icc,
+                          bool has_trailing_data, uint32_t frame_index,
+                          bool is_last);
+
+// Returns the size of the progression range reserved to the decoding of the
+// ANMF chunk at 'frame_index'.
+float GetANMFProgression(bool has_preview, bool has_icc, bool has_trailing_data,
+                         uint32_t frame_index, bool is_last);
+
+// Returns the size of the progression range reserved to the decoding of each
+// row in each tile of the frame at 'frame_index'.
+float GetRowProgression(bool has_preview, bool has_icc, bool has_trailing_data,
+                        bool is_animation, uint32_t num_tiles_x,
+                        uint32_t frame_index, uint32_t frame_height,
+                        bool is_last);
+
+// Returns the expected progress at the beginning of the given 'frame_index'
+// (right before ANMF chunk).
+float GetProgressAtFrame(bool has_preview, bool has_icc, bool has_trailing_data,
+                         uint32_t frame_index);
+
+//------------------------------------------------------------------------------
 
 }  // namespace WP2
 

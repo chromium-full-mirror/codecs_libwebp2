@@ -23,6 +23,7 @@
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
 #include "src/common/constants.h"
+#include "src/common/header_enc_dec.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/random.h"
@@ -119,7 +120,7 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
       gparams->segments_[i].use_grain_ = false;  // Nah.
     }
     gparams->maybe_use_lossy_alpha_ =
-        gparams->has_alpha_ && (config.speed > 0) &&
+        gparams->has_alpha_ && (config.effort > 0) &&
         (config.alpha_quality <= kMaxLossyQuality) && random->FlipACoin();
     gparams->enable_alpha_filter_ =
         gparams->maybe_use_lossy_alpha_ && config.enable_alpha_filter;
@@ -156,8 +157,8 @@ WP2Status RandomEncode(size_t seed, const EncoderConfig& config,
 
   // Append proxy header data, only config and dimensions are relevant.
   WP2_CHECK_STATUS(EncodeHeader(final_config, width, height, has_alpha,
-                                /*is_anim=*/false, /*loop_count=*/0,
-                                /*background_color=*/kTransparentArgb38b,
+                                /*is_anim=*/false, /*loop_forever=*/true,
+                                kDefaultBackgroundColor,
                                 /*preview_color=*/RGB12b(), /*has_icc=*/false,
                                 /*has_trailing_data=*/false, output));
 
@@ -174,7 +175,7 @@ WP2Status RandomEncode(size_t seed, const EncoderConfig& config,
   const uint32_t num_bytes = random.Get(10u, width * height * 4u);
   {
     uint8_t buf[kMaxVarIntLength];
-    const size_t buf_size = WriteVarInt(num_bytes - 1, kChunkSizeMax, buf);
+    const size_t buf_size = WriteVarInt(num_bytes, 1, kChunkSizeMax, buf);
     WP2_CHECK_ALLOC_OK(output->Append(buf, buf_size));
   }
   Vector_u8 bytes;
@@ -312,7 +313,8 @@ WP2Status GetTileBytesPosition(const uint8_t bitstream[],
   WP2_CHECK_STATUS(SkipICC(&data_source, features));
   AnimationFrame frame;
   uint32_t frame_index = 0;
-  WP2_CHECK_STATUS(DecodeANMF(&data_source, features, frame_index, &frame));
+  WP2_CHECK_STATUS(DecodeANMF(DecoderConfig::kDefault, &data_source, features,
+                              frame_index, &frame));
   GlobalParams gparams;
   WP2_CHECK_STATUS(
       DecodeGLBL(&data_source, DecoderConfig::kDefault, features, &gparams));
@@ -337,10 +339,9 @@ WP2Status MutateBitstream(uint32_t tile_width, uint32_t tile_height,
                           uint8_t tile_bytes[], size_t tile_num_bytes,
                           UniformIntDistribution* const random) {
   ExternalDataSource data_source(tile_bytes, tile_num_bytes);
-  const uint64_t max_size = kMaxNumBytesPerPixel * tile_width * tile_height + 1;
+  const uint64_t max_size = kMaxNumBytesPerPixel * tile_width * tile_height;
   size_t tile_chunk_size;
-  WP2_CHECK_OK(ReadVarInt(&data_source, max_size, &tile_chunk_size),
-               WP2_STATUS_NOT_ENOUGH_DATA);
+  WP2_CHECK_STATUS(TryReadVarInt(&data_source, 1, max_size, &tile_chunk_size));
   const size_t var_int_num_bytes = data_source.GetNumReadBytes();
   WP2_CHECK_OK(var_int_num_bytes + tile_chunk_size == tile_num_bytes,
                WP2_STATUS_NOT_ENOUGH_DATA);
@@ -375,8 +376,8 @@ TEST_P(ImageMutationTest, FromValidImage) {
     // Read and encode an image, only keep the bitstream.
     ArgbBuffer src;
     ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(), &src));
-    ASSERT_WP2_OK(src.SetView(src, {0, 0, std::min(src.width, max_tile_size),
-                                    std::min(src.height, max_tile_size)}));
+    ASSERT_WP2_OK(src.SetView(src, {0, 0, std::min(src.width(), max_tile_size),
+                                    std::min(src.height(), max_tile_size)}));
     ASSERT_WP2_OK(Encode(src, &writer, config));
   }
   bool is_valid = false;

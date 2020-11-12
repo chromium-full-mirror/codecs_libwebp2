@@ -457,6 +457,7 @@ class YUVPlane {
 
   // 'resize_if_needed' this YUVPlane to fit 'rgb' and copies its content,
   // applying the 'csp_transform'. Dimensions are rounded up to 'pad' multiple.
+  // If 'import_alpha' is false, alpha should be fully opaque.
   WP2Status Import(const ArgbBuffer& rgb, bool import_alpha,
                    const CSPTransform& csp_transform, bool resize_if_needed,
                    size_t pad = 1);
@@ -489,6 +490,7 @@ class YUVPlane {
 
   // Converts samples to Argb using the 'transform' and 'resize_if_needed'.
   // The 'upsample_if_needed' will convert 420->444 if not null and if needed.
+  // 'dst' should be in WP2_Argb_32 or WP2_ARGB_32 format.
   WP2Status Export(
       const CSPTransform& transform, bool resize_if_needed,
       ArgbBuffer* const dst,
@@ -496,6 +498,7 @@ class YUVPlane {
 
   // Same as above but uses 'ccsp_to_rgb_matrix' and 'ccsp_to_rgb_shift' to
   // define the color space and precision of the input samples. See CSPTranform.
+  // 'dst' should be in WP2_Argb_32 format.
   WP2Status Export(
       const CSPMtx& ccsp_to_rgb, bool resize_if_needed, ArgbBuffer* const dst,
       const SamplingTaps* const upsample_if_needed = nullptr) const;

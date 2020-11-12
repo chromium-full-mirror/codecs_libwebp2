@@ -54,7 +54,7 @@ class AOMResidualReader : public ResidualIO, public AOMResidualIO {
 
  private:
   // Returns the number of non-zero coefficients that were read or -1 on error.
-  int ReadTransformCoefficients(Plane plane, int start_x, int start_y,
+  int ReadTransformCoefficients(Channel channel, int start_x, int start_y,
                                 TransformSize tx_size, TransformPair tx_type,
                                 bool first_is_dc, uint32_t max_num_coeffs,
                                 int16_t* const coeffs,

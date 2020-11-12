@@ -58,8 +58,8 @@ struct Params {
   uint32_t bit_trace_level = 0;
   bool show_histograms = false;  // show symbol histograms
   WP2::EncoderConfig config;
-  bool loop_count_was_specified = false;
-  uint32_t loop_count = WP2::kInfiniteLoop;
+  bool loop_forever_was_specified = false;
+  bool loop_forever = true;
   WP2::PictureHint pic_hint = WP2::HINT_NONE;
   bool crop = false;
   WP2::Rectangle crop_area;
@@ -115,19 +115,19 @@ void HelpLong() {
                   WP2::EncoderConfig::kDefault.alpha_quality));
   opt.Add("-target_size <int>", "target size (in bytes)");
   opt.Add("-target_psnr <float>", "target PSNR (in dB. typically: 42)");
-  opt.Add("-speed <int>",
+  opt.Add("-effort <int>",
           SPrintf("compression effort (0:fast..9:slower/better), default=%d",
-                  WP2::EncoderConfig::kDefault.speed));
+                  WP2::EncoderConfig::kDefault.effort));
   opt.Add("-tile_shape <int>",
           SPrintf("tile shape (0=128, 1=256, 2=512, 3=wide, default = %d)",
                   WP2::EncoderConfig::kDefault.tile_shape));
   opt.Add("-f [<str> <int>]",
           "create an animation from frames "
           "(alternate images and durations in ms)");
-  opt.Add("-loop <int>",
-          SPrintf("number of loops for animations "
-                  "(1..%d), default=infinite(%d)",
-                  (1u << WP2::kLoopCountNumBits) - 1, WP2::kInfiniteLoop));
+  opt.Add("-no_loop", "the animation will play once then stop");
+  opt.Add("-loop_forever",
+          "the animation will play in a loop "
+          "(if it cannot be deduced from input, default is loop_forever)");
   opt.Add("-csp <int>", "color space");
   opt.Add("-uv_mode <int>", "UV subsampling mode (0=Adapt,1=420,2=444,3=Auto)");
   opt.Add("-pass <int>", "entropy-analysis passes (1..10)");
@@ -290,27 +290,6 @@ void ApplyModifications(const char* const file, const Params& params,
   }
 }
 
-uint8_t GetWP2LoopCount(const char* const file, bool loop_count_was_specified,
-                        uint32_t specified_loop_count,
-                        uint32_t input_loop_count) {
-  if (loop_count_was_specified) {
-    EXIT_IF_FALSE(specified_loop_count <= WP2::kMaxLoopCount,
-                  "Error! Specified loop count %u can not be higher than %u",
-                  specified_loop_count, WP2::kMaxLoopCount);
-    return (uint8_t)specified_loop_count;
-  } else {
-    if (input_loop_count == WP2::ImageReader::kInfiniteLoopCount) {
-      return WP2::kInfiniteLoop;
-    }
-    EXIT_IF_FALSE(
-        input_loop_count <= WP2::kMaxLoopCount,
-        "Error! Extracted loop count %u from '%s' can not be higher than %u "
-        "(specify a custom loop count with -loop)",
-        input_loop_count, file, WP2::kMaxLoopCount);
-    return (uint8_t)specified_loop_count;
-  }
-}
-
 // Encodes 'frames' into 'writer'.
 void CompressAnimation(const std::vector<std::string>& frames,
                        const std::vector<uint32_t>& frame_durations,
@@ -331,10 +310,10 @@ void CompressAnimation(const std::vector<std::string>& frames,
     EXIT_IF_ERROR(WP2::ReadImage(data.bytes, data.size, rgb_buffer,
                                  WP2::FileFormat::AUTO, params.log_level),
                   "Error! Cannot read input file '%s'", file_path);
-    ApplyModifications(file_path, params, rgb_buffer, &rgb_buffer->metadata);
+    ApplyModifications(file_path, params, rgb_buffer, &rgb_buffer->metadata_);
 
     if (refs != nullptr) {
-      refs->emplace_back(rgb_buffer->format);
+      refs->emplace_back(rgb_buffer->format());
       EXIT_IF_ERROR(RotateBuffer(params.config.decoding_orientation,
                                  *rgb_buffer, &refs->back()),
                     "Error! Image copy failed.");
@@ -348,17 +327,13 @@ void CompressAnimation(const std::vector<std::string>& frames,
     fprintf(stderr, "Time to read all input frames: %.3fs\n", elapsed);
   }
 
-  // Set loop count to infinite if it was not specified.
-  const uint8_t loop_count =
-      GetWP2LoopCount("frames", params.loop_count_was_specified,
-                      params.loop_count, WP2::ImageReader::kInfiniteLoopCount);
-
   // Encode animation.
   start = GetStopwatchTime();
   // TODO(yguyon): Warn that no metadata is copied over when compressing
   //               several still images into an animation with cwp2
-  EXIT_IF_ERROR(animation_encoder.Encode(writer, params.config, loop_count),
-                "Error! Cannot encode animation as WP2");
+  EXIT_IF_ERROR(
+      animation_encoder.Encode(writer, params.config, params.loop_forever),
+      "Error! Cannot encode animation as WP2");
   if (params.log_level >= WP2::LogLevel::VERBOSE) {
     const double encode_time = GetStopwatchTime() - start;
     fprintf(stderr, "Time to encode animation: %.3fs\n", encode_time);
@@ -376,7 +351,7 @@ void CompressImage(const char* const file_path,
                                 params.log_level);
   // 'buffer' must not be modified between calls to ReadFrame(), so we use a
   // proxy.
-  WP2::ArgbBuffer frame(buffer->format);
+  WP2::ArgbBuffer frame(buffer->format());
   bool is_last_frame = false;
   uint32_t duration_ms = 0;
   WP2::AnimationEncoder animation_encoder;
@@ -387,10 +362,10 @@ void CompressImage(const char* const file_path,
     EXIT_IF_ERROR(image_reader.ReadFrame(&is_last_frame, &duration_ms),
                   "Error! Cannot read input '%s'", file_path);
     EXIT_IF_ERROR(frame.SetView(*buffer), "Error! Cannot set view.");
-    ApplyModifications(file_path, params, &frame, &buffer->metadata);
+    ApplyModifications(file_path, params, &frame, &buffer->metadata_);
 
     if (refs != nullptr) {
-      refs->emplace_back(frame.format);
+      refs->emplace_back(frame.format());
       EXIT_IF_ERROR(RotateBuffer(params.config.decoding_orientation, frame,
                                  &refs->back()),
                     "Error! Image copy failed.");
@@ -415,12 +390,11 @@ void CompressImage(const char* const file_path,
     EXIT_IF_ERROR(WP2::Encode(frame, writer, params.config, params.pic_hint),
                   "Error! Cannot encode '%s' as WP2", file_path);
   } else {
-    // Override input loop count if it was specified.
-    const uint8_t loop_count =
-        GetWP2LoopCount(file_path, params.loop_count_was_specified,
-                        params.loop_count, image_reader.GetLoopCount());
-    EXIT_IF_ERROR(animation_encoder.Encode(writer, params.config, loop_count,
-                                           buffer->metadata),
+    const bool loop_forever = params.loop_forever_was_specified
+                                  ? params.loop_forever
+                                  : (image_reader.GetLoopCount() != 1);
+    EXIT_IF_ERROR(animation_encoder.Encode(writer, params.config, loop_forever,
+                                           buffer->metadata_),
                   "Error! Cannot encode '%s' as WP2", file_path);
   }
   if (params.log_level >= WP2::LogLevel::VERBOSE) {
@@ -432,10 +406,10 @@ void CompressImage(const char* const file_path,
 //------------------------------------------------------------------------------
 
 uint32_t GetWidth(const Params& params, const WP2::ArgbBuffer& argb_buffer) {
-  return params.crop ? params.crop_area.width : argb_buffer.width;
+  return params.crop ? params.crop_area.width : argb_buffer.width();
 }
 uint32_t GetHeight(const Params& params, const WP2::ArgbBuffer& argb_buffer) {
-  return params.crop ? params.crop_area.height : argb_buffer.height;
+  return params.crop ? params.crop_area.height : argb_buffer.height();
 }
 
 void PrintSummary(const WP2::MemoryWriter& memory_writer,
@@ -449,11 +423,10 @@ void PrintSummary(const WP2::MemoryWriter& memory_writer,
   const uint32_t degrees = (uint32_t)bitstream.orientation * 90;
 
   printf("Dimension:     %u x %u\n", bitstream.width, bitstream.height);
-  printf("animation:     %s", bitstream.is_animation ? "yes" : "no");
-  if (bitstream.is_animation) {
-    printf(" (loop count:%u)", bitstream.loop_count);
-  }
-  printf("\n");
+  printf("animation:     %s\n",
+         bitstream.is_animation ? (bitstream.loop_forever ? "yes (loop forever)"
+                                                          : "yes (play once)")
+                                : "no");
   printf("quality hint:  %u\n", bitstream.quality_hint);
   printf("preview:       %s\n", bitstream.has_preview ? "yes" : "no");
   printf("preview color: %u, %u, %u\n", prev_col.r, prev_col.g, prev_col.b);
@@ -562,9 +535,9 @@ int main(int argc, char* argv[]) {
       }
     } else if (!strcmp(argv[c], "-histos")) {
       params.show_histograms = true;
-    } else if ((!strcmp(argv[c], "-z") || !strcmp(argv[c], "-speed")) &&
+    } else if ((!strcmp(argv[c], "-z") || !strcmp(argv[c], "-effort")) &&
                c + 1 < argc) {
-      params.config.speed = ExUtilGetInt(argv[++c], &parse_error);
+      params.config.effort = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-tile_shape") && c + 1 < argc) {
       params.config.tile_shape =
           (WP2::TileShape)ExUtilGetInt(argv[++c], &parse_error);
@@ -608,9 +581,12 @@ int main(int argc, char* argv[]) {
     } else if (!strcmp(argv[c], "-orientation") && c + 1 < argc) {
       params.config.decoding_orientation =
           (WP2::Orientation)(ExUtilGetUInt(argv[++c], &parse_error) & 3);
-    } else if (!strcmp(argv[c], "-loop") && c + 1 < argc) {
-      params.loop_count_was_specified = true;
-      params.loop_count = ExUtilGetUInt(argv[++c], &parse_error);
+    } else if (!strcmp(argv[c], "-no_loop")) {
+      params.loop_forever = false;
+      params.loop_forever_was_specified = true;
+    } else if (!strcmp(argv[c], "-loop_forever")) {
+      params.loop_forever = true;
+      params.loop_forever_was_specified = true;
     } else if (!strcmp(argv[c], "-crop") && c + 4 < argc) {
       params.crop = true;
       params.crop_area.x = (uint32_t)ExUtilGetInt(argv[++c], &parse_error);

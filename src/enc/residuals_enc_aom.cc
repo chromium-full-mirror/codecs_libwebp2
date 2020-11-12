@@ -31,7 +31,6 @@ WP2Status AOMResidualWriter::WriteCoeffs(
     AOMContext* const aom_context) {
   // Convert WP2 data to libgav1 data.
   const TransformSize tx_size = ConvertSize(dim);
-  const Plane plane = ConvertPlane(channel);
   aom_context->SetIs420(is420);
   is420 = ((channel == kUChannel || channel == kVChannel) && is420);
 
@@ -40,7 +39,7 @@ WP2Status AOMResidualWriter::WriteCoeffs(
   int8_t dc_category;
   const uint32_t subsampling =
       (is420 && (channel == kUChannel || channel == kVChannel));
-  WriteTransformCoefficients(coeffs, *aom_context, is420, plane,
+  WriteTransformCoefficients(coeffs, *aom_context, is420, channel,
                              x_pix >> subsampling, y_pix >> subsampling,
                              tx_size, tx_type, first_is_dc, sm, enc,
                              &coefficient_level, &dc_category);
@@ -49,7 +48,7 @@ WP2Status AOMResidualWriter::WriteCoeffs(
     const int y4 = DivideBy4(y_pix >> subsampling);
     const int w4 = kTransformWidth4x4[tx_size];
     const int h4 = kTransformHeight4x4[tx_size];
-    SetEntropyContexts(x4, y4, w4, h4, plane, std::min(4, coefficient_level),
+    SetEntropyContexts(x4, y4, w4, h4, channel, std::min(4, coefficient_level),
                        dc_category, aom_context);
   }
 
@@ -108,7 +107,7 @@ uint32_t AOMResidualWriter::WriteCoeffBaseRange(uint32_t level,
 
 void AOMResidualWriter::WriteTransformCoefficients(
     const int16_t* const res, const AOMContext& aom_context, bool is420,
-    Plane plane, int start_x, int start_y, TransformSize tx_size,
+    Channel channel, int start_x, int start_y, TransformSize tx_size,
     TransformPair tx_type, bool first_is_dc, SymbolManager* const sm,
     ANSEncBase* const enc, int* const coefficient_level,
     int8_t* const dc_category) {
@@ -120,7 +119,7 @@ void AOMResidualWriter::WriteTransformCoefficients(
   const uint32_t bw_pix = kTransformWidth[tx_size];
   const uint32_t bh_pix = kTransformHeight[tx_size];
   int eob = bw_pix * bh_pix / (is420 ? 4 : 1) - 1;
-  const uint16_t* scan = UberZigZag(tx_size, aom_context.IsReduced(plane));
+  const uint16_t* scan = UberZigZag(tx_size, aom_context.IsReduced(channel));
   for (; eob >= 0 && res[scan[eob]] == 0; --eob) {
   }
   ++eob;  // is actually the size.
@@ -138,7 +137,7 @@ void AOMResidualWriter::WriteTransformCoefficients(
   const int padded_tx_height =
       clamped_tx_height + kQuantizedCoefficientBufferPadding;
   const int eob_multi_size = kEobMultiSizeLookup[tx_size];
-  const PlaneType plane_type = GetPlaneType(plane);
+  const PlaneType plane_type = GetPlaneType(channel);
 
   const uint32_t tx_class = (uint32_t)GetTransformClass(tx_type);
   int context = (tx_class != (uint32_t)TransformClass::kTwoD) ? 1 : 0;
@@ -267,7 +266,7 @@ void AOMResidualWriter::WriteTransformCoefficients(
   if (first_is_dc && res[0]) {
     const uint32_t dc_sign_cluster =
           GetClusterAOM2<kAOMDCSign>(plane_type,
-                          GetDcSignContext(aom_context, x4, y4, w4, h4, plane));
+              GetDcSignContext(aom_context, x4, y4, w4, h4, channel));
     *dc_category = (res[0] < 0) ? -1 : 1;
     WriteSignAndApplyDequantization<true>(res[0], dc_sign_cluster,
                                           coefficient_level, sm, enc);

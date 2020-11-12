@@ -31,7 +31,8 @@ namespace WP2 {
 // If fully available, decodes the ANMF chunk, verifies its integrity and stores
 // the new frame features. 'glimpse' implies using the glimpsed frame index
 // instead of the current frame index.
-WP2Status DecodeFrameInfo(DataSource* const data_source,
+WP2Status DecodeFrameInfo(const DecoderConfig& config,
+                          DataSource* const data_source,
                           const BitstreamFeatures& features, bool glimpse,
                           Decoder::State* const state);
 

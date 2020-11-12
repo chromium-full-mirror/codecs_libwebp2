@@ -45,15 +45,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
               << WP2GetStatusMessage(read_status) << std::endl;
     abort();
   }
-  if (loop_count == WP2::ImageReader::kInfiniteLoopCount ||
-      loop_count > WP2::kMaxLoopCount) {
-    loop_count = WP2::kInfiniteLoop;
-  }
+  const bool loop_forever = (loop_count != 1);
 
   // Encode up to ~1M pixels to avoid timeouts.
   const size_t kMaxNumPixels = (1u << 20);
   const size_t num_pixels_per_frame =
-      original_frames.front().width * original_frames.front().height;
+      original_frames.front().width() * original_frames.front().height();
   const size_t max_num_frames = 1u + kMaxNumPixels / num_pixels_per_frame;
   if (original_frames.size() > max_num_frames) {
     original_frames.resize(max_num_frames);
@@ -70,12 +67,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   // Extract a random config.
   // Encoding settings are limited to guarantee a reasonable test duration.
-  const bool use_fast_config = (original_frames.front().width > 128u ||
-                                original_frames.front().height > 128u);
+  const bool use_fast_config = (original_frames.front().width() > 128u ||
+                                original_frames.front().height() > 128u);
   const bool use_advanced_config = params.ExtractBool();
 
   WP2::EncoderConfig config;
-  params.ExtractSimpleConfig(/*max_speed=*/use_fast_config ? 0 : 3, &config);
+  params.ExtractSimpleConfig(/*max_effort=*/use_fast_config ? 0 : 3, &config);
   if (use_advanced_config) {
     params.ExtractAdvancedConfig(use_fast_config, &config);
   }
@@ -83,6 +80,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   const bool compare_after_decoding = !use_advanced_config;
   const float expected_distortion = WP2::testing::GetExpectedDistortion(config);
   return WP2::testing::TestAnimEncConfig(
-      original_frames, durations_ms, loop_count, config, compare_after_decoding,
-      expected_distortion);
+      original_frames, durations_ms, loop_forever, config,
+      compare_after_decoding, expected_distortion);
 }

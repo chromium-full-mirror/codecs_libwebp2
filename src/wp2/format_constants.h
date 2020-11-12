@@ -34,7 +34,7 @@ static constexpr uint32_t kMaxBufferArea = (1u << 28);
 static constexpr uint32_t kSignature = 0x6ffff4;
 static constexpr uint32_t kMaxPreviewSize = 333;
 static constexpr uint32_t kHeaderMinSize = 10;
-static constexpr uint32_t kHeaderMaxSize = 17;
+static constexpr uint32_t kHeaderMaxSize = 16;
 static constexpr uint32_t kTagMask = 0x60ffe9;
 
 // Maximum (inclusive) size of a buffer chunk. -1 to fit in our var ints.
@@ -56,28 +56,19 @@ static constexpr uint32_t kQualityHintNumBits = 4;
 static constexpr uint32_t kAlphaQualityRange = kMaxLossyQuality + 2;
 
 // For animations:
-// Header chunk
-static constexpr uint8_t kLoopCountNumBits = 6;
-static constexpr uint32_t kMaxLoopCount =
-    (1u << kLoopCountNumBits) - 1u;  // = 63, inclusive
-static constexpr uint8_t kInfiniteLoop = 0;
-static constexpr uint8_t kBackgroundNumBits = 2;
-static constexpr uint8_t kBackgroundTransparent = 0x0;
-static constexpr uint8_t kBackgroundWhite = 0x1;
-static constexpr uint8_t kBackgroundBlack = 0x2;
-static constexpr uint8_t kBackgroundCustom = 0x3;
 // ANMF chunk
-static constexpr size_t kANMFHeaderSize = 10;
+static constexpr size_t kANMFMinHeaderSize = 2;   // 8 bits + duration var int
+static constexpr size_t kANMFMaxHeaderSize = 11;  // 8 bits + 5 clamped var ints
 static constexpr uint8_t kANMFTagNumBits = 6;
 static constexpr uint32_t kANMFTagDispose = 0x33;
 static constexpr uint32_t kANMFTagFrame = 0x15;
-static constexpr uint8_t kFrameDurationNumBits = 16;
+static constexpr uint8_t kFrameDurationNumBits = 15;
 static constexpr uint32_t kMaxFrameDurationMs =
-    (1u << kFrameDurationNumBits) - 1u;  // ~= 65 seconds
+    (1u << kFrameDurationNumBits) - 1u;  // ~= 32 seconds
 // Maximum number of frames in an animation, including preframes.
 // Compute kMaxNumFrames so that the animation's total duration fits in 31 bits.
 static constexpr uint32_t kMaxNumFrames =
-    (1u << (31 - kFrameDurationNumBits)) - 1u;  // = 32767, inclusive
+    (1u << (31 - kFrameDurationNumBits)) - 1u;  // = 65535, inclusive
 // Number of allowed consecutive preframes (meaning with a duration of 0 ms).
 static constexpr uint32_t kMaxNumPreframes = 4;
 // Number of allowed consecutive non-disposed regular frames (ignore preframes).

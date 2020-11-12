@@ -46,8 +46,8 @@ bool TryReadTileChunkSize(const GlobalParams& gparams,
       return false;
     }
     tile->chunk_size_is_known = true;
-    RegisterChunkSize(config, tile->chunk_size,
-                      data_source->GetNumReadBytes() - size_before);
+    RegisterBitTrace(config, data_source->GetNumReadBytes() - size_before,
+                     "chunk_size");
   }
   return true;
 }
@@ -55,6 +55,7 @@ bool TryReadTileChunkSize(const GlobalParams& gparams,
 // Returns true if the next tile has all its chunk data available.
 bool TryReadTile(DataSource* const data_source,
                  const BitstreamFeatures& features, const DecoderConfig& config,
+                 ProgressWatcher* const progress,
                  TilesLayout* const tiles_layout, Tile* const tile,
                  PartialTileDecoder* const partial_tile_decoder) {
   if (!TryReadTileChunkSize(*tiles_layout->gparams, data_source, config,
@@ -72,7 +73,7 @@ bool TryReadTile(DataSource* const data_source,
       // an error right now.
       if (data_source->TryGetNext(data_source->GetNumNextBytes(),
                                   &tile->data_handle)) {
-        if (partial_tile_decoder->Init(features, config,
+        if (partial_tile_decoder->Init(features, config, progress,
                                        tiles_layout, tile) != WP2_STATUS_OK) {
           return false;  // this is most probably a memory alloc failure
         }
@@ -127,7 +128,7 @@ WP2Status Decoder::DecodeAvailableTiles() {
 
   while (tiles_layout->num_assignable_tiles < tiles_layout->tiles.size()) {
     const uint32_t tile_index = tiles_layout->num_assignable_tiles;
-    if (!TryReadTile(state_->data_source, features_, config_,
+    if (!TryReadTile(state_->data_source, features_, config_, &state_->progress,
                      &state_->tiles_layout,
                      &state_->tiles_layout.tiles[tile_index],
                      state_->partial_tile_decoder.get())) {
@@ -237,7 +238,7 @@ WP2Status Decoder::DecodeAvailableTiles() {
           0, num_converted_rows_in_tile, tile.rect.width,
           num_convertible_rows_in_tile - num_converted_rows_in_tile};
 
-      ArgbBuffer rgb_output_rows(tile.rgb_output.format);
+      ArgbBuffer rgb_output_rows(tile.rgb_output.format());
       WP2_CHECK_STATUS(rgb_output_rows.SetView(tile.rgb_output, new_rows_rect));
       YUVPlane yuv_output_rows;
       WP2_CHECK_STATUS(yuv_output_rows.SetView(tile.yuv_output, new_rows_rect));
@@ -260,21 +261,23 @@ WP2Status Decoder::DiscardAvailableTiles() {
   TilesLayout* const tiles_layout = &state_->tiles_layout;
   PartialTileDecoder* const partial_tile_decoder =
       state_->partial_tile_decoder.get();
-  if ((partial_tile_decoder != nullptr) &&
-      (partial_tile_decoder->GetPartialTile() != nullptr)) {
-    state_->data_source->MarkNumBytesAsRead(
-        partial_tile_decoder->GetPartialTile()->chunk_size);
+  if (partial_tile_decoder != nullptr &&
+      partial_tile_decoder->GetPartialTile() != nullptr) {
+    const Tile& partial_tile = *partial_tile_decoder->GetPartialTile();
+    state_->data_source->MarkNumBytesAsRead(partial_tile.chunk_size);
     state_->data_source->Discard(state_->data_source->GetNumReadBytes());
     partial_tile_decoder->Clear();
+    WP2_CHECK_STATUS(state_->progress.AdvanceBy(partial_tile.rect.height -
+                                                partial_tile.num_decoded_rows));
   }
 
   while (tiles_layout->num_assignable_tiles < tiles_layout->tiles.size()) {
-    const uint32_t tile_index = tiles_layout->num_assignable_tiles;
+    Tile& tile = state_->tiles_layout.tiles[tiles_layout->num_assignable_tiles];
     const bool skipped_tile =
-        TrySkipTile(state_->data_source, config_, &state_->tiles_layout,
-                    &state_->tiles_layout.tiles[tile_index]);
+        TrySkipTile(state_->data_source, config_, &state_->tiles_layout, &tile);
     state_->data_source->Discard(state_->data_source->GetNumReadBytes());
     if (!skipped_tile) break;
+    WP2_CHECK_STATUS(state_->progress.AdvanceBy(tile.rect.height));
   }
 
   if (tiles_layout->num_assignable_tiles < tiles_layout->tiles.size()) {

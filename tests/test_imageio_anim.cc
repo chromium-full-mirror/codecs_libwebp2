@@ -76,9 +76,9 @@ TEST(ReadImageTest, AnimationMetadata) {
   const Data good_exif = CreateData("good exif");
   const Data good_iccp = CreateData("good iccp");
   const Data good_xmp = CreateData("good xmp");
-  ASSERT_WP2_OK(input.metadata.exif.CopyFrom(good_exif.bytes, good_exif.size));
-  ASSERT_WP2_OK(input.metadata.iccp.CopyFrom(good_iccp.bytes, good_iccp.size));
-  ASSERT_WP2_OK(input.metadata.xmp.CopyFrom(good_xmp.bytes, good_xmp.size));
+  ASSERT_WP2_OK(input.metadata_.exif.CopyFrom(good_exif.bytes, good_exif.size));
+  ASSERT_WP2_OK(input.metadata_.iccp.CopyFrom(good_iccp.bytes, good_iccp.size));
+  ASSERT_WP2_OK(input.metadata_.xmp.CopyFrom(good_xmp.bytes, good_xmp.size));
 
   // Encode.
   AnimationEncoder encoder;
@@ -86,15 +86,16 @@ TEST(ReadImageTest, AnimationMetadata) {
     ASSERT_WP2_OK(encoder.AddFrame(input, /*duration_ms=*/1));
   }
   MemoryWriter output;
-  ASSERT_WP2_OK(encoder.Encode(&output, config, kInfiniteLoop, input.metadata));
+  ASSERT_WP2_OK(
+      encoder.Encode(&output, config, /*loop_forever=*/true, input.metadata_));
 
   // Decode only first frame.
   {
     ArgbBuffer decoded;
     ASSERT_WP2_OK(ReadImage(output.mem_, output.size_, &decoded));
-    EXPECT_TRUE(testing::HasSameData(decoded.metadata.exif, good_exif));
-    EXPECT_TRUE(testing::HasSameData(decoded.metadata.iccp, good_iccp));
-    EXPECT_TRUE(testing::HasSameData(decoded.metadata.xmp, good_xmp));
+    EXPECT_TRUE(testing::HasSameData(decoded.metadata_.exif, good_exif));
+    EXPECT_TRUE(testing::HasSameData(decoded.metadata_.iccp, good_iccp));
+    EXPECT_TRUE(testing::HasSameData(decoded.metadata_.xmp, good_xmp));
   }
 
   // Decode and check metadata for all frames.
@@ -104,9 +105,9 @@ TEST(ReadImageTest, AnimationMetadata) {
     bool is_last_frame = true;
     do {
       ASSERT_WP2_OK(image_reader.ReadFrame(&is_last_frame));
-      EXPECT_TRUE(testing::HasSameData(decoded.metadata.exif, good_exif));
-      EXPECT_TRUE(testing::HasSameData(decoded.metadata.iccp, good_iccp));
-      EXPECT_TRUE(testing::HasSameData(decoded.metadata.xmp, good_xmp));
+      EXPECT_TRUE(testing::HasSameData(decoded.metadata_.exif, good_exif));
+      EXPECT_TRUE(testing::HasSameData(decoded.metadata_.iccp, good_iccp));
+      EXPECT_TRUE(testing::HasSameData(decoded.metadata_.xmp, good_xmp));
     } while (!is_last_frame);
   }
 }

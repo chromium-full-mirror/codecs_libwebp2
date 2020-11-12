@@ -262,7 +262,7 @@ static void CopyImageWithPrediction(int width, int height, int bits,
                                     const int16_t* const modes,
                                     uint16_t* const argb_scratch,
                                     uint16_t* const argb, bool has_alpha,
-                                    int speed) {
+                                    int effort) {
   const int tiles_per_row = WP2LSubSampleSize(width, bits);
   // The width of upper_row and current_row is one pixel larger than image width
   // to allow the top right pixel to point to the leftmost pixel of the next row
@@ -278,7 +278,7 @@ static void CopyImageWithPrediction(int width, int height, int bits,
               &argb[4 * y * width + 4 * (width + (y + 1 < height))],
               current_row);
 
-    if (speed == 0) {
+    if (effort == 0) {
       PredictBatch(kPredLowEffort, 0, y, width, channel_bits, current_row,
                    has_alpha, upper_row, &argb[4 * y * width]);
     } else {
@@ -300,12 +300,12 @@ static void CopyImageWithPrediction(int width, int height, int bits,
 // near lossless processing, shaving off more bits of residuals for lower
 // qualities.
 WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
-                        uint32_t channel_bits, int speed, uint16_t* const argb,
+                        uint32_t channel_bits, int effort, uint16_t* const argb,
                         bool has_alpha, uint16_t* const argb_scratch,
                         int16_t* const image) {
   const uint32_t tiles_per_row = WP2LSubSampleSize(width, bits);
   const uint32_t tiles_per_col = WP2LSubSampleSize(height, bits);
-  if (speed == 0) {
+  if (effort == 0) {
     for (size_t i = 0; i < tiles_per_row * tiles_per_col; ++i) {
       image[4 * i + 0] = 0;
       image[4 * i + 1] = 0;
@@ -337,7 +337,7 @@ WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
   }
 
   CopyImageWithPrediction(width, height, bits, channel_bits, image,
-                          argb_scratch, argb, has_alpha, speed);
+                          argb_scratch, argb, has_alpha, effort);
   return WP2_STATUS_OK;
 }
 
@@ -404,11 +404,11 @@ static float GetPredictionCostCrossColorRed(
 static void GetBestGreenToRed(const int16_t* argb, uint32_t width,
                               int tile_width, int tile_height,
                               WP2LMultipliers prev_x, WP2LMultipliers prev_y,
-                              int speed,
+                              int effort,
                               const Vector_u32& accumulated_red_histo,
                               WP2LMultipliers* const best_tx,
                               Vector_u32* const tmp_histo) {
-  const int kMaxIters = (speed < 5) ? 4 + speed * 2 / 5 : 6;  // in range [4..6]
+  const int kMaxIters = (effort < 5) ? 4 + effort * 2 / 5 : 6;  // in [4..6]
   int green_to_red_best = 0;
   int iter, offset;
   float best_diff = GetPredictionCostCrossColorRed(
@@ -475,7 +475,7 @@ static constexpr uint32_t kGreenRedToBlueMaxIters = 7;
 static void GetBestGreenRedToBlue(const int16_t* argb, uint32_t width,
                                   int tile_width, int tile_height,
                                   WP2LMultipliers prev_x,
-                                  WP2LMultipliers prev_y, int speed,
+                                  WP2LMultipliers prev_y, int effort,
                                   const Vector_u32& accumulated_blue_histo,
                                   WP2LMultipliers* const best_tx,
                                   Vector_u32* tmp_histo) {
@@ -483,7 +483,7 @@ static void GetBestGreenRedToBlue(const int16_t* argb, uint32_t width,
       {{0, -1}, {0, 1}, {-1, 0}, {1, 0}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
   const int8_t delta_lut[kGreenRedToBlueMaxIters] = { 16, 16, 8, 4, 2, 2, 2 };
   const int iters =
-      (speed < 3) ? 1 : (speed >= 5) ? kGreenRedToBlueMaxIters : 4;
+      (effort < 3) ? 1 : (effort >= 5) ? kGreenRedToBlueMaxIters : 4;
   int green_to_blue_best = 0;
   int red_to_blue_best = 0;
   int iter;
@@ -509,8 +509,8 @@ static void GetBestGreenRedToBlue(const int16_t* argb, uint32_t width,
         green_to_blue_best = green_to_blue_cur;
         red_to_blue_best = red_to_blue_cur;
       }
-      if (speed < 3 && iter == 4) {
-        // Only axis aligned diffs for lower speed.
+      if (effort < 3 && iter == 4) {
+        // Only axis aligned diffs for lower effort.
         break;  // next iter.
       }
     }
@@ -525,7 +525,7 @@ static void GetBestGreenRedToBlue(const int16_t* argb, uint32_t width,
 
 static WP2LMultipliers GetBestColorTransformForTile(
     int tile_x, int tile_y, int bits, WP2LMultipliers prev_x,
-    WP2LMultipliers prev_y, int speed, int xsize, int ysize,
+    WP2LMultipliers prev_y, int effort, int xsize, int ysize,
     const Vector_u32& accumulated_red_histo,
     const Vector_u32& accumulated_blue_histo, const int16_t* const argb,
     Vector_u32* const tmp_histo) {
@@ -542,9 +542,9 @@ static WP2LMultipliers GetBestColorTransformForTile(
   MultipliersClear(&best_tx);
 
   GetBestGreenToRed(tile_argb, xsize, tile_width, tile_height, prev_x, prev_y,
-                    speed, accumulated_red_histo, &best_tx, tmp_histo);
+                    effort, accumulated_red_histo, &best_tx, tmp_histo);
   GetBestGreenRedToBlue(tile_argb, xsize, tile_width, tile_height, prev_x,
-                        prev_y, speed, accumulated_blue_histo, &best_tx,
+                        prev_y, effort, accumulated_blue_histo, &best_tx,
                         tmp_histo);
   return best_tx;
 }
@@ -564,7 +564,7 @@ static void CopyTileWithColorTransform(uint32_t width, uint32_t height,
 }
 
 WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
-                              WP2SampleFormat format, uint32_t speed,
+                              WP2SampleFormat format, uint32_t effort,
                               uint16_t* const argb_in, int16_t* image) {
   const int max_tile_size = 1 << bits;
   const int tile_xsize = WP2LSubSampleSize(width, bits);
@@ -600,7 +600,7 @@ WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
         ColorCodeToMultipliers(&image[4 * (offset - tile_xsize)], &prev_y);
       }
       prev_x = GetBestColorTransformForTile(
-          tile_x, tile_y, bits, prev_x, prev_y, speed, width, height,
+          tile_x, tile_y, bits, prev_x, prev_y, effort, width, height,
           accumulated_red_histo, accumulated_blue_histo, argb, &tmp_histo);
       MultipliersToColorCode(&prev_x, &image[4 * offset]);
       CopyTileWithColorTransform(width, height, tile_x_offset, tile_y_offset,

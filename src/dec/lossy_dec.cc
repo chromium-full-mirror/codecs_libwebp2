@@ -168,7 +168,12 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     // current block are decoded.
     if (info.block.x_pix() + info.block.w_pix() == tile->yuv_output.Y.w_) {
       const uint32_t num_decoded_yuv_rows = info.block.y_pix();
-      tile->num_decoded_rows = filter.Apply(num_decoded_yuv_rows);
+      const uint32_t num_decoded_rows = filter.Apply(num_decoded_yuv_rows);
+      if (num_decoded_rows > tile->num_decoded_rows) {
+        WP2_CHECK_STATUS(
+            progress->AdvanceBy(num_decoded_rows - tile->num_decoded_rows));
+        tile->num_decoded_rows = num_decoded_rows;
+      }
     }
 
     CodedBlock cb;
@@ -314,13 +319,6 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     }
 #endif
 
-    const uint32_t bw = cb.w();
-    const uint32_t bh = cb.h();
-    const uint32_t actual_block_width_px =
-        std::min(bw * kMinBlockSizePix, tile->rect.width - cb.x_pix());
-    const uint32_t actual_block_height_px =
-        std::min(bh * kMinBlockSizePix, tile->rect.height - cb.y_pix());
-
     size_t min_num_used_bytes = ANSDec::GetMinNumUsedBytesDiff(
         num_used_bytes_before, dec->GetNumUsedBytes());
     if (gparams.has_alpha_) {
@@ -329,11 +327,6 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
           SafeSub(min_num_used_bytes, cb.alpha_lossless_bytes_);
     }
     tile->block_map.RegisterBlock(cb, (uint32_t)min_num_used_bytes);
-
-    if (progress != nullptr) {
-      WP2_CHECK_STATUS(
-          progress->AdvanceBy(actual_block_width_px * actual_block_height_px));
-    }
 
     if (VDMatch(config, "blocks")) {
       WP2_CHECK_ALLOC_OK(all_blocks.push_back(std::move(cb)));
@@ -359,7 +352,11 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   }
 #endif
 
-  tile->num_decoded_rows = filter.Apply(tile->rect.height);
+  const uint32_t num_decoded_rows = filter.Apply(tile->rect.height);
+  assert(num_decoded_rows > tile->num_decoded_rows);
+  WP2_CHECK_STATUS(
+      progress->AdvanceBy(num_decoded_rows - tile->num_decoded_rows));
+  tile->num_decoded_rows = num_decoded_rows;
   assert(tile->num_decoded_rows == tile->rect.height);
 
   // VisualDebug

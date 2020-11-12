@@ -17,27 +17,30 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
+#include "src/common/global_params.h"
+#include "src/common/header_enc_dec.h"
+#include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
 #include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/dsp/math.h"
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
-#include "src/common/global_params.h"
-#include "src/common/lossy/block.h"
-#include "src/common/lossy/block_size.h"
 
 namespace WP2 {
 
 //------------------------------------------------------------------------------
 
 WP2Status TileDecoder::BypassTileDec() {
-  const uint32_t max_num_bytes = GetTileMaxNumBytes(*gparams_, tile_->rect);
+  const size_t num_read_bytes_before =
+      tile_->input->GetNumDiscardedBytes() + tile_->input->GetNumReadBytes();
   if (gparams_->type_ == GlobalParams::GP_LOSSLESS) {
     tile_->output_is_yuv = false;
     assert(!tile_->rgb_output.IsEmpty());
     const uint32_t bytes_per_row =
         tile_->rect.width * (gparams_->has_alpha_ ? 4 : 3);
-    assert(bytes_per_row * tile_->rect.height == max_num_bytes);
+    assert(bytes_per_row * tile_->rect.height ==
+           GetTileMaxNumBytes(*gparams_, tile_->rect));
 
     uint8_t* row = (uint8_t*)tile_->rgb_output.GetRow(0);
     tile_->num_decoded_rows = 0;
@@ -55,11 +58,9 @@ WP2Status TileDecoder::BypassTileDec() {
           row[x * 4 + 3] = handle.GetBytes()[x * 3 + 2];
         }
       }
-      row += tile_->rgb_output.stride;
+      row += tile_->rgb_output.stride();
       ++tile_->num_decoded_rows;
-      if (progress_ != nullptr) {
-        WP2_CHECK_STATUS(progress_->AdvanceBy(tile_->rect.width));
-      }
+      WP2_CHECK_STATUS(progress_->AdvanceBy(1.f));
     }
   } else {  // !GP_LOSSLESS
     tile_->output_is_yuv = true;
@@ -89,11 +90,7 @@ WP2Status TileDecoder::BypassTileDec() {
                 &sim_block.coeffs_[c][0][0] + kMaxBlockSizePix2, 1);
     }
 
-    DataSource::DataHandle handle;
-    WP2_CHECK_OK(tile_->input->TryReadNext(max_num_bytes, &handle),
-                 WP2_STATUS_NOT_ENOUGH_DATA);
-    HeaderDec bit_unpacker(handle.GetBytes(), handle.GetSize());
-    bit_unpacker.SetDebugPrefix("raw_px");
+    HeaderDec bit_unpacker(tile_->input, "raw_pixels");
     if (!gparams_->has_alpha_ && !tile_->yuv_output.A.IsEmpty()) {
       tile_->yuv_output.A.Fill(kAlphaMax);
     }
@@ -124,14 +121,24 @@ WP2Status TileDecoder::BypassTileDec() {
           tile_->block_map.RegisterBlock(sim_block, min_num_bytes_per_px);
         }
       }
-      if (progress_ != nullptr) {
-        WP2_CHECK_STATUS(progress_->AdvanceBy(tile_->rect.width));
-      }
+      WP2_CHECK_STATUS(progress_->AdvanceBy(1.f));
     }
 
-    WP2_CHECK_OK(bit_unpacker.Ok(), WP2_STATUS_BAD_READ);
-    assert(bit_unpacker.Used() == max_num_bytes);
+    WP2_CHECK_STATUS(bit_unpacker.GetStatus());
   }
+  const size_t num_read_bytes = tile_->input->GetNumDiscardedBytes() +
+                                tile_->input->GetNumReadBytes() -
+                                num_read_bytes_before;
+  (void)num_read_bytes;
+  assert(num_read_bytes == GetTileMaxNumBytes(*gparams_, tile_->rect));
+
+#if defined(WP2_BITTRACE)
+  if (config_->info != nullptr) {
+    WP2_CHECK_STATUS(tiles_layout_->assignment_lock.Acquire());
+    RegisterBitTrace(*config_, num_read_bytes, "BypassPixels");
+    tiles_layout_->assignment_lock.Release();
+  }
+#endif
   return WP2_STATUS_OK;
 }
 

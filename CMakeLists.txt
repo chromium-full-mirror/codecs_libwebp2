@@ -45,6 +45,8 @@ set(AOM_SRC_PATH CACHE STRING "Path to AOM sources.")
 set(AOM_BUILD_PATH CACHE STRING "Path to AOM build directory.")
 set(AVIF_SRC_PATH CACHE STRING "Path to AVIF sources.")
 set(AVIF_BUILD_PATH CACHE STRING "Path to AVIF build directory.")
+set(LIBGAV1_SRC_PATH CACHE STRING "Path to libgav1 sources.")
+set(LIBGAV1_BUILD_PATH CACHE STRING "Path to libgav1 build directory.")
 set(SJPEG_INSTALL_PATH CACHE STRING
                              "Path where sjpeg is installed (for rd-curve).")
 # Debug options.
@@ -204,10 +206,12 @@ add_library(
   wp2_utils OBJECT
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/color_precision.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/constants.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/integral.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/integral.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/global_params.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/global_params.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/header_enc_dec.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/header_enc_dec.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/integral.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/integral.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/progress_watcher.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/progress_watcher.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/argb_buffer.cc
@@ -711,6 +715,19 @@ if(WP2_BUILD_EXTRAS)
       target_include_directories(extras SYSTEM PRIVATE ${AOM_SRC_PATH}
                                                        ${AOM_BUILD_PATH})
       target_compile_definitions(extras PUBLIC WP2_HAVE_AOM_DBG)
+    endif()
+    if(LIBGAV1_SRC_PATH)
+      if(NOT LIBGAV1_BUILD_PATH)
+        message(FATAL_ERROR "LIBGAV1_BUILD_PATH need to be set.")
+      endif()
+      add_definitions("-Wno-shadow -Wno-format-nonliteral")  # because of abseil
+      add_subdirectory(${LIBGAV1_SRC_PATH}/third_party/abseil-cpp
+                       ${LIBGAV1_BUILD_PATH}/abseil/absl)
+      target_link_directories(extras PUBLIC ${LIBGAV1_BUILD_PATH})
+      target_link_libraries(extras libgav1.a absl::base absl::synchronization)
+      target_include_directories(extras SYSTEM PRIVATE ${LIBGAV1_SRC_PATH}/src
+                                                       ${LIBGAV1_BUILD_PATH})
+      target_compile_definitions(extras PUBLIC WP2_HAVE_LIBGAV1)
     endif()
   endif()
   # Deal with AVIF.

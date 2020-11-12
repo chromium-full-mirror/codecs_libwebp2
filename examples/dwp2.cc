@@ -190,11 +190,11 @@ std::string PrintSummary(const WP2::BitstreamFeatures& bitstream,
   std::string str;
   str += SPrintf("Dimension:     %u x %u\n", bitstream.width, bitstream.height);
   if (!short_output) {
-    str += SPrintf("animation:     %s", bitstream.is_animation ? "yes" : "no");
-    if (bitstream.is_animation) {
-      str += SPrintf(" (loop count:%d)", bitstream.loop_count);
-    }
-    str += "\n";
+    str += SPrintf("animation:     %s\n",
+                   bitstream.is_animation
+                       ? (bitstream.loop_forever ? "yes (loop forever)"
+                                                 : "yes (play once)")
+                       : "no");
     str += SPrintf("quality hint:  %u\n", bitstream.quality_hint);
     str += SPrintf("preview:       %s\n", bitstream.has_preview ? "yes" : "no");
     str += SPrintf("preview color: %u, %u, %u\n", prev_col.r, prev_col.g,
@@ -228,7 +228,7 @@ class ImageDecoder : public WP2::WorkerBase {
     if (!settings_.quiet) {
       *standard_out +=
           SPrintf("Decoded %s. Dimensions: %d x %d. Transparency: %s.\n",
-                  in_path.c_str(), buffer.width, buffer.height,
+                  in_path.c_str(), buffer.width(), buffer.height(),
                   buffer.HasTransparency() ? "yes" : "no");
     }
     if (!settings_.out_path.empty()) {

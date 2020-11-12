@@ -39,12 +39,12 @@ TEST(Lossless10, Simple) {
 
   // Convert the src to 10 bit.
   ArgbBuffer src(WP2_Argb_38);
-  ASSERT_WP2_OK(src.Resize(src_32.width, src_32.height));
+  ASSERT_WP2_OK(src.Resize(src_32.width(), src_32.height()));
   UniformIntDistribution random(/*seed=*/0);
-  for (uint32_t y = 0; y < src_32.height; ++y) {
+  for (uint32_t y = 0; y < src_32.height(); ++y) {
     const uint8_t* const row_in = src_32.GetRow8(y);
     uint16_t* const row_out = src.GetRow16(y);
-    for (uint32_t x = 0; x < 4 * src_32.width; ++x) {
+    for (uint32_t x = 0; x < 4 * src_32.width(); ++x) {
       // TODO(vrabaud) convert to 10 bit and add noise.
       row_out[x] = (row_in[x] << 0) + 0 * random.Get(0, 3);
     }
@@ -74,8 +74,8 @@ TEST_P(DecodeTest, Simple) {
 
   ArgbBuffer src;
   MemoryWriter data;
-  ASSERT_WP2_OK(
-      testing::CompressImage(src_file_name, &data, &src, quality, /*speed=*/3));
+  ASSERT_WP2_OK(testing::CompressImage(src_file_name, &data, &src, quality,
+                                       /*effort=*/3));
 
   ArgbBuffer output;
   DecoderConfig config;
@@ -110,18 +110,19 @@ TEST(DecodeTest, RawBuffer) {
   ASSERT_WP2_OK(testing::CompressImage(src_file_name, &data, &src, quality));
 
   Data output_buffer;
-  const uint32_t min_stride = src.width * WP2FormatBpp(src.format);
+  const uint32_t min_stride = src.width() * WP2FormatBpp(src.format());
   const uint32_t useless_gap_between_lines = 237;
   const uint32_t arbitrary_stride = min_stride + useless_gap_between_lines;
-  const uint32_t min_size = (src.height - 1) * arbitrary_stride + min_stride;
+  const uint32_t min_size = (src.height() - 1) * arbitrary_stride + min_stride;
   ASSERT_WP2_OK(output_buffer.Resize(min_size, /*keep_bytes=*/false));
 
   ASSERT_WP2_OK(DecodeArgb_32(data.mem_, data.size_, output_buffer.bytes,
                               arbitrary_stride, output_buffer.size));
 
   ArgbBuffer output;
-  ASSERT_WP2_OK(output.SetExternal(src.width, src.height, output_buffer.bytes,
-                                   arbitrary_stride, /*is_slow=*/true));
+  ASSERT_WP2_OK(output.SetExternal(src.width(), src.height(),
+                                   output_buffer.bytes, arbitrary_stride,
+                                   /*is_slow=*/true));
 
   ASSERT_TRUE(testing::Compare(src, output, src_file_name,
                                testing::GetExpectedDistortion(quality)));

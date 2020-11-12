@@ -903,7 +903,7 @@ void SymbolWriter::ComputeGolombCost(uint32_t range, uint32_t max_nnz,
   // Quantize the histogram to get the cost of using a dictionary.
   quantizer_golomb_.Quantize(histogram_golomb_.data(), mapping_golomb_.data(),
                              *size_golomb, range_golomb, max_nnz,
-                             /*speed=*/9, config_golomb);
+                             /*effort=*/9, config_golomb);
   *cost += (*config_golomb)->cost_;
   // Do not use Golomb if there is only one value for now.
   const uint32_t nnz_range_golomb = std::min(max_nnz, range_golomb);
@@ -1089,7 +1089,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
   if (size < ANS_MAX_SYMBOLS) {
     // Quantize the histogram to get the cost of using a dictionary.
     quantizer_.Quantize(histogram_.data(), mapping_.data(), size, range,
-                        max_nnz, /*speed=*/9, &config);
+                        max_nnz, /*effort=*/9, &config);
     cost_dict = config->cost_;
     cost_dict += WP2Log2(nnz_range);  // Add the size_m1 cost.
   } else {

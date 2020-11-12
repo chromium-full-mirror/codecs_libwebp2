@@ -33,12 +33,12 @@ TEST(ReadImageTest, Metadata) {
   // Read image with metadata.
   ASSERT_WP2_OK(ReadImage(
       testing::GetTestDataPath("test_exif_xmp.webp").c_str(), &buffer));
-  EXPECT_TRUE(!buffer.metadata.IsEmpty());
+  EXPECT_TRUE(!buffer.metadata_.IsEmpty());
   // Read image without metadata.
   ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath("source1_64x48.png").c_str(),
                           &buffer));
   // Expect nothing left from first image.
-  EXPECT_TRUE(buffer.metadata.IsEmpty());
+  EXPECT_TRUE(buffer.metadata_.IsEmpty());
 }
 
 TEST(ReadImageTest, NoStdoutFileSize) {

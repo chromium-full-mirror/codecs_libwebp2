@@ -84,17 +84,17 @@ TEST_P(DecodeCustomCspTest, Comparison) {
 
   YUVPlane custom_output;  // Might contain RGB.
   Metadata metadata;
-  const uint32_t padded_width = Pad(src.width, kPredWidth);
-  const uint32_t padded_height = Pad(src.height, kPredWidth);
-  ASSERT_WP2_OK(custom_output.Y.Resize(pad_y ? padded_width : src.width,
-                                       pad_y ? padded_height : src.height));
-  ASSERT_WP2_OK(custom_output.U.Resize(pad_u ? padded_width : src.width,
-                                       pad_u ? padded_height : src.height));
-  ASSERT_WP2_OK(custom_output.V.Resize(pad_v ? padded_width : src.width,
-                                       pad_v ? padded_height : src.height));
+  const uint32_t padded_width = Pad(src.width(), kPredWidth);
+  const uint32_t padded_height = Pad(src.height(), kPredWidth);
+  ASSERT_WP2_OK(custom_output.Y.Resize(pad_y ? padded_width : src.width(),
+                                       pad_y ? padded_height : src.height()));
+  ASSERT_WP2_OK(custom_output.U.Resize(pad_u ? padded_width : src.width(),
+                                       pad_u ? padded_height : src.height()));
+  ASSERT_WP2_OK(custom_output.V.Resize(pad_v ? padded_width : src.width(),
+                                       pad_v ? padded_height : src.height()));
   if (get_alpha) {
-    ASSERT_WP2_OK(custom_output.A.Resize(pad_a ? padded_width : src.width,
-                                        pad_a ? padded_height : src.height));
+    ASSERT_WP2_OK(custom_output.A.Resize(pad_a ? padded_width : src.width(),
+                                         pad_a ? padded_height : src.height()));
   }
 
   ASSERT_WP2_OK(Decode(
@@ -107,9 +107,9 @@ TEST_P(DecodeCustomCspTest, Comparison) {
       get_metadata ? &metadata : nullptr));
 
   if (get_metadata) {
-    EXPECT_TRUE(testing::HasSameData(metadata.exif, ref.metadata.exif));
-    EXPECT_TRUE(testing::HasSameData(metadata.xmp, ref.metadata.xmp));
-    EXPECT_TRUE(testing::HasSameData(metadata.iccp, ref.metadata.iccp));
+    EXPECT_TRUE(testing::HasSameData(metadata.exif, ref.metadata_.exif));
+    EXPECT_TRUE(testing::HasSameData(metadata.xmp, ref.metadata_.xmp));
+    EXPECT_TRUE(testing::HasSameData(metadata.iccp, ref.metadata_.iccp));
   }
 
   switch (matrix) {
@@ -120,12 +120,12 @@ TEST_P(DecodeCustomCspTest, Comparison) {
       const YUVPlane& rgb = custom_output;
       // Change the container but keep the data as is, except kRGB10 shift.
       ArgbBuffer output;
-      ASSERT_WP2_OK(output.Resize(ref.width, ref.height));
-      for (uint32_t y = 0; y < ref.height; ++y) {
-        for (uint32_t x = 0; x < ref.width; ++x) {
-          const uint32_t px = x * WP2FormatBpp(output.format);
-          uint8_t* const pixel = &((uint8_t*)output.GetRow(y))[px];
-          pixel[0] = rgb.A.IsEmpty() ? ((uint8_t*)ref.GetRow(y))[px + 0]
+      ASSERT_WP2_OK(output.Resize(ref.width(), ref.height()));
+      for (uint32_t y = 0; y < ref.height(); ++y) {
+        for (uint32_t x = 0; x < ref.width(); ++x) {
+          const uint32_t px = x * WP2FormatBpp(output.format());
+          uint8_t* const pixel = &(output.GetRow8(y))[px];
+          pixel[0] = rgb.A.IsEmpty() ? (ref.GetRow8(y))[px + 0]
                                      : (uint8_t)rgb.A.At(x, y);
           constexpr int16_t min = 0, max = 255;
           if (matrix == Matrix::kRGB8) {
@@ -179,7 +179,7 @@ TEST_P(DecodeCustomCspTest, Comparison) {
                                    /*resize_if_needed=*/true));
       // SetView() plane by plane to avoid IsSubsampled() checks.
       YUVPlane non_padded_yuv;
-      const Rectangle rect = {0, 0, ref.width, ref.height};
+      const Rectangle rect = {0, 0, ref.width(), ref.height()};
       ASSERT_WP2_OK(non_padded_yuv.Y.SetView(custom_output.Y, rect));
       ASSERT_WP2_OK(non_padded_yuv.U.SetView(custom_output.U, rect));
       ASSERT_WP2_OK(non_padded_yuv.V.SetView(custom_output.V, rect));

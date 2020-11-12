@@ -58,14 +58,15 @@ ${VWP2} -version
 ${VWP2} -h
 ${VWP2} -q 30 -nomt -noasm
 ${VWP2} -quants 30,64,12,64,13,432,12,125,32 -nomt -noasm
-${VWP2} -info -d -alt /tmp -ps 3 -speed 3 -segments 1 -pass 2 \
+${VWP2} -info -d -alt /tmp -ps 3 -effort 3 -segments 1 -pass 2 \
         -nometadata -bt 2 -q 50 -set_block 1 2 6 9 -h
 
 ${GET_DISTO} -version
 ${GET_DISTO} -h
 
 # test -d option
-${CWP2} -o ${TMP_FILE} ${SRC_FILE3} -speed 1 -d ${TMP_FILE2} -bt -create_preview
+${CWP2} -o ${TMP_FILE} ${SRC_FILE3} -effort 1 -d ${TMP_FILE2} \
+        -bt -create_preview
 ${DWP2} ${TMP_FILE} -o ${TMP_FILE3} -histos -count_blocks -short
 ${GET_DISTO} ${TMP_FILE2} ${TMP_FILE3} -exact
 
@@ -74,20 +75,20 @@ echo "asdfvkladfsvkal" > ${TMP_FILE}
 ${CWP2} ${TMP_FILE3} -preview ${TMP_FILE}
 
 # lossy vdebug test
-${CWP2} -o ${TMP_FILE} ${SRC_FILE1} -crop 30 31 1 20 -speed 0 -diffusion 50 \
+${CWP2} -o ${TMP_FILE} ${SRC_FILE1} -crop 30 31 1 20 -effort 0 -diffusion 50 \
         -quants "60,43, 23, 23,54 ,23" -BT -histos -tile_shape 3
 for vdebug in `seq -1 33`; do
   ${DWP2} ${TMP_FILE} -mt -vdebug ${vdebug} &> /dev/null
 done
 
 # lossless vdebug test
-${CWP2} -o ${TMP_FILE} ${SRC_FILE1} -crop 30 31 1 20 -speed 0 -q 99 -sns 30 -v
+${CWP2} -o ${TMP_FILE} ${SRC_FILE1} -crop 30 31 1 20 -effort 0 -q 99 -sns 30 -v
 for vdebug in `seq -1 20`; do
   ${DWP2} ${TMP_FILE} -vdebug ${vdebug} &> /dev/null
 done
 
 # grain test
-${CWP2} -o ${TMP_FILE} ${SRC_FILE1} -crop 30 31 200 200 -speed 0 \
+${CWP2} -o ${TMP_FILE} ${SRC_FILE1} -crop 30 31 200 200 -effort 0 \
         -grain -noasm -segment_mode auto -perceptual
 ${GET_DISTO} ${TMP_FILE} ${SRC_FILE1} -scale -crop_source 30 31 200 200 \
              -prefix "this is a test" -suffix "good"

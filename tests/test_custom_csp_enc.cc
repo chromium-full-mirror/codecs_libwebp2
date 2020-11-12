@@ -66,17 +66,17 @@ TEST_P(EncodeCustomCspTest, Comparison) {
       testing::CompressImage(src_file_name, &ref_data, &src, quality));
 
   YUVPlane custom_input;  // Might contain RGB.
-  const uint32_t padded_width = Pad(src.width, kPredWidth);
-  const uint32_t padded_height = Pad(src.height, kPredWidth);
-  ASSERT_WP2_OK(custom_input.Y.Resize(pad_y ? padded_width : src.width,
-                                      pad_y ? padded_height : src.height));
-  ASSERT_WP2_OK(custom_input.U.Resize(pad_u ? padded_width : src.width,
-                                      pad_u ? padded_height : src.height));
-  ASSERT_WP2_OK(custom_input.V.Resize(pad_v ? padded_width : src.width,
-                                      pad_v ? padded_height : src.height));
+  const uint32_t padded_width = Pad(src.width(), kPredWidth);
+  const uint32_t padded_height = Pad(src.height(), kPredWidth);
+  ASSERT_WP2_OK(custom_input.Y.Resize(pad_y ? padded_width : src.width(),
+                                      pad_y ? padded_height : src.height()));
+  ASSERT_WP2_OK(custom_input.U.Resize(pad_u ? padded_width : src.width(),
+                                      pad_u ? padded_height : src.height()));
+  ASSERT_WP2_OK(custom_input.V.Resize(pad_v ? padded_width : src.width(),
+                                      pad_v ? padded_height : src.height()));
   if (encode_alpha) {
-    ASSERT_WP2_OK(custom_input.A.Resize(pad_a ? padded_width : src.width,
-                                        pad_a ? padded_height : src.height));
+    ASSERT_WP2_OK(custom_input.A.Resize(pad_a ? padded_width : src.width(),
+                                        pad_a ? padded_height : src.height()));
   }
 
   CSPTransform csp_transform;  // Match Encode() behavior.
@@ -104,9 +104,9 @@ TEST_P(EncodeCustomCspTest, Comparison) {
 
   for (uint32_t y = 0; y < padded_height; ++y) {
     for (uint32_t x = 0; x < padded_width; ++x) {
-      if (x < src.width && y < src.height) {
-        const uint32_t px = x * WP2FormatBpp(src.format);
-        const uint8_t* const pixel = &((uint8_t*)src.GetRow(y))[px];
+      if (x < src.width() && y < src.height()) {
+        const uint32_t px = x * WP2FormatBpp(src.format());
+        const uint8_t* const pixel = src.GetRow8(y) + px;
         if (encode_alpha) custom_input.A.At(x, y) = pixel[0];
         csp_transform.ToYUV(pixel[1], pixel[2], pixel[3],
                             &custom_input.Y.At(x, y), &custom_input.U.At(x, y),
@@ -116,7 +116,8 @@ TEST_P(EncodeCustomCspTest, Comparison) {
   }
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (custom_input.GetChannel(c).IsEmpty()) continue;
-    ASSERT_WP2_OK(custom_input.GetChannel(c).FillPad(src.width, src.height));
+    ASSERT_WP2_OK(
+        custom_input.GetChannel(c).FillPad(src.width(), src.height()));
   }
 
   MemoryWriter data;
@@ -124,13 +125,12 @@ TEST_P(EncodeCustomCspTest, Comparison) {
   config.quality = quality;
   Metadata empty_metadata;
   ASSERT_WP2_OK(Encode(
-      src.width, src.height,
-      custom_input.Y.Row(0), custom_input.Y.Step(),
-      custom_input.U.Row(0), custom_input.U.Step(),
-      custom_input.V.Row(0), custom_input.V.Step(),
+      src.width(), src.height(), custom_input.Y.Row(0), custom_input.Y.Step(),
+      custom_input.U.Row(0), custom_input.U.Step(), custom_input.V.Row(0),
+      custom_input.V.Step(),
       custom_input.HasAlpha() ? custom_input.A.Row(0) : nullptr,
       custom_input.A.Step(), ccsp_to_rgb_matrix, ccsp_to_rgb_shift, &data,
-      config, encode_metadata ? src.metadata : empty_metadata));
+      config, encode_metadata ? src.metadata_ : empty_metadata));
 
   // Decode the reference and the custom bitstreams.
   ArgbBuffer ref, dst;
@@ -146,9 +146,9 @@ TEST_P(EncodeCustomCspTest, Comparison) {
       (matrix == Matrix::kRGB8 || matrix == Matrix::kRGB10) ? 99.f : 50.f));
 
   if (encode_metadata) {
-    EXPECT_TRUE(testing::HasSameData(dst.metadata.exif, ref.metadata.exif));
-    EXPECT_TRUE(testing::HasSameData(dst.metadata.xmp, ref.metadata.xmp));
-    EXPECT_TRUE(testing::HasSameData(dst.metadata.iccp, ref.metadata.iccp));
+    EXPECT_TRUE(testing::HasSameData(dst.metadata_.exif, ref.metadata_.exif));
+    EXPECT_TRUE(testing::HasSameData(dst.metadata_.xmp, ref.metadata_.xmp));
+    EXPECT_TRUE(testing::HasSameData(dst.metadata_.iccp, ref.metadata_.iccp));
   }
 }
 
@@ -239,7 +239,7 @@ TEST_P(ReadCustomCspTest, Y4M) {
           ccsp.HasAlpha() ? ccsp.A.Row(0) : nullptr, ccsp.A.Step(),
           ccsp_to_rgb.mtx(), ccsp_to_rgb.shift, duration_ms));
     }
-    ASSERT_WP2_OK(encoder.Encode(&data, config, kInfiniteLoop));
+    ASSERT_WP2_OK(encoder.Encode(&data, config));
   }
 
   ArgbBuffer decoded;
@@ -298,24 +298,25 @@ TEST_P(StrideTest, Combination) {
   Vector_s16 rgba[4];
   for (uint32_t c : {0, 1, 2, 3}) {
     if (p.steps[c] == 0) continue;
-    ASSERT_TRUE(rgba[c].resize(p.steps[c] * src.height));
-    const uint32_t max_width = std::min(src.width, p.steps[c]);
-    for (uint32_t y = 0; y < src.height; ++y) {
-      const uint8_t* const src_row = (const uint8_t*)src.GetRow(y);
+    ASSERT_TRUE(rgba[c].resize(p.steps[c] * src.height()));
+    const uint32_t max_width = std::min(src.width(), p.steps[c]);
+    for (uint32_t y = 0; y < src.height(); ++y) {
+      const uint8_t* const src_row = src.GetRow8(y);
       int16_t* const dst_row = &rgba[c][p.steps[c] * y];
       for (uint32_t x = 0; x < max_width; ++x) {
-        dst_row[x] = src_row[x * WP2FormatBpp(src.format) + c];
+        dst_row[x] = src_row[x * WP2FormatBpp(src.format()) + c];
       }
     }
     // Pixels outside of the image are undefined on purpose for the sanitizers.
   }
 
   MemoryWriter writer;
-  ASSERT_EQ(Encode(src.width, src.height,
-                   rgba[0].data(), p.steps[0], rgba[1].data(), p.steps[1],
-                   rgba[2].data(), p.steps[2], rgba[3].data(), p.steps[3],
-                   kRGB8ToRGBMatrix, kRGB8ToRGBShift, &writer),
-            p.expected_status) << p.label;
+  ASSERT_EQ(Encode(src.width(), src.height(), rgba[0].data(), p.steps[0],
+                   rgba[1].data(), p.steps[1], rgba[2].data(), p.steps[2],
+                   rgba[3].data(), p.steps[3], kRGB8ToRGBMatrix,
+                   kRGB8ToRGBShift, &writer),
+            p.expected_status)
+      << p.label;
 }
 
 INSTANTIATE_TEST_SUITE_P(

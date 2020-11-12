@@ -34,7 +34,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   const bool use_advanced_config = params.ExtractBool();
 
   WP2::EncoderConfig config;
-  params.ExtractSimpleConfig(/*max_speed=*/use_fast_config ? 0 : 3, &config);
+  params.ExtractSimpleConfig(/*max_effort=*/use_fast_config ? 0 : 3, &config);
   if (use_advanced_config) {
     params.ExtractAdvancedConfig(use_fast_config, &config);
   }
@@ -48,9 +48,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     duration_ms = params.ExtractUInt32(1, WP2::kMaxFrameDurationMs);
   }
 
-  const uint32_t loop_count =
-      params.ExtractBool() ? WP2::kInfiniteLoop
-                           : params.ExtractUInt32(1, WP2::kMaxLoopCount);
+  const bool loop_forever = params.ExtractBool();
 
   // Create a randomly sized valid buffer with random pixels and use it as an
   // atlas that contains all frames. It's best to extract other params before
@@ -60,17 +58,17 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                                          : (64u * 64u * num_frames));
   if (atlas.IsEmpty()) return 0;  // No byte left to extract as raw pixels.
 
-  num_frames_x = std::min(num_frames_x, atlas.width);
-  num_frames_y = std::min(num_frames_y, atlas.height);
+  num_frames_x = std::min(num_frames_x, atlas.width());
+  num_frames_y = std::min(num_frames_y, atlas.height());
   num_frames = num_frames_x * num_frames_y;
-  const uint32_t frame_width = atlas.width / num_frames_x;
-  const uint32_t frame_height = atlas.height / num_frames_y;
+  const uint32_t frame_width = atlas.width() / num_frames_x;
+  const uint32_t frame_height = atlas.height() / num_frames_y;
 
   std::vector<WP2::ArgbBuffer> original_frames;
   original_frames.reserve(num_frames);
   for (uint32_t frame_x = 0; frame_x < num_frames_x; ++frame_x) {
     for (uint32_t frame_y = 0; frame_y < num_frames_y; ++frame_y) {
-      original_frames.emplace_back(atlas.format);
+      original_frames.emplace_back(atlas.format());
       if (original_frames.back().SetView(
               atlas, {frame_x * frame_width, frame_y * frame_height,
                       frame_width, frame_height}) != WP2_STATUS_OK) {
@@ -83,8 +81,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   const bool compare_after_decoding = !use_advanced_config;
   // Input can be random noise; output can get heavily distorted but it's fine.
   const float expected_distortion =
-      WP2::testing::GetExpectedDistortion(config) - 10.f;
+      WP2::testing::GetExpectedDistortion(config) - 10.5f;
   return WP2::testing::TestAnimEncConfig(
-      original_frames, durations_ms, loop_count, config, compare_after_decoding,
-      expected_distortion);
+      original_frames, durations_ms, loop_forever, config,
+      compare_after_decoding, expected_distortion);
 }

@@ -751,7 +751,7 @@ static void GetSpread(const Plane16& src, Plane16* const dst) {
 }
 
 constexpr float MultiScoreFunc::kMinScore;
-constexpr int MultiScoreFunc::kMinSpeedForGoodQuantDCT;
+constexpr int MultiScoreFunc::kMinEffortForGoodQuantDCT;
 
 WP2Status MultiScoreFunc::Init(const EncoderConfig& config,
                                const Rectangle& tile_rect, const YUVPlane& yuv,
@@ -774,7 +774,7 @@ WP2Status MultiScoreFunc::Init(const EncoderConfig& config,
     GetMinMax(src_plane, min_.GetChannel(channel), max_.GetChannel(channel));
   }
 
-  if (config_->speed >= kMinSpeedForGoodQuantDCT) {
+  if (config_->effort >= kMinEffortForGoodQuantDCT) {
     // Image processing.
     WP2_CHECK_STATUS(spread_.Resize(src_->GetWidth(), src_->GetHeight(),
                                     /*pad=*/1, src_->HasAlpha()));
@@ -1200,8 +1200,8 @@ WP2Status TileScoreFunc::InitForEncode() {
   MemoryWriter writer;
   WP2_CHECK_STATUS(
       EncodeHeader(tmp_config_, tile_rect_.width, tile_rect_.height,
-                   src_->HasAlpha(), /*is_anim=*/false, kInfiniteLoop,
-                   /*background_color=*/{}, /*preview_color=*/{},
+                   src_->HasAlpha(), /*is_anim=*/false, /*loop_forever=*/true,
+                   kDefaultBackgroundColor, /*preview_color=*/{},
                    /*has_icc=*/false, /*has_trailing_data=*/false, &writer));
   WP2_CHECK_STATUS(features_.Read(writer.mem_, writer.size_));
   return WP2_STATUS_OK;
@@ -1217,8 +1217,8 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
   WP2_CHECK_STATUS(enc.Assemble());
 
   // Reset the unique tile to a fresh state.
-  const uint32_t width = decompressed_argb_.width;
-  const uint32_t height = decompressed_argb_.height;
+  const uint32_t width = decompressed_argb_.width();
+  const uint32_t height = decompressed_argb_.height();
   const uint32_t tile_width = TileWidth(FinalTileShape(*config_), width);
   const uint32_t tile_height =
       TileHeight(FinalTileShape(*config_), /*image_width=*/width);
@@ -1236,10 +1236,18 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
   tile->private_input = ExternalDataSource(enc.Buffer(), enc.BufferSize());
   tile->input = &tile->private_input;
 
+  ProgressWatcher progress(/*hook=*/nullptr);
+  WP2_CHECK_STATUS(progress.Set(
+      GetProgressionBeforeFrames(features_.has_preview, features_.has_icc)));
+  progress.SetAdvancementScale(GetRowProgression(
+      features_.has_preview, features_.has_icc, features_.has_trailing_data,
+      /*is_animation=*/false, /*num_tiles_x=*/1, /*frame_index=*/0, height,
+      /*is_last=*/true));
+
   // Decode to 'decompressed_argb_'.
   ANSDec dec(tile->input);
   WP2_CHECK_STATUS(LossyDecode(features_, dec_config_, &tiles_layout_,
-                               /*progress=*/nullptr, &dec, tile));
+                               &progress, &dec, tile));
 
   // Compare the pixels of the non-padded area only.
   YUVPlane original_view, decompressed_view;

@@ -35,13 +35,13 @@ namespace {
 
 // Converts pixels to opaque gray levels. Transparency gives black.
 WP2Status ConvertToGrayLevels(const ArgbBuffer& src, Plane8u* const dst) {
-  assert(src.width < (1u << 16) && src.height < (1u << 16));
-  WP2_CHECK_STATUS(dst->Resize(src.width, src.height));
+  assert(src.width() < (1u << 16) && src.height() < (1u << 16));
+  WP2_CHECK_STATUS(dst->Resize(src.width(), src.height()));
 
-  for (uint32_t y = 0; y < src.height; ++y) {
+  for (uint32_t y = 0; y < src.height(); ++y) {
     uint8_t* const dst_y = dst->Row(y);
-    const uint8_t* src_pixel = (const uint8_t*)src.GetRow(y);
-    for (uint32_t x = 0; x < src.width; ++x, src_pixel += 4) {
+    const uint8_t* src_pixel = src.GetRow8(y);
+    for (uint32_t x = 0; x < src.width(); ++x, src_pixel += 4) {
       const uint8_t r = src_pixel[1], g = src_pixel[2], b = src_pixel[3];
       dst_y[x] = (uint8_t)std::lround(0.2126 * r + 0.7152 * g + 0.0722 * b);
     }
@@ -55,18 +55,18 @@ WP2Status DetectEdges(const ArgbBuffer& canvas, Plane16* const dst) {
   WP2_CHECK_STATUS(ConvertToGrayLevels(canvas, &gray));
 
   dst->Fill(0);
-  for (uint32_t y = 1; y < canvas.height - 1; ++y) {
+  for (uint32_t y = 1; y < canvas.height() - 1; ++y) {
     const uint8_t* const src = gray.Row(y);
-    const uint32_t dst_y = y * dst->h_ / canvas.height;
+    const uint32_t dst_y = y * dst->h_ / canvas.height();
     auto* const sobel = dst->Row(dst_y);
-    for (uint32_t x = 1; x < canvas.width - 1; ++x) {
+    for (uint32_t x = 1; x < canvas.width() - 1; ++x) {
       const int32_t neighbors_sum = (src +          1)[x] +
                                     (src -          1)[x] +
                                     (src + gray.step_)[x] +
                                     (src - gray.step_)[x];
       const int32_t diff = std::abs(neighbors_sum - 4 * (int32_t)src[x]);
       // rescale from canvas to grid coordinate
-      const uint32_t dst_x = x * dst->w_ / canvas.width;
+      const uint32_t dst_x = x * dst->w_ / canvas.width();
       sobel[dst_x] = std::min(sobel[dst_x] + diff, 32767);
     }
   }
@@ -130,13 +130,13 @@ float GetDiff(const ArgbBuffer& reference, const ArgbBuffer& canvas,
               uint32_t pixel_x, uint32_t pixel_y,
               uint32_t grid_w, uint32_t grid_h,
               int radius = 0) {
-  assert(canvas.width == reference.width);
-  assert(canvas.height == reference.height);
-  const uint32_t cx = DivRound(pixel_x * (canvas.width - 1),  grid_w - 1);
-  const uint32_t cy = DivRound(pixel_y * (canvas.height - 1), grid_h - 1);
+  assert(canvas.width() == reference.width());
+  assert(canvas.height() == reference.height());
+  const uint32_t cx = DivRound(pixel_x * (canvas.width() - 1), grid_w - 1);
+  const uint32_t cy = DivRound(pixel_y * (canvas.height() - 1), grid_h - 1);
   float diff = 0.f;
-  const int y_limit = canvas.height - 1;
-  const int x_limit = canvas.width - 1;
+  const int y_limit = canvas.height() - 1;
+  const int x_limit = canvas.width() - 1;
   for (int dy = -radius; dy <= radius; ++dy) {
     const uint32_t y = (uint32_t)Clamp((int)cy + dy, 0, y_limit);
     for (int dx = -radius; dx <= radius; ++dx) {
@@ -218,7 +218,7 @@ WP2Status CollectVerticesFromColorDiffMaximization(
   WP2_CHECK_ALLOC_OK(palette.reserve(max_num_vertices));
 
   ArgbBuffer result;
-  WP2_CHECK_STATUS(result.Resize(canvas.width, canvas.height));
+  WP2_CHECK_STATUS(result.Resize(canvas.width(), canvas.height()));
 
   const uint32_t w = preview->grid_width_, h = preview->grid_height_;
   Vector_u8 used;  // Vector does not handle bool very well
@@ -239,7 +239,7 @@ WP2Status CollectVerticesFromColorDiffMaximization(
     uint32_t num_covered_pixels = 0;
     WP2_CHECK_STATUS(
         triangulation.FillTriangles(*preview, &result, &num_covered_pixels));
-    assert(num_covered_pixels >= result.width * result.height);
+    assert(num_covered_pixels >= result.width() * result.height());
 
     float best_diff = -1.f;
     uint32_t best_offset = 0;
@@ -261,8 +261,8 @@ WP2Status CollectVerticesFromColorDiffMaximization(
     }
     if (best_diff < 0) break;
     used[best_offset] = 1u;
-    const uint32_t cx = best_vtx.x * (canvas.width - 1) / (w - 1);
-    const uint32_t cy = best_vtx.y * (canvas.height - 1) / (h - 1);
+    const uint32_t cx = best_vtx.x * (canvas.width() - 1) / (w - 1);
+    const uint32_t cy = best_vtx.y * (canvas.height() - 1) / (h - 1);
     const AYCoCg19b col =
         ToAYCoCg19b(GetAverageColor(canvas, avg_radius, cx, cy));
     WP2_CHECK_ALLOC_OK(palette.push_back(col));

@@ -393,7 +393,7 @@ class ImageReaderJPEG : public ImageReader::Impl {
 
     if (status == WP2_STATUS_OK) {
       status = ExtractMetadataFromJPEG((j_decompress_ptr)&dinfo,
-                                       &buffer_->metadata, log_level_);
+                                       &buffer_->metadata_, log_level_);
     }
 
     if (status == WP2_STATUS_OK) {

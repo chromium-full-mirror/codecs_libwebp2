@@ -805,7 +805,7 @@ std::vector<std::string> GetHelp() {
   m.emplace_back(
       "  left/right ........ change the compression factor by +/- 10 units");
   m.emplace_back("  ctrl + arrows ..... change alpha compression factor");
-  m.emplace_back("  's' ............... change encoding speed parameter");
+  m.emplace_back("  's' ............... change encoding effort parameter");
   m.emplace_back("  't' ............... toggle segment id mode");
   m.emplace_back(
       "  '1' ............... cycle colorspace type "
@@ -954,8 +954,8 @@ void PrintInfo() {
     }
 
     snprintf(tmp, sizeof(tmp),
-             "Quality: %3.1f [speed=%d      sns=%5.1f diffusion=%d",
-             kParams.quality, kParams.enc_config.speed, kParams.enc_config.sns,
+             "Quality: %3.1f [effort=%d     sns=%5.1f diffusion=%d",
+             kParams.quality, kParams.enc_config.effort, kParams.enc_config.sns,
              kParams.enc_config.error_diffusion);
     msg.emplace_back(tmp);
     snprintf(tmp, sizeof(tmp),
@@ -982,11 +982,11 @@ void PrintInfo() {
              100. * kParams.output.size() / kParams.input.size());
     msg.back() += tmp;
 
-    if (kParams.in.metadata.IsEmpty()) {
-      assert(kParams.out.metadata.IsEmpty());
+    if (kParams.in.metadata_.IsEmpty()) {
+      assert(kParams.out.metadata_.IsEmpty());
     } else {
-      const WP2::Metadata& mi = kParams.in.metadata;
-      const WP2::Metadata& mo = kParams.out.metadata;
+      const WP2::Metadata& mi = kParams.in.metadata_;
+      const WP2::Metadata& mo = kParams.out.metadata_;
       snprintf(tmp, sizeof(tmp),  // 6 spaces to align with "Size: ".
                "      %s %zu B of metadata (ICCP %zu, EXIF %zu, XMP %zu)",
                kParams.keep_metadata ? "included" : "ignored",
@@ -994,7 +994,7 @@ void PrintInfo() {
                mi.exif.size, mi.xmp.size);
       msg.emplace_back(tmp);
       if (!kParams.keep_metadata) {
-        assert(kParams.out.metadata.IsEmpty());
+        assert(kParams.out.metadata_.IsEmpty());
       } else if (mi.iccp.size != mo.iccp.size || mi.exif.size != mo.exif.size ||
                  mi.xmp.size != mo.xmp.size) {
         snprintf(tmp, sizeof(tmp), " decoded as ICCP %zu, EXIF %zu, XMP %zu",
@@ -1108,7 +1108,7 @@ void SetError(const std::string& message) {
   SetMessage(message, /*even_if_show_info=*/true, /*duration_ms=*/60000);
 
   // Reset outputs so that nothing misleading is displayed.
-  const uint32_t width = kParams.in.width, height = kParams.in.height;
+  const uint32_t width = kParams.in.width(), height = kParams.in.height();
   for (WP2::ArgbBuffer* const buffer :
        {&kParams.out, &kParams.dinfo.debug_output}) {
     if (buffer->Resize(width, height) != WP2_STATUS_OK) assert(false);
@@ -1139,15 +1139,15 @@ WP2Status ComputeErrorMap(WP2::MetricType metric,
                           const WP2::ArgbBuffer& decoded,
                           WP2::ArgbBuffer* const error_map,
                           WP2::DecoderInfo* const info = nullptr) {
-  WP2_CHECK_OK(
-      decoded.width == original.width && decoded.height == original.height,
-      WP2_STATUS_BAD_DIMENSION);
-  WP2_CHECK_STATUS(error_map->Resize(original.width, original.height));
+  WP2_CHECK_OK(decoded.width() == original.width() &&
+                   decoded.height() == original.height(),
+               WP2_STATUS_BAD_DIMENSION);
+  WP2_CHECK_STATUS(error_map->Resize(original.width(), original.height()));
   const double norm =
       (metric == WP2::PSNR) ? 5. : (metric == WP2::LSIM) ? 5. : 8.;
-  for (uint32_t y = 0; y < error_map->height; ++y) {
-    uint8_t* const dst = (uint8_t*)error_map->GetRow(y);
-    for (uint32_t x = 0; x < error_map->width; ++x) {
+  for (uint32_t y = 0; y < error_map->height(); ++y) {
+    uint8_t* const dst = error_map->GetRow8(y);
+    for (uint32_t x = 0; x < error_map->width(); ++x) {
       float d;
       WP2_CHECK_STATUS(decoded.GetDistortion(original, x, y, metric, &d));
       const uint8_t v =
@@ -1209,15 +1209,15 @@ WP2Status ComputeDiffMap(WP2::MetricType metric,
   WP2_CHECK_STATUS(
       ComputeErrorMap(metric, original, decoded, &error_map_decoded));
   WP2_CHECK_STATUS(ComputeErrorMap(metric, original, alt, &error_map_alt));
-  WP2_CHECK_STATUS(diff_map->Resize(original.width, original.height));
-  const uint32_t bpp = WP2FormatBpp(original.format);
-  for (uint32_t y = 0; y < diff_map->height; ++y) {
-    for (uint32_t x = 0; x < diff_map->width; ++x) {
+  WP2_CHECK_STATUS(diff_map->Resize(original.width(), original.height()));
+  const uint32_t bpp = WP2FormatBpp(original.format());
+  for (uint32_t y = 0; y < diff_map->height(); ++y) {
+    for (uint32_t x = 0; x < diff_map->width(); ++x) {
       const uint32_t i = x * bpp + 1;
-      const uint8_t err_dec = ((const uint8_t*)error_map_decoded.GetRow(y))[i];
-      const uint8_t err_alt = ((const uint8_t*)error_map_alt.GetRow(y))[i];
-      ComputeDiffPixel(&((const uint8_t*)original.GetRow(y))[x * bpp], err_dec,
-                       err_alt, &((uint8_t*)diff_map->GetRow(y))[x * bpp]);
+      const uint8_t err_dec = (error_map_decoded.GetRow8(y))[i];
+      const uint8_t err_alt = (error_map_alt.GetRow8(y))[i];
+      ComputeDiffPixel(&(original.GetRow8(y))[x * bpp], err_dec, err_alt,
+                       &(diff_map->GetRow8(y))[x * bpp]);
 
       if (info != nullptr && info->selection.x == x && info->selection.y == y) {
         info->selection_info +=
@@ -1254,9 +1254,9 @@ bool Params::EncodeImage() {
     WP2::StringWriter writer(&output);
     WP2::Metadata metadata;
     using std::swap;
-    if (!keep_metadata) swap(metadata, in.metadata);
+    if (!keep_metadata) swap(metadata, in.metadata_);
     const WP2Status enc_status = Encode(in, &writer, enc_config);
-    if (!keep_metadata) swap(metadata, in.metadata);
+    if (!keep_metadata) swap(metadata, in.metadata_);
     if (enc_status != WP2_STATUS_OK) {
       SetError("Error: Compression failed");
       fprintf(stderr, "Compression failed: %s\n", WP2GetStatusText(enc_status));
@@ -1467,7 +1467,7 @@ bool Params::CompressWebP(bool match_size) {
     return false;
   }
   if (enc_config.thread_level > 0) ++webp_config.thread_level;
-  webp_config.method = (enc_config.speed * 6 + 4) / 9;
+  webp_config.method = (enc_config.effort * 6 + 4) / 9;
   webp_config.segments = std::min(enc_config.segments, 4);
   webp_config.sns_strength = (int)std::lround(enc_config.sns);
   webp_config.pass = 6;
@@ -1510,7 +1510,7 @@ bool Params::CompressAV1(bool copy_partition, float av1_quality,
   WP2::ParamsAV1 cfg;
   cfg.quality = av1_quality;
   // The settings below seem to give the best results (yes, even threads).
-  cfg.speed = 9;
+  cfg.effort = 9;
   cfg.threads = 1;
   cfg.pass = 2;
   cfg.use_yuv444 =
@@ -1547,7 +1547,7 @@ bool Params::CompressAV1(bool copy_partition, float av1_quality,
   }
 
   if (copy_partition) {
-    WP2ConvertPartition(in.width, in.height, enc_config.partition_set,
+    WP2ConvertPartition(in.width(), in.height(), enc_config.partition_set,
                         /*ignore_invalid=*/true, &force_partition);
   }
 
@@ -1638,8 +1638,8 @@ bool Params::SetCurrentFile(size_t file) {
       }
       preview_color = WP2::ToArgb32b(wp2_features.preview_color);
     }
-    width = in.width;
-    height = in.height;
+    width = in.width();
+    height = in.height();
 
     if (!EncodeAndDecode()) return false;
   }
@@ -1691,7 +1691,7 @@ bool Params::SetAltFile(const char* const file_name) {
     fprintf(stderr, "Could not decode the alternate file %s\n", file_name);
     return false;
   }
-  const uint32_t w = alt1.width, h = alt1.height;
+  const uint32_t w = alt1.width(), h = alt1.height();
   if (w != width || h != height) {
     alt1.Deallocate();
     fprintf(stderr, "Alternate picture has incompatible dimensions "
@@ -1749,7 +1749,7 @@ const WP2::ArgbBuffer& Params::GetBuffer() const {
 bool Params::GetCurrentCanvas(WP2::ArgbBuffer* const buffer) {
   if (show == Params::kPreviewColor) {
     ShiftAlt();
-    status = buffer->Resize(out.width, out.height);
+    status = buffer->Resize(out.width(), out.height());
     if (status == WP2_STATUS_OK) buffer->Fill(preview_color);
   } else {
     status = buffer->SetView(GetBuffer());
@@ -2044,8 +2044,9 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
       msg->push_back(b.y_context_is_constant ? "Y context is constant"
                                              : "Y context is not constant");
       const int optimize_modes =
-          (b.y_context_is_constant || enc_config.speed == 0) ? 0 :
-                                     (enc_config.speed == 1) ? 1 : 2;
+          (b.y_context_is_constant || enc_config.effort == 0) ? 0
+          : (enc_config.effort == 1)                          ? 1
+                                                              : 2;
       msg->push_back(SPrintf("OptimizeModes%d() Y "
                              "score: %.1f (%.1f per pixel)",
                              optimize_modes,
@@ -2212,7 +2213,7 @@ bool Params::ReadPartition(bool read_only) {
   if (!WP2ReadPartition(partition_file_path, read_only, &force_partition)) {
     return false;
   }
-  WP2ConvertPartition(in.width, in.height, enc_config.partition_set,
+  WP2ConvertPartition(in.width(), in.height(), enc_config.partition_set,
                       /*ignore_invalid=*/false, &force_partition);
   return true;
 }
@@ -2359,9 +2360,9 @@ void HandleKey(unsigned char key, int pos_x, int pos_y) {
     SetMenuSelection(selection);
     if (!kParams.DecodeOutput()) return;
   } else if (key == 's' || key == 'S') {
-    ModifyR(kParams.enc_config.speed, 10, key == 's');
+    ModifyR(kParams.enc_config.effort, 10, key == 's');
     if (!kParams.EncodeAndDecode()) return;
-    SetMessage(SPrintf("Speed: %d", kParams.enc_config.speed));
+    SetMessage(SPrintf("Effort: %d", kParams.enc_config.effort));
   } else if (key == 'o' || key == 'O') {
     ModifyR(kParams.background, Params::kBackgroundNum, key == 'o');
     const char* const kBackgroundName[] = {"Checkerboard", "Clearly White",
@@ -2557,7 +2558,7 @@ void HandleKey(unsigned char key, int pos_x, int pos_y) {
                        kOnOff[kParams.enc_config.tune_perceptual]));
   } else if (key == 'k' || key == 'K') {
     kParams.keep_metadata = !kParams.keep_metadata;
-    if (kParams.in.metadata.IsEmpty()) {
+    if (kParams.in.metadata_.IsEmpty()) {
       SetMessage("Metadata: none");
     } else {
       if (!kParams.EncodeAndDecode()) return;
@@ -2961,17 +2962,17 @@ void DisplayBackground(uint32_t width, uint32_t height) {
 void DisplayBuffer(const WP2::ArgbBuffer& buffer) {
   if (buffer.IsEmpty()) return;
   if (buffer.HasTransparency()) {
-    DisplayBackground(buffer.width, buffer.height);
+    DisplayBackground(buffer.width(), buffer.height());
   }
 
   // convert from src->Argb Argb format to GL's BGRA format.
-  std::vector<uint8_t> rgba(4u * buffer.width * buffer.height);
-  for (uint32_t y = 0; y < buffer.height; ++y) {
-    const uint8_t* const src = (const uint8_t*)buffer.GetRow(y);
-    uint8_t* const dst = &rgba[y * 4u * buffer.width];
-    WP2ArgbConvertTo[WP2_RGBA_32](src, buffer.width, dst);
+  std::vector<uint8_t> rgba(4u * buffer.width() * buffer.height());
+  for (uint32_t y = 0; y < buffer.height(); ++y) {
+    const uint8_t* const src = buffer.GetRow8(y);
+    uint8_t* const dst = &rgba[y * 4u * buffer.width()];
+    WP2ArgbConvertTo[WP2_RGBA_32](src, buffer.width(), dst);
   }
-  glDrawPixels(buffer.width, buffer.height, GL_RGBA, GL_UNSIGNED_BYTE,
+  glDrawPixels(buffer.width(), buffer.height(), GL_RGBA, GL_UNSIGNED_BYTE,
                reinterpret_cast<const GLvoid*>(&rgba[0]));
 }
 
@@ -3055,10 +3056,10 @@ void Help() {
                   "from strongest compression to lossless "
                   "(%1.1f by default)",
                   WP2::EncoderConfig::kDefault.alpha_quality));
-  opt.Add("-speed <int>", SPrintf("compression effort in (0..9) range, "
-                                  "from fastest to slowest/best results "
-                                  "(%d by default)",
-                                  WP2::EncoderConfig::kDefault.speed));
+  opt.Add("-effort <int>", SPrintf("compression effort in (0..9) range, "
+                                   "from fastest to slowest/best results "
+                                   "(%d by default)",
+                                   WP2::EncoderConfig::kDefault.effort));
   opt.Add("-pm <int>",
           SPrintf("partition method (0..%d)", WP2::NUM_PARTITION_METHODS - 1));
   opt.Add("-ps <int>",
@@ -3130,8 +3131,8 @@ int main(int argc, char* argv[]) {
     } else if (!strcmp(argv[c], "-csp") && c + 1 < argc) {
       kParams.enc_config.csp_type =
           (WP2::Csp)ExUtilGetInt(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-speed") && c + 1 < argc) {
-      kParams.enc_config.speed = ExUtilGetInt(argv[++c], &parse_error);
+    } else if (!strcmp(argv[c], "-effort") && c + 1 < argc) {
+      kParams.enc_config.effort = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-segments") && c + 1 < argc) {
       kParams.enc_config.segments = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-segment_mode") && c + 1 < argc) {

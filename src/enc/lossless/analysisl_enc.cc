@@ -252,24 +252,24 @@ static WP2Status AnalyzeEntropy(const WP2::ArgbBuffer& pic, uint32_t width,
                                 Encoder* const encoder,
                                 EntropyMode* const min_entropy_ix,
                                 bool* const red_and_blue_always_zero) {
-  if (WP2FormatBpc(pic.format) == 1) {
+  if (WP2FormatBpc(pic.format()) == 1) {
     WP2_CHECK_STATUS(AnalyzeEntropyImpl(
-        pic.GetRow8(0), pic.stride, width, height, pic.format, use_palette,
+        pic.GetRow8(0), pic.stride(), width, height, pic.format(), use_palette,
         encoder, min_entropy_ix, red_and_blue_always_zero));
   } else {
     WP2_CHECK_STATUS(AnalyzeEntropyImpl(
-        pic.GetRow16(0), pic.stride, width, height, pic.format, use_palette,
+        pic.GetRow16(0), pic.stride(), width, height, pic.format(), use_palette,
         encoder, min_entropy_ix, red_and_blue_always_zero));
   }
 
   return WP2_STATUS_OK;
 }
 
-static int GetHistoBits(int speed, bool use_palette, int width, int height) {
+static int GetHistoBits(int effort, bool use_palette, int width, int height) {
   // Make tile size a function of encoding method (Range: 0 to 6).
   // TODO(vrabaud) use rounding. We leave it as is so that for the default
   // value of 5, it matches the old default value of 3.
-  uint32_t histo_bits = (use_palette ? 9. : 7.) - speed * 6. / 9.;
+  uint32_t histo_bits = (use_palette ? 9. : 7.) - effort * 6. / 9.;
   while (true) {
     const uint32_t huff_image_size = WP2LSubSampleSize(width, histo_bits) *
                                      WP2LSubSampleSize(height, histo_bits);
@@ -280,8 +280,8 @@ static int GetHistoBits(int speed, bool use_palette, int width, int height) {
          (histo_bits > kHistogramBitsMax) ? kHistogramBitsMax : histo_bits;
 }
 
-static uint32_t GetTransformBits(uint32_t speed, uint32_t histo_bits) {
-  const uint32_t max_transform_bits = (speed < 5) ? 6 : (speed > 5) ? 4 : 5;
+static uint32_t GetTransformBits(uint32_t effort, uint32_t histo_bits) {
+  const uint32_t max_transform_bits = (effort < 5) ? 6 : (effort > 5) ? 4 : 5;
   const uint32_t res =
       (histo_bits > max_transform_bits) ? max_transform_bits : histo_bits;
   assert(res <= kTransformBitsMax);
@@ -289,7 +289,7 @@ static uint32_t GetTransformBits(uint32_t speed, uint32_t histo_bits) {
 }
 
 // Translates an entropy mode to a CrunchConfig.
-static void TranslateEntropyMode(EntropyMode entropy_idx, uint32_t speed,
+static void TranslateEntropyMode(EntropyMode entropy_idx, uint32_t effort,
                                  bool red_and_blue_always_zero,
                                  CrunchConfig* const config) {
   config->use_group4 = false;
@@ -298,7 +298,7 @@ static void TranslateEntropyMode(EntropyMode entropy_idx, uint32_t speed,
                                (entropy_idx == EntropyMode::kSpatialSubGreen);
   config->use_predict = (entropy_idx == EntropyMode::kSpatial) ||
                         (entropy_idx == EntropyMode::kSpatialSubGreen);
-  if (speed == 0) {
+  if (effort == 0) {
     config->use_cross_color = false;
   } else {
     config->use_cross_color =
@@ -311,19 +311,19 @@ static void TranslateEntropyMode(EntropyMode entropy_idx, uint32_t speed,
 // sets red_and_blue_always_zero to true if the red and blue components are
 // always zero after applying the best transform.
 // TODO(maryla): the logic for red_and_blue_always_zero seems broken: it's only
-// valid if there's only one transform (speed != 9)
+// valid if there's only one transform (effort != 9)
 WP2Status EncoderAnalyze(Encoder* const encoder,
                          CrunchConfig crunch_configs[kCrunchNumMax],
                          uint32_t* const crunch_configs_size) {
   const WP2::ArgbBuffer& pic = encoder->pic_;
-  const uint32_t width = pic.width;
-  const uint32_t height = pic.height;
-  const int speed = encoder->config_.speed;
+  const uint32_t width = pic.width();
+  const uint32_t height = pic.height();
+  const int effort = encoder->config_.effort;
   uint32_t n_lz77s;
   assert(!pic.IsEmpty());
 
   WP2_CHECK_STATUS(encoder->palette_.AnalyzeAndCreate(pic));
-  WP2_CHECK_STATUS(encoder->palette_.FindBestMethod(encoder, speed));
+  WP2_CHECK_STATUS(encoder->palette_.FindBestMethod(encoder, effort));
 
   // Do not use a palette when there is only one color as ANS will optimize it
   // anyway.
@@ -332,11 +332,11 @@ WP2Status EncoderAnalyze(Encoder* const encoder,
   // TODO(jyrki): replace the decision to be based on an actual estimate
   // of entropy, or even spatial variance of entropy.
   encoder->histo_bits_ =
-      GetHistoBits(speed, use_palette, pic.width, pic.height);
-  encoder->transform_bits_ = GetTransformBits(speed, encoder->histo_bits_);
+      GetHistoBits(effort, use_palette, pic.width(), pic.height());
+  encoder->transform_bits_ = GetTransformBits(effort, encoder->histo_bits_);
 
   *crunch_configs_size = 0;
-  if (false) {
+  if (encoder->palette_.Size() >= 2) {
     // Try group4 for images with a palette.
     CrunchConfig* config;
     config = &crunch_configs[*crunch_configs_size];
@@ -348,7 +348,7 @@ WP2Status EncoderAnalyze(Encoder* const encoder,
     config->use_cross_color = false;
     ++(*crunch_configs_size);
 
-    if (encoder->palette_.Size() > 3 && speed > 0) {
+    if (encoder->palette_.Size() > 3 && effort > 0) {
       config = &crunch_configs[*crunch_configs_size];
       // Copy the previous config.
       *config = crunch_configs[*crunch_configs_size - 1];
@@ -357,13 +357,13 @@ WP2Status EncoderAnalyze(Encoder* const encoder,
       ++(*crunch_configs_size);
     }
   }
-  if (speed == 0) {
+  if (effort == 0) {
     if (*crunch_configs_size != 1) {
       // AnalyzeEntropy is somewhat slow. 'red_and_blue_always_zero' is unused
-      // for speed == 0.
+      // for effort == 0.
       TranslateEntropyMode(
           use_palette ? EntropyMode::kPalette : EntropyMode::kSpatialSubGreen,
-          speed, /*red_and_blue_always_zero=*/false, &crunch_configs[0]);
+          effort, /*red_and_blue_always_zero=*/false, &crunch_configs[0]);
       *crunch_configs_size = 1;
     }
     n_lz77s = 1;
@@ -371,25 +371,25 @@ WP2Status EncoderAnalyze(Encoder* const encoder,
     EntropyMode min_entropy_ix = EntropyMode::kDirect;
     // Try out multiple LZ77 on images with few colors.
     n_lz77s = (use_palette && encoder->palette_.Size() <= 16) ? 2 : 1;
-    // TODO(maryla): if speed == 9 this doesn't seem useful.
+    // TODO(maryla): if effort == 9 this doesn't seem useful.
     bool red_and_blue_always_zero = false;
     WP2_CHECK_STATUS(AnalyzeEntropy(pic, width, height, use_palette, encoder,
                                     &min_entropy_ix,
                                     &red_and_blue_always_zero));
-    if (speed == 9) {
+    if (effort == 9) {
       // Go brute force on all transforms.
       static_assert(1 + (uint32_t)EntropyMode::kNum <= kCrunchNumMax,
                     "Too many entropy types");
       for (uint32_t i = 0; i < (uint32_t)EntropyMode::kNum; ++i) {
         if (i != (uint32_t)EntropyMode::kPalette || use_palette) {
           assert(*crunch_configs_size < kCrunchNumMax);
-          TranslateEntropyMode((EntropyMode)i, speed, red_and_blue_always_zero,
+          TranslateEntropyMode((EntropyMode)i, effort, red_and_blue_always_zero,
                                &crunch_configs[(*crunch_configs_size)++]);
         }
       }
     } else {
       // Only choose the guessed best transform.
-      TranslateEntropyMode(min_entropy_ix, speed, red_and_blue_always_zero,
+      TranslateEntropyMode(min_entropy_ix, effort, red_and_blue_always_zero,
                            &crunch_configs[(*crunch_configs_size)++]);
     }
   }

@@ -225,7 +225,7 @@ void WP2DecoderDelete(WP2Decoder* idec);
 
 struct WP2Config {
   float quality;
-  int speed;
+  int effort;
  ...
 };
 

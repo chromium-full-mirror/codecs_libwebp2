@@ -212,8 +212,8 @@ void CreatePlainTiles(uint32_t width, uint32_t height, uint8_t min_color,
   UniformIntDistribution random(/*seed=*/12);
   ASSERT_WP2_OK(canvas->Resize(width, height));
   uint32_t num_tiles_x, num_tiles_y;
-  GetNumTiles(canvas->width, canvas->height, kTileSize, kTileSize, &num_tiles_x,
-              &num_tiles_y);
+  GetNumTiles(canvas->width(), canvas->height(), kTileSize, kTileSize,
+              &num_tiles_x, &num_tiles_y);
   for (uint32_t x = 0; x < num_tiles_x; ++x) {
     for (uint32_t y = 0; y < num_tiles_y; ++y) {
       const Argb32b color{255, random.Get(min_color, max_color),
@@ -221,8 +221,8 @@ void CreatePlainTiles(uint32_t width, uint32_t height, uint8_t min_color,
                           random.Get(min_color, max_color)};
       const Rectangle window{
           x * kTileSize, y * kTileSize,
-          std::min(canvas->width - x * kTileSize, kTileSize),
-          std::min(canvas->height - y * kTileSize, kTileSize)};
+          std::min(canvas->width() - x * kTileSize, kTileSize),
+          std::min(canvas->height() - y * kTileSize, kTileSize)};
       canvas->Fill(window, color);
     }
   }
@@ -235,7 +235,7 @@ TEST(IntertileFilterTest, Simple) {
   ArgbBuffer plain_planes, plain_tiles;
   CreatePlainTiles(2 * kTileSize + 1, 2 * kTileSize - 1, avg, avg,
                    &plain_planes);
-  CreatePlainTiles(plain_planes.width, plain_planes.height, min, max,
+  CreatePlainTiles(plain_planes.width(), plain_planes.height(), min, max,
                    &plain_tiles);
 
   EncoderConfig encoder_config = EncoderConfig::kDefault;

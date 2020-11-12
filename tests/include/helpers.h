@@ -137,7 +137,7 @@ WP2Status CompressImage(
     const std::string& file_name, Writer* const encoded_data,
     ArgbBuffer* original_image = nullptr,
     float quality = EncoderConfig::kDefault.quality,
-    int speed = EncoderConfig::kDefault.speed,
+    int effort = EncoderConfig::kDefault.effort,
     int thread_level = EncoderConfig::kDefault.thread_level,
     uint32_t num_downsamplings = 0);
 
@@ -146,7 +146,7 @@ WP2Status CompressAnimation(
     const std::vector<uint32_t>& durations_ms, Writer* const encoded_data,
     std::vector<ArgbBuffer>* frames = nullptr,
     float quality = EncoderConfig::kDefault.quality,
-    int speed = EncoderConfig::kDefault.speed,
+    int effort = EncoderConfig::kDefault.effort,
     int thread_level = EncoderConfig::kDefault.thread_level,
     uint32_t num_downsamplings = 0);
 
@@ -171,10 +171,18 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config);
                                    float expected_distortion = 99.f,
                                    MetricType metric = PSNR);
 
+// ProgressHook example. 'last_progress_' will record it. Set 'fail_at_' to make
+// ProgressHook::OnUpdate() return false when the specified progress is reached.
+class ProgressTester : public ProgressHook {
+ public:
+  bool OnUpdate(float progress) override;
+  void Reset() { *this = ProgressTester(); }
+  float last_progress_ = -1.f, fail_at_ = 2.f;  // No USER_ABORT by default.
+};
+
 //------------------------------------------------------------------------------
 
-// Returns WP2_STATUS_INVALID_PARAMETER if the comparison fails.
-WP2Status EncodeDecodeCompare(
+::testing::AssertionResult EncodeDecodeCompare(
     const std::string& file_name,
     const EncoderConfig& encoder_config = EncoderConfig::kDefault,
     const DecoderConfig& decoder_config = DecoderConfig::kDefault);

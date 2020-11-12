@@ -135,14 +135,14 @@ class ImageReaderWEBP : public ImageReader::Impl {
 
       if (!bitstream->has_animation) {
         // Not an animation, regular decoding.
-        output_buffer->colorspace = FormatToWebPMode(buffer_->format);
+        output_buffer->colorspace = FormatToWebPMode(buffer_->format());
         if (output_buffer->colorspace == MODE_LAST) {
           status = WP2_STATUS_INVALID_COLORSPACE;
           goto End;
         }
-        output_buffer->u.RGBA.rgba = (uint8_t*)buffer_->GetRow(0);
-        output_buffer->u.RGBA.stride = buffer_->stride;
-        output_buffer->u.RGBA.size = buffer_->stride * buffer_->height;
+        output_buffer->u.RGBA.rgba = buffer_->GetRow8(0);
+        output_buffer->u.RGBA.stride = buffer_->stride();
+        output_buffer->u.RGBA.size = buffer_->stride() * buffer_->height();
         output_buffer->is_external_memory = 1;
 
         if (WebPDecode(data_, data_size_, &config) != VP8_STATUS_OK) {
@@ -175,7 +175,7 @@ class ImageReaderWEBP : public ImageReader::Impl {
       // Exif/XMP/ICC extraction.
       if (status == WP2_STATUS_OK) {
         const WP2Status status_metadata =
-            ExtractMetadata(data_, data_size_, &buffer_->metadata);
+            ExtractMetadata(data_, data_size_, &buffer_->metadata_);
         if (status_metadata != WP2_STATUS_OK) status = status_metadata;
       }
 
@@ -210,8 +210,9 @@ class ImageReaderWEBP : public ImageReader::Impl {
     }
     if (buf == nullptr) return WP2_STATUS_BITSTREAM_ERROR;  // No data = error.
 
-    WP2_CHECK_STATUS(buffer_->Import(WP2_RGBA_32, buffer_->width,
-                                     buffer_->height, buf, buffer_->width * 4));
+    WP2_CHECK_STATUS(buffer_->Import(WP2_RGBA_32, buffer_->width(),
+                                     buffer_->height(), buf,
+                                     buffer_->width() * 4));
     *is_last = !WebPAnimDecoderHasMoreFrames(decoder_);
     *duration_ms = (uint32_t)(timestamp - last_timestamp_);
     last_timestamp_ = timestamp;

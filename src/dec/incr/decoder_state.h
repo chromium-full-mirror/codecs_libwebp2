@@ -23,6 +23,7 @@
 #ifndef WP2_DEC_INCR_DECODER_STATE_H_
 #define WP2_DEC_INCR_DECODER_STATE_H_
 
+#include "src/common/constants.h"
 #include "src/dec/filters/intertile_filter.h"
 #include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
@@ -43,6 +44,7 @@ class PartialTileDecoder : public WP2Allocable {
   // Initializes the worker.
   virtual WP2Status Init(const BitstreamFeatures& features,
                          const DecoderConfig& config,
+                         ProgressWatcher* const progress,
                          TilesLayout* const tiles_layout,
                          Tile* const partial_tile) = 0;
   // Starts work. Returns WP2_STATUS_OK or an error.
@@ -60,16 +62,17 @@ class PartialTileDecoder : public WP2Allocable {
 // Pointer to implementation for Decoder state.
 struct Decoder::State : public WP2Allocable {
  protected:
-  explicit State(DataSource* const input) : data_source(input) {}
+  State(const DecoderConfig& config, DataSource* const input)
+      : data_source(input), progress(config.progress_hook) {}
 
  public:
   virtual ~State() = default;
 
   static constexpr size_t kUnknown = 0;
 
-  // What data is expected next; the order matters.
+  // What data or action is expected next. The order matters.
   enum Stage {
-    WAITING_FOR_HEADER_CHUNK = 0,
+    WAITING_FOR_HEADER_CHUNK,
     ALLOCATE_OUTPUT_BUFFER,
     WAITING_FOR_PREVIEW_CHUNK,
     WAITING_FOR_ICC_CHUNK,
@@ -77,6 +80,7 @@ struct Decoder::State : public WP2Allocable {
     PREPARE_TILES,
     WAITING_FOR_TILE_DATA,
     WAITING_FOR_METADATA_CHUNKS,
+    FINISH_PROGRESS,
     DECODED
   } stage = WAITING_FOR_HEADER_CHUNK;
   // Store last success, pending or error status.
@@ -159,6 +163,9 @@ struct Decoder::State : public WP2Allocable {
   // Used to decode parts of a tile, if not null. Must be destroyed first.
   std::unique_ptr<PartialTileDecoder> partial_tile_decoder;
 
+  // Decoding advancement.
+  ProgressWatcher progress;  // Can generate WP2_STATUS_USER_ABORT.
+
   // Moves to next stage if there is no error, otherwise returns false.
   bool NextStage();
 
@@ -185,7 +192,8 @@ struct Decoder::State : public WP2Allocable {
 
 struct DecoderStateArray : public Decoder::State {
  public:
-  DecoderStateArray() : Decoder::State(&array_data_source) {}
+  explicit DecoderStateArray(const DecoderConfig& config)
+      : Decoder::State(config, &array_data_source) {}
 
   // Rewinds also the 'array_data_source' so no need to call SetInput() again.
   void Rewind(bool output_buffer_changed) override;
@@ -196,7 +204,8 @@ struct DecoderStateArray : public Decoder::State {
 
 struct DecoderStateStream : public Decoder::State {
  public:
-  DecoderStateStream() : Decoder::State(&stream_data_source) {}
+  explicit DecoderStateStream(const DecoderConfig& config)
+      : Decoder::State(config, &stream_data_source) {}
   StreamDataSource stream_data_source;
 };
 
@@ -217,8 +226,9 @@ class CustomDataSource : public DataSource {
 
 struct DecoderStateCustom : public Decoder::State {
  public:
-  explicit DecoderStateCustom(CustomDecoder* const custom_decoder)
-      : Decoder::State(&custom_data_source),
+  DecoderStateCustom(const DecoderConfig& config,
+                     CustomDecoder* const custom_decoder)
+      : Decoder::State(config, &custom_data_source),
         custom_data_source(custom_decoder) {}
   CustomDataSource custom_data_source;
 };

@@ -30,7 +30,7 @@ def GetFilePath(file_name):
 
 class Libwp2Test(unittest.TestCase):
 
-  def Encode(self, quality, speed):
+  def Encode(self, quality, effort):
     file_path = GetFilePath('source1_64x48.png')
 
     original_image = wp2.ArgbBuffer()
@@ -38,7 +38,7 @@ class Libwp2Test(unittest.TestCase):
 
     config = wp2.EncoderConfig()
     config.quality = quality
-    config.speed = speed
+    config.effort = effort
     self.assertTrue(config.IsValid())
 
     memory_writer = wp2.MemoryWriter()
@@ -54,7 +54,7 @@ class Libwp2Test(unittest.TestCase):
     self.assertGreaterEqual(wp2.WP2GetVersion(), 1)
 
   def testEncodeDecode(self):
-    # Test different combinations of quality, speed.
+    # Test different combinations of quality, effort.
     self.Decode(self.Encode(0, 5))
     self.Decode(self.Encode(50, 0))
     self.Decode(self.Encode(75, 9))

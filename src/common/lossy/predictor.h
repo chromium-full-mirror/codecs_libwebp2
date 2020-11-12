@@ -163,9 +163,9 @@ class Predictors {
   PredictorVector::const_iterator end() const { return preds_.end(); }
   // Finds the best predictor for a block 'cb'. This predictor has to give a
   // score better than the current one 'best_score'.
-  // This is speed dependent: it looks at all non-angle predictors, and for
+  // This is effort dependent: it looks at all non-angle predictors, and for
   // angle predictors, it looks at the main angles but only refine some of them
-  // depending on the speed.
+  // depending on the effort.
   // For Y/A channel, best_score needs to be given and the function will try to
   // find a better score. If found, best_factor will be replaced and
   // best_predictor set.

@@ -121,12 +121,13 @@ Argb32b GetAverageColor(const ArgbBuffer& canvas, uint32_t radius,
       (uint32_t)std::max(0, (int32_t)pixel_x - (int32_t)radius);
   const uint32_t min_y =
       (uint32_t)std::max(0, (int32_t)pixel_y - (int32_t)radius);
-  const uint32_t max_x = std::min(canvas.width - 1, pixel_x + radius);
-  const uint32_t max_y = std::min(canvas.height - 1, pixel_y + radius);
+  const uint32_t max_x = std::min(canvas.width() - 1, pixel_x + radius);
+  const uint32_t max_y = std::min(canvas.height() - 1, pixel_y + radius);
 
-  assert(canvas.format == WP2_Argb_32 || canvas.format == WP2_Argb_38);
+  assert(canvas.format() == WP2_Argb_32 || canvas.format() == WP2_ARGB_32 ||
+         canvas.format() == WP2_Argb_38);
   ColorAccumulator accumulator;
-  const uint32_t channel_depth = WP2FormatBpc(canvas.format);
+  const uint32_t channel_depth = WP2FormatBpc(canvas.format());
   assert(channel_depth == 1 || channel_depth == 2);
   if (channel_depth == 1) {
     for (uint32_t y = min_y; y <= max_y; ++y) {
@@ -145,7 +146,15 @@ Argb32b GetAverageColor(const ArgbBuffer& canvas, uint32_t radius,
       }
     }
   }
-  return accumulator.GetAverage();
+  Argb32b average = accumulator.GetAverage();
+  if (canvas.format() == WP2_ARGB_32) {
+    // Premultiply.
+    return {average.a, (uint8_t)WP2::DivBy255(average.r * average.a),
+            (uint8_t)WP2::DivBy255(average.g * average.a),
+            (uint8_t)WP2::DivBy255(average.b * average.a)};
+  } else {
+    return average;
+  }
 }
 
 static int16_t GetAverageColor(const Plane16& plane) {
@@ -196,8 +205,8 @@ uint16_t PreviewData::GetBestIndex(const ArgbBuffer& canvas,
                                    uint32_t x, uint32_t y) const {
   const uint32_t round_x = (grid_width_ - 1) >> 1;
   const uint32_t round_y = (grid_height_ - 1) >> 1;
-  x = (x * (canvas.width - 1) + round_x) / (grid_width_ - 1);
-  y = (y * (canvas.height - 1) + round_y) / (grid_height_ - 1);
+  x = (x * (canvas.width() - 1) + round_x) / (grid_width_ - 1);
+  y = (y * (canvas.height() - 1) + round_y) / (grid_height_ - 1);
   const Argb32b color = GetAverageColor(canvas, /*radius=*/5, x, y);
   return FindClosestColorIndex(palette_, ToAYCoCg19b(color));
 }
@@ -245,8 +254,8 @@ WP2Status PreviewData::CollectColors(const ArgbBuffer& canvas,
         }
       }
       // Accumulate.
-      const uint32_t pixel_x = x * (canvas.width - 1) / w;
-      const uint32_t pixel_y = y * (canvas.height - 1) / h;
+      const uint32_t pixel_x = x * (canvas.width() - 1) / w;
+      const uint32_t pixel_y = y * (canvas.height() - 1) / h;
       centroids[closest_vertex_index].Add(
           GetAverageColor(canvas, /*radius=*/5, pixel_x, pixel_y));
     }
@@ -265,8 +274,8 @@ WP2Status PreviewData::CollectColors(const ArgbBuffer& canvas,
   }
 
   // add the corners
-  for (uint32_t y : {0u, canvas.height - 1}) {
-    for (uint32_t x : {0u, canvas.width - 1}) {
+  for (uint32_t y : {0u, canvas.height() - 1}) {
+    for (uint32_t x : {0u, canvas.width() - 1}) {
       const Argb32b c = GetAverageColor(canvas, /*radius=*/15, x, y);
       WP2_CHECK_ALLOC_OK(palette_.push_back(ToAYCoCg19b(c)));
     }

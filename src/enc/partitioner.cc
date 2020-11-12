@@ -715,7 +715,7 @@ WP2Status MultiPassPartitioner::GetBestPartition(
     WP2_CHECK_STATUS(GetBlocks(Pass::LumaAlphaGradient, block_size,
                                Grid::Snapped, &max_num_blocks_left, blocks));
   }
-  if (config_->speed >= MultiScoreFunc::kMinSpeedForGoodQuantDCT) {
+  if (config_->effort >= MultiScoreFunc::kMinEffortForGoodQuantDCT) {
     // Blocks having a DCT that still gives a good result when quantized.
     WP2_CHECK_STATUS(GetBlocks(Pass::GoodQuantDCT, BLK_32x32, Grid::Snapped,
                                &max_num_blocks_left, blocks));

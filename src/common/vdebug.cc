@@ -67,10 +67,10 @@ const Argb32b kSegmentColors[kMaxNumSegments]{
 // Sets pixel at (x, y) with 'color' if it fits in 'debug_output' boundaries.
 static void MarkPixelForVDebug(int32_t x, int32_t y, Argb32b color,
                                ArgbBuffer* const debug_output) {
-  assert(debug_output->format == WP2_Argb_32);
-  if (x >= 0 && x < (int32_t)debug_output->width &&  // Within bounds.
-      y >= 0 && y < (int32_t)debug_output->height) {
-    ToUInt8(color, (uint8_t*)debug_output->GetRow(y) + x * 4);
+  assert(debug_output->format() == WP2_Argb_32);
+  if (x >= 0 && x < (int32_t)debug_output->width() &&  // Within bounds.
+      y >= 0 && y < (int32_t)debug_output->height()) {
+    ToUInt8(color, debug_output->GetRow8(y) + x * 4);
   }
 }
 
@@ -93,8 +93,7 @@ static void DrawPixelArray(uint32_t x, uint32_t y, uint32_t w, uint32_t h,
           const uint32_t final_x = x + c * scale + cs;
           if (final_x >= w) break;
 
-          uint8_t* const pixel =
-              (uint8_t*)debug_output->GetRow(final_y) + final_x * 4;
+          uint8_t* const pixel = debug_output->GetRow8(final_y) + final_x * 4;
           if (mask[l][c] != ' ') {
             ToUInt8(color, pixel);
           } else if (bg_color.a > 0) {
@@ -110,18 +109,18 @@ static void DrawPixelArray(uint32_t x, uint32_t y, uint32_t w, uint32_t h,
 
 static void DrawUndefinedPattern(ArgbBuffer* const debug_output) {
   // Easily recognizable striped background.
-  for (uint32_t y = 0; y < debug_output->height; ++y) {
-    for (uint32_t x = 0; x < debug_output->width; ++x) {
+  for (uint32_t y = 0; y < debug_output->height(); ++y) {
+    for (uint32_t x = 0; x < debug_output->width(); ++x) {
       ToUInt8(((x % 10) == (y % 10)) ? Argb32b{0xff, 0x22, 0x22, 0x22}
                                      : Argb32b{0xff, 0x00, 0x00, 0x00},
-              (uint8_t*)debug_output->GetRow(y) + x * 4);
+              debug_output->GetRow8(y) + x * 4);
     }
   }
 
   // Display "undefined" if the 'debug_output' content is not overwritten.
-  DrawPixelArray(debug_output->width / 3, debug_output->height / 3,
-                 debug_output->width - debug_output->width / 3,
-                 debug_output->height - debug_output->height / 3,
+  DrawPixelArray(debug_output->width() / 3, debug_output->height() / 3,
+                 debug_output->width() - debug_output->width() / 3,
+                 debug_output->height() - debug_output->height() / 3,
                  Argb32b{0xff, 0x55, 0x55, 0x55}, Argb32b{0, 0, 0, 0},
                  {
                      "            #        # #             #",
@@ -130,7 +129,7 @@ static void DrawUndefinedPattern(ArgbBuffer* const debug_output) {
                      "# ## #  # # # #     #  # #  # #    # #",
                      " # # #  #  ##  ##   #  # #  #  ##   ##",
                  },
-                 /*scale=*/Clamp(debug_output->width / 128u, 1u, 4u),
+                 /*scale=*/Clamp(debug_output->width() / 128u, 1u, 4u),
                  debug_output);
 }
 
@@ -142,8 +141,8 @@ WP2Status SetupDecoderInfo(const BitstreamFeatures& features,
     if (VDMatch(config, "original")) {
       // Keep the content of the buffer but check the size.
       WP2_CHECK_OK(!debug_output->IsEmpty() &&
-                       debug_output->width == features.raw_width &&
-                       debug_output->height == features.raw_height,
+                       debug_output->width() == features.raw_width &&
+                       debug_output->height() == features.raw_height,
                    WP2_STATUS_BAD_DIMENSION);
       // TODO(yguyon): Rotate 'debug_output' if 'orientation' is not kOriginal
     } else {
@@ -156,32 +155,24 @@ WP2Status SetupDecoderInfo(const BitstreamFeatures& features,
 #if defined(WP2_BITTRACE)
     config.info->bit_traces.clear();
     config.info->blocks.clear();
-    // Register the 'header_size' into WP2_BITTRACE.
-    LabelStats* const stats =
-        &config.info->bit_traces["BitstreamFeatures (not ANS)"];
-    stats->bits += features.header_size * 8.;
-    stats->num_occurrences += 1;
-    // TODO(yguyon): Add WP2BitCounts to HeaderDec to have finer labels rather
-    //               than storing the whole BitstreamFeatures as a Symbol.
-    stats->type = LabelStats::Type::Symbol;
-    stats->histo[0] += 1;
 #endif  // WP2_BITTRACE
+    RegisterBitTrace(config, features.header_size, "BitstreamFeatures");
     config.info->header_size = features.header_size;
     config.info->selection_info.clear();
   }
   return WP2_STATUS_OK;
 }
 
-void RegisterChunkSize(const DecoderConfig& config, uint32_t chunk_size,
-                       uint32_t chunk_size_size) {
-  (void)config, (void)chunk_size, (void)chunk_size_size;
+void RegisterBitTrace(const DecoderConfig& config, uint32_t num_bytes,
+                      WP2_OPT_LABEL) {
+  (void)config, (void)num_bytes, (void)label;
 #if defined(WP2_BITTRACE)
   if (config.info != nullptr) {
-    LabelStats* const stats = &config.info->bit_traces["ChunkSize (not ANS)"];
-    stats->bits += chunk_size_size * 8.;
+    LabelStats* const stats = &config.info->bit_traces[label];
+    stats->bits += num_bytes * 8.;
     stats->num_occurrences += 1;
-    stats->type = LabelStats::Type::RValue;
-    stats->histo[chunk_size] += 1;
+    stats->type = LabelStats::Type::Symbol;
+    stats->histo[0] += 1;
   }
 #endif  // WP2_BITTRACE
 }
@@ -396,8 +387,8 @@ void CodedBlock::StoreTransform(const DecoderConfig& config,
 
   const bool all_zero = !HasCoeffs(kYChannel);
   const Rectangle r_px{x_pix(), y_pix(),
-                       std::min(w_pix(), debug_output->width - x_pix()),
-                       std::min(h_pix(), debug_output->height - y_pix())};
+                       std::min(w_pix(), debug_output->width() - x_pix()),
+                       std::min(h_pix(), debug_output->height() - y_pix())};
   const uint8_t r = (uint8_t)(value * 255u / max_value);
   const uint8_t g = all_zero ? 0x00 : 0xCC;
   const uint8_t b = r;
@@ -513,8 +504,8 @@ static void DisplayPredContext(const CodedBlock& cb, Channel channel,
                                bool draw_red_border,
                                ArgbBuffer* const debug_output) {
   const uint32_t x = cb.x_pix(), y = cb.y_pix(), w = cb.w_pix(), h = cb.h_pix();
-  const Rectangle rect = {x, y, std::min(w, debug_output->width - x),
-                                std::min(h, debug_output->height - y)};
+  const Rectangle rect = {x, y, std::min(w, debug_output->width() - x),
+                          std::min(h, debug_output->height() - y)};
 
   if (draw_red_border) {  // Encircle the left, top, right context lines.
     const uint32_t bx = SafeSub(x, 2u), by = SafeSub(y, 2u);
@@ -540,11 +531,11 @@ static void DisplayPredContext(const CodedBlock& cb, Channel channel,
     for (uint32_t i = 0; i < rect.width; ++i) {  // Top
       debug_output->Fill({x + i, y - 1, 1, 1}, CtxtToColor(context[h + 1 + i]));
     }
-    if (x + w < debug_output->width) {  // Top-right
+    if (x + w < debug_output->width()) {  // Top-right
       debug_output->Fill({x + w, y - 1, 1, 1}, CtxtToColor(context[h + 1 + w]));
     }
   }
-  if (x + w < debug_output->width) {
+  if (x + w < debug_output->width()) {
     for (uint32_t j = 0; j < rect.height; ++j) {  // Right
       debug_output->Fill({x + w, y + j, 1, 1},
                          CtxtToColor(context[h + 1 + w + 1 + j]));
@@ -573,9 +564,10 @@ void CodedBlock::StorePredictionScore(const EncoderConfig& config,
   ArgbBuffer debug_output;  // Tile view.
   WP2_ASSERT_STATUS(debug_output.SetView(config.info->debug_output, tile_rect));
 
-  const Rectangle rect = {  // Block rect.
-      x_pix(), y_pix(), std::min(w_pix(), debug_output.width  - x_pix()),
-                        std::min(h_pix(), debug_output.height - y_pix())};
+  const Rectangle rect = {
+      // Block rect.
+      x_pix(), y_pix(), std::min(w_pix(), debug_output.width() - x_pix()),
+      std::min(h_pix(), debug_output.height() - y_pix())};
   const bool selected = VDSelected(tile_rect.x, tile_rect.y, rect, config);
 
   debug_output.Fill(rect, Argb32b{0xff, 0x00, 0x22, 0x00});
@@ -908,10 +900,10 @@ WP2Status CodedBlock::Draw(const DecoderConfig& config, uint32_t tile_x,
                            ArgbBuffer* const debug_output) const {
   const uint32_t x = x_pix(), bw = w_pix();
   const uint32_t y = y_pix(), bh = h_pix();
-  const uint32_t w = std::min(bw, debug_output->width - x);  // Border
-  const uint32_t h = std::min(bh, debug_output->height - y);
-  const uint32_t mid_w = std::min(bw - 2, debug_output->width - (x + 1));
-  const uint32_t mid_h = std::min(bh - 2, debug_output->height - (y + 1));
+  const uint32_t w = std::min(bw, debug_output->width() - x);  // Border
+  const uint32_t h = std::min(bh, debug_output->height() - y);
+  const uint32_t mid_w = std::min(bw - 2, debug_output->width() - (x + 1));
+  const uint32_t mid_h = std::min(bh - 2, debug_output->height() - (y + 1));
 
   if (VDMatch(config, "partition")) {
     if (VDMatch(config, "split-tf")) {
@@ -1095,8 +1087,8 @@ WP2Status CodedBlock::Store420Decision(const EncoderConfig& config,
                        Argb32b{0xff, 0xff, 0x11, 0x11},
                        Argb32b{0xff, 0x11, 0xff, 0x11}};
   const Rectangle rect = {x_pix(), y_pix(),
-                          std::min(w_pix(), debug_output.width - x_pix()),
-                          std::min(h_pix(), debug_output.height - y_pix())};
+                          std::min(w_pix(), debug_output.width() - x_pix()),
+                          std::min(h_pix(), debug_output.height() - y_pix())};
   debug_output.Fill(rect, colors[(int)decision]);
   debug_output.DrawRect(rect, Argb32b{0xff, 0x00, 0x00, 0x00});
   return WP2_STATUS_OK;
@@ -1115,8 +1107,8 @@ WP2Status CodedBlock::StoreLambdaMult(const EncoderConfig& config,
   pos_x += x_pix();
   pos_y += y_pix();
   const Rectangle rect = {pos_x, pos_y,
-                          std::min(w_pix(), debug_output.width - pos_x),
-                          std::min(h_pix(), debug_output.height - pos_y)};
+                          std::min(w_pix(), debug_output.width() - pos_x),
+                          std::min(h_pix(), debug_output.height() - pos_y)};
   const uint8_t gray = (uint8_t)Clamp((lambda_mult_ - 1.0f) * 500.f + 128.f,
                                       0.f, 255.f);
   debug_output.Fill(rect, Argb32b{0xff, gray, gray, gray});
@@ -1208,7 +1200,7 @@ static void ApplyVDebugDiff(const YUVPlane& unfiltered_pixels,
     }
   }
   // TODO(yguyon): Use the actual CSPTransform
-  ArgbBuffer debug_output_view(debug_output->format);
+  ArgbBuffer debug_output_view(debug_output->format());
   WP2_ASSERT_STATUS(debug_output_view.SetView(*debug_output, rect));
   WP2_ASSERT_STATUS(diff_pixels.Export(
       CSPTransform(), /*resize_if_needed=*/false, &debug_output_view));
@@ -1228,7 +1220,7 @@ static void ApplyVDebugAlphaDiff(const YUVPlane& unfiltered_pixels,
   const Plane16& filtered = filtered_pixels.GetChannel(c);
   const int32_t kMultiplier = 4;  // Multiplier to make things more visible.
   for (uint32_t y = 0; y < rect.height; ++y) {
-    uint8_t* row = (uint8_t*)debug_output->GetRow(rect.y + y);
+    uint8_t* row = debug_output->GetRow8(rect.y + y);
     for (uint32_t x = 0; x < rect.width; ++x) {
       const int32_t diff = filtered.At(x, y) - unfiltered.At(x, y);
       const int32_t v = diff * kMultiplier * 255 / (int32_t)kAlphaMax + 128;
@@ -1244,22 +1236,22 @@ static void ApplyVDebugDiff(const ArgbBuffer& unfiltered_pixels,
                             const ArgbBuffer& filtered_pixels,
                             int32_t multiplier,
                             ArgbBuffer* const debug_output) {
-  assert(unfiltered_pixels.format == filtered_pixels.format);
-  assert(unfiltered_pixels.width == filtered_pixels.width);
-  assert(unfiltered_pixels.height == filtered_pixels.height);
-  assert(unfiltered_pixels.format == debug_output->format);
-  assert(unfiltered_pixels.width == debug_output->width);
-  assert(unfiltered_pixels.height == debug_output->height);
-  const uint32_t num_channels = WP2FormatBpp(debug_output->format);
-  const uint32_t alpha_channel = WP2AlphaChannelIndex(debug_output->format);
+  assert(unfiltered_pixels.format() == filtered_pixels.format());
+  assert(unfiltered_pixels.width() == filtered_pixels.width());
+  assert(unfiltered_pixels.height() == filtered_pixels.height());
+  assert(unfiltered_pixels.format() == debug_output->format());
+  assert(unfiltered_pixels.width() == debug_output->width());
+  assert(unfiltered_pixels.height() == debug_output->height());
+  const uint32_t num_channels = WP2FormatBpp(debug_output->format());
+  const uint32_t alpha_channel = WP2AlphaChannelIndex(debug_output->format());
 
-  for (uint32_t y = 0; y < unfiltered_pixels.height; ++y) {
-    for (uint32_t x = 0; x < unfiltered_pixels.width; ++x) {
+  for (uint32_t y = 0; y < unfiltered_pixels.height(); ++y) {
+    for (uint32_t x = 0; x < unfiltered_pixels.width(); ++x) {
       for (uint32_t c = 0; c < num_channels; ++c) {
         const int32_t unfiltered =
-            ((uint8_t*)unfiltered_pixels.GetRow(y))[x * num_channels + c];
+            (unfiltered_pixels.GetRow8(y))[x * num_channels + c];
         const int32_t filtered =
-            ((uint8_t*)filtered_pixels.GetRow(y))[x * num_channels + c];
+            (filtered_pixels.GetRow8(y))[x * num_channels + c];
 
         int32_t diff = (filtered - unfiltered) * multiplier;
         if (c == alpha_channel) {
@@ -1268,8 +1260,7 @@ static void ApplyVDebugDiff(const ArgbBuffer& unfiltered_pixels,
           diff = 128 + diff;  // Grey by default.
         }
 
-        uint8_t* const pixel =
-            (uint8_t*)debug_output->GetRow(y) + x * num_channels + c;
+        uint8_t* const pixel = debug_output->GetRow8(y) + x * num_channels + c;
         *pixel = (uint8_t)Clamp(diff, 0, 255);
       }
     }
@@ -1619,13 +1610,13 @@ void AlphaFilter::ApplyVDebug(uint32_t num_rows) {
 // Sets all R, G and B channels to the value of a single 'channel'.
 static void ToGray(const ArgbBuffer& from, uint32_t channel,
                    ArgbBuffer* const to) {
-  assert(from.width == to->width && from.height == to->height);
-  assert(from.format == WP2_Argb_32 && to->format == WP2_Argb_32);
+  assert(from.width() == to->width() && from.height() == to->height());
+  assert(from.format() == WP2_Argb_32 && to->format() == WP2_Argb_32);
   uint32_t kAlpha = 0;
-  for (uint32_t y = 0; y < to->height; ++y) {
-    const uint8_t* const from_row = (const uint8_t*)from.GetRow(y);
-    uint8_t* const to_row = (uint8_t*)to->GetRow(y);
-    for (size_t x = 0; x < to->width; ++x) {
+  for (uint32_t y = 0; y < to->height(); ++y) {
+    const uint8_t* const from_row = from.GetRow8(y);
+    uint8_t* const to_row = to->GetRow8(y);
+    for (size_t x = 0; x < to->width(); ++x) {
       const uint8_t* const from_pixel = from_row + x * 4;
       uint8_t* const to_pixel = to_row + x * 4;
       uint32_t gray = from_pixel[channel];
@@ -1647,7 +1638,8 @@ void ApplyVDebugBeforeAfter(const DecoderConfig& config,
                             ArgbBuffer* const debug_output) {
   if (VDMatch(config, "original/diff")) {
     ArgbBuffer argb;
-    WP2_ASSERT_STATUS(argb.Resize(debug_output->width, debug_output->height));
+    WP2_ASSERT_STATUS(
+        argb.Resize(debug_output->width(), debug_output->height()));
     YUVPlane non_padded;
     WP2_ASSERT_STATUS(non_padded.SetView(
         tile.yuv_output, {0, 0, tile.rect.width, tile.rect.height}));
@@ -1658,8 +1650,8 @@ void ApplyVDebugBeforeAfter(const DecoderConfig& config,
              VDMatch(config, "v")) {
     const uint32_t yuv_bits = csp_tranform.GetYUVPrecisionBits() + 1;
     if (VDMatch(config, "original")) {
-      csp_tranform.Apply(debug_output, yuv_bits, 0, 0, debug_output->width,
-                         debug_output->height);
+      csp_tranform.Apply(debug_output, yuv_bits, 0, 0, debug_output->width(),
+                         debug_output->height());
       ToGray(*debug_output, VDChannel(config) + 1, debug_output);
     } else if (VDMatch(config, "compressed")) {
       const Plane16& plane = tile.yuv_output.GetChannel(VDChannel(config));
@@ -1675,7 +1667,7 @@ void ApplyVDebugBeforeAfter(const DecoderConfig& config,
       } else if (VDMatch(config, "compressed")) {
         ArgbBuffer argb;
         WP2_ASSERT_STATUS(
-            argb.Resize(debug_output->width, debug_output->height));
+            argb.Resize(debug_output->width(), debug_output->height()));
         YUVPlane non_padded_yuv;
         WP2_ASSERT_STATUS(non_padded_yuv.SetView(
             tile.yuv_output, {0, 0, tile.rect.width, tile.rect.height}));
@@ -1689,7 +1681,7 @@ void ApplyVDebugBeforeAfter(const DecoderConfig& config,
   if (VDMatch(config, "histogram") && VDSelected(tile.rect, config)) {
     // A gray image of either Y,U,V,R,G or B should already be in
     // 'debug_output'. The histogram will be based on that.
-    ArgbBuffer selected_area(debug_output->format);
+    ArgbBuffer selected_area(debug_output->format());
     Rectangle rect = config.info->selection.ClipWith(tile.rect);
     assert(rect.GetArea() != 0);
     rect.x -= tile.rect.x;
@@ -1745,7 +1737,7 @@ WP2Status PartitionScoreFunc::ClearVDebug() const {
         WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kMaxYuvBits));
       }
       debug_output.DrawRect(
-          {0, 0, debug_output.width, debug_output.height},
+          {0, 0, debug_output.width(), debug_output.height()},
           Argb32b{255, (uint8_t)(pm * 255 / NUM_PARTITION_METHODS),
                   (uint8_t)(100 + pm * 100 / NUM_PARTITION_METHODS),
                   (uint8_t)(50 + pm * 50 / NUM_PARTITION_METHODS)});
@@ -1792,8 +1784,8 @@ void Partitioner::RegisterOrderForVDebug(uint32_t pass, uint32_t pass_index,
     Rectangle rect;
     rect.x = tile_rect_.x + block.x_pix();
     rect.y = tile_rect_.y + block.y_pix();
-    rect.width = std::min(block.w_pix(), debug_output->width - rect.x);
-    rect.height = std::min(block.h_pix(), debug_output->height - rect.y);
+    rect.width = std::min(block.w_pix(), debug_output->width() - rect.x);
+    rect.height = std::min(block.h_pix(), debug_output->height() - rect.y);
 
     if (VDMatch(*config_, "pass") || VDMatch(*config_, "order")) {
       Argb32b color;
@@ -1988,10 +1980,10 @@ void MultiScoreFunc::DrawValueThresholdColor(
                           (value <= 1.f) ? 55.f + 200.f * (1.f - value) : 0.f};
 
   for (uint32_t sub_y = 0; sub_y < cell_height; ++sub_y) {
-    if (block.y_pix() + sub_y >= debug_output->height) break;
-    uint8_t* const row = (uint8_t*)debug_output->GetRow(block.y_pix() + sub_y);
+    if (block.y_pix() + sub_y >= debug_output->height()) break;
+    uint8_t* const row = debug_output->GetRow8(block.y_pix() + sub_y);
     for (uint32_t sub_x = 0; sub_x < cell_width; ++sub_x) {
-      if (block.x_pix() + sub_x >= debug_output->width) break;
+      if (block.x_pix() + sub_x >= debug_output->width()) break;
       uint8_t* const pixel = &row[(block.x_pix() + sub_x) * 4];
       for (uint32_t c : {1, 2, 3}) {
         pixel[c] = (uint8_t)std::lround((pixel[c] + color[c]) * 0.5f);
@@ -2028,8 +2020,8 @@ WP2Status MultiScoreFunc::DrawLossyLuma(const Block& block,
     // If there is enough space, also display the quantized luma for the
     // sub-blocks, for comparison during the merging pass.
     if (VDMatch(*config_, "merge-flat") &&
-        block.x_pix() + 2 * block.w_pix() <= debug_output->width &&
-        block.y_pix() + block.h_pix() <= debug_output->height) {
+        block.x_pix() + 2 * block.w_pix() <= debug_output->width() &&
+        block.y_pix() + block.h_pix() <= debug_output->height()) {
       QuantizeCoeffs(kYChannel, block, BLK_8x8, coeffs);
       std::copy(coeffs, coeffs + block.w_pix() * block.h_pix(), p.Row(0));
       WP2_CHECK_STATUS(block_debug_output.SetView(
@@ -2048,10 +2040,10 @@ WP2Status MultiScoreFunc::DrawSelection(const Block& block,
   Rectangle border = {SafeSub(block_rect.x, 1u), SafeSub(block_rect.y, 1u), 0,
                       0};
   border.width =
-      std::min(block_rect.x + block_rect.width + 1u, debug_output->width) -
+      std::min(block_rect.x + block_rect.width + 1u, debug_output->width()) -
       border.x;
   border.height =
-      std::min(block_rect.y + block_rect.height + 1u, debug_output->height) -
+      std::min(block_rect.y + block_rect.height + 1u, debug_output->height()) -
       border.y;
   debug_output->DrawRect(border, Argb32b{255, 255, 255, 0});
 
@@ -2096,8 +2088,8 @@ static void DrawDirection(const Rectangle& rect, uint32_t direction,
   for (uint32_t y = 0; y < rect.height; ++y) {
     for (uint32_t x = 0; x < rect.width; ++x) {
       if (kPatterns[direction][y][x] == 1) {
-        ToUInt8(color, (uint8_t*)debug_output->GetRow(rect.y + y) +
-                           (rect.x + x) * WP2FormatBpp(debug_output->format));
+        ToUInt8(color, debug_output->GetRow8(rect.y + y) +
+                           (rect.x + x) * WP2FormatBpp(debug_output->format()));
       }
     }
   }
@@ -2128,11 +2120,11 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
   if (VDMatch(*config_, "direction-4x4")) {
     // Display the luma source as background.
     WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kMaxYuvBits + 1u));
-    for (uint32_t y = 0; y + 4 <= debug_output.height; y += 4) {
-      for (uint32_t x = 0; x + 4 <= debug_output.width; x += 4) {
+    for (uint32_t y = 0; y + 4 <= debug_output.height(); y += 4) {
+      for (uint32_t x = 0; x + 4 <= debug_output.width(); x += 4) {
         const Rectangle block_rect = {x, y,
-                                      std::min(4u, debug_output.width - x),
-                                      std::min(4u, debug_output.height - y)};
+                                      std::min(4u, debug_output.width() - x),
+                                      std::min(4u, debug_output.height() - y)};
         const uint32_t i = x / 4 + y / 4 * num_block_cols_;
         if (direction_certainty_[i] > 0) {  // Do not draw random directions.
           const uint8_t c =
@@ -2169,13 +2161,13 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
   Block selected_block = Block();
 
   // Display all blocks.
-  for (uint32_t y = 0; y + block.h_pix() <= debug_output.height;
+  for (uint32_t y = 0; y + block.h_pix() <= debug_output.height();
        y += cell_height) {
-    for (uint32_t x = 0; x + block.w_pix() <= debug_output.width;
+    for (uint32_t x = 0; x + block.w_pix() <= debug_output.width();
          x += cell_width) {
       block.SetXY(x / kMinBlockSizePix, y / kMinBlockSizePix);
-      const uint32_t max_width = debug_output.width - block.x_pix();
-      const uint32_t max_height = debug_output.height - block.y_pix();
+      const uint32_t max_width = debug_output.width() - block.x_pix();
+      const uint32_t max_height = debug_output.height() - block.y_pix();
       const Rectangle cell_rect = {block.x_pix(), block.y_pix(),
                                    std::min(cell_width, max_width),
                                    std::min(cell_height, max_height)};
@@ -2199,8 +2191,8 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
 
   // Display selected block on top.
   if (selected_block.dim() != BLK_LAST) {
-    const uint32_t max_width = debug_output.width - selected_block.x_pix();
-    const uint32_t max_height = debug_output.height - selected_block.y_pix();
+    const uint32_t max_width = debug_output.width() - selected_block.x_pix();
+    const uint32_t max_height = debug_output.height() - selected_block.y_pix();
     const Rectangle block_rect = {selected_block.x_pix(),
                                   selected_block.y_pix(),
                                   std::min(selected_block.w_pix(), max_width),
@@ -2224,8 +2216,8 @@ void SegmentationGridVDebug(const EncoderConfig& config, const Rectangle& rect,
   ArgbBuffer* const debug_output = &config.info->debug_output;
   config.info->debug_output.Fill(
       {tile_pos_x + rect.x, tile_pos_y + rect.y,
-       std::min(rect.width, debug_output->width - tile_pos_x - rect.x),
-       std::min(rect.height, debug_output->height - tile_pos_y - rect.y)},
+       std::min(rect.width, debug_output->width() - tile_pos_x - rect.x),
+       std::min(rect.height, debug_output->height() - tile_pos_y - rect.y)},
       Argb32b{255, gray, gray, gray});
 
   if (VDSelected(tile_pos_x, tile_pos_y, rect, config)) {

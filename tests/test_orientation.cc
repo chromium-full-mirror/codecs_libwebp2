@@ -209,8 +209,8 @@ TEST(OrientationTest, Incremental) {
           if (previous_decoded_area.width > 0) {
             EXPECT_LE(decoded_area.x, previous_decoded_area.x);
           }
-          if (decoded.width > 0) {
-            EXPECT_LT(decoded_area.x, decoded.width);
+          if (decoded.width() > 0) {
+            EXPECT_LT(decoded_area.x, decoded.width());
           }
         }
         if (orientation == Orientation::kOriginal ||
@@ -220,14 +220,14 @@ TEST(OrientationTest, Incremental) {
           if (previous_decoded_area.height > 0) {
             EXPECT_LE(decoded_area.y, previous_decoded_area.y);
           }
-          if (decoded.height > 0) {
-            EXPECT_LT(decoded_area.y, decoded.height);
+          if (decoded.height() > 0) {
+            EXPECT_LT(decoded_area.y, decoded.height());
           }
         }
         EXPECT_GE(decoded_area.width, previous_decoded_area.width);
-        EXPECT_LE(decoded_area.width, decoded.width);
+        EXPECT_LE(decoded_area.width, decoded.width());
         EXPECT_GE(decoded_area.height, previous_decoded_area.height);
-        EXPECT_LE(decoded_area.height, decoded.height);
+        EXPECT_LE(decoded_area.height, decoded.height());
 
         previous_decoded_area = decoded_area;
       }
@@ -235,8 +235,8 @@ TEST(OrientationTest, Incremental) {
       ASSERT_WP2_OK(idec.GetStatus());
       EXPECT_EQ(decoded_area.x, 0u);
       EXPECT_EQ(decoded_area.y, 0u);
-      EXPECT_EQ(decoded_area.width, decoded.width);
-      EXPECT_EQ(decoded_area.height, decoded.height);
+      EXPECT_EQ(decoded_area.width, decoded.width());
+      EXPECT_EQ(decoded_area.height, decoded.height());
 
       ASSERT_WP2_OK(RotateBuffer(GetInverseOrientation(orientation), &decoded));
       EXPECT_TRUE(testing::Compare(original, decoded, file_name,
@@ -248,19 +248,18 @@ TEST(OrientationTest, Incremental) {
 //------------------------------------------------------------------------------
 
 TEST(OrientationTest, Preview) {
-  const std::string file_name = "test_exif_xmp.webp";
+  const std::string file_name = "source3_222x167.jpg";
   const std::string file_path = testing::GetTestDataPath(file_name);
 
   ArgbBuffer original_image;
   ASSERT_WP2_OK(ReadImage(file_path.c_str(), &original_image));
-  original_image.height -= 2;  // Make sure it's not square.
 
   EncoderConfig config;
   config.quality = 10.f;
-  config.speed = 1;
+  config.effort = 1;
   config.create_preview = true;
 
-  ArgbBuffer preview_reference(original_image.format);
+  ArgbBuffer preview_reference(original_image.format());
   {
     MemoryWriter memory_writer;
     EXPECT_WP2_OK(Encode(original_image, &memory_writer, config));
@@ -276,7 +275,7 @@ TEST(OrientationTest, Preview) {
     MemoryWriter memory_writer;
     EXPECT_WP2_OK(Encode(original_image, &memory_writer, config));
 
-    ArgbBuffer preview(original_image.format);  // Use original size.
+    ArgbBuffer preview(original_image.format());  // Use original size.
     ASSERT_WP2_OK(
         ExtractPreview(memory_writer.mem_, memory_writer.size_, &preview));
 

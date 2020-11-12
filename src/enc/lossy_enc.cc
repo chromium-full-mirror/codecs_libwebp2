@@ -60,12 +60,12 @@ WP2Status DecideTransforms(const EncoderConfig& config,
                            Vector<TransformPair>* const transforms_subset) {
   WP2_CHECK_ALLOC_OK(transforms->reserve(5));
   transforms->push_back_no_resize(kDctDct);
-  if (config.speed >= 3) {
+  if (config.effort >= 3) {
     transforms->push_back_no_resize(kAdstAdst);
-    if (config.speed >= 4) {
+    if (config.effort >= 4) {
       transforms->push_back_no_resize(kDctAdst);
       transforms->push_back_no_resize(kAdstDct);
-      if (config.speed >= 5) {
+      if (config.effort >= 5) {
         transforms->push_back_no_resize(kIdentityIdentity);
       }
     }
@@ -74,12 +74,12 @@ WP2Status DecideTransforms(const EncoderConfig& config,
   // (= not testing every transform with each predictor).
   WP2_CHECK_ALLOC_OK(transforms_subset->reserve(5));
   transforms_subset->push_back_no_resize(kDctDct);
-  if (config.speed >= 6) {
+  if (config.effort >= 6) {
     transforms_subset->push_back_no_resize(kAdstAdst);
-    if (config.speed >= 7) {
+    if (config.effort >= 7) {
       transforms_subset->push_back_no_resize(kDctAdst);
       transforms_subset->push_back_no_resize(kAdstDct);
-      if (config.speed >= 8) {
+      if (config.effort >= 8) {
         transforms_subset->push_back_no_resize(kIdentityIdentity);
       }
     }
@@ -184,8 +184,8 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
     cb.mtx_set_ = gparams.use_rnd_mtx_ ? &gparams.mtx_set_ : nullptr;
   }
 
-  const int speed = config_->speed;
-  const uint32_t num_passes = std::max(config_->pass, (speed >= 7) ? 2 : 1);
+  const uint32_t num_passes =
+      std::max(config_->pass, (config_->effort >= 7) ? 2 : 1);
 #if 0
   VectorNoCtor<QuantStat> qstats;
   if (num_passes > 1) {

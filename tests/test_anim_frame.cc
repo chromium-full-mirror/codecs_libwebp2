@@ -30,6 +30,7 @@
 #include "src/utils/utils.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {
@@ -61,14 +62,13 @@ TEST(AnimFrameTest, ForceLossless) {
   config.tile_shape = TILE_SHAPE_SQUARE_256;
   MemoryWriter encoded_data;
 
-  const Argb38b background_color = kTransparentArgb38b;
-  ASSERT_WP2_OK(
-      EncodeHeader(config, first_frame.GetWidth(), first_frame.GetHeight(),
-                   has_alpha, /*is_anim=*/(frames.size() > 1), /*loop_count=*/1,
-                   background_color, RGB12b{10, 0, 30}, /*has_icc=*/false,
-                   /*has_trailing_data=*/false, &encoded_data));
+  ASSERT_WP2_OK(EncodeHeader(
+      config, first_frame.GetWidth(), first_frame.GetHeight(), has_alpha,
+      /*is_anim=*/(frames.size() > 1), /*loop_forever=*/false,
+      kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
+      /*has_trailing_data=*/false, &encoded_data));
 
-  FrameEncoder frame_encode(config, background_color, frames);
+  FrameEncoder frame_encode(config, kDefaultBackgroundColor, frames);
   ASSERT_WP2_OK(frame_encode.Encode(&encoded_data));
 
   // Decode.
@@ -110,9 +110,9 @@ class ParameterizedAnimFrameTest : public ::testing::TestWithParam<Param> {
     }
     // Allows setting "is_slow".
     WP2_CHECK_STATUS(decoded_frame_.SetExternal(
-        decoded_frame_internal_.width, decoded_frame_internal_.height,
-        (uint8_t*)decoded_frame_internal_.GetRow(0),
-        decoded_frame_internal_.stride, is_slow));
+        decoded_frame_internal_.width(), decoded_frame_internal_.height(),
+        decoded_frame_internal_.GetRow8(0), decoded_frame_internal_.stride(),
+        is_slow));
     return WP2_STATUS_OK;
   }
 
@@ -132,10 +132,10 @@ TEST_P(ParameterizedAnimFrameTest, Blend) {
       &buffers));
   // Smaller view to speed up the test.
   for (ArgbBuffer& b : buffers) {
-    ASSERT_WP2_OK(b.SetView(b, {0, 0, b.width / 2, b.height / 2}));
+    ASSERT_WP2_OK(b.SetView(b, {0, 0, b.width() / 2, b.height() / 2}));
   }
 
-  const Rectangle window = {0, 0, buffers[0].width, buffers[0].height};
+  const Rectangle window = {0, 0, buffers[0].width(), buffers[0].height()};
 
   Vector<Subframe> subframes;
   ASSERT_TRUE(subframes.resize(2));
@@ -163,11 +163,10 @@ TEST_P(ParameterizedAnimFrameTest, Blend) {
   config.decoding_orientation = orientation;
   MemoryWriter encoded_data;
 
-  const Argb38b background_color = kTransparentArgb38b;
   ASSERT_WP2_OK(EncodeHeader(
-      config, first_frame.rgb_pixels.width, first_frame.rgb_pixels.height,
-      has_alpha, /*is_anim=*/(subframes.size() > 1), /*loop_count=*/1,
-      background_color, RGB12b{10, 0, 30}, /*has_icc=*/false,
+      config, first_frame.rgb_pixels.width(), first_frame.rgb_pixels.height(),
+      has_alpha, /*is_anim=*/(subframes.size() > 1), /*loop_forever=*/false,
+      kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
   SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha);
@@ -212,10 +211,10 @@ TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
   // Smaller view to speed up the test.
   for (ArgbBuffer& b : buffers) {
     ASSERT_WP2_OK(b.SetView(
-        b, {b.width / 3, b.height / 3, b.width / 3, b.height / 3}));
+        b, {b.width() / 3, b.height() / 3, b.width() / 3, b.height() / 3}));
   }
 
-  const Rectangle window = {0, 0, buffers[0].width, buffers[0].height};
+  const Rectangle window = {0, 0, buffers[0].width(), buffers[0].height()};
 
   Vector<Subframe> subframes;
   ASSERT_TRUE(subframes.resize(2));
@@ -243,11 +242,10 @@ TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
   config.decoding_orientation = orientation;
   MemoryWriter encoded_data;
 
-  const Argb38b background_color = kTransparentArgb38b;
   ASSERT_WP2_OK(EncodeHeader(
-      config, first_frame.rgb_pixels.width, first_frame.rgb_pixels.height,
-      has_alpha, /*is_anim=*/(subframes.size() > 1), /*loop_count=*/1,
-      background_color, RGB12b{10, 0, 30}, /*has_icc=*/false,
+      config, first_frame.rgb_pixels.width(), first_frame.rgb_pixels.height(),
+      has_alpha, /*is_anim=*/(subframes.size() > 1), /*loop_forever=*/false,
+      kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
   SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha);
@@ -284,17 +282,18 @@ TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
   ASSERT_WP2_OK(decoder.GetStatus());
 }
 
-static Argb32b RandomColor(UniformIntDistribution* const random) {
-  const bool opaque = random->FlipACoin();
-  const uint8_t alpha = opaque ? 255 : random->Get(0, 255);
-  const float a = alpha / 255.f;
-  return {alpha, (uint8_t)(a * random->Get(0, 255)),
-          (uint8_t)(a * random->Get(0, 255)),
-          (uint8_t)(a * random->Get(0, 255))};
+Argb32b RandomColor(bool has_alpha, UniformIntDistribution* const random) {
+  const uint8_t alpha = (has_alpha ? random->Get(0u, kAlphaMax) : kAlphaMax);
+  return {
+      alpha,                           // premultiplied
+      random->Get<uint8_t>(0, alpha),  // red
+      random->Get<uint8_t>(0, alpha),  // green
+      random->Get<uint8_t>(0, alpha)   // blue
+  };
 }
 
-static Rectangle RandomRect(uint32_t frame_width, uint32_t frame_height,
-                            UniformIntDistribution* const random) {
+Rectangle RandomRect(uint32_t frame_width, uint32_t frame_height,
+                     UniformIntDistribution* const random) {
   const uint32_t x = random->Get<uint32_t>(0, frame_width - 2);
   const uint32_t y = random->Get<uint32_t>(0, frame_height - 2);
   return {x, y, random->Get<uint32_t>(1, frame_width - x - 1),
@@ -302,27 +301,28 @@ static Rectangle RandomRect(uint32_t frame_width, uint32_t frame_height,
 }
 
 // Set (e.g. to /tmp) to debug RandomFrames test below.
-static const char* kDebugOutputPath = "";
+const char* const kDebugOutputPath = "";
 
-static WP2Status FillRandom(const std::string& debug_str,
-                            const ArgbBuffer* const previous,
-                            UniformIntDistribution* const random,
-                            ArgbBuffer* const buffer) {
+WP2Status FillRandom(const std::string& debug_str,
+                     const ArgbBuffer* const previous,
+                     UniformIntDistribution* const random,
+                     ArgbBuffer* const buffer) {
   if (previous != nullptr && random->FlipACoin()) {
     WP2_CHECK_STATUS(buffer->CopyFrom(*previous));
   } else if (random->FlipACoin()) {
-    buffer->Fill(RandomColor(random));
+    buffer->Fill(RandomColor(/*has_alpha=*/true, random));
   } else {
     buffer->Fill({0, 0, 0, 0});
   }
 
-  const uint32_t width = buffer->width;
-  const uint32_t height = buffer->height;
+  const uint32_t width = buffer->width();
+  const uint32_t height = buffer->height();
   const uint32_t num_rects = random->Get(1, 3);
   for (uint32_t j = 0; j < num_rects; ++j) {
     Rectangle window = RandomRect(width, height, random);
-    buffer->Fill(window, random->FlipACoin() ? Argb32b{0, 0, 0, 0}
-                                             : RandomColor(random));
+    buffer->Fill(window, random->FlipACoin()
+                             ? Argb32b{0, 0, 0, 0}
+                             : RandomColor(/*has_alpha=*/true, random));
   }
 
   if (std::strlen(kDebugOutputPath) > 0) {
@@ -334,10 +334,9 @@ static WP2Status FillRandom(const std::string& debug_str,
   return WP2_STATUS_OK;
 }
 
-static WP2Status SaveDebug(const ArgbBuffer& expected_buffer,
-                           const ArgbBuffer& decoded_frame,
-                           Orientation orientation, uint32_t test_id,
-                           uint32_t final_frame_index) {
+WP2Status SaveDebug(const ArgbBuffer& expected_buffer,
+                    const ArgbBuffer& decoded_frame, Orientation orientation,
+                    uint32_t test_id, uint32_t final_frame_index) {
   if (std::strlen(kDebugOutputPath) > 0) {
     ArgbBuffer expected_rotated;
     WP2_CHECK_STATUS(expected_rotated.CopyFrom(expected_buffer));
@@ -396,12 +395,12 @@ TEST_P(ParameterizedAnimFrameTest, RandomFrames) {
   config.decoding_orientation = orientation;
   MemoryWriter encoded_data;
 
-  const Argb32b background_color = RandomColor(&random);
+  const Argb32b background_color = RandomColor(has_alpha, &random);
   printf("Background_color: Argb32(%d, %d, %d, %d)\n", background_color.a,
          background_color.r, background_color.g, background_color.b);
   ASSERT_WP2_OK(EncodeHeader(
       config, width, height, has_alpha, /*is_anim=*/(frames.size() > 1),
-      /*loop_count=*/1, ToArgb38b(background_color),
+      /*loop_forever=*/false, ToArgb38b(background_color),
       /*preview_color=*/RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
@@ -452,22 +451,15 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
   config.decoding_orientation = orientation;
   MemoryWriter encoded_data;
 
-  const Argb32b background_color = RandomColor(&random);
-  printf("Background_color: Argb32(%d, %d, %d, %d)\n", background_color.a,
-         background_color.r, background_color.g, background_color.b);
-
   uint32_t num_consecutive_preframes = 0;
   for (uint32_t i = 0; i < subframes.size(); ++i) {
     Subframe& subframe = subframes[i];
-    const bool is_preframe = (i == subframes.size() - 1 ||
-                              num_consecutive_preframes >= kMaxNumPreframes)
-                                 ? false
-                                 : random.FlipACoin();
-    num_consecutive_preframes = is_preframe ? num_consecutive_preframes + 1 : 0;
+    const bool is_preframe =
+        (i + 1 < subframes.size() &&
+         num_consecutive_preframes < kMaxNumPreframes && random.FlipACoin());
     subframe.duration_ms = is_preframe ? 0 : random.Get(1, 100);
     subframe.dispose =
-        (i == 0) ? true
-                 : (num_consecutive_preframes > 0) ? false : random.FlipACoin();
+        (i == 0 || (num_consecutive_preframes == 0 && random.FlipACoin()));
     subframe.blend = random.FlipACoin();
     ASSERT_WP2_OK(subframe.rgb_pixels.Resize(width, height));
     const std::string debug_str =
@@ -475,8 +467,8 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
                 subframe.duration_ms, subframe.dispose, subframe.blend);
     ASSERT_WP2_OK(FillRandom(
         debug_str,
-        /*previous=*/i > 0 ? &(subframes[i - 1].rgb_pixels) : nullptr, &random,
-        &subframe.rgb_pixels));
+        /*previous=*/(i > 0 ? &(subframes[i - 1].rgb_pixels) : nullptr),
+        &random, &subframe.rgb_pixels));
     has_alpha |= subframe.rgb_pixels.HasTransparency();
 
     if (random.FlipACoin()) {
@@ -485,13 +477,21 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
       subframe.window = RandomRect(width, height, &random);
     }
 
-    printf("frame %d duration %d dispose %d blend %d\n", i,
-           subframe.duration_ms, subframe.dispose, subframe.blend);
+    printf("frame %u duration %u dispose %d blend %d window %u,%u,%u,%u\n", i,
+           subframe.duration_ms, subframe.dispose, subframe.blend,
+           subframe.window.x, subframe.window.y, subframe.window.width,
+           subframe.window.height);
+
+    num_consecutive_preframes = is_preframe ? num_consecutive_preframes + 1 : 0;
   }
+
+  const Argb32b background_color = RandomColor(has_alpha, &random);
+  printf("Background_color: Argb32(%d, %d, %d, %d)\n", background_color.a,
+         background_color.r, background_color.g, background_color.b);
 
   ASSERT_WP2_OK(EncodeHeader(
       config, width, height, has_alpha, /*is_anim=*/(subframes.size() > 1),
-      /*loop_count=*/1, ToArgb38b(background_color),
+      /*loop_forever=*/false, ToArgb38b(background_color),
       /*preview_color=*/RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
@@ -518,7 +518,7 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
   int final_frame_index = 0;
   for (uint32_t i = 0; i < subframes.size(); ++i) {
     const Subframe& subframe = subframes[i];
-    if (i == 0 || subframe.dispose) expected_buffer.Fill(background_color);
+    if (subframe.dispose) expected_buffer.Fill(background_color);
     if (subframe.blend) {
       ASSERT_WP2_OK(
           expected_buffer.CompositeUnder(subframe.rgb_pixels, subframe.window));

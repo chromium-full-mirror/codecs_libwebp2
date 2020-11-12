@@ -208,10 +208,7 @@ TEST_P(ImageTest, ImageOptimTest) {
         << "Error while saving temp file " << temp_file;
     printf("saved %s\n", temp_file.c_str());
   }
-  float disto[5];
-  ASSERT_WP2_OK(pic2.GetDistortion(pic, PSNR, disto));
-  if (debug) printf("PSNR: %f\n", disto[4]);
-  EXPECT_GE(disto[4], 30.f);
+  ASSERT_TRUE(testing::Compare(pic, pic2, name, 30.f));
 }
 
 INSTANTIATE_TEST_SUITE_P(ImageTestInstantiation, ImageTest,

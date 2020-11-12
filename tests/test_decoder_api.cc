@@ -28,7 +28,7 @@ Data GenerateBitstream() {
   MemoryWriter writer;
   if (testing::CompressImage("test_exif_xmp.webp", &writer, nullptr,
                              EncoderConfig::kDefault.quality,
-                             EncoderConfig::kDefault.speed,
+                             EncoderConfig::kDefault.effort,
                              EncoderConfig::kDefault.thread_level,
                              /*num_downsamplings=*/2) != WP2_STATUS_OK) {
     abort();
@@ -45,7 +45,7 @@ Data GenerateAnimatedBitstream() {
   MemoryWriter writer;
   if (testing::CompressAnimation(
           {"source0.pgm", "source1.png"}, {50, 50}, &writer, nullptr,
-          EncoderConfig::kDefault.quality, EncoderConfig::kDefault.speed,
+          EncoderConfig::kDefault.quality, EncoderConfig::kDefault.effort,
           EncoderConfig::kDefault.thread_level,
           /*num_downsamplings=*/2) != WP2_STATUS_OK) {
     abort();
@@ -139,7 +139,7 @@ TEST(DecoderAPITest, StillImageWithMetadata) {
   decoder.ReadFrame();                       // Decode XMP/EXIF, if any.
   if (decoder.GetStatus() == WP2_STATUS_OK) {
     // Success! Access ICC, XMP, EXIF chunks in 'decoder.GetPixels().metadata'.
-    ASSERT_FALSE(decoder.GetPixels().metadata.IsEmpty());
+    ASSERT_FALSE(decoder.GetPixels().metadata_.IsEmpty());
   }
 }
 

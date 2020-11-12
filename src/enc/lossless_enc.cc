@@ -27,10 +27,10 @@ WP2Status TileEncoder::LosslessEncode(ANSEnc* const enc) {
   ANSDictionaries dicts;
   // If R,G,B fit on 10 bits, make sure the values do not exceed 8 bits.
   // TODO(vrabaud) remove
-  if (tile_->rgb_input.format == WP2_Argb_38) {
-    for (uint32_t y = 0; y < tile_->rgb_input.height; ++y) {
+  if (tile_->rgb_input.format() == WP2_Argb_38) {
+    for (uint32_t y = 0; y < tile_->rgb_input.height(); ++y) {
       const uint16_t* const row = tile_->rgb_input.GetRow16(y);
-      for (uint32_t x = 0; x < tile_->rgb_input.width; ++x) {
+      for (uint32_t x = 0; x < tile_->rgb_input.width(); ++x) {
         for (uint32_t c = 1; c < 4; ++c) {
           WP2_CHECK_OK(row[4 * x + c] < (1 << 8),
                        WP2_STATUS_INVALID_COLORSPACE);

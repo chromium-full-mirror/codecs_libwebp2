@@ -159,7 +159,7 @@ WP2Status DecodePreview(const uint8_t* const data, uint32_t data_size,
                         ArgbBuffer* const output_buffer) {
   if (output_buffer != nullptr) {
     WP2_CHECK_OK(!output_buffer->IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
-    WP2_CHECK_OK(output_buffer->format == WP2_Argb_32,
+    WP2_CHECK_OK(output_buffer->format() == WP2_Argb_32,
                  WP2_STATUS_INVALID_COLORSPACE);
 
     PreviewData preview;
@@ -173,7 +173,8 @@ WP2Status DecodePreview(const uint8_t* const data, uint32_t data_size,
       triangulation.FillTriangles(preview, output_buffer, &num_covered_pixels));
     // Make sure all 'canvas' pixels were drawn (fast good enough test).
     // TODO(yguyon): Make sure each pixel is drawn exactly once.
-    assert(num_covered_pixels >= output_buffer->width * output_buffer->height);
+    assert(num_covered_pixels >=
+           output_buffer->width() * output_buffer->height());
     // TODO(skal): use_noise_
   }
   return WP2_STATUS_OK;

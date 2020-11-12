@@ -198,9 +198,9 @@ WP2Status GetTilesLayout(uint32_t frame_width, uint32_t frame_height,
                             tile_index);
     // Set views on RGB and YUV output buffers, both can be used.
     if (!rgb_output->IsEmpty()) {
-      assert(rgb_output->width == frame_width &&
-             rgb_output->height == frame_height);
-      WP2_CHECK_STATUS(tile.rgb_output.SetFormat(rgb_output->format));
+      assert(rgb_output->width() == frame_width &&
+             rgb_output->height() == frame_height);
+      WP2_CHECK_STATUS(tile.rgb_output.SetFormat(rgb_output->format()));
       WP2_CHECK_STATUS(tile.rgb_output.SetView(*rgb_output, tile.rect));
       tile.output_is_yuv = false;
     }
@@ -226,7 +226,7 @@ uint32_t GetTileMaxNumBytes(const GlobalParams& gparams,
   (void)gparams, (void)tile_rect;
   // Make sure it does not fall back to raw pixel coding in CodeTiles().
   constexpr uint32_t kPlentyEnoughNumBytes = 2147483647u;
-  static_assert(kPlentyEnoughNumBytes < kUpperVarInt, "kPlentyEnoughNumBytes");
+  static_assert(kPlentyEnoughNumBytes <= kMaxVarInt, "kPlentyEnoughNumBytes");
   return kPlentyEnoughNumBytes;
 #else
   const bool lossless = (gparams.type_ == GlobalParams::GP_LOSSLESS);

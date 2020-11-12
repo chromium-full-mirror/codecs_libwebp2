@@ -22,7 +22,6 @@
 #include "src/dsp/dsp.h"
 
 #if defined(WP2_USE_SSE)
-#include <stdio.h>  // for Print()
 #include <initializer_list>
 #endif
 
@@ -142,23 +141,6 @@ void SSIMGet_C(const T* src1, size_t step1, const T* src2, size_t step2,
 // SSE implementation
 
 #if defined(WP2_USE_SSE)
-
-// debug helper (TODO(skal): move to dsp.h ?)
-template<typename T> void Print(const __m128i A, const char name[]) {
-  constexpr size_t size = 16 / sizeof(T);
-  T tmp[size];
-  _mm_storeu_si128((__m128i*)tmp, A);
-  printf("%s :", name);
-  for (auto c : tmp) {
-    printf((size == 16) ? " %.2x" : (size == 8) ? " %.4x" : " %.8x", c);
-  }
-  printf("\n");
-}
-void Print32b(const __m128i A, const char name[]) { Print<uint32_t>(A, name); }
-void Print16b(const __m128i A, const char name[]) { Print<uint16_t>(A, name); }
-void Print8b(const __m128i A, const char name[]) { Print<uint8_t>(A, name); }
-
-//------------------------------------------------------------------------------
 
 __m128i MakeWeight16b(int w) {
   return _mm_set_epi16(0, 1 * w, 2 * w, 3 * w, 4 * w, 3 * w, 2 * w, 1 * w);
@@ -332,11 +314,6 @@ WP2_TSAN_IGNORE_FUNCTION void WP2SSIMInitSSE() {
   WP2SSIMGet4x8u = SSIMGet_SSE_4x;
   WP2SSIMGet8u = SSIMGet_SSE_8u;
   WP2SSIMGet16s = SSIMGet_SSE_16s;
-
-  // to avoid compile warnings:
-  (void)Print8b;
-  (void)Print16b;
-  (void)Print32b;
 }
 
 #endif  // WP2_USE_SSE

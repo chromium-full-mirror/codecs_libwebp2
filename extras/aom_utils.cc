@@ -17,53 +17,65 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include "extras/aom_utils.h"
+
+#include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <cmath>
 
-#include "extras/aom_utils.h"
+#include "examples/example_utils.h"
 #include "extras/ccsp_imageio.h"
+#include "imageio/imageio_util.h"
 #include "src/utils/utils.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
-#include "imageio/imageio_util.h"
-#include "examples/example_utils.h"
 
 #ifdef WP2_HAVE_AOM
 #include "aom/aom_decoder.h"
 #include "aom/aom_encoder.h"
 #include "aom/aomcx.h"
 #include "aom/aomdx.h"
+
 #if defined(WP2_HAVE_AOM_DBG)
 #include "stats/aomstats.h"
 // to benefit from these, one should build libaom using the config:
 //  cmake ../ -DCONFIG_ACCOUNTING=1 -DCONFIG_INSPECTION=1
+#include "av1/common/common_data.h"
 #include "av1/decoder/accounting.h"
 #include "av1/decoder/inspection.h"
-#include "av1/common/common_data.h"
-#endif
+#endif  // defined(WP2_HAVE_AOM_DBG)
+
+// libgav1 can be used as decoder instead of libaom
+#if defined(WP2_HAVE_LIBGAV1)
+#include "gav1/decoder.h"
+#include "gav1/status_code.h"
+#endif  // defined(WP2_HAVE_LIBGAV1)
+
 #include "examples/stopwatch.h"
+
 #if !defined(WP2_HAVE_WEBP)
 #error "WEBP support is required by WP2_HAVE_AOM"
 #else
 #include "webp/decode.h"
 #include "webp/encode.h"
-#endif
+#endif  // !defined(WP2_HAVE_WEBP)
+
 #endif  // WP2_HAVE_AOM
 
 #ifdef WP2_HAVE_AVIF
 #include "avif/avif.h"
 #endif
 
-//------------------------------------------------------------------------------
+namespace WP2 {
+namespace {
 
 #if defined(WP2_HAVE_AOM)
-#if (AOM_ENCODER_ABI_VERSION == (8 + 1 + AOM_CODEC_ABI_VERSION))
-#define USE_OLD_AOM 1
-#endif
-static bool encode_frame(aom_codec_ctx_t* const codec, aom_image_t* const img,
-                         int pts, aom_enc_frame_flags_t flags,
-                         std::string* const out, bool report_error = true) {
+
+//------------------------------------------------------------------------------
+
+bool encode_frame(aom_codec_ctx_t* const codec, aom_image_t* const img, int pts,
+                  aom_enc_frame_flags_t flags, std::string* const out,
+                  bool report_error = true) {
   const aom_codec_err_t err =
       aom_codec_encode(codec, img, pts, /*duration=*/1, flags);
   if (err != AOM_CODEC_OK) {
@@ -86,11 +98,9 @@ static bool encode_frame(aom_codec_ctx_t* const codec, aom_image_t* const img,
   return got_pkts;
 }
 
-#endif  // WP2_HAVE_AOM
+//------------------------------------------------------------------------------
 
 #if defined(WP2_HAVE_AOM_DBG)
-
-namespace {
 
 void inspect_cb(void* pbi, void* data) {
   insp_frame_data* const frame_data = (insp_frame_data*)data;
@@ -102,11 +112,7 @@ void inspect_cb(void* pbi, void* data) {
 int16_t GetMiData(const insp_mi_data& mi, const std::string& mi_data_name) {
   if (mi_data_name == "mode") return mi.mode;
   if (mi_data_name == "uv_mode") return mi.uv_mode;
-#if defined(USE_OLD_AOM)
-  if (mi_data_name == "sb_type") return mi.sb_type;
-#else
   if (mi_data_name == "sb_type") return mi.bsize;
-#endif
   if (mi_data_name == "skip") return mi.skip;
   if (mi_data_name == "segment_id") return mi.segment_id;
   if (mi_data_name == "dual_filter_type") return mi.dual_filter_type;
@@ -129,10 +135,10 @@ int16_t GetMiData(const insp_mi_data& mi, const std::string& mi_data_name) {
 }
 
 // Draws a 3x3 red square representing the 'value' as 9 bits.
-void DrawNumber(uint32_t value, int x, int y, WP2::ArgbBuffer* const out) {
+void DrawNumber(uint32_t value, int x, int y, ArgbBuffer* const out) {
   for (uint32_t j = 0; j < 3; ++j) {
     for (uint32_t i = 0; i < 3; ++i) {
-      if (x + i < out->width && y + j < out->height) {
+      if (x + i < out->width() && y + j < out->height()) {
         ((uint32_t*)out->GetRow(y + j))[(x + i)] =
             (value & 1) ? 0xffff8888u : 0xffff0000u;
       }
@@ -144,7 +150,7 @@ void DrawNumber(uint32_t value, int x, int y, WP2::ArgbBuffer* const out) {
 // Fills rectangles with uniform colors representing the values of
 // 'mi_data_name' in 'data' blocks.
 void DrawMiData(const insp_frame_data& data, const std::string& mi_data_name,
-                bool draw_mi_number, WP2::ArgbBuffer* const out) {
+                bool draw_mi_number, ArgbBuffer* const out) {
   const uint32_t num_cols = data.mi_cols;
   const uint32_t num_rows = data.mi_rows;
   assert(out != nullptr);
@@ -160,8 +166,8 @@ void DrawMiData(const insp_frame_data& data, const std::string& mi_data_name,
   // To remember already painted areas.
   std::vector<int32_t> values(num_cols * num_rows, max + 1);
 
-  for (uint32_t r = 0; r < num_rows && r * 4 < out->height; ++r) {
-    for (uint32_t c = 0; c < num_cols && c * 4 < out->width; ++c) {
+  for (uint32_t r = 0; r < num_rows && r * 4 < out->height(); ++r) {
+    for (uint32_t c = 0; c < num_cols && c * 4 < out->width(); ++c) {
       const insp_mi_data& mi = data.mi_grid[r * num_cols + c];
       const int16_t mi_data = GetMiData(mi, mi_data_name);
 
@@ -169,15 +175,11 @@ void DrawMiData(const insp_frame_data& data, const std::string& mi_data_name,
       const uint32_t color = 0xff000000u + 0x010101u * intensity;
 
       if (values[r * num_cols + c] == max + 1) {  // Not yet drawn.
-#if defined(USE_OLD_AOM)
-        const BLOCK_SIZE bsize = (BLOCK_SIZE)mi.sb_type;
-#else
         const BLOCK_SIZE bsize = (BLOCK_SIZE)mi.bsize;
-#endif
         const uint32_t w = mi_size_wide[bsize], h = mi_size_high[bsize];
         const uint32_t min_x = c * 4, min_y = r * 4;
         out->Fill({min_x, min_y, w * 4, h * 4},
-                  WP2::Argb32b{0xff, intensity, intensity, intensity});
+                  Argb32b{0xff, intensity, intensity, intensity});
 
         if (draw_mi_number) {
           DrawNumber((uint32_t)(mi_data - min), min_x + 1, min_y + 1, out);
@@ -191,13 +193,13 @@ void DrawMiData(const insp_frame_data& data, const std::string& mi_data_name,
       } else if (mi_data != values[r * num_cols + c]) {
         // Already drawn but non-uniform values were found within a block.
         const uint32_t min_x = c * 4, min_y = r * 4;
-        const uint32_t max_x = std::min((c + 1) * 4, out->width);
-        const uint32_t max_y = std::min((r + 1) * 4, out->height);
+        const uint32_t max_x = std::min((c + 1) * 4, out->width());
+        const uint32_t max_y = std::min((r + 1) * 4, out->height());
 
         for (uint32_t y = min_y; y < max_y; ++y) {
           for (uint32_t x = min_x; x < max_x; ++x) {
             if ((x + y) & 1) continue;  // Semi-transparent checkerboard.
-            ((uint32_t*)out->GetRow(y))[x] = color;
+            (out->GetRow8(y))[x] = color;
           }
         }
       }
@@ -206,19 +208,18 @@ void DrawMiData(const insp_frame_data& data, const std::string& mi_data_name,
 }
 
 void DrawQuant(const insp_frame_data& data, int channel,
-               WP2::ArgbBuffer* const out) {
+               ArgbBuffer* const out) {
   const uint32_t num_cols = data.mi_cols;
   const uint32_t num_rows = data.mi_rows;
   assert(out != nullptr);
 
-  for (uint32_t r = 0; r < num_rows && r * 4 < out->height; ++r) {
-    for (uint32_t c = 0; c < num_cols && c * 4 < out->width; ++c) {
+  for (uint32_t r = 0; r < num_rows && r * 4 < out->height(); ++r) {
+    for (uint32_t c = 0; c < num_cols && c * 4 < out->width(); ++c) {
       const insp_mi_data& mi = data.mi_grid[r * num_cols + c];
       const int16_t segment = GetMiData(mi, "segment_id");
-      int16_t quant = (channel == 0)
-                          ? data.y_dequant[segment][0]
-                          : (channel == 1) ? data.u_dequant[segment][0]
-                                           : data.v_dequant[segment][0];
+      int16_t quant = (channel == 0)   ? data.y_dequant[segment][0]
+                      : (channel == 1) ? data.u_dequant[segment][0]
+                                       : data.v_dequant[segment][0];
       // Raw quant values are multiplied by 4. We shift them back to
       // make them comparable with those used by wp2.
       quant /= 4;
@@ -232,7 +233,7 @@ void DrawQuant(const insp_frame_data& data, int channel,
       const float green = std::pow((1.f - normalized_quant), 1.f / kGamma);
       // Max out saturation.
       const float mult = std::min(1.f / red, 1.f / green);
-      WP2::Argb32b color;
+      Argb32b color;
       color.r = std::min((int32_t)(red * mult * 0xff), 0xff);
       color.g = std::min((int32_t)(green * mult * 0xff), 0xff);
       color.b = 0;
@@ -242,10 +243,10 @@ void DrawQuant(const insp_frame_data& data, int channel,
   }
 }
 
-std::vector<WP2::Rectangle> ExtractBoxes(const insp_frame_data& data,
-                                         uint32_t width, uint32_t height,
-                                         bool extract_transform_boxes) {
-  std::vector<WP2::Rectangle> boxes;
+std::vector<Rectangle> ExtractBoxes(const insp_frame_data& data, uint32_t width,
+                                    uint32_t height,
+                                    bool extract_transform_boxes) {
+  std::vector<Rectangle> boxes;
   const uint32_t w = (uint32_t)data.mi_cols;
   const uint32_t h = (uint32_t)data.mi_rows;
   std::vector<bool> done(w * h, false);
@@ -254,11 +255,7 @@ std::vector<WP2::Rectangle> ExtractBoxes(const insp_frame_data& data,
       if (done[y * w + x]) continue;
 
       const insp_mi_data& mi = data.mi_grid[y * w + x];
-#if defined(USE_OLD_AOM)
-      const BLOCK_SIZE bsize = (BLOCK_SIZE)mi.sb_type;
-#else
       const BLOCK_SIZE bsize = (BLOCK_SIZE)mi.bsize;
-#endif
       const uint32_t bw = mi_size_wide[bsize];
       const uint32_t bh = mi_size_high[bsize];
 
@@ -295,13 +292,14 @@ std::vector<WP2::Rectangle> ExtractBoxes(const insp_frame_data& data,
   return boxes;
 }
 
-void DrawBoxes(const std::vector<WP2::Rectangle>& boxes,
-               WP2::Argb32b color, WP2::ArgbBuffer* const out) {
+void DrawBoxes(const std::vector<Rectangle>& boxes, Argb32b color,
+               ArgbBuffer* const out) {
   assert(out != nullptr);
   for (const auto& rect : boxes) out->DrawRect(rect, color);
 }
 
 // category id, similar to those reported by 'dwebp'
+// clang-format off
 static const char* const kCtgCoeffs        = "coeffs";
 static const char* const kCtgPaletteCoeffs = "palette-coeffs";
 static const char* const kCtgPredModes     = "pred-modes";
@@ -343,15 +341,15 @@ static std::map<std::string, const char*> kCategories = {
   {"read_palette_colors_uv",          kCtgPaletteHeader},
   {"read_palette_mode_info",          kCtgPaletteHeader},
 };
-
-}  // namespace
+// clang-format on
 
 #endif  // WP2_HAVE_AOM_DBG
 
-namespace WP2 {
+//------------------------------------------------------------------------------
 
 // small class to wrap plain-C destruction call
-template<class T> class Cleaner {
+template <class T>
+class Cleaner {
  public:
   Cleaner(T* const obj, void (*dtor)(T*)) : obj_(obj), dtor_(dtor) {}
   ~Cleaner() { dtor_(obj_); }
@@ -359,17 +357,13 @@ template<class T> class Cleaner {
   void (*dtor_)(T*);
 };
 
-#if defined(WP2_HAVE_AOM)
-
 //------------------------------------------------------------------------------
 
 // From twopass_encoder.c / aomenc.c
-static WP2Status wp2_get_frame_stats(aom_codec_ctx_t* ctx,
-                                     const aom_image_t* img,
-                                     aom_codec_pts_t pts, unsigned int duration,
-                                     aom_enc_frame_flags_t flags,
-                                     aom_fixed_buf_t* stats,
-                                     bool* const got_stats) {
+WP2Status wp2_get_frame_stats(aom_codec_ctx_t* ctx, const aom_image_t* img,
+                              aom_codec_pts_t pts, unsigned int duration,
+                              aom_enc_frame_flags_t flags,
+                              aom_fixed_buf_t* stats, bool* const got_stats) {
   *got_stats = false;
   aom_codec_iter_t iter = NULL;
   const aom_codec_cx_pkt_t* pkt = NULL;
@@ -398,17 +392,17 @@ static WP2Status wp2_get_frame_stats(aom_codec_ctx_t* ctx,
 //------------------------------------------------------------------------------
 
 // Converts 'ref' image into AV1 struct 'raw'.
-static WP2Status CreateAV1Img(const ArgbBuffer& ref, aom_image_t* const raw,
-                              bool use_yuv444 = false) {
+WP2Status CreateAV1Img(const ArgbBuffer& ref, aom_image_t* const raw,
+                       bool use_yuv444 = false) {
   YUVPlane yuv;
   WP2_CHECK_STATUS(ToYCbCr(ref, /*ycbcr_num_bits=*/8,
                            use_yuv444 ? nullptr : &SamplingTaps::kDownSharp,
                            &yuv));
 
-  const int w = ref.width;
-  const int h = ref.height;
-  if (!aom_img_alloc(raw, use_yuv444 ? AOM_IMG_FMT_I444 : AOM_IMG_FMT_I420,
-                     w, h, /*align=*/16)) {
+  const int w = ref.width();
+  const int h = ref.height();
+  if (!aom_img_alloc(raw, use_yuv444 ? AOM_IMG_FMT_I444 : AOM_IMG_FMT_I420, w,
+                     h, /*align=*/16)) {
     fprintf(stderr, "aom_img_alloc() failed!");
     return WP2_STATUS_OUT_OF_MEMORY;
   }
@@ -426,9 +420,8 @@ static WP2Status CreateAV1Img(const ArgbBuffer& ref, aom_image_t* const raw,
 //------------------------------------------------------------------------------
 
 // Initializes the 'codec'. Uses 'params', 'pass' and 'stats' to configure it.
-static WP2Status CreateCodec(int w, int h, const ParamsAV1& params,
-                             aom_enc_pass pass, aom_fixed_buf_t stats,
-                             aom_codec_ctx_t* const codec) {
+WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
+                      aom_fixed_buf_t stats, aom_codec_ctx_t* const codec) {
   const aom_codec_iface_t* const itf = aom_codec_av1_cx();
   if (itf == NULL) {
     fprintf(stderr, "aom_codec_av1_cx() failed!\n");
@@ -442,11 +435,18 @@ static WP2Status CreateCodec(int w, int h, const ParamsAV1& params,
   }
   cfg.g_w = w;
   cfg.g_h = h;
+  if (pass == AOM_RC_ONE_PASS) {
+    // Set the maximum number of frames to encode to 1. This instructs libaom to
+    // set still_picture and reduced_still_picture_header to 1 in AV1 sequence
+    // headers. In two-pass encoding the number of frames is available in the
+    // first-pass stats, so this is not necessary.
+    cfg.g_limit = 1;
+  }
   cfg.g_timebase.num = 1;
   cfg.g_timebase.den = 25;
   cfg.g_bit_depth = AOM_BITS_8;
   cfg.g_usage =
-      (params.speed == 0) ? AOM_USAGE_REALTIME : AOM_USAGE_GOOD_QUALITY;
+      (params.effort == 0) ? AOM_USAGE_REALTIME : AOM_USAGE_GOOD_QUALITY;
   cfg.g_profile = (params.use_yuv444 ? 1 : 0);
   cfg.g_threads = params.threads;
   cfg.rc_end_usage = AOM_Q;
@@ -479,10 +479,19 @@ static WP2Status CreateCodec(int w, int h, const ParamsAV1& params,
     return WP2_STATUS_INVALID_PARAMETER;
   }
   // AV1's speed param goes opposite to WP2's
-  const int speed = std::max(8 - (int)params.speed * 8 / 9, 0);
+  const int speed = std::max(8 - (int)params.effort * 8 / 9, 0);
   if (aom_codec_control(codec, AOME_SET_CPUUSED, speed) != AOM_CODEC_OK) {
     fprintf(stderr,
             "aom_codec_control(AOME_SET_CPUUSED) failed for speed setting\n");
+    return WP2_STATUS_INVALID_PARAMETER;
+  }
+  if (params.filter_strength == 0 &&
+      (aom_codec_control(codec, AV1E_SET_ENABLE_CDEF, 0) != AOM_CODEC_OK ||
+       aom_codec_control(codec, AV1E_SET_ENABLE_RESTORATION, 0) !=
+           AOM_CODEC_OK ||
+       aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA, 0) !=
+           AOM_CODEC_OK)) {
+    fprintf(stderr, "aom_codec_control(AV1E_SET_ENABLE_FILTER) failed\n");
     return WP2_STATUS_INVALID_PARAMETER;
   }
   return WP2_STATUS_OK;
@@ -490,18 +499,17 @@ static WP2Status CreateCodec(int w, int h, const ParamsAV1& params,
 
 //------------------------------------------------------------------------------
 
-static constexpr int kFlags = AOM_EFLAG_FORCE_KF;
+constexpr int kFlags = AOM_EFLAG_FORCE_KF;
 
-static WP2Status FirstPassAV1(const ArgbBuffer& ref, const ParamsAV1& params,
-                              double* const timing,
-                              aom_fixed_buf_t* const stats) {
+WP2Status FirstPassAV1(const ArgbBuffer& ref, const ParamsAV1& params,
+                       double* const timing, aom_fixed_buf_t* const stats) {
   aom_image_t raw;
   WP2_CHECK_STATUS(CreateAV1Img(ref, &raw, params.use_yuv444));
   const auto C1 = Cleaner<aom_image>(&raw, aom_img_free);
 
   aom_codec_ctx_t codec;
   // TODO(yguyon): Check possible leaks of itf/cfg/codec
-  WP2_CHECK_STATUS(CreateCodec((int)ref.width, (int)ref.height, params,
+  WP2_CHECK_STATUS(CreateCodec((int)ref.width(), (int)ref.height(), params,
                                AOM_RC_FIRST_PASS, /*stats=*/{NULL, 0}, &codec));
 
   const double start_time = GetStopwatchTime();
@@ -524,193 +532,318 @@ static WP2Status FirstPassAV1(const ArgbBuffer& ref, const ParamsAV1& params,
 
 //------------------------------------------------------------------------------
 
-// Encodes 'ref' into 'out', decodes it into 'decoded'.
-static WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
-                             aom_fixed_buf_t stats, ArgbBuffer* const decoded,
-                             std::string* const out, double timing[],
-                             std::vector<WP2::Rectangle>* const blocks,
-                             std::vector<WP2::Rectangle>* const transforms,
-                             QuantAV1* const quant) {
-  (void)blocks, (void)transforms, (void)quant;
-  WP2_CHECK_OK(decoded != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(out != nullptr, WP2_STATUS_NULL_PARAMETER);
-  out->clear();
+// Encodes 'image' into 'bitsteam'.
+WP2Status EncodeAV1WithLibaom(const ArgbBuffer& image, const ParamsAV1& params,
+                              aom_fixed_buf_t stats,
+                              std::string* const bitsteam,
+                              double* const timing) {
+  WP2_CHECK_OK(bitsteam != nullptr, WP2_STATUS_NULL_PARAMETER);
+  bitsteam->clear();
 
-  // encode
-  {
-    aom_image_t raw;
-    WP2_CHECK_STATUS(CreateAV1Img(ref, &raw, params.use_yuv444));
-    auto C1 = Cleaner<aom_image>(&raw, aom_img_free);
+  aom_image_t raw;
+  WP2_CHECK_STATUS(CreateAV1Img(image, &raw, params.use_yuv444));
+  auto C1 = Cleaner<aom_image>(&raw, aom_img_free);
 
-    aom_codec_ctx_t codec;
-    // TODO(yguyon): Check possible leaks of itf/cfg/codec
-    WP2_CHECK_STATUS(
-        CreateCodec((int)ref.width, (int)ref.height, params,
-                    (stats.buf != NULL) ? AOM_RC_LAST_PASS : AOM_RC_ONE_PASS,
-                    stats, &codec));
-    // encode
-    const double start_time = GetStopwatchTime();
-    if (encode_frame(&codec, &raw, 0 /* frame count */, kFlags, out, false)) {
-      fprintf(stderr, "!?! first calls to encode_frame() should 'fail'!\n");
-      return WP2_STATUS_BITSTREAM_ERROR;
-    }
-    while (encode_frame(&codec, NULL, -1, 0, out)) { /* flush encoder */ }
-    if (timing != nullptr) timing[0] = GetStopwatchTime() - start_time;
-    if (aom_codec_destroy(&codec) != AOM_CODEC_OK) {
-      fprintf(stderr, "aom_codec_destroy() failed!\n");
-      return WP2_STATUS_BITSTREAM_ERROR;
-    }
+  aom_codec_ctx_t codec;
+  // TODO(yguyon): Check possible leaks of itf/cfg/codec
+  WP2_CHECK_STATUS(CreateCodec(
+      (int)image.width(), (int)image.height(), params,
+      (stats.buf != NULL) ? AOM_RC_LAST_PASS : AOM_RC_ONE_PASS, stats, &codec));
+  const double start_time = GetStopwatchTime();
+  if (encode_frame(&codec, &raw, 0, kFlags, bitsteam, false)) {
+    fprintf(stderr, "!?! first calls to encode_frame() should 'fail'!\n");
+    return WP2_STATUS_BITSTREAM_ERROR;
   }
-
-  // decode back
-  WP2_CHECK_STATUS(decoded->Resize(ref.width, ref.height));
-  {
-    const aom_codec_iface_t* const itf = aom_codec_av1_dx();
-    if (itf == NULL) {
-      fprintf(stderr, "aom_codec_av1_dx() failed!\n");
-      return WP2_STATUS_INVALID_PARAMETER;
-    }
-
-    aom_codec_ctx_t codec;
-    if (aom_codec_dec_init(&codec, itf, NULL, 0) != AOM_CODEC_OK) {
-      fprintf(stderr, "aom_codec_dec_init() failed\n");
-      return WP2_STATUS_OUT_OF_MEMORY;
-    }
-
-#if defined(WP2_HAVE_AOM_DBG)
-    insp_frame_data frame_data;
-    ifd_init(&frame_data, ref.width, ref.height);
-    WP2_CHECK_OK(frame_data.mi_grid != NULL, WP2_STATUS_OUT_OF_MEMORY);
-    auto C4 = Cleaner<insp_frame_data>(&frame_data, ifd_clear);
-
-    struct aom_inspect_init inspect = { inspect_cb, &frame_data };
-    const bool use_inspect =
-        (params.draw_mi_data != nullptr || params.draw_blocks ||
-         params.draw_transforms || blocks != nullptr || transforms != nullptr ||
-         quant != nullptr) &&
-        (aom_codec_control(&codec, AV1_SET_INSPECTION_CALLBACK, &inspect) ==
-         AOM_CODEC_OK);
-#endif    // WP2_HAVE_AOM_DBG
-
-    const double start_time = GetStopwatchTime();
-    aom_codec_dec_cfg cfg;
-    memset(&cfg, 0, sizeof(cfg));
-    cfg.allow_lowbitdepth = 1;
-    if (aom_codec_decode(&codec,
-                         (const uint8_t*)out->data(), out->size(), &cfg)
-          != AOM_CODEC_OK) {
-      fprintf(stderr, "aom_codec_decode() failed.\n");
-      return WP2_STATUS_OUT_OF_MEMORY;
-    }
-    if (timing != nullptr) timing[1] = GetStopwatchTime() - start_time;
-    aom_image_t* img = NULL;
-    aom_codec_iter_t iter = NULL;
-    bool ok = false;
-    while ((img = aom_codec_get_frame(&codec, &iter)) != NULL) {
-      YUVPlane yuv;
-      WP2_CHECK_STATUS(yuv.Resize(ref.width, ref.height, /*pad=*/1,
-                                  /*has_alpha=*/false, !params.use_yuv444));
-      yuv.Y.From(img->planes[AOM_PLANE_Y], img->stride[AOM_PLANE_Y], -16);
-      yuv.U.From(img->planes[AOM_PLANE_U], img->stride[AOM_PLANE_U], -128);
-      yuv.V.From(img->planes[AOM_PLANE_V], img->stride[AOM_PLANE_V], -128);
-      WP2_CHECK_STATUS(
-          ToRGBA(yuv, params.use_yuv444 ? nullptr : &SamplingTaps::kUpSmooth,
-                 decoded));
-      ok = true;
-      break;
-    }
-    if (!ok) {
-      fprintf(stderr, "Round-trip error!\n");
-      return WP2_STATUS_OUT_OF_MEMORY;
-    }
-#if defined(WP2_HAVE_AOM_DBG)
-#if defined(WP2_BITTRACE)
-    if (params.bittrace > 0) {
-      Accounting* acc = NULL;
-      if (aom_codec_control(&codec, AV1_GET_ACCOUNTING, &acc) == AOM_CODEC_OK) {
-        std::map<std::string, WP2BitCounts::mapped_type> accum;
-        const uint32_t num_syms = acc->syms.num_syms;
-        for (uint32_t i = 0; i < num_syms; ++i) {
-          const AccountingSymbol& sym = acc->syms.syms[i];
-          const double bits = sym.bits / 8.;
-          const char* str = acc->syms.dictionary.strs[sym.id];
-          const uint32_t num_samples = sym.samples;
-          if (params.compact_trace) {
-            if (kCategories[str] == nullptr) {
-              fprintf(stderr, "Unmapped category! Missing line:\n");
-              fprintf(stderr, "  {\"%s\",    kCtgXXX},\n", str);
-            } else {
-              str = kCategories[str];
-            }
-          }
-          accum[str].bits += bits;
-          accum[str].num_occurrences += num_samples;
-        }
-        std::vector<WP2TraceType> values;
-        for (const auto& p : accum) values.push_back(p);
-        const bool use_bytes = (params.bittrace == 2);
-        PrintBitTraceCluster(values, true, use_bytes, 0);
-      } else {
-        fprintf(stderr, "Error! AV1 accounting (bit traces) not compiled in\n");
-      }
-    }
-#endif  // WP2_BITTRACE
-    if (use_inspect) {
-      if (params.draw_mi_data != nullptr) {
-        if (std::strcmp(params.draw_mi_data, "quant") == 0) {
-          DrawQuant(frame_data, /*channel=*/0, decoded);
-        } else {
-          DrawMiData(frame_data, params.draw_mi_data, params.draw_mi_number,
-                     decoded);
-        }
-      }
-      // Print transforms before blocks because transforms are smaller.
-      if (params.draw_transforms || transforms != nullptr) {
-        std::vector<WP2::Rectangle> t =
-            ExtractBoxes(frame_data, ref.width, ref.height,
-                         /*extract_transform_boxes=*/true);
-        if (params.draw_transforms) {
-          DrawBoxes(t, {0xff, 0x08, 0x80, 0xf0}, decoded);
-        }
-        if (transforms != nullptr) std::swap(*transforms, t);
-      }
-      if (params.draw_blocks || blocks != nullptr) {
-        std::vector<WP2::Rectangle> b =
-            ExtractBoxes(frame_data, ref.width, ref.height,
-                         /*extract_transform_boxes=*/false);
-        if (params.draw_blocks) DrawBoxes(b, {0xff, 0x08, 0xf0, 0x80}, decoded);
-        if (blocks != nullptr) std::swap(*blocks, b);
-      }
-      if (quant != nullptr) {
-        for (uint32_t i = 0; i < 8; ++i) {
-          for (uint32_t j = 0; j < 2; ++j) {
-            // Raw quant values are multiplied by 4. We shift them back to
-            // make them comparable with those used by wp2.
-            quant->y_dequant[i][j] = frame_data.y_dequant[i][j] >> 2;
-            quant->u_dequant[i][j] = frame_data.u_dequant[i][j] >> 2;
-            quant->v_dequant[i][j] = frame_data.v_dequant[i][j] >> 2;
-          }
-        }
-      }
-    }
-#endif  // WP2_HAVE_AOM_DBG
-
-    if (aom_codec_destroy(&codec) != AOM_CODEC_OK) {
-      fprintf(stderr, "aom_codec_destroy() failed!\n");
-      return WP2_STATUS_OUT_OF_MEMORY;
-    }
+  while (encode_frame(&codec, NULL, -1, 0, bitsteam)) { /* flush encoder */
+  }
+  if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
+  if (aom_codec_destroy(&codec) != AOM_CODEC_OK) {
+    fprintf(stderr, "aom_codec_destroy() failed!\n");
+    return WP2_STATUS_BITSTREAM_ERROR;
   }
 
   return WP2_STATUS_OK;
 }
 
+// Decodes 'bitstream' into 'decoded'.
+WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
+                              const std::string bitstream,
+                              ArgbBuffer* const decoded, double* const timing,
+                              std::vector<Rectangle>* const blocks,
+                              std::vector<Rectangle>* const transforms,
+                              QuantAV1* const quant) {
+  (void)blocks, (void)transforms, (void)quant;
+  WP2_CHECK_OK(decoded != nullptr, WP2_STATUS_NULL_PARAMETER);
+
+  const aom_codec_iface_t* const itf = aom_codec_av1_dx();
+  if (itf == NULL) {
+    fprintf(stderr, "aom_codec_av1_dx() failed!\n");
+    return WP2_STATUS_INVALID_PARAMETER;
+  }
+
+  const aom_codec_dec_cfg cfg = {params.threads, ref.width(), ref.height(), 1};
+  aom_codec_ctx_t codec;
+  if (aom_codec_dec_init(&codec, itf, &cfg, 0) != AOM_CODEC_OK) {
+    fprintf(stderr, "aom_codec_dec_init() failed\n");
+    return WP2_STATUS_OUT_OF_MEMORY;
+  }
+
+  if (aom_codec_control(&codec, AV1_SET_SKIP_LOOP_FILTER,
+                        (params.filter_strength > 0) ? 0 : 1) != AOM_CODEC_OK) {
+    fprintf(stderr, "aom_codec_control(AV1_SET_SKIP_LOOP_FILTER) failed\n");
+    return WP2_STATUS_INVALID_PARAMETER;
+  }
+
+#if defined(WP2_HAVE_AOM_DBG)
+  insp_frame_data frame_data;
+  ifd_init(&frame_data, ref.width(), ref.height());
+  WP2_CHECK_OK(frame_data.mi_grid != NULL, WP2_STATUS_OUT_OF_MEMORY);
+  auto C4 = Cleaner<insp_frame_data>(&frame_data, ifd_clear);
+
+  struct aom_inspect_init inspect = {inspect_cb, &frame_data};
+  const bool use_inspect =
+      (params.draw_mi_data != nullptr || params.draw_blocks ||
+       params.draw_transforms || blocks != nullptr || transforms != nullptr ||
+       quant != nullptr) &&
+      (aom_codec_control(&codec, AV1_SET_INSPECTION_CALLBACK, &inspect) ==
+       AOM_CODEC_OK);
+#endif  // WP2_HAVE_AOM_DBG
+
+  const double start_time = GetStopwatchTime();
+  if (aom_codec_decode(&codec, (const uint8_t*)bitstream.data(),
+                       bitstream.size(), NULL) != AOM_CODEC_OK) {
+    fprintf(stderr, "aom_codec_decode() failed.\n");
+    return WP2_STATUS_OUT_OF_MEMORY;
+  }
+  if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
+  aom_image_t* img = NULL;
+  aom_codec_iter_t iter = NULL;
+  bool ok = false;
+  while ((img = aom_codec_get_frame(&codec, &iter)) != NULL) {
+    YUVPlane yuv;
+    WP2_CHECK_STATUS(yuv.Resize(ref.width(), ref.height(), /*pad=*/1,
+                                /*has_alpha=*/false, !params.use_yuv444));
+    yuv.Y.From(img->planes[AOM_PLANE_Y], img->stride[AOM_PLANE_Y], -16);
+    yuv.U.From(img->planes[AOM_PLANE_U], img->stride[AOM_PLANE_U], -128);
+    yuv.V.From(img->planes[AOM_PLANE_V], img->stride[AOM_PLANE_V], -128);
+    WP2_CHECK_STATUS(ToRGBA(
+        yuv, params.use_yuv444 ? nullptr : &SamplingTaps::kUpSmooth, decoded));
+    ok = true;
+    break;
+  }
+  if (!ok) {
+    fprintf(stderr, "Round-trip error!\n");
+    return WP2_STATUS_OUT_OF_MEMORY;
+  }
+#if defined(WP2_HAVE_AOM_DBG)
+#if defined(WP2_BITTRACE)
+  if (params.bittrace > 0) {
+    Accounting* acc = NULL;
+    if (aom_codec_control(&codec, AV1_GET_ACCOUNTING, &acc) == AOM_CODEC_OK) {
+      std::map<std::string, WP2BitCounts::mapped_type> accum;
+      const uint32_t num_syms = acc->syms.num_syms;
+      for (uint32_t i = 0; i < num_syms; ++i) {
+        const AccountingSymbol& sym = acc->syms.syms[i];
+        const double bits = sym.bits / 8.;
+        const char* str = acc->syms.dictionary.strs[sym.id];
+        const uint32_t num_samples = sym.samples;
+        if (params.compact_trace) {
+          if (kCategories[str] == nullptr) {
+            fprintf(stderr, "Unmapped category! Missing line:\n");
+            fprintf(stderr, "  {\"%s\",    kCtgXXX},\n", str);
+          } else {
+            str = kCategories[str];
+          }
+        }
+        accum[str].bits += bits;
+        accum[str].num_occurrences += num_samples;
+      }
+      std::vector<WP2TraceType> values;
+      values.reserve(accum.size());
+      for (const auto& p : accum) values.push_back(p);
+      const bool use_bytes = (params.bittrace == 2);
+      PrintBitTraceCluster(values, true, use_bytes, /*show_histograms=*/false);
+    } else {
+      fprintf(stderr, "Error! AV1 accounting (bit traces) not compiled in\n");
+    }
+  }
+#endif  // WP2_BITTRACE
+  if (use_inspect) {
+    if (params.draw_mi_data != nullptr) {
+      if (std::strcmp(params.draw_mi_data, "quant") == 0) {
+        DrawQuant(frame_data, /*channel=*/0, decoded);
+      } else {
+        DrawMiData(frame_data, params.draw_mi_data, params.draw_mi_number,
+                   decoded);
+      }
+    }
+    // Print transforms before blocks because transforms are smaller.
+    if (params.draw_transforms || transforms != nullptr) {
+      std::vector<Rectangle> t =
+          ExtractBoxes(frame_data, ref.width(), ref.height(),
+                       /*extract_transform_boxes=*/true);
+      if (params.draw_transforms) {
+        DrawBoxes(t, {0xff, 0x08, 0x80, 0xf0}, decoded);
+      }
+      if (transforms != nullptr) std::swap(*transforms, t);
+    }
+    if (params.draw_blocks || blocks != nullptr) {
+      std::vector<Rectangle> b =
+          ExtractBoxes(frame_data, ref.width(), ref.height(),
+                       /*extract_transform_boxes=*/false);
+      if (params.draw_blocks) DrawBoxes(b, {0xff, 0x08, 0xf0, 0x80}, decoded);
+      if (blocks != nullptr) std::swap(*blocks, b);
+    }
+    if (quant != nullptr) {
+      for (uint32_t i = 0; i < 8; ++i) {
+        for (uint32_t j = 0; j < 2; ++j) {
+          // Raw quant values are multiplied by 4. We shift them back to
+          // make them comparable with those used by wp2.
+          quant->y_dequant[i][j] = frame_data.y_dequant[i][j] >> 2;
+          quant->u_dequant[i][j] = frame_data.u_dequant[i][j] >> 2;
+          quant->v_dequant[i][j] = frame_data.v_dequant[i][j] >> 2;
+        }
+      }
+    }
+  }
+#endif  // WP2_HAVE_AOM_DBG
+
+  if (aom_codec_destroy(&codec) != AOM_CODEC_OK) {
+    fprintf(stderr, "aom_codec_destroy() failed!\n");
+    return WP2_STATUS_OUT_OF_MEMORY;
+  }
+  return WP2_STATUS_OK;
+}
+
+#if defined(WP2_HAVE_LIBGAV1)
+WP2Status ConvertStatus(::libgav1::StatusCode code) {
+  switch (code) {
+    case ::libgav1::kStatusOk:
+      return WP2_STATUS_OK;
+    case ::libgav1::kStatusUnknownError:
+    case ::libgav1::kStatusInvalidArgument:
+    case ::libgav1::kStatusAlready:
+    case ::libgav1::kStatusNothingToDequeue:
+      return WP2_STATUS_INVALID_PARAMETER;
+    case ::libgav1::kStatusOutOfMemory:
+      return WP2_STATUS_OUT_OF_MEMORY;
+    case ::libgav1::kStatusResourceExhausted:
+      return WP2_STATUS_NOT_ENOUGH_DATA;
+    case ::libgav1::kStatusNotInitialized:
+    case ::libgav1::kStatusInternalError:
+      return WP2_STATUS_INVALID_CONFIGURATION;
+    case ::libgav1::kStatusUnimplemented:
+    case ::libgav1::kStatusTryAgain:
+      return WP2_STATUS_UNSUPPORTED_FEATURE;
+    case ::libgav1::kStatusBitstreamError:
+      return WP2_STATUS_BITSTREAM_ERROR;
+    default:
+      assert(false);
+      return WP2_STATUS_LAST;
+  }
+}
+#endif  // defined(WP2_HAVE_LIBGAV1)
+
+// Decodes 'bitstream' into 'decoded'.
+WP2Status DecodeAV1WithLibgav1(const ArgbBuffer& ref, const ParamsAV1& params,
+                               const std::string bitstream,
+                               ArgbBuffer* const decoded,
+                               double* const timing) {
+#if defined(WP2_HAVE_LIBGAV1)
+  WP2_CHECK_OK(decoded != nullptr, WP2_STATUS_NULL_PARAMETER);
+  ::libgav1::DecoderSettings settings;
+  settings.threads = params.threads;
+  if (params.filter_strength == 0) settings.post_filter_mask = 0x0;
+  ::libgav1::Decoder decoder;
+
+  ::libgav1::StatusCode status = decoder.Init(&settings);
+  if (status != ::libgav1::kStatusOk) {
+    fprintf(stderr, "libgav1::DecoderSettings::Init() failed: %s\n",
+            ::libgav1::GetErrorString(status));
+    return ConvertStatus(status);
+  }
+
+  const double start_time = GetStopwatchTime();
+  status = decoder.EnqueueFrame(
+      reinterpret_cast<const uint8_t*>(bitstream.data()), bitstream.size(),
+      /*user_private_data=*/0, /*buffer_private_data=*/nullptr);
+  if (status != ::libgav1::kStatusOk) {
+    fprintf(stderr, "libgav1::DecoderSettings::EnqueueFrame() failed: %s\n",
+            ::libgav1::GetErrorString(status));
+    return ConvertStatus(status);
+  }
+
+  const ::libgav1::DecoderBuffer* buffer;
+  status = decoder.DequeueFrame(&buffer);
+  if (status != ::libgav1::kStatusOk || buffer == nullptr) {
+    fprintf(stderr, "libgav1::DecoderSettings::DequeueFrame() failed: %s\n",
+            ::libgav1::GetErrorString(status));
+    return ConvertStatus(status);
+  }
+  if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
+
+  WP2_CHECK_OK(buffer->displayed_width[AOM_PLANE_Y] == (int)ref.width() &&
+                   buffer->displayed_height[AOM_PLANE_Y] == (int)ref.height(),
+               WP2_STATUS_BAD_DIMENSION);
+  WP2_CHECK_OK(buffer->image_format == kLibgav1ImageFormatYuv420 ||
+                   buffer->image_format == kLibgav1ImageFormatYuv444,
+               WP2_STATUS_INVALID_COLORSPACE);
+  const bool is420 = (buffer->image_format == kLibgav1ImageFormatYuv420);
+
+  YUVPlane yuv;
+  WP2_CHECK_STATUS(yuv.Resize(ref.width(), ref.height(), /*pad=*/1,
+                              /*has_alpha=*/false, is420));
+  yuv.Y.From(buffer->plane[AOM_PLANE_Y], buffer->stride[AOM_PLANE_Y], -16);
+  yuv.U.From(buffer->plane[AOM_PLANE_U], buffer->stride[AOM_PLANE_U], -128);
+  yuv.V.From(buffer->plane[AOM_PLANE_V], buffer->stride[AOM_PLANE_V], -128);
+  WP2_CHECK_STATUS(ToRGBA(
+      yuv, (is420 && params.use_yuv444) ? nullptr : &SamplingTaps::kUpSmooth,
+      decoded));
+
+  return WP2_STATUS_OK;
+#else
+  (void)ref, (void)params, (void)bitstream, (void)decoded, (void)timing;
+  return WP2_STATUS_UNSUPPORTED_FEATURE;
+#endif  // defined(WP2_HAVE_LIBGAV1)
+}
+
+// Encodes 'ref' into 'out', decodes it into 'decoded'.
+WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
+                      aom_fixed_buf_t stats, ArgbBuffer* const decoded,
+                      std::string* const out, double timing[],
+                      std::vector<Rectangle>* const blocks,
+                      std::vector<Rectangle>* const transforms,
+                      QuantAV1* const quant) {
+  WP2_CHECK_STATUS(EncodeAV1WithLibaom(
+      ref, params, stats, out, (timing != nullptr) ? &timing[0] : nullptr));
+
+  WP2_CHECK_STATUS(decoded->Resize(ref.width(), ref.height()));
+  if (params.use_libgav1_decoder) {
+    WP2_CHECK_STATUS(
+        DecodeAV1WithLibgav1(ref, params, *out, decoded,
+                             (timing != nullptr) ? &timing[1] : nullptr));
+  } else {
+    WP2_CHECK_STATUS(DecodeAV1WithLibaom(
+        ref, params, *out, decoded, (timing != nullptr) ? &timing[1] : nullptr,
+        blocks, transforms, quant));
+  }
+  return WP2_STATUS_OK;
+}
+
 //------------------------------------------------------------------------------
+
+#endif  // defined(WP2_HAVE_AOM)
+
+}  // namespace
+
+//------------------------------------------------------------------------------
+
+#if defined(WP2_HAVE_AOM)
 
 WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
                       ArgbBuffer* const decoded, std::string* const out,
-                      double timing[],
-                      std::vector<WP2::Rectangle>* const blocks,
-                      std::vector<WP2::Rectangle>* const transforms,
+                      double timing[], std::vector<Rectangle>* const blocks,
+                      std::vector<Rectangle>* const transforms,
                       QuantAV1* const quant) {
   if (params.pass < 2) {
     return CompressAV1(ref, params, /*stats=*/{NULL, 0}, decoded, out, timing,
@@ -731,9 +864,8 @@ WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
 
 WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
                       ArgbBuffer* const decoded, std::string* const out,
-                      double timing[],
-                      std::vector<WP2::Rectangle>* const blocks,
-                      std::vector<WP2::Rectangle>* const transforms,
+                      double timing[], std::vector<Rectangle>* const blocks,
+                      std::vector<Rectangle>* const transforms,
                       QuantAV1* const quant) {
   (void)ref;
   (void)params;
@@ -747,7 +879,10 @@ WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
   return WP2_STATUS_UNSUPPORTED_FEATURE;
 }
 
-#endif  // WP2_HAVE_AOM
+#endif  // defined(WP2_HAVE_AOM)
+
+//------------------------------------------------------------------------------
+// AVIF
 
 #ifdef WP2_HAVE_AVIF
 
@@ -767,15 +902,14 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
   out->clear();
 
   YUVPlane yuv;
-  WP2_CHECK_STATUS(
-      ToYCbCr(ref, 8, params.use_yuv444 ? nullptr : &SamplingTaps::kDownSharp,
-              &yuv));
+  WP2_CHECK_STATUS(ToYCbCr(
+      ref, 8, params.use_yuv444 ? nullptr : &SamplingTaps::kDownSharp, &yuv));
 
-  const uint32_t w = ref.width;
-  const uint32_t h = ref.height;
+  const uint32_t w = ref.width();
+  const uint32_t h = ref.height();
   constexpr int kDepth = 8;
   const avifPixelFormat format =
-    params.use_yuv444 ? AVIF_PIXEL_FORMAT_YUV444 :  AVIF_PIXEL_FORMAT_YUV420;
+      params.use_yuv444 ? AVIF_PIXEL_FORMAT_YUV444 : AVIF_PIXEL_FORMAT_YUV420;
   avifImage* const image = avifImageCreate(w, h, kDepth, format);
   const auto C1 = Cleaner<avifImage>(image, avifImageDestroy);
 
@@ -792,11 +926,11 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
   yuv.V.To(image->yuvPlanes[AVIF_CHAN_V], image->yuvRowBytes[AVIF_CHAN_V], 128);
   if (has_alpha) {
     WP2_CHECK_STATUS(yuv.A.Resize(w, h));
-    for (uint32_t y = 0; y < ref.height; ++y) {
+    for (uint32_t y = 0; y < ref.height(); ++y) {
       auto* const row_yuv = yuv.A.Row(y);
-      const uint8_t* const row = (const uint8_t*)ref.GetRow(y);
-      for (uint32_t x = 0; x < ref.width; ++x) {
-        const uint8_t* argb = &row[x * WP2FormatBpp(ref.format)];
+      const uint8_t* const row = ref.GetRow8(y);
+      for (uint32_t x = 0; x < ref.width(); ++x) {
+        const uint8_t* argb = &row[x * WP2FormatBpp(ref.format())];
         row_yuv[x] = argb[0];
       }
     }
@@ -808,7 +942,7 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
   const auto C3 = Cleaner<avifRWData>(&avif_enc, avifRWDataFree);
   avifEncoder* const encoder = avifEncoderCreate();
   const auto C4 = Cleaner<avifEncoder>(encoder, avifEncoderDestroy);
-  encoder->maxThreads = 1;
+  encoder->maxThreads = params.threads;
   // Scale to go from AVIF_QUANTIZER_BEST_QUALITY to
   // AVIF_QUANTIZER_WORST_QUALITY.
   encoder->minQuantizer = ToAvifQuantizer(params.quality);
@@ -817,7 +951,7 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
   encoder->maxQuantizerAlpha = ToAvifQuantizer(params.alpha_quality);
   encoder->speed = (int)AVIF_SPEED_FASTEST +
                    ((int)AVIF_SPEED_SLOWEST - (int)AVIF_SPEED_FASTEST) *
-                       (int)params.speed / 9;
+                       (int)params.effort / 9;
   double start_time = GetStopwatchTime();
   const avifResult encodeResult = avifEncoderWrite(encoder, image, &avif_enc);
   if (timing != nullptr) timing[0] = GetStopwatchTime() - start_time;
@@ -834,7 +968,7 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
   avifDecoder* const decoder = avifDecoderCreate();
   start_time = GetStopwatchTime();
   const avifResult decodeResult =
-      avifDecoderRead(decoder, avif_dec, (avifROData*)&avif_enc);
+      avifDecoderReadMemory(decoder, avif_dec, avif_enc.data, avif_enc.size);
   if (timing != nullptr) timing[1] = GetStopwatchTime() - start_time;
   avifDecoderDestroy(decoder);
   if (decodeResult == AVIF_RESULT_OK) {
@@ -872,5 +1006,7 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
 }
 
 #endif  // WP2_HAVE_AVIF
+
+//------------------------------------------------------------------------------
 
 }  // namespace WP2

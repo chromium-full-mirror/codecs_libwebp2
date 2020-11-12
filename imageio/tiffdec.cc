@@ -173,7 +173,7 @@ class ImageReaderTIFF : public ImageReader::Impl {
     WP2Status status = DecodeTIFF(tiff, duration_ms);
 
     if (status == WP2_STATUS_OK) {
-      status = ExtractMetadataFromTIFF(tiff, &buffer_->metadata, log_level_);
+      status = ExtractMetadataFromTIFF(tiff, &buffer_->metadata_, log_level_);
       if (status != WP2_STATUS_OK && log_level_ >= LogLevel::DEFAULT) {
         fprintf(stderr, "Error! Cannot extract TIFF metadata\n");
       }

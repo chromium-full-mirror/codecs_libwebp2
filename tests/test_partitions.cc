@@ -35,12 +35,12 @@ TEST_P(PartitionsTest, Simple) {
   const std::string& file_name = std::get<0>(GetParam());
   EncoderConfig config = EncoderConfig::kDefault;
   config.quality = std::get<1>(GetParam());
-  config.speed = std::get<2>(GetParam());
+  config.effort = std::get<2>(GetParam());
   config.partition_method = std::get<3>(GetParam());
   config.partition_set = std::get<4>(GetParam());
   config.partition_snapping = std::get<5>(GetParam());
 
-  ASSERT_WP2_OK(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -48,7 +48,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(
         ::testing::Values("source1_64x48.png"),
         /*quality=*/::testing::Values(80),
-        ::testing::Values(EncoderConfig::kDefault.speed),
+        ::testing::Values(EncoderConfig::kDefault.effort),
         ::testing::Values(
             MULTIPASS_PARTITIONING, BLOCK_ENCODE_PARTITIONING,
             AREA_ENCODE_PARTITIONING
@@ -62,7 +62,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(
         ::testing::Values("source1_64x48.png"),
         /*quality=*/::testing::Values(50),
-        ::testing::Values(EncoderConfig::kDefault.speed),
+        ::testing::Values(EncoderConfig::kDefault.effort),
         ::testing::Values(MULTIPASS_PARTITIONING),
         ::testing::Values(ALL_SQUARES),
         ::testing::Values(EncoderConfig::kDefault.partition_snapping)));
@@ -72,7 +72,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(
         ::testing::Values("source1_32x32.png"),
         /*quality=*/::testing::Values(50),
-        ::testing::Values(EncoderConfig::kDefault.speed),
+        ::testing::Values(EncoderConfig::kDefault.effort),
         ::testing::Values(TILE_ENCODE_PARTITIONING),
         ::testing::Values(ALL_RECTS),
         ::testing::Values(EncoderConfig::kDefault.partition_snapping)));
@@ -82,7 +82,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(
         ::testing::Values("source1_4x4.png"),
         /*quality=*/::testing::Values(35),
-        ::testing::Values(EncoderConfig::kDefault.speed),
+        ::testing::Values(EncoderConfig::kDefault.effort),
         ::testing::Values(EXHAUSTIVE_PARTITIONING),
         ::testing::Values(ALL_RECTS),
         ::testing::Values(EncoderConfig::kDefault.partition_snapping)));
@@ -92,7 +92,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(
         ::testing::Values("source1_64x48.png"),
         /*quality=*/::testing::Values(30),
-        ::testing::Values(EncoderConfig::kDefault.speed),
+        ::testing::Values(EncoderConfig::kDefault.effort),
         ::testing::Range(ALL_4X4_PARTITIONING,
                          NUM_PARTITION_METHODS),
         ::testing::Values(ALL_SQUARES),
@@ -102,7 +102,7 @@ INSTANTIATE_TEST_SUITE_P(
     PartitionsTestInstantiationRDOpt, PartitionsTest,
     ::testing::Combine(::testing::Values("source1_64x48.png"),
                        /*quality=*/::testing::Values(75),
-                       ::testing::Values(EncoderConfig::kDefault.speed),
+                       ::testing::Values(EncoderConfig::kDefault.effort),
                        ::testing::Values(SPLIT_RECURSE_PARTITIONING,
                                          AREA_ENCODE_PARTITIONING,
                                          SUB_AREA_ENCODE_PARTITIONING),
@@ -116,7 +116,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(
         ::testing::Values("alpha_ramp.png", "source3.jpeg"),
         /*quality=*/::testing::Values(0.f, 25.f, 50.f, 85.f),
-        /*speed=*/::testing::Values(0, 3, 6, 9),
+        /*effort=*/::testing::Values(0, 3, 6, 9),
         ::testing::Range(MULTIPASS_PARTITIONING, NUM_PARTITION_METHODS),
         ::testing::Values(SMALL_SQUARES, MEDIUM_SQUARES, ALL_SQUARES,
                           SMALL_RECTS, ALL_RECTS, THICK_RECTS),

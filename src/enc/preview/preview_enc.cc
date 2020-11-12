@@ -44,10 +44,9 @@ void BlurPixel(const ArgbBuffer& src, uint32_t radius,
                ArgbBuffer* const dst) {
   const Argb32b color = GetAverageColor(src, radius, pixel_x, pixel_y);
 
-  assert(src.format == WP2_Argb_32 && src.format == dst->format);
-  const uint8_t* const src_pixel =
-      (const uint8_t*)src.GetRow(pixel_y) + pixel_x * 4;
-  uint8_t* const dst_pixel = (uint8_t*)dst->GetRow(pixel_y) + pixel_x * 4;
+  assert(src.format() == WP2_Argb_32 && src.format() == dst->format());
+  const uint8_t* const src_pixel = src.GetRow8(pixel_y) + pixel_x * 4;
+  uint8_t* const dst_pixel = dst->GetRow8(pixel_y) + pixel_x * 4;
 
   if (AbsUInt32(src_pixel[0], color.a) < threshold) dst_pixel[0] = color.a;
   if (AbsUInt32(src_pixel[1], color.r) < threshold) dst_pixel[1] = color.r;
@@ -58,11 +57,11 @@ void BlurPixel(const ArgbBuffer& src, uint32_t radius,
 WP2Status Blur(ArgbBuffer* const buffer, uint32_t radius, uint32_t threshold) {
   if (radius < 1) return WP2_STATUS_OK;
 
-  ArgbBuffer original(buffer->format);
+  ArgbBuffer original(buffer->format());
   WP2_CHECK_STATUS(original.CopyFrom(*buffer));
 
-  for (uint32_t y = 0; y < buffer->height; ++y) {
-    for (uint32_t x = 0; x < buffer->width; ++x) {
+  for (uint32_t y = 0; y < buffer->height(); ++y) {
+    for (uint32_t x = 0; x < buffer->width(); ++x) {
       BlurPixel(original, radius, x, y, threshold, buffer);
     }
   }
@@ -70,14 +69,17 @@ WP2Status Blur(ArgbBuffer* const buffer, uint32_t radius, uint32_t threshold) {
 }
 
 //------------------------------------------------------------------------------
-// 2x Horizontal averaging. Does not reallocate, stride stays the same.
-bool HalfWidthDownscale(ArgbBuffer* const canvas, uint32_t min_w) {
-  assert(canvas->format == WP2_Argb_32);
+// 2x Horizontal averaging.
+// 'canvas_view' must be a view on 'canvas'. Downscales the data in 'canvas' in
+// place and updates canvas_view to the new dimensions.
+bool HalfWidthDownscale(ArgbBuffer* const canvas, ArgbBuffer* const canvas_view,
+                        uint32_t min_w) {
+  assert(canvas->format() == WP2_Argb_32);
   assert(min_w > 1);
-  const uint32_t half_width = std::max(1u, canvas->width / 2);
+  const uint32_t half_width = std::max(1u, canvas_view->width() / 2);
   if (half_width < min_w) return true;
   const uint32_t kChannels = 4;
-  for (uint32_t y = 0; y < canvas->height; ++y) {
+  for (uint32_t y = 0; y < canvas_view->height(); ++y) {
     const uint8_t* src = canvas->GetRow8(y);
     uint8_t* dst = canvas->GetRow8(y);
     for (uint32_t x = 0; x < half_width; ++x) {
@@ -88,26 +90,37 @@ bool HalfWidthDownscale(ArgbBuffer* const canvas, uint32_t min_w) {
       dst += kChannels;
     }
   }
-  canvas->width = half_width;
+  const WP2Status status =
+      canvas_view->SetView(*canvas, {0, 0, half_width, canvas_view->height()});
+  // No memory allocation so this shouldn't fail unless there is a bug.
+  (void)status;
+  assert(status == WP2_STATUS_OK);
   return false;
 }
 
-// 2x Vertical averaging. Does not reallocate, stride stays the same.
-bool HalfHeightDownscale(ArgbBuffer* const canvas, uint32_t min_h) {
-  assert(canvas->format == WP2_Argb_32);
+// 2x Vertical averaging.
+// 'canvas_view' must be a view on 'canvas'. Downscales the data in 'canvas' in
+// place and updates canvas_view to the new dimensions.
+bool HalfHeightDownscale(ArgbBuffer* const canvas,
+                         ArgbBuffer* const canvas_view, uint32_t min_h) {
+  assert(canvas->format() == WP2_Argb_32);
   assert(min_h > 1);
-  const uint32_t half_height = std::max(1u, canvas->height / 2);
+  const uint32_t half_height = std::max(1u, canvas_view->height() / 2);
   if (half_height < min_h) return true;
   const uint32_t kChannels = 4;
   for (uint32_t y = 0; y < half_height; ++y) {
     const uint8_t* const src1 = canvas->GetRow8(2 * y + 0);
     const uint8_t* const src2 = canvas->GetRow8(2 * y + 1);
     uint8_t* const dst = canvas->GetRow8(y);
-    for (uint32_t x = 0; x < kChannels * canvas->width; ++x) {
+    for (uint32_t x = 0; x < kChannels * canvas_view->width(); ++x) {
       dst[x] = RightShiftRound(src1[x] + src2[x], 1);
     }
   }
-  canvas->height = half_height;
+  const WP2Status status =
+      canvas_view->SetView(*canvas, {0, 0, canvas_view->width(), half_height});
+  // No memory allocation so this shouldn't fail unless there is a bug.
+  (void)status;
+  assert(status == WP2_STATUS_OK);
   return false;
 }
 
@@ -363,10 +376,13 @@ WP2Status PreviewData::Encode(ANSEnc* const enc) const {
 namespace {
 
 // Adjust buffer size and grid size.
+// buffer_view should be a view on buffer. buffer's data will be modified,
+// and buffer_view updated to the new dimensions.
 WP2Status AdjustDimensions(const PreviewConfig& config,
                            ArgbBuffer* const buffer,
+                           ArgbBuffer* const buffer_view,
                            PreviewData* const preview) {
-  uint32_t buffer_w = buffer->width, buffer_h = buffer->height;
+  uint32_t buffer_w = buffer->width(), buffer_h = buffer->height();
   uint32_t grid_w = config.grid_size, grid_h = config.grid_size;
 
   if (buffer_w >= buffer_h) {
@@ -392,8 +408,8 @@ WP2Status AdjustDimensions(const PreviewConfig& config,
   // bilinear interpolation.
   bool done = false;
   while (!done) {
-    done = HalfWidthDownscale(buffer, buffer_w) ||
-           HalfHeightDownscale(buffer, buffer_h);
+    done = HalfWidthDownscale(buffer, buffer_view, buffer_w) ||
+           HalfHeightDownscale(buffer, buffer_view, buffer_h);
   }
 
   // printf("final Canvas: %d,%d\n", buffer->width, buffer->height);
@@ -436,21 +452,24 @@ WP2Status PreviewData::Generate(const ArgbBuffer& canvas,
 
 WP2Status EncodePreview(const ArgbBuffer& buffer, const PreviewConfig& config,
                         Writer* const output) {
-  WP2_CHECK_OK(buffer.format == WP2_Argb_32, WP2_STATUS_INVALID_COLORSPACE);
   WP2_CHECK_OK(config.IsValid(), WP2_STATUS_INVALID_CONFIGURATION);
   WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
 
   // Prepare canvas.
-  ArgbBuffer canvas(buffer.format);
-  WP2_CHECK_STATUS(canvas.CopyFrom(buffer));
+  ArgbBuffer canvas(WP2_Argb_32);
+  WP2_CHECK_STATUS(canvas.ConvertFrom(buffer));
+  // View on 'canvas', so we can can resize it without reallocating data.
+  ArgbBuffer canvas_view(canvas.format());
+  WP2_CHECK_STATUS(canvas_view.SetView(canvas));
 
   PreviewData preview;
-  WP2_CHECK_STATUS(AdjustDimensions(config, &canvas, &preview));
+  WP2_CHECK_STATUS(AdjustDimensions(config, &canvas, &canvas_view, &preview));
 
-  WP2_CHECK_STATUS(Blur(&canvas, config.blur_radius, config.blur_threshold));
+  WP2_CHECK_STATUS(
+      Blur(&canvas_view, config.blur_radius, config.blur_threshold));
 
   // Generate and optimize.
-  WP2_CHECK_STATUS(preview.Generate(canvas, config));
+  WP2_CHECK_STATUS(preview.Generate(canvas_view, config));
 
   // Create bitstream.
   ANSEnc enc;

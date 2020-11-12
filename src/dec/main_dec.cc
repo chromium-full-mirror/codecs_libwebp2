@@ -59,8 +59,8 @@ WP2Status ReadTiles(const DecoderConfig& config, DataSource* const data_source,
     WP2_CHECK_STATUS(DecodeTileChunkSize(*tiles_layout->gparams, tile.rect,
                                          data_source, &tile.chunk_size));
     tile.chunk_size_is_known = true;
-    RegisterChunkSize(config, tile.chunk_size,
-                      data_source->GetNumReadBytes() - size_before);
+    RegisterBitTrace(config, data_source->GetNumReadBytes() - size_before,
+                     "ChunkSize");
     WP2_CHECK_OK(data_source->TryReadNext(tile.chunk_size, &tile.data_handle),
                  WP2_STATUS_NOT_ENOUGH_DATA);
   }
@@ -150,7 +150,8 @@ WP2Status InternalDecode(const DecoderConfig& config,
   uint32_t frame_index = 0;
   bool is_preframe;
   do {
-    WP2_CHECK_STATUS(DecodeANMF(data_source, features, frame_index, &frame));
+    WP2_CHECK_STATUS(
+        DecodeANMF(config, data_source, features, frame_index, &frame));
     is_preframe = (frame.duration_ms == 0);
     // We cannot have more than kMaxNumPreframes preframes.
     WP2_CHECK_OK(!(is_preframe && frame_index >= kMaxNumPreframes),
@@ -160,20 +161,12 @@ WP2Status InternalDecode(const DecoderConfig& config,
                  WP2_STATUS_UNSUPPORTED_FEATURE);
     // The first frame must dispose.
     WP2_CHECK_OK(frame_index > 0 || frame.dispose, WP2_STATUS_BITSTREAM_ERROR);
-    if (features.is_animation && frame_index == 0) {
-      WP2_CHECK_STATUS(progress.AdvanceBy(kProgressDecANMF));
+    if (features.is_animation) {
+      progress.SetAdvancementScale(GetANMFProgression(
+          features.has_preview, features.has_icc, features.has_trailing_data,
+          frame_index, /*is_last=*/!is_preframe));
+      WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
     }
-
-    // From now on, progress will advance as pixels are available in the buffer.
-    // If this is a pre-frame, we assume there's one more frame, but there
-    // might actually be even more.
-    const float num_pixels = (float)features.width * features.height *
-                             (frame_index + 1 + (is_preframe ? 1 : 0));
-    const float progress_range_for_pixels =
-        1.f - progress.GetProgress() - kProgressDecEnd -
-        (features.has_trailing_data ? kProgressDecMetadata : 0.f);
-    progress.SetAdvancementScale(progress_range_for_pixels / num_pixels);
-    WP2_CHECK_STATUS(progress.AdvanceBy(num_pixels - frame.window.GetArea()));
 
     TilesLayout tiles_layout;
 
@@ -226,7 +219,8 @@ WP2Status InternalDecode(const DecoderConfig& config,
                               gparams.type_ == GlobalParams::GP_BOTH);
 
     // Create views or buffers of the dimensions of the 'frame.window'.
-    ArgbBuffer rgb_frame(rgb_output_wanted ? rgb_output->format : WP2_Argb_32);
+    ArgbBuffer rgb_frame(rgb_output_wanted ? rgb_output->format()
+                                           : WP2_Argb_32);
 
     if (rgb_output_needed) {
       if (rgb_output_wanted && !frame.blend) {
@@ -255,6 +249,12 @@ WP2Status InternalDecode(const DecoderConfig& config,
                                     &rgb_frame, &yuv_frame, &tiles_layout));
     // All tiles should be immediately decodable.
     tiles_layout.num_assignable_tiles = (uint32_t)tiles_layout.tiles.size();
+
+    // From now on, progress will advance as rows are available in the buffer.
+    progress.SetAdvancementScale(GetRowProgression(
+        features.has_preview, features.has_icc, features.has_trailing_data,
+        features.is_animation, tiles_layout.num_tiles_x, frame_index,
+        frame.window.height, /*is_last=*/!is_preframe));
 
     {  // Actual tile decoding.
       // TODO(maryla): support multiple frames (add the bpps?). This will
@@ -337,11 +337,12 @@ WP2Status InternalDecode(const DecoderConfig& config,
 
   // Skip all remaining frames (DecodeTiles() is not called).
   while (!frame.is_last) {
-    WP2_CHECK_STATUS(DecodeANMF(data_source, features, frame_index, &frame));
+    WP2_CHECK_STATUS(
+        DecodeANMF(config, data_source, features, frame_index, &frame));
     WP2_CHECK_STATUS(SkipTiles(data_source, features, frame.window));
     ++frame_index;
   }
-  progress.SetAdvancementScale(1.);
+  progress.SetAdvancementScale(1.f);
 
   // Decode or skip trailing metadata if any (EXIF, XMP).
   if (metadata != nullptr) {
@@ -380,18 +381,18 @@ WP2Status Decode(const uint8_t* data, size_t data_size, ArgbBuffer* output,
                  const DecoderConfig& config) {
   WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
   const WP2SampleFormat format_default =
-      (WP2FormatBpc(output->format) == 1) ? WP2_Argb_32 : WP2_Argb_38;
+      (WP2FormatBpc(output->format()) == 1) ? WP2_Argb_32 : WP2_Argb_38;
   ArgbBuffer tmp_output(format_default);
   ArgbBuffer* real_output = nullptr;
 
-  if ((output->format != format_default) || output->IsSlow()) {
+  if ((output->format() != format_default) || output->IsSlow()) {
     // work on tmp buffer
     real_output = output;
     output = &tmp_output;  // tmp working buffer
   }
   ExternalDataSource data_source(data, data_size);
   WP2Status status = InternalDecode(config, &data_source, output,
-                                    /*yuv_output=*/nullptr, &output->metadata);
+                                    /*yuv_output=*/nullptr, &output->metadata_);
   if (status != WP2_STATUS_OK) {
     output->Deallocate();
     // Because it's not incremental decoding, missing data means an error.
@@ -400,7 +401,7 @@ WP2Status Decode(const uint8_t* data, size_t data_size, ArgbBuffer* output,
   }
   if (real_output != nullptr) {
     WP2_CHECK_STATUS(real_output->ConvertFrom(*output));
-    swap(real_output->metadata, output->metadata);
+    swap(real_output->metadata_, output->metadata_);
   }
   return WP2_STATUS_OK;
 }
@@ -421,7 +422,7 @@ WP2Status DecodeArgb_32(const uint8_t* input_data, size_t input_data_size,
   ArgbBuffer output;
   BitstreamFeatures features;
   ExternalDataSource data_source(input_data, input_data_size);
-  const uint32_t bpp = WP2FormatBpp(output.format);
+  const uint32_t bpp = WP2FormatBpp(output.format());
   WP2_CHECK_STATUS(DecodeHeader(&data_source, &features));
   WP2_CHECK_OK(IsBufferLengthValid(features.width, features.height,
                                    bpp, output_stride, output_buffer_size),
@@ -533,7 +534,7 @@ WP2Status ExtractPreview(const uint8_t* const data, size_t data_size,
       WP2_CHECK_STATUS(output_buffer->Resize(features.width, features.height));
     }
 
-    if (output_buffer->format != WP2_Argb_32 || output_buffer->IsSlow() ||
+    if (output_buffer->format() != WP2_Argb_32 || output_buffer->IsSlow() ||
         features.orientation == Orientation::k90Clockwise ||
         features.orientation == Orientation::k270Clockwise) {
       // Create another buffer to leave intact the layout of 'output_buffer'
@@ -542,16 +543,16 @@ WP2Status ExtractPreview(const uint8_t* const data, size_t data_size,
       ArgbBuffer raw_output_buffer(WP2_Argb_32);
       WP2_CHECK_STATUS(raw_output_buffer.Resize(
           RotateWidth(GetInverseOrientation(features.orientation),
-                      output_buffer->width, output_buffer->height),
+                      output_buffer->width(), output_buffer->height()),
           RotateHeight(GetInverseOrientation(features.orientation),
-                       output_buffer->width, output_buffer->height)));
+                       output_buffer->width(), output_buffer->height())));
 
       WP2_CHECK_STATUS(
           DecodePreview(&data_source, features, &raw_output_buffer));
 
       WP2_CHECK_STATUS(RotateSubBuffer(
           features.orientation, raw_output_buffer,
-          {0, 0, raw_output_buffer.width, raw_output_buffer.height},
+          {0, 0, raw_output_buffer.width(), raw_output_buffer.height()},
           output_buffer));
     } else {
       // The layout of 'output_buffer' will not be modified, only its content.
@@ -564,13 +565,13 @@ WP2Status ExtractPreview(const uint8_t* const data, size_t data_size,
     }
     std::array<uint8_t, 4> bytes;
     ToUInt8(ToArgb32b(features.preview_color), bytes.data());
-    if (output_buffer->format != WP2_Argb_32) {
+    if (output_buffer->format() != WP2_Argb_32) {
       const std::array<uint8_t, 4> bytes_argb32b = bytes;
       WP2ArgbConverterInit();
-      WP2ArgbConvertTo[output_buffer->format](bytes_argb32b.data(), 1,
-                                              bytes.data());
+      WP2ArgbConvertTo[output_buffer->format()](bytes_argb32b.data(), 1,
+                                                bytes.data());
     }
-    output_buffer->Fill({0, 0, output_buffer->width, output_buffer->height},
+    output_buffer->Fill({0, 0, output_buffer->width(), output_buffer->height()},
                         bytes.data());
   }
   return WP2_STATUS_OK;
@@ -595,7 +596,8 @@ WP2Status ExtractMetadata(const uint8_t* data, size_t data_size,
     AnimationFrame frame;
     uint32_t frame_index = 0;
     do {
-      WP2_CHECK_STATUS(DecodeANMF(&data_source, features, frame_index, &frame));
+      WP2_CHECK_STATUS(DecodeANMF(DecoderConfig::kDefault, &data_source,
+                                  features, frame_index, &frame));
       WP2_CHECK_STATUS(SkipTiles(&data_source, features, frame.window));
       ++frame_index;
     } while (!frame.is_last);

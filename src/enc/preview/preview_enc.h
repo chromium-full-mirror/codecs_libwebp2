@@ -52,8 +52,8 @@ struct PreviewConfig {
   };
 
   PreviewConfig() { assert(IsValid()); }  // Check default values.
-  // Get settings matching 'quality' and 'speed' (see EncoderConfig).
-  PreviewConfig(float quality, int speed);
+  // Get settings matching 'quality' and 'effort' (see EncoderConfig).
+  PreviewConfig(float quality, int effort);
 
   // Returns true if all parameters are within their valid ranges.
   bool IsValid() const;

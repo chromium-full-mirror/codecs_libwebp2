@@ -40,13 +40,17 @@ enum {
   kQuantizedCoefficientBufferPadding = 4,
 };  // anonymous enum
 
-enum Plane : uint8_t { kPlaneY, kPlaneU, kPlaneV, kPlaneA };
-enum : uint8_t { kMaxPlanesMonochrome = kPlaneY + 1, kMaxPlanes = kPlaneA + 1 };
+enum : uint8_t { kMaxPlanesMonochrome = 1, kMaxPlanes = 4 };
 
 // The plane types, called luma and chroma in the spec.
 // Matches PlaneType in cdfs.inc
 // TODO(maryla): should there be one separate for alpha?
-enum PlaneType : uint8_t { kPlaneTypeY, kPlaneTypeUV, kNumPlaneTypes };
+enum PlaneType : uint8_t { kPlaneTypeYA, kPlaneTypeUV, kNumPlaneTypes };
+
+constexpr PlaneType GetPlaneType(Channel channel) {
+  return (channel == kUChannel || channel == kVChannel) ? kPlaneTypeUV
+                                                        : kPlaneTypeYA;
+}
 
 enum BlockSize : uint8_t {
   kBlock4x4,
@@ -139,11 +143,6 @@ inline int LeftShift(int value, int bits) {
 }
 inline int MultiplyBy2(int n) { return LeftShift(n, 1); }
 inline int MultiplyBy4(int n) { return LeftShift(n, 2); }
-
-constexpr PlaneType GetPlaneType(Plane plane) {
-  // Alpha uses kPlaneTypeY.
-  return (plane == kPlaneU || plane == kPlaneV) ? kPlaneTypeUV : kPlaneTypeY;
-}
 
 // Input: 1d array index |index|, which indexes into a 2d array of width
 //     1 << |tx_width_log2|.
@@ -311,15 +310,16 @@ class AOMResidualIO {
   // |x4| and |y4| are the column and row positions of the 4x4 block. |w4| and
   // |h4| are the width and height in 4x4 units of |tx_size|.
   static int GetTransformAllZeroContext(const AOMContext& aom_context,
-                                        Plane plane, TransformSize tx_size,
+                                        Channel channel, TransformSize tx_size,
                                         int x4, int y4, int w4, int h4);
 
   static int GetCoeffBaseContextEob(TransformSize tx_size, int index);
 
   static int GetCoeffBaseRangeContextEob(int adjusted_tx_width_log2, int pos);
   static int GetDcSignContext(const AOMContext& aom_context, int x4, int y4,
-                              int w4, int h4, Plane plane);
-  static void SetEntropyContexts(int x4, int y4, int w4, int h4, Plane plane,
+                              int w4, int h4, Channel channel);
+  static void SetEntropyContexts(int x4, int y4, int w4, int h4,
+                                 Channel channel,
                                  uint8_t coefficient_level, int8_t dc_category,
                                  AOMContext* const aom_context);
 };
@@ -331,16 +331,16 @@ class AOMContext {
   WP2Status CopyFrom(const AOMContext& other);
   void Reset();
 
-  uint32_t Rows4x4(Plane plane) const {
-    return rows4x4_ >> (IsReduced(plane) ? 1 : 0);
+  uint32_t Rows4x4(Channel channel) const {
+    return rows4x4_ >> (IsReduced(channel) ? 1 : 0);
   }
-  uint32_t Columns4x4(Plane plane) const {
-    return columns4x4_ >> (IsReduced(plane) ? 1 : 0);
+  uint32_t Columns4x4(Channel channel) const {
+    return columns4x4_ >> (IsReduced(channel) ? 1 : 0);
   }
   bool Is420() const { return is420_; }
   void SetIs420(bool is420) { is420_ = is420; }
-  bool IsReduced(const Plane& plane) const {
-    return ((plane == kPlaneU || plane == kPlaneV) && is420_);
+  bool IsReduced(Channel channel) const {
+    return ((channel == kUChannel || channel == kVChannel) && is420_);
   }
 
   // These two arrays (|coefficient_levels_| and |dc_categories_|) are used to
@@ -423,36 +423,6 @@ inline WP2::BlockSize ConvertSize(TransformSize tx_size) {
   const WP2::BlockSize res = kSizeAOMToWP2[(uint32_t)tx_size];
   assert(res != BLK_LAST && kSizeWP2ToAOM[res] == tx_size);
   return res;
-}
-
-inline Plane ConvertPlane(Channel channel) {
-  switch (channel) {
-    case kYChannel:
-      return kPlaneY;
-    case kUChannel:
-      return kPlaneU;
-    case kVChannel:
-      return kPlaneV;
-    case kAChannel:
-      return kPlaneA;
-  }
-  assert(false);
-  return kPlaneY;
-}
-
-inline Channel ConvertPlane(Plane p) {
-  switch (p) {
-    case kPlaneY:
-      return kYChannel;
-    case kPlaneU:
-      return kUChannel;
-    case kPlaneV:
-      return kVChannel;
-    case kPlaneA:
-      return kAChannel;
-  }
-  assert(false);
-  return kYChannel;
 }
 
 inline const uint16_t* UberZigZag(TransformSize tx_size, bool is420) {

@@ -67,14 +67,17 @@ TEST(EncodeTest, BadFormat) {
   for (uint32_t format_ind = 0; format_ind < (uint32_t)WP2_FORMAT_NUM;
        ++format_ind) {
     WP2SampleFormat format = (WP2SampleFormat)format_ind;
-    // MemoryWriter is in WP2_Argb_32.
-    if (format == WP2_Argb_32) continue;
     ArgbBuffer input(format);
     ASSERT_WP2_OK(input.Resize(1, 1));
     for (uint32_t i = 0; i < WP2FormatBpp(format); ++i) {
       ((uint8_t*)input.GetRow(0))[i] = (uint8_t)0xFF;
     }
-    ASSERT_EQ(Encode(input, &output), WP2_STATUS_INVALID_COLORSPACE);
+    const WP2Status status = Encode(input, &output);
+    if (format == WP2_Argb_32 || format == WP2_ARGB_32) {
+      ASSERT_WP2_OK(status);
+    } else {
+      ASSERT_EQ(status, WP2_STATUS_INVALID_COLORSPACE);
+    }
   }
 }
 

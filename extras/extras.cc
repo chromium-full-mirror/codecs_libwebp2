@@ -39,15 +39,15 @@ WP2Status ArgbBufferRescale(ArgbBuffer* buffer,
   WP2_CHECK_STATUS(rescaled_buffer.Resize(width, height));
 
   // Simple point-sampling for now.
-  uint8_t* dst = (uint8_t*)rescaled_buffer.GetRow(0);
-  const uint8_t* const src = (const uint8_t*)buffer->GetRow(0);
+  uint8_t* dst = rescaled_buffer.GetRow8(0);
+  const uint8_t* const src = buffer->GetRow8(0);
   for (uint32_t j = 0; j < height; ++j) {
-    const uint32_t J = j * buffer->height / height;
+    const uint32_t J = j * buffer->height() / height;
     for (uint32_t i = 0; i < width; ++i) {
-      const uint32_t I = i * buffer->width / width;
-      memcpy(&dst[4 * i], &src[J * buffer->stride + 4 * I], sizeof(uint32_t));
+      const uint32_t I = i * buffer->width() / width;
+      memcpy(&dst[4 * i], &src[J * buffer->stride() + 4 * I], sizeof(uint32_t));
     }
-    dst += rescaled_buffer.stride;
+    dst += rescaled_buffer.stride();
   }
   WP2_CHECK_STATUS(buffer->CopyFrom(rescaled_buffer));
   return WP2_STATUS_OK;

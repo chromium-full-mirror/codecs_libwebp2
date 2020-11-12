@@ -48,15 +48,15 @@ void PutLE32(uint8_t* const dst, uint32_t value) {
 WP2Status WriteTIFF(const ArgbBuffer& buffer, FILE* fout) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!buffer.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
-  WP2_CHECK_OK(buffer.format == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
+  WP2_CHECK_OK(buffer.format() == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
 
   // TODO(skal): should be has_alpha = WP2ArgbBufferHasTransparency(buffer);
   // but tests are failing with that.
   const int has_alpha = 1;
-  const uint32_t width = buffer.width;
-  const uint32_t height = buffer.height;
-  const uint8_t* Argb = (const uint8_t*)buffer.GetRow(0);
-  const uint32_t stride = buffer.stride;
+  const uint32_t width = buffer.width();
+  const uint32_t height = buffer.height();
+  const uint8_t* Argb = buffer.GetRow8(0);
+  const uint32_t stride = buffer.stride();
   const WP2SampleFormat fmt = has_alpha ? WP2_rgbA_32 : WP2_RGB_24;
   const uint8_t bytes_per_px = has_alpha ? 4 : 3;
   // For non-alpha case, we omit tag 0x152 (ExtraSamples).

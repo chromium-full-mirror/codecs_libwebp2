@@ -53,6 +53,14 @@ struct Frame {
 // Returns false if at least one of the 'frames' is translucent.
 bool AllFramesAreOpaque(const Vector<Frame>& frames);
 
+// Encodes the header of a frame into its "ANMF" chunk.
+// 'image_width' and 'image_height' are the unoriented dimensions of the whole
+// canvas in pixels. 'duration' is in milliseconds. 'window' is in pixels,
+// unoriented, not padded, within the whole canvas.
+WP2Status WriteANMF(uint32_t image_width, uint32_t image_height,
+                    uint32_t duration, const Rectangle& window, bool dispose,
+                    bool blend, bool is_last, Writer* const output);
+
 //------------------------------------------------------------------------------
 
 // Used to compute and store which parts (subframes) of a frame are different

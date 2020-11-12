@@ -115,17 +115,17 @@ struct Rectangle {
 //------------------------------------------------------------------------------
 // Reading
 
-struct ArgbBuffer {
-  const WP2SampleFormat format;
-  uint32_t width;
-  uint32_t height;
-  uint32_t stride;
-
+class ArgbBuffer {
+ public:
   ArgbBuffer(WP2SampleFormat format_in = WP2_Argb_32);
   bool IsEmpty() const;
   void* GetRow(uint32_t y);
   WP2Status CopyFrom(const ArgbBuffer& src);
   WP2Status ConvertFrom(const ArgbBuffer& src);
+  WP2SampleFormat format() const;
+  uint32_t width() const;
+  uint32_t height() const;
+  uint32_t stride() const;
 };
 
 // Gets a pointer to data.
@@ -133,7 +133,7 @@ struct ArgbBuffer {
 void GetBytes(const uint8_t** output_data, size_t* const output_data_size) {
   if ((output_data != nullptr) && (output_data_size != nullptr)) {
     *output_data = (uint8_t*)$self->GetRow(0);
-    *output_data_size = $self->height * $self->stride;
+    *output_data_size = $self->height() * $self->stride();
   }
 }
 };
@@ -180,7 +180,7 @@ void GetBytes(const uint8_t** output_data, size_t* const output_data_size) {
 
 struct EncoderConfig {
   float quality;
-  int speed;
+  int effort;
   int thread_level;
 
   bool IsValid() const;
@@ -208,7 +208,7 @@ struct BitstreamFeatures {
   int quality_hint;
   int has_icc;
   int has_trailing_data;
-  uint8_t loop_count;
+  bool loop_forever;
   size_t header_size;
 };
 

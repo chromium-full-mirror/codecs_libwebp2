@@ -32,9 +32,9 @@ TEST_P(SpeedTest, Simple) {
   const std::string& file_name = std::get<0>(GetParam());
   EncoderConfig config = EncoderConfig::kDefault;
   config.quality = std::get<1>(GetParam());
-  config.speed = std::get<2>(GetParam());
+  config.effort = std::get<2>(GetParam());
 
-  ASSERT_WP2_OK(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
 }
 
 INSTANTIATE_TEST_SUITE_P(

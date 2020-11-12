@@ -87,16 +87,15 @@ TEST_P(EncodeDecodeCustomCspTest, Comparison) {
   ASSERT_WP2_OK(custom_input.Import(src, encode_alpha, csp_transform,
                                     /*resize_if_needed=*/true, /*pad=*/1));
   ASSERT_WP2_OK(
-      custom_output.Resize(src.width, src.height, /*pad=*/1, encode_alpha));
+      custom_output.Resize(src.width(), src.height(), /*pad=*/1, encode_alpha));
 
   MemoryWriter data;
   EncoderConfig config = EncoderConfig::kDefault;
   config.quality = quality;
   ASSERT_WP2_OK(Encode(
-      src.width, src.height,
-      custom_input.Y.Row(0), custom_input.Y.Step(),
-      custom_input.U.Row(0), custom_input.U.Step(),
-      custom_input.V.Row(0), custom_input.V.Step(),
+      src.width(), src.height(), custom_input.Y.Row(0), custom_input.Y.Step(),
+      custom_input.U.Row(0), custom_input.U.Step(), custom_input.V.Row(0),
+      custom_input.V.Step(),
       custom_input.HasAlpha() ? custom_input.A.Row(0) : nullptr,
       custom_input.A.Step(), ccsp_to_rgb_matrix, ccsp_to_rgb_shift, &data,
       config));

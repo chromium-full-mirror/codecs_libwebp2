@@ -74,7 +74,7 @@ class RGBToCCSPImpl : public ImageReader::Impl {
       // Samples are already in Argb 8 bits.
       *ccsp_to_rgb_ = CSPMtx({1, 0, 0, 0, 1, 0, 0, 0, 1}, 0);  // Identity.
       if (metadata_ != nullptr) {
-        WP2_CHECK_STATUS(metadata_->CopyFrom(rgb_buffer_.metadata));
+        WP2_CHECK_STATUS(metadata_->CopyFrom(rgb_buffer_.metadata_));
       }
     }
     return status;
@@ -229,7 +229,7 @@ WP2Status SaveImage(const YUVPlane& buffer, const CSPMtx& ccsp_to_rgb,
     ArgbBuffer argb_buffer;
     WP2_CHECK_STATUS(buffer.Export(ccsp_to_rgb, /*resize_if_needed=*/true,
                                    &argb_buffer, &SamplingTaps::kUpSmooth));
-    WP2_CHECK_STATUS(argb_buffer.metadata.CopyFrom(metadata));
+    WP2_CHECK_STATUS(argb_buffer.metadata_.CopyFrom(metadata));
     WP2_CHECK_STATUS(SaveImage(argb_buffer, file_path, overwrite, format));
     return WP2_STATUS_OK;
   }

@@ -45,14 +45,14 @@ TEST_P(AnimTest, Simple) {
   const std::vector<const char*>& file_names = std::get<0>(GetParam());
   const std::vector<uint32_t>& durations_ms = std::get<1>(GetParam());
   const float quality = std::get<2>(GetParam());
-  const int speed = std::get<3>(GetParam());
+  const int effort = std::get<3>(GetParam());
   const uint32_t thread_level = std::get<4>(GetParam());
 
   std::vector<ArgbBuffer> frames;
   MemoryWriter encoded_data;
   ASSERT_WP2_OK(testing::CompressAnimation(file_names, durations_ms,
                                            &encoded_data, &frames, quality,
-                                           speed, thread_level));
+                                           effort, thread_level));
 
   // Decode.
   DecoderConfig decoder_config;
@@ -85,14 +85,14 @@ TEST_P(AnimTest, FirstFrame) {
   const std::vector<const char*>& file_names = std::get<0>(GetParam());
   const std::vector<uint32_t>& durations_ms = std::get<1>(GetParam());
   const float quality = std::get<2>(GetParam());
-  const int speed = std::get<3>(GetParam());
+  const int effort = std::get<3>(GetParam());
   const uint32_t thread_level = std::get<4>(GetParam());
 
   std::vector<ArgbBuffer> frames;
   MemoryWriter encoded_data;
   ASSERT_WP2_OK(testing::CompressAnimation(file_names, durations_ms,
                                            &encoded_data, &frames, quality,
-                                           speed, thread_level));
+                                           effort, thread_level));
 
   // Decode.
   ArgbBuffer decoded_frame;
@@ -110,10 +110,10 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
         Param({"source1_64x48.png"},
               /*frame durations (ms):*/ {1000},
-              /*quality=*/0.0f, /*speed=*/1, /*thread_level=*/0),
+              /*quality=*/0.0f, /*effort=*/1, /*thread_level=*/0),
         Param({"alpha_ramp.png", "alpha_ramp.lossy.webp", "alpha_ramp.webp"},
               /*frame durations (ms):*/ {50, 70, 1},
-              /*quality=*/100.0f, /*speed=*/5, /*thread_level=*/0)));
+              /*quality=*/100.0f, /*effort=*/5, /*thread_level=*/0)));
 
 // Disabled because it takes too much time.
 INSTANTIATE_TEST_SUITE_P(
@@ -121,14 +121,14 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
         Param({"source0.pgm", "source1.png", "source2.tiff", "source3.jpg"},
               /*frame durations (ms):*/ {kMaxFrameDurationMs, 1, 20, 3},
-              /*quality=*/75.0f, /*speed=*/3, /*thread_level=*/1)));
+              /*quality=*/75.0f, /*effort=*/3, /*thread_level=*/1)));
 
 //------------------------------------------------------------------------------
 
 WP2Status Fill(ArgbBuffer* const buffer, uint32_t width, uint32_t height) {
   WP2_CHECK_STATUS(buffer->Resize(width, height));
   for (uint32_t y = 0; y < height; ++y) {
-    memset(buffer->GetRow(y), 127, buffer->stride);
+    memset(buffer->GetRow(y), 127, buffer->stride());
   }
   return WP2_STATUS_OK;
 }
@@ -149,13 +149,6 @@ TEST(AnimTest, Fail) {
   ASSERT_EQ(animation_encoder.AddFrame(src, ms), WP2_STATUS_BAD_DIMENSION);
   ASSERT_WP2_OK(Fill(&src, kImageDimMax + 1, 1));
   ASSERT_EQ(animation_encoder.AddFrame(src, ms), WP2_STATUS_BAD_DIMENSION);
-  ASSERT_WP2_OK(Fill(&src, 1, 1));
-  src.width = 0;
-  ASSERT_EQ(animation_encoder.AddFrame(src, ms), WP2_STATUS_BAD_DIMENSION);
-  src.width = 1;
-  src.height = 0;
-  ASSERT_EQ(animation_encoder.AddFrame(src, ms), WP2_STATUS_BAD_DIMENSION);
-  src.height = 1;
 
   // OK.
   ASSERT_WP2_OK(Fill(&src, 128, 512));
@@ -198,7 +191,7 @@ TEST(AnimTest, Metadata) {
   const Metadata metadata_bad2(CreateMetadata("spamely", "spam spam"));
   const Metadata metadata_bad3(CreateMetadata(nullptr, "xmp"));
   ArgbBuffer decoded_image;
-  ASSERT_WP2_OK(decoded_image.metadata.CopyFrom(metadata_bad3));
+  ASSERT_WP2_OK(decoded_image.metadata_.CopyFrom(metadata_bad3));
 
   AnimationEncoder animation_encoder;
   {
@@ -206,19 +199,20 @@ TEST(AnimTest, Metadata) {
     ASSERT_WP2_OK(Fill(&blank_image, 128, 128));
 
     // Add frames with various metadata.
-    ASSERT_WP2_OK(blank_image.metadata.CopyFrom(metadata_bad1));
+    ASSERT_WP2_OK(blank_image.metadata_.CopyFrom(metadata_bad1));
     ASSERT_WP2_OK(animation_encoder.AddFrame(blank_image, 1));
-    blank_image.metadata.Clear();
+    blank_image.metadata_.Clear();
     ASSERT_WP2_OK(animation_encoder.AddFrame(blank_image, 1));
-    ASSERT_WP2_OK(blank_image.metadata.CopyFrom(metadata_bad2));
+    ASSERT_WP2_OK(blank_image.metadata_.CopyFrom(metadata_bad2));
     ASSERT_WP2_OK(animation_encoder.AddFrame(blank_image, 1));
   }
 
   {
     // Encode them with 'metadata_good'.
     MemoryWriter encoded_data;
-    ASSERT_WP2_OK(animation_encoder.Encode(
-        &encoded_data, EncoderConfig::kDefault, kInfiniteLoop, metadata_good));
+    ASSERT_WP2_OK(
+        animation_encoder.Encode(&encoded_data, EncoderConfig::kDefault,
+                                 /*loop_forever=*/true, metadata_good));
 
     // Decode and expect to find 'metadata_good' and no 'metadata_bad*'.
     ASSERT_WP2_OK(
@@ -226,21 +220,21 @@ TEST(AnimTest, Metadata) {
   }
 
   EXPECT_TRUE(
-      testing::HasSameData(decoded_image.metadata.exif, metadata_good.exif));
+      testing::HasSameData(decoded_image.metadata_.exif, metadata_good.exif));
 
-  EXPECT_EQ(decoded_image.metadata.xmp.size, metadata_good.xmp.size);
-  EXPECT_EQ(decoded_image.metadata.xmp.bytes, nullptr);
+  EXPECT_EQ(decoded_image.metadata_.xmp.size, metadata_good.xmp.size);
+  EXPECT_EQ(decoded_image.metadata_.xmp.bytes, nullptr);
 }
 
 //------------------------------------------------------------------------------
 
 void FillWithNoise(const Rectangle& window, size_t seed,
                    ArgbBuffer* const buffer) {
-  assert(buffer->format == WP2_Argb_32);
-  const uint32_t bpp = WP2FormatBpp(buffer->format);
+  assert(buffer->format() == WP2_Argb_32);
+  const uint32_t bpp = WP2FormatBpp(buffer->format());
   UniformIntDistribution random(seed);  // Deterministic.
   for (uint32_t y = 0; y < window.height; ++y) {
-    uint8_t* const row = (uint8_t*)buffer->GetRow(window.y + y);
+    uint8_t* const row = buffer->GetRow8(window.y + y);
     for (uint32_t x = 0; x < window.width; ++x) {
       row[(window.x + x) * bpp] = random.Get<uint8_t>(0, 255);  // Alpha
       for (uint32_t c = 1; c < bpp; ++c) {
@@ -261,7 +255,7 @@ TEST(AnimTest, Preframes) {
   // This way preframes should be way smaller than entire frames and should be
   // selected as the best option.
   ASSERT_WP2_OK(first_frame.Resize(512, 512));
-  FillWithNoise({0, 0, first_frame.width, first_frame.height}, /*seed=*/42,
+  FillWithNoise({0, 0, first_frame.width(), first_frame.height()}, /*seed=*/42,
                 &first_frame);
 
   // Copy of first frame except for two areas that are far from each other
@@ -269,14 +263,14 @@ TEST(AnimTest, Preframes) {
   ASSERT_WP2_OK(second_frame.CopyFrom(first_frame));
   const uint32_t area_size = 8;
   FillWithNoise({0, 0, area_size, area_size}, /*seed=*/12, &second_frame);
-  FillWithNoise({first_frame.width - area_size, first_frame.height - area_size,
-                 area_size, area_size},
+  FillWithNoise({first_frame.width() - area_size,
+                 first_frame.height() - area_size, area_size, area_size},
                 /*seed=*/0, &second_frame);
 
   // Encode losslessly.
   EncoderConfig config;
   config.quality = 100.f;
-  config.speed = 2;
+  config.effort = 2;
   config.thread_level = 8;
   MemoryWriter encoded_data;
   AnimationEncoder animation_encoder;
@@ -324,7 +318,7 @@ TEST(AnimTest, NoAnimButFrameData) {
   const FrameFeatures* const features = decoder.TryGetFrameDecodedFeatures(0);
   ASSERT_NE(features, nullptr);
   ASSERT_EQ(features->duration_ms, kMaxFrameDurationMs);
-  ASSERT_EQ(features->window, Rectangle(0, 0, src.width, src.height));
+  ASSERT_EQ(features->window, Rectangle(0, 0, src.width(), src.height()));
   ASSERT_TRUE(features->is_last);
   ASSERT_EQ(features->last_dispose_frame_index, 0u);
 }

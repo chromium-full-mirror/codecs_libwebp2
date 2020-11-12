@@ -144,6 +144,9 @@ WP2_EXTERN uint32_t WP2FormatBpc(WP2SampleFormat format);
 // Returns the index of the alpha channel, or the number of channels if none.
 WP2_EXTERN uint32_t WP2AlphaChannelIndex(WP2SampleFormat format);
 
+// Returns true if the format has premultiplied rgb values (rgb = a * RGB).
+WP2_EXTERN bool WP2IsPremultiplied(WP2SampleFormat format);
+
 namespace WP2 {
 
 //------------------------------------------------------------------------------
@@ -276,7 +279,7 @@ enum class Orientation { kOriginal = 0, k90Clockwise, k180, k270Clockwise };
 //------------------------------------------------------------------------------
 // Main Input/Output buffer structure
 
-struct ArgbBuffer {
+class ArgbBuffer {
  public:
   explicit ArgbBuffer(WP2SampleFormat format_in = WP2_Argb_32) noexcept;
   ArgbBuffer(const ArgbBuffer&) = delete;  // No invisible copy, for safety.
@@ -284,7 +287,7 @@ struct ArgbBuffer {
   ~ArgbBuffer() { Deallocate(); }
 
   // Returns true if this buffer is empty (has no pixel).
-  bool IsEmpty() const { return (pixels == nullptr); }
+  bool IsEmpty() const { return (pixels_ == nullptr); }
   // Deallocates this buffer's memory (including metadata) and resets it empty.
   void Deallocate();
 
@@ -300,9 +303,9 @@ struct ArgbBuffer {
   WP2Status SetFormat(WP2SampleFormat format_in);
 
   // Returns true if this buffer points to a non-owned memory (View).
-  bool IsView() const { return is_external_memory; }
+  bool IsView() const { return is_external_memory_; }
   // Returns true if this buffer points to slow memory.
-  bool IsSlow() const { return is_slow_memory; }
+  bool IsSlow() const { return is_slow_memory_; }
 
   // Resizes this buffer to dimensions 'new_width' x 'new_height'.
   // If it's a view, success depends on whether it's already exactly well-sized.
@@ -420,7 +423,22 @@ struct ArgbBuffer {
   // Simple in-place 2x down-sampler. Cheap! (box-average)
   void SimpleHalfDownsample();
 
+  // Should always be WP2_Argb_32 for encoding.
+  WP2_NO_DISCARD WP2SampleFormat format() const { return format_; }
+  // Number of pixels on the horizontal axis.
+  WP2_NO_DISCARD uint32_t width() const { return width_; }
+  // Number of pixels on the vertical axis.
+  WP2_NO_DISCARD uint32_t height() const { return height_; }
+  // Difference in bytes from a scanline to the next one.
+  WP2_NO_DISCARD uint32_t stride() const { return stride_; }
+
  public:
+  Metadata metadata_;  // ICC / XMP / EXIF metadata.
+
+ private:
+  void FillImpl(const Rectangle& window, const void* color);
+  WP2Status SetExternalImpl(uint32_t new_width, uint32_t new_height,
+                            void* samples, uint32_t new_stride, bool is_slow);
   // If 'include_alpha_in_all', result[4] will take alpha into account (if any).
   // Otherwise alpha can still have an influence since we use premultiplied
   // RGB, except if the image is all black.
@@ -429,26 +447,16 @@ struct ArgbBuffer {
                                          bool include_alpha_in_all,
                                          float result[5]) const;
 
-  // Should always be WP2_Argb_32 for encoding.
-  // TODO(vrabaud) make it private and use a getter.
-  const WP2SampleFormat format;
+  const WP2SampleFormat format_;
+  uint32_t width_ = 0;
+  uint32_t height_ = 0;
+  uint32_t stride_ = 0;
 
-  uint32_t width = 0;   // Number of pixels on the horizontal axis.
-  uint32_t height = 0;  // Number of pixels on the vertical axis.
-  uint32_t stride = 0;  // Difference in bytes from a scanline to the next one.
-
-  Metadata metadata;    // ICC / XMP / EXIF metadata.
-
- private:
-  void FillImpl(const Rectangle& window, const void* color);
-  WP2Status SetExternalImpl(uint32_t new_width, uint32_t new_height,
-                            void* samples, uint32_t new_stride, bool is_slow);
-
-  void* pixels = nullptr;           // Pointer to samples.
-  bool is_external_memory = false;  // If false, 'pixels' is 'private_memory'.
-  void* private_memory = nullptr;   // Internally allocated memory.
-  bool is_slow_memory = false;  // If true, the memory is considered 'slow' and
-                                // the number of reads/writes will be reduced.
+  void* pixels_ = nullptr;           // Pointer to samples.
+  bool is_external_memory_ = false;  // If false, 'pixels' is 'private_memory'.
+  void* private_memory_ = nullptr;   // Internally allocated memory.
+  bool is_slow_memory_ = false;  // If true, the memory is considered 'slow' and
+                                 // the number of reads/writes will be reduced.
 };
 
 //------------------------------------------------------------------------------

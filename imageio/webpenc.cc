@@ -60,7 +60,7 @@ WP2Status CompressWebP(const ArgbBuffer& buffer, const WebPConfig& config,
   return WP2_STATUS_OK;
 }
 
-WP2Status CompressWebP(const ArgbBuffer& buffer, float quality, int speed,
+WP2Status CompressWebP(const ArgbBuffer& buffer, float quality, int effort,
                        Writer* const output) {
   WebPConfig config;
   WP2_CHECK_OK(WebPConfigInit(&config), WP2_STATUS_VERSION_MISMATCH);
@@ -78,9 +78,9 @@ WP2Status CompressWebP(const ArgbBuffer& buffer, float quality, int speed,
                                100.f),
                    0, 100);
     config.exact = (config.near_lossless == 100);
-    config.quality = Clamp(speed / 9.f * 100.f, 0.f, 100.f);
+    config.quality = Clamp(effort / 9.f * 100.f, 0.f, 100.f);
   }
-  config.method = Clamp(DivRound(speed * 6, 9), 0, 6);
+  config.method = Clamp(DivRound(effort * 6, 9), 0, 6);
   WP2_CHECK_STATUS(CompressWebP(buffer, config, output));
   return WP2_STATUS_OK;
 }

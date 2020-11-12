@@ -151,12 +151,12 @@ HRESULT WriteUsingWIC(const char* file_path, bool use_stdout, bool overwrite,
 WP2Status WritePNG(const ArgbBuffer& buffer, FILE*, const char* const file_path,
                    bool use_stdout, bool overwrite, size_t* const file_size) {
   WP2_CHECK_OK(file_path != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(buffer.format == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
+  WP2_CHECK_OK(buffer.format() == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
 
-  const uint32_t width = buffer.width;
-  const uint32_t height = buffer.height;
+  const uint32_t width = buffer.width();
+  const uint32_t height = buffer.height();
   const uint8_t* const Argb = buffer.Argb;
-  const uint32_t stride = buffer.stride;
+  const uint32_t stride = buffer.stride();
   const int ok = SUCCEEDED(WriteUsingWIC(
       file_path, use_stdout, overwrite, MAKE_REFGUID(GUID_ContainerFormatPng),
       rgb, stride, width, height, 1, file_size));
@@ -177,15 +177,15 @@ void PNGAPI PNGErrorFunction(png_structp png, png_const_charp dummy) {
 WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout,
                    const char*, bool, bool, size_t*) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(buffer.format == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
+  WP2_CHECK_OK(buffer.format() == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
 
-  const uint32_t width = buffer.width;
-  const uint32_t height = buffer.height;
+  const uint32_t width = buffer.width();
+  const uint32_t height = buffer.height();
   const bool has_alpha = buffer.HasTransparency();
   volatile png_bytep row = (png_bytep)buffer.GetRow(0);
   Vector_u8 ARGB;
   WP2_CHECK_ALLOC_OK(ARGB.resize(width * (has_alpha ? 4u : 3u)));
-  const uint32_t stride = buffer.stride;
+  const uint32_t stride = buffer.stride();
   volatile png_structp png;
   volatile png_infop info;
   png_uint_32 y;

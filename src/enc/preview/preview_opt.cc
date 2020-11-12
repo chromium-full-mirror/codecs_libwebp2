@@ -82,7 +82,7 @@ WP2Status PreviewDataEnc::GetScore(float bigger_size_penalty) {
                                           &num_covered_pixels));
   // Make sure all canvas_' pixels were tested (fast good enough test).
   // TODO(yguyon): Make sure each pixel is tested exactly once.
-  assert(num_covered_pixels >= canvas_.width * canvas_.height);
+  assert(num_covered_pixels >= canvas_.width() * canvas_.height());
   // Scale loss to make it comparable to the size.
   triangulation_loss_ /= num_covered_pixels;
 

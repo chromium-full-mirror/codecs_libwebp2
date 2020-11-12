@@ -91,13 +91,16 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   WP2::Data encoded_data;
   if (!params.TryExtractWP2Bitstream(&encoded_data)) return 0;  // malloc fail.
 
-  // Success is not expected but it shouldn't crash or return a weird error.
+  // Success is not expected but it should not crash or return a weird error.
   const WP2Status status = WP2::testing::DecodeIncremental(
       config, {encoded_data.bytes, encoded_data.size}, setup);
   if (status != WP2_STATUS_OK &&
       status != WP2_STATUS_NOT_ENOUGH_DATA &&
       status != WP2_STATUS_BITSTREAM_ERROR &&
-      status != WP2_STATUS_OUT_OF_MEMORY) {
+      status != WP2_STATUS_OUT_OF_MEMORY &&
+      status != WP2_STATUS_UNSUPPORTED_FEATURE) {
+    // WP2_STATUS_UNSUPPORTED_FEATURE is returned for neural decoding without
+    // the correct compilation flags.
     abort();
   }
   return 0;

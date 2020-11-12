@@ -71,7 +71,7 @@ void Help() {
   opt.Add("-q <float>", "quality factor [0..100]");
   opt.Add("-alpha_q <float>", "alpha quality factor [0..100]");
   opt.Add("-size <int>", "target size (predates -q)");
-  opt.Add("-speed <int>", "compression effort [0..9]");
+  opt.Add("-effort <int>", "compression effort [0..9]");
   opt.Add("-threads <int>", "number of threads used");
   opt.Add("-pass <int>", "number of passes [1..2]");
   opt.Add("-420", "use YUV420 encoding (default)");
@@ -96,7 +96,8 @@ void Help() {
   opt.Add("-d <file path>", "path to encoded AV1 image");
   opt.Add("-D", "same as -d [in_file].av1");
   opt.Add("-quiet", "minimal output");
-  opt.Add("-avif", "writer as AVIF");
+  opt.Add("-avif", "write as AVIF");
+  opt.Add("-libgav1", "use libgav1 decoder");
   opt.Add("-h", "this help");
   opt.Print();
 }
@@ -196,14 +197,16 @@ int main(int argc, const char* argv[]) {
       params.size = atoi(argv[++c]);  // NOLINT
     } else if (!strcmp(argv[c], "-threads") && c + 1 < argc) {
       params.threads = atoi(argv[++c]);  // NOLINT
-    } else if (!strcmp(argv[c], "-speed") && c + 1 < argc) {
-      params.speed = atoi(argv[++c]);  // NOLINT
+    } else if (!strcmp(argv[c], "-effort") && c + 1 < argc) {
+      params.effort = atoi(argv[++c]);  // NOLINT
     } else if (!strcmp(argv[c], "-pass") && c + 1 < argc) {
       params.pass = atoi(argv[++c]);  // NOLINT
     } else if (!strcmp(argv[c], "-quiet")) {
       quiet = true;
     } else if (!strcmp(argv[c], "-avif")) {
       use_avif = true;
+    } else if (!strcmp(argv[c], "-libgav1")) {
+      params.use_libgav1_decoder = true;
     } else if (!strcmp(argv[c], "-h")) {
       Help();
       return 0;
@@ -309,8 +312,8 @@ int main(int argc, const char* argv[]) {
         printf("%zu %f   (%f %f %f %f) ", bits.size(), disto[4], disto[0],
                disto[1], disto[2], disto[3]);
         printf("[ %.2f bpp ] [ %d x %d ] [%.3f / %.3f secs]\n",
-               8.f * bits.size() / (ref.width * ref.height), ref.width,
-               ref.height, timing[0], timing[1]);
+               8.f * bits.size() / (ref.width() * ref.height()), ref.width(),
+               ref.height(), timing[0], timing[1]);
       }
 
       if (store_blocks || store_transforms) {

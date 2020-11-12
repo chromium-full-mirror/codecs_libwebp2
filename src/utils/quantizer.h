@@ -74,11 +74,11 @@ class Quantizer {
   // of the number of pixels n_pixels_bits, find the best way to store the
   // symbols represented by 'histogram' with the data in 'histogram' by
   // minimizing their overall size. 'size_sparse' is an upper bound of the
-  // number of non-zero counts. 'speed' is between 0 (fastest) and 9 (slowest).
+  // number of non-zero counts. 'effort' is between 0 (fastest) and 9 (slowest).
   // 'max_count' is the maximum value a count can take.
   void Quantize(const uint32_t* const histogram, const uint16_t* const mapping,
                 size_t size_sparse, uint32_t symbol_range, uint32_t max_count,
-                int speed, Config** const config_best);
+                int effort, Config** const config_best);
 
  private:
   // Free the config from the buffer to make it re-usable.
@@ -95,7 +95,7 @@ class Quantizer {
   // 'cost_max' is the value above which we can early exit.
   void QuantizeImpl(const uint32_t* const histogram,
                     const uint16_t* const mapping, size_t size_sparse,
-                    uint32_t symbol_range, uint32_t n_pixels_bits, int speed,
+                    uint32_t symbol_range, uint32_t n_pixels_bits, int effort,
                     size_t config_index,
                     float cost_max = std::numeric_limits<float>::max());
 

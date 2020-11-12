@@ -159,9 +159,9 @@ void PopulationAnalyzer::PopulationCost(const uint32_t* const population,
     return;
   }
 
-  // TODO(vrabaud) use the speed parameter instead of imposing 0.
+  // TODO(vrabaud) use the 'effort' parameter instead of imposing 0.
   quantizer_.Quantize(histogram_.data(), mapping_.data(), size, range,
-                      image_size_, /*speed=*/0, &config);
+                      image_size_, /*effort=*/0, &config);
   if (cost != nullptr) {
     *cost = WP2Log2(3) +
             WP2Log2(std::min(image_size_, range) - 1) +
@@ -351,13 +351,13 @@ static WP2Status HistogramSetCopy(const HistogramSet& in,
 // of their symbols.
 class BinMerger {
  public:
-  BinMerger(uint32_t histo_size, uint32_t speed) : speed_(speed) {
+  BinMerger(uint32_t histo_size, uint32_t effort) : effort_(effort) {
     combine_cost_factor_ = 0.16;
-    if (speed < 8) {
+    if (effort < 8) {
       if (histo_size > 256) combine_cost_factor_ /= 2.;
       if (histo_size > 512) combine_cost_factor_ /= 2.;
       if (histo_size > 1024) combine_cost_factor_ /= 2.;
-      if (speed < 5) combine_cost_factor_ /= 2.;
+      if (effort < 5) combine_cost_factor_ /= 2.;
     }
   }
   // Merges empty histograms together.
@@ -379,12 +379,12 @@ class BinMerger {
                          uint16_t* const bin_map) {
     // Don't attempt linear bin-partition heuristic for
     // histograms of small sizes (as bin_map will be very sparse) and
-    // maximum speed 9 (to preserve the compression gains at that level).
+    // maximum effort 9 (to preserve the compression gains at that level).
     const uint32_t entropy_combine_num_bins =
-        speed_ == 0 ? kNumPartitions : kBinSizeTot;
+        effort_ == 0 ? kNumPartitions : kBinSizeTot;
     const bool entropy_combine =
         (image_histo.histograms_.size() > entropy_combine_num_bins * 2) &&
-        (speed_ < 9);
+        (effort_ < 9);
     if (!entropy_combine) return false;
 
     std::fill(max_costs_, max_costs_ + kSymbolNum, 0);
@@ -434,7 +434,7 @@ class BinMerger {
       uint16_t num_combine_failures;  // number of combine failures per bin_id
     } bin_info[kBinSizeTot];
 
-    const uint32_t num_bins = (speed_ == 0) ? kNumPartitions : kBinSizeTot;
+    const uint32_t num_bins = (effort_ == 0) ? kNumPartitions : kBinSizeTot;
     assert(num_bins <= kBinSizeTot);
     for (uint32_t idx = 0; idx < num_bins; ++idx) {
       bin_info[idx].first = -1;
@@ -450,7 +450,7 @@ class BinMerger {
         // just move histogram #idx to its final position
         histograms[size] = histograms[idx];
         bin_info[bin_id].first = size++;
-      } else if (speed_ == 0) {
+      } else if (effort_ == 0) {
         HistogramAdd(*histograms[idx], *histograms[first], histograms[first]);
       } else {
         // try to merge #idx into #first (both share the same bin_id)
@@ -467,7 +467,7 @@ class BinMerger {
       }
     }
     WP2_CHECK_ALLOC_OK(image_histo->histograms_.resize(size));
-    if (speed_ == 0) {
+    if (effort_ == 0) {
       // for low_effort case, update the final cost when everything is merged
       for (uint32_t idx = 0; idx < size; ++idx) {
         analyzer->UpdateHistogramCost(histograms[idx]);
@@ -480,7 +480,7 @@ class BinMerger {
   uint32_t GetHistoBinIndex(const Histogram& h) const {
     uint32_t bin_id = 0;
     // Carve the space depending on the three widest disparities.
-    for (uint32_t i = 0; i < (speed_ > 0 ? 3u : 1u); ++i) {
+    for (uint32_t i = 0; i < (effort_ > 0 ? 3u : 1u); ++i) {
       const uint32_t s = disparities_[i].second;
       const double range = disparities_[i].first;
       if (range == 0.) break;
@@ -505,7 +505,7 @@ class BinMerger {
   std::pair<double, uint32_t> disparities_[kSymbolNum];
 
   double combine_cost_factor_;
-  const uint32_t speed_;
+  const uint32_t effort_;
 };
 
 // -----------------------------------------------------------------------------
@@ -767,11 +767,11 @@ static WP2Status HistogramRemap(const HistogramSet& in, HistogramSet* const out,
 
 // Number of histograms for which we try to merge them all into one to see if
 // it is more efficient.
-// TODO(vrabaud) Make this parameter speed dependent.
+// TODO(vrabaud) Make this parameter effort dependent.
 const int kAllHistogramMergingNum = 10;
 
 WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
-                               const BackwardRefs& refs, int speed,
+                               const BackwardRefs& refs, int effort,
                                int histogram_bits,
                                const LosslessSymbolsInfo& symbols_info,
                                HistogramSet* const image_histo,
@@ -796,7 +796,7 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
   WP2_CHECK_STATUS(HistogramSetCopy(orig_histo, symbols_info, image_histo));
 
   WP2::Vector_u16 bin_map;
-  BinMerger merger(orig_histo.histograms_.size(), speed);
+  BinMerger merger(orig_histo.histograms_.size(), effort);
   WP2_CHECK_STATUS(merger.RemoveEmptyHistograms(image_histo));
   WP2_CHECK_ALLOC_OK(bin_map.resize(image_histo->histograms_.size()));
   const bool entropy_combine =
@@ -808,8 +808,8 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
 
   // Don't combine the histograms using stochastic and greedy heuristics for
   // low-effort compression mode.
-  if (speed > 0 || !entropy_combine) {
-    const float x = (speed == 5) ? 75.f / 100.f : speed / 9.f;
+  if (effort > 0 || !entropy_combine) {
+    const float x = (effort == 5) ? 75.f / 100.f : effort / 9.f;
     // cubic ramp between 1 and MAX_HISTO_GREEDY:
     const auto threshold_size = (int)(1 + (x * x * x) * (MAX_HISTO_GREEDY - 1));
     bool do_greedy;
@@ -855,7 +855,7 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
       symbols_info_tmp.SetAsLabelImage();
       WP2_CHECK_STATUS(EncodeImageNoClusters(
           &enc, &dicts, labels.data(), &hash_chain, &ref_pool, histo_ysize,
-          histo_xsize, symbols_info_tmp, speed));
+          histo_xsize, symbols_info_tmp, effort));
       cost_all = enc.GetCost(dicts);
     }
 

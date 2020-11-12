@@ -32,23 +32,6 @@ namespace {
 
 //------------------------------------------------------------------------------
 
-// Copies data from 'src' to 'dst' and convert it if formats differ.
-void Convert(const ArgbBuffer& src, ArgbBuffer* const dst) {
-  if (src.format == WP2_Argb_32) {
-    ASSERT_WP2_OK(dst->ConvertFrom(src));
-  } else {
-    ASSERT_EQ(dst->format, WP2_Argb_32);
-    ASSERT_WP2_OK(dst->Resize(src.width, src.height));
-
-    WP2ArgbConverterInit();
-    for (uint32_t y = 0; y < src.height; ++y) {
-      const uint8_t* const src_row = (const uint8_t*)src.GetRow(y);
-      uint8_t* const dst_row = (uint8_t*)dst->GetRow(y);
-      WP2ArgbConvertFrom[src.format](src_row, src.width, dst_row);
-    }
-  }
-}
-
 // Reference implementation, without the tricks used in argb_converter.cc
 void Premultiply(uint8_t* argb, uint32_t width) {
   for (uint32_t i = 0; i < width; ++i, argb += 4) {
@@ -62,77 +45,102 @@ void Premultiply(uint8_t* argb, uint32_t width) {
 }
 
 // Copies alpha from 'src' to 'dst' (must both be WP2_Argb_32).
-void CopyAlpha(const ArgbBuffer& src, ArgbBuffer* const dst, bool premultiply) {
-  ASSERT_EQ(src.format, WP2_Argb_32);
-  ASSERT_EQ(dst->format, WP2_Argb_32);
-  ASSERT_EQ(src.width, dst->width);
-  ASSERT_EQ(src.height, dst->height);
+WP2Status CopyAlpha(const ArgbBuffer& src, ArgbBuffer* const dst,
+                    bool premultiply) {
+  WP2_CHECK_OK(src.format() == WP2_Argb_32 || src.format() == WP2_ARGB_32,
+               WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(dst->format() == WP2_Argb_32 || src.format() == WP2_ARGB_32,
+               WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(src.width() == dst->width(), WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(src.height() == dst->height(), WP2_STATUS_INVALID_PARAMETER);
 
-  for (uint32_t y = 0; y < src.height; ++y) {
-    const uint8_t* const src_row = (const uint8_t*)src.GetRow(y);
-    uint8_t* const dst_row = (uint8_t*)dst->GetRow(y);
-    for (uint32_t x = 0; x < src.width; ++x) dst_row[x * 4] = src_row[x * 4];
-    if (premultiply) Premultiply(dst_row, src.width);
+  for (uint32_t y = 0; y < src.height(); ++y) {
+    const uint8_t* const src_row = src.GetRow8(y);
+    uint8_t* const dst_row = dst->GetRow8(y);
+    for (uint32_t x = 0; x < src.width(); ++x) dst_row[x * 4] = src_row[x * 4];
+    if (premultiply) Premultiply(dst_row, src.width());
   }
+
+  return WP2_STATUS_OK;
 }
 
 // Go back to Argb32 for comparison and copy alpha if it was lost.
-ArgbBuffer ConvertOutputBackToOriginalFormat(const ArgbBuffer& original,
-                                             const ArgbBuffer& output) {
-  ArgbBuffer output_in_original_format(original.format);
-  Convert(output, &output_in_original_format);
-  if (output.format == WP2_RGB_24 || output.format == WP2_BGR_24) {
-    CopyAlpha(original, &output_in_original_format, /*premultiply=*/true);
-  } else if (output.format == WP2_XRGB_32 || output.format == WP2_RGBX_32 ||
-             output.format == WP2_BGRX_32) {
-    CopyAlpha(original, &output_in_original_format, /*premultiply=*/false);
+WP2Status ConvertOutputBackToOriginalFormat(
+    const ArgbBuffer& original, const ArgbBuffer& output, bool decoded,
+    ArgbBuffer* const output_in_original_format) {
+  WP2ArgbConverterInit();
+
+  WP2_CHECK_OK(original.format() == output_in_original_format->format(),
+               WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_STATUS(output_in_original_format->ConvertFrom(output));
+  const bool orig_premultiplied = WP2IsPremultiplied(original.format());
+  if (output.format() == WP2_RGB_24 || output.format() == WP2_BGR_24) {
+    WP2_CHECK_STATUS(
+        CopyAlpha(original, output_in_original_format, orig_premultiplied));
+  } else if (output.format() == WP2_XRGB_32 || output.format() == WP2_RGBX_32 ||
+             output.format() == WP2_BGRX_32) {
+    WP2_CHECK_STATUS(CopyAlpha(original, output_in_original_format, false));
   }
-  return output_in_original_format;
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
 // Basic format conversion only tests
 
 TEST(FormatTest, ConvertSimple) {
-  const std::string& file_name = "1x1";
-  ArgbBuffer original(WP2_Argb_32);
-  ASSERT_WP2_OK(original.Resize(1, 1));
-  uint8_t* const a = (uint8_t*)original.GetRow(0) + 0;
-  uint8_t* const r = (uint8_t*)original.GetRow(0) + 1;
-  uint8_t* const g = (uint8_t*)original.GetRow(0) + 2;
-  uint8_t* const b = (uint8_t*)original.GetRow(0) + 3;
-  *a = 0xAA;
-  *r = 0x55;
-  *g = 0xAA;
-  *b = 0x00;
+  WP2ArgbConverterInit();
 
-  for (WP2SampleFormat format = WP2_Argb_32; format < WP2_FORMAT_NUM;
-       format = (WP2SampleFormat)(format + 1)) {
-    if (WP2FormatBpc(format) != WP2FormatBpc(WP2_Argb_32)) continue;
-    ArgbBuffer converted(format);
-    Convert(original, &converted);
+  for (WP2SampleFormat orig_format : {WP2_Argb_32, WP2_ARGB_32}) {
+    const std::string& file_name = "1x1";
+    ArgbBuffer original(orig_format);
+    ASSERT_WP2_OK(original.Resize(1, 1));
+    uint8_t* const a = original.GetRow8(0) + 0;
+    uint8_t* const r = original.GetRow8(0) + 1;
+    uint8_t* const g = original.GetRow8(0) + 2;
+    uint8_t* const b = original.GetRow8(0) + 3;
+    *a = 0xAA;
+    *r = 0x55;
+    *g = 0xAA;
+    *b = 0x00;
 
-    ArgbBuffer reconverted =
-        ConvertOutputBackToOriginalFormat(original, converted);
-    ASSERT_TRUE(testing::Compare(original, reconverted, file_name));
+    for (WP2SampleFormat format = WP2_Argb_32; format < WP2_FORMAT_NUM;
+         format = (WP2SampleFormat)(format + 1)) {
+      if (WP2FormatBpc(format) != WP2FormatBpc(WP2_Argb_32)) continue;
+      ArgbBuffer converted(format);
+      ASSERT_WP2_OK(converted.ConvertFrom(original));
+
+      ArgbBuffer reconverted(original.format());
+      ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(original, converted,
+                                                      false, &reconverted));
+
+      ASSERT_TRUE(testing::Compare(original, reconverted, file_name))
+          << "format: " << orig_format << " to: " << format;
+    }
   }
 }
 
 TEST(FormatTest, ConvertImage) {
-  const std::string& file_name = "source1_64x48.png";
-  ArgbBuffer original(WP2_Argb_32);
-  ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath(file_name).c_str(), &original));
+  WP2ArgbConverterInit();
 
-  for (WP2SampleFormat format = WP2_Argb_32; format < WP2_FORMAT_NUM;
-       format = (WP2SampleFormat)(format + 1)) {
-    if (WP2FormatBpc(format) != WP2FormatBpc(WP2_Argb_32)) continue;
-    ArgbBuffer converted(format);
-    Convert(original, &converted);
+  for (WP2SampleFormat orig_format : {WP2_Argb_32, WP2_ARGB_32}) {
+    const std::string& file_name = "source1_64x48.png";
+    ArgbBuffer original(orig_format);
+    ASSERT_WP2_OK(
+        ReadImage(testing::GetTestDataPath(file_name).c_str(), &original));
 
-    ArgbBuffer reconverted =
-        ConvertOutputBackToOriginalFormat(original, converted);
-    ASSERT_TRUE(testing::Compare(original, reconverted, file_name));
+    for (WP2SampleFormat format = WP2_Argb_32; format < WP2_FORMAT_NUM;
+         format = (WP2SampleFormat)(format + 1)) {
+      if (WP2FormatBpc(format) != WP2FormatBpc(WP2_Argb_32)) continue;
+      ArgbBuffer converted(format);
+      ASSERT_WP2_OK(converted.ConvertFrom(original));
+
+      ArgbBuffer reconverted(original.format());
+      ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(original, converted,
+                                                      false, &reconverted));
+
+      ASSERT_TRUE(testing::Compare(original, reconverted, file_name))
+          << "format: " << orig_format << " to: " << format;
+    }
   }
 }
 
@@ -151,14 +159,15 @@ TEST_P(FormatTest, EncodeDecodeImage) {
 
   ArgbBuffer src;
   MemoryWriter data;
-  ASSERT_WP2_OK(
-      testing::CompressImage(src_file_name, &data, &src, quality, /*speed=*/2));
+  ASSERT_WP2_OK(testing::CompressImage(src_file_name, &data, &src, quality,
+                                       /*effort=*/2));
 
   ArgbBuffer output(output_format);
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &output));
 
-  ArgbBuffer output_original_format =
-      ConvertOutputBackToOriginalFormat(src, output);
+  ArgbBuffer output_original_format(src.format());
+  ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(src, output, true,
+                                                  &output_original_format));
   ASSERT_TRUE(testing::Compare(src, output_original_format, src_file_name,
                                testing::GetExpectedDistortion(quality)));
 }
@@ -170,13 +179,13 @@ TEST_P(FormatTest, EncodeDecodeAnimation) {
   const std::vector<uint32_t> durations_ms(file_names.size(), 100u);
   const WP2SampleFormat output_format = std::get<1>(GetParam());
   const float quality = std::get<2>(GetParam());
-  const uint32_t speed = 0, thread_level = 0;
+  const uint32_t effort = 0, thread_level = 0;
 
   std::vector<ArgbBuffer> frames;
   MemoryWriter encoded_data;
   ASSERT_WP2_OK(testing::CompressAnimation(file_names, durations_ms,
                                            &encoded_data, &frames, quality,
-                                           speed, thread_level));
+                                           effort, thread_level));
 
   ArgbBuffer decoded_frame(output_format);
   ArrayDecoder decoder(encoded_data.mem_, encoded_data.size_,
@@ -185,8 +194,9 @@ TEST_P(FormatTest, EncodeDecodeAnimation) {
   for (size_t i = 0; i < frames.size(); ++i) {
     ASSERT_TRUE(decoder.ReadFrame());
 
-    ArgbBuffer decoded_frame_original_format =
-        ConvertOutputBackToOriginalFormat(frames[i], decoded_frame);
+    ArgbBuffer decoded_frame_original_format(frames[i].format());
+    ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(
+        frames[i], decoded_frame, true, &decoded_frame_original_format));
     EXPECT_TRUE(testing::Compare(frames[i], decoded_frame_original_format,
                                  file_names[i],
                                  testing::GetExpectedDistortion(quality)));
@@ -209,7 +219,7 @@ TEST_P(FormatTest, EncodeDecodePreview) {
 
   EncoderConfig config;
   config.quality = quality;
-  config.speed = 2;
+  config.effort = 2;
   config.create_preview = true;
   MemoryWriter memory_writer;
   EXPECT_WP2_OK(Encode(original_image, &memory_writer, config));
@@ -218,8 +228,10 @@ TEST_P(FormatTest, EncodeDecodePreview) {
   ASSERT_WP2_OK(ExtractPreview(memory_writer.mem_, memory_writer.size_,
                                &decompressed_preview));
 
-  ArgbBuffer decompressed_preview_original_format =
-      ConvertOutputBackToOriginalFormat(original_image, decompressed_preview);
+  ArgbBuffer decompressed_preview_original_format(original_image.format());
+  ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(
+      original_image, decompressed_preview, true,
+      &decompressed_preview_original_format));
   float disto[5];
   ASSERT_WP2_OK(
       decompressed_preview_original_format.GetDistortion(original_image,

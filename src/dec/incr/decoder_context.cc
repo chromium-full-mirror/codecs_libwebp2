@@ -58,6 +58,7 @@ void ContextTileDecoder::DecodePartialTile() {
 
 WP2Status ContextTileDecoder::Init(const BitstreamFeatures& features,
                                    const DecoderConfig& config,
+                                   ProgressWatcher* const progress,
                                    TilesLayout* const tiles_layout,
                                    Tile* const partial_tile) {
   auto& worker = inter_context_data_.worker;   // shortcut
@@ -65,6 +66,7 @@ WP2Status ContextTileDecoder::Init(const BitstreamFeatures& features,
   worker.config_ = &config;
   worker.tiles_layout_ = tiles_layout;
   worker.gparams_ = tiles_layout->gparams;
+  worker.progress_ = progress;
   worker.tile_ = partial_tile;
   worker.self_assigning_ = false;   // Isolated worker.
   inter_context_data_.input = SuspendableDataSource();  // Clear.

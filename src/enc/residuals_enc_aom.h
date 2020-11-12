@@ -49,7 +49,7 @@ class AOMResidualWriter : public ResidualIO, public AOMResidualIO {
  private:
   static void WriteTransformCoefficients(
       const int16_t* const res, const AOMContext& aom_context, bool is420,
-      Plane plane, int start_x, int start_y, TransformSize tx_size,
+      Channel channel, int start_x, int start_y, TransformSize tx_size,
       TransformPair tx_type, bool first_is_dc, SymbolManager* const sm,
       ANSEncBase* const enc, int* const coefficient_level,
       int8_t* const dc_category);

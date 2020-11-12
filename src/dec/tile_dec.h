@@ -121,7 +121,7 @@ class TileDecoder : public WorkerBase {
  public:
   const BitstreamFeatures* features_ = nullptr;
   const DecoderConfig* config_ = nullptr;
-  const GlobalParams* gparams_;
+  const GlobalParams* gparams_ = nullptr;
   ProgressWatcher* progress_ = nullptr;
   TilesLayout* tiles_layout_ = nullptr;  // Used to get next assignable tile.
   Tile* tile_ = nullptr;                 // Currently assigned tile.

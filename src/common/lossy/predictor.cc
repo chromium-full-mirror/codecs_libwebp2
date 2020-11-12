@@ -392,7 +392,7 @@ class AnglePredictor : public ContextPredictor {
     const float angle = (M_PI / 180.f) * GetAngleDegrees();
     const float cos = std::cos(angle);
     const float sin = std::sin(angle);
-    const uint32_t pixel_depth = WP2FormatBpp(debug_output->format);
+    const uint32_t pixel_depth = WP2FormatBpp(debug_output->format());
     const uint32_t l =
         std::sqrt(rect.width * rect.width + rect.height * rect.height) / 2;
     for (float i = 0; i < l; i += 0.5) {
@@ -400,8 +400,7 @@ class AnglePredictor : public ContextPredictor {
       const int x = std::round(rect.x + (rect.width - 1) / 2.f + i * cos);
       if (!rect.Contains(x, y)) break;
       const uint8_t color[4] = {255, 255, 0, 0};
-      uint8_t* const dst_pixel =
-          (uint8_t*)debug_output->GetRow(y) + x * pixel_depth;
+      uint8_t* const dst_pixel = debug_output->GetRow8(y) + x * pixel_depth;
       std::memcpy(dst_pixel, color, pixel_depth);
     }
   }
@@ -955,11 +954,11 @@ WP2Status Predictors::FindBest(
 
   // Choose to refine all the ones within a percentage of the lowest score. This
   // helps refine predictors that give similar scores.
+  const int effort = config.effort;
   const float min_allowed_score =
       angle_scores[0].score +
-      (angle_scores.back().score - angle_scores[0].score) * config.speed / 9.f +
-      1;
-  assert(config.speed != 9.f || angle_scores.back().score <= min_allowed_score);
+      (angle_scores.back().score - angle_scores[0].score) * effort / 9.f + 1;
+  assert(effort != 9 || angle_scores.back().score <= min_allowed_score);
   for (const AngleScore& s : angle_scores) {
     // We refine every predictor with a better score, or distortion and make
     // sure we refine all the ones within a percentage of the lowest score.

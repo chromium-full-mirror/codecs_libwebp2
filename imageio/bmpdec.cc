@@ -72,7 +72,7 @@ class ImageReaderBMP : public ImageReader::Impl {
 
     const uint8_t* src = data_ + offset;
     for (uint32_t y = 0; y < height; ++y) {
-      uint8_t* const dst = (uint8_t*)buffer_->GetRow(height - 1 - y);
+      uint8_t* const dst = buffer_->GetRow8(height - 1 - y);
       WP2ArgbConvertFrom[has_alpha ? WP2_BGRA_32 : WP2_BGR_24](src, width, dst);
       src += stride;
       assert(src <= data_ + data_size_);

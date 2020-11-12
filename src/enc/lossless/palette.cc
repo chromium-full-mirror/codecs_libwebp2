@@ -137,8 +137,8 @@ uint32_t CountColors(const WP2::ArgbBuffer& pic, const T* src,
   // so we're sure that last_pix != argb[0]
   int16_t prev_pix[4] = {(int16_t)~src[0], (int16_t)~src[1], (int16_t)~src[2],
                          (int16_t)~src[3]};
-  for (uint32_t y = 0; y < pic.height; ++y) {
-    for (uint32_t x = 0; x < pic.width; ++x) {
+  for (uint32_t y = 0; y < pic.height(); ++y) {
+    for (uint32_t x = 0; x < pic.width(); ++x) {
       const int16_t pix[4] = {(int16_t)src[4 * x + 0], (int16_t)src[4 * x + 1],
                               (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
       if (ColorEq(pix, prev_pix)) continue;
@@ -153,24 +153,25 @@ uint32_t CountColors(const WP2::ArgbBuffer& pic, const T* src,
         }
       }
     }
-    src += pic.stride;
+    src += pic.stride();
   }
   return num_colors;
 }
 
 WP2Status Palette::AnalyzeAndCreate(const WP2::ArgbBuffer& pic) {
-  max_palette_size_ = MaxPaletteSize(pic.width * pic.height);
+  max_palette_size_ = MaxPaletteSize(pic.width() * pic.height());
   constexpr uint32_t kMaxDimension = 128u;
-  full_optimize_ = (pic.width < kMaxDimension && pic.height < kMaxDimension);
+  full_optimize_ =
+      (pic.width() < kMaxDimension && pic.height() < kMaxDimension);
 
   ColorCacheMap color_cache;
   WP2_CHECK_STATUS(color_cache.Allocate(max_palette_size_));
 
-  if (WP2FormatBpc(pic.format) == 1) {
+  if (WP2FormatBpc(pic.format()) == 1) {
     num_colors_ =
         CountColors(pic, pic.GetRow8(0), &color_cache, max_palette_size_);
   } else {
-    assert(WP2FormatBpc(pic.format) == 2);
+    assert(WP2FormatBpc(pic.format()) == 2);
     num_colors_ =
         CountColors(pic, pic.GetRow16(0), &color_cache, max_palette_size_);
   }
@@ -225,14 +226,14 @@ WP2Status Palette::Apply(const WP2::ArgbBuffer& pic, uint16_t* dst) const {
     color_cache.Insert(&colors_[4 * i], i);
   }
 
-  const uint32_t max_alpha = WP2::FormatMax(pic.format, /*channel=*/0);
-  if (WP2FormatBpc(pic.format) == 1) {
-    ApplyT(pic.GetRow8(0), pic.stride, pic.width, pic.height, color_cache,
+  const uint32_t max_alpha = WP2::FormatMax(pic.format(), /*channel=*/0);
+  if (WP2FormatBpc(pic.format()) == 1) {
+    ApplyT(pic.GetRow8(0), pic.stride(), pic.width(), pic.height(), color_cache,
            max_alpha, dst);
   } else {
-    assert(WP2FormatBpc(pic.format) == 2);
-    ApplyT(pic.GetRow16(0), pic.stride, pic.width, pic.height, color_cache,
-           max_alpha, dst);
+    assert(WP2FormatBpc(pic.format()) == 2);
+    ApplyT(pic.GetRow16(0), pic.stride(), pic.width(), pic.height(),
+           color_cache, max_alpha, dst);
   }
 
   return WP2_STATUS_OK;
@@ -453,7 +454,7 @@ WP2Status InternalParams::WriteAsImage(WP2::ANSDictionaries* const dict,
   symbols_info.Init(has_alpha_, format_);
   WP2_CHECK_STATUS(EncodeImageNoClusters(
     enc, dict, tmp_palette.data(), &encoder->hash_chain_,
-    &encoder->ref_pool_, num_colors_, 1, symbols_info, /*speed=*/3));
+    &encoder->ref_pool_, num_colors_, 1, symbols_info, /*effort=*/3));
   return WP2_STATUS_OK;
 }
 
@@ -544,7 +545,7 @@ WP2Status Palette::TryPalette(WP2::Vector_s16& colors, Encoder* const encoder,
   return WP2_STATUS_OK;
 }
 
-WP2Status Palette::FindBestMethod(Encoder* const encoder, int speed) {
+WP2Status Palette::FindBestMethod(Encoder* const encoder, int effort) {
   method_ = PaletteStorageMethod::kMethodVerbatim;
   cost_ = std::numeric_limits<float>::max();
   if (num_colors_ < 2) return WP2_STATUS_OK;
@@ -574,7 +575,7 @@ WP2Status Palette::FindBestMethod(Encoder* const encoder, int speed) {
 
   WP2_CHECK_STATUS(TryPalette(colors_, encoder, params));
 
-  const bool try_alt_order = (speed > 0 &&
+  const bool try_alt_order = (effort > 0 &&
     HasNonMonotonousDeltas(&colors_[0], num_colors_));
   while (try_alt_order) {   // use "while" so we can "break" from the loop
     // prepare an alternate palette to try
@@ -587,27 +588,27 @@ WP2Status Palette::FindBestMethod(Encoder* const encoder, int speed) {
     // without alpha, any other call to GreedyMinimizeDeltas() is a no-op
     if (!has_alpha_) break;
 
-    if (speed > 2) {   // try few other sorts if time permits
+    if (effort > 2) {   // try few other sorts if time permits
       GreedyMinimizeDeltas(num_colors_, &alt_colors[0], 119);
       WP2_CHECK_STATUS(TryPalette(alt_colors, encoder, params));
     }
-    if (speed > 3) {
+    if (effort > 3) {
       GreedyMinimizeDeltas(num_colors_, &alt_colors[0], 42);
       WP2_CHECK_STATUS(TryPalette(alt_colors, encoder, params));
     }
-    if (speed > 4) {
+    if (effort > 4) {
       GreedyMinimizeDeltas(num_colors_, &alt_colors[0], 0);
       WP2_CHECK_STATUS(TryPalette(alt_colors, encoder, params));
     }
-    // for slower speeds, we uniformly sample the range of weights
+    // for slower efforts, we uniformly sample the range of weights
     // with increasing density.
-    if (speed > 5 && full_optimize_) {
-      // we use more sub-divisions with higher speed
-      const int shift = std::min(speed - 4, 5);   // [1..5]
-      // if 'speed' is slow enough, or we already found that MethodImage
+    if (effort > 5 && full_optimize_) {
+      // we use more sub-divisions with higher effort
+      const int shift = std::min(effort - 4, 5);   // [1..5]
+      // if 'effort' is high enough, or we already found that MethodImage
       // was better, try MethodImage again.
       const bool as_image =
-         (speed > 6 || method_ == PaletteStorageMethod::kMethodImage);
+         (effort > 6 || method_ == PaletteStorageMethod::kMethodImage);
       uint32_t base_w = 1, range = 256;
       while (true) {
         const uint32_t step = range >> shift;

@@ -186,9 +186,8 @@ template<WP2SSIMGetFromStatsFunc get_from_stats>
 double AccumulateSSIM(const WP2::ArgbBuffer& a, const WP2::ArgbBuffer& b,
                       uint32_t channel) {
   return AccumulateSSIM<uint8_t, /*CHANNEL_STRIDE=*/4, get_from_stats>(
-      a.width, a.height, /*bit_depth=*/8,
-      (const uint8_t*)a.GetRow(0) + channel, a.stride,
-      (const uint8_t*)b.GetRow(0) + channel, b.stride);
+      a.width(), a.height(), /*bit_depth=*/8, a.GetRow8(0) + channel,
+      a.stride(), b.GetRow8(0) + channel, b.stride());
 }
 
 double AccumulateSSIM(const WP2::ArgbBuffer& a, const WP2::ArgbBuffer& b,
@@ -248,11 +247,11 @@ double AccumulateLSIM(const uint8_t* const src, uint32_t src_stride,
 double AccumulateLSIM(const WP2::ArgbBuffer& src_buffer,
                       const WP2::ArgbBuffer& ref_buffer,
                       uint32_t channel) {
-  const uint32_t w = src_buffer.width, h = ref_buffer.height;
-  const uint8_t* const src = (const uint8_t*)src_buffer.GetRow(0) + channel;
-  const size_t src_stride = src_buffer.stride;
-  const uint8_t* const ref = (const uint8_t*)ref_buffer.GetRow(0) + channel;
-  const size_t ref_stride = ref_buffer.stride;
+  const uint32_t w = src_buffer.width(), h = ref_buffer.height();
+  const uint8_t* const src = src_buffer.GetRow8(0) + channel;
+  const size_t src_stride = src_buffer.stride();
+  const uint8_t* const ref = ref_buffer.GetRow8(0) + channel;
+  const size_t ref_stride = ref_buffer.stride();
   double total_sse = 0.;
   for (uint32_t y = 0; y < h; ++y) {
     for (uint32_t x = 0; x < w; ++x) {
@@ -434,7 +433,7 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
                                     const Rectangle& window,
                                     MetricType metric_type,
                                     float result[5]) const {
-  ArgbBuffer view, ref_view;
+  ArgbBuffer view(format()), ref_view(ref.format());
   WP2_CHECK_STATUS(view.SetView(*this, window));
   WP2_CHECK_STATUS(ref_view.SetView(ref, window));
   return view.GetDistortion(ref_view, metric_type, result);
@@ -450,13 +449,14 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
                                     MetricType metric_type,
                                     bool include_alpha_in_all,
                                     float result[5]) const {
+  WP2_CHECK_OK(ref.format() == format_, WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(!IsEmpty() && !ref.IsEmpty() && (result != nullptr),
                WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK((width == ref.width) && (height == ref.height),
+  WP2_CHECK_OK((width() == ref.width()) && (height() == ref.height()),
                WP2_STATUS_BAD_DIMENSION);
   result[0] = result[1] = result[2] = result[3] = result[4] = 0.f;
 
-  const double pix_size = width * height;
+  const double pix_size = width() * height();
   const double max = 255.;  // Maximum value per pixel per channel.
   double total_distortion = 0.;
   const bool has_transparency = HasTransparency();
@@ -465,16 +465,16 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
   if (metric_type == PSNR) {
     WP2PSNRInit();
     uint64_t result_64b[4] = {0, 0, 0, 0};
-    for (uint32_t y = 0; y < height; ++y) {
-      if (WP2FormatBpc(ref.format) == 1) {
+    for (uint32_t y = 0; y < height(); ++y) {
+      if (WP2FormatBpc(ref.format()) == 1) {
         const uint8_t* const ptr1 = GetRow8(y);
         const uint8_t* const ptr2 = ref.GetRow8(y);
-        WP2SumSquaredError4x8u(ptr1, ptr2, width, result_64b);
+        WP2SumSquaredError4x8u(ptr1, ptr2, width(), result_64b);
       } else {
-        assert(WP2FormatBpc(ref.format) == 2);
+        assert(WP2FormatBpc(ref.format()) == 2);
         const uint16_t* const ptr1 = GetRow16(y);
         const uint16_t* const ptr2 = ref.GetRow16(y);
-        WP2SumSquaredError2x16u(ptr1, ptr2, width, result_64b);
+        WP2SumSquaredError2x16u(ptr1, ptr2, width(), result_64b);
       }
     }
     for (uint32_t c = 0; c < 4; ++c) {
@@ -483,7 +483,7 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     }
     result[4] = (float)GetPSNR(total_distortion, pix_channel_size, max);
   } else if (metric_type == SSIM) {
-    assert(WP2FormatBpc(ref.format) == 1);  // not supported yet
+    assert(WP2FormatBpc(ref.format()) == 1);  // not supported yet
     WP2SSIMInit();
     for (uint32_t c = 0; c < 4; ++c) {
       const double disto = AccumulateSSIM(*this, ref, c);
@@ -492,14 +492,15 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     }
     result[4] = (float)GetLogSSIM(total_distortion, pix_channel_size);
   } else if (metric_type == MSSSIM) {
-    assert(WP2FormatBpc(ref.format) == 1);  // not supported yet
+    assert(WP2FormatBpc(ref.format()) == 1);  // not supported yet
     WP2SSIMInit();
-    ArgbBuffer buf1, buf2;  // working copies, to be down-scaled
+    // working copies, to be down-scaled
+    ArgbBuffer buf1(ref.format()), buf2(format());
     WP2_CHECK_STATUS(buf1.CopyFrom(ref));
     WP2_CHECK_STATUS(buf2.CopyFrom(*this));
     double acc[4] = {1., 1., 1., 1.};
     for (uint32_t pass = 0; pass < kNumMSSSIMPasses - 1; ++pass) {
-      const double norm = 1. / (buf1.width * buf1.height);
+      const double norm = 1. / (buf1.width() * buf1.height());
       for (uint32_t c = 0; c < 4; ++c) {
         const double sum = norm * AccumulateCsSSIM(buf1, buf2, c);
         acc[c] *= pow(sum, kMSSSIMExponents[pass]);
@@ -509,7 +510,7 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     }
     double total = 0.;
     for (uint32_t c = 0; c < 4; ++c) {
-      const double norm = 1. / (buf1.width * buf1.height);
+      const double norm = 1. / (buf1.width() * buf1.height());
       const double sum = norm * AccumulateSSIM(buf1, buf2, c);
       acc[c] *= pow(sum, kMSSSIMExponents[kNumMSSSIMPasses - 1]);
       if (c > 0 || include_alpha) total += acc[c];
@@ -558,20 +559,30 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
 
 WP2Status ArgbBuffer::GetDistortionBlackOrWhiteBackground(
     const ArgbBuffer& ref, MetricType metric_type, float* result) const {
+  const bool has_transparency = ref.HasTransparency();
+
+  ArgbBuffer this_premultiplied, ref_premultiplied;
+  WP2_CHECK_STATUS((format() == WP2_Argb_32)
+                       ? this_premultiplied.SetView(*this)
+                       : this_premultiplied.ConvertFrom(*this));
+  WP2_CHECK_STATUS((ref.format() == WP2_Argb_32)
+                       ? ref_premultiplied.SetView(ref)
+                       : ref_premultiplied.ConvertFrom(ref));
+
   // Since we use premultiplied values, no compositing is the same as
   // compositing on a black background.
-  WP2_CHECK_STATUS(
-      GetDistortion(ref, metric_type, /*include_alpha_in_all=*/false, result));
-  if (!ref.HasTransparency()) {
+  WP2_CHECK_STATUS(this_premultiplied.GetDistortion(
+      ref_premultiplied, metric_type, /*include_alpha_in_all=*/false, result));
+  if (!has_transparency) {
     return WP2_STATUS_OK;
   }
 
   // Composite on a white background.
-  // TODO(mayrla): we could composite directly inside GetDistortion() to use
+  // TODO(maryla): we could composite directly inside GetDistortion() to use
   // less memory. Compositing over pure white could also be simplified.
-  ArgbBuffer ref_white, this_white;
-  WP2_CHECK_STATUS(ref_white.CopyFrom(ref));
-  WP2_CHECK_STATUS(this_white.CopyFrom(*this));
+  ArgbBuffer ref_white(WP2_Argb_32), this_white(WP2_Argb_32);
+  WP2_CHECK_STATUS(ref_white.CopyFrom(ref_premultiplied));
+  WP2_CHECK_STATUS(this_white.CopyFrom(this_premultiplied));
   WP2_CHECK_STATUS(ref_white.CompositeOver(Argb32b{255, 255, 255, 255}));
   WP2_CHECK_STATUS(this_white.CompositeOver(Argb32b{255, 255, 255, 255}));
   float result_white_background[5];
@@ -606,14 +617,14 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
                                     MetricType metric_type,
                                     float* result) const {
   WP2_CHECK_OK(!IsEmpty() && !ref.IsEmpty(), WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK((width == ref.width) && (height == ref.height),
+  WP2_CHECK_OK((width() == ref.width()) && (height() == ref.height()),
                WP2_STATUS_BAD_DIMENSION);
-  WP2_CHECK_OK(x < width && y < height, WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(x < width() && y < height(), WP2_STATUS_INVALID_PARAMETER);
 
   double total = 0.;
   if (metric_type == PSNR) {
     const uint8_t* const ptr1 = (const uint8_t*)GetRow(y);
-    const uint8_t* const ptr2 = (const uint8_t*)ref.GetRow(y);
+    const uint8_t* const ptr2 = ref.GetRow8(y);
     for (uint32_t c = 0; c < 4; ++c) {
       const int diff = ptr1[4 * x + c] - ptr2[4 * x + c];
       total += diff * diff;
@@ -625,8 +636,8 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     // and call the regular MSSSIM function on it.
     const uint32_t xx = std::max(0, (int)x - 8);
     const uint32_t yy = std::max(0, (int)y - 8);
-    const uint32_t w = std::min(xx + 16, width) - xx;
-    const uint32_t h = std::min(yy + 16, height) - yy;
+    const uint32_t w = std::min(xx + 16, width()) - xx;
+    const uint32_t h = std::min(yy + 16, height()) - yy;
     ArgbBuffer tmp1, tmp2;
     WP2_CHECK_STATUS(tmp1.SetView(ref, {xx, yy, w, h}));
     WP2_CHECK_STATUS(tmp2.SetView(*this, {xx, yy, w, h}));
@@ -637,19 +648,19 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     WP2SSIMInit();
     // we need absolute top-left pointers
     const uint8_t* const ptr1 = (const uint8_t*)GetRow(0);
-    const uint8_t* const ptr2 = (const uint8_t*)ref.GetRow(0);
+    const uint8_t* const ptr2 = ref.GetRow8(0);
     if (metric_type == SSIM) {
       for (uint32_t c = 0; c < 4; ++c) {
         WP2DistoStats stats;
-        WP2SSIMGetClipped<4>(ptr1 + c, stride,
-                             ptr2 + c, ref.stride, x, y, width, height, &stats);
+        WP2SSIMGetClipped<4>(ptr1 + c, stride(), ptr2 + c, ref.stride(), x, y,
+                             width(), height(), &stats);
         total += WP2SSIMCalculation(/*bit_depth=*/8, stats);
       }
       total = GetLogSSIM(total, 4.);
     } else if (metric_type == LSIM) {
       for (uint32_t c = 0; c < 4; ++c) {
-        total = AccumulateLSIM(ptr1 + c, stride,
-                               ptr2 + c, ref.stride, x, y, width, height);
+        total = AccumulateLSIM(ptr1 + c, stride(), ptr2 + c, ref.stride(), x, y,
+                               width(), height());
       }
       total = GetPSNR(total, 4., /*max=*/255.);
     } else {

@@ -92,7 +92,6 @@ WP2Status AOMResidualReader::ReadCoeffs(
   // Convert WP2 data to libgav1 data.
   const bool half_res = (channel == kUChannel || channel == kVChannel) && is420;
   const TransformSize tx_size = ConvertSize(dim);
-  const Plane plane = ConvertPlane(channel);
   dec_ = dec;
   sr_ = sr;
 
@@ -100,7 +99,7 @@ WP2Status AOMResidualReader::ReadCoeffs(
   const uint32_t subsampling = half_res ? 1u : 0u;
 
   const int num_coeffs_in_transform = ReadTransformCoefficients(
-      plane, x_pix >> subsampling, y_pix >> subsampling, tx_size, tx_type,
+      channel, x_pix >> subsampling, y_pix >> subsampling, tx_size, tx_type,
       first_is_dc, max_num_coeffs, coeffs, aom_context);
   WP2_CHECK_OK(num_coeffs_in_transform >= 0, WP2_STATUS_BITSTREAM_ERROR);
   *num_coeffs = (uint32_t)num_coeffs_in_transform;
@@ -108,7 +107,7 @@ WP2Status AOMResidualReader::ReadCoeffs(
 }
 
 int AOMResidualReader::ReadTransformCoefficients(
-    Plane plane, int start_x, int start_y, TransformSize tx_size,
+    Channel channel, int start_x, int start_y, TransformSize tx_size,
     TransformPair tx_type, bool first_is_dc, uint32_t max_num_coeffs,
     int16_t* const coeffs, AOMContext* const aom_context) {
   const int x4 = DivideBy4(start_x);
@@ -116,7 +115,7 @@ int AOMResidualReader::ReadTransformCoefficients(
   const int w4 = kTransformWidth4x4[tx_size];
   const int h4 = kTransformHeight4x4[tx_size];
   if (max_num_coeffs == 0) {
-    SetEntropyContexts(x4, y4, w4, h4, plane, 0, 0, aom_context);
+    SetEntropyContexts(x4, y4, w4, h4, channel, 0, 0, aom_context);
     // This is not used in this case, so it can be set to any value.
     return 0;
   }
@@ -130,7 +129,7 @@ int AOMResidualReader::ReadTransformCoefficients(
   const int padded_tx_height =
       clamped_tx_height + kQuantizedCoefficientBufferPadding;
   const int eob_multi_size = kEobMultiSizeLookup[tx_size];
-  const PlaneType plane_type = GetPlaneType(plane);
+  const PlaneType plane_type = GetPlaneType(channel);
   const uint32_t tx_class = (uint32_t)GetTransformClass(tx_type);
   int context = (tx_class != (uint32_t)TransformClass::kTwoD) ? 1 : 0;
   int16_t eob_pt_tmp;
@@ -193,7 +192,7 @@ int AOMResidualReader::ReadTransformCoefficients(
     std::fill(quantized2, quantized2 + padded_tx_width * padded_tx_height, 0u);
   }
 
-  const uint16_t* scan = UberZigZag(tx_size, aom_context->IsReduced(plane));
+  const uint16_t* scan = UberZigZag(tx_size, aom_context->IsReduced(channel));
   const TransformSize adjusted_tx_size = kAdjustedTransformSize[tx_size];
   const int adjusted_tx_width_log2 = kTransformWidthLog2[adjusted_tx_size];
   const int clamped_tx_size_context = std::min(tx_size_context, 3);
@@ -248,7 +247,7 @@ int AOMResidualReader::ReadTransformCoefficients(
   const uint32_t dc_sign_cluster =
       (quantized[0] != 0)
           ? GetClusterAOM2<kAOMDCSign>(plane_type,
-                          GetDcSignContext(*aom_context, x4, y4, w4, h4, plane))
+                GetDcSignContext(*aom_context, x4, y4, w4, h4, channel))
           : 0;
   assert(scan[0] == 0);
   if (first_is_dc &&
@@ -269,7 +268,7 @@ int AOMResidualReader::ReadTransformCoefficients(
     }
   }
 
-  SetEntropyContexts(x4, y4, w4, h4, plane, std::min(4, coefficient_level),
+  SetEntropyContexts(x4, y4, w4, h4, channel, std::min(4, coefficient_level),
                      dc_category, aom_context);
   return last_coeff;
 }

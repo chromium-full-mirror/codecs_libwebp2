@@ -22,7 +22,7 @@ Encode images into wp2 format.
 
   export PYTHONPATH=$PYTHONPATH:/path/to/libwebp2/module
   python3 examples/cwp2.py /path/to/input.png --output /path/to/output.wp2
-                           --quality 80 --speed 7
+                           --quality 80 --effort 7
 """
 
 import argparse
@@ -59,11 +59,11 @@ def main():
       dest='quality')
   parser.add_argument(
       '-s',
-      '--speed',
-      default='6',
+      '--effort',
+      default='5',
       type=int,
-      help='Speed: from 0 (faster) to 9 (slower, better).',
-      dest='speed')
+      help='Effort: from 0 (faster) to 9 (slower, better).',
+      dest='effort')
 
   args = parser.parse_args()
 
@@ -88,7 +88,7 @@ def main():
 
   config = wp2.EncoderConfig()
   config.quality = args.quality
-  config.speed = args.speed
+  config.effort = args.effort
   if not config.IsValid():
     print('error: invalid configuration')
     exit(1)

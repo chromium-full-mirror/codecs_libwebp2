@@ -39,8 +39,8 @@ class Rasterizer {
   Rasterizer() : vertical_span_{0, 0} {}
 
   WP2Status Init(const ArgbBuffer& canvas, const PreviewData& preview) {
-    img_w_ = canvas.width;
-    img_h_ = canvas.height;
+    img_w_ = canvas.width();
+    img_h_ = canvas.height();
     if (img_w_ > (1u << 31) / img_h_) return WP2_STATUS_INVALID_PARAMETER;
     mult_w_ = DivCeil(img_w_ << kBits, preview.grid_width_ - 1u);
     mult_h_ = DivCeil(img_h_ << kBits, preview.grid_height_ - 1u);
@@ -171,7 +171,7 @@ static void GetGradients(VertexArgb v0, VertexArgb v1, VertexArgb v2,
 void Rasterizer::DrawScans(VertexArgb v0, VertexArgb v1, VertexArgb v2,
                            ArgbBuffer* const canvas,
                            uint32_t* const num_pixels) const {
-  assert(canvas->width == img_w_ && canvas->height == img_h_);
+  assert(canvas->width() == img_w_ && canvas->height() == img_h_);
   double gradA[3], gradR[3], gradG[3], gradB[3];
   GetGradients(v0, v1, v2, gradA, gradR, gradG, gradB);
   double base_A = gradA[1] * vertical_span_.from + gradA[2];
@@ -226,8 +226,8 @@ static void GetColor(const float grad[4][3], int x, int y, Argb32b* const c) {
 }
 
 static void GetRawColor(const ArgbBuffer& buf, int x, int y, Argb32b* const c) {
-  x = std::max(0, std::min(x, (int)buf.width - 1));
-  y = std::max(0, std::min(y, (int)buf.height - 1));
+  x = std::max(0, std::min(x, (int)buf.width() - 1));
+  y = std::max(0, std::min(y, (int)buf.height() - 1));
   *c = ToArgb32b(buf.GetRow8(y) + 4 * x);
 }
 
@@ -268,7 +268,7 @@ static uint32_t Square(double a, uint8_t b) {
 float Rasterizer::GetLossInScans(const ArgbBuffer& reference,
                                  VertexArgb v0, VertexArgb v1, VertexArgb v2,
                                  uint32_t* const num_pixels) const {
-  assert(reference.width == img_w_ && reference.height == img_h_);
+  assert(reference.width() == img_w_ && reference.height() == img_h_);
   double gradA[3], gradR[3], gradG[3], gradB[3];
   GetGradients(v0, v1, v2, gradA, gradR, gradG, gradB);
   double base_A = gradA[1] * vertical_span_.from + gradA[2];

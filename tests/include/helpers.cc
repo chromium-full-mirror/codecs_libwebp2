@@ -79,7 +79,7 @@ WP2Status ReadAnimation(const uint8_t* const data, size_t size,
     uint32_t duration_ms = 0;
     WP2_CHECK_STATUS(image_reader.ReadFrame(&is_last_frame, &duration_ms));
     assert(!buffer.IsEmpty() && !buffer.IsView());
-    frames->emplace_back(buffer.format);
+    frames->emplace_back(buffer.format());
     WP2_CHECK_STATUS(frames->back().CopyFrom(buffer));
     if (frame_durations != nullptr) frame_durations->push_back(duration_ms);
   } while (!is_last_frame);
@@ -103,7 +103,7 @@ WP2Status ReadAnimation(const std::string& file_path,
 
 WP2Status CompressImage(const std::string& file_name,
                         Writer* const encoded_data, ArgbBuffer* original_image,
-                        float quality, int speed, int thread_level,
+                        float quality, int effort, int thread_level,
                         uint32_t num_downsamplings) {
   ArgbBuffer internal_original_image;
   if (original_image == nullptr) original_image = &internal_original_image;
@@ -115,7 +115,7 @@ WP2Status CompressImage(const std::string& file_name,
 
   EncoderConfig config;
   config.quality = quality;
-  config.speed = speed;
+  config.effort = effort;
   config.thread_level = thread_level;
   return Encode(*original_image, encoded_data, config);
 }
@@ -124,7 +124,7 @@ WP2Status CompressAnimation(const std::vector<const char*>& frames_file_names,
                             const std::vector<uint32_t>& durations_ms,
                             Writer* const encoded_data,
                             std::vector<ArgbBuffer>* frames, float quality,
-                            int speed, int thread_level,
+                            int effort, int thread_level,
                             uint32_t num_downsamplings) {
   assert(frames_file_names.size() == durations_ms.size());
   std::vector<std::string> file_paths;
@@ -144,7 +144,7 @@ WP2Status CompressAnimation(const std::vector<const char*>& frames_file_names,
 
   EncoderConfig config;
   config.quality = quality;
-  config.speed = speed;
+  config.effort = effort;
   config.thread_level = thread_level;
   return animation_encoder.Encode(encoded_data, config);
 }
@@ -172,28 +172,49 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config) {
                                    const std::string& file_name,
                                    float expected_distortion, MetricType metric,
                                    Orientation decoding_orientation) {
-  if (src.width != RotateWidth(decoding_orientation, dec.width, dec.height) ||
-      src.height != RotateHeight(decoding_orientation, dec.width, dec.height)) {
+  if (src.width() !=
+          RotateWidth(decoding_orientation, dec.width(), dec.height()) ||
+      src.height() !=
+          RotateHeight(decoding_orientation, dec.width(), dec.height())) {
     return ::testing::AssertionFailure()
-           << "Original image dimensions " << src.width << "x" << src.height
-           << " are different than the decompressed ones " << dec.width << "x"
-           << dec.height << " with file " << file_name;
+           << "Original image dimensions " << src.width() << "x" << src.height()
+           << " are different than the decompressed ones " << dec.width() << "x"
+           << dec.height() << " with file " << file_name;
   }
 
-  WP2::ArgbBuffer dec_oriented(dec.format);
+  // We only compare in premultiplied. Results are not guaranteed in
+  // unmultiplied.
+  const bool convert =
+      !WP2IsPremultiplied(src.format()) || (src.format() != dec.format());
+  WP2::ArgbBuffer src_converted(convert ? WP2_Argb_32 : src.format());
+  WP2::ArgbBuffer dec_converted(src_converted.format());
+  if (convert) {
+    if (src_converted.ConvertFrom(src) != WP2_STATUS_OK ||
+        dec_converted.ConvertFrom(dec) != WP2_STATUS_OK) {
+      return ::testing::AssertionFailure() << "Failed to convert";
+    }
+  } else {
+    if (src_converted.SetView(src) != WP2_STATUS_OK ||
+        dec_converted.SetView(dec) != WP2_STATUS_OK) {
+      return ::testing::AssertionFailure() << "Failed to set view";
+    }
+  }
+
+  WP2::ArgbBuffer dec_oriented(dec_converted.format());
   if (decoding_orientation != WP2::Orientation::kOriginal) {
     if (WP2::RotateBuffer(WP2::GetInverseOrientation(decoding_orientation), dec,
                           &dec_oriented) != WP2_STATUS_OK) {
       return ::testing::AssertionFailure() << "Failed to rotate buffer";
     }
   } else {
-    if (dec_oriented.SetView(dec) != WP2_STATUS_OK) {
+    if (dec_oriented.SetView(dec_converted) != WP2_STATUS_OK) {
       return ::testing::AssertionFailure() << "Failed to set view";
     }
   }
 
   float disto[5];
-  if (dec_oriented.GetDistortion(src, metric, disto) != WP2_STATUS_OK) {
+  if (dec_oriented.GetDistortion(src_converted, metric, disto) !=
+      WP2_STATUS_OK) {
     return ::testing::AssertionFailure()
            << "Can not get distortion with file " << file_name;
   }
@@ -202,11 +223,12 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config) {
         ::testing::AssertionFailure()
         << "Distortion is too high: " << disto[0] << ", " << disto[1] << ", "
         << disto[2] << ", " << disto[3] << ", " << disto[4] << " with file "
-        << file_name << " (expected at least " << expected_distortion << ")";
-    for (uint32_t y = 0; y < src.height; ++y) {
-      const uint8_t* a = (const uint8_t*)src.GetRow(y);
+        << file_name << " (expected at least " << expected_distortion << ")"
+        << (convert ? " (note buffers were converted to Argb)" : "");
+    for (uint32_t y = 0; y < src_converted.height(); ++y) {
+      const uint8_t* a = (const uint8_t*)src_converted.GetRow(y);
       const uint8_t* b = (const uint8_t*)dec_oriented.GetRow(y);
-      for (uint32_t x = 0; x < src.width; ++x) {
+      for (uint32_t x = 0; x < src_converted.width(); ++x) {
         const int32_t aa = a[0], ar = a[1], ag = a[2], ab = a[3];
         const int32_t ba = b[0], br = b[1], bg = b[2], bb = b[3];
         if (aa != ba || ar != br || ag != bg || ab != bb) {
@@ -272,26 +294,43 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config) {
   return ::testing::AssertionSuccess();
 }
 
+bool ProgressTester::OnUpdate(float progress) {
+  assert(progress >= 0.f && progress <= 1.f);
+  assert(progress >= last_progress_);
+  last_progress_ = progress;
+  return (progress < fail_at_);
+}
+
 //------------------------------------------------------------------------------
 
-WP2Status EncodeDecodeCompare(const std::string& file_name,
-                              const EncoderConfig& encoder_config,
-                              const DecoderConfig& decoder_config) {
+::testing::AssertionResult EncodeDecodeCompare(
+    const std::string& file_name, const EncoderConfig& encoder_config,
+    const DecoderConfig& decoder_config) {
   ArgbBuffer original;
-  WP2_CHECK_STATUS(
-      ReadImage(testing::GetTestDataPath(file_name).c_str(), &original));
+  WP2Status status =
+      ReadImage(testing::GetTestDataPath(file_name).c_str(), &original);
+  if (status != WP2_STATUS_OK) {
+    return ::testing::AssertionFailure() << "Failed to read file " << file_name
+                                         << ": " << WP2GetStatusMessage(status);
+  }
 
   MemoryWriter memory_writer;
-  WP2_CHECK_STATUS(Encode(original, &memory_writer, encoder_config));
+  status = Encode(original, &memory_writer, encoder_config);
+  if (status != WP2_STATUS_OK) {
+    return ::testing::AssertionFailure()
+           << "Failed to encode: " << WP2GetStatusMessage(status);
+  }
 
   ArgbBuffer decompressed;
-  WP2_CHECK_STATUS(Decode(memory_writer.mem_, memory_writer.size_,
-                          &decompressed, decoder_config));
+  status = Decode(memory_writer.mem_, memory_writer.size_, &decompressed,
+                  decoder_config);
+  if (status != WP2_STATUS_OK) {
+    return ::testing::AssertionFailure()
+           << "Failed to decode: " << WP2GetStatusMessage(status);
+  }
 
-  WP2_CHECK_OK(testing::Compare(original, decompressed, file_name,
-                                testing::GetExpectedDistortion(encoder_config)),
-               WP2_STATUS_INVALID_PARAMETER);
-  return WP2_STATUS_OK;
+  return testing::Compare(original, decompressed, file_name,
+                          testing::GetExpectedDistortion(encoder_config));
 }
 
 WP2Status GetDistortionDiff(const std::string& file_name,
@@ -442,7 +481,7 @@ std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& config) {
   PRINT_SETTING1(target_size);
   PRINT_SETTING1(target_psnr);
   PRINT_SETTING1(alpha_quality);
-  PRINT_SETTING1(speed);
+  PRINT_SETTING1(effort);
   PRINT_SETTING2(decoding_orientation, Orientation);
   PRINT_SETTING2(create_preview, bool);
   PRINT_SETTING2(transfer_function, TransferFunction);

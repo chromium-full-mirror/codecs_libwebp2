@@ -34,7 +34,7 @@ bool EncoderConfig::IsValid() const {
   not_ok |= (quality < 0 || quality > kMaxQuality);
   not_ok |= (target_psnr < 0);
   not_ok |= (alpha_quality < 0 || alpha_quality > (int)kMaxQuality);
-  not_ok |= (speed < 0 || speed > 9);
+  not_ok |= (effort < 0 || effort > 9);
   not_ok |= (preview_size > 0 && preview == nullptr);
   not_ok |= (transfer_function > (int)WP2_TF_ARIB_STD_B67_HLG);
   not_ok |= (pass < 1 || pass > 10);

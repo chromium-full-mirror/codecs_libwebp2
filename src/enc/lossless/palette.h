@@ -54,8 +54,8 @@ class Palette {
   size_t Size() const { return num_colors_; }
   // Try to find the best writing method 'method_'. Might reorder the colors_.
   // The storage cost cost_ will be calculated.
-  // The 'speed' parameter impacts the depth of analyzis to get a better cost.
-  WP2Status FindBestMethod(Encoder* const encoder, int speed);
+  // The 'effort' parameter impacts the depth of analyzis to get a better cost.
+  WP2Status FindBestMethod(Encoder* const encoder, int effort);
   // Returns the bit cost of the current palette, set by FindBestMethod().
   float GetCost() const { return cost_; }
   // Writes the palette to the provided bitwriter 'enc' according to method_.

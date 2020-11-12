@@ -183,28 +183,28 @@ WP2Status DecodeFrame(GifFileType* const decoder, int transparent_index,
     for (uint32_t pass = 0; pass < kNumPasses; ++pass) {
       uint32_t y = kOffsets[pass];
       // It is not written in GIF specs if an interlaced image can be <5px tall.
-      if (y < frame->height) {
-        uint8_t* row = (uint8_t*)frame->GetRow(y);
-        const uint32_t jump = kJumps[pass] * frame->stride;
-        for (; y < frame->height; y += kJumps[pass], row += jump) {
+      if (y < frame->height()) {
+        uint8_t* row = frame->GetRow8(y);
+        const uint32_t jump = kJumps[pass] * frame->stride();
+        for (; y < frame->height(); y += kJumps[pass], row += jump) {
           WP2_CHECK_STATUS(ErrorToStatus(
-              decoder, DGifGetLine(decoder, tmp_indexed_row, frame->width),
+              decoder, DGifGetLine(decoder, tmp_indexed_row, frame->width()),
               log_level));
           WP2_CHECK_STATUS(ConvertIndexedColors(
-              decoder, tmp_indexed_row, tmp_argb_row, frame->width,
-              transparent_index, row, frame->format));
+              decoder, tmp_indexed_row, tmp_argb_row, frame->width(),
+              transparent_index, row, frame->format()));
         }
       }
     }
   } else {
-    uint8_t* row = (uint8_t*)frame->GetRow(0);
-    for (uint32_t y = 0; y < frame->height; ++y, row += frame->stride) {
+    uint8_t* row = frame->GetRow8(0);
+    for (uint32_t y = 0; y < frame->height(); ++y, row += frame->stride()) {
       WP2_CHECK_STATUS(ErrorToStatus(
-          decoder, DGifGetLine(decoder, tmp_indexed_row, frame->width),
+          decoder, DGifGetLine(decoder, tmp_indexed_row, frame->width()),
           log_level));
       WP2_CHECK_STATUS(ConvertIndexedColors(
-          decoder, tmp_indexed_row, tmp_argb_row, frame->width,
-          transparent_index, row, frame->format));
+          decoder, tmp_indexed_row, tmp_argb_row, frame->width(),
+          transparent_index, row, frame->format()));
     }
   }
   return WP2_STATUS_OK;
@@ -272,8 +272,9 @@ class ImageReaderGIF : public ImageReader::Impl {
                  ArgbBuffer* const buffer, LogLevel log_level,
                  size_t max_num_pixels)
       : ImageReader::Impl(buffer, data, data_size, log_level, max_num_pixels),
-        previous_canvas_((buffer_ != nullptr) ? buffer_->format : WP2_Argb_32),
-        frame_(previous_canvas_.format) {}
+        previous_canvas_((buffer_ != nullptr) ? buffer_->format()
+                                              : WP2_Argb_32),
+        frame_(previous_canvas_.format()) {}
   ~ImageReaderGIF() override {
     if (decoder_ != NULL) {
 #if LOCAL_GIF_PREREQ(5, 1)
@@ -327,11 +328,11 @@ class ImageReaderGIF : public ImageReader::Impl {
 
     // Allocate temp rows (used for DGifGetLine()).
     tmp_indexed_row_ =
-        (uint8_t*)WP2Malloc(buffer_->width, sizeof(*tmp_indexed_row_));
+        (uint8_t*)WP2Malloc(buffer_->width(), sizeof(*tmp_indexed_row_));
     WP2_CHECK_ALLOC_OK(tmp_indexed_row_ != nullptr);
-    if (IsConversionNeeded(buffer_->format)) {
+    if (IsConversionNeeded(buffer_->format())) {
       tmp_argb_row_ =
-          (uint32_t*)WP2Malloc(buffer_->width, sizeof(*tmp_argb_row_));
+          (uint32_t*)WP2Malloc(buffer_->width(), sizeof(*tmp_argb_row_));
       WP2_CHECK_ALLOC_OK(tmp_argb_row_ != nullptr);
     }
     return WP2_STATUS_OK;
@@ -344,11 +345,11 @@ class ImageReaderGIF : public ImageReader::Impl {
     } else if (previous_frame_dispose_method_ ==
                DisposeMethod::RESTORE_PREVIOUS) {
       const uint8_t* const previous_pixels_inside_frame_rect_ =
-          (const uint8_t*)previous_canvas_.GetRow(frame_rect_.y) +
-          frame_rect_.x * WP2FormatBpp(previous_canvas_.format);
+          previous_canvas_.GetRow8(frame_rect_.y) +
+          frame_rect_.x * WP2FormatBpp(previous_canvas_.format());
       WP2_CHECK_STATUS(frame_.Import(
-          previous_canvas_.format, frame_rect_.width, frame_rect_.height,
-          previous_pixels_inside_frame_rect_, previous_canvas_.stride));
+          previous_canvas_.format(), frame_rect_.width, frame_rect_.height,
+          previous_pixels_inside_frame_rect_, previous_canvas_.stride()));
     }
     WP2_CHECK_STATUS(previous_canvas_.CopyFrom(*buffer_));
     return WP2_STATUS_OK;
@@ -364,7 +365,7 @@ class ImageReaderGIF : public ImageReader::Impl {
       // First frame.
       // Metadata must be decoded now but Giflib DGifGetRecordType() doesn't
       // work without DGifGetLine(), hence the use of ReadGIFMetadata().
-      WP2_CHECK_STATUS(ReadGIFMetadata(data_, data_size_, &buffer_->metadata));
+      WP2_CHECK_STATUS(ReadGIFMetadata(data_, data_size_, &buffer_->metadata_));
 
       int error = D_GIF_SUCCEEDED;
       decoder_ = DGifOpen((void*)this, InputFunction, &error);

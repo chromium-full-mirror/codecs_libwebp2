@@ -161,17 +161,8 @@ TEST_P(CspImageTest, Simple) {
   ArgbBuffer dst;
   ASSERT_WP2_OK(yuv.Export(transf, /*resize_if_needed=*/true, &dst));
 
-  float disto[5];
-  ASSERT_WP2_OK(dst.GetDistortion(src, PSNR, disto));
-
-  // Alpha is not supported, total is not either.
-  const float min_in_disto = std::min({disto[1], disto[2], disto[3]});
   const float min_expected_disto = (csp_type == Csp::kYCoCg) ? 99.f : 45.f;
-  EXPECT_GE(min_in_disto, min_expected_disto)
-      << std::endl
-      << "Distortion A " << disto[0] << ", R " << disto[1] << ", G " << disto[2]
-      << ", B " << disto[3] << ", total " << disto[4] << " for file "
-      << src_file_name << ", csp " << (uint32_t)csp_type;
+  ASSERT_TRUE(testing::Compare(src, dst, src_file_name, min_expected_disto));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -201,7 +192,7 @@ TEST_P(CustomCspTest, RoundingError) {
   const char* const file_name = GetParam();
   EncoderConfig config = EncoderConfig::kDefault;
   config.csp_type = Csp::kCustom;
-  ASSERT_WP2_OK(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
 }
 
 INSTANTIATE_TEST_SUITE_P(CustomCspTestInstantiation, CustomCspTest,
@@ -232,9 +223,9 @@ TEST_P(DecodeArgbTest, Valid) {
                                testing::GetExpectedDistortion(quality)));
 
   for (const ArgbBuffer* const buffer : {&src, &dst}) {
-    for (uint32_t y = 0; y < buffer->height; ++y) {
-      const uint8_t* pixel = (const uint8_t*)buffer->GetRow(y);
-      for (uint32_t x = 0; x < buffer->width; ++x) {
+    for (uint32_t y = 0; y < buffer->height(); ++y) {
+      const uint8_t* pixel = buffer->GetRow8(y);
+      for (uint32_t x = 0; x < buffer->width(); ++x) {
         ASSERT_GE(pixel[0], pixel[1]);
         ASSERT_GE(pixel[0], pixel[2]);
         ASSERT_GE(pixel[0], pixel[3]);

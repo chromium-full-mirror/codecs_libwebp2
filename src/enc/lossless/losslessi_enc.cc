@@ -236,17 +236,17 @@ WP2Status EncodeImageNoClusters(
     WP2::ANSEncBase* const enc, WP2::ANSDictionaries* const dicts,
     const int16_t* const argb, HashChain* const hash_chain,
     BackwardRefsPool* const ref_pool, uint32_t width, uint32_t height,
-    const LosslessSymbolsInfo& symbols_info, int speed) {
+    const LosslessSymbolsInfo& symbols_info, int effort) {
   WP2::SymbolWriter sw;
 
   // Calculate backward references from ARGB image.
-  WP2_CHECK_STATUS(hash_chain->Fill(speed, argb, width, height));
+  WP2_CHECK_STATUS(hash_chain->Fill(effort, argb, width, height));
   LosslessSymbolsInfo symbols_info_new;
   WP2_CHECK_STATUS(symbols_info_new.CopyFrom(symbols_info));
   BackwardRefsPool::RefsPtr refs = BackwardRefsPool::GetEmptyBackwardRefs();
   CacheConfig cache_config;
   WP2_CHECK_STATUS(GetBackwardReferences(
-      width, height, argb, speed, kLZ77Standard | kLZ77RLE,
+      width, height, argb, effort, kLZ77Standard | kLZ77RLE,
       /*cache_bits_max=*/0, *hash_chain, symbols_info_new, &cache_config,
       ref_pool, &refs));
 
@@ -268,7 +268,7 @@ WP2Status EncodeImageNoClusters(
 static WP2Status EncodeImageInternal(
     const uint16_t* const argb_in, const CrunchConfig& config, uint32_t width,
     uint32_t height, uint32_t histogram_bits, uint32_t cache_bits_max,
-    uint32_t speed, WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts,
+    uint32_t effort, WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts,
     HashChain* const hash_chain, BackwardRefsPool* ref_pool,
     LosslessSymbolsInfo* const symbols_info_best,
     EncodeInfo* const encode_info) {
@@ -305,7 +305,7 @@ static WP2Status EncodeImageInternal(
   WP2_CHECK_STATUS(enc_best.Clone(*enc));
   WP2_CHECK_STATUS(dicts_best.CopyFrom(*dicts));
   WP2_CHECK_ALLOC_OK(histogram_symbols.resize(histogram_image_xysize));
-  WP2_CHECK_STATUS(hash_chain->Fill(speed, argb, width, height));
+  WP2_CHECK_STATUS(hash_chain->Fill(effort, argb, width, height));
   for (uint32_t lz77s_idx = 0; lz77s_idx < config.lz77s_types_to_try_size;
        ++lz77s_idx) {
     LosslessSymbolsInfo symbols_info;
@@ -314,7 +314,7 @@ static WP2Status EncodeImageInternal(
         BackwardRefsPool::GetEmptyBackwardRefs();
     CacheConfig cache_config;
     WP2_CHECK_STATUS(GetBackwardReferences(
-        width, height, argb, speed, config.lz77s_types_to_try[lz77s_idx],
+        width, height, argb, effort, config.lz77s_types_to_try[lz77s_idx],
         cache_bits_max, *hash_chain, symbols_info, &cache_config, ref_pool,
         &refs_best));
     symbols_info.SetCacheRange(GetColorCacheRange(cache_config));
@@ -323,7 +323,7 @@ static WP2Status EncodeImageInternal(
 
     // Build histogram image and symbols from backward references.
     WP2_CHECK_STATUS(GetHistoImageSymbols(
-        width, height, *refs_best, speed, histogram_bits, symbols_info,
+        width, height, *refs_best, effort, histogram_bits, symbols_info,
         &histogram_image, histogram_symbols.data()));
 
     {
@@ -377,7 +377,7 @@ static WP2Status EncodeImageInternal(
                                    /*max=*/num_clusters - 1);
         WP2_CHECK_STATUS(EncodeImageNoClusters(
             enc, dicts, labels.data(), hash_chain, ref_pool, histogram_width,
-            histogram_height, symbols_info_tmp, speed));
+            histogram_height, symbols_info_tmp, effort));
       }
 
       // Get the symbols stats.
@@ -442,7 +442,7 @@ static void ApplySubtractGreen(Encoder* const encoder, uint32_t width,
 // 2^(enc->transform_bits_)), saves the residuals in enc->argb_ and writes the
 // transform for each block in the form of an image.
 static WP2Status ApplyPredictFilter(const Encoder* const encoder,
-                                    uint32_t width, uint32_t height, int speed,
+                                    uint32_t width, uint32_t height, int effort,
                                     WP2::ANSEnc* const enc,
                                     WP2::ANSDictionaries* const dicts) {
   const int pred_bits = encoder->transform_bits_;
@@ -450,7 +450,7 @@ static WP2Status ApplyPredictFilter(const Encoder* const encoder,
   const int transform_height = WP2LSubSampleSize(height, pred_bits);
 
   WP2_CHECK_STATUS(ResidualImage(
-      width, height, pred_bits, encoder->symbols_info_.ChannelBits(), speed,
+      width, height, pred_bits, encoder->symbols_info_.ChannelBits(), effort,
       encoder->argb_, encoder->has_alpha_, encoder->argb_scratch_,
       encoder->transform_data_));
   const WP2::ANSDebugPrefix prefix(enc, "predictor");
@@ -463,7 +463,7 @@ static WP2Status ApplyPredictFilter(const Encoder* const encoder,
   const WP2Status status = EncodeImageNoClusters(
       enc, dicts, encoder->transform_data_, (HashChain*)&encoder->hash_chain_,
       (BackwardRefsPool*)&encoder->ref_pool_, transform_width, transform_height,
-      symbols_info, speed);
+      symbols_info, effort);
   return status;
 }
 
@@ -472,7 +472,7 @@ static WP2Status ApplyPredictFilter(const Encoder* const encoder,
 // transform for each block in the form of an image.
 static WP2Status ApplyCrossColorFilter(const Encoder* const encoder,
                                        uint32_t width, uint32_t height,
-                                       int speed, WP2::ANSEnc* const enc,
+                                       int effort, WP2::ANSEnc* const enc,
                                        WP2::ANSDictionaries* const dicts) {
   const int ccolor_transform_bits = encoder->transform_bits_;
   const int transform_width = WP2LSubSampleSize(width, ccolor_transform_bits);
@@ -480,7 +480,7 @@ static WP2Status ApplyCrossColorFilter(const Encoder* const encoder,
 
   WP2_CHECK_STATUS(ColorSpaceTransform(width, height, ccolor_transform_bits,
                                        encoder->symbols_info_.SampleFormat(),
-                                       speed, encoder->argb_,
+                                       effort, encoder->argb_,
                                        encoder->transform_data_));
   const WP2::ANSDebugPrefix prefix(enc, "cross_color");
   enc->PutRange(ccolor_transform_bits, kTransformBitsMin, kTransformBitsMax,
@@ -491,7 +491,7 @@ static WP2Status ApplyCrossColorFilter(const Encoder* const encoder,
   WP2_CHECK_STATUS(EncodeImageNoClusters(
       enc, dicts, encoder->transform_data_, (HashChain*)&encoder->hash_chain_,
       (BackwardRefsPool*)&encoder->ref_pool_, transform_width, transform_height,
-      symbols_info, speed));
+      symbols_info, effort));
   return WP2_STATUS_OK;
 }
 
@@ -540,13 +540,13 @@ WP2Status Encoder::AllocateTransformBuffer(const CrunchConfig& config,
 static WP2Status MakeInputImageCopy(const CrunchConfig& config,
                                     Encoder* const encoder) {
   const WP2::ArgbBuffer& pic = encoder->pic_;
-  const uint32_t width = pic.width;
-  const uint32_t height = pic.height;
+  const uint32_t width = pic.width();
+  const uint32_t height = pic.height();
   WP2_CHECK_STATUS(encoder->AllocateTransformBuffer(config, width, height));
   if (encoder->argb_content_ == kEncoderARGB) return WP2_STATUS_OK;
-  assert(WP2FormatBpc(pic.format) == 1 || WP2FormatBpc(pic.format) == 2);
+  assert(WP2FormatBpc(pic.format()) == 1 || WP2FormatBpc(pic.format()) == 2);
   for (uint32_t y = 0; y < height; ++y) {
-    if (WP2FormatBpc(pic.format) == 1) {
+    if (WP2FormatBpc(pic.format()) == 1) {
       std::copy(pic.GetRow8(y), pic.GetRow8(y) + 4 * width,
                 &encoder->argb_[4 * y * width]);
     } else {
@@ -564,8 +564,8 @@ static WP2Status MakeInputImageCopy(const CrunchConfig& config,
 static WP2Status MapImageFromPalette(const CrunchConfig& config,
                                      Encoder* const encoder) {
   const WP2::ArgbBuffer& pic = encoder->pic_;
-  const uint32_t width = pic.width;
-  const uint32_t height = pic.height;
+  const uint32_t width = pic.width();
+  const uint32_t height = pic.height();
 
   WP2_CHECK_STATUS(encoder->AllocateTransformBuffer(config, width, height));
 
@@ -584,9 +584,10 @@ static WP2Status EncodePalette(WP2::ANSEnc* const enc,
 // Applies the different transforms decided by the cruncher and writes them to
 // the header.
 static WP2Status ApplyAndWriteTransforms(
-    uint32_t width, uint32_t height, uint32_t speed, const CrunchConfig& config,
-    Encoder* const encoder, LosslessSymbolsInfo* const symbols_info,
-    WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts) {
+    uint32_t width, uint32_t height, uint32_t effort,
+    const CrunchConfig& config, Encoder* const encoder,
+    LosslessSymbolsInfo* const symbols_info, WP2::ANSEnc* const enc,
+    WP2::ANSDictionaries* const dicts) {
   WP2_CHECK_STATUS(symbols_info->CopyFrom(encoder->symbols_info_));
   symbols_info->SetCacheRange(0);
 
@@ -648,12 +649,12 @@ static WP2Status ApplyAndWriteTransforms(
 
   if (config.use_predict) {
     WP2_CHECK_STATUS(
-        ApplyPredictFilter(encoder, width, height, speed, enc, dicts));
+        ApplyPredictFilter(encoder, width, height, effort, enc, dicts));
   }
 
   if (config.use_cross_color) {
     WP2_CHECK_STATUS(
-        ApplyCrossColorFilter(encoder, width, height, speed, enc, dicts));
+        ApplyCrossColorFilter(encoder, width, height, effort, enc, dicts));
   }
 
   return WP2_STATUS_OK;
@@ -673,14 +674,14 @@ Encoder::Encoder(const WP2::EncoderConfig& config,
   histo_bits_ = 0;
   transform_bits_ = 0;
   // TODO(vrabaud) Deal with channel_bits
-  symbols_info_.Init(has_alpha, picture.format);
+  symbols_info_.Init(has_alpha, picture.format());
 
   argb_content_ = kEncoderNone;
   WP2LEncDspInit();
 }
 
 WP2Status Encoder::Allocate() {
-  const uint32_t num_pixels = pic_.width * pic_.height;
+  const uint32_t num_pixels = pic_.width() * pic_.height();
   WP2_CHECK_ALLOC_OK(hash_chain_.Allocate(num_pixels));
   palette_.Init(symbols_info_.SampleFormat(), has_alpha_);
   ref_pool_.Init(num_pixels);
@@ -706,9 +707,9 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
   Encoder* const encoder = params->encoder;
   const CrunchConfig* const crunch_configs = params->crunch_configs;
   const uint32_t num_crunch_configs = params->num_crunch_configs;
-  const uint32_t speed = params->config->speed;
-  const uint32_t width = encoder->pic_.width;
-  const uint32_t height = encoder->pic_.height;
+  const uint32_t effort = params->config->effort;
+  const uint32_t width = encoder->pic_.width();
+  const uint32_t height = encoder->pic_.height();
   uint32_t best_size = std::numeric_limits<uint32_t>::max();
   WP2::ANSEnc enc;
   WP2::ANSEnc enc_best;
@@ -725,7 +726,7 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
     encoder->ref_pool_.Reset();
 
     WP2_CHECK_STATUS(ApplyAndWriteTransforms(
-        width, height, speed, *config, encoder, &symbols_info, &enc, &dicts));
+        width, height, effort, *config, encoder, &symbols_info, &enc, &dicts));
 
     // -------------------------------------------------------------------------
     // Encode and write the transformed image.
@@ -749,7 +750,7 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
               : kMaxCacheBits;
       WP2_CHECK_STATUS(EncodeImageInternal(
           encoder->argb_, *config, width, height, encoder->histo_bits_,
-          cache_bits_max, speed, &enc, &dicts, &encoder->hash_chain_,
+          cache_bits_max, effort, &enc, &dicts, &encoder->hash_chain_,
           &encoder->ref_pool_, &symbols_info, &current_encode_info));
     }
 

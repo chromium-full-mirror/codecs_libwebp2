@@ -421,14 +421,14 @@ TEST_P(PrintTransformTest, Simple) {
 
   ArgbBuffer image;
   ASSERT_WP2_OK(image.Resize(size * size, size * size));
-  const uint32_t bpp = WP2FormatBpp(image.format);
+  const uint32_t bpp = WP2FormatBpp(image.format());
   for (uint32_t y = 0; y < size; ++y) {
     for (uint32_t x = 0; x < size; ++x) {
       int32_t coeffs[32 * 32] = {0};
       coeffs[y * size + x] = 125;
       WP2InvTransform2D(coeffs, tf_x, tf_y, size, size, coeffs);
 
-      uint8_t* row = (uint8_t*)image.GetRow(y * size) + (x * size) * bpp;
+      uint8_t* row = image.GetRow8(y * size) + (x * size) * bpp;
       for (uint32_t sub_y = 0; sub_y < size; ++sub_y) {
         for (uint32_t sub_x = 0; sub_x < size; ++sub_x) {
           const int32_t color = 128 + coeffs[sub_y * size + sub_x];
@@ -438,18 +438,18 @@ TEST_P(PrintTransformTest, Simple) {
           row[sub_x * bpp + 2] = color;
           row[sub_x * bpp + 3] = color;
         }
-        row += image.stride;
+        row += image.stride();
       }
     }
   }
 
   ASSERT_WP2_OK(
-      ArgbBufferRescale(&image, image.width * scale, image.height * scale));
+      ArgbBufferRescale(&image, image.width() * scale, image.height() * scale));
   const Argb32b red = {0xFF, 0xFF, 0x00, 0x00};
   for (uint32_t i = 1; i < size; ++i) {
     const uint32_t row_or_col = i * size * scale;
-    image.Fill({0, row_or_col, image.width, 1}, red);
-    image.Fill({row_or_col, 0, 1, image.height}, red);
+    image.Fill({0, row_or_col, image.width(), 1}, red);
+    image.Fill({row_or_col, 0, 1, image.height()}, red);
   }
 
   char file_path[100];  // Change output folder here.

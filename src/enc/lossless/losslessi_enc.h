@@ -85,7 +85,7 @@ WP2Status EncodeImageNoClusters(
     WP2::ANSEncBase* const enc, WP2::ANSDictionaries* const dicts,
     const int16_t* const argb, HashChain* const hash_chain,
     BackwardRefsPool* const ref_pool, uint32_t width, uint32_t height,
-    const LosslessSymbolsInfo& symbols_info, int speed);
+    const LosslessSymbolsInfo& symbols_info, int effort);
 
 // Optional extra info that can be exported by EncodeImage.
 // Callers should allocate themselves the vectors that they wish filled in.
@@ -135,12 +135,12 @@ uint32_t DistanceToPlaneCode(uint32_t width, uint32_t dist);
 // Image transforms in predictor_enc.cc
 
 WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
-                        uint32_t channel_bits, int speed, uint16_t* const argb,
+                        uint32_t channel_bits, int effort, uint16_t* const argb,
                         bool has_alpha, uint16_t* const argb_scratch,
                         int16_t* const image);
 
 WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
-                              WP2SampleFormat format, uint32_t speed,
+                              WP2SampleFormat format, uint32_t effort,
                               uint16_t* const argb, int16_t* image);
 
 //------------------------------------------------------------------------------

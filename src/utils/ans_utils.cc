@@ -27,47 +27,6 @@
 namespace WP2 {
 
 //------------------------------------------------------------------------------
-// Header bit I/O helpers.
-
-uint32_t HeaderDec::ReadBitsInternal(int nb_bits) {
-  assert(nb_bits <= 24);
-  uint32_t value = 0;
-  if (Ok()) {
-    if (bit_pos_ + nb_bits > max_pos_) {
-      error_ = true;
-    } else {
-      size_t pos = bit_pos_ >> 3;
-      const int shift = bit_pos_ & 7;
-      bit_pos_ += nb_bits;
-      for (int n = 0; n < shift + nb_bits; n += 8) {
-        value |= (uint32_t)buf_[pos++] << n;
-      }
-      value >>= shift;
-      value &= (1 << nb_bits) - 1;
-    }
-  }
-  return value;
-}
-
-void HeaderEnc::PutBitsInternal(uint32_t value, int nb_bits) {
-  assert(nb_bits <= 24);
-  assert(value < (1u << nb_bits));
-
-  const int shift = bit_pos_ & 7;
-  size_t pos = bit_pos_ >> 3;
-  bit_pos_ += nb_bits;
-  if (bit_pos_ > max_pos_) {
-    error_ = true;
-    return;
-  }
-  value <<= shift;
-  for (int n = 0; n < nb_bits + shift; n += 8) {
-    buf_[pos++] |= value & 0xff;
-    value >>= 8;
-  }
-}
-
-//------------------------------------------------------------------------------
 // ANS quantizations.
 
 void ANSCountsQuantizeHuffman(uint32_t size,
@@ -182,8 +141,8 @@ ComputeCost(const OptimizeArrayStorageStat* const s1,
 // with a smaller overall bit cost.
 void OptimizeArrayStorage(OptimizeArrayStorageStat* const stats,
                           size_t* const size_in, float overhead) {
-// TODO(vrabaud) include a speed parameter to choose between the two methods.
-// or at least, choose the slower one if size is small (e.g. < 5).
+// TODO(vrabaud) include an effort parameter to choose between the two methods
+//               or at least, choose the slower one if size is small (e.g. < 5).
 // The first method gives a speedup of an order of magnitude for a compression
 // hit of less than 0.1%
   size_t size = *size_in;

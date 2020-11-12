@@ -24,6 +24,12 @@
 
 namespace WP2 {
 
+// Like assert() but is not silent if NDEBUG is defined (-c opt).
+#define CHECK_OR_DIE(cond)     \
+  do {                         \
+    if (!(cond)) std::abort(); \
+  } while (0)
+
 //------------------------------------------------------------------------------
 
 namespace {
@@ -121,24 +127,24 @@ class SwappingCustomDecoder : public ExternalCustomDecoder {
 
 void VerifyFrameFeatures(const FrameFeatures* const frame_features,
                          uint32_t frame_index, const ArgbBuffer& output) {
-  ASSERT_NE(frame_features, nullptr);
-  ASSERT_LE(frame_features->last_dispose_frame_index, frame_index);
+  CHECK_OR_DIE(frame_features != nullptr);
+  CHECK_OR_DIE(frame_features->last_dispose_frame_index <= frame_index);
   if (frame_index == 0 ||
       frame_features->last_dispose_frame_index == frame_index) {
     // Disposed frame or not an animation.
-    ASSERT_EQ(frame_features->window.x, 0u);
-    ASSERT_EQ(frame_features->window.y, 0u);
+    CHECK_OR_DIE(frame_features->window.x == 0u);
+    CHECK_OR_DIE(frame_features->window.y == 0u);
     if (!output.IsEmpty()) {
-      ASSERT_EQ(frame_features->window.width, output.width);
-      ASSERT_EQ(frame_features->window.height, output.height);
+      CHECK_OR_DIE(frame_features->window.width == output.width());
+      CHECK_OR_DIE(frame_features->window.height == output.height());
     }
   } else {
-    ASSERT_GT(frame_features->window.GetArea(), 0u);
+    CHECK_OR_DIE(frame_features->window.GetArea() > 0u);
     if (!output.IsEmpty()) {
-      ASSERT_LE(frame_features->window.x + frame_features->window.width,
-                output.width);
-      ASSERT_LE(frame_features->window.y + frame_features->window.height,
-                output.height);
+      CHECK_OR_DIE(frame_features->window.x + frame_features->window.width <=
+                   output.width());
+      CHECK_OR_DIE(frame_features->window.y + frame_features->window.height <=
+                   output.height());
     }
   }
 }
@@ -148,12 +154,12 @@ WP2Status ImportRect(const ArgbBuffer& from, const Rectangle& rect,
                      ArgbBuffer* const to) {
   WP2_CHECK_OK(to != nullptr, WP2_STATUS_NULL_PARAMETER);
   if (rect.GetArea() == 0) return WP2_STATUS_OK;
-  ArgbBuffer from_view(from.format), to_view(to->format);
+  ArgbBuffer from_view(from.format()), to_view(to->format());
   WP2_CHECK_STATUS(from_view.SetView(from, rect));
   WP2_CHECK_STATUS(to_view.SetView(*to, rect));
   for (uint32_t y = 0; y < rect.height; ++y) {
     WP2_CHECK_STATUS(
-        to_view.ImportRow(from_view.format, y, from_view.GetRow8(y)));
+        to_view.ImportRow(from_view.format(), y, from_view.GetRow8(y)));
   }
   return WP2_STATUS_OK;
 }
@@ -163,12 +169,6 @@ WP2Status ImportRect(const ArgbBuffer& from, const Rectangle& rect,
 //------------------------------------------------------------------------------
 
 namespace testing {
-
-// Like assert() but is not silent if NDEBUG is defined (-c opt).
-#define CHECK_OR_DIE(cond)     \
-  do {                         \
-    if (!(cond)) std::abort(); \
-  } while (0)
 
 WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
                             const IncrementalDecodingTestSetup& setup,
@@ -303,7 +303,7 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
         CHECK_OR_DIE(idec->GetNumFrameDecodedFeatures() >=
                      idec->GetNumAvailableFrames());
         if (!rewinded && available_input_size < input.size &&
-            available_input_size + kANMFHeaderSize >= input.size &&
+            available_input_size + kANMFMaxHeaderSize >= input.size &&
             !idec->TryGetDecodedFeatures()->has_trailing_data) {
           // Close to the end, no metadata afterwards, expecting one more frame.
           if (expected_total_num_frames == 0u) {
@@ -324,8 +324,8 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
     const BitstreamFeatures* const features = idec->TryGetDecodedFeatures();
     if (features != nullptr) {
       if (!output.IsEmpty()) {
-        CHECK_OR_DIE(features->width == output.width);
-        CHECK_OR_DIE(features->height == output.height);
+        CHECK_OR_DIE(features->width == output.width());
+        CHECK_OR_DIE(features->height == output.height());
       }
       const Rectangle unoriented =
           RotateRectangle(GetInverseOrientation(features->orientation),
@@ -334,13 +334,19 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
       CHECK_OR_DIE(unoriented.y == 0u);
     }
     CHECK_OR_DIE(decoded_area.width >= previous_decoded_area.width);
-    CHECK_OR_DIE(decoded_area.width <= output.width);
+    CHECK_OR_DIE(decoded_area.width <= output.width());
     CHECK_OR_DIE(decoded_area.height >= previous_decoded_area.height);
-    CHECK_OR_DIE(decoded_area.height <= output.height);
+    CHECK_OR_DIE(decoded_area.height <= output.height());
 
     // Save incremental output to make sure data doesn't change later.
     if (decoded_area.GetArea() > 0) {
       CHECK_OR_DIE(features != nullptr);
+      if (features->is_opaque) {
+        ArgbBuffer view(output.format());
+        WP2_CHECK_STATUS(view.SetView(output, decoded_area));
+        CHECK_OR_DIE(!view.HasTransparency());
+      }
+
       if (incremental_output.IsEmpty()) {
         WP2_CHECK_STATUS(
             incremental_output.Resize(features->width, features->height));
@@ -354,12 +360,13 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
         CHECK_OR_DIE(disto[4] == 99.f);
       }
       WP2_CHECK_STATUS(ImportRect(output, decoded_area, &incremental_output));
+      previous_decoded_area = decoded_area;
     }
 
     if (idec->TryGetDecodedFeatures() != nullptr) {
       if (decoded_a_full_frame) {
-        CHECK_OR_DIE(decoded_area.width == output.width);
-        CHECK_OR_DIE(decoded_area.height == output.height);
+        CHECK_OR_DIE(decoded_area.width == output.width());
+        CHECK_OR_DIE(decoded_area.height == output.height());
         // Compare incremental data and the current canvas.
         CHECK_OR_DIE(testing::Compare(incremental_output, output,
                                       "incrementally decoded"));
@@ -379,15 +386,13 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
           ++frame_index;
         }
         previous_decoded_area = Rectangle(0, 0, 0, 0);
-      } else {
-        if (!idec->TryGetDecodedFeatures()->has_trailing_data && !rewinded &&
-            frame_index == 0 && available_input_size < input.size) {
-          // If a frame was decoded, it means thet there are more bytes in
-          // 'input' than a complete valid bitstream.
-          WP2_CHECK_OK(idec->GetNumAvailableFrames() == 0u,
-                       WP2_STATUS_BITSTREAM_ERROR);
-        }
-        previous_decoded_area = decoded_area;
+      } else if (!idec->TryGetDecodedFeatures()->has_trailing_data &&
+                 !rewinded && frame_index == 0 &&
+                 available_input_size < input.size) {
+        // If a frame was decoded, it means that there are more bytes in
+        // 'input' than a complete valid bitstream.
+        WP2_CHECK_OK(idec->GetNumAvailableFrames() == 0u,
+                     WP2_STATUS_BITSTREAM_ERROR);
       }
     }
 
@@ -400,10 +405,10 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
   return WP2_STATUS_OK;
 }
 
-#undef CHECK_OR_DIE
-
 }  // namespace testing
 
 //------------------------------------------------------------------------------
+
+#undef CHECK_OR_DIE
 
 }  // namespace WP2

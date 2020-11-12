@@ -34,13 +34,13 @@ namespace {
 // Returns true if 'ccsp' and 'rgb' contain the same samples.
 ::testing::AssertionResult AreEqual(const YUVPlane& ccsp,
                                     const ArgbBuffer& rgb) {
-  if (ccsp.GetWidth() != rgb.width || ccsp.GetHeight() != rgb.height ||
+  if (ccsp.GetWidth() != rgb.width() || ccsp.GetHeight() != rgb.height() ||
       ccsp.IsDownsampled()) {
     return ::testing::AssertionFailure();
   }
 
   for (uint32_t y = 0; y < ccsp.GetHeight(); ++y) {
-    const uint8_t* const rgb_row = (const uint8_t*)rgb.GetRow(y);
+    const uint8_t* const rgb_row = rgb.GetRow8(y);
     for (uint32_t x = 0; x < ccsp.GetWidth(); ++x) {
       const int32_t ccsp_a = ccsp.HasAlpha() ? ccsp.A.At(x, y) : kAlphaMax;
       const int32_t rgb_a = rgb_row[x * 4 + 0];

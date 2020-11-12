@@ -18,6 +18,7 @@
 // Author: Yannis Guyon (yguyon@google.com)
 
 #include <algorithm>
+#include <cstring>
 #include <numeric>
 
 #include "src/dsp/dsp.h"
@@ -30,14 +31,15 @@ namespace {
 
 constexpr uint32_t kWeightLog2 = 8;
 constexpr uint32_t kStrengthShift = WP2Log2Ceil_k(kDblkMaxStrength);
+constexpr uint32_t kBlurShift = (kWeightLog2 + kStrengthShift + 1);  // 16bit
+constexpr uint32_t kBlurUnit = 1u << kBlurShift;
 
 static_assert(kDblkMaxHalf <= 8u, "kDblkMaxHalf should be adjusted");
 
 // Weights representing how much to blend a pixel with the average.
 // Per line length, per distance to edge. Fixed point precision is kWeightLog2.
 // Values are chosen experimentally.
-constexpr uint16_t kBlurWeights[kDblkMaxHalf + 1][8] = {
-    {},
+constexpr uint16_t kBlurWeights[kDblkMaxHalf][8] = {
     {160},
     {180, 70},
     {190, 89, 22},
@@ -46,6 +48,15 @@ constexpr uint16_t kBlurWeights[kDblkMaxHalf + 1][8] = {
     {200, 139, 89, 50, 22, 6},
     {200, 147, 102, 65, 37, 16, 4},
     {200, 153, 113, 78, 50, 28, 13, 3},
+};
+constexpr uint16_t kWeightThreshold(int i) {
+  return kBlurUnit / (2 * kBlurWeights[i][0]);
+}
+constexpr uint16_t kBlurWeightsThreshold[kDblkMaxHalf] = {
+  kWeightThreshold(0), kWeightThreshold(1),
+  kWeightThreshold(2), kWeightThreshold(3),
+  kWeightThreshold(4), kWeightThreshold(5),
+  kWeightThreshold(6), kWeightThreshold(7),
 };
 
 // Per sharpness. Threshold to decide whether to filter a line or not-at-all.
@@ -76,78 +87,73 @@ constexpr int8_t kFlatnessThreshold[kDblkMaxSharpness + 1][kDblkMaxHalf] = {
 // plain-C implementation
 
 // returns ...p0|q0... edge difference
-static int32_t EdgeDelta(uint32_t half, const int16_t* const q0, int32_t step) {
+static int32_t EdgeDelta(const int16_t* const q0, uint32_t half) {
   assert(half > 0 && half <= kDblkMaxHalf);
-  const int16_t* const p0 = q0 - step;
 
   // Extrapolate the edge color from the two closest pixels (consider it to be
   // between p0 and q0, at a distance of 0.5 pixels from each).
-  int32_t edge_according_to_p = p0[0];
-  int32_t edge_according_to_q = q0[0];
+  const int16_t* const p0 = q0 - 1;
+  int32_t diff = (q0[0] - p0[0]);
   if (half > 1) {
-    edge_according_to_p += RightShift(p0[0] - p0[-step], 1);
-    edge_according_to_q += RightShift(q0[0] - q0[ step], 1);
+    diff += RightShift(diff - q0[1] + p0[-1], 1);
   }
-  return (edge_according_to_q - edge_according_to_p);
+  return diff;
 }
 
-bool WouldDeblockLine_C(uint32_t filter_strength, int32_t threshold,
-                        uint32_t half, bool is_chroma, int32_t min, int32_t max,
-                        int32_t step, int16_t* q0) {
-  (void)min, (void)max, (void)is_chroma, (void)filter_strength;
-  assert(filter_strength != 0);
-  return (std::abs(EdgeDelta(half, q0, step)) <= threshold);
+uint8_t WouldDeblockLine_C(int32_t threshold, uint32_t half,
+                           const int16_t q0[]) {
+  return (std::abs(EdgeDelta(q0, half)) <= threshold) ? 1 : 0;
 }
 
-bool DeblockLine_C(uint32_t filter_strength, int32_t threshold, uint32_t half,
-                   bool is_chroma, int32_t min, int32_t max,
-                   int32_t step, int16_t* q0) {
-  assert(filter_strength > 0);
-  int32_t delta =  EdgeDelta(half, q0, step);
-  if (std::abs(delta) > threshold) return false;
+void DeblockLine_C(uint32_t filter_strength, int32_t threshold,
+                   uint8_t half, int32_t min, int32_t max, int16_t* q0) {
+  assert(filter_strength > 0 && half > 0);
+  int32_t delta = EdgeDelta(q0, half);
+  if (std::abs(delta) > threshold) return;
   // Do not filter invisible block edges, consider them already deblocked.
-  if (std::abs(delta) <= 1) return true;
-  // Color offset to go from the edge extrapolated by p0 to the adjusted edge.
   delta *= (int32_t)filter_strength;
-
-  int16_t* p = q0 - step;
+  if (std::abs(delta) <= kBlurWeightsThreshold[half - 1]) return;
+  int16_t* p = q0 - 1;
   int16_t* q = q0;
-  for (uint32_t i = 0; i < half; ++i, p -= step, q += step) {
-    const int32_t weighted_delta = RightShiftRound(
-        delta * kBlurWeights[half][i], kWeightLog2 + kStrengthShift + 1);
+  for (uint32_t i = 0; i < half; ++i, p -= 1, q += 1) {
+    // warning! -(b>>1) is not equal to (-b>>1), that's why we need two deltas
+    const int16_t p_weighted_delta = RightShiftRound(
+        +delta * kBlurWeights[half - 1][i], kBlurShift);
+    const int16_t m_weighted_delta = RightShiftRound(
+        -delta * kBlurWeights[half - 1][i], kBlurShift);
+
     // since kBlurWeights[] is decreasing, check if we can early-out
-    if (weighted_delta == 0) break;
-    *p = (int16_t)Clamp(*p + weighted_delta, min, max);
-    *q = (int16_t)Clamp(*q - weighted_delta, min, max);
+    if ((m_weighted_delta | p_weighted_delta) == 0) break;
+    *p = (int16_t)Clamp(*p + p_weighted_delta, min, max);
+    *q = (int16_t)Clamp(*q + m_weighted_delta, min, max);
   }
-  return true;
 }
 
 uint32_t MeasureFlatLength_2(uint32_t filter_sharpness,
-                             const int16_t* const q0, int32_t step) {
-  const int16_t* const p = q0 - step;
+                             const int16_t* const q0) {
+  const int16_t* const p = q0 - 1;
   const int16_t* const q = q0;
   const int32_t diff0 = q[0] - p[0];
-  const int32_t diff_q = q[step] - q[0];
-  const int32_t diff_p = p[0] - p[-step];
+  const int32_t diff_q = q[1] - q[0];
+  const int32_t diff_p = p[0] - p[-1];
   const int32_t t = kFlatnessThreshold[filter_sharpness][1];
   if (std::abs(diff_q - diff0) > t || std::abs(diff_p - diff0) > t) return 1;
   return 2;
 }
 
 uint32_t MeasureFlatLength_C(uint32_t filter_sharpness, uint32_t half,
-                             const int16_t* q0, int32_t step) {
+                             const int16_t* q0) {
   assert(half > 0 && half <= kDblkMaxHalf);
   if (half == 1) return 1;
-  if (half == 2) return MeasureFlatLength_2(filter_sharpness, q0, step);
-  const int16_t* p = q0 - step;
+  if (half == 2) return MeasureFlatLength_2(filter_sharpness, q0);
+  const int16_t* p = q0 - 1;
   const int16_t* q = q0;
   int32_t previous_diff_p = *p - *q;
   int32_t previous_diff_q = -previous_diff_p;
   for (uint32_t i = 1; i < half; ++i) {
     const int32_t previous_p = *p, previous_q = *q;
-    p -= step;
-    q += step;
+    p -= 1;
+    q += 1;
     const int32_t diff_p = *p - previous_p, diff_q = *q - previous_q;
     const int32_t t = kFlatnessThreshold[filter_sharpness][i];
     if (std::abs(diff_p - previous_diff_p) > t ||
@@ -160,6 +166,35 @@ uint32_t MeasureFlatLength_C(uint32_t filter_sharpness, uint32_t half,
   return half;
 }
 
+void MeasureFlatLengths_C(uint32_t filter_sharpness, uint32_t half,
+                          const int16_t* q0, uint32_t step,
+                          uint8_t out[], uint32_t size) {
+  for (uint32_t i = 0; i < size; ++i, q0 += step) {
+    out[i] = MeasureFlatLength_C(filter_sharpness, half, q0);
+  }
+}
+
+//------------------------------------------------------------------------------
+// buffer I/O
+
+void CopyIn_C(const int16_t* src, uint32_t src_step,
+              int16_t* dst, int32_t width, int32_t height) {
+  src -= height * src_step;
+  dst -= height;
+  for (int j = 0; j < 2 * height; ++j, src += src_step, dst += 1) {
+    for (int i = 0; i < width; ++i) dst[i * kDblCacheStep] = src[i];
+  }
+}
+
+void CopyOut_C(const int16_t* src, int16_t* dst, uint32_t dst_step,
+               int32_t width, int32_t height) {
+  src -= height;
+  dst -= height * dst_step;
+  for (int j = 0; j < 2 * height; ++j, src += 1, dst += dst_step) {
+    for (int i = 0; i < width; ++i) dst[i] = src[i * kDblCacheStep];
+  }
+}
+
 }  // namespace
 
 //------------------------------------------------------------------------------
@@ -169,103 +204,211 @@ uint32_t MeasureFlatLength_C(uint32_t filter_sharpness, uint32_t half,
 
 namespace {
 
-inline __m128i Load_s16x4(const int16_t p[], int step) {
-  return _mm_set_epi16(0, 0, 0, 0, p[3 * step], p[2 * step], p[1 * step], p[0]);
+// loads 8 int16's of input
+#define LOAD_ROW8(ROW) \
+    _mm_loadu_si128((const __m128i*)(src + (ROW) * kDblCacheStep))
+// stores 2x4 int16's of output
+#define STORE_ROW2x4(REG, ROW, STEP)                                \
+  _mm_storel_epi64((__m128i*)(dst + ((ROW) + 0) * (STEP)), (REG));  \
+  _mm_storel_epi64((__m128i*)(dst + ((ROW) + 1) * (STEP)),          \
+                   _mm_srli_si128((REG), 8))
+void Transpose8x4_SSE(const int16_t* src, int16_t* dst, uint32_t dst_step) {
+  const __m128i a0 = LOAD_ROW8(0);  // a00 a01 ... a07
+  const __m128i a1 = LOAD_ROW8(1);  // a10 a11 ... a17
+  const __m128i a2 = LOAD_ROW8(2);  // a20 a21 ... a27
+  const __m128i a3 = LOAD_ROW8(3);  // a30 a31 ... a37
+  const __m128i b0 = _mm_unpacklo_epi16(a0, a1);  // a00 a10 a01 a11 ... a03 a13
+  const __m128i b1 = _mm_unpackhi_epi16(a0, a1);  // a04 a14 a05 a15 ... a07 a17
+  const __m128i b2 = _mm_unpacklo_epi16(a2, a3);  // a20 a30 a21 a31 ... a23 a33
+  const __m128i b3 = _mm_unpackhi_epi16(a2, a3);  // a24 a34 a25 a35 ... a27 a37
+  const __m128i c0 = _mm_unpacklo_epi32(b0, b2);  // a00 a10 a20 a30 ... a21 a31
+  const __m128i c1 = _mm_unpackhi_epi32(b0, b2);  // a02 a12 a22 a32 ... a23 a33
+  const __m128i c2 = _mm_unpacklo_epi32(b1, b3);  // a04 a14 a24 a34 ... a25 a35
+  const __m128i c3 = _mm_unpackhi_epi32(b1, b3);  // a06 a16 a17 a18 ... a27 a37
+  STORE_ROW2x4(c0, 0, dst_step);
+  STORE_ROW2x4(c1, 2, dst_step);
+  STORE_ROW2x4(c2, 4, dst_step);
+  STORE_ROW2x4(c3, 6, dst_step);
 }
-inline __m128i Load_s16x8(const int16_t p[], int step) {
-  return _mm_set_epi16(p[7 * step], p[6 * step], p[5 * step], p[4 * step],
-                       p[3 * step], p[2 * step], p[1 * step], p[0]);
-}
+#undef STORE_ROW2x4
+#undef LOAD_ROW8
 
-// Loads P0/Q0 with minimal memory access.
-// Q0 = [q0 q1 q2 q3 q4 q5 q6 q7]
-// P0 = [p0 p1 p2 p3 p4 p5 p6 p7]
-template<bool half_larger_than_4>
-void GetP0Q0(const __m128i thresh, const int16_t* const q0, int32_t step,
-             __m128i* const P0, __m128i* const Q0) {
-  const int16_t* const p0 = q0 - step;
-  if (step == 1) {
-    if (half_larger_than_4) {
-      *Q0 = _mm_loadu_si128((const __m128i*)(q0 + 0));
-      *P0 = _mm_loadu_si128((const __m128i*)(q0 - 8));
-      const __m128i kRev =
-        _mm_set_epi32(0x01000302, 0x05040706, 0x09080b0a, 0x0d0c0f0e);
-      *P0 = _mm_shuffle_epi8(*P0, kRev);
+// loads 2x4 int16's of input
+#define LOAD_ROW2x4(ROW, STEP) _mm_unpacklo_epi16(                   \
+  _mm_loadl_epi64((const __m128i*)(src + (ROW + 0) * (STEP))),  \
+  _mm_loadl_epi64((const __m128i*)(src + (ROW + 1) * (STEP))))
+// stores 8 int16's of output
+#define STORE_ROW8(REG, ROW) \
+  _mm_storeu_si128((__m128i*)(dst + (ROW) * kDblCacheStep), REG)
+void Transpose4x8_SSE(const int16_t* src, uint32_t src_step, int16_t* dst) {
+  const __m128i a0 = LOAD_ROW2x4(0, src_step);    // a00 a10 a01 a11 ... a03 a13
+  const __m128i a1 = LOAD_ROW2x4(2, src_step);    // a20 a30 a21 a31 ... a23 a33
+  const __m128i a2 = LOAD_ROW2x4(4, src_step);    // a40 a50 a41 a51 ... a43 a53
+  const __m128i a3 = LOAD_ROW2x4(6, src_step);    // a60 a70 a61 a71 ... a63 a73
+  const __m128i b0 = _mm_unpacklo_epi32(a0, a1);  // a00 a10 a20 a30 ... a21 a31
+  const __m128i b1 = _mm_unpackhi_epi32(a0, a1);  // a02 a12 a22 a32 ... a23 a33
+  const __m128i b2 = _mm_unpacklo_epi32(a2, a3);  // a40 a50 a60 a70 ... a61 a71
+  const __m128i b3 = _mm_unpackhi_epi32(a2, a3);  // a42 a52 a62 a72 ... a63 a73
+  const __m128i c0 = _mm_unpacklo_epi64(b0, b2);  // a00 a10 ... a70
+  const __m128i c1 = _mm_unpackhi_epi64(b0, b2);  // a01 a11 ... a71
+  const __m128i c2 = _mm_unpacklo_epi64(b1, b3);  // a02 a12 ... a72
+  const __m128i c3 = _mm_unpackhi_epi64(b1, b3);  // a03 a13 ... a73
+  STORE_ROW8(c0, 0);
+  STORE_ROW8(c1, 1);
+  STORE_ROW8(c2, 2);
+  STORE_ROW8(c3, 3);
+}
+#undef STORE_ROW8
+#undef LOAD_ROW2x4
+
+void CopyIn_SSE(const int16_t* src, uint32_t src_step,
+                int16_t* dst, int32_t width, int32_t height) {
+  for (int y = 0; y < width; y += 4) {
+    if (height <= 4) {
+      Transpose4x8_SSE(src - 4 * src_step, src_step, dst - 4);
     } else {
-      *Q0 = _mm_loadl_epi64((const __m128i*)(q0 + 0));
-      *P0 = _mm_loadl_epi64((const __m128i*)(q0 - 4));
-      const __m128i kRev =
-        _mm_set_epi32(0, 0, 0x01000302, 0x05040706);
-      *P0 = _mm_shuffle_epi8(*P0, kRev);
+      Transpose4x8_SSE(src - 8 * src_step, src_step, dst - 8);
+      Transpose4x8_SSE(src - 0 * src_step, src_step, dst - 0);
     }
-  } else {
-    if (half_larger_than_4) {
-      *Q0 = Load_s16x8(q0,  step);
-      *P0 = Load_s16x8(p0, -step);
-    } else {
-      *Q0 = Load_s16x4(q0,  step);
-      *P0 = Load_s16x4(p0, -step);
-    }
+    src += 4;
+    dst += 4 * kDblCacheStep;
   }
 }
 
-uint32_t MeasureFlatLength_SSE(uint32_t filter_sharpness, uint32_t half,
-                               const int16_t* q0, int32_t step) {
-  assert(half > 0 && half <= kDblkMaxHalf);
-  if (half == 1) return 1;
-  if (half <= 2) return MeasureFlatLength_2(filter_sharpness, q0, step);
-  const __m128i thresh =
-      _mm_loadl_epi64((const __m128i*)kFlatnessThreshold[filter_sharpness]);
-  // Q0 = [q0 q1 q2 q3 q4 q5 q6 q7]
-  // P0 = [p0 p1 p2 p3 p4 p5 p6 p7]
-  __m128i Q0, P0;
+void CopyOut_SSE(const int16_t* src, int16_t* dst, uint32_t dst_step,
+                 int32_t width, int32_t height) {
+  for (int y = 0; y < width; y += 4) {
+    if (height <= 4) {
+      Transpose8x4_SSE(src - 4, dst - 4 * dst_step, dst_step);
+    } else {
+      Transpose8x4_SSE(src - 8, dst - 8 * dst_step, dst_step);
+      Transpose8x4_SSE(src - 0, dst - 0 * dst_step, dst_step);
+    }
+    dst += 4;
+    src += 4 * kDblCacheStep;
+  }
+}
+
+//------------------------------------------------------------------------------
+// Actual deblocking
+
+// clang-format off
+constexpr int16_t kBlurWeights_SSE[kDblkMaxHalf][16] = {
+  { 0,  0,  0,  0,  0,   0,   0, 160, -160,    0,    0,   0,   0,   0,   0,  0},
+  { 0,  0,  0,  0,  0,   0,  70, 180, -180,  -70,    0,   0,   0,   0,   0,  0},
+  { 0,  0,  0,  0,  0,  22,  89, 190, -190,  -89,  -22,   0,   0,   0,   0,  0},
+  { 0,  0,  0,  0, 13,  50, 113, 200, -200, -113,  -50, -13,   0,   0,   0,  0},
+  { 0,  0,  0,  8, 32,  72, 128, 200, -200, -128,  -72, -32,  -8,   0,   0,  0},
+  { 0,  0,  6, 22, 50,  89, 139, 200, -200, -139,  -89, -50, -22,  -6,   0,  0},
+  { 0,  4, 16, 37, 65, 102, 147, 200, -200, -147, -102, -65, -37, -16,  -4,  0},
+  { 3, 13, 28, 50, 78, 113, 153, 200, -200, -153, -113, -78, -50, -28, -13, -3}
+};
+// clang-format on
+static_assert(kBlurShift == 15, "_mm_mulhrs_epi16 needs to be changed.");
+
+void DeblockLine_SSE(uint32_t filter_strength, int32_t threshold,
+                     uint8_t half, int32_t min, int32_t max, int16_t* q0) {
+  assert(filter_strength > 0 && half > 0);
+  const __m128i m_min = _mm_set1_epi16(min);
+  const __m128i m_max = _mm_set1_epi16(max);
+  int32_t delta = EdgeDelta(q0, half);
+  if (std::abs(delta) > threshold) return;
+  // Do not filter invisible block edges, consider them already deblocked.
+  delta *= (int32_t)filter_strength;
+  if (std::abs(delta) <= kBlurWeightsThreshold[half - 1]) return;
+  assert(std::abs(delta) < 0x7fff);
+  const int16_t* const weights = kBlurWeights_SSE[half - 1];
+  const __m128i m_delta = _mm_set1_epi16(delta);
   if (half <= 4) {
-    GetP0Q0</*half_larger_than_4=*/false>(thresh, q0, step, &P0, &Q0);
+    const __m128i a0 = _mm_loadu_si128((const __m128i*)(weights + 4));
+    const __m128i b0 = _mm_mulhrs_epi16(a0, m_delta);
+    const __m128i c0 = _mm_loadu_si128((const __m128i*)(q0 - 4));
+    const __m128i d0 = _mm_adds_epi16(c0, b0);
+    const __m128i e0 = _mm_min_epi16(_mm_max_epi16(d0, m_min), m_max);
+    _mm_storeu_si128((__m128i*)(q0 - 4), e0);
   } else {
-    GetP0Q0</*half_larger_than_4=*/true>(thresh, q0, step, &P0, &Q0);
+    const __m128i a0 = _mm_loadu_si128((const __m128i*)(weights + 0));
+    const __m128i a1 = _mm_loadu_si128((const __m128i*)(weights + 8));
+    const __m128i b0 = _mm_mulhrs_epi16(a0, m_delta);
+    const __m128i b1 = _mm_mulhrs_epi16(a1, m_delta);
+    const __m128i c0 = _mm_loadu_si128((const __m128i*)(q0 - 8));
+    const __m128i c1 = _mm_loadu_si128((const __m128i*)(q0 - 0));
+    const __m128i d0 = _mm_adds_epi16(c0, b0);
+    const __m128i d1 = _mm_adds_epi16(c1, b1);
+    const __m128i e0 = _mm_min_epi16(_mm_max_epi16(d0, m_min), m_max);
+    const __m128i e1 = _mm_min_epi16(_mm_max_epi16(d1, m_min), m_max);
+    _mm_storeu_si128((__m128i*)(q0 - 8), e0);
+    _mm_storeu_si128((__m128i*)(q0 - 0), e1);
   }
-  // Q1 = [p0 q0 q1 q2 q3 q4 q5 q6]
-  // P1 = [q0 p0 p1 p2 p3 p4 p5 p6]
-  const __m128i Q1 = _mm_insert_epi16(_mm_slli_si128(Q0, 2), q0[-step], 0);
-  const __m128i P1 = _mm_insert_epi16(_mm_slli_si128(P0, 2), q0[0], 0);
-  // dQ10 = [p0-q0 q0-q1 q1-q2 q2-q3 q3-q4 q4-q5 q5-q6 q6-q7]
-  // dP10 = [q0-p0 p0-p1 p1-p2 p2-p3 p3-p4 p4-p5 p5-p6 p6-p7]
-  const __m128i dQ10 = _mm_subs_epi16(Q1, Q0);
-  const __m128i dP10 = _mm_subs_epi16(P1, P0);
-  // dQ21 = [0     p0-q0 q0-q1 q1-q2 q2-q3 q3-q4 q4-q5 q5-q6]
-  // dP21 = [0     q0-p0 p0-p1 p1-p2 p2-p3 p3-p4 p4-p5 p5-p6]
-  const __m128i dQ21 = _mm_slli_si128(dQ10, 2);
-  const __m128i dP21 = _mm_slli_si128(dP10, 2);
-  // ddQ = [|q0-p0| |2q0-q1-p0| |2q1-q0-q2| |2q2-q1-q3| ... |2q6-q5-q7|]
-  // ddP = [|p0-q0| |2p0-p1-q0| |2p1-p0-p2| |2p2-p1-p3| ... |2p6-p5-p7|]
-  const __m128i abs_ddQ = _mm_abs_epi16(_mm_subs_epi16(dQ21, dQ10));
-  const __m128i abs_ddP = _mm_abs_epi16(_mm_subs_epi16(dP21, dP10));
-  const __m128i abs_all = _mm_max_epu16(abs_ddQ, abs_ddP);
-  const __m128i abs_all_8b = _mm_packs_epi16(abs_all, abs_all);
-  const __m128i bits_PQ = _mm_cmpgt_epi8(abs_all_8b, thresh);
-  const uint32_t bits = _mm_movemask_epi8(bits_PQ);
-  return WP2Ctz(bits | /*sentinel=*/(1 << half));
 }
+
+WP2_TSAN_IGNORE_FUNCTION void DblkFilterInitSSE() {
+  DeblockLine = DeblockLine_SSE;
+
+  FilterCopyIn = CopyIn_SSE;
+  FilterCopyOut = CopyOut_SSE;
+}
+
+#if defined(WP2_USE_AVX2)
+void DeblockLine_AVX2(uint32_t filter_strength, int32_t threshold,
+                     uint8_t half, int32_t min, int32_t max, int16_t* q0) {
+  if (half <= 4) {
+    DeblockLine_SSE(filter_strength, threshold, half, min, max, q0);
+    return;
+  }
+  assert(filter_strength > 0 && half > 0);
+  int32_t delta = EdgeDelta(q0, half);
+  if (std::abs(delta) > threshold) return;
+  // Do not filter invisible block edges, consider them already deblocked.
+  delta *= (int32_t)filter_strength;
+  if (std::abs(delta) <= kBlurWeightsThreshold[half - 1]) return;
+  assert(std::abs(delta) < 0x7fff);
+  const __m256i m_min = _mm256_set1_epi16(min);
+  const __m256i m_max = _mm256_set1_epi16(max);
+  const int16_t* const weights = kBlurWeights_SSE[half - 1];
+  const __m256i m_delta = _mm256_set1_epi16(delta);
+  const __m256i a = _mm256_lddqu_si256((const __m256i*)weights);
+  const __m256i b = _mm256_mulhrs_epi16(a, m_delta);
+  const __m256i c = _mm256_lddqu_si256((const __m256i*)(q0 - 8));
+  const __m256i d = _mm256_adds_epi16(b, c);
+  const __m256i e = _mm256_min_epi16(d, m_max);
+  const __m256i f = _mm256_max_epi16(e, m_min);
+  _mm256_storeu_si256((__m256i*)(q0 - 8), f);
+}
+
+WP2_TSAN_IGNORE_FUNCTION void DblkFilterInitAVX2() {
+  DeblockLine = DeblockLine_AVX2;
+}
+#endif
 
 }  // namespace
 
-static WP2_TSAN_IGNORE_FUNCTION void DblkFilterInitSSE() {
-  MeasureFlatLength = MeasureFlatLength_SSE;
-}
-
 #endif  // WP2_USE_SSE
+
 //------------------------------------------------------------------------------
 
 int32_t DeblockThresholdFromSharpness(uint32_t filter_sharpness,
                                       uint32_t num_precision_bits) {
+  // This threshold is only used after calling EdgeDelta() which uses one extra
+  // bit of precision to avoid a ">>1". Hence the "2 * " here.
   return ChangePrecision(kSharpnessThreshold[filter_sharpness], 10u,
                          num_precision_bits);
 }
 
-DeblockLineF DeblockLine = nullptr;
-DeblockLineF WouldDeblockLine = nullptr;
-uint32_t (*MeasureFlatLength)(uint32_t filter_sharpness, uint32_t half,
-                              const int16_t* const q0, int32_t step) = nullptr;
+void (*DeblockLine)(uint32_t filter_strength, int32_t threshold, uint8_t half,
+                    int32_t min, int32_t max, int16_t* q0) = nullptr;
+uint8_t (*WouldDeblockLine)(int32_t threshold, uint32_t half,
+                            const int16_t q0[]) = nullptr;
+
+
+void (*MeasureFlatLengths)(uint32_t filter_sharpness, uint32_t half,
+                           const int16_t* q0, uint32_t step,
+                           uint8_t out[], uint32_t size) = nullptr;
+
+void (*FilterCopyIn)(const int16_t* src, uint32_t src_step,
+                     int16_t* dst, int32_t W, int32_t H) = nullptr;
+void (*FilterCopyOut)(const int16_t* src, int16_t* dst, uint32_t dst_step,
+                      int32_t W, int32_t H) = nullptr;
 
 static volatile WP2CPUInfo dblk_filter_last_cpuinfo_used =
     (WP2CPUInfo)&dblk_filter_last_cpuinfo_used;
@@ -275,13 +418,17 @@ WP2_TSAN_IGNORE_FUNCTION void DblkFilterInit() {
 
   DeblockLine = DeblockLine_C;
   WouldDeblockLine = WouldDeblockLine_C;
-
-  MeasureFlatLength = MeasureFlatLength_C;
+  MeasureFlatLengths = MeasureFlatLengths_C;
+  FilterCopyIn = CopyIn_C;
+  FilterCopyOut = CopyOut_C;
 
   if (WP2GetCPUInfo != nullptr) {
 #if defined(WP2_USE_SSE)
     if (WP2GetCPUInfo(kSSE)) DblkFilterInitSSE();
-#endif
+#if defined(WP2_USE_AVX2)
+    if (WP2GetCPUInfo(kAVX2)) DblkFilterInitAVX2();
+#endif  // AVX2
+#endif  // SSE
   }
 
   dblk_filter_last_cpuinfo_used = WP2GetCPUInfo;

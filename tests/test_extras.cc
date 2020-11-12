@@ -37,12 +37,12 @@ TEST_P(RescaleTest, ArgbBuffer) {
   ArgbBuffer b;
   ASSERT_WP2_OK(
       b.Resize(random.Get(min_size, max_size), random.Get(min_size, max_size)));
-  uint8_t* dst = (uint8_t*)b.GetRow(0);
-  for (uint32_t j = 0; j < b.height; ++j) {
-    for (uint32_t i = 0; i < 4 * b.width; ++i) {
+  uint8_t* dst = b.GetRow8(0);
+  for (uint32_t j = 0; j < b.height(); ++j) {
+    for (uint32_t i = 0; i < 4 * b.width(); ++i) {
       dst[i] = random.Get<uint8_t>(0x00u, 0xffu);
     }
-    dst += b.stride;
+    dst += b.stride();
   }
   ASSERT_WP2_OK(ArgbBufferRescale(&b, random.Get(min_size, max_size),
                                   random.Get(min_size, max_size)));

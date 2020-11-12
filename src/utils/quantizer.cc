@@ -48,9 +48,9 @@ WP2Status Quantizer::Allocate(uint32_t range_max) {
 
 void Quantizer::Quantize(const uint32_t* const histogram,
                          const uint16_t* const mapping, size_t size_sparse,
-                         uint32_t symbol_range, uint32_t max_count, int speed,
+                         uint32_t symbol_range, uint32_t max_count, int effort,
                          Config** const config_best) {
-  assert(speed >= 0 && speed <= 9);
+  assert(effort >= 0 && effort <= 9);
   *config_best = &configs_[0];
   configs_used_[0] = true;
   for (size_t i = 1; i < kConfigNbr; ++i) configs_used_[i] = false;
@@ -70,7 +70,7 @@ void Quantizer::Quantize(const uint32_t* const histogram,
     buffer += histogram_size_max_ * sizeof(uint16_t) / sizeof(uint32_t);
   }
   QuantizeImpl(histogram, mapping, size_sparse, symbol_range,
-               1 + WP2Log2Floor(max_count), speed, 0);
+               1 + WP2Log2Floor(max_count), effort, 0);
 }
 
 // The quantization implementation uses the Config cache of the class during
@@ -78,7 +78,7 @@ void Quantizer::Quantize(const uint32_t* const histogram,
 void Quantizer::QuantizeImpl(const uint32_t* const histogram,
                              const uint16_t* const mapping, size_t size_sparse,
                              uint32_t symbol_range, uint32_t n_pixels_bits,
-                             int speed, size_t config_index, float cost_max) {
+                             int effort, size_t config_index, float cost_max) {
   assert(config_index < kConfigNbr);
   Config* const config_best = &configs_[config_index];
   if (size_sparse == 0) {
@@ -109,7 +109,7 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
         1 + WP2Log2Floor(*std::max_element(histogram, histogram + size_sparse));
     max_freq_bits_max = std::min(max_freq_bits_max, kMaxFreqBits);
     const uint32_t max_freq_bits_min =
-        (1 * speed + max_freq_bits_max * (9 - speed)) / 9;
+        (1 * effort + max_freq_bits_max * (9 - effort)) / 9;
     for (uint32_t max_freq_bits = max_freq_bits_max;
          max_freq_bits >= max_freq_bits_min; --max_freq_bits) {
       bits[n_max_freq_bits++] = max_freq_bits;
@@ -272,7 +272,7 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
             const uint32_t histogram_to_write_size_bits =
                 1 + WP2Log2Floor(histogram_to_write_size);
             QuantizeImpl(histogram_sub, mapping_sub, ind, 1 + kMaxFreqBits,
-                         histogram_to_write_size_bits, speed,
+                         histogram_to_write_size_bits, effort,
                          config_next - configs_, cost_max_tmp);
             if (config_next->cost_ < cost_max_tmp) {
               // Also add to the cost the size of the array.

@@ -22,6 +22,7 @@
 
 #include "src/common/color_precision.h"
 #include "src/common/constants.h"
+#include "src/common/header_enc_dec.h"
 #include "src/dec/preview/preview_dec.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/utils/ans_utils.h"
@@ -33,52 +34,39 @@
 namespace WP2 {
 
 //------------------------------------------------------------------------------
-// ReadVarInt() and ReadChunk() mark bytes as read but don't discard them.
+// ReadChunk() marks bytes as read but does not discard them.
 
-bool ReadVarInt(DataSource* const data_source, uint64_t buf_size_upper,
-                size_t* const size) {
-  size_t n = 0;
-  *size = 0;
-  size_t buf_size_upper_tmp = buf_size_upper;
-  while (buf_size_upper_tmp >= 256) {
-    const uint8_t* buf;
-    if (!data_source->TryGetNext(n + 1, &buf)) return false;  // missing data
-    if (!(buf[n] & 0x80)) break;
-    *size |= (size_t)(buf[n] & 0x7f) << (7 * n);
-    buf_size_upper_tmp >>= 7;
-    ++n;
-    if (n >= kMaxVarIntLength) return false;  // 'buf_size_upper' is too big
-                                              // or bad bitstream
-  }
-  const uint8_t* buf;
-  if (!data_source->TryGetNext(n + 1, &buf)) return false;  // missing data
-  *size |= buf[n] << (7 * n);
-  ++n;
-  if (*size >= buf_size_upper) return false;  // bad bitstream
-  data_source->MarkNumBytesAsRead(n);  // 'n' bytes were used.
-  return true;  // success
-}
-
-WP2Status ReadChunk(DataSource* const data_source, DataView* const chunk_data) {
+// Extracts a chunk. 'chunk_data' is not owning the returned data and must be
+// used or copied before reading from the 'data_source' again.
+static WP2Status ReadChunk(DataSource* const data_source,
+                           DataView* const chunk_data) {
+  assert(chunk_data != nullptr);
   size_t chunk_size = 0;
-  WP2_CHECK_OK(ReadVarInt(data_source, kChunkSizeMax, &chunk_size),
+  WP2_CHECK_STATUS(TryReadVarInt(data_source, 1, kChunkSizeMax, &chunk_size));
+  WP2_CHECK_OK(data_source->TryReadNext(chunk_size, &chunk_data->bytes),
                WP2_STATUS_NOT_ENOUGH_DATA);
-  chunk_size += 1;
-  if (chunk_data != nullptr) {
-    WP2_CHECK_OK(data_source->TryReadNext(chunk_size, &chunk_data->bytes),
-                 WP2_STATUS_NOT_ENOUGH_DATA);
-    chunk_data->size = chunk_size;
-  } else {
-    data_source->MarkNumBytesAsRead(chunk_size);
-  }
+  chunk_data->size = chunk_size;
   return WP2_STATUS_OK;
 }
 
-WP2Status SkipChunk(DataSource* const data_source) {
+// Reads the chunk size and set that many following bytes as read.
+static WP2Status SkipChunk(DataSource* const data_source) {
   size_t chunk_size = 0;
-  WP2_CHECK_OK(ReadVarInt(data_source, kChunkSizeMax, &chunk_size),
-               WP2_STATUS_NOT_ENOUGH_DATA);
-  data_source->MarkNumBytesAsRead(chunk_size + 1);
+  WP2_CHECK_STATUS(TryReadVarInt(data_source, 1, kChunkSizeMax, &chunk_size));
+  data_source->MarkNumBytesAsRead(chunk_size);
+  return WP2_STATUS_OK;
+}
+
+// Copies the bytes into 'chunk_data' unless it is null or not empty.
+static WP2Status CopyChunk(DataSource* const data_source,
+                           Data* const chunk_data) {
+  if (chunk_data != nullptr && chunk_data->IsEmpty()) {
+    DataView view;
+    WP2_CHECK_STATUS(ReadChunk(data_source, &view));
+    WP2_CHECK_STATUS(chunk_data->CopyFrom(view.bytes, view.size));
+  } else {
+    WP2_CHECK_STATUS(SkipChunk(data_source));
+  }
   return WP2_STATUS_OK;
 }
 
@@ -87,8 +75,8 @@ WP2Status DecodeTileChunkSize(const GlobalParams& params,
                               DataSource* const data_source,
                               size_t* const tile_chunk_size) {
   const uint64_t max_num_bytes = GetTileMaxNumBytes(params, tile_rect);
-  WP2_CHECK_OK(ReadVarInt(data_source, max_num_bytes + 1, tile_chunk_size),
-               WP2_STATUS_NOT_ENOUGH_DATA);
+  WP2_CHECK_STATUS(
+      TryReadVarInt(data_source, 1, max_num_bytes, tile_chunk_size));
   return WP2_STATUS_OK;
 }
 
@@ -99,25 +87,6 @@ static uint32_t Load24(const uint8_t buf[]) {
   return (uint32_t)buf[0] | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2] << 16);
 }
 
-// Get 'background_color' from 'flag'.
-// Returns false if it still needs to be decoded.
-static inline bool GetBackgroundColor(uint8_t background_bits,
-                                      Argb38b* const background_color) {
-  if (background_bits == kBackgroundTransparent) {
-    background_color->a = 0x00u;
-    background_color->r = background_color->g = background_color->b = 0x0000u;
-  } else if (background_bits == kBackgroundWhite) {
-    background_color->a = 0xFFu;
-    background_color->r = background_color->g = background_color->b = 0x03FFu;
-  } else if (background_bits == kBackgroundBlack) {
-    background_color->a = 0xFFu;
-    background_color->r = background_color->g = background_color->b = 0x0000u;
-  } else {
-    return false;
-  }
-  return true;
-}
-
 WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
                                           size_t data_size) {
   WP2_CHECK_OK(!WP2_ABI_IS_INCOMPATIBLE(version, WP2_ABI_VERSION),
@@ -126,7 +95,9 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
   WP2_CHECK_OK(data_size >= kHeaderMinSize, WP2_STATUS_NOT_ENOUGH_DATA);
   WP2_CHECK_OK(Load24(data) == kSignature, WP2_STATUS_BITSTREAM_ERROR);
 
-  HeaderDec dec(data + 3, data_size - 3);
+  ExternalDataSource data_source(data, data_size);
+  data_source.MarkNumBytesAsRead(3);  // For kSignature
+  HeaderDec dec(&data_source, "image_features");
   raw_width = 1 + dec.ReadBits(kImageDimNumBits, "width_m1");
   raw_height = 1 + dec.ReadBits(kImageDimNumBits, "height_m1");
 
@@ -152,31 +123,34 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
   WP2_CHECK_OK(dec.ReadBits(2, "filler") == 0x2u, WP2_STATUS_BITSTREAM_ERROR);
 
   if (is_animation) {
-    loop_count = (uint8_t)dec.ReadBits(kLoopCountNumBits, "loop_count");
-    const uint8_t background_bits =
-        (uint8_t)dec.ReadBits(kBackgroundNumBits, "background");
-    if (!GetBackgroundColor(background_bits, &background_color)) {
-      background_color.a = (uint8_t)dec.ReadBits(8, "background");
+    loop_forever = !!dec.ReadBits(1, "loop");
+    const bool custom_background = !!dec.ReadBits(1, "background");
+    if (custom_background) {
+      background_color.a =
+          (uint8_t)(is_opaque ? kAlphaMax : dec.ReadBits(8, "background"));
       background_color.r = (uint16_t)dec.ReadBits(10, "background");
       background_color.g = (uint16_t)dec.ReadBits(10, "background");
       background_color.b = (uint16_t)dec.ReadBits(10, "background");
       WP2_CHECK_OK(CheckPremultiplied(background_color),
                    WP2_STATUS_BITSTREAM_ERROR);
-      WP2_CHECK_OK(dec.ReadBits(2, "filler") == 0x0,
+    } else {
+      background_color = kDefaultBackgroundColor;
+      WP2_CHECK_OK(dec.ReadBits(6, "filler") == 0x2u,
                    WP2_STATUS_BITSTREAM_ERROR);
     }
   } else {
-    loop_count = 1;
-    background_color = kTransparentArgb38b;
+    loop_forever = true;
+    background_color = kDefaultBackgroundColor;
   }
   if (transfer_function == WP2_TF_UNSPECIFIED) {
     transfer_function =
         (TransferFunction)(1 + dec.ReadBits(4, "transfer_function"));
     WP2_CHECK_OK(dec.ReadBits(4, "filler") == 0x0, WP2_STATUS_BITSTREAM_ERROR);
   }
-  WP2_CHECK_OK(dec.Ok(), WP2_STATUS_BITSTREAM_ERROR);
+  WP2_CHECK_STATUS(dec.GetStatus());
 
-  header_size = 3 + dec.Used();
+  header_size = data_source.GetNumReadBytes();
+  assert(header_size >= kHeaderMinSize && header_size <= kHeaderMaxSize);
   return WP2_STATUS_OK;
 }
 
@@ -198,13 +172,7 @@ WP2Status DecodeHeader(DataSource* const data_source,
 WP2Status DecodeICC(DataSource* const data_source,
                     const BitstreamFeatures& features, Data* const iccp) {
   if (features.has_icc) {
-    DataView chunk_iccp;
-    WP2_CHECK_STATUS(ReadChunk(data_source, &chunk_iccp));
-
-    // Copy chunk before disposal if it's empty.
-    if (iccp != nullptr && iccp->IsEmpty()) {
-      WP2_CHECK_STATUS(iccp->CopyFrom(chunk_iccp.bytes, chunk_iccp.size));
-    }
+    WP2_CHECK_STATUS(CopyChunk(data_source, iccp));
   }
   return WP2_STATUS_OK;
 }
@@ -261,10 +229,12 @@ WP2Status DecodePreview(DataSource* const data_source,
                         const BitstreamFeatures& features,
                         ArgbBuffer* const output_buffer) {
   if (features.has_preview) {
-    DataView chunk;
-    WP2_CHECK_STATUS(ReadChunk(data_source, &chunk));
     if (output_buffer != nullptr) {
+      DataView chunk;
+      WP2_CHECK_STATUS(ReadChunk(data_source, &chunk));
       WP2_CHECK_STATUS(DecodePreview(chunk.bytes, chunk.size, output_buffer));
+    } else {
+      WP2_CHECK_STATUS(SkipChunk(data_source));
     }
   }
   return WP2_STATUS_OK;
@@ -302,16 +272,11 @@ WP2Status DecodeMetadata(DataSource* const data_source,
                          Data* const exif, Data* const xmp) {
   bool has_xmp, has_exif;
   WP2_CHECK_STATUS(HasMetadata(data_source, features, &has_xmp, &has_exif));
-  DataView chunk_xmp = {nullptr, 0}, chunk_exif = {nullptr, 0};
-  if (has_xmp) WP2_CHECK_STATUS(ReadChunk(data_source, &chunk_xmp));
-  if (has_exif) WP2_CHECK_STATUS(ReadChunk(data_source, &chunk_exif));
-
-  // Copy metadata before disposal if it's empty.
-  if (exif != nullptr && exif->IsEmpty()) {
-    WP2_CHECK_STATUS(exif->CopyFrom(chunk_exif.bytes, chunk_exif.size));
+  if (has_xmp) {
+    WP2_CHECK_STATUS(CopyChunk(data_source, xmp));
   }
-  if (xmp != nullptr && xmp->IsEmpty()) {
-    WP2_CHECK_STATUS(xmp->CopyFrom(chunk_xmp.bytes, chunk_xmp.size));
+  if (has_exif) {
+    WP2_CHECK_STATUS(CopyChunk(data_source, exif));
   }
   return WP2_STATUS_OK;
 }

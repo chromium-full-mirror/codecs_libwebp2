@@ -20,10 +20,13 @@
 #include <cassert>
 
 #include "./anim_enc.h"
+#include "src/common/header_enc_dec.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
+
+//------------------------------------------------------------------------------
 
 bool AllFramesAreOpaque(const Vector<Frame>& frames) {
   for (const Frame& frame : frames) {
@@ -35,50 +38,47 @@ bool AllFramesAreOpaque(const Vector<Frame>& frames) {
   return true;
 }
 
-//------------------------------------------------------------------------------
+static_assert(GetMaxVarIntLength(0, kMaxFrameDurationMs) <
+                  GetMaxVarIntLength(0, kMaxFrameDurationMs + 1),
+              "kMaxFrameDurationMs is not optimized to fit in a varint");
 
-namespace {
-
-WP2Status WriteANMF(uint32_t duration, const Rectangle& window, bool dispose,
+WP2Status WriteANMF(uint32_t image_width, uint32_t image_height,
+                    uint32_t duration, const Rectangle& window, bool dispose,
                     bool blend, bool is_last, Writer* const output) {
-  assert(window.x < kImageDimMax && window.y < kImageDimMax);
-  assert(window.width > 0 && window.width <= kImageDimMax);
-  assert(window.height > 0 && window.height <= kImageDimMax);
+  assert(image_width <= kImageDimMax && image_height <= kImageDimMax);
+  assert(window.width > 0 && window.x + window.width <= image_width);
+  assert(window.height > 0 && window.y + window.height <= image_height);
   // If it's the last frame, it can't be a preframe.
   if (is_last) assert(duration > 0);
 
-  uint8_t header[kANMFHeaderSize];
-  HeaderEnc henc(header, sizeof(header));
+  uint8_t header[kANMFMaxHeaderSize];
+  HeaderEnc enc(header, sizeof(header), "anmf_chunk");
   const uint32_t tag = dispose ? kANMFTagDispose : kANMFTagFrame;
-  henc.PutBits(tag, kANMFTagNumBits, "anmf_tag");
-  henc.PutBits(blend ? 1 : 0, 1, "blend");
-  henc.PutBits(is_last ? 1 : 0, 1, "is_last");
-  henc.PutBits(duration, kFrameDurationNumBits, "duration");
-  henc.PutBits(window.x, kImageDimNumBits, "frame_x");
-  henc.PutBits(window.y, kImageDimNumBits, "frame_y");
-  henc.PutBits(window.width - 1, kImageDimNumBits, "frame_w");
-  henc.PutBits(window.height - 1, kImageDimNumBits, "frame_h");
-  henc.Align();
-  WP2_CHECK_OK(henc.Ok(), WP2_STATUS_BAD_WRITE);
-  WP2_CHECK_OK(output->Append(header, sizeof(header)), WP2_STATUS_BAD_WRITE);
+  enc.PutBits(tag, kANMFTagNumBits, "anmf_tag");
+  enc.PutBits(blend ? 1 : 0, 1, "blend");
+  enc.PutBits(is_last ? 1 : 0, 1, "is_last");
+  enc.PutVarUInt(duration, 0, kMaxFrameDurationMs, "duration");
+  enc.PutRect(window, image_width, image_height, "window");
+  enc.Align();
+  assert(enc.Ok());
+  assert(enc.Used() >= kANMFMinHeaderSize && enc.Used() <= kANMFMaxHeaderSize);
+  WP2_CHECK_OK(output->Append(header, enc.Used()), WP2_STATUS_BAD_WRITE);
   return WP2_STATUS_OK;
 }
-
-}  // anonymous namespace
 
 //------------------------------------------------------------------------------
 
 uint32_t Frame::GetWidth() const {
-  return ccsp_pixels.IsEmpty() ? rgb_pixels.width : ccsp_pixels.GetWidth();
+  return ccsp_pixels.IsEmpty() ? rgb_pixels.width() : ccsp_pixels.GetWidth();
 }
 uint32_t Frame::GetHeight() const {
-  return ccsp_pixels.IsEmpty() ? rgb_pixels.height : ccsp_pixels.GetHeight();
+  return ccsp_pixels.IsEmpty() ? rgb_pixels.height() : ccsp_pixels.GetHeight();
 }
 
 Rectangle Subframe::GetFrameRect() const {
-  return {0, 0,
-          ccsp_pixels.IsEmpty() ? rgb_pixels.width : ccsp_pixels.GetWidth(),
-          ccsp_pixels.IsEmpty() ? rgb_pixels.height : ccsp_pixels.GetHeight()};
+  return {
+      0, 0, ccsp_pixels.IsEmpty() ? rgb_pixels.width() : ccsp_pixels.GetWidth(),
+      ccsp_pixels.IsEmpty() ? rgb_pixels.height() : ccsp_pixels.GetHeight()};
 }
 
 //------------------------------------------------------------------------------
@@ -98,24 +98,25 @@ WP2Status FrameEncoder::SaveSubframeToCanvas(const ArgbBuffer& subframe,
   WP2_CHECK_OK(ccsp_canvas_.IsEmpty(), WP2_STATUS_UNSUPPORTED_FEATURE);
 
   if (rgb_canvas_.IsEmpty()) {
-    assert(window.width == subframe.width && window.height == subframe.height);
+    assert(window.width == subframe.width() &&
+           window.height == subframe.height());
     assert(window.x == 0 && window.y == 0);
 
     WP2_CHECK_STATUS(rgb_canvas_.CopyFrom(subframe));
   } else {
-    assert(subframe.width == rgb_canvas_.width);
-    assert(subframe.height == rgb_canvas_.height);
+    assert(subframe.width() == rgb_canvas_.width());
+    assert(subframe.height() == rgb_canvas_.height());
 
-    const uint32_t pixel_depth = WP2FormatBpp(rgb_canvas_.format);
+    const uint32_t pixel_depth = WP2FormatBpp(rgb_canvas_.format());
     uint8_t* canvas_row =
-        (uint8_t*)rgb_canvas_.GetRow(window.y) + window.x * pixel_depth;
+        rgb_canvas_.GetRow8(window.y) + window.x * pixel_depth;
     const uint8_t* frame_row =
-        (const uint8_t*)subframe.GetRow(window.y) + window.x * pixel_depth;
+        subframe.GetRow8(window.y) + window.x * pixel_depth;
 
     for (uint32_t y = 0; y < window.height; ++y) {
       memcpy(canvas_row, frame_row, window.width * pixel_depth);
-      canvas_row += rgb_canvas_.stride;
-      frame_row += subframe.stride;
+      canvas_row += rgb_canvas_.stride();
+      frame_row += subframe.stride();
     }
   }
   return WP2_STATUS_OK;
@@ -135,9 +136,9 @@ WP2Status FrameEncoder::GetPixelsDifferentFromCanvas(
   // A mix of color spaces is currently unsupported.
   WP2_CHECK_OK(ccsp_canvas_.IsEmpty(), WP2_STATUS_UNSUPPORTED_FEATURE);
 
-  assert(frame.format == rgb_canvas_.format);
-  assert(frame.width == rgb_canvas_.width &&
-         frame.height == rgb_canvas_.height);
+  assert(frame.format() == rgb_canvas_.format());
+  assert(frame.width() == rgb_canvas_.width() &&
+         frame.height() == rgb_canvas_.height());
 
   // As quality lowers, pixels tend to be less different from previous frame.
   // TODO(yguyon): Refine 15, make a constant etc.
@@ -145,14 +146,14 @@ WP2Status FrameEncoder::GetPixelsDifferentFromCanvas(
   const uint32_t squared_threshold =
       (uint32_t)std::lround(threshold * threshold);
 
-  const uint32_t pixel_depth = WP2FormatBpp(rgb_canvas_.format);
-  const uint8_t* canvas_row = (const uint8_t*)rgb_canvas_.GetRow(0);
-  const uint8_t* frame_row = (const uint8_t*)frame.GetRow(0);
+  const uint32_t pixel_depth = WP2FormatBpp(rgb_canvas_.format());
+  const uint8_t* canvas_row = rgb_canvas_.GetRow8(0);
+  const uint8_t* frame_row = frame.GetRow8(0);
 
-  for (uint32_t y = 0; y < frame.height; ++y) {
+  for (uint32_t y = 0; y < frame.height(); ++y) {
     const uint8_t* canvas_pixel = canvas_row;
     const uint8_t* frame_pixel = frame_row;
-    for (uint32_t x = 0; x < frame.width;
+    for (uint32_t x = 0; x < frame.width();
          ++x, canvas_pixel += pixel_depth, frame_pixel += pixel_depth) {
       uint32_t squared_diff = 0;
       for (uint32_t c = 0; c < pixel_depth; ++c) {
@@ -163,8 +164,8 @@ WP2Status FrameEncoder::GetPixelsDifferentFromCanvas(
         different_pixels->AddPoint(x, y);
       }
     }
-    canvas_row += rgb_canvas_.stride;
-    frame_row += frame.stride;
+    canvas_row += rgb_canvas_.stride();
+    frame_row += frame.stride();
   }
   return WP2_STATUS_OK;
 }
@@ -309,7 +310,7 @@ WP2Status FrameEncoder::EncodeFrame(const Frame& frame, bool dispose,
 
 WP2Status FrameEncoder::Encode(Writer* const output) {
   const uint32_t max_num_preframes =
-      (kMaxNumPreframes * (uint32_t)config_.speed + 4) / 9;
+      (kMaxNumPreframes * (uint32_t)config_.effort + 4) / 9;
 
   // One more for the regular frame following the preframes.
   RectangleGroup different_pixels(max_num_preframes + 1);
@@ -402,7 +403,7 @@ WP2Status FrameEncoder::Encode(Writer* const output) {
     if (i + 1 < frames_.size()) {
       // Check if the next frame is maybe disposing to know if the current frame
       // must be saved to the canvas.
-      dispose = (frames_[i + 1].force_dispose || config_.speed == 0 ||
+      dispose = (frames_[i + 1].force_dispose || config_.effort == 0 ||
                  i + 1 - last_dispose_index > kMaxNumDependentFrames);
       if (!dispose) {
         if (frame.rgb_pixels.IsEmpty()) {
@@ -435,11 +436,12 @@ WP2Status SubframeEncoder::EncodeSubframe(const EncoderConfig& config,
                                          : subframe.ccsp_pixels.HasAlpha()),
         WP2_STATUS_INVALID_PARAMETER);
   }
-  WP2_CHECK_STATUS(WriteANMF(subframe.duration_ms, subframe.window,
-                             subframe.dispose, subframe.blend, is_last,
-                             output));
+  WP2_CHECK_STATUS(
+      WriteANMF(subframe.GetFrameRect().width, subframe.GetFrameRect().height,
+                subframe.duration_ms, subframe.window, subframe.dispose,
+                subframe.blend, is_last, output));
 
-  ArgbBuffer rgb_subframe(subframe.rgb_pixels.format);
+  ArgbBuffer rgb_subframe(subframe.rgb_pixels.format());
 
   const GlobalParams::Type type = DecideGlobalParamsType(config);
   const bool yuv_is_needed = (type != GlobalParams::GP_LOSSLESS);
@@ -467,7 +469,7 @@ WP2Status SubframeEncoder::EncodeSubframe(const EncoderConfig& config,
   if (yuv_is_needed) {
     WP2_CHECK_STATUS(csp_transform.Init(config.csp_type, rgb_subframe));
     if (subframe.ccsp_pixels.IsEmpty()) {
-      ArgbBuffer view(subframe.rgb_pixels.format);
+      ArgbBuffer view(subframe.rgb_pixels.format());
       WP2_CHECK_STATUS(view.SetView(subframe.rgb_pixels, subframe.window));
       WP2_CHECK_STATUS(
           yuv_subframe.Import(view, view.HasTransparency(), csp_transform,

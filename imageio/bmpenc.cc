@@ -39,11 +39,11 @@ static constexpr uint32_t kBMPHeaderSize = 54u;
 
 WP2Status WriteBMP(const ArgbBuffer& buffer, FILE* fout) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(buffer.format == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
+  WP2_CHECK_OK(buffer.format() == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
 
   const bool has_alpha = buffer.HasTransparency();
-  const uint32_t width = buffer.width;
-  const uint32_t height = buffer.height;
+  const uint32_t width = buffer.width();
+  const uint32_t height = buffer.height();
   WP2_CHECK_OK(!buffer.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
   const uint32_t bytes_per_px = has_alpha ? 4 : 3;
   const uint32_t line_size = bytes_per_px * width;
@@ -83,7 +83,7 @@ WP2Status WriteBMP(const ArgbBuffer& buffer, FILE* fout) {
 
   // write pixel array
   for (uint32_t y = 0; y < height; ++y) {
-    const uint8_t* const Argb = (const uint8_t*)buffer.GetRow(height - 1 - y);
+    const uint8_t* const Argb = buffer.GetRow8(height - 1 - y);
     WP2ArgbConvertTo[has_alpha ? WP2_BGRA_32 : WP2_BGR_24](Argb, width,
                                                            ARGB.data());
     WP2_CHECK_OK(fwrite(ARGB.data(), bmp_stride, 1, fout) == 1,

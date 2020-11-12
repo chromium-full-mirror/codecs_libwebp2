@@ -23,8 +23,7 @@ IMG_LIBS= -lpng -lz -ljpeg -ltiff -lgif \
 GTEST_DIR=../googletest
 GTEST_FLAGS  = -I$(GTEST_DIR)/googletest/include
 GTEST_FLAGS += -I$(GTEST_DIR)/googlemock/include
-GTEST_LIBS  = $(GTEST_DIR)/googletest/make/gtest-all.o
-GTEST_LIBS += $(GTEST_DIR)/googlemock/make/gtest_main.o
+GTEST_LIBS = -L$(GTEST_DIR)/lib -lgtest -lgtest_main
 
 ifeq ($(strip $(shell uname)), Darwin)
   # Work around a problem linking tables marked as common symbols,
@@ -103,8 +102,8 @@ EXTRA_FLAGS += -msse4
 
 # AVX2-specific flags:
 ifeq ($(HAVE_AVX2), 1)
-EXTRA_FLAGS += -DWP2_HAVE_AVX2
-src/dsp/%_avx2.o: EXTRA_FLAGS += -mavx2
+EXTRA_FLAGS += -DWP2_HAVE_AVX2 -DWP2_HAVE_SSE
+src/dsp/deblocking_filter_dsp.o: EXTRA_FLAGS += -mavx2
 endif
 
 
@@ -350,8 +349,9 @@ UTILS_DEC_OBJS = \
     src/utils/wiener.o \
 
 UTILS_ENC_OBJS = \
-    src/common/integral.o \
     src/common/global_params.o \
+    src/common/header_enc_dec.o \
+    src/common/integral.o \
 
 COMMON_DEC_OBJS = \
     src/common/filters/rstr_flt_params.o \
@@ -413,12 +413,14 @@ HDRS = \
     src/common/lossy/rnd_mtx.h \
     src/common/lossy/aom/array_2d.h \
     src/common/lossy/aom/cdfs.inc \
-    src/common/integral.h \
     src/common/global_params.h \
+    src/common/header_enc_dec.h \
+    src/common/integral.h \
     src/common/preview/preview.h \
     src/common/progress_watcher.h \
     src/common/symbols.h \
     src/dsp/dsp.h \
+    src/dsp/dsp_x86.h \
     src/dsp/lossless/lossless.h \
     src/dsp/lossless/lossless_common.h \
     src/dsp/math.h \
@@ -479,22 +481,6 @@ OUT_LIBS += src/libwebp2decoder.a
 OUT_LIBS += src/libwebp2ans.a
 OUT_LIBS += src/libwebp2preview.a
 OUT_LIBS += src/libwebp2.a
-
-OUT_EXAMPLES =
-OUT_EXAMPLES += examples/cwp2
-OUT_EXAMPLES += examples/dwp2
-OUT_EXAMPLES += examples/vwp2
-
-EXTRAS_LIB = extras/libextras.a
-
-EXTRA_EXAMPLES =
-EXTRA_EXAMPLES += examples/get_disto
-EXTRA_EXAMPLES += examples/rd_curve
-EXTRA_EXAMPLES += extras/vwp2_sdl
-EXTRA_EXAMPLES += extras/av1enc
-EXTRA_EXAMPLES += extras/mk_preview
-EXTRA_EXAMPLES += extras/ewp2
-
 # libs for testing. Let's just include everything we could need
 BASE_LIBS =
 BASE_LIBS += extras/libextras.a
@@ -504,12 +490,12 @@ BASE_LIBS += imageio/libimageio_util.a
 BASE_LIBS += examples/example_utils.a
 BASE_LIBS += src/libwebp2.a
 
-TEST_LIBS =
-TEST_LIBS += tests/include/helpers_incr.o
-TEST_LIBS += tests/include/helpers_filter.o
-TEST_LIBS += tests/include/helpers.o
-TEST_LIBS += $(BASE_LIBS)
-TEST_LIBS += $(GTEST_LIBS)
+TEST_OBJS =
+TEST_OBJS += tests/include/helpers_incr.o
+TEST_OBJS += tests/include/helpers_filter.o
+TEST_OBJS += tests/include/helpers.o
+TEST_OBJS += $(BASE_LIBS)
+
 TEST_CXX_FLAGS =
 TEST_CXX_FLAGS += $(GTEST_FLAGS) -lpthread -Wno-unused-command-line-argument
 
@@ -521,87 +507,7 @@ ifeq ($(MAKECMDGOALS),clean)
   OUTPUT += $(EXTRAS_LIB)
 endif
 
-TEST_BINARIES =
-TEST_BINARIES += tests/test_alloc
-TEST_BINARIES += tests/test_analysis
-TEST_BINARIES += tests/test_anim
-TEST_BINARIES += tests/test_anim_incr
-TEST_BINARIES += tests/test_anim_rectangle
-TEST_BINARIES += tests/test_alpha_filter
-TEST_BINARIES += tests/test_imageio
-TEST_BINARIES += tests/test_imageio_conversion
-TEST_BINARIES += tests/test_imageio_util
-TEST_BINARIES += tests/test_imageio_anim
-TEST_BINARIES += tests/test_example_utils
-TEST_BINARIES += tests/test_ans
-TEST_BINARIES += tests/test_block_size
-TEST_BINARIES += tests/test_buffer
-TEST_BINARIES += tests/test_dec
-TEST_BINARIES += tests/test_diffusion
-TEST_BINARIES += tests/test_intertile_filter
-TEST_BINARIES += tests/test_deblocking_filter
-TEST_BINARIES += tests/test_directional_filter
-TEST_BINARIES += tests/test_restoration_filter
-TEST_BINARIES += tests/test_extras
-TEST_BINARIES += tests/test_header
-TEST_BINARIES += tests/test_global_params
-TEST_BINARIES += tests/test_math
-TEST_BINARIES += tests/test_malloc_fail_at
-TEST_BINARIES += tests/test_plane
-TEST_BINARIES += tests/test_pessimization
-TEST_BINARIES += tests/test_custom_csp
-TEST_BINARIES += tests/test_custom_csp_dec
-TEST_BINARIES += tests/test_custom_csp_enc
-TEST_BINARIES += tests/test_custom_csp_enc_dec
-TEST_BINARIES += tests/test_predictor
-TEST_BINARIES += tests/test_partitions
-TEST_BINARIES += tests/test_partition_score_func
-TEST_BINARIES += tests/test_preview_api
-TEST_BINARIES += tests/test_api
-TEST_BINARIES += tests/test_optim
-TEST_BINARIES += tests/test_score
-TEST_BINARIES += tests/test_simple_enc_dec
-TEST_BINARIES += tests/test_simple_encode
-TEST_BINARIES += tests/test_slow_enc
-TEST_BINARIES += tests/test_segment
-TEST_BINARIES += tests/test_transf
-TEST_BINARIES += tests/test_utils
-TEST_BINARIES += tests/test_uv_mode
-TEST_BINARIES += tests/test_aom_residuals
-TEST_BINARIES += tests/test_residuals
-TEST_BINARIES += tests/test_anim_frame
-TEST_BINARIES += tests/test_incr_dec
-TEST_BINARIES += tests/test_quant_mtx
-TEST_BINARIES += tests/test_histogram
-TEST_BINARIES += tests/test_group4
-TEST_BINARIES += tests/test_palette
-TEST_BINARIES += tests/test_color_cache
-TEST_BINARIES += tests/test_color_precision
-TEST_BINARIES += tests/test_coded_block
-TEST_BINARIES += tests/test_context
-TEST_BINARIES += tests/test_csp
-TEST_BINARIES += tests/test_dsp
-TEST_BINARIES += tests/test_dsp_speed
-TEST_BINARIES += tests/test_data_source
-TEST_BINARIES += tests/test_data_source_stream
-TEST_BINARIES += tests/test_distortion
-TEST_BINARIES += tests/test_orientation
-TEST_BINARIES += tests/test_front_mgr
-TEST_BINARIES += tests/test_formats
-TEST_BINARIES += tests/test_speeds
-TEST_BINARIES += tests/test_thread
-TEST_BINARIES += tests/test_tile_shapes
-TEST_BINARIES += tests/test_syntax_writer
-TEST_BINARIES += tests/test_version
-TEST_BINARIES += tests/test_progress
-TEST_BINARIES += tests/ansz
-TEST_BINARIES += tests/test_assert_bin
-TEST_BINARIES += tests/test_symbols
-TEST_BINARIES += tests/test_vector
-
-ex: $(OUT_EXAMPLES)
-all: ex $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES) $(TEST_BINARIES)
-extras: $(EXTRAS_LIB)
+all: ex $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES) $(CC_TESTS) $(SH_TESTS)
 
 %.o: %.c $(HDRS)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
@@ -621,6 +527,21 @@ src/libwebp2.a: $(LIBWP2_OBJS)
 
 %.a:
 	$(AR) $(ARFLAGS) $@ $^
+
+###############################################################################
+# examples
+###############################################################################
+
+OUT_EXAMPLES =
+OUT_EXAMPLES += examples/cwp2
+OUT_EXAMPLES += examples/dwp2
+OUT_EXAMPLES += examples/vwp2
+OUT_EXAMPLES += examples/get_disto
+OUT_EXAMPLES += examples/rd_curve
+
+ex: $(OUT_EXAMPLES)
+$(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES):
+	$(CXX) -o $@ $^ $(LDFLAGS)
 
 examples/cwp2: examples/cwp2.o
 examples/cwp2: $(BASE_LIBS)
@@ -644,392 +565,25 @@ examples/rd_curve: $(BASE_LIBS)
 examples/rd_curve: extras/libextras.a
 examples/rd_curve: override EXTRA_LIBS += $(IMG_LIBS)
 
+###############################################################################
+# extras
+###############################################################################
+
+EXTRA_EXAMPLES =
+EXTRA_EXAMPLES += extras/vwp2_sdl
+EXTRA_EXAMPLES += extras/av1enc
+EXTRA_EXAMPLES += extras/mk_preview
+EXTRA_EXAMPLES += extras/ewp2
+
+EXTRAS_LIB = extras/libextras.a
+
+extras: $(EXTRAS_LIB)
+
 extras/vwp2_sdl: extras/vwp2_sdl.o
 extras/vwp2_sdl: extras/wp2_to_sdl.o
 extras/vwp2_sdl: $(BASE_LIBS)
 extras/vwp2_sdl: override EXTRA_FLAGS += -DWP2_HAVE_SDL $(SDL_FLAGS)
 extras/vwp2_sdl: override EXTRA_LIBS += $(SDL_LIBS) $(IMG_LIBS)
-
-$(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES):
-	$(CXX) -o $@ $^ $(LDFLAGS)
-
-tests/test_alloc: tests/test_alloc.o
-tests/test_alloc: $(TEST_LIBS)
-tests/test_alloc: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_alloc: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_analysis: tests/test_analysis.o
-tests/test_analysis: $(TEST_LIBS)
-tests/test_analysis: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_analysis: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_progress: tests/test_progress.o
-tests/test_progress: $(TEST_LIBS)
-tests/test_progress: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_progress: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_speeds: tests/test_speeds.o
-tests/test_speeds: $(TEST_LIBS)
-tests/test_speeds: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_speeds: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_thread: tests/test_thread.o
-tests/test_thread: $(TEST_LIBS)
-tests/test_thread: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_thread: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_tile_shapes: tests/test_tile_shapes.o
-tests/test_tile_shapes: $(TEST_LIBS)
-tests/test_tile_shapes: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_tile_shapes: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_version: tests/test_version.o
-tests/test_version: $(TEST_LIBS)
-tests/test_version: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_version: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_syntax_writer: tests/test_syntax_writer.o
-tests/test_syntax_writer: $(TEST_LIBS)
-tests/test_syntax_writer: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_syntax_writer: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_alpha_filter: tests/test_alpha_filter.o
-tests/test_alpha_filter: $(TEST_LIBS)
-tests/test_alpha_filter: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_alpha_filter: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_anim: tests/test_anim.o
-tests/test_anim: $(TEST_LIBS)
-tests/test_anim: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_anim: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_anim_incr: tests/test_anim_incr.o
-tests/test_anim_incr: $(TEST_LIBS)
-tests/test_anim_incr: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_anim_incr: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_anim_rectangle: tests/test_anim_rectangle.o
-tests/test_anim_rectangle: $(TEST_LIBS)
-tests/test_anim_rectangle: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_anim_rectangle: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_imageio: tests/test_imageio.o
-tests/test_imageio: $(TEST_LIBS)
-tests/test_imageio: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_imageio: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_imageio_conversion: tests/test_imageio_conversion.o
-tests/test_imageio_conversion: $(TEST_LIBS)
-tests/test_imageio_conversion: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_imageio_conversion: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_imageio_util: tests/test_imageio_util.o
-tests/test_imageio_util: $(TEST_LIBS)
-tests/test_imageio_util: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_imageio_util: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_imageio_anim: tests/test_imageio_anim.o
-tests/test_imageio_anim: $(TEST_LIBS)
-tests/test_imageio_anim: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_imageio_anim: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_example_utils: tests/test_example_utils.o
-tests/test_example_utils: examples/example_utils.a
-tests/test_example_utils: $(TEST_LIBS)
-tests/test_example_utils: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_example_utils: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_header: tests/test_header.o
-tests/test_header: $(TEST_LIBS)
-tests/test_header: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_header: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_global_params: tests/test_global_params.o
-tests/test_global_params: $(TEST_LIBS)
-tests/test_global_params: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_global_params: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_transf: tests/test_transf.o
-tests/test_transf: $(TEST_LIBS)
-tests/test_transf: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_transf: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_utils: tests/test_utils.o
-tests/test_utils: $(TEST_LIBS)
-tests/test_utils: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_utils: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_uv_mode: tests/test_uv_mode.o
-tests/test_uv_mode: $(TEST_LIBS)
-tests/test_uv_mode: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_uv_mode: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_aom_residuals: tests/test_aom_residuals.o
-tests/test_aom_residuals: $(TEST_LIBS)
-tests/test_aom_residuals: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_aom_residuals: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_residuals: tests/test_residuals.o
-tests/test_residuals: $(TEST_LIBS)
-tests/test_residuals: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_residuals: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_diffusion: tests/test_diffusion.o
-tests/test_diffusion: $(TEST_LIBS)
-tests/test_diffusion: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_diffusion: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_intertile_filter: tests/test_intertile_filter.o
-tests/test_intertile_filter: $(TEST_LIBS)
-tests/test_intertile_filter: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_intertile_filter: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_deblocking_filter: tests/test_deblocking_filter.o
-tests/test_deblocking_filter: $(TEST_LIBS)
-tests/test_deblocking_filter: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_deblocking_filter: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_directional_filter: tests/test_directional_filter.o
-tests/test_directional_filter: $(TEST_LIBS)
-tests/test_directional_filter: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_directional_filter: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_restoration_filter: tests/test_restoration_filter.o
-tests/test_restoration_filter: $(TEST_LIBS)
-tests/test_restoration_filter: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_restoration_filter: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_quant_mtx: tests/test_quant_mtx.o
-tests/test_quant_mtx: $(TEST_LIBS)
-tests/test_quant_mtx: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_quant_mtx: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_color_cache: tests/lossless/test_color_cache.o
-tests/test_color_cache: $(TEST_LIBS)
-tests/test_color_cache: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_color_cache: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_group4: tests/lossless/test_group4.o
-tests/test_group4: $(TEST_LIBS)
-tests/test_group4: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_group4: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_palette: tests/lossless/test_palette.o
-tests/test_palette: $(TEST_LIBS)
-tests/test_palette: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_palette: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_histogram: tests/lossless/test_histogram.o
-tests/test_histogram: $(TEST_LIBS)
-tests/test_histogram: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_histogram: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_color_precision: tests/test_color_precision.o
-tests/test_color_precision: $(TEST_LIBS)
-tests/test_color_precision: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_color_precision: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_coded_block: tests/test_coded_block.o
-tests/test_coded_block: $(TEST_LIBS)
-tests/test_coded_block: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_coded_block: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_segment: tests/test_segment.o
-tests/test_segment: $(TEST_LIBS)
-tests/test_segment: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_segment: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_simple_enc_dec: tests/test_simple_enc_dec.o
-tests/test_simple_enc_dec: $(BASE_LIBS)  # doesn't use gtest
-tests/test_simple_enc_dec: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_simple_enc_dec: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_simple_encode: tests/test_simple_encode.o
-tests/test_simple_encode: $(TEST_LIBS)
-tests/test_simple_encode: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_simple_encode: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_slow_enc: tests/test_slow_enc.o
-tests/test_slow_enc: $(TEST_LIBS)
-tests/test_slow_enc: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_slow_enc: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_context: tests/test_context.o
-tests/test_context: $(TEST_LIBS)
-tests/test_context: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_context: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_csp: tests/test_csp.o
-tests/test_csp: $(TEST_LIBS)
-tests/test_csp: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_csp: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_dsp: tests/test_dsp.o
-tests/test_dsp: $(TEST_LIBS)
-tests/test_dsp: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_dsp: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_dsp_speed: tests/test_dsp_speed.o
-tests/test_dsp_speed: $(TEST_LIBS)
-tests/test_dsp_speed: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_dsp_speed: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_dec: tests/test_dec.o
-tests/test_dec: $(TEST_LIBS)
-tests/test_dec: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_dec: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_data_source: tests/test_data_source.o
-tests/test_data_source: $(TEST_LIBS)
-tests/test_data_source: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_data_source: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_data_source_stream: tests/test_data_source_stream.o
-tests/test_data_source_stream: $(TEST_LIBS)
-tests/test_data_source_stream: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_data_source_stream: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_distortion: tests/test_distortion.o
-tests/test_distortion: $(TEST_LIBS)
-tests/test_distortion: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_distortion: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_orientation: tests/test_orientation.o
-tests/test_orientation: $(TEST_LIBS)
-tests/test_orientation: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_orientation: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_anim_frame: tests/test_anim_frame.o
-tests/test_anim_frame: $(TEST_LIBS)
-tests/test_anim_frame: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_anim_frame: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_incr_dec: tests/test_incr_dec.o
-tests/test_incr_dec: $(TEST_LIBS)
-tests/test_incr_dec: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_incr_dec: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_malloc_fail_at: tests/test_malloc_fail_at.o
-tests/test_malloc_fail_at: $(TEST_LIBS)
-tests/test_malloc_fail_at: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_malloc_fail_at: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_math: tests/test_math.o
-tests/test_math: $(TEST_LIBS)
-tests/test_math: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_math: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_ans: tests/test_ans.o
-tests/test_ans: $(TEST_LIBS)
-tests/test_ans: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_ans: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_buffer: tests/test_buffer.o
-tests/test_buffer: $(TEST_LIBS)
-tests/test_buffer: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_buffer: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_block_size: tests/test_block_size.o
-tests/test_block_size: $(TEST_LIBS)
-tests/test_block_size: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_block_size: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_vector: tests/test_vector.o
-tests/test_vector: $(TEST_LIBS)
-tests/test_vector: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_vector: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_plane: tests/test_plane.o
-tests/test_plane: $(TEST_LIBS)
-tests/test_plane: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_plane: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_pessimization: tests/test_pessimization.o
-tests/test_pessimization: $(TEST_LIBS)
-tests/test_pessimization: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_pessimization: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_custom_csp: tests/test_custom_csp.o
-tests/test_custom_csp: $(TEST_LIBS)
-tests/test_custom_csp: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_custom_csp: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_custom_csp_dec: tests/test_custom_csp_dec.o
-tests/test_custom_csp_dec: $(TEST_LIBS)
-tests/test_custom_csp_dec: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_custom_csp_dec: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_custom_csp_enc: tests/test_custom_csp_enc.o
-tests/test_custom_csp_enc: $(TEST_LIBS)
-tests/test_custom_csp_enc: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_custom_csp_enc: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_custom_csp_enc_dec: tests/test_custom_csp_enc_dec.o
-tests/test_custom_csp_enc_dec: $(TEST_LIBS)
-tests/test_custom_csp_enc_dec: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_custom_csp_enc_dec: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_predictor: tests/test_predictor.o
-tests/test_predictor: $(TEST_LIBS)
-tests/test_predictor: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_predictor: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_partitions: tests/test_partitions.o
-tests/test_partitions: $(TEST_LIBS)
-tests/test_partitions: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_partitions: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_partition_score_func: tests/test_partition_score_func.o
-tests/test_partition_score_func: $(TEST_LIBS)
-tests/test_partition_score_func: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_partition_score_func: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_api: tests/test_api.o
-tests/test_api: $(TEST_LIBS)
-tests/test_api: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_api: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_preview_api: tests/test_preview_api.o
-tests/test_preview_api: $(TEST_LIBS)
-tests/test_preview_api: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_preview_api: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_optim: tests/test_optim.o
-tests/test_optim: $(TEST_LIBS)
-tests/test_optim: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_optim: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_front_mgr: tests/test_front_mgr.o
-tests/test_front_mgr: $(TEST_LIBS)
-tests/test_front_mgr: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_front_mgr: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_formats: tests/test_formats.o
-tests/test_formats: $(TEST_LIBS)
-tests/test_formats: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_formats: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_extras: tests/test_extras.o
-tests/test_extras: $(TEST_LIBS)
-tests/test_extras: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_extras: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_symbols: tests/test_symbols.o
-tests/test_symbols: $(TEST_LIBS)
-tests/test_symbols: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_symbols: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_score: tests/test_score.o
-tests/test_score: $(TEST_LIBS)
-tests/test_score: override EXTRA_LIBS += $(IMG_LIBS)
-tests/test_score: override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
-
-tests/test_assert_bin: tests/test_assert.o
-tests/test_assert_bin: src/libwebp2.a
-
-tests/ansz: tests/ansz.o
-tests/ansz: $(BASE_LIBS)
-tests/ansz: override EXTRA_LIBS += $(IMG_LIBS)
 
 extras/av1enc: extras/av1enc.o
 extras/av1enc: $(BASE_LIBS)
@@ -1043,9 +597,9 @@ extras/ewp2: extras/ewp2.o
 extras/ewp2: $(BASE_LIBS)
 extras/ewp2: override EXTRA_LIBS += $(IMG_LIBS) -lpthread
 
-
-$(TEST_BINARIES):
-	$(CXX) -o $@ $^ $(LDFLAGS)
+###############################################################################
+# tests
+###############################################################################
 
 dist: DESTDIR := dist
 dist: OUT_EXAMPLES += $(EXTRA_EXAMPLES)
@@ -1064,25 +618,65 @@ dist: all
 	    | $(COL) -bx >$(DESTDIR)/doc/$${basenam}.html; \
 	done
 
-test: test_io test_cmd test_enc test_alloc test_ans test_extras test_ansz \
-	test_assert test_math test_transf test_utils test_front_mgr test_plane \
-	test_preview_api test_optim test_csp test_dsp test_vector test_buffer \
-	test_symbols test_segment test_quant_mtx test_incr_dec test_api \
-	test_coded_block test_distortion test_predictor test_score \
-	test_anim test_anim_incr test_imageio_anim test_example_utils \
-	test_orientation test_partitions test_uv_mode test_aom_residuals \
-	test_residuals test_speeds test_progress test_intertile_filter \
-	test_directional_filter test_deblocking_filter test_restoration_filter \
-	test_header test_custom_csp test_custom_csp_dec test_malloc_fail_at \
-	test_header test_custom_csp_enc test_custom_csp_enc_dec test_dec \
-	test_thread test_pessimization test_formats test_global_params \
-	test_data_source test_data_source_stream test_alpha_filter \
-	test_anim_rectangle test_block_size test_context test_color_precision \
-	test_imageio test_imageio_conversion test_imageio_util test_dsp_speed \
-	test_simple_enc_dec test_simple_encode test_slow_enc test_io_pnm \
-	test_color_cache test_group4 test_histogram test_analysis \
-	test_partition_score_func test_tile_shapes test_version \
-	test_syntax_writer test_anim_frame test_diffusion test_palette
+###############################################################################
+# tests
+###############################################################################
+
+CC_TESTS =
+CC_TESTS += test_alloc test_ans test_extras
+CC_TESTS += test_math test_transf test_utils test_front_mgr
+CC_TESTS += test_preview_api test_optim test_csp test_dsp test_vector
+CC_TESTS += test_symbols test_segment test_quant_mtx test_incr_dec test_api
+CC_TESTS += test_coded_block test_distortion test_predictor test_score
+CC_TESTS += test_anim test_anim_incr test_imageio_anim test_example_utils
+CC_TESTS += test_orientation test_partitions test_uv_mode test_aom_residuals
+CC_TESTS += test_residuals test_efforts test_progress test_intertile_filter
+CC_TESTS += test_directional_filter test_deblocking_filter test_plane
+CC_TESTS += test_header test_custom_csp test_custom_csp_dec test_malloc_fail_at
+CC_TESTS += test_custom_csp_enc test_custom_csp_enc_dec test_dec
+CC_TESTS += test_thread test_pessimization test_formats test_global_params
+CC_TESTS += test_data_source test_data_source_stream test_alpha_filter
+CC_TESTS += test_anim_rectangle test_block_size test_context test_buffer
+CC_TESTS += test_imageio test_imageio_conversion test_imageio_util
+CC_TESTS += test_simple_enc_dec test_simple_encode test_slow_enc
+CC_TESTS += test_partition_score_func test_tile_shapes test_version
+CC_TESTS += test_syntax_writer test_anim_frame test_diffusion test_analysis
+CC_TESTS += test_decoder_api test_restoration_filter test_color_precision
+CC_TESTS += test_dsp_speed
+# lossless tests:
+CC_TESTS += lossless/test_color_cache lossless/test_palette
+CC_TESTS += lossless/test_group4 lossless/test_histogram
+
+# template for generating test binary rules
+define TEST_binary_template
+tests/$(1): tests/$$(addsuffix .o, $(1)) $(TEST_OBJS)
+tests/$(1): override EXTRA_LIBS += $(IMG_LIBS) $(GTEST_LIBS)
+tests/$(1): override EXTRA_CXX_FLAGS += $(TEST_CXX_FLAGS)
+tests/$(1):
+	$$(CXX) -o $(2) $$^ $$(LDFLAGS)
+endef
+
+define TEST_template  # generate the rules with same name for .cc and binary
+$(call TEST_binary_template,$(1),$$@)
+endef
+
+define TEST_template_full   # generate the rules for binary and test script
+$(call TEST_template,$(1))
+$(1): tests/$(1)
+	cd tests && ./$(1)
+endef
+
+$(foreach ttest, $(CC_TESTS), $(eval $(call TEST_template_full,$(ttest))))
+
+# special sh tests, with specially named binaries
+
+$(eval $(call TEST_binary_template,test_assert,tests/test_assert_bin))
+test_assert: tests/test_assert
+	cd tests && ./test_assert.sh
+
+$(eval $(call TEST_binary_template,ansz,tests/ansz))
+test_ansz: tests/ansz
+	cd tests && ./test_ansz.sh
 
 test_io: $(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES)
 	cd tests && ./test_io.sh ../examples
@@ -1097,162 +691,21 @@ test_enc_dir: $(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES)
 test_enc_anim: $(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES)
 	cd tests && ./test_enc_anim.sh ../examples
 
-test_alloc: tests/test_alloc
-	cd tests && ./test_alloc
-test_analysis: tests/test_analysis
-	cd tests && ./test_analysis
-test_speeds: tests/test_speeds
-	cd tests && ./test_speeds
-test_thread: tests/test_thread
-	cd tests && ./test_thread
-test_tile_shapes: tests/test_tile_shapes
-	cd tests && ./test_tile_shapes
-test_version: tests/test_version
-	cd tests && ./test_version
-test_syntax_writer: tests/test_syntax_writer
-	cd tests && ./test_syntax_writer
-test_progress: tests/test_progress
-	cd tests && ./test_progress
-test_alpha_filter: tests/test_alpha_filter
-	cd tests && ./test_alpha_filter
-test_anim: tests/test_anim
-	cd tests && ./test_anim
-test_anim_rectangle: tests/test_anim_rectangle
-	cd tests && ./test_anim_rectangle
-test_anim_incr: tests/test_anim_incr
-	cd tests && ./test_anim_incr
-test_imageio: tests/test_imageio
-	cd tests && ./test_imageio
-test_imageio_conversion: tests/test_imageio_conversion
-	cd tests && ./test_imageio_conversion
-test_imageio_util: tests/test_imageio_util
-	cd tests && ./test_imageio_util
-test_imageio_anim: tests/test_imageio_anim
-	cd tests && ./test_imageio_anim
-test_example_utils: tests/test_example_utils
-	cd tests && ./test_example_utils
-test_header: tests/test_header
-	cd tests && ./test_header
-test_global_params: tests/test_global_params
-	cd tests && ./test_global_params
-test_slow_enc: tests/test_slow_enc
-	cd tests && ./test_slow_enc
-test_simple_encode: tests/test_simple_encode
-	cd tests && ./test_simple_encode
-test_simple_enc_dec: tests/test_simple_enc_dec
-	cd tests && ./test_simple_enc_dec
-test_segment: tests/test_segment
-	cd tests && ./test_segment
-test_utils: tests/test_utils
-	cd tests && ./test_utils
-test_transf: tests/test_transf
-	cd tests && ./test_transf
-test_anim_frame: tests/test_anim_frame
-	cd tests && ./test_anim_frame
-test_incr_dec: tests/test_incr_dec
-	cd tests && ./test_incr_dec
-test_quant_mtx: tests/test_quant_mtx
-	cd tests && ./test_quant_mtx
-test_diffusion: tests/test_diffusion
-	cd tests && ./test_diffusion
-test_intertile_filter: tests/test_intertile_filter
-	cd tests && ./test_intertile_filter
-test_deblocking_filter: tests/test_deblocking_filter
-	cd tests && ./test_deblocking_filter
-test_directional_filter: tests/test_directional_filter
-	cd tests && ./test_directional_filter
-test_restoration_filter: tests/test_restoration_filter
-	cd tests && ./test_restoration_filter
-test_color_cache: tests/test_color_cache
-	cd tests && ./test_color_cache
-test_group4: tests/test_group4
-	cd tests && ./test_group4
-test_palette: tests/test_palette
-	cd tests && ./test_palette
-test_histogram: tests/test_histogram
-	cd tests && ./test_histogram
-test_color_precision: tests/test_color_precision
-	cd tests && ./test_color_precision
-test_coded_block: tests/test_coded_block
-	cd tests && ./test_coded_block
-test_context: tests/test_context
-	cd tests && ./test_context
-test_csp: tests/test_csp
-	cd tests && ./test_csp
-test_dsp: tests/test_dsp
-	cd tests && ./test_dsp
-test_dsp_speed: tests/test_dsp_speed
-	cd tests && ./test_dsp_speed
-test_dec: tests/test_dec
-	cd tests && ./test_dec
-test_data_source: tests/test_data_source
-	cd tests && ./test_data_source
-test_data_source_stream: tests/test_data_source_stream
-	cd tests && ./test_data_source_stream
-test_distortion: tests/test_distortion
-	cd tests && ./test_distortion
-test_orientation: tests/test_orientation
-	cd tests && ./test_orientation
-test_math: tests/test_math
-	cd tests && ./test_math
-test_malloc_fail_at: tests/test_malloc_fail_at
-	cd tests && ./test_malloc_fail_at
-test_buffer: tests/test_buffer
-	cd tests && ./test_buffer
-test_block_size: tests/test_block_size
-	cd tests && ./test_block_size
+SH_TESTS =
+SH_TESTS += test_assert test_ansz test_io_pnm test_cmd
+SH_TESTS += test_enc test_enc_dir test_enc_anim
 
-test_ans: tests/test_ans
-	cd tests && ./test_ans
-test_ansz: tests/ansz
-	cd tests && ./test_ansz.sh
-test_extras: tests/test_extras
-	cd tests && ./test_extras
-test_front_mgr: tests/test_front_mgr
-	cd tests && ./test_front_mgr
-test_formats: tests/test_formats
-	cd tests && ./test_formats
-test_plane: tests/test_plane
-	cd tests && ./test_plane
-test_pessimization: tests/test_pessimization
-	cd tests && ./test_pessimization
-test_custom_csp: tests/test_custom_csp
-	cd tests && ./test_custom_csp
-test_custom_csp_dec: tests/test_custom_csp_dec
-	cd tests && ./test_custom_csp_dec
-test_custom_csp_enc: tests/test_custom_csp_enc
-	cd tests && ./test_custom_csp_enc
-test_custom_csp_enc_dec: tests/test_custom_csp_enc_dec
-	cd tests && ./test_custom_csp_enc_dec
-test_predictor: tests/test_predictor
-	cd tests && ./test_predictor
-test_partitions: tests/test_partitions
-	cd tests && ./test_partitions
-test_partition_score_func: tests/test_partition_score_func
-	cd tests && ./test_partition_score_func
-test_api: tests/test_api
-	cd tests && ./test_api
-test_preview_api: tests/test_preview_api
-	cd tests && ./test_preview_api
-test_optim: tests/test_optim
-	cd tests && ./test_optim source0.ppm
-test_score: tests/test_score
-	cd tests && ./test_score
-test_assert: tests/test_assert_bin
-	cd tests && ./test_assert.sh
-test_vector: tests/test_vector
-	cd tests && ./test_vector
-test_symbols: tests/test_symbols
-	cd tests && ./test_symbols
-test_uv_mode: tests/test_uv_mode
-	cd tests && ./test_uv_mode
-test_aom_residuals: tests/test_aom_residuals
-	cd tests && ./test_aom_residuals
-test_residuals: tests/test_residuals
-	cd tests && ./test_residuals
+test: $(CC_TESTS) $(SH_TESTS)
 
-clean:
-	$(RM) $(OUTPUT) $(TEST_BINARIES) *~
+###############################################################################
+
+ex_clean:
+	for ttest in $(CC_TESTS); do $(RM) tests/$$ttest tests/$$ttest.o; done
+	for ttest in ansz test_assert_bin; do $(RM) tests/$$ttest; done
+	$(RM) tests/*.o tests/*~
+
+clean: ex_clean
+	$(RM) $(OUTPUT) *~
 	$(RM) -rf Testing
 	for d in examples extras imageio src src/dec src/dsp src/enc src/wp2 \
 	         src/utils tests man doc swig cmake src/enc/lossless \
@@ -1332,10 +785,12 @@ DIST_FILES= \
             src/common/constants.h \
             src/common/filters/rstr_flt_params.h \
             src/common/filters/rstr_flt_params.cc \
-            src/common/integral.h \
-            src/common/integral.cc \
             src/common/global_params.h \
             src/common/global_params.cc \
+            src/common/header_enc_dec.h \
+            src/common/header_enc_dec.cc \
+            src/common/integral.h \
+            src/common/integral.cc \
             src/common/lossless/color_cache.h \
             src/common/lossless/color_cache.cc \
             src/common/lossy/aom/array_2d.h \
@@ -1424,6 +879,7 @@ DIST_FILES= \
             src/dsp/deblocking_filter_dsp.cc \
             src/dsp/dec_dsp.cc \
             src/dsp/dsp.h \
+            src/dsp/dsp_x86.h \
             src/dsp/enc_dsp.cc \
             src/dsp/grain_c.cc \
             src/dsp/math.cc \
@@ -1598,6 +1054,7 @@ DIST_FILES= \
             tests/test_data_source_stream.cc \
             tests/test_deblocking_filter.cc \
             tests/test_dec.cc \
+            tests/test_decoder_api.cc \
             tests/test_diffusion.cc \
             tests/test_directional_filter.cc \
             tests/test_distortion.cc \
@@ -1641,7 +1098,7 @@ DIST_FILES= \
             tests/test_simple_encode.cc \
             tests/test_slow_enc.cc \
             tests/test_stuttering_server.sh \
-            tests/test_speeds.cc \
+            tests/test_efforts.cc \
             tests/test_symbols.cc \
             tests/test_swig_examples.sh \
             tests/test_swig_python.py \

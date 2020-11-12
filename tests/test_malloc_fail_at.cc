@@ -57,7 +57,7 @@ class MallocFailureTest
 TEST_P(MallocFailureTest, Encoding) {
   const std::string& src_file_name = std::get<0>(GetParam());
   const float quality = std::get<1>(GetParam());
-  const int speed = std::get<2>(GetParam());
+  const int effort = std::get<2>(GetParam());
   const int thread_level = (std::get<3>(GetParam()) == 0) ? 0 : 1;
   const int min_malloc_fail_at = std::get<4>(GetParam());
   const int max_malloc_fail_at = std::get<5>(GetParam());
@@ -70,7 +70,7 @@ TEST_P(MallocFailureTest, Encoding) {
     src.Deallocate();
     data.Reset();
     WP2SetMallocFailAt(malloc_fail_at);
-    status = testing::CompressImage(src_file_name, &data, &src, quality, speed,
+    status = testing::CompressImage(src_file_name, &data, &src, quality, effort,
                                     thread_level);
     if (status != WP2_STATUS_OK) {
       ASSERT_EQ(status, WP2_STATUS_OUT_OF_MEMORY)
@@ -81,7 +81,7 @@ TEST_P(MallocFailureTest, Encoding) {
     ++malloc_fail_at;
   }
   std::cout << "Compressing " << src_file_name << " (quality " << quality
-            << ", speed " << speed << ", mt " << thread_level << ")"
+            << ", effort " << effort << ", mt " << thread_level << ")"
             << " took at least " << malloc_fail_at << " WP2Malloc() calls "
             << "(" << status << ")." << std::endl;
 
@@ -92,7 +92,7 @@ TEST_P(MallocFailureTest, Encoding) {
       ArgbBuffer another_src;  // Keep first OK output though.
       NoAllocationFailureMemoryWriter another_data;
       ASSERT_WP2_OK(testing::CompressImage(src_file_name, &another_data,
-                                           &another_src, quality, speed,
+                                           &another_src, quality, effort,
                                            thread_level))
           << "False positives from " << malloc_fail_at << " to "
           << (malloc_fail_at + i - 1);
@@ -114,7 +114,7 @@ TEST_P(MallocFailureTest, Encoding) {
 TEST_P(MallocFailureTest, Decoding) {
   const std::string& src_file_name = std::get<0>(GetParam());
   const float quality = std::get<1>(GetParam());
-  const int speed = std::get<2>(GetParam());
+  const int effort = std::get<2>(GetParam());
   const int thread_level = std::get<3>(GetParam());
   const int min_malloc_fail_at = std::get<4>(GetParam());
   const int max_malloc_fail_at = std::get<5>(GetParam());
@@ -124,7 +124,7 @@ TEST_P(MallocFailureTest, Decoding) {
   MemoryWriter data;
   WP2SetMallocFailAt(0);
   ASSERT_WP2_OK(testing::CompressImage(src_file_name, &data, &src, quality,
-                                       speed, /*thread_level=*/1));
+                                       effort, /*thread_level=*/1));
 
   ArgbBuffer output;
   DecoderConfig config;
@@ -144,7 +144,7 @@ TEST_P(MallocFailureTest, Decoding) {
     ++malloc_fail_at;
   }
   std::cout << "Decompressing " << src_file_name << " (quality " << quality
-            << ", speed " << speed << ", mt " << thread_level << ")"
+            << ", effort " << effort << ", mt " << thread_level << ")"
             << " took at least " << malloc_fail_at << " WP2Malloc() calls "
             << "(" << status << ")." << std::endl;
 
@@ -170,7 +170,7 @@ INSTANTIATE_TEST_SUITE_P(
     MallocFailureTestInstantiationLossy, MallocFailureTest,
     ::testing::Combine(::testing::Values("source1_64x48.png"),
                        ::testing::Values(75.f) /* quality */,
-                       ::testing::Values(0) /* speed */,
+                       ::testing::Values(0) /* effort */,
                        ::testing::Values(8) /* multithreading */,
                        ::testing::Values(3) /* min_malloc_fail_at */,
                        ::testing::Values(4) /* max_malloc_fail_at */));
@@ -179,7 +179,7 @@ INSTANTIATE_TEST_SUITE_P(
     MallocFailureTestInstantiationLossless, MallocFailureTest,
     ::testing::Combine(::testing::Values("source1_64x48.png"),
                        ::testing::Values(100.f) /* quality */,
-                       ::testing::Values(0) /* speed */,
+                       ::testing::Values(0) /* effort */,
                        ::testing::Values(8) /* multithreading */,
                        ::testing::Values(8) /* min_malloc_fail_at */,
                        ::testing::Values(9) /* max_malloc_fail_at */));
@@ -188,7 +188,7 @@ INSTANTIATE_TEST_SUITE_P(
     MallocFailureTestInstantiationSmall, MallocFailureTest,
     ::testing::Combine(::testing::Values("source1_1x1.png"),
                        ::testing::Values(0.f, 99.f) /* quality */,
-                       ::testing::Values(5) /* speed */,
+                       ::testing::Values(5) /* effort */,
                        ::testing::Values(0) /* multithreading */,
                        ::testing::Values(19) /* min_malloc_fail_at */,
                        ::testing::Values(20) /* max_malloc_fail_at */));
@@ -203,7 +203,7 @@ INSTANTIATE_TEST_SUITE_P(
                                          "alpha_ramp.lossy.webp", "source3.jpg",
                                          "test_exif_xmp.webp"),
                        ::testing::Values(0.f, 50.f, 99.f, 100.f) /* quality */,
-                       ::testing::Values(0, 5, 9) /* speed */,
+                       ::testing::Values(0, 5, 9) /* effort */,
                        ::testing::Values(0, 8) /* multithreading */,
                        ::testing::Values(1) /* min_malloc_fail_at */,
                        ::testing::Values(1000000) /* max_malloc_fail_at */));

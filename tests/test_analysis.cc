@@ -27,9 +27,9 @@ namespace {
 
 uint32_t CountColors(const ArgbBuffer& buffer) {
   std::unordered_set<uint32_t> colors;
-  for (uint32_t y = 0; y < buffer.height; ++y) {
+  for (uint32_t y = 0; y < buffer.height(); ++y) {
     const uint32_t* const row = (uint32_t*)buffer.GetRow(y);
-    for (uint32_t x = 0; x < buffer.width; ++x) {
+    for (uint32_t x = 0; x < buffer.width(); ++x) {
       colors.insert(row[x]);
     }
   }
@@ -79,11 +79,11 @@ TEST(PreprocessNearLosslessTest, Mask) {
       ReadImage(testing::GetTestDataPath("logo.png").c_str(), &original));
   // Convert image to a grayscale mask.
   ArgbBuffer mask;
-  ASSERT_WP2_OK(mask.Resize(original.width, original.height));
-  for (uint32_t y = 0; y < original.height; ++y) {
-    const uint8_t* const src_row = (uint8_t*)original.GetRow(y);
-    uint8_t* const dst = (uint8_t*)mask.GetRow(y);
-    for (uint32_t x = 0; x < original.width; ++x) {
+  ASSERT_WP2_OK(mask.Resize(original.width(), original.height()));
+  for (uint32_t y = 0; y < original.height(); ++y) {
+    const uint8_t* const src_row = original.GetRow8(y);
+    uint8_t* const dst = mask.GetRow8(y);
+    for (uint32_t x = 0; x < original.width(); ++x) {
       dst[4 * x + 0] = kAlphaMax;
       dst[4 * x + 1] = dst[4 * x + 2] = dst[4 * x + 3] = src_row[4 * x + 0];
     }
@@ -124,10 +124,10 @@ TEST(PreprocessNearLosslessTest, Mask) {
     previous_size = size;
 
     // Check that fully white and fully black pixels are unchanged.
-    for (uint32_t y = 0; y < original.height; ++y) {
-      const uint8_t* const mask_row = (uint8_t*)mask.GetRow(y);
-      const uint8_t* const nll_row = (uint8_t*)preprocessed.GetRow(y);
-      for (uint32_t x = 0; x < original.width; ++x) {
+    for (uint32_t y = 0; y < original.height(); ++y) {
+      const uint8_t* const mask_row = mask.GetRow8(y);
+      const uint8_t* const nll_row = preprocessed.GetRow8(y);
+      for (uint32_t x = 0; x < original.width(); ++x) {
         if (mask_row[4 * x + 1] == 0 || mask_row[4 * x + 1] == 255) {
           EXPECT_EQ(nll_row[4 * x + 1], mask_row[4 * x + 1]);
         }

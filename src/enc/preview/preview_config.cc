@@ -33,15 +33,15 @@ static uint32_t ILerp(uint32_t min_value, uint32_t max_value, float value) {
   return (uint32_t)std::lround(Lerp(min_value, max_value, value));
 }
 
-PreviewConfig::PreviewConfig(float quality, int speed) {
+PreviewConfig::PreviewConfig(float quality, int effort) {
   const float q = quality / 100.0f;                  // [0,1]
-  const float s = speed / 9.0f;                      // [0,1]
-  const float qs = ((1 + q) * (1 + s) - 1.f) / 3.f;  // [0,1]
-  assert(q >= 0.f && q <= 1.f && s >= 0.f && s <= 1.f);
+  const float e = effort / 9.0f;                     // [0,1]
+  const float qs = ((1 + q) * (1 + e) - 1.f) / 3.f;  // [0,1]
+  assert(q >= 0.f && q <= 1.f && e >= 0.f && e <= 1.f);
 
   num_colors = ILerp(6, 10, std::sqrt(qs));
-  grid_density = Lerp(1.0, 3.0, s);
-  num_iterations = ILerp(500u, 3000u, s);
+  grid_density = Lerp(1.0, 3.0, e);
+  num_iterations = ILerp(500u, 3000u, e);
 
   assert(IsValid());
 }

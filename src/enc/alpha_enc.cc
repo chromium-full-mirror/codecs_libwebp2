@@ -45,7 +45,7 @@ WP2Status AlphaWriter::Init(const EncoderConfig& config,
     WP2_CHECK_STATUS(alpha_.Resize(tile_rect_.width, tile_rect_.height));
     for (uint32_t y = 0; y < tile_rect_.height; ++y) {
       const int16_t* const src_row = yuv.A.Row(y);
-      uint8_t* const dst = (uint8_t*)alpha_.GetRow(y);
+      uint8_t* const dst = alpha_.GetRow8(y);
       for (uint32_t x = 0; x < tile_rect_.width; ++x) {
         const uint8_t alpha = Clamp<int16_t>(src_row[x], 0, kAlphaMax);
         dst[4 * x + 0] = kAlphaMax;
@@ -68,7 +68,7 @@ WP2Status AlphaWriter::Init(const EncoderConfig& config,
         lossless_encode_info_.line_tokens.resize(tile_rect_.height));
     WP2_CHECK_STATUS(WP2L::EncodeImage(config_, *buffer, /*has_alpha=*/true,
                                        &lossless_enc_, &lossless_encode_info_));
-    assert(lossless_encode_info_.line_tokens[alpha_.height - 1] ==
+    assert(lossless_encode_info_.line_tokens[alpha_.height() - 1] ==
            lossless_enc_.NumTokens());
   }
 
@@ -144,7 +144,7 @@ WP2Status AlphaWriter::Write(const CodedBlock& cb, ANSEnc* const enc) {
 }
 
 WP2Status AlphaWriter::WriteLossless(const CodedBlock& cb, ANSEnc* const enc) {
-  const uint32_t max_line = std::min(cb.y_pix() + cb.h_pix(), alpha_.height);
+  const uint32_t max_line = std::min(cb.y_pix() + cb.h_pix(), alpha_.height());
   if (next_line_ < max_line) {
     // Write as many new lines as we need for this block.
     const uint32_t lines_to_write = max_line - next_line_;
@@ -206,11 +206,11 @@ WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
 
   if (forced_predictor) {
     // Predictor is set by EncoderConfig::info (debug).
-  } else if (config_.speed == 1) {
+  } else if (config_.effort == 1) {
     // Select the first predictor to save time.
     cb->SetPredictor(kAChannel, preds[0]);
     cb->pred_scores_[kAChannel] = 1.f;
-  } else if (config_.speed == 2) {
+  } else if (config_.effort == 2) {
     // Quickly select the best predictor.
     cb->FindBestPred(preds, kAChannel, /*reduced=*/false);
   } else {

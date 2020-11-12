@@ -56,13 +56,13 @@ ${EWP2} "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" \
         -psnr "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" 50.0
 
 # Encode/decode WebP from JPG
-${EWP2} "${TESTDATA_DIR}/source3.jpg" -o "${TMP_WEBP}" -q 100 -speed 2
+${EWP2} "${TESTDATA_DIR}/source3.jpg" -o "${TMP_WEBP}" -q 100 -effort 2
 ${EWP2} "${TMP_WEBP}" -o "${TMP_PNG}" -ssim "${TESTDATA_DIR}/source3.jpg" 99.0
 
 # Encode/decode WebP from/to PNG (some premultiplied-alpha loss)
-${EWP2} "${TESTDATA_DIR}/source1.png" -o "${TMP_WEBP}" -q 100 -speed 2
+${EWP2} "${TESTDATA_DIR}/source1.png" -o "${TMP_WEBP}" -q 100 -effort 2
 ${EWP2} "${TMP_WEBP}" -o "${TMP_PNG}" -ssim "${TESTDATA_DIR}/source1.png" 38.0
-${EWP2} "${TESTDATA_DIR}/source1.png" -o "${TMP_WEBP}" -q 0 -speed 0
+${EWP2} "${TESTDATA_DIR}/source1.png" -o "${TMP_WEBP}" -q 0 -effort 0
 ${EWP2} "${TMP_WEBP}" -o "${TMP_PNG}" -ssim "${TESTDATA_DIR}/source1.png" 8.0
 
 echo "TEST OK"

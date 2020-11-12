@@ -51,7 +51,7 @@ TEST_P(PaletteTest, RoundTrip) {
   ArgbBuffer buffer;
   ASSERT_WP2_OK(buffer.Resize(kWidth, kHeight));
   for (uint32_t y = 0; y < kHeight; ++y) {
-    uint8_t* const row = (uint8_t*)buffer.GetRow(y);
+    uint8_t* const row = buffer.GetRow8(y);
     for (uint32_t x = 0; x < kWidth; ++x) {
       const uint32_t color_index = random.Get(0u, num_colors - 1);
       std::copy(&colors[4 * color_index], &colors[4 * color_index] + 4,
@@ -62,7 +62,7 @@ TEST_P(PaletteTest, RoundTrip) {
   // Create palette.
   WP2L::Palette palette;
   const bool has_alpha = buffer.HasTransparency();
-  palette.Init(buffer.format, has_alpha);
+  palette.Init(buffer.format(), has_alpha);
   ASSERT_WP2_OK(palette.AnalyzeAndCreate(buffer));
   // There could be fewer colors if we never chose some of them but it's pretty
   // unlikely so check for equality.
@@ -74,7 +74,7 @@ TEST_P(PaletteTest, RoundTrip) {
   const WP2::EncoderConfig encoder_config;
   WP2L::Encoder encoder(encoder_config, buffer, has_alpha);
   ASSERT_WP2_OK(encoder.Allocate());
-  ASSERT_WP2_OK(palette.FindBestMethod(&encoder, /*speed=*/5));
+  ASSERT_WP2_OK(palette.FindBestMethod(&encoder, /*effort=*/5));
   ASSERT_WP2_OK(palette.Write(&enc, &dicts, &encoder));
 
   // Apply palette on buffer.
@@ -112,7 +112,7 @@ TEST_P(PaletteTest, RoundTrip) {
                        /*has_alpha=*/true, reconstructed.data());
 
   for (uint32_t y = 0; y < kHeight; ++y) {
-    uint8_t* const reference_row = (uint8_t*)buffer.GetRow(y);
+    uint8_t* const reference_row = buffer.GetRow8(y);
     uint16_t* const reconstructed_row = &reconstructed[y * kWidth * 4];
     for (uint32_t x = 0; x < kWidth; ++x) {
       for (uint32_t c = 0; c < 4; ++c) {

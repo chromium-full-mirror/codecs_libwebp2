@@ -36,9 +36,9 @@ namespace {
 
 void RescalePlane(ArgbBuffer* const pic1, int channel, uint32_t max) {
   const uint32_t factor = (max > 0) ? (255u << 16) / max : 0;
-  for (uint32_t y = 0; y < pic1->height; ++y) {
-    uint8_t* const ptr = (uint8_t*)pic1->GetRow(y) + channel;
-    for (uint32_t x = 0; x < pic1->width; ++x) {
+  for (uint32_t y = 0; y < pic1->height(); ++y) {
+    uint8_t* const ptr = pic1->GetRow8(y) + channel;
+    for (uint32_t x = 0; x < pic1->width(); ++x) {
       ptr[4 * x] = (ptr[4 * x] * factor + (1 << 15)) >> 16;
     }
   }
@@ -48,10 +48,10 @@ void RescalePlane(ArgbBuffer* const pic1, int channel, uint32_t max) {
 uint32_t DiffScaleChannel(ArgbBuffer* const pic1, const ArgbBuffer* const pic2,
                           int channel, bool do_scaling) {
   uint32_t max = 0;
-  for (uint32_t y = 0; y < pic1->height; ++y) {
-    uint8_t* const ptr1 = (uint8_t*)pic1->GetRow(y) + channel;
-    const uint8_t* const ptr2 = (const uint8_t*)pic2->GetRow(y) + channel;
-    for (uint32_t x = 0; x < pic1->width; ++x) {
+  for (uint32_t y = 0; y < pic1->height(); ++y) {
+    uint8_t* const ptr1 = pic1->GetRow8(y) + channel;
+    const uint8_t* const ptr2 = pic2->GetRow8(y) + channel;
+    for (uint32_t x = 0; x < pic1->width(); ++x) {
       const uint32_t diff = abs(ptr1[4 * x] - ptr2[4 * x]);
       if (diff > max) max = diff;
       ptr1[4 * x] = diff;
@@ -65,9 +65,9 @@ uint32_t DiffScaleChannel(ArgbBuffer* const pic1, const ArgbBuffer* const pic2,
 // Convert an argb picture to luminance.
 void ConvertToGray(ArgbBuffer* const pic) {
   assert(pic != nullptr);
-  for (uint32_t y = 0; y < pic->height; ++y) {
-    uint8_t* const row = (uint8_t*)pic->GetRow(y);
-    for (uint32_t x = 0; x < pic->width; ++x) {
+  for (uint32_t y = 0; y < pic->height(); ++y) {
+    uint8_t* const row = pic->GetRow8(y);
+    for (uint32_t x = 0; x < pic->width(); ++x) {
       const uint32_t r = row[4 * x + 1];
       const uint32_t g = row[4 * x + 2];
       const uint32_t b = row[4 * x + 3];
@@ -192,7 +192,7 @@ int main(int argc, const char *argv[]) {
                 "Can't decode input file '%s'.", path2);
 
   // save original dimensions (before crop) for bpp calculation.
-  const uint32_t width = pic1_rgb.width, height = pic1_rgb.height;
+  const uint32_t width = pic1_rgb.width(), height = pic1_rgb.height();
   if (crop != NO_CROP) {
     if (crop == CROP_BOTH) {
       EXIT_IF_ERROR(pic1_rgb.SetView(pic1_rgb, crop_area),

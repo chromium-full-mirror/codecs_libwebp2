@@ -73,7 +73,7 @@ class FuzzedParameters {
   bool TryExtractWP2Bitstream(Data* const encoded_data);
 
   // Extracts main encoding settings (quality, speed etc.) and sets 'config'.
-  void ExtractSimpleConfig(uint32_t max_speed, EncoderConfig* const config);
+  void ExtractSimpleConfig(uint32_t max_effort, EncoderConfig* const config);
   // Extracts other settings (partition_set etc.) and sets 'config'.
   void ExtractAdvancedConfig(bool fast, EncoderConfig* const config);
 
@@ -93,7 +93,7 @@ int TestImageEncConfig(const ArgbBuffer& original, const EncoderConfig& config,
 
 int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
                       const std::vector<uint32_t>& durations_ms,
-                      uint32_t loop_count, const EncoderConfig& config,
+                      bool loop_forever, const EncoderConfig& config,
                       bool compare_after_decoding, float expected_distortion);
 
 // Verifies that 'encoded_data' does not crash when decoded with 'config'.

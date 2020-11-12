@@ -20,6 +20,7 @@
 #include <cassert>
 
 #include "src/common/color_precision.h"
+#include "src/common/header_enc_dec.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/data_source.h"
@@ -31,31 +32,26 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
-WP2Status DecodeANMF(DataSource* const data_source,
+WP2Status DecodeANMF(const DecoderConfig& config, DataSource* const data_source,
                      const BitstreamFeatures& features, uint32_t frame_index,
                      AnimationFrame* const frame) {
   if (features.is_animation) {
-    const uint8_t* data;
-    WP2_CHECK_OK(data_source->TryReadNext(kANMFHeaderSize, &data),
-                 WP2_STATUS_NOT_ENOUGH_DATA);
-
-    HeaderDec dec(data, kANMFHeaderSize);
+    const size_t num_read_bytes_before = data_source->GetNumReadBytes();
+    HeaderDec dec(data_source, "anmf_chunk");
     const uint32_t tag = dec.ReadBits(kANMFTagNumBits, "anmf_tag");
     frame->dispose = (tag == kANMFTagDispose);
     frame->blend = (dec.ReadBits(1, "blend") == 1);
     frame->is_last = (dec.ReadBits(1, "is_last") == 1);
-    frame->duration_ms = dec.ReadBits(kFrameDurationNumBits, "duration");
-    frame->window.x = dec.ReadBits(kImageDimNumBits, "frame_x");
-    frame->window.y = dec.ReadBits(kImageDimNumBits, "frame_y");
-    frame->window.width = dec.ReadBits(kImageDimNumBits, "frame_w") + 1;
-    frame->window.height = dec.ReadBits(kImageDimNumBits, "frame_h") + 1;
+    // TODO(yguyon): Force read 'duration_ms>0' if kMaxNumPreframes || is_last
+    frame->duration_ms = dec.ReadVarUInt(0, kMaxFrameDurationMs, "duration");
+    frame->window =
+        dec.ReadRect(features.raw_width, features.raw_height, "window");
+    WP2_CHECK_STATUS(dec.GetStatus());
 
     WP2_CHECK_OK((tag == kANMFTagDispose) || (tag == kANMFTagFrame),
                  WP2_STATUS_BITSTREAM_ERROR);
-    WP2_CHECK_OK(frame->window.x + frame->window.width <= features.raw_width,
-                 WP2_STATUS_BITSTREAM_ERROR);
-    WP2_CHECK_OK(frame->window.y + frame->window.height <= features.raw_height,
-                 WP2_STATUS_BITSTREAM_ERROR);
+    assert(frame->window.x + frame->window.width <= features.raw_width);
+    assert(frame->window.y + frame->window.height <= features.raw_height);
     if (frame_index == 0) {  // The first frame MUST dispose.
       WP2_CHECK_OK(frame->dispose, WP2_STATUS_BITSTREAM_ERROR);
     } else {
@@ -64,15 +60,13 @@ WP2Status DecodeANMF(DataSource* const data_source,
         WP2_CHECK_OK(!frame->is_last, WP2_STATUS_BITSTREAM_ERROR);
       }
     }
-    // TODO(yguyon): Enforce these checks by design
+    RegisterBitTrace(
+        config, data_source->GetNumReadBytes() - num_read_bytes_before, "ANMF");
   } else {
     frame->dispose = true;
     frame->blend = false;
     frame->duration_ms = kMaxFrameDurationMs;
-    frame->window.x = 0;
-    frame->window.y = 0;
-    frame->window.width = features.raw_width;
-    frame->window.height = features.raw_height;
+    frame->window = {0, 0, features.raw_width, features.raw_height};
     frame->is_last = true;
   }
   return WP2_STATUS_OK;
@@ -93,9 +87,9 @@ static WP2Status FillBorders(const BitstreamFeatures& features,
   WP2_CHECK_OK((rgb_output != nullptr) != (yuv_output != nullptr),
                WP2_STATUS_INVALID_PARAMETER);
   const uint32_t width =
-      (rgb_output != nullptr) ? rgb_output->width : yuv_output->GetWidth();
+      (rgb_output != nullptr) ? rgb_output->width() : yuv_output->GetWidth();
   const uint32_t height =
-      (rgb_output != nullptr) ? rgb_output->height : yuv_output->GetHeight();
+      (rgb_output != nullptr) ? rgb_output->height() : yuv_output->GetHeight();
   const Rectangle& window = frame.window;
   assert(window.x + window.width <= width);
   assert(window.y + window.height <= height);
@@ -108,7 +102,7 @@ static WP2Status FillBorders(const BitstreamFeatures& features,
                       width - (window.x + window.width), window.height);
 
   if (rgb_output != nullptr) {
-    if (WP2FormatBpc(rgb_output->format) == 1) {
+    if (WP2FormatBpc(rgb_output->format()) == 1) {
       const Argb32b color = ToArgb32b(features.background_color);
 
       rgb_output->Fill(top, color);

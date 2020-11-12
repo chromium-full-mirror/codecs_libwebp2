@@ -41,7 +41,8 @@ static Rectangle BoundingRectangle(const Rectangle& a, const Rectangle& b) {
 
 //------------------------------------------------------------------------------
 
-WP2Status DecodeFrameInfo(DataSource* const data_source,
+WP2Status DecodeFrameInfo(const DecoderConfig& config,
+                          DataSource* const data_source,
                           const BitstreamFeatures& features, bool glimpse,
                           Decoder::State* const state) {
   const uint32_t frame_index =
@@ -50,28 +51,36 @@ WP2Status DecodeFrameInfo(DataSource* const data_source,
   const size_t bitstream_position =
       data_source->GetNumDiscardedBytes() + data_source->GetNumReadBytes();
   AnimationFrame info;
-  // Fills 'info' with default values if it's not an animation.
-  WP2_CHECK_STATUS(DecodeANMF(data_source, features, frame_index, &info));
+  // Fills 'info' with default values if it is not an animation.
+  WP2_CHECK_STATUS(
+      DecodeANMF(config, data_source, features, frame_index, &info));
 
   Decoder::State::InternalFrameFeatures frame;
   frame.bitstream_position = bitstream_position;
   frame.num_bytes = Decoder::State::kUnknown;
   frame.info = info;
   frame.duration_ms = frame.info.duration_ms;
-  frame.window = RotateRectangle(features.orientation, features.raw_width,
-                                 features.raw_height, frame.info.window);
   frame.is_last = frame.info.is_last;
   frame.final_frame_index = state->GetFinalFrameIndex(frame_index);
 
-  const bool is_regular_frame = (frame.info.duration_ms > 0);
-  // 'last_dispose_frame_index' is actually a final frame index.
+  const bool is_frame_regular = (frame.info.duration_ms > 0);
   if (frame.info.dispose) {
+    // 'last_dispose_frame_index' is actually a final frame index.
     frame.last_dispose_frame_index = frame.final_frame_index;
+    if (frame_index > 0) {
+      const bool is_previous_frame_regular =
+          (state->frames[frame_index - 1].info.duration_ms > 0);
+      // If this frame is disposed, it makes no sense to have a preframe before.
+      WP2_CHECK_OK(is_previous_frame_regular, WP2_STATUS_BITSTREAM_ERROR);
+    }
+
+    // The whole canvas is discarded.
+    frame.window = {0, 0, features.width, features.height};
   } else {
     assert(frame_index > 0);  // Otherwise it would be 'frame.info.dispose'.
     frame.last_dispose_frame_index =
         state->frames[frame_index - 1].last_dispose_frame_index;
-    if (!is_regular_frame) {
+    if (!is_frame_regular) {
       const uint32_t previous_regular_frame_index =
           (frame.final_frame_index == 0)
               ? 0
@@ -80,9 +89,7 @@ WP2Status DecodeFrameInfo(DataSource* const data_source,
           (frame_index - previous_regular_frame_index) <= kMaxNumPreframes,
           WP2_STATUS_BITSTREAM_ERROR);
     }
-  }
 
-  if (!frame.info.dispose) {
     uint32_t previous_dispose = frame_index;
     while (previous_dispose > 0 &&
            !state->frames[--previous_dispose].info.dispose) {
@@ -91,14 +98,16 @@ WP2Status DecodeFrameInfo(DataSource* const data_source,
                   state->frames[previous_dispose].final_frame_index) <=
                      kMaxNumDependentFrames + 1,
                  WP2_STATUS_BITSTREAM_ERROR);
-  }
 
-  if (is_regular_frame) {
-    // Merge previous preframe windows with the current regular frame window.
-    for (uint32_t i = frame_index; i > 0; --i) {
-      if (state->frames[i - 1].info.duration_ms > 0) break;
-      frame.window =
-          BoundingRectangle(frame.window, state->frames[i - 1].window);
+    frame.window = RotateRectangle(features.orientation, features.raw_width,
+                                   features.raw_height, frame.info.window);
+    if (is_frame_regular) {
+      // Merge previous preframe windows with the current regular frame window.
+      for (uint32_t i = frame_index; i > 0; --i) {
+        if (state->frames[i - 1].info.duration_ms > 0) break;
+        frame.window =
+            BoundingRectangle(frame.window, state->frames[i - 1].window);
+      }
     }
   }
 
@@ -118,7 +127,7 @@ WP2Status DecodeFrameInfo(DataSource* const data_source,
     WP2_CHECK_OK(frame == state->frames[frame_index], WP2_STATUS_BAD_READ);
   } else {
     WP2_CHECK_ALLOC_OK(state->frames.push_back(frame));
-    if (is_regular_frame) {
+    if (is_frame_regular) {
       assert(frame.final_frame_index == state->final_to_regular_index.size());
       WP2_CHECK_ALLOC_OK(state->final_to_regular_index.push_back(frame_index));
     }

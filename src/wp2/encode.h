@@ -52,7 +52,8 @@ struct EncoderConfig {
                             // try to achieve. Precedence over 'target_size'.
 
   float alpha_quality = 100.f;  // Range: [0 = smallest size .. 100 = lossless]
-  int speed = 5;  // Quality/speed trade-off. Range: [0=fast .. 9=slower-better]
+  int effort = 5;               // Compression rate/speed trade-off.
+                                // Range: [0=faster-bigger .. 9=slower-better]
 
   // Side parameters:
   // Set whether the image will be rotated during decoding.
@@ -274,10 +275,9 @@ class AnimationEncoder {
   // Encodes all frames. Call it again to compress the same frames with a
   // different 'config' and/or to another 'output'.
   // Returns WP2_STATUS_OK if no error occurred.
-  WP2_NO_DISCARD WP2Status
-  Encode(Writer* output, const EncoderConfig& config = EncoderConfig::kDefault,
-         uint8_t loop_count = kInfiniteLoop,
-         const Metadata& metadata = Metadata()) const;
+  WP2_NO_DISCARD WP2Status Encode(
+      Writer* output, const EncoderConfig& config = EncoderConfig::kDefault,
+      bool loop_forever = true, const Metadata& metadata = Metadata()) const;
 
   struct State;
 

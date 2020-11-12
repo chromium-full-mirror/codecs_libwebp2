@@ -31,8 +31,8 @@ struct ParamsAV1 {
   float quality = 75.f;         // in [0..100]
   float alpha_quality = 100.f;  // in [0..100]
   uint32_t size = 0;            // target size if not zero (predates 'quality')
-  uint32_t speed = 5;           // in [0..9]
-  uint32_t threads = 1;
+  uint32_t effort = 5;           // in [0..9]
+  uint32_t threads = 1;         // 1 means no multi-threading
   uint32_t pass = 2;
   bool use_yuv444 = true;
   float filter_strength = 50.f;  // in [0..100]
@@ -43,6 +43,7 @@ struct ParamsAV1 {
   bool draw_transforms = false;
   const char* draw_mi_data = nullptr;
   bool draw_mi_number = false;  // draw value of mi data as red square (9 bits)
+  bool use_libgav1_decoder = false;  // use libaom decoder if false
 };
 
 struct QuantAV1 {

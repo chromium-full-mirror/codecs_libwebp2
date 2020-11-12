@@ -230,7 +230,7 @@ class SubAreaScoreFunc : public AreaScoreFunc {
 class MultiScoreFunc : public PartitionScoreFunc {
  public:
   static constexpr float kMinScore = 0.5f;  // Blocks below that are discarded.
-  static constexpr int kMinSpeedForGoodQuantDCT = 4;
+  static constexpr int kMinEffortForGoodQuantDCT = 4;
 
   enum class Pass {  // The following passes select blocks with:
     LumaAlphaGradient,  // gradient-like original luma and alpha values

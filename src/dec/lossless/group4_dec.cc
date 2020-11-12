@@ -224,6 +224,8 @@ WP2Status Decoder::DecodeGroup4(uint32_t width, uint32_t last_row,
       }
     }
     src += 4 * width;
+
+    WP2_CHECK_STATUS(dec_->GetStatus());
     WP2_CHECK_STATUS(ProcessRows(y, config_.info));
   }
 

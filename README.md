@@ -12,6 +12,34 @@ See http://developers.google.com/speed/webp for the first version of WebP .
 
 [TOC]
 
+## What to expect?
+
+The WebP 2 experimental codec is mostly pushing the features of WebP further
+in terms of compression efficiency. The new features (like 10b HDR support)
+are kept minimal. The axis of experimentation are:
+
+* more efficient lossy compression (~30% better than WebP, ~20% worse than AVIF)
+* better visual degradation at very low bitrate
+* improved lossless compression
+* improved transparency compression
+* animation support
+* ultra-light previews
+* lightweight incremental decoding
+* small container overhead, tailored specifically for image compression
+* full 10bit architecture (HDR10)
+* strong focus on software implementation, fully multi-threaded
+
+The use cases remain mostly the same as WebP: transfer over
+the wire, faster web, smaller apps, better user experience...
+WebP 2 is primarily tuned for the typical content available on
+the Web and Mobile apps: medium-range dimensions, transparency, short
+animations, thumbnails.
+
+WebP2 is currently only partially optimized and, roughly speaking 5x slower
+than WebP for lossy compression. It still compresses 2x faster than AVIF,
+but takes 3x more time to decompress.
+The goal is to reach decompression speed parity.
+
 ## Building
 
 ### Prerequisites
@@ -75,7 +103,7 @@ Important options:
 | `-o <string>`      |     | output file path                                 |
 | `-q <float>`       | 75  | image quality factor \[0=lossy : 100=lossless\]* |
 | `-alpha_q <float>` | 100 | alpha quality factor \[0=lossy : 100=lossless\]* |
-| `-speed <int>`     | 5   | compression effort \[0=fast : 9=slower/better\]  |
+| `-effort <int>`    | 5   | compression effort \[0=fast : 9=slower/better\]  |
 | `-f [<str> <int>]` |     | create an animation (alternate image, duration)  |
 
 \* The quality factor range corresponds to:
@@ -118,9 +146,8 @@ result:
 $ vwp2 in_file...
 ```
 
-`vwp2` takes most of the same flags as `cwp2`, e.g. `-q` for quality, `-speed`,
-and so on. Encoding parameters can also be changed dynamically in the tool using
-key bidings.
+`vwp2` takes most of the same flags as `cwp2`, e.g. `-q` for quality. Encoding
+parameters can also be changed dynamically in the tool using key bidings.
 
 Press `h` to a list of key bindings.
 
@@ -146,7 +173,7 @@ $ rd_curve [options] input_file
 ```
 
 `rd_curve` takes most of the same flags as `cwp2`, e.g. `-q` for quality,
-`-speed`, and so on.
+`-effort`, and so on.
 
 By default, only the webp2 codec is used. Use `-webp`, `-jpeg` or `-av1` flags
 to add other codecs.
@@ -295,9 +322,31 @@ if (decoder.GetStatus() != WP2_STATUS_OK) { /* error */ }
 
 ## Development
 
+### Bugs
+
+Please report all bugs to the issue tracker: https://bugs.chromium.org/p/webp2
+
 ### Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to submit patches.
+
+One of the easiest ways to contribute is to report cases with compression
+artifacts or surprising output size. These 'bad cases' are very useful to
+help improve the compression library!
+
+Please use the [tracker](https://bugs.chromium.org/p/webp2) to report such
+issues, making sure to include:
+
+* the version or revision used (using "`git rev-parse HEAD`" for instance)
+
+* the version of the compiler used (if you compiled your own version)
+
+* the problematic source image (will only be used for debugging and
+discarded afterward!)
+
+* the *exact* command line to use to reproduce the issue
+
+* the output file, if applicable.
 
 ### Coding conventions and style
 
@@ -309,7 +358,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to submit patches.
   in function declarations. Input parameters use const references.
 
   ```c++
-  void DoSomething(const WP2Obj1& const input, WP2Obj1* const out)
+  void DoSomething(const Type1& const input, Type2* const out)
   ```
 
 * Do not use C++ exceptions.

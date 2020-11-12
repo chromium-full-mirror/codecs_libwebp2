@@ -182,11 +182,11 @@ bool FuzzedParameters::TryExtractWP2Bitstream(Data* const encoded_data) {
 
 //------------------------------------------------------------------------------
 
-void FuzzedParameters::ExtractSimpleConfig(uint32_t max_speed,
+void FuzzedParameters::ExtractSimpleConfig(uint32_t max_effort,
                                            EncoderConfig* const config) {
   config->quality = (float)ExtractUInt32(kMaxQuality);
   config->alpha_quality = (float)ExtractUInt32(kMaxQuality);
-  config->speed = (int)ExtractUInt32(max_speed);
+  config->effort = (int)ExtractUInt32(max_effort);
   config->decoding_orientation = (Orientation)ExtractUInt32(3);
   // config->create_preview = ExtractBool();  // Too slow.
   config->thread_level = (int)ExtractUInt32((1u << 31) - 1u);

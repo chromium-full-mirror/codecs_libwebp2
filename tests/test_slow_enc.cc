@@ -32,24 +32,24 @@ TEST_P(EncodeDecodeTest, Simple) {
   const std::string& file_name = std::get<0>(GetParam());
   EncoderConfig config = EncoderConfig::kDefault;
   config.quality = std::get<1>(GetParam());
-  config.speed = std::get<2>(GetParam());
+  config.effort = std::get<2>(GetParam());
   config.sns = std::get<3>(GetParam());
 
-  ASSERT_WP2_OK(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    EncodeDecodeTestInstantiationLosslessMaxSpeed, EncodeDecodeTest,
+    EncodeDecodeTestInstantiationLosslessMaxEffort, EncodeDecodeTest,
     ::testing::Combine(::testing::Values("source1_64x48.png"),
                        /*quality=*/::testing::Values(100.f),
-                       /*speed=*/::testing::Values(9),
+                       /*effort=*/::testing::Values(9),
                        /*sns=*/::testing::Values(30.f)));
 
 INSTANTIATE_TEST_SUITE_P(
-    EncodeDecodeTestInstantiationLossyMaxSpeed, EncodeDecodeTest,
+    EncodeDecodeTestInstantiationLossyMaxEffort, EncodeDecodeTest,
     ::testing::Combine(::testing::Values("source1_64x48.png"),
                        /*quality=*/::testing::Values(75.f),
-                       /*speed=*/::testing::Values(9),
+                       /*effort=*/::testing::Values(9),
                        ::testing::Values(EncoderConfig::kDefault.sns)));
 
 // This one takes a while to run so it is disabled.
@@ -58,7 +58,7 @@ INSTANTIATE_TEST_SUITE_P(
     DISABLED_EncodeDecodeTestInstantiation, EncodeDecodeTest,
     ::testing::Combine(::testing::Values("alpha_ramp.png", "source3.jpg"),
                        /*quality=*/::testing::Values(0.f, 50.f, 98.f),
-                       /*speed=*/::testing::Values(6, 7, 8, 9),
+                       /*effort=*/::testing::Values(6, 7, 8, 9),
                        ::testing::Values(EncoderConfig::kDefault.sns)));
 
 //------------------------------------------------------------------------------

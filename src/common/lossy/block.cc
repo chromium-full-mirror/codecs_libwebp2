@@ -911,11 +911,11 @@ WP2Status CodedBlock::OptimizeModesLuma(
   } else if (SetForcedPredictor(preds, config, tile_rect.x, tile_rect.y,
                                 kYChannel, this)) {
     // Predictor is set by EncoderConfig::info (debug).
-  } else if (config.speed == 0) {
+  } else if (config.effort == 0) {
     // Select the first predictor to save time.
     SetPredictor(kYChannel, preds[0]);
     pred_scores_[kYChannel] = 1.f;
-  } else if (config.speed == 1) {
+  } else if (config.effort == 1) {
     // Quickly select the best predictor and then choose the best transform.
     FindBestPred(preds, kYChannel, /*reduced=*/false);
   } else {
@@ -964,11 +964,11 @@ WP2Status CodedBlock::OptimizeModesChroma(
   if (SetForcedPredictor(preds, config, tile_rect.x, tile_rect.y, kUChannel,
                          this)) {
     // Predictor is set by EncoderConfig::info (debug).
-  } else if (config.speed == 0 || preds.size() == 1) {
+  } else if (config.effort == 0 || preds.size() == 1) {
     // Select the first predictor to save time.
     SetUVPredictor(preds[0]);
     pred_scores_[kUChannel] = pred_scores_[kVChannel] = 1.f;
-  } else if (config.speed == 1) {
+  } else if (config.effort == 1) {
     // Quickly select the best predictor.
     FindBestPred(preds, kUChannel, /*reduced=*/false);
   } else {

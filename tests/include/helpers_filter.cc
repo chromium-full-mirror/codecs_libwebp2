@@ -56,11 +56,11 @@ void Noise(int32_t min_value, int32_t max_value, size_t seed, int32_t strength,
 
 void Noise(size_t seed, int32_t strength, ArgbBuffer* const canvas) {
   UniformIntDistribution random(seed);
-  assert(canvas->format == WP2_Argb_32);
+  assert(canvas->format() == WP2_Argb_32);
 
-  uint8_t* pixel = (uint8_t*)canvas->GetRow(0);
-  for (uint32_t y = 0; y < canvas->height; ++y, pixel += canvas->stride) {
-    for (uint32_t x = 0; x < canvas->width; ++x) {
+  uint8_t* pixel = canvas->GetRow8(0);
+  for (uint32_t y = 0; y < canvas->height(); ++y, pixel += canvas->stride()) {
+    for (uint32_t x = 0; x < canvas->width(); ++x) {
       const int32_t a = pixel[x * 4 + 0];
       uint8_t* const r = &pixel[x * 4 + 1];
       uint8_t* const g = &pixel[x * 4 + 2];

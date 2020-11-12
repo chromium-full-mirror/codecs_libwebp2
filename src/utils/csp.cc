@@ -381,7 +381,7 @@ WP2Status CSPTransform::CustomToArgb(uint32_t width, uint32_t height,
                                      const int16_t* a_buffer, uint32_t a_step,
                                      const CSPMtx& ccsp_to_rgb,
                                      ArgbBuffer* const argb) {
-  WP2_CHECK_OK(argb->width == width && argb->height == height,
+  WP2_CHECK_OK(argb->width() == width && argb->height() == height,
                WP2_STATUS_BAD_DIMENSION);
   int16_t m[9];
   for (uint32_t i = 0; i < 9; ++i) {
@@ -392,7 +392,7 @@ WP2Status CSPTransform::CustomToArgb(uint32_t width, uint32_t height,
   }
 
   for (uint32_t y = 0; y < height; ++y) {
-    uint8_t* const dst_row = (uint8_t*)argb->GetRow(y);
+    uint8_t* const dst_row = argb->GetRow8(y);
     if (a_buffer != nullptr) {
       for (uint32_t x = 0; x < width; ++x) {
         uint8_t* const dst_pixel = &dst_row[x * 4];
@@ -992,12 +992,12 @@ bool NormalizeFromInput(const uint8_t* argb,
 //------------------------------------------------------------------------------
 
 WP2Status CSPTransform::Optimize(const ArgbBuffer& image) {
-  WP2_CHECK_OK(image.format == WP2_Argb_32, WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(image.format() == WP2_Argb_32, WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(!image.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
-  const uint8_t* const argb = (const uint8_t*)image.GetRow(0);
-  const uint32_t w = image.width;
-  const uint32_t h = image.height;
-  const size_t stride = image.stride;
+  const uint8_t* const argb = image.GetRow8(0);
+  const uint32_t w = image.width();
+  const uint32_t h = image.height();
+  const size_t stride = image.stride();
   SetYUVBounds(-(1 << kMaxYuvBits), (1 << kMaxYuvBits) - 1);
 
   double cov[3][3];
@@ -1034,9 +1034,9 @@ void CSPTransform::Apply(ArgbBuffer* const image, uint32_t num_precision_bits,
                          uint32_t x, uint32_t y, uint32_t w, uint32_t h) const {
   if (image == nullptr || image->IsEmpty()) return;
   for (uint32_t j = 0; j < h; ++j) {
-    if (y + j >= image->height) break;
-    uint8_t* const dst = (uint8_t*)image->GetRow(y + j);
-    for (uint32_t i = x; i < std::min(x + w, image->width); ++i) {
+    if (y + j >= image->height()) break;
+    uint8_t* const dst = image->GetRow8(y + j);
+    for (uint32_t i = x; i < std::min(x + w, image->width()); ++i) {
       // Set alpha to opaque.
       dst[4 * i + 0] = 255;
       int16_t yuv[3];

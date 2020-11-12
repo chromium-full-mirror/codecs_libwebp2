@@ -39,7 +39,7 @@ TMP_WP2=/tmp/test_enc.wp2
 TMP_PNG=/tmp/test_enc.png
 
 echo "lossy test"
-${CWP2} -o ${TMP_WP2} "${TESTDATA_DIR}/source1.png" -q 75 -speed 2 -summary \
+${CWP2} -o ${TMP_WP2} "${TESTDATA_DIR}/source1.png" -q 75 -effort 2 -summary \
         -mt 2147483647 -orientation 2 -crop 7 8 497 304 -segment_mode implicit
 ${DWP2} -mt 2147483647 ${TMP_WP2} -o ${TMP_PNG}
 ${GET_DISTO} ${TMP_PNG} "${TESTDATA_DIR}/source1.png" -lsim \
@@ -53,7 +53,7 @@ ${GET_DISTO} ${TMP_WP2} "${TESTDATA_DIR}/test_exif_xmp.webp" \
              -ssim -crop_source 0 0 0 0 -crop 0 0 128 128
 
 echo "lossless get_disto test"
-${CWP2} -o ${TMP_WP2} "${TESTDATA_DIR}/source3.jpg" -q 100 -short -speed 0
+${CWP2} -o ${TMP_WP2} "${TESTDATA_DIR}/source3.jpg" -q 100 -short -effort 0
 ${GET_DISTO} ${TMP_WP2} "${TESTDATA_DIR}/source3.jpg" -exact -scale ${TMP_WP2} \
              -gray -psnrhvs
 

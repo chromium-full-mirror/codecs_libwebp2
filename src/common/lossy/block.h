@@ -213,7 +213,7 @@ class CodedBlock {
                             const BlockContext& context, Channel channel,
                             uint32_t num_channels, bool reduced,
                             Counters* const counters);
-  // Calls FindBestPred/Tf() depending on 'config.speed' and 'context' then
+  // Calls FindBestPred/Tf() depending on 'config.effort' and 'context' then
   // Quantize(). All 'transforms' will be tested but only 'transforms_subset'
   // will be tried for each of the 'preds'.
   WP2Status OptimizeModesLuma(const EncoderConfig& config,

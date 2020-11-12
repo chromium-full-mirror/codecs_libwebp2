@@ -43,9 +43,8 @@ class ImageReaderWP2 : public ImageReader::Impl {
       BitstreamFeatures features;
       WP2_CHECK_STATUS(features.Read(data_, data_size_));
       WP2_CHECK_STATUS(CheckDimensions(features.width, features.height));
-      loop_count_ = (features.loop_count == WP2::kInfiniteLoop)
-                        ? ImageReader::kInfiniteLoopCount
-                        : features.loop_count;
+      loop_count_ =
+          features.loop_forever ? ImageReader::kInfiniteLoopCount : 1u;
     }
 
     // Attempt to decode the next frame.
@@ -72,8 +71,8 @@ class ImageReaderWP2 : public ImageReader::Impl {
         // Metadata must be extracted during the first ReadFrame() call.
         // ICCP was already decoded after header.
         const WP2Status metadata_status =
-            ExtractMetadata(data_, data_size_, &buffer_->metadata.exif,
-                            /*iccp=*/nullptr, &buffer_->metadata.xmp);
+            ExtractMetadata(data_, data_size_, &buffer_->metadata_.exif,
+                            /*iccp=*/nullptr, &buffer_->metadata_.xmp);
         if (metadata_status != WP2_STATUS_OK) status = metadata_status;
       }
     } else if (decoder_.GetStatus() == WP2_STATUS_OK) {

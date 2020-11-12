@@ -22,6 +22,7 @@
 
 #include "src/common/color_precision.h"
 #include "src/common/constants.h"
+#include "src/common/header_enc_dec.h"
 #include "src/dec/tile_dec.h"
 #include "src/enc/partitioner.h"
 #include "src/enc/preview/preview_enc.h"
@@ -81,28 +82,12 @@ WP2Status TileEncoder::Execute() {
 
 //------------------------------------------------------------------------------
 
-size_t WriteVarInt(uint64_t size, uint64_t size_upper,
-                   uint8_t dst[kMaxVarIntLength]) {
-  uint64_t n = 0;
-  if (size >= kUpperVarInt) return 0;
-  assert(size < size_upper);
-  // TODO(yguyon): No need to write anything when 'size_upper' is 1
-  //               or remove possibility of 'size' being 0 (pessimization)
-  while (size_upper >= 256 && size >= 128) {
-    dst[n++] = (size & 0x7f) | 0x80;
-    size >>= 7;
-    size_upper >>= 7;
-  }
-  dst[n++] = size;
-  return n;
-}
-
 namespace {
 
 WP2Status WriteChunk(DataView data, Writer* const output) {
   if (data.size == 0) return WP2_STATUS_OK;
   uint8_t buf[kMaxVarIntLength];
-  const size_t buf_size = WriteVarInt(data.size - 1, kChunkSizeMax, buf);
+  const size_t buf_size = WriteVarInt(data.size, 1, kChunkSizeMax, buf);
   WP2_CHECK_OK(output->Append(buf, buf_size), WP2_STATUS_BAD_WRITE);
   WP2_CHECK_OK(output->Append(data.bytes, data.size), WP2_STATUS_BAD_WRITE);
   return WP2_STATUS_OK;
@@ -139,9 +124,9 @@ WP2Status GetEncTilesLayout(uint32_t frame_width, uint32_t frame_height,
     // Set views on RGB and YUV input buffers, one or both may be used.
     assert(!frame_rgb.IsEmpty() || !frame_yuv.IsEmpty());
     if (!frame_rgb.IsEmpty()) {
-      assert(frame_rgb.width == frame_width &&
-             frame_rgb.height == frame_height);
-      WP2_CHECK_STATUS(tile.rgb_input.SetFormat(frame_rgb.format));
+      assert(frame_rgb.width() == frame_width &&
+             frame_rgb.height() == frame_height);
+      WP2_CHECK_STATUS(tile.rgb_input.SetFormat(frame_rgb.format()));
       WP2_CHECK_STATUS(tile.rgb_input.SetView(frame_rgb, tile.rect));
     }
     if (!frame_yuv.IsEmpty()) {
@@ -208,8 +193,8 @@ WP2Status CodeTiles(EncTilesLayout* const tiles_layout,
     {
       uint8_t buffer[kMaxVarIntLength];
       const size_t size =
-          WriteVarInt(std::min(tile.enc.BufferSize(), (size_t)max_num_bytes),
-                      max_num_bytes + 1, buffer);
+          WriteVarInt(std::min(tile.enc.BufferSize(), (size_t)max_num_bytes), 1,
+                      max_num_bytes, buffer);
       WP2_CHECK_ALLOC_OK(output->Append(buffer, size));
     }
 
@@ -229,22 +214,6 @@ WP2Status CodeTiles(EncTilesLayout* const tiles_layout,
 
 //------------------------------------------------------------------------------
 
-// Get background flag from 'background_color'.
-uint8_t BackgroundColorToBackgroundBits(Argb38b background_color) {
-  if (background_color.a == 0x00u) return kBackgroundTransparent;
-  if (background_color.a == 0xFFu) {
-    if (background_color.r == 0x03FFu && background_color.g == 0x03FFu &&
-        background_color.b == 0x03FFu) {
-      return kBackgroundWhite;
-    }
-    if (background_color.r == 0x0000u && background_color.g == 0x0000u &&
-        background_color.b == 0x0000u) {
-      return kBackgroundBlack;
-    }
-  }
-  return kBackgroundCustom;
-}
-
 bool HasPreview(const EncoderConfig& config) {
   return (config.create_preview || config.preview_size > 0);
 }
@@ -256,20 +225,21 @@ bool HasPreview(const EncoderConfig& config) {
 // Encode header to 'output'.
 WP2Status EncodeHeader(const EncoderConfig& config,
                        uint32_t width, uint32_t height,
-                       bool has_alpha, bool is_anim, uint32_t loop_count,
+                       bool has_alpha, bool is_anim, bool loop_forever,
                        Argb38b background_color, RGB12b preview_color,
                        bool has_icc, bool has_trailing_data,
                        Writer* const output) {
+  if (!has_alpha) {
+    WP2_CHECK_OK(background_color.a == kAlphaMax, WP2_STATUS_INVALID_PARAMETER);
+  }
   WP2_CHECK_OK(CheckPremultiplied(background_color),
                WP2_STATUS_INVALID_PARAMETER);
   const bool use_bt2020 =
       (config.transfer_function == WP2_TF_ITU_R_BT2020_10BIT);
-  const uint8_t background_bits =
-      BackgroundColorToBackgroundBits(background_color);
 
   {
     uint8_t header[kHeaderMaxSize];
-    HeaderEnc henc(header, sizeof(header));
+    HeaderEnc henc(header, sizeof(header), "image_features");
 
     // signature
     henc.PutBits(kSignature, 24, "signature");
@@ -295,14 +265,20 @@ WP2Status EncodeHeader(const EncoderConfig& config,
     henc.PutBits(0x2u, 2, "filler");  // reserved
 
     if (is_anim) {
-      henc.PutBits(loop_count, kLoopCountNumBits, "loop_count");
-      henc.PutBits(background_bits, kBackgroundNumBits, "background");
-      if (background_bits == kBackgroundCustom) {
-        henc.PutBits(background_color.a, 8, "background");
+      henc.PutBits(loop_forever ? 1 : 0, 1, "loop");
+      const bool custom_background =
+          (background_color.a != kDefaultBackgroundColor.a ||
+           background_color.r != kDefaultBackgroundColor.r ||
+           background_color.g != kDefaultBackgroundColor.g ||
+           background_color.b != kDefaultBackgroundColor.b);
+      henc.PutBits(custom_background ? 1 : 0, 1, "background");
+      if (custom_background) {
+        if (has_alpha) henc.PutBits(background_color.a, 8, "background");
         henc.PutBits(background_color.r, 10, "background");
         henc.PutBits(background_color.g, 10, "background");
         henc.PutBits(background_color.b, 10, "background");
-        henc.PutBits(0x0, 2, "filler");
+      } else {
+        henc.PutBits(0x2u, 6, "filler");
       }
     }
     if (!use_bt2020) {
@@ -325,7 +301,7 @@ WP2Status EncodePreview(const ArgbBuffer& buffer, const EncoderConfig& config,
   if (config.create_preview) {
     MemoryWriter preview;
     WP2_CHECK_STATUS(EncodePreview(
-        buffer, PreviewConfig(config.quality, config.speed), &preview));
+        buffer, PreviewConfig(config.quality, config.effort), &preview));
     WP2_CHECK_STATUS(WriteChunk({preview.mem_, preview.size_}, output));
   } else if (config.preview_size > 0) {
     WP2_CHECK_OK(config.preview != nullptr, WP2_STATUS_INVALID_PARAMETER);
@@ -361,17 +337,24 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
   GlobalParams gparams;
   FeatureMap features;
   gparams.features_ = &features;
-  ArgbBuffer pre_processed_buffer;
   const ArgbBuffer* buffer = &rgb_buffer;
+  const WP2SampleFormat format_default =
+      (WP2FormatBpc(rgb_buffer.format()) == 1) ? WP2_Argb_32 : WP2_Argb_38;
+  ArgbBuffer pre_processed_buffer(format_default);
+  // TODO(maryla): make premultiplication optional.
+  if (!rgb_buffer.IsEmpty() &&
+      (rgb_buffer.format() != pre_processed_buffer.format())) {
+    WP2_CHECK_STATUS(pre_processed_buffer.ConvertFrom(rgb_buffer));
+    buffer = &pre_processed_buffer;
+  }
 
   // near-lossless pre-processing
   constexpr uint32_t kMinNearLosslessDimension = 16;    // minimum dimension
-  if (yuv_buffer.IsEmpty() &&
-      rgb_buffer.width >= kMinNearLosslessDimension &&
-      rgb_buffer.height >= kMinNearLosslessDimension &&
+  if (yuv_buffer.IsEmpty() && buffer->width() >= kMinNearLosslessDimension &&
+      buffer->height() >= kMinNearLosslessDimension &&
       config.quality > kMaxLossyQuality && config.quality < kMaxQuality) {
-    WP2_CHECK_STATUS(PreprocessNearLossless(
-        rgb_buffer, config, /*is_alpha=*/false, &pre_processed_buffer));
+    WP2_CHECK_STATUS(PreprocessNearLossless(*buffer, config, /*is_alpha=*/false,
+                                            &pre_processed_buffer));
     buffer = &pre_processed_buffer;
   }
 
@@ -435,16 +418,16 @@ PartitionMethod FinalPartitionMethod(const EncoderConfig& config,
     }
     if (tile_width < 32 && tile_height < 32) {
       // Small enough to use slow methods.
-      if (config.speed == 0) return ALL_16X16_PARTITIONING;
-      if (config.speed <= 2) return MULTIPASS_PARTITIONING;
+      if (config.effort == 0) return ALL_16X16_PARTITIONING;
+      if (config.effort <= 2) return MULTIPASS_PARTITIONING;
       if (!config.partition_snapping) return MULTIPASS_PARTITIONING;
-      if (config.speed <= 5) return AREA_ENCODE_PARTITIONING;
-      if (config.speed <= 7) return TILE_ENCODE_PARTITIONING;
+      if (config.effort <= 5) return AREA_ENCODE_PARTITIONING;
+      if (config.effort <= 7) return TILE_ENCODE_PARTITIONING;
       if (tile_width <= 16 && tile_height <= 16) return EXHAUSTIVE_PARTITIONING;
       return TILE_ENCODE_PARTITIONING;
     }
-    if (config.speed == 0) return ALL_16X16_PARTITIONING;
-    if (config.speed <= 6) return MULTIPASS_PARTITIONING;
+    if (config.effort == 0) return ALL_16X16_PARTITIONING;
+    if (config.effort <= 6) return MULTIPASS_PARTITIONING;
     if (!config.partition_snapping) return MULTIPASS_PARTITIONING;
     return AREA_ENCODE_PARTITIONING;
   }
@@ -460,31 +443,32 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
 
   WP2_CHECK_OK(config.IsValid(), WP2_STATUS_INVALID_CONFIGURATION);
 
-  WP2_CHECK_OK(input.format == WP2_Argb_32 || (input.format == WP2_Argb_38 &&
-                                               config.quality == kMaxQuality),
-               WP2_STATUS_INVALID_COLORSPACE);
-  WP2_CHECK_OK((input.width > 0) && (input.height > 0) &&
-                   (input.width <= kImageDimMax) &&
-                   (input.height <= kImageDimMax),
+  WP2_CHECK_OK(
+      input.format() == WP2_Argb_32 || input.format() == WP2_ARGB_32 ||
+          (input.format() == WP2_Argb_38 && config.quality == kMaxQuality),
+      WP2_STATUS_INVALID_COLORSPACE);
+  WP2_CHECK_OK((input.width() > 0) && (input.height() > 0) &&
+                   (input.width() <= kImageDimMax) &&
+                   (input.height() <= kImageDimMax),
                WP2_STATUS_BAD_DIMENSION);
 
   (void)picture_hint;
   WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_STATUS(SetupEncoderInfo(input.width, input.height, config));
+  WP2_CHECK_STATUS(SetupEncoderInfo(input.width(), input.height(), config));
 
   const RGB12b preview_color = GetPreviewColor(input);
   const bool has_alpha = input.HasTransparency();
-  const bool has_icc = (input.metadata.iccp.size > 0);
+  const bool has_icc = (input.metadata_.iccp.size > 0);
   const bool has_trailing_data =
-      (input.metadata.xmp.size > 0) || (input.metadata.exif.size > 0);
-  WP2_CHECK_STATUS(EncodeHeader(config, input.width, input.height,
-                                has_alpha, /*is_anim=*/false, /*loop_count=*/0,
-                                kTransparentArgb38b, preview_color, has_icc,
-                                has_trailing_data, output));
+      (input.metadata_.xmp.size > 0) || (input.metadata_.exif.size > 0);
+  WP2_CHECK_STATUS(EncodeHeader(
+      config, input.width(), input.height(), has_alpha, /*is_anim=*/false,
+      /*loop_forever=*/true, kDefaultBackgroundColor, preview_color, has_icc,
+      has_trailing_data, output));
 
   WP2_CHECK_STATUS(EncodePreview(input, config, output));
-  WP2_CHECK_STATUS(
-      EncodeICC({input.metadata.iccp.bytes, input.metadata.iccp.size}, output));
+  WP2_CHECK_STATUS(EncodeICC(
+      {input.metadata_.iccp.bytes, input.metadata_.iccp.size}, output));
 
   const GlobalParams::Type type = DecideGlobalParamsType(config);
   const bool yuv_is_needed = (type != GlobalParams::GP_LOSSLESS);
@@ -498,10 +482,10 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
                                       /*pad=*/kPredWidth));
   }
 
-  WP2_CHECK_STATUS(
-      EncodeTiles(input.width, input.height, input, yuv_input, csp_transform,
-                  config, GetQualityHint(config.quality), has_alpha, output));
-  WP2_CHECK_STATUS(EncodeMetadata(input.metadata, output));
+  WP2_CHECK_STATUS(EncodeTiles(
+      input.width(), input.height(), input, yuv_input, csp_transform, config,
+      GetQualityHint(config.quality), has_alpha, output));
+  WP2_CHECK_STATUS(EncodeMetadata(input.metadata_, output));
   return WP2_STATUS_OK;
 }
 
@@ -584,9 +568,10 @@ WP2Status Encode(uint32_t width, uint32_t height,
   const bool has_icc = (metadata.iccp.size > 0);
   const bool has_trailing_data =
       (metadata.xmp.size > 0 || metadata.exif.size > 0);
-  WP2_CHECK_STATUS(EncodeHeader(
-      config, width, height, has_alpha, /*is_anim=*/false, /*loop_count=*/0,
-      kTransparentArgb38b, preview_color, has_icc, has_trailing_data, output));
+  WP2_CHECK_STATUS(EncodeHeader(config, width, height, has_alpha,
+                                /*is_anim=*/false, /*loop_forever=*/true,
+                                kDefaultBackgroundColor, preview_color, has_icc,
+                                has_trailing_data, output));
 
   WP2_CHECK_STATUS(EncodePreview(rgb_input, config, output));
   WP2_CHECK_STATUS(

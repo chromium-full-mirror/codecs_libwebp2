@@ -338,8 +338,8 @@ int main(int argc, const char* argv[]) {
 
   // save reconstructed preview
   if (preview_file != nullptr) {
-    const uint32_t out_h = std::max(32u,
-        WP2::DivRound(out_w * original.height, original.width));
+    const uint32_t out_h = std::max(
+        32u, WP2::DivRound(out_w * original.height(), original.width()));
     WP2::ArgbBuffer thumb;
     CHECK_STATUS(thumb.Resize(out_w, out_h), "Memory error\n");
     CHECK_STATUS(WP2::DecodePreview(preview_data, preview_size, &thumb),

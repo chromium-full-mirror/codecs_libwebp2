@@ -120,7 +120,7 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
       ++ind;
     }
   }
-  return WP2_STATUS_OK;
+  return dec->GetStatus();
 }
 
 //------------------------------------------------------------------------------
@@ -211,14 +211,18 @@ int32_t SymbolReader::Read(uint32_t cluster, uint32_t sym, WP2_OPT_LABEL,
                                         /*max_value=*/0, label, &value, cost);
   (void)status;
   assert(status == WP2_STATUS_OK);
+  // TODO(yguyon): Enforce dec_->GetStatus() checking more widely.
+  //               Currently some failures are silent.
   return value;
 }
 
 WP2Status SymbolReader::TryRead(uint32_t cluster, uint32_t sym,
                                 uint32_t max_value, WP2_OPT_LABEL,
                                 int32_t* const value, double* const cost) {
-  return ReadInternal(cluster, sym, /*use_max_value=*/true, max_value, label,
-                      value, cost);
+  const WP2Status status = ReadInternal(cluster, sym, /*use_max_value=*/true,
+                                        max_value, label, value, cost);
+  if (dec_->GetStatus() != WP2_STATUS_OK) return dec_->GetStatus();
+  return status;
 }
 
 uint32_t SymbolReader::FindSymbol(const Stat& stat, uint32_t max_value) {
@@ -512,7 +516,7 @@ WP2Status SymbolReader::ReadHeader(uint32_t max_nnz, uint32_t sym,
        ++cluster) {
     WP2_CHECK_STATUS(ReadHeader(cluster, max_nnz, sym, label));
   }
-  return WP2_STATUS_OK;
+  return dec_->GetStatus();
 }
 
 WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
@@ -537,12 +541,12 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
       WP2_CHECK_STATUS(AddAdaptiveBit(
           cluster, sym, symbols_info_.StartingProbaP0(cluster, sym),
           symbols_info_.StartingProbaP1(cluster, sym)));
-      return WP2_STATUS_OK;
+      return dec_->GetStatus();
     case SymbolsInfo::StorageMethod::kAdaptiveSym: {
       WP2_CHECK_STATUS(AddAdaptiveSymbol(cluster, sym,
                                          ANSAdaptiveSymbol::Method::kAOM,
                                          kANSAProbaInvalidSpeed));
-      return WP2_STATUS_OK;
+      return dec_->GetStatus();
     }
     case SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed: {
       if (max_nnz <= 1) {
@@ -560,7 +564,7 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
         speed = kANSAProbaInvalidSpeed;
       }
       WP2_CHECK_STATUS(AddAdaptiveSymbol(cluster, sym, method, speed));
-      return WP2_STATUS_OK;
+      return dec_->GetStatus();
     }
     case SymbolsInfo::StorageMethod::kUnused:
       break;
@@ -573,14 +577,14 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
   // Deal with trivial cases.
   if (c == kSymbolCountZero) {
     AddTrivial(cluster, sym, 0);
-    return WP2_STATUS_OK;
+    return dec_->GetStatus();
   }
   if (c == kSymbolCountOne) {
     const int32_t value =
         dec_->ReadRange(symbols_info_.Min(cluster, sym),
                         symbols_info_.Max(cluster, sym), "symbol");
     AddTrivial(cluster, sym, value);
-    return WP2_STATUS_OK;
+    return dec_->GetStatus();
   }
 
   const uint32_t type = dec_->ReadRValue(3, "type");
@@ -610,7 +614,7 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
     }
     AddRange(cluster, sym, &infos_, range - nnz);
   }
-  return WP2_STATUS_OK;
+  return dec_->GetStatus();
 }
 
 void SymbolReader::GetPotentialUsage(uint32_t cluster, uint32_t sym,

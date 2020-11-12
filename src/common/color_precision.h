@@ -175,7 +175,7 @@ inline bool CheckPremultiplied(Argb38b color) {
 // Returns the maximum value for a given channel.
 // 'channel' is the index of the channel in order ARGB.
 static inline uint64_t FormatMax(WP2SampleFormat format, uint32_t channel) {
-  if (format == WP2_Argb_32) {
+  if (format == WP2_Argb_32 || format == WP2_ARGB_32) {
     return 255;
   } else if (format == WP2_Argb_38) {
     return (channel == 0) ? 255 : 1023;

@@ -102,10 +102,10 @@ WP2Status RotateBuffer(Orientation orientation, ArgbBuffer* const buffer) {
     // Note: Rotating a non-square image in place is not trivial; using a
     // temporary array instead.
     // TODO(yguyon): rotate directly during decoding
-    ArgbBuffer tmp(buffer->format);
-    WP2_CHECK_STATUS(tmp.Resize(buffer->height, buffer->width));
+    ArgbBuffer tmp(buffer->format());
+    WP2_CHECK_STATUS(tmp.Resize(buffer->height(), buffer->width()));
     WP2_CHECK_STATUS(RotateSubBuffer(
-        orientation, *buffer, {0, 0, buffer->width, buffer->height}, &tmp));
+        orientation, *buffer, {0, 0, buffer->width(), buffer->height()}, &tmp));
 
     if (buffer->IsView()) {
       WP2_CHECK_STATUS(buffer->CopyFrom(tmp));
@@ -114,22 +114,22 @@ WP2Status RotateBuffer(Orientation orientation, ArgbBuffer* const buffer) {
     }
   } else if (orientation == Orientation::k180) {
     // Swap first half with opposites.
-    const uint32_t pixel_depth = WP2FormatBpp(buffer->format);
-    uint8_t* row = (uint8_t*)buffer->GetRow(0);
-    uint8_t* opposite_row = (uint8_t*)buffer->GetRow(buffer->height - 1) +
-                            (buffer->width - 1) * pixel_depth;
+    const uint32_t pixel_depth = WP2FormatBpp(buffer->format());
+    uint8_t* row = buffer->GetRow8(0);
+    uint8_t* opposite_row = buffer->GetRow8(buffer->height() - 1) +
+                            (buffer->width() - 1) * pixel_depth;
     while (row < opposite_row) {
       uint8_t* pixel = row;
       uint8_t* opposite_pixel = opposite_row;
-      for (uint32_t x = 0; x < buffer->width && pixel < opposite_pixel; ++x) {
+      for (uint32_t x = 0; x < buffer->width() && pixel < opposite_pixel; ++x) {
         for (uint32_t c = 0; c < pixel_depth; ++c) {
           std::swap(pixel[c], opposite_pixel[c]);
         }
         pixel += pixel_depth;
         opposite_pixel -= pixel_depth;
       }
-      row += buffer->stride;
-      opposite_row -= buffer->stride;
+      row += buffer->stride();
+      opposite_row -= buffer->stride();
     }
   }
   return WP2_STATUS_OK;
@@ -139,12 +139,11 @@ WP2Status RotateBuffer(Orientation orientation, const ArgbBuffer& src,
                        ArgbBuffer* const dst) {
   WP2_CHECK_OK(dst != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!src.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
-  WP2_CHECK_OK(src.format == WP2_Argb_32, WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_STATUS(
-      dst->Resize(RotateWidth(orientation, src.width, src.height),
-                  RotateHeight(orientation, src.width, src.height)));
+      dst->Resize(RotateWidth(orientation, src.width(), src.height()),
+                  RotateHeight(orientation, src.width(), src.height())));
   WP2_CHECK_STATUS(RotateSubBuffer(
-      orientation, src, Rectangle(0, 0, src.width, src.height), dst));
+      orientation, src, Rectangle(0, 0, src.width(), src.height()), dst));
   return WP2_STATUS_OK;
 }
 
@@ -152,46 +151,48 @@ WP2Status RotateSubBuffer(Orientation orientation, const ArgbBuffer& src,
                           const Rectangle& rect_in_src, ArgbBuffer* const dst) {
   WP2_CHECK_OK(dst != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!src.IsEmpty() && !dst->IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
-  WP2_CHECK_OK(src.format == WP2_Argb_32, WP2_STATUS_INVALID_PARAMETER);
-  WP2_CHECK_OK((rect_in_src.x + rect_in_src.width <= src.width) &&
-                   (rect_in_src.y + rect_in_src.height <= src.height),
+  WP2_CHECK_OK(src.format() == WP2_Argb_32 || src.format() == WP2_ARGB_32 ||
+                   dst->format() == WP2_Argb_32 || dst->format() == WP2_ARGB_32,
+               WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK((rect_in_src.x + rect_in_src.width <= src.width()) &&
+                   (rect_in_src.y + rect_in_src.height <= src.height()),
                WP2_STATUS_INVALID_PARAMETER);
   if (rect_in_src.width == 0 || rect_in_src.height == 0) return WP2_STATUS_OK;
 
-  const uint32_t dst_x = RotatePointX(orientation, src.width, src.height,
+  const uint32_t dst_x = RotatePointX(orientation, src.width(), src.height(),
                                       rect_in_src.x, rect_in_src.y);
-  const uint32_t dst_y = RotatePointY(orientation, src.width, src.height,
+  const uint32_t dst_y = RotatePointY(orientation, src.width(), src.height(),
                                       rect_in_src.x, rect_in_src.y);
   const uint32_t dst_width =
       RotateWidth(orientation, rect_in_src.width, rect_in_src.height);
   const uint32_t dst_height =
       RotateHeight(orientation, rect_in_src.width, rect_in_src.height);
-  WP2_CHECK_OK(dst_width <= dst->width, WP2_STATUS_INVALID_PARAMETER);
-  WP2_CHECK_OK(dst_height <= dst->height, WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(dst_width <= dst->width(), WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(dst_height <= dst->height(), WP2_STATUS_INVALID_PARAMETER);
 
-  const uint32_t src_pixel_depth = WP2FormatBpp(src.format);
-  const uint32_t dst_pixel_depth = WP2FormatBpp(dst->format);
+  const uint32_t src_pixel_depth = WP2FormatBpp(src.format());
+  const uint32_t dst_pixel_depth = WP2FormatBpp(dst->format());
   const uint8_t* src_row =
-      (uint8_t*)src.GetRow(rect_in_src.y) + rect_in_src.x * src_pixel_depth;
-  uint8_t* dst_line = (uint8_t*)dst->GetRow(dst_y) + dst_x * dst_pixel_depth;
+      src.GetRow8(rect_in_src.y) + rect_in_src.x * src_pixel_depth;
+  uint8_t* dst_line = dst->GetRow8(dst_y) + dst_x * dst_pixel_depth;
 
   int32_t dst_next_line;
   int32_t dst_next_pixel;
   if (orientation == Orientation::k90Clockwise) {
     dst_next_line = -(int32_t)dst_pixel_depth;
-    dst_next_pixel = (int32_t)dst->stride;
+    dst_next_pixel = (int32_t)dst->stride();
   } else if (orientation == Orientation::k180) {
-    dst_next_line = -(int32_t)dst->stride;
+    dst_next_line = -(int32_t)dst->stride();
     dst_next_pixel = -(int32_t)dst_pixel_depth;
   } else if (orientation == Orientation::k270Clockwise) {
     dst_next_line = (int32_t)dst_pixel_depth;
-    dst_next_pixel = -(int32_t)dst->stride;
+    dst_next_pixel = -(int32_t)dst->stride();
   } else {
-    dst_next_line = (int32_t)dst->stride;
+    dst_next_line = (int32_t)dst->stride();
     dst_next_pixel = (int32_t)dst_pixel_depth;
   }
 
-  if (src.format == dst->format) {
+  if (src.format() == dst->format()) {
     for (uint32_t y = 0; y < rect_in_src.height; ++y) {
       const uint8_t* src_pixel = src_row;
       uint8_t* dst_pixel = dst_line;
@@ -202,21 +203,23 @@ WP2Status RotateSubBuffer(Orientation orientation, const ArgbBuffer& src,
         src_pixel += src_pixel_depth;
         dst_pixel += dst_next_pixel;
       }
-      src_row += src.stride;
+      src_row += src.stride();
       dst_line += dst_next_line;
     }
   } else {
     WP2ArgbConverterInit();
+    const WP2ArgbConverterF convert =
+        WP2ConversionFunction(src.format(), dst->format());
     for (uint32_t y = 0; y < rect_in_src.height; ++y) {
       const uint8_t* src_pixel = src_row;
       uint8_t* dst_pixel = dst_line;
       for (uint32_t x = 0; x < rect_in_src.width; ++x) {
         // Not optimized but the orientation stuff should be removed eventually.
-        WP2ArgbConvertTo[dst->format](src_pixel, /*width=*/1u, dst_pixel);
+        convert(src_pixel, /*width=*/1u, dst_pixel);
         src_pixel += src_pixel_depth;
         dst_pixel += dst_next_pixel;
       }
-      src_row += src.stride;
+      src_row += src.stride();
       dst_line += dst_next_line;
     }
   }

@@ -96,7 +96,7 @@ TEST_P(PlaneTest, Simple) {
   ASSERT_GT(disto[4], 35.f);
 
   // some test view
-  ASSERT_WP2_OK(yuv.SetView(yuv, {0, 0, pic.width, pic.height}));
+  ASSERT_WP2_OK(yuv.SetView(yuv, {0, 0, pic.width(), pic.height()}));
   ASSERT_FALSE(yuv.Y.IsView());
   Fill(&yuv.Y);
 

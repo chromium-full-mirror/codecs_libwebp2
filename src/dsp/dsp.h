@@ -70,12 +70,14 @@ static_assert(_MSC_VER >= 1900, "Visual Studio needs to be at version >= 2015");
 #if defined(__SSE4_2__) || defined(WP2_MSC_SSE) || defined(WP2_HAVE_SSE)
 #define WP2_USE_SSE    // incorporate all instructions up to SSE4.2 (inclusive)
 #include <smmintrin.h>
-#endif
 
+// HAVE_AVX2 is dependent on HAVE_SSE
 #if defined(__AVX2__) || defined(WP2_HAVE_AVX2)
 #define WP2_USE_AVX2
 #include <immintrin.h>
-#endif
+#endif  // AVX2
+
+#endif  // SSE
 
 #if defined(__ANDROID__) && defined(__ARM_ARCH_7A__)
 #define WP2_ANDROID_NEON  // Android targets that might support NEON
@@ -202,10 +204,19 @@ void WP2DecDspInit();
 
 typedef void (*WP2ArgbConverterF)(const uint8_t* src,
                                   uint32_t width, uint8_t* dst);
-// functions to convert from any format to internal Argb
+// functions to convert from...
+// any format -> Argb
 extern WP2ArgbConverterF WP2ArgbConvertFrom[WP2_FORMAT_NUM];
-// functions to convert from internal Argb to any format
+// any format -> ARGB
+extern WP2ArgbConverterF WP2ARGBConvertFrom[WP2_FORMAT_NUM];
+// Argb -> any format
 extern WP2ArgbConverterF WP2ArgbConvertTo[WP2_FORMAT_NUM];
+// ARGB -> any format
+extern WP2ArgbConverterF WP2ARGBConvertTo[WP2_FORMAT_NUM];
+// Returns the function for converting between the two formats. At least one of
+// the two formats must be Argb or ARGB, returns null otherwise.
+WP2ArgbConverterF WP2ConversionFunction(WP2SampleFormat from,
+                                        WP2SampleFormat to);
 
 void WP2ArgbConverterInit();
 
@@ -297,37 +308,43 @@ static constexpr uint32_t kDblkMaxStrength = 63;
 static constexpr uint32_t kDblkMaxSharpness = 7;
 // max number of filtered pixels on each side of the edge
 static constexpr uint32_t kDblkMaxHalf = 8;
+static constexpr int kDblCacheStep = 2 * kDblkMaxHalf;   // ('step' of cache)
 
-void DblkFilterInit();
+// Copy a width x '2*height' area to and from cache, transposed.
+extern void (*FilterCopyIn)(const int16_t* src, uint32_t src_step,
+                            int16_t* dst, int32_t width, int32_t height);
+extern void (*FilterCopyOut)(const int16_t* src, int16_t* dst,
+                             uint32_t dst_step, int32_t width, int32_t height);
 
-// Applies the deblocking filter on a line of 2 * 'half_length' across the
-// edge. 'q0' is the top/left-most pixel on the bottom/right side of the edge
-// and is 'step' units away from its immediate neighbors.
+// Applies the deblocking filter on a line of 2 * 'half' samples across
+// the edge.
 // The higher 'filter_strength' and the lower 'filter_sharpness' are, the
 // higher the variance threshold (under which the filter is applied) is.
 // The 'filter_strength' also influences the number of actually filtered
 // pixels and how much they are modified (for narrow filter only).
-// 'num_precision_bits' includes the sign. 'min' and 'max' are color boundaries.
-// Returns true if the line was deblocked, false if pixels were above deblocking
-// threshold (no deblocking).
-typedef bool (*DeblockLineF)(uint32_t filter_strength, int32_t threshold,
-                             uint32_t half_length, bool is_chroma, int32_t min,
-                             int32_t max, int32_t step, int16_t* q0);
-extern DeblockLineF DeblockLine;
-// Same as above but doesn't actually deblock the line, just returns true if
-// it would be deblocked when calling DeblockLine.
-extern DeblockLineF WouldDeblockLine;
+// 'min' and 'max' are color boundaries.
+extern void (*DeblockLine)(uint32_t filter_strength, int32_t threshold,
+                           uint8_t half, int32_t min, int32_t max, int16_t* q0);
 
-// Returns the number of pixels in [1:half] that are flat on each side of 'q0'.
+// Returns 1 if the line with half-size 'half' would be deblocked.
+extern uint8_t (*WouldDeblockLine)(int32_t threshold, uint32_t half,
+                                   const int16_t q0[]);
+
+// Returns the number of pixels in [1:half] that are flat on each side of rows.
 // For half = 3,4, the samples q0[-4..3] must all be available for read.
 // For 4 < half <= 8, the samples q0[-8..7] must be readable.
-extern uint32_t (*MeasureFlatLength)(uint32_t filter_sharpness, uint32_t half,
-                                     const int16_t* q0, int32_t step);
+// The function processes 'size' lines.
+extern void (*MeasureFlatLengths)(uint32_t filter_sharpness, uint32_t half,
+                                  const int16_t* q0, uint32_t step,
+                                  uint8_t out[], uint32_t size);
 
 // Returns the sample threshold deduced from sharpness and precision bits (sign
-// included), to be passed to DeblockLineF functions.
+// included), to be passed to (Would)DeblockLine functions.
 int32_t DeblockThresholdFromSharpness(uint32_t filter_sharpness,
                                       uint32_t num_precision_bits);
+
+// To initialize the above.
+void DblkFilterInit();
 
 }  // namespace WP2
 

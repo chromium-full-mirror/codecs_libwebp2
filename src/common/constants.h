@@ -43,9 +43,9 @@ static constexpr uint32_t GetQualityHint(float quality) {
 
 static constexpr uint32_t kMaxVarIntLength = 5;
 // Upper value expressible with a var int with kMaxVarIntLength values.
-static constexpr uint64_t kUpperVarInt =
-    (1ull << (7 * (kMaxVarIntLength - 1) + 8));  // == 64G
-static_assert(kChunkSizeMax < kUpperVarInt,
+static constexpr uint64_t kMaxVarInt =
+    (1ull << (7 * (kMaxVarIntLength - 1) + 8)) - 1;  // == 64G
+static_assert(kChunkSizeMax <= kMaxVarInt,
               "The maximum chunk size cannot be represented with var ints.");
 
 // Maximum (inclusive) bytes per pixel.
@@ -79,13 +79,14 @@ static constexpr int32_t kMaxDcValue = (1 << 12) - 1;
 static constexpr int32_t kMaxCoeffValue =
     ((1 << kMaxCoeffBits) - 1) + 3 + kResidual1Max;
 
-static constexpr Argb38b kTransparentArgb38b{0x00u, 0x0000u, 0x0000u, 0x0000u};
+static constexpr Argb38b kDefaultBackgroundColor{kAlphaMax, 0x0000u, 0x0000u,
+                                                 0x0000u};
 
 // Decoding progress proportion in [0:1] range. The remaining is left to pixels.
 static constexpr float kProgressDecHeader =   0.01f * 1;  // % for readability
 static constexpr float kProgressDecPreview =  0.01f * 3;
 static constexpr float kProgressDecICC =      0.01f * 2;
-static constexpr float kProgressDecANMF =     0.01f * 1;
+static constexpr float kProgressDecANMF =     0.01f * 1;  // % within a frame
 static constexpr float kProgressDecMetadata = 0.01f * 4;
 static constexpr float kProgressDecEnd =      0.01f * 0.1f;
 

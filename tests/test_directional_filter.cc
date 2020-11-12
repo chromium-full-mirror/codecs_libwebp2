@@ -177,8 +177,8 @@ TEST(DirectionalFilterTest, Simple) {
   decoder_config.enable_directional_filter = true;
   decoder_config.enable_restoration_filter = false;
 
-  ASSERT_WP2_OK(testing::EncodeDecodeCompare("source4.webp", encoder_config,
-                                             decoder_config));
+  ASSERT_TRUE(testing::EncodeDecodeCompare("source4.webp", encoder_config,
+                                           decoder_config));
 }
 
 // Tests that PSNR is better with the directional filter than without.

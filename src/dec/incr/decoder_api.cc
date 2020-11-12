@@ -44,7 +44,7 @@ Decoder::Decoder(State* const state, const DecoderConfig& config,
     }
 #endif  // WP2_USE_CONTEXT_SWITCH
 
-    output_->metadata.Clear();
+    output_->metadata_.Clear();
   }
 }
 
@@ -78,8 +78,8 @@ WP2Status Decoder::GetStatus() const {
 }
 
 bool Decoder::Failed() const {
-  return (state_->status != WP2_STATUS_OK &&
-          state_->status != WP2_STATUS_NOT_ENOUGH_DATA);
+  return (state_ == nullptr || (state_->status != WP2_STATUS_OK &&
+                                state_->status != WP2_STATUS_NOT_ENOUGH_DATA));
 }
 
 //------------------------------------------------------------------------------
@@ -152,12 +152,12 @@ Rectangle Decoder::GetDecodedArea() const {
       if (state_->frame_num_final_rows < frame.info.window.height) {
         num_decoded_rows = frame.info.window.y + state_->frame_num_final_rows;
       } else {
-        num_decoded_rows = state_->raw_output_buffer.height;
+        num_decoded_rows = state_->raw_output_buffer.height();
       }
 
       // Return the width only if we have at least one row.
       if (num_decoded_rows > 0) {
-        num_decoded_columns = state_->raw_output_buffer.width;
+        num_decoded_columns = state_->raw_output_buffer.width();
       }
     }
   }
@@ -195,7 +195,11 @@ void Decoder::SkipNumNextFrames(uint32_t num_frames_to_skip) {
 }
 
 void Decoder::Rewind(bool output_buffer_changed) {
-  if (!Failed()) state_->Rewind(output_buffer_changed);
+  // Only rewind if no failure (USER_ABORT not being considered as one here).
+  if (!Failed() ||
+      (state_ != nullptr && state_->status == WP2_STATUS_USER_ABORT)) {
+    state_->Rewind(output_buffer_changed);
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -203,7 +207,7 @@ void Decoder::Rewind(bool output_buffer_changed) {
 ArrayDecoder::ArrayDecoder(const DecoderConfig& config,
                            ArgbBuffer* output_buffer)
     // May fail. If so WP2_STATUS_OUT_OF_MEMORY will be returned by GetStatus().
-    : Decoder(new (WP2Allocable::nothrow) DecoderStateArray(), config,
+    : Decoder(new (WP2Allocable::nothrow) DecoderStateArray(config), config,
               output_buffer) {}
 
 ArrayDecoder::ArrayDecoder(const uint8_t* data, size_t size,
@@ -226,7 +230,7 @@ void ArrayDecoder::SetInput(const uint8_t* data, size_t size) {
 StreamDecoder::StreamDecoder(const DecoderConfig& config,
                              ArgbBuffer* output_buffer)
     // May fail. If so WP2_STATUS_OUT_OF_MEMORY will be returned by GetStatus().
-    : Decoder(new (WP2Allocable::nothrow) DecoderStateStream(), config,
+    : Decoder(new (WP2Allocable::nothrow) DecoderStateStream(config), config,
               output_buffer) {}
 
 void StreamDecoder::AppendInput(const uint8_t* data, size_t size,
@@ -257,8 +261,8 @@ void StreamDecoder::AppendInput(const uint8_t* data, size_t size,
 CustomDecoder::CustomDecoder(const DecoderConfig& config,
                              ArgbBuffer* output_buffer)
     // May fail. If so WP2_STATUS_OUT_OF_MEMORY will be returned by GetStatus().
-    : Decoder(new (WP2Allocable::nothrow) DecoderStateCustom(this), config,
-              output_buffer) {}
+    : Decoder(new (WP2Allocable::nothrow) DecoderStateCustom(config, this),
+              config, output_buffer) {}
 
 void CustomDecoder::DecodeAvailableData() {
   if (Failed()) return;

@@ -44,8 +44,8 @@ TEST(BufferTest, Metadata) {
     ArgbBuffer buffer(format);
 
     ASSERT_WP2_OK(
-        buffer.metadata.exif.CopyFrom(metadata.data(), metadata.size()));
-    ASSERT_FALSE(buffer.metadata.IsEmpty());
+        buffer.metadata_.exif.CopyFrom(metadata.data(), metadata.size()));
+    ASSERT_FALSE(buffer.metadata_.IsEmpty());
     // SetExternal() should clear the metadata.
     if (WP2FormatBpc(format) == 1) {
       ASSERT_WP2_OK(buffer.SetExternal(8, 8, pixels8.data(), 8 * 4));
@@ -53,45 +53,45 @@ TEST(BufferTest, Metadata) {
       ASSERT_WP2_OK(
           buffer.SetExternal(8, 8, pixels16.data(), 8 * 4 * sizeof(uint16_t)));
     }
-    ASSERT_TRUE(buffer.metadata.IsEmpty());
+    ASSERT_TRUE(buffer.metadata_.IsEmpty());
 
     ASSERT_WP2_OK(
-        buffer.metadata.iccp.CopyFrom(metadata.data(), metadata.size()));
-    ASSERT_FALSE(buffer.metadata.IsEmpty());
+        buffer.metadata_.iccp.CopyFrom(metadata.data(), metadata.size()));
+    ASSERT_FALSE(buffer.metadata_.IsEmpty());
     ASSERT_WP2_OK(buffer.SetView(buffer, {1, 1, 1, 1}));
     ASSERT_TRUE(buffer.IsView());
     ASSERT_FALSE(
-        buffer.metadata.IsEmpty());  // Kept metadata because same buffer
+        buffer.metadata_.IsEmpty());  // Kept metadata because same buffer
 
     ArgbBuffer other_buffer(format);
     ASSERT_WP2_OK(other_buffer.Resize(2, 2));
     ASSERT_WP2_OK(
-        other_buffer.metadata.iccp.CopyFrom(metadata.data(), metadata.size()));
+        other_buffer.metadata_.iccp.CopyFrom(metadata.data(), metadata.size()));
     ASSERT_WP2_OK(buffer.SetView(other_buffer, {1, 1, 1, 1}));
     ASSERT_EQ(other_buffer.SetView(buffer), WP2_STATUS_INVALID_PARAMETER);
-    ASSERT_TRUE(buffer.metadata.IsEmpty());
+    ASSERT_TRUE(buffer.metadata_.IsEmpty());
 
     // Resize() should clear the buffer anew, including metadata.
     ASSERT_WP2_OK(
-        buffer.metadata.xmp.CopyFrom(metadata.data(), metadata.size()));
-    ASSERT_FALSE(buffer.metadata.IsEmpty());
+        buffer.metadata_.xmp.CopyFrom(metadata.data(), metadata.size()));
+    ASSERT_FALSE(buffer.metadata_.IsEmpty());
     ASSERT_EQ(buffer.Resize(8, 8),
               WP2_STATUS_BAD_DIMENSION);  // Not exactly same
-    ASSERT_WP2_OK(buffer.Resize(buffer.width, buffer.height));
+    ASSERT_WP2_OK(buffer.Resize(buffer.width(), buffer.height()));
     ASSERT_TRUE(buffer.IsView());
-    ASSERT_TRUE(buffer.metadata.IsEmpty());
+    ASSERT_TRUE(buffer.metadata_.IsEmpty());
 
     ASSERT_WP2_OK(
-        buffer.metadata.exif.CopyFrom(metadata.data(), metadata.size()));
-    ASSERT_FALSE(buffer.metadata.IsEmpty());
+        buffer.metadata_.exif.CopyFrom(metadata.data(), metadata.size()));
+    ASSERT_FALSE(buffer.metadata_.IsEmpty());
     buffer.Deallocate();
-    ASSERT_TRUE(buffer.metadata.IsEmpty());
+    ASSERT_TRUE(buffer.metadata_.IsEmpty());
 
     ASSERT_WP2_OK(
-        buffer.metadata.exif.CopyFrom(metadata.data(), metadata.size()));
-    ASSERT_FALSE(buffer.metadata.IsEmpty());
+        buffer.metadata_.exif.CopyFrom(metadata.data(), metadata.size()));
+    ASSERT_FALSE(buffer.metadata_.IsEmpty());
     ASSERT_WP2_OK(buffer.Resize(16, 16));
-    ASSERT_TRUE(buffer.metadata.IsEmpty());
+    ASSERT_TRUE(buffer.metadata_.IsEmpty());
 
     if (WP2FormatBpc(format) == 1) {
       other_buffer.Fill({0, 0, 2, 2}, color8);
@@ -99,32 +99,33 @@ TEST(BufferTest, Metadata) {
       other_buffer.Fill({0, 0, 2, 2}, color16);
     }
     ASSERT_WP2_OK(
-        buffer.metadata.exif.CopyFrom(metadata.data(), metadata.size()));
-    ASSERT_FALSE(buffer.metadata.IsEmpty());
+        buffer.metadata_.exif.CopyFrom(metadata.data(), metadata.size()));
+    ASSERT_FALSE(buffer.metadata_.IsEmpty());
     ASSERT_WP2_OK(buffer.CopyFrom(other_buffer));
-    ASSERT_TRUE(buffer.metadata.IsEmpty());  // Clears and doesn't copy metadata
+    ASSERT_TRUE(
+        buffer.metadata_.IsEmpty());  // Clears and doesn't copy metadata
 
     ArgbBuffer other_format(
         (WP2SampleFormat)((format_ind == 0) ? 1 : format_ind - 1));
     ASSERT_WP2_OK(other_format.Resize(2, 2));
     ASSERT_WP2_OK(
-        other_format.metadata.iccp.CopyFrom(metadata.data(), metadata.size()));
+        other_format.metadata_.iccp.CopyFrom(metadata.data(), metadata.size()));
     ASSERT_WP2_OK(
-        buffer.metadata.iccp.CopyFrom(metadata.data(), metadata.size()));
-    ASSERT_FALSE(other_format.metadata.IsEmpty());
-    if (buffer.format == WP2_Argb_32 &&
-        WP2FormatBpc(other_format.format) == 1) {
+        buffer.metadata_.iccp.CopyFrom(metadata.data(), metadata.size()));
+    ASSERT_FALSE(other_format.metadata_.IsEmpty());
+    if (buffer.format() == WP2_Argb_32 &&
+        WP2FormatBpc(other_format.format()) == 1) {
       ASSERT_WP2_OK(other_format.ConvertFrom(buffer));
-      ASSERT_TRUE(other_format.metadata.IsEmpty());  // Doesn't copy metadata
+      ASSERT_TRUE(other_format.metadata_.IsEmpty());  // Doesn't copy metadata
     }
 
-    ASSERT_FALSE(buffer.metadata.IsEmpty());
+    ASSERT_FALSE(buffer.metadata_.IsEmpty());
     buffer.Deallocate();
-    ASSERT_TRUE(buffer.metadata.IsEmpty());
-    ASSERT_FALSE(other_buffer.metadata.IsEmpty());
+    ASSERT_TRUE(buffer.metadata_.IsEmpty());
+    ASSERT_FALSE(other_buffer.metadata_.IsEmpty());
     ASSERT_WP2_OK(buffer.Swap(&other_buffer));
-    ASSERT_FALSE(buffer.metadata.IsEmpty());
-    ASSERT_TRUE(other_buffer.metadata.IsEmpty());
+    ASSERT_FALSE(buffer.metadata_.IsEmpty());
+    ASSERT_TRUE(other_buffer.metadata_.IsEmpty());
   }
 }
 
@@ -149,13 +150,13 @@ WP2Status Decode(const uint8_t* data, size_t data_size,
 TEST_P(BufferTest, API) {
   const std::string filename = std::get<0>(GetParam());
   const float quality = std::get<1>(GetParam()) ? 100.f : 75.f;
-  const int speed = 2;
+  const int effort = 2;
   const bool use_decoder = std::get<2>(GetParam());
   ArgbBuffer src;
   MemoryWriter data;
-  ASSERT_WP2_OK(testing::CompressImage(filename, &data, &src, quality, speed));
+  ASSERT_WP2_OK(testing::CompressImage(filename, &data, &src, quality, effort));
   EXPECT_FALSE(src.IsView());
-  ASSERT_WP2_OK(src.SetView(src, {1, 1, src.width / 2, src.height / 2}));
+  ASSERT_WP2_OK(src.SetView(src, {1, 1, src.width() / 2, src.height() / 2}));
   EXPECT_FALSE(src.IsView());  // We still own the memory.
 
   ArgbBuffer output1;
@@ -163,8 +164,8 @@ TEST_P(BufferTest, API) {
 
   ArgbBuffer output2;
   // Try a too small buffer
-  ASSERT_WP2_OK(
-      output2.SetView(output1, {0, 0, output1.width / 2, output1.height / 2}));
+  ASSERT_WP2_OK(output2.SetView(
+      output1, {0, 0, output1.width() / 2, output1.height() / 2}));
   ASSERT_EQ(Decode(data.mem_, data.size_, &output2, use_decoder),
             WP2_STATUS_BAD_DIMENSION);
   EXPECT_FALSE(testing::Compare(output1, output2, filename));
@@ -177,12 +178,12 @@ TEST_P(BufferTest, API) {
 
   // And then a large internal one
   output2.Deallocate();
-  ASSERT_WP2_OK(output2.Resize(output1.width * 2, output1.height * 3));
+  ASSERT_WP2_OK(output2.Resize(output1.width() * 2, output1.height() * 3));
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &output2, use_decoder));
   EXPECT_TRUE(testing::Compare(output1, output2, filename));
 
   // And a too large external one
-  ASSERT_WP2_OK(output1.Resize(output1.width * 2, output1.height * 3));
+  ASSERT_WP2_OK(output1.Resize(output1.width() * 2, output1.height() * 3));
   ASSERT_WP2_OK(output2.SetView(output1));
   ASSERT_EQ(Decode(data.mem_, data.size_, &output2, use_decoder),
             WP2_STATUS_BAD_DIMENSION);
@@ -209,7 +210,7 @@ TEST(BufferTest, Composite) {
 
   ASSERT_WP2_OK(buffer.CompositeOver({127, 13, 57, 116}));
 
-  uint8_t* row = (uint8_t*)buffer.GetRow(0);
+  uint8_t* row = buffer.GetRow8(0);
 
   EXPECT_TRUE(buffer.HasTransparency());
 
@@ -280,7 +281,7 @@ TEST(BufferTest, CompositeOnBuffer) {
 
   ASSERT_TRUE(testing::Compare(buffer, bg_buffer2, "buffer"));
 
-  uint8_t* row = (uint8_t*)buffer.GetRow(0);
+  uint8_t* row = buffer.GetRow8(0);
 
   EXPECT_EQ(row[4 * 0 + 0], 255);
   EXPECT_EQ(row[4 * 0 + 1], 0);
@@ -302,7 +303,7 @@ TEST(BufferTest, CompositeOnBuffer) {
   EXPECT_EQ(row[4 * 3 + 2], 57);
   EXPECT_EQ(row[4 * 3 + 3], 116);
 
-  row = (uint8_t*)buffer.GetRow(1);
+  row = buffer.GetRow8(1);
 
   EXPECT_EQ(row[4 * 0 + 0], 255);
   EXPECT_EQ(row[4 * 0 + 1], 0);
@@ -326,12 +327,12 @@ TEST(BufferTest, CompositeOnBuffer) {
 }
 
 void FillWithNoise(size_t seed, ArgbBuffer* const buffer) {
-  assert(buffer->format == WP2_Argb_32);
-  const uint32_t bpp = WP2FormatBpp(buffer->format);
+  assert(buffer->format() == WP2_Argb_32);
+  const uint32_t bpp = WP2FormatBpp(buffer->format());
   UniformIntDistribution random(seed);  // Deterministic.
-  for (uint32_t y = 0; y < buffer->height; ++y) {
-    uint8_t* const row = (uint8_t*)buffer->GetRow(y);
-    for (uint32_t x = 0; x < buffer->width; ++x) {
+  for (uint32_t y = 0; y < buffer->height(); ++y) {
+    uint8_t* const row = buffer->GetRow8(y);
+    for (uint32_t x = 0; x < buffer->width(); ++x) {
       row[x * bpp] = random.Get<uint8_t>(0, 255);  // Alpha
       for (uint32_t c = 1; c < bpp; ++c) {
         // Premultiplied

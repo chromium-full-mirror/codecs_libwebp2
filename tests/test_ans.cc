@@ -329,61 +329,6 @@ TEST_F(TestANS, Test0) {
 
 //------------------------------------------------------------------------------
 
-// Test HeaderEnc/HeaderDec.
-TEST_F(TestANS, Test1) {
-  const uint32_t kSize = 50 * kTestFactor;
-  const uint32_t kMaxBits = 24;
-  uint8_t buf[kSize];
-  HeaderEnc enc(buf, kSize);
-  HeaderDec dec(buf, 0);
-
-  for (bool encoding : {true, false}) {
-    UniformIntDistribution random(kBaseSeed);
-    int N = 0;
-    while (encoding ? enc.Ok() : dec.Ok()) {
-      const uint32_t b = random.Get(1u, kMaxBits - 1u), sb = b - 1u;
-      if (N + b > kSize * 8) break;
-
-      const bool is_signed = random.FlipACoin();
-      if (is_signed) {
-        const int32_t v = random.Get(-(1 << sb), (1 << sb) - 1);
-        if (encoding) {
-          enc.PutSBits(v, b, "sbit");
-        } else {
-          EXPECT_EQ(dec.ReadSBits(b, "sbit"), v) << "Error at position N=" << N;
-        }
-      } else {
-        const uint32_t v = random.Get(0u, (1u << b) - 1u);
-        if (encoding) {
-          enc.PutBits(v, b, "bit");
-        } else {
-          EXPECT_EQ(dec.ReadBits(b, "bit"), v) << "Error at position N=" << N;
-        }
-      }
-
-      N += b;
-    }
-
-    if (encoding) {
-      ASSERT_TRUE(enc.Ok()) << "Error encoding header.";
-      dec = HeaderDec(buf, enc.Used());
-    } else {
-      ASSERT_TRUE(dec.Ok()) << "Error decoding header.";
-    }
-
-    if (kVerbose) {
-      if (encoding) {
-        printf("header encoding: ok: %d N=%d actual bytes: %d\n", (int)enc.Ok(),
-               N, (int)enc.Used());
-      } else {
-        printf("header decoding: ok: %d N=%d\n", (int)dec.Ok(), N);
-      }
-    }
-  }
-}
-
-//------------------------------------------------------------------------------
-
 // Test different symbol inputs.
 TEST_F(TestANS, Test2) {
   const uint32_t kNumSymbols = 700 * kTestFactor;
@@ -681,7 +626,7 @@ TEST_F(TestANS, Test5) {
 
   Quantizer::Config* config = nullptr;
   quantizer.Quantize(histogram.data(), mapping.data(), size_sparse, kMaxSymbol,
-                     /*max_count=*/16, /*speed=*/5, &config);
+                     /*max_count=*/16, /*effort=*/5, &config);
 
   // Display results.
   if (kVerbose) {

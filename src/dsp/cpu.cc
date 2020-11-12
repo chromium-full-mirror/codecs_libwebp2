@@ -285,7 +285,9 @@ void WP2DspReset() {
 
   WP2::DeblockLine = nullptr;
   WP2::WouldDeblockLine = nullptr;
-  WP2::MeasureFlatLength = nullptr;
+  WP2::FilterCopyIn = nullptr;
+  WP2::FilterCopyOut = nullptr;
+  WP2::MeasureFlatLengths = nullptr;
 
   WP2::CdefDirection4x4 = nullptr;
   WP2::CdefDirection8x8 = nullptr;

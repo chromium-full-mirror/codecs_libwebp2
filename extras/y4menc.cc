@@ -77,11 +77,11 @@ WP2Status ToYCbCr(const ArgbBuffer& rgb, uint32_t ycbcr_num_bits,
                WP2_STATUS_INVALID_PARAMETER);
   const uint32_t shift = kRGBToYCbCrShift - (ycbcr_num_bits - 8);
 
-  WP2_CHECK_STATUS(ycbcr->Resize(rgb.width, rgb.height));
-  for (uint32_t y = 0; y < rgb.height; ++y) {
-    const uint8_t* const row = (const uint8_t*)rgb.GetRow(y);
-    for (uint32_t x = 0; x < rgb.width; ++x) {
-      const uint8_t* argb = &row[x * WP2FormatBpp(rgb.format)];
+  WP2_CHECK_STATUS(ycbcr->Resize(rgb.width(), rgb.height()));
+  for (uint32_t y = 0; y < rgb.height(); ++y) {
+    const uint8_t* const row = rgb.GetRow8(y);
+    for (uint32_t x = 0; x < rgb.width(); ++x) {
+      const uint8_t* argb = &row[x * WP2FormatBpp(rgb.format())];
       Multiply(argb[1], argb[2], argb[3], kRGBToYCbCrMatrix, shift,
                &ycbcr->Y.At(x, y), &ycbcr->U.At(x, y), &ycbcr->V.At(x, y));
     }

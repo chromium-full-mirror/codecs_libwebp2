@@ -96,8 +96,8 @@ class SymbolReader : public SymbolIO<StatExtra> {
   WP2Status ReadInternal(uint32_t cluster, uint32_t sym, bool use_max_value,
                          uint32_t max_value, WP2_OPT_LABEL,
                          int32_t* const value, double* const cost = nullptr);
-  // Finds the biggest symbol 'sym' such that stat.mappings[sym] <= max_value.
-  uint32_t FindSymbol(const Stat& stat, uint32_t max_value);
+  // Finds the biggest symbol 'sym' such that 'stat.mappings[sym] <= max_value'.
+  static uint32_t FindSymbol(const Stat& stat, uint32_t max_value);
 
   ANSDec* dec_;
   // Tmp variables to use during the update.
