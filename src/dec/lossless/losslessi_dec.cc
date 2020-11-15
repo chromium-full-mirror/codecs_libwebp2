@@ -134,7 +134,8 @@ WP2Status Decoder::ReadANSStats(uint32_t width, uint32_t height,
 // Emit rows without any scaling.
 template <typename T>
 uint32_t EmitRows(const uint16_t* row_in, uint32_t mb_w, uint32_t mb_h,
-                  bool has_alpha, T* const out, uint32_t out_stride) {
+                  bool has_alpha, bool premultiply, T* const out,
+                  uint32_t out_stride) {
   int lines = mb_h;
   T* row_out = out;
   while (lines-- > 0) {
@@ -144,7 +145,10 @@ uint32_t EmitRows(const uint16_t* row_in, uint32_t mb_w, uint32_t mb_h,
       if (!has_alpha) assert(alpha == WP2::kAlphaMax);
       row_out[i] = alpha;
       if (alpha > 0) {
-        for (int j = 1; j <= 3; ++j) row_out[i + j] = (T)row_in[j];
+        for (int j = 1; j <= 3; ++j) {
+          row_out[i + j] =
+              premultiply ? WP2::DivBy255((T)row_in[j] * alpha) : (T)row_in[j];
+        }
       } else {
         // To optimize encoding, the encoder can store arbitrary rgb values when
         // a = 0 (fully transparent pixel, see GetResidual in predictor_enc.cc).
@@ -231,11 +235,11 @@ WP2Status Decoder::ProcessRows(uint32_t row,
     if (WP2FormatBpc(buf->format()) == 1) {
       num_rows_out =
           EmitRows(rows_data, buf->width(), num_rows, gparams_->has_alpha_,
-                   buf->GetRow8(last_out_row_), buf->stride());
+                   premultiply_, buf->GetRow8(last_out_row_), buf->stride());
     } else {
       num_rows_out =
           EmitRows(rows_data, buf->width(), num_rows, gparams_->has_alpha_,
-                   buf->GetRow16(last_out_row_), buf->stride());
+                   premultiply_, buf->GetRow16(last_out_row_), buf->stride());
     }
     // Update 'last_out_row_'.
     last_out_row_ += num_rows_out;
@@ -807,6 +811,8 @@ WP2Status Decoder::DecodeHeader() {
         return WP2_STATUS_OK;
       } else {
         // Color indexing cannot be used with other transforms.
+        premultiply_ =
+            (gparams_->has_alpha_ ? dec_->ReadBool("premultiply") : false);
         const bool use_subtract_green = dec_->ReadBool("use_subtract_green");
         const bool use_predictor = dec_->ReadBool("use_predictor");
         const bool use_cross_color = dec_->ReadBool("use_cross_color");

@@ -133,14 +133,21 @@ template <typename T>
 uint32_t CountColors(const WP2::ArgbBuffer& pic, const T* src,
                      ColorCacheMap* const color_cache,
                      const uint32_t max_palette_size) {
+  assert(pic.format() == WP2_Argb_32 || pic.format() == WP2_Argb_38 ||
+         pic.format() == WP2_ARGB_32);
+  const bool premultiply = !WP2IsPremultiplied(pic.format());
   uint32_t num_colors = 0;
   // so we're sure that last_pix != argb[0]
-  int16_t prev_pix[4] = {(int16_t)~src[0], (int16_t)~src[1], (int16_t)~src[2],
-                         (int16_t)~src[3]};
+  int16_t prev_pix[4] = {(int16_t)~src[0], 0, 0, 0};
   for (uint32_t y = 0; y < pic.height(); ++y) {
     for (uint32_t x = 0; x < pic.width(); ++x) {
-      const int16_t pix[4] = {(int16_t)src[4 * x + 0], (int16_t)src[4 * x + 1],
-                              (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
+      int16_t pix[4] = {(int16_t)src[4 * x + 0], (int16_t)src[4 * x + 1],
+                        (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
+      if (premultiply) {
+        for (uint32_t c = 1; c < 4; ++c) {
+          pix[c] = WP2::DivBy255(pix[c] * pix[0]);
+        }
+      }
       if (ColorEq(pix, prev_pix)) continue;
       ColorCopy(pix, prev_pix);
       uint32_t value;
@@ -159,6 +166,10 @@ uint32_t CountColors(const WP2::ArgbBuffer& pic, const T* src,
 }
 
 WP2Status Palette::AnalyzeAndCreate(const WP2::ArgbBuffer& pic) {
+  WP2_CHECK_OK(pic.format() == WP2_Argb_32 || pic.format() == WP2_Argb_38 ||
+                   pic.format() == WP2_ARGB_32,
+               WP2_STATUS_INVALID_COLORSPACE);
+
   max_palette_size_ = MaxPaletteSize(pic.width() * pic.height());
   constexpr uint32_t kMaxDimension = 128u;
   full_optimize_ =
@@ -195,16 +206,21 @@ WP2Status Palette::AnalyzeAndCreate(const WP2::ArgbBuffer& pic) {
 template <typename T>
 void ApplyT(const T* src, uint32_t src_stride, uint32_t width, uint32_t height,
             const ColorCacheMap& color_cache, uint32_t max_alpha,
-            uint16_t* dst) {
+            bool premultiply, uint16_t* dst) {
   int16_t prev_pix[4] = {(int16_t)~src[0], (int16_t)~src[1], (int16_t)~src[2],
                          (int16_t)~src[3]};
   uint32_t prev_idx = 0;
   for (uint32_t y = 0; y < height; ++y) {
     for (uint32_t x = 0; x < width; ++x, dst += 4) {
-      const int16_t pix[4] = {(int16_t)src[4 * x + 0], (int16_t)src[4 * x + 1],
-                              (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
+      int16_t pix[4] = {(int16_t)src[4 * x + 0], (int16_t)src[4 * x + 1],
+                        (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
+      if (premultiply) {
+        for (uint32_t c = 1; c < 4; ++c) {
+          pix[c] = WP2::DivBy255(pix[c] * pix[0]);
+        }
+      }
       if (!ColorEq(pix, prev_pix)) {
-        color_cache.Contains(pix, &prev_idx);
+        if (!color_cache.Contains(pix, &prev_idx)) assert(false);
         ColorCopy(pix, prev_pix);
       }
       dst[0] = max_alpha;
@@ -217,6 +233,9 @@ void ApplyT(const T* src, uint32_t src_stride, uint32_t width, uint32_t height,
 }
 
 WP2Status Palette::Apply(const WP2::ArgbBuffer& pic, uint16_t* dst) const {
+  WP2_CHECK_OK(pic.format() == WP2_Argb_32 || pic.format() == WP2_Argb_38 ||
+                   pic.format() == WP2_ARGB_32,
+               WP2_STATUS_INVALID_COLORSPACE);
   ColorCacheMap color_cache;
 
   WP2_CHECK_STATUS(color_cache.Allocate(num_colors_));
@@ -226,14 +245,16 @@ WP2Status Palette::Apply(const WP2::ArgbBuffer& pic, uint16_t* dst) const {
     color_cache.Insert(&colors_[4 * i], i);
   }
 
+  const bool premultiply = !WP2IsPremultiplied(pic.format());
+
   const uint32_t max_alpha = WP2::FormatMax(pic.format(), /*channel=*/0);
   if (WP2FormatBpc(pic.format()) == 1) {
     ApplyT(pic.GetRow8(0), pic.stride(), pic.width(), pic.height(), color_cache,
-           max_alpha, dst);
+           max_alpha, premultiply, dst);
   } else {
     assert(WP2FormatBpc(pic.format()) == 2);
     ApplyT(pic.GetRow16(0), pic.stride(), pic.width(), pic.height(),
-           color_cache, max_alpha, dst);
+           color_cache, max_alpha, premultiply, dst);
   }
 
   return WP2_STATUS_OK;

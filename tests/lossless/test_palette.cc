@@ -14,6 +14,7 @@
 
 // Test Palette class.
 
+#include "src/common/color_precision.h"
 #include "src/dec/lossless/losslessi_dec.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/lossless/palette.h"
@@ -24,14 +25,16 @@
 namespace WP2 {
 namespace {
 
-// num_colors, seed
-class PaletteTest
-    : public ::testing::TestWithParam<std::tuple<uint32_t, uint32_t>> {};
+// num_colors, seed, src format
+class PaletteTest : public ::testing::TestWithParam<
+                        std::tuple<uint32_t, uint32_t, WP2SampleFormat>> {};
 
 TEST_P(PaletteTest, RoundTrip) {
   WP2LDspInit();
   const uint32_t num_colors = std::get<0>(GetParam());
   const uint32_t seed = std::get<1>(GetParam());
+  const WP2SampleFormat format = std::get<2>(GetParam());
+  const bool premultiplied = WP2IsPremultiplied(format);
 
   UniformIntDistribution random(seed);
 
@@ -42,13 +45,16 @@ TEST_P(PaletteTest, RoundTrip) {
   for (uint32_t i = 0; i < num_colors; ++i) {
     const uint32_t a = random.Get(0u, kAlphaMax);
     colors[4 * i + 0] = a;
-    for (uint32_t c = 1; c < 4; ++c) colors[4 * i + c] = random.Get(0u, a);
+    for (uint32_t c = 1; c < 4; ++c) {
+      const uint32_t max = premultiplied ? a : WP2::FormatMax(format, c);
+      colors[4 * i + c] = random.Get(0u, max);
+    }
   }
 
   // Generate random source buffer.
   const uint32_t kWidth = 100;
   const uint32_t kHeight = num_colors;
-  ArgbBuffer buffer;
+  ArgbBuffer buffer(format);
   ASSERT_WP2_OK(buffer.Resize(kWidth, kHeight));
   for (uint32_t y = 0; y < kHeight; ++y) {
     uint8_t* const row = buffer.GetRow8(y);
@@ -58,6 +64,9 @@ TEST_P(PaletteTest, RoundTrip) {
                 &row[4 * x]);
     }
   }
+  ArgbBuffer premultiplied_buffer;
+  ASSERT_WP2_OK(premultiplied ? premultiplied_buffer.SetView(buffer)
+                              : premultiplied_buffer.ConvertFrom(buffer));
 
   // Create palette.
   WP2L::Palette palette;
@@ -112,7 +121,7 @@ TEST_P(PaletteTest, RoundTrip) {
                        /*has_alpha=*/true, reconstructed.data());
 
   for (uint32_t y = 0; y < kHeight; ++y) {
-    uint8_t* const reference_row = buffer.GetRow8(y);
+    uint8_t* const reference_row = premultiplied_buffer.GetRow8(y);
     uint16_t* const reconstructed_row = &reconstructed[y * kWidth * 4];
     for (uint32_t x = 0; x < kWidth; ++x) {
       for (uint32_t c = 0; c < 4; ++c) {
@@ -128,7 +137,8 @@ INSTANTIATE_TEST_SUITE_P(PaletteTestInstantiation, PaletteTest,
                              // num_colors
                              ::testing::Values<uint32_t>(2, 5, 10, 30, 50, 100),
                              // seed
-                             ::testing::Range<uint32_t>(0, 5)));
+                             ::testing::Range<uint32_t>(0, 5),
+                             ::testing::Values(WP2_Argb_32, WP2_ARGB_32)));
 
 }  // namespace
 }  // namespace WP2

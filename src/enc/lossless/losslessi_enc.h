@@ -57,6 +57,8 @@ class Encoder {
   const WP2::EncoderConfig& config_;  // user configuration and parameters
   const WP2::ArgbBuffer& pic_;        // input picture (tile view)
   bool has_alpha_;  // false if the whole image is opaque (not only this tile)
+  // whether pixels should be encoded premultiplied with the alpha value
+  bool use_premultiplied_ = true;
 
   uint16_t* argb_;                       // Transformed argb image data.
   EncoderARGBContent argb_content_;      // Content type of the argb buffer.

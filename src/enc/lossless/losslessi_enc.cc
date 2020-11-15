@@ -542,13 +542,27 @@ static WP2Status MakeInputImageCopy(const CrunchConfig& config,
   const WP2::ArgbBuffer& pic = encoder->pic_;
   const uint32_t width = pic.width();
   const uint32_t height = pic.height();
+  const bool premultiply = encoder->has_alpha_ && encoder->use_premultiplied_ &&
+                           !WP2IsPremultiplied(pic.format());
   WP2_CHECK_STATUS(encoder->AllocateTransformBuffer(config, width, height));
   if (encoder->argb_content_ == kEncoderARGB) return WP2_STATUS_OK;
   assert(WP2FormatBpc(pic.format()) == 1 || WP2FormatBpc(pic.format()) == 2);
   for (uint32_t y = 0; y < height; ++y) {
     if (WP2FormatBpc(pic.format()) == 1) {
-      std::copy(pic.GetRow8(y), pic.GetRow8(y) + 4 * width,
-                &encoder->argb_[4 * y * width]);
+      if (premultiply) {
+        const uint8_t* const src_row = pic.GetRow8(y);
+        for (uint32_t x = 0; x < width; ++x) {
+          const uint8_t a = src_row[4 * x + 0];
+          encoder->argb_[4 * (y * width + x) + 0] = a;
+          for (uint32_t c = 1; c < 4; ++c) {
+            encoder->argb_[4 * (y * width + x) + c] =
+                WP2::DivBy255(src_row[4 * x + c] * a);
+          }
+        }
+      } else {
+        std::copy(pic.GetRow8(y), pic.GetRow8(y) + 4 * width,
+                  &encoder->argb_[4 * y * width]);
+      }
     } else {
       std::copy(pic.GetRow16(y), pic.GetRow16(y) + 4 * width,
                 &encoder->argb_[4 * y * width]);
@@ -595,13 +609,19 @@ static WP2Status ApplyAndWriteTransforms(
 
   const WP2::ANSDebugPrefix prefix1(enc, "GlobalHeader");
   const WP2::ANSDebugPrefix prefix2(enc, "transforms");
+  const bool decoder_must_premultiply =
+      encoder->has_alpha_ && !encoder->use_premultiplied_;
+
   if (enc->PutBool(config.use_palette || config.use_subtract_green ||
                        config.use_predict || config.use_cross_color ||
-                       config.use_group4,
+                       config.use_group4 || decoder_must_premultiply,
                    "transform_present")) {
     if (!enc->PutBool(config.use_palette, "use_color_indexing") &&
         !enc->PutBool(config.use_group4, "use_group4")) {
       // Color indexing cannot be used with other transforms.
+      if (encoder->has_alpha_) {
+        enc->PutBool(decoder_must_premultiply, "premultiply");
+      }
       enc->PutBool(config.use_subtract_green, "use_subtract_green");
       enc->PutBool(config.use_predict, "use_predictor");
       enc->PutBool(config.use_cross_color, "use_cross_color");

@@ -26,6 +26,8 @@ namespace WP2L {
 // -----------------------------------------------------------------------------
 // Entropy analysis
 
+namespace {
+
 // These five modes are evaluated and their respective entropy is computed.
 enum class EntropyMode {
   // No transform, colors are stored as is.
@@ -66,8 +68,8 @@ typedef enum {
 // Adds the red minus green, and blue minus green values from the given argb
 // pixel 'p' to the given histograms 'r' and 'b'.
 template <typename T>
-static void AddSingleSubGreen(const T* const p, uint32_t mask,
-                              uint32_t* const r, uint32_t* const b) {
+void AddSingleSubGreen(const T* const p, uint32_t mask, uint32_t* const r,
+                       uint32_t* const b) {
   const int green = p[2];  // The upper bits are masked away later.
   ++r[((int)p[1] - green) & mask];
   ++b[((int)p[3] - green) & mask];
@@ -76,29 +78,50 @@ static void AddSingleSubGreen(const T* const p, uint32_t mask,
 // Adds the values from the given argb pixel 'p' to the given histograms 'a',
 // 'r', 'g', and 'b'.
 template <typename T>
-static void AddSingle(const T* const p, uint32_t* const a, uint32_t* const r,
-                      uint32_t* const g, uint32_t* const b) {
+void AddSingle(const T* const p, uint32_t* const a, uint32_t* const r,
+               uint32_t* const g, uint32_t* const b) {
   ++a[p[0]];
   ++r[p[1]];
   ++g[p[2]];
   ++b[p[3]];
 }
 
+template <typename T>
+void Premultiply(const T* const src, T* const dst) {
+  const uint32_t a = src[0];
+  if (a < 255) {
+    dst[0] = src[0];
+    dst[1] = WP2::DivBy255(src[1] * a);
+    dst[2] = WP2::DivBy255(src[2] * a);
+    dst[3] = WP2::DivBy255(src[3] * a);
+  } else {
+    std::copy(src, src + 4, dst);
+  }
+}
+
+enum PremultMode { kUnmultiplied = 0, kPremultiplied, kNumPremultModes };
+
 // Analyzes the distribution of colors on the image to estimate the best
-// transform, returned in 'min_entropy_ix'. Also sets 'red_and_blue_always_zero'
+// transform, returned in 'best_mode'. Also sets 'red_and_blue_always_zero'
 // to true if both red and blue channels are always zero when applying this
 // transform.
 template <typename T>
-static WP2Status AnalyzeEntropyImpl(const T* curr_row, uint32_t stride,
-                                    uint32_t width, uint32_t height,
-                                    WP2SampleFormat format, bool use_palette,
-                                    Encoder* const encoder,
-                                    EntropyMode* const min_entropy_ix,
-                                    bool* const red_and_blue_always_zero) {
+WP2Status AnalyzeEntropyImpl(const T* curr_row, uint32_t stride, uint32_t width,
+                             uint32_t height, WP2SampleFormat format,
+                             bool has_alpha, bool use_palette,
+                             Encoder* const encoder,
+                             EntropyMode* const best_mode,
+                             bool* const red_and_blue_always_zero,
+                             bool* const use_premultiplied) {
+  const PremultMode first_premult_mode =
+      (!WP2IsPremultiplied(format) && has_alpha) ? PremultMode::kUnmultiplied
+                                                 : PremultMode::kPremultiplied;
+
   if (use_palette && encoder->palette_.Size() <= 16) {
     // In practice, small palettes are better than any other transform.
-    *min_entropy_ix = EntropyMode::kPalette;
+    *best_mode = EntropyMode::kPalette;
     *red_and_blue_always_zero = true;
+    *use_premultiplied = true;
     return WP2_STATUS_OK;
   }
   uint32_t max_channel = 0;
@@ -119,109 +142,167 @@ static WP2Status AnalyzeEntropyImpl(const T* curr_row, uint32_t stride,
   }
 
   // Allocate histogram set with cache_bits = 0.
-  WP2::Vector_u32 histo;
+  WP2::Vector_u32 histo[kNumPremultModes];
   const uint32_t histo_len = max_channel + 1;
-  WP2_CHECK_ALLOC_OK(histo.resize(kHistoTotal * histo_len));
-  std::fill(histo.begin(), histo.end(), 0);
+
+  for (uint32_t premult = first_premult_mode; premult < kNumPremultModes;
+       ++premult) {
+    WP2_CHECK_ALLOC_OK(histo[premult].resize(kHistoTotal * histo_len));
+    std::fill(histo[premult].begin(), histo[premult].end(), 0);
+  }
 
   const T* prev_row = nullptr;
   // Skip the first pixel.
   T pix_prev[4] = {curr_row[0], curr_row[1], curr_row[2], curr_row[3]};
+  T pix_premult_prev[4];
+  Premultiply(pix_prev, pix_premult_prev);
+  T pix_premult_prev_row[4];
+  T pix_premult[4];
   for (uint32_t y = 0; y < height; ++y) {
     for (uint32_t x = 0; x < width; ++x) {
-      // Compute the difference between the two pixels.
       const T* pix = &curr_row[4 * x];
-      uint32_t pix_diff[4];
-      for (uint32_t c = 0; c < 4; ++c) {
-        pix_diff[c] = ((int32_t)pix[c] - (int32_t)pix_prev[c]) & masks[c];
+
+      for (uint32_t premult = first_premult_mode; premult < kNumPremultModes;
+           ++premult) {
+        const T* p;
+        const T* p_prev_row;
+        T* p_prev;
+
+        if (premult == first_premult_mode) {  // pixels as is
+          p = pix;
+          p_prev = pix_prev;
+          p_prev_row = (y > 0) ? &prev_row[4 * x] : nullptr;
+        } else {  // pixels premultiplied by us
+          Premultiply(pix, pix_premult);
+          if (y > 0) Premultiply(&prev_row[4 * x], pix_premult_prev_row);
+
+          p = pix_premult;
+          p_prev = pix_premult_prev;
+          p_prev_row = (y > 0) ? pix_premult_prev_row : nullptr;
+        }
+
+        // Compute the difference between the two pixels.
+        uint32_t p_diff[4];
+        for (uint32_t c = 0; c < 4; ++c) {
+          p_diff[c] = ((int32_t)p[c] - (int32_t)p_prev[c]) & masks[c];
+        }
+        std::copy(p, p + 4, p_prev);
+
+        if ((p_diff[0] + p_diff[1] + p_diff[2] + p_diff[3] == 0) ||
+            (p_prev_row != nullptr &&
+             memcmp(p, p_prev_row, 4 * sizeof(T)) == 0)) {
+          continue;
+        }
+
+        AddSingle(p, &histo[premult][kHistoAlpha * histo_len],
+                  &histo[premult][kHistoRed * histo_len],
+                  &histo[premult][kHistoGreen * histo_len],
+                  &histo[premult][kHistoBlue * histo_len]);
+        AddSingle(p_diff, &histo[premult][kHistoAlphaPred * histo_len],
+                  &histo[premult][kHistoRedPred * histo_len],
+                  &histo[premult][kHistoGreenPred * histo_len],
+                  &histo[premult][kHistoBluePred * histo_len]);
+        AddSingleSubGreen(p, max_rgb,
+                          &histo[premult][kHistoRedSubGreen * histo_len],
+                          &histo[premult][kHistoBlueSubGreen * histo_len]);
+        AddSingleSubGreen(p_diff, max_rgb,
+                          &histo[premult][kHistoRedPredSubGreen * histo_len],
+                          &histo[premult][kHistoBluePredSubGreen * histo_len]);
+
+        // Palettes are always premultiplied. It doesn't make sense to look at
+        // entropy for unmultiplied palettes.
+        if (use_palette && premult == kPremultiplied) {
+          // Approximate the palette by the entropy of the multiplicative hash.
+          const uint32_t hash = HashPix(p, WP2Log2Floor(max_channel + 1));
+          ++histo[premult][kHistoPalette * histo_len + hash];
+        }
       }
-      std::copy(pix, pix + 4, pix_prev);
-      if ((pix_diff[0] + pix_diff[1] + pix_diff[2] + pix_diff[3] == 0) ||
-          (prev_row != nullptr
-              && memcmp(pix, &prev_row[4 * x], 4 * sizeof(uint8_t)) == 0)) {
-        continue;
-      }
-      AddSingle(pix,
-                &histo[kHistoAlpha * histo_len],
-                &histo[kHistoRed * histo_len],
-                &histo[kHistoGreen * histo_len],
-                &histo[kHistoBlue * histo_len]);
-      AddSingle(pix_diff,
-                &histo[kHistoAlphaPred * histo_len],
-                &histo[kHistoRedPred * histo_len],
-                &histo[kHistoGreenPred * histo_len],
-                &histo[kHistoBluePred * histo_len]);
-      AddSingleSubGreen(pix, max_rgb, &histo[kHistoRedSubGreen * histo_len],
-                        &histo[kHistoBlueSubGreen * histo_len]);
-      AddSingleSubGreen(pix_diff, max_rgb,
-                        &histo[kHistoRedPredSubGreen * histo_len],
-                        &histo[kHistoBluePredSubGreen * histo_len]);
-      // Approximate the palette by the entropy of the multiplicative hash.
-      const uint32_t hash = HashPix(pix, WP2Log2Floor(max_channel + 1));
-      ++histo[kHistoPalette * histo_len + hash];
     }
     prev_row = curr_row;
     curr_row = (const T*)((const uint8_t*)curr_row + stride);
   }
 
-  double entropy_comp[kHistoTotal];
-  double entropy[(uint32_t)EntropyMode::kNum];
-  const EntropyMode last_mode_to_analyze =
-      use_palette ? EntropyMode::kPalette : EntropyMode::kSpatialSubGreen;
-  // Let's add one zero to the predicted histograms. The zeros are removed
-  // too efficiently by the pix_diff == 0 comparison, at least one of the
-  // zeros is likely to exist.
-  ++histo[kHistoRedPredSubGreen * histo_len];
-  ++histo[kHistoBluePredSubGreen * histo_len];
-  ++histo[kHistoRedPred * histo_len];
-  ++histo[kHistoGreenPred * histo_len];
-  ++histo[kHistoBluePred * histo_len];
-  ++histo[kHistoAlphaPred * histo_len];
+  double entropy_comp[kNumPremultModes][kHistoTotal];
+  double entropy[kNumPremultModes][(uint32_t)EntropyMode::kNum];
 
-  for (uint32_t j = 0; j < kHistoTotal; ++j) {
-    entropy_comp[j] = WP2::ANSCountsQuantizedCost(
-        &histo[j * histo_len], &histo[j * histo_len], histo_len);
-  }
-  entropy[(uint32_t)EntropyMode::kDirect] =
-      entropy_comp[kHistoAlpha] + entropy_comp[kHistoRed] +
-      entropy_comp[kHistoGreen] + entropy_comp[kHistoBlue];
-  entropy[(uint32_t)EntropyMode::kSpatial] =
-      entropy_comp[kHistoAlphaPred] + entropy_comp[kHistoRedPred] +
-      entropy_comp[kHistoGreenPred] + entropy_comp[kHistoBluePred];
-  entropy[(uint32_t)EntropyMode::kSubGreen] =
-      entropy_comp[kHistoAlpha] + entropy_comp[kHistoRedSubGreen] +
-      entropy_comp[kHistoGreen] + entropy_comp[kHistoBlueSubGreen];
-  entropy[(uint32_t)EntropyMode::kSpatialSubGreen] =
-      entropy_comp[kHistoAlphaPred] + entropy_comp[kHistoRedPredSubGreen] +
-      entropy_comp[kHistoGreenPred] + entropy_comp[kHistoBluePredSubGreen];
-  entropy[(uint32_t)EntropyMode::kPalette] = entropy_comp[kHistoPalette];
+  for (uint32_t premult = first_premult_mode; premult < kNumPremultModes;
+       ++premult) {
+    // Let's add one zero to the predicted histograms. The zeros are removed
+    // too efficiently by the pix_diff == 0 comparison, at least one of the
+    // zeros is likely to exist.
+    ++histo[premult][kHistoRedPredSubGreen * histo_len];
+    ++histo[premult][kHistoBluePredSubGreen * histo_len];
+    ++histo[premult][kHistoRedPred * histo_len];
+    ++histo[premult][kHistoGreenPred * histo_len];
+    ++histo[premult][kHistoBluePred * histo_len];
+    ++histo[premult][kHistoAlphaPred * histo_len];
 
-  // When including transforms, there is an overhead in bits from
-  // storing them. This overhead is small but matters for small images.
-  // For spatial, there are 14 transformations.
-  const int transform_bits = encoder->transform_bits_;
-  entropy[(uint32_t)EntropyMode::kSpatial] +=
-      WP2LSubSampleSize(width, transform_bits) *
-      WP2LSubSampleSize(height, transform_bits) * WP2Log2(14);
-  // For color transforms: 24 as only 3 channels are considered in a
-  // ColorTransformElement.
-  entropy[(uint32_t)EntropyMode::kSpatialSubGreen] +=
-      WP2LSubSampleSize(width, transform_bits) *
-      WP2LSubSampleSize(height, transform_bits) * WP2Log2(24);
-  // For palettes, add the cost of storing the palette.
-  if (use_palette) {
-    const float palette_cost = encoder->palette_.GetCost();
-    entropy[(uint32_t)EntropyMode::kPalette] += palette_cost;
-  }
+    for (uint32_t j = 0; j < kHistoTotal; ++j) {
+      entropy_comp[premult][j] = WP2::ANSCountsQuantizedCost(
+          &histo[premult][j * histo_len], &histo[premult][j * histo_len],
+          histo_len);
+    }
 
-  *min_entropy_ix = EntropyMode::kDirect;
-  for (uint32_t k = (uint32_t)EntropyMode::kDirect + 1;
-       k <= (uint32_t)last_mode_to_analyze; ++k) {
-    if (entropy[(uint32_t)*min_entropy_ix] > entropy[k]) {
-      *min_entropy_ix = (EntropyMode)k;
+    entropy[premult][(uint32_t)EntropyMode::kDirect] =
+        entropy_comp[premult][kHistoAlpha] + entropy_comp[premult][kHistoRed] +
+        entropy_comp[premult][kHistoGreen] + entropy_comp[premult][kHistoBlue];
+    entropy[premult][(uint32_t)EntropyMode::kSpatial] =
+        entropy_comp[premult][kHistoAlphaPred] +
+        entropy_comp[premult][kHistoRedPred] +
+        entropy_comp[premult][kHistoGreenPred] +
+        entropy_comp[premult][kHistoBluePred];
+    entropy[premult][(uint32_t)EntropyMode::kSubGreen] =
+        entropy_comp[premult][kHistoAlpha] +
+        entropy_comp[premult][kHistoRedSubGreen] +
+        entropy_comp[premult][kHistoGreen] +
+        entropy_comp[premult][kHistoBlueSubGreen];
+    entropy[premult][(uint32_t)EntropyMode::kSpatialSubGreen] =
+        entropy_comp[premult][kHistoAlphaPred] +
+        entropy_comp[premult][kHistoRedPredSubGreen] +
+        entropy_comp[premult][kHistoGreenPred] +
+        entropy_comp[premult][kHistoBluePredSubGreen];
+    // When including transforms, there is an overhead in bits from
+    // storing them. This overhead is small but matters for small images.
+    // For spatial, there are 14 transformations.
+    const int transform_bits = encoder->transform_bits_;
+    entropy[premult][(uint32_t)EntropyMode::kSpatial] +=
+        WP2LSubSampleSize(width, transform_bits) *
+        WP2LSubSampleSize(height, transform_bits) * WP2Log2(14);
+    // For color transforms: 24 as only 3 channels are considered in a
+    // ColorTransformElement.
+    entropy[premult][(uint32_t)EntropyMode::kSpatialSubGreen] +=
+        WP2LSubSampleSize(width, transform_bits) *
+        WP2LSubSampleSize(height, transform_bits) * WP2Log2(24);
+
+    // Palettes are always premultiplied. It doesn't make sense to look at
+    // entropy for unmultiplied palettes.
+    if (use_palette && premult == kPremultiplied) {
+      // For palettes, add the cost of storing the palette.
+      entropy[premult][(uint32_t)EntropyMode::kPalette] =
+          entropy_comp[premult][kHistoPalette] + encoder->palette_.GetCost();
+    } else {
+      entropy[premult][(uint32_t)EntropyMode::kPalette] =
+          std::numeric_limits<double>::max();
     }
   }
-  assert((uint32_t)*min_entropy_ix <= (uint32_t)last_mode_to_analyze);
+
+  *best_mode = EntropyMode::kDirect;
+  *use_premultiplied = first_premult_mode;
+  for (uint32_t premult = first_premult_mode; premult < kNumPremultModes;
+       ++premult) {
+    for (uint32_t mode = (uint32_t)EntropyMode::kDirect + 1;
+         mode < (uint32_t)EntropyMode::kNum; ++mode) {
+      if ((EntropyMode)mode == EntropyMode::kPalette && !use_palette) continue;
+      if (entropy[*use_premultiplied][(uint32_t)*best_mode] >
+          entropy[premult][mode]) {
+        *best_mode = (EntropyMode)mode;
+        *use_premultiplied = premult;
+      }
+    }
+  }
+  if (!use_palette) assert(*best_mode != EntropyMode::kPalette);
+  if (WP2IsPremultiplied(format) || !has_alpha) assert(*use_premultiplied);
+
   *red_and_blue_always_zero = true;
   // Let's check if the histogram of the chosen entropy mode has
   // non-zero red and blue values. If all are zero, we can later skip
@@ -234,9 +315,11 @@ static WP2Status AnalyzeEntropyImpl(const T* curr_row, uint32_t stride,
       {kHistoRedPredSubGreen, kHistoBluePredSubGreen},
       {kHistoRed, kHistoBlue}};
   const uint32_t* const red_histo =
-      &histo[histo_len * kHistoPairs[(uint32_t)*min_entropy_ix][0]];
+      &histo[*use_premultiplied]
+            [histo_len * kHistoPairs[(uint32_t)*best_mode][0]];
   const uint32_t* const blue_histo =
-      &histo[histo_len * kHistoPairs[(uint32_t)*min_entropy_ix][1]];
+      &histo[*use_premultiplied]
+            [histo_len * kHistoPairs[(uint32_t)*best_mode][1]];
   for (size_t i = 1; i < histo_len; ++i) {
     if ((red_histo[i] | blue_histo[i]) != 0) {
       *red_and_blue_always_zero = false;
@@ -247,19 +330,21 @@ static WP2Status AnalyzeEntropyImpl(const T* curr_row, uint32_t stride,
   return WP2_STATUS_OK;
 }
 
-static WP2Status AnalyzeEntropy(const WP2::ArgbBuffer& pic, uint32_t width,
-                                uint32_t height, bool use_palette,
-                                Encoder* const encoder,
-                                EntropyMode* const min_entropy_ix,
-                                bool* const red_and_blue_always_zero) {
+WP2Status AnalyzeEntropy(const WP2::ArgbBuffer& pic, uint32_t width,
+                         uint32_t height, bool has_alpha, bool use_palette,
+                         Encoder* const encoder, EntropyMode* const best_mode,
+                         bool* const red_and_blue_always_zero,
+                         bool* const use_premultiplied) {
   if (WP2FormatBpc(pic.format()) == 1) {
     WP2_CHECK_STATUS(AnalyzeEntropyImpl(
-        pic.GetRow8(0), pic.stride(), width, height, pic.format(), use_palette,
-        encoder, min_entropy_ix, red_and_blue_always_zero));
+        pic.GetRow8(0), pic.stride(), width, height, pic.format(), has_alpha,
+        use_palette, encoder, best_mode, red_and_blue_always_zero,
+        use_premultiplied));
   } else {
     WP2_CHECK_STATUS(AnalyzeEntropyImpl(
-        pic.GetRow16(0), pic.stride(), width, height, pic.format(), use_palette,
-        encoder, min_entropy_ix, red_and_blue_always_zero));
+        pic.GetRow16(0), pic.stride(), width, height, pic.format(), has_alpha,
+        use_palette, encoder, best_mode, red_and_blue_always_zero,
+        use_premultiplied));
   }
 
   return WP2_STATUS_OK;
@@ -280,7 +365,7 @@ static int GetHistoBits(int effort, bool use_palette, int width, int height) {
          (histo_bits > kHistogramBitsMax) ? kHistogramBitsMax : histo_bits;
 }
 
-static uint32_t GetTransformBits(uint32_t effort, uint32_t histo_bits) {
+uint32_t GetTransformBits(uint32_t effort, uint32_t histo_bits) {
   const uint32_t max_transform_bits = (effort < 5) ? 6 : (effort > 5) ? 4 : 5;
   const uint32_t res =
       (histo_bits > max_transform_bits) ? max_transform_bits : histo_bits;
@@ -289,9 +374,9 @@ static uint32_t GetTransformBits(uint32_t effort, uint32_t histo_bits) {
 }
 
 // Translates an entropy mode to a CrunchConfig.
-static void TranslateEntropyMode(EntropyMode entropy_idx, uint32_t effort,
-                                 bool red_and_blue_always_zero,
-                                 CrunchConfig* const config) {
+void TranslateEntropyMode(EntropyMode entropy_idx, uint32_t effort,
+                          bool red_and_blue_always_zero,
+                          CrunchConfig* const config) {
   config->use_group4 = false;
   config->use_palette = (entropy_idx == EntropyMode::kPalette);
   config->use_subtract_green = (entropy_idx == EntropyMode::kSubGreen) ||
@@ -305,6 +390,8 @@ static void TranslateEntropyMode(EntropyMode entropy_idx, uint32_t effort,
         red_and_blue_always_zero ? false : config->use_predict;
   }
 }
+
+}  // namespace
 
 // Fills in 'crunch_configs' with a set of transforms and LZ77 variants to try
 // based on heuristics. Also initializes the palette in enc->palette_ and
@@ -358,6 +445,7 @@ WP2Status EncoderAnalyze(Encoder* const encoder,
     }
   }
   if (effort == 0) {
+    encoder->use_premultiplied_ = true;
     if (*crunch_configs_size != 1) {
       // AnalyzeEntropy is somewhat slow. 'red_and_blue_always_zero' is unused
       // for effort == 0.
@@ -368,14 +456,13 @@ WP2Status EncoderAnalyze(Encoder* const encoder,
     }
     n_lz77s = 1;
   } else {
-    EntropyMode min_entropy_ix = EntropyMode::kDirect;
+    EntropyMode best_mode = EntropyMode::kDirect;
     // Try out multiple LZ77 on images with few colors.
     n_lz77s = (use_palette && encoder->palette_.Size() <= 16) ? 2 : 1;
-    // TODO(maryla): if effort == 9 this doesn't seem useful.
     bool red_and_blue_always_zero = false;
-    WP2_CHECK_STATUS(AnalyzeEntropy(pic, width, height, use_palette, encoder,
-                                    &min_entropy_ix,
-                                    &red_and_blue_always_zero));
+    WP2_CHECK_STATUS(AnalyzeEntropy(
+        pic, width, height, encoder->has_alpha_, use_palette, encoder,
+        &best_mode, &red_and_blue_always_zero, &encoder->use_premultiplied_));
     if (effort == 9) {
       // Go brute force on all transforms.
       static_assert(1 + (uint32_t)EntropyMode::kNum <= kCrunchNumMax,
@@ -389,7 +476,7 @@ WP2Status EncoderAnalyze(Encoder* const encoder,
       }
     } else {
       // Only choose the guessed best transform.
-      TranslateEntropyMode(min_entropy_ix, effort, red_and_blue_always_zero,
+      TranslateEntropyMode(best_mode, effort, red_and_blue_always_zero,
                            &crunch_configs[(*crunch_configs_size)++]);
     }
   }

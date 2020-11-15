@@ -18,7 +18,8 @@ The WebP 2 experimental codec is mostly pushing the features of WebP further
 in terms of compression efficiency. The new features (like 10b HDR support)
 are kept minimal. The axis of experimentation are:
 
-* more efficient lossy compression (~30% better than WebP, ~20% worse than AVIF)
+* more efficient lossy compression (~30% better than WebP,
+  as close to AVIF as possible)
 * better visual degradation at very low bitrate
 * improved lossless compression
 * improved transparency compression

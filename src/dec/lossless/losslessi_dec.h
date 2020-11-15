@@ -155,6 +155,8 @@ class Decoder {
   WP2::DecoderConfig config_;
   const WP2::GlobalParams* gparams_ = nullptr;
   WP2::ProgressWatcher* progress_ = nullptr;
+  // Whether pixels mut be premultiplied with the alpha value before emitting.
+  bool premultiply_ = false;
 };
 
 }  // namespace WP2L

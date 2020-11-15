@@ -24,9 +24,13 @@
 #include "include/helpers.h"
 #include "src/common/constants.h"
 #include "src/common/header_enc_dec.h"
+#include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/data_source.h"
 #include "src/utils/random.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 
@@ -51,6 +55,7 @@ class ErrorTracer : public WP2ErrorTracer {
     if (!callstack_.empty()) callstack_ += ", ";
     callstack_ += call;  // Reversed call order but more convenient text output.
   }
+  std::string GetShortCallstack() const { return callstack_.substr(0, 70); }
   void Flush() {
     ++callstack_count_[callstack_];
     callstack_.clear();
@@ -72,6 +77,7 @@ class ErrorTracer : public WP2ErrorTracer {
 #else
 class ErrorTracer {
  public:
+  std::string GetShortCallstack() const { return ""; }
   void Flush() {}
 };
 #endif  // defined(WP2_TRACE) || defined(WP2_ERROR_TRACE)
@@ -140,20 +146,18 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
 
 //------------------------------------------------------------------------------
 
-// Generates a random wp2 bitstream from 'seed' and 'config' to 'output'.
-// It contains the header (defaults values), a semi-random GlobalParams and a
-// randomly-sized tile chunk with random bytes.
-WP2Status RandomEncode(size_t seed, const EncoderConfig& config,
-                       Writer* const output) {
+// Generates a random wp2 bitstream header to 'output'.
+// It contains the bitstream features and a semi-random GlobalParams.
+WP2Status RandomEncodeBeforeTile(uint32_t width, uint32_t height,
+                                 const EncoderConfig& config,
+                                 UniformIntDistribution* const random,
+                                 Writer* const output) {
   EncoderConfig final_config = config;
   final_config.tile_shape = TILE_SHAPE_SQUARE_512;
   WP2_CHECK_OK(final_config.IsValid(), WP2_STATUS_INVALID_CONFIGURATION);
   WP2_CHECK_OK(!final_config.create_preview, WP2_STATUS_INVALID_CONFIGURATION);
 
-  UniformIntDistribution random(seed);
-  const uint32_t width = random.Get(1, 512);
-  const uint32_t height = random.Get(1, 512);
-  const bool has_alpha = random.FlipACoin();
+  const bool has_alpha = random->FlipACoin();
 
   // Append proxy header data, only config and dimensions are relevant.
   WP2_CHECK_STATUS(EncodeHeader(final_config, width, height, has_alpha,
@@ -165,14 +169,21 @@ WP2Status RandomEncode(size_t seed, const EncoderConfig& config,
   // Append randomly generated global parameters.
   GlobalParams gparams;
   WP2_CHECK_STATUS(
-      GenerateRandomGlobalParams(config, has_alpha, &random, &gparams));
+      GenerateRandomGlobalParams(config, has_alpha, random, &gparams));
   WP2_CHECK_STATUS(EncodeGLBL(config, gparams, GetQualityHint(config.quality),
                               has_alpha, output));
+  return WP2_STATUS_OK;
+}
 
+// Generates a random wp2 tile bitstream to 'output'.
+// It contains a randomly-sized tile chunk filled with random bytes.
+WP2Status RandomEncodeTile(uint32_t width, uint32_t height,
+                           UniformIntDistribution* const random,
+                           Writer* const output) {
   // Append a randomly sized random bitstream representing a single tile.
   // Testing several tiles at once would not bring useful information as they
   // are isolated. Clamp to ~4 bytes per pixel.
-  const uint32_t num_bytes = random.Get(10u, width * height * 4u);
+  const uint32_t num_bytes = random->Get(10u, width * height * 4u);
   {
     uint8_t buf[kMaxVarIntLength];
     const size_t buf_size = WriteVarInt(num_bytes, 1, kChunkSizeMax, buf);
@@ -180,10 +191,39 @@ WP2Status RandomEncode(size_t seed, const EncoderConfig& config,
   }
   Vector_u8 bytes;
   WP2_CHECK_ALLOC_OK(bytes.resize(num_bytes));
-  for (uint8_t& byte : bytes) byte = random.Get<uint8_t>(0, 255);
+  for (uint8_t& byte : bytes) byte = random->Get<uint8_t>(0, 255);
   WP2_CHECK_ALLOC_OK(output->Append(bytes.data(), bytes.size()));
   return WP2_STATUS_OK;
 }
+
+//------------------------------------------------------------------------------
+
+// Generates as many random bytes as requested.
+class RandomDataSource : public DataSource {
+ public:
+  explicit RandomDataSource(UniformIntDistribution* const random,
+                            Tile* const tile)
+      : random_(random), tile_(tile) {}
+  UniformIntDistribution* const random_;
+  Tile* const tile_;
+  Vector_u8 bytes_;
+
+ private:
+  // See DataSource.
+  bool Fetch(size_t num_requested_bytes) override {
+    tile_->chunk_size =
+        num_discarded_bytes_ + num_read_bytes_ + num_requested_bytes;
+    if (!bytes_.resize(tile_->chunk_size)) return false;
+    for (size_t i = num_discarded_bytes_ + num_available_bytes_;
+         i < tile_->chunk_size; ++i) {
+      bytes_[i] = random_->Get<uint8_t>(0, 255);
+    }
+    available_bytes_ = bytes_.data() + num_discarded_bytes_;
+    num_available_bytes_ = num_read_bytes_ + num_requested_bytes;
+    return true;
+  }
+  void OnDiscard(size_t) override {}
+};
 
 //------------------------------------------------------------------------------
 
@@ -192,16 +232,21 @@ struct BitstreamStats {
   size_t length = 0;           // Of the bitstream, header included.
   BitstreamFeatures features;  // Extracted header.
   bool is_valid = false;       // Can be decoded without an error.
+  std::string callstack;       // Only filled if WP2_ERROR_TRACE.
 
   static void PrintTitleRow() {
     printf("Length   Width  Height  Bpp     Valid\n");
   }
   void PrintRow() const {
-    printf("%7zu, %5u, %6u, %6.2f, %s\n", length, features.width,
-           features.height, length / (float)(features.width * features.height),
+    printf("%7zu, %5u, %6u, %6.2f, %s", length, features.width, features.height,
+           length / (float)(features.width * features.height),
            is_valid ? "Yes" : "No");
+    if (!callstack.empty()) printf(", %s", callstack.c_str());
+    printf("\n");
   }
 };
+
+//------------------------------------------------------------------------------
 
 // From a wp2 'bitstream', checks if it 'is_valid' and can extract 'stats'.
 WP2Status GetBistreamStats(const uint8_t bitstream[], size_t bitstream_length,
@@ -220,26 +265,113 @@ WP2Status GetBistreamStats(const uint8_t bitstream[], size_t bitstream_length,
   return WP2_STATUS_OK;
 }
 
+// Decodes the BitstreamFeatures and GlobalParams from the given 'output', then
+// generates as many bytes as necessary until LossyDecode() or LosslessDecode()
+// returns. Appends these bytes to 'output' even if there was an error.
+WP2Status RandomEncodeDecodeTile(uint32_t width, uint32_t height,
+                                 UniformIntDistribution* const random,
+                                 MemoryWriter* const output,
+                                 bool* const is_valid,
+                                 BitstreamStats* const stats = nullptr) {
+  // Setup input and config.
+  ExternalDataSource header_data(output->mem_, output->size_);
+  DecoderConfig config = DecoderConfig::kDefault;
+  config.incremental_mode = DecoderConfig::IncrementalMode::FULL_TILE;
+  WP2DecDspInit();
+
+  // Decode the header.
+  BitstreamFeatures features;
+  WP2_CHECK_STATUS(features.Read(output->mem_, output->size_));
+  header_data.MarkNumBytesAsRead(features.header_size);
+  ProgressWatcher progress(nullptr);
+  progress.SetAdvancementScale(0.f);  // Avoid assertions.
+  GlobalParams gparams;
+  WP2_CHECK_STATUS(DecodeGLBL(&header_data, config, features, &gparams));
+
+  // Setup the decoding environment.
+  TilesLayout tiles_layout;
+  tiles_layout.num_tiles_x = tiles_layout.num_tiles_y = 1;
+  tiles_layout.tile_width = width;
+  tiles_layout.tile_height = height;
+  tiles_layout.num_assignable_tiles = 1;
+  WP2_CHECK_ALLOC_OK(tiles_layout.tiles.resize(1));
+  tiles_layout.gparams = &gparams;
+  Tile& tile = tiles_layout.tiles.front();
+  tile.rect = {0, 0, width, height};
+  tile.chunk_size_is_known = false;
+  tile.chunk_size = 0;  // Updated by the RandomDataSource because it is checked
+                        // in LossyDecode() and LosslessDecode().
+
+  // Generate as many bytes as needed.
+  RandomDataSource tile_data(random, &tile);
+  ANSDec dec(&tile_data);
+  WP2Status status;
+  if (gparams.type_ == GlobalParams::GP_BOTH) {
+    *is_valid = true;
+    return WP2_STATUS_OK;  // Ignore neural decoding.
+  } else if (gparams.type_ == GlobalParams::GP_LOSSY) {
+    WP2_CHECK_STATUS(
+        tile.yuv_output.Resize(width, height, kPredWidth, gparams.has_alpha_));
+    status =
+        LossyDecode(features, config, &tiles_layout, &progress, &dec, &tile);
+  } else {
+    WP2_CHECK_STATUS(tile.rgb_output.Resize(width, height));
+    status = LosslessDecode(features, config, gparams, &progress, &dec, &tile);
+  }
+
+  // Append the generated tile to 'output' for accurate stats.
+  const size_t tile_size = tile_data.bytes_.size();
+  WP2_CHECK_OK(tile_size > 0 && tile_size <= kChunkSizeMax,
+               WP2_STATUS_BITSTREAM_ERROR);
+  uint8_t buf[kMaxVarIntLength];
+  const size_t buf_size = WriteVarInt(tile_size, 1, kChunkSizeMax, buf);
+  WP2_CHECK_ALLOC_OK(output->Append(buf, buf_size));
+  WP2_CHECK_ALLOC_OK(
+      output->Append(tile_data.bytes_.data(), tile_data.bytes_.size()));
+
+  // Make sure the error is not a real issue.
+  if (status != WP2_STATUS_BITSTREAM_ERROR) WP2_CHECK_STATUS(status);
+  *is_valid = (status == WP2_STATUS_OK);
+
+  if (stats != nullptr) {
+    stats->length = output->size_;
+    stats->features = features;
+    stats->is_valid = *is_valid;
+  }
+  return WP2_STATUS_OK;
+}
+
 //------------------------------------------------------------------------------
 
 // Creates 'num_tries' random bitstreams and counts the number of valid ones.
 WP2Status GetPessimizationProportion(
-    size_t seed_generator_seed, const EncoderConfig& config, uint32_t num_tries,
-    uint32_t* const num_valid,
+    size_t seed_generator_seed, const EncoderConfig& config,
+    bool fixed_size_tile, uint32_t num_tries, uint32_t* const num_valid,
     std::vector<BitstreamStats>* const all_stats = nullptr) {
   ErrorTracer error_tracer;
   UniformIntDistribution seed_generator(seed_generator_seed);
   if (num_valid != nullptr) *num_valid = 0;
   for (uint32_t i = 0; i < num_tries; ++i) {
     const size_t seed = seed_generator.Get(0u, 1234567890u);
+    UniformIntDistribution random(seed);
     bool is_valid;
     if (all_stats != nullptr) all_stats->emplace_back();
     BitstreamStats* const stats =
         (all_stats != nullptr) ? &all_stats->back() : nullptr;
     MemoryWriter writer;
-    WP2_CHECK_STATUS(RandomEncode(seed, config, &writer));
+    const uint32_t width = random.Get(1, 512);
+    const uint32_t height = random.Get(1, 512);
     WP2_CHECK_STATUS(
-        GetBistreamStats(writer.mem_, writer.size_, &is_valid, stats));
+        RandomEncodeBeforeTile(width, height, config, &random, &writer));
+    if (fixed_size_tile) {
+      WP2_CHECK_STATUS(RandomEncodeTile(width, height, &random, &writer));
+      WP2_CHECK_STATUS(
+          GetBistreamStats(writer.mem_, writer.size_, &is_valid, stats));
+    } else {
+      WP2_CHECK_STATUS(RandomEncodeDecodeTile(width, height, &random, &writer,
+                                              &is_valid, stats));
+    }
+    if (stats != nullptr) stats->callstack = error_tracer.GetShortCallstack();
     error_tracer.Flush();
     if (num_valid != nullptr && is_valid) ++*num_valid;
   }
@@ -262,23 +394,28 @@ TEST(PessimizationTest, NotRandom) {
 
 // Try different configurations.
 class PessimizationTest : public ::testing::TestWithParam<
-                              std::tuple<size_t, float, uint32_t, bool>> {};
+                              std::tuple<size_t, float, bool, uint32_t, bool>> {
+};
 
 TEST_P(PessimizationTest, RandomBitstream) {
   const size_t seed = std::get<0>(GetParam());
   EncoderConfig config = EncoderConfig::kDefault;
   config.quality = config.alpha_quality = std::get<1>(GetParam());
-  const uint32_t num_tries = std::get<2>(GetParam());
-  const bool print_stats = std::get<3>(GetParam());
+  const bool fixed_tile_size = std::get<2>(GetParam());
+  const uint32_t num_tries = std::get<3>(GetParam());
+  const bool print_stats = std::get<4>(GetParam());
 
   uint32_t num_valid;
   std::vector<BitstreamStats> all_stats;
-  ASSERT_WP2_OK(GetPessimizationProportion(seed, config, num_tries, &num_valid,
+  ASSERT_WP2_OK(GetPessimizationProportion(seed, config, fixed_tile_size,
+                                           num_tries, &num_valid,
                                            print_stats ? &all_stats : nullptr));
 
   const float percentage_of_valid_bitstreams = 100.f * num_valid / num_tries;
-  EXPECT_GE(percentage_of_valid_bitstreams, 0.f);
-  // TODO(yguyon): 0% seems buggy?
+  EXPECT_GE(percentage_of_valid_bitstreams,
+            fixed_tile_size                        ? 0.f
+            : (config.quality <= kMaxLossyQuality) ? 50.f
+                                                   : 30.f);
 
   if (print_stats) {
     BitstreamStats::PrintTitleRow();
@@ -292,7 +429,8 @@ INSTANTIATE_TEST_SUITE_P(
     PessimizationTestInstantiation, PessimizationTest,
     ::testing::Combine(::testing::Values(42),           // seed
                        ::testing::Values(75.f, 100.f),  // quality
-                       ::testing::Values(50),           // num tries
+                       ::testing::Values(true, false),  // fixed tile size
+                       ::testing::Values(100),          // num tries
                        ::testing::Values(false)         // print stats
                        ));
 
@@ -410,7 +548,6 @@ TEST_P(ImageMutationTest, FromValidImage) {
 
   const float percentage_of_valid_bitstreams = 100.f * num_valid / num_tries;
   EXPECT_GE(percentage_of_valid_bitstreams, 0.f);
-  // TODO(yguyon): 2% seems super low.
 
   if (print_stats) {
     printf("Valid mutations: %u/%u (%.3f %%), tile bytes: %zu/%zu\n", num_valid,

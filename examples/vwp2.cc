@@ -378,7 +378,7 @@ struct Params {
   std::string visual_debug = "decompressed";    // displayed debug output
 
   bool view_only = false;
-  WP2::ArgbBuffer in;      // original samples in RGB
+  WP2::ArgbBuffer in = WP2::ArgbBuffer(WP2_ARGB_32);  // original samples in RGB
   WP2::ArgbBuffer in_yuv;  // original alpha, Y, U or V samples
   // image shown on spacebar (can be a view on 'in' or 'in_yuv')
   WP2::ArgbBuffer original;
@@ -1278,12 +1278,12 @@ bool Params::DecodeOutput() {
   if (view_only &&
       WP2::GuessImageFormat((const uint8_t*)output.data(), output.size()) !=
           WP2::FileFormat::WP2) {
-    status = out.CopyFrom(in);
+    status = out.ConvertFrom(in);
   } else {
     if (WP2::VDMatch(dec_config, "original")) {
       // The reference image is needed in 'debug_output' if the 'visual_debug'
       // is set to "original".
-      status = dinfo.debug_output.CopyFrom(in);
+      status = dinfo.debug_output.ConvertFrom(in);
       if (status != WP2_STATUS_OK) {
         SetError("Error: Out of memory");
         return false;
@@ -1377,7 +1377,7 @@ bool Params::VDMatchEncDec(const char* token) const {
 bool Params::DecodeAndSwap(WP2::ArgbBuffer* const buffer) {
   status = buffer->Swap(&dec_config.info->debug_output);  // Avoid realloc
   assert(status == WP2_STATUS_OK);
-  status = dec_config.info->debug_output.CopyFrom(in);
+  status = dec_config.info->debug_output.ConvertFrom(in);
   assert(status == WP2_STATUS_OK);
   status = Decode(output, &out, dec_config);
   if (status != WP2_STATUS_OK) {
@@ -1437,7 +1437,8 @@ bool Params::GetOriginal() {
     if (original.SetView(in_yuv) != WP2_STATUS_OK) return false;
   } else {
     original_selection_info.clear();
-    if (original.SetView(in) != WP2_STATUS_OK) return false;
+    // They use different formats so we can't use a view.
+    if (original.ConvertFrom(in) != WP2_STATUS_OK) return false;
   }
   return true;
 }
@@ -1751,8 +1752,10 @@ bool Params::GetCurrentCanvas(WP2::ArgbBuffer* const buffer) {
     ShiftAlt();
     status = buffer->Resize(out.width(), out.height());
     if (status == WP2_STATUS_OK) buffer->Fill(preview_color);
-  } else {
+  } else if (GetBuffer().format() == buffer->format()) {
     status = buffer->SetView(GetBuffer());
+  } else {
+    status = buffer->ConvertFrom(GetBuffer());
   }
   return (status == WP2_STATUS_OK);
 }
@@ -2967,10 +2970,12 @@ void DisplayBuffer(const WP2::ArgbBuffer& buffer) {
 
   // convert from src->Argb Argb format to GL's BGRA format.
   std::vector<uint8_t> rgba(4u * buffer.width() * buffer.height());
+  const WP2ArgbConverterF convert =
+      WP2ConversionFunction(buffer.format(), WP2_RGBA_32);
   for (uint32_t y = 0; y < buffer.height(); ++y) {
     const uint8_t* const src = buffer.GetRow8(y);
     uint8_t* const dst = &rgba[y * 4u * buffer.width()];
-    WP2ArgbConvertTo[WP2_RGBA_32](src, buffer.width(), dst);
+    convert(src, buffer.width(), dst);
   }
   glDrawPixels(buffer.width(), buffer.height(), GL_RGBA, GL_UNSIGNED_BYTE,
                reinterpret_cast<const GLvoid*>(&rgba[0]));

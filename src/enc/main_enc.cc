@@ -341,12 +341,6 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
   const WP2SampleFormat format_default =
       (WP2FormatBpc(rgb_buffer.format()) == 1) ? WP2_Argb_32 : WP2_Argb_38;
   ArgbBuffer pre_processed_buffer(format_default);
-  // TODO(maryla): make premultiplication optional.
-  if (!rgb_buffer.IsEmpty() &&
-      (rgb_buffer.format() != pre_processed_buffer.format())) {
-    WP2_CHECK_STATUS(pre_processed_buffer.ConvertFrom(rgb_buffer));
-    buffer = &pre_processed_buffer;
-  }
 
   // near-lossless pre-processing
   constexpr uint32_t kMinNearLosslessDimension = 16;    // minimum dimension

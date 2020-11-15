@@ -766,7 +766,6 @@ int main(int argc, char* argv[]) {
   if (!output_to_directory) params.allow_overwrite = true;
 
   // Reuse these to do fewer memory allocations.
-  WP2::ArgbBuffer rgb_buffer;
   MemoryWriterProgress writer;
   CounterProgress counter;
   writer.report_progress_ = report_progress;
@@ -776,6 +775,7 @@ int main(int argc, char* argv[]) {
     EXIT_IF_FALSE(!output_to_directory,
                   "Error! Animation output file must be explicitly specified.");
 
+    WP2::ArgbBuffer rgb_buffer(WP2_Argb_32);
     const std::string& out_file = out_path;
     const bool write_to_memory =
         (!out_file.empty() || params.print_distortion >= 0 ||
@@ -824,6 +824,9 @@ int main(int argc, char* argv[]) {
         "directory.");
     EXIT_IF_FALSE(decoded_file.empty() || in_files.size() == 1,
         "Can only use -d option with a single input image.");
+    // Load images unmultiplied, as some images compress better this way
+    // (only useful for lossless).
+    WP2::ArgbBuffer rgb_buffer(WP2_ARGB_32);
     // Compress each image.
     for (const std::string& in_file : in_files) {
       if (in_files.size() > 1 && params.log_level >= WP2::LogLevel::DEFAULT) {
