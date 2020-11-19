@@ -22,6 +22,7 @@
 
 #include "src/common/color_precision.h"
 #include "src/common/global_params.h"
+#include "src/common/progress_watcher.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
@@ -141,6 +142,7 @@ class SubframeEncoder {
 
   WP2Status EncodeSubframe(const EncoderConfig& config,
                            const Subframe& subframe, bool is_last,
+                           const ProgressRange& progress,
                            Writer* const output) const;
 
  private:
@@ -154,7 +156,7 @@ class SubframeEncoder {
 class FrameEncoder {
  public:
   FrameEncoder(const EncoderConfig& config, Argb38b background_color,
-               const Vector<Frame>& frames);
+               const Vector<Frame>& frames, const ProgressRange& progress);
 
   // Encodes all frames. Returns WP2_STATUS_OK if no error occurred.
   WP2Status Encode(Writer* const output);
@@ -184,11 +186,13 @@ class FrameEncoder {
   // Encodes a preframe or a regular frame.
   WP2Status EncodeSubframe(const Frame& frame, bool dispose, bool is_preframe,
                            bool is_previous_preframe, const Rectangle& window,
+                           const ProgressRange& progress,
                            Writer* const output) const;
 
   // Encodes one final frame (including its preframes).
   WP2Status EncodeFrame(const Frame& frame, bool dispose,
                         const RectangleGroup& different_pixels,
+                        const ProgressRange& progress,
                         Writer* const output) const;
 
   const EncoderConfig& config_;
@@ -203,6 +207,7 @@ class FrameEncoder {
   const Argb32b background_color_;
 
   SubframeEncoder subframe_encoder_;
+  const ProgressRange progress_;
 };
 
 //------------------------------------------------------------------------------

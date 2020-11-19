@@ -283,8 +283,6 @@ WP2Status RandomEncodeDecodeTile(uint32_t width, uint32_t height,
   BitstreamFeatures features;
   WP2_CHECK_STATUS(features.Read(output->mem_, output->size_));
   header_data.MarkNumBytesAsRead(features.header_size);
-  ProgressWatcher progress(nullptr);
-  progress.SetAdvancementScale(0.f);  // Avoid assertions.
   GlobalParams gparams;
   WP2_CHECK_STATUS(DecodeGLBL(&header_data, config, features, &gparams));
 
@@ -312,11 +310,10 @@ WP2Status RandomEncodeDecodeTile(uint32_t width, uint32_t height,
   } else if (gparams.type_ == GlobalParams::GP_LOSSY) {
     WP2_CHECK_STATUS(
         tile.yuv_output.Resize(width, height, kPredWidth, gparams.has_alpha_));
-    status =
-        LossyDecode(features, config, &tiles_layout, &progress, &dec, &tile);
+    status = LossyDecode(features, config, &tiles_layout, &dec, &tile);
   } else {
     WP2_CHECK_STATUS(tile.rgb_output.Resize(width, height));
-    status = LosslessDecode(features, config, gparams, &progress, &dec, &tile);
+    status = LosslessDecode(features, config, gparams, &dec, &tile);
   }
 
   // Append the generated tile to 'output' for accurate stats.

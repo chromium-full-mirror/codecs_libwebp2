@@ -174,7 +174,8 @@ Rectangle ScaleRect(const Rectangle& rect, uint32_t multiplier) {
 
 }  // namespace
 
-WP2Status EncodeScreenContent(const ArgbBuffer& input, Writer* const output,
+WP2Status EncodeScreenContent(const ArgbBuffer& input,
+                              Writer* const output,
                               const EncoderConfig& config) {
 #if !defined(WP2_BITTRACE)
   fprintf(stderr, "WARNING! WP2_BITTRACE required for screen content\n");
@@ -184,6 +185,10 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input, Writer* const output,
   if (config.quality > kMaxLossyQuality || config.quality <= 50) {
     return Encode(input, output, config);
   }
+
+  ProgressWatcher progress(config.progress_hook);
+  WP2_CHECK_STATUS(progress.Start());
+
   const uint32_t block_width = DivCeil(input.width(), kScreenBlockSize);
   const uint32_t block_height = DivCeil(input.height(), kScreenBlockSize);
   // Empirical value. TODO(maryla): tune.
@@ -273,14 +278,29 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input, Writer* const output,
       /*loop_forever=*/false, kDefaultBackgroundColor, GetPreviewColor(input),
       has_icc, has_trailing_data, output));
 
+  WP2_CHECK_STATUS(EncodePreview(input, config, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
+
+  WP2_CHECK_STATUS(EncodeICC(
+      {input.metadata_.iccp.bytes, input.metadata_.iccp.size}, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
+
+  const ProgressRange lossless_progress(
+      &progress, GetFrameProgression(/*frame_index=*/0, /*is_last=*/false));
+  const ProgressRange lossy_progress(
+      &progress, GetFrameProgression(/*frame_index=*/1, /*is_last=*/true));
+
   SubframeEncoder frame_encode(GetQualityHint(config.quality), has_alpha);
-  WP2_CHECK_STATUS(frame_encode.EncodeSubframe(lossless_config,
-                                               lossless_subframe,
-                                               /*is_last=*/false, output));
+  WP2_CHECK_STATUS(frame_encode.EncodeSubframe(
+      lossless_config, lossless_subframe,
+      /*is_last=*/false, lossless_progress, output));
 
   WP2_CHECK_STATUS(frame_encode.EncodeSubframe(lossy_config, lossy_subframe,
-                                               /*is_last=*/true, output));
+                                               /*is_last=*/true, lossy_progress,
+                                               output));
 
+  WP2_CHECK_STATUS(EncodeMetadata(input.metadata_, output));
+  WP2_CHECK_STATUS(progress.Finish());
   return WP2_STATUS_OK;
 }
 

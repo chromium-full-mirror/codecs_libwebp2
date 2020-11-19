@@ -532,17 +532,6 @@ src/libwebp2.a: $(LIBWP2_OBJS)
 # examples
 ###############################################################################
 
-OUT_EXAMPLES =
-OUT_EXAMPLES += examples/cwp2
-OUT_EXAMPLES += examples/dwp2
-OUT_EXAMPLES += examples/vwp2
-OUT_EXAMPLES += examples/get_disto
-OUT_EXAMPLES += examples/rd_curve
-
-ex: $(OUT_EXAMPLES)
-$(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES):
-	$(CXX) -o $@ $^ $(LDFLAGS)
-
 examples/cwp2: examples/cwp2.o
 examples/cwp2: $(BASE_LIBS)
 examples/cwp2: override EXTRA_LIBS += $(IMG_LIBS)
@@ -565,19 +554,18 @@ examples/rd_curve: $(BASE_LIBS)
 examples/rd_curve: extras/libextras.a
 examples/rd_curve: override EXTRA_LIBS += $(IMG_LIBS)
 
+OUT_EXAMPLES =
+OUT_EXAMPLES += examples/cwp2
+OUT_EXAMPLES += examples/dwp2
+OUT_EXAMPLES += examples/vwp2
+OUT_EXAMPLES += examples/get_disto
+OUT_EXAMPLES += examples/rd_curve
+
+ex: $(OUT_EXAMPLES)
+
 ###############################################################################
 # extras
 ###############################################################################
-
-EXTRA_EXAMPLES =
-EXTRA_EXAMPLES += extras/vwp2_sdl
-EXTRA_EXAMPLES += extras/av1enc
-EXTRA_EXAMPLES += extras/mk_preview
-EXTRA_EXAMPLES += extras/ewp2
-
-EXTRAS_LIB = extras/libextras.a
-
-extras: $(EXTRAS_LIB)
 
 extras/vwp2_sdl: extras/vwp2_sdl.o
 extras/vwp2_sdl: extras/wp2_to_sdl.o
@@ -596,6 +584,21 @@ extras/mk_preview: override EXTRA_LIBS += $(IMG_LIBS) -lpthread
 extras/ewp2: extras/ewp2.o
 extras/ewp2: $(BASE_LIBS)
 extras/ewp2: override EXTRA_LIBS += $(IMG_LIBS) -lpthread
+
+EXTRA_EXAMPLES =
+EXTRA_EXAMPLES += extras/vwp2_sdl
+EXTRA_EXAMPLES += extras/av1enc
+EXTRA_EXAMPLES += extras/mk_preview
+EXTRA_EXAMPLES += extras/ewp2
+
+EXTRAS_LIB = extras/libextras.a
+
+extras: $(EXTRAS_LIB) $(EXTRA_EXAMPLES)
+
+###############################################################################
+
+$(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES):
+	$(CXX) -o $@ $^ $(LDFLAGS)
 
 ###############################################################################
 # tests

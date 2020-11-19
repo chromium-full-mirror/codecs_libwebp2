@@ -26,8 +26,9 @@ namespace libgav1 {
 
 WP2Status AOMResidualWriter::WriteCoeffs(
     uint32_t x_pix, uint32_t y_pix, WP2::BlockSize dim, TransformPair tx_type,
-    bool first_is_dc, bool is420, const int16_t* const coeffs, Channel channel,
-    bool do_update, SymbolManager* const sm, ANSEncBase* const enc,
+    bool first_is_dc, int max_num_coeffs, bool is420,
+    const int16_t* const coeffs, Channel channel, bool do_update,
+    SymbolManager* const sm, ANSEncBase* const enc,
     AOMContext* const aom_context) {
   // Convert WP2 data to libgav1 data.
   const TransformSize tx_size = ConvertSize(dim);
@@ -36,20 +37,20 @@ WP2Status AOMResidualWriter::WriteCoeffs(
 
   // Write the coefficients.
   int coefficient_level;
-  int8_t dc_category;
   const uint32_t subsampling =
       (is420 && (channel == kUChannel || channel == kVChannel));
-  WriteTransformCoefficients(coeffs, *aom_context, is420, channel,
+  WriteTransformCoefficients(coeffs, max_num_coeffs, *aom_context, is420,
+                             channel,
                              x_pix >> subsampling, y_pix >> subsampling,
                              tx_size, tx_type, first_is_dc, sm, enc,
-                             &coefficient_level, &dc_category);
+                             &coefficient_level);
   if (do_update) {
     const int x4 = DivideBy4(x_pix >> subsampling);
     const int y4 = DivideBy4(y_pix >> subsampling);
     const int w4 = kTransformWidth4x4[tx_size];
     const int h4 = kTransformHeight4x4[tx_size];
     SetEntropyContexts(x4, y4, w4, h4, channel, std::min(4, coefficient_level),
-                       dc_category, aom_context);
+                       aom_context);
   }
 
   return WP2_STATUS_OK;
@@ -62,28 +63,18 @@ void AOMResidualWriter::WriteSignAndApplyDequantization(
     SymbolManager* const sm, ANSEncBase* const enc) {
   assert(res != 0);
   const bool sign = (res < 0);
-  const int32_t val = std::abs(res);
+  int32_t val = std::abs(res);
+  val = std::min(is_dc_coefficient ? kMaxDcValue : kMaxCoeffValue, (int)val);
   if (is_dc_coefficient) {
     sm->Process(dc_sign_cluster, kAOMDCSign, sign, "is_negative_dc", enc);
   } else {
     enc->PutBool(sign, "is_negative");
   }
   *coefficient_level += val;
-  if (val > kNumQuantizerBaseLevels + kQuantizerCoefficientBaseRange) {
-    const uint32_t abs_v_ini =
-        val - (kNumQuantizerBaseLevels + kQuantizerCoefficientBaseRange);
-    uint32_t abs_v = (abs_v_ini >> 1);
-    int length = 0;
-    while (abs_v > 0) {
-      enc->PutBool(false, "golomb_length_bit");
-      abs_v >>= 1;
-      ++length;
-    }
-    enc->PutBool(true, "golomb_length_bit");
-    abs_v = abs_v_ini;
-    for (int ii = length - 1; ii >= 0; --ii) {
-      enc->PutBool(abs_v & (1 << ii), "more_golomb");
-    }
+  constexpr int16_t max_range = is_dc_coefficient ? kMaxDcValue : kMaxCoeffValue;
+  if (val >= kQuantizerCoefficientBaseRangeContextClamp) {
+    WriteGolomb(val, kQuantizerCoefficientBaseRangeContextClamp, max_range,
+                /*prefix_size=*/1, enc, "golomb");
   }
 }
 
@@ -105,28 +96,84 @@ uint32_t AOMResidualWriter::WriteCoeffBaseRange(uint32_t level,
   return sum;
 }
 
+void AOMResidualWriter::WriteEOB(
+    int eob, int max_num_coeffs, TransformSize tx_size, PlaneType plane_type,
+    int context, SymbolManager* const sm, ANSEncBase* const enc) {
+  const int tx_size_context = kTransformSizeContext[tx_size];
+  assert((max_num_coeffs % 4) == 0 && max_num_coeffs <= 1024);
+  const int eob_multi_size = WP2Log2Floor(max_num_coeffs >> 2);
+
+  eob -= 1;  // in [0..max_num_coeffs)
+  int16_t eob_pt = 0;
+  if (eob > 0) eob_pt = 1 + WP2Log2Floor(eob);
+
+  assert(eob_pt <= kEobPt1024SymbolCount);
+  switch (eob_multi_size) {
+    case 0:
+      sm->Process(GetClusterAOM2<kAOMEOBPT4>(plane_type, context), kAOMEOBPT4,
+                  eob_pt, "eob_pt", enc);
+      break;
+    case 1:
+      sm->Process(GetClusterAOM2<kAOMEOBPT8>(plane_type, context), kAOMEOBPT8,
+                  eob_pt, "eob_pt", enc);
+      break;
+    case 2:
+      sm->Process(GetClusterAOM2<kAOMEOBPT16>(plane_type, context), kAOMEOBPT16,
+                  eob_pt, "eob_pt", enc);
+      break;
+    case 3:
+      sm->Process(GetClusterAOM2<kAOMEOBPT32>(plane_type, context), kAOMEOBPT32,
+                  eob_pt, "eob_pt", enc);
+      break;
+    case 4:
+      sm->Process(GetClusterAOM2<kAOMEOBPT64>(plane_type, context), kAOMEOBPT64,
+                  eob_pt, "eob_pt", enc);
+      break;
+    case 5:
+      sm->Process(GetClusterAOM2<kAOMEOBPT128>(plane_type, context),
+                  kAOMEOBPT128, eob_pt, "eob_pt", enc);
+      break;
+    case 6:
+      sm->Process(GetClusterAOM2<kAOMEOBPT256>(plane_type, context),
+                  kAOMEOBPT256, eob_pt, "eob_pt", enc);
+      break;
+    case 7:
+      sm->Process(GetClusterAOM1<kAOMEOBPT512>(plane_type), kAOMEOBPT512,
+                  eob_pt, "eob_pt", enc);
+      break;
+    case 8:
+    default:
+      sm->Process(GetClusterAOM1<kAOMEOBPT1024>(plane_type), kAOMEOBPT1024,
+                  eob_pt, "eob_pt", enc);
+      break;
+  }
+
+  if (eob_pt >= 2) {     // eob > 1
+    eob_pt -= 2;
+    const bool eob_extra = (eob >> eob_pt) & 1;
+    sm->Process(
+        GetClusterAOM3<kAOMEOBExtra>(tx_size_context, plane_type, eob_pt),
+        kAOMEOBExtra, eob_extra, "eob_extra", enc);
+    // remaining extra bits
+    const uint32_t bit2 = 1 << eob_pt;   // second-leading bit
+    if (bit2 > 1) enc->PutRange(eob & (bit2 - 1), 0, bit2 - 1, "eob_more");
+  }
+}
+
 void AOMResidualWriter::WriteTransformCoefficients(
-    const int16_t* const res, const AOMContext& aom_context, bool is420,
+    const int16_t* const res, int max_num_coeffs,
+    const AOMContext& aom_context, bool is420,
     Channel channel, int start_x, int start_y, TransformSize tx_size,
     TransformPair tx_type, bool first_is_dc, SymbolManager* const sm,
-    ANSEncBase* const enc, int* const coefficient_level,
-    int8_t* const dc_category) {
-  const int x4 = DivideBy4(start_x);
-  const int y4 = DivideBy4(start_y);
-  const int w4 = kTransformWidth4x4[tx_size];
-  const int h4 = kTransformHeight4x4[tx_size];
+    ANSEncBase* const enc, int* const coefficient_level) {
   const int tx_size_context = kTransformSizeContext[tx_size];
-  const uint32_t bw_pix = kTransformWidth[tx_size];
-  const uint32_t bh_pix = kTransformHeight[tx_size];
-  int eob = bw_pix * bh_pix / (is420 ? 4 : 1) - 1;
+  int eob = max_num_coeffs - 1;
   const uint16_t* scan = UberZigZag(tx_size, aom_context.IsReduced(channel));
   for (; eob >= 0 && res[scan[eob]] == 0; --eob) {
   }
   ++eob;  // is actually the size.
   *coefficient_level = 0;
-  *dc_category = 0;
   if (eob == 0) return;  // all_zero
-  const uint32_t eob_ini = eob;
 
   const int tx_width = kTransformWidth[tx_size];
   const int tx_height = kTransformHeight[tx_size];
@@ -136,70 +183,15 @@ void AOMResidualWriter::WriteTransformCoefficients(
       clamped_tx_width + kQuantizedCoefficientBufferPadding;
   const int padded_tx_height =
       clamped_tx_height + kQuantizedCoefficientBufferPadding;
-  const int eob_multi_size = kEobMultiSizeLookup[tx_size];
   const PlaneType plane_type = GetPlaneType(channel);
 
   const uint32_t tx_class = (uint32_t)GetTransformClass(tx_type);
   int context = (tx_class != (uint32_t)TransformClass::kTwoD) ? 1 : 0;
 
-  int16_t eob_pt;
-  if (eob < 2) {
-    eob_pt = eob;
-  } else {
-    eob_pt = WP2Log2(eob - 1) + 2;
-  }
-  assert(eob_pt <= kEobPt1024SymbolCount);
+  WriteEOB(eob, max_num_coeffs, tx_size, plane_type, context, sm, enc);
 
-  switch (eob_multi_size) {
-    case 0:
-      sm->Process(GetClusterAOM2<kAOMEOBPT16>(plane_type, context), kAOMEOBPT16,
-                  eob_pt - 1, "eob_pt", enc);
-      break;
-    case 1:
-      sm->Process(GetClusterAOM2<kAOMEOBPT32>(plane_type, context), kAOMEOBPT32,
-                  eob_pt - 1, "eob_pt", enc);
-      break;
-    case 2:
-      sm->Process(GetClusterAOM2<kAOMEOBPT64>(plane_type, context), kAOMEOBPT64,
-                  eob_pt - 1, "eob_pt", enc);
-      break;
-    case 3:
-      sm->Process(GetClusterAOM2<kAOMEOBPT128>(plane_type, context),
-                  kAOMEOBPT128, eob_pt - 1, "eob_pt", enc);
-      break;
-    case 4:
-      sm->Process(GetClusterAOM2<kAOMEOBPT256>(plane_type, context),
-                  kAOMEOBPT256, eob_pt - 1, "eob_pt", enc);
-      break;
-    case 5:
-      sm->Process(GetClusterAOM1<kAOMEOBPT512>(plane_type), kAOMEOBPT512,
-                  eob_pt - 1, "eob_pt", enc);
-      break;
-    case 6:
-    default:
-      sm->Process(GetClusterAOM1<kAOMEOBPT1024>(plane_type), kAOMEOBPT1024,
-                  eob_pt - 1, "eob_pt", enc);
-      break;
-  }
-
-  if (eob_pt >= 3) {
-    eob -= ((1 << (eob_pt - 2)) + 1);
-    context = eob_pt - 3;
-    bool eob_extra = (eob >= (1 << (eob_pt - 3)));
-    sm->Process(
-        GetClusterAOM3<kAOMEOBExtra>(tx_size_context, plane_type, context),
-        kAOMEOBExtra, eob_extra, "eob_extra", enc);
-    if (eob_extra) eob -= 1 << (eob_pt - 3);
-    for (int i = 1; i < eob_pt - 2; ++i) {
-      if (enc->PutBool(eob >= (1 << (eob_pt - i - 3)), "eob_more")) {
-        eob -= 1 << (eob_pt - i - 3);
-      }
-    }
-  }
-  assert(eob_ini != 0);
   uint8_t quantized[2048], quantized2[2048];
   int16_t levels[kMaxBlockSizePix2];   // non-padded
-  eob = eob_ini;
   std::fill(quantized, quantized + padded_tx_width * padded_tx_height, 0u);
   std::fill(quantized2, quantized2 + padded_tx_width * padded_tx_height, 0u);
   const TransformSize adjusted_tx_size = kAdjustedTransformSize[tx_size];
@@ -264,10 +256,7 @@ void AOMResidualWriter::WriteTransformCoefficients(
 
   assert(scan[0] == 0);
   if (first_is_dc && res[0]) {
-    const uint32_t dc_sign_cluster =
-          GetClusterAOM2<kAOMDCSign>(plane_type,
-              GetDcSignContext(aom_context, x4, y4, w4, h4, channel));
-    *dc_category = (res[0] < 0) ? -1 : 1;
+    const uint32_t dc_sign_cluster = GetClusterAOM1<kAOMDCSign>(plane_type);
     WriteSignAndApplyDequantization<true>(res[0], dc_sign_cluster,
                                           coefficient_level, sm, enc);
   }

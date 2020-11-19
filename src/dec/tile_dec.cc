@@ -50,6 +50,7 @@ void Tile::Clear() {
   yuv_output.Clear();
   num_decoded_rows = 0;
   block_map.Clear();
+  row_progress = ProgressScale(nullptr, 0.f);
 }
 
 //------------------------------------------------------------------------------
@@ -95,11 +96,11 @@ WP2Status TileDecoder::Execute() {
             dec.ReadBool("use_lossless");
       }
       WP2_CHECK_STATUS(dec.GetStatus());
-      WP2_CHECK_STATUS(is_lossless
-                           ? LosslessDecode(*features_, *config_, *gparams_,
-                                            progress_, &dec, tile_)
-                           : LossyDecode(*features_, *config_, tiles_layout_,
-                                         progress_, &dec, tile_));
+
+      WP2_CHECK_STATUS(
+          is_lossless
+              ? LosslessDecode(*features_, *config_, *gparams_, &dec, tile_)
+              : LossyDecode(*features_, *config_, tiles_layout_, &dec, tile_));
 
 #if defined(WP2_BITTRACE)
       if (config_->info != nullptr) {
@@ -129,7 +130,6 @@ WP2Status TileDecoder::Execute() {
 
 WP2Status SetupWorkers(const BitstreamFeatures& features,
                        const DecoderConfig& config,
-                       ProgressWatcher* const progress,
                        TilesLayout* const tiles_layout,
                        Vector<TileDecoder>* const workers) {
   WP2_CHECK_OK(config.thread_level <= 2147483647u,
@@ -142,7 +142,6 @@ WP2Status SetupWorkers(const BitstreamFeatures& features,
     worker.features_ = &features;
     worker.config_ = &config;
     worker.gparams_ = tiles_layout->gparams;
-    worker.progress_ = progress;
     worker.tiles_layout_ = tiles_layout;
     worker.self_assigning_ = true;
     WP2_CHECK_STATUS(worker.TryAssignNextTile());
@@ -178,6 +177,7 @@ Rectangle GetTileRect(uint32_t frame_width, uint32_t frame_height,
 
 WP2Status GetTilesLayout(uint32_t frame_width, uint32_t frame_height,
                          uint32_t tile_width, uint32_t tile_height,
+                         const ProgressRange& progress,
                          ArgbBuffer* const rgb_output,
                          YUVPlane* const yuv_output,
                          TilesLayout* const tiles_layout) {
@@ -190,12 +190,17 @@ WP2Status GetTilesLayout(uint32_t frame_width, uint32_t frame_height,
       GetNumTiles(frame_width, frame_height, tile_width, tile_height,
                   &tiles_layout->num_tiles_x, &tiles_layout->num_tiles_y);
   WP2_CHECK_ALLOC_OK(tiles_layout->tiles.resize(num_tiles));
+    const uint32_t num_pixels = frame_width * frame_height;
 
   for (uint32_t tile_index = 0; tile_index < num_tiles; ++tile_index) {
     Tile& tile = tiles_layout->tiles[tile_index];
     tile.Clear();
     tile.rect = GetTileRect(frame_width, frame_height, tile_width, tile_height,
                             tile_index);
+    const float per_tile = 1.f * tile.rect.GetArea() / num_pixels;
+    const float per_row = 1.f / tile.rect.height;
+    tile.row_progress = ProgressScale(progress, per_tile * per_row);
+
     // Set views on RGB and YUV output buffers, both can be used.
     if (!rgb_output->IsEmpty()) {
       assert(rgb_output->width() == frame_width &&

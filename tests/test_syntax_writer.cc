@@ -79,7 +79,7 @@ TEST(TestSyntaxWriter, CopyFrom) {
 
     ASSERT_WP2_OK(syntax_writer.Init(
         &dicts, config, gparams, yuv, ChromaSubsampling::k420, tile_rect,
-        (uint32_t)kBlocks.size(), /*use_aom_coeffs=*/true));
+        (uint32_t)kBlocks.size(), /*use_aom_coeffs=*/true, ProgressRange()));
 
     // Encode a bunch of blocks.
     ASSERT_WP2_OK(mgr.Init(config.partition_set, /*snapped=*/false,

@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/enc/lossless/backward_references_enc.h"
 #include "src/utils/quantizer.h"
@@ -158,6 +159,7 @@ WP2Status BuildHistograms(uint32_t width, uint32_t height, uint32_t histo_bits,
 // Builds the histogram image.
 WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
                                const BackwardRefs& refs, int effort,
+                               const WP2::ProgressRange& progress,
                                int histogram_bits,
                                const LosslessSymbolsInfo& symbols_info,
                                HistogramSet* const image_histo,

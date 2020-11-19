@@ -33,7 +33,8 @@ WP2Status SyntaxWriter::Init(ANSDictionaries* const dicts,
                              const GlobalParams& gparams, const YUVPlane& yuv,
                              ChromaSubsampling chroma_subsampling,
                              const Rectangle& tile_rect, uint32_t num_blocks,
-                             bool use_aom_coeffs) {
+                             bool use_aom_coeffs,
+                             const ProgressRange& alpha_progress) {
   config_ = &config;
   dicts_ = dicts;
   recorded_blocks_ = 0;
@@ -64,8 +65,10 @@ WP2Status SyntaxWriter::Init(ANSDictionaries* const dicts,
       context_.Init(use_aom_coeffs_, tile_rect.width, tile_rect.height));
 
   if (gparams_->has_alpha_) {
-    WP2_CHECK_STATUS(
-        alpha_writer_.Init(*config_, gparams, context_, yuv, tile_rect));
+    WP2_CHECK_STATUS(alpha_writer_.Init(*config_, gparams, context_, yuv,
+                                        tile_rect, alpha_progress));
+  } else {
+    WP2_CHECK_STATUS(alpha_progress.AdvanceBy(1.f));
   }
   WP2_CHECK_STATUS(InitPass());
 

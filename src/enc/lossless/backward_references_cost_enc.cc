@@ -90,17 +90,15 @@ class CostModel : public CountsBuffer<double> {
   }
 
   inline double GetLengthCost(uint32_t length) const {
-    int code, extra_bits;
-    WP2LPrefixEncodeBits(length, &code, &extra_bits);
+    WP2::Golomb golomb(length - kMinLZ77Length, kLZZGolombPrefixSize);
     return counts_[kSymbolType][kSymbolTypeCopy] +
-           counts_[kSymbolLen][code] + extra_bits;
+           counts_[kSymbolLen][golomb.prefix] + golomb.extra_bits_num;
   }
 
   inline double GetDistanceCost(uint32_t distance) const {
-    distance = DistanceToPlaneCode(width_, distance);
-    int code, extra_bits;
-    WP2LPrefixEncodeBits(distance, &code, &extra_bits);
-    return counts_[kSymbolDist][code] + extra_bits;
+    const int32_t code = DistanceToPlaneCode(width_, distance);
+    WP2::Golomb golomb(code, kLZZGolombPrefixSize);
+    return counts_[kSymbolDist][golomb.prefix] + golomb.extra_bits_num;
   }
 
  private:
@@ -272,8 +270,8 @@ bool CostManager::Init(Segment* const segments, uint32_t num_pixels,
 
   // Fill in the cost_cache_.
   cache_intervals_size_ = 1;
-  cost_cache_[0] = cost_model.GetLengthCost(0);
-  for (uint32_t i = 1; i < cost_cache_size; ++i) {
+  cost_cache_[kMinLZ77Length] = cost_model.GetLengthCost(kMinLZ77Length);
+  for (uint32_t i = kMinLZ77Length + 1; i < cost_cache_size; ++i) {
     cost_cache_[i] = cost_model.GetLengthCost(i);
     // Get the number of bound intervals.
     if (cost_cache_[i] != cost_cache_[i - 1]) {
@@ -299,8 +297,8 @@ bool CostManager::Init(Segment* const segments, uint32_t num_pixels,
     // difference is found, a new interval is created and bounded.
     cur->start = 0;
     cur->end = 1;
-    cur->cost = cost_cache_[0];
-    for (uint32_t i = 1; i < cost_cache_size; ++i) {
+    cur->cost = cost_cache_[kMinLZ77Length];
+    for (uint32_t i = kMinLZ77Length + 1; i < cost_cache_size; ++i) {
       const double cost_val = cost_cache_[i];
       if (cost_val != cur->cost) {
         ++cur;
@@ -475,7 +473,7 @@ static inline WP2Status PushInterval(CostManager* const manager,
 
   if (len < kSkipDistance) {
     int j;
-    for (j = position; j < position + len; ++j) {
+    for (j = position + kMinLZ77Length; j < position + len; ++j) {
       const uint32_t k = j - position;
       float cost_tmp;
       assert(j >= position && k < kMaxLZ77Length);

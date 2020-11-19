@@ -86,7 +86,7 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
   // Initialize the instances recording only final blocks.
   WP2_CHECK_STATUS(syntax_writer_.Init(
       &dicts_, *config_, *gparams_, yuv, chroma_subsampling, tile_rect,
-      num_block_cols_ * num_block_rows_, use_aom_coeffs));
+      num_block_cols_ * num_block_rows_, use_aom_coeffs, ProgressRange()));
   WP2_CHECK_STATUS(syntax_writer_.SetInitialSegmentIds());
   WP2_CHECK_STATUS(syntax_writer_.InitPass());
 
@@ -312,7 +312,7 @@ WP2Status AreaScoreFunc::Init(const EncoderConfig& config,
   // Initialize the instances recording only final blocks.
   WP2_CHECK_STATUS(syntax_writer_.Init(
       &dicts_, *config_, *gparams_, yuv, chroma_subsampling, tile_rect,
-      num_block_cols_ * num_block_rows_, use_aom_coeffs));
+      num_block_cols_ * num_block_rows_, use_aom_coeffs, ProgressRange()));
   WP2_CHECK_STATUS(syntax_writer_.SetInitialSegmentIds());
   WP2_CHECK_STATUS(syntax_writer_.InitPass());
 
@@ -1222,9 +1222,9 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
   const uint32_t tile_width = TileWidth(FinalTileShape(*config_), width);
   const uint32_t tile_height =
       TileHeight(FinalTileShape(*config_), /*image_width=*/width);
-  WP2_CHECK_STATUS(GetTilesLayout(width, height, tile_width, tile_height,
-                                  &decompressed_argb_, &decompressed_yuv_,
-                                  &tiles_layout_));
+  WP2_CHECK_STATUS(GetTilesLayout(
+      width, height, tile_width, tile_height, ProgressScale(nullptr, 0.f),
+      &decompressed_argb_, &decompressed_yuv_, &tiles_layout_));
   assert(tiles_layout_.tiles.size() == 1 &&
          enc_tiles_layout_.tiles.size() == 1);
 
@@ -1236,18 +1236,10 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
   tile->private_input = ExternalDataSource(enc.Buffer(), enc.BufferSize());
   tile->input = &tile->private_input;
 
-  ProgressWatcher progress(/*hook=*/nullptr);
-  WP2_CHECK_STATUS(progress.Set(
-      GetProgressionBeforeFrames(features_.has_preview, features_.has_icc)));
-  progress.SetAdvancementScale(GetRowProgression(
-      features_.has_preview, features_.has_icc, features_.has_trailing_data,
-      /*is_animation=*/false, /*num_tiles_x=*/1, /*frame_index=*/0, height,
-      /*is_last=*/true));
-
   // Decode to 'decompressed_argb_'.
   ANSDec dec(tile->input);
-  WP2_CHECK_STATUS(LossyDecode(features_, dec_config_, &tiles_layout_,
-                               &progress, &dec, tile));
+  WP2_CHECK_STATUS(
+      LossyDecode(features_, dec_config_, &tiles_layout_, &dec, tile));
 
   // Compare the pixels of the non-padded area only.
   YUVPlane original_view, decompressed_view;

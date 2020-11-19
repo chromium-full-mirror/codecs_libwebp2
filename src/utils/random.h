@@ -65,7 +65,7 @@ class UniformIntDistribution {
   explicit UniformIntDistribution(size_t seed = 0) : generator_(seed) {}
 
   template <typename T = int32_t>
-  T Get(T min, T max) {
+  T Get(T min, T max) {   // uniform distribution in [min, max]
     return GetUniformIntDistribution(&generator_, min, max);
   }
 

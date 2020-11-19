@@ -49,6 +49,7 @@ struct PreviewConfig {
     kEdgeSelectionAndRepulsion,
     kColorDiffMaximization,
     kRandomEdgeSelection,
+    kVoronoi,
   };
 
   PreviewConfig() { assert(IsValid()); }  // Check default values.
@@ -117,6 +118,11 @@ WP2Status CollectVerticesFromColorDiffMaximization(
 // Takes a list of at most twice 'max_num_vertices' of the most edgy,
 // non-isolated pixels, and draws 'max_num_vertices' at random from it.
 WP2Status CollectVerticesFromRandomEdgeSelection(
+    const ArgbBuffer& canvas, uint32_t max_num_vertices,
+    PreviewData* const preview);
+
+// Use Voronoi cells to spread vertices with equal-density.
+WP2Status CollectVerticesFromVoronoiCells(
     const ArgbBuffer& canvas, uint32_t max_num_vertices,
     PreviewData* const preview);
 

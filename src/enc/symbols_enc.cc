@@ -1127,7 +1127,9 @@ WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
   } else if (type == Stat::Type::kDict) {
     // The number of symbols is bounded by the number of possible symbols
     // and the size of the image.
-    enc->PutRange(size, 2, nnz_range, "size_m2");
+    const uint32_t dict_range = std::min(nnz_range, (uint32_t)ANS_MAX_SYMBOLS);
+    assert(size <= dict_range);
+    enc->PutRange(size, 2, dict_range, "size_m2");
     // Store the dictionary.
     WP2_CHECK_STATUS(WriteHistogram(*config, range, max_nnz, enc));
     // Create needed dictionaries.

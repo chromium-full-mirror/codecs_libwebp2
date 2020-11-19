@@ -28,15 +28,14 @@ namespace WP2 {
 
 WP2Status LosslessDecode(const BitstreamFeatures& features,
                          const DecoderConfig& config,
-                         const GlobalParams& gparams,
-                         ProgressWatcher* const progress, ANSDec* const dec,
+                         const GlobalParams& gparams, ANSDec* const dec,
                          Tile* const tile) {
   (void)features;
   assert(!tile->rgb_output.IsEmpty());
   tile->output_is_yuv = false;
 
   WP2L::Decoder dec_lossless;
-  dec_lossless.Init(config, gparams, progress, dec, tile);
+  dec_lossless.Init(config, gparams, dec, tile);
 
   WP2_CHECK_STATUS(dec_lossless.DecodeHeader());
   WP2_CHECK_STATUS(dec_lossless.DecodeImage());

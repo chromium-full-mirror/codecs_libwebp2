@@ -31,13 +31,15 @@
 
 namespace WP2L {
 
+using WP2::ProgressRange;
+
 //------------------------------------------------------------------------------
 // Palette.
 
 // Computes a value that is related to the entropy created by the
 // palette entry diff.
-static inline uint32_t PaletteColorDistance(const int16_t  col1[],
-                                            const int16_t  col2[],
+static inline uint32_t PaletteColorDistance(const int16_t col1[],
+                                            const int16_t col2[],
                                             uint32_t weight_RGB) {
   assert(weight_RGB <= 256);
   const uint32_t weight_A = 256 - weight_RGB;
@@ -54,7 +56,7 @@ static inline uint32_t PaletteColorDistance(const int16_t  col1[],
 // palette is stored with delta encoding.
 static void GreedyMinimizeDeltas(uint32_t num_colors, int16_t colors[],
                                  uint32_t weight_RGB /* in [0..256] */) {
-  int16_t predict[4] = { 0 };
+  int16_t predict[4] = {0};
   for (size_t i = 0; i < num_colors; ++i) {
     size_t best_ix = i;
     uint32_t best_score =
@@ -188,7 +190,7 @@ WP2Status Palette::AnalyzeAndCreate(const WP2::ArgbBuffer& pic) {
   }
 
   if (num_colors_ <= 1 || num_colors_ > max_palette_size_) {
-    num_colors_ = 0;    // disables the palette
+    num_colors_ = 0;  // disables the palette
     cost_ = std::numeric_limits<float>::max();
     return WP2_STATUS_OK;
   }
@@ -285,7 +287,8 @@ class InternalParams {
   // Used for List method. It modifies stats_.
   WP2Status WriteAsList(WP2::ANSEncBase* const enc);
   // Used for Image method.
-  WP2Status WriteAsImage(WP2::ANSDictionaries* const dict,
+  WP2Status WriteAsImage(const ProgressRange& progress,
+                         WP2::ANSDictionaries* const dict,
                          Encoder* const encoder,
                          WP2::ANSEncBase* const enc) const;
   WP2Status WriteVerbatim(WP2::ANSEncBase* const enc) const;
@@ -296,7 +299,7 @@ class InternalParams {
   uint32_t channel_max_;
   uint32_t num_channels_;
   uint32_t num_colors_;
-  const int16_t* const colors_;   // only used for Verbatim
+  const int16_t* const colors_;  // only used for Verbatim
 
   // method-dependent:
   bool is_increasing_[4], is_decreasing_[4];
@@ -330,13 +333,13 @@ WP2Status InternalParams::StoreSigns(WP2::ANSEncBase* const bw) {
         opposite_[i] = (uint8_t)!is_stored_as_above_[c][i + 1];
       }
       const float cost_opposite = WP2::StoreVector(
-        opposite_.data(), num_colors_ - 1, 1, stats_.data(), nullptr);
+          opposite_.data(), num_colors_ - 1, 1, stats_.data(), nullptr);
       const bool use_opposite_sign = (cost_opposite < cost);
       bw->PutBool(use_opposite_sign, "use_opposite_sign");
       bw->AddDebugPrefix("transform_index_signs");
       if (use_opposite_sign) {
-        WP2::StoreVector(opposite_.data(), num_colors_ - 1, 1,
-                         stats_.data(), bw);
+        WP2::StoreVector(opposite_.data(), num_colors_ - 1, 1, stats_.data(),
+                         bw);
       } else {
         WP2::StoreVector(&is_stored_as_above_[c][1], num_colors_ - 1, 1,
                          stats_.data(), bw);
@@ -455,8 +458,10 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
   return WP2_STATUS_OK;
 }
 
-WP2Status InternalParams::WriteAsImage(WP2::ANSDictionaries* const dict,
-    Encoder* const encoder, WP2::ANSEncBase* const enc) const {
+WP2Status InternalParams::WriteAsImage(const ProgressRange& progress,
+                                       WP2::ANSDictionaries* const dict,
+                                       Encoder* const encoder,
+                                       WP2::ANSEncBase* const enc) const {
   // Compute the cost of storing the palette differences as an image.
   WP2::Vector_s16 tmp_palette;
   WP2_CHECK_ALLOC_OK(tmp_palette.resize(4 * num_colors_));
@@ -465,8 +470,8 @@ WP2Status InternalParams::WriteAsImage(WP2::ANSDictionaries* const dict,
     for (size_t i = 0; i < num_colors_; ++i) {
       tmp_palette[4 * i + c] = channel_diffs_[c][i];
       if (c == 0 && !has_alpha_) {
-        assert(
-          tmp_palette[4 * i + c] == (int16_t)((i > 0) ? 0u : WP2::kAlphaMax));
+        assert(tmp_palette[4 * i + c] ==
+               (int16_t)((i > 0) ? 0u : WP2::kAlphaMax));
       }
     }
   }
@@ -474,18 +479,20 @@ WP2Status InternalParams::WriteAsImage(WP2::ANSDictionaries* const dict,
   assert(format_ == encoder->symbols_info_.SampleFormat());
   symbols_info.Init(has_alpha_, format_);
   WP2_CHECK_STATUS(EncodeImageNoClusters(
-    enc, dict, tmp_palette.data(), &encoder->hash_chain_,
-    &encoder->ref_pool_, num_colors_, 1, symbols_info, /*effort=*/3));
+      enc, dict, tmp_palette.data(), &encoder->hash_chain_, &encoder->ref_pool_,
+      num_colors_, 1, symbols_info, /*effort=*/3, progress));
   return WP2_STATUS_OK;
 }
 
 InternalParams::InternalParams(WP2SampleFormat format, bool has_alpha,
                                uint32_t channel_max, uint32_t num_channels,
                                const WP2::Vector_s16& colors)
-    : format_(format), has_alpha_(has_alpha), channel_max_(channel_max),
+    : format_(format),
+      has_alpha_(has_alpha),
+      channel_max_(channel_max),
       num_channels_(num_channels),
-      num_colors_(colors.size() / 4), colors_(colors.data()) {
-}
+      num_colors_(colors.size() / 4),
+      colors_(colors.data()) {}
 
 WP2Status InternalParams::Init(const int16_t colors[]) {
   for (auto& b : is_increasing_) b = true;
@@ -516,7 +523,7 @@ WP2Status InternalParams::Init(const int16_t colors[]) {
       // Store it above if it is indeed above or at the same value than
       // before but closer to channel_max_.
       is_stored_as_above_[c][i] = (uint8_t)(
-        (diff > 0) || (diff == 0 && (int)channel_max_ - channel < channel));
+          (diff > 0) || (diff == 0 && (int)channel_max_ - channel < channel));
     }
     if (is_increasing_[c]) {
       std::fill(&is_stored_as_above_[c][0],
@@ -529,12 +536,17 @@ WP2Status InternalParams::Init(const int16_t colors[]) {
   return WP2_STATUS_OK;
 }
 
-WP2Status Palette::TryPalette(WP2::Vector_s16& colors, Encoder* const encoder,
-                              InternalParams& params, bool also_as_image) {
+WP2Status Palette::TryPalette(WP2::Vector_s16& colors,
+                              const ProgressRange& progress,
+                              Encoder* const encoder, InternalParams& params,
+                              bool also_as_image) {
   bool is_better = false;
   WP2::ANSDictionaries dict;
   WP2::ANSEncCounter bw;
   float cost;
+
+  const ProgressRange image_progress(progress, 0.5f);
+  const ProgressRange list_progress(progress, 0.5f);
 
   WP2_CHECK_STATUS(params.Init(&colors[0]));
   WP2_CHECK_STATUS(params.StoreSigns(&bw));
@@ -543,7 +555,7 @@ WP2Status Palette::TryPalette(WP2::Vector_s16& colors, Encoder* const encoder,
   // start by evaluating the kMethodImage as baseline.
   if (also_as_image) {
     bw.Reset();
-    WP2_CHECK_STATUS(params.WriteAsImage(&dict, encoder, &bw));
+    WP2_CHECK_STATUS(params.WriteAsImage(image_progress, &dict, encoder, &bw));
     cost = cost_base + bw.GetCost(dict);
     dict.DeepClear();
     if (cost < cost_) {
@@ -551,11 +563,14 @@ WP2Status Palette::TryPalette(WP2::Vector_s16& colors, Encoder* const encoder,
       method_ = PaletteStorageMethod::kMethodImage;
       is_better = true;
     }
+  } else {
+    WP2_CHECK_STATUS(image_progress.AdvanceBy(1.f));
   }
 
   // then as kMethodList
   bw.Reset();
   WP2_CHECK_STATUS(params.WriteAsList(&bw));
+  WP2_CHECK_STATUS(list_progress.AdvanceBy(1.f));
   cost = cost_base + bw.GetCost();
   if (cost < cost_) {
     cost_ = cost;
@@ -566,10 +581,14 @@ WP2Status Palette::TryPalette(WP2::Vector_s16& colors, Encoder* const encoder,
   return WP2_STATUS_OK;
 }
 
-WP2Status Palette::FindBestMethod(Encoder* const encoder, int effort) {
+WP2Status Palette::FindBestMethod(const ProgressRange& progress,
+                                  Encoder* const encoder, int effort) {
   method_ = PaletteStorageMethod::kMethodVerbatim;
   cost_ = std::numeric_limits<float>::max();
-  if (num_colors_ < 2) return WP2_STATUS_OK;
+  if (num_colors_ < 2) {
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
+    return WP2_STATUS_OK;
+  }
 
   WP2::ANSEncCounter bw;
   // Write the number of colors.
@@ -578,58 +597,64 @@ WP2Status Palette::FindBestMethod(Encoder* const encoder, int effort) {
   // Check if values are grayscale.
   bw.PutBool(is_grayscale_, "is_grayscale");
 
-  const uint16_t channel_max =
-      encoder->symbols_info_.GetMaxRange(kSymbolR) - 1;
+  const uint16_t channel_max = encoder->symbols_info_.GetMaxRange(kSymbolR) - 1;
   const uint32_t num_channels = (is_grayscale_ ? 2 : 4);
 
-  InternalParams params(format_, has_alpha_, channel_max,
-                        num_channels, colors_);
+  InternalParams params(format_, has_alpha_, channel_max, num_channels,
+                        colors_);
 
   if (num_colors_ <= kSmallPaletteLimit) {
     WP2_CHECK_STATUS(params.WriteVerbatim(&bw));
     method_ = PaletteStorageMethod::kMethodVerbatim;
     cost_ = bw.GetCost();
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
     return WP2_STATUS_OK;
   }
 
-  const float cost_base = bw.GetCost() + 1.f;   // +1 for the 'is_image' bit
+  const float cost_base = bw.GetCost() + 1.f;  // +1 for the 'is_image' bit
 
-  WP2_CHECK_STATUS(TryPalette(colors_, encoder, params));
+  // Advance progression by half the remaining range for each TryPalette() call.
+  ProgressRange try_progress(progress, 0.5f);
+  WP2_CHECK_STATUS(TryPalette(colors_, try_progress, encoder, params));
 
-  const bool try_alt_order = (effort > 0 &&
-    HasNonMonotonousDeltas(&colors_[0], num_colors_));
-  while (try_alt_order) {   // use "while" so we can "break" from the loop
+  const bool try_alt_order =
+      (effort > 0 && HasNonMonotonousDeltas(&colors_[0], num_colors_));
+  while (try_alt_order) {  // use "while" so we can "break" from the loop
     // prepare an alternate palette to try
     WP2::Vector_s16 alt_colors;
     WP2_CHECK_ALLOC_OK(alt_colors.copy_from(colors_));
 
     GreedyMinimizeDeltas(num_colors_, &alt_colors[0], 220);
-    WP2_CHECK_STATUS(TryPalette(alt_colors, encoder, params));
+    try_progress = ProgressRange(try_progress, 0.5f);
+    WP2_CHECK_STATUS(TryPalette(alt_colors, try_progress, encoder, params));
 
     // without alpha, any other call to GreedyMinimizeDeltas() is a no-op
     if (!has_alpha_) break;
 
-    if (effort > 2) {   // try few other sorts if time permits
+    if (effort > 2) {  // try few other sorts if time permits
       GreedyMinimizeDeltas(num_colors_, &alt_colors[0], 119);
-      WP2_CHECK_STATUS(TryPalette(alt_colors, encoder, params));
+      try_progress = ProgressRange(try_progress, 0.5f);
+      WP2_CHECK_STATUS(TryPalette(alt_colors, try_progress, encoder, params));
     }
     if (effort > 3) {
       GreedyMinimizeDeltas(num_colors_, &alt_colors[0], 42);
-      WP2_CHECK_STATUS(TryPalette(alt_colors, encoder, params));
+      try_progress = ProgressRange(try_progress, 0.5f);
+      WP2_CHECK_STATUS(TryPalette(alt_colors, try_progress, encoder, params));
     }
     if (effort > 4) {
       GreedyMinimizeDeltas(num_colors_, &alt_colors[0], 0);
-      WP2_CHECK_STATUS(TryPalette(alt_colors, encoder, params));
+      try_progress = ProgressRange(try_progress, 0.5f);
+      WP2_CHECK_STATUS(TryPalette(alt_colors, try_progress, encoder, params));
     }
     // for slower efforts, we uniformly sample the range of weights
     // with increasing density.
     if (effort > 5 && full_optimize_) {
       // we use more sub-divisions with higher effort
-      const int shift = std::min(effort - 4, 5);   // [1..5]
+      const int shift = std::min(effort - 4, 5);  // [1..5]
       // if 'effort' is high enough, or we already found that MethodImage
       // was better, try MethodImage again.
       const bool as_image =
-         (effort > 6 || method_ == PaletteStorageMethod::kMethodImage);
+          (effort > 6 || method_ == PaletteStorageMethod::kMethodImage);
       uint32_t base_w = 1, range = 256;
       while (true) {
         const uint32_t step = range >> shift;
@@ -639,7 +664,9 @@ WP2Status Palette::FindBestMethod(Encoder* const encoder, int effort) {
         float cost_saved = cost_;
         for (uint32_t dw = 0; dw < range; dw += step) {
           GreedyMinimizeDeltas(num_colors_, &alt_colors[0], base_w + dw);
-          WP2_CHECK_STATUS(TryPalette(alt_colors, encoder, params, as_image));
+          try_progress = ProgressRange(try_progress, 0.5f);
+          WP2_CHECK_STATUS(
+              TryPalette(alt_colors, try_progress, encoder, params, as_image));
           if (cost_ < cost_saved) {
             new_base_w = base_w + dw;
             cost_saved = cost_;
@@ -653,11 +680,13 @@ WP2Status Palette::FindBestMethod(Encoder* const encoder, int effort) {
     break;
   }
 
+  WP2_CHECK_STATUS(try_progress.AdvanceBy(1.f));  // Finish 'progress'.
   cost_ += cost_base;
   return WP2_STATUS_OK;
 }
 
-WP2Status Palette::Write(WP2::ANSEncBase* const enc,
+WP2Status Palette::Write(const ProgressRange& progress,
+                         WP2::ANSEncBase* const enc,
                          WP2::ANSDictionaries* const dicts_in,
                          Encoder* const encoder) const {
   const WP2::ANSDebugPrefix prefix(enc, "palette");
@@ -668,23 +697,25 @@ WP2Status Palette::Write(WP2::ANSEncBase* const enc,
   enc->PutBool(is_grayscale_, "is_grayscale");
 
   const uint32_t num_channels = (is_grayscale_ ? 2 : 4);
-  const uint16_t channel_max =
-      encoder->symbols_info_.GetMaxRange(kSymbolR) - 1;
-  InternalParams params(format_, has_alpha_, channel_max,
-                        num_channels, colors_);
+  const uint16_t channel_max = encoder->symbols_info_.GetMaxRange(kSymbolR) - 1;
+  InternalParams params(format_, has_alpha_, channel_max, num_channels,
+                        colors_);
 
   if (method_ == PaletteStorageMethod::kMethodVerbatim) {
-    return params.WriteVerbatim(enc);
+    WP2_CHECK_STATUS(params.WriteVerbatim(enc));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
+    return WP2_STATUS_OK;
   }
   WP2_CHECK_STATUS(params.Init(&colors_[0]));
   WP2_CHECK_STATUS(params.StoreSigns(enc));
   const bool use_image = (method_ == PaletteStorageMethod::kMethodImage);
   if (enc->PutBool(use_image, "use_image")) {
     WP2::ANSDictionaries dict;
-    WP2_CHECK_STATUS(params.WriteAsImage(&dict, encoder, enc));
+    WP2_CHECK_STATUS(params.WriteAsImage(progress, &dict, encoder, enc));
     WP2_CHECK_STATUS(dicts_in->AppendAndClear(&dict));
   } else if (method_ == PaletteStorageMethod::kMethodList) {
     WP2_CHECK_STATUS(params.WriteAsList(enc));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
   } else {
     assert(false);
   }

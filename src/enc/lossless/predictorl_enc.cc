@@ -161,7 +161,6 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
                                    const int16_t* const modes,
                                    Vector_u32 accumulated[4],
                                    Vector_u32 tmp_histo[][4]) {
-  const int kNumPredModes = 14;
   const int start_x = tile_x << bits;
   const int start_y = tile_y << bits;
   const int tile_size = 1 << bits;
@@ -174,10 +173,10 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
   const int context_start_x = start_x - have_left;
   const int tiles_per_row = WP2LSubSampleSize(width, bits);
   // Prediction modes of the left and above neighbor tiles.
-  const int left_mode =
+  const uint32_t left_mode =
       (tile_x > 0) ? modes[4 * (tile_y * tiles_per_row + tile_x - 1) + 2]
                    : 0xff;
-  const int above_mode =
+  const uint32_t above_mode =
       (tile_y > 0) ? modes[4 * ((tile_y - 1) * tiles_per_row + tile_x) + 2]
                    : 0xff;
   // The width of upper_row and current_row is one pixel larger than image width
@@ -186,8 +185,8 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
   uint16_t* upper_row = argb_scratch;
   uint16_t* current_row = &upper_row[4 * (width + 1)];
   float best_diff = std::numeric_limits<float>::max();
-  int best_mode = 0;
-  int mode;
+  uint32_t best_mode = 0;
+  uint32_t mode;
   // Need pointers to be able to swap arrays.
   Vector_u32* histo_argb = &tmp_histo[0][0];
   Vector_u32* best_histo = &tmp_histo[1][0];
@@ -197,7 +196,7 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
 
   // TODO(vrabaud) fix channel_bits.
   const uint32_t channel_bits = 8;
-  for (mode = 0; mode < kNumPredModes; ++mode) {
+  for (mode = 0; mode < kNumPredictors; ++mode) {
     float cur_diff;
     int relative_y;
     for (uint32_t i = 0; i < 4; ++i) {

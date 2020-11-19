@@ -816,6 +816,16 @@ static void FillExtents(Symbol sym, uint32_t* const extents,
                                           num_extents);
       break;
     }
+    case kAOMEOBPT4: {
+      CoordinateFiller<kCoordMaxSize>::Do(libgav1::kDefaultEobPt4Cdf, c,
+                                          num_extents);
+      break;
+    }
+    case kAOMEOBPT8: {
+      CoordinateFiller<kCoordMaxSize>::Do(libgav1::kDefaultEobPt8Cdf, c,
+                                          num_extents);
+      break;
+    }
     case kAOMEOBPT16: {
       CoordinateFiller<kCoordMaxSize>::Do(libgav1::kDefaultEobPt16Cdf, c,
                                           num_extents);
@@ -905,6 +915,10 @@ static const uint16_t* GetCDF(Symbol sym, uint32_t quantizer_context,
   switch (sym) {
     case kAOMAllZero:
       return GetCDF(cluster, libgav1::kDefaultAllZeroCdf);
+    case kAOMEOBPT4:
+      return GetCDF(cluster, libgav1::kDefaultEobPt4Cdf);
+    case kAOMEOBPT8:
+      return GetCDF(cluster, libgav1::kDefaultEobPt8Cdf);
     case kAOMEOBPT16:
       return GetCDF(cluster, libgav1::kDefaultEobPt16Cdf);
     case kAOMEOBPT32:

@@ -80,9 +80,11 @@ static inline int WP2Ctz(uint32_t n) {
   return first_set_bit;
 }
 #else  // default: use the C-version.
+#define WP2_NEED_LOG_TABLE_8BIT
+extern const uint8_t WP2LogTable8bit[256 + 1];
 static inline int WP2Log2Floor(uint32_t n) {
   int log_value = 0;
-  while (n >= 256) {
+  while (n > 256) {
     log_value += 8;
     n >>= 8;
   }

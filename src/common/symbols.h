@@ -37,7 +37,7 @@
 namespace WP2 {
 
 // Maximum number of symbol types to use.
-static constexpr uint32_t kSymbolNumMax = 41;
+static constexpr uint32_t kSymbolNumMax = 43;
 // Number of residual clusters, not including sectors.
 // Y/UV/A * Method0/Method1 * transform.
 static constexpr uint32_t kResidualClusters = 3 * kNumResidualStats * TRF_LAST;
@@ -345,7 +345,8 @@ struct Golomb {
   uint32_t extra_bits_value;
 };
 
-// Read/write a value using Golomb encoding.
+// Read/write a value in [min, max] using Golomb coding.
+// 'prefix_size' must be 1 or 2 (number of leading bits coded separately).
 void WriteGolomb(uint32_t value, uint32_t min, uint32_t max,
                  uint32_t prefix_size, ANSEncBase* const enc, WP2_OPT_LABEL);
 uint32_t ReadGolomb(uint32_t min, uint32_t max, uint32_t prefix_size,
@@ -586,6 +587,8 @@ enum Symbol {
   // AOM residual encoding
   // ---------------------
   kAOMAllZero,
+  kAOMEOBPT4,
+  kAOMEOBPT8,
   kAOMEOBPT16,
   kAOMEOBPT32,
   kAOMEOBPT64,
@@ -610,7 +613,8 @@ constexpr Symbol kSymbolsForCoeffsPerTf[] = {
     kSymbolDC, kSymbolResidualUseBounds, kSymbolResidualBound1IsX,
     kSymbolResidualUseBound2};
 constexpr Symbol kSymbolsForAOMCoeffs[] = {
-    kAOMAllZero,  kAOMEOBPT16,      kAOMEOBPT32,   kAOMEOBPT64,
+    kAOMAllZero,  kAOMEOBPT4,       kAOMEOBPT8,
+    kAOMEOBPT16,  kAOMEOBPT32,      kAOMEOBPT64,
     kAOMEOBPT128, kAOMEOBPT256,     kAOMEOBPT512,  kAOMEOBPT1024,
     kAOMEOBExtra, kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange,
     kAOMDCSign};

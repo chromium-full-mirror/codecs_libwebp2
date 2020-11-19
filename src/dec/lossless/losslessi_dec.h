@@ -62,9 +62,9 @@ class Metadata {
 class Decoder {
  public:
   Decoder();
-  void Init(const WP2::DecoderConfig& config, const WP2::GlobalParams& gparams,
-            WP2::ProgressWatcher* const progress,
-            WP2::ANSDec* const dec, WP2::Tile* const tile);
+  void Init(const WP2::DecoderConfig& config,
+            const WP2::GlobalParams& gparams, WP2::ANSDec* const dec,
+            WP2::Tile* const tile);
   // Decodes the image header. Returns false in case of error.
   WP2Status DecodeHeader();
   // Decodes an image. It's required to decode the lossless header before
@@ -154,7 +154,6 @@ class Decoder {
   WP2::Planef bits_per_pixel_;
   WP2::DecoderConfig config_;
   const WP2::GlobalParams* gparams_ = nullptr;
-  WP2::ProgressWatcher* progress_ = nullptr;
   // Whether pixels mut be premultiplied with the alpha value before emitting.
   bool premultiply_ = false;
 };

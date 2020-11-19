@@ -193,7 +193,7 @@ WP2Status DecodeGLBL(DataSource* const data_source, const DecoderConfig& config,
   const WP2Status status =
       ReadChunk(data_source, (gparams != nullptr) ? &chunk_glbl : nullptr);
   if (status != WP2_STATUS_OK) {
-    // The data consumption must be atomic.
+    // The data consumption must be atomic for incr dec glimpses.
     data_source->UnmarkAllReadBytes();
     data_source->MarkNumBytesAsRead(num_read_bytes);
   }

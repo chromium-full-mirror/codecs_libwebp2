@@ -20,6 +20,7 @@
 #ifndef WP2_ENC_LOSSLESS_LOSSLESSI_ENC_H_
 #define WP2_ENC_LOSSLESS_LOSSLESSI_ENC_H_
 
+#include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/dsp/lossless/lossless.h"
 #include "src/enc/lossless/backward_references_enc.h"
@@ -27,6 +28,7 @@
 #include "src/enc/lossless/palette.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
@@ -83,11 +85,14 @@ class Encoder {
 //------------------------------------------------------------------------------
 // internal functions. Not public.
 
-WP2Status EncodeImageNoClusters(
-    WP2::ANSEncBase* const enc, WP2::ANSDictionaries* const dicts,
-    const int16_t* const argb, HashChain* const hash_chain,
-    BackwardRefsPool* const ref_pool, uint32_t width, uint32_t height,
-    const LosslessSymbolsInfo& symbols_info, int effort);
+WP2Status EncodeImageNoClusters(WP2::ANSEncBase* const enc,
+                                WP2::ANSDictionaries* const dicts,
+                                const int16_t* const argb,
+                                HashChain* const hash_chain,
+                                BackwardRefsPool* const ref_pool,
+                                uint32_t width, uint32_t height,
+                                const LosslessSymbolsInfo& symbols_info,
+                                int effort, const WP2::ProgressRange& progress);
 
 // Optional extra info that can be exported by EncodeImage.
 // Callers should allocate themselves the vectors that they wish filled in.
@@ -109,12 +114,14 @@ struct EncodeInfo {
 // 'has_alpha' might be true for another tile even if this one does not.
 WP2Status EncodeImage(const WP2::EncoderConfig& config,
                       const WP2::ArgbBuffer& picture, bool has_alpha,
+                      const WP2::ProgressRange& progress,
                       WP2::ANSEnc* const enc,
                       EncodeInfo* const encode_info = nullptr);
 
 // Stores the pixels of the image, without caring about the header.
 WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
                       const BackwardRefs& refs,
+                      const WP2::ProgressRange& progress,
                       const uint16_t* const histogram_symbols,
                       WP2::ANSEncBase* const enc, WP2::SymbolManager* const sw,
                       EncodeInfo* const encode_info = nullptr);
@@ -164,7 +171,8 @@ struct CrunchConfig {
 
 static constexpr uint32_t kCrunchNumMax = 7;
 
-WP2Status EncoderAnalyze(Encoder* const encoder,
+WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
+                         Encoder* const encoder,
                          CrunchConfig crunch_configs[kCrunchNumMax],
                          uint32_t* const crunch_configs_size);
 
@@ -173,7 +181,9 @@ WP2Status EncoderAnalyze(Encoder* const encoder,
 
 WP2Status Group4Encode(const uint16_t* const argb, uint32_t width,
                        uint32_t height, uint32_t num_colors,
-                       bool use_move_to_front, WP2::ANSEncBase* const enc,
+                       bool use_move_to_front,
+                       const WP2::ProgressRange& progress,
+                       WP2::ANSEncBase* const enc,
                        EncodeInfo* const encode_info);
 
 }  // namespace WP2L

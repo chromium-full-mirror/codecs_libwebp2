@@ -40,19 +40,23 @@ class AOMResidualWriter : public ResidualIO, public AOMResidualIO {
   // If 'do_update', the 'aom_context' is modified.
   static WP2Status WriteCoeffs(uint32_t x_pix, uint32_t y_pix,
                                WP2::BlockSize dim, TransformPair tx_type,
-                               bool first_is_dc, bool is420,
+                               bool first_is_dc, int max_num_coeffs, bool is420,
                                const int16_t* const coeffs, Channel channel,
                                bool do_update, SymbolManager* const sm,
                                ANSEncBase* const enc,
                                AOMContext* const aom_context);
 
  private:
+  static void WriteEOB(int eob, int max_num_coeffs,
+                       TransformSize tx_size, PlaneType plane_type, int context,
+                       SymbolManager* const sm, ANSEncBase* const enc);
   static void WriteTransformCoefficients(
-      const int16_t* const res, const AOMContext& aom_context, bool is420,
+      const int16_t* const res, int max_num_coeffs,
+      const AOMContext& aom_context, bool is420,
       Channel channel, int start_x, int start_y, TransformSize tx_size,
       TransformPair tx_type, bool first_is_dc, SymbolManager* const sm,
-      ANSEncBase* const enc, int* const coefficient_level,
-      int8_t* const dc_category);
+      ANSEncBase* const enc, int* const coefficient_level);
+
   template <bool is_dc_coefficient>
   static void WriteSignAndApplyDequantization(
       int16_t res, uint32_t dc_sign_cluster, int* coefficient_level,

@@ -55,7 +55,6 @@ bool TryReadTileChunkSize(const GlobalParams& gparams,
 // Returns true if the next tile has all its chunk data available.
 bool TryReadTile(DataSource* const data_source,
                  const BitstreamFeatures& features, const DecoderConfig& config,
-                 ProgressWatcher* const progress,
                  TilesLayout* const tiles_layout, Tile* const tile,
                  PartialTileDecoder* const partial_tile_decoder) {
   if (!TryReadTileChunkSize(*tiles_layout->gparams, data_source, config,
@@ -73,8 +72,8 @@ bool TryReadTile(DataSource* const data_source,
       // an error right now.
       if (data_source->TryGetNext(data_source->GetNumNextBytes(),
                                   &tile->data_handle)) {
-        if (partial_tile_decoder->Init(features, config, progress,
-                                       tiles_layout, tile) != WP2_STATUS_OK) {
+        if (partial_tile_decoder->Init(features, config, tiles_layout, tile) !=
+            WP2_STATUS_OK) {
           return false;  // this is most probably a memory alloc failure
         }
       }
@@ -128,7 +127,7 @@ WP2Status Decoder::DecodeAvailableTiles() {
 
   while (tiles_layout->num_assignable_tiles < tiles_layout->tiles.size()) {
     const uint32_t tile_index = tiles_layout->num_assignable_tiles;
-    if (!TryReadTile(state_->data_source, features_, config_, &state_->progress,
+    if (!TryReadTile(state_->data_source, features_, config_,
                      &state_->tiles_layout,
                      &state_->tiles_layout.tiles[tile_index],
                      state_->partial_tile_decoder.get())) {
@@ -258,7 +257,7 @@ WP2Status Decoder::DecodeAvailableTiles() {
 }
 
 WP2Status Decoder::DiscardAvailableTiles() {
-  TilesLayout* const tiles_layout = &state_->tiles_layout;
+  TilesLayout& tiles_layout = state_->tiles_layout;
   PartialTileDecoder* const partial_tile_decoder =
       state_->partial_tile_decoder.get();
   if (partial_tile_decoder != nullptr &&
@@ -267,22 +266,21 @@ WP2Status Decoder::DiscardAvailableTiles() {
     state_->data_source->MarkNumBytesAsRead(partial_tile.chunk_size);
     state_->data_source->Discard(state_->data_source->GetNumReadBytes());
     partial_tile_decoder->Clear();
-    WP2_CHECK_STATUS(state_->progress.AdvanceBy(partial_tile.rect.height -
-                                                partial_tile.num_decoded_rows));
+    WP2_CHECK_STATUS(partial_tile.row_progress.AdvanceBy(
+        partial_tile.rect.height - partial_tile.num_decoded_rows));
   }
 
-  while (tiles_layout->num_assignable_tiles < tiles_layout->tiles.size()) {
-    Tile& tile = state_->tiles_layout.tiles[tiles_layout->num_assignable_tiles];
+  while (tiles_layout.num_assignable_tiles < tiles_layout.tiles.size()) {
+    Tile& tile = tiles_layout.tiles[tiles_layout.num_assignable_tiles];
     const bool skipped_tile =
         TrySkipTile(state_->data_source, config_, &state_->tiles_layout, &tile);
     state_->data_source->Discard(state_->data_source->GetNumReadBytes());
     if (!skipped_tile) break;
-    WP2_CHECK_STATUS(state_->progress.AdvanceBy(tile.rect.height));
+    WP2_CHECK_STATUS(tile.row_progress.AdvanceBy(tile.rect.height));
   }
 
-  if (tiles_layout->num_assignable_tiles < tiles_layout->tiles.size()) {
-    return WP2_STATUS_NOT_ENOUGH_DATA;
-  }
+  WP2_CHECK_OK(tiles_layout.num_assignable_tiles >= tiles_layout.tiles.size(),
+               WP2_STATUS_NOT_ENOUGH_DATA);
   return WP2_STATUS_OK;
 }
 

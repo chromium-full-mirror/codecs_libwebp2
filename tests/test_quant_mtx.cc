@@ -407,7 +407,7 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
         SyntaxWriter syntax_writer;
         ASSERT_WP2_OK(syntax_writer.Init(
             &dicts, config, params, yuv, ChromaSubsampling::k420, rect,
-            (uint32_t)cblocks.size(), kUseAOMCoeffs));
+            (uint32_t)cblocks.size(), kUseAOMCoeffs, ProgressRange()));
 
         // Just check that we can get the pseudo rate without crashing.
         // WARNING! We must call this *after* syntax_writer.Init() because

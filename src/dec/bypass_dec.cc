@@ -60,7 +60,7 @@ WP2Status TileDecoder::BypassTileDec() {
       }
       row += tile_->rgb_output.stride();
       ++tile_->num_decoded_rows;
-      WP2_CHECK_STATUS(progress_->AdvanceBy(1.f));
+      WP2_CHECK_STATUS(tile_->row_progress.AdvanceBy(1.f));
     }
   } else {  // !GP_LOSSLESS
     tile_->output_is_yuv = true;
@@ -121,7 +121,7 @@ WP2Status TileDecoder::BypassTileDec() {
           tile_->block_map.RegisterBlock(sim_block, min_num_bytes_per_px);
         }
       }
-      WP2_CHECK_STATUS(progress_->AdvanceBy(1.f));
+      WP2_CHECK_STATUS(tile_->row_progress.AdvanceBy(1.f));
     }
 
     WP2_CHECK_STATUS(bit_unpacker.GetStatus());

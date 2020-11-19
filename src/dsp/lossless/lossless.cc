@@ -109,11 +109,15 @@ static void Predictor11_C(const uint16_t* left, const uint16_t* top,
 }
 static void Predictor12_C(const uint16_t* left, const uint16_t* top,
                           uint16_t max_value, uint16_t* out) {
-  ClampedAddSubtractFull(left, top, top - 4, max_value, out);
+  AddSubtractFull(left, top, top - 4, max_value, out);
 }
 static void Predictor13_C(const uint16_t* left, const uint16_t* top,
                           uint16_t max_value, uint16_t* out) {
-  ClampedAddSubtractHalf(left, top, top - 4, max_value, out);
+  AddSubtractHalf(left, top, top - 4, max_value, out);
+}
+static void Predictor14_C(const uint16_t* left, const uint16_t* top,
+                          uint16_t max_value, uint16_t* out) {
+  ClampedAddSubtractFull(left, top, top - 4, max_value, out);
 }
 
 typedef void (*PredictoAddFunc)(const uint16_t* in, const uint16_t* upper,
@@ -152,6 +156,7 @@ GENERATE_PREDICTOR_ADD(Predictor10_C, PredictorAdd10_C)
 GENERATE_PREDICTOR_ADD(Predictor11_C, PredictorAdd11_C)
 GENERATE_PREDICTOR_ADD(Predictor12_C, PredictorAdd12_C)
 GENERATE_PREDICTOR_ADD(Predictor13_C, PredictorAdd13_C)
+GENERATE_PREDICTOR_ADD(Predictor14_C, PredictorAdd14_C)
 
 //------------------------------------------------------------------------------
 
@@ -371,24 +376,24 @@ WP2LMapARGBFunc WP2LMapColor;
 static volatile WP2CPUInfo lossless_last_cpuinfo_used =
     (WP2CPUInfo)&lossless_last_cpuinfo_used;
 
-#define COPY_PREDICTOR_ARRAY(IN, OUT) do {                \
-  (OUT)[0] = IN##0_C;                                     \
-  (OUT)[1] = IN##1_C;                                     \
-  (OUT)[2] = IN##2_C;                                     \
-  (OUT)[3] = IN##3_C;                                     \
-  (OUT)[4] = IN##4_C;                                     \
-  (OUT)[5] = IN##5_C;                                     \
-  (OUT)[6] = IN##6_C;                                     \
-  (OUT)[7] = IN##7_C;                                     \
-  (OUT)[8] = IN##8_C;                                     \
-  (OUT)[9] = IN##9_C;                                     \
-  (OUT)[10] = IN##10_C;                                   \
-  (OUT)[11] = IN##11_C;                                   \
-  (OUT)[12] = IN##12_C;                                   \
-  (OUT)[13] = IN##13_C;                                   \
-  (OUT)[14] = IN##0_C; /* <- padding security sentinels*/ \
-  (OUT)[15] = IN##0_C;                                    \
-} while (0);
+#define COPY_PREDICTOR_ARRAY(IN, OUT) \
+  do {                                \
+    (OUT)[0] = IN##0_C;               \
+    (OUT)[1] = IN##1_C;               \
+    (OUT)[2] = IN##2_C;               \
+    (OUT)[3] = IN##3_C;               \
+    (OUT)[4] = IN##4_C;               \
+    (OUT)[5] = IN##5_C;               \
+    (OUT)[6] = IN##6_C;               \
+    (OUT)[7] = IN##7_C;               \
+    (OUT)[8] = IN##8_C;               \
+    (OUT)[9] = IN##9_C;               \
+    (OUT)[10] = IN##10_C;             \
+    (OUT)[11] = IN##11_C;             \
+    (OUT)[12] = IN##12_C;             \
+    (OUT)[13] = IN##13_C;             \
+    (OUT)[14] = IN##14_C;             \
+  } while (0);
 
 WP2_TSAN_IGNORE_FUNCTION void WP2LDspInit() {
   if (lossless_last_cpuinfo_used == WP2GetCPUInfo) return;

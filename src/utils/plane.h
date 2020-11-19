@@ -259,6 +259,10 @@ class Plane : public PlaneBase {
   const T& AtClamped(int x, int y) const {
     return AtClamped((uint32_t)std::max(x, 0), (uint32_t)std::max(y, 0));
   }
+  T& AtClamped(int x, int y) {
+    return At(std::min(std::max(x, 0), (int)w_ - 1),
+              std::min(std::max(y, 0), (int)h_ - 1));
+  }
 
   // No bound checking, to access pixels adjacent to a subview.
   const T& AtUnclamped(int x, int y) const {
@@ -356,6 +360,20 @@ class Plane : public PlaneBase {
   // values are expected to be <= (1 << num_bits)
   WP2Status ToGray(ArgbBuffer* dst, uint32_t num_bits, bool shift = true) const;
 
+  // Process 'src's samples with arbitrary function.
+  WP2Status Process(const ArgbBuffer& src,
+                    int32_t (*convert)(const void* sample) = ToGrayF) {
+    WP2_CHECK_STATUS(Resize(src.width(), src.height()));
+    for (uint32_t y = 0; y < h_; ++y) {
+      T* const dst = Row(y);
+      const uint8_t* psrc = src.GetRow8(y);
+      for (uint32_t x = 0; x < w_; ++x, psrc += WP2FormatBpp(src.format())) {
+        dst[x] = (T)convert((const void*)psrc);
+      }
+    }
+    return WP2_STATUS_OK;
+  }
+
   // Computes sum of squared error. Implemented for 8u/16s.
   WP2Status GetSSE(const Plane<T>& src, uint64_t* const score) const;
   // Computes SSIM. Implemented for 16s.
@@ -386,6 +404,37 @@ class Plane : public PlaneBase {
     }
     return RightShiftRound(sum, 8);
   }
+
+  // simple Luma converter for Process()
+  static int32_t ToGrayF(const void* src) {
+    const uint8_t* const src8 = (const uint8_t*)src;
+    const int32_t r = src8[1], g = src8[2], b = src8[3];
+    return ((77 * r + 149 * g + 29 * b + 128) >> 8);
+  }
+
+ public:     // minimal iterator
+  class iterator {
+   public:
+    iterator(const T* const ptr, uint32_t width, size_t step)
+        : x_(0), y_(0), width_(width), step_(step), ptr_((T*)ptr) {}
+    iterator operator++() {
+      if (++x_ == width_) { ptr_ += step_, x_ = 0, ++y_; }
+      return *this;
+    }
+    bool operator!=(const iterator& i) const {
+      return (&ptr_[x_] != &i.ptr_[i.x_]);
+    }
+    T& operator*() { return ptr_[x_]; }
+
+    size_t x_, y_;
+
+   private:
+    const size_t width_, step_;
+    T* ptr_;
+  };
+  iterator begin() const { return {data_, w_, step_}; }
+  const iterator end() const { return {data_ + h_ * step_, 0, 0}; }
+
 
  protected:
   T* data_ = nullptr;

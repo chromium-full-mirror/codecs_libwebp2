@@ -19,6 +19,7 @@
 
 #include "./anim_enc.h"
 
+#include "src/common/progress_watcher.h"
 #include "src/enc/preview/preview_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/utils.h"
@@ -162,6 +163,9 @@ WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
   WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(config.IsValid(), WP2_STATUS_INVALID_CONFIGURATION);
 
+  ProgressWatcher progress(config.progress_hook);
+  WP2_CHECK_STATUS(progress.Start());
+
   const bool has_alpha = !AllFramesAreOpaque(frames);
   const Frame& first_frame = frames.front();
   const RGB12b preview_color =
@@ -177,6 +181,7 @@ WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
       config, first_frame.GetWidth(), first_frame.GetHeight(), has_alpha,
       /*is_anim=*/true, loop_forever, kDefaultBackgroundColor, preview_color,
       has_icc, has_trailing_data, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   if (config.create_preview && first_frame.rgb_pixels.IsEmpty()) {
     ArgbBuffer converted;
@@ -187,15 +192,21 @@ WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
   } else {
     WP2_CHECK_STATUS(EncodePreview(first_frame.rgb_pixels, config, output));
   }
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
+
   WP2_CHECK_STATUS(
       EncodeICC({metadata.iccp.bytes, metadata.iccp.size}, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   {
-    FrameEncoder frame_encoder(config, kDefaultBackgroundColor, frames);
+    const ProgressRange frames_progress(&progress, kProgressFrames);
+    FrameEncoder frame_encoder(config, kDefaultBackgroundColor, frames,
+                               frames_progress);
     WP2_CHECK_STATUS(frame_encoder.Encode(output));
   }
 
   WP2_CHECK_STATUS(EncodeMetadata(metadata, output));
+  WP2_CHECK_STATUS(progress.Finish());
   return WP2_STATUS_OK;
 }
 

@@ -162,10 +162,10 @@ WP2Status ResidualReader::ReadCoeffs(Channel channel, ANSDec* const dec,
         const int max_num_coeffs = (cb->num_coeffs_[channel][tf_i] > 0)
                                        ? WP2::kNumCoeffs[cb->tdim(channel)]
                                        : 0;
-        WP2_CHECK_STATUS(aom_reader_.ReadCoeffs(
+        aom_reader_.ReadCoeffs(
             channel, cb->x_pix() + split_x, cb->y_pix() + split_y, split_size,
             cb->is420_, params->tf, cb->IsFirstCoeffDC(channel), max_num_coeffs,
-            dec, sr, aom_context, coeffs, &cb->num_coeffs_[channel][tf_i]));
+            dec, sr, aom_context, coeffs, &cb->num_coeffs_[channel][tf_i]);
         SetGeometry(cb->num_coeffs_[channel][tf_i],
                     &cb->method_[channel][tf_i]);
       } else if (cb->method_[channel][tf_i] == EncodingMethod::kAllZero) {

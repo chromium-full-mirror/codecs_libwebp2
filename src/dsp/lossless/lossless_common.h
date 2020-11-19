@@ -38,61 +38,6 @@ static inline uint32_t WP2LSubSampleSize(uint32_t size,
 }
 
 // -----------------------------------------------------------------------------
-// PrefixEncode()
-
-// Splitting of distance and length codes into prefixes and
-// extra bits. The prefixes are encoded with an entropy code
-// while the extra bits are stored just as normal bits.
-static inline void WP2LPrefixEncodeBitsNoLUT(int distance, int* const code,
-                                                  int* const extra_bits) {
-  const int highest_bit = WP2Log2Floor(--distance);
-  const int second_highest_bit = (distance >> (highest_bit - 1)) & 1;
-  *extra_bits = highest_bit - 1;
-  *code = 2 * highest_bit + second_highest_bit;
-}
-
-static inline void WP2LPrefixEncodeNoLUT(int distance, int* const code,
-                                              int* const extra_bits,
-                                              int* const extra_bits_value) {
-  const int highest_bit = WP2Log2Floor(--distance);
-  const int second_highest_bit = (distance >> (highest_bit - 1)) & 1;
-  *extra_bits = highest_bit - 1;
-  *extra_bits_value = distance & ((1 << *extra_bits) - 1);
-  *code = 2 * highest_bit + second_highest_bit;
-}
-
-#define PREFIX_LOOKUP_IDX_MAX   512
-typedef struct {
-  int8_t code_;
-  int8_t extra_bits_;
-} WP2LPrefixCode;
-
-// These tables are derived using WP2LPrefixEncodeNoLUT.
-extern const WP2LPrefixCode kWP2PrefixEncodeCode[PREFIX_LOOKUP_IDX_MAX];
-extern const uint8_t kWP2PrefixEncodeExtraBitsValue[PREFIX_LOOKUP_IDX_MAX];
-static inline void WP2LPrefixEncodeBits(int distance, int* const code,
-                                             int* const extra_bits) {
-  if (distance < PREFIX_LOOKUP_IDX_MAX) {
-    const WP2LPrefixCode prefix_code = kWP2PrefixEncodeCode[distance];
-    *code = prefix_code.code_;
-    *extra_bits = prefix_code.extra_bits_;
-  } else {
-    WP2LPrefixEncodeBitsNoLUT(distance, code, extra_bits);
-  }
-}
-
-static inline void WP2LPrefixEncode(int distance, int* const code,
-                                         int* const extra_bits,
-                                         int* const extra_bits_value) {
-  if (distance < PREFIX_LOOKUP_IDX_MAX) {
-    const WP2LPrefixCode prefix_code = kWP2PrefixEncodeCode[distance];
-    *code = prefix_code.code_;
-    *extra_bits = prefix_code.extra_bits_;
-    *extra_bits_value = kWP2PrefixEncodeExtraBitsValue[distance];
-  } else {
-    WP2LPrefixEncodeNoLUT(distance, code, extra_bits, extra_bits_value);
-  }
-}
 
 // Sum of each component, mod 256.
 static WP2_UBSAN_IGNORE_UNSIGNED_OVERFLOW inline void WP2LAddPixels(
@@ -177,13 +122,29 @@ static inline int AddSubtractComponentFull(int a, int b, int c, int max_value) {
   return WP2::Clamp(a + b - c, 0, max_value);
 }
 
+// Same as above but clamped between a and b.
+static inline int ClampedAddSubtractComponentFull(int a, int b, int c) {
+  const int min = std::min(a, b);
+  const int max = std::max(a, b);
+  return WP2::Clamp(a + b - c, min, max);
+}
+
+static inline void AddSubtractFull(const uint16_t* const c0,
+                                   const uint16_t* const c1,
+                                   const uint16_t* const c2, uint16_t mask,
+                                   uint16_t* const out) {
+  for (size_t i = 0; i < 4; ++i) {
+    out[i] = AddSubtractComponentFull(c0[i], c1[i], c2[i], mask) & mask;
+  }
+}
+
 static inline void ClampedAddSubtractFull(const uint16_t* const c0,
                                           const uint16_t* const c1,
                                           const uint16_t* const c2,
                                           uint16_t mask,
                                           uint16_t* const out) {
   for (size_t i = 0; i < 4; ++i) {
-    out[i] = AddSubtractComponentFull(c0[i], c1[i], c2[i], mask) & mask;
+    out[i] = ClampedAddSubtractComponentFull(c0[i], c1[i], c2[i]);
   }
 }
 
@@ -191,10 +152,10 @@ static inline int AddSubtractComponentHalf(int a, int b, int max_value) {
   return WP2::Clamp(a + (a - b) / 2, 0, max_value);
 }
 
-static inline void ClampedAddSubtractHalf(const uint16_t* const c0,
-                                          const uint16_t* const c1,
-                                          const uint16_t* const c2,
-                                          uint16_t mask, uint16_t* const out) {
+static inline void AddSubtractHalf(const uint16_t* const c0,
+                                   const uint16_t* const c1,
+                                   const uint16_t* const c2, uint16_t mask,
+                                   uint16_t* const out) {
   Average2(c0, c1, mask, out);
   for (size_t i = 0; i < 4; ++i) {
     out[i] = AddSubtractComponentHalf(out[i], c2[i], mask) & mask;

@@ -29,6 +29,7 @@
 #include "src/common/lossy/predictor.h"
 #include "src/common/lossy/residuals.h"
 #include "src/common/lossy/rnd_mtx.h"
+#include "src/common/progress_watcher.h"
 #include "src/dsp/dsp.h"
 #include "src/enc/analysis.h"
 #include "src/enc/lossless/losslessi_enc.h"
@@ -74,7 +75,7 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
                       const ArgbBuffer& rgb_buffer, const YUVPlane& yuv_buffer,
                       const CSPTransform& transf, const EncoderConfig& config,
                       uint32_t quality_hint, bool image_has_alpha,
-                      Writer* const output);
+                      const ProgressRange& progress, Writer* const output);
 
 // Writes 'metadata' to 'output'.
 WP2Status EncodeMetadata(const Metadata& metadata, Writer* const output);
@@ -110,6 +111,7 @@ struct EncTile {
 
   // Output. Assemble() to get the encoded bytes.
   ANSEnc enc;
+  ProgressRange progress;
 };
 
 struct EncTilesLayout {
@@ -245,7 +247,8 @@ class AlphaWriter {
   // Setup. 'tile_rect' is in pixels, not padded.
   WP2Status Init(const EncoderConfig& config, const GlobalParams& gparams,
                  const BlockContext& context, const YUVPlane& yuv,
-                 const Rectangle& tile_rect);
+                 const Rectangle& tile_rect,
+                 const ProgressRange& progress);
 
   // Deep copy. 'yuv, context, dicts' must be the clones of 'other' instances.
   WP2Status CopyFrom(const AlphaWriter& other, const BlockContext& context);
@@ -310,7 +313,7 @@ class SyntaxWriter : public WP2Allocable {
                  const GlobalParams& gparams, const YUVPlane& yuv,
                  ChromaSubsampling chroma_subsampling,
                  const Rectangle& tile_rect, uint32_t num_blocks,
-                 bool use_aom_coeffs);
+                 bool use_aom_coeffs, const ProgressRange& alpha_progress);
   // Deep copy. 'dicts' must be copied beforehand.
   WP2Status CopyFrom(const SyntaxWriter& other, ANSDictionaries* const dicts);
   // Initializes some data based on results from the previous pass. To be called

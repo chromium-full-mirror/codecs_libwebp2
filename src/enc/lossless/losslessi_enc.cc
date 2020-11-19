@@ -26,6 +26,7 @@
 #include <string>
 
 #include "src/common/color_precision.h"
+#include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/dsp/lossless/lossless_common.h"
 #include "src/enc/lossless/backward_references_enc.h"
@@ -37,6 +38,8 @@
 #include "src/utils/vector.h"
 
 namespace WP2L {
+
+using WP2::ProgressRange;
 
 // -----------------------------------------------------------------------------
 
@@ -61,8 +64,33 @@ static bool IsArrayMadeOfLabels(const int16_t v[], uint32_t size) {
   return true;
 }
 
+// Writes a 'value' as Golomb where the prefix is stored as symbol 'sym' in
+// cluster 'cluster'.
+static void WriteLZ77Golomb(uint32_t cluster, uint32_t sym, int32_t value,
+                            WP2_OPT_LABEL, WP2::SymbolManager* const sw,
+                            WP2::ANSEncBase* const enc, double* const cost) {
+  WP2::Golomb golomb(value, kLZZGolombPrefixSize);
+  sw->ProcessWithCost(cluster, sym, golomb.prefix, label, enc, cost);
+  if (golomb.extra_bits_num == 0) return;
+  if (golomb.extra_bits_num <= IO_BITS) {
+    std::string label_bits;
+    WP2SPrint(&label_bits, "%s_bits", label);
+    enc->PutUValue(golomb.extra_bits_value, golomb.extra_bits_num,
+                   label_bits.c_str());
+  } else {
+    std::string label_bits1, label_bits2;
+    WP2SPrint(&label_bits1, "%s_bits1", label);
+    WP2SPrint(&label_bits2, "%s_bits2", label);
+    enc->PutUValue(golomb.extra_bits_value & IO_MASK, IO_BITS,
+                   label_bits1.c_str());
+    enc->PutUValue(golomb.extra_bits_value >> IO_BITS,
+                   golomb.extra_bits_num - IO_BITS, label_bits2.c_str());
+  }
+  if (cost != nullptr) *cost += golomb.extra_bits_num;
+}
+
 WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
-                      const BackwardRefs& refs,
+                      const BackwardRefs& refs, const ProgressRange& progress,
                       const uint16_t* const histogram_symbols,
                       WP2::ANSEncBase* const enc, WP2::SymbolManager* const sw,
                       EncodeInfo* const encode_info) {
@@ -76,6 +104,8 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
   uint32_t tile_y = y & tile_mask;
   uint32_t histogram_ix =
       (histogram_symbols == nullptr) ? 0 : histogram_symbols[0];
+
+  const WP2::ProgressScale row_progress(progress, 1.f / height);
 
   if (encode_info != nullptr) {
     assert(encode_info->line_tokens.empty() ||
@@ -134,30 +164,11 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
       }
       case kSymbolTypeCopy: {
         WP2::ANSDebugPrefix prefix(enc, "copy");
-        int bits, n_bits;
-        int code;
-        WP2LPrefixEncode(v.GetLength(), &code, &n_bits, &bits);
-        sw->ProcessWithCost(histogram_ix, kSymbolLen, code, "len", enc,
-                            cost_ptr);
-        if (n_bits) {
-          enc->PutUValue(bits, n_bits, "len_bits");
-          cost += n_bits;
-        }
-
         const uint32_t distance = DistanceToPlaneCode(width, v.GetDistance());
-        WP2LPrefixEncode(distance, &code, &n_bits, &bits);
-        sw->ProcessWithCost(histogram_ix, kSymbolDist, code, "dist", enc,
-                            cost_ptr);
-        if (n_bits) {
-          if (n_bits <= IO_BITS) {
-            enc->PutUValue(bits, n_bits, "dist_bits");
-          } else {
-            enc->PutUValue(bits & IO_MASK, IO_BITS, "dist_bits1");
-            enc->PutUValue(bits >> IO_BITS, n_bits - IO_BITS, "dist_bits2");
-          }
-          cost += n_bits;
-        }
-
+        WriteLZ77Golomb(histogram_ix, kSymbolDist, distance, "dist", sw, enc,
+                        &cost);
+        WriteLZ77Golomb(histogram_ix, kSymbolLen,
+                        v.GetLength() - kMinLZ77Length, "len", sw, enc, &cost);
         break;
       }
       default:
@@ -177,18 +188,22 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
           encode_info->line_tokens[y] = enc->NumTokens();
         }
         ++y;
+        WP2_CHECK_STATUS(row_progress.AdvanceBy(1.f));
       }
     }
   }
-  return enc->GetStatus();
+  WP2_CHECK_STATUS(enc->GetStatus());
+  assert(y <= height);
+  WP2_CHECK_STATUS(row_progress.AdvanceBy(height - y));
+  return WP2_STATUS_OK;
 }
 
 WP2Status StorePixels(uint32_t width, const BackwardRefs& refs,
                       WP2::ANSEncBase* const enc,
                       WP2::SymbolManager* const sw) {
   WP2_CHECK_STATUS(StorePixels(width, /*height=*/0, /*histo_bits=*/0, refs,
-                               /*histogram_symbols=*/nullptr, enc, sw,
-                               /*encode_info=*/nullptr));
+                               ProgressRange(), /*histogram_symbols=*/nullptr,
+                               enc, sw));
   return WP2_STATUS_OK;
 }
 
@@ -232,11 +247,14 @@ WP2Status WriteHeaders(const WP2::SymbolRecorder& recorder,
   return WP2_STATUS_OK;
 }
 
-WP2Status EncodeImageNoClusters(
-    WP2::ANSEncBase* const enc, WP2::ANSDictionaries* const dicts,
-    const int16_t* const argb, HashChain* const hash_chain,
-    BackwardRefsPool* const ref_pool, uint32_t width, uint32_t height,
-    const LosslessSymbolsInfo& symbols_info, int effort) {
+WP2Status EncodeImageNoClusters(WP2::ANSEncBase* const enc,
+                                WP2::ANSDictionaries* const dicts,
+                                const int16_t* const argb,
+                                HashChain* const hash_chain,
+                                BackwardRefsPool* const ref_pool,
+                                uint32_t width, uint32_t height,
+                                const LosslessSymbolsInfo& symbols_info,
+                                int effort, const ProgressRange& progress) {
   WP2::SymbolWriter sw;
 
   // Calculate backward references from ARGB image.
@@ -261,16 +279,17 @@ WP2Status EncodeImageNoClusters(
                                 dicts, &sw));
 
   // Store actual literals.
-  return StorePixels(width, height, /*histo_bits=*/0, *refs,
-                     /*histogram_symbols=*/nullptr, enc, &sw);
+  WP2_CHECK_STATUS(StorePixels(width, height, /*histo_bits=*/0, *refs, progress,
+                               /*histogram_symbols=*/nullptr, enc, &sw));
+  return WP2_STATUS_OK;
 }
 
 static WP2Status EncodeImageInternal(
     const uint16_t* const argb_in, const CrunchConfig& config, uint32_t width,
     uint32_t height, uint32_t histogram_bits, uint32_t cache_bits_max,
-    uint32_t effort, WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts,
-    HashChain* const hash_chain, BackwardRefsPool* ref_pool,
-    LosslessSymbolsInfo* const symbols_info_best,
+    uint32_t effort, const ProgressRange& progress, WP2::ANSEnc* const enc,
+    WP2::ANSDictionaries* const dicts, HashChain* const hash_chain,
+    BackwardRefsPool* ref_pool, LosslessSymbolsInfo* const symbols_info_best,
     EncodeInfo* const encode_info) {
   const uint32_t histogram_width = WP2LSubSampleSize(width, histogram_bits);
   const uint32_t histogram_height = WP2LSubSampleSize(height, histogram_bits);
@@ -308,6 +327,14 @@ static WP2Status EncodeImageInternal(
   WP2_CHECK_STATUS(hash_chain->Fill(effort, argb, width, height));
   for (uint32_t lz77s_idx = 0; lz77s_idx < config.lz77s_types_to_try_size;
        ++lz77s_idx) {
+    const ProgressRange idx_progress(progress,
+                                     1.f / config.lz77s_types_to_try_size);
+    const ProgressRange histo_symbols_progress(idx_progress, 0.2f);
+    const ProgressRange histo_image_progress(idx_progress, 0.2f);
+    const ProgressRange symbol_stats_progress(idx_progress, 0.2f);
+    const ProgressRange header_progress(idx_progress, 0.2f);
+    const ProgressRange literals_progress(idx_progress, 0.2f);
+
     LosslessSymbolsInfo symbols_info;
     WP2_CHECK_STATUS(symbols_info.CopyFrom(symbols_info_init));
     BackwardRefsPool::RefsPtr refs_best =
@@ -323,8 +350,9 @@ static WP2Status EncodeImageInternal(
 
     // Build histogram image and symbols from backward references.
     WP2_CHECK_STATUS(GetHistoImageSymbols(
-        width, height, *refs_best, effort, histogram_bits, symbols_info,
-        &histogram_image, histogram_symbols.data()));
+        width, height, *refs_best, effort, histo_symbols_progress,
+        histogram_bits, symbols_info, &histogram_image,
+        histogram_symbols.data()));
 
     {
       WP2::ANSDebugPrefix prefix_gh(enc, "GlobalHeader");
@@ -377,7 +405,9 @@ static WP2Status EncodeImageInternal(
                                    /*max=*/num_clusters - 1);
         WP2_CHECK_STATUS(EncodeImageNoClusters(
             enc, dicts, labels.data(), hash_chain, ref_pool, histogram_width,
-            histogram_height, symbols_info_tmp, effort));
+            histogram_height, symbols_info_tmp, effort, histo_image_progress));
+      } else {
+        WP2_CHECK_STATUS(histo_image_progress.AdvanceBy(1.f));
       }
 
       // Get the symbols stats.
@@ -386,12 +416,14 @@ static WP2Status EncodeImageInternal(
       WP2::SymbolRecorder recorder;
       symbols_info.SetNumClusters(num_clusters);
       WP2_CHECK_STATUS(recorder.Allocate(symbols_info, /*num_records=*/0));
-      WP2_CHECK_STATUS(StorePixels(width, height, histogram_bits, *refs_best,
-                                   histogram_symbols.data(), &enc_noop,
-                                   &recorder));
+      WP2_CHECK_STATUS(StorePixels(
+          width, height, histogram_bits, *refs_best, symbol_stats_progress,
+          histogram_symbols.data(), &enc_noop, &recorder));
+
       // Store symbol headers.
       WP2_CHECK_STATUS(
           WriteHeaders(recorder, symbols_info, num_pixels, enc, dicts, &sw));
+      WP2_CHECK_STATUS(header_progress.AdvanceBy(1.f));
     }
 
     // Store actual literals.
@@ -403,8 +435,8 @@ static WP2Status EncodeImageInternal(
           encode_info->bits_per_pixel.size()));
     }
     WP2_CHECK_STATUS(StorePixels(width, height, histogram_bits, *refs_best,
-                                 histogram_symbols.data(), enc, &sw,
-                                 &current_encode_info));
+                                 literals_progress, histogram_symbols.data(),
+                                 enc, &sw, &current_encode_info));
 
     // Keep track of the smallest image so far.
     if (enc->GetCost(*dicts) < best_cost) {
@@ -417,7 +449,7 @@ static WP2Status EncodeImageInternal(
       }
     }
     // Reset the bit writer for the following iteration if any.
-    if (config.lz77s_types_to_try_size > 1) {
+    if (lz77s_idx + 1 < config.lz77s_types_to_try_size) {
       WP2_CHECK_STATUS(enc->Clone(enc_init));
       dicts->DeepClear();
       WP2_CHECK_STATUS(dicts->CopyFrom(dicts_init));
@@ -443,6 +475,7 @@ static void ApplySubtractGreen(Encoder* const encoder, uint32_t width,
 // transform for each block in the form of an image.
 static WP2Status ApplyPredictFilter(const Encoder* const encoder,
                                     uint32_t width, uint32_t height, int effort,
+                                    const ProgressRange& progress,
                                     WP2::ANSEnc* const enc,
                                     WP2::ANSDictionaries* const dicts) {
   const int pred_bits = encoder->transform_bits_;
@@ -463,7 +496,7 @@ static WP2Status ApplyPredictFilter(const Encoder* const encoder,
   const WP2Status status = EncodeImageNoClusters(
       enc, dicts, encoder->transform_data_, (HashChain*)&encoder->hash_chain_,
       (BackwardRefsPool*)&encoder->ref_pool_, transform_width, transform_height,
-      symbols_info, effort);
+      symbols_info, effort, progress);
   return status;
 }
 
@@ -472,7 +505,9 @@ static WP2Status ApplyPredictFilter(const Encoder* const encoder,
 // transform for each block in the form of an image.
 static WP2Status ApplyCrossColorFilter(const Encoder* const encoder,
                                        uint32_t width, uint32_t height,
-                                       int effort, WP2::ANSEnc* const enc,
+                                       int effort,
+                                       const ProgressRange& progress,
+                                       WP2::ANSEnc* const enc,
                                        WP2::ANSDictionaries* const dicts) {
   const int ccolor_transform_bits = encoder->transform_bits_;
   const int transform_width = WP2LSubSampleSize(width, ccolor_transform_bits);
@@ -491,7 +526,7 @@ static WP2Status ApplyCrossColorFilter(const Encoder* const encoder,
   WP2_CHECK_STATUS(EncodeImageNoClusters(
       enc, dicts, encoder->transform_data_, (HashChain*)&encoder->hash_chain_,
       (BackwardRefsPool*)&encoder->ref_pool_, transform_width, transform_height,
-      symbols_info, effort));
+      symbols_info, effort, progress));
   return WP2_STATUS_OK;
 }
 
@@ -548,24 +583,30 @@ static WP2Status MakeInputImageCopy(const CrunchConfig& config,
   if (encoder->argb_content_ == kEncoderARGB) return WP2_STATUS_OK;
   assert(WP2FormatBpc(pic.format()) == 1 || WP2FormatBpc(pic.format()) == 2);
   for (uint32_t y = 0; y < height; ++y) {
+    uint16_t* const dst_row = &encoder->argb_[4 * y * width];
     if (WP2FormatBpc(pic.format()) == 1) {
-      if (premultiply) {
-        const uint8_t* const src_row = pic.GetRow8(y);
+      const uint8_t* const src_row = pic.GetRow8(y);
+      if (WP2IsPremultiplied(pic.format()) || !encoder->has_alpha_) {
+        // Simply copy pixels over.
+        std::copy(src_row, src_row + 4 * width, dst_row);
+      } else {
         for (uint32_t x = 0; x < width; ++x) {
           const uint8_t a = src_row[4 * x + 0];
-          encoder->argb_[4 * (y * width + x) + 0] = a;
-          for (uint32_t c = 1; c < 4; ++c) {
-            encoder->argb_[4 * (y * width + x) + c] =
-                WP2::DivBy255(src_row[4 * x + c] * a);
+          if (a == 0) {
+            // Zero out fully transparent pixels.
+            std::fill(dst_row + 4 * x, dst_row + 4 * (x + 1), 0u);
+          } else if (premultiply) {
+            dst_row[4 * x + 0] = a;
+            for (uint32_t c = 1; c < 4; ++c) {
+              dst_row[4 * x + c] = WP2::DivBy255(src_row[4 * x + c] * a);
+            }
+          } else {
+            std::copy(src_row + 4 * x, src_row + 4 * (x + 1), dst_row + 4 * x);
           }
         }
-      } else {
-        std::copy(pic.GetRow8(y), pic.GetRow8(y) + 4 * width,
-                  &encoder->argb_[4 * y * width]);
       }
     } else {
-      std::copy(pic.GetRow16(y), pic.GetRow16(y) + 4 * width,
-                &encoder->argb_[4 * y * width]);
+      std::copy(pic.GetRow16(y), pic.GetRow16(y) + 4 * width, dst_row);
     }
   }
   encoder->argb_content_ = kEncoderARGB;
@@ -588,20 +629,13 @@ static WP2Status MapImageFromPalette(const CrunchConfig& config,
   return status;
 }
 
-// Save palette_[] to bitstream.
-static WP2Status EncodePalette(WP2::ANSEnc* const enc,
-                               WP2::ANSDictionaries* const dicts,
-                               Encoder* const encoder) {
-  return encoder->palette_.Write(enc, dicts, encoder);
-}
-
 // Applies the different transforms decided by the cruncher and writes them to
 // the header.
 static WP2Status ApplyAndWriteTransforms(
     uint32_t width, uint32_t height, uint32_t effort,
-    const CrunchConfig& config, Encoder* const encoder,
-    LosslessSymbolsInfo* const symbols_info, WP2::ANSEnc* const enc,
-    WP2::ANSDictionaries* const dicts) {
+    const CrunchConfig& config, const ProgressRange progress,
+    Encoder* const encoder, LosslessSymbolsInfo* const symbols_info,
+    WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts) {
   WP2_CHECK_STATUS(symbols_info->CopyFrom(encoder->symbols_info_));
   symbols_info->SetCacheRange(0);
 
@@ -628,18 +662,28 @@ static WP2Status ApplyAndWriteTransforms(
     }
   }
 
+  const ProgressRange palette_progress(progress, 0.2f);
+  const ProgressRange group4_progress(progress, 0.2f);
+  const ProgressRange subtract_green_progress(progress, 0.2f);
+  const ProgressRange predict_progress(progress, 0.2f);
+  const ProgressRange cross_color_progress(progress, 0.2f);
+
   // Encode palette
   if (config.use_palette) {
     symbols_info->SetAsLabelImage();
     const uint32_t palette_size = encoder->palette_.Size();
     symbols_info->SetMinMax(kSymbolG, /*min=*/0, /*max=*/palette_size - 1);
-    WP2_CHECK_STATUS(EncodePalette(enc, dicts, encoder));
+    WP2_CHECK_STATUS(
+        encoder->palette_.Write(palette_progress, enc, dicts, encoder));
     WP2_CHECK_STATUS(MapImageFromPalette(config, encoder));
+  } else {
+    WP2_CHECK_STATUS(palette_progress.AdvanceBy(1.f));
   }
 
   if (config.use_group4) {
     assert(encoder->palette_.Size() >= 2);
-    WP2_CHECK_STATUS(EncodePalette(enc, dicts, encoder));
+    WP2_CHECK_STATUS(
+        encoder->palette_.Write(group4_progress, enc, dicts, encoder));
     WP2_CHECK_STATUS(MapImageFromPalette(config, encoder));
     // Green channel of first pixel.
     const uint16_t first_color = encoder->argb_[2];
@@ -654,6 +698,8 @@ static WP2Status ApplyAndWriteTransforms(
     } else {
       assert(!config.group4_use_move_to_front);
     }
+  } else {
+    WP2_CHECK_STATUS(group4_progress.AdvanceBy(1.f));
   }
 
   // In case image is not packed, copy it to the argb_ buffer.
@@ -666,15 +712,20 @@ static WP2Status ApplyAndWriteTransforms(
   if (config.use_subtract_green) {
     ApplySubtractGreen(encoder, width, height, enc);
   }
+  WP2_CHECK_STATUS(subtract_green_progress.AdvanceBy(1.f));
 
   if (config.use_predict) {
-    WP2_CHECK_STATUS(
-        ApplyPredictFilter(encoder, width, height, effort, enc, dicts));
+    WP2_CHECK_STATUS(ApplyPredictFilter(encoder, width, height, effort,
+                                        predict_progress, enc, dicts));
+  } else {
+    WP2_CHECK_STATUS(predict_progress.AdvanceBy(1.f));
   }
 
   if (config.use_cross_color) {
-    WP2_CHECK_STATUS(
-        ApplyCrossColorFilter(encoder, width, height, effort, enc, dicts));
+    WP2_CHECK_STATUS(ApplyCrossColorFilter(encoder, width, height, effort,
+                                           cross_color_progress, enc, dicts));
+  } else {
+    WP2_CHECK_STATUS(cross_color_progress.AdvanceBy(1.f));
   }
 
   return WP2_STATUS_OK;
@@ -721,6 +772,7 @@ typedef struct {
 } StreamEncodeContext;
 
 static WP2Status EncodeStreamHook(void* input, void* data2,
+                                  const ProgressRange& progress,
                                   EncodeInfo* const encode_info) {
   auto* const params = (StreamEncodeContext*)input;
   WP2::ANSEnc* const enc_init = params->enc;
@@ -737,6 +789,10 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
 
   for (const CrunchConfig* config = &crunch_configs[0];
        config < &crunch_configs[0] + num_crunch_configs; ++config) {
+    const ProgressRange config_progress(progress, 1.f / num_crunch_configs);
+    const ProgressRange transforms_progress(config_progress, 0.5f);
+    const ProgressRange encode_progress(config_progress, 0.5f);
+
     // Reset the bit writer.
     WP2_CHECK_STATUS(enc.Clone(*enc_init));
     WP2::ANSDictionaries dicts;
@@ -745,8 +801,9 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
     LosslessSymbolsInfo symbols_info;
     encoder->ref_pool_.Reset();
 
-    WP2_CHECK_STATUS(ApplyAndWriteTransforms(
-        width, height, effort, *config, encoder, &symbols_info, &enc, &dicts));
+    WP2_CHECK_STATUS(ApplyAndWriteTransforms(width, height, effort, *config,
+                                             transforms_progress, encoder,
+                                             &symbols_info, &enc, &dicts));
 
     // -------------------------------------------------------------------------
     // Encode and write the transformed image.
@@ -758,9 +815,10 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
     }
 
     if (config->use_group4) {
-      WP2_CHECK_STATUS(Group4Encode(
-          encoder->argb_, width, height, encoder->palette_.Size(),
-          config->group4_use_move_to_front, &enc, &current_encode_info));
+      WP2_CHECK_STATUS(
+          Group4Encode(encoder->argb_, width, height, encoder->palette_.Size(),
+                       config->group4_use_move_to_front, encode_progress, &enc,
+                       &current_encode_info));
     } else {
       // If using a color cache, do not have it bigger than the number of
       // colors.
@@ -770,8 +828,9 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
               : kMaxCacheBits;
       WP2_CHECK_STATUS(EncodeImageInternal(
           encoder->argb_, *config, width, height, encoder->histo_bits_,
-          cache_bits_max, effort, &enc, &dicts, &encoder->hash_chain_,
-          &encoder->ref_pool_, &symbols_info, &current_encode_info));
+          cache_bits_max, effort, encode_progress, &enc, &dicts,
+          &encoder->hash_chain_, &encoder->ref_pool_, &symbols_info,
+          &current_encode_info));
     }
 
     // If we are better than what we already have.
@@ -792,17 +851,22 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
 
 WP2Status EncodeImage(const WP2::EncoderConfig& config,
                       const WP2::ArgbBuffer& picture, bool has_alpha,
-                      WP2::ANSEnc* const enc, EncodeInfo* const encode_info) {
+                      const ProgressRange& progress, WP2::ANSEnc* const enc,
+                      EncodeInfo* const encode_info) {
   assert(!picture.IsEmpty());
   assert(enc != nullptr);
+
+  const ProgressRange analysis_progress(progress, 0.5f);
+  const ProgressRange encode_progress(progress, 0.5f);
+
   Encoder encoder(config, picture, has_alpha);
   CrunchConfig crunch_configs[kCrunchNumMax];
   uint32_t num_crunch_configs = 0;
 
   // Analyze image (entropy, num_palettes etc)
   WP2_CHECK_STATUS(encoder.Allocate());
-  WP2_CHECK_STATUS(
-      EncoderAnalyze(&encoder, crunch_configs, &num_crunch_configs));
+  WP2_CHECK_STATUS(EncoderAnalyze(analysis_progress, &encoder, crunch_configs,
+                                  &num_crunch_configs));
 
   StreamEncodeContext params;
   for (uint32_t idx = 0; idx < num_crunch_configs; ++idx) {
@@ -814,7 +878,9 @@ WP2Status EncodeImage(const WP2::EncoderConfig& config,
   params.config = &config;
   params.enc = enc;
   params.encoder = &encoder;
-  return EncodeStreamHook(&params, nullptr, encode_info);
+  WP2_CHECK_STATUS(EncodeStreamHook(&params, /*data2=*/nullptr, encode_progress,
+                                    encode_info));
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------

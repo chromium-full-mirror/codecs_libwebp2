@@ -127,7 +127,7 @@ WP2Status GlimpseAtNextFrame(const DecoderConfig& config,
 
   state->data_source->MarkNumBytesAsRead(state->glimpsed_bitstream_position -
                                          current_bitstream_position);
-  WP2Status status = GlimpseTillNextANMFChunk(config, features, state);
+  const WP2Status status = GlimpseTillNextANMFChunk(config, features, state);
   state->glimpsed_bitstream_position =
       current_bitstream_position + state->data_source->GetNumReadBytes();
   state->data_source->UnmarkAllReadBytes();
@@ -163,10 +163,10 @@ bool FrameIsAlreadyInOutputBuffer(uint32_t tile_width, uint32_t tile_height,
 
       // Simulate that all tiles are decoded.
       const Rectangle& window = state->frames[target_frame_index].info.window;
-      state->status =
-          GetTilesLayout(window.width, window.height, tile_width, tile_height,
-                         &state->frame_output_buffer, &state->yuv_output_buffer,
-                         &state->tiles_layout);
+      state->status = GetTilesLayout(
+          window.width, window.height, tile_width, tile_height,
+          state->current_tiles_progress, &state->frame_output_buffer,
+          &state->yuv_output_buffer, &state->tiles_layout);
       state->tiles_layout.num_assignable_tiles =
           state->tiles_layout.tiles.size();
       state->tiles_layout.first_unassigned_tile_index =

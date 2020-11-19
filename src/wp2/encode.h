@@ -143,6 +143,10 @@ struct EncoderConfig {
   int u_quant_multiplier = 7;  // 0.875
   int v_quant_multiplier = 7;
 
+  // Inherit ProgressHook and reference the instance here to get notified of
+  // progress and/or to abort encoding.
+  ProgressHook* progress_hook = nullptr;
+
   EncoderInfo* info = nullptr;   // If not null, report internal stats and info.
 };
 

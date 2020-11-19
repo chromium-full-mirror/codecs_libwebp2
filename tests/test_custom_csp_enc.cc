@@ -14,6 +14,7 @@
 
 // Encoding from custom color space test.
 
+#include <limits>
 #include <string>
 #include <tuple>
 
@@ -321,6 +322,53 @@ TEST_P(StrideTest, Combination) {
 
 INSTANTIATE_TEST_SUITE_P(
     StrideTestInstantiation, StrideTest, ::testing::ValuesIn(kBufferParams));
+
+//------------------------------------------------------------------------------
+
+// Test that WP2_STATUS_INVALID_PARAMETER is returned for bad alpha input.
+TEST(CustomCspAlphaTest, Garbage) {
+  constexpr int16_t kGarbageAlphaValues[] = {
+      std::numeric_limits<int16_t>::min(), std::numeric_limits<int16_t>::max(),
+      -1, kAlphaMax + 1};
+  constexpr uint32_t kWidth = 16, kHeight = 16;
+
+  for (int16_t garbage_alpha : kGarbageAlphaValues) {
+    Vector_s16 rgba[4];
+    for (uint32_t c : {0, 1, 2, 3}) {
+      ASSERT_TRUE(rgba[c].resize(kWidth * kHeight));
+      std::fill(rgba[c].begin(), rgba[c].end(), (c == 3) ? garbage_alpha : -12);
+    }
+
+    MemoryWriter writer;
+    ASSERT_EQ(Encode(kWidth, kHeight, rgba[0].data(), kWidth, rgba[1].data(),
+                     kWidth, rgba[2].data(), kWidth, rgba[3].data(), kWidth,
+                     kRGB8ToRGBMatrix, kRGB8ToRGBShift, &writer),
+              WP2_STATUS_INVALID_PARAMETER);
+  }
+}
+
+// Test that given but opaque alpha input is compressed as if it was omitted.
+TEST(CustomCspAlphaTest, Opaque) {
+  constexpr uint32_t kWidth = 16, kHeight = 16;
+  Vector_s16 rgba[4];
+  for (uint32_t c : {0, 1, 2, 3}) {
+    ASSERT_TRUE(rgba[c].resize(kWidth * kHeight));
+    std::fill(rgba[c].begin(), rgba[c].end(), (c == 3) ? kAlphaMax : -5);
+  }
+
+  MemoryWriter writer_opaque;
+  ASSERT_WP2_OK(Encode(kWidth, kHeight, rgba[0].data(), kWidth, rgba[1].data(),
+                       kWidth, rgba[2].data(), kWidth, rgba[3].data(), kWidth,
+                       kRGB8ToRGBMatrix, kRGB8ToRGBShift, &writer_opaque));
+  MemoryWriter writer_no_alpha;
+  ASSERT_WP2_OK(Encode(kWidth, kHeight, rgba[0].data(), kWidth, rgba[1].data(),
+                       kWidth, rgba[2].data(), kWidth, nullptr, 0,
+                       kRGB8ToRGBMatrix, kRGB8ToRGBShift, &writer_no_alpha));
+  ASSERT_EQ(writer_opaque.size_, writer_no_alpha.size_);
+  ASSERT_TRUE(std::equal(writer_opaque.mem_,
+                         writer_opaque.mem_ + writer_opaque.size_,
+                         writer_no_alpha.mem_));
+}
 
 //------------------------------------------------------------------------------
 

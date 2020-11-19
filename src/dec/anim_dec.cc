@@ -46,7 +46,13 @@ WP2Status DecodeANMF(const DecoderConfig& config, DataSource* const data_source,
     frame->duration_ms = dec.ReadVarUInt(0, kMaxFrameDurationMs, "duration");
     frame->window =
         dec.ReadRect(features.raw_width, features.raw_height, "window");
-    WP2_CHECK_STATUS(dec.GetStatus());
+    const WP2Status status = dec.GetStatus();
+    if (status != WP2_STATUS_OK) {
+      // The data consumption must be atomic for incr dec glimpses.
+      data_source->UnmarkAllReadBytes();
+      data_source->MarkNumBytesAsRead(num_read_bytes_before);
+    }
+    WP2_CHECK_STATUS(status);
 
     WP2_CHECK_OK((tag == kANMFTagDispose) || (tag == kANMFTagFrame),
                  WP2_STATUS_BITSTREAM_ERROR);

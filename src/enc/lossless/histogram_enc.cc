@@ -311,6 +311,7 @@ WP2Status BuildHistograms(uint32_t width, uint32_t height, uint32_t histo_bits,
   symbols_info_counter.SetNumClusters(num_histos);
   WP2_CHECK_STATUS(recorder.Allocate(symbols_info_counter, /*num_records=*/0));
   WP2_CHECK_STATUS(StorePixels(width, height, histo_bits, refs,
+                               WP2::ProgressRange(nullptr, 0.f),
                                /*histogram_symbols=*/nullptr, &enc_noop,
                                &recorder));
 
@@ -772,10 +773,15 @@ const int kAllHistogramMergingNum = 10;
 
 WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
                                const BackwardRefs& refs, int effort,
+                               const WP2::ProgressRange& progress,
                                int histogram_bits,
                                const LosslessSymbolsInfo& symbols_info,
                                HistogramSet* const image_histo,
                                uint16_t* const histogram_symbols) {
+  const WP2::ProgressRange combine_progress(progress, 0.2f);
+  const WP2::ProgressRange encode_progress(progress, 0.6f);
+  const WP2::ProgressRange reduce_progress(progress, 0.2f);
+
   const uint32_t histo_xsize =
       histogram_bits ? WP2LSubSampleSize(width, histogram_bits) : 1;
   const uint32_t histo_ysize =
@@ -819,6 +825,7 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
       WP2_CHECK_STATUS(HistogramCombineGreedy(image_histo, &analyzer));
     }
   }
+  WP2_CHECK_STATUS(combine_progress.AdvanceBy(1.f));
 
   // Sometimes, combining histograms provides worse entropy. But if we
   // combine all the histograms, we could have the overall extra entropy be
@@ -855,7 +862,7 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
       symbols_info_tmp.SetAsLabelImage();
       WP2_CHECK_STATUS(EncodeImageNoClusters(
           &enc, &dicts, labels.data(), &hash_chain, &ref_pool, histo_ysize,
-          histo_xsize, symbols_info_tmp, effort));
+          histo_xsize, symbols_info_tmp, effort, encode_progress));
       cost_all = enc.GetCost(dicts);
     }
 
@@ -875,6 +882,8 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
       WP2_CHECK_ALLOC_OK(image_histo->histograms_.resize(1));
       tmp_histo->CopyTo(image_histo->histograms_[0]);
     }
+  } else {
+    WP2_CHECK_STATUS(encode_progress.AdvanceBy(1.f));
   }
 
   // In case we have too many histograms, merge the least bad pairs.
@@ -884,6 +893,7 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
         image_histo, kMaxHistogramImageSize, std::numeric_limits<float>::max(),
         &analyzer, &do_greedy));
   }
+  WP2_CHECK_STATUS(reduce_progress.AdvanceBy(1.f));
 
   WP2_CHECK_STATUS(HistogramRemap(orig_histo, image_histo, &analyzer,
                                   histogram_symbols));

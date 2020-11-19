@@ -20,6 +20,7 @@
 #include <cassert>
 
 #include "./anim_enc.h"
+#include "src/common/constants.h"
 #include "src/common/header_enc_dec.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/wp2/format_constants.h"
@@ -85,12 +86,14 @@ Rectangle Subframe::GetFrameRect() const {
 
 FrameEncoder::FrameEncoder(const EncoderConfig& config,
                            Argb38b background_color,
-                           const Vector<Frame>& frames)
+                           const Vector<Frame>& frames,
+                           const ProgressRange& progress)
     : config_(config),
       frames_(frames),
       image_has_alpha_(!AllFramesAreOpaque(frames)),
       background_color_(ToArgb32b(background_color)),
-      subframe_encoder_(GetQualityHint(config.quality), image_has_alpha_) {}
+      subframe_encoder_(GetQualityHint(config.quality), image_has_alpha_),
+      progress_(progress, 1.f) {}
 
 WP2Status FrameEncoder::SaveSubframeToCanvas(const ArgbBuffer& subframe,
                                              const Rectangle& window) {
@@ -265,6 +268,7 @@ WP2Status FrameEncoder::EncodeSubframe(const Frame& frame, bool dispose,
                                        bool is_preframe,
                                        bool is_previous_preframe,
                                        const Rectangle& window,
+                                       const ProgressRange& progress,
                                        Writer* const output) const {
   if (is_previous_preframe) assert(!dispose);
   EncoderConfig config = config_;
@@ -286,21 +290,26 @@ WP2Status FrameEncoder::EncodeSubframe(const Frame& frame, bool dispose,
   subframe.dispose = dispose;
   subframe.window = window;
   subframe.blend = false;
-  return subframe_encoder_.EncodeSubframe(config, subframe, is_last, output);
+  WP2_CHECK_STATUS(subframe_encoder_.EncodeSubframe(config, subframe, is_last,
+                                                    progress, output));
+  return WP2_STATUS_OK;
 }
 
 WP2Status FrameEncoder::EncodeFrame(const Frame& frame, bool dispose,
                                     const RectangleGroup& different_pixels,
+                                    const ProgressRange& progress,
                                     Writer* const output) const {
   assert(different_pixels.GetNumRectangles() >= 1);
 
   bool is_previous_preframe = false;
   for (uint32_t r = 0; r < different_pixels.GetNumRectangles(); ++r) {
+    const ProgressRange subframe_progress(
+        progress, 1.f / different_pixels.GetNumRectangles());
     const bool is_preframe = (r < different_pixels.GetNumRectangles() - 1);
     const bool dispose_this_frame = (dispose && r == 0);  // Only the first one.
-    WP2_CHECK_STATUS(EncodeSubframe(frame, dispose_this_frame, is_preframe,
-                                    is_previous_preframe,
-                                    different_pixels.GetRectangle(r), output));
+    WP2_CHECK_STATUS(EncodeSubframe(
+        frame, dispose_this_frame, is_preframe, is_previous_preframe,
+        different_pixels.GetRectangle(r), subframe_progress, output));
     is_previous_preframe = is_preframe;
   }
   return WP2_STATUS_OK;
@@ -321,6 +330,7 @@ WP2Status FrameEncoder::Encode(Writer* const output) {
 
   uint32_t last_dispose_index = 0;
   for (uint32_t i = 0; i < frames_.size(); ++i) {
+    const ProgressRange frame_progress(progress_, 1.f / frames_.size());
     const Frame& frame = frames_[i];
     WP2_CHECK_STATUS(
         SetupEncoderInfo(frame.GetWidth(), frame.GetHeight(), config_));
@@ -358,26 +368,32 @@ WP2Status FrameEncoder::Encode(Writer* const output) {
       // Completely different frame, store it as disposing "for free".
       dispose = true;
       // There is only one choice, encode directly to 'output'.
-      WP2_CHECK_STATUS(EncodeFrame(frame, dispose, different_pixels, output));
+      WP2_CHECK_STATUS(EncodeFrame(frame, dispose, different_pixels,
+                                   frame_progress, output));
     } else {
       // Try different encoding patterns and keep the smallest bitstream.
+      const ProgressRange as_is_progress(frame_progress, 0.4f);
+      const ProgressRange merged_progress(frame_progress, 0.3f);
+      const ProgressRange dispose_progress(frame_progress, 0.3f);
 
       // Keep the current settings.
       MemoryWriter writer_as_is;
-      WP2_CHECK_STATUS(
-          EncodeFrame(frame, dispose, different_pixels, &writer_as_is));
+      WP2_CHECK_STATUS(EncodeFrame(frame, dispose, different_pixels,
+                                   as_is_progress, &writer_as_is));
       const MemoryWriter* writer_kept = &writer_as_is;
 
       // Merge the areas (if more than one) into their bounding rectangle.
       MemoryWriter writer_merged;
       if (different_pixels.GetNumRectangles() > 1) {
         bounded_pixels.SetRectangle(different_pixels.GetBoundingRectangle());
-        WP2_CHECK_STATUS(
-            EncodeFrame(frame, dispose, bounded_pixels, &writer_merged));
+        WP2_CHECK_STATUS(EncodeFrame(frame, dispose, bounded_pixels,
+                                     merged_progress, &writer_merged));
         if (writer_merged.size_ < writer_kept->size_) {
           writer_kept = &writer_merged;
           subframes_kept = &bounded_pixels;
         }
+      } else {
+        WP2_CHECK_STATUS(merged_progress.AdvanceBy(1.f));
       }
 
       // Most of the time, in lossy, cropping a frame does not take less space
@@ -387,8 +403,8 @@ WP2Status FrameEncoder::Encode(Writer* const output) {
       // Store the entire frame (and thus dispose the canvas prior to it).
       MemoryWriter writer_dispose;
       all_pixels.SetRectangle({0, 0, frame.GetWidth(), frame.GetHeight()});
-      WP2_CHECK_STATUS(
-          EncodeFrame(frame, /*dispose=*/true, all_pixels, &writer_dispose));
+      WP2_CHECK_STATUS(EncodeFrame(frame, /*dispose=*/true, all_pixels,
+                                   dispose_progress, &writer_dispose));
       if (writer_dispose.size_ < writer_kept->size_) {
         writer_kept = &writer_dispose;
         subframes_kept = &all_pixels;
@@ -427,6 +443,7 @@ SubframeEncoder::SubframeEncoder(uint32_t quality_hint, bool image_has_alpha)
 WP2Status SubframeEncoder::EncodeSubframe(const EncoderConfig& config,
                                           const Subframe& subframe,
                                           bool is_last,
+                                          const ProgressRange& progress,
                                           Writer* const output) const {
   WP2_CHECK_OK(subframe.GetFrameRect().Contains(subframe.window),
                WP2_STATUS_INVALID_PARAMETER);
@@ -440,6 +457,7 @@ WP2Status SubframeEncoder::EncodeSubframe(const EncoderConfig& config,
       WriteANMF(subframe.GetFrameRect().width, subframe.GetFrameRect().height,
                 subframe.duration_ms, subframe.window, subframe.dispose,
                 subframe.blend, is_last, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));  // ANMF
 
   ArgbBuffer rgb_subframe(subframe.rgb_pixels.format());
 
@@ -484,9 +502,10 @@ WP2Status SubframeEncoder::EncodeSubframe(const EncoderConfig& config,
     }
   }
 
-  WP2_CHECK_STATUS(EncodeTiles(
-      subframe.window.width, subframe.window.height, rgb_subframe, yuv_subframe,
-      csp_transform, config, quality_hint_, image_has_alpha_, output));
+  WP2_CHECK_STATUS(EncodeTiles(subframe.window.width, subframe.window.height,
+                               rgb_subframe, yuv_subframe, csp_transform,
+                               config, quality_hint_, image_has_alpha_,
+                               progress, output));
   return WP2_STATUS_OK;
 }
 

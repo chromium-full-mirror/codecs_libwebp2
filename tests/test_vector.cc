@@ -88,6 +88,10 @@ template<typename T> void DoTestPushBack(const T& vector_type) {
   EXPECT_TRUE(v.resize(1));   // down-size back to 1
   EXPECT_EQ(v.size(), 1u);
   EXPECT_EQ((int)v[0], kMagic);
+
+  v.resize_no_check(7);   // up-size quietly
+  EXPECT_EQ(v.size(), 7u);
+  EXPECT_EQ((int)v[1], kMagic2);
 }
 
 TEST(VectorTest, PushBack) {

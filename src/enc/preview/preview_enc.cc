@@ -330,6 +330,20 @@ WP2Status PreviewData::SortPalette() {
 
 //------------------------------------------------------------------------------
 
+WP2Status PreviewData::CleanupVertices() {
+  std::sort(vertices_.begin(), vertices_.end());
+  uint32_t size = 0;
+  for (auto& v : vertices_) {
+    if (IsCorner(v.x, v.y) || IsOutside(v.x, v.y)) continue;
+    if (size > 0 &&
+        v.x == vertices_[size - 1].x && v.y == vertices_[size - 1].y) continue;
+    std::swap(vertices_[size], v);
+    ++size;
+  }
+  vertices_.resize_no_check(size);
+  return WP2_STATUS_OK;
+}
+
 WP2Status PreviewData::SortVertices() {
   // Sort by 'y' then by 'x' for easier duplicate check.
   std::sort(vertices_.begin(), vertices_.end());
@@ -438,8 +452,12 @@ WP2Status PreviewData::Generate(const ArgbBuffer& canvas,
              PreviewConfig::AnalysisMethod::kColorDiffMaximization) {
     WP2_CHECK_STATUS(CollectVerticesFromColorDiffMaximization(
         canvas, max_num_vertices, this));
-  } else {
+  } else if (config.analysis_method ==
+      PreviewConfig::AnalysisMethod::kRandomEdgeSelection) {
     WP2_CHECK_STATUS(CollectVerticesFromRandomEdgeSelection(
+        canvas, max_num_vertices, this));
+  } else {
+    WP2_CHECK_STATUS(CollectVerticesFromVoronoiCells(
         canvas, max_num_vertices, this));
   }
   WP2_CHECK_STATUS(CollectColors2(canvas, config.num_colors));

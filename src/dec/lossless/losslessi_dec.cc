@@ -57,44 +57,42 @@ static const uint8_t kCodeToPlane[kCodeToPlaneCodes] = {
 
 //------------------------------------------------------------------------------
 
-static inline int GetCopyDistance(uint32_t distance_symbol,
-                                  WP2::ANSDec* const dec, double* const cost,
-                                  const char* const label = "dist_bits") {
-  if (distance_symbol < 4) {
-    return distance_symbol + 1;
-  }
-  const uint32_t extra_bits = (distance_symbol - 2) >> 1;
-  const int offset = (2 + (distance_symbol & 1)) << extra_bits;
+// Returns a Golomb coded number where the prefix is stored as symbol 'sym' in
+// cluster 'cluster'.
+static inline int32_t ReadLZ77Golomb(uint32_t cluster, uint32_t sym,
+                                     WP2_OPT_LABEL, WP2::SymbolReader* const sr,
+                                     WP2::ANSDec* const dec,
+                                     double* const cost) {
+  const uint32_t prefix = sr->Read(cluster, sym, label, cost);
 
+  const uint32_t extra_bits =
+      WP2::Golomb::NumExtraBits(prefix, kLZZGolombPrefixSize);
+  int32_t extra_val = 0;
   if (extra_bits > 0) {
-    int extra_val;
     if (extra_bits <= IO_BITS) {
-      extra_val = dec->ReadUValue(extra_bits, label);
+      std::string label_bits;
+      WP2SPrint(&label_bits, "%s_bits", label);
+      extra_val = dec->ReadUValue(extra_bits, label_bits.c_str());
     } else {
-      extra_val = dec->ReadUValue(IO_BITS, "dist_bits1");
-      extra_val |= dec->ReadUValue(extra_bits - IO_BITS, "dist_bits2")
+      std::string label_bits1, label_bits2;
+      WP2SPrint(&label_bits1, "%s_bits1", label);
+      WP2SPrint(&label_bits2, "%s_bits2", label);
+      extra_val = dec->ReadUValue(IO_BITS, label_bits1.c_str());
+      extra_val |= dec->ReadUValue(extra_bits - IO_BITS, label_bits2.c_str())
                    << IO_BITS;
     }
     if (cost != nullptr) {
       *cost += extra_bits;
     }
-    return offset + extra_val + 1;
-  } else {
-    return offset + 1;
   }
-}
-
-static inline int GetCopyLength(uint32_t length_symbol, WP2::ANSDec* const dec,
-                                double* const cost) {
-  // Length and distance prefixes are encoded the same way.
-  return GetCopyDistance(length_symbol, dec, cost, "len_bits");
+  return WP2::Golomb::Merge(prefix, /*prefix_size=*/2, extra_val);
 }
 
 static inline int PlaneCodeToDistance(int xsize, int plane_code) {
-  if (plane_code > kCodeToPlaneCodes) {
-    return plane_code - kCodeToPlaneCodes;
+  if (plane_code >= kCodeToPlaneCodes) {
+    return plane_code + 1 - kCodeToPlaneCodes;
   } else {
-    const int dist_code = kCodeToPlane[plane_code - 1];
+    const int dist_code = kCodeToPlane[plane_code];
     const int yoffset = dist_code >> 4;
     const int xoffset = 8 - (dist_code & 0xf);
     const int dist = yoffset * xsize + xoffset;
@@ -244,9 +242,7 @@ WP2Status Decoder::ProcessRows(uint32_t row,
     // Update 'last_out_row_'.
     last_out_row_ += num_rows_out;
     tile_->num_decoded_rows += num_rows_out;
-    if (progress_ != nullptr) {  // Progress does not advance for alpha rows.
-      WP2_CHECK_STATUS(progress_->AdvanceBy(num_rows_out));
-    }
+    WP2_CHECK_STATUS(tile_->row_progress.AdvanceBy(num_rows_out));
   }
 
   // Update 'last_row_'.
@@ -338,18 +334,19 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
       WP2_CHECK_STATUS(dec_->GetStatus());
     } else if (type == kSymbolTypeCopy) {
       WP2::ANSDebugPrefix prefix(dec_, "copy");
-      int dist_code, dist;
-      const uint32_t length_sym =
-          sr->Read(cluster, kSymbolLen, "len", cost_ptr);
-      length = GetCopyLength(length_sym, dec_, cost_ptr);
-      const uint32_t dist_symbol =
-          sr->Read(cluster, kSymbolDist, "dist", cost_ptr);
-      dist_code = GetCopyDistance(dist_symbol, dec_, cost_ptr);
-      dist = PlaneCodeToDistance(width, dist_code);
-      WP2_CHECK_STATUS(dec_->GetStatus());
-      WP2_CHECK_OK(src - data >= (ptrdiff_t)(4 * dist) &&
-                       src_end - src >= (ptrdiff_t)(4 * length),
+
+      const int dist_code =
+          ReadLZ77Golomb(cluster, kSymbolDist, "dist", sr, dec_, cost_ptr);
+      const int dist = PlaneCodeToDistance(width, dist_code);
+      WP2_CHECK_OK(src - data >= (ptrdiff_t)(4 * dist),
                    WP2_STATUS_BITSTREAM_ERROR);
+
+      length = kMinLZ77Length +
+               ReadLZ77Golomb(cluster, kSymbolLen, "len", sr, dec_, cost_ptr);
+      WP2_CHECK_OK(src_end - src >= (ptrdiff_t)(4 * length),
+                   WP2_STATUS_BITSTREAM_ERROR);
+
+      WP2_CHECK_STATUS(dec_->GetStatus());
       CopyBlock(src, dist, length);
       if (!gparams_->has_alpha_) assert(src[0] == WP2::kAlphaMax);
     } else if (type == kSymbolTypeCacheIdx) {
@@ -749,12 +746,10 @@ Decoder::Decoder() {
 }
 
 void Decoder::Init(const WP2::DecoderConfig& config,
-                   const WP2::GlobalParams& gparams,
-                   WP2::ProgressWatcher* const progress, WP2::ANSDec* const dec,
+                   const WP2::GlobalParams& gparams, WP2::ANSDec* const dec,
                    WP2::Tile* const tile) {
   config_ = config;
   gparams_ = &gparams;
-  progress_ = progress;
   dec_ = dec;
   last_out_row_ = 0;
   tile_ = tile;

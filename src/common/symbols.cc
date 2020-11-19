@@ -373,7 +373,6 @@ void LosslessSymbolsInfo::Init(bool has_alpha, WP2SampleFormat sample_format,
                                uint32_t num_clusters) {
   sample_format_ = sample_format;
   constexpr StorageMethod storage_method = StorageMethod::kAuto;
-  int extra_bits, code;
   SetInfo(kSymbolType, /*min=*/0, /*max=*/kSymbolTypeNum - 1, num_clusters,
           storage_method);
   SetInfo(kSymbolA, /*min=*/0, /*max=*/WP2::FormatMax(sample_format, 0),
@@ -384,11 +383,16 @@ void LosslessSymbolsInfo::Init(bool has_alpha, WP2SampleFormat sample_format,
           num_clusters, storage_method);
   SetInfo(kSymbolB, /*min=*/0, /*max=*/WP2::FormatMax(sample_format, 3),
           num_clusters, storage_method);
-  WP2LPrefixEncodeBits(kMaxLZ77Distance + kCodeToPlaneCodes, &code,
-                       &extra_bits);
-  SetInfo(kSymbolDist, /*min=*/0, /*max=*/code, num_clusters, storage_method);
-  WP2LPrefixEncodeBits(kMaxLZ77Length, &code, &extra_bits);
-  SetInfo(kSymbolLen, /*min=*/0, /*max=*/code, num_clusters, storage_method);
+
+  WP2::Golomb golomb_max(kMaxLZ77Distance + kCodeToPlaneCodes - 1,
+                         kLZZGolombPrefixSize);
+  SetInfo(kSymbolDist, /*min=*/0, golomb_max.prefix, num_clusters,
+          storage_method);
+
+  golomb_max =
+      WP2::Golomb(kMaxLZ77Length - kMinLZ77Length, kLZZGolombPrefixSize);
+  SetInfo(kSymbolLen, /*min=*/0, golomb_max.prefix, num_clusters,
+          storage_method);
 
   SetCacheRange(0);
   if (!has_alpha) {

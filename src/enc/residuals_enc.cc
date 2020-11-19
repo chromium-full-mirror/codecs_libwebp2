@@ -429,9 +429,11 @@ WP2Status ResidualWriter::WriteCoeffs(const CodedBlock& cb, Channel channel,
       const int16_t* const coeffs = cb.coeffs_[channel][tf_i];
       const uint32_t num_coeffs = cb.num_coeffs_[channel][tf_i];
       if (use_aom_coeffs_) {
+        const int max_num_coeffs = WP2::kNumCoeffs[cb.tdim(channel)];
         WP2_CHECK_STATUS(aom_writer_.WriteCoeffs(
             cb.x_pix() + split_x, cb.y_pix() + split_y, split_size,
-            coding_params.tf, cb.IsFirstCoeffDC(channel), cb.is420_, coeffs,
+            coding_params.tf, cb.IsFirstCoeffDC(channel), max_num_coeffs,
+            cb.is420_, coeffs,
             channel, /*do_update=*/true, sm, enc, aom_context));
       } else {
         const EncodingMethod method = cb.method_[channel][tf_i];
@@ -506,11 +508,12 @@ WP2Status ResidualWriter::GetRateAOM(const CodedBlock& cb, Channel channel,
   uint32_t tf_i = 0;
   for (uint32_t split_y = 0; split_y < cb.h_pix(); split_y += split_h) {
     for (uint32_t split_x = 0; split_x < cb.w_pix(); split_x += split_w) {
+      const int max_num_coeffs = WP2::kNumCoeffs[cb.tdim(channel)];
       WP2_CHECK_STATUS(libgav1::AOMResidualWriter::WriteCoeffs(
           cb.x_pix() + split_x, cb.y_pix() + split_y, split_size,
-          coding_params.tf, cb.IsFirstCoeffDC(channel), cb.is420_,
-          cb.coeffs_[channel][tf_i], channel, /*do_update=*/false, counter,
-          &enc, const_cast<libgav1::AOMContext*>(&aom_context)));
+          coding_params.tf, cb.IsFirstCoeffDC(channel), max_num_coeffs,
+          cb.is420_, cb.coeffs_[channel][tf_i], channel, /*do_update=*/false,
+          counter, &enc, const_cast<libgav1::AOMContext*>(&aom_context)));
       ++tf_i;
     }
   }

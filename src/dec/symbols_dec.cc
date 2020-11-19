@@ -350,7 +350,7 @@ WP2Status SymbolReader::ReadInternal(uint32_t cluster, uint32_t sym,
       *value = stat.param.trivial_value;
       if (use_max_value) {
         // TODO(vrabaud) could be optimized if at encoding time we only have one
-        //               value and hit max_value.
+        //               value and hit max_value. pessimization: 0.50%.
         WP2_CHECK_OK(*value <= (int32_t)max_value, WP2_STATUS_BITSTREAM_ERROR);
       }
       break;
@@ -572,7 +572,7 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
 
   const uint32_t nnz_range = std::min(max_nnz, range);
   const SymbolCount c = (SymbolCount)dec_->ReadRValue(
-      nnz_range == 1 ? kSymbolCountLast - 1 : kSymbolCountLast, "scount");
+      (nnz_range == 1) ? kSymbolCountLast - 1 : kSymbolCountLast, "scount");
 
   // Deal with trivial cases.
   if (c == kSymbolCountZero) {
@@ -598,9 +598,9 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
         ReadHistogram(nnz, range_golomb, max_nnz, dec_, infos_));
     WP2_CHECK_STATUS(AddGolomb(cluster, sym, &infos_, golomb_prefix_size));
   } else if (type == 1) {  // kDict
-    const uint32_t nnz = dec_->ReadRange(2, nnz_range, "size_m2");
-    // TODO(vrabaud) Solve this differently.
-    WP2_CHECK_OK(nnz < ANS_MAX_SYMBOLS, WP2_STATUS_BITSTREAM_ERROR);
+    // a kDict can't use more than ANS_MAX_SYMBOLS
+    const uint32_t dict_range = std::min(nnz_range, (uint32_t)ANS_MAX_SYMBOLS);
+    const uint32_t nnz = dec_->ReadRange(2, dict_range, "size_m2");
     WP2_CHECK_STATUS(ReadHistogram(nnz, range, max_nnz, dec_, infos_));
     WP2_CHECK_STATUS(AddDict(cluster, sym, &infos_));
   } else {                 // kRange

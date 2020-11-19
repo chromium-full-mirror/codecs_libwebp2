@@ -35,10 +35,9 @@ namespace {
 
 template <class T>
 void Fill(Plane<T>* const p) {
-  for (uint32_t y = 0; y < p->h_; ++y) {
-    for (uint32_t x = 0; x < p->w_; ++x) {
-      p->At(x, y) = (x * 3 + y * 2 + 1) & 0xffffu;
-    }
+  for (auto it = p->begin(); it != p->end(); ++it) {
+    p->At(it.x_, it.y_) = (it.x_ * 3 + it.y_ * 2 + 1) & 0xffffu;
+    ASSERT_EQ(p->At(it.x_, it.y_), *it);
   }
 }
 
@@ -115,6 +114,36 @@ TEST_P(PlaneTest, Simple) {
     const int x = i % 32;
     const int y = i / 32;
     ASSERT_TRUE(tmp[x + y * 32] != 0 || x >= 7 || y >= 7);
+  }
+}
+
+TEST_P(PlaneTest, TestProcess) {
+  ArgbBuffer argb;
+  ASSERT_WP2_OK(argb.Resize(23, 47));
+  constexpr uint8_t col[4] = { 253, 32, 63, 87 };
+  argb.Fill({col[0], col[1], col[2], col[3]});
+  auto glambda = [](const void* s) {
+    const uint8_t* const p = (const uint8_t*)s;
+    return (int32_t)(23. * p[0] + 32. * p[1] + 5. * p[2] + 3. * p[3]);
+  };
+  Plane<float> pf;
+  ASSERT_WP2_OK(pf.Process(argb, glambda));
+  for (auto f : pf) ASSERT_EQ(f, glambda(col));
+}
+
+TEST_P(PlaneTest, TestAClamped) {
+  constexpr int kDimX = 32, kDimY = 27;
+  Plane<float> pf;
+  ASSERT_WP2_OK(pf.Resize(kDimX, kDimY, /*step=*/kDimX + 7));
+  uint32_t i = 0;
+  for (auto& f : pf) f = 3.4f * i++;
+  for (int y = -10; y < kDimY + 10; ++y) {
+    for (int x = -10; x < kDimX + 10; ++x) {
+      const float v = pf.AtClamped(x, y);
+      i = std::max(std::min(x, kDimX - 1), 0) +
+          std::max(std::min(y, kDimY - 1), 0) * kDimX;
+      ASSERT_EQ(v, 3.4f * i);
+    }
   }
 }
 

@@ -66,7 +66,8 @@ void CreateCanvasAndFilter(uint32_t width, uint32_t height,
   ASSERT_WP2_OK(
       canvas->Resize(width, height, /*pad=*/kPredWidth, /*has_alpha=*/true));
   ASSERT_WP2_OK(GetTilesLayout(width, height, kTileSize, kTileSize,
-                               &argb_buffer, canvas, &tiles_layout));
+                               ProgressScale(nullptr, 0.f), &argb_buffer,
+                               canvas, &tiles_layout));
 
   std::vector<Vector<Segment>> segments;
   std::vector<YUVPlane> yuvs;

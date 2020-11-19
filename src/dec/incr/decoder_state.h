@@ -44,7 +44,6 @@ class PartialTileDecoder : public WP2Allocable {
   // Initializes the worker.
   virtual WP2Status Init(const BitstreamFeatures& features,
                          const DecoderConfig& config,
-                         ProgressWatcher* const progress,
                          TilesLayout* const tiles_layout,
                          Tile* const partial_tile) = 0;
   // Starts work. Returns WP2_STATUS_OK or an error.
@@ -165,6 +164,7 @@ struct Decoder::State : public WP2Allocable {
 
   // Decoding advancement.
   ProgressWatcher progress;  // Can generate WP2_STATUS_USER_ABORT.
+  ProgressRange current_frame_progress, current_tiles_progress;
 
   // Moves to next stage if there is no error, otherwise returns false.
   bool NextStage();

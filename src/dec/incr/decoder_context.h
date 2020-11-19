@@ -32,7 +32,6 @@ namespace WP2 {
 class ContextTileDecoder : public PartialTileDecoder {
  public:
   WP2Status Init(const BitstreamFeatures& features, const DecoderConfig& config,
-                 ProgressWatcher* const progress,
                  TilesLayout* const tiles_layout,
                  Tile* const partial_tile) override;
   WP2Status Start() override;

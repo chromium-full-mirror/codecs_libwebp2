@@ -117,8 +117,7 @@ WP2Status AlphaReader::ReadLossless(CodedBlock* const cb) {
 
     if (first_block_) {
       // Initialize the lossless decoder and read the header.
-      lossless_decoder_.Init(DecoderConfig(), *gparams_, /*progress=*/nullptr,
-                             dec_, &alpha_tile_);
+      lossless_decoder_.Init(DecoderConfig(), *gparams_, dec_, &alpha_tile_);
       WP2_CHECK_STATUS(lossless_decoder_.DecodeHeader());
 
       first_block_ = false;

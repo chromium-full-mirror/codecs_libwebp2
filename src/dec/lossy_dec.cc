@@ -60,8 +60,7 @@ static double NormDiff(double a, double b, double reduce_diff_by = 0) {
 
 WP2Status LossyDecode(const BitstreamFeatures& features,
                       const DecoderConfig& config,
-                      TilesLayout* const tiles_layout,
-                      ProgressWatcher* const progress, ANSDec* const dec,
+                      TilesLayout* const tiles_layout, ANSDec* const dec,
                       Tile* const tile) {
   WP2TransformInit();
   WP2QuantizeInit();
@@ -78,7 +77,9 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   if (is_neural) {
     assert(!tile->rgb_output.IsEmpty());
     tile->output_is_yuv = false;
-    return NeuralDecode(&tile->rgb_output, dec, features);
+    WP2_CHECK_STATUS(NeuralDecode(&tile->rgb_output, dec, features));
+    WP2_CHECK_STATUS(tile->row_progress.AdvanceBy(tile->rect.height));
+    return WP2_STATUS_OK;
   }
   assert(!tile->yuv_output.IsEmpty());
   tile->output_is_yuv = true;
@@ -170,8 +171,8 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
       const uint32_t num_decoded_yuv_rows = info.block.y_pix();
       const uint32_t num_decoded_rows = filter.Apply(num_decoded_yuv_rows);
       if (num_decoded_rows > tile->num_decoded_rows) {
-        WP2_CHECK_STATUS(
-            progress->AdvanceBy(num_decoded_rows - tile->num_decoded_rows));
+        WP2_CHECK_STATUS(tile->row_progress.AdvanceBy(num_decoded_rows -
+                                                      tile->num_decoded_rows));
         tile->num_decoded_rows = num_decoded_rows;
       }
     }
@@ -355,7 +356,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   const uint32_t num_decoded_rows = filter.Apply(tile->rect.height);
   assert(num_decoded_rows > tile->num_decoded_rows);
   WP2_CHECK_STATUS(
-      progress->AdvanceBy(num_decoded_rows - tile->num_decoded_rows));
+      tile->row_progress.AdvanceBy(num_decoded_rows - tile->num_decoded_rows));
   tile->num_decoded_rows = num_decoded_rows;
   assert(tile->num_decoded_rows == tile->rect.height);
 

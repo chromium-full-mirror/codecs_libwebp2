@@ -106,7 +106,7 @@ enum PremultMode { kUnmultiplied = 0, kPremultiplied, kNumPremultModes };
 // to true if both red and blue channels are always zero when applying this
 // transform.
 template <typename T>
-WP2Status AnalyzeEntropyImpl(const T* curr_row, uint32_t stride, uint32_t width,
+WP2Status AnalyzeEntropyImpl(const T* argb, uint32_t stride, uint32_t width,
                              uint32_t height, WP2SampleFormat format,
                              bool has_alpha, bool use_palette,
                              Encoder* const encoder,
@@ -151,33 +151,43 @@ WP2Status AnalyzeEntropyImpl(const T* curr_row, uint32_t stride, uint32_t width,
     std::fill(histo[premult].begin(), histo[premult].end(), 0);
   }
 
-  const T* prev_row = nullptr;
-  // Skip the first pixel.
-  T pix_prev[4] = {curr_row[0], curr_row[1], curr_row[2], curr_row[3]};
-  T pix_premult_prev[4];
-  Premultiply(pix_prev, pix_premult_prev);
-  T pix_premult_prev_row[4];
-  T pix_premult[4];
-  for (uint32_t y = 0; y < height; ++y) {
-    for (uint32_t x = 0; x < width; ++x) {
-      const T* pix = &curr_row[4 * x];
+  constexpr T kTransparent[4] = {0, 0, 0, 0};
 
-      for (uint32_t premult = first_premult_mode; premult < kNumPremultModes;
-           ++premult) {
+  for (uint32_t premult = first_premult_mode; premult < kNumPremultModes;
+       ++premult) {
+    const T* prev_row = nullptr;
+    const T* curr_row = argb;
+    // Skip the first pixel.
+    T pix_prev[4] = {curr_row[0], curr_row[1], curr_row[2], curr_row[3]};
+    if (premult != first_premult_mode) {
+      Premultiply(pix_prev, pix_prev);
+    }
+    T pix_premult_prev_row[4];
+    T pix_premult[4];
+    for (uint32_t y = 0; y < height; ++y) {
+      for (uint32_t x = 0; x < width; ++x) {
+        const T* pix = &curr_row[4 * x];
+
         const T* p;
+        const T* p_prev = pix_prev;
         const T* p_prev_row;
-        T* p_prev;
 
         if (premult == first_premult_mode) {  // pixels as is
           p = pix;
-          p_prev = pix_prev;
           p_prev_row = (y > 0) ? &prev_row[4 * x] : nullptr;
+          if (premult == kUnmultiplied) {
+            // Zero-out fully transparent pixels.
+            if (p[0] == 0) p = kTransparent;
+            if (p_prev[0] == 0) p_prev = kTransparent;
+            if (p_prev_row != nullptr && p_prev_row[0] == 0) {
+              p_prev_row = kTransparent;
+            }
+          }
         } else {  // pixels premultiplied by us
           Premultiply(pix, pix_premult);
           if (y > 0) Premultiply(&prev_row[4 * x], pix_premult_prev_row);
 
           p = pix_premult;
-          p_prev = pix_premult_prev;
           p_prev_row = (y > 0) ? pix_premult_prev_row : nullptr;
         }
 
@@ -186,7 +196,8 @@ WP2Status AnalyzeEntropyImpl(const T* curr_row, uint32_t stride, uint32_t width,
         for (uint32_t c = 0; c < 4; ++c) {
           p_diff[c] = ((int32_t)p[c] - (int32_t)p_prev[c]) & masks[c];
         }
-        std::copy(p, p + 4, p_prev);
+
+        std::copy(p, p + 4, pix_prev);
 
         if ((p_diff[0] + p_diff[1] + p_diff[2] + p_diff[3] == 0) ||
             (p_prev_row != nullptr &&
@@ -217,9 +228,9 @@ WP2Status AnalyzeEntropyImpl(const T* curr_row, uint32_t stride, uint32_t width,
           ++histo[premult][kHistoPalette * histo_len + hash];
         }
       }
+      prev_row = curr_row;
+      curr_row = (const T*)((const uint8_t*)curr_row + stride);
     }
-    prev_row = curr_row;
-    curr_row = (const T*)((const uint8_t*)curr_row + stride);
   }
 
   double entropy_comp[kNumPremultModes][kHistoTotal];
@@ -399,7 +410,8 @@ void TranslateEntropyMode(EntropyMode entropy_idx, uint32_t effort,
 // always zero after applying the best transform.
 // TODO(maryla): the logic for red_and_blue_always_zero seems broken: it's only
 // valid if there's only one transform (effort != 9)
-WP2Status EncoderAnalyze(Encoder* const encoder,
+WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
+                         Encoder* const encoder,
                          CrunchConfig crunch_configs[kCrunchNumMax],
                          uint32_t* const crunch_configs_size) {
   const WP2::ArgbBuffer& pic = encoder->pic_;
@@ -409,8 +421,12 @@ WP2Status EncoderAnalyze(Encoder* const encoder,
   uint32_t n_lz77s;
   assert(!pic.IsEmpty());
 
+  const WP2::ProgressRange palette_progress(progress, 0.5f);
+  const WP2::ProgressRange entropy_progress(progress, 0.5f);
+
   WP2_CHECK_STATUS(encoder->palette_.AnalyzeAndCreate(pic));
-  WP2_CHECK_STATUS(encoder->palette_.FindBestMethod(encoder, effort));
+  WP2_CHECK_STATUS(
+      encoder->palette_.FindBestMethod(palette_progress, encoder, effort));
 
   // Do not use a palette when there is only one color as ANS will optimize it
   // anyway.
@@ -455,7 +471,11 @@ WP2Status EncoderAnalyze(Encoder* const encoder,
       *crunch_configs_size = 1;
     }
     n_lz77s = 1;
+    WP2_CHECK_STATUS(entropy_progress.AdvanceBy(1.f));
   } else {
+    const WP2::ProgressRange analysis_progress(entropy_progress, 0.5f);
+    const WP2::ProgressRange translate_progress(entropy_progress, 0.5f);
+
     EntropyMode best_mode = EntropyMode::kDirect;
     // Try out multiple LZ77 on images with few colors.
     n_lz77s = (use_palette && encoder->palette_.Size() <= 16) ? 2 : 1;
@@ -463,21 +483,24 @@ WP2Status EncoderAnalyze(Encoder* const encoder,
     WP2_CHECK_STATUS(AnalyzeEntropy(
         pic, width, height, encoder->has_alpha_, use_palette, encoder,
         &best_mode, &red_and_blue_always_zero, &encoder->use_premultiplied_));
+    WP2_CHECK_STATUS(analysis_progress.AdvanceBy(1.f));
     if (effort == 9) {
       // Go brute force on all transforms.
-      static_assert(1 + (uint32_t)EntropyMode::kNum <= kCrunchNumMax,
-                    "Too many entropy types");
-      for (uint32_t i = 0; i < (uint32_t)EntropyMode::kNum; ++i) {
+      constexpr uint32_t kNum = (uint32_t)EntropyMode::kNum;
+      static_assert(1 + kNum <= kCrunchNumMax, "Too many entropy types");
+      for (uint32_t i = 0; i < kNum; ++i) {
         if (i != (uint32_t)EntropyMode::kPalette || use_palette) {
           assert(*crunch_configs_size < kCrunchNumMax);
           TranslateEntropyMode((EntropyMode)i, effort, red_and_blue_always_zero,
                                &crunch_configs[(*crunch_configs_size)++]);
         }
+        WP2_CHECK_STATUS(translate_progress.AdvanceBy(1.f / kNum));
       }
     } else {
       // Only choose the guessed best transform.
       TranslateEntropyMode(best_mode, effort, red_and_blue_always_zero,
                            &crunch_configs[(*crunch_configs_size)++]);
+      WP2_CHECK_STATUS(translate_progress.AdvanceBy(1.f));
     }
   }
   // Fill in the different LZ77s.

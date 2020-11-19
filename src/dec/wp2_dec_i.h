@@ -50,14 +50,12 @@ namespace WP2 {
 
 WP2Status LossyDecode(const BitstreamFeatures& features,
                       const DecoderConfig& config,
-                      TilesLayout* const tiles_layout,
-                      ProgressWatcher* const progress, ANSDec* const dec,
+                      TilesLayout* const tiles_layout, ANSDec* const dec,
                       Tile* const tile);
 
 WP2Status LosslessDecode(const BitstreamFeatures& features,
                          const DecoderConfig& config,
-                         const GlobalParams& gparams,
-                         ProgressWatcher* const progress, ANSDec* const dec,
+                         const GlobalParams& gparams, ANSDec* const dec,
                          Tile* const tile);
 
 WP2Status NeuralDecode(ArgbBuffer* const picture, ANSDec* const dec,

@@ -24,6 +24,7 @@
 #include "imageio/image_enc.h"
 #include "include/helpers.h"
 #include "src/common/color_precision.h"
+#include "src/common/progress_watcher.h"
 #include "src/enc/anim/anim_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/orientation.h"
@@ -36,6 +37,8 @@ namespace WP2 {
 namespace {
 
 using WP2::testing::GetTestDataPath;
+
+constexpr ProgressRange kProgress;
 
 TEST(AnimFrameTest, ForceLossless) {
   std::vector<ArgbBuffer> buffers;
@@ -68,7 +71,8 @@ TEST(AnimFrameTest, ForceLossless) {
       kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
-  FrameEncoder frame_encode(config, kDefaultBackgroundColor, frames);
+  FrameEncoder frame_encode(config, kDefaultBackgroundColor, frames,
+                            kProgress);
   ASSERT_WP2_OK(frame_encode.Encode(&encoded_data));
 
   // Decode.
@@ -170,12 +174,10 @@ TEST_P(ParameterizedAnimFrameTest, Blend) {
       /*has_trailing_data=*/false, &encoded_data));
 
   SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha);
-  ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(config, first_frame,
-                                                /*is_last=*/false,
-                                                &encoded_data));
-  ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(config, second_frame,
-                                                /*is_last=*/true,
-                                                &encoded_data));
+  ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
+      config, first_frame, /*is_last=*/false, kProgress, &encoded_data));
+  ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
+      config, second_frame, /*is_last=*/true, kProgress, &encoded_data));
   // Decode.
   ASSERT_WP2_OK(InitDecodedFrame(window.width, window.height));
   ArrayDecoder decoder(encoded_data.mem_, encoded_data.size_,
@@ -249,12 +251,10 @@ TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
       /*has_trailing_data=*/false, &encoded_data));
 
   SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha);
-  ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(config, first_frame,
-                                                /*is_last=*/false,
-                                                &encoded_data));
-  ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(config, second_frame,
-                                                /*is_last=*/true,
-                                                &encoded_data));
+  ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
+      config, first_frame, /*is_last=*/false, kProgress, &encoded_data));
+  ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
+      config, second_frame, /*is_last=*/true, kProgress, &encoded_data));
   // Decode.
   ASSERT_WP2_OK(InitDecodedFrame(window.width, window.height));
   ArrayDecoder decoder(encoded_data.mem_, encoded_data.size_,
@@ -404,7 +404,8 @@ TEST_P(ParameterizedAnimFrameTest, RandomFrames) {
       /*preview_color=*/RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
-  FrameEncoder frame_encode(config, ToArgb38b(background_color), frames);
+  FrameEncoder frame_encode(config, ToArgb38b(background_color), frames,
+                            kProgress);
   ASSERT_WP2_OK(frame_encode.Encode(&encoded_data));
 
   // Decode.
@@ -500,7 +501,7 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
   for (uint32_t i = 0; i < subframes.size(); ++i) {
     const bool is_last = (i == num_subframes - 1);
     ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(config, subframes[i], is_last,
-                                                  &encoded_data));
+                                                  kProgress, &encoded_data));
   }
 
   // Decode.

@@ -57,7 +57,9 @@ WP2Status Counters::Init(const SymbolRecorder& recorder) {
   residuals_aom_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
   WP2_CHECK_ALLOC_OK(residuals_aom_ != nullptr);
   WP2_CHECK_STATUS(residuals_aom_->Allocate(
-      {kSymbolTransform, kAOMAllZero, kAOMEOBPT16, kAOMEOBPT32, kAOMEOBPT64,
+      {kSymbolTransform, kAOMAllZero,
+       kAOMEOBPT4, kAOMEOBPT8,
+       kAOMEOBPT16, kAOMEOBPT32, kAOMEOBPT64,
        kAOMEOBPT128, kAOMEOBPT256, kAOMEOBPT512, kAOMEOBPT1024, kAOMEOBExtra,
        kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange, kAOMDCSign}));
 

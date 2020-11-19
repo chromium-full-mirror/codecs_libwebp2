@@ -283,6 +283,7 @@ static constexpr uint32_t kMaxLZ77Length = (1u << 14);
 // TODO(vrabaud) get the code to work for a higher value.
 static constexpr uint32_t kMinLZ77Length = 1;
 static constexpr uint32_t kMaxLZ77Distance = (1u << 20);
+static constexpr uint32_t kLZZGolombPrefixSize = 2;
 
 // Min and max number of sampling bits for histograms.
 static constexpr uint32_t kHistogramBitsMin = 2;

@@ -108,18 +108,16 @@ WP2Status InternalDecode(const DecoderConfig& config,
   WP2DecDspInit();
   BitstreamFeatures features;
   ProgressWatcher progress(config.progress_hook);
-  WP2_CHECK_STATUS(progress.Rewind());
+  WP2_CHECK_STATUS(progress.Start());
 
   // Decode the header (width, height, etc.).
   WP2_CHECK_STATUS(DecodeHeader(data_source, &features));
-  WP2_CHECK_STATUS(progress.AdvanceBy(kProgressDecHeader));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
   WP2_CHECK_STATUS(SetupDecoderInfo(features, config));
 
   // Preview is only accessible through ExtractPreview().
   WP2_CHECK_STATUS(SkipPreview(data_source, features));
-  if (features.has_preview) {
-    WP2_CHECK_STATUS(progress.AdvanceBy(kProgressDecPreview));
-  }
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   // Exactly one output format.
   const bool rgb_output_wanted = (rgb_output != nullptr);
@@ -143,7 +141,7 @@ WP2Status InternalDecode(const DecoderConfig& config,
   } else {
     WP2_CHECK_STATUS(SkipICC(data_source, features));
   }
-  if (features.has_icc) WP2_CHECK_STATUS(progress.AdvanceBy(kProgressDecICC));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   // Decode the first frame if it is an animation, the whole image otherwise.
   AnimationFrame frame;
@@ -161,12 +159,10 @@ WP2Status InternalDecode(const DecoderConfig& config,
                  WP2_STATUS_UNSUPPORTED_FEATURE);
     // The first frame must dispose.
     WP2_CHECK_OK(frame_index > 0 || frame.dispose, WP2_STATUS_BITSTREAM_ERROR);
-    if (features.is_animation) {
-      progress.SetAdvancementScale(GetANMFProgression(
-          features.has_preview, features.has_icc, features.has_trailing_data,
-          frame_index, /*is_last=*/!is_preframe));
-      WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
-    }
+
+    const ProgressRange frame_progress(
+        &progress, GetFrameProgression(frame_index, /*is_last=*/!is_preframe));
+    WP2_CHECK_STATUS(frame_progress.AdvanceBy(kOnePercent));  // For ANMF
 
     TilesLayout tiles_layout;
 
@@ -178,6 +174,8 @@ WP2Status InternalDecode(const DecoderConfig& config,
     FillDecoderInfo(gparams, config);
     const uint32_t padded_frame_width = Pad(frame.window.width, kPredWidth);
     const uint32_t padded_frame_height = Pad(frame.window.height, kPredWidth);
+
+    WP2_CHECK_STATUS(frame_progress.AdvanceBy(kOnePercent));  // GlobalParams
 
     // Setup a YUV buffer if needed.
     if (yuv_output_wanted) {
@@ -244,17 +242,13 @@ WP2Status InternalDecode(const DecoderConfig& config,
       }
     }
 
+    const ProgressRange tiles_progress(frame_progress, kProgressTiles);
     WP2_CHECK_STATUS(GetTilesLayout(frame.window.width, frame.window.height,
                                     features.tile_width, features.tile_height,
-                                    &rgb_frame, &yuv_frame, &tiles_layout));
+                                    tiles_progress, &rgb_frame, &yuv_frame,
+                                    &tiles_layout));
     // All tiles should be immediately decodable.
     tiles_layout.num_assignable_tiles = (uint32_t)tiles_layout.tiles.size();
-
-    // From now on, progress will advance as rows are available in the buffer.
-    progress.SetAdvancementScale(GetRowProgression(
-        features.has_preview, features.has_icc, features.has_trailing_data,
-        features.is_animation, tiles_layout.num_tiles_x, frame_index,
-        frame.window.height, /*is_last=*/!is_preframe));
 
     {  // Actual tile decoding.
       // TODO(maryla): support multiple frames (add the bpps?). This will
@@ -264,8 +258,7 @@ WP2Status InternalDecode(const DecoderConfig& config,
             frame.window.width, frame.window.height));
       }
       Vector<TileDecoder> workers;
-      WP2_CHECK_STATUS(
-          SetupWorkers(features, config, &progress, &tiles_layout, &workers));
+      WP2_CHECK_STATUS(SetupWorkers(features, config, &tiles_layout, &workers));
       WP2_CHECK_STATUS(
           DecodeTiles(config, data_source, &tiles_layout, &workers));
     }
@@ -342,7 +335,6 @@ WP2Status InternalDecode(const DecoderConfig& config,
     WP2_CHECK_STATUS(SkipTiles(data_source, features, frame.window));
     ++frame_index;
   }
-  progress.SetAdvancementScale(1.f);
 
   // Decode or skip trailing metadata if any (EXIF, XMP).
   if (metadata != nullptr) {
@@ -350,9 +342,6 @@ WP2Status InternalDecode(const DecoderConfig& config,
         DecodeMetadata(data_source, features, &metadata->exif, &metadata->xmp));
   } else {
     WP2_CHECK_STATUS(SkipMetadata(data_source, features));
-  }
-  if (features.has_trailing_data) {
-    WP2_CHECK_STATUS(progress.AdvanceBy(kProgressDecMetadata));
   }
 
   // TODO(yguyon): rotate directly during decoding

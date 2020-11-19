@@ -223,8 +223,6 @@ WP2Status AOMContext::Init(uint32_t width, uint32_t height) {
         (i == kEntropyContextLeft) ? rows4x4_ : columns4x4_;
     WP2_CHECK_ALLOC_OK(
         coefficient_levels_[i].Reset(PlaneCount(), contexts_per_plane));
-    WP2_CHECK_ALLOC_OK(
-        dc_categories_[i].Reset(PlaneCount(), contexts_per_plane));
   }
   return WP2_STATUS_OK;
 }
@@ -233,9 +231,6 @@ WP2Status AOMContext::CopyFrom(const AOMContext& other) {
   for (uint32_t i = 0; i < coefficient_levels_.size(); ++i) {
     WP2_CHECK_ALLOC_OK(
         coefficient_levels_[i].CopyFrom(other.coefficient_levels_[i]));
-  }
-  for (uint32_t i = 0; i < dc_categories_.size(); ++i) {
-    WP2_CHECK_ALLOC_OK(dc_categories_[i].CopyFrom(other.dc_categories_[i]));
   }
   columns4x4_ = other.columns4x4_;
   rows4x4_ = other.rows4x4_;
@@ -248,9 +243,6 @@ void AOMContext::Reset() {
     const int contexts_per_plane =
         (i == kEntropyContextLeft) ? rows4x4_ : columns4x4_;
     if (!coefficient_levels_[i].Reset(PlaneCount(), contexts_per_plane)) {
-      assert(false);
-    }
-    if (!dc_categories_[i].Reset(PlaneCount(), contexts_per_plane)) {
       assert(false);
     }
   }
@@ -272,18 +264,13 @@ int AOMResidualIO::GetTransformAllZeroContext(const AOMContext& aom_context,
   if (channel == kUChannel || channel == kVChannel) return 0;
   const uint8_t* coefficient_levels =
       &aom_context.coefficient_levels_[kEntropyContextTop][channel][x4];
-  const int8_t* dc_categories =
-      &aom_context.dc_categories_[kEntropyContextTop][channel][x4];
   for (int i = 0; i < num_top_elements; ++i) {
     top |= coefficient_levels[i];
-    top |= dc_categories[i];
   }
   coefficient_levels =
       &aom_context.coefficient_levels_[kEntropyContextLeft][channel][y4];
-  dc_categories = &aom_context.dc_categories_[kEntropyContextLeft][channel][y4];
   for (int i = 0; i < num_left_elements; ++i) {
     left |= coefficient_levels[i];
-    left |= dc_categories[i];
   }
   return static_cast<int>(top != 0) + static_cast<int>(left != 0) + 7;
 }
@@ -434,43 +421,19 @@ int AOMResidualIO::GetCoeffBaseRangeContextEob(int adjusted_tx_width_log2,
   return ((row | column) < 2) ? 7 : 14;
 }
 
-int AOMResidualIO::GetDcSignContext(const AOMContext& aom_context, int x4,
-                                    int y4, int w4, int h4, Channel channel) {
-  const int max_x4x4 = aom_context.Columns4x4(channel);
-  const int8_t* dc_categories =
-      &aom_context.dc_categories_[kEntropyContextTop][channel][x4];
-  int dc_sign = std::accumulate(
-      dc_categories, dc_categories + GetNumElements(w4, x4, max_x4x4), 0);
-  const int max_y4x4 = aom_context.Rows4x4(channel);
-  dc_categories = &aom_context.dc_categories_[kEntropyContextLeft][channel][y4];
-  dc_sign = std::accumulate(
-      dc_categories, dc_categories + GetNumElements(h4, y4, max_y4x4), dc_sign);
-  // This return statement is equivalent to:
-  //   if (dc_sign < 0) return 1;
-  //   if (dc_sign > 0) return 2;
-  //   return 0;
-  return static_cast<int>(dc_sign < 0) +
-         MultiplyBy2(static_cast<int>(dc_sign > 0));
-}
-
 void AOMResidualIO::SetEntropyContexts(int x4, int y4, int w4, int h4,
                                        Channel channel,
                                        uint8_t coefficient_level,
-                                       int8_t dc_category,
                                        AOMContext* const aom_context) {
   const int max_x4x4 = aom_context->Columns4x4(channel);
   const int num_top_elements = GetNumElements(w4, x4, max_x4x4);
   assert(sizeof(aom_context->coefficient_levels_[0][0][0]) == 1);
   memset(&aom_context->coefficient_levels_[kEntropyContextTop][channel][x4],
          coefficient_level, num_top_elements);
-  memset(&aom_context->dc_categories_[kEntropyContextTop][channel][x4],
-         dc_category, num_top_elements);
   const int max_y4x4 = aom_context->Rows4x4(channel);
   const int num_left_elements = GetNumElements(h4, y4, max_y4x4);
   memset(&aom_context->coefficient_levels_[kEntropyContextLeft][channel][y4],
          coefficient_level, num_left_elements);
-  memset(&aom_context->dc_categories_[kEntropyContextLeft][channel][y4],
-         dc_category, num_left_elements);
 }
 
 }  // namespace libgav1

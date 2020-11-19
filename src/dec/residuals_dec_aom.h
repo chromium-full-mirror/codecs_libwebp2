@@ -46,31 +46,33 @@ class AOMResidualReader : public ResidualIO, public AOMResidualIO {
   void Init() { ResidualIO::Init(/*use_aom_coeffs=*/true); }
 
   // Reads residual coefficients.
-  WP2Status ReadCoeffs(Channel channel, uint32_t x_pix, uint32_t y_pix,
-                       WP2::BlockSize dim, bool is420, TransformPair tx_type,
-                       bool first_is_dc, int max_num_coeffs, ANSDec* const dec,
-                       SymbolReader* const sr, AOMContext* const aom_context,
-                       int16_t* const coeffs, uint32_t* const num_coeffs);
+  void ReadCoeffs(Channel channel, uint32_t x_pix, uint32_t y_pix,
+                  WP2::BlockSize dim, bool is420, TransformPair tx_type,
+                  bool first_is_dc, int max_num_coeffs, ANSDec* const dec,
+                  SymbolReader* const sr, AOMContext* const aom_context,
+                  int16_t* const coeffs, uint32_t* const num_coeffs);
 
  private:
-  // Returns the number of non-zero coefficients that were read or -1 on error.
-  int ReadTransformCoefficients(Channel channel, int start_x, int start_y,
-                                TransformSize tx_size, TransformPair tx_type,
-                                bool first_is_dc, uint32_t max_num_coeffs,
-                                int16_t* const coeffs,
-                                AOMContext* const aom_context);
+  // Returns the number of non-zero coefficients read.
+  uint32_t ReadTransformCoefficients(Channel channel, int start_x, int start_y,
+                                     TransformSize tx_size,
+                                     TransformPair tx_type,
+                                     bool first_is_dc, int max_num_coeffs,
+                                     int16_t* const coeffs,
+                                     AOMContext* const aom_context);
+
+  // Reads End-of-Block element.
+  int ReadEOB(int max_num_coeffs,
+              TransformSize tx_size, PlaneType plane_type, int context);
 
   // This function specializes the parsing of DC coefficient by removing some of
   // the branches when i == 0 (since scan[0] is always 0 and scan[i] is always
-  // non-zero for all other possible values of i). |dc_category| is an output
-  // parameter that is populated when |is_dc_coefficient| is true.
-  // |coefficient_level| is an output parameter which accumulates the
-  // coefficient level.
+  // non-zero for all other possible values of i). |coefficient_level| is an
+  // output parameter which accumulates the coefficient level.
   template <bool is_dc_coefficient>
-  bool ReadSignAndApplyDequantization(
+  void ReadSignAndApplyDequantization(
       int adjusted_tx_width_log2, uint16_t dc_sign_cluster,
-      int16_t* const coeffs, int8_t* dc_category,
-      int* coefficient_level);  // Part of 5.11.39.
+      int16_t* const coeffs, int* coefficient_level);  // Part of 5.11.39.
   int ReadCoeffBaseRange(int clamped_tx_size_context, int cdf_context,
                          int plane_type);  // Part of 5.11.39.
 

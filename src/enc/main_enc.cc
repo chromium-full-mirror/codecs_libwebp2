@@ -104,6 +104,7 @@ bool WriteTag(const uint32_t tag, Writer* const output) {
 // Fills the 'tiles_layout'. Dimensions are in pixels, not padded.
 WP2Status GetEncTilesLayout(uint32_t frame_width, uint32_t frame_height,
                             uint32_t tile_width, uint32_t tile_height,
+                            const ProgressRange& progress,
                             const ArgbBuffer& frame_rgb,
                             const YUVPlane& frame_yuv,
                             const GlobalParams& gparams,
@@ -114,12 +115,15 @@ WP2Status GetEncTilesLayout(uint32_t frame_width, uint32_t frame_height,
       GetNumTiles(frame_width, frame_height, tile_width, tile_height,
                   &tiles_layout->num_tiles_x, &tiles_layout->num_tiles_y);
   WP2_CHECK_ALLOC_OK(tiles_layout->tiles.resize(num_tiles));
+  const uint32_t num_pixels = frame_width * frame_height;
 
   uint32_t tile_y = 0, tile_x = 0;
   for (EncTile& tile : tiles_layout->tiles) {
     tile.rect = {tile_x * tile_width, tile_y * tile_height,
                  std::min(frame_width - tile_x * tile_width, tile_width),
                  std::min(frame_height - tile_y * tile_height, tile_height)};
+    tile.progress =
+        ProgressRange(progress, 1.f * tile.rect.GetArea() / num_pixels);
 
     // Set views on RGB and YUV input buffers, one or both may be used.
     assert(!frame_rgb.IsEmpty() || !frame_yuv.IsEmpty());
@@ -332,7 +336,7 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
                       const ArgbBuffer& rgb_buffer, const YUVPlane& yuv_buffer,
                       const CSPTransform& transf, const EncoderConfig& config,
                       uint32_t quality_hint, bool image_has_alpha,
-                      Writer* const output) {
+                      const ProgressRange& progress, Writer* const output) {
   WP2EncDspInit();
   GlobalParams gparams;
   FeatureMap features;
@@ -361,15 +365,17 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
 
   WP2_CHECK_STATUS(
       EncodeGLBL(config, gparams, quality_hint, image_has_alpha, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));  // GlobalParams
 
   const uint32_t tile_width = TileWidth(FinalTileShape(config), width);
   const uint32_t tile_height =
       TileHeight(FinalTileShape(config), /*image_width=*/width);
 
+  const ProgressRange tiles_progress(progress, kProgressTiles);
   EncTilesLayout tiles_layout;
   WP2_CHECK_STATUS(GetEncTilesLayout(width, height, tile_width, tile_height,
-                                     *buffer, yuv_buffer, gparams,
-                                     &tiles_layout));
+                                     tiles_progress, *buffer, yuv_buffer,
+                                     gparams, &tiles_layout));
 
   Vector<TileEncoder> workers;
   WP2_CHECK_STATUS(SetupWorkers(width, height, *buffer, yuv_buffer, config,
@@ -448,6 +454,10 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
 
   (void)picture_hint;
   WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
+
+  ProgressWatcher progress(config.progress_hook);
+  WP2_CHECK_STATUS(progress.Start());
+
   WP2_CHECK_STATUS(SetupEncoderInfo(input.width(), input.height(), config));
 
   const RGB12b preview_color = GetPreviewColor(input);
@@ -459,10 +469,14 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
       config, input.width(), input.height(), has_alpha, /*is_anim=*/false,
       /*loop_forever=*/true, kDefaultBackgroundColor, preview_color, has_icc,
       has_trailing_data, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   WP2_CHECK_STATUS(EncodePreview(input, config, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
+
   WP2_CHECK_STATUS(EncodeICC(
       {input.metadata_.iccp.bytes, input.metadata_.iccp.size}, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   const GlobalParams::Type type = DecideGlobalParamsType(config);
   const bool yuv_is_needed = (type != GlobalParams::GP_LOSSLESS);
@@ -476,10 +490,14 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
                                       /*pad=*/kPredWidth));
   }
 
+  const ProgressRange frames_progress(&progress, kProgressFrames);
+  WP2_CHECK_STATUS(frames_progress.AdvanceBy(kOnePercent));  // Simulate ANMF
   WP2_CHECK_STATUS(EncodeTiles(
       input.width(), input.height(), input, yuv_input, csp_transform, config,
-      GetQualityHint(config.quality), has_alpha, output));
+      GetQualityHint(config.quality), has_alpha, frames_progress, output));
+
   WP2_CHECK_STATUS(EncodeMetadata(input.metadata_, output));
+  WP2_CHECK_STATUS(progress.Finish());
   return WP2_STATUS_OK;
 }
 
@@ -502,7 +520,7 @@ WP2Status Encode(uint32_t width, uint32_t height,
   WP2_CHECK_OK((width > 0 && height > 0) &&
                    (width <= kImageDimMax && height <= kImageDimMax),
                WP2_STATUS_BAD_DIMENSION);
-  const bool has_alpha = (a_buffer != nullptr);
+  bool has_alpha = (a_buffer != nullptr);
 
   WP2_CHECK_OK(c0_buffer != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(c1_buffer != nullptr, WP2_STATUS_NULL_PARAMETER);
@@ -513,8 +531,24 @@ WP2Status Encode(uint32_t width, uint32_t height,
   if (has_alpha) {
     WP2_CHECK_OK(a_step >= width, WP2_STATUS_BAD_DIMENSION);
   }
-
   WP2_CHECK_OK(ccsp_to_rgb.shift <= 16, WP2_STATUS_INVALID_PARAMETER);
+
+  ProgressWatcher progress(config.progress_hook);
+  WP2_CHECK_STATUS(progress.Start());
+
+  if (has_alpha) {
+    has_alpha = false;  // Make sure at least one pixel is transparent.
+    const int16_t* a_row = a_buffer;
+    for (uint32_t y = 0; y < height; ++y) {
+      for (uint32_t x = 0; x < width; ++x) {
+        WP2_CHECK_OK(a_row[x] >= 0 && (uint32_t)a_row[x] <= kAlphaMax,
+                     WP2_STATUS_INVALID_PARAMETER);
+        if ((uint32_t)a_row[x] < kAlphaMax) has_alpha = true;
+      }
+      a_row += a_step;
+    }
+  }
+
   WP2_CHECK_STATUS(SetupEncoderInfo(width, height, config));
 
   const GlobalParams::Type type = DecideGlobalParamsType(config);
@@ -566,15 +600,23 @@ WP2Status Encode(uint32_t width, uint32_t height,
                                 /*is_anim=*/false, /*loop_forever=*/true,
                                 kDefaultBackgroundColor, preview_color, has_icc,
                                 has_trailing_data, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   WP2_CHECK_STATUS(EncodePreview(rgb_input, config, output));
-  WP2_CHECK_STATUS(
-      EncodeICC({metadata.iccp.bytes, metadata.iccp.size}, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   WP2_CHECK_STATUS(
-      EncodeTiles(width, height, rgb_input, yuv_input, csp_transform, config,
-                  GetQualityHint(config.quality), has_alpha, output));
+      EncodeICC({metadata.iccp.bytes, metadata.iccp.size}, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
+
+  const ProgressRange frames_progress(&progress, kProgressFrames);
+  WP2_CHECK_STATUS(frames_progress.AdvanceBy(kOnePercent));  // Simulate ANMF
+  WP2_CHECK_STATUS(EncodeTiles(
+      width, height, rgb_input, yuv_input, csp_transform, config,
+      GetQualityHint(config.quality), has_alpha, frames_progress, output));
+
   WP2_CHECK_STATUS(EncodeMetadata(metadata, output));
+  WP2_CHECK_STATUS(progress.Finish());
   return WP2_STATUS_OK;
 }
 

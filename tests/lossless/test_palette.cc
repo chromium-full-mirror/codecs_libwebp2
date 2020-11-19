@@ -83,8 +83,9 @@ TEST_P(PaletteTest, RoundTrip) {
   const WP2::EncoderConfig encoder_config;
   WP2L::Encoder encoder(encoder_config, buffer, has_alpha);
   ASSERT_WP2_OK(encoder.Allocate());
-  ASSERT_WP2_OK(palette.FindBestMethod(&encoder, /*effort=*/5));
-  ASSERT_WP2_OK(palette.Write(&enc, &dicts, &encoder));
+  ASSERT_WP2_OK(
+      palette.FindBestMethod(ProgressRange(), &encoder, /*effort=*/5));
+  ASSERT_WP2_OK(palette.Write(ProgressRange(), &enc, &dicts, &encoder));
 
   // Apply palette on buffer.
   Vector_u16 paletted_buffer;
@@ -93,15 +94,13 @@ TEST_P(PaletteTest, RoundTrip) {
 
   // Decode palette.
   WP2L::Decoder decoder;
-  const WP2::DecoderConfig decoder_config;
   GlobalParams gparams;
   gparams.has_alpha_ = has_alpha;
   ASSERT_WP2_OK(enc.Assemble());
   ExternalDataSource data_source(enc.Buffer(), enc.BufferSize());
   ANSDec dec(&data_source);
   Tile tile;
-  decoder.Init(decoder_config, gparams,
-               /*progress=*/nullptr, &dec, &tile);
+  decoder.Init(WP2::DecoderConfig::kDefault, gparams, &dec, &tile);
   WP2L::Transform transform;
   transform.type_ = WP2L::COLOR_INDEXING_TRANSFORM;
   transform.width_ = kWidth;

@@ -21,6 +21,7 @@
 #include "src/common/lossless/color_cache.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/symbols_enc.h"
+#include "src/utils/utils.h"
 
 namespace WP2L {
 
@@ -60,13 +61,16 @@ static void WriteColor(uint16_t current_color, uint16_t expected_new_color,
 
 // Implementation taken from https://www.itu.int/rec/T-REC-T.6-198811-I/en.
 // See the above for diagrams showing the meaning of a0/a1/b1/b2.
-static void Impl(const uint16_t* const argb, uint32_t width, uint32_t height,
-                 MoveToFrontCache* const mtf, WP2::ANSEncBase* const enc,
-                 WP2::SymbolManager* const sm, EncodeInfo* const encode_info) {
+static WP2Status Impl(const uint16_t* const argb, uint32_t width,
+                      uint32_t height, const WP2::ProgressRange& progress,
+                      MoveToFrontCache* const mtf, WP2::ANSEncBase* const enc,
+                      WP2::SymbolManager* const sm,
+                      EncodeInfo* const encode_info) {
   WP2::ANSDebugPrefix prefix(enc, "group4");
 
   const uint32_t num_colors = mtf->num_colors();
   const uint16_t first_color = GetColor(argb, /*x=*/0);
+  const WP2::ProgressScale row_progress(progress, 1.f / height);
 
   for (uint32_t y = 0; y < height; ++y) {
     const uint16_t* prev = (y > 0) ? &argb[(y - 1) * width * 4] : nullptr;
@@ -217,12 +221,16 @@ static void Impl(const uint16_t* const argb, uint32_t width, uint32_t height,
       std::fill(&encode_info->bits_per_pixel[0] + y * width + a0_prev,
                 &encode_info->bits_per_pixel[0] + y * width + width, 0);
     }
+    WP2_CHECK_STATUS(row_progress.AdvanceBy(1.f));
   }
+  return WP2_STATUS_OK;
 }
 
 WP2Status Group4Encode(const uint16_t* const argb, uint32_t width,
                        uint32_t height, uint32_t num_colors,
-                       bool use_move_to_front, WP2::ANSEncBase* const enc,
+                       bool use_move_to_front,
+                       const WP2::ProgressRange& progress,
+                       WP2::ANSEncBase* const enc,
                        EncodeInfo* const encode_info) {
   WP2::SymbolsInfo info;
   InitGroup4(width, num_colors, &info);
@@ -230,11 +238,16 @@ WP2Status Group4Encode(const uint16_t* const argb, uint32_t width,
   MoveToFrontCache mtf;
   WP2_CHECK_STATUS(mtf.Init(use_move_to_front, num_colors));
 
+  // Impl() is called twice.
+  const WP2::ProgressRange first_impl_progress(progress, 0.5f);
+  const WP2::ProgressRange second_impl_progress(progress, 0.5f);
+
   // Get symbol statistics.
   WP2::SymbolRecorder sr;
   WP2_CHECK_STATUS(sr.Allocate(info, /*num_records=*/0));
   WP2::ANSEncNoop noop;
-  Impl(argb, width, height, &mtf, &noop, &sr, /*encode_info=*/nullptr);
+  WP2_CHECK_STATUS(Impl(argb, width, height, first_impl_progress, &mtf, &noop,
+                        &sr, /*encode_info=*/nullptr));
 
   // Write the headers.
   WP2::SymbolWriter sw;
@@ -262,7 +275,8 @@ WP2Status Group4Encode(const uint16_t* const argb, uint32_t width,
 
   // Write the data.
   mtf.Reset();
-  Impl(argb, width, height, &mtf, enc, &sw, encode_info);
+  WP2_CHECK_STATUS(Impl(argb, width, height, second_impl_progress, &mtf, enc,
+                        &sw, encode_info));
 
   return WP2_STATUS_OK;
 }

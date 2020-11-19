@@ -140,6 +140,8 @@ enum {
   kNumSquareTransformSizes = 5,
   kAllZeroContexts = 13,
   kEobPtContexts = 2,
+  kEobPt4SymbolCount = 3,
+  kEobPt8SymbolCount = 4,
   kEobPt16SymbolCount = 5,
   kEobPt32SymbolCount = 6,
   kEobPt64SymbolCount = 7,
@@ -154,7 +156,7 @@ enum {
   kCoeffBaseSymbolCount = 4,
   kCoeffBaseRangeContexts = 21,
   kCoeffBaseRangeSymbolCount = 4,
-  kDcSignContexts = 3,
+  kDcSignContexts = 1,
 };  // anonymous enum
 
 /* clang-format off */
@@ -231,6 +233,44 @@ constexpr uint16_t kDefaultAllZeroCdf[kCoefficientQuantizerContexts]
   }
 };
 /* clang-format on */
+constexpr uint16_t kDefaultEobPt4Cdf[kCoefficientQuantizerContexts]
+                                     [kNumPlaneTypes][kEobPtContexts]
+                                     [kEobPt4SymbolCount + 1] = {
+                                         {{{31928, 31729, 30788, 27873, 0, 0},
+                                           {32398, 32097, 30885, 28297, 0, 0}},
+                                          {{29521, 27818, 23080, 18205, 0, 0},
+                                           {30864, 29414, 25005, 18121, 0, 0}}},
+                                         {{{30643, 30217, 27603, 23822, 0, 0},
+                                           {32255, 32003, 30909, 26429, 0, 0}},
+                                          {{25131, 23270, 18509, 13660, 0, 0},
+                                           {30271, 28672, 23902, 15775, 0, 0}}},
+                                         {{{28752, 27871, 23887, 17800, 0, 0},
+                                           {32052, 31663, 30122, 22712, 0, 0}},
+                                          {{21629, 19498, 14527, 9202, 0, 0},
+                                           {29576, 27736, 22471, 13013, 0, 0}}},
+                                         {{{26060, 23810, 18022, 10635, 0, 0},
+                                           {31546, 30694, 27985, 17358, 0, 0}},
+                                          {{13193, 11002, 6724, 3059, 0, 0},
+                                           {25471, 22001, 13495, 4574, 0, 0}}}};
+constexpr uint16_t kDefaultEobPt8Cdf[kCoefficientQuantizerContexts]
+                                     [kNumPlaneTypes][kEobPtContexts]
+                                     [kEobPt8SymbolCount + 1] = {
+                                         {{{31928, 31729, 30788, 27873, 0, 0},
+                                           {32398, 32097, 30885, 28297, 0, 0}},
+                                          {{29521, 27818, 23080, 18205, 0, 0},
+                                           {30864, 29414, 25005, 18121, 0, 0}}},
+                                         {{{30643, 30217, 27603, 23822, 0, 0},
+                                           {32255, 32003, 30909, 26429, 0, 0}},
+                                          {{25131, 23270, 18509, 13660, 0, 0},
+                                           {30271, 28672, 23902, 15775, 0, 0}}},
+                                         {{{28752, 27871, 23887, 17800, 0, 0},
+                                           {32052, 31663, 30122, 22712, 0, 0}},
+                                          {{21629, 19498, 14527, 9202, 0, 0},
+                                           {29576, 27736, 22471, 13013, 0, 0}}},
+                                         {{{26060, 23810, 18022, 10635, 0, 0},
+                                           {31546, 30694, 27985, 17358, 0, 0}},
+                                          {{13193, 11002, 6724, 3059, 0, 0},
+                                           {25471, 22001, 13495, 4574, 0, 0}}}};
 
 constexpr uint16_t kDefaultEobPt16Cdf[kCoefficientQuantizerContexts]
                                      [kNumPlaneTypes][kEobPtContexts]
@@ -1959,15 +1999,11 @@ constexpr uint16_t kDefaultCoeffBaseRangeCdf
 
 /* clang-format off */
 constexpr uint16_t kDefaultDcSignCdf[kCoefficientQuantizerContexts]
-                     [kNumPlaneTypes][kDcSignContexts][kBooleanFieldCdfSize] = {
-  {{{16768, 0, 0}, {19712, 0, 0}, {13952, 0, 0}}, {{17536, 0, 0}, {19840, 0, 0},
-    {15488, 0, 0}}},
-  {{{16768, 0, 0}, {19712, 0, 0}, {13952, 0, 0}}, {{17536, 0, 0}, {19840, 0, 0},
-    {15488, 0, 0}}},
-  {{{16768, 0, 0}, {19712, 0, 0}, {13952, 0, 0}}, {{17536, 0, 0}, {19840, 0, 0},
-    {15488, 0, 0}}},
-  {{{16768, 0, 0}, {19712, 0, 0}, {13952, 0, 0}}, {{17536, 0, 0}, {19840, 0, 0},
-    {15488, 0, 0}}}
+                     [kNumPlaneTypes][kBooleanFieldCdfSize] = {
+  {{16768, 0, 0}, {17536, 0, 0}},
+  {{16768, 0, 0}, {17536, 0, 0}},
+  {{16768, 0, 0}, {17536, 0, 0}},
+  {{16768, 0, 0}, {17536, 0, 0}}
 };
 /* clang-format on */
 
@@ -2050,6 +2086,14 @@ int main() {
                "[kBooleanFieldCdfSize - 1] =";
   WP2::PrintNormalized(WP2::libgav1::kDefaultAllZeroCdf);
   std::cout << "constexpr uint16_t "
+               "kDefaultEobPt4Cdf[kCoefficientQuantizerContexts]["
+               "kNumPlaneTypes][kEobPtContexts][kEobPt4SymbolCount] =";
+  WP2::PrintNormalized(WP2::libgav1::kDefaultEobPt4Cdf);
+  std::cout << "constexpr uint16_t "
+               "kDefaultEobPt8Cdf[kCoefficientQuantizerContexts]["
+               "kNumPlaneTypes][kEobPtContexts][kEobPt8SymbolCount] =";
+  WP2::PrintNormalized(WP2::libgav1::kDefaultEobPt8Cdf);
+  std::cout << "constexpr uint16_t "
                "kDefaultEobPt16Cdf[kCoefficientQuantizerContexts]["
                "kNumPlaneTypes][kEobPtContexts][kEobPt16SymbolCount] =";
   WP2::PrintNormalized(WP2::libgav1::kDefaultEobPt16Cdf);
@@ -2099,7 +2143,7 @@ int main() {
   WP2::PrintNormalized(WP2::libgav1::kDefaultCoeffBaseRangeCdf);
   std::cout << "constexpr uint16_t "
                "kDefaultDcSignCdf[kCoefficientQuantizerContexts]["
-               "kNumPlaneTypes][kDcSignContexts][kBooleanFieldCdfSize - 1] =";
+               "kNumPlaneTypes][kBooleanFieldCdfSize - 1] =";
   WP2::PrintNormalized(WP2::libgav1::kDefaultDcSignCdf);
   return 0;
 }
@@ -2372,6 +2416,30 @@ constexpr uint16_t
                             {0, 8192},
                             {0, 8192},
                             {0, 8192}}}};
+
+constexpr uint16_t kDefaultEobPt4Cdf
+    [kCoefficientQuantizerContexts][kNumPlaneTypes][kEobPtContexts]
+    [kEobPt4SymbolCount] = {
+        {{{0, 13936, 15393}, {0, 14148, 15442}},
+         {{0, 9102, 11539}, {0, 9060, 12502}}},
+        {{{0, 11910, 13801}, {0, 13214, 15454}},
+         {{0, 6829, 9254}, {0, 7887, 11950}}},
+        {{{0, 8899, 11943}, {0, 11355, 15060}},
+         {{0, 4600, 7263}, {0, 6506, 11235}}},
+        {{{0, 5317, 9011}, {0, 8678, 13992}},
+         {{0, 1530, 3363}, {0, 2287, 6747}}}};
+
+constexpr uint16_t kDefaultEobPt8Cdf
+    [kCoefficientQuantizerContexts][kNumPlaneTypes][kEobPtContexts]
+    [kEobPt8SymbolCount] = {
+        {{{0, 13936, 15393, 15864}, {0, 14148, 15442, 16048}},
+         {{0, 9102, 11539, 13908}, {0, 9060, 12502, 14707}}},
+        {{{0, 11910, 13801, 15108}, {0, 13214, 15454, 16001}},
+         {{0, 6829, 9254, 11635}, {0, 7887, 11950, 14335}}},
+        {{{0, 8899, 11943, 13935}, {0, 11355, 15060, 15831}},
+         {{0, 4600, 7263, 9749}, {0, 6506, 11235, 13868}}},
+        {{{0, 5317, 9011, 11905}, {0, 8678, 13992, 15347}},
+         {{0, 1530, 3363, 5501}, {0, 2287, 6747, 11000}}}};
 
 constexpr uint16_t kDefaultEobPt16Cdf
     [kCoefficientQuantizerContexts][kNumPlaneTypes][kEobPtContexts]
@@ -4194,12 +4262,12 @@ constexpr uint16_t kDefaultCoeffBaseRangeCdf
            {0, 4096, 8192, 12288}}}}};
 
 constexpr uint16_t kDefaultDcSignCdf
-    [kCoefficientQuantizerContexts][kNumPlaneTypes][kDcSignContexts]
+    [kCoefficientQuantizerContexts][kNumPlaneTypes]
     [kBooleanFieldCdfSize - 1] = {
-        {{{0, 8384}, {0, 9856}, {0, 6976}}, {{0, 8768}, {0, 9920}, {0, 7744}}},
-        {{{0, 8384}, {0, 9856}, {0, 6976}}, {{0, 8768}, {0, 9920}, {0, 7744}}},
-        {{{0, 8384}, {0, 9856}, {0, 6976}}, {{0, 8768}, {0, 9920}, {0, 7744}}},
-        {{{0, 8384}, {0, 9856}, {0, 6976}}, {{0, 8768}, {0, 9920}, {0, 7744}}}};
+        {{0, 8384}, {0, 8768}},
+        {{0, 8384}, {0, 8768}},
+        {{0, 8384}, {0, 8768}},
+        {{0, 8384}, {0, 8768}}};
 
 #endif
 

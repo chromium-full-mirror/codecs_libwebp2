@@ -96,18 +96,23 @@ TEST_P(ResidualWriterTest, AOM) {
               }
             }
           }
+          // Rand might generate zeros, checking 'fill_all_zero' is not enough.
+          const bool all_zero =
+              (std::count(coeffs, coeffs + num_elem, 0) == num_elem);
+
           // Record data to get stats.
           if (do_reset) {
             recorder.ResetRecord(/*reset_backup=*/true);
             writer.Init();
             aom_context_enc.Reset();
           }
+          const int max_num_coeffs =
+              all_zero ? 0 : WP2::kNumCoeffs[cb.tdim(channel)];
           ANSEncNoop enc_noop;
-          EXPECT_WP2_OK(
-              writer.WriteCoeffs(cb.x_pix(), cb.y_pix(), cb.dim(), kDctDct,
-                                 /*first_is_dc=*/true, cb.is420_, coeffs,
-                                 channel, /*do_update=*/false, &recorder,
-                                 &enc_noop, &aom_context_enc));
+          EXPECT_WP2_OK(writer.WriteCoeffs(
+              cb.x_pix(), cb.y_pix(), cb.dim(), kDctDct, /*first_is_dc=*/true,
+              max_num_coeffs, cb.is420_, coeffs, channel,  /*do_update=*/false,
+              &recorder, &enc_noop, &aom_context_enc));
 
           // Write the data.
           ANSEnc enc;
@@ -126,11 +131,10 @@ TEST_P(ResidualWriterTest, AOM) {
             }
           }
           // Write the coefficients.
-          EXPECT_WP2_OK(
-              writer.WriteCoeffs(cb.x_pix(), cb.y_pix(), cb.dim(), kDctDct,
-                                 /*first_is_dc=*/true, cb.is420_, coeffs,
-                                 channel, /*do_update=*/true, sw.get(),
-                                 &enc, &aom_context_enc));
+          EXPECT_WP2_OK(writer.WriteCoeffs(
+              cb.x_pix(), cb.y_pix(), cb.dim(), kDctDct, /*first_is_dc=*/true,
+              max_num_coeffs, cb.is420_, coeffs, channel, /*do_update=*/true,
+              sw.get(), &enc, &aom_context_enc));
 
           // Read the data.
           EXPECT_WP2_OK(enc.Assemble());
@@ -155,21 +159,16 @@ TEST_P(ResidualWriterTest, AOM) {
           CodedBlock cb_out;
           cb_out.SetDim(block, mgr);
           cb_out.is420_ = cb.is420_;
-          // Rand might generate zeros, checking 'fill_all_zero' is not enough.
-          const bool all_zero =
-              (std::count(coeffs, coeffs + num_elem, 0) == num_elem);
           // This is usually decoded before by ReadHasCoeffs().
           cb_out.num_coeffs_[channel][tf_i] = (all_zero ? 0 : num_elem);
           std::fill(cb_out.coeffs_[channel][tf_i],
                     cb_out.coeffs_[channel][tf_i] + num_elem, 0);
-          const int max_num_coeffs =
-              all_zero ? 0 : WP2::kNumCoeffs[cb.tdim(channel)];
-          EXPECT_WP2_OK(reader.ReadCoeffs(
+          reader.ReadCoeffs(
               channel, cb.x_pix(), cb.y_pix(), cb.dim(), cb.is420_,
               cb_out.GetCodingParams(channel)->tf,
               cb_out.IsFirstCoeffDC(channel), max_num_coeffs, &dec,
               &sr, &aom_context_dec, cb_out.coeffs_[channel][tf_i],
-              &cb_out.num_coeffs_[channel][tf_i]));
+              &cb_out.num_coeffs_[channel][tf_i]);
           for (uint32_t i = 0; i < num_elem; ++i) {
             EXPECT_EQ(cb.coeffs_[channel][tf_i][i],
                       cb_out.coeffs_[channel][tf_i][i])

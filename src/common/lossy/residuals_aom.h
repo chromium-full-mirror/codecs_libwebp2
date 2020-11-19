@@ -163,6 +163,8 @@ enum {
   kNumSquareTransformSizes = 5,
   kAllZeroContexts = 13,
   kEobPtContexts = 2,
+  kEobPt4SymbolCount = 3,
+  kEobPt8SymbolCount = 4,
   kEobPt16SymbolCount = 5,
   kEobPt32SymbolCount = 6,
   kEobPt64SymbolCount = 7,
@@ -176,8 +178,7 @@ enum {
   kCoeffBaseContexts = 42,
   kCoeffBaseSymbolCount = 4,
   kCoeffBaseRangeContexts = 21,
-  kCoeffBaseRangeSymbolCount = 4,
-  kDcSignContexts = 3,
+  kCoeffBaseRangeSymbolCount = 4
 };  // anonymous enum
 
 struct SymbolDecoderContext {
@@ -188,6 +189,10 @@ struct SymbolDecoderContext {
 
   uint16_t all_zero_cdf[kNumSquareTransformSizes][kAllZeroContexts]
                        [kBooleanFieldCdfSize];
+  uint16_t eob_pt_4_cdf[kNumPlaneTypes][kEobPtContexts]
+                        [kEobPt4SymbolCount + 1];
+  uint16_t eob_pt_8_cdf[kNumPlaneTypes][kEobPtContexts]
+                        [kEobPt8SymbolCount + 1];
   uint16_t eob_pt_16_cdf[kNumPlaneTypes][kEobPtContexts]
                         [kEobPt16SymbolCount + 1];
   uint16_t eob_pt_32_cdf[kNumPlaneTypes][kEobPtContexts]
@@ -210,7 +215,7 @@ struct SymbolDecoderContext {
   uint16_t coeff_base_range_cdf[kNumSquareTransformSizes][kNumPlaneTypes]
                                [kCoeffBaseRangeContexts]
                                [kCoeffBaseRangeSymbolCount + 1];
-  uint16_t dc_sign_cdf[kNumPlaneTypes][kDcSignContexts][kBooleanFieldCdfSize];
+  uint16_t dc_sign_cdf[kNumPlaneTypes][kBooleanFieldCdfSize];
 };
 
 // This is computed as:
@@ -234,23 +239,23 @@ class AOMResidualIO {
   // for symbols using 1, 2 or 3 arguments.
   template <Symbol sym>
   static uint32_t GetClusterAOM1(uint32_t arg0) {
-    static_assert(sym == kAOMEOBPT512 || sym == kAOMEOBPT1024, "wrong symbol");
+    static_assert(sym == kAOMEOBPT512 || sym == kAOMEOBPT1024 ||
+                  sym == kAOMDCSign, "wrong symbol");
     return arg0;
   }
   template <Symbol sym>
   static uint32_t GetClusterAOM2(uint32_t arg0, uint32_t arg1) {
-    static_assert(sym == kAOMAllZero || sym == kAOMEOBPT16 ||
-                      sym == kAOMEOBPT32 || sym == kAOMEOBPT64 ||
-                      sym == kAOMEOBPT128 || sym == kAOMEOBPT256 ||
-                      sym == kAOMDCSign,
+    static_assert(sym == kAOMAllZero ||
+                      sym == kAOMEOBPT4   || sym == kAOMEOBPT8 ||
+                      sym == kAOMEOBPT16  ||
+                      sym == kAOMEOBPT32  || sym == kAOMEOBPT64 ||
+                      sym == kAOMEOBPT128 || sym == kAOMEOBPT256,
                   "wrong symbol");
     const std::array<uint32_t, 2> extent =
         (sym == kAOMAllZero)
             ? std::array<uint32_t, 2>{kNumSquareTransformSizes,
                                       kAllZeroContexts}
-            : (sym == kAOMDCSign)
-                  ? std::array<uint32_t, 2>{kNumPlaneTypes, kDcSignContexts}
-                  : std::array<uint32_t, 2>{kNumPlaneTypes, kEobPtContexts};
+            : std::array<uint32_t, 2>{kNumPlaneTypes, kEobPtContexts};
     uint32_t cluster = arg1;
     uint32_t stride = extent[1];
     cluster += arg0 * stride;
@@ -316,11 +321,8 @@ class AOMResidualIO {
   static int GetCoeffBaseContextEob(TransformSize tx_size, int index);
 
   static int GetCoeffBaseRangeContextEob(int adjusted_tx_width_log2, int pos);
-  static int GetDcSignContext(const AOMContext& aom_context, int x4, int y4,
-                              int w4, int h4, Channel channel);
   static void SetEntropyContexts(int x4, int y4, int w4, int h4,
-                                 Channel channel,
-                                 uint8_t coefficient_level, int8_t dc_category,
+                                 Channel channel, uint8_t coefficient_level,
                                  AOMContext* const aom_context);
 };
 
@@ -343,7 +345,7 @@ class AOMContext {
     return ((channel == kUChannel || channel == kVChannel) && is420_);
   }
 
-  // These two arrays (|coefficient_levels_| and |dc_categories_|) are used to
+  // One array (|coefficient_levels_|) is used to
   // store the entropy context. Their dimensions are as follows: First -
   // left/top; Second - plane; Third - row4x4 (if first dimension is
   // left)/column4x4 (if first dimension is top).
@@ -355,24 +357,6 @@ class AOMContext {
   // following values: 0, 1, 2, 3 and >= 4. So instead of clamping to 63, we
   // clamp to 4 (i.e.) all the values greater than 4 are stored as 4.
   std::array<Array2D<uint8_t>, 2> coefficient_levels_;
-  // This is equivalent to the LeftDcContext and AboveDcContext arrays in the
-  // spec. In the spec, it can store 3 possible values: 0, 1 and 2 (where 1
-  // means the value is < 0, 2 means the value is > 0 and 0 means the value is
-  // equal to 0).
-  //
-  // The stored values are used in two places:
-  //  * GetTransformAllZeroContext: Here, we only care about whether the
-  //  value is 0 or not (whether it is 1 or 2 is irrelevant).
-  //  * GetDcSignContext: Here, we do the following computation: if the
-  //  stored value is 1, we decrement a counter. If the stored value is 2
-  //  we increment a counter.
-  //
-  // Based on this usage, we can simply replace 1 with -1 and 2 with 1 and
-  // use that value to compute the counter.
-  //
-  // The usage on GetTransformAllZeroContext is unaffected since there we
-  // only care about whether it is 0 or not.
-  std::array<Array2D<int8_t>, 2> dc_categories_;
 
  private:
   uint32_t columns4x4_;

@@ -113,6 +113,12 @@ class VectorBase {
     capacity_ = previous_capacity;
     return false;
   }
+  // Sets the new size assuming there's enough capacity. Warning! No check.
+  // Content is unmodified.
+  void resize_no_check(size_t num_items) {
+    if (capacity_ < num_items) assert(false);
+    num_items_ = num_items;
+  }
 
   // Constructs a new item by copy ctor. May reallocate if 'resize_if_needed'.
   WP2_NO_DISCARD bool push_back(const T& value, bool resize_if_needed = true) {

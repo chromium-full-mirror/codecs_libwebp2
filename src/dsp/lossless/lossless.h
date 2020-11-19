@@ -40,7 +40,7 @@ static inline uint16_t MakeIndex(int16_t val) {
 //------------------------------------------------------------------------------
 // Decoding
 
-constexpr uint32_t kNumPredictors = 16;
+constexpr uint32_t kNumPredictors = 15;
 
 typedef void (*WP2LPredictorFunc)(const uint16_t* const left,
                                   const uint16_t* const top, uint16_t max_value,

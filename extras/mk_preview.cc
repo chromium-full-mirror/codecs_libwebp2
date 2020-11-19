@@ -80,7 +80,7 @@ static void Help() {
           "[-o output] [-d output]");
   opt.Add("");
   opt.Add("PreviewConfiguration Options:");
-  opt.Add(" -m [edge,rand,diff]", "analysis method");
+  opt.Add(" -m [edge,rand,diff,voronoi]", "analysis method");
   opt.Add(" -n <int>", "starting number of vertices");
   opt.Add(" -nc <int>", "starting number of colors");
   opt.Add(" -density <float>", "grid density");
@@ -251,6 +251,9 @@ int main(int argc, const char* argv[]) {
       } else if (!strcmp(argv[c], "rand")) {
         config.analysis_method =
           WP2::PreviewConfig::AnalysisMethod::kRandomEdgeSelection;
+      } else if (!strcmp(argv[c], "voronoi")) {
+        config.analysis_method =
+          WP2::PreviewConfig::AnalysisMethod::kVoronoi;
       } else {
         CHECK_OK(false, "Unknown analysis method '%s'\n", argv[c]);
       }

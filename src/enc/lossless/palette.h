@@ -20,6 +20,7 @@
 #ifndef WP2_ENC_LOSSLESS_PALETTE_H_
 #define WP2_ENC_LOSSLESS_PALETTE_H_
 
+#include "src/common/progress_watcher.h"
 #include "src/utils/ans.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
@@ -55,11 +56,13 @@ class Palette {
   // Try to find the best writing method 'method_'. Might reorder the colors_.
   // The storage cost cost_ will be calculated.
   // The 'effort' parameter impacts the depth of analyzis to get a better cost.
-  WP2Status FindBestMethod(Encoder* const encoder, int effort);
+  WP2Status FindBestMethod(const WP2::ProgressRange& progress,
+                           Encoder* const encoder, int effort);
   // Returns the bit cost of the current palette, set by FindBestMethod().
   float GetCost() const { return cost_; }
   // Writes the palette to the provided bitwriter 'enc' according to method_.
-  WP2Status Write(WP2::ANSEncBase* const enc, WP2::ANSDictionaries* const dicts,
+  WP2Status Write(const WP2::ProgressRange& progress,
+                  WP2::ANSEncBase* const enc, WP2::ANSDictionaries* const dicts,
                   Encoder* const encoder) const;
 
   // for debugging
@@ -70,6 +73,7 @@ class Palette {
   // try coding a palette 'colors' and if it has a better cost_, set it as the
   // new colors_.
   WP2Status TryPalette(WP2::Vector_s16& colors,
+                       const WP2::ProgressRange& progress,
                        Encoder* const encoder, InternalParams& params,
                        bool also_as_image = true);
 

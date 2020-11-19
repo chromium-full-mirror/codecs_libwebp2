@@ -82,13 +82,16 @@ static constexpr int32_t kMaxCoeffValue =
 static constexpr Argb38b kDefaultBackgroundColor{kAlphaMax, 0x0000u, 0x0000u,
                                                  0x0000u};
 
-// Decoding progress proportion in [0:1] range. The remaining is left to pixels.
-static constexpr float kProgressDecHeader =   0.01f * 1;  // % for readability
-static constexpr float kProgressDecPreview =  0.01f * 3;
-static constexpr float kProgressDecICC =      0.01f * 2;
-static constexpr float kProgressDecANMF =     0.01f * 1;  // % within a frame
-static constexpr float kProgressDecMetadata = 0.01f * 4;
-static constexpr float kProgressDecEnd =      0.01f * 0.1f;
+// Decoding progress proportion in [0:1] range.
+static constexpr float kOnePercent = 0.01f;   // For each header, ICC, ANMF etc.
+static constexpr float kProgressEnd = 0.02f;  // XMP+EXIF.
+// Progress occupied by header + preview + ICC.
+static constexpr float kProgressBeforeFrames = 3 * kOnePercent;
+// Progress left after removing the header + preview + ICC + XMP+EXIF.
+static constexpr float kProgressFrames =
+    1.f - kProgressBeforeFrames - kProgressEnd;
+// Progress for all tiles within a frame minus ANMF + GlobalParams.
+static constexpr float kProgressTiles = 1.f - 2 * kOnePercent;
 
 // Returns the tile width/height in pixels for a given TileShape and a given
 // image width.

@@ -47,11 +47,11 @@ uint32_t DistanceToPlaneCode(uint32_t width, uint32_t dist) {
   const uint32_t yoffset = dist / width;
   const uint32_t xoffset = dist - yoffset * width;
   if (xoffset <= 8 && yoffset < 8) {
-    return plane_to_code_lut[yoffset * 16 + 8 - xoffset] + 1;
+    return plane_to_code_lut[yoffset * 16 + 8 - xoffset];
   } else if (xoffset + 8 > width && yoffset < 7) {
-    return plane_to_code_lut[(yoffset + 1) * 16 + 8 + (width - xoffset)] + 1;
+    return plane_to_code_lut[(yoffset + 1) * 16 + 8 + (width - xoffset)];
   }
-  return dist + kCodeToPlaneCodes;
+  return dist + kCodeToPlaneCodes - 1;
 }
 
 // Returns the exact index where array1 and array2 are different. For an index
@@ -577,7 +577,7 @@ static WP2Status BackwardReferencesLz77Box(uint32_t width, uint32_t height,
         int plane_code;
         // Ignore offsets that bring us after the pixel.
         if (offset <= 0) continue;
-        plane_code = DistanceToPlaneCode(width, offset) - 1;
+        plane_code = DistanceToPlaneCode(width, offset);
         if (plane_code >= WINDOW_OFFSETS_SIZE_MAX) continue;
         window_offsets[plane_code] = offset;
       }

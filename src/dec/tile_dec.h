@@ -50,6 +50,7 @@ struct Tile {
   uint32_t num_decoded_rows = 0;  // For incremental decoding; the number of
                                   // already decoded rows in this tile.
   FilterBlockMap block_map;  // Info (segment, bpp etc.) per block. Lossy only.
+  ProgressScale row_progress;  // Advance by 1 for each decoded row.
 
   void Clear();
   void Draw(const WP2::DecoderConfig& config);  // For debugging.
@@ -92,6 +93,7 @@ Rectangle GetTileRect(uint32_t frame_width, uint32_t frame_height,
 // 'rgb_output' and/or 'yuv_output' can be empty.
 WP2Status GetTilesLayout(uint32_t frame_width, uint32_t frame_height,
                          uint32_t tile_width, uint32_t tile_height,
+                         const ProgressRange& progress,
                          ArgbBuffer* const rgb_output,
                          YUVPlane* const yuv_output,
                          TilesLayout* const tiles_layout);
@@ -122,7 +124,6 @@ class TileDecoder : public WorkerBase {
   const BitstreamFeatures* features_ = nullptr;
   const DecoderConfig* config_ = nullptr;
   const GlobalParams* gparams_ = nullptr;
-  ProgressWatcher* progress_ = nullptr;
   TilesLayout* tiles_layout_ = nullptr;  // Used to get next assignable tile.
   Tile* tile_ = nullptr;                 // Currently assigned tile.
   bool self_assigning_ = true;  // If true tries to assign a new tile when done.
@@ -134,7 +135,6 @@ class TileDecoder : public WorkerBase {
 // tiles and threads.
 WP2Status SetupWorkers(const BitstreamFeatures& features,
                        const DecoderConfig& config,
-                       ProgressWatcher* const progress,
                        TilesLayout* const tiles_layout,
                        Vector<TileDecoder>* const workers);
 

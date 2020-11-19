@@ -209,7 +209,10 @@ class PreviewData {
   bool IsOutside(uint32_t x, uint32_t y) const {
     return (x >= grid_width_ || y >= grid_height_);
   }
+  // Sort vertices, remove duplicates, outside, corner vertices.
+  WP2Status CleanupVertices();
 
+ public:
   uint32_t grid_width_ = 0, grid_height_ = 0;
   Vector<VertexIndexedColor> vertices_;
   // color index of corners (order: top-left,top-right,bottom-left,bottom-right)

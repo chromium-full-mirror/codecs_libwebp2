@@ -39,7 +39,8 @@ WP2Status TileEncoder::LosslessEncode(ANSEnc* const enc) {
     }
   }
   WP2_CHECK_STATUS(WP2L::EncodeImage(*config_, tile_->rgb_input,
-                                     tiles_layout_->gparams->has_alpha_, enc));
+                                     tiles_layout_->gparams->has_alpha_,
+                                     tile_->progress, enc));
   return enc->GetStatus();
 }
 

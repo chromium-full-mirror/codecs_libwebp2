@@ -26,7 +26,8 @@ namespace WP2 {
 WP2Status AlphaWriter::Init(const EncoderConfig& config,
                             const GlobalParams& gparams,
                             const BlockContext& context, const YUVPlane& yuv,
-                            const Rectangle& tile_rect) {
+                            const Rectangle& tile_rect,
+                            const ProgressRange& progress) {
   assert(gparams.has_alpha_);
 
   tile_rect_ = tile_rect;
@@ -40,7 +41,11 @@ WP2Status AlphaWriter::Init(const EncoderConfig& config,
 
   if (alpha_mode_ == kAlphaModeLossy) {
     WP2_CHECK_STATUS(mode_predictor_.Init(tile_rect_.width, tile_rect_.height));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
   } else {
+    const ProgressRange near_lossless_progress(progress, 0.5f);
+    const ProgressRange encode_image_progress(progress, 0.5f);
+
     // Convert alpha plane to a grayscale image (not padded).
     WP2_CHECK_STATUS(alpha_.Resize(tile_rect_.width, tile_rect_.height));
     for (uint32_t y = 0; y < tile_rect_.height; ++y) {
@@ -60,6 +65,7 @@ WP2Status AlphaWriter::Init(const EncoderConfig& config,
                                               &pre_processed_buffer));
       buffer = &pre_processed_buffer;
     }
+    WP2_CHECK_STATUS(near_lossless_progress.AdvanceBy(1.f));
 
     // Encode the whole alpha losslessly.
     WP2_CHECK_ALLOC_OK(lossless_encode_info_.bits_per_pixel.resize(
@@ -67,7 +73,8 @@ WP2Status AlphaWriter::Init(const EncoderConfig& config,
     WP2_CHECK_ALLOC_OK(
         lossless_encode_info_.line_tokens.resize(tile_rect_.height));
     WP2_CHECK_STATUS(WP2L::EncodeImage(config_, *buffer, /*has_alpha=*/true,
-                                       &lossless_enc_, &lossless_encode_info_));
+                                       encode_image_progress, &lossless_enc_,
+                                       &lossless_encode_info_));
     assert(lossless_encode_info_.line_tokens[alpha_.height() - 1] ==
            lossless_enc_.NumTokens());
   }
