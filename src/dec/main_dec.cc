@@ -405,8 +405,9 @@ WP2Status DecodeArgb_32(const uint8_t* input_data, size_t input_data_size,
                         size_t output_buffer_size,
                         const DecoderConfig& config) {
   if (config.progress_hook != nullptr) {
-    WP2_CHECK_OK(config.progress_hook->OnUpdate(0.f), WP2_STATUS_USER_ABORT);
-    // OnUpdate() will be called twice with 'progress' at 0; not a big deal.
+    WP2_CHECK_OK(config.progress_hook->OnUpdate(0.), WP2_STATUS_USER_ABORT);
+    // OnUpdate() will be called twice with 'progress' at 0; not a big deal
+    // but it is safer to call the hook before DecodeHeader() or anything.
   }
   ArgbBuffer output;
   BitstreamFeatures features;
@@ -434,7 +435,7 @@ WP2Status Decode(const uint8_t* input_data, size_t input_data_size,
   const CSPMtx rgb_to_ccsp(rgb_to_ccsp_matrix, rgb_to_ccsp_shift);
 
   if (config.progress_hook != nullptr) {
-    WP2_CHECK_OK(config.progress_hook->OnUpdate(0.f), WP2_STATUS_USER_ABORT);
+    WP2_CHECK_OK(config.progress_hook->OnUpdate(0.), WP2_STATUS_USER_ABORT);
   }
   WP2_CHECK_OK(rgb_to_ccsp.shift <= 16, WP2_STATUS_INVALID_PARAMETER);
 

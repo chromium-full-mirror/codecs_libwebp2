@@ -50,6 +50,11 @@
 #define LOCAL_GIF_PREREQ(maj, min) 0
 #endif
 
+// D_GIF_SUCCEEDED was added in 5.1.0.
+#ifndef D_GIF_SUCCEEDED
+#define D_GIF_SUCCEEDED 0
+#endif
+
 //------------------------------------------------------------------------------
 
 namespace WP2 {

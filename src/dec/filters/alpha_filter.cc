@@ -33,7 +33,7 @@ constexpr uint32_t kGaussian1[] = {1024, 621};       // radius = 1
 constexpr uint32_t kGaussian2[] = {1024, 797, 377};  // radius = 2
 // Weights for pixel value differences.
 // round(exp(-i*i/(2.*sigma*sigma)) * (1<<kWeightBits))
-// sigma = 5
+// sigma = 5.
 constexpr uint32_t kValueWeights5[kAlphaMax + 1] = {
     1024, 1004, 945, 855, 744, 621, 498, 384, 285, 203,
     139,  91,   57,  35,  20,  11,  6,   3,   2,   1};  // Rest is 0.

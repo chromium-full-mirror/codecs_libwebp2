@@ -252,7 +252,6 @@ WP2Status SyntaxReader::GetBlock(CodedBlock* const cb, YUVPlane* const out,
 
   // Initialize the views now that 'blk_.dim' is known.
   cb->SetContextInput(*out);  // Predict from other reconstructed pixels.
-  cb->ResetContextCache();
   cb->SetReconstructedOutput(out);
 
   dec_->PushBitTracesCustomPrefix("segment_id");

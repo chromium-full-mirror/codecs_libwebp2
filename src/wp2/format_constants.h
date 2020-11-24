@@ -37,8 +37,8 @@ static constexpr uint32_t kHeaderMinSize = 10;
 static constexpr uint32_t kHeaderMaxSize = 16;
 static constexpr uint32_t kTagMask = 0x60ffe9;
 
-// Maximum (inclusive) size of a buffer chunk. -1 to fit in our var ints.
-static constexpr uint64_t kChunkSizeMax = (1ull << 36) - 1;  // ~=64G
+// Maximum (inclusive) size of a buffer chunk.
+static constexpr uint32_t kMaxChunkSize = 1u << 29;  // ~500 MB
 
 static constexpr const char kFileExtension[] = "wp2";
 
@@ -187,6 +187,10 @@ static constexpr uint32_t kMaxTileSize =
 static constexpr uint32_t kMaxAspectRatio = 64;
 static_assert(kMaxTileSize * kMaxTileSize / kMaxTilePixels <= kMaxAspectRatio,
               "Extreme aspect ratios are no good");
+static constexpr uint32_t kMaxTileChunkSize =
+    (kMaxTilePixels * (kAlphaBits + (kMaxYuvBits + 1) * 3) + 7) / 8;
+static_assert(kMaxTileChunkSize <= kMaxChunkSize,
+              "Tile bypass may not fit in a chunk");
 
 typedef enum {
   TILE_SHAPE_SQUARE_128,

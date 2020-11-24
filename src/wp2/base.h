@@ -470,7 +470,7 @@ class ProgressHook {
   // didn't start) to 1.f (decoding is done). For animations, 'progress' will
   // be reset to 0.f at each frame beginning; otherwise it never decreases.
   // Return true to continue, false to stop decoding.
-  virtual bool OnUpdate(float progress) = 0;
+  virtual bool OnUpdate(double progress) = 0;
 };
 
 //------------------------------------------------------------------------------

@@ -175,9 +175,9 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config);
 // ProgressHook::OnUpdate() return false when the specified progress is reached.
 class ProgressTester : public ProgressHook {
  public:
-  bool OnUpdate(float progress) override;
+  bool OnUpdate(double progress) override;
   void Reset() { *this = ProgressTester(); }
-  float last_progress_ = -1.f, fail_at_ = 2.f;  // No USER_ABORT by default.
+  double last_progress_ = -1.f, fail_at_ = 2.f;  // No USER_ABORT by default.
 };
 
 //------------------------------------------------------------------------------

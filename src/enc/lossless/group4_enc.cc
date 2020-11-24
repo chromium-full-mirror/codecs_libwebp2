@@ -70,7 +70,7 @@ static WP2Status Impl(const uint16_t* const argb, uint32_t width,
 
   const uint32_t num_colors = mtf->num_colors();
   const uint16_t first_color = GetColor(argb, /*x=*/0);
-  const WP2::ProgressScale row_progress(progress, 1.f / height);
+  const WP2::ProgressScale row_progress(progress, 1. / height);
 
   for (uint32_t y = 0; y < height; ++y) {
     const uint16_t* prev = (y > 0) ? &argb[(y - 1) * width * 4] : nullptr;
@@ -221,7 +221,7 @@ static WP2Status Impl(const uint16_t* const argb, uint32_t width,
       std::fill(&encode_info->bits_per_pixel[0] + y * width + a0_prev,
                 &encode_info->bits_per_pixel[0] + y * width + width, 0);
     }
-    WP2_CHECK_STATUS(row_progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(row_progress.AdvanceBy(1.));
   }
   return WP2_STATUS_OK;
 }
@@ -239,8 +239,8 @@ WP2Status Group4Encode(const uint16_t* const argb, uint32_t width,
   WP2_CHECK_STATUS(mtf.Init(use_move_to_front, num_colors));
 
   // Impl() is called twice.
-  const WP2::ProgressRange first_impl_progress(progress, 0.5f);
-  const WP2::ProgressRange second_impl_progress(progress, 0.5f);
+  const WP2::ProgressRange first_impl_progress(progress, 0.5);
+  const WP2::ProgressRange second_impl_progress(progress, 0.5);
 
   // Get symbol statistics.
   WP2::SymbolRecorder sr;

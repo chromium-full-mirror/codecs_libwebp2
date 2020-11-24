@@ -545,8 +545,8 @@ WP2Status Palette::TryPalette(WP2::Vector_s16& colors,
   WP2::ANSEncCounter bw;
   float cost;
 
-  const ProgressRange image_progress(progress, 0.5f);
-  const ProgressRange list_progress(progress, 0.5f);
+  const ProgressRange image_progress(progress, 0.5);
+  const ProgressRange list_progress(progress, 0.5);
 
   WP2_CHECK_STATUS(params.Init(&colors[0]));
   WP2_CHECK_STATUS(params.StoreSigns(&bw));
@@ -564,13 +564,13 @@ WP2Status Palette::TryPalette(WP2::Vector_s16& colors,
       is_better = true;
     }
   } else {
-    WP2_CHECK_STATUS(image_progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(image_progress.AdvanceBy(1.));
   }
 
   // then as kMethodList
   bw.Reset();
   WP2_CHECK_STATUS(params.WriteAsList(&bw));
-  WP2_CHECK_STATUS(list_progress.AdvanceBy(1.f));
+  WP2_CHECK_STATUS(list_progress.AdvanceBy(1.));
   cost = cost_base + bw.GetCost();
   if (cost < cost_) {
     cost_ = cost;
@@ -586,7 +586,7 @@ WP2Status Palette::FindBestMethod(const ProgressRange& progress,
   method_ = PaletteStorageMethod::kMethodVerbatim;
   cost_ = std::numeric_limits<float>::max();
   if (num_colors_ < 2) {
-    WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.));
     return WP2_STATUS_OK;
   }
 
@@ -607,14 +607,14 @@ WP2Status Palette::FindBestMethod(const ProgressRange& progress,
     WP2_CHECK_STATUS(params.WriteVerbatim(&bw));
     method_ = PaletteStorageMethod::kMethodVerbatim;
     cost_ = bw.GetCost();
-    WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.));
     return WP2_STATUS_OK;
   }
 
   const float cost_base = bw.GetCost() + 1.f;  // +1 for the 'is_image' bit
 
   // Advance progression by half the remaining range for each TryPalette() call.
-  ProgressRange try_progress(progress, 0.5f);
+  ProgressRange try_progress(progress, 0.5);
   WP2_CHECK_STATUS(TryPalette(colors_, try_progress, encoder, params));
 
   const bool try_alt_order =
@@ -625,7 +625,7 @@ WP2Status Palette::FindBestMethod(const ProgressRange& progress,
     WP2_CHECK_ALLOC_OK(alt_colors.copy_from(colors_));
 
     GreedyMinimizeDeltas(num_colors_, &alt_colors[0], 220);
-    try_progress = ProgressRange(try_progress, 0.5f);
+    try_progress = ProgressRange(try_progress, 0.5);
     WP2_CHECK_STATUS(TryPalette(alt_colors, try_progress, encoder, params));
 
     // without alpha, any other call to GreedyMinimizeDeltas() is a no-op
@@ -633,17 +633,17 @@ WP2Status Palette::FindBestMethod(const ProgressRange& progress,
 
     if (effort > 2) {  // try few other sorts if time permits
       GreedyMinimizeDeltas(num_colors_, &alt_colors[0], 119);
-      try_progress = ProgressRange(try_progress, 0.5f);
+      try_progress = ProgressRange(try_progress, 0.5);
       WP2_CHECK_STATUS(TryPalette(alt_colors, try_progress, encoder, params));
     }
     if (effort > 3) {
       GreedyMinimizeDeltas(num_colors_, &alt_colors[0], 42);
-      try_progress = ProgressRange(try_progress, 0.5f);
+      try_progress = ProgressRange(try_progress, 0.5);
       WP2_CHECK_STATUS(TryPalette(alt_colors, try_progress, encoder, params));
     }
     if (effort > 4) {
       GreedyMinimizeDeltas(num_colors_, &alt_colors[0], 0);
-      try_progress = ProgressRange(try_progress, 0.5f);
+      try_progress = ProgressRange(try_progress, 0.5);
       WP2_CHECK_STATUS(TryPalette(alt_colors, try_progress, encoder, params));
     }
     // for slower efforts, we uniformly sample the range of weights
@@ -664,7 +664,7 @@ WP2Status Palette::FindBestMethod(const ProgressRange& progress,
         float cost_saved = cost_;
         for (uint32_t dw = 0; dw < range; dw += step) {
           GreedyMinimizeDeltas(num_colors_, &alt_colors[0], base_w + dw);
-          try_progress = ProgressRange(try_progress, 0.5f);
+          try_progress = ProgressRange(try_progress, 0.5);
           WP2_CHECK_STATUS(
               TryPalette(alt_colors, try_progress, encoder, params, as_image));
           if (cost_ < cost_saved) {
@@ -680,7 +680,7 @@ WP2Status Palette::FindBestMethod(const ProgressRange& progress,
     break;
   }
 
-  WP2_CHECK_STATUS(try_progress.AdvanceBy(1.f));  // Finish 'progress'.
+  WP2_CHECK_STATUS(try_progress.AdvanceBy(1.));  // Finish 'progress'.
   cost_ += cost_base;
   return WP2_STATUS_OK;
 }
@@ -703,7 +703,7 @@ WP2Status Palette::Write(const ProgressRange& progress,
 
   if (method_ == PaletteStorageMethod::kMethodVerbatim) {
     WP2_CHECK_STATUS(params.WriteVerbatim(enc));
-    WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.));
     return WP2_STATUS_OK;
   }
   WP2_CHECK_STATUS(params.Init(&colors_[0]));
@@ -715,7 +715,7 @@ WP2Status Palette::Write(const ProgressRange& progress,
     WP2_CHECK_STATUS(dicts_in->AppendAndClear(&dict));
   } else if (method_ == PaletteStorageMethod::kMethodList) {
     WP2_CHECK_STATUS(params.WriteAsList(enc));
-    WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   } else {
     assert(false);
   }

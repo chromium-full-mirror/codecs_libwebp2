@@ -71,8 +71,9 @@ void AOMResidualWriter::WriteSignAndApplyDequantization(
     enc->PutBool(sign, "is_negative");
   }
   *coefficient_level += val;
-  constexpr int16_t max_range = is_dc_coefficient ? kMaxDcValue : kMaxCoeffValue;
   if (val >= kQuantizerCoefficientBaseRangeContextClamp) {
+    constexpr int16_t max_range = is_dc_coefficient ? kMaxDcValue
+                                                    : kMaxCoeffValue;
     WriteGolomb(val, kQuantizerCoefficientBaseRangeContextClamp, max_range,
                 /*prefix_size=*/1, enc, "golomb");
   }

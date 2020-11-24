@@ -294,8 +294,8 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config) {
   return ::testing::AssertionSuccess();
 }
 
-bool ProgressTester::OnUpdate(float progress) {
-  assert(progress >= 0.f && progress <= 1.f);
+bool ProgressTester::OnUpdate(double progress) {
+  assert(progress >= 0. && progress <= 1.);
   assert(progress >= last_progress_);
   last_progress_ = progress;
   return (progress < fail_at_);

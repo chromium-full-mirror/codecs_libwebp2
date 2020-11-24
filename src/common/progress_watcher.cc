@@ -30,11 +30,11 @@ namespace WP2 {
 // TODO(yguyon): Add no-op fast return if 'hook_' is null
 //               (useful to keep assertions always running for now)
 
-WP2Status ProgressWatcher::Set(float progress) {
+WP2Status ProgressWatcher::Set(double progress) {
   WP2_CHECK_STATUS(thread_lock_.Acquire());
-  if (progress == 0.f) aborted_ = false;  // Rewinded.
+  if (progress == 0.) aborted_ = false;  // Rewinded.
   if (!aborted_) {
-    assert(progress >= 0.f && progress <= 1.f);
+    assert(progress >= 0. && progress <= 1.);
     progress_ = progress;
     if (hook_ != nullptr) aborted_ = !hook_->OnUpdate(progress_);
   }
@@ -42,22 +42,22 @@ WP2Status ProgressWatcher::Set(float progress) {
   return aborted_ ? WP2_STATUS_USER_ABORT : WP2_STATUS_OK;
 }
 
-WP2Status ProgressWatcher::Start() { return Set(0.f); }
+WP2Status ProgressWatcher::Start() { return Set(0.); }
 
 WP2Status ProgressWatcher::Finish() {
-  assert(progress_ < 1.f);
+  assert(progress_ < 1.);
   // If the following assertion fails, it might be a precision error
   // (progression is incremented by amounts that are too small).
   // Try switching to doubles to see if the problem is fixed.
-  assert(std::abs(progress_ + kProgressEnd - 1.f) < 0.001f);
-  return Set(1.f);
+  assert(std::abs(progress_ + kProgressEnd - 1.) < 0.001);
+  return Set(1.);
 }
 
-WP2Status ProgressWatcher::AdvanceBy(float step) {
+WP2Status ProgressWatcher::AdvanceBy(double step) {
   WP2_CHECK_STATUS(thread_lock_.Acquire());
   if (!aborted_) {
     progress_ += step;
-    assert(progress_ >= 0.f && progress_ <= 1.f);
+    assert(progress_ >= 0. && progress_ <= 1.);
     if (hook_ != nullptr) aborted_ = !hook_->OnUpdate(progress_);
   }
   const bool aborted = aborted_;  // Prevent threaded data race.
@@ -67,19 +67,19 @@ WP2Status ProgressWatcher::AdvanceBy(float step) {
 
 //------------------------------------------------------------------------------
 
-ProgressRange::ProgressRange(ProgressWatcher* const watcher, float range)
+ProgressRange::ProgressRange(ProgressWatcher* const watcher, double range)
     : watcher_(watcher), range_(range) {}
-ProgressRange::ProgressRange(const ProgressRange& parent, float range)
+ProgressRange::ProgressRange(const ProgressRange& parent, double range)
     : watcher_(parent.watcher_), range_(parent.range_ * range) {}
 
-WP2Status ProgressRange::AdvanceBy(float step) const {
+WP2Status ProgressRange::AdvanceBy(double step) const {
   if (watcher_ == nullptr) return WP2_STATUS_OK;
   return watcher_->AdvanceBy(step * range_);
 }
 
 //------------------------------------------------------------------------------
 
-float GetFrameProgression(uint32_t frame_index, bool is_last) {
+double GetFrameProgression(uint32_t frame_index, bool is_last) {
   if (frame_index == 0 && is_last) {
     return kProgressFrames;
   } else {
@@ -93,19 +93,18 @@ float GetFrameProgression(uint32_t frame_index, bool is_last) {
 
     // The portion that corresponds to the single ANMF chunk and the tiles
     // belonging to the 'frame_index'.
-    return kProgressFrames *
-           std::pow(0.5f, frame_index + (is_last ? 0.f : 1.f));
+    return kProgressFrames * std::pow(0.5, frame_index + (is_last ? 0. : 1.));
   }
 }
 
-float GetProgressAtFrame(uint32_t frame_index) {
+double GetProgressAtFrame(uint32_t frame_index) {
   if (frame_index == 0) {
     return kProgressBeforeFrames;
   } else {
     // Each time a frame is completed, it occupies half of the remaining
     // progression. Hence the same amount is left at the beginning of the next
     // frame.
-    const float previous_frame_progression =
+    const double previous_frame_progression =
         GetFrameProgression(frame_index - 1, /*is_last=*/false);
     return kProgressBeforeFrames +
            (kProgressFrames - previous_frame_progression);

@@ -186,7 +186,7 @@ WP2Status RandomEncodeTile(uint32_t width, uint32_t height,
   const uint32_t num_bytes = random->Get(10u, width * height * 4u);
   {
     uint8_t buf[kMaxVarIntLength];
-    const size_t buf_size = WriteVarInt(num_bytes, 1, kChunkSizeMax, buf);
+    const uint32_t buf_size = WriteVarInt(num_bytes, 1, kMaxChunkSize, buf);
     WP2_CHECK_ALLOC_OK(output->Append(buf, buf_size));
   }
   Vector_u8 bytes;
@@ -318,10 +318,10 @@ WP2Status RandomEncodeDecodeTile(uint32_t width, uint32_t height,
 
   // Append the generated tile to 'output' for accurate stats.
   const size_t tile_size = tile_data.bytes_.size();
-  WP2_CHECK_OK(tile_size > 0 && tile_size <= kChunkSizeMax,
+  WP2_CHECK_OK(tile_size > 0 && tile_size <= kMaxChunkSize,
                WP2_STATUS_BITSTREAM_ERROR);
   uint8_t buf[kMaxVarIntLength];
-  const size_t buf_size = WriteVarInt(tile_size, 1, kChunkSizeMax, buf);
+  const uint32_t buf_size = WriteVarInt(tile_size, 1, kMaxChunkSize, buf);
   WP2_CHECK_ALLOC_OK(output->Append(buf, buf_size));
   WP2_CHECK_ALLOC_OK(
       output->Append(tile_data.bytes_.data(), tile_data.bytes_.size()));
@@ -474,8 +474,8 @@ WP2Status MutateBitstream(uint32_t tile_width, uint32_t tile_height,
                           uint8_t tile_bytes[], size_t tile_num_bytes,
                           UniformIntDistribution* const random) {
   ExternalDataSource data_source(tile_bytes, tile_num_bytes);
-  const uint64_t max_size = kMaxNumBytesPerPixel * tile_width * tile_height;
-  size_t tile_chunk_size;
+  const uint32_t max_size = kMaxNumBytesPerPixel * tile_width * tile_height;
+  uint32_t tile_chunk_size;
   WP2_CHECK_STATUS(TryReadVarInt(&data_source, 1, max_size, &tile_chunk_size));
   const size_t var_int_num_bytes = data_source.GetNumReadBytes();
   WP2_CHECK_OK(var_int_num_bytes + tile_chunk_size == tile_num_bytes,

@@ -86,8 +86,9 @@ namespace {
 
 WP2Status WriteChunk(DataView data, Writer* const output) {
   if (data.size == 0) return WP2_STATUS_OK;
+  WP2_CHECK_OK(data.size <= kMaxChunkSize, WP2_STATUS_INVALID_PARAMETER);
   uint8_t buf[kMaxVarIntLength];
-  const size_t buf_size = WriteVarInt(data.size, 1, kChunkSizeMax, buf);
+  const size_t buf_size = WriteVarInt(data.size, 1, kMaxChunkSize, buf);
   WP2_CHECK_OK(output->Append(buf, buf_size), WP2_STATUS_BAD_WRITE);
   WP2_CHECK_OK(output->Append(data.bytes, data.size), WP2_STATUS_BAD_WRITE);
   return WP2_STATUS_OK;
@@ -123,7 +124,7 @@ WP2Status GetEncTilesLayout(uint32_t frame_width, uint32_t frame_height,
                  std::min(frame_width - tile_x * tile_width, tile_width),
                  std::min(frame_height - tile_y * tile_height, tile_height)};
     tile.progress =
-        ProgressRange(progress, 1.f * tile.rect.GetArea() / num_pixels);
+        ProgressRange(progress, 1. * tile.rect.GetArea() / num_pixels);
 
     // Set views on RGB and YUV input buffers, one or both may be used.
     assert(!frame_rgb.IsEmpty() || !frame_yuv.IsEmpty());

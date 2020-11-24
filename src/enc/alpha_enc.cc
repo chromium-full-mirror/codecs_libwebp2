@@ -41,10 +41,10 @@ WP2Status AlphaWriter::Init(const EncoderConfig& config,
 
   if (alpha_mode_ == kAlphaModeLossy) {
     WP2_CHECK_STATUS(mode_predictor_.Init(tile_rect_.width, tile_rect_.height));
-    WP2_CHECK_STATUS(progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   } else {
-    const ProgressRange near_lossless_progress(progress, 0.5f);
-    const ProgressRange encode_image_progress(progress, 0.5f);
+    const ProgressRange near_lossless_progress(progress, 0.5);
+    const ProgressRange encode_image_progress(progress, 0.5);
 
     // Convert alpha plane to a grayscale image (not padded).
     WP2_CHECK_STATUS(alpha_.Resize(tile_rect_.width, tile_rect_.height));
@@ -65,7 +65,7 @@ WP2Status AlphaWriter::Init(const EncoderConfig& config,
                                               &pre_processed_buffer));
       buffer = &pre_processed_buffer;
     }
-    WP2_CHECK_STATUS(near_lossless_progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(near_lossless_progress.AdvanceBy(1.));
 
     // Encode the whole alpha losslessly.
     WP2_CHECK_ALLOC_OK(lossless_encode_info_.bits_per_pixel.resize(

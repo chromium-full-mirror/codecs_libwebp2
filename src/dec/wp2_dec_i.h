@@ -130,7 +130,7 @@ WP2Status FillBorders(const BitstreamFeatures& features,
 WP2Status DecodeTileChunkSize(const GlobalParams& params,
                               const Rectangle& tile_rect,
                               DataSource* const data_source,
-                              size_t* const tile_chunk_size);
+                              uint32_t* const tile_chunk_size);
 
 WP2Status DecodeMetadata(DataSource* const data_source,
                          const BitstreamFeatures& features, Data* const exif,

@@ -20,18 +20,22 @@ include(UseSWIG)
 find_package(PythonLibs 3 REQUIRED)
 
 set_property(SOURCE libwebp2.i PROPERTY CPLUSPLUS ON)
-swig_add_library(
-  libwebp2
-  TYPE
-  SHARED
-  LANGUAGE
-  python
-  OUTPUT_DIR
-  ${CMAKE_CURRENT_BINARY_DIR}
-  OUTFILE_DIR
-  ${CMAKE_CURRENT_BINARY_DIR}
-  SOURCES
-  ${CMAKE_CURRENT_SOURCE_DIR}/libwebp2.i)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.8")
+  swig_add_library(
+    libwebp2
+    TYPE
+    SHARED
+    LANGUAGE
+    python
+    OUTPUT_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}
+    OUTFILE_DIR
+    ${CMAKE_CURRENT_BINARY_DIR}
+    SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/libwebp2.i)
+else()
+  swig_add_module(libwebp2 python ${CMAKE_CURRENT_SOURCE_DIR}/libwebp2.i)
+endif()
 target_include_directories(${SWIG_MODULE_libwebp2_REAL_NAME}
                            PRIVATE ${PROJECT_SOURCE_DIR} ${PYTHON_INCLUDE_DIRS})
 target_link_libraries(${SWIG_MODULE_libwebp2_REAL_NAME}
@@ -45,4 +49,4 @@ get_property(
   PROPERTY COMPILE_FLAGS)
 set(FLAGS "${FLAGS} -Wno-shadow -Wno-missing-declarations")
 set_property(TARGET ${SWIG_MODULE_libwebp2_REAL_NAME} PROPERTY COMPILE_FLAGS
-                                                             ${FLAGS})
+                                                               ${FLAGS})

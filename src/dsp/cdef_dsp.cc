@@ -374,8 +374,8 @@ void CdefFilter_C(const int16_t* src, int32_t src_step, uint32_t bitdepth,
               const int dx = sign * kCdefDirections[direction + offset][k][1];
               const int16_t value = src[dy * src_step + dx + x];
               if (value != kUnknown) {
-                sum += Constrain(value - pixel_value, secondary_strength, damping)
-                     * kCdefSecondaryTaps[k];
+                sum += Constrain(value - pixel_value, secondary_strength,
+                                 damping) * kCdefSecondaryTaps[k];
                 if (clipping_required) {
                   max_value = std::max(value, max_value);
                   min_value = std::min(value, min_value);

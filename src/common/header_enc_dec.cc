@@ -25,12 +25,13 @@ namespace WP2 {
 
 static_assert(GetMaxVarIntLength(0, kMaxVarInt) == kMaxVarIntLength, "Error");
 
-WP2Status TryReadVarInt(DataSource* const data_source, size_t min_value,
-                        size_t max_value, size_t* const value) {
-  assert(min_value <= max_value && max_value <= kMaxVarInt);
+WP2Status TryReadVarInt(DataSource* const data_source, uint32_t min_value,
+                        uint32_t max_value, uint32_t* const value) {
+  assert(min_value <= max_value);
   *value = 0;
   uint32_t num_bytes = 0;
-  size_t max_remaining_value = max_value - min_value;
+  uint32_t max_remaining_value = max_value - min_value;
+  assert(max_remaining_value <= kMaxVarInt);
   bool read_next_byte = (max_remaining_value > 0);
   while (read_next_byte) {
     const uint32_t i = num_bytes++;         // Current byte index.
@@ -42,7 +43,7 @@ WP2Status TryReadVarInt(DataSource* const data_source, size_t min_value,
     const uint8_t byte = bytes[i];  // Current byte. Next byte is 'bytes[i+1]'.
     read_next_byte = (max_remaining_value > 0xFF && (byte & 0x80));
     // If there is a next byte, use only 7 bits in current 'byte'.
-    *value |= (uint64_t)(read_next_byte ? (byte & 0x7F) : byte) << (7 * i);
+    *value |= (uint32_t)(read_next_byte ? (byte & 0x7F) : byte) << (7 * i);
     max_remaining_value >>= 7;
   }
   *value += min_value;
@@ -51,11 +52,12 @@ WP2Status TryReadVarInt(DataSource* const data_source, size_t min_value,
   return WP2_STATUS_OK;
 }
 
-uint32_t WriteVarInt(size_t value, size_t min_value, size_t max_value,
+uint32_t WriteVarInt(uint32_t value, uint32_t min_value, uint32_t max_value,
                      uint8_t dst[]) {
-  assert(min_value <= value && value <= max_value && max_value <= kMaxVarInt);
+  assert(min_value <= value && value <= max_value);
   value -= min_value;      // Get rid of 'min_value'.
   max_value -= min_value;  // Consider 'value' in [0:max_value].
+  assert(max_value <= kMaxVarInt);
 
   uint32_t num_used_bytes = 0;
   if (max_value == 0) return num_used_bytes;
@@ -89,7 +91,7 @@ uint32_t HeaderDec::ReadVarUInt(uint32_t min_value, uint32_t max_value,
   assert(min_value <= max_value);
   if (status_ != WP2_STATUS_OK || min_value == max_value) return 0;
   assert(bit_pos_ == 8);  // Not-aligned variable-length ints are not supported.
-  size_t value;
+  uint32_t value;
   status_ = TryReadVarInt(data_source_, min_value, max_value, &value);
   WP2Trace("%s: value=%u in [%u:%u]", debug_prefix_, label, value, min_value,
            max_value);

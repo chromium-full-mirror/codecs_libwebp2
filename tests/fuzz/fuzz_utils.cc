@@ -21,10 +21,12 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <string>
 #include <vector>
 
-#include "src/wp2/format_constants.h"
 #include "imageio/image_enc.h"
+#include "src/wp2/format_constants.h"
 
 #include "examples/example_utils.h"
 #include "imageio/imageio_util.h"

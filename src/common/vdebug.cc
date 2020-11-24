@@ -1129,7 +1129,7 @@ void Tile::Draw(const DecoderConfig& config) {
     WP2SAppend(str_ptr, "\nTile at %u, %u px (%u x %u)\n", rect.x, rect.y,
                rect.width, rect.height);
     assert(chunk_size_is_known);
-    WP2SAppend(str_ptr, "Tile size: %zu bytes\n", chunk_size);
+    WP2SAppend(str_ptr, "Tile size: %u bytes\n", chunk_size);
   }
 
   config.info->debug_output.DrawRect(rect, color);

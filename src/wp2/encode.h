@@ -44,8 +44,9 @@ struct EncoderConfig {
  public:
   // Compression parameters:
   float quality = 75.0f;  // Range: [0 = smallest file .. 100 = lossless]
-                          // Quality in (95-100) range will use near-lossless.
                           // Quality 100 is strictly lossless.
+                          // Quality above 95 (exclusive) is near lossless.
+                          // Quality in [0-95] range will use lossy compression.
   size_t target_size = 0;  // If non-zero, set the desired target size in bytes.
                            // Takes precedence over the 'quality' parameter.
   float target_psnr = 0.f;  // If non-zero, specifies the minimal distortion to

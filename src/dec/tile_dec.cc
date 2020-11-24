@@ -50,7 +50,7 @@ void Tile::Clear() {
   yuv_output.Clear();
   num_decoded_rows = 0;
   block_map.Clear();
-  row_progress = ProgressScale(nullptr, 0.f);
+  row_progress = ProgressScale();
 }
 
 //------------------------------------------------------------------------------
@@ -197,8 +197,8 @@ WP2Status GetTilesLayout(uint32_t frame_width, uint32_t frame_height,
     tile.Clear();
     tile.rect = GetTileRect(frame_width, frame_height, tile_width, tile_height,
                             tile_index);
-    const float per_tile = 1.f * tile.rect.GetArea() / num_pixels;
-    const float per_row = 1.f / tile.rect.height;
+    const double per_tile = 1. * tile.rect.GetArea() / num_pixels;
+    const double per_row = 1. / tile.rect.height;
     tile.row_progress = ProgressScale(progress, per_tile * per_row);
 
     // Set views on RGB and YUV output buffers, both can be used.
@@ -230,9 +230,7 @@ uint32_t GetTileMaxNumBytes(const GlobalParams& gparams,
 #if defined(WP2_ENC_DEC_MATCH)
   (void)gparams, (void)tile_rect;
   // Make sure it does not fall back to raw pixel coding in CodeTiles().
-  constexpr uint32_t kPlentyEnoughNumBytes = 2147483647u;
-  static_assert(kPlentyEnoughNumBytes <= kMaxVarInt, "kPlentyEnoughNumBytes");
-  return kPlentyEnoughNumBytes;
+  return kMaxChunkSize;
 #else
   const bool lossless = (gparams.type_ == GlobalParams::GP_LOSSLESS);
   const uint32_t channel_bits =
@@ -259,7 +257,7 @@ WP2Status SkipTiles(DataSource* const data_source,
     const Rectangle& tile_rect =
         GetTileRect(window.width, window.height, features.tile_width,
                     features.tile_height, tile_index);
-    size_t tile_chunk_size;
+    uint32_t tile_chunk_size;
     WP2_CHECK_STATUS(
         DecodeTileChunkSize(gparams, tile_rect, data_source, &tile_chunk_size));
     data_source->MarkNumBytesAsRead(tile_chunk_size);

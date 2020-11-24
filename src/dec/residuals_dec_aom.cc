@@ -40,8 +40,9 @@ void AOMResidualReader::ReadSignAndApplyDequantization(
   const bool sign = is_dc_coefficient ?
       sr_->Read(dc_sign_cluster, kAOMDCSign, "is_negative_dc") :
       dec_->ReadBool("is_negative");
-  constexpr int16_t max_range = is_dc_coefficient ? kMaxDcValue : kMaxCoeffValue;
   if (coeff >= kQuantizerCoefficientBaseRangeContextClamp) {
+    constexpr int16_t max_range = is_dc_coefficient ? kMaxDcValue
+                                                    : kMaxCoeffValue;
     coeff = ReadGolomb(kQuantizerCoefficientBaseRangeContextClamp, max_range,
                         /*prefix_size=*/1, dec_, "golomb");
   }

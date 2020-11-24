@@ -421,8 +421,8 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   uint32_t n_lz77s;
   assert(!pic.IsEmpty());
 
-  const WP2::ProgressRange palette_progress(progress, 0.5f);
-  const WP2::ProgressRange entropy_progress(progress, 0.5f);
+  const WP2::ProgressRange palette_progress(progress, 0.5);
+  const WP2::ProgressRange entropy_progress(progress, 0.5);
 
   WP2_CHECK_STATUS(encoder->palette_.AnalyzeAndCreate(pic));
   WP2_CHECK_STATUS(
@@ -471,10 +471,10 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
       *crunch_configs_size = 1;
     }
     n_lz77s = 1;
-    WP2_CHECK_STATUS(entropy_progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(entropy_progress.AdvanceBy(1.));
   } else {
-    const WP2::ProgressRange analysis_progress(entropy_progress, 0.5f);
-    const WP2::ProgressRange translate_progress(entropy_progress, 0.5f);
+    const WP2::ProgressRange analysis_progress(entropy_progress, 0.5);
+    const WP2::ProgressRange translate_progress(entropy_progress, 0.5);
 
     EntropyMode best_mode = EntropyMode::kDirect;
     // Try out multiple LZ77 on images with few colors.
@@ -483,7 +483,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
     WP2_CHECK_STATUS(AnalyzeEntropy(
         pic, width, height, encoder->has_alpha_, use_palette, encoder,
         &best_mode, &red_and_blue_always_zero, &encoder->use_premultiplied_));
-    WP2_CHECK_STATUS(analysis_progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(analysis_progress.AdvanceBy(1.));
     if (effort == 9) {
       // Go brute force on all transforms.
       constexpr uint32_t kNum = (uint32_t)EntropyMode::kNum;
@@ -494,13 +494,13 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
           TranslateEntropyMode((EntropyMode)i, effort, red_and_blue_always_zero,
                                &crunch_configs[(*crunch_configs_size)++]);
         }
-        WP2_CHECK_STATUS(translate_progress.AdvanceBy(1.f / kNum));
+        WP2_CHECK_STATUS(translate_progress.AdvanceBy(1. / kNum));
       }
     } else {
       // Only choose the guessed best transform.
       TranslateEntropyMode(best_mode, effort, red_and_blue_always_zero,
                            &crunch_configs[(*crunch_configs_size)++]);
-      WP2_CHECK_STATUS(translate_progress.AdvanceBy(1.f));
+      WP2_CHECK_STATUS(translate_progress.AdvanceBy(1.));
     }
   }
   // Fill in the different LZ77s.

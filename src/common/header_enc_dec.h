@@ -35,22 +35,21 @@ namespace WP2 {
 
 // Returns true if 'value' is successfully read, false otherwise.
 // 'value' is expected to be in [min_value:max_value].
-WP2Status TryReadVarInt(DataSource* const data_source, size_t min_value,
-                        size_t max_value, size_t* const value);
+WP2Status TryReadVarInt(DataSource* const data_source, uint32_t min_value,
+                        uint32_t max_value, uint32_t* const value);
 
 // Encodes 'value' in [min_value:max_value] into a variable length integer.
 // 'max_value' cannot exceed kMaxVarInt.
 // 'dst' must be at least GetMaxVarIntLength(min_value, max_value) long.
-uint32_t WriteVarInt(size_t value, size_t min_value, size_t max_value,
+uint32_t WriteVarInt(uint32_t value, uint32_t min_value, uint32_t max_value,
                      uint8_t dst[]);
 
 // Returns the maximum number of bytes used by an integer of variable length,
 // given 'min/max_value' and any given value.
-constexpr uint32_t GetMaxVarIntLength(size_t min_value, size_t max_value) {
-  return (min_value >= max_value) ? 0
-         : (min_value + 255 >= max_value)
-             ? 1
-             : (1 + GetMaxVarIntLength(0, (max_value - min_value) >> 7));
+constexpr uint32_t GetMaxVarIntLength(uint32_t min_value, uint32_t max_value) {
+  return (min_value >= max_value) ? 0 :
+         (min_value + 255 >= max_value) ? 1 :
+         (1 + GetMaxVarIntLength(0, (max_value - min_value) >> 7));
 }
 
 //------------------------------------------------------------------------------

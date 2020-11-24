@@ -33,23 +33,23 @@ namespace WP2 {
 class ProgressWatcher {
  public:
   explicit ProgressWatcher(ProgressHook* const hook)
-      : hook_(hook), progress_(0.f), aborted_(false) {}
+      : hook_(hook), progress_(0.), aborted_(false) {}
 
   // Sets the 'progress_'. Must be in [0:1].
-  WP2Status Set(float progress);
+  WP2Status Set(double progress);
   // Advances the 'progress_' by 'step' units. Everything must remain in [0:1].
-  WP2Status AdvanceBy(float step);
+  WP2Status AdvanceBy(double step);
 
   // Rewind() goes to 0, Finish() goes to 1.
   WP2Status Start();
   WP2Status Finish();
 
   // Returns the progress in [0:1] range. Not thread-safe.
-  float GetProgress() const { return progress_; }
+  double GetProgress() const { return progress_; }
 
  private:
   ProgressHook* const hook_;
-  float progress_;
+  double progress_;
   ThreadLock thread_lock_;
   bool aborted_;  // True if 'hook_' returned false at least once.
 };
@@ -58,9 +58,9 @@ class ProgressRange {
  public:
   // Sets the 'watcher' to be notified when AdvanceBy() is called.
   // The 'range' represents the portion of the progress booked by this instance.
-  ProgressRange(ProgressWatcher* const watcher, float range);
+  ProgressRange(ProgressWatcher* const watcher, double range);
   // Sub-range. Can be recursive.
-  ProgressRange(const ProgressRange& parent, float range);
+  ProgressRange(const ProgressRange& parent, double range);
   // Can be used as a class member.
   ProgressRange() = default;
   ProgressRange(const ProgressRange&) = default;
@@ -70,11 +70,11 @@ class ProgressRange {
 
   // Advances the progress by 'step' units, in [0:1] mapped to the 'range_'.
   // It is const because the range is not modified, only the progress within.
-  WP2Status AdvanceBy(float step) const;
+  WP2Status AdvanceBy(double step) const;
 
  private:
   ProgressWatcher* watcher_ = nullptr;
-  float range_ = 0.f;  // In [0:1].
+  double range_ = 0.;  // In [0:1].
 };
 
 // Can be used to scale AdvanceBy() steps rather than booking a portion of the
@@ -87,11 +87,11 @@ typedef ProgressRange ProgressScale;
 
 // Returns the size of the progression range reserved to the decoding of the
 // frame at 'frame_index'.
-float GetFrameProgression(uint32_t frame_index, bool is_last);
+double GetFrameProgression(uint32_t frame_index, bool is_last);
 
 // Returns the expected progress at the beginning of the given 'frame_index'
 // (right before ANMF chunk).
-float GetProgressAtFrame(uint32_t frame_index);
+double GetProgressAtFrame(uint32_t frame_index);
 
 //------------------------------------------------------------------------------
 

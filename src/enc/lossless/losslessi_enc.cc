@@ -105,7 +105,7 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
   uint32_t histogram_ix =
       (histogram_symbols == nullptr) ? 0 : histogram_symbols[0];
 
-  const WP2::ProgressScale row_progress(progress, 1.f / height);
+  const WP2::ProgressScale row_progress(progress, 1. / height);
 
   if (encode_info != nullptr) {
     assert(encode_info->line_tokens.empty() ||
@@ -188,7 +188,7 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
           encode_info->line_tokens[y] = enc->NumTokens();
         }
         ++y;
-        WP2_CHECK_STATUS(row_progress.AdvanceBy(1.f));
+        WP2_CHECK_STATUS(row_progress.AdvanceBy(1.));
       }
     }
   }
@@ -328,12 +328,12 @@ static WP2Status EncodeImageInternal(
   for (uint32_t lz77s_idx = 0; lz77s_idx < config.lz77s_types_to_try_size;
        ++lz77s_idx) {
     const ProgressRange idx_progress(progress,
-                                     1.f / config.lz77s_types_to_try_size);
-    const ProgressRange histo_symbols_progress(idx_progress, 0.2f);
-    const ProgressRange histo_image_progress(idx_progress, 0.2f);
-    const ProgressRange symbol_stats_progress(idx_progress, 0.2f);
-    const ProgressRange header_progress(idx_progress, 0.2f);
-    const ProgressRange literals_progress(idx_progress, 0.2f);
+                                     1. / config.lz77s_types_to_try_size);
+    const ProgressRange histo_symbols_progress(idx_progress, 0.2);
+    const ProgressRange histo_image_progress(idx_progress, 0.2);
+    const ProgressRange symbol_stats_progress(idx_progress, 0.2);
+    const ProgressRange header_progress(idx_progress, 0.2);
+    const ProgressRange literals_progress(idx_progress, 0.2);
 
     LosslessSymbolsInfo symbols_info;
     WP2_CHECK_STATUS(symbols_info.CopyFrom(symbols_info_init));
@@ -407,7 +407,7 @@ static WP2Status EncodeImageInternal(
             enc, dicts, labels.data(), hash_chain, ref_pool, histogram_width,
             histogram_height, symbols_info_tmp, effort, histo_image_progress));
       } else {
-        WP2_CHECK_STATUS(histo_image_progress.AdvanceBy(1.f));
+        WP2_CHECK_STATUS(histo_image_progress.AdvanceBy(1.));
       }
 
       // Get the symbols stats.
@@ -423,7 +423,7 @@ static WP2Status EncodeImageInternal(
       // Store symbol headers.
       WP2_CHECK_STATUS(
           WriteHeaders(recorder, symbols_info, num_pixels, enc, dicts, &sw));
-      WP2_CHECK_STATUS(header_progress.AdvanceBy(1.f));
+      WP2_CHECK_STATUS(header_progress.AdvanceBy(1.));
     }
 
     // Store actual literals.
@@ -662,11 +662,11 @@ static WP2Status ApplyAndWriteTransforms(
     }
   }
 
-  const ProgressRange palette_progress(progress, 0.2f);
-  const ProgressRange group4_progress(progress, 0.2f);
-  const ProgressRange subtract_green_progress(progress, 0.2f);
-  const ProgressRange predict_progress(progress, 0.2f);
-  const ProgressRange cross_color_progress(progress, 0.2f);
+  const ProgressRange palette_progress(progress, 0.2);
+  const ProgressRange group4_progress(progress, 0.2);
+  const ProgressRange subtract_green_progress(progress, 0.2);
+  const ProgressRange predict_progress(progress, 0.2);
+  const ProgressRange cross_color_progress(progress, 0.2);
 
   // Encode palette
   if (config.use_palette) {
@@ -677,7 +677,7 @@ static WP2Status ApplyAndWriteTransforms(
         encoder->palette_.Write(palette_progress, enc, dicts, encoder));
     WP2_CHECK_STATUS(MapImageFromPalette(config, encoder));
   } else {
-    WP2_CHECK_STATUS(palette_progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(palette_progress.AdvanceBy(1.));
   }
 
   if (config.use_group4) {
@@ -699,7 +699,7 @@ static WP2Status ApplyAndWriteTransforms(
       assert(!config.group4_use_move_to_front);
     }
   } else {
-    WP2_CHECK_STATUS(group4_progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(group4_progress.AdvanceBy(1.));
   }
 
   // In case image is not packed, copy it to the argb_ buffer.
@@ -712,20 +712,20 @@ static WP2Status ApplyAndWriteTransforms(
   if (config.use_subtract_green) {
     ApplySubtractGreen(encoder, width, height, enc);
   }
-  WP2_CHECK_STATUS(subtract_green_progress.AdvanceBy(1.f));
+  WP2_CHECK_STATUS(subtract_green_progress.AdvanceBy(1.));
 
   if (config.use_predict) {
     WP2_CHECK_STATUS(ApplyPredictFilter(encoder, width, height, effort,
                                         predict_progress, enc, dicts));
   } else {
-    WP2_CHECK_STATUS(predict_progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(predict_progress.AdvanceBy(1.));
   }
 
   if (config.use_cross_color) {
     WP2_CHECK_STATUS(ApplyCrossColorFilter(encoder, width, height, effort,
                                            cross_color_progress, enc, dicts));
   } else {
-    WP2_CHECK_STATUS(cross_color_progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(cross_color_progress.AdvanceBy(1.));
   }
 
   return WP2_STATUS_OK;
@@ -789,9 +789,9 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
 
   for (const CrunchConfig* config = &crunch_configs[0];
        config < &crunch_configs[0] + num_crunch_configs; ++config) {
-    const ProgressRange config_progress(progress, 1.f / num_crunch_configs);
-    const ProgressRange transforms_progress(config_progress, 0.5f);
-    const ProgressRange encode_progress(config_progress, 0.5f);
+    const ProgressRange config_progress(progress, 1. / num_crunch_configs);
+    const ProgressRange transforms_progress(config_progress, 0.5);
+    const ProgressRange encode_progress(config_progress, 0.5);
 
     // Reset the bit writer.
     WP2_CHECK_STATUS(enc.Clone(*enc_init));
@@ -856,8 +856,8 @@ WP2Status EncodeImage(const WP2::EncoderConfig& config,
   assert(!picture.IsEmpty());
   assert(enc != nullptr);
 
-  const ProgressRange analysis_progress(progress, 0.5f);
-  const ProgressRange encode_progress(progress, 0.5f);
+  const ProgressRange analysis_progress(progress, 0.5);
+  const ProgressRange encode_progress(progress, 0.5);
 
   Encoder encoder(config, picture, has_alpha);
   CrunchConfig crunch_configs[kCrunchNumMax];

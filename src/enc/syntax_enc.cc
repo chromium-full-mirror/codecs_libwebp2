@@ -68,7 +68,7 @@ WP2Status SyntaxWriter::Init(ANSDictionaries* const dicts,
     WP2_CHECK_STATUS(alpha_writer_.Init(*config_, gparams, context_, yuv,
                                         tile_rect, alpha_progress));
   } else {
-    WP2_CHECK_STATUS(alpha_progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(alpha_progress.AdvanceBy(1.));
   }
   WP2_CHECK_STATUS(InitPass());
 

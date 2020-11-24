@@ -34,9 +34,9 @@ class EncDecProgressTest
     : public ::testing::TestWithParam<std::tuple<const char*, bool, uint32_t>> {
 };
 
-constexpr float kFailurePoints[] = {0.f,     kOnePercent, kProgressBeforeFrames,
-                                    0.5f,    0.75f,       1.f - kProgressEnd,
-                                    0.9999f, 1.f};
+constexpr double kFailurePoints[] = {0.,     kOnePercent, kProgressBeforeFrames,
+                                     0.5,    0.75,        1. - kProgressEnd,
+                                     0.9999, 1.};
 
 // Encode() progression
 TEST_P(EncDecProgressTest, Encode) {
@@ -62,7 +62,7 @@ TEST_P(EncDecProgressTest, Encode) {
   // Test that it ends at 1.
   progress_tester.Reset();
   ASSERT_WP2_OK(Encode(src, &data, encoder_config));
-  ASSERT_EQ(progress_tester.last_progress_, 1.f);
+  ASSERT_EQ(progress_tester.last_progress_, 1.);
 }
 
 // Decode() progression
@@ -88,11 +88,11 @@ TEST_P(EncDecProgressTest, Decode) {
     progress_tester.Reset();
     ASSERT_EQ(Decode(data.mem_, data_size, &output, config),
               WP2_STATUS_BITSTREAM_ERROR);
-    ASSERT_EQ(progress_tester.last_progress_, 0.f);
+    ASSERT_EQ(progress_tester.last_progress_, 0.);
   }
 
   // Test that it fails as expected.
-  for (float fail_at : kFailurePoints) {
+  for (double fail_at : kFailurePoints) {
     progress_tester.Reset();
     progress_tester.fail_at_ = fail_at;
     ASSERT_EQ(Decode(data.mem_, data.size_, &output, config),
@@ -102,7 +102,7 @@ TEST_P(EncDecProgressTest, Decode) {
   // Test that it ends at 1.
   progress_tester.Reset();
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &output, config));
-  ASSERT_EQ(progress_tester.last_progress_, 1.f);
+  ASSERT_EQ(progress_tester.last_progress_, 1.);
 
   ASSERT_TRUE(testing::Compare(src, output, file_name,
                                testing::GetExpectedDistortion(quality)));
@@ -132,11 +132,11 @@ TEST_P(EncDecProgressTest, Decoder) {
     decoder.SetInput(data.mem_, data_size);
     ASSERT_FALSE(decoder.ReadFrame());
     ASSERT_EQ(decoder.GetStatus(), WP2_STATUS_NOT_ENOUGH_DATA);
-    ASSERT_EQ(progress_tester.last_progress_, 0.f);
+    ASSERT_EQ(progress_tester.last_progress_, 0.);
   }
 
   // Test that it fails as expected.
-  for (float fail_at : kFailurePoints) {
+  for (double fail_at : kFailurePoints) {
     progress_tester.Reset();
     progress_tester.fail_at_ = fail_at;
     decoder.Rewind();
@@ -152,7 +152,7 @@ TEST_P(EncDecProgressTest, Decoder) {
   ASSERT_TRUE(decoder.ReadFrame());
   ASSERT_WP2_OK(decoder.GetStatus());
   ASSERT_FALSE(decoder.ReadFrame());
-  ASSERT_EQ(progress_tester.last_progress_, 1.f);
+  ASSERT_EQ(progress_tester.last_progress_, 1.);
 
   ASSERT_TRUE(testing::Compare(src, output, file_name,
                                testing::GetExpectedDistortion(quality)));
@@ -193,7 +193,7 @@ TEST(EncProgressTest, UserAbortBeforeAnyEncoding) {
   for (int i : {0, 1, 2, 3}) src.GetRow8(0)[i] = 100 + 25 * i;
 
   testing::ProgressTester progress_tester;
-  progress_tester.fail_at_ = 0.f;
+  progress_tester.fail_at_ = 0.;
   EncoderConfig encoder_config;
   encoder_config.progress_hook = &progress_tester;
   MemoryWriter data;
@@ -214,7 +214,7 @@ TEST(DecProgressTest, UserAbortBeforeAnyDecoding) {
   ArgbBuffer decoded_buffer;
   ArrayDecoder decoder(encoded_data.data(), encoded_data.size(), config);
 
-  progress_stopper.fail_at_ = 0.f;
+  progress_stopper.fail_at_ = 0.;
   ASSERT_EQ(DecodeArgb_32(encoded_data.data(), encoded_data.size(),
                           decoded_pixels.data(), stride, decoded_pixels.size(),
                           config),
@@ -225,7 +225,7 @@ TEST(DecProgressTest, UserAbortBeforeAnyDecoding) {
   ASSERT_FALSE(decoder.ReadFrame());
   ASSERT_EQ(decoder.GetStatus(), WP2_STATUS_USER_ABORT);
 
-  progress_stopper.fail_at_ = 0.001f;
+  progress_stopper.fail_at_ = 0.001;
   ASSERT_EQ(DecodeArgb_32(encoded_data.data(), encoded_data.size(),
                           decoded_pixels.data(), stride, decoded_pixels.size(),
                           config),
@@ -276,7 +276,7 @@ TEST_P(ProgressPrecisionTest, Encode) {
                        decoder_config);
   ASSERT_TRUE(decoder.ReadFrame());
   ASSERT_WP2_OK(decoder.GetStatus());  // There is no trailing metadata.
-  ASSERT_EQ(progress_tester.last_progress_, 1.f);
+  ASSERT_EQ(progress_tester.last_progress_, 1.);
 }
 
 INSTANTIATE_TEST_SUITE_P(

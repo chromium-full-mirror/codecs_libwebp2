@@ -105,15 +105,15 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   if (config_->use_neural_compression) {
     assert(!tile_->rgb_input.IsEmpty());
     WP2_CHECK_STATUS(NeuralEncode(tile_->rgb_input, *config_, enc));
-    WP2_CHECK_STATUS(tile_->progress.AdvanceBy(1.f));
+    WP2_CHECK_STATUS(tile_->progress.AdvanceBy(1.));
     return WP2_STATUS_OK;
   }
   assert(!yuv_buffer.IsEmpty());
 
-  const ProgressRange partitioning_progress(tile_->progress, 0.3f);
-  const ProgressRange alpha_progress(tile_->progress, 0.2f);
-  const ProgressRange passes_progress(tile_->progress, 0.4f);
-  const ProgressRange write_progress(tile_->progress, 0.1f);
+  const ProgressRange partitioning_progress(tile_->progress, 0.3);
+  const ProgressRange alpha_progress(tile_->progress, 0.2);
+  const ProgressRange passes_progress(tile_->progress, 0.4);
+  const ProgressRange write_progress(tile_->progress, 0.1);
 
   // shortcuts
   const Rectangle padded_rect = {tile_rect.x, tile_rect.y,
@@ -131,7 +131,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
             mgr.Blocks().begin());
   WP2_CHECK_STATUS(ExtractBlockPartition(*config_, gparams, yuv_buffer,
                                          tile_rect, &mgr.Blocks()));
-  WP2_CHECK_STATUS(partitioning_progress.AdvanceBy(1.f));  // TODO(yguyon) Split
+  WP2_CHECK_STATUS(partitioning_progress.AdvanceBy(1.));  // TODO(yguyon) Split
   WP2_CHECK_STATUS(mgr.Sort());
   // process all blocks
   WP2_CHECK_ALLOC_OK(cblocks.resize(mgr.Blocks().size()));
@@ -233,8 +233,8 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
     }
 #endif
 
-    const ProgressRange pass_progress(passes_progress, 1.f / num_passes);
-    const ProgressScale row_progress(pass_progress, 1.f / tile_rect.height);
+    const ProgressRange pass_progress(passes_progress, 1. / num_passes);
+    const ProgressScale row_progress(pass_progress, 1. / tile_rect.height);
 
     // main coding loop
     WP2_CHECK_STATUS(writer.InitPass());
@@ -370,7 +370,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
 
   // Write coded blocks
   WP2_CHECK_STATUS(writer.WriteBlocks(cblocks, &mgr, enc));
-  WP2_CHECK_STATUS(write_progress.AdvanceBy(1.f));
+  WP2_CHECK_STATUS(write_progress.AdvanceBy(1.));
 
   if (!vd_plane.IsEmpty()) {
     if (VDMatch(*config_, "a")) {

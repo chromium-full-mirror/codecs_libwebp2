@@ -25,22 +25,6 @@
 namespace {
 
 //------------------------------------------------------------------------------
-// ConvertFrom...
-
-void Premultiply(uint8_t* ARGB, uint32_t width) {
-  uint32_t i;
-  for (i = 0; i < width; ++i, ARGB += 4) {
-    const uint32_t A = ARGB[0];
-    if (A < 255) {
-      ARGB[1] = WP2::DivBy255(ARGB[1] * A);
-      ARGB[2] = WP2::DivBy255(ARGB[2] * A);
-      ARGB[3] = WP2::DivBy255(ARGB[3] * A);
-    }
-  }
-}
-
-
-//------------------------------------------------------------------------------
 // ConvertTo...
 
 void Unmult(uint32_t a, uint8_t* const v) {
@@ -55,12 +39,14 @@ void Unmult(uint32_t a, uint8_t* const v) {
 }
 
 void Premult(uint32_t a, uint8_t* const v) {
-  if (a > 0) {
-    v[0] = WP2::DivBy255(v[0] * a);
-    v[1] = WP2::DivBy255(v[1] * a);
-    v[2] = WP2::DivBy255(v[2] * a);
-  } else {
-    v[0] = v[1] = v[2] = 0;
+  if (a < 255) {
+    if (a > 0) {
+      v[0] = WP2::DivBy255(v[0] * a);
+      v[1] = WP2::DivBy255(v[1] * a);
+      v[2] = WP2::DivBy255(v[2] * a);
+    } else {
+      v[0] = v[1] = v[2] = 0;
+    }
   }
 }
 
@@ -140,6 +126,10 @@ CONVERT_TO_FUNC(Convert_ARGB_BGR_C, 0, 2, 1, 0, 0, 1, 3);
 // SSE4.1 implementation
 
 #if defined(WP2_USE_SSE)
+
+void Premultiply(uint8_t* ARGB, uint32_t width) {
+  for (uint32_t i = 0; i < width; ++i, ARGB += 4) Premult(ARGB[0], ARGB + 1);
+}
 
 #define PSHUFB_CST32(CST)  \
   _mm_set_epi32(CST | 0x0c0c0c0c, CST | 0x08080808, CST | 0x04040404, CST)

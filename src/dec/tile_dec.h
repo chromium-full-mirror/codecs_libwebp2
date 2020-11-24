@@ -36,7 +36,7 @@ class GlobalParams;
 
 struct Tile {
   bool chunk_size_is_known = false;    // True when the chunk size is decoded.
-  size_t chunk_size = 0;               // Value is valid if chunk_size_is_known.
+  uint32_t chunk_size = 0;             // Value is valid if chunk_size_is_known.
   DataSource* input = nullptr;         // Input data. Points to private_input
   ExternalDataSource private_input;    // if the whole chunk is available.
   DataSource::DataHandle data_handle;  // Keep the chunks of several tiles from

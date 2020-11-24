@@ -304,7 +304,7 @@ WP2Status FrameEncoder::EncodeFrame(const Frame& frame, bool dispose,
   bool is_previous_preframe = false;
   for (uint32_t r = 0; r < different_pixels.GetNumRectangles(); ++r) {
     const ProgressRange subframe_progress(
-        progress, 1.f / different_pixels.GetNumRectangles());
+        progress, 1. / different_pixels.GetNumRectangles());
     const bool is_preframe = (r < different_pixels.GetNumRectangles() - 1);
     const bool dispose_this_frame = (dispose && r == 0);  // Only the first one.
     WP2_CHECK_STATUS(EncodeSubframe(
@@ -330,7 +330,7 @@ WP2Status FrameEncoder::Encode(Writer* const output) {
 
   uint32_t last_dispose_index = 0;
   for (uint32_t i = 0; i < frames_.size(); ++i) {
-    const ProgressRange frame_progress(progress_, 1.f / frames_.size());
+    const ProgressRange frame_progress(progress_, 1. / frames_.size());
     const Frame& frame = frames_[i];
     WP2_CHECK_STATUS(
         SetupEncoderInfo(frame.GetWidth(), frame.GetHeight(), config_));
@@ -372,9 +372,9 @@ WP2Status FrameEncoder::Encode(Writer* const output) {
                                    frame_progress, output));
     } else {
       // Try different encoding patterns and keep the smallest bitstream.
-      const ProgressRange as_is_progress(frame_progress, 0.4f);
-      const ProgressRange merged_progress(frame_progress, 0.3f);
-      const ProgressRange dispose_progress(frame_progress, 0.3f);
+      const ProgressRange as_is_progress(frame_progress, 0.4);
+      const ProgressRange merged_progress(frame_progress, 0.3);
+      const ProgressRange dispose_progress(frame_progress, 0.3);
 
       // Keep the current settings.
       MemoryWriter writer_as_is;
@@ -393,7 +393,7 @@ WP2Status FrameEncoder::Encode(Writer* const output) {
           subframes_kept = &bounded_pixels;
         }
       } else {
-        WP2_CHECK_STATUS(merged_progress.AdvanceBy(1.f));
+        WP2_CHECK_STATUS(merged_progress.AdvanceBy(1.));
       }
 
       // Most of the time, in lossy, cropping a frame does not take less space

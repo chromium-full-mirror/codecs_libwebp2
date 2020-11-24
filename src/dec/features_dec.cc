@@ -41,8 +41,8 @@ namespace WP2 {
 static WP2Status ReadChunk(DataSource* const data_source,
                            DataView* const chunk_data) {
   assert(chunk_data != nullptr);
-  size_t chunk_size = 0;
-  WP2_CHECK_STATUS(TryReadVarInt(data_source, 1, kChunkSizeMax, &chunk_size));
+  uint32_t chunk_size = 0;
+  WP2_CHECK_STATUS(TryReadVarInt(data_source, 1, kMaxChunkSize, &chunk_size));
   WP2_CHECK_OK(data_source->TryReadNext(chunk_size, &chunk_data->bytes),
                WP2_STATUS_NOT_ENOUGH_DATA);
   chunk_data->size = chunk_size;
@@ -51,8 +51,8 @@ static WP2Status ReadChunk(DataSource* const data_source,
 
 // Reads the chunk size and set that many following bytes as read.
 static WP2Status SkipChunk(DataSource* const data_source) {
-  size_t chunk_size = 0;
-  WP2_CHECK_STATUS(TryReadVarInt(data_source, 1, kChunkSizeMax, &chunk_size));
+  uint32_t chunk_size = 0;
+  WP2_CHECK_STATUS(TryReadVarInt(data_source, 1, kMaxChunkSize, &chunk_size));
   data_source->MarkNumBytesAsRead(chunk_size);
   return WP2_STATUS_OK;
 }
@@ -73,8 +73,8 @@ static WP2Status CopyChunk(DataSource* const data_source,
 WP2Status DecodeTileChunkSize(const GlobalParams& params,
                               const Rectangle& tile_rect,
                               DataSource* const data_source,
-                              size_t* const tile_chunk_size) {
-  const uint64_t max_num_bytes = GetTileMaxNumBytes(params, tile_rect);
+                              uint32_t* const tile_chunk_size) {
+  const uint32_t max_num_bytes = GetTileMaxNumBytes(params, tile_rect);
   WP2_CHECK_STATUS(
       TryReadVarInt(data_source, 1, max_num_bytes, tile_chunk_size));
   return WP2_STATUS_OK;

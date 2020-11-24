@@ -2005,15 +2005,15 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
                            (WP2TransformType)b_enc.tf_y, w, h, res,
                            reduced_transform);
 
-            const int32_t norm = (int32_t)num_coeffs;
+            const float norm = 2. * (int32_t)std::sqrt(num_coeffs);
             for (uint32_t j = 0; j < h; ++j) {
               std::string line;
               for (uint32_t i = 0; i < w; ++i) {
                 const uint32_t idx = i + w * j;
                 if (show_original) {
                   const int32_t v = res[idx];
-                  if (std::abs(v / norm) > 0) {
-                    line += SPrintf("%3d ", v / norm);
+                  if (std::abs(v) >= (norm * 1.00)) {
+                    line += SPrintf("%3d ", (int)(v / norm));
                   } else {
                     const char symbol = (std::abs(v) >= (norm * 0.50)) ? 'X'
                                       : (std::abs(v) >= (norm * 0.25)) ? 'x'
@@ -2028,7 +2028,7 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
               msg->push_back(line);
             }
             if (show_original) {
-              msg->push_back(SPrintf("original coeffs in units of %u", norm));
+              msg->push_back(SPrintf("original coeffs in units of %.1f", norm));
             }
           } else {
             msg->push_back(" - no coeffs -");

@@ -298,7 +298,7 @@ void Decoder::DecodeAvailableData() {
         if (state_->status == WP2_STATUS_OK) {
           if (DiscardTillMetadata(state_)) {
             state_->stage = State::Stage::WAITING_FOR_METADATA_CHUNKS;
-            state_->status = state_->progress.Set(1.f - kProgressEnd);
+            state_->status = state_->progress.Set(1. - kProgressEnd);
             keep_decoding = true;
             break;  // Go to the WAITING_FOR_METADATA_CHUNKS part.
           }
@@ -306,7 +306,7 @@ void Decoder::DecodeAvailableData() {
                                            features_.tile_height, state_)) {
             state_->stage = State::Stage::WAITING_FOR_TILE_DATA;
             if (state_->frames[state_->current_frame_index].is_last) {
-              state_->status = state_->progress.Set(1.f - kProgressEnd);
+              state_->status = state_->progress.Set(1. - kProgressEnd);
             } else {
               state_->status = state_->progress.Set(
                   GetProgressAtFrame(state_->current_frame_index + 1));
@@ -320,7 +320,7 @@ void Decoder::DecodeAvailableData() {
                                              features_.tile_height, state_)) {
               state_->stage = State::Stage::WAITING_FOR_TILE_DATA;
               if (state_->frames[state_->current_frame_index].is_last) {
-                state_->status = state_->progress.Set(1.f - kProgressEnd);
+                state_->status = state_->progress.Set(1. - kProgressEnd);
               } else {
                 state_->status = state_->progress.Set(
                     GetProgressAtFrame(state_->current_frame_index + 1));
@@ -390,7 +390,7 @@ void Decoder::DecodeAvailableData() {
           if (DiscardTillMetadata(state_)) {
             if (partial_tile_decoder != nullptr) partial_tile_decoder->Clear();
             state_->stage = State::Stage::WAITING_FOR_METADATA_CHUNKS;
-            state_->status = state_->progress.Set(1.f - kProgressEnd);
+            state_->status = state_->progress.Set(1. - kProgressEnd);
             keep_decoding = true;
             break;
           }
@@ -515,7 +515,7 @@ void Decoder::DecodeAvailableData() {
     }
   }
 
-  if (GetStatus() == WP2_STATUS_OK && state_->progress.GetProgress() < 1.f) {
+  if (GetStatus() == WP2_STATUS_OK && state_->progress.GetProgress() < 1.) {
     state_->status = state_->progress.Finish();
   }
 }

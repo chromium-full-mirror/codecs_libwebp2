@@ -32,7 +32,7 @@ namespace {
 
 TEST(HeaderTest, VarInt) {
   uint8_t dst[kMaxVarIntLength];
-  size_t decoded_value;
+  uint32_t decoded_value;
 
   // 0 bit written, 0 bit read.
   {
@@ -45,7 +45,7 @@ TEST(HeaderTest, VarInt) {
     ASSERT_EQ(data_source.GetNumReadBytes(), 0u);
   }
 
-  constexpr size_t kMin = 0;
+  constexpr uint32_t kMin = 0;
   ASSERT_EQ(WriteVarInt(/*value=*/0, kMin, /*max_value=*/1, dst), 1u);
   ASSERT_EQ(WriteVarInt(/*value=*/1, kMin, /*max_value=*/1, dst), 1u);
   ASSERT_EQ(WriteVarInt(/*value=*/127, kMin, /*max_value=*/255, dst), 1u);
@@ -56,9 +56,9 @@ TEST(HeaderTest, VarInt) {
   ASSERT_EQ(WriteVarInt(/*value=*/256, kMin, /*max_value=*/256, dst), 2u);
 
   // clang-format off
-  const size_t kValues[] =
+  const uint32_t kValues[] =
       {0, 1, 2, 3, 5, 8, 126, 127, 128, 129, 254, 255, 256, 257, 260768,
-       (kMaxVarInt >> 7), (kMaxVarInt >> 7) - 1, (kMaxVarInt >> 7) + 1,
+       (kMaxVarInt >> 7) - 1, (kMaxVarInt >> 7), (kMaxVarInt >> 7) + 1,
        kMaxVarInt - 2, kMaxVarInt - 1, kMaxVarInt};
   // clang-format on
 

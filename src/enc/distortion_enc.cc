@@ -605,7 +605,7 @@ WP2Status ArgbBuffer::GetDistortionBlackOrWhiteBackground(
 WP2Status ArgbBuffer::GetDistortionBlackOrWhiteBackground(
     const ArgbBuffer& ref, const Rectangle& window, MetricType metric_type,
     float* result) const {
-  ArgbBuffer view, ref_view;
+  ArgbBuffer view(format()), ref_view(ref.format());
   WP2_CHECK_STATUS(view.SetView(*this, window));
   WP2_CHECK_STATUS(ref_view.SetView(ref, window));
   return view.GetDistortionBlackOrWhiteBackground(ref_view, metric_type,

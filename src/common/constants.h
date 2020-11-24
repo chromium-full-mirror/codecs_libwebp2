@@ -41,11 +41,12 @@ static constexpr uint32_t GetQualityHint(float quality) {
              : kLosslessQualityHint;
 }
 
-static constexpr uint32_t kMaxVarIntLength = 5;
-// Upper value expressible with a var int with kMaxVarIntLength values.
-static constexpr uint64_t kMaxVarInt =
-    (1ull << (7 * (kMaxVarIntLength - 1) + 8)) - 1;  // == 64G
-static_assert(kChunkSizeMax <= kMaxVarInt,
+// Maximum number of bytes used by a variable-length integer.
+static constexpr uint32_t kMaxVarIntLength = 4;
+// Maximum value expressible with a variable-length integer (included).
+static constexpr uint32_t kMaxVarInt =
+    (1u << (7 * (kMaxVarIntLength - 1) + 8)) - 1u;  // 29 bits so ~500 MB
+static_assert(kMaxChunkSize - 1u <= kMaxVarInt,
               "The maximum chunk size cannot be represented with var ints.");
 
 // Maximum (inclusive) bytes per pixel.
@@ -83,15 +84,15 @@ static constexpr Argb38b kDefaultBackgroundColor{kAlphaMax, 0x0000u, 0x0000u,
                                                  0x0000u};
 
 // Decoding progress proportion in [0:1] range.
-static constexpr float kOnePercent = 0.01f;   // For each header, ICC, ANMF etc.
-static constexpr float kProgressEnd = 0.02f;  // XMP+EXIF.
+static constexpr double kOnePercent = 0.01;   // For each header, ICC, ANMF etc.
+static constexpr double kProgressEnd = 0.02;  // XMP+EXIF.
 // Progress occupied by header + preview + ICC.
-static constexpr float kProgressBeforeFrames = 3 * kOnePercent;
+static constexpr double kProgressBeforeFrames = 3 * kOnePercent;
 // Progress left after removing the header + preview + ICC + XMP+EXIF.
-static constexpr float kProgressFrames =
-    1.f - kProgressBeforeFrames - kProgressEnd;
+static constexpr double kProgressFrames =
+    1. - kProgressBeforeFrames - kProgressEnd;
 // Progress for all tiles within a frame minus ANMF + GlobalParams.
-static constexpr float kProgressTiles = 1.f - 2 * kOnePercent;
+static constexpr double kProgressTiles = 1. - 2 * kOnePercent;
 
 // Returns the tile width/height in pixels for a given TileShape and a given
 // image width.
