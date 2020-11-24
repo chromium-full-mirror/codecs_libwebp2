@@ -17,6 +17,8 @@
 //
 // Author: James Zern (jzern@google.com)
 
+#include <initializer_list>
+
 #include "src/dsp/dsp.h"
 
 #if defined(WP2_HAVE_NEON_RTCD)
@@ -307,6 +309,12 @@ void WP2DspReset() {
     WP2FwdDct[i] = WP2FwdAdst[i] = WP2FwdHadamard[i] = nullptr;
   }
   WP2SlowDct8x8 = nullptr;
+  for (uint32_t th : {0, 1, 2, 3, 4}) {
+    for (uint32_t tw : {0, 1, 2, 3, 4}) {
+      WP2InvDctCol[th][tw] = nullptr;
+      WP2FwdDctCol[th][tw] = nullptr;
+    }
+  }
 
   WP2::GetBlockMinMax = nullptr;
   WP2::GetBlockMinMax_5x5 = nullptr;

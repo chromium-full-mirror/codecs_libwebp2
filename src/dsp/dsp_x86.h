@@ -21,11 +21,68 @@
 #define WP2_DSP_DSP_X86_H_
 
 #if defined(WP2_USE_SSE)
-#include <stdio.h>
+
+#include <assert.h>
+
+// handy struct for holding N uint32_t words
+template<uint32_t N>
+struct VectorSSE {
+ public:
+  VectorSSE() = default;
+  // some ctor can't be mark 'explicit' or you'll lose some coding flexibility
+  VectorSSE(const void* const in) : v(_mm_loadu_si128((const __m128i*)in)) {}
+  VectorSSE(const __m128i a) : v(a) {}
+  VectorSSE(int32_t a) : v(_mm_set1_epi32(a)) {}
+  VectorSSE& operator=(const __m128i a) {
+    v = a;
+    return *this;
+  }
+  VectorSSE& operator=(int32_t a) {
+    *this = VectorSSE(a);
+    return *this;
+  }
+  operator __m128i() const { return v; }
+
+  // arithmetic
+  VectorSSE operator+(const __m128i a) const {
+    return VectorSSE(_mm_add_epi32(v, a));
+  }
+  VectorSSE operator-(const __m128i a) const {
+    return VectorSSE(_mm_sub_epi32(v, a));
+  }
+  // 32b x 32b -> 32b multiply
+  VectorSSE operator*(const __m128i a) const {
+    return VectorSSE(_mm_mullo_epi32(v, a));
+  }
+  // arithmetic right shift
+  VectorSSE operator>>(uint32_t n) const {
+    return VectorSSE(_mm_srai_epi32(v, n));
+  }
+  static constexpr VectorSSE Rounding(uint32_t n) {
+    return VectorSSE(_mm_set1_epi32((1 << n) >> 1));
+  }
+
+  // I/O
+  static VectorSSE Load(const void* const in) { return VectorSSE(in); }
+  void Store(void* const out) const { _mm_storeu_si128((__m128i*)out, v); }
+
+  // return size in 'step' units
+  static uint32_t Size(uint32_t width) {
+    assert((width % N) == 0);
+    return width / N;
+  }
+  static constexpr uint32_t Step() { return N; }
+
+ private:
+  __m128i v;
+};
+
+typedef VectorSSE<4> VecI32_SSE;    // four 32bits-words
 
 //------------------------------------------------------------------------------
 // debugging
 
+#include <stdio.h>
 template<typename T>
 void Print(const __m128i A, const char name[], int how_many = 32) {
   constexpr int size = 16 / sizeof(T);

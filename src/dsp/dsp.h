@@ -261,20 +261,26 @@ typedef void (*WP2TransposeF)(const int32_t* in, uint32_t w, uint32_t h,
 
 typedef void (*WP2TransformF)(const int32_t* input, int32_t* output);
 
+typedef void (*WP2TransformColF)(const int32_t* input,
+                                 int32_t* output, uint32_t w);
+
 // indexed on size=2,4,8,16,32
 extern WP2TransformF WP2FwdDct[5], WP2FwdAdst[5], WP2FwdHadamard[5];
 extern WP2TransformF WP2InvDct[5], WP2InvAdst[5], WP2InvHadamard[5];
+// Column-wise 2D transforms, indexed on log2(size) vertically / horizontally
+extern WP2TransformColF WP2InvDctCol[5][5];
+extern WP2TransformColF WP2FwdDctCol[5][5];
 
 extern WP2TransposeF WP2Transpose;
 
 void WP2TransformInit();
 
 // These functions work inplace when 'src' and 'dst' point to the same address.
-// Entry call for 1D transforms.
+// Entry point for 1D transforms. Repeats for 'num_rows' consecutive rows.
 void WP2InvTransform(const int32_t src[], WP2TransformType type, uint32_t size,
-                     int32_t dst[]);
+                     int32_t dst[], uint32_t num_rows = 1);
 void WP2Transform(const int32_t src[], WP2TransformType type, uint32_t size,
-                  int32_t dst[]);
+                  int32_t dst[], uint32_t num_rows = 1);
 // If 'reduced' is true, transforms at half the resolution.
 void WP2Transform2D(const int32_t src[], WP2TransformType tf_x,
                     WP2TransformType tf_y, uint32_t size_x, uint32_t size_y,

@@ -2800,6 +2800,8 @@ int32_t (*WP2SlowDct8x8)(const int32_t in[64],
 WP2TransformF WP2InvDct[5] = { nullptr }, WP2FwdDct[5] = { nullptr };
 WP2TransformF WP2InvAdst[5] = { nullptr }, WP2FwdAdst[5] = { nullptr };
 WP2TransformF WP2InvHadamard[5] = { nullptr }, WP2FwdHadamard[5] = { nullptr };
+WP2TransformColF WP2InvDctCol[5][5] = { { nullptr } };
+WP2TransformColF WP2FwdDctCol[5][5] = { { nullptr } };
 
 static volatile WP2CPUInfo transform_last_cpuinfo_used =
     (WP2CPUInfo)&transform_last_cpuinfo_used;
@@ -2842,6 +2844,13 @@ WP2_TSAN_IGNORE_FUNCTION void WP2TransformInit() {
   WP2FwdHadamard[3] = fHadamard16_C;
   WP2FwdHadamard[4] = fHadamard32_C;
 
+  for (uint32_t th : {0, 1, 2, 3, 4}) {
+    for (uint32_t tw : {0, 1, 2, 3, 4}) {
+      WP2InvDctCol[th][tw] = nullptr;
+      WP2FwdDctCol[th][tw] = nullptr;
+    }
+  }
+
   WP2SlowDct8x8 = SlowDct8x8_C;
 
   if (WP2GetCPUInfo != nullptr) {
@@ -2865,35 +2874,46 @@ static inline uint32_t SizeToIdx(uint32_t size) {
 //------------------------------------------------------------------------------
 
 void WP2InvTransform(const int32_t src[], WP2TransformType type, uint32_t size,
-                     int32_t dst[]) {
+                  int32_t dst[], uint32_t num_rows) {
   const uint32_t idx = SizeToIdx(size);
+  WP2TransformF transform = nullptr;
   // clang-format off
   switch (type) {
-    case WP2TransformType::kDct: WP2InvDct[idx](src, dst); break;
-    case WP2TransformType::kAdst: WP2InvAdst[idx](src, dst); break;
-    case WP2TransformType::kHadamard: WP2InvHadamard[idx](src, dst); break;
+    case WP2TransformType::kDct: transform = WP2InvDct[idx]; break;
+    case WP2TransformType::kAdst: transform = WP2InvAdst[idx]; break;
+    case WP2TransformType::kHadamard: transform = WP2InvHadamard[idx]; break;
     case WP2TransformType::kIdentity:
-      iIdentity(src, dst, size, /*divider=*/size / 2);
-      break;
+      for (size_t j = 0; j < num_rows; ++j)
+        iIdentity(src + j * size, dst + j * size, size, /*divider=*/(size / 2));
+      return;
     default:
       assert(false);
+  }
+  for (size_t j = 0; j < num_rows; ++j) {
+    transform(src + j * size, dst + j * size);
   }
   // clang-format on
 }
 
 void WP2Transform(const int32_t src[], WP2TransformType type, uint32_t size,
-                  int32_t dst[]) {
+                  int32_t dst[], uint32_t num_rows) {
   const uint32_t idx = SizeToIdx(size);
+  WP2TransformF transform = nullptr;
   // clang-format off
   switch (type) {
-    case WP2TransformType::kDct: WP2FwdDct[idx](src, dst); break;
-    case WP2TransformType::kAdst: WP2FwdAdst[idx](src, dst); break;
-    case WP2TransformType::kHadamard: WP2FwdHadamard[idx](src, dst); break;
+    case WP2TransformType::kDct: transform = WP2FwdDct[idx]; break;
+    case WP2TransformType::kAdst: transform = WP2FwdAdst[idx]; break;
+    case WP2TransformType::kHadamard: transform = WP2FwdHadamard[idx]; break;
     case WP2TransformType::kIdentity:
-      Identity(src, dst, size, /*multiplier=*/(size / 2));
-      break;
+      for (size_t j = 0; j < num_rows; ++j)
+        Identity(src + j * size, dst + j * size, size,
+                 /*multiplier=*/(size / 2));
+      return;
     default:
       assert(false);
+  }
+  for (size_t j = 0; j < num_rows; ++j) {
+    transform(src + j * size, dst + j * size);
   }
   // clang-format on
 }
@@ -2904,13 +2924,17 @@ static void Transform2D(const int32_t src[], WP2TransformType tf_x,
   int32_t tmp[32 * 32];
   const uint32_t tw = size_x;
   const uint32_t th = size_y;
-  for (size_t j = 0; j < th; ++j) {
-    WP2Transform(src + j * tw, tf_x, size_x, tmp + j * tw);
+  WP2Transform(src, tf_x, size_x, tmp, th);
+  if (tf_y == WP2TransformType::kDct) {
+    const WP2TransformColF transform =
+        WP2FwdDctCol[SizeToIdx(size_y)][SizeToIdx(size_x)];
+    if (transform != nullptr) {
+      transform(tmp, dst, tw);
+      return;
+    }
   }
   WP2Transpose(tmp, tw, th, dst);  // tw x th -> th x tw
-  for (size_t j = 0; j < tw; ++j) {
-    WP2Transform(dst + j * th, tf_y, size_y, tmp + j * th);
-  }
+  WP2Transform(dst, tf_y, size_y, tmp, tw);
   WP2Transpose(tmp, th, tw, dst);  // th x tw -> tw x th
 }
 
@@ -2922,15 +2946,18 @@ static void InvTransform2D(const int32_t src[], WP2TransformType tf_x,
   int32_t tmp[32 * 32];
   const uint32_t tw = size_x;
   const uint32_t th = size_y;
-  WP2Transpose(src, tw, th, tmp);  // tw x th -> th x tw
-  for (uint32_t j = 0; j < x_end; ++j) {
-    WP2InvTransform(tmp + j * th, tf_y, size_y, dst + j * th);
+  const WP2TransformColF transform = (tf_y == WP2TransformType::kDct) ?
+        WP2InvDctCol[SizeToIdx(size_y)][SizeToIdx(size_x)] :
+        nullptr;
+  if (transform != nullptr) {
+    transform(src, tmp, tw);
+  } else {
+    WP2Transpose(src, tw, th, tmp);  // tw x th -> th x tw
+    WP2InvTransform(tmp, tf_y, size_y, dst, x_end);
+    std::fill(dst + x_end * th, dst + tw * th, 0);
+    WP2Transpose(dst, th, tw, tmp);  // th x tw -> tw x th
   }
-  std::fill(dst + x_end * th, dst + tw * th, 0);
-  WP2Transpose(dst, th, tw, tmp);  // th x tw -> tw x th
-  for (size_t j = 0; j < th; ++j) {
-    WP2InvTransform(tmp + j * tw, tf_x, size_x, dst + j * tw);
-  }
+  WP2InvTransform(tmp, tf_x, size_x, dst, th);
 }
 
 //------------------------------------------------------------------------------
