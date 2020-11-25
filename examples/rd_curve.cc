@@ -42,9 +42,10 @@
 #include "extras/aom_utils.h"
 
 #ifdef WP2_HAVE_SJPEG
-#include "sjpeg.h"
+#include "sjpeg.h"  // NOLINT (include directory)
 #endif
 
+namespace WP2 {
 namespace {
 
 typedef enum { WP2_STATS = 0, WEBP_STATS, AV1_STATS,
@@ -52,13 +53,12 @@ typedef enum { WP2_STATS = 0, WEBP_STATS, AV1_STATS,
 
 StatType kAllTypes[] = {WP2_STATS, WEBP_STATS, AV1_STATS, JPEG_STATS,
                         NEURAL_STATS};
-static const char* const kTypeNames[] = {"WP2", "WebP", "AV1", "JPEG",
-                                         "Neural"};
+const char* const kTypeNames[] = {"WP2", "WebP", "AV1", "JPEG", "Neural"};
 
-static const int kDefaultSteps = 8;  // default number of steps
+const int kDefaultSteps = 8;  // default number of steps
 
-static const float kDefaultQMin =  0.f;
-static const float kDefaultQMax = 95.f;  // don't do lossless by default
+const float kDefaultQMin = 0.f;
+const float kDefaultQMax = 95.f;  // don't do lossless by default
 
 enum class OutputFormat { kText, kGnuplot, kHtml, kLumascope };
 
@@ -71,14 +71,14 @@ struct TestParams {
   float qmax = kDefaultQMax;
   uint32_t qsteps = kDefaultSteps;
   bool quiet = false;
-  WP2::EncoderConfig config;
-  std::vector<WP2::Rectangle> force_partition;
+  EncoderConfig config;
+  std::vector<Rectangle> force_partition;
   float q = 0;                       // in [0..100]
   bool use_mt = true;
   uint32_t stack_size = 50 * 4096u;   // must be a multiple of system's pagesize
   bool disable_filters = false;
   bool use_sharp_yuv = false;
-  WP2::MetricType metric = WP2::PSNR;
+  MetricType metric = PSNR;
   const char* neural_path = nullptr;
   // label for the gnuplot curve
   const char* label = kTypeNames[WP2_STATS];
@@ -86,8 +86,8 @@ struct TestParams {
 
 //------------------------------------------------------------------------------
 
-static void PrintHelpAndExit(int return_code) {
-  const WP2::EncoderConfig kDefaultConfig = WP2::EncoderConfig::kDefault;
+void PrintHelpAndExit(int return_code) {
+  const EncoderConfig kDefaultConfig = EncoderConfig::kDefault;
 
   ProgramOptions opt;
   opt.Add("Usage:");
@@ -121,12 +121,12 @@ static void PrintHelpAndExit(int return_code) {
   opt.Add("-nowp2", "skip WP2 rd-curve");
   opt.Add("-csp <int>", "color space to use");
   opt.Add("-sharp_yuv", "use slower / sharper YUV conversion");
-  opt.Add("-pm <int>", SPrintf("partition method (0..%d, default = %d)",
-                               WP2::NUM_PARTITION_METHODS - 1,
-                               kDefaultConfig.partition_method));
+  opt.Add("-pm <int>",
+          SPrintf("partition method (0..%d, default = %d)",
+                  NUM_PARTITION_METHODS - 1, kDefaultConfig.partition_method));
   opt.Add("-ps <int>",
-          SPrintf("partition set (0..%d, default = %d)",
-                  WP2::NUM_PARTITION_SETS - 1, kDefaultConfig.partition_set));
+          SPrintf("partition set (0..%d, default = %d)", NUM_PARTITION_SETS - 1,
+                  kDefaultConfig.partition_set));
   opt.Add("-uv_mode <int>", "UV-mode to use (0=Adapt,1=420,2=444,3=Auto)");
   opt.Add("-segments <int>",
           SPrintf("number of segments to use (%u)", kDefaultConfig.segments));
@@ -155,15 +155,13 @@ static void PrintHelpAndExit(int return_code) {
   exit(return_code);
 }
 
-}  // namespace
-
 //------------------------------------------------------------------------------
 
-class Task : public WP2::Worker {
+class Task : public Worker {
  public:
   Task() noexcept {};
   void Init(const TestParams& params,
-            const WP2::ArgbBuffer& ref,  // needs to out-live the worker object
+            const ArgbBuffer& ref,  // needs to out-live the worker object
             const std::string prefix, StatType type,
             const std::vector<std::string>& include = {},
             const std::vector<std::string>& exclude = {}) {
@@ -177,23 +175,23 @@ class Task : public WP2::Worker {
 
   // Main task: encode, measure distortion, decode.
   WP2Status Execute() override {
-    WP2::ArgbBuffer decoded;
+    ArgbBuffer decoded;
     switch (type_) {
       default:
       case WP2_STATS:
-        CompressWP2(&decoded);
+        EncodeWP2(&decoded);
         break;
       case WEBP_STATS:
-        CompressWebP(&decoded);
+        EncodeWebP(&decoded);
         break;
       case AV1_STATS:
-        CompressAV1(&decoded);
+        EncodeAV1(&decoded);
         break;
       case JPEG_STATS:
-        CompressJPEG(&decoded);
+        EncodeJPEG(&decoded);
         break;
       case NEURAL_STATS:
-        CompressNeural(&decoded);
+        EncodeNeural(&decoded);
         break;
     }
     // finish up
@@ -202,10 +200,10 @@ class Task : public WP2::Worker {
     // compute distortions
     float values[5];
     EXIT_IF_ERROR(
-        decoded.GetDistortionBlackOrWhiteBackground(*ref_, WP2::PSNR, values),
+        decoded.GetDistortionBlackOrWhiteBackground(*ref_, PSNR, values),
         "GetDistortionBlackOrWhiteBackground() failed.");
     psnr_ = values[4];
-    if (params_.metric != WP2::PSNR) {
+    if (params_.metric != PSNR) {
       EXIT_IF_ERROR(decoded.GetDistortionBlackOrWhiteBackground(
                         *ref_, params_.metric, values),
                     "GetDistortionBlackOrWhiteBackground() failed.");
@@ -213,7 +211,7 @@ class Task : public WP2::Worker {
     }
     if (!prefix_.empty()) {
       const std::string file = prefix_ + SPrintf("%d.png", type_);
-      EXIT_IF_ERROR(WP2::SaveImage(decoded, file.c_str(), /*overwrite=*/true),
+      EXIT_IF_ERROR(SaveImage(decoded, file.c_str(), /*overwrite=*/true),
                     "Cannot save output [%s]", file.c_str());
     }
     return WP2_STATUS_OK;
@@ -222,7 +220,7 @@ class Task : public WP2::Worker {
  public:
   StatType type_;
   TestParams params_;
-  const WP2::ArgbBuffer* ref_;
+  const ArgbBuffer* ref_;
   std::string prefix_;
 
   std::vector<std::string> include_;
@@ -236,34 +234,34 @@ class Task : public WP2::Worker {
 
  private:
   // used by the two methods below
-  void DoCompressWP2(WP2::ArgbBuffer* const decoded);
-  void CompressWP2(WP2::ArgbBuffer* const decoded);
-  void CompressNeural(WP2::ArgbBuffer* const decoded);
+  void DoEncodeWP2(ArgbBuffer* const decoded);
+  void EncodeWP2(ArgbBuffer* const decoded);
+  void EncodeNeural(ArgbBuffer* const decoded);
 
-  void CompressWebP(WP2::ArgbBuffer* const decoded);
-  void CompressAV1(WP2::ArgbBuffer* const decoded);
-  void CompressJPEG(WP2::ArgbBuffer* const decoded);
+  void EncodeWebP(ArgbBuffer* const decoded);
+  void EncodeAV1(ArgbBuffer* const decoded);
+  void EncodeJPEG(ArgbBuffer* const decoded);
 };
 
 //------------------------------------------------------------------------------
 
-void Task::DoCompressWP2(WP2::ArgbBuffer* const decoded) {
+void Task::DoEncodeWP2(ArgbBuffer* const decoded) {
   // Create working copy
-  WP2::ArgbBuffer src;
+  ArgbBuffer src;
   EXIT_IF_ERROR(src.CopyFrom(*ref_), "Can't copy buffer");
 
   params_.config.thread_level = (int)params_.use_mt;
-  WP2::EncoderInfo einfo;
+  EncoderInfo einfo;
   einfo.force_partition = params_.force_partition;
   params_.config.info = &einfo;
   EXIT_IF_FALSE(params_.config.IsValid(),
                 "Error! Invalid configuration. Some parameters are erroneous.");
 
   // Set up the memory writer
-  WP2::MemoryWriter memory_writer;
+  MemoryWriter memory_writer;
 
   double start_time = GetStopwatchTime();
-  EXIT_IF_ERROR(WP2::Encode(src, &memory_writer, params_.config),
+  EXIT_IF_ERROR(Encode(src, &memory_writer, params_.config),
                 "Error! Cannot encode picture as WP2");
   enc_time_ = GetStopwatchTime() - start_time;
   size_ = memory_writer.size_;
@@ -271,18 +269,18 @@ void Task::DoCompressWP2(WP2::ArgbBuffer* const decoded) {
   params_.config.info = nullptr;
 
   // decode back
-  WP2::DecoderConfig dec_config;
+  DecoderConfig dec_config;
   dec_config.thread_level = params_.use_mt ? 1 : 0;
   if (params_.disable_filters) {
     dec_config.enable_deblocking_filter = false;
     dec_config.enable_directional_filter = false;
     dec_config.enable_restoration_filter = false;
   }
-  WP2::DecoderInfo dinfo;
+  DecoderInfo dinfo;
   dec_config.info = &dinfo;
   start_time = GetStopwatchTime();
   EXIT_IF_ERROR(
-      WP2::Decode(memory_writer.mem_, memory_writer.size_, decoded, dec_config),
+      Decode(memory_writer.mem_, memory_writer.size_, decoded, dec_config),
       "FATAL: Decoding failed for quality %f!", params_.config.quality);
   dec_time_ = GetStopwatchTime() - start_time;
 
@@ -315,24 +313,24 @@ void Task::DoCompressWP2(WP2::ArgbBuffer* const decoded) {
 #endif  // WP2_BITTRACE
 }
 
-void Task::CompressWP2(WP2::ArgbBuffer* const decoded) {
+void Task::EncodeWP2(ArgbBuffer* const decoded) {
   params_.config.quality = params_.q;
   params_.config.alpha_quality = params_.q;
-  DoCompressWP2(decoded);
+  DoEncodeWP2(decoded);
 }
 
-void Task::CompressNeural(WP2::ArgbBuffer* const decoded) {
+void Task::EncodeNeural(ArgbBuffer* const decoded) {
   assert(params_.neural_path != nullptr);
   params_.config.graphdef_path = params_.neural_path;
   params_.config.use_neural_compression = 1;
   // neural-net compression only accepts integer quality in [0..9] range
   params_.config.quality = (int)(params_.q * 9 / 100);
-  DoCompressWP2(decoded);
+  DoEncodeWP2(decoded);
 }
 
 //------------------------------------------------------------------------------
 
-void Task::CompressWebP(WP2::ArgbBuffer* const decoded) {
+void Task::EncodeWebP(ArgbBuffer* const decoded) {
 #if defined(WP2_HAVE_WEBP)
   WebPConfig config;
   EXIT_IF_FALSE(WebPConfigPreset(&config, WEBP_PRESET_DEFAULT, params_.q),
@@ -345,17 +343,16 @@ void Task::CompressWebP(WP2::ArgbBuffer* const decoded) {
   config.use_sharp_yuv = params_.use_sharp_yuv;
 
   // encode
-  WP2::MemoryWriter writer;
+  MemoryWriter writer;
   double start_time = GetStopwatchTime();
-  EXIT_IF_ERROR(WP2::CompressWebP(*ref_, config, &writer),
+  EXIT_IF_ERROR(CompressWebP(*ref_, config, &writer),
                 "Error! Could not encode WebP.");
   enc_time_ = GetStopwatchTime() - start_time;
   size_ = writer.size_;
 
   // decode back
   start_time = GetStopwatchTime();
-  EXIT_IF_ERROR(WP2::ReadImage(writer.mem_, writer.size_, decoded,
-                               WP2::FileFormat::WEBP),
+  EXIT_IF_ERROR(ReadImage(writer.mem_, writer.size_, decoded, FileFormat::WEBP),
                 "Can't decode back the WebP output!");
   dec_time_ = GetStopwatchTime() - start_time;
 #else
@@ -365,18 +362,17 @@ void Task::CompressWebP(WP2::ArgbBuffer* const decoded) {
 
 //------------------------------------------------------------------------------
 
-void Task::CompressAV1(WP2::ArgbBuffer* const decoded) {
-  WP2::ParamsAV1 p;
+void Task::EncodeAV1(ArgbBuffer* const decoded) {
+  ParamsAV1 p;
   p.quality = params_.q;
-  p.use_yuv444 = (params_.config.uv_mode == WP2::EncoderConfig::UVMode444);
+  p.use_yuv444 = (params_.config.uv_mode == EncoderConfig::UVMode444);
   if (params_.config.thread_level > 1) p.threads = 4;
   p.effort = params_.config.effort;
   p.pass = (params_.config.pass > 1) ? 2 : 1;
 
   std::string out;
   double timing[2];
-  EXIT_IF_FALSE(WP2::CompressAV1(*ref_, p, decoded, &out, timing)
-                    == WP2_STATUS_OK,
+  EXIT_IF_FALSE(CompressAV1(*ref_, p, decoded, &out, timing) == WP2_STATUS_OK,
                 "CompressAV1() failed!");
   enc_time_ = timing[0];
   dec_time_ = timing[1];
@@ -385,7 +381,7 @@ void Task::CompressAV1(WP2::ArgbBuffer* const decoded) {
 
 //------------------------------------------------------------------------------
 
-void Task::CompressJPEG(WP2::ArgbBuffer* const decoded) {
+void Task::EncodeJPEG(ArgbBuffer* const decoded) {
 #if defined(WP2_HAVE_SJPEG)
   sjpeg::EncoderParam param;
   param.SetQuality(params_.q);
@@ -393,17 +389,16 @@ void Task::CompressJPEG(WP2::ArgbBuffer* const decoded) {
   param.adaptive_quantization = (params_.config.effort >= 2);
   param.Huffman_compress = (params_.config.effort >= 1);
   param.yuv_mode =
-      (params_.config.uv_mode == WP2::EncoderConfig::UVMode444)
-          ? SJPEG_YUV_444
-          : (params_.config.uv_mode == WP2::EncoderConfig::UVMode420)
-                ? SJPEG_YUV_420
-                : params_.use_sharp_yuv ? SJPEG_YUV_SHARP : SJPEG_YUV_AUTO;
+      (params_.config.uv_mode == EncoderConfig::UVMode444)   ? SJPEG_YUV_444
+      : (params_.config.uv_mode == EncoderConfig::UVMode420) ? SJPEG_YUV_420
+      : params_.use_sharp_yuv                                ? SJPEG_YUV_SHARP
+                                                             : SJPEG_YUV_AUTO;
 
   const uint32_t w = ref_->width();
   const uint32_t h = ref_->height();
   const size_t stride = 3 * w;
   // Extract RGB
-  WP2::Vector_u8 rgb;
+  Vector_u8 rgb;
   EXIT_IF_FALSE(rgb.resize(stride * h), "Malloc failure for rgb[]");
   for (uint32_t y = 0; y < h; ++y) {
     const uint8_t* const row = ref_->GetRow8(y);
@@ -424,8 +419,8 @@ void Task::CompressJPEG(WP2::ArgbBuffer* const decoded) {
 
   // decode back
   start_time = GetStopwatchTime();
-  EXIT_IF_ERROR(WP2::ReadImage((const uint8_t*)out.data(), out.size(), decoded,
-                               WP2::FileFormat::JPEG),
+  EXIT_IF_ERROR(ReadImage((const uint8_t*)out.data(), out.size(), decoded,
+                          FileFormat::JPEG),
                 "Can't decode back the JPEG output!");
   dec_time_ = GetStopwatchTime() - start_time;
 #else
@@ -601,11 +596,11 @@ class GnuplotOutputWriter : public OutputWriter {
     report_ += "set style data linesp\n";
     report_ += SPrintf("set title 'RD-curve [%s]'\n", params_.in_file.c_str());
     report_ += "set xlabel 'bpp'\n";
-    report_ += SPrintf("set ylabel '%s'\n", kWP2MetricNames[params_.metric]);
+    report_ += SPrintf("set ylabel '%s'\n", kMetricNames[params_.metric]);
     report_ += "set terminal png size 1024,800\n";
     report_ += "set output '/tmp/rd-curve.png'\n";
     report_ += "plot ";
-    const int skip = (params_.metric != WP2::PSNR) ? 2 : 1;
+    const int skip = (params_.metric != PSNR) ? 2 : 1;
     int column = 3;
 
     std::string curves = "";
@@ -719,9 +714,9 @@ class LumascopeOutputWriter : public OutputWriter {
     report_ += SPrintf("\"%s ; Size: %d ; bpp: %.3f ; PSNR : %2.2lf ;",
                        names[type].c_str(), task->size_,
                        task->bpp_, task->psnr_);
-    if (params_.metric != WP2::PSNR) {
-      report_ += SPrintf(" %s: %2.2lf ;", kWP2MetricNames[params_.metric],
-                         task->disto_);
+    if (params_.metric != PSNR) {
+      report_ +=
+          SPrintf(" %s: %2.2lf ;", kMetricNames[params_.metric], task->disto_);
     }
     report_ += SPrintf(" enc: %.2f ; dec: %.2f\"",
                        task->enc_time_, task->dec_time_);
@@ -733,7 +728,7 @@ class LumascopeOutputWriter : public OutputWriter {
   const std::string lumascope_path_;
 };
 
-static std::vector<std::string> Split(const std::string& s, char delim) {
+std::vector<std::string> Split(const std::string& s, char delim) {
   std::vector<std::string> result;
   std::stringstream ss(s);
   std::string item;
@@ -745,7 +740,7 @@ static std::vector<std::string> Split(const std::string& s, char delim) {
 
 //------------------------------------------------------------------------------
 
-static int RdCurveMain(int argc, char* argv[], std::string* output_str) {
+int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   EXIT_IF_FALSE(WP2CheckVersion(), "Error! Library version mismatch!");
 
   TestParams params;
@@ -757,7 +752,7 @@ static int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   bool do_neural = false;
   bool crop = false;
   bool convert_to_gray = false;
-  WP2::Rectangle crop_area;
+  Rectangle crop_area;
   bool save_output = false;
   const char* save_folder = ".";
   std::vector<std::string> include;
@@ -777,20 +772,20 @@ static int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       params.config.effort = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-tile_shape") && c + 1 < argc) {
       params.config.tile_shape =
-          (WP2::TileShape)ExUtilGetInt(argv[++c], &parse_error);
+          (TileShape)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-csp") && c + 1 < argc) {
-      params.config.csp_type = (WP2::Csp)ExUtilGetInt(argv[++c], &parse_error);
+      params.config.csp_type = (Csp)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-pm") && c + 1 < argc) {
       params.config.partition_method =
-          (WP2::PartitionMethod)ExUtilGetInt(argv[++c], &parse_error);
+          (PartitionMethod)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-ps") && c + 1 < argc) {
       params.config.partition_set =
-          (WP2::PartitionSet)ExUtilGetInt(argv[++c], &parse_error);
+          (PartitionSet)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-snap")) {
       params.config.partition_snapping = true;
     } else if (!strcmp(argv[c], "-uv_mode") && c + 1 < argc) {
       params.config.uv_mode =
-          (WP2::EncoderConfig::UVMode)ExUtilGetInt(argv[++c], &parse_error);
+          (EncoderConfig::UVMode)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-neural") && c + 1 < argc) {
       params.neural_path = argv[++c];
       do_neural = true;
@@ -819,11 +814,11 @@ static int RdCurveMain(int argc, char* argv[], std::string* output_str) {
     } else if (!strcmp(argv[c], "-segment_mode") && c + 1 < argc) {
       ++c;
       if (!strcmp(argv[c], "auto")) {
-        params.config.segment_id_mode = WP2::EncoderConfig::SEGMENT_ID_AUTO;
+        params.config.segment_id_mode = EncoderConfig::SEGMENT_ID_AUTO;
       } else if (!strcmp(argv[c], "explicit")) {
-        params.config.segment_id_mode = WP2::EncoderConfig::SEGMENT_ID_EXPLICIT;
+        params.config.segment_id_mode = EncoderConfig::SEGMENT_ID_EXPLICIT;
       } else if (!strcmp(argv[c], "implicit")) {
-        params.config.segment_id_mode = WP2::EncoderConfig::SEGMENT_ID_IMPLICIT;
+        params.config.segment_id_mode = EncoderConfig::SEGMENT_ID_IMPLICIT;
       } else {
         fprintf(stderr, "unsupported segment mode '%s'\n", argv[c]);
         parse_error = true;
@@ -913,8 +908,8 @@ static int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   }
 
   // Read the input
-  WP2::ArgbBuffer ref;
-  EXIT_IF_ERROR(WP2::ReadImage(params.in_file.c_str(), &ref),
+  ArgbBuffer ref;
+  EXIT_IF_ERROR(ReadImage(params.in_file.c_str(), &ref),
                 "Error! Cannot read input picture file '%s'",
                 params.in_file.c_str());
 
@@ -936,11 +931,11 @@ static int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   }
 
   if (partition_file_path != nullptr) {
-    EXIT_IF_FALSE(WP2ReadPartition(partition_file_path, /*read_only=*/false,
-                                   &params.force_partition),
+    EXIT_IF_FALSE(ReadPartition(partition_file_path, /*read_only=*/false,
+                                &params.force_partition),
                   "Error: Unable to parse partition file");
-    WP2ConvertPartition(ref.width(), ref.height(), params.config.partition_set,
-                        /*ignore_invalid=*/true, &params.force_partition);
+    ConvertPartition(ref.width(), ref.height(), params.config.partition_set,
+                     /*ignore_invalid=*/true, &params.force_partition);
   }
 
   std::unique_ptr<OutputWriter> output;
@@ -962,11 +957,11 @@ static int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   output->Start();
 
   // set up multi-threading
-  const auto& itf = WP2::GetWorkerInterface();
+  const auto& itf = GetWorkerInterface();
 
   const uint32_t num_tasks =
       (do_wp2 + do_webp + do_jpeg + do_av1 + do_neural) * (params.qsteps + 1);
-  WP2::Vector<Task> tasks;
+  Vector<Task> tasks;
   EXIT_IF_FALSE(tasks.resize(num_tasks), "Task allocation failed.");
 
   Task* task = &tasks[0];
@@ -1042,10 +1037,13 @@ static int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   return 0;
 }
 
+}  // namespace
+}  // namespace WP2
+
 #ifndef WP2_RD_CURVE_NO_MAIN
 int main(int argc, char* argv[]) {
   std::string output_str;
-  const int ret = RdCurveMain(argc, argv, &output_str);
+  const int ret = WP2::RdCurveMain(argc, argv, &output_str);
   printf("%s", output_str.c_str());
   return ret;
 }

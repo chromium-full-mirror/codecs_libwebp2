@@ -122,9 +122,10 @@ TEST_P(Group4Test, Pattern) {
 
 INSTANTIATE_TEST_SUITE_P(
     Group4Test, Group4Test,
-    ::testing::Combine(::testing::Values(Type::kCircle, Type::kRandom),
-                       ::testing::Range(0, 100),
-                       ::testing::Values(WP2L::kGroup4Window, 101)));
+    ::testing::Combine(::testing::Values(Type::kCircle, Type::kRandom),  // type
+                       ::testing::Range(0, 20),                          // seed
+                       ::testing::Values(WP2L::kGroup4Window, 101)       // dim
+                       ));
 
 }  // namespace
 }  // namespace WP2

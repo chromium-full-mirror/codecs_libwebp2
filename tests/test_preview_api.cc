@@ -39,9 +39,9 @@ constexpr float kMinExpectedSimilarity = 13.f;
 void ShowOutput(const std::string& file_name, const ArgbBuffer& original_image,
                 const ArgbBuffer& decompressed_preview) {
 #ifdef WP2_TEST_PREVIEW_API_SAVE_OUTPUT
-  std::string original = WP2RemoveFileExtension(file_name) + "_original.png";
+  std::string original = RemoveFileExtension(file_name) + "_original.png";
   EXPECT_WP2_OK(SaveImage(original_image, ("/tmp/" + original).c_str(), true));
-  std::string decompressed = WP2RemoveFileExtension(file_name) + "_preview.png";
+  std::string decompressed = RemoveFileExtension(file_name) + "_preview.png";
   EXPECT_WP2_OK(
       SaveImage(decompressed_preview, ("/tmp/" + decompressed).c_str(), true));
 #else

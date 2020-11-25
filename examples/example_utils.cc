@@ -27,13 +27,18 @@
 #include <string>
 #include <vector>
 
+#include "examples/stopwatch.h"
+#include "src/common/color_precision.h"
+
+namespace WP2 {
+
 //------------------------------------------------------------------------------
 
 // Prints the distortion stored in 'values'.
 static void PrintDistortion(WP2::MetricType metric, float values[5],
                             size_t data_size, bool short_output) {
   if (!short_output) {
-    fprintf(stderr, "%s: ", kWP2MetricNames[metric]);
+    fprintf(stderr, "%s: ", kMetricNames[metric]);
     if (metric == WP2::PSNR_YUV || metric == WP2::SSIM_YUV ||
         metric == WP2::PSNRHVS) {
       fprintf(stderr, "A: %2.2f  Y: %2.2f  U: %2.2f  V: %2.2f   ",
@@ -42,18 +47,18 @@ static void PrintDistortion(WP2::MetricType metric, float values[5],
       fprintf(stderr, "A: %2.2f  R: %2.2f  G: %2.2f  B: %2.2f   ",
               values[0], values[1], values[2], values[3]);
     }
-    fprintf(stderr, "Total size: %7d %s: %2.2f\n",
-            (int)data_size, kWP2MetricNames[metric], values[4]);
+    fprintf(stderr, "Total size: %7d %s: %2.2f\n", (int)data_size,
+            kMetricNames[metric], values[4]);
   } else {
     fprintf(stderr, "%7d %.4f\n", (int)data_size, values[4]);
   }
 }
 
-void WP2PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
-                        const uint8_t* const data, size_t data_size,
-                        WP2::MetricType metric, bool short_output) {
+void PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
+                     const uint8_t* const data, size_t data_size,
+                     WP2::MetricType metric, bool short_output) {
   WP2::ArrayDecoder decoder(data, data_size);
-  size_t num_frames = 0;
+  uint32_t num_frames = 0;
   float avg_values[5] = {0};
   while (decoder.ReadFrame()) {
     EXIT_IF_FALSE(refs.size() > num_frames,
@@ -63,7 +68,7 @@ void WP2PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
                       refs[num_frames], metric, values),
                   "Error while computing distortion!");
     if (!short_output) {
-      fprintf(stderr, "Frame %3zu distortion ", num_frames);
+      fprintf(stderr, "Frame %3u distortion ", num_frames);
       PrintDistortion(metric, values, data_size, short_output);
     }
     for (int i = 0; i < 5; ++i) avg_values[i] += values[i];
@@ -75,7 +80,7 @@ void WP2PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
   if (num_frames > 0) {
     for (int i = 0; i < 5; ++i) avg_values[i] /= num_frames;
     if (!short_output) {
-      fprintf(stderr, "Total avg distortion over %zu frames ", num_frames);
+      fprintf(stderr, "Total avg distortion over %u frames ", num_frames);
     }
     PrintDistortion(metric, avg_values, data_size, short_output);
   } else {
@@ -89,19 +94,19 @@ void WP2PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
   }
 }
 
-void WP2PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
-                        size_t data_size, WP2::MetricType metric,
-                        bool short_output) {
+void PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
+                     size_t data_size, WP2::MetricType metric,
+                     bool short_output) {
   std::vector<WP2::ArgbBuffer> refs(1);
   if (refs.front().SetView(ref) != WP2_STATUS_OK) assert(false);
-  WP2PrintDistortion(refs, data, data_size, metric, short_output);
+  PrintDistortion(refs, data, data_size, metric, short_output);
 }
 
 //------------------------------------------------------------------------------
 
-void WP2CollectBitTraces(const uint8_t* const data, size_t data_size,
-                         int bit_trace, uint32_t bit_trace_level,
-                         bool short_output, bool show_histograms) {
+void CollectBitTraces(const uint8_t* const data, size_t data_size,
+                      int bit_trace, uint32_t bit_trace_level,
+                      bool short_output, bool show_histograms) {
   WP2::DecoderConfig config;
   WP2::DecoderInfo info;
   config.info = &info;
@@ -127,13 +132,42 @@ void WP2CollectBitTraces(const uint8_t* const data, size_t data_size,
 
 //------------------------------------------------------------------------------
 
+std::string PrintSummary(const BitstreamFeatures& bitstream,
+                         size_t input_data_size, bool short_output) {
+  const WP2::Argb32b prev_col = ToArgb32b(bitstream.preview_color);
+  const uint32_t degrees = (uint32_t)bitstream.orientation * 90;
+
+  std::string str;
+  str += SPrintf("Dimension:     %u x %u\n", bitstream.width, bitstream.height);
+  if (!short_output) {
+    str += SPrintf("animation:     %s\n",
+                   bitstream.is_animation
+                       ? (bitstream.loop_forever ? "yes (loop forever)"
+                                                 : "yes (play once)")
+                       : "no");
+    str += SPrintf("quality hint:  %u\n", bitstream.quality_hint);
+    str += SPrintf("preview:       %s\n", bitstream.has_preview ? "yes" : "no");
+    str += SPrintf("preview color: %u, %u, %u\n", prev_col.r, prev_col.g,
+                   prev_col.b);
+    str += SPrintf("rotated by:    %u degrees clockwise\n", degrees);
+    str += SPrintf("transfer:      %d\n", (int)bitstream.transfer_function);
+    str += SPrintf("ICC:           %s\n", bitstream.has_icc ? "yes" : "no");
+    str += SPrintf("XMP/EXIF:      %s\n",
+                   bitstream.has_trailing_data ? "yes" : "no");
+    str += SPrintf("file size:     %" PRIu64 "\n", (uint64_t)input_data_size);
+  }
+  return str;
+}
+
+//------------------------------------------------------------------------------
+
 #ifdef _WIN32
 static constexpr char kPathSeparator = (char)'\\';
 #else
 static constexpr char kPathSeparator = (char)'/';
 #endif  // _WIN32
 
-std::string WP2JoinPath(const std::string& prefix, const std::string& suffix) {
+std::string JoinPath(const std::string& prefix, const std::string& suffix) {
   std::string joined_path = prefix;
   if (!joined_path.empty() && joined_path.back() != kPathSeparator) {
     joined_path += kPathSeparator;
@@ -142,7 +176,7 @@ std::string WP2JoinPath(const std::string& prefix, const std::string& suffix) {
   return joined_path;
 }
 
-bool WP2IsDirectory(const std::string& path) {
+bool IsDirectory(const std::string& path) {
   if (path.empty()) return false;
 #ifdef _WIN32
   auto attributes = GetFileAttributes(path.c_str());
@@ -156,17 +190,17 @@ bool WP2IsDirectory(const std::string& path) {
 #endif  // _WIN32
 }
 
-bool WP2GetFilesIn(const std::string& dir_path,
-                   std::vector<std::string>* const files, bool recursive) {
+bool GetFilesIn(const std::string& dir_path,
+                std::vector<std::string>* const files, bool recursive) {
 #ifdef _WIN32
   WIN32_FIND_DATA ffd;
-  HANDLE handle = FindFirstFile(WP2JoinPath(dir_path, "*").c_str(), &ffd);
+  HANDLE handle = FindFirstFile(JoinPath(dir_path, "*").c_str(), &ffd);
   if (handle == INVALID_HANDLE_VALUE) return false;
 
   do {
-    const std::string file_path = WP2JoinPath(dir_path, ffd.cFileName);
+    const std::string file_path = JoinPath(dir_path, ffd.cFileName);
     if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-      if (recursive) WP2GetFilesIn(file_path, files, recursive);
+      if (recursive) GetFilesIn(file_path, files, recursive);
     } else {
       files->push_back(file_path);
     }
@@ -186,12 +220,12 @@ bool WP2GetFilesIn(const std::string& dir_path,
     if ((strcmp(ent->d_name, ".") == 0) || (strcmp(ent->d_name, "..") == 0)) {
       continue;
     }
-    const std::string ent_path = WP2JoinPath(dir_path, ent->d_name);
+    const std::string ent_path = JoinPath(dir_path, ent->d_name);
     if (recursive) {
-      if (!WP2GetFilesIn(ent_path, files, recursive)) {
+      if (!GetFilesIn(ent_path, files, recursive)) {
         files->push_back(ent_path);
       }
-    } else if (!WP2IsDirectory(ent_path)) {
+    } else if (!IsDirectory(ent_path)) {
       files->push_back(ent_path);
     }
   }
@@ -200,13 +234,13 @@ bool WP2GetFilesIn(const std::string& dir_path,
 #endif  // _WIN32
 }
 
-std::string WP2GetFileName(const std::string& path) {
+std::string GetFileName(const std::string& path) {
   const size_t last_separator_pos = path.find_last_of(kPathSeparator);
   if (last_separator_pos == std::string::npos) return path;
   return path.substr(last_separator_pos + 1);
 }
 
-std::string WP2RemoveFileExtension(const std::string& path) {
+std::string RemoveFileExtension(const std::string& path) {
   const size_t last_separator_pos = path.find_last_of(kPathSeparator);
   const size_t last_dot_pos = path.find_last_of('.');
   if ((last_dot_pos == std::string::npos) ||
@@ -217,7 +251,7 @@ std::string WP2RemoveFileExtension(const std::string& path) {
   return path.substr(0, last_dot_pos);
 }
 
-std::string WP2GetFileExtension(const std::string& path) {
+std::string GetFileExtension(const std::string& path) {
   const size_t last_separator_pos = path.find_last_of(kPathSeparator);
   const size_t last_dot_pos = path.find_last_of('.');
   if ((last_dot_pos == std::string::npos) ||
@@ -229,13 +263,13 @@ std::string WP2GetFileExtension(const std::string& path) {
   return path.substr(last_dot_pos + 1);
 }
 
-std::string WP2InputFileToOutputDir(const std::string& input_file_path,
-                                    const std::string& output_dir_path,
-                                    const std::string& extension) {
+std::string InputFileToOutputDir(const std::string& input_file_path,
+                                 const std::string& output_dir_path,
+                                 const std::string& extension) {
   assert(!extension.empty());
-  return WP2JoinPath(output_dir_path,
-                     WP2RemoveFileExtension(WP2GetFileName(input_file_path)) +
-                         '.' + extension);
+  return JoinPath(
+      output_dir_path,
+      RemoveFileExtension(GetFileName(input_file_path)) + '.' + extension);
 }
 
 //------------------------------------------------------------------------------
@@ -289,8 +323,8 @@ struct PartitionParams {
   }
 };
 
-bool WP2ReadPartition(const char file_path[], bool read_only,
-                      std::vector<WP2::Rectangle>* const partition) {
+bool ReadPartition(const char file_path[], bool read_only,
+                   std::vector<WP2::Rectangle>* const partition) {
   std::FILE* const file = std::fopen(file_path, "r");
   if (file == nullptr) {
     // If not 'read_only', it's considered output, not an error.
@@ -311,9 +345,9 @@ bool WP2ReadPartition(const char file_path[], bool read_only,
   return true;
 }
 
-void WP2ConvertPartition(uint32_t pic_width, uint32_t pic_height,
-                         WP2::PartitionSet partition_set, bool ignore_invalid,
-                         std::vector<WP2::Rectangle>* const partition) {
+void ConvertPartition(uint32_t pic_width, uint32_t pic_height,
+                      WP2::PartitionSet partition_set, bool ignore_invalid,
+                      std::vector<WP2::Rectangle>* const partition) {
   PartitionParams p = {WP2::GetBlockSizes(partition_set),
                        pic_width,
                        pic_height,
@@ -327,8 +361,8 @@ void WP2ConvertPartition(uint32_t pic_width, uint32_t pic_height,
   std::swap(*partition, p.partition);
 }
 
-bool WP2WritePartition(const std::vector<WP2::Rectangle>& partition,
-                       const char file_path[]) {
+bool WritePartition(const std::vector<WP2::Rectangle>& partition,
+                    const char file_path[]) {
   std::FILE* const file = std::fopen(file_path, "w");
   if (file == nullptr) return false;
   for (const WP2::Rectangle& rect : partition) {
@@ -498,3 +532,48 @@ uint32_t ExUtilGetFloats(const char* v, float values[], uint32_t num_values_max,
 }
 
 //------------------------------------------------------------------------------
+
+constexpr double MultiProgressPrinter::kNumSecondsBetweenPrints;
+
+void MultiProgressPrinter::Init(uint32_t num_jobs) {
+  jobs_.clear();
+  jobs_.reserve(num_jobs);
+  for (uint32_t i = 0; i < num_jobs; ++i) jobs_.emplace_back(this, i);
+  started_ = false;
+  num_finished_jobs_ = 0;
+}
+
+void MultiProgressPrinter::OnUpdate(bool job_just_finished) {
+  if (jobs_.size() > 1) WP2_ASSERT_STATUS(lock_.Acquire());
+  assert(num_finished_jobs_ < jobs_.size());
+  if (job_just_finished) ++num_finished_jobs_;
+  if (num_finished_jobs_ == jobs_.size()) {
+    printf("100.00 %%\n");
+  } else {
+    const double timestamp = GetStopwatchTime();
+    if (!started_ || (timestamp - last_timestamp_) > kNumSecondsBetweenPrints) {
+      double sum = 0;
+      for (const Job& job : jobs_) sum += job.progress_;
+      printf("%6.2f %%\n", sum * 100. / jobs_.size());
+      started_ = true;
+      last_timestamp_ = timestamp;
+    }
+  }
+  if (jobs_.size() > 1) lock_.Release();
+}
+
+bool MultiProgressPrinter::Job::OnUpdate(double progress) {
+  if (!finished_) {
+    progress_ = progress;
+    if (progress_ > 0.999999) {
+      progress_ = 1.;
+      finished_ = true;
+    }
+    parent_->OnUpdate(finished_);
+  }
+  return true;
+}
+
+//------------------------------------------------------------------------------
+
+}  // namespace WP2

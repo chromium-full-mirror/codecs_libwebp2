@@ -23,26 +23,27 @@
 #include "include/helpers.h"
 #include "src/utils/random.h"
 
+namespace WP2 {
 namespace {
 
 //------------------------------------------------------------------------------
 
 TEST(PathTest, Simple) {
-  ASSERT_TRUE(WP2IsDirectory(WP2::testing::GetTestDataPath("")));
-  ASSERT_FALSE(WP2IsDirectory(WP2::testing::GetTestDataPath("source1.png")));
+  ASSERT_TRUE(IsDirectory(testing::GetTestDataPath("")));
+  ASSERT_FALSE(IsDirectory(testing::GetTestDataPath("source1.png")));
 
 #if defined(_WIN32)
-  ASSERT_EQ(WP2JoinPath("path", "file.png"), "path\\file.png");
+  ASSERT_EQ(JoinPath("path", "file.png"), "path\\file.png");
 #else
-  ASSERT_EQ(WP2JoinPath("path", "file.png"), "path/file.png");
+  ASSERT_EQ(JoinPath("path", "file.png"), "path/file.png");
 #endif
-  ASSERT_EQ(WP2GetFileName("path/file.png"), "file.png");
-  ASSERT_EQ(WP2RemoveFileExtension("file.png"), "file");
+  ASSERT_EQ(GetFileName("path/file.png"), "file.png");
+  ASSERT_EQ(RemoveFileExtension("file.png"), "file");
 }
 
 //------------------------------------------------------------------------------
 
-std::string RandomString(WP2::UniformIntDistribution* const r, size_t len,
+std::string RandomString(UniformIntDistribution* const r, size_t len,
                          int density = 0) {
   std::string s(len + 1, 0);
   for (auto& c : s) {
@@ -54,7 +55,7 @@ std::string RandomString(WP2::UniformIntDistribution* const r, size_t len,
 
 TEST(ProgramOptionTest, Display) {
   ProgramOptions opt;
-  WP2::UniformIntDistribution rnd(21565);
+  UniformIntDistribution rnd(21565);
   opt.Add("");
   opt.Add("test", "");
   std::deque<std::string> flags;  // permanent storage for flag strings
@@ -146,3 +147,4 @@ TEST(ArgParser, Floats) {
 //------------------------------------------------------------------------------
 
 }  // namespace
+}  // namespace WP2

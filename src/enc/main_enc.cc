@@ -343,9 +343,8 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
   FeatureMap features;
   gparams.features_ = &features;
   const ArgbBuffer* buffer = &rgb_buffer;
-  const WP2SampleFormat format_default =
-      (WP2FormatBpc(rgb_buffer.format()) == 1) ? WP2_Argb_32 : WP2_Argb_38;
-  ArgbBuffer pre_processed_buffer(format_default);
+
+  ArgbBuffer pre_processed_buffer(buffer->format());
 
   // near-lossless pre-processing
   constexpr uint32_t kMinNearLosslessDimension = 16;    // minimum dimension

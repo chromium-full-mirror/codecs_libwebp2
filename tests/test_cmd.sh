@@ -89,7 +89,7 @@ done
 
 # grain test
 ${CWP2} -o ${TMP_FILE} ${SRC_FILE1} -crop 30 31 200 200 -effort 0 \
-        -grain -noasm -segment_mode auto -perceptual
+        -grain -noasm -segment_mode auto -perceptual -progress
 ${GET_DISTO} ${TMP_FILE} ${SRC_FILE1} -scale -crop_source 30 31 200 200 \
              -prefix "this is a test" -suffix "good"
 

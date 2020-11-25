@@ -1911,9 +1911,9 @@ bool TileScoreFunc::RegisterScoreForVDebug(const char label[],
                                            float score) const {
   if (VDMatch(*config_, "encoder/partition/score")) {
     std::string* const str_ptr = &config_->info->selection_info;
-    WP2SAppend(str_ptr, "\n%s: score %.6f, %4zu blocks, %4zu-byte tile", label,
-               score, blocks_.size(),
-               enc_tiles_layout_.tiles.front().enc.BufferSize());
+    WP2SAppend(str_ptr, "\n%s: score %.6f, %4u blocks, %4u-byte tile", label,
+               score, (uint32_t)blocks_.size(),
+               (uint32_t)enc_tiles_layout_.tiles.front().enc.BufferSize());
     if (block.dim() != BLK_LAST) {
       WP2SAppend(str_ptr, ", on block at %3u,%3u (%2ux%2u)", block.x_pix(),
                  block.y_pix(), block.w_pix(), block.h_pix());
@@ -1927,12 +1927,12 @@ bool TileScoreFunc::RegisterScoreForVDebug(const char label[],
 //------------------------------------------------------------------------------
 
 void ExhaustivePartitioner::RegisterScoreForVDebug(
-    float best_partition_score, size_t best_partition_size,
-    size_t num_iterations) const {
+    float best_partition_score, uint64_t best_partition_size,
+    uint64_t num_iterations) const {
   if (VDMatch(*config_, "encoder/partition/score")) {
     std::string* const str_ptr = &config_->info->selection_info;
-    WP2SAppend(str_ptr, "\n\nNum iterations: %zu\n", num_iterations);
-    WP2SAppend(str_ptr, "Best partition score: %8.3f size: %4zu\n",
+    WP2SAppend(str_ptr, "\n\nNum iterations: %" PRIu64 "\n", num_iterations);
+    WP2SAppend(str_ptr, "Best partition score: %8.3f size: %4" PRIu64 "\n",
                best_partition_score, best_partition_size);
   }
 }

@@ -69,9 +69,12 @@ static uint32_t Smooth(const uint32_t* const prev,
 WP2Status PreprocessNearLossless(const ArgbBuffer& in_buffer,
                                  const EncoderConfig& config, bool is_alpha,
                                  ArgbBuffer* const out_buffer) {
-  assert(out_buffer != nullptr);
-  assert(in_buffer.format() == WP2_Argb_32);
-  assert(out_buffer->format() == WP2_Argb_32);
+  WP2_CHECK_OK(out_buffer != nullptr, WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(
+      in_buffer.format() == WP2_Argb_32 || in_buffer.format() == WP2_ARGB_32,
+      WP2_STATUS_INVALID_COLORSPACE);
+  WP2_CHECK_OK(out_buffer->format() == in_buffer.format(),
+               WP2_STATUS_INVALID_COLORSPACE);
   const uint32_t w = in_buffer.width(), h = in_buffer.height();
   WP2_CHECK_STATUS(out_buffer->Resize(w, h));
   Vector_u32 tmp;

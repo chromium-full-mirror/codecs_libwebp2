@@ -22,16 +22,18 @@
 #include <string>
 #include <vector>
 
-#include "extras/extras.h"
 #include "examples/example_utils.h"
+#include "extras/extras.h"
 #include "imageio/file_format.h"
-#include "imageio/imageio_util.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
-#include "src/common/preview/preview.h"   // TODO(skal): make better include
-#include "src/enc/preview/preview_enc.h"
+#include "imageio/imageio_util.h"
+#include "src/common/preview/preview.h"  // TODO(skal): make better include
 #include "src/dec/preview/preview_dec.h"
+#include "src/enc/preview/preview_enc.h"
 #include "src/wp2/encode.h"
+
+//------------------------------------------------------------------------------
 
 #define CHECK_OK(COND, STR...) do {   \
   if (!(COND)) {                      \
@@ -41,16 +43,21 @@
 } while (false)
 #define CHECK_STATUS(CALL, STR...) CHECK_OK(((CALL) == WP2_STATUS_OK), STR)
 
+namespace {
 static int verbose = 1;
 static bool check = false;
+}  // namespace
 #define VERBOSE(STR...) if (verbose > 0) printf(STR)  // NOLINT (string literal)
 
+//------------------------------------------------------------------------------
+
+namespace WP2 {
 namespace {
-bool operator==(const WP2::AYCoCg19b& a, const WP2::AYCoCg19b& b) {
+
+bool operator==(const AYCoCg19b& a, const AYCoCg19b& b) {
   return (a.y == b.y) && (a.co == b.co) && (a.cg == b.cg) && (a.a == b.a);
 }
-bool operator==(const WP2::VertexIndexedColor& a,
-                const WP2::VertexIndexedColor& b) {
+bool operator==(const VertexIndexedColor& a, const VertexIndexedColor& b) {
   return (a.x == b.x) && (a.y == b.y) && (a.color_index == b.color_index);
 }
 template<typename T> bool SameArray(const T a[], const T b[], size_t size) {
@@ -60,7 +67,7 @@ template<typename T> bool SameArray(const T a[], const T b[], size_t size) {
   return true;
 }
 
-bool operator==(const WP2::PreviewData& A, const WP2::PreviewData& B) {
+bool operator==(const PreviewData& A, const PreviewData& B) {
   return (A.grid_width_ == B.grid_width_) &&
          (A.grid_height_ == B.grid_height_) &&
          (A.palette_.size() == B.palette_.size()) &&
@@ -70,9 +77,9 @@ bool operator==(const WP2::PreviewData& A, const WP2::PreviewData& B) {
          SameArray(A.vertices_.data(), B.vertices_.data(), A.vertices_.size());
 }
 
-}  // namespace
+//------------------------------------------------------------------------------
 
-static void Help() {
+void Help() {
   ProgramOptions opt;
   opt.Add("Usage:");
   opt.Add("   preview -convert [-dry] text_files... ");
@@ -121,7 +128,7 @@ static void Help() {
 
 //------------------------------------------------------------------------------
 
-static int ConvertTextFiles(int argc, const char* argv[]) {
+int ConvertTextFiles(int argc, const char* argv[]) {
   // pure txt->bits conversion mode
   uint32_t total_size = 0;
   uint32_t nb_files = 0;
@@ -135,21 +142,20 @@ static int ConvertTextFiles(int argc, const char* argv[]) {
       return 0;
     }
     std::string in;
-    CHECK_STATUS(WP2::IoUtilReadFile(argv[c], &in),
-                 "bad input [%s]\n", argv[c]);
-    WP2::PreviewData data;
+    CHECK_STATUS(IoUtilReadFile(argv[c], &in), "bad input [%s]\n", argv[c]);
+    PreviewData data;
     CHECK_STATUS(PreviewFromText(in, &data), "Error in text-to-preview\n");
-    WP2::ANSEnc enc;
+    ANSEnc enc;
     CHECK_STATUS(data.Encode(&enc),
                  "Error encoding to binary! SHOULDN'T HAPPEN!!\n");
     if (!dry_run) {
-      const std::string out_name = WP2RemoveFileExtension(argv[c]) + ".bits";
-      CHECK_STATUS(WP2::IoUtilWriteFile(enc.Buffer(), enc.BufferSize(),
-                                        out_name.c_str()),
-                   "Couldn't save compressed bits [%s]!\n", out_name.c_str());
+      const std::string out_name = RemoveFileExtension(argv[c]) + ".bits";
+      CHECK_STATUS(
+          IoUtilWriteFile(enc.Buffer(), enc.BufferSize(), out_name.c_str()),
+          "Couldn't save compressed bits [%s]!\n", out_name.c_str());
     }
     if (check) {
-      WP2::PreviewData verif;
+      PreviewData verif;
       CHECK_STATUS(verif.Decode(enc.Buffer(), enc.BufferSize()),
                    "Round-trip Decode() failed.\n");
       CHECK_STATUS(verif == data, "Round-trip verification failed!\n");
@@ -163,7 +169,7 @@ static int ConvertTextFiles(int argc, const char* argv[]) {
 
 //------------------------------------------------------------------------------
 
-static void ResetProbas(WP2::PreviewConfig* const config) {
+void ResetProbas(PreviewConfig* const config) {
   config->proba_vertex_move = 0;
   config->proba_vertex_add = 0;
   config->proba_vertex_sub = 0;
@@ -173,14 +179,22 @@ static void ResetProbas(WP2::PreviewConfig* const config) {
   config->proba_color_index_move = 0;
 }
 
+}  // namespace
+}  // namespace WP2
+
+//------------------------------------------------------------------------------
+
+using WP2::ExUtilGetUInt;
+using WP2::PreviewConfig;
+
 int main(int argc, const char* argv[]) {
   if (argc < 2) {
     fprintf(stderr, "missing arguments!\n");
-    Help();
+    WP2::Help();
     return 1;
   }
   if (argc > 1 && !strcmp(argv[1], "-convert")) {
-    return ConvertTextFiles(argc, argv);
+    return WP2::ConvertTextFiles(argc, argv);
   }
 
   WP2::PreviewConfig config(75.f, 5);
@@ -194,7 +208,7 @@ int main(int argc, const char* argv[]) {
   for (int c = 1; c < argc; ++c) {
     bool parse_error = false;
     if (!strcmp(argv[c], "-h")) {
-      Help();
+      WP2::Help();
       return 0;
     } else if (!strcmp(argv[c], "-check")) {
       check = true;
@@ -224,7 +238,7 @@ int main(int argc, const char* argv[]) {
           4.4f * ExUtilGetUInt(argv[++c], &parse_error) / 100.f;
     } else if (!strcmp(argv[c], "-p") && c + 1 < argc) {
       if (!strcmp(argv[c + 1], "none")) {
-        ResetProbas(&config);
+        WP2::ResetProbas(&config);
         c += 1;
       } else if (c + 2 < argc) {
         auto* const dst =
@@ -244,16 +258,15 @@ int main(int argc, const char* argv[]) {
       ++c;
       if (!strcmp(argv[c], "edge")) {
         config.analysis_method =
-          WP2::PreviewConfig::AnalysisMethod::kEdgeSelectionAndRepulsion;
+            PreviewConfig::AnalysisMethod::kEdgeSelectionAndRepulsion;
       } else if (!strcmp(argv[c], "diff")) {
         config.analysis_method =
-          WP2::PreviewConfig::AnalysisMethod::kColorDiffMaximization;
+            PreviewConfig::AnalysisMethod::kColorDiffMaximization;
       } else if (!strcmp(argv[c], "rand")) {
         config.analysis_method =
-          WP2::PreviewConfig::AnalysisMethod::kRandomEdgeSelection;
+            PreviewConfig::AnalysisMethod::kRandomEdgeSelection;
       } else if (!strcmp(argv[c], "voronoi")) {
-        config.analysis_method =
-          WP2::PreviewConfig::AnalysisMethod::kVoronoi;
+        config.analysis_method = PreviewConfig::AnalysisMethod::kVoronoi;
       } else {
         CHECK_OK(false, "Unknown analysis method '%s'\n", argv[c]);
       }
@@ -279,7 +292,7 @@ int main(int argc, const char* argv[]) {
       parse_error = true;
     }
     if (parse_error) {
-      Help();
+      WP2::Help();
       return 1;
     }
   }
@@ -299,7 +312,7 @@ int main(int argc, const char* argv[]) {
                  "Round-trip error. SHOULDN'T HAPPEN!!'\n");
   } else {
     // Read the starting state
-    const bool as_txt = (WP2GetFileExtension(bin_file) == "txt");
+    const bool as_txt = (WP2::GetFileExtension(bin_file) == "txt");
     std::string bin;
     CHECK_STATUS(WP2::IoUtilReadFile(bin_file, &bin),
                  "bad bin file [%s]\n", bin_file);
@@ -323,7 +336,7 @@ int main(int argc, const char* argv[]) {
   VERBOSE("Creating preview for %s. Size:%u\n", img_file, preview_size);
 
   if (out_file != nullptr) {
-    const bool as_txt = (WP2GetFileExtension(out_file) == "txt");
+    const bool as_txt = (WP2::GetFileExtension(out_file) == "txt");
     if (as_txt) {
       const std::string s = PreviewToText(data);
       CHECK_STATUS(

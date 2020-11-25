@@ -40,7 +40,7 @@ TEST_P(SpeedTest, Simple) {
 INSTANTIATE_TEST_SUITE_P(
     SpeedTestInstantiationAll, SpeedTest,
     ::testing::Combine(::testing::Values("source1_64x48.png"),
-                       ::testing::Range(0.f, 100.f, 20.f),
+                       ::testing::Range(0.f, 100.f, 50.f),
                        ::testing::Range(0, 9)));
 
 //------------------------------------------------------------------------------

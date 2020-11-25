@@ -29,10 +29,12 @@
 #include "src/utils/plane.h"
 #include "src/wp2/encode.h"
 
-using WP2::ArgbBuffer;
-using WP2::YUVPlane;
-
 namespace {
+
+using WP2::ArgbBuffer;
+using WP2::ExUtilGetFloat;
+using WP2::ExUtilGetUInt;
+using WP2::ProgramOptions;
 
 void RescalePlane(ArgbBuffer* const pic1, int channel, uint32_t max) {
   const uint32_t factor = (max > 0) ? (255u << 16) / max : 0;
@@ -106,7 +108,7 @@ void Help() {
   opt.Print();
 }
 
-}    // namespace
+}  // namespace
 
 int main(int argc, const char *argv[]) {
   EXIT_IF_FALSE(WP2CheckVersion(), "Error! Library version mismatch!");

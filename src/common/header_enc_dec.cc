@@ -165,7 +165,7 @@ void HeaderEnc::PutVarUInt(uint32_t value, uint32_t min_value,
     assert((bit_pos_ & 7) == 0);
     WP2Trace("%s: value=%u in [%u:%u]", debug_prefix_, label, value, min_value,
              max_value);
-    const size_t num_written_bytes =
+    const uint32_t num_written_bytes =
         WriteVarInt(value, min_value, max_value, buf_ + (bit_pos_ >> 3));
     bit_pos_ += num_written_bytes << 3;
   }
@@ -193,7 +193,7 @@ void HeaderEnc::PutBitsInternal(uint32_t value, uint32_t num_bits) {
   assert(value < (1u << num_bits));
 
   const uint32_t shift = bit_pos_ & 7;
-  size_t pos = bit_pos_ >> 3;
+  uint32_t pos = bit_pos_ >> 3;
   bit_pos_ += num_bits;
   if (bit_pos_ > max_pos_) {  // Make sure 'value' fits in 'buf_'.
     error_ = true;

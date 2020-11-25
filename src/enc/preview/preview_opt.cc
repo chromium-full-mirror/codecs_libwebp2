@@ -33,10 +33,9 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 void PreviewDataEnc::Print() const {
-  fprintf(stderr,
-      "%zu vertices, %zu colors, loss: %.1f, score: %.1f size: %u\n",
-      vertices_.size(), palette_.size(),
-      triangulation_loss_, score_, num_bytes_);
+  fprintf(stderr, "%u vertices, %u colors, loss: %.1f, score: %.1f size: %u\n",
+          (uint32_t)vertices_.size(), (uint32_t)palette_.size(),
+          triangulation_loss_, score_, num_bytes_);
 }
 
 //------------------------------------------------------------------------------

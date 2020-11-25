@@ -247,10 +247,9 @@ std::string PrintPreview(const PreviewData& data, bool reduced) {
   std::string out;
   char tmp[kMaxLen];
   snprintf(tmp, kMaxLen,
-           "Grid: %d x %d, %zu vertices, %zu colors, use_noise:%d  ",
-           data.grid_width_, data.grid_height_,
-           data.vertices_.size(),
-           data.palette_.size(), data.use_noise_);
+           "Grid: %d x %d, %u vertices, %u colors, use_noise:%d  ",
+           data.grid_width_, data.grid_height_, (uint32_t)data.vertices_.size(),
+           (uint32_t)data.palette_.size(), data.use_noise_);
   out += tmp;
   snprintf(tmp, kMaxLen, "Corners: [%d %d %d %d]\n",
            data.corners_[0], data.corners_[1],

@@ -176,16 +176,6 @@ class Writer {
   // Can be used to save the output of the encoding.
   // Should return false if an error happened.
   WP2_NO_DISCARD virtual bool Append(const void* data, size_t data_size) = 0;
-
-  // TODO(yguyon):
-  // Will be regularly called during the encoding process. Can be used to show
-  // the progress to the user and add the possibility to stop the encoding.
-  // 'percent' is in range [0..100].
-  // Should return false if an error happened or if the encoding has to stop.
-  WP2_NO_DISCARD virtual bool UpdateProgress(int percent) {
-    (void)percent;
-    return true;
-  }
 };
 
 // Writes the encoding output to memory.

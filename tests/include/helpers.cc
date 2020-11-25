@@ -42,7 +42,7 @@ void GetTestDataPaths(const std::vector<const char*>& file_names,
 }
 
 std::string GetTempDataPath(const std::string& file_path) {
-  return "/tmp/" + WP2GetFileName(file_path);
+  return "/tmp/" + GetFileName(file_path);
 }
 
 //------------------------------------------------------------------------------

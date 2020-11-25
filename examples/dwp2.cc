@@ -35,6 +35,11 @@
 
 namespace {
 
+using WP2::ExUtilGetUInt;
+using WP2::ExUtilTryGetUInt;
+using WP2::ProgramOptions;
+using WP2::SPrintf;
+
 constexpr uint32_t kDefaultThreadLevel = 20;  // When -mt is set.
 
 //------------------------------------------------------------------------------
@@ -85,6 +90,7 @@ void Help() {
           "explicit)");
   opt.Add("-i", "just print bitstream info and exit");
   opt.Add("-v", "verbose (e.g. print encoding/decoding times)");
+  opt.Add("-progress", "display decoding progression");
   opt.Add("-quiet", "quiet mode, don't print anything");
 #ifdef WP2_BITTRACE
   opt.Add("-bt / -BT", "set bit trace level to 1 / 2");
@@ -111,6 +117,7 @@ struct DecodingSettings {
   bool quiet = false;
   bool print_info = false;
   bool short_output = false;
+  bool report_progress = false;
 
   WP2::DecoderConfig config;
   const char* visual_debug = nullptr;
@@ -130,10 +137,10 @@ std::vector<std::string> GetFilesToDecode(const std::vector<std::string>& paths,
                                           bool quiet) {
   std::vector<std::string> files_to_decode;
   for (const std::string& path : paths) {
-    if (WP2IsDirectory(path)) {
+    if (WP2::IsDirectory(path)) {
       if (recursive_input) {
         std::vector<std::string> files_in_dir;
-        EXIT_IF_FALSE(WP2GetFilesIn(path, &files_in_dir, /*recursive=*/true),
+        EXIT_IF_FALSE(WP2::GetFilesIn(path, &files_in_dir, /*recursive=*/true),
                       "Error! Opening directory %s failed.", path.c_str());
 
         // Only keep files with a wp2 extension.
@@ -182,44 +189,17 @@ std::string GetFrameFilename(size_t index, uint32_t duration_ms) {
 
 //------------------------------------------------------------------------------
 
-std::string PrintSummary(const WP2::BitstreamFeatures& bitstream,
-                         size_t input_data_size, bool short_output) {
-  const WP2::Argb32b prev_col = WP2::ToArgb32b(bitstream.preview_color);
-  const uint32_t degrees = (uint32_t)bitstream.orientation * 90;
-
-  std::string str;
-  str += SPrintf("Dimension:     %u x %u\n", bitstream.width, bitstream.height);
-  if (!short_output) {
-    str += SPrintf("animation:     %s\n",
-                   bitstream.is_animation
-                       ? (bitstream.loop_forever ? "yes (loop forever)"
-                                                 : "yes (play once)")
-                       : "no");
-    str += SPrintf("quality hint:  %u\n", bitstream.quality_hint);
-    str += SPrintf("preview:       %s\n", bitstream.has_preview ? "yes" : "no");
-    str += SPrintf("preview color: %u, %u, %u\n", prev_col.r, prev_col.g,
-                   prev_col.b);
-    str += SPrintf("rotated by:    %u degrees clockwise\n", degrees);
-    str += SPrintf("transfer:      %d\n", (int)bitstream.transfer_function);
-    str += SPrintf("ICC:           %s\n", bitstream.has_icc ? "yes" : "no");
-    str += SPrintf("XMP/EXIF:      %s\n",
-                   bitstream.has_trailing_data ? "yes" : "no");
-    str += SPrintf("file size:     %zu\n", input_data_size);
-  }
-  return str;
-}
-
-//------------------------------------------------------------------------------
-
 class ImageDecoder : public WP2::WorkerBase {
  public:
   ImageDecoder(const DecodingSettings& settings,
                const std::vector<std::string>& image_pool,
-               size_t* const next_image_index, WP2::ThreadLock* const mutex)
+               size_t* const next_image_index, WP2::ThreadLock* const mutex,
+               WP2::MultiProgressPrinter* const progress_printer)
       : settings_(settings),
         image_pool_(image_pool),
         next_image_index_(next_image_index),
-        mutex_(mutex) {}
+        mutex_(mutex),
+        progress_printer_(progress_printer) {}
 
  protected:
   WP2Status SaveImage(const std::string& in_path, const WP2::ArgbBuffer& buffer,
@@ -238,10 +218,10 @@ class ImageDecoder : public WP2::WorkerBase {
             GetExtensionFromFormat(settings_.out_format);
         WP2_CHECK_OK(extension != nullptr, WP2_STATUS_UNSUPPORTED_FEATURE);
         if (settings_.inplace_output) {
-          final_out_path = WP2RemoveFileExtension(in_path) + '.' + extension;
+          final_out_path = WP2::RemoveFileExtension(in_path) + '.' + extension;
         } else {
           final_out_path =
-              WP2InputFileToOutputDir(in_path, settings_.out_path, extension);
+              WP2::InputFileToOutputDir(in_path, settings_.out_path, extension);
         }
       } else {
         final_out_path = settings_.out_path;
@@ -272,9 +252,10 @@ class ImageDecoder : public WP2::WorkerBase {
     return WP2_STATUS_OK;
   }
 
-  WP2Status DecodeAndSaveImage(const std::string& in_path,
-                               std::string* const standard_out,
-                               std::string* const standard_err) {
+  WP2Status DecodeAndSaveImage(
+      const std::string& in_path, std::string* const standard_out,
+      std::string* const standard_err,
+      WP2::ProgressHook* const progress_hook) {
     WP2::ArgbBuffer output_buffer(WP2_Argb_32);
 
     WP2::Data data;
@@ -285,11 +266,12 @@ class ImageDecoder : public WP2::WorkerBase {
 
     if (settings_.print_info) {
       *standard_out +=
-          PrintSummary(bitstream, data.size, settings_.short_output);
+          WP2::PrintSummary(bitstream, data.size, settings_.short_output);
       return WP2_STATUS_OK;
     }
 
     WP2::DecoderConfig config = settings_.config;
+    config.progress_hook = progress_hook;
     WP2::DecoderInfo info;
     if (settings_.verbose || settings_.bit_trace || settings_.count_blocks ||
         settings_.visual_debug != nullptr) {
@@ -362,7 +344,7 @@ class ImageDecoder : public WP2::WorkerBase {
                          settings_.bit_trace_level);
         }
         if (settings_.count_blocks) {
-          printf("num-blocks : %zu\n", info.blocks.size());
+          printf("num-blocks : %u\n", (uint32_t)info.blocks.size());
         }
 #endif
       }
@@ -374,20 +356,23 @@ class ImageDecoder : public WP2::WorkerBase {
     while (true) {
       // Get the next image to decode from the shared pool, if any.
       if (mutex_ != nullptr) WP2_CHECK_STATUS(mutex_->Acquire());
-      if (*next_image_index_ >= image_pool_.size()) {
+      const size_t image_index = *next_image_index_;
+      if (image_index >= image_pool_.size()) {
         // Nothing left to do.
         if (mutex_ != nullptr) mutex_->Release();
         break;
       }
-      const std::string& in_path = image_pool_[*next_image_index_];
+      const std::string& in_path = image_pool_[image_index];
       ++*next_image_index_;
       if (mutex_ != nullptr) mutex_->Release();
 
       std::string standard_out, standard_err;
-      const WP2Status status =
-          DecodeAndSaveImage(in_path, &standard_out, &standard_err);
+      const WP2Status status = DecodeAndSaveImage(
+          in_path, &standard_out, &standard_err,
+          settings_.report_progress ? progress_printer_->GetJob(image_index)
+                                    : nullptr);
 
-      if (!settings_.quiet) {
+      if (!settings_.quiet && !settings_.report_progress) {
         // Acquire mutex to be sure to print in order without mixing lines.
         if (mutex_ != nullptr) WP2_CHECK_STATUS(mutex_->Acquire());
         printf("%s", standard_out.c_str());
@@ -407,6 +392,8 @@ class ImageDecoder : public WP2::WorkerBase {
   const std::vector<std::string>& image_pool_;
   size_t* const next_image_index_ = nullptr;
   WP2::ThreadLock* const mutex_ = nullptr;  // Acquire/release if not null.
+
+  WP2::MultiProgressPrinter* const progress_printer_;  // Thread-safe.
 };
 
 //------------------------------------------------------------------------------
@@ -418,11 +405,11 @@ int main(int argc, char* argv[]) {
   bool recursive_input = false;
   DecodingSettings settings = {};
   uint32_t thread_level = 0;
-  int c;
+  WP2::MultiProgressPrinter progress_printer;
 
   EXIT_IF_FALSE(WP2CheckVersion(), "Error! Library version mismatch!");
 
-  for (c = 1; c < argc; ++c) {
+  for (int c = 1; c < argc; ++c) {
     bool parse_error = false;
     if (!strcmp(argv[c], "-h") || !strcmp(argv[c], "-help")) {
       Help();
@@ -492,6 +479,8 @@ int main(int argc, char* argv[]) {
       settings.show_histograms = true;
     } else if (!strcmp(argv[c], "-count_blocks")) {
       settings.count_blocks = true;
+    } else if (!strcmp(argv[c], "-progress")) {
+      settings.report_progress = true;
     } else if (!strcmp(argv[c], "-quiet")) {
       settings.quiet = true;
     } else if (!strcmp(argv[c], "-short")) {
@@ -529,9 +518,10 @@ int main(int argc, char* argv[]) {
   }
 
   if (settings.quiet) settings.verbose = false;
+  if (settings.quiet) settings.report_progress = false;
 
   settings.output_to_directory =
-      (settings.inplace_output || WP2IsDirectory(settings.out_path));
+      (settings.inplace_output || WP2::IsDirectory(settings.out_path));
   // Destination is explicitly specified, allow overwriting it.
   if (!settings.output_to_directory) settings.allow_overwrite = true;
 
@@ -547,6 +537,8 @@ int main(int argc, char* argv[]) {
         "Error! Several input images require the output to be an existing "
         "directory.");
   }
+
+  if (settings.report_progress) progress_printer.Init(in_files.size());
 
   // Use a pool of images to decode.
   size_t next_image_index = 0;
@@ -567,7 +559,7 @@ int main(int argc, char* argv[]) {
   WP2Status status = WP2_STATUS_OK;
   for (size_t i = 0; i < num_workers; ++i) {
     workers.emplace_back(settings, in_files, &next_image_index,
-                         use_mt_workers ? &mutex : nullptr);
+                         use_mt_workers ? &mutex : nullptr, &progress_printer);
     status = workers.back().Start(use_mt_workers);
     if (status != WP2_STATUS_OK) break;
   }

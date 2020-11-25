@@ -251,7 +251,7 @@ class SymbolWriter : public SymbolManager,
   // Fills the array 'is_maybe_used' with true when the symbol might be used,
   // false if we are sure it is not used.
   void GetPotentialUsage(uint32_t cluster, uint32_t sym, bool is_maybe_used[],
-                         size_t size) const override;
+                         uint32_t size) const override;
 
  protected:
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to

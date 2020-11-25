@@ -35,27 +35,27 @@
 #include "src/common/lossy/block_size_io.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
+#include "src/utils/thread_utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
+
+namespace WP2 {
 
 //------------------------------------------------------------------------------
 
 // Parse numerical values (and update *error in case of error).
-extern int ExUtilGetInt(const char* const v, bool* const error, int base = 0);
-extern uint32_t ExUtilGetUInt(const char* const v, bool* const error,
-                              int base = 0);
+int ExUtilGetInt(const char* const v, bool* const error, int base = 0);
+uint32_t ExUtilGetUInt(const char* const v, bool* const error, int base = 0);
 
-extern bool ExUtilTryGetInt(const char* const v, int* const n, int base = 0);
-extern bool ExUtilTryGetUInt(const char* const v, uint32_t* const n,
-                             int base = 0);
+bool ExUtilTryGetInt(const char* const v, int* const n, int base = 0);
+bool ExUtilTryGetUInt(const char* const v, uint32_t* const n, int base = 0);
 
-extern float ExUtilGetFloat(const char* v, bool* const error);
+float ExUtilGetFloat(const char* v, bool* const error);
 
 // Parse several float values into values[] (at most 'num_values_max') from a
 // list. Return true in case of error ('parse_error').
-extern uint32_t ExUtilGetFloats(const char* v,
-                                float values[], uint32_t num_values_max,
-                                bool* const error, char separator = ',');
+uint32_t ExUtilGetFloats(const char* v, float values[], uint32_t num_values_max,
+                         bool* const error, char separator = ',');
 
 //------------------------------------------------------------------------------
 
@@ -72,21 +72,20 @@ static inline void ExUtilDisableSIMD() {}
 //------------------------------------------------------------------------------
 // Distortion
 
-static const char* const kWP2MetricNames[] = {
-  "PSNR", "PSNRHVS", "PSNR_YUV", "SSIM", "SSIM_YUV", "MSSSIM", "LSIM"
-};
-STATIC_ASSERT_ARRAY_SIZE(kWP2MetricNames, WP2::NUM_METRIC_TYPES);
+static const char* const kMetricNames[] = {
+    "PSNR", "PSNRHVS", "PSNR_YUV", "SSIM", "SSIM_YUV", "MSSSIM", "LSIM"};
+STATIC_ASSERT_ARRAY_SIZE(kMetricNames, WP2::NUM_METRIC_TYPES);
 
 // Computes and prints the distortion of the compressed image stored in 'data'
 // compared to 'refs' (single image or several frames if it's an animation).
-void WP2PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
-                        const uint8_t* const data, size_t data_size,
-                        WP2::MetricType metric, bool short_output);
+void PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
+                     const uint8_t* const data, size_t data_size,
+                     WP2::MetricType metric, bool short_output);
 
 // One-liner for still images because ArgbBuffer doesn't provide a copy ctor.
-void WP2PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
-                        size_t data_size, WP2::MetricType metric,
-                        bool short_output);
+void PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
+                     size_t data_size, WP2::MetricType metric,
+                     bool short_output);
 
 //------------------------------------------------------------------------------
 // Bit trace
@@ -229,9 +228,9 @@ static inline void PrintBitTraces(const WP2::DecoderInfo& info,
 }
 #endif  // WP2_BITTRACE
 
-void WP2CollectBitTraces(const uint8_t* const data, size_t data_size,
-                         int bit_trace, uint32_t bit_trace_level,
-                         bool short_output, bool show_histograms);
+void CollectBitTraces(const uint8_t* const data, size_t data_size,
+                      int bit_trace, uint32_t bit_trace_level,
+                      bool short_output, bool show_histograms);
 
 //------------------------------------------------------------------------------
 
@@ -269,51 +268,54 @@ static inline std::string SPrintf(const char* format, ...) {
     }                                                 \
   } while (0)
 
+std::string PrintSummary(const WP2::BitstreamFeatures& bitstream,
+                         size_t input_data_size, bool short_output = false);
+
 //------------------------------------------------------------------------------
 // Tools for working with directories.
 
 // Join 'prefix' and 'suffix' with the OS' path separator, if not already there.
-std::string WP2JoinPath(const std::string& prefix, const std::string& suffix);
+std::string JoinPath(const std::string& prefix, const std::string& suffix);
 
 // Get everything after the last path separator.
-std::string WP2GetFileName(const std::string& path);
+std::string GetFileName(const std::string& path);
 
 // Remove everything after and the last dot, if there is no separator after it.
-std::string WP2RemoveFileExtension(const std::string& path);
+std::string RemoveFileExtension(const std::string& path);
 
 // Returns everything after the last dot, if there is no separator after it.
-std::string WP2GetFileExtension(const std::string& path);
+std::string GetFileExtension(const std::string& path);
 
 // Returns true if 'path' is a directory that can be opened.
-bool WP2IsDirectory(const std::string& path);
+bool IsDirectory(const std::string& path);
 
 // Append the paths of all files in 'dir_path' to 'files'.
-bool WP2GetFilesIn(const std::string& dir_path,
-                   std::vector<std::string>* const files, bool recursive);
+bool GetFilesIn(const std::string& dir_path,
+                std::vector<std::string>* const files, bool recursive);
 
 // Combine input file name and output directory path to form an output file path
 // with the given 'extension'.
-std::string WP2InputFileToOutputDir(const std::string& input_file_path,
-                                    const std::string& output_dir_path,
-                                    const std::string& extension);
+std::string InputFileToOutputDir(const std::string& input_file_path,
+                                 const std::string& output_dir_path,
+                                 const std::string& extension);
 
 //------------------------------------------------------------------------------
 // Reading / Writing partition files
 
 // Read the 'partition' from the file located at 'file_path'. Returns true in
 // case of success (or if the file can not be opened and 'read_only' is true).
-bool WP2ReadPartition(const char file_path[], bool read_only,
-                      std::vector<WP2::Rectangle>* const partition);
+bool ReadPartition(const char file_path[], bool read_only,
+                   std::vector<WP2::Rectangle>* const partition);
 
 // Adapts the 'partition' by either ignoring blocks that are not part of the
 // 'partition_set' or by splitting them until they do.
-void WP2ConvertPartition(uint32_t pic_width, uint32_t pic_height,
-                         WP2::PartitionSet partition_set, bool ignore_invalid,
-                         std::vector<WP2::Rectangle>* const partition);
+void ConvertPartition(uint32_t pic_width, uint32_t pic_height,
+                      WP2::PartitionSet partition_set, bool ignore_invalid,
+                      std::vector<WP2::Rectangle>* const partition);
 
 // Writes the 'partition' to the file located at 'file_path'.
-bool WP2WritePartition(const std::vector<WP2::Rectangle>& partition,
-                       const char file_path[]);
+bool WritePartition(const std::vector<WP2::Rectangle>& partition,
+                    const char file_path[]);
 
 //------------------------------------------------------------------------------
 // Program options.
@@ -349,4 +351,39 @@ class ProgramOptions {
   std::vector<std::pair<const char*, const std::string>> content_;
 };
 
-#endif /* WP2_EXAMPLES_EXAMPLE_UTILS_H_ */
+// Prints the overall advancement progression percentage of all jobs.
+class MultiProgressPrinter {
+ public:
+  static constexpr double kNumSecondsBetweenPrints = 5.;
+
+  void Init(uint32_t num_jobs);
+  WP2::ProgressHook* GetJob(uint32_t index) { return &jobs_[index]; }
+
+ private:
+  class Job : public WP2::ProgressHook {
+   public:
+    Job(MultiProgressPrinter* const parent, uint32_t index)
+        : parent_(parent), index_(index) {}
+
+    bool OnUpdate(double progress) override;
+
+    MultiProgressPrinter* const parent_;
+    const uint32_t index_;
+    double progress_ = 0.;
+    bool finished_ = false;
+  };
+
+  void OnUpdate(bool job_just_finished);
+
+  std::vector<Job> jobs_;
+  WP2::ThreadLock lock_;
+  bool started_;
+  double last_timestamp_;
+  uint32_t num_finished_jobs_;
+};
+
+//------------------------------------------------------------------------------
+
+}  // namespace WP2
+
+#endif  // WP2_EXAMPLES_EXAMPLE_UTILS_H_

@@ -72,6 +72,7 @@
 #define snprintf _snprintf
 #endif
 
+namespace WP2 {
 namespace {
 
 //------------------------------------------------------------------------------
@@ -247,14 +248,15 @@ std::string GetLeaf(const std::string& mask, int32_t leaf_offset = 0) {
 constexpr uint32_t kNumSparks = 1000;
 
 // Unfortunate global variables. Gathered into a struct for comfort.
-struct Params {
-  Params() : current_file(~0u) {
-    enc_config.thread_level = 64;
-    enc_config.info = &einfo;
-    dec_config.thread_level = 64;
-    dec_config.info = &dinfo;
+class Params {
+ public:
+  Params() : current_file_(~0u) {
+    enc_config_.thread_level = 64;
+    enc_config_.info = &einfo_;
+    dec_config_.thread_level = 64;
+    dec_config_.info = &dinfo_;
 #if defined(WP2_BITTRACE)
-    einfo.store_blocks = true;  // Preemptively to avoid (slow) reencoding.
+    einfo_.store_blocks = true;  // Preemptively to avoid (slow) reencoding.
 #endif
   }
   WP2_NO_DISCARD bool SetCurrentFile(size_t file_number);
@@ -263,26 +265,27 @@ struct Params {
   WP2_NO_DISCARD bool SetAltImage();
   WP2_NO_DISCARD bool DumpCurrentCanvas(const char* const file_path);
   void ShiftAlt();   // move alt1 to alt2
+  void SetQuality(float incr);
   WP2_NO_DISCARD bool EncodeImage();
   WP2_NO_DISCARD bool DecodeOutput();
   WP2_NO_DISCARD bool EncodeAndDecode();
-  WP2_NO_DISCARD bool DecodeAndSwap(WP2::ArgbBuffer* const buffer);
+  WP2_NO_DISCARD bool DecodeAndSwap(ArgbBuffer* const buffer);
   WP2_NO_DISCARD bool GetOriginal();
   WP2_NO_DISCARD bool GetCompressed();
   WP2_NO_DISCARD bool ComputeYUVDistortion();
 
-  const WP2::ArgbBuffer& GetBuffer() const;
-  WP2_NO_DISCARD bool GetCurrentCanvas(WP2::ArgbBuffer* const buffer);
+  const ArgbBuffer& GetBuffer() const;
+  WP2_NO_DISCARD bool GetCurrentCanvas(ArgbBuffer* const buffer);
 
-  WP2_NO_DISCARD bool CompressWebP(bool match_size);
-  float webp_distortion = 0.f;
-  uint32_t webp_size = 0;
-  WP2_NO_DISCARD bool CompressAV1(bool copy_partition, float av1_quality,
-                                  size_t* const av1_file_size = nullptr);
-  WP2_NO_DISCARD bool CompressAV1ToMatch(bool copy_partition,
-                                         size_t target_file_size);
+  WP2_NO_DISCARD bool EncodeWebP(bool match_size);
+  float webp_distortion_ = 0.f;
+  uint32_t webp_size_ = 0;
+  WP2_NO_DISCARD bool EncodeAV1(bool copy_partition, float av1_quality,
+                                size_t* const av1_file_size = nullptr);
+  WP2_NO_DISCARD bool EncodeAV1ToMatch(bool copy_partition,
+                                       size_t target_file_size);
 
-  WP2Status status = WP2_STATUS_OK;
+  WP2Status status_ = WP2_STATUS_OK;
 
   enum Show {
     kDebug,
@@ -296,18 +299,32 @@ struct Params {
     kHelp,
     kMenu
   };
-  Show show = kDebug;
-  int mouse_x = 20, mouse_y = 20;  // In pixels, starting from top left.
-  int mouse_x_down = 20, mouse_y_down = 20;  // Position at last GLUT_DOWN.
-  bool moved_since_last_down = false;
-  std::string message;
-  int message_end_time;
-  bool show_interface = true;
+  Show show_ = kDebug;
+  int mouse_x_ = 20, mouse_y_ = 20;  // In pixels, starting from top left.
+  int mouse_x_down_ = 20, mouse_y_down_ = 20;  // Position at last GLUT_DOWN.
+  bool moved_since_last_down_ = false;
+  std::string message_;
+  int message_end_time_;
+  bool show_interface_ = true;
 
-  float sparks_x[kNumSparks] = {0};
-  float sparks_y[kNumSparks] = {0};
-  uint32_t sparks_index = 0;
-  bool display_sparks = false;
+  // Converts from pixel sizes to relative sizes as used by OpenGL.
+  float ToRelativeX(int32_t px) const { return px * 2.f / viewport_width_; }
+  float ToRelativeY(int32_t px) const { return px * 2.f / viewport_height_; }
+  // Converts from pixel positions to absolute positions as used by OpenGL.
+  float ToAbsoluteX(int32_t px) const { return ToRelativeX(px) - 1.f; }
+  float ToAbsoluteY(int32_t px) const { return 1.f - ToRelativeY(px); }
+  // Converts from viewport pixel position to image pixel coordinates.
+  uint32_t ToImageX(int viewport_x) const;
+  uint32_t ToImageY(int viewport_y) const;
+  // Same as glRectf() but with 'rect' in pixels, top-left being (0, 0).
+  void glRect(const Rectangle& rect, uint32_t thickness = 1) const;
+
+  float sparks_x_[kNumSparks] = {0};
+  float sparks_y_[kNumSparks] = {0};
+  uint32_t sparks_index_ = 0;
+  bool display_sparks_ = false;
+
+  void DisplaySparks();
 
   enum {
     kDisplayNone,
@@ -319,18 +336,18 @@ struct Params {
     kDisplayPredModes,
     kDisplayGrid,
     kDisplayNum
-  } display_block = kDisplayNone;
+  } display_block_ = kDisplayNone;
   void DisplayBlockInfo(std::vector<std::string>* const msg);
 
-  const char* partition_file_path = "/tmp/partition.txt";
-  const char* dump_wp2_path = "/tmp/dump.wp2";
-  const char* dump_png_path = "/tmp/dump.png";
+  const char* partition_file_path_ = "/tmp/partition.txt";
+  const char* dump_wp2_path_ = "/tmp/dump.wp2";
+  const char* dump_png_path_ = "/tmp/dump.png";
   // If not empty, is the current block being drawn with the mouse.
-  WP2::Rectangle forcing_block;
+  Rectangle forcing_block_;
   // Same as EncoderInfo::force_partition but not yet encoded.
-  std::vector<WP2::Rectangle> force_partition;
-  std::vector<WP2::EncoderInfo::ForcedSegment> force_segment;
-  std::vector<WP2::EncoderInfo::ForcedPredictor> force_predictor;
+  std::vector<Rectangle> force_partition_;
+  std::vector<EncoderInfo::ForcedSegment> force_segment_;
+  std::vector<EncoderInfo::ForcedPredictor> force_predictor_;
   void ClearForcedElements();
   bool IsDebugViewVisible() const;
   bool IsPartitionVisible() const;
@@ -339,15 +356,60 @@ struct Params {
   void DisplayPartition() const;
   void DisplayForcedSegments() const;
   void DisplayForcedPredictors() const;
+#if defined(WP2_BITTRACE)
+  // Displays a sort of bar graph at the bottom of the screen showing the
+  // relative size of different syntax elements.
+  // 'traces' contains the size in bits taken by each (group of) symbols.
+  void DisplayBitTraces(const std::map<std::string, float>& traces,
+                        double total_size);
+#endif
   uint32_t getLineThickness() const;
-  bool ReadPartition(bool read_only = true);
+  bool ReadAndConvertPartition(bool read_only = true);
   // Checks if either the encoding or decoding visual debug config match the
   // given token.
   bool VDMatchEncDec(const char* token) const;
 
   bool IsHamburgerMenuVisible() const;
+  void SetMenuSelection(const std::string& selection);
+  void DisplayMenu();
+  bool DisplaySubMenu(int32_t x, int32_t y, const VDToken& prefix,
+                      std::string* const current_selection);
 
+  // Adds a temporary 'message' on screen.
+  void SetMessage(const std::string& message, bool even_if_show_info = false,
+                  int duration_ms = 2000);
+  // Same as above with different default arguments.
+  void AddInfo(const std::string& message);
+  void SetError(const std::string& message);
+
+  // Top-level window refresh.
+  void PrintInfo();
+
+  void PrintMessages(const std::vector<std::string>& msg, bool print_lower,
+                     const float text_color[4], const float bg_color[4],
+                     bool small = false, bool outline = false);
+  std::vector<std::string> GetHelp();
+
+  // Reshapes the window based on current image size and zoom level.
+  void ReshapeWindow();
   void ApplyZoomLevel();
+
+  // Event handling.
+  void HandleKey(unsigned char key, int pos_x, int pos_y);
+  void HandleKeyUp(unsigned char key, int pos_x, int pos_y);
+  void HandleMouseMove(int x, int y, bool button_pressed);
+  void HandleSegmentClick(int button, int state, uint32_t img_x_down,
+                          uint32_t img_y_down, uint32_t img_x, uint32_t img_y);
+  void HandlePredictorClick(int button, int state, uint32_t img_x_down,
+                            uint32_t img_y_down, uint32_t img_x,
+                            uint32_t img_y);
+  void HandlePartitionClick(int button, int state, uint32_t img_x_down,
+                            uint32_t img_y_down, uint32_t img_x,
+                            uint32_t img_y);
+  void HandleMenuClick(int button, int state, uint32_t img_x_down,
+                       uint32_t img_y_down, uint32_t img_x, uint32_t img_y);
+  void HandleMouseClick(int button, int state, int x, int y);
+  void HandleDisplay();
 
   enum Background {
     kCheckerboard,
@@ -355,75 +417,77 @@ struct Params {
     kBlack,
     kPink,
     kBackgroundNum,
-  } background = kCheckerboard;
+  } background_ = kCheckerboard;
 
   // Debug environment value. Can be retrieved with 'atoi(getenv("WP2DBG"))'.
-  uint32_t wp2dbg_value = 0;
+  uint32_t wp2dbg_value_ = 0;
 
-  size_t current_file;
-  std::vector<std::string> files;
-  std::string input;   // input file
-  std::string output;  // currently encoded file
+  size_t current_file_;
+  std::vector<std::string> files_;
+  std::string input_;   // input file
+  std::string output_;  // currently encoded file
 
-  float riskiness = 0.f;
+  float riskiness_ = 0.f;
 
-  uint32_t enc_duration_ms;  // encoding time in ms
-  uint32_t dec_duration_ms;  // decoding time in ms
+  uint32_t enc_duration_ms_;  // encoding time in ms
+  uint32_t dec_duration_ms_;  // decoding time in ms
 
-  float quality = 75.;
-  float alpha_quality = 100.;
-  WP2::EncoderConfig enc_config;  // encoding parameters
-  WP2::DecoderConfig dec_config;
-  std::string menu_selection = "decompressed";  // hovered menu selection
-  std::string visual_debug = "decompressed";    // displayed debug output
+  float quality_ = 75.;
+  float alpha_quality_ = 100.;
+  EncoderConfig enc_config_;  // encoding parameters
+  DecoderConfig dec_config_;
+  std::string menu_selection_ = "decompressed";  // hovered menu selection
+  std::string visual_debug_ = "decompressed";    // displayed debug output
 
-  bool view_only = false;
-  WP2::ArgbBuffer in = WP2::ArgbBuffer(WP2_ARGB_32);  // original samples in RGB
-  WP2::ArgbBuffer in_yuv;  // original alpha, Y, U or V samples
+  bool view_only_ = false;
+  ArgbBuffer in_ = ArgbBuffer(WP2_ARGB_32);  // original samples in RGB
+  ArgbBuffer in_yuv_;  // original alpha, Y, U or V samples
   // image shown on spacebar (can be a view on 'in' or 'in_yuv')
-  WP2::ArgbBuffer original;
-  WP2::ArgbBuffer out;  // recompressed samples
-  WP2::ArgbBuffer out_yuv;  // recompressed samples
-  WP2::ArgbBuffer preview;
-  WP2::Argb32b preview_color;
-  WP2::ArgbBuffer webp;  // result of WebP compression
+  ArgbBuffer original_;
+  ArgbBuffer out_;      // recompressed samples
+  ArgbBuffer out_yuv_;  // recompressed samples
+  ArgbBuffer preview_;
+  Argb32b preview_color_;
+  ArgbBuffer webp_;  // result of WebP compression
   // alternate comparison pictures & messages
-  WP2::ArgbBuffer alt1, alt2;
-  std::string alt1_msg, alt2_msg;
+  ArgbBuffer alt1_, alt2_;
+  std::string alt1_msg_, alt2_msg_;
 
-  WP2::EncoderInfo einfo;
-  WP2::DecoderInfo dinfo;
-  std::string original_selection_info;
-  WP2::MetricType distortion_metric = WP2::PSNR;
-  float distortion[5] = {0.f}, yuv_distortion[3] = {0.f};
-  int bit_trace = 0;
-  uint32_t bit_trace_level = 0;
-  uint32_t visual_bit_trace_level = 3;
+  EncoderInfo einfo_;
+  DecoderInfo dinfo_;
+  std::string original_selection_info_;
+  MetricType distortion_metric_ = PSNR;
+  float distortion_[5] = {0.f}, yuv_distortion_[3] = {0.f};
+  int bit_trace_ = 0;
+  uint32_t bit_trace_level_ = 0;
+  uint32_t visual_bit_trace_level_ = 3;
 
-  uint32_t width, height;
-  uint32_t viewport_width, viewport_height;
-  int zoom_level = 0;  // Multiply width, height by 2^zoom_level.
+  uint32_t width_, height_;
+  uint32_t viewport_width_, viewport_height_;
+  int zoom_level_ = 0;  // Multiply width, height by 2^zoom_level.
 
-  bool crop = false;
-  WP2::Rectangle crop_area;
-  bool keep_metadata = false;
-} kParams;  // NOLINT (non trivially destructible global var)
+  bool crop_ = false;
+  Rectangle crop_area_;
+  bool keep_metadata_ = false;
+};
 
-void SetMenuSelection(const std::string& selection) {
-  kParams.menu_selection = selection;
-  assert(!kParams.menu_selection.empty());
-  kParams.visual_debug = kParams.menu_selection;
-  kParams.dinfo.visual_debug = kParams.visual_debug.c_str();
-  kParams.einfo.visual_debug = kParams.visual_debug.c_str();
+// Made accessible to plain C function callbacks of glut.
+Params* global_params = nullptr;
 
-  if (!WP2::VDMatch(kParams.enc_config, "encoder")) {
-    kParams.einfo.visual_debug = nullptr;
+void Params::SetMenuSelection(const std::string& selection) {
+  menu_selection_ = selection;
+  assert(!menu_selection_.empty());
+  visual_debug_ = menu_selection_;
+  dinfo_.visual_debug = visual_debug_.c_str();
+  einfo_.visual_debug = visual_debug_.c_str();
+
+  if (!VDMatch(enc_config_, "encoder")) {
+    einfo_.visual_debug = nullptr;
   }
-  if (WP2::VDMatch(kParams.dec_config, "decompressed") ||
-      WP2::VDMatch(kParams.dec_config, "encoder")) {
+  if (VDMatch(dec_config_, "decompressed") || VDMatch(dec_config_, "encoder")) {
     // "decompressed" is in fact the regular output.
     // "encoder" is reserved to EncoderConfig.
-    kParams.dinfo.visual_debug = nullptr;
+    dinfo_.visual_debug = nullptr;
   }
 }
 
@@ -438,62 +502,44 @@ void PrintString(float x, float y, const std::string& text,
   for (char c : text) glutBitmapCharacter(font, c);
 }
 
-// Converts from pixel sizes to relative sizes as used by OpenGL.
-float ToRelativeX(int32_t pixels) {
-  return pixels * 2.f / kParams.viewport_width;
+uint32_t Params::ToImageX(int viewport_x) const {
+  return DivRound(
+      (uint32_t)Clamp<int>(viewport_x, 0, viewport_width_ - 1) * (width_ - 1),
+      viewport_width_ - 1);
 }
-float ToRelativeY(int32_t pixels) {
-  return pixels * 2.f / kParams.viewport_height;
-}
-// Converts from pixel positions to absolute positions as used by OpenGL.
-float ToAbsoluteX(int32_t pixels) { return ToRelativeX(pixels) - 1; }
-float ToAbsoluteY(int32_t pixels) { return 1 - ToRelativeY(pixels); }
-
-// Converts from viewport pixel position to image pixel coordinates.
-uint32_t ToImageX(int viewport_x) {
-  return WP2::DivRound(
-      (uint32_t)WP2::Clamp<int>(viewport_x, 0, kParams.viewport_width - 1) *
-          (kParams.width - 1),
-      kParams.viewport_width - 1);
-}
-uint32_t ToImageY(int viewport_y) {
-  return WP2::DivRound(
-      (uint32_t)WP2::Clamp<int>(viewport_y, 0, kParams.viewport_height - 1) *
-          (kParams.height - 1),
-      kParams.viewport_height - 1);
+uint32_t Params::ToImageY(int viewport_y) const {
+  return DivRound(
+      (uint32_t)Clamp<int>(viewport_y, 0, viewport_height_ - 1) * (height_ - 1),
+      viewport_height_ - 1);
 }
 
 // Floors to block-aligned coordinate.
 uint32_t AlignWithBlocks(uint32_t coord) {
-  return coord - coord % WP2::kMinBlockSizePix;
+  return coord - coord % kMinBlockSizePix;
 }
 
-void DisplaySparks() {
-  if (!kParams.display_sparks) return;
+void Params::DisplaySparks() {
+  if (!display_sparks_) return;
 
-  static WP2::UniformIntDistribution random(/*seed=*/0u);
+  static UniformIntDistribution random(/*seed=*/0u);
 
-  const float mouse_x =
-      ToRelativeX(kParams.mouse_x + random.Get<int32_t>(-5, 5)) - 1.f;
-  const float mouse_y = -(ToRelativeY(kParams.mouse_y) - 1.f);
-  kParams.sparks_x[kParams.sparks_index] = mouse_x;
-  kParams.sparks_y[kParams.sparks_index] = mouse_y;
-  kParams.sparks_index = (kParams.sparks_index + 1) % kNumSparks;
+  sparks_x_[sparks_index_] =
+      ToRelativeX(mouse_x_ + random.Get<int32_t>(-5, 5)) - 1.f;
+  sparks_y_[sparks_index_] = -(ToRelativeY(mouse_y_) - 1.f);
+  sparks_index_ = (sparks_index_ + 1) % kNumSparks;
 
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   for (uint32_t i = 0; i < kNumSparks; ++i) {
-    if (kParams.sparks_x[i] != 0 && kParams.sparks_y[i] != 0) {
-      kParams.sparks_y[i] -= ToRelativeY(2);
+    if (sparks_x_[i] != 0 && sparks_y_[i] != 0) {
+      sparks_y_[i] -= ToRelativeY(2);
 
       glColor4f(random.Get<int32_t>(100, 255) / 255.f,
                 random.Get<int32_t>(100, 255) / 255.f,
                 random.Get<int32_t>(100, 255) / 255.f, 1.f);
-      glRectf(kParams.sparks_x[i] - ToRelativeX(1),
-              kParams.sparks_y[i] - ToRelativeY(1),
-              kParams.sparks_x[i] + ToRelativeX(1),
-              kParams.sparks_y[i] + ToRelativeY(1));
-      if (kParams.sparks_y[i] < -1) {
-        kParams.sparks_x[i] = kParams.sparks_y[i] = 0;
+      glRectf(sparks_x_[i] - ToRelativeX(1), sparks_y_[i] - ToRelativeY(1),
+              sparks_x_[i] + ToRelativeX(1), sparks_y_[i] + ToRelativeY(1));
+      if (sparks_y_[i] < -1) {
+        sparks_x_[i] = sparks_y_[i] = 0;
       }
     }
   }
@@ -508,29 +554,29 @@ constexpr int32_t kMenuBorderWidth = 2;
 
 // Renders a submenu at (x, y) with children of 'prefix'. Highlights the node
 // matching the 'current_selection' or sets it to the hovered entry.
-// Returns true if the mouse is inside the submenu.
-bool DisplaySubMenu(int32_t x, int32_t y, const VDToken& prefix,
-                    std::string* const current_selection) {
+// Returns true if the mouse at 'mouse_x, mouse_y' is inside the submenu.
+bool Params::DisplaySubMenu(int32_t x, int32_t y, const VDToken& prefix,
+                            std::string* const current_selection) {
   const int32_t longest_name_size = prefix.longest_next_name_size;
-  const int32_t width = (longest_name_size + 3) * kMenuCharWidth +
-                                  2 * kMenuBorderWidth;
-  const int32_t height = prefix.next.size() * kMenuItemHeight;
-  const int32_t left = x, right = x + width - 1;  // Inclusive.
+  const int32_t submenu_width =
+      (longest_name_size + 3) * kMenuCharWidth + 2 * kMenuBorderWidth;
+  const int32_t submenu_height = prefix.next.size() * kMenuItemHeight;
+  const int32_t left = x, right = x + submenu_width - 1;  // Inclusive.
 
-  const int32_t mx = kParams.mouse_x, my = kParams.mouse_y;
-  const bool mouse_is_nearby = (mx >= left && mx <= right + 50 &&
-                                my + 150 >= y && my <= y + height + 150);
-  const bool mouse_in_column = (mouse_is_nearby && mx <= right);
+  const bool mouse_is_nearby =
+      (mouse_x_ >= left && mouse_x_ <= right + 50 && mouse_y_ + 150 >= y &&
+       mouse_y_ <= y + submenu_height + 150);
+  const bool mouse_in_column = (mouse_is_nearby && mouse_x_ <= right);
   const bool mouse_in_submenu =
-      (mouse_in_column && my >= y && my <= y + height - 1);
+      (mouse_in_column && mouse_y_ >= y && mouse_y_ <= y + submenu_height - 1);
   bool was_hovered = false;  // True if an element is hovered by the mouse.
 
   // Background.
   const float kMenuAlpha = .8;
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   glColor4f(0.f, 0.f, 0.f, kMenuAlpha);
-  glRectf(ToAbsoluteX(x), ToAbsoluteY(y), ToAbsoluteX(x + width),
-          ToAbsoluteY(y + height));
+  glRectf(ToAbsoluteX(x), ToAbsoluteY(y), ToAbsoluteX(x + submenu_width),
+          ToAbsoluteY(y + submenu_height));
 
   // For each branch in the current VisualDebug tree node.
   int32_t top = y;
@@ -538,7 +584,8 @@ bool DisplaySubMenu(int32_t x, int32_t y, const VDToken& prefix,
     const int32_t bottom = top + kMenuItemHeight - 1;  // Inclusive.
 
     // Set 'current_selection' if hovered by the mouse.
-    const bool is_hovered = (mouse_in_submenu && my >= top && my <= bottom);
+    const bool is_hovered =
+        (mouse_in_submenu && mouse_y_ >= top && mouse_y_ <= bottom);
     if (is_hovered) {
       assert(!was_hovered);  // Check that only one item is hovered.
       *current_selection = token.name;
@@ -585,13 +632,13 @@ bool DisplaySubMenu(int32_t x, int32_t y, const VDToken& prefix,
 }
 
 // Renders the menu and selected or hovered submenus.
-void DisplayMenu() {
+void Params::DisplayMenu() {
   const bool is_hamburger_hovered =
-      (kParams.mouse_x >= 0 && kParams.mouse_x < kMenuItemHeight &&
-       kParams.mouse_y >= 0 && kParams.mouse_y < kMenuItemHeight);
+      (mouse_x_ >= 0 && mouse_x_ < kMenuItemHeight && mouse_y_ >= 0 &&
+       mouse_y_ < kMenuItemHeight);
 
   // Show the hamburger menu.
-  if (kParams.IsHamburgerMenuVisible()) {
+  if (IsHamburgerMenuVisible()) {
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glColor4f(0.f, 0.f, 0.f, .8f);
     glRectf(-1, 1, -1 + ToRelativeX(kMenuItemHeight),
@@ -605,19 +652,19 @@ void DisplayMenu() {
     }
 
     // Show menu items if hamburger menu is hovered.
-    if (is_hamburger_hovered) kParams.show = Params::kMenu;
-  } else if (kParams.show == Params::kMenu) {
-    kParams.show = Params::kDebug;
-    kParams.menu_selection = kParams.visual_debug;
+    if (is_hamburger_hovered) show_ = kMenu;
+  } else if (show_ == kMenu) {
+    show_ = kDebug;
+    menu_selection_ = visual_debug_;
   }
 
   // Show menu items.
-  if (kParams.show == Params::kMenu) {
-    const bool menu_hovered = DisplaySubMenu(0, kMenuItemHeight, kVisualDebug,
-                                             &kParams.menu_selection);
+  if (show_ == kMenu) {
+    const bool menu_hovered =
+        DisplaySubMenu(0, kMenuItemHeight, kVisualDebug, &menu_selection_);
     if (!menu_hovered && !is_hamburger_hovered) {
-      kParams.show = Params::kDebug;
-      kParams.menu_selection = kParams.visual_debug;
+      show_ = kDebug;
+      menu_selection_ = visual_debug_;
     }
   }
 }
@@ -640,9 +687,9 @@ void SplitIntoMessages(const std::string& str,
   while (!msg->empty() && msg->back().empty()) msg->pop_back();
 }
 
-void PrintMessages(const std::vector<std::string>& msg, bool print_lower,
-                   const float text_color[4], const float bg_color[4],
-                   bool small = false, bool outline = false) {
+void Params::PrintMessages(const std::vector<std::string>& msg,
+                           bool print_lower, const float text_color[4],
+                           const float bg_color[4], bool small, bool outline) {
   if (msg.empty()) return;
 
   const float line_height = ToRelativeY(19);
@@ -688,17 +735,13 @@ void PrintMessages(const std::vector<std::string>& msg, bool print_lower,
 
 #if defined(WP2_BITTRACE)
 constexpr uint32_t kBitTraceMaxLevels = 10;
-constexpr float kInfoAlpha = 0.8f;
 
-// Displays a sort of bar graph at the bottom of the screen showing the relative
-// size of different syntax elements.
-// 'traces' contains the size in bits taken by each (group of) symbols.
-void DisplayBitTraces(const std::map<std::string, float>& traces,
-                      double total_size) {
+void Params::DisplayBitTraces(const std::map<std::string, float>& traces,
+                              double total_size) {
   const float line_height = ToRelativeY(35);
 
-  const float mouse_x = ToRelativeX(kParams.mouse_x) - 1;
-  const float mouse_y = -(ToRelativeY(kParams.mouse_y) - 1);
+  const float mouse_x = ToRelativeX(mouse_x_) - 1;
+  const float mouse_y = -(ToRelativeY(mouse_y_) - 1);
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
   // First pass draws the bars, second pass draws the labels, third pass draws
@@ -720,6 +763,7 @@ void DisplayBitTraces(const std::map<std::string, float>& traces,
       const float top = bottom + line_height;
       const float left = left_pos[prefix] - 1;
       const float right = left + width;
+      constexpr float kInfoAlpha = 0.8f;
 
       if (pass == 0) {
         // First pass : draw the bars.
@@ -782,7 +826,7 @@ void DisplayBitTraces(const std::map<std::string, float>& traces,
 
 //------------------------------------------------------------------------------
 
-std::vector<std::string> GetHelp() {
+std::vector<std::string> Params::GetHelp() {
   std::vector<std::string> m;
   // Adding a new shortcut? These are still available: j, p, u, y
   m.emplace_back("Keyboard shortcuts:");
@@ -797,9 +841,9 @@ std::vector<std::string> GetHelp() {
   m.emplace_back(
       "  'a' ............... saves current canvas as alternate picture");
   m.emplace_back(std::string("  'A' ............... saves current canvas to ") +
-                 kParams.dump_png_path);
-  m.emplace_back(std::string("  alt+'a' ........... loads ") +
-                 kParams.dump_png_path + std::string(" as alternate picture"));
+                 dump_png_path_);
+  m.emplace_back(std::string("  alt+'a' ........... loads ") + dump_png_path_ +
+                 std::string(" as alternate picture"));
   m.emplace_back(
       "  up/down ........... change the compression factor by +/- 1 units");
   m.emplace_back(
@@ -842,7 +886,7 @@ std::vector<std::string> GetHelp() {
 #endif
   m.emplace_back(std::string("  'l'/'L' ........... "
                              "load or dump the current bitstream as ") +
-                 kParams.dump_wp2_path);
+                 dump_wp2_path_);
   m.emplace_back("  'h' ............... show this help message");
   m.emplace_back("  'H' ............... toggle interface display");
   m.emplace_back("  'q' / 'Q' / ESC ... quit");
@@ -856,7 +900,7 @@ std::vector<std::string> GetHelp() {
   m.emplace_back("  click. Press 'c' to convert rectangles (dashed outline)");
   m.emplace_back("  into actual forced encoded blocks (magenta outline).");
   m.emplace_back("  Press 'd' to dump or 'D' to load the blocks in file at");
-  m.emplace_back(std::string("  ") + kParams.partition_file_path);
+  m.emplace_back(std::string("  ") + partition_file_path_);
   m.emplace_back("Segment edition: In segment-ids view, right click to cycle");
   m.emplace_back("  through segments, then press 'c' to apply. ");
   m.emplace_back("  Middle click to remove.");
@@ -879,60 +923,59 @@ const char* const kPartitionSetString[] = {
 const char* const kOnOff[] = {"Off", "On"};
 const char* const kSegmentModes[] = {"Auto", "Explicit", "Implicit"};
 
-STATIC_ASSERT_ARRAY_SIZE(kCSPString, WP2::kNumCspTypes);
-STATIC_ASSERT_ARRAY_SIZE(kUVModeString, WP2::EncoderConfig::NumUVMode);
-STATIC_ASSERT_ARRAY_SIZE(kPartitionSetString, WP2::NUM_PARTITION_SETS);
+STATIC_ASSERT_ARRAY_SIZE(kCSPString, kNumCspTypes);
+STATIC_ASSERT_ARRAY_SIZE(kUVModeString, EncoderConfig::NumUVMode);
+STATIC_ASSERT_ARRAY_SIZE(kPartitionSetString, NUM_PARTITION_SETS);
 
-void PrintInfo() {
+void Params::PrintInfo() {
   DisplaySparks();
   std::vector<std::string> msg;
-  kParams.DisplayBlockInfo(&msg);
-  kParams.DisplayPartition();
-  kParams.DisplayForcedSegments();
-  kParams.DisplayForcedPredictors();
+  DisplayBlockInfo(&msg);
+  DisplayPartition();
+  DisplayForcedSegments();
+  DisplayForcedPredictors();
   DisplayMenu();
 
-  if (kParams.show == Params::kMenu ||
-      (kParams.forcing_block.width > 0 && kParams.forcing_block.height > 0)) {
+  if (show_ == kMenu ||
+      (forcing_block_.width > 0 && forcing_block_.height > 0)) {
     // Do not print messages if something else is displayed instead.
     return;
   }
 
-  bool print_lower = kParams.IsHamburgerMenuVisible();
+  bool print_lower = IsHamburgerMenuVisible();
   float text_color[4] = {.0f, .0f, .0f, .9f};
   float bg_color[4] = {.8f, .8f, .9f, .9f};
   bool small = false;
 
-  if (kParams.display_block != Params::kDisplayNone) {
+  if (display_block_ != kDisplayNone) {
     bg_color[0] = .8f;
     bg_color[1] = .7f;
     bg_color[2] = .7f;
     bg_color[3] = .8f;
-    small = (kParams.display_block > Params::kDisplayHeader);
-  } else if (kParams.show == Params::kHelp) {
+    small = (display_block_ > kDisplayHeader);
+  } else if (show_ == kHelp) {
     const std::vector<std::string> help = GetHelp();
     msg.insert(msg.end(), help.begin(), help.end());
-  } else if (kParams.show == Params::kOriginal) {
+  } else if (show_ == kOriginal) {
     msg.emplace_back("- O R I G I N A L -");
-    if (!kParams.original_selection_info.empty()) {
-      SplitIntoMessages(kParams.original_selection_info, &msg);
+    if (!original_selection_info_.empty()) {
+      SplitIntoMessages(original_selection_info_, &msg);
       print_lower = true;  // Match standard kDebug text formatting.
       small = true;
     }
-  } else if (kParams.show == Params::kCompressed) {
+  } else if (show_ == kCompressed) {
     msg.emplace_back("- Compressed -");
-  } else if (kParams.show == Params::kPreview) {
+  } else if (show_ == kPreview) {
     msg.emplace_back("- Preview -");
-  } else if (kParams.show == Params::kPreviewColor) {
+  } else if (show_ == kPreviewColor) {
     msg.emplace_back("- Preview color -");
-  } else if (kParams.show == Params::kWebP) {
-    msg.emplace_back(SPrintf("- WebP [size=%u %s=%.2f] -", kParams.webp_size,
-                             kWP2MetricNames[kParams.distortion_metric],
-                             kParams.webp_distortion));
-    msg.emplace_back(SPrintf(
-        "[ref WP2: size=%u %s=%.2f]", kParams.output.size(),
-        kWP2MetricNames[kParams.distortion_metric], kParams.distortion[4]));
-  } else if (kParams.show == Params::kInfo) {
+  } else if (show_ == kWebP) {
+    msg.emplace_back(SPrintf("- WebP [size=%u %s=%.2f] -", webp_size_,
+                             kMetricNames[distortion_metric_],
+                             webp_distortion_));
+    msg.emplace_back(SPrintf("[ref WP2: size=%u %s=%.2f]", output_.size(),
+                             kMetricNames[distortion_metric_], distortion_[4]));
+  } else if (show_ == kInfo) {
     char tmp[80];
 
     bg_color[0] = .8f;
@@ -941,64 +984,62 @@ void PrintInfo() {
     bg_color[3] = .8f;
     small = true;
 
-    msg.emplace_back(kParams.files[kParams.current_file]);
+    msg.emplace_back(files_[current_file_]);
 
-    snprintf(tmp, sizeof(tmp), "Dimension: %d x %d",
-             kParams.width, kParams.height);
+    snprintf(tmp, sizeof(tmp), "Dimension: %d x %d", width_, height_);
     msg.emplace_back(tmp);
-    if (kParams.viewport_width != kParams.width ||
-        kParams.viewport_height != kParams.height) {
-      snprintf(tmp, sizeof(tmp), " (displayed as %d x %d)",
-               kParams.viewport_width, kParams.viewport_height);
+    if (viewport_width_ != width_ || viewport_height_ != height_) {
+      snprintf(tmp, sizeof(tmp), " (displayed as %d x %d)", viewport_width_,
+               viewport_height_);
       msg.back() += tmp;
     }
 
     snprintf(tmp, sizeof(tmp),
-             "Quality: %3.1f [effort=%d     sns=%5.1f diffusion=%d",
-             kParams.quality, kParams.enc_config.effort, kParams.enc_config.sns,
-             kParams.enc_config.error_diffusion);
+             "Quality: %3.1f [effort=%d     sns=%5.1f diffusion=%d", quality_,
+             enc_config_.effort, enc_config_.sns, enc_config_.error_diffusion);
     msg.emplace_back(tmp);
-    snprintf(tmp, sizeof(tmp),
-             "              segments=%u/%d(%c) snap=%s]",
-             kParams.dinfo.num_segments, kParams.enc_config.segments,
-             kSegmentModes[(int)kParams.enc_config.segment_id_mode][0],
-             kOnOff[kParams.enc_config.partition_snapping]);
+    snprintf(tmp, sizeof(tmp), "              segments=%u/%d(%c) snap=%s]",
+             dinfo_.num_segments, enc_config_.segments,
+             kSegmentModes[(int)enc_config_.segment_id_mode][0],
+             kOnOff[enc_config_.partition_snapping]);
     msg.emplace_back(tmp);
 
-    if (kParams.in.HasTransparency()) {
+    if (in_.HasTransparency()) {
       snprintf(tmp, sizeof(tmp), "Alpha quality: %.1f (%s=%.2f)",
-               kParams.alpha_quality,
-               kWP2MetricNames[kParams.distortion_metric],
-               kParams.distortion[0]);
+               alpha_quality_, kMetricNames[distortion_metric_],
+               distortion_[0]);
       msg.emplace_back(tmp);
     }
 
-    snprintf(tmp, sizeof(tmp), "Size: %zu [%.2f bpp] (enc %u ms + dec %u ms)",
-             kParams.output.size(),
-             8.f * kParams.output.size() / (kParams.width * kParams.height),
-             kParams.enc_duration_ms, kParams.dec_duration_ms);
+    snprintf(tmp, sizeof(tmp),
+             "Size: %" PRIu64 " [%.2f bpp] (enc %u ms + dec %u ms)",
+             (uint64_t)output_.size(),
+             8.f * output_.size() / (width_ * height_), enc_duration_ms_,
+             dec_duration_ms_);
     msg.emplace_back(tmp);
     snprintf(tmp, sizeof(tmp), " (%.1f%% of original)",
-             100. * kParams.output.size() / kParams.input.size());
+             100. * output_.size() / input_.size());
     msg.back() += tmp;
 
-    if (kParams.in.metadata_.IsEmpty()) {
-      assert(kParams.out.metadata_.IsEmpty());
+    if (in_.metadata_.IsEmpty()) {
+      assert(out_.metadata_.IsEmpty());
     } else {
-      const WP2::Metadata& mi = kParams.in.metadata_;
-      const WP2::Metadata& mo = kParams.out.metadata_;
+      const Metadata& mi = in_.metadata_;
+      const Metadata& mo = out_.metadata_;
       snprintf(tmp, sizeof(tmp),  // 6 spaces to align with "Size: ".
-               "      %s %zu B of metadata (ICCP %zu, EXIF %zu, XMP %zu)",
-               kParams.keep_metadata ? "included" : "ignored",
-               (mi.iccp.size + mi.exif.size + mi.xmp.size), mi.iccp.size,
-               mi.exif.size, mi.xmp.size);
+               "      %s %u B of metadata (ICCP %u, EXIF %u, XMP %u)",
+               keep_metadata_ ? "included" : "ignored",
+               (uint32_t)(mi.iccp.size + mi.exif.size + mi.xmp.size),
+               (uint32_t)mi.iccp.size, (uint32_t)mi.exif.size,
+               (uint32_t)mi.xmp.size);
       msg.emplace_back(tmp);
-      if (!kParams.keep_metadata) {
-        assert(kParams.out.metadata_.IsEmpty());
+      if (!keep_metadata_) {
+        assert(out_.metadata_.IsEmpty());
       } else if (mi.iccp.size != mo.iccp.size || mi.exif.size != mo.exif.size ||
                  mi.xmp.size != mo.xmp.size) {
-        snprintf(tmp, sizeof(tmp), " decoded as ICCP %zu, EXIF %zu, XMP %zu",
-                 mo.iccp.size, mo.exif.size, mo.xmp.size);
+        snprintf(tmp, sizeof(tmp), " decoded as ICCP %u, EXIF %u, XMP %u",
+                 (uint32_t)mo.iccp.size, (uint32_t)mo.exif.size,
+                 (uint32_t)mo.xmp.size);
         msg.back() += tmp;
       }
     }
@@ -1010,49 +1051,46 @@ void PrintInfo() {
 #endif
 
     snprintf(tmp, sizeof(tmp), "Filters: dblk=%s, drct=%s, rstr=%s, alpha=%s",
-             kOnOff[kParams.dec_config.enable_deblocking_filter],
-             kOnOff[kParams.dec_config.enable_directional_filter],
-             kOnOff[kParams.dec_config.enable_restoration_filter],
-             kOnOff[kParams.enc_config.enable_alpha_filter]);
+             kOnOff[dec_config_.enable_deblocking_filter],
+             kOnOff[dec_config_.enable_directional_filter],
+             kOnOff[dec_config_.enable_restoration_filter],
+             kOnOff[enc_config_.enable_alpha_filter]);
     msg.emplace_back(tmp);
 
     snprintf(tmp, sizeof(tmp), "%s=%.2f  (a %.1f, r %.1f, g %.1f, b %.1f)",
-             kWP2MetricNames[kParams.distortion_metric], kParams.distortion[4],
-             kParams.distortion[0], kParams.distortion[1],
-             kParams.distortion[2], kParams.distortion[3]);
+             kMetricNames[distortion_metric_], distortion_[4], distortion_[0],
+             distortion_[1], distortion_[2], distortion_[3]);
     msg.emplace_back(tmp);
-    if (kParams.yuv_distortion[0] > 0.f) {  // Maybe it is unavailable.
+    if (yuv_distortion_[0] > 0.f) {  // Maybe it is unavailable.
       snprintf(tmp, sizeof(tmp), "  (y %.1f, u %.1f, v %.1f)",
-               kParams.yuv_distortion[0], kParams.yuv_distortion[1],
-               kParams.yuv_distortion[2]);
+               yuv_distortion_[0], yuv_distortion_[1], yuv_distortion_[2]);
       msg.back() += tmp;
     }
 
     snprintf(tmp, sizeof(tmp), "CSP: %s   UV: %s  Partition: %s, %s  Tile: %s",
-             kCSPString[(int)kParams.enc_config.csp_type],
-             kUVModeString[(int)kParams.enc_config.uv_mode],
-             WP2::kPartitionMethodString[kParams.enc_config.partition_method],
-             kPartitionSetString[kParams.enc_config.partition_set],
-             kTileShapeString[kParams.enc_config.tile_shape]);
+             kCSPString[(int)enc_config_.csp_type],
+             kUVModeString[(int)enc_config_.uv_mode],
+             kPartitionMethodString[enc_config_.partition_method],
+             kPartitionSetString[enc_config_.partition_set],
+             kTileShapeString[enc_config_.tile_shape]);
     msg.emplace_back(tmp);
     snprintf(tmp, sizeof(tmp), "Perceptual:%s  RndMtx: %s  Grain: %s Amp: %d",
-             kOnOff[kParams.enc_config.tune_perceptual],
-             kOnOff[kParams.enc_config.use_random_matrix],
-             kOnOff[kParams.enc_config.store_grain],
-             kParams.dec_config.grain_amplitude);
+             kOnOff[enc_config_.tune_perceptual],
+             kOnOff[enc_config_.use_random_matrix],
+             kOnOff[enc_config_.store_grain], dec_config_.grain_amplitude);
     msg.emplace_back(tmp);
 
 #if defined(WP2_BITTRACE)
     double total_size = 0;
-    for (const auto& p : kParams.dinfo.bit_traces) {
+    for (const auto& p : dinfo_.bit_traces) {
       total_size += p.second.bits;
     }
 
     std::map<std::string, float> traces;
-    for (const auto& p : kParams.dinfo.bit_traces) {
+    for (const auto& p : dinfo_.bit_traces) {
       uint32_t level = 0;
       size_t i = 0;
-      while (level < kParams.visual_bit_trace_level && i != std::string::npos) {
+      while (level < visual_bit_trace_level_ && i != std::string::npos) {
         i = p.first.find("/", (i == 0) ? 0 : i + 1);
         traces[p.first.substr(0, i)] += p.second.bits;
         ++level;
@@ -1060,10 +1098,10 @@ void PrintInfo() {
     }
     DisplayBitTraces(traces, total_size);
 #endif  // WP2_BITTRACE
-  } else if (kParams.show == Params::kAlt1) {
-    msg.emplace_back(kParams.alt1_msg);
-  } else if (kParams.show == Params::kAlt2) {
-    msg.emplace_back(kParams.alt2_msg);
+  } else if (show_ == kAlt1) {
+    msg.emplace_back(alt1_msg_);
+  } else if (show_ == kAlt2) {
+    msg.emplace_back(alt2_msg_);
   } else {
     bg_color[0] = .9f;
     bg_color[1] = .9f;
@@ -1071,56 +1109,53 @@ void PrintInfo() {
     bg_color[3] = .8f;
     small = true;
 
-    if (WP2::VDMatch(kParams.enc_config, "")) {
-      msg.emplace_back(kParams.einfo.visual_debug);
-      SplitIntoMessages(kParams.einfo.selection_info, &msg);
-    } else if (WP2::VDMatch(kParams.dec_config, "")) {
-      msg.emplace_back(kParams.dinfo.visual_debug);
-      SplitIntoMessages(kParams.dinfo.selection_info, &msg);
+    if (VDMatch(enc_config_, "")) {
+      msg.emplace_back(einfo_.visual_debug);
+      SplitIntoMessages(einfo_.selection_info, &msg);
+    } else if (VDMatch(dec_config_, "")) {
+      msg.emplace_back(dinfo_.visual_debug);
+      SplitIntoMessages(dinfo_.selection_info, &msg);
     }
   }
 
-  if (!kParams.message.empty()) {
-    msg.push_back(kParams.message);
-    if (glutGet(GLUT_ELAPSED_TIME) > kParams.message_end_time) {
-      kParams.message.clear();
+  if (!message_.empty()) {
+    msg.push_back(message_);
+    if (glutGet(GLUT_ELAPSED_TIME) > message_end_time_) {
+      message_.clear();
     }
   }
 
   PrintMessages(msg, print_lower, text_color, bg_color, small);
 }
 
-// Adds a temporary 'message' on screen.
-void SetMessage(const std::string& message, bool even_if_show_info = false,
-                int duration_ms = 2000) {
-  if (kParams.show != Params::kInfo || even_if_show_info) {
-    kParams.message = message;
-    kParams.message_end_time = glutGet(GLUT_ELAPSED_TIME) + duration_ms;
+void Params::SetMessage(const std::string& message, bool even_if_show_info,
+                        int duration_ms) {
+  if (show_ != kInfo || even_if_show_info) {
+    message_ = message;
+    message_end_time_ = glutGet(GLUT_ELAPSED_TIME) + duration_ms;
   }
 }
 
-// Same as above with different default arguments.
-void AddInfo(const std::string& message) {
+void Params::AddInfo(const std::string& message) {
   SetMessage(message, /*even_if_show_info=*/true, /*duration_ms=*/5000);
 }
 
-void SetError(const std::string& message) {
-  SetMessage(message, /*even_if_show_info=*/true, /*duration_ms=*/60000);
+void Params::SetError(const std::string& message) {
+  SetMessage(message, /*even_if_show_info=*/true,
+             /*duration_ms=*/60000);
 
   // Reset outputs so that nothing misleading is displayed.
-  const uint32_t width = kParams.in.width(), height = kParams.in.height();
-  for (WP2::ArgbBuffer* const buffer :
-       {&kParams.out, &kParams.dinfo.debug_output}) {
-    if (buffer->Resize(width, height) != WP2_STATUS_OK) assert(false);
+  for (ArgbBuffer* const buffer : {&out_, &dinfo_.debug_output}) {
+    WP2_ASSERT_STATUS(buffer->Resize(in_.width(), in_.height()));
     buffer->Fill({0, 0, 0, 0});
   }
 #if defined(WP2_BITTRACE)
-  kParams.einfo.blocks.clear();
-  kParams.dinfo.bit_traces.clear();
-  kParams.dinfo.blocks.clear();
+  einfo_.blocks.clear();
+  dinfo_.bit_traces.clear();
+  dinfo_.blocks.clear();
 #endif  // WP2_BITTRACE
-  kParams.dinfo.header_size = 0;
-  kParams.dinfo.selection_info.clear();
+  dinfo_.header_size = 0;
+  dinfo_.selection_info.clear();
 }
 
 //------------------------------------------------------------------------------
@@ -1134,30 +1169,27 @@ void DisplayLoop(int delay_ms) {
 //------------------------------------------------------------------------------
 // error maps
 
-WP2Status ComputeErrorMap(WP2::MetricType metric,
-                          const WP2::ArgbBuffer& original,
-                          const WP2::ArgbBuffer& decoded,
-                          WP2::ArgbBuffer* const error_map,
-                          WP2::DecoderInfo* const info = nullptr) {
+WP2Status ComputeErrorMap(MetricType metric, const ArgbBuffer& original,
+                          const ArgbBuffer& decoded,
+                          ArgbBuffer* const error_map,
+                          DecoderInfo* const info = nullptr) {
   WP2_CHECK_OK(decoded.width() == original.width() &&
                    decoded.height() == original.height(),
                WP2_STATUS_BAD_DIMENSION);
   WP2_CHECK_STATUS(error_map->Resize(original.width(), original.height()));
-  const double norm =
-      (metric == WP2::PSNR) ? 5. : (metric == WP2::LSIM) ? 5. : 8.;
+  const double norm = (metric == PSNR) ? 5. : (metric == LSIM) ? 5. : 8.;
   for (uint32_t y = 0; y < error_map->height(); ++y) {
     uint8_t* const dst = error_map->GetRow8(y);
     for (uint32_t x = 0; x < error_map->width(); ++x) {
       float d;
       WP2_CHECK_STATUS(decoded.GetDistortion(original, x, y, metric, &d));
-      const uint8_t v =
-          (uint8_t)std::lround(WP2::Clamp(255. - d * norm, 0., 255.));
+      const uint8_t v = (uint8_t)std::lround(Clamp(255. - d * norm, 0., 255.));
       dst[4 * x + 0] = 255;  // TODO(skal): handle alpha properly
       dst[4 * x + 1] = dst[4 * x + 2] = dst[4 * x + 3] = v;
 
       if (info != nullptr && info->selection.x == x && info->selection.y == y) {
         info->selection_info =
-            SPrintf("%s at %u, %u: %f\n", kWP2MetricNames[metric], x, y, d);
+            SPrintf("%s at %u, %u: %f\n", kMetricNames[metric], x, y, d);
       }
     }
   }
@@ -1168,44 +1200,39 @@ WP2Status ComputeErrorMap(WP2::MetricType metric,
 // redder tint depending on 'error_a' or 'error_b' being the lowest.
 void ComputeDiffPixel(const uint8_t original[4], uint8_t error_a,
                       uint8_t error_b, uint8_t diff[4]) {
-  diff[0] = WP2::kAlphaMax;
+  diff[0] = kAlphaMax;
   for (uint32_t i : {1, 2, 3}) {
     // Darkened/greyed out version of the original sample.
-    diff[i] =
-        WP2::RightShiftRound((63u << 1) + ((uint32_t)original[i] << 6), 7);
+    diff[i] = RightShiftRound((63u << 1) + ((uint32_t)original[i] << 6), 7);
   }
   if (error_a > error_b) {
-    diff[1] =
-        (uint8_t)WP2::Clamp(diff[1] + (error_a - error_b) * 10u, 0u, 255u);
+    diff[1] = (uint8_t)Clamp(diff[1] + (error_a - error_b) * 10u, 0u, 255u);
   } else if (error_b > error_a) {
-    diff[2] =
-        (uint8_t)WP2::Clamp(diff[2] + (error_b - error_a) * 10u, 0u, 255u);
+    diff[2] = (uint8_t)Clamp(diff[2] + (error_b - error_a) * 10u, 0u, 255u);
   }
 }
 
 // Fills 'diff_map' with 'original' pixels that are greener if 'decoded' is
 // closer than 'alt', redder otherwise.
-WP2Status ComputeDiffMap(WP2::MetricType metric,
-                         const WP2::ArgbBuffer& original,
-                         const WP2::ArgbBuffer& decoded,
-                         const WP2::ArgbBuffer& alt,
-                         WP2::ArgbBuffer* const diff_map,
-                         WP2::DecoderInfo* const info = nullptr) {
+WP2Status ComputeDiffMap(MetricType metric, const ArgbBuffer& original,
+                         const ArgbBuffer& decoded, const ArgbBuffer& alt,
+                         ArgbBuffer* const diff_map,
+                         DecoderInfo* const info = nullptr) {
   if (info != nullptr) {
     float disto_dec[5] = {}, disto_alt[5] = {};
     WP2_CHECK_STATUS(decoded.GetDistortion(original, metric, disto_dec));
     WP2_CHECK_STATUS(alt.GetDistortion(original, metric, disto_alt));
     info->selection_info =
         SPrintf("%s of decoded: %5.2f (A %4.1f, R %4.1f, G %4.1f, B %4.1f)\n",
-                kWP2MetricNames[metric], disto_dec[4], disto_dec[0],
-                disto_dec[1], disto_dec[2], disto_dec[3]);
+                kMetricNames[metric], disto_dec[4], disto_dec[0], disto_dec[1],
+                disto_dec[2], disto_dec[3]);
     info->selection_info +=
         SPrintf("%s of alt:     %5.2f (A %4.1f, R %4.1f, G %4.1f, B %4.1f)\n",
-                kWP2MetricNames[metric], disto_alt[4], disto_alt[0],
-                disto_alt[1], disto_alt[2], disto_alt[3]);
+                kMetricNames[metric], disto_alt[4], disto_alt[0], disto_alt[1],
+                disto_alt[2], disto_alt[3]);
   }
 
-  WP2::ArgbBuffer error_map_decoded, error_map_alt;
+  ArgbBuffer error_map_decoded, error_map_alt;
   WP2_CHECK_STATUS(
       ComputeErrorMap(metric, original, decoded, &error_map_decoded));
   WP2_CHECK_STATUS(ComputeErrorMap(metric, original, alt, &error_map_alt));
@@ -1234,36 +1261,37 @@ WP2Status ComputeDiffMap(WP2::MetricType metric,
 // compression
 
 bool Params::EncodeImage() {
-  enc_config.quality = quality;
-  enc_config.alpha_quality = alpha_quality;
-  if (!enc_config.IsValid()) {
+  enc_config_.quality = quality_;
+  enc_config_.alpha_quality = alpha_quality_;
+  if (!enc_config_.IsValid()) {
     SetError("Error: Invalid configuration");
     fprintf(stderr, "Invalid configuration\n");
     return false;
   }
 
   const double start = GetStopwatchTime();
-  if (view_only) {
-    output = input;
+  if (view_only_) {
+    output_ = input_;
   } else {
-    output.clear();
-    einfo.force_partition = force_partition;
-    einfo.force_segment = force_segment;
-    einfo.force_predictor = force_predictor;
+    output_.clear();
+    einfo_.force_partition = force_partition_;
+    einfo_.force_segment = force_segment_;
+    einfo_.force_predictor = force_predictor_;
 
-    WP2::StringWriter writer(&output);
-    WP2::Metadata metadata;
+    StringWriter writer(&output_);
+    Metadata metadata;
     using std::swap;
-    if (!keep_metadata) swap(metadata, in.metadata_);
-    const WP2Status enc_status = Encode(in, &writer, enc_config);
-    if (!keep_metadata) swap(metadata, in.metadata_);
+    if (!keep_metadata_) swap(metadata, in_.metadata_);
+    const WP2Status enc_status = Encode(in_, &writer, enc_config_);
+    if (!keep_metadata_) swap(metadata, in_.metadata_);
     if (enc_status != WP2_STATUS_OK) {
       SetError("Error: Compression failed");
       fprintf(stderr, "Compression failed: %s\n", WP2GetStatusText(enc_status));
       return false;
     }
   }
-  enc_duration_ms = (uint32_t)std::lround(1000. * (GetStopwatchTime() - start));
+  enc_duration_ms_ =
+      (uint32_t)std::lround(1000. * (GetStopwatchTime() - start));
   return true;
 }
 
@@ -1275,70 +1303,67 @@ bool Params::EncodeAndDecode() {
 bool Params::DecodeOutput() {
   const double start = GetStopwatchTime();
 
-  if (view_only &&
-      WP2::GuessImageFormat((const uint8_t*)output.data(), output.size()) !=
-          WP2::FileFormat::WP2) {
-    status = out.ConvertFrom(in);
+  if (view_only_ && GuessImageFormat((const uint8_t*)output_.data(),
+                                     output_.size()) != FileFormat::WP2) {
+    status_ = out_.ConvertFrom(in_);
   } else {
-    if (WP2::VDMatch(dec_config, "original")) {
+    if (VDMatch(dec_config_, "original")) {
       // The reference image is needed in 'debug_output' if the 'visual_debug'
       // is set to "original".
-      status = dinfo.debug_output.ConvertFrom(in);
-      if (status != WP2_STATUS_OK) {
+      status_ = dinfo_.debug_output.ConvertFrom(in_);
+      if (status_ != WP2_STATUS_OK) {
         SetError("Error: Out of memory");
         return false;
       }
     }
 
-    status = Decode(output, &out, dec_config);
-    if (bit_trace > 0) {
+    status_ = Decode(output_, &out_, dec_config_);
+    if (bit_trace_ > 0) {
 #if defined(WP2_BITTRACE)
-      PrintBitTraces(dinfo, output.size(), /*sort_values=*/true,
-                     /*use_bytes=*/bit_trace == 2, /*show_histograms=*/false,
-                     /*short_version=*/false, bit_trace_level);
+      PrintBitTraces(dinfo_, output_.size(), /*sort_values=*/true,
+                     /*use_bytes=*/bit_trace_ == 2, /*show_histograms=*/false,
+                     /*short_version=*/false, bit_trace_level_);
 #endif
     }
   }
-  dec_duration_ms = (uint32_t)std::lround(1000. * (GetStopwatchTime() - start));
+  dec_duration_ms_ =
+      (uint32_t)std::lround(1000. * (GetStopwatchTime() - start));
 
-  if (status != WP2_STATUS_OK) {
+  if (status_ != WP2_STATUS_OK) {
     SetError("Error: Decompression failed");
     fprintf(stderr, "Decompression failed\n");
     return false;
   }
 
-  if (out.GetDistortionBlackOrWhiteBackground(in, distortion_metric,
-                                              distortion) != WP2_STATUS_OK) {
+  if (out_.GetDistortionBlackOrWhiteBackground(in_, distortion_metric_,
+                                               distortion_) != WP2_STATUS_OK) {
     fprintf(stderr, "Error while computing the distortion.\n");
   }
-  if (WP2::VDMatch(dec_config, "error-map")) {
-    // clang-format off
-    const WP2::MetricType metric =
-            WP2::VDMatch(dec_config,   "PSNR") ?   WP2::PSNR :
-            WP2::VDMatch(dec_config,   "LSIM") ?   WP2::LSIM :
-            WP2::VDMatch(dec_config, "MSSSIM") ? WP2::MSSSIM :
-                                                  WP2::SSIM;
-    // clang-format on
-    if (WP2::VDMatch(dec_config, "diff-with-alt")) {
-      if (kParams.alt1.IsEmpty()) {
+  if (VDMatch(dec_config_, "error-map")) {
+    const MetricType metric = VDMatch(dec_config_, "PSNR")     ? PSNR
+                              : VDMatch(dec_config_, "LSIM")   ? LSIM
+                              : VDMatch(dec_config_, "MSSSIM") ? MSSSIM
+                                                               : SSIM;
+    if (VDMatch(dec_config_, "diff-with-alt")) {
+      if (alt1_.IsEmpty()) {
         SetError("alt-1 is empty");
-      } else if (ComputeDiffMap(metric, kParams.in, kParams.out, kParams.alt1,
-                                &kParams.dec_config.info->debug_output,
-                                kParams.dec_config.info) != WP2_STATUS_OK) {
+      } else if (ComputeDiffMap(metric, in_, out_, alt1_,
+                                &dec_config_.info->debug_output,
+                                dec_config_.info) != WP2_STATUS_OK) {
         SetError("Error: Diff map computation failed");
         fprintf(stderr, "Diff map computation failed\n");
         return false;
       }
-    } else if (ComputeErrorMap(metric, kParams.in, kParams.out,
-                               &kParams.dec_config.info->debug_output,
-                               kParams.dec_config.info) != WP2_STATUS_OK) {
+    } else if (ComputeErrorMap(metric, in_, out_,
+                               &dec_config_.info->debug_output,
+                               dec_config_.info) != WP2_STATUS_OK) {
       SetError("Error: Error map computation failed");
       fprintf(stderr, "Error map computation failed\n");
       return false;
     }
   }
-  if (!force_segment.empty() && !dinfo.explicit_segment_ids) {
-    force_segment.clear();
+  if (!force_segment_.empty() && !dinfo_.explicit_segment_ids) {
+    force_segment_.clear();
   }
 
   if (!ComputeYUVDistortion()) return false;
@@ -1346,75 +1371,75 @@ bool Params::DecodeOutput() {
 }
 
 bool Params::ComputeYUVDistortion() {
-  if (!view_only && show == kInfo) {  // Only displayed during 'kInfo'.
+  if (!view_only_ && show_ == kInfo) {  // Only displayed during 'kInfo'.
     const char* const kOrigVD[] = {"original/y", "original/u", "original/v"};
     const char* const kDecVD[] = {"y/compressed", "u/compressed",
                                   "v/compressed"};
-    WP2::ArgbBuffer original_yuv, decompressed_yuv;
-    for (WP2::Channel c : {WP2::kYChannel, WP2::kUChannel, WP2::kVChannel}) {
-      WP2::DecoderInfo decoder_info;
-      dec_config.info = &decoder_info;
+    ArgbBuffer original_yuv, decompressed_yuv;
+    for (Channel c : {kYChannel, kUChannel, kVChannel}) {
+      DecoderInfo decoder_info;
+      dec_config_.info = &decoder_info;
       decoder_info.visual_debug = kOrigVD[c];
       if (!DecodeAndSwap(&original_yuv)) return false;
       decoder_info.visual_debug = kDecVD[c];
       if (!DecodeAndSwap(&decompressed_yuv)) return false;
-      dec_config.info = &dinfo;
+      dec_config_.info = &dinfo_;
       float disto[5];
       WP2_ASSERT_STATUS(decompressed_yuv.GetDistortion(
-          original_yuv, distortion_metric, disto));
-      yuv_distortion[c] = disto[1];
+          original_yuv, distortion_metric_, disto));
+      yuv_distortion_[c] = disto[1];
     }
   } else {
-    yuv_distortion[0] = yuv_distortion[1] = yuv_distortion[2] = 0.f;
+    yuv_distortion_[0] = yuv_distortion_[1] = yuv_distortion_[2] = 0.f;
   }
   return true;
 }
 
 bool Params::VDMatchEncDec(const char* token) const {
-  return WP2::VDMatch(dec_config, token) || WP2::VDMatch(enc_config, token);
+  return VDMatch(dec_config_, token) || VDMatch(enc_config_, token);
 }
 
-bool Params::DecodeAndSwap(WP2::ArgbBuffer* const buffer) {
-  status = buffer->Swap(&dec_config.info->debug_output);  // Avoid realloc
-  assert(status == WP2_STATUS_OK);
-  status = dec_config.info->debug_output.ConvertFrom(in);
-  assert(status == WP2_STATUS_OK);
-  status = Decode(output, &out, dec_config);
-  if (status != WP2_STATUS_OK) {
+bool Params::DecodeAndSwap(ArgbBuffer* const buffer) {
+  status_ = buffer->Swap(&dec_config_.info->debug_output);  // Avoid realloc
+  assert(status_ == WP2_STATUS_OK);
+  status_ = dec_config_.info->debug_output.ConvertFrom(in_);
+  assert(status_ == WP2_STATUS_OK);
+  status_ = Decode(output_, &out_, dec_config_);
+  if (status_ != WP2_STATUS_OK) {
     fprintf(stderr, "Decompression failed?!\n");
     return false;
   }
-  status = buffer->Swap(&dec_config.info->debug_output);
-  assert(status == WP2_STATUS_OK);
+  status_ = buffer->Swap(&dec_config_.info->debug_output);
+  assert(status_ == WP2_STATUS_OK);
   return true;
 }
 
 bool Params::GetOriginal() {
-  if (VDMatch(dec_config, "residuals")) {
-    WP2::EncoderInfo encoder_info;
-    WP2::Channel c = VDChannel(dec_config);
+  if (VDMatch(dec_config_, "residuals")) {
+    EncoderInfo encoder_info;
+    Channel c = VDChannel(dec_config_);
     const std::string kChannelName[] = {"y", "u", "v", "a"};
     const std::string vdebug = kChannelName[c] + "/encoder/original-residuals";
     encoder_info.visual_debug = vdebug.c_str();
-    encoder_info.selection = dinfo.selection;
-    enc_config.info = &encoder_info;
+    encoder_info.selection = dinfo_.selection;
+    enc_config_.info = &encoder_info;
 
     // Avoid realloc
-    if (in_yuv.Swap(&enc_config.info->debug_output) != WP2_STATUS_OK) {
+    if (in_yuv_.Swap(&enc_config_.info->debug_output) != WP2_STATUS_OK) {
       return false;
     }
     if (!EncodeImage()) return false;
-    if (in_yuv.Swap(&enc_config.info->debug_output) != WP2_STATUS_OK) {
+    if (in_yuv_.Swap(&enc_config_.info->debug_output) != WP2_STATUS_OK) {
       return false;
     }
 
-    original_selection_info = encoder_info.selection_info;
-    enc_config.info = &einfo;
-    if (original.SetView(in_yuv) != WP2_STATUS_OK) return false;
+    original_selection_info_ = encoder_info.selection_info;
+    enc_config_.info = &einfo_;
+    if (original_.SetView(in_yuv_) != WP2_STATUS_OK) return false;
     return true;
   }
 
-  WP2::DecoderInfo decoder_info;
+  DecoderInfo decoder_info;
   // clang-format off
   decoder_info.visual_debug = VDMatchEncDec("a") ? "original/a" :
                               VDMatchEncDec("y") ? "original/y" :
@@ -1427,24 +1452,24 @@ bool Params::GetOriginal() {
   decoder_info.selection =
       (VDMatchEncDec("prediction/modes/long") ||
        VDMatchEncDec("prediction/raw") || VDMatchEncDec("compressed"))
-          ? dinfo.selection
-          : WP2::Rectangle();
+          ? dinfo_.selection
+          : Rectangle();
   if (decoder_info.visual_debug != nullptr) {
-    dec_config.info = &decoder_info;
-    if (!DecodeAndSwap(&in_yuv)) return false;
-    original_selection_info = decoder_info.selection_info;
-    dec_config.info = &dinfo;
-    if (original.SetView(in_yuv) != WP2_STATUS_OK) return false;
+    dec_config_.info = &decoder_info;
+    if (!DecodeAndSwap(&in_yuv_)) return false;
+    original_selection_info_ = decoder_info.selection_info;
+    dec_config_.info = &dinfo_;
+    if (original_.SetView(in_yuv_) != WP2_STATUS_OK) return false;
   } else {
-    original_selection_info.clear();
+    original_selection_info_.clear();
     // They use different formats so we can't use a view.
-    if (original.ConvertFrom(in) != WP2_STATUS_OK) return false;
+    if (original_.ConvertFrom(in_) != WP2_STATUS_OK) return false;
   }
   return true;
 }
 
 bool Params::GetCompressed() {
-  WP2::DecoderInfo decoder_info;
+  DecoderInfo decoder_info;
   // clang-format off
   decoder_info.visual_debug = VDMatchEncDec("a") ? "a/compressed" :
                               VDMatchEncDec("y") ? "y/compressed" :
@@ -1452,107 +1477,105 @@ bool Params::GetCompressed() {
                               VDMatchEncDec("v") ? "v/compressed" : nullptr;
   // clang-format on
   if (decoder_info.visual_debug != nullptr) {
-    dec_config.info = &decoder_info;
-    if (!DecodeAndSwap(&out_yuv)) return false;
-    dec_config.info = &dinfo;
+    dec_config_.info = &decoder_info;
+    if (!DecodeAndSwap(&out_yuv_)) return false;
+    dec_config_.info = &dinfo_;
   } else {
-    out_yuv.Deallocate();
+    out_yuv_.Deallocate();
   }
   return true;
 }
 
-bool Params::CompressWebP(bool match_size) {
+bool Params::EncodeWebP(bool match_size) {
 #if defined(WP2_HAVE_WEBP)
   WebPConfig webp_config;
-  if (!WebPConfigPreset(&webp_config, WEBP_PRESET_DEFAULT, quality)) {
+  if (!WebPConfigPreset(&webp_config, WEBP_PRESET_DEFAULT, quality_)) {
     return false;
   }
-  if (enc_config.thread_level > 0) ++webp_config.thread_level;
-  webp_config.method = (enc_config.effort * 6 + 4) / 9;
-  webp_config.segments = std::min(enc_config.segments, 4);
-  webp_config.sns_strength = (int)std::lround(enc_config.sns);
+  if (enc_config_.thread_level > 0) ++webp_config.thread_level;
+  webp_config.method = (enc_config_.effort * 6 + 4) / 9;
+  webp_config.segments = std::min(enc_config_.segments, 4);
+  webp_config.sns_strength = (int)std::lround(enc_config_.sns);
   webp_config.pass = 6;
   if (match_size) {
-    webp_config.target_size = (int)output.size();
+    webp_config.target_size = (int)output_.size();
   } else {
-    if (distortion_metric != WP2::PSNR) return false;
-    webp_config.target_PSNR = distortion[4];
+    if (distortion_metric_ != PSNR) return false;
+    webp_config.target_PSNR = distortion_[4];
   }
   if (!WebPValidateConfig(&webp_config)) return false;
 
-  WP2::MemoryWriter writer;
-  status = WP2::CompressWebP(in, webp_config, &writer);
-  if (status != WP2_STATUS_OK) return false;
-  webp_size = writer.size_;
+  MemoryWriter writer;
+  status_ = CompressWebP(in_, webp_config, &writer);
+  if (status_ != WP2_STATUS_OK) return false;
+  webp_size_ = writer.size_;
 
-  status =
-      WP2::ReadImage(writer.mem_, writer.size_, &webp, WP2::FileFormat::WEBP);
-  if (status != WP2_STATUS_OK) return false;
+  status_ = ReadImage(writer.mem_, writer.size_, &webp_, FileFormat::WEBP);
+  if (status_ != WP2_STATUS_OK) return false;
 
   float disto[5];
-  status =
-      webp.GetDistortionBlackOrWhiteBackground(in, distortion_metric, disto);
-  if (status != WP2_STATUS_OK) return false;
-  webp_distortion = disto[4];
+  status_ =
+      webp_.GetDistortionBlackOrWhiteBackground(in_, distortion_metric_, disto);
+  if (status_ != WP2_STATUS_OK) return false;
+  webp_distortion_ = disto[4];
 
-  show = kWebP;
+  show_ = kWebP;
   return true;
 #else
   return false;
 #endif  // WP2_HAVE_WEBP
 }
 
-bool Params::CompressAV1(bool copy_partition, float av1_quality,
-                         size_t* const av1_file_size) {
+bool Params::EncodeAV1(bool copy_partition, float av1_quality,
+                       size_t* const av1_file_size) {
 #if !defined(WP2_HAVE_AOM_DBG)
   if (copy_partition) return false;
 #endif
 #if defined(WP2_HAVE_AOM)
-  WP2::ParamsAV1 cfg;
+  ParamsAV1 cfg;
   cfg.quality = av1_quality;
   // The settings below seem to give the best results (yes, even threads).
   cfg.effort = 9;
   cfg.threads = 1;
   cfg.pass = 2;
-  cfg.use_yuv444 =
-      (kParams.enc_config.uv_mode != WP2::EncoderConfig::UVMode420);
-  cfg.draw_blocks = (kParams.display_block != Params::kDisplayNone);
-  cfg.draw_transforms = (kParams.display_block == Params::kDisplayYCoeffs);
-  if (copy_partition) force_partition.clear();
+  cfg.use_yuv444 = (enc_config_.uv_mode != EncoderConfig::UVMode420);
+  cfg.draw_blocks = (display_block_ != kDisplayNone);
+  cfg.draw_transforms = (display_block_ == kDisplayYCoeffs);
+  if (copy_partition) force_partition_.clear();
 
   printf("Compressing AV1 at quality %.1f...\n", cfg.quality);
   std::string tmp;
   double timing[2];
   ShiftAlt();
-  if (WP2::CompressAV1(
-          in, cfg, &alt1, &tmp, timing, /*blocks=*/nullptr,
-          /*transforms=*/(copy_partition ? &force_partition : nullptr)) !=
+  if (CompressAV1(
+          in_, cfg, &alt1_, &tmp, timing, /*blocks=*/nullptr,
+          /*transforms=*/(copy_partition ? &force_partition_ : nullptr)) !=
       WP2_STATUS_OK) {
     return false;
   }
-  printf("Done compressing AV1 in just %.2f seconds (%zu bytes)!\n", timing[0],
-         tmp.size());
+  printf("Done compressing AV1 in just %.2f seconds (%" PRIu64 " bytes)!\n",
+         timing[0], (uint64_t)tmp.size());
 
   if (av1_file_size != nullptr) *av1_file_size = tmp.size();
-  alt1_msg = SPrintf("AV1 - size = %zu", tmp.size());
+  alt1_msg_ = SPrintf("AV1 - size = %" PRIu64 "", (uint64_t)tmp.size());
 
   if (!cfg.draw_blocks && !cfg.draw_transforms) {
     // Only print distortion if the output image is unaltered by debug overlays.
     float disto[5];
-    if (alt1.GetDistortionBlackOrWhiteBackground(in, distortion_metric,
-                                                 disto) != WP2_STATUS_OK) {
+    if (alt1_.GetDistortionBlackOrWhiteBackground(in_, distortion_metric_,
+                                                  disto) != WP2_STATUS_OK) {
       return false;
     }
-    alt1_msg +=
-        SPrintf("  %s = %.1f", kWP2MetricNames[distortion_metric], disto[4]);
+    alt1_msg_ +=
+        SPrintf("  %s = %.1f", kMetricNames[distortion_metric_], disto[4]);
   }
 
   if (copy_partition) {
-    WP2ConvertPartition(in.width(), in.height(), enc_config.partition_set,
-                        /*ignore_invalid=*/true, &force_partition);
+    ConvertPartition(in_.width(), in_.height(), enc_config_.partition_set,
+                     /*ignore_invalid=*/true, &force_partition_);
   }
 
-  show = kAlt1;
+  show_ = kAlt1;
   return true;
 #else
   (void)copy_partition;
@@ -1560,13 +1583,13 @@ bool Params::CompressAV1(bool copy_partition, float av1_quality,
 #endif  // WP2_HAVE_AOM
 }
 
-bool Params::CompressAV1ToMatch(bool copy_partition, size_t target_file_size) {
+bool Params::EncodeAV1ToMatch(bool copy_partition, size_t target_file_size) {
   // Begin by testing 0, it's probably a good choice.
   int lo_q = -100, hi_q = 100, mid_q;
   do {
     mid_q = (lo_q + hi_q) / 2;
     size_t file_size;
-    if (!CompressAV1(copy_partition, mid_q, &file_size)) {
+    if (!EncodeAV1(copy_partition, mid_q, &file_size)) {
       AddInfo("AV1 not available");
       return false;
     }
@@ -1585,135 +1608,136 @@ bool Params::CompressAV1ToMatch(bool copy_partition, size_t target_file_size) {
 //------------------------------------------------------------------------------
 
 void Params::ApplyZoomLevel() {
-  if (zoom_level >= 0) {
-    viewport_width = width << zoom_level;
-    viewport_height = height << zoom_level;
+  if (zoom_level_ >= 0) {
+    viewport_width_ = width_ << zoom_level_;
+    viewport_height_ = height_ << zoom_level_;
   } else {
-    viewport_width = width >> -zoom_level;
-    viewport_height = height >> -zoom_level;
+    viewport_width_ = width_ >> -zoom_level_;
+    viewport_height_ = height_ >> -zoom_level_;
   }
 }
 
 bool Params::SetCurrentFile(size_t file) {
-  if (file >= files.size()) file = files.size() - 1;
-  if (file != current_file) {
+  if (file >= files_.size()) file = files_.size() - 1;
+  if (file != current_file_) {
     ClearForcedElements();
-    current_file = file;
-    const std::string& file_name = files[file];
-    status = WP2::IoUtilReadFile(file_name.c_str(), &input);
-    if (status != WP2_STATUS_OK) {
+    current_file_ = file;
+    const std::string& file_name = files_[file];
+    status_ = IoUtilReadFile(file_name.c_str(), &input_);
+    if (status_ != WP2_STATUS_OK) {
       fprintf(stderr, "Could not read the input file %s\n", file_name.c_str());
       return false;
     }
-    const uint8_t* data = (const uint8_t*)input.data();
-    const size_t data_size = input.size();
+    const uint8_t* data = (const uint8_t*)input_.data();
+    const size_t data_size = input_.size();
 
-    const WP2::FileFormat format = WP2::GuessImageFormat(data, data_size);
-    if (format == WP2::FileFormat::UNSUPPORTED) {
+    const FileFormat format = GuessImageFormat(data, data_size);
+    if (format == FileFormat::UNSUPPORTED) {
       fprintf(stderr, "Unsupported input format\n");
       return false;
     }
-    if (WP2::ReadImage(data, data_size, &in, format) != WP2_STATUS_OK) {
+    if (ReadImage(data, data_size, &in_, format) != WP2_STATUS_OK) {
       fprintf(stderr, "Could not decode the input file %s\n",
               file_name.c_str());
       return false;
     }
 
-    if (crop && in.SetView(in, crop_area) != WP2_STATUS_OK) {
+    if (crop_ && in_.SetView(in_, crop_area_) != WP2_STATUS_OK) {
       fprintf(stderr, "Error! Cropping operation failed. Skipping.");
     }
 
-    preview_color = {0x00u, 0x00u, 0x00u, 0x00u};
-    preview.Deallocate();
-    if (format == WP2::FileFormat::WP2) {
-      WP2::BitstreamFeatures wp2_features;
+    preview_color_ = {0x00u, 0x00u, 0x00u, 0x00u};
+    preview_.Deallocate();
+    if (format == FileFormat::WP2) {
+      BitstreamFeatures wp2_features;
       if (wp2_features.Read(data, data_size) != WP2_STATUS_OK) {
         fprintf(stderr, "Inconsistent state: could not read WP2 features.\n");
         return false;
       }
       if (wp2_features.has_preview &&
-          ExtractPreview(data, data_size, &preview) != WP2_STATUS_OK) {
+          ExtractPreview(data, data_size, &preview_) != WP2_STATUS_OK) {
         fprintf(stderr, "Could not decode preview of %s\n",
                 file_name.c_str());
-        preview.Deallocate();
+        preview_.Deallocate();
       }
-      preview_color = WP2::ToArgb32b(wp2_features.preview_color);
+      preview_color_ = ToArgb32b(wp2_features.preview_color);
     }
-    width = in.width();
-    height = in.height();
+    width_ = in_.width();
+    height_ = in_.height();
 
     if (!EncodeAndDecode()) return false;
   }
-  return (status == WP2_STATUS_OK);
+  return (status_ == WP2_STATUS_OK);
 }
 
 void Params::ShiftAlt() {
-  const WP2Status s = alt1.Swap(&alt2);
+  const WP2Status s = alt1_.Swap(&alt2_);
   (void)s;
   assert(s == WP2_STATUS_OK);
-  std::swap(alt1_msg, alt2_msg);
-  alt1_msg.clear();
-  alt1.Deallocate();
+  std::swap(alt1_msg_, alt2_msg_);
+  alt1_msg_.clear();
+  alt1_.Deallocate();
 }
 
 bool Params::SetBitstream(const char* const file_name) {
   std::string data;
-  status = WP2::IoUtilReadFile(file_name, &data);
-  if (status != WP2_STATUS_OK) {
+  status_ = IoUtilReadFile(file_name, &data);
+  if (status_ != WP2_STATUS_OK) {
     fprintf(stderr, "Could not read the file %s\n", file_name);
     return false;
   }
 
-  WP2::ArgbBuffer tmp;
-  status = WP2::Decode(data, &tmp);
-  if (status != WP2_STATUS_OK) {
+  ArgbBuffer tmp;
+  status_ = Decode(data, &tmp);
+  if (status_ != WP2_STATUS_OK) {
     fprintf(stderr, "Could not decode the file %s\n", file_name);
     return false;
   }
 
   ClearForcedElements();
-  alt1_msg.clear();
-  alt1.Deallocate();
-  alt2_msg.clear();
-  alt2.Deallocate();
+  alt1_msg_.clear();
+  alt1_.Deallocate();
+  alt2_msg_.clear();
+  alt2_.Deallocate();
 
-  view_only = true;
+  view_only_ = true;
   using std::swap;
-  swap(data, input);
+  swap(data, input_);
   data.clear();
-  status = tmp.Swap(&in);
-  return (status == WP2_STATUS_OK);
+  status_ = tmp.Swap(&in_);
+  return (status_ == WP2_STATUS_OK);
 }
 
 bool Params::SetAltFile(const char* const file_name) {
   ShiftAlt();
-  status = WP2::ReadImage(file_name, &alt1);
-  if (status != WP2_STATUS_OK) {
+  status_ = ReadImage(file_name, &alt1_);
+  if (status_ != WP2_STATUS_OK) {
     fprintf(stderr, "Could not decode the alternate file %s\n", file_name);
     return false;
   }
-  const uint32_t w = alt1.width(), h = alt1.height();
-  if (w != width || h != height) {
-    alt1.Deallocate();
-    fprintf(stderr, "Alternate picture has incompatible dimensions "
-                    " (%dx%d vs expected %dx%d)\n",
-            w, h, width, height);
+  const uint32_t w = alt1_.width(), h = alt1_.height();
+  if (w != width_ || h != height_) {
+    alt1_.Deallocate();
+    fprintf(stderr,
+            "Alternate picture has incompatible dimensions "
+            " (%dx%d vs expected %dx%d)\n",
+            w, h, width_, height_);
     return false;
   }
-  alt1_msg = SPrintf("- Alt Pic (%s) -", file_name);
+  alt1_msg_ = SPrintf("- Alt Pic (%s) -", file_name);
   return true;
 }
 
 // Copies the current canvas to the alternative buffer.
 bool Params::SetAltImage() {
-  if (show == Params::kAlt1 || show == Params::kAlt2) return false;
-  WP2::ArgbBuffer tmp;
+  if (show_ == kAlt1 || show_ == kAlt2) return false;
+  ArgbBuffer tmp;
   if (GetCurrentCanvas(&tmp)) {
     ShiftAlt();
-    status = tmp.IsView() ? alt1.CopyFrom(tmp) : alt1.Swap(&tmp);
-    if (status == WP2_STATUS_OK) alt1_msg = "- Saved canvas -";
+    status_ = tmp.IsView() ? alt1_.CopyFrom(tmp) : alt1_.Swap(&tmp);
+    if (status_ == WP2_STATUS_OK) alt1_msg_ = "- Saved canvas -";
   }
-  if (status != WP2_STATUS_OK) {
+  if (status_ != WP2_STATUS_OK) {
     fprintf(stderr, "Could not copy the alternate image\n");
     return false;
   }
@@ -1721,12 +1745,12 @@ bool Params::SetAltImage() {
 }
 
 bool Params::DumpCurrentCanvas(const char* const file_path) {
-  WP2::ArgbBuffer tmp;
+  ArgbBuffer tmp;
   if (GetCurrentCanvas(&tmp)) {
-    status = WP2::SaveImage(tmp, file_path, /*overwrite=*/true);
+    status_ = SaveImage(tmp, file_path, /*overwrite=*/true);
   }
 
-  if (status != WP2_STATUS_OK) {
+  if (status_ != WP2_STATUS_OK) {
     fprintf(stderr, "Could not dump the current canvas\n");
     return false;
   }
@@ -1734,47 +1758,46 @@ bool Params::DumpCurrentCanvas(const char* const file_path) {
 }
 
 // Returns the currently displayed buffer.
-const WP2::ArgbBuffer& Params::GetBuffer() const {
-  if (show == Params::kOriginal) return original;
-  if (show == Params::kPreview) return preview;
-  if (show == Params::kWebP) return webp;
-  if (show == Params::kAlt1 && !alt1.IsEmpty()) return alt1;
-  if (show == Params::kAlt2 && !alt2.IsEmpty()) return alt2;
-  if (show == Params::kCompressed) return out_yuv.IsEmpty() ? out : out_yuv;
-  if (WP2::VDMatch(dec_config, "")) return dec_config.info->debug_output;
-  if (WP2::VDMatch(enc_config, "")) return enc_config.info->debug_output;
-  return out;
+const ArgbBuffer& Params::GetBuffer() const {
+  if (show_ == kOriginal) return original_;
+  if (show_ == kPreview) return preview_;
+  if (show_ == kWebP) return webp_;
+  if (show_ == kAlt1 && !alt1_.IsEmpty()) return alt1_;
+  if (show_ == kAlt2 && !alt2_.IsEmpty()) return alt2_;
+  if (show_ == kCompressed) return out_yuv_.IsEmpty() ? out_ : out_yuv_;
+  if (VDMatch(dec_config_, "")) return dec_config_.info->debug_output;
+  if (VDMatch(enc_config_, "")) return enc_config_.info->debug_output;
+  return out_;
 }
 
 // Copies the current canvas to 'buffer'.
-bool Params::GetCurrentCanvas(WP2::ArgbBuffer* const buffer) {
-  if (show == Params::kPreviewColor) {
+bool Params::GetCurrentCanvas(ArgbBuffer* const buffer) {
+  if (show_ == kPreviewColor) {
     ShiftAlt();
-    status = buffer->Resize(out.width(), out.height());
-    if (status == WP2_STATUS_OK) buffer->Fill(preview_color);
+    status_ = buffer->Resize(out_.width(), out_.height());
+    if (status_ == WP2_STATUS_OK) buffer->Fill(preview_color_);
   } else if (GetBuffer().format() == buffer->format()) {
-    status = buffer->SetView(GetBuffer());
+    status_ = buffer->SetView(GetBuffer());
   } else {
-    status = buffer->ConvertFrom(GetBuffer());
+    status_ = buffer->ConvertFrom(GetBuffer());
   }
-  return (status == WP2_STATUS_OK);
+  return (status_ == WP2_STATUS_OK);
 }
 
 //------------------------------------------------------------------------------
 // Blocks
 
-// Same as glRectf() but with 'rect' in pixels, top-left being (0, 0).
-void glRect(const WP2::Rectangle& rect, uint32_t thickness = 1) {
-  const float x = 2.f * rect.x / kParams.width - 1.f;
+void Params::glRect(const Rectangle& rect, uint32_t thickness) const {
+  const float x = 2.f * rect.x / width_ - 1.f;
   // Compensate OpenGL bottom-left origin by shifting by one pixel vertically.
-  const float y = 1.f - 2.f * (rect.y + rect.height) / kParams.height -
-       1.f / kParams.viewport_height;
-  const float w = 2.f * rect.width / kParams.width;
-  const float h = 2.f * rect.height / kParams.height;
+  const float y =
+      1.f - 2.f * (rect.y + rect.height) / height_ - 1.f / viewport_height_;
+  const float w = 2.f * rect.width / width_;
+  const float h = 2.f * rect.height / height_;
 
   // Thickness
-  const float px_w = 2.f / kParams.viewport_width;
-  const float px_h = 2.f / kParams.viewport_height;
+  const float px_w = 2.f / viewport_width_;
+  const float px_h = 2.f / viewport_height_;
   for (uint32_t j = 0; j < thickness; ++j) {
     for (uint32_t i = 0; i < thickness; ++i) {
       glRectf(x + i * px_w, y - j * px_h, x + w + i * px_w, y + h - j * px_h);
@@ -1823,25 +1846,25 @@ class ParagraphMaker {
 };
 
 void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
-  if (display_block == kDisplayNone) return;
+  if (display_block_ == kDisplayNone) return;
 #if defined(WP2_BITTRACE)
-  assert(dinfo.store_blocks && einfo.store_blocks &&
-         einfo.blocks.size() == dinfo.blocks.size());
+  assert(dinfo_.store_blocks && einfo_.store_blocks &&
+         einfo_.blocks.size() == dinfo_.blocks.size());
   // Sort encoded and decoded blocks for easy comparison.
-  for (std::vector<WP2::BlockInfo>* blocks : {&dinfo.blocks, &einfo.blocks}) {
+  for (std::vector<BlockInfo>* blocks : {&dinfo_.blocks, &einfo_.blocks}) {
     std::sort(blocks->begin(), blocks->end(),
-              [](const WP2::BlockInfo& l, const WP2::BlockInfo& r) {
+              [](const BlockInfo& l, const BlockInfo& r) {
                 return (l.rect.x < r.rect.x) ||
                        (l.rect.x == r.rect.x && l.rect.y < r.rect.y);
               });
   }
 
   const char* const kEncNames[] = {"X", "Mtd0", "Mtd1", "DC  ", "Zero"};
-  const int selection_x = (int)dinfo.selection.x;
-  const int selection_y = (int)dinfo.selection.y;
-  for (uint32_t index = 0; index < dinfo.blocks.size(); ++index) {
-    const WP2::BlockInfo& b = dinfo.blocks[index];
-    const WP2::BlockInfo& b_enc = einfo.blocks[index];
+  const int selection_x = (int)dinfo_.selection.x;
+  const int selection_y = (int)dinfo_.selection.y;
+  for (uint32_t index = 0; index < dinfo_.blocks.size(); ++index) {
+    const BlockInfo& b = dinfo_.blocks[index];
+    const BlockInfo& b_enc = einfo_.blocks[index];
     assert(b.rect.x == b_enc.rect.x && b.rect.width == b_enc.rect.width &&
            b.rect.y == b_enc.rect.y && b.rect.height == b_enc.rect.height);
     assert(b.segment_id == b_enc.segment_id);
@@ -1852,7 +1875,7 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
 
     const bool block_selected = (bx <= selection_x && selection_x < bx + bw &&
                                  by <= selection_y && selection_y < by + bh);
-    if (display_block == kDisplayGrid || !block_selected) {
+    if (display_block_ == kDisplayGrid || !block_selected) {
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
       glColor4f(0.0f, 0.2f, 0.1f, 0.2f);
       // +1 width and height for a thinner border betweens blocks.
@@ -1861,7 +1884,7 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
     }
 
     bool forced = false;
-    for (const WP2::Rectangle& rect : einfo.force_partition) {
+    for (const Rectangle& rect : einfo_.force_partition) {
       if (rect.x == b.rect.x && rect.y == b.rect.y) {
         assert(rect.width == b.rect.width && rect.height == b.rect.height);
         forced = true;
@@ -1871,24 +1894,24 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
     msg->push_back(SPrintf("size: %2d x %2d  pos: %3d x %3d  %s",
                            bw, bh, bx, by, forced ? "(forced)" : ""));
     float disto[5];
-    const WP2::Rectangle rect{(uint32_t)bx, (uint32_t)by, (uint32_t)bw,
-                              (uint32_t)bh};
-    WP2_ASSERT_STATUS(kParams.out.GetDistortionBlackOrWhiteBackground(
-        kParams.in, rect, kParams.distortion_metric, disto));
-    msg->push_back(
-        SPrintf("bits:%5.1f (%.2f bpp) %s:%5.1f", b.bits, b.bits / (bw * bh),
-                kWP2MetricNames[kParams.distortion_metric], disto[4]));
+    const Rectangle rect{(uint32_t)bx, (uint32_t)by, (uint32_t)bw,
+                         (uint32_t)bh};
+    WP2_ASSERT_STATUS(out_.GetDistortionBlackOrWhiteBackground(
+        in_, rect, distortion_metric_, disto));
+    msg->push_back(SPrintf("bits:%5.1f (%.2f bpp) %s:%5.1f", b.bits,
+                           b.bits / (bw * bh), kMetricNames[distortion_metric_],
+                           disto[4]));
 
     // Isolate the bit costs about residuals (Y, U, V, A, remaining stuff).
     static constexpr uint32_t kAll = 4;
-    std::map<const std::string, WP2::LabelStats> bit_traces[5];
+    std::map<const std::string, LabelStats> bit_traces[5];
     double bit_sums[5] = {0};
 
     for (const auto& bt : b.bit_traces) {
       std::string label = bt.first;
       uint32_t channel;
       for (channel = 0; channel < kAll; ++channel) {
-        const std::string prefix = WP2::kCoeffsStr[channel];
+        const std::string prefix = kCoeffsStr[channel];
 
         if (label.size() >= prefix.size() &&
             std::strncmp(label.c_str(), prefix.c_str(), prefix.size()) == 0) {
@@ -1910,10 +1933,10 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
     }
 
     ParagraphMaker pm;
-    if (display_block == kDisplayHeader) {
+    if (display_block_ == kDisplayHeader) {
       pm.Init("Costs: ");
       for (uint32_t c = 0; c < (b.has_lossy_alpha ? kAll : 3); ++c) {
-        pm.AppendToList(SPrintf("%s: %.1f", WP2::kCoeffsStr[c], bit_sums[c]));
+        pm.AppendToList(SPrintf("%s: %.1f", kCoeffsStr[c], bit_sums[c]));
       }
       for (const auto& p : bit_traces[kAll]) {
         pm.AppendToList(SPrintf("%s: %.1f", p.first.c_str(), p.second.bits));
@@ -1926,20 +1949,20 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
                              WP2TransformNames[b.tf_x],
                              WP2TransformNames[b.tf_y]));
       for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
-        if (b.encoding_method[WP2::kYChannel][tf_i] == -1) continue;
+        if (b.encoding_method[kYChannel][tf_i] == -1) continue;
         msg->push_back(
             SPrintf("Transform %u. Mthd: Y=%s U=%s V=%s (A=%s)", tf_i,
-                    kEncNames[b.encoding_method[WP2::kYChannel][tf_i] + 1],
-                    kEncNames[b.encoding_method[WP2::kUChannel][tf_i] + 1],
-                    kEncNames[b.encoding_method[WP2::kVChannel][tf_i] + 1],
-                    kEncNames[b.encoding_method[WP2::kAChannel][tf_i] + 1]));
+                    kEncNames[b.encoding_method[kYChannel][tf_i] + 1],
+                    kEncNames[b.encoding_method[kUChannel][tf_i] + 1],
+                    kEncNames[b.encoding_method[kVChannel][tf_i] + 1],
+                    kEncNames[b.encoding_method[kAChannel][tf_i] + 1]));
       }
-    } else if (display_block <= kDisplayACoeffs) {
-      if (display_block == kDisplayACoeffs && !b.has_lossy_alpha) {
+    } else if (display_block_ <= kDisplayACoeffs) {
+      if (display_block_ == kDisplayACoeffs && !b.has_lossy_alpha) {
         msg->push_back("- no alpha -");
       } else {
-        const uint32_t channel = (uint32_t)(display_block - kDisplayYCoeffs);
-        msg->push_back(SPrintf("%s channel.", WP2::kChannelStr[channel]));
+        const uint32_t channel = (uint32_t)(display_block_ - kDisplayYCoeffs);
+        msg->push_back(SPrintf("%s channel.", kChannelStr[channel]));
         for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
           if (!b.residual_info[channel][tf_i].empty()) {
             pm.Init();
@@ -1983,24 +2006,22 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
                       kEncNames[b.encoding_method[channel][tf_i]] + 1));
           const uint32_t scale =
               (b.is420 && (channel == 1 || channel == 2)) ? 2 : 1;
-          const WP2::BlockSize split_size =
-              WP2::GetSplitSize(WP2::GetBlockSize(bw / WP2::kMinBlockSizePix,
-                                                  bh / WP2::kMinBlockSizePix),
-                                b.split_tf[channel]);
-          const uint32_t w = WP2::BlockWidthPix(split_size) / scale;
-          const uint32_t h = WP2::BlockHeightPix(split_size) / scale;
-          const bool show_original = (kParams.show == Params::kOriginal);
+          const BlockSize split_size = GetSplitSize(
+              GetBlockSize(bw / kMinBlockSizePix, bh / kMinBlockSizePix),
+              b.split_tf[channel]);
+          const uint32_t w = BlockWidthPix(split_size) / scale;
+          const uint32_t h = BlockHeightPix(split_size) / scale;
+          const bool show_original = (show_ == kOriginal);
           if (show_original || b.encoding_method[channel][tf_i] !=
-                                   (int8_t)WP2::EncodingMethod::kAllZero) {
-            int32_t res[WP2::kMaxBlockSizePix2];
+                                   (int8_t)EncodingMethod::kAllZero) {
+            int32_t res[kMaxBlockSizePix2];
             const uint32_t num_coeffs = w * h;
             std::copy(&b_enc.original_res[channel][tf_i][0],
                       &b_enc.original_res[channel][tf_i][0] + num_coeffs,
                       &res[0]);
 
             const bool reduced_transform =
-                (channel == WP2::kUChannel || channel == WP2::kVChannel) &&
-                b_enc.is420;
+                (channel == kUChannel || channel == kVChannel) && b_enc.is420;
             WP2Transform2D(res, (WP2TransformType)b_enc.tf_x,
                            (WP2TransformType)b_enc.tf_y, w, h, res,
                            reduced_transform);
@@ -2035,7 +2056,7 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
           }
         }
       }
-    } else if (display_block == kDisplayPredModes) {
+    } else if (display_block_ == kDisplayPredModes) {
       msg->push_back(SPrintf("Chroma prediction mode: %d", b.uv_pred));
       msg->push_back(SPrintf("Luma prediction: %d", b.y_pred));
       if (b.has_lossy_alpha) {
@@ -2047,17 +2068,17 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
       msg->push_back(b.y_context_is_constant ? "Y context is constant"
                                              : "Y context is not constant");
       const int optimize_modes =
-          (b.y_context_is_constant || enc_config.effort == 0) ? 0
-          : (enc_config.effort == 1)                          ? 1
-                                                              : 2;
-      msg->push_back(SPrintf("OptimizeModes%d() Y "
-                             "score: %.1f (%.1f per pixel)",
-                             optimize_modes,
-                             b_enc.pred_scores[WP2::kYChannel],
-                             b_enc.pred_scores[WP2::kYChannel] / (bw * bh)));
+          (b.y_context_is_constant || enc_config_.effort == 0) ? 0
+          : (enc_config_.effort == 1)                          ? 1
+                                                               : 2;
+      msg->push_back(
+          SPrintf("OptimizeModes%d() Y "
+                  "score: %.1f (%.1f per pixel)",
+                  optimize_modes, b_enc.pred_scores[kYChannel],
+                  b_enc.pred_scores[kYChannel] / (bw * bh)));
       msg->push_back(SPrintf("FindBestUVModes() score: %.1f (%.1f per pixel)",
-                             b_enc.pred_scores[WP2::kUChannel],
-                             b_enc.pred_scores[WP2::kUChannel] / (bw * bh)));
+                             b_enc.pred_scores[kUChannel],
+                             b_enc.pred_scores[kUChannel] / (bw * bh)));
     }
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glColor4f(1.f, 0.f, 0.f, 0.5f);  // red
@@ -2067,28 +2088,29 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
 }
 
 void Params::ClearForcedElements() {
-  force_partition.clear();
-  force_segment.clear();
-  force_predictor.clear();
-  forcing_block = WP2::Rectangle();
+  force_partition_.clear();
+  force_segment_.clear();
+  force_predictor_.clear();
+  forcing_block_ = Rectangle();
 }
 
 bool Params::IsDebugViewVisible() const {
-  return (show == kDebug || show == kInfo || show == kHelp || show == kMenu);
+  return (show_ == kDebug || show_ == kInfo || show_ == kHelp ||
+          show_ == kMenu);
 }
 
 bool Params::IsPartitionVisible() const {
-  return (display_block != kDisplayNone ||
-          (IsDebugViewVisible() && WP2::VDMatch(dec_config, "partition"))) &&
+  return (display_block_ != kDisplayNone ||
+          (IsDebugViewVisible() && VDMatch(dec_config_, "partition"))) &&
          !IsSegmentVisible() && !IsPredictorVisible();
 }
 
 bool Params::IsSegmentVisible() const {
-  return IsDebugViewVisible() && WP2::VDMatch(dec_config, "segment-ids");
+  return IsDebugViewVisible() && VDMatch(dec_config_, "segment-ids");
 }
 
 bool Params::IsPredictorVisible() const {
-  return IsDebugViewVisible() && WP2::VDMatch(dec_config, "prediction");
+  return IsDebugViewVisible() && VDMatch(dec_config_, "prediction");
 }
 
 void Params::DisplayPartition() const {
@@ -2100,19 +2122,19 @@ void Params::DisplayPartition() const {
 
   // Encoded forced blocks.
   glColor4f(1.0f, 0.2f, 1.0f, 1.0f);
-  for (const WP2::Rectangle& rect : einfo.force_partition) glRect(rect, thick);
+  for (const Rectangle& rect : einfo_.force_partition) glRect(rect, thick);
 
   glLineStipple(2 * thick, 0xAAAA);
   glEnable(GL_LINE_STIPPLE);
 
   // All blocks, including those that haven't been applied yet.
   glColor4f(0.6f, 1.0f, 0.6f, 1.0f);
-  for (const WP2::Rectangle& rect : force_partition) glRect(rect, thick);
+  for (const Rectangle& rect : force_partition_) glRect(rect, thick);
 
   // If a block is currently being drawn with the mouse.
-  if (forcing_block.width > 0 && forcing_block.height > 0) {
+  if (forcing_block_.width > 0 && forcing_block_.height > 0) {
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-    glRect(forcing_block, thick);
+    glRect(forcing_block_, thick);
   }
 
   glDisable(GL_LINE_STIPPLE);
@@ -2127,14 +2149,14 @@ void Params::DisplayForcedSegments() const {
   const uint32_t thick = getLineThickness();
   glLineStipple(2 * thick, 0xAAAA);
 
-  for (const auto& segment : force_segment) {
-    for (const WP2::BlockInfo& block : einfo.blocks) {
+  for (const auto& segment : force_segment_) {
+    for (const BlockInfo& block : einfo_.blocks) {
       if (block.rect.Contains(segment.x, segment.y)) {
-        const WP2::Rectangle rect{block.rect.x, block.rect.y,
-                                  block.rect.width - 1, block.rect.height - 1};
+        const Rectangle rect{block.rect.x, block.rect.y, block.rect.width - 1,
+                             block.rect.height - 1};
         glColor4f(0.f, 0.f, 0.f, 1.f);
         glRect(rect, thick * 2);
-        const WP2::Argb32b color = WP2::kSegmentColors[segment.segment_id];
+        const Argb32b color = kSegmentColors[segment.segment_id];
         glColor4f(color.r / 255.f, color.g / 255.f, color.b / 255.f, 1.f);
         glRect(rect, thick);
         break;
@@ -2144,31 +2166,20 @@ void Params::DisplayForcedSegments() const {
 #endif
 }
 
-#ifdef WP2_BITTRACE
-static const std::vector<std::string>& GetPredictors(
-    const WP2::BlockInfo& block, WP2::Channel channel) {
-  const WP2::DecoderInfo& info = *kParams.dec_config.info;
-  return (channel == WP2::kYChannel)
-             ? info.y_predictors
-             : (channel == WP2::kAChannel) ? info.a_predictors
-                                           : info.uv_predictors;
-}
-#endif
-
 void Params::DisplayForcedPredictors() const {
   if (!IsPredictorVisible()) return;
 
 #if defined(WP2_BITTRACE)
-  WP2::Channel channel = WP2::VDChannel(kParams.dec_config);
-  if (channel == WP2::kVChannel) channel = WP2::kUChannel;
+  Channel channel = VDChannel(dec_config_);
+  if (channel == kVChannel) channel = kUChannel;
 
   glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-  for (const auto& predictor : force_predictor) {
+  for (const auto& predictor : force_predictor_) {
     if (predictor.channel != channel) continue;
-    for (const WP2::BlockInfo& block : einfo.blocks) {
+    for (const BlockInfo& block : einfo_.blocks) {
       if (block.rect.Contains(predictor.x, predictor.y)) {
-        if (channel == WP2::kYChannel && block.y_context_is_constant) {
+        if (channel == kYChannel && block.y_context_is_constant) {
           glColor4f(1.f, 0.f, 0.f, 1.f);
         } else {
           glColor4f(0.f, 1.f, 0.f, 1.f);
@@ -2176,7 +2187,9 @@ void Params::DisplayForcedPredictors() const {
         glRect(block.rect, 4.f);
 
         const std::vector<std::string>& predictors =
-            GetPredictors(block, channel);
+            (channel == kYChannel)   ? dinfo_.y_predictors
+            : (channel == kAChannel) ? dinfo_.a_predictors
+                                     : dinfo_.uv_predictors;
         const uint32_t predictor_id =
             std::min(predictor.predictor_id, (uint8_t)(predictors.size() - 1));
 
@@ -2186,8 +2199,8 @@ void Params::DisplayForcedPredictors() const {
 
         const std::string& title = predictors[predictor_id];
         glColor4f(1.f, 0.f, 1.f, 1.f);
-        PrintString((predictor.x) * 2.f / kParams.width - 1,
-                    1 - (predictor.y) * 2.f / kParams.height, title);
+        PrintString((predictor.x) * 2.f / width_ - 1,
+                    1 - (predictor.y) * 2.f / height_, title);
 
         break;
       }
@@ -2197,27 +2210,27 @@ void Params::DisplayForcedPredictors() const {
 }
 
 uint32_t Params::getLineThickness() const {
-  return (display_block != kDisplayNone)
+  return (display_block_ != kDisplayNone)
              ? 1u
-             : std::max(1u, std::min(viewport_width / width,
-                                     viewport_height / height));
+             : std::max(1u, std::min(viewport_width_ / width_,
+                                     viewport_height_ / height_));
 }
 
 bool Params::IsHamburgerMenuVisible() const {
-  return (show == kDebug || show == kMenu ||
-          (show == kOriginal && display_block != kDisplayNone)) &&
-         (forcing_block.width == 0 || forcing_block.height == 0);
+  return (show_ == kDebug || show_ == kMenu ||
+          (show_ == kOriginal && display_block_ != kDisplayNone)) &&
+         (forcing_block_.width == 0 || forcing_block_.height == 0);
 }
 
 //------------------------------------------------------------------------------
 
-bool Params::ReadPartition(bool read_only) {
-  force_partition.clear();
-  if (!WP2ReadPartition(partition_file_path, read_only, &force_partition)) {
+bool Params::ReadAndConvertPartition(bool read_only) {
+  force_partition_.clear();
+  if (!ReadPartition(partition_file_path_, read_only, &force_partition_)) {
     return false;
   }
-  WP2ConvertPartition(in.width(), in.height(), enc_config.partition_set,
-                      /*ignore_invalid=*/false, &force_partition);
+  ConvertPartition(in_.width(), in_.height(), enc_config_.partition_set,
+                   /*ignore_invalid=*/false, &force_partition_);
   return true;
 }
 
@@ -2242,24 +2255,23 @@ void ModifyR(T& value, T max, bool increment, int increment_step = 1) {
   }
 }
 
-// Reshapes the window based on current image size and zoom level.
-void ReshapeWindow() {
-  kParams.ApplyZoomLevel();
-  glutReshapeWindow(kParams.viewport_width, kParams.viewport_height);
+void Params::ReshapeWindow() {
+  ApplyZoomLevel();
+  glutReshapeWindow(viewport_width_, viewport_height_);
   // Update viewport_width/height based on actual window dimensions. These can
   // be different from the ones we requested because of the size of the screen
   // or because the window is in fullscreen mode.
-  kParams.viewport_width = glutGet(GLUT_WINDOW_WIDTH);
-  kParams.viewport_height = glutGet(GLUT_WINDOW_HEIGHT);
+  viewport_width_ = glutGet(GLUT_WINDOW_WIDTH);
+  viewport_height_ = glutGet(GLUT_WINDOW_HEIGHT);
   glutPostRedisplay();
 }
 
-void HandleKey(unsigned char key, int pos_x, int pos_y) {
-  kParams.mouse_x = pos_x;
-  kParams.mouse_y = pos_y;
+void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
+  mouse_x_ = pos_x;
+  mouse_y_ = pos_y;
 
   // Ignore key strokes if the menu is opened.
-  if (kParams.show == Params::kMenu) return;
+  if (show_ == kMenu) return;
 
   const bool is_ctrl = (glutGetModifiers() == GLUT_ACTIVE_CTRL);
   const bool is_alt = (glutGetModifiers() == GLUT_ACTIVE_ALT);
@@ -2267,20 +2279,20 @@ void HandleKey(unsigned char key, int pos_x, int pos_y) {
 
   // first, the keys with special modifiers
   if (is_alt && key >= '0' && key <= '9') {
-    if (key == '1' && !kParams.alt1.IsEmpty()) {
-      kParams.show = Params::kAlt1;
-    } else if (key == '2' && !kParams.alt2.IsEmpty()) {
-      kParams.show = Params::kAlt2;
+    if (key == '1' && !alt1_.IsEmpty()) {
+      show_ = kAlt1;
+    } else if (key == '2' && !alt2_.IsEmpty()) {
+      show_ = kAlt2;
     }
     glutPostRedisplay();
   } else if (key == 'q' || key == 'Q' || key == 27 /* Esc */) {
-    if (key == 27 /* Esc */ && (kParams.einfo.selection.width > 0 ||
-                                kParams.einfo.selection.height > 0)) {
-      kParams.einfo.selection = kParams.dinfo.selection = {0, 0, 0, 0};
-      if (WP2::VDMatch(kParams.enc_config, "encoder")) {
-        if (!kParams.EncodeAndDecode()) return;
+    if (key == 27 /* Esc */ &&
+        (einfo_.selection.width > 0 || einfo_.selection.height > 0)) {
+      einfo_.selection = dinfo_.selection = {0, 0, 0, 0};
+      if (VDMatch(enc_config_, "encoder")) {
+        if (!EncodeAndDecode()) return;
       } else {
-        if (!kParams.DecodeOutput()) return;
+        if (!DecodeOutput()) return;
       }
       AddInfo("Selection cleared. Press escape again to quit.");
     } else {
@@ -2291,54 +2303,53 @@ void HandleKey(unsigned char key, int pos_x, int pos_y) {
 #endif
     }
   } else if (key == ' ') {
-    kParams.show = Params::kOriginal;
-    if (!kParams.GetOriginal()) AddInfo("An error occurred");
+    show_ = kOriginal;
+    if (!GetOriginal()) AddInfo("An error occurred");
     glutPostRedisplay();
   } else if (key == 'W' || key == 'w') {
-    if (!kParams.CompressWebP(key == 'w')) AddInfo("WebP not available");
+    if (!EncodeWebP(key == 'w')) AddInfo("WebP not available");
     glutPostRedisplay();
   } else if (key == 'r' || key == 'R') {
     const bool binary_search = is_alt;
     const bool copy_partition = (key == 'R');
-    if (binary_search
-            ? kParams.CompressAV1ToMatch(copy_partition, kParams.output.size())
-            : kParams.CompressAV1(copy_partition, kParams.quality)) {
+    if (binary_search ? EncodeAV1ToMatch(copy_partition, output_.size())
+                      : EncodeAV1(copy_partition, quality_)) {
       AddInfo(copy_partition ? "Copied partition (press 'c' to use it)"
                              : "Stored AV1 as alt-1 image");
     } else {
       AddInfo("AV1 not available");
     }
     glutPostRedisplay();
-  } else if (key == '\\' && !kParams.preview.IsEmpty()) {
-    kParams.show = Params::kPreview;
+  } else if (key == '\\' && !preview_.IsEmpty()) {
+    show_ = kPreview;
     glutPostRedisplay();
-  } else if (key == '|' && kParams.preview_color.a == 0xFFu) {
-    kParams.show = Params::kPreviewColor;
+  } else if (key == '|' && preview_color_.a == 0xFFu) {
+    show_ = kPreviewColor;
     glutPostRedisplay();
   } else if (key == 13) {  // return
-    if (!kParams.alt1.IsEmpty()) {
-      kParams.show = Params::kAlt1;
+    if (!alt1_.IsEmpty()) {
+      show_ = kAlt1;
       glutPostRedisplay();
     }
   } else if (key == '\t') {
-    kParams.show = Params::kCompressed;
-    if (!kParams.GetCompressed()) AddInfo("Unable to display compressed image");
+    show_ = kCompressed;
+    if (!GetCompressed()) AddInfo("Unable to display compressed image");
     glutPostRedisplay();
   } else if (key == 'a' || key == 'A') {
     if (is_alt) {
-      if (kParams.SetAltFile(kParams.dump_png_path)) {
-        AddInfo(SPrintf("Loaded alt-1 from '%s'", kParams.dump_png_path));
+      if (SetAltFile(dump_png_path_)) {
+        AddInfo(SPrintf("Loaded alt-1 from '%s'", dump_png_path_));
       } else {
-        AddInfo(SPrintf("Could not load '%s'", kParams.dump_png_path));
+        AddInfo(SPrintf("Could not load '%s'", dump_png_path_));
       }
     } else if (key == 'A') {
-      if (kParams.DumpCurrentCanvas(kParams.dump_png_path)) {
-        AddInfo(SPrintf("Dumped canvas to '%s'", kParams.dump_png_path));
+      if (DumpCurrentCanvas(dump_png_path_)) {
+        AddInfo(SPrintf("Dumped canvas to '%s'", dump_png_path_));
       } else {
-        AddInfo(SPrintf("Could not dump to '%s'", kParams.dump_png_path));
+        AddInfo(SPrintf("Could not dump to '%s'", dump_png_path_));
       }
     } else {
-      if (kParams.SetAltImage()) {
+      if (SetAltImage()) {
         AddInfo("Saved canvas to alt-1 image");
       } else {
         AddInfo("Unable to save canvas");
@@ -2346,110 +2357,103 @@ void HandleKey(unsigned char key, int pos_x, int pos_y) {
       glutPostRedisplay();
     }
   } else if (key == 'b' || key == 'B') {
-    const bool need_update = (kParams.dinfo.store_blocks == 0);
-    Modify(kParams.display_block, Params::kDisplayNum, key == 'b');
-    kParams.dinfo.store_blocks =
-        (kParams.display_block != Params::kDisplayNone);
+    const bool need_update = (dinfo_.store_blocks == 0);
+    Modify(display_block_, kDisplayNum, key == 'b');
+    dinfo_.store_blocks = (display_block_ != kDisplayNone);
     if (need_update) {
-      if (!kParams.DecodeOutput()) return;
+      if (!DecodeOutput()) return;
     }
     glutPostRedisplay();
   } else if (key == 'E' || key == 'e') {
     std::string selection =
-        GetLeaf(kParams.menu_selection, /*leaf_offset=*/(key == 'e') ? 1 : -1);
+        GetLeaf(menu_selection_, /*leaf_offset=*/(key == 'e') ? 1 : -1);
     if (selection.find("error-map") != 0) {  // NOLINT
       selection = "error-map/PSNR";
     }
     SetMenuSelection(selection);
-    if (!kParams.DecodeOutput()) return;
+    if (!DecodeOutput()) return;
   } else if (key == 's' || key == 'S') {
-    ModifyR(kParams.enc_config.effort, 10, key == 's');
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(SPrintf("Effort: %d", kParams.enc_config.effort));
+    ModifyR(enc_config_.effort, 10, key == 's');
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("Effort: %d", enc_config_.effort));
   } else if (key == 'o' || key == 'O') {
-    ModifyR(kParams.background, Params::kBackgroundNum, key == 'o');
+    ModifyR(background_, kBackgroundNum, key == 'o');
     const char* const kBackgroundName[] = {"Checkerboard", "Clearly White",
                                            "Just Black", "Not Pink"};
-    STATIC_ASSERT_ARRAY_SIZE(kBackgroundName, Params::kBackgroundNum);
-    SetMessage(SPrintf("Background: %s", kBackgroundName[kParams.background]));
+    STATIC_ASSERT_ARRAY_SIZE(kBackgroundName, kBackgroundNum);
+    SetMessage(SPrintf("Background: %s", kBackgroundName[background_]));
   } else if (key == 'l') {
-    if (kParams.SetBitstream(kParams.dump_wp2_path)) {
-      AddInfo(SPrintf("Loaded file from '%s'", kParams.dump_wp2_path));
-      if (!kParams.EncodeAndDecode()) return;  // 'view_only' so just copy.
+    if (SetBitstream(dump_wp2_path_)) {
+      AddInfo(SPrintf("Loaded file from '%s'", dump_wp2_path_));
+      if (!EncodeAndDecode()) return;  // 'view_only' so just copy.
     } else {
-      AddInfo(SPrintf("Couldn't load file from '%s'", kParams.dump_wp2_path));
+      AddInfo(SPrintf("Couldn't load file from '%s'", dump_wp2_path_));
     }
   } else if (key == 'L') {
-    if (kParams.output.empty() ||
-        WP2::IoUtilWriteFile(kParams.output, kParams.dump_wp2_path,
-                             /*overwrite=*/true) != WP2_STATUS_OK) {
-      AddInfo(SPrintf("Couldn't save dump file '%s'", kParams.dump_wp2_path));
+    if (output_.empty() ||
+        IoUtilWriteFile(output_, dump_wp2_path_,
+                        /*overwrite=*/true) != WP2_STATUS_OK) {
+      AddInfo(SPrintf("Couldn't save dump file '%s'", dump_wp2_path_));
     } else {
-      AddInfo(SPrintf("Saved bits as '%s'", kParams.dump_wp2_path));
+      AddInfo(SPrintf("Saved bits as '%s'", dump_wp2_path_));
     }
   } else if (key == 'M' || key == 'm') {
-    kParams.enc_config.use_random_matrix =
-        !kParams.enc_config.use_random_matrix;
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(
-        SPrintf("Use random matrix: %d", kParams.enc_config.use_random_matrix));
+    enc_config_.use_random_matrix = !enc_config_.use_random_matrix;
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("Use random matrix: %d", enc_config_.use_random_matrix));
   } else if (key == 'x' || key == 'X') {
-    Modify(kParams.wp2dbg_value, 2u, key == 'x');
-    setenv("WP2DBG", (kParams.wp2dbg_value == 0) ? "0" : "1", 1);
-    if (!kParams.EncodeAndDecode()) return;
-    AddInfo(SPrintf("export WP2DBG=%d", kParams.wp2dbg_value));
+    Modify(wp2dbg_value_, 2u, key == 'x');
+    setenv("WP2DBG", (wp2dbg_value_ == 0) ? "0" : "1", 1);
+    if (!EncodeAndDecode()) return;
+    AddInfo(SPrintf("export WP2DBG=%d", wp2dbg_value_));
   } else if (key == 'f' || key == 'F') {
     if (glutGetModifiers() == GLUT_ACTIVE_ALT) {
-      kParams.dec_config.enable_restoration_filter =
-          !kParams.dec_config.enable_restoration_filter;
+      dec_config_.enable_restoration_filter =
+          !dec_config_.enable_restoration_filter;
     } else if (glutGetModifiers() == (GLUT_ACTIVE_ALT | GLUT_ACTIVE_SHIFT)) {
-      kParams.enc_config.enable_alpha_filter =
-          !kParams.enc_config.enable_alpha_filter;
+      enc_config_.enable_alpha_filter = !enc_config_.enable_alpha_filter;
     } else if (key == 'F') {
-      kParams.dec_config.enable_directional_filter =
-          !kParams.dec_config.enable_directional_filter;
+      dec_config_.enable_directional_filter =
+          !dec_config_.enable_directional_filter;
     } else {
-      kParams.dec_config.enable_deblocking_filter =
-          !kParams.dec_config.enable_deblocking_filter;
+      dec_config_.enable_deblocking_filter =
+          !dec_config_.enable_deblocking_filter;
     }
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(
-        SPrintf("Filters: dblk=%s, drct=%s, rstr=%s, alpha=%s",
-                kOnOff[kParams.dec_config.enable_deblocking_filter],
-                kOnOff[kParams.dec_config.enable_directional_filter],
-                kOnOff[kParams.dec_config.enable_restoration_filter],
-                kOnOff[kParams.enc_config.enable_alpha_filter]));
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("Filters: dblk=%s, drct=%s, rstr=%s, alpha=%s",
+                       kOnOff[dec_config_.enable_deblocking_filter],
+                       kOnOff[dec_config_.enable_directional_filter],
+                       kOnOff[dec_config_.enable_restoration_filter],
+                       kOnOff[enc_config_.enable_alpha_filter]));
   } else if (key == 'g' || key == 'G') {
     if (key == 'G') {
-      kParams.dec_config.grain_amplitude = 0;
+      dec_config_.grain_amplitude = 0;
     } else {
-      ModifyR(kParams.dec_config.grain_amplitude, (uint8_t)101, false, 20);
+      ModifyR(dec_config_.grain_amplitude, (uint8_t)101, false, 20);
     }
-    kParams.enc_config.store_grain = (kParams.dec_config.grain_amplitude > 0);
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(
-        SPrintf("Grain amplitude: %d", kParams.dec_config.grain_amplitude));
+    enc_config_.store_grain = (dec_config_.grain_amplitude > 0);
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("Grain amplitude: %d", dec_config_.grain_amplitude));
   } else if (key == 'c' || key == 'C') {
-    if (!kParams.EncodeAndDecode()) return;
-    AddInfo(SPrintf("Forcing %zu blocks %zu segments %zu predictors",
-                    kParams.einfo.force_partition.size(),
-                    kParams.einfo.force_segment.size(),
-                    kParams.einfo.force_predictor.size()));
+    if (!EncodeAndDecode()) return;
+    AddInfo(SPrintf("Forcing %u blocks %u segments %u predictors",
+                    (uint32_t)einfo_.force_partition.size(),
+                    (uint32_t)einfo_.force_segment.size(),
+                    (uint32_t)einfo_.force_predictor.size()));
   } else if (key == 'd') {
-    EXIT_IF_FALSE(
-        WP2WritePartition(kParams.force_partition, kParams.partition_file_path),
-        "Error: Unable to write partition file");
-    AddInfo(SPrintf("Dumped %zu blocks", kParams.force_partition.size()));
+    EXIT_IF_FALSE(WritePartition(force_partition_, partition_file_path_),
+                  "Error: Unable to write partition file");
+    AddInfo(SPrintf("Dumped %u blocks", (uint32_t)force_partition_.size()));
   } else if (key == 'D') {
-    if (kParams.ReadPartition(/*read_only=*/true)) {
-      AddInfo(SPrintf("Loaded %zu blocks", kParams.force_partition.size()));
+    if (ReadAndConvertPartition(/*read_only=*/true)) {
+      AddInfo(SPrintf("Loaded %u blocks", (uint32_t)force_partition_.size()));
     } else {
       AddInfo("Error: Unable to parse partition file");
     }
   } else if (key == '+' || key == '_') {
-    const int file = (int)kParams.current_file + (key == '+' ? 1 : -1);
-    if (file >= 0 && file < (int)kParams.files.size()) {
-      if (kParams.SetCurrentFile(file)) {
+    const int file = (int)current_file_ + (key == '+' ? 1 : -1);
+    if (file >= 0 && file < (int)files_.size()) {
+      if (SetCurrentFile(file)) {
         ReshapeWindow();
       } else {
         AddInfo(SPrintf("Unable to read file %d", file));
@@ -2458,184 +2462,177 @@ void HandleKey(unsigned char key, int pos_x, int pos_y) {
       AddInfo(SPrintf("File %d is not referenced", file));
     }
   } else if (key == 'i' || key == 'I') {
-    if (kParams.show != Params::kInfo) {
-      kParams.show = Params::kInfo;
-      kParams.show_interface = true;
-      kParams.display_block = Params::kDisplayNone;
+    if (show_ != kInfo) {
+      show_ = kInfo;
+      show_interface_ = true;
+      display_block_ = kDisplayNone;
       if (key == 'I') {
-        if (!kParams.ComputeYUVDistortion()) return;
+        if (!ComputeYUVDistortion()) return;
       } else {
-        kParams.yuv_distortion[0] = 0.f;
-        kParams.yuv_distortion[1] = 0.f;
-        kParams.yuv_distortion[2] = 0.f;
+        yuv_distortion_[0] = 0.f;
+        yuv_distortion_[1] = 0.f;
+        yuv_distortion_[2] = 0.f;
       }
     } else {
-      kParams.show = Params::kDebug;
+      show_ = kDebug;
     }
     glutPostRedisplay();
   } else if (key == 't' || key == 'T') {
-    Modify(kParams.enc_config.segment_id_mode, 3u, key == 't');
-    if (!kParams.EncodeAndDecode()) return;
+    Modify(enc_config_.segment_id_mode, 3u, key == 't');
+    if (!EncodeAndDecode()) return;
     SetMessage(SPrintf("use_segment_id_mode: %s",
-                       kSegmentModes[kParams.enc_config.segment_id_mode]));
+                       kSegmentModes[enc_config_.segment_id_mode]));
   } else if (key == 'n' || key == 'N') {
-    if (kParams.show != Params::kInfo) {
-      kParams.show = Params::kInfo;
-      kParams.show_interface = true;
-      kParams.display_block = Params::kDisplayNone;
+    if (show_ != kInfo) {
+      show_ = kInfo;
+      show_interface_ = true;
+      display_block_ = kDisplayNone;
     }
-    Modify(kParams.distortion_metric, WP2::NUM_METRIC_TYPES, key == 'n');
-    if (!kParams.DecodeOutput()) return;
+    Modify(distortion_metric_, NUM_METRIC_TYPES, key == 'n');
+    if (!DecodeOutput()) return;
     glutPostRedisplay();
   } else if (key == 'h') {
-    if (kParams.show != Params::kHelp) {
-      kParams.show = Params::kHelp;
-      kParams.show_interface = true;
-      kParams.display_block = Params::kDisplayNone;
+    if (show_ != kHelp) {
+      show_ = kHelp;
+      show_interface_ = true;
+      display_block_ = kDisplayNone;
     } else {
-      kParams.show = Params::kDebug;
+      show_ = kDebug;
     }
     glutPostRedisplay();
   } else if (key == 'H') {
-    kParams.show_interface = !kParams.show_interface;
+    show_interface_ = !show_interface_;
     glutPostRedisplay();
   } else if (key == '1' || key == '!') {
-    Modify(kParams.enc_config.csp_type, WP2::kNumCspTypes, key == '1');
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(SPrintf("CSP type: %s",
-                       kCSPString[(uint32_t)kParams.enc_config.csp_type]));
+    Modify(enc_config_.csp_type, kNumCspTypes, key == '1');
+    if (!EncodeAndDecode()) return;
+    SetMessage(
+        SPrintf("CSP type: %s", kCSPString[(uint32_t)enc_config_.csp_type]));
   } else if (key == '2' || key == '@') {
-    Modify(kParams.enc_config.uv_mode, WP2::EncoderConfig::NumUVMode,
-           key == '2');
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(
-        SPrintf("UV Mode: %s", kUVModeString[kParams.enc_config.uv_mode]));
+    Modify(enc_config_.uv_mode, EncoderConfig::NumUVMode, key == '2');
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("UV Mode: %s", kUVModeString[enc_config_.uv_mode]));
   } else if (key == '3' || key == '#') {
-    Modify(kParams.enc_config.tile_shape, WP2::NUM_TILE_SHAPES,
-           key == '3');
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(SPrintf("Tile shape: %s",
-                       kTileShapeString[kParams.enc_config.tile_shape]));
-  } else if (key == '4' || key == '$') {
-    Modify(kParams.enc_config.partition_method, WP2::NUM_PARTITION_METHODS,
-           key == '4');
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(SPrintf(
-        "Partition method: %s",
-        WP2::kPartitionMethodString[kParams.enc_config.partition_method]));
-  } else if (key == '5' || key == '%') {
-    Modify(kParams.enc_config.partition_set, WP2::NUM_PARTITION_SETS,
-           key == '5');
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(SPrintf("Partition set: %s",
-                       kPartitionSetString[kParams.enc_config.partition_set]));
-  } else if (key == '6' || key == '^') {
-    kParams.enc_config.partition_snapping =
-        !kParams.enc_config.partition_snapping;
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(SPrintf("Partition snapping: %s",
-                       kOnOff[kParams.enc_config.partition_snapping]));
-  } else if (key == '7' || key == '&') {
-    kParams.enc_config.segments -= 1;  // 'segments' value is 1-based
-    ModifyR(kParams.enc_config.segments, (int)WP2::kMaxNumSegments, key == '7');
-    kParams.enc_config.segments += 1;
-    kParams.force_segment.clear();
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(SPrintf("Num segments: %d", kParams.enc_config.segments));
-  } else if (key == '8' || key == '*') {
-    kParams.enc_config.sns += (key == '8') ? 7.f : -6.f;
-    kParams.enc_config.sns = WP2::Clamp(kParams.enc_config.sns, 0.f, 100.f);
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(SPrintf("SNS: %.1f", kParams.enc_config.sns));
-  } else if (key == '9' || key == '(') {
-    kParams.enc_config.error_diffusion += (key == '9') ? 7 : -6;
-    kParams.enc_config.error_diffusion =
-        WP2::Clamp(kParams.enc_config.error_diffusion, 0, 100);
-    if (!kParams.EncodeAndDecode()) return;
+    Modify(enc_config_.tile_shape, NUM_TILE_SHAPES, key == '3');
+    if (!EncodeAndDecode()) return;
     SetMessage(
-        SPrintf("Error diffusion: %d", kParams.enc_config.error_diffusion));
+        SPrintf("Tile shape: %s", kTileShapeString[enc_config_.tile_shape]));
+  } else if (key == '4' || key == '$') {
+    Modify(enc_config_.partition_method, NUM_PARTITION_METHODS, key == '4');
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("Partition method: %s",
+                       kPartitionMethodString[enc_config_.partition_method]));
+  } else if (key == '5' || key == '%') {
+    Modify(enc_config_.partition_set, NUM_PARTITION_SETS, key == '5');
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("Partition set: %s",
+                       kPartitionSetString[enc_config_.partition_set]));
+  } else if (key == '6' || key == '^') {
+    enc_config_.partition_snapping = !enc_config_.partition_snapping;
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("Partition snapping: %s",
+                       kOnOff[enc_config_.partition_snapping]));
+  } else if (key == '7' || key == '&') {
+    enc_config_.segments -= 1;  // 'segments' value is 1-based
+    ModifyR(enc_config_.segments, (int)kMaxNumSegments, key == '7');
+    enc_config_.segments += 1;
+    force_segment_.clear();
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("Num segments: %d", enc_config_.segments));
+  } else if (key == '8' || key == '*') {
+    enc_config_.sns += (key == '8') ? 7.f : -6.f;
+    enc_config_.sns = Clamp(enc_config_.sns, 0.f, 100.f);
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("SNS: %.1f", enc_config_.sns));
+  } else if (key == '9' || key == '(') {
+    enc_config_.error_diffusion += (key == '9') ? 7 : -6;
+    enc_config_.error_diffusion = Clamp(enc_config_.error_diffusion, 0, 100);
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("Error diffusion: %d", enc_config_.error_diffusion));
   } else if (key == '0' || key == ')') {
-    kParams.enc_config.tune_perceptual = !kParams.enc_config.tune_perceptual;
-    if (!kParams.EncodeAndDecode()) return;
-    SetMessage(SPrintf("Perceptual: %s",
-                       kOnOff[kParams.enc_config.tune_perceptual]));
+    enc_config_.tune_perceptual = !enc_config_.tune_perceptual;
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("Perceptual: %s", kOnOff[enc_config_.tune_perceptual]));
   } else if (key == 'k' || key == 'K') {
-    kParams.keep_metadata = !kParams.keep_metadata;
-    if (kParams.in.metadata_.IsEmpty()) {
+    keep_metadata_ = !keep_metadata_;
+    if (in_.metadata_.IsEmpty()) {
       SetMessage("Metadata: none");
     } else {
-      if (!kParams.EncodeAndDecode()) return;
-      SetMessage(kParams.keep_metadata ? "Metadata: on" : "Metadata: off");
+      if (!EncodeAndDecode()) return;
+      SetMessage(keep_metadata_ ? "Metadata: on" : "Metadata: off");
     }
   } else if (key == 'v' || key == 'V') {
     SetMenuSelection(
-        GetLeaf(kParams.menu_selection, /*leaf_offset=*/(key == 'v') ? 1 : -1));
-    if (WP2::VDMatch(kParams.enc_config, "encoder")) {
-      if (!kParams.EncodeAndDecode()) return;
+        GetLeaf(menu_selection_, /*leaf_offset=*/(key == 'v') ? 1 : -1));
+    if (VDMatch(enc_config_, "encoder")) {
+      if (!EncodeAndDecode()) return;
     } else {
-      if (!kParams.DecodeOutput()) return;
+      if (!DecodeOutput()) return;
     }
   } else if (key == 'z' || key == 'Z') {
-    kParams.zoom_level += (key == 'z') ? +1 : -1;  // Zoom in or out.
+    zoom_level_ += (key == 'z') ? +1 : -1;  // Zoom in or out.
     ReshapeWindow();
   } else if (key == '?') {
-    kParams.display_sparks = !kParams.display_sparks;
+    display_sparks_ = !display_sparks_;
   }
 }
 
-void HandleKeyUp(unsigned char key, int pos_x, int pos_y) {
+void HandleKey(unsigned char key, int pos_x, int pos_y) {
+  global_params->HandleKey(key, pos_x, pos_y);
+}
+
+void Params::HandleKeyUp(unsigned char key, int pos_x, int pos_y) {
   (void)pos_x;
   (void)pos_y;
   const bool is_alt = (glutGetModifiers() == GLUT_ACTIVE_ALT);
   if (key == ' ' || key == '\\' || key == '|' || key == 13 || key == '\t') {
-    kParams.show = Params::kDebug;
-    kParams.out_yuv.Deallocate();
+    show_ = kDebug;
+    out_yuv_.Deallocate();
     glutPostRedisplay();
   } else if (key == 'w' || key == 'W') {
-    kParams.show = Params::kDebug;
-    kParams.webp.Deallocate();
+    show_ = kDebug;
+    webp_.Deallocate();
     glutPostRedisplay();
   } else if (key == 'R' || key == 'r') {
-    kParams.show = Params::kDebug;
+    show_ = kDebug;
     glutPostRedisplay();
   } else if (is_alt && (key == '1' || key == '2')) {
-    kParams.show = Params::kDebug;
+    show_ = kDebug;
     glutPostRedisplay();
   }
+}
+
+void HandleKeyUp(unsigned char key, int pos_x, int pos_y) {
+  global_params->HandleKeyUp(key, pos_x, pos_y);
 }
 
 uint32_t GetSqDist(uint32_t a, uint32_t b) {
   return (a < b) ? ((b - a) * (b - a)) : ((a - b) * (a - b));
 }
-uint32_t GetDist(const WP2::Rectangle& rect, WP2::BlockSize size) {
-  return GetSqDist(rect.width, WP2::BlockWidthPix(size)) +
-         GetSqDist(rect.height, WP2::BlockHeightPix(size));
+uint32_t GetDist(const Rectangle& rect, BlockSize size) {
+  return GetSqDist(rect.width, BlockWidthPix(size)) +
+         GetSqDist(rect.height, BlockHeightPix(size));
 }
 
-void HandleMouseMove(int x, int y) {
-  kParams.mouse_x = x;
-  kParams.mouse_y = y;
-}
+void Params::HandleMouseMove(int x, int y, bool button_pressed) {
+  mouse_x_ = x;
+  mouse_y_ = y;
+  if (!button_pressed) return;
 
-void HandleMouseMoveButtonPressed(int x, int y) {
-  kParams.mouse_x = x;
-  kParams.mouse_y = y;
-  if (x != kParams.mouse_x_down || y != kParams.mouse_y_down) {
-    kParams.moved_since_last_down = true;
+  if (x != mouse_x_down_ || y != mouse_y_down_) {
+    moved_since_last_down_ = true;
   }
   const uint32_t img_x = ToImageX(x), img_y = ToImageY(y);
-  const uint32_t img_x_down = ToImageX(kParams.mouse_x_down);
-  const uint32_t img_y_down = ToImageY(kParams.mouse_y_down);
+  const uint32_t img_x_down = ToImageX(mouse_x_down_);
+  const uint32_t img_y_down = ToImageY(mouse_y_down_);
 
-  WP2::Rectangle* const rect = &kParams.forcing_block;
+  Rectangle* const rect = &forcing_block_;
   if (rect->width > 0 && rect->height > 0) {
     // Maximum block position and size (both relative to top-left).
-    const uint32_t max_w =
-        WP2::SizeBlocks(kParams.width) * WP2::kMinBlockSizePix;
-    const uint32_t max_h =
-        WP2::SizeBlocks(kParams.height) * WP2::kMinBlockSizePix;
-    const uint32_t max_x = WP2::SafeSub(max_w, WP2::kMinBlockSizePix);
-    const uint32_t max_y = WP2::SafeSub(max_h, WP2::kMinBlockSizePix);
+    const uint32_t max_w = SizeBlocks(width_) * kMinBlockSizePix;
+    const uint32_t max_h = SizeBlocks(height_) * kMinBlockSizePix;
+    const uint32_t max_x = SafeSub(max_w, kMinBlockSizePix);
+    const uint32_t max_y = SafeSub(max_h, kMinBlockSizePix);
 
     rect->x = std::min(AlignWithBlocks(std::min(img_x_down, img_x)), max_x);
     rect->y = std::min(AlignWithBlocks(std::min(img_y_down, img_y)), max_y);
@@ -2643,33 +2640,42 @@ void HandleMouseMoveButtonPressed(int x, int y) {
     rect->height = std::max(img_y_down, img_y) - rect->y + 1;
 
     // Find the valid block matching the drawn rectangle the most.
-    WP2::BlockSize closest_size = WP2::BLK_4x4;
-    const WP2::PartitionSet ps = kParams.enc_config.partition_set;
-    for (uint32_t i = 0; i < WP2::GetNumBlockSizes(ps); ++i) {
-      const WP2::BlockSize size = WP2::GetBlockSizes(ps)[i];
-      if (rect->x + WP2::BlockWidthPix(size) <= max_w &&
-          rect->y + WP2::BlockHeightPix(size) <= max_h &&
-          rect->x + rect->width >= WP2::BlockWidthPix(size) &&
-          rect->y + rect->height >= WP2::BlockHeightPix(size) &&
+    BlockSize closest_size = BLK_4x4;
+    const PartitionSet ps = enc_config_.partition_set;
+    for (uint32_t i = 0; i < GetNumBlockSizes(ps); ++i) {
+      const BlockSize size = GetBlockSizes(ps)[i];
+      if (rect->x + BlockWidthPix(size) <= max_w &&
+          rect->y + BlockHeightPix(size) <= max_h &&
+          rect->x + rect->width >= BlockWidthPix(size) &&
+          rect->y + rect->height >= BlockHeightPix(size) &&
           GetDist(*rect, size) < GetDist(*rect, closest_size)) {
         closest_size = size;
       }
     }
-    rect->width = WP2::BlockWidthPix(closest_size);
-    rect->height = WP2::BlockHeightPix(closest_size);
+    rect->width = BlockWidthPix(closest_size);
+    rect->height = BlockHeightPix(closest_size);
 
     // Replace the rectangle so that the first click (down) is a corner.
     if (img_x < img_x_down) {
-      rect->x = WP2::SafeSub(AlignWithBlocks(img_x_down), rect->width);
+      rect->x = SafeSub(AlignWithBlocks(img_x_down), rect->width);
     }
     if (img_y < img_y_down) {
-      rect->y = WP2::SafeSub(AlignWithBlocks(img_y_down), rect->height);
+      rect->y = SafeSub(AlignWithBlocks(img_y_down), rect->height);
     }
   }
 }
 
-void HandleSegmentClick(int button, int state, uint32_t img_x_down,
-                        uint32_t img_y_down, uint32_t img_x, uint32_t img_y) {
+void HandleMouseMove(int x, int y) {
+  global_params->HandleMouseMove(x, y, /*button_pressed=*/false);
+}
+
+void HandleMouseMoveButtonPressed(int x, int y) {
+  global_params->HandleMouseMove(x, y, /*button_pressed=*/true);
+}
+
+void Params::HandleSegmentClick(int button, int state, uint32_t img_x_down,
+                                uint32_t img_y_down, uint32_t img_x,
+                                uint32_t img_y) {
   (void)button;
   (void)state;
   (void)img_x_down;
@@ -2678,22 +2684,21 @@ void HandleSegmentClick(int button, int state, uint32_t img_x_down,
   (void)img_y;
 
 #if defined(WP2_BITTRACE)
-  if (!kParams.IsSegmentVisible() || button == GLUT_LEFT_BUTTON ||
-      state != GLUT_DOWN) {
+  if (!IsSegmentVisible() || button == GLUT_LEFT_BUTTON || state != GLUT_DOWN) {
     return;
   }
 
-  if (!kParams.dinfo.explicit_segment_ids) {
+  if (!dinfo_.explicit_segment_ids) {
     AddInfo("Cannot force segments at low quality (segment ids are implicit).");
     return;
   }
 
-  uint32_t num_segments = kParams.dinfo.num_segments;
+  uint32_t num_segments = dinfo_.num_segments;
   // No point in forcing the segment if there's only one...
   if (num_segments == 1) return;
 
   uint32_t block_x = 0, block_y = 0;
-  for (const WP2::BlockInfo block : kParams.einfo.blocks) {
+  for (const BlockInfo& block : einfo_.blocks) {
     if (block.rect.Contains(img_x_down, img_y_down)) {
       block_x = block.rect.x;
       block_y = block.rect.y;
@@ -2702,30 +2707,30 @@ void HandleSegmentClick(int button, int state, uint32_t img_x_down,
   }
 
   bool found = false;
-  for (uint32_t i = 0; i < kParams.force_segment.size(); ++i) {
-    WP2::EncoderInfo::ForcedSegment* const forced_segment =
-        &kParams.force_segment[i];
+  for (uint32_t i = 0; i < force_segment_.size(); ++i) {
+    EncoderInfo::ForcedSegment* const forced_segment = &force_segment_[i];
     if (forced_segment->x == block_x && forced_segment->y == block_y) {
       found = true;
       forced_segment->segment_id = (forced_segment->segment_id + 1);
       if (button == GLUT_MIDDLE_BUTTON ||
           forced_segment->segment_id == num_segments) {
         // Remove.
-        kParams.force_segment[i] = kParams.force_segment.back();
-        kParams.force_segment.pop_back();
+        force_segment_[i] = force_segment_.back();
+        force_segment_.pop_back();
       }
       break;
     }
   }
   if (button == GLUT_RIGHT_BUTTON && !found) {
-    WP2::EncoderInfo::ForcedSegment forced = {block_x, block_y, 0};
-    kParams.force_segment.emplace_back(forced);
+    EncoderInfo::ForcedSegment forced = {block_x, block_y, 0};
+    force_segment_.emplace_back(forced);
   }
 #endif
 }
 
-void HandlePredictorClick(int button, int state, uint32_t img_x_down,
-                          uint32_t img_y_down, uint32_t img_x, uint32_t img_y) {
+void Params::HandlePredictorClick(int button, int state, uint32_t img_x_down,
+                                  uint32_t img_y_down, uint32_t img_x,
+                                  uint32_t img_y) {
   (void)button;
   (void)state;
   (void)img_x_down;
@@ -2734,15 +2739,14 @@ void HandlePredictorClick(int button, int state, uint32_t img_x_down,
   (void)img_y;
 
 #if defined(WP2_BITTRACE)
-  if (!kParams.IsPredictorVisible() || button == GLUT_LEFT_BUTTON ||
-      state != GLUT_DOWN)
+  if (!IsPredictorVisible() || button == GLUT_LEFT_BUTTON || state != GLUT_DOWN)
     return;
 
-  WP2::Channel channel = WP2::VDChannel(kParams.dec_config);
-  if (channel == WP2::kVChannel) channel = WP2::kUChannel;
+  Channel channel = VDChannel(dec_config_);
+  if (channel == kVChannel) channel = kUChannel;
 
-  const WP2::BlockInfo* b = nullptr;
-  for (const WP2::BlockInfo& block : kParams.einfo.blocks) {
+  const BlockInfo* b = nullptr;
+  for (const BlockInfo& block : einfo_.blocks) {
     if (block.rect.Contains(img_x_down, img_y_down)) {
       b = &block;
       break;
@@ -2750,11 +2754,14 @@ void HandlePredictorClick(int button, int state, uint32_t img_x_down,
   }
   assert(b != nullptr);
 
-  const uint32_t num_predictors = GetPredictors(*b, channel).size();
+  const uint32_t num_predictors =
+      (channel == kYChannel)   ? dinfo_.y_predictors.size()
+      : (channel == kAChannel) ? dinfo_.a_predictors.size()
+                               : dinfo_.uv_predictors.size();
 
   bool found = false;
-  for (uint32_t i = 0; i < kParams.force_predictor.size(); ++i) {
-    auto* const forced_predictor = &kParams.force_predictor[i];
+  for (uint32_t i = 0; i < force_predictor_.size(); ++i) {
+    auto* const forced_predictor = &force_predictor_[i];
     if (forced_predictor->x == b->rect.x && forced_predictor->y == b->rect.y &&
         forced_predictor->channel == channel) {
       found = true;
@@ -2762,48 +2769,48 @@ void HandlePredictorClick(int button, int state, uint32_t img_x_down,
       if (button == GLUT_MIDDLE_BUTTON ||
           forced_predictor->predictor_id >= num_predictors) {
         // Remove.
-        kParams.force_predictor[i] = kParams.force_predictor.back();
-        kParams.force_predictor.pop_back();
+        force_predictor_[i] = force_predictor_.back();
+        force_predictor_.pop_back();
       }
       break;
     }
   }
   if (button == GLUT_RIGHT_BUTTON && !found) {
-    WP2::EncoderInfo::ForcedPredictor forced = {channel, b->rect.x, b->rect.y,
-                                                0};
-    kParams.force_predictor.emplace_back(forced);
+    EncoderInfo::ForcedPredictor forced = {channel, b->rect.x, b->rect.y, 0};
+    force_predictor_.emplace_back(forced);
   }
 #endif
 }
 
-void HandlePartitionClick(int button, int state, uint32_t img_x_down,
-                          uint32_t img_y_down, uint32_t img_x, uint32_t img_y) {
+void Params::HandlePartitionClick(int button, int state, uint32_t img_x_down,
+                                  uint32_t img_y_down, uint32_t img_x,
+                                  uint32_t img_y) {
   if (button != GLUT_RIGHT_BUTTON && button != GLUT_MIDDLE_BUTTON) return;
 
   if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
-    if (kParams.IsPartitionVisible()) {
+    if (IsPartitionVisible()) {
       // Start drawing a block.
-      kParams.forcing_block.x = AlignWithBlocks(img_x_down);
-      kParams.forcing_block.y = AlignWithBlocks(img_y_down);
-      kParams.forcing_block.width = WP2::kMinBlockSizePix;
-      kParams.forcing_block.height = WP2::kMinBlockSizePix;
+      forcing_block_.x = AlignWithBlocks(img_x_down);
+      forcing_block_.y = AlignWithBlocks(img_y_down);
+      forcing_block_.width = kMinBlockSizePix;
+      forcing_block_.height = kMinBlockSizePix;
     } else {
-      kParams.forcing_block = {0, 0, 0, 0};
+      forcing_block_ = {0, 0, 0, 0};
     }
     return;
   }
 
   const bool delete_only = button == GLUT_MIDDLE_BUTTON;
-  if ((kParams.forcing_block.width > 0 && kParams.forcing_block.height > 0 &&
+  if ((forcing_block_.width > 0 && forcing_block_.height > 0 &&
        state == GLUT_UP) ||
       delete_only) {
     bool removed_block = false;
-    if (!kParams.moved_since_last_down) {
+    if (!moved_since_last_down_) {
       // Remove the block under the mouse.
-      for (uint32_t i = 0; i < kParams.force_partition.size(); ++i) {
-        if (kParams.force_partition[i].Contains(img_x, img_y)) {
-          kParams.force_partition[i] = kParams.force_partition.back();
-          kParams.force_partition.pop_back();
+      for (uint32_t i = 0; i < force_partition_.size(); ++i) {
+        if (force_partition_[i].Contains(img_x, img_y)) {
+          force_partition_[i] = force_partition_.back();
+          force_partition_.pop_back();
           removed_block = true;
           break;
         }
@@ -2811,70 +2818,71 @@ void HandlePartitionClick(int button, int state, uint32_t img_x_down,
     }
     if (!removed_block && !delete_only) {
       // Remove all blocks intersecting the new one.
-      for (uint32_t i = 0; i < kParams.force_partition.size();) {
-        if (kParams.force_partition[i].Intersects(kParams.forcing_block)) {
-          kParams.force_partition[i] = kParams.force_partition.back();
-          kParams.force_partition.pop_back();
+      for (uint32_t i = 0; i < force_partition_.size();) {
+        if (force_partition_[i].Intersects(forcing_block_)) {
+          force_partition_[i] = force_partition_.back();
+          force_partition_.pop_back();
         } else {
           ++i;
         }
       }
-      kParams.force_partition.emplace_back(kParams.forcing_block);
+      force_partition_.emplace_back(forcing_block_);
     }
   }
-  kParams.forcing_block = {0, 0, 0, 0};
+  forcing_block_ = {0, 0, 0, 0};
 }
 
-void HandleMenuClick(int button, int state, uint32_t img_x_down,
-                     uint32_t img_y_down, uint32_t img_x, uint32_t img_y) {
+void Params::HandleMenuClick(int button, int state, uint32_t img_x_down,
+                             uint32_t img_y_down, uint32_t img_x,
+                             uint32_t img_y) {
   if (button != GLUT_LEFT_BUTTON) return;
 
   if (state == GLUT_DOWN) {
-    kParams.einfo.selection = kParams.dinfo.selection = {img_x, img_y, 1, 1};
-    kParams.forcing_block = {0, 0, 0, 0};
+    einfo_.selection = dinfo_.selection = {img_x, img_y, 1, 1};
+    forcing_block_ = {0, 0, 0, 0};
   } else if (state == GLUT_UP) {
-    if (kParams.show == Params::kMenu) {
-      kParams.show = Params::kDebug;
-      if (!kParams.menu_selection.empty()) {
+    if (show_ == kMenu) {
+      show_ = kDebug;
+      if (!menu_selection_.empty()) {
         // Select the first available leaf (DFS) if not already the case.
-        SetMenuSelection(GetLeaf(kParams.menu_selection));
+        SetMenuSelection(GetLeaf(menu_selection_));
       }
-      kParams.einfo.selection = kParams.dinfo.selection = {0, 0, 0, 0};
-      kParams.forcing_block = {0, 0, 0, 0};
-      if (WP2::VDMatch(kParams.enc_config, "encoder")) {
-        if (!kParams.EncodeAndDecode()) return;
+      einfo_.selection = dinfo_.selection = {0, 0, 0, 0};
+      forcing_block_ = {0, 0, 0, 0};
+      if (VDMatch(enc_config_, "encoder")) {
+        if (!EncodeAndDecode()) return;
       } else {
-        if (!kParams.DecodeOutput()) return;
+        if (!DecodeOutput()) return;
       }
     } else {
       const uint32_t min_x = std::min(img_x_down, img_x);
       const uint32_t min_y = std::min(img_y_down, img_y);
-      kParams.einfo.selection = kParams.dinfo.selection = {
+      einfo_.selection = dinfo_.selection = {
           min_x, min_y, std::max(img_x_down, img_x) - min_x + 1,
           std::max(img_y_down, img_y) - min_y + 1};
-      kParams.forcing_block = {0, 0, 0, 0};
+      forcing_block_ = {0, 0, 0, 0};
 
       // Refresh vdebugs that might handle mouse 'selection'.
-      if (WP2::VDMatch(kParams.enc_config, "encoder")) {
-        if (!kParams.EncodeAndDecode()) return;
-      } else if (WP2::VDMatch(kParams.dec_config, "")) {
-        if (!kParams.DecodeOutput()) return;
+      if (VDMatch(enc_config_, "encoder")) {
+        if (!EncodeAndDecode()) return;
+      } else if (VDMatch(dec_config_, "")) {
+        if (!DecodeOutput()) return;
       }
     }
   }
 }
 
-void HandleMouseClick(int button, int state, int x, int y) {
-  kParams.mouse_x = x;
-  kParams.mouse_y = y;
+void Params::HandleMouseClick(int button, int state, int x, int y) {
+  mouse_x_ = x;
+  mouse_y_ = y;
   if (state == GLUT_DOWN) {
-    kParams.mouse_x_down = x;
-    kParams.mouse_y_down = y;
-    kParams.moved_since_last_down = false;
+    mouse_x_down_ = x;
+    mouse_y_down_ = y;
+    moved_since_last_down_ = false;
   }
   const uint32_t img_x = ToImageX(x), img_y = ToImageY(y);
-  const uint32_t img_x_down = ToImageX(kParams.mouse_x_down);
-  const uint32_t img_y_down = ToImageY(kParams.mouse_y_down);
+  const uint32_t img_x_down = ToImageX(mouse_x_down_);
+  const uint32_t img_y_down = ToImageY(mouse_y_down_);
 
   HandleMenuClick(button, state, img_x_down, img_y_down, img_x, img_y);
   HandleSegmentClick(button, state, img_x_down, img_y_down, img_x, img_y);
@@ -2882,29 +2890,29 @@ void HandleMouseClick(int button, int state, int x, int y) {
   HandlePartitionClick(button, state, img_x_down, img_y_down, img_x, img_y);
 }
 
-void SetQuality(float incr) {
+void HandleMouseClick(int button, int state, int x, int y) {
+  global_params->HandleMouseClick(button, state, x, y);
+}
+
+void Params::SetQuality(float incr) {
   if (glutGetModifiers() & GLUT_ACTIVE_ALT) incr *= 100.;  // Min or max
   const bool set_alpha =
-      kParams.in.HasTransparency() && glutGetModifiers() & GLUT_ACTIVE_CTRL;
-  float* const quality = set_alpha ? &kParams.alpha_quality : &kParams.quality;
+      in_.HasTransparency() && glutGetModifiers() & GLUT_ACTIVE_CTRL;
+  float* const quality = set_alpha ? &alpha_quality_ : &quality_;
   const float new_quality = WP2::Clamp(*quality + incr, 0.f, 100.f);
   if (*quality == new_quality) return;
   *quality = new_quality;
-  if (!kParams.EncodeAndDecode()) return;
+  if (!EncodeAndDecode()) return;
   SetMessage(
       SPrintf("%s: %.1f", (set_alpha ? "Alpha quality" : "Quality"), *quality));
 }
 
 void HandleSpecialKeys(int key, int pos_x, int pos_y) {
-  (void)pos_x;
-  (void)pos_y;
-  switch (key) {
-    default: return;
-    case GLUT_KEY_UP: SetQuality(1); break;
-    case GLUT_KEY_DOWN: SetQuality(-1); break;
-    case GLUT_KEY_RIGHT: SetQuality(10); break;
-    case GLUT_KEY_LEFT: SetQuality(-10); break;
-  }
+  (void)pos_x, (void)pos_y;
+  if (key == GLUT_KEY_UP) return global_params->SetQuality(1);
+  if (key == GLUT_KEY_DOWN) return global_params->SetQuality(-1);
+  if (key == GLUT_KEY_RIGHT) return global_params->SetQuality(10);
+  if (key == GLUT_KEY_LEFT) return global_params->SetQuality(-10);
 }
 
 void HandleReshape(int width, int height) {
@@ -2913,8 +2921,8 @@ void HandleReshape(int width, int height) {
   glLoadIdentity();
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
-  kParams.viewport_width = (uint32_t)width;
-  kParams.viewport_height = (uint32_t)height;
+  global_params->viewport_width_ = (uint32_t)width;
+  global_params->viewport_height_ = (uint32_t)height;
 }
 
 //------------------------------------------------------------------------------
@@ -2940,13 +2948,14 @@ void DisplayCheckerboard(uint32_t width, uint32_t height) {
   glPopMatrix();
 }
 
-void DisplayBackground(uint32_t width, uint32_t height) {
-  if (kParams.background == Params::kCheckerboard) {
+void DisplayBackground(uint32_t width, uint32_t height,
+                       Params::Background background) {
+  if (background == Params::kCheckerboard) {
     DisplayCheckerboard(width, height);
     return;
   }
 
-  switch (kParams.background) {
+  switch (background) {
     case Params::kWhite:
       glColor3f(1.f, 1.f, 1.f);
       break;
@@ -2962,10 +2971,10 @@ void DisplayBackground(uint32_t width, uint32_t height) {
   glRectf(-1.f, -1.f, 1.f, 1.f);
 }
 
-void DisplayBuffer(const WP2::ArgbBuffer& buffer) {
+void DisplayBuffer(const ArgbBuffer& buffer, Params::Background background) {
   if (buffer.IsEmpty()) return;
   if (buffer.HasTransparency()) {
-    DisplayBackground(buffer.width(), buffer.height());
+    DisplayBackground(buffer.width(), buffer.height(), background);
   }
 
   // convert from src->Argb Argb format to GL's BGRA format.
@@ -2981,7 +2990,7 @@ void DisplayBuffer(const WP2::ArgbBuffer& buffer) {
                reinterpret_cast<const GLvoid*>(&rgba[0]));
 }
 
-void DisplayColor(WP2::Argb32b color) {
+void DisplayColor(Argb32b color) {
   assert(color.a == 255u);
   glMatrixMode(GL_PROJECTION);
   glPushMatrix();
@@ -2992,29 +3001,29 @@ void DisplayColor(WP2::Argb32b color) {
   glPopMatrix();
 }
 
-void HandleDisplay() {
-  if (kParams.out.IsEmpty()) return;
+void Params::HandleDisplay() {
+  if (out_.IsEmpty()) return;
   glPushMatrix();
-  glPixelZoom((GLfloat)(+1. / kParams.width * kParams.viewport_width),
-              (GLfloat)(-1. / kParams.height * kParams.viewport_height));
+  glPixelZoom((GLfloat)(+1. / width_ * viewport_width_),
+              (GLfloat)(-1. / height_ * viewport_height_));
   glRasterPos2f(-1.f, 1.f);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, kParams.width);
+  glPixelStorei(GL_UNPACK_ROW_LENGTH, width_);
 
-  if (kParams.show == Params::kPreviewColor) {
-    DisplayColor(kParams.preview_color);
+  if (show_ == kPreviewColor) {
+    DisplayColor(preview_color_);
   } else {
-    DisplayBuffer(kParams.GetBuffer());
+    DisplayBuffer(GetBuffer(), background_);
   }
 
-  if (kParams.show_interface) PrintInfo();
+  if (show_interface_) PrintInfo();
   glPopMatrix();
   glutSwapBuffers();
 }
 
-void StartDisplay(const char* window_title) {
-  const uint32_t width = kParams.width;
-  const uint32_t height = kParams.height;
+void HandleDisplay() { global_params->HandleDisplay(); }
+
+void StartDisplay(const char* window_title, uint32_t width, uint32_t height) {
   const uint32_t swidth = (uint32_t)glutGet(GLUT_SCREEN_WIDTH);
   const uint32_t sheight = (uint32_t)glutGet(GLUT_SCREEN_HEIGHT);
 
@@ -3055,20 +3064,19 @@ void Help() {
   opt.Add("-q <float>", SPrintf("quality factor in (0..100) range, "
                                 "from strongest compression to lossless "
                                 "(%1.1f by default)",
-                                WP2::EncoderConfig::kDefault.quality));
-  opt.Add("-alpha_q <float>",
-          SPrintf("alpha quality factor in (0..100) range, "
-                  "from strongest compression to lossless "
-                  "(%1.1f by default)",
-                  WP2::EncoderConfig::kDefault.alpha_quality));
+                                EncoderConfig::kDefault.quality));
+  opt.Add("-alpha_q <float>", SPrintf("alpha quality factor in (0..100) range, "
+                                      "from strongest compression to lossless "
+                                      "(%1.1f by default)",
+                                      EncoderConfig::kDefault.alpha_quality));
   opt.Add("-effort <int>", SPrintf("compression effort in (0..9) range, "
                                    "from fastest to slowest/best results "
                                    "(%d by default)",
-                                   WP2::EncoderConfig::kDefault.effort));
+                                   EncoderConfig::kDefault.effort));
   opt.Add("-pm <int>",
-          SPrintf("partition method (0..%d)", WP2::NUM_PARTITION_METHODS - 1));
+          SPrintf("partition method (0..%d)", NUM_PARTITION_METHODS - 1));
   opt.Add("-ps <int>",
-          SPrintf("partition set (0..%d)", WP2::NUM_PARTITION_SETS - 1));
+          SPrintf("partition set (0..%d)", NUM_PARTITION_SETS - 1));
   opt.Add("-snap", "force quadtree-like partitioning");
   opt.Add("-sns <float>", "segmentation strength (0=off..100)");
   opt.Add("-uv_mode <int>", "UV subsampling mode (0=Adapt,1=420,2=444,3=Auto)");
@@ -3097,15 +3105,27 @@ void Help() {
   opt.AddSystemOptionSection();
   opt.Print();
   // Keyboard options.
-  const std::vector<std::string> help = GetHelp();
+  const std::vector<std::string> help = global_params->GetHelp();
   for (const std::string& str : help) printf("%s\n", str.c_str());
 }
 
 }  // namespace
+}  // namespace WP2
+
+//------------------------------------------------------------------------------
+
+using WP2::ExUtilGetFloat;
+using WP2::ExUtilGetFloats;
+using WP2::ExUtilGetInt;
+using WP2::ExUtilGetUInt;
+using WP2::Help;
+using WP2::Params;
 
 int main(int argc, char* argv[]) {
   EXIT_IF_FALSE(WP2CheckVersion(), "Error! Library version mismatch!");
 
+  Params params;
+  WP2::global_params = &params;
   bool read_initial_partition = false;
   const char* alt_name = nullptr;
   const char* window_title = "WebP2 viewer";
@@ -3115,67 +3135,67 @@ int main(int argc, char* argv[]) {
       Help();
       return 0;
     } else if (!strcmp(argv[c], "-info")) {
-      kParams.show = Params::kInfo;
+      params.show_ = Params::kInfo;
     } else if (!strcmp(argv[c], "-d")) {
-      kParams.view_only = true;
+      params.view_only_ = true;
     } else if (!strcmp(argv[c], "-alt") && c + 1 < argc) {
       alt_name = argv[++c];
     } else if (!strcmp(argv[c], "-pm") && c + 1 < argc) {
-      kParams.enc_config.partition_method =
+      params.enc_config_.partition_method =
           (WP2::PartitionMethod)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-ps") && c + 1 < argc) {
-      kParams.enc_config.partition_set =
+      params.enc_config_.partition_set =
           (WP2::PartitionSet)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-snap")) {
-      kParams.enc_config.partition_snapping = true;
+      params.enc_config_.partition_snapping = true;
     } else if (!strcmp(argv[c], "-sns") && c + 1 < argc) {
-      kParams.enc_config.sns = ExUtilGetFloat(argv[++c], &parse_error);
+      params.enc_config_.sns = ExUtilGetFloat(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-uv_mode") && c + 1 < argc) {
-      kParams.enc_config.uv_mode =
+      params.enc_config_.uv_mode =
           (WP2::EncoderConfig::UVMode)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-csp") && c + 1 < argc) {
-      kParams.enc_config.csp_type =
+      params.enc_config_.csp_type =
           (WP2::Csp)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-effort") && c + 1 < argc) {
-      kParams.enc_config.effort = ExUtilGetInt(argv[++c], &parse_error);
+      params.enc_config_.effort = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-segments") && c + 1 < argc) {
-      kParams.enc_config.segments = ExUtilGetInt(argv[++c], &parse_error);
+      params.enc_config_.segments = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-segment_mode") && c + 1 < argc) {
       ++c;
       if (!strcmp(argv[c], "auto")) {
-        kParams.enc_config.segment_id_mode =
+        params.enc_config_.segment_id_mode =
             WP2::EncoderConfig::SEGMENT_ID_AUTO;
       } else if (!strcmp(argv[c], "explicit")) {
-        kParams.enc_config.segment_id_mode =
+        params.enc_config_.segment_id_mode =
             WP2::EncoderConfig::SEGMENT_ID_EXPLICIT;
       } else if (!strcmp(argv[c], "implicit")) {
-        kParams.enc_config.segment_id_mode =
+        params.enc_config_.segment_id_mode =
             WP2::EncoderConfig::SEGMENT_ID_IMPLICIT;
       } else {
         EXIT_IF_FALSE(false, "unsupported segment mode '%s'", argv[c]);
       }
     } else if (!strcmp(argv[c], "-pass") && c + 1 < argc) {
-      kParams.enc_config.pass = ExUtilGetInt(argv[++c], &parse_error);
+      params.enc_config_.pass = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-nomt")) {
-      kParams.enc_config.thread_level = 0;
-      kParams.dec_config.thread_level = 0;
+      params.enc_config_.thread_level = 0;
+      params.dec_config_.thread_level = 0;
     } else if (!strcmp(argv[c], "-metadata") ||
                !strcmp(argv[c], "-nometadata")) {
-      kParams.keep_metadata = !strcmp(argv[c], "-metadata");
+      params.keep_metadata_ = !strcmp(argv[c], "-metadata");
     } else if (!strcmp(argv[c], "-bt") || !strcmp(argv[c], "-BT")) {
-      kParams.bit_trace = !strcmp(argv[c], "-bt") ? 1 : 2;
+      params.bit_trace_ = !strcmp(argv[c], "-bt") ? 1 : 2;
       if (c + 1 < argc) {
         if (isdigit(argv[c + 1][0])) {
-          kParams.bit_trace_level = ExUtilGetUInt(argv[++c], &parse_error);
+          params.bit_trace_level_ = ExUtilGetUInt(argv[++c], &parse_error);
         } else {
-          kParams.bit_trace_level = 0;
+          params.bit_trace_level_ = 0;
         }
       }
     } else if (!strcmp(argv[c], "-vbt") && c + 1 < argc) {
-      kParams.visual_bit_trace_level = ExUtilGetUInt(argv[++c], &parse_error);
+      params.visual_bit_trace_level_ = ExUtilGetUInt(argv[++c], &parse_error);
 #if defined(WP2_BITTRACE)
-      if (kParams.visual_bit_trace_level > kBitTraceMaxLevels) {
-        printf("-vbt must be at most '%d'\n", kBitTraceMaxLevels);
+      if (params.visual_bit_trace_level_ > WP2::kBitTraceMaxLevels) {
+        printf("-vbt must be at most '%d'\n", WP2::kBitTraceMaxLevels);
         parse_error = true;
       }
 #else
@@ -3183,68 +3203,67 @@ int main(int argc, char* argv[]) {
       parse_error = true;
 #endif  // WP2_BITTRACE
     } else if (!strcmp(argv[c], "--") && c + 1 < argc) {
-      kParams.files.emplace_back(argv[++c]);
+      params.files_.emplace_back(argv[++c]);
     } else if (!strcmp(argv[c], "-q") && c + 1 < argc) {
-      kParams.quality = ExUtilGetFloat(argv[++c], &parse_error);
+      params.quality_ = ExUtilGetFloat(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-quants") && c + 1 < argc) {
-      ExUtilGetFloats(argv[++c],
-                      kParams.enc_config.segment_factors, WP2::kMaxNumSegments,
-                      &parse_error);
+      ExUtilGetFloats(argv[++c], params.enc_config_.segment_factors,
+                      WP2::kMaxNumSegments, &parse_error);
     } else if (!strcmp(argv[c], "-alpha_q") && c + 1 < argc) {
-      kParams.alpha_quality = ExUtilGetFloat(argv[++c], &parse_error);
+      params.alpha_quality_ = ExUtilGetFloat(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-dblk_filter") ||
                !strcmp(argv[c], "-no_dblk_filter")) {
-      kParams.dec_config.enable_deblocking_filter =
+      params.dec_config_.enable_deblocking_filter =
           !strcmp(argv[c], "-dblk_filter");
     } else if (!strcmp(argv[c], "-drct_filter") ||
                !strcmp(argv[c], "-no_drct_filter")) {
-      kParams.dec_config.enable_directional_filter =
+      params.dec_config_.enable_directional_filter =
           !strcmp(argv[c], "-drct_filter");
     } else if (!strcmp(argv[c], "-rstr_filter") ||
                !strcmp(argv[c], "-no_rstr_filter")) {
-      kParams.dec_config.enable_restoration_filter =
+      params.dec_config_.enable_restoration_filter =
           !strcmp(argv[c], "-rstr_filter");
     } else if (!strcmp(argv[c], "-title") && c + 1 < argc) {
       window_title = argv[++c];
     } else if (!strcmp(argv[c], "-crop") && c + 4 < argc) {
-      kParams.crop = true;
-      kParams.crop_area.x = ExUtilGetUInt(argv[++c], &parse_error);
-      kParams.crop_area.y = ExUtilGetUInt(argv[++c], &parse_error);
-      kParams.crop_area.width = ExUtilGetUInt(argv[++c], &parse_error);
-      kParams.crop_area.height = ExUtilGetUInt(argv[++c], &parse_error);
+      params.crop_ = true;
+      params.crop_area_.x = ExUtilGetUInt(argv[++c], &parse_error);
+      params.crop_area_.y = ExUtilGetUInt(argv[++c], &parse_error);
+      params.crop_area_.width = ExUtilGetUInt(argv[++c], &parse_error);
+      params.crop_area_.height = ExUtilGetUInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-set_block") && c + 4 < argc) {
-      kParams.force_partition.emplace_back(
+      params.force_partition_.emplace_back(
           ExUtilGetUInt(argv[c + 1], &parse_error),
           ExUtilGetUInt(argv[c + 2], &parse_error),
           ExUtilGetUInt(argv[c + 3], &parse_error),
           ExUtilGetUInt(argv[c + 4], &parse_error));
       c += 4;
     } else if (!strcmp(argv[c], "-set_partition") && c + 1 < argc) {
-      kParams.partition_file_path = argv[++c];
+      params.partition_file_path_ = argv[++c];
       read_initial_partition = true;
     } else if (!strcmp(argv[c], "-diffusion") && c + 1 < argc) {
-      kParams.enc_config.error_diffusion =
+      params.enc_config_.error_diffusion =
           ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-set_dump_path") && c + 1 < argc) {
-      const std::string extension = WP2GetFileExtension(argv[++c]);
+      const std::string extension = WP2::GetFileExtension(argv[++c]);
       if (extension == "wp2") {
-        kParams.dump_wp2_path = argv[c];
+        params.dump_wp2_path_ = argv[c];
       } else if (extension == "png") {
-        kParams.dump_png_path = argv[c];
+        params.dump_png_path_ = argv[c];
       } else {
         printf("Unhandled extension for -set_dump_path '%s'\n", argv[c]);
         parse_error = true;
       }
     } else if (argv[c][0] == '-') {
       bool must_stop;
-      if (ProgramOptions::ParseSystemOptions(argv[c], &must_stop)) {
+      if (WP2::ProgramOptions::ParseSystemOptions(argv[c], &must_stop)) {
         if (must_stop) return 0;
       } else {
         printf("Unknown option '%s'\n", argv[c]);
         parse_error = true;
       }
     } else {
-      kParams.files.emplace_back(argv[c]);
+      params.files_.emplace_back(argv[c]);
     }
 
     if (parse_error) {
@@ -3253,21 +3272,21 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  if (kParams.files.empty()) {
+  if (params.files_.empty()) {
     printf("missing input file(s)!!\n");
     Help();
     return 0;
   }
 
-  if (!kParams.SetCurrentFile(0)) return 1;
+  if (!params.SetCurrentFile(0)) return 1;
 
   if (read_initial_partition) {
-    EXIT_IF_FALSE(kParams.ReadPartition(/*read_only=*/false),
+    EXIT_IF_FALSE(params.ReadAndConvertPartition(/*read_only=*/false),
                   "Error: Unable to parse partition file");
   }
 
   if (alt_name != nullptr) {
-    EXIT_IF_FALSE(kParams.SetAltFile(alt_name),
+    EXIT_IF_FALSE(params.SetAltFile(alt_name),
                   "Error: Unable to read alt file");
   }
 
@@ -3282,7 +3301,7 @@ int main(int argc, char* argv[]) {
 #if defined(WP2_HAVE_GLUT) && defined(FREEGLUT)
   glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_CONTINUE_EXECUTION);
 #endif
-  StartDisplay(window_title);
+  WP2::StartDisplay(window_title, params.width_, params.height_);
 
   glutMainLoop();
 

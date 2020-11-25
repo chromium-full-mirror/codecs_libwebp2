@@ -41,7 +41,7 @@ TEST_P(SpeedTestCpuInfo, TestAddSub) {
   constexpr uint32_t kMaxLen = 32 * 32;
   int16_t src[kMaxLen], pred[kMaxLen], dst[kMaxLen];
   int32_t res[kMaxLen];
-  constexpr uint32_t kNumTests = 100;
+  constexpr uint32_t kNumTests = 10;
   constexpr uint32_t kNumLoops = 10000;
   PseudoRNG rng;
   for (uint32_t t = 0; t < kNumTests; ++t) {
@@ -73,7 +73,7 @@ TEST_P(SpeedTestCpuInfo, TestAddSubBlock) {
   constexpr uint32_t kMaxLen = 32 * 32;
   int16_t src[kMaxLen], pred[kMaxLen], dst[kMaxLen];
   int32_t res[kMaxLen];
-  constexpr uint32_t kNumTests = 1000;
+  constexpr uint32_t kNumTests = 100;
   constexpr uint32_t kNumLoops = 200;
   PseudoRNG rng;
   for (uint32_t t = 0; t < kNumTests; ++t) {
@@ -109,7 +109,7 @@ TEST_P(SpeedTestCpuInfo, TestAddSubBlock) {
 template<typename T, int BitDepth>
 void DoTestSSIM(int min_range, int max_range, double result) {
   constexpr uint32_t kMaxDim = 300;
-  constexpr uint32_t kNumTests = 15;
+  constexpr uint32_t kNumTests = 5;
   constexpr uint32_t kNumLoops = 7;
   PseudoRNG rng;
   double total_score = 0.;
@@ -144,11 +144,11 @@ void DoTestSSIM(int min_range, int max_range, double result) {
 }
 
 TEST_P(SpeedTestCpuInfo, TestSSIM_16b) {
-  DoTestSSIM<int16_t, 10>(-1024, 1024, 0.094818372359986899);
+  DoTestSSIM<int16_t, 10>(-1024, 1024, 0.018060768717439498);
 }
 
 TEST_P(SpeedTestCpuInfo, TestSSIM_8b) {
-  DoTestSSIM<uint8_t, 8>(0, 256, 5.2010943029822574);
+  DoTestSSIM<uint8_t, 8>(0, 256, 0.98364064068631074);
 }
 
 //------------------------------------------------------------------------------
@@ -156,7 +156,7 @@ TEST_P(SpeedTestCpuInfo, TestSSIM_8b) {
 template<typename T>
 void DoTestPSNR(int min_range, int max_range, uint64_t result) {
   constexpr uint32_t kMaxDim = 500;
-  constexpr uint32_t kNumTests = 100;
+  constexpr uint32_t kNumTests = 10;
   constexpr uint32_t kNumLoops = 50;
   PseudoRNG rng;
   uint64_t total_score = 0;
@@ -190,11 +190,11 @@ void DoTestPSNR(int min_range, int max_range, uint64_t result) {
 }
 
 TEST_P(SpeedTestCpuInfo, TestPSNR_16b) {
-  DoTestPSNR<int16_t>(-2048, 2048, 64311554390702llu);
+  DoTestPSNR<int16_t>(-2048, 2048, 6630626819665llu);
 }
 
 TEST_P(SpeedTestCpuInfo, TestPSNR_8b) {
-  DoTestPSNR<uint8_t>(0, 256, 147478357240llu);
+  DoTestPSNR<uint8_t>(0, 256, 15200787724llu);
 }
 
 //------------------------------------------------------------------------------

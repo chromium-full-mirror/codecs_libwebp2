@@ -270,6 +270,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST(DeblockingFilterTest, Simple) {
   EncoderConfig encoder_config = EncoderConfig::kDefault;
   encoder_config.quality = 40;  // Expect compression artifacts.
+  encoder_config.effort = 2;    // Speed up the test.
 
   DecoderConfig decoder_config = DecoderConfig::kDefault;
   decoder_config.enable_deblocking_filter = true;
@@ -284,6 +285,7 @@ TEST(DeblockingFilterTest, Simple) {
 TEST(DeblockingFilterTest, BetterPSNR) {
   EncoderConfig encoder_config = EncoderConfig::kDefault;
   encoder_config.quality = 50;  // Expect compression artifacts.
+  encoder_config.effort = 2;    // Speed up the test.
 
   DecoderConfig decoder_config_no_filter = DecoderConfig::kDefault;
   decoder_config_no_filter.enable_deblocking_filter = false;

@@ -157,8 +157,8 @@ TEST_P(EncodeCustomCspTest, Comparison) {
 
 INSTANTIATE_TEST_SUITE_P(
     EncodeCustomCspTestInstantiation, EncodeCustomCspTest,
-    ::testing::Combine(::testing::Values("source1_1x1.png", "source1_64x48.png",
-                                         "test_exif_xmp.webp"),
+    ::testing::Combine(::testing::Values("source1_1x1.png",
+                                         "source1_64x48.png"),
                        ::testing::Values(0.f, 100.f) /* quality */,
                        ::testing::Values(Matrix::kRGB8, Matrix::kRGB10,
                                          Matrix::kYCoCg, Matrix::kYpUV),

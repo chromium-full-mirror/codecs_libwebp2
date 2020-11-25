@@ -121,23 +121,24 @@ WP2Status StoreICCPFromMarker(WP2::DataView marker_data,
                               size_t* const iccp_max_seq,
                               WP2::LogLevel log_level) {
   // ICC_PROFILE\0<seq><count>; 'seq' starts at 1.
-  const size_t seq = marker_data.bytes[kICCPSignature.size];
-  const size_t count = marker_data.bytes[kICCPSignature.size + 1];
+  const uint32_t seq = marker_data.bytes[kICCPSignature.size];
+  const uint32_t count = marker_data.bytes[kICCPSignature.size + 1];
   const size_t segment_size = marker_data.size - kICCPSignature.skip_size;
 
   if (segment_size == 0) {
     if (log_level >= WP2::LogLevel::DEFAULT) {
-      fprintf(stderr, "[ICCP] size (%zu) cannot be 0!\n", segment_size);
+      fprintf(stderr, "[ICCP] size (%u) cannot be 0!\n",
+              (uint32_t)segment_size);
     }
     return WP2_STATUS_BITSTREAM_ERROR;
   } else if (count == 0) {
     if (log_level >= WP2::LogLevel::DEFAULT) {
-      fprintf(stderr, "[ICCP] count (%zu) cannot be 0!\n", count);
+      fprintf(stderr, "[ICCP] count (%u) cannot be 0!\n", count);
     }
     return WP2_STATUS_BITSTREAM_ERROR;
   } else if (seq == 0) {
     if (log_level >= WP2::LogLevel::DEFAULT) {
-      fprintf(stderr, "[ICCP] invalid sequence (%zu)!\n", seq);
+      fprintf(stderr, "[ICCP] invalid sequence (%u)!\n", seq);
     }
     return WP2_STATUS_BITSTREAM_ERROR;
   }
@@ -146,8 +147,8 @@ WP2Status StoreICCPFromMarker(WP2::DataView marker_data,
     *iccp_segment_expected_count = count;
   } else if (*iccp_segment_expected_count != count) {
     if (log_level >= WP2::LogLevel::DEFAULT) {
-      fprintf(stderr, "[ICCP] Inconsistent segment count (%zu / %zu)!\n",
-              *iccp_segment_expected_count, count);
+      fprintf(stderr, "[ICCP] Inconsistent segment count (%u / %u)!\n",
+              (uint32_t)*iccp_segment_expected_count, count);
     }
     return WP2_STATUS_BITSTREAM_ERROR;
   }
@@ -155,7 +156,7 @@ WP2Status StoreICCPFromMarker(WP2::DataView marker_data,
   ICCPSegment* const segment = iccp_segments + seq - 1;
   if (segment->data_length != 0) {
     if (log_level >= WP2::LogLevel::DEFAULT) {
-      fprintf(stderr, "[ICCP] Duplicate segment number (%zu)!\n", seq);
+      fprintf(stderr, "[ICCP] Duplicate segment number (%u)!\n", seq);
     }
     return WP2_STATUS_BITSTREAM_ERROR;
   }
@@ -173,17 +174,17 @@ WP2Status VerifyICCP(size_t iccp_segment_count,
                      WP2::LogLevel log_level) {
   if (iccp_segment_expected_count != iccp_segment_count) {
     if (log_level >= WP2::LogLevel::DEFAULT) {
-      fprintf(stderr,
-              "[ICCP] Segment count: %zu does not match expected: %zu!\n",
-              iccp_segment_count, iccp_segment_expected_count);
+      fprintf(stderr, "[ICCP] Segment count: %u does not match expected: %u!\n",
+              (uint32_t)iccp_segment_count,
+              (uint32_t)iccp_segment_expected_count);
     }
     return WP2_STATUS_BITSTREAM_ERROR;
   }
   if (iccp_max_seq != iccp_segment_count) {
     if (log_level >= WP2::LogLevel::DEFAULT) {
       fprintf(stderr,
-              "[ICCP] Discontinuous segments, expected: %zu actual: %zu!\n",
-              iccp_segment_count, iccp_max_seq);
+              "[ICCP] Discontinuous segments, expected: %u actual: %u!\n",
+              (uint32_t)iccp_segment_count, (uint32_t)iccp_max_seq);
     }
     return WP2_STATUS_BITSTREAM_ERROR;
   }

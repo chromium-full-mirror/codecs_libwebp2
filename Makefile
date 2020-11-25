@@ -727,13 +727,13 @@ DIST_FILES= \
             Makefile \
             README.md \
             README.wp2_js \
-            COPYING \
+            LICENSE \
             CMakeLists.txt \
             cmake/compiler.cmake \
             cmake/cpu.cmake \
             cmake/thread.cmake \
             cmake/wp2Config.cmake.in \
-            doc/REMOVE.ME \
+            doc/vwp2.webp \
             examples/cwp2.cc \
             examples/dwp2.cc \
             examples/vwp2.cc \
@@ -887,6 +887,7 @@ DIST_FILES= \
             src/dsp/grain_c.cc \
             src/dsp/math.cc \
             src/dsp/math.h \
+            src/dsp/score_dsp.cc \
             src/dsp/ssim_dsp.cc \
             src/dsp/intra_c.cc  \
             src/dsp/quant_c.cc  \
@@ -1038,7 +1039,7 @@ DIST_FILES= \
             tests/test_assert.sh \
             tests/test_block_size.cc \
             tests/test_buffer.cc \
-            tests/test_bypass.sh \
+            tests/test_bypass.cc \
             tests/test_cmd.sh \
             tests/lossless/test_color_cache.cc \
             tests/lossless/test_histogram.cc \

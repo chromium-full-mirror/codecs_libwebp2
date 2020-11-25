@@ -51,7 +51,7 @@ class ErrorTracer : public WP2ErrorTracer {
 
   void Log(const char* const file, int line, WP2Status, const char*) override {
     // Lighten the callstack.
-    const std::string call = WP2GetFileName(file) + ":" + std::to_string(line);
+    const std::string call = GetFileName(file) + ":" + std::to_string(line);
     if (!callstack_.empty()) callstack_ += ", ";
     callstack_ += call;  // Reversed call order but more convenient text output.
   }
@@ -238,8 +238,8 @@ struct BitstreamStats {
     printf("Length   Width  Height  Bpp     Valid\n");
   }
   void PrintRow() const {
-    printf("%7zu, %5u, %6u, %6.2f, %s", length, features.width, features.height,
-           length / (float)(features.width * features.height),
+    printf("%7u, %5u, %6u, %6.2f, %s", (uint32_t)length, features.width,
+           features.height, length / (float)(features.width * features.height),
            is_valid ? "Yes" : "No");
     if (!callstack.empty()) printf(", %s", callstack.c_str());
     printf("\n");
@@ -547,9 +547,10 @@ TEST_P(ImageMutationTest, FromValidImage) {
   EXPECT_GE(percentage_of_valid_bitstreams, 0.f);
 
   if (print_stats) {
-    printf("Valid mutations: %u/%u (%.3f %%), tile bytes: %zu/%zu\n", num_valid,
+    printf("Valid mutations: %u/%u (%.3f %%), tile bytes: %u/%u\n", num_valid,
            num_tries, percentage_of_valid_bitstreams,
-           writer.size_ - tile_bytes_position, writer.size_);
+           (uint32_t)(writer.size_ - tile_bytes_position),
+           (uint32_t)writer.size_);
   }
 }
 

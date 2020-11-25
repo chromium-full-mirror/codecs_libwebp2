@@ -393,7 +393,7 @@ class SymbolIO {
   // Fills the array 'is_maybe_used' with true when the symbol might be used,
   // false if we are sure it is not used.
   virtual void GetPotentialUsage(uint32_t cluster, uint32_t sym,
-                                 bool is_maybe_used[], size_t size) const = 0;
+                                 bool is_maybe_used[], uint32_t size) const = 0;
 
  protected:
   // The stats of a symbol.

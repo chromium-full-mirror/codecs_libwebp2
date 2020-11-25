@@ -618,7 +618,8 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
 }
 
 void SymbolReader::GetPotentialUsage(uint32_t cluster, uint32_t sym,
-                                     bool is_maybe_used[], size_t size) const {
+                                     bool is_maybe_used[],
+                                     uint32_t size) const {
   const Stat& stat = *GetStats(cluster, sym);
   switch (stat.type) {
     case (Stat::Type::kTrivial):
@@ -655,8 +656,8 @@ void SymbolReader::GetPotentialUsage(uint32_t cluster, uint32_t sym,
                                : stat.extra.codes[k].symbol;
         const uint32_t extra_bits_num = Golomb::NumExtraBits(m, prefix_size);
         const uint32_t m1 = Golomb::Merge(m, prefix_size, 0);
-        const size_t
-            m2 = Golomb::Merge(m, prefix_size, (1 << extra_bits_num) - 1);
+        const uint32_t m2 =
+            Golomb::Merge(m, prefix_size, (1 << extra_bits_num) - 1);
         std::fill(is_maybe_used + m1, is_maybe_used + std::min(m2 + 1, size),
                   true);
       }

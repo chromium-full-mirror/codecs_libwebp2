@@ -100,7 +100,7 @@ class HeaderDec {
 // Class for writing small headers.
 class HeaderEnc {
  public:
-  HeaderEnc(uint8_t* buf, size_t size, const char debug_prefix[])
+  HeaderEnc(uint8_t* buf, uint32_t size, const char debug_prefix[])
       : buf_(buf),
         max_pos_(size * 8),
         bit_pos_(0),
@@ -130,7 +130,7 @@ class HeaderEnc {
   uint8_t* Align();
 
   // Size used so far, in bytes.
-  size_t Used() const { return (bit_pos_ + 7) >> 3; }
+  uint32_t Used() const { return (bit_pos_ + 7) >> 3; }
 
   // Should be checked before using the above methods.
   bool Ok() const { return !error_; }
@@ -139,8 +139,8 @@ class HeaderEnc {
   void PutBitsInternal(uint32_t value, uint32_t num_bits);
 
   uint8_t* const buf_;  // Output bitstream.
-  size_t max_pos_;      // Maximum number of bits that can be written to 'buf_'.
-  size_t bit_pos_;      // Number of bits written to 'buf_'.
+  uint32_t max_pos_;    // Maximum number of bits that can be written to 'buf_'.
+  uint32_t bit_pos_;    // Number of bits written to 'buf_'.
   bool error_;
   const char* const debug_prefix_;
 };

@@ -320,8 +320,8 @@ TEST_F(TestANS, Test0) {
   const uint8_t* buf = enc.Buffer();
   const int size_expected = (int)std::lround(enc.GetCostFull());
   if (kVerbose) {
-    printf("%zu symbols -> actual bits: %d / expected bits:%d\n", tokens.size(),
-           (int)size * 8, size_expected);
+    printf("%u symbols -> actual bits: %d / expected bits:%d\n",
+           (uint32_t)tokens.size(), (int)size * 8, size_expected);
   }
   EXPECT_TRUE(VerifyBuffer(buf, size, /*codes=*/nullptr, /*bin_symbol=*/nullptr,
                            /*asymbol=*/nullptr, tokens));

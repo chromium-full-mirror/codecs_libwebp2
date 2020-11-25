@@ -44,13 +44,13 @@ ${CWP2} \
   -f "${TESTDATA_DIR}/source0.pgm" 50 \
      "${TESTDATA_DIR}/source1.png" 75 \
      "${TESTDATA_DIR}/source2.tiff" 100 \
-  -o "${DST_DIR}/anim.wp2" -effort 0
+  -o "${DST_DIR}/anim.wp2" -effort 0 -progress
 
 echo "-frames test"
 ${DWP2} \
   "${DST_DIR}/anim.wp2" \
   -o "${DST_DIR}/" -frames -force -v -bt \
-  -no_dblk_filter -no_drct_filter -no_rstr_filter
+  -no_dblk_filter -no_drct_filter -no_rstr_filter -progress
 ${GET_DISTO} "${TESTDATA_DIR}/source0.pgm" \
   "${DST_DIR}/frame00000_50ms.png" -min 32.0
 ${GET_DISTO} "${TESTDATA_DIR}/source1.png" \

@@ -226,8 +226,8 @@ class ExhaustivePartitioner : public Partitioner {
 
   // VDebug
   void RegisterScoreForVDebug(float best_partition_score,
-                              size_t best_partition_size,
-                              size_t num_iterations) const;
+                              uint64_t best_partition_size,
+                              uint64_t num_iterations) const;
 };
 
 //------------------------------------------------------------------------------

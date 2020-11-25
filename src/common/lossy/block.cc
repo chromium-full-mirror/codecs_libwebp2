@@ -196,6 +196,10 @@ void CodedBlock::GetContext(Channel channel, bool fill_in, bool extend_right,
                             int16_t context[]) const {
   const uint32_t w = blk_.w_pix(), h = blk_.h_pix();
   const Plane16& context_src = predict_from_.GetChannel(channel);
+  if (context_src.IsEmpty()) {
+    std::fill(context, context + kMaxContextSize, 0);
+    return;
+  }
   // absolute position within dst_ picture
   const uint32_t y_pix = blk_.y_pix();
   // implement all the neighbouring sample logic:
@@ -204,7 +208,7 @@ void CodedBlock::GetContext(Channel channel, bool fill_in, bool extend_right,
   GetOccupancy(&y_left_occ, &y_right_occ, &right_extent);
   // Number of available context pixels on the left and right sides.
   const int left_context_size =
-      (std::max(0, (int)y_left_occ) * kMinBlockSizePix);
+      (std::max(0, (int)y_left_occ) * (int)kMinBlockSizePix);
   const bool have_top_left = have_top && (-1 < y_left_occ);
   const bool have_top_right = have_top && (-1 < y_right_occ);
 

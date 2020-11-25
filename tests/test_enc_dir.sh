@@ -47,7 +47,7 @@ cp -f "${TESTDATA_DIR}/source1_1x1.png" "${TMP_TESTDATA_DIR}/"
 cp -f "${TESTDATA_DIR}/source1_64x48.png" "${TMP_TESTDATA_DIR}/"
 
 echo "input folder test"
-${CWP2} ${TMP_TESTDATA_DIR} -r -o ${DST_DIR} -force -effort 0
+${CWP2} ${TMP_TESTDATA_DIR} -r -o ${DST_DIR} -force -effort 0 -progress
 ${DWP2} ${DST_DIR} -r -o ${DST_DIR} -force
 
 echo "multithreaded decoding"
@@ -59,7 +59,7 @@ echo "several input files test"
 ${CWP2} "${TESTDATA_DIR}/source1.png" "${TESTDATA_DIR}/source3.jpg" \
         -o ${DST_DIR} -force -effort 0
 ${DWP2} "${DST_DIR}/source1.wp2" "${DST_DIR}/source3.wp2" \
-        -o ${DST_DIR} -pam -force
+        -o ${DST_DIR} -pam -force -progress
 
 echo "inplace test"
 ${CWP2} "${DST_DIR}/source1.pam" "${DST_DIR}/source3.pam" \

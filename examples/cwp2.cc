@@ -43,6 +43,14 @@
 
 namespace {
 
+using WP2::ExUtilGetFloat;
+using WP2::ExUtilGetFloats;
+using WP2::ExUtilGetInt;
+using WP2::ExUtilGetUInt;
+using WP2::ExUtilTryGetInt;
+using WP2::ProgramOptions;
+using WP2::SPrintf;
+
 //------------------------------------------------------------------------------
 
 constexpr uint32_t kDefaultThreadLevel = 20;  // When -mt is set.
@@ -63,32 +71,6 @@ struct Params {
   WP2::PictureHint pic_hint = WP2::HINT_NONE;
   bool crop = false;
   WP2::Rectangle crop_area;
-};
-
-//------------------------------------------------------------------------------
-
-class ProgressPrinter {
- protected:
-  bool PrintProgress(int percent) const {
-    if (report_progress_) {
-      fprintf(stderr, "[%s]: %3d %%      \r", file_name_.c_str(), percent);
-    }
-    return true;
-  }
-
- public:
-  std::string file_name_;
-  bool report_progress_ = false;
-};
-
-class MemoryWriterProgress : public WP2::MemoryWriter, public ProgressPrinter {
- public:
-  bool UpdateProgress(int percent) override { return PrintProgress(percent); }
-};
-
-class CounterProgress : public WP2::Counter, public ProgressPrinter {
- public:
-  bool UpdateProgress(int percent) override { return PrintProgress(percent); }
 };
 
 //------------------------------------------------------------------------------
@@ -171,6 +153,7 @@ void HelpLong() {
           "(default=off unless out_file is explicit)");
   opt.Add("-short", "condense printed message");
   opt.Add("-summary", "print summary and statistics");
+  opt.Add("-progress", "display encoding progression");
   opt.Add("-quiet", "don't print anything");
 #ifdef WP2_BITTRACE
   opt.Add("-bt / -BT", "set bit trace level to 1 / 2");
@@ -200,7 +183,7 @@ std::vector<std::string> GetFramesToEncode(
   // Keep only files with a matching frame name.
   std::vector<InputFrame> input_frames;
   for (const std::string& file_path : files) {
-    const std::string file_name = WP2GetFileName(file_path);
+    const std::string file_name = WP2::GetFileName(file_path);
     uint32_t frame_index;
     uint32_t duration_ms;
     const int num_assigned_variables =
@@ -243,10 +226,10 @@ std::vector<std::string> GetFilesToEncode(
     std::vector<uint32_t>* const frame_durations) {
   std::vector<std::string> files;
   for (const std::string& path : paths) {
-    if (WP2IsDirectory(path)) {
+    if (WP2::IsDirectory(path)) {
       if (recursive_input) {
         std::vector<std::string> files_in_dir;
-        EXIT_IF_FALSE(WP2GetFilesIn(path, &files_in_dir, /*recursive=*/true),
+        EXIT_IF_FALSE(WP2::GetFilesIn(path, &files_in_dir, /*recursive=*/true),
                       "Error! Opening directory %s failed.", path.c_str());
 
         // Only keep files with a handled extension.
@@ -412,34 +395,10 @@ uint32_t GetHeight(const Params& params, const WP2::ArgbBuffer& argb_buffer) {
   return params.crop ? params.crop_area.height : argb_buffer.height();
 }
 
-void PrintSummary(const WP2::MemoryWriter& memory_writer,
-                  uint32_t width, uint32_t height) {
-  WP2::BitstreamFeatures bitstream;
-  EXIT_IF_ERROR(bitstream.Read(memory_writer.mem_, memory_writer.size_),
-                "FATAL: Roundtrip error!");
-  EXIT_IF_FALSE(bitstream.raw_width == width, "FATAL: invalid width");
-  EXIT_IF_FALSE(bitstream.raw_height == height, "FATAL: invalid height");
-  const WP2::Argb32b prev_col = WP2::ToArgb32b(bitstream.preview_color);
-  const uint32_t degrees = (uint32_t)bitstream.orientation * 90;
-
-  printf("Dimension:     %u x %u\n", bitstream.width, bitstream.height);
-  printf("animation:     %s\n",
-         bitstream.is_animation ? (bitstream.loop_forever ? "yes (loop forever)"
-                                                          : "yes (play once)")
-                                : "no");
-  printf("quality hint:  %u\n", bitstream.quality_hint);
-  printf("preview:       %s\n", bitstream.has_preview ? "yes" : "no");
-  printf("preview color: %u, %u, %u\n", prev_col.r, prev_col.g, prev_col.b);
-  printf("rotated by:    %u degrees clockwise\n", degrees);
-  printf("transfer:      %d\n", (int)bitstream.transfer_function);
-  printf("ICC:           %s\n", bitstream.has_icc ? "yes" : "no");
-  printf("XMP/EXIF:      %s\n", bitstream.has_trailing_data ? "yes" : "no");
-}
-
 void PrintSize(const std::string& out_file,
                size_t out_size, float num_pixels, bool short_output) {
   const float bpp = 8.f * out_size / num_pixels;
-  printf("output size:  %zu (%.2f bpp)", out_size, bpp);
+  printf("output size:  %" PRIu64 " (%.2f bpp)", (uint64_t)out_size, bpp);
   if (out_file.empty()) {
     printf("    [not saved]\n");
   } else if (short_output) {
@@ -463,13 +422,18 @@ void SaveImage(const WP2::MemoryWriter& memory_writer, const Params& params,
   }
 
   if (params.bit_trace > 0) {
-    WP2CollectBitTraces(memory_writer.mem_, memory_writer.size_,
-                        params.bit_trace, params.bit_trace_level,
-                        params.short_output, params.show_histograms);
+    WP2::CollectBitTraces(memory_writer.mem_, memory_writer.size_,
+                          params.bit_trace, params.bit_trace_level,
+                          params.short_output, params.show_histograms);
   }
 
   if (params.log_level >= WP2::LogLevel::DEFAULT && params.print_summary) {
-    PrintSummary(memory_writer, width, height);
+    WP2::BitstreamFeatures bitstream;
+    EXIT_IF_ERROR(bitstream.Read(memory_writer.mem_, memory_writer.size_),
+                  "FATAL: Roundtrip error!");
+    EXIT_IF_FALSE(bitstream.raw_width == width, "FATAL: invalid width");
+    EXIT_IF_FALSE(bitstream.raw_height == height, "FATAL: invalid height");
+    printf("%s", WP2::PrintSummary(bitstream, memory_writer.size_).c_str());
   }
 }
 
@@ -741,6 +705,7 @@ int main(int argc, char* argv[]) {
 
   // Don't compute distortion in quiet mode.
   if (params.log_level == WP2::LogLevel::QUIET) params.print_distortion = -1;
+  if (params.log_level == WP2::LogLevel::QUIET) report_progress = false;
 
   // Check for unsupported command line options for lossless mode and log
   // warning for such options.
@@ -761,15 +726,14 @@ int main(int argc, char* argv[]) {
                                          "Some parameters are erroneous.");
 
   const bool is_animation = !frame_durations.empty();
-  const bool output_to_directory = (inplace_output || WP2IsDirectory(out_path));
+  const bool output_to_directory =
+      (inplace_output || WP2::IsDirectory(out_path));
   // Destination is explicitly specified, allow overwriting it.
   if (!output_to_directory) params.allow_overwrite = true;
 
   // Reuse these to do fewer memory allocations.
-  MemoryWriterProgress writer;
-  CounterProgress counter;
-  writer.report_progress_ = report_progress;
-  counter.report_progress_ = report_progress;
+  WP2::MemoryWriter writer;
+  WP2::Counter counter;
 
   if (is_animation) {
     EXIT_IF_FALSE(!output_to_directory,
@@ -781,18 +745,22 @@ int main(int argc, char* argv[]) {
         (!out_file.empty() || params.print_distortion >= 0 ||
          params.print_summary || params.bit_trace > 0);
 
+    WP2::MultiProgressPrinter progress_printer;
+    if (report_progress) {
+      progress_printer.Init(/*num_jobs=*/1);
+      params.config.progress_hook = progress_printer.GetJob(0);
+    }
+
     size_t out_size;
     if (write_to_memory) {
-      writer.file_name_ = out_file.empty() ? "output" : out_file;
-
       if (params.print_distortion >= 0) {
         std::vector<WP2::ArgbBuffer> refs;
         CompressAnimation(in_files, frame_durations, params, &refs, &rgb_buffer,
                           &writer);
 
-        WP2PrintDistortion(refs, writer.mem_, writer.size_,
-                           (WP2::MetricType)params.print_distortion,
-                           params.short_output);
+        PrintDistortion(refs, writer.mem_, writer.size_,
+                        (WP2::MetricType)params.print_distortion,
+                        params.short_output);
       } else {
         CompressAnimation(in_files, frame_durations, params, nullptr,
                           &rgb_buffer, &writer);
@@ -803,7 +771,6 @@ int main(int argc, char* argv[]) {
                 GetHeight(params, rgb_buffer));
       writer.size_ = 0;
     } else {
-      counter.file_name_ = out_file.empty() ? "output" : out_file;
       CompressAnimation(in_files, frame_durations, params, nullptr, &rgb_buffer,
                         &counter);
       out_size = counter.total_size_;
@@ -811,7 +778,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (params.log_level >= WP2::LogLevel::DEFAULT &&
-        (params.print_distortion < 0)) {
+        params.print_distortion < 0) {
       const uint32_t width = GetWidth(params, rgb_buffer);
       const uint32_t height = GetHeight(params, rgb_buffer);
       const float num_pixels = ((float)width * height * in_files.size());
@@ -824,23 +791,33 @@ int main(int argc, char* argv[]) {
         "directory.");
     EXIT_IF_FALSE(decoded_file.empty() || in_files.size() == 1,
         "Can only use -d option with a single input image.");
+
+    WP2::MultiProgressPrinter progress_printer;
+    if (report_progress) progress_printer.Init(in_files.size());
+    uint32_t job_index = 0;
+
     // Load images unmultiplied, as some images compress better this way
     // (only useful for lossless).
     WP2::ArgbBuffer rgb_buffer(WP2_ARGB_32);
     // Compress each image.
     for (const std::string& in_file : in_files) {
-      if (in_files.size() > 1 && params.log_level >= WP2::LogLevel::DEFAULT) {
+      if (in_files.size() > 1 && params.log_level >= WP2::LogLevel::DEFAULT &&
+          !report_progress) {
         printf("%s\n", in_file.c_str());
       }
       std::string out_file;
       if (inplace_output) {
         out_file =
-            (WP2RemoveFileExtension(in_file) + '.' + WP2::kFileExtension);
+            (WP2::RemoveFileExtension(in_file) + '.' + WP2::kFileExtension);
       } else if (output_to_directory) {
         out_file =
-            WP2InputFileToOutputDir(in_file, out_path, WP2::kFileExtension);
+            WP2::InputFileToOutputDir(in_file, out_path, WP2::kFileExtension);
       } else {
         out_file = out_path;
+      }
+
+      if (report_progress) {
+        params.config.progress_hook = progress_printer.GetJob(job_index++);
       }
 
       const bool write_to_memory =
@@ -850,15 +827,13 @@ int main(int argc, char* argv[]) {
 
       size_t out_size;
       if (write_to_memory) {
-        writer.file_name_ = out_file.empty() ? "output" : out_file;
-
         if (params.print_distortion >= 0) {
           std::vector<WP2::ArgbBuffer> refs;
           CompressImage(in_file.c_str(), params, &refs, &rgb_buffer, &writer);
 
-          WP2PrintDistortion(refs, writer.mem_, writer.size_,
-                             (WP2::MetricType)params.print_distortion,
-                             params.short_output);
+          PrintDistortion(refs, writer.mem_, writer.size_,
+                          (WP2::MetricType)params.print_distortion,
+                          params.short_output);
         } else {
           CompressImage(in_file.c_str(), params, nullptr, &rgb_buffer, &writer);
         }
@@ -877,14 +852,13 @@ int main(int argc, char* argv[]) {
         }
         writer.size_ = 0;
       } else {
-        counter.file_name_ = out_file.empty() ? "output" : out_file;
         CompressImage(in_file.c_str(), params, nullptr, &rgb_buffer, &counter);
         out_size = counter.total_size_;
         counter.total_size_ = 0;
       }
 
       if (params.log_level >= WP2::LogLevel::DEFAULT &&
-          (params.print_distortion < 0)) {
+          params.print_distortion < 0 && !report_progress) {
         const uint32_t width = GetWidth(params, rgb_buffer);
         const uint32_t height = GetHeight(params, rgb_buffer);
         const float num_pixels = (float)width * height;

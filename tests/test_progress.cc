@@ -34,9 +34,8 @@ class EncDecProgressTest
     : public ::testing::TestWithParam<std::tuple<const char*, bool, uint32_t>> {
 };
 
-constexpr double kFailurePoints[] = {0.,     kOnePercent, kProgressBeforeFrames,
-                                     0.5,    0.75,        1. - kProgressEnd,
-                                     0.9999, 1.};
+constexpr double kFailurePoints[] = {
+    0., kOnePercent, kProgressBeforeFrames, 0.5, 1. - kProgressEnd, 0.9999, 1.};
 
 // Encode() progression
 TEST_P(EncDecProgressTest, Encode) {
@@ -281,8 +280,8 @@ TEST_P(ProgressPrecisionTest, Encode) {
 
 INSTANTIATE_TEST_SUITE_P(
     ProgressPrecisionTestInstantiation, ProgressPrecisionTest,
-    ::testing::Combine(::testing::Values(1, 2048),    // width
-                       ::testing::Values(1, 2048),    // height
+    ::testing::Combine(::testing::Values(1, 64),      // width
+                       ::testing::Values(1, 4096),    // height
                        ::testing::Values(true),       // has_alpha
                        ::testing::Values(25.f, 96.f)  // quality
                        ));

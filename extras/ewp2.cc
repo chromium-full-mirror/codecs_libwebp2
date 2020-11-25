@@ -30,7 +30,12 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 
-using FileFormat = WP2::FileFormat;
+using WP2::ExUtilGetFloat;
+using WP2::ExUtilGetInt;
+using WP2::FileFormat;
+using WP2::GetFileName;
+using WP2::ProgramOptions;
+using WP2::SPrintf;
 
 //------------------------------------------------------------------------------
 
@@ -86,10 +91,11 @@ void PrintSize(const std::string& file_path, size_t size, uint32_t num_pixels,
                bool verbose, bool print_disto) {
   const double bpp = size * 8. / num_pixels;
   if (verbose) {
-    printf("%s %zu bytes (%.3f bpp)\n", file_path.c_str(), size, bpp);
+    printf("%s %" PRIu64 " bytes (%.3f bpp)\n", file_path.c_str(),
+           (uint64_t)size, bpp);
   } else {
-    printf("%s %zu %.3f bpp%s", WP2GetFileName(file_path).c_str(), size, bpp,
-           print_disto ? "" : "\n");
+    printf("%s %" PRIu64 " %.3f bpp%s", GetFileName(file_path).c_str(),
+           (uint64_t)size, bpp, print_disto ? "" : "\n");
   }
 }
 
@@ -441,15 +447,14 @@ int main(int argc, char* argv[]) {
              distortion[3], cmp_path.c_str(), ref_path.c_str());
     } else {
       printf("%s distortion %f   %f %f %f %f\n",
-             print_size ? "   " : WP2GetFileName(cmp_path).c_str(),
-             distortion[4], distortion[0], distortion[1], distortion[2],
-             distortion[3]);
+             print_size ? "   " : GetFileName(cmp_path).c_str(), distortion[4],
+             distortion[0], distortion[1], distortion[2], distortion[3]);
     }
     EXIT_IF_FALSE(
         distortion[4] >= ref_distortion,
         "Error! Distortion %f from %s to %s is worse than the required %f.",
-        distortion[4], WP2GetFileName(ref_path).c_str(),
-        WP2GetFileName(cmp_path).c_str(), ref_distortion);
+        distortion[4], GetFileName(ref_path).c_str(),
+        GetFileName(cmp_path).c_str(), ref_distortion);
   }
 
   return 0;

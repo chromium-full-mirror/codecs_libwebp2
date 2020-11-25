@@ -44,8 +44,8 @@ namespace {
 
 std::string AppendToFileName(const std::string& file_path,
                              const std::string& suffix) {
-  return WP2RemoveFileExtension(file_path) + suffix + "." +
-         WP2GetFileExtension(file_path);
+  return WP2::RemoveFileExtension(file_path) + suffix + "." +
+         WP2::GetFileExtension(file_path);
 }
 
 //------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ const char* const kAllMiDataNames[]{
 //------------------------------------------------------------------------------
 
 void Help() {
-  ProgramOptions opt;
+  WP2::ProgramOptions opt;
   opt.Add("Usage:");
   opt.Add("  av1enc [options] in_file [-o decoded_img] [-d encoded_av1]");
   opt.Add("");
@@ -210,7 +210,7 @@ int main(int argc, const char* argv[]) {
     } else if (!strcmp(argv[c], "-h")) {
       Help();
       return 0;
-    } else if (ProgramOptions::ParseMetricOptions(argv[c], &type)) {
+    } else if (WP2::ProgramOptions::ParseMetricOptions(argv[c], &type)) {
       continue;
     } else {
       input_path = argv[c];
@@ -224,7 +224,7 @@ int main(int argc, const char* argv[]) {
     decoded_path = AppendToFileName(input_path, "_dec");
   }
   if (encoded_path_from_input) {
-    encoded_path = WP2RemoveFileExtension(input_path) + ".av1";
+    encoded_path = WP2::RemoveFileExtension(input_path) + ".av1";
   }
 
   WP2::ArgbBuffer ref;
@@ -283,10 +283,11 @@ int main(int argc, const char* argv[]) {
 
       // Align text with bit traces.
       if (count_blocks) {
-        printf("num-blocks                     %zu\n", blocks.size());
+        printf("num-blocks                     %u\n", (uint32_t)blocks.size());
       }
       if (count_transforms) {
-        printf("num-transforms                 %zu\n", transforms.size());
+        printf("num-transforms                 %u\n",
+               (uint32_t)transforms.size());
       }
       if (print_quant) {
         for (uint32_t s = 0; s < 8; ++s) {
@@ -309,8 +310,8 @@ int main(int argc, const char* argv[]) {
           fprintf(stderr, "Error while computing the distortion.\n");
           return 2;
         }
-        printf("%zu %f   (%f %f %f %f) ", bits.size(), disto[4], disto[0],
-               disto[1], disto[2], disto[3]);
+        printf("%" PRIu64 " %f   (%f %f %f %f) ", (uint64_t)bits.size(),
+               disto[4], disto[0], disto[1], disto[2], disto[3]);
         printf("[ %.2f bpp ] [ %d x %d ] [%.3f / %.3f secs]\n",
                8.f * bits.size() / (ref.width() * ref.height()), ref.width(),
                ref.height(), timing[0], timing[1]);
@@ -319,7 +320,7 @@ int main(int argc, const char* argv[]) {
       if (store_blocks || store_transforms) {
         const char path[] = "/tmp/partition.txt";
         // Transforms are contained in blocks so output only transforms if both.
-        if (!WP2WritePartition(store_transforms ? transforms : blocks, path)) {
+        if (!WritePartition(store_transforms ? transforms : blocks, path)) {
           fprintf(stderr, "Error saving partition file (%s)\n", path);
           return 3;
         } else if (!quiet) {
@@ -346,8 +347,8 @@ int main(int argc, const char* argv[]) {
           fprintf(stderr, "Error saving encoded file (%s)\n", path.c_str());
           return 3;
         } else if (!quiet) {
-          printf("Saved encoded file: %s (%zu bytes)\n", path.c_str(),
-                 bits.size());
+          printf("Saved encoded file: %s (%" PRIu64 " bytes)\n", path.c_str(),
+                 (uint64_t)bits.size());
         }
       }
     }

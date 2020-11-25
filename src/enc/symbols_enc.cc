@@ -1147,7 +1147,8 @@ WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
 }
 
 void SymbolWriter::GetPotentialUsage(uint32_t cluster, uint32_t sym,
-                                     bool is_maybe_used[], size_t size) const {
+                                     bool is_maybe_used[],
+                                     uint32_t size) const {
   const Stat& stat = *GetStats(cluster, sym);
   switch (stat.type) {
     case (Stat::Type::kTrivial):
@@ -1166,13 +1167,13 @@ void SymbolWriter::GetPotentialUsage(uint32_t cluster, uint32_t sym,
       }
       const Vector_u32& v = stat.extra.dict->Counts();
       if (stat.use_mapping) {
-        for (size_t i = 0; i < stat.extra.mapping_size; ++i) {
+        for (uint32_t i = 0; i < stat.extra.mapping_size; ++i) {
           if (stat.mappings[i] != Stat::kInvalidMapping) {
             is_maybe_used[i] = (v[stat.mappings[i]] > 0);
           }
         }
       } else {
-        for (size_t i = 0; i < stat.extra.dict->MaxSymbol(); ++i) {
+        for (uint32_t i = 0; i < stat.extra.dict->MaxSymbol(); ++i) {
           is_maybe_used[i] = (v[i] > 0);
         }
       }
@@ -1186,26 +1187,26 @@ void SymbolWriter::GetPotentialUsage(uint32_t cluster, uint32_t sym,
       const Vector_u32& v = stat.extra.dict->Counts();
       const uint32_t prefix_size = stat.param.golomb.prefix_size;
       if (stat.use_mapping) {
-        for (size_t i = 0; i < stat.extra.mapping_size; ++i) {
+        for (uint32_t i = 0; i < stat.extra.mapping_size; ++i) {
           const auto m = stat.mappings[i];
           if (m != Stat::kInvalidMapping && v[m] > 0) {
             const uint32_t extra_bits_num =
                 Golomb::NumExtraBits(i, prefix_size);
             const uint32_t i1 = Golomb::Merge(i, prefix_size, 0);
             assert(i1 <= size);
-            const size_t i2 =
+            const uint32_t i2 =
                 Golomb::Merge(i, prefix_size, (1 << extra_bits_num) - 1);
             std::fill(is_maybe_used + i1,
                       is_maybe_used + std::min(i2 + 1, size), true);
           }
         }
       } else {
-        for (size_t i = 0; i < stat.extra.dict->MaxSymbol(); ++i) {
+        for (uint32_t i = 0; i < stat.extra.dict->MaxSymbol(); ++i) {
           if (v[i] == 0) continue;
           const uint32_t extra_bits_num = Golomb::NumExtraBits(i, prefix_size);
           const uint32_t i1 = Golomb::Merge(i, prefix_size, 0);
           assert(i1 <= size);
-          const size_t i2 =
+          const uint32_t i2 =
               Golomb::Merge(i, prefix_size, (1 << extra_bits_num) - 1);
           std::fill(is_maybe_used + i1, is_maybe_used + std::min(i2 + 1, size),
                     true);

@@ -443,7 +443,7 @@ TEST(BufferTest, GetDistortion_BlackSquare) {
     for (uint32_t metric = 0; metric < NUM_METRIC_TYPES; ++metric) {
       // Not yet implemented.
       if (format == WP2_Argb_38 && (MetricType)metric != PSNR) continue;
-      SCOPED_TRACE(SPrintf("metric %s", kWP2MetricNames[metric]));
+      SCOPED_TRACE(SPrintf("metric %s", kMetricNames[metric]));
       float result[5];
       ASSERT_WP2_OK(compressed.GetDistortion(orig, (MetricType)metric, result));
       EXPECT_LT(result[0], 50.f);  // a
@@ -494,7 +494,7 @@ TEST(BufferTest, GetDistortion_WhiteSquare) {
   compressed.Fill({25, 25, 50, 50}, Argb32b({250, 250, 250, 250}));
 
   for (uint32_t metric = 0; metric < NUM_METRIC_TYPES; ++metric) {
-    SCOPED_TRACE(SPrintf("metric %s", kWP2MetricNames[metric]));
+    SCOPED_TRACE(SPrintf("metric %s", kMetricNames[metric]));
     float result[5];
     ASSERT_WP2_OK(compressed.GetDistortion(orig, (MetricType)metric, result));
 

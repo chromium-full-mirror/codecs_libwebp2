@@ -608,7 +608,7 @@ WP2Status ExhaustivePartitioner::GetBestPartition(
   front_mgr_.Clear();
   partition_.clear();
 
-  size_t num_iterations = 0;
+  uint64_t num_iterations = 0;
   while (true) {
     bool found;
     float score;
