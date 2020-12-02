@@ -161,8 +161,8 @@ class ResidualIO {
                                      uint32_t sector = 0);
 
   // Initialize the probabilities for the symbol info.
-  static WP2Status InitializeInfo(bool has_alpha, uint32_t quality_hint,
-                                  bool use_aom_coeffs, SymbolsInfo* const info);
+  static WP2Status InitializeInfo(bool has_alpha, bool use_aom_coeffs,
+                                  SymbolsInfo* const info);
 
   // Looks at the coeffs and figure out the geometry of the residuals.
   // When it is not all zero or DC only, it returns kMethod0.

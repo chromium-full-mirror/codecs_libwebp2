@@ -653,9 +653,9 @@ void ANSDec::PopBitTracesCustomPrefix(const char* const suffix_of_prefix) {
   if (counters_custom_key_ == suffix_of_prefix) {
     counters_custom_key_.clear();
   } else {
-    const size_t suffix_length = std::strlen(suffix_of_prefix);
+    const uint32_t suffix_length = std::strlen(suffix_of_prefix);
     assert(counters_custom_key_.size() > suffix_length);
-    const size_t new_length = counters_custom_key_.size() - suffix_length - 1;
+    const uint32_t new_length = counters_custom_key_.size() - suffix_length - 1;
     assert(counters_custom_key_[new_length] == '/' &&
            counters_custom_key_.substr(new_length + 1) == suffix_of_prefix);
     counters_custom_key_.resize(new_length);
@@ -664,12 +664,12 @@ void ANSDec::PopBitTracesCustomPrefix(const char* const suffix_of_prefix) {
 }
 #endif
 
-size_t ANSDec::GetNumUsedBytes() const {
+uint32_t ANSDec::GetNumUsedBytes() const {
   return data_source_->GetNumDiscardedBytes() + data_source_->GetNumReadBytes();
 }
 
-size_t ANSDec::GetMinNumUsedBytesDiff(size_t num_used_bytes_before,
-                                      size_t num_used_bytes_after) {
+uint32_t ANSDec::GetMinNumUsedBytesDiff(uint32_t num_used_bytes_before,
+                                        uint32_t num_used_bytes_after) {
   // Precision is +-IO_BYTES.
   return SafeSub(num_used_bytes_after, num_used_bytes_before + IO_BYTES);
 }
@@ -1319,14 +1319,14 @@ WP2Status ANSEnc::Append(const ANSEnc& enc) {
 WP2Status ANSEnc::AppendTokens(const ANSEnc& enc, uint32_t start_token,
                                uint32_t n_tokens) {
   // Figure out the pages in order
-  size_t n_pages = 0;
+  uint32_t n_pages = 0;
   for (const ANSTokenPage* page = enc.tokens_; page != nullptr;
        page = page->prev) {
     ++n_pages;
   }
   VectorNoCtor<const ANSTokenPage*> pages;
   if (!pages.resize(n_pages)) return WP2_STATUS_OUT_OF_MEMORY;
-  size_t idx = n_pages;
+  uint32_t idx = n_pages;
   for (const ANSTokenPage* page = enc.tokens_; page != nullptr;
        page = page->prev) {
     pages[--idx] = page;

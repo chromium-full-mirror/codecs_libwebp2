@@ -33,8 +33,6 @@ class RndMtxSet;
 // Quantization
 
 static constexpr uint32_t kNumQuantZones = 4;
-static constexpr uint32_t kMinQuantStep = 128u;
-static constexpr uint32_t kMaxQuantStep = 5800u;
 
 class QuantStat {
  public:
@@ -102,9 +100,10 @@ struct QuantMtx {
   // lambda multipliers
   float lambda1;   // used for Y mode-decision
   float lambda2;   // used for UV mode-decision
+  float lambda3;   // used for prediction-mode bits
 
  protected:
-  uint16_t quant_steps[kNumQuantZones] = {0};   // quant levels for each zones
+  uint16_t quant_steps[kNumQuantZones] = {0};   // quant id for each zones
 
   // quantization and dequantization factors for converting between transform
   // coefficients and coded levels:
@@ -119,9 +118,9 @@ struct QuantMtx {
   uint16_t max_abs_res_dc[TRF_LAST];   // permanent storage for DC
 
   // data for all quant matrices
-  static constexpr size_t kDataSize =
+  static constexpr uint32_t kDataSize =
       8 +  // < should be 2 * 2, but we round up to 8 bytes for WP2Quantize()
-      4 * 4 + 8 * 8 + 16 * 16 +  32 * 32 +
+      4 * 4 + 8 * 8 + 16 * 16 + 32 * 32 +
       2 * (2 * 4 + 2 * 8 + 4 * 8 + 4 * 16 + 8 * 16 + 8 * 32 + 16 * 32);
   int16_t dequant_data[kDataSize];
   Vector_u32 iquant_data;

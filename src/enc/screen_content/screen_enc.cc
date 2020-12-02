@@ -172,6 +172,21 @@ Rectangle ScaleRect(const Rectangle& rect, uint32_t multiplier) {
           rect.height * multiplier};
 }
 
+EncoderConfig LossyConfig(const EncoderConfig& base_config) {
+  assert(base_config.quality <= kMaxLossyQuality);
+  EncoderConfig config = base_config;
+  config.tile_shape = FinalTileShape(base_config);
+  return config;
+}
+
+EncoderConfig LosslessConfig(const EncoderConfig& base_config) {
+  const uint32_t kNearLosslessQuality = 98;
+  EncoderConfig config = base_config;
+  config.quality = kNearLosslessQuality;
+  config.tile_shape = FinalTileShape(base_config);
+  return config;
+}
+
 }  // namespace
 
 WP2Status EncodeScreenContent(const ArgbBuffer& input,
@@ -189,26 +204,34 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
   ProgressWatcher progress(config.progress_hook);
   WP2_CHECK_STATUS(progress.Start());
 
-  const uint32_t block_width = DivCeil(input.width(), kScreenBlockSize);
-  const uint32_t block_height = DivCeil(input.height(), kScreenBlockSize);
   // Empirical value. TODO(maryla): tune.
   const float lambda = std::max(85.f, -42.f * config.quality + 3400.f);
 
-  const uint32_t kNearLosslessQuality = 98;
-
-  EncoderConfig lossless_config = config;
-  lossless_config.quality = kNearLosslessQuality;
   Planef lossless_scores;
-  WP2_CHECK_STATUS(GetScores(lossless_config, input, lambda, &lossless_scores));
-  EncoderConfig lossy_config = config;
+  WP2_CHECK_STATUS(
+      GetScores(LosslessConfig(config), input, lambda, &lossless_scores));
   // We don't actually need to keep lossy and lossless_score, we could subtract
   // one from the other directly. But this is simpler/clearer.
   Planef lossy_scores;
-  WP2_CHECK_STATUS(GetScores(lossy_config, input, lambda, &lossy_scores));
+  WP2_CHECK_STATUS(
+      GetScores(LossyConfig(config), input, lambda, &lossy_scores));
 
   Plane<bool> is_lossy;
   WP2_CHECK_STATUS(
       DecideLossy(input, lossy_scores, lossless_scores, &is_lossy));
+
+  return EncodeScreenContent(input, is_lossy, kScreenBlockSize, output, config);
+}
+
+WP2Status EncodeScreenContent(const ArgbBuffer& input,
+                              const Plane<bool>& is_lossy, uint32_t block_size,
+                              Writer* const output,
+                              const EncoderConfig& config) {
+  ProgressWatcher progress(config.progress_hook);
+  WP2_CHECK_STATUS(progress.Start());
+
+  const uint32_t block_height = DivCeil(input.height(), block_size);
+  const uint32_t block_width = DivCeil(input.width(), block_size);
 
   RectangleGroup lossy_rect_group(1);
   RectangleGroup lossless_rect_group(1);
@@ -225,20 +248,20 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
   if (lossy_rect_group.GetNumRectangles() == 0 ||
       lossless_rect_group.GetNumRectangles() == 0) {
     if (lossless_rect_group.GetNumRectangles() > 0) {
-      return Encode(input, output, lossless_config);
+      return Encode(input, output, LosslessConfig(config));
     }
-    return Encode(input, output, lossy_config);
+    return Encode(input, output, LossyConfig(config));
   }
 
   Subframe lossless_subframe;
   Subframe lossy_subframe;
-  WP2_CHECK_STATUS(lossy_subframe.rgb_pixels.CopyFrom(input));
-  WP2_CHECK_STATUS(lossless_subframe.rgb_pixels.CopyFrom(input));
+  WP2_CHECK_STATUS(lossy_subframe.rgb_pixels.ConvertFrom(input));
+  WP2_CHECK_STATUS(lossless_subframe.rgb_pixels.ConvertFrom(input));
   lossy_subframe.window =
-      ScaleRect(lossy_rect_group.GetRectangle(0), kScreenBlockSize)
+      ScaleRect(lossy_rect_group.GetRectangle(0), block_size)
           .ClipWith(lossy_subframe.GetFrameRect());
   lossless_subframe.window =
-      ScaleRect(lossless_rect_group.GetRectangle(0), kScreenBlockSize)
+      ScaleRect(lossless_rect_group.GetRectangle(0), block_size)
           .ClipWith(lossless_subframe.GetFrameRect());
 
   lossless_subframe.duration_ms = 0;
@@ -250,26 +273,25 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
   for (uint32_t y = 0; y < block_height; ++y) {
     for (uint32_t x = 0; x < block_width; ++x) {
       const bool lossy = is_lossy.At(x, y);
-      const uint32_t w =
-          std::min(input.width() - x * kScreenBlockSize, kScreenBlockSize);
-      for (uint32_t j = 0; j < kScreenBlockSize; ++j) {
-        if (y * kScreenBlockSize + j >= input.height()) break;
-        uint8_t* lossless_row = (uint8_t*)(lossless_subframe.rgb_pixels.GetRow(
-            y * kScreenBlockSize + j));
-        uint8_t* lossy_row = (uint8_t*)(lossy_subframe.rgb_pixels.GetRow(
-            y * kScreenBlockSize + j));
+      const uint32_t w = std::min(input.width() - x * block_size, block_size);
+      for (uint32_t j = 0; j < block_size; ++j) {
+        if (y * block_size + j >= input.height()) break;
+        uint8_t* lossless_row =
+            (uint8_t*)(lossless_subframe.rgb_pixels.GetRow(y * block_size + j));
+        uint8_t* lossy_row =
+            (uint8_t*)(lossy_subframe.rgb_pixels.GetRow(y * block_size + j));
         if (lossy) {
-          std::fill(&lossless_row[(x * kScreenBlockSize) * 4],
-                    &lossless_row[(x * kScreenBlockSize + w) * 4], 0);
+          std::fill(&lossless_row[(x * block_size) * 4],
+                    &lossless_row[(x * block_size + w) * 4], 0);
         } else {
-          std::fill(&lossy_row[(x * kScreenBlockSize) * 4],
-                    &lossy_row[(x * kScreenBlockSize + w) * 4], 0);
+          std::fill(&lossy_row[(x * block_size) * 4],
+                    &lossy_row[(x * block_size + w) * 4], 0);
         }
       }
     }
   }
 
-  const bool has_alpha = input.HasTransparency();
+  const bool has_alpha = true;
   const bool has_icc = (input.metadata_.iccp.size > 0);
   const bool has_trailing_data =
       (input.metadata_.xmp.size > 0) || (input.metadata_.exif.size > 0);
@@ -277,6 +299,7 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
       config, input.width(), input.height(), has_alpha, /*is_anim=*/true,
       /*loop_forever=*/false, kDefaultBackgroundColor, GetPreviewColor(input),
       has_icc, has_trailing_data, output));
+  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   WP2_CHECK_STATUS(EncodePreview(input, config, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
@@ -290,14 +313,15 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
   const ProgressRange lossy_progress(
       &progress, GetFrameProgression(/*frame_index=*/1, /*is_last=*/true));
 
-  SubframeEncoder frame_encode(GetQualityHint(config.quality), has_alpha);
+  SubframeEncoder frame_encode(GetQualityHint(config.quality), has_alpha,
+                               FinalTileShape(config));
   WP2_CHECK_STATUS(frame_encode.EncodeSubframe(
-      lossless_config, lossless_subframe,
+      LosslessConfig(config), lossless_subframe,
       /*is_last=*/false, lossless_progress, output));
 
-  WP2_CHECK_STATUS(frame_encode.EncodeSubframe(lossy_config, lossy_subframe,
-                                               /*is_last=*/true, lossy_progress,
-                                               output));
+  WP2_CHECK_STATUS(
+      frame_encode.EncodeSubframe(LossyConfig(config), lossy_subframe,
+                                  /*is_last=*/true, lossy_progress, output));
 
   WP2_CHECK_STATUS(EncodeMetadata(input.metadata_, output));
   WP2_CHECK_STATUS(progress.Finish());

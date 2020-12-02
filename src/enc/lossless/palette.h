@@ -52,7 +52,7 @@ class Palette {
   // Returns the number of colors in the palette. Returns 0 if AnalyzeAndCreate
   // hasn't been called or if it was called on an image with more than
   // kMaxPaletteSize unique colors or less than two colors.
-  size_t Size() const { return num_colors_; }
+  uint32_t Size() const { return num_colors_; }
   // Try to find the best writing method 'method_'. Might reorder the colors_.
   // The storage cost cost_ will be calculated.
   // The 'effort' parameter impacts the depth of analyzis to get a better cost.

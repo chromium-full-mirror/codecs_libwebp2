@@ -53,7 +53,7 @@ void PredictorVector::reset() {
 // Appends a formatted literal to a std::string.
 #define WP2SAppend(str_ptr, ...)                                         \
   do {                                                                   \
-    const size_t size = std::snprintf(nullptr, 0, __VA_ARGS__) + 1;      \
+    const uint32_t size = std::snprintf(nullptr, 0, __VA_ARGS__) + 1;    \
     (str_ptr)->resize((str_ptr)->size() + size);                         \
     std::snprintf((char*)&(str_ptr)->at((str_ptr)->size() - size), size, \
                   __VA_ARGS__);                                          \

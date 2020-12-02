@@ -298,7 +298,7 @@ WP2Status CollectVerticesFromRandomEdgeSelection(
     }
   };
 
-  const size_t num_best_candidates = 2 * max_num_vertices;
+  const uint32_t num_best_candidates = 2 * max_num_vertices;
   Vector<Candidate> candidates_heap;
   WP2_CHECK_ALLOC_OK(candidates_heap.reserve(num_best_candidates));
 
@@ -318,10 +318,11 @@ WP2Status CollectVerticesFromRandomEdgeSelection(
       }
     }
   }
-  max_num_vertices = std::min(candidates_heap.size(), (size_t)max_num_vertices);
+  max_num_vertices =
+      std::min((uint32_t)candidates_heap.size(), max_num_vertices);
 
   // Randomly pick at most 'max_num_vertices' from the 'num_best_candidates'.
-  const size_t random_seed = edges.w_ + edges.h_;
+  const uint32_t random_seed = edges.w_ + edges.h_;
   Shuffle(candidates_heap.begin(), candidates_heap.end(), random_seed);
 
   WP2_CHECK_ALLOC_OK(vertices.resize(max_num_vertices));

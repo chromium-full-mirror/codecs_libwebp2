@@ -158,7 +158,7 @@ class Predictors {
   }
   bool empty() const { return preds_.empty(); }
   uint32_t size() const { return preds_.size(); }
-  const Predictor* operator[](size_t i) const { return preds_[i]; }
+  const Predictor* operator[](uint32_t i) const { return preds_[i]; }
   PredictorVector::const_iterator begin() const { return preds_.begin(); }
   PredictorVector::const_iterator end() const { return preds_.end(); }
   // Finds the best predictor for a block 'cb'. This predictor has to give a

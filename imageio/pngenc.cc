@@ -48,12 +48,12 @@ namespace WP2 {
 
 namespace {
 
-#define IFS(fn)                                                   \
-  do {                                                            \
-    if (SUCCEEDED(hr)) {                                          \
-      hr = (fn);                                                  \
-      if (FAILED(hr)) fprintf(stderr, #fn " failed %08lx\n", hr); \
-    }                                                             \
+#define IFS(fn)                                                  \
+  do {                                                           \
+    if (SUCCEEDED(hr)) {                                         \
+      hr = (fn);                                                 \
+      if (FAILED(hr)) fprintf(stderr, #fn " failed %08x\n", hr); \
+    }                                                            \
   } while (0)
 
 #ifdef __cplusplus
@@ -73,7 +73,7 @@ HRESULT CreateOutputStream(const char* file_path, bool write_to_mem,
     IFS(SHCreateStreamOnFileA(file_path, STGM_WRITE | create_mode, stream));
   }
   if (FAILED(hr)) {
-    fprintf(stderr, "Error opening output file %s (%08lx)\n", file_path, hr);
+    fprintf(stderr, "Error opening output file %s (%08x)\n", file_path, hr);
   }
   return hr;
 }

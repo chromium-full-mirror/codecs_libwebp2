@@ -22,7 +22,7 @@
 
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
-#include "src/dsp/lossless/lossless.h"
+#include "src/dsp/lossless/encl_dsp.h"
 #include "src/enc/lossless/backward_references_enc.h"
 #include "src/enc/lossless/histogram_enc.h"
 #include "src/enc/lossless/palette.h"

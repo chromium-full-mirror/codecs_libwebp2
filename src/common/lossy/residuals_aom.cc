@@ -218,7 +218,7 @@ WP2Status AOMContext::Init(uint32_t width, uint32_t height) {
   is420_ = false;
   columns4x4_ = (width + 3) >> 2;
   rows4x4_ = (height + 3) >> 2;
-  for (size_t i = 0; i < coefficient_levels_.size(); ++i) {
+  for (uint32_t i = 0; i < coefficient_levels_.size(); ++i) {
     const int contexts_per_plane =
         (i == kEntropyContextLeft) ? rows4x4_ : columns4x4_;
     WP2_CHECK_ALLOC_OK(
@@ -239,7 +239,7 @@ WP2Status AOMContext::CopyFrom(const AOMContext& other) {
 }
 
 void AOMContext::Reset() {
-  for (size_t i = 0; i < coefficient_levels_.size(); ++i) {
+  for (uint32_t i = 0; i < coefficient_levels_.size(); ++i) {
     const int contexts_per_plane =
         (i == kEntropyContextLeft) ? rows4x4_ : columns4x4_;
     if (!coefficient_levels_[i].Reset(PlaneCount(), contexts_per_plane)) {

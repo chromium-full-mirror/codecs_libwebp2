@@ -27,8 +27,7 @@
 #endif
 
 #include "src/common/color_precision.h"
-#include "src/dsp/lossless/lossless.h"
-#include "src/dsp/lossless/lossless_common.h"
+#include "src/dsp/lossless/encl_dsp.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/symbols_enc.h"
 #include "src/utils/random.h"
@@ -41,9 +40,9 @@ namespace WP2L {
 
 //------------------------------------------------------------------------------
 
-static inline void CopySubHistogram(const Histogram& a, const size_t s,
+static inline void CopySubHistogram(const Histogram& a, const uint32_t s,
                                     Histogram* const out) {
-  const size_t size =
+  const uint32_t size =
       sizeof(out->counts_[s][0]) * a.symbols_info_->GetMaxRange(s);
   memcpy(out->counts_[s], a.counts_[s], size);
   out->trivial_symbols_[s] = a.trivial_symbols_[s];
@@ -56,7 +55,7 @@ static void HistogramAdd(const Histogram& a, const Histogram& b,
                          Histogram* const out) {
   assert(a.symbols_info_ == b.symbols_info_);
   if (&b != out) {
-    for (size_t s = 0; s < kSymbolNum; ++s) {
+    for (uint32_t s = 0; s < kSymbolNum; ++s) {
       if (a.nonzeros_[s] == 0) {
         CopySubHistogram(b, s, out);
       } else if (b.nonzeros_[s] == 0) {
@@ -64,7 +63,7 @@ static void HistogramAdd(const Histogram& a, const Histogram& b,
       } else if (a.nonzeros_[s] == 1 && b.nonzeros_[s] == 1 &&
                  a.trivial_symbols_[s] == b.trivial_symbols_[s]) {
         const auto& trivial_symbol = a.trivial_symbols_[s];
-        const size_t size =
+        const uint32_t size =
             sizeof(out->counts_[s][0]) * a.symbols_info_->GetMaxRange(s);
         memset(out->counts_[s], 0, size);
         out->counts_[s][trivial_symbol] =
@@ -73,14 +72,13 @@ static void HistogramAdd(const Histogram& a, const Histogram& b,
         out->nonzeros_[s] = 1;
       } else {
         out->trivial_symbols_[s] = 0;
-        WP2LBufferAdd(a.counts_[s], b.counts_[s],
-                      a.symbols_info_->GetMaxRange(s), out->counts_[s],
-                      &out->nonzeros_[s]);
+        BufferAdd(a.counts_[s], b.counts_[s], a.symbols_info_->GetMaxRange(s),
+                  out->counts_[s], &out->nonzeros_[s]);
         assert(out->nonzeros_[s] > 1);
       }
     }
   } else {
-    for (size_t s = 0; s < kSymbolNum; ++s) {
+    for (uint32_t s = 0; s < kSymbolNum; ++s) {
       if (a.nonzeros_[s] == 0) {
         // out is b and no modification is added.
       } else if (b.nonzeros_[s] == 0) {
@@ -92,9 +90,8 @@ static void HistogramAdd(const Histogram& a, const Histogram& b,
             a.counts_[s][a.trivial_symbols_[s]];
       } else {
         out->trivial_symbols_[s] = 0;
-        WP2LBufferAdd(a.counts_[s], b.counts_[s],
-                      a.symbols_info_->GetMaxRange(s), out->counts_[s],
-                      &out->nonzeros_[s]);
+        BufferAdd(a.counts_[s], b.counts_[s], a.symbols_info_->GetMaxRange(s),
+                  out->counts_[s], &out->nonzeros_[s]);
         assert(out->nonzeros_[s] > 1);
       }
     }
@@ -111,7 +108,7 @@ bool HistogramSet::Allocate(uint32_t size,
   }
   std::fill(buffer_.begin(), buffer_.end(), 0);
   uint32_t* memory = buffer_.data();
-  for (size_t i = 0; i < size; ++i) {
+  for (uint32_t i = 0; i < size; ++i) {
     histograms_[i] = &histo_buffer_[i];
     histo_buffer_[i].Init();
     histo_buffer_[i].SetBuffer(memory, symbols_info);
@@ -128,7 +125,7 @@ bool HistogramSet::Allocate(uint32_t size,
 
 PopulationAnalyzer::PopulationAnalyzer(uint32_t image_size)
     : image_size_(image_size) {
-  WP2LEncDspInit();
+  EncLDspInit();
 }
 
 void PopulationAnalyzer::PopulationCost(const uint32_t* const population,
@@ -163,9 +160,8 @@ void PopulationAnalyzer::PopulationCost(const uint32_t* const population,
   quantizer_.Quantize(histogram_.data(), mapping_.data(), size, range,
                       image_size_, /*effort=*/0, &config);
   if (cost != nullptr) {
-    *cost = WP2Log2(3) +
-            WP2Log2(std::min(image_size_, range) - 1) +
-            config->cost_;
+    *cost =
+        WP2Log2(3) + WP2Log2(std::min(image_size_, range) - 1) + config->cost;
   }
 }
 
@@ -188,7 +184,7 @@ void PopulationAnalyzer::GetCombinedEntropy(
     return;
   }
 
-  WP2LBufferAdd(X, Y, length, sum_tmp_.data(), nullptr);
+  BufferAdd(X, Y, length, sum_tmp_.data(), nullptr);
   PopulationCost(sum_tmp_.data(), length, nullptr, nullptr, cost);
 }
 
@@ -203,18 +199,18 @@ int PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
 
   // Deal with the raw bits of length and distance.
   for (const auto& sym : {kSymbolLen, kSymbolDist}) {
-    *cost += WP2LExtraCostCombined(a.counts_[sym], b.counts_[sym],
-                                   a.symbols_info_->GetMaxRange(sym));
+    *cost += ExtraCostCombined(a.counts_[sym], b.counts_[sym],
+                               a.symbols_info_->GetMaxRange(sym));
     if (*cost > cost_threshold) return 0;
   }
 
   bool is_used[kSymbolTypeNum];
-  for (size_t i = 0; i < kSymbolTypeNum; ++i) {
+  for (uint32_t i = 0; i < kSymbolTypeNum; ++i) {
     is_used[i] = (a.counts_[kSymbolType][i] + b.counts_[kSymbolType][i] > 0);
   }
 
   // Deal with all the symbols.
-  for (size_t s = 0; s < kSymbolNum; ++s) {
+  for (uint32_t s = 0; s < kSymbolNum; ++s) {
     if (a.symbols_info_->IsSymbolUseless((Symbol)s, is_used) &&
         b.symbols_info_->IsSymbolUseless((Symbol)s, is_used)) {
       continue;
@@ -280,7 +276,7 @@ void PopulationAnalyzer::UpdateHistogramCost(Histogram* const h) {
     std::fill(h->costs_, h->costs_ + kSymbolNum, 0.);
     return;
   }
-  for (size_t s = 0; s < kSymbolNum; ++s) {
+  for (uint32_t s = 0; s < kSymbolNum; ++s) {
     const Symbol sym = (Symbol)s;
     if (h->symbols_info_->IsSymbolUseless(sym, is_used)) {
       h->costs_[s] = 0.;
@@ -292,7 +288,7 @@ void PopulationAnalyzer::UpdateHistogramCost(Histogram* const h) {
   }
   for (const auto& sym : {kSymbolLen, kSymbolDist}) {
     h->costs_[sym] +=
-        WP2LExtraCost(h->counts_[sym], h->symbols_info_->GetMaxRange(sym));
+        ExtraCost(h->counts_[sym], h->symbols_info_->GetMaxRange(sym));
   }
   // Update the total bit_cost.
   for (const auto& c : h->costs_) h->bit_cost_ += c;
@@ -535,7 +531,7 @@ void HistoQueue::MergeFront() {
                (*histograms_)[idx1]);
   (*histograms_)[idx1]->bit_cost_ = queue_.front().cost_combo;
 
-  for (size_t i = 0; i < queue_.size();) {
+  for (uint32_t i = 0; i < queue_.size();) {
     HistogramPair* const p = &queue_[i];
     if (p->idx1 == idx1 || p->idx2 == idx1 || p->idx1 == idx2 ||
         p->idx2 == idx2) {
@@ -716,7 +712,7 @@ static WP2Status HistogramRemap(const HistogramSet& in, HistogramSet* const out,
   const uint32_t in_size = in.histograms_.size();
   const uint32_t out_size = out->histograms_.size();
   if (out_size > 1) {
-    for (size_t i = 0; i < in_size; ++i) {
+    for (uint32_t i = 0; i < in_size; ++i) {
       int best_out = 0;
       double best_bits = std::numeric_limits<double>::max();
       for (uint32_t k = 0; k < out_size; ++k) {
@@ -731,7 +727,7 @@ static WP2Status HistogramRemap(const HistogramSet& in, HistogramSet* const out,
     }
   } else {
     assert(out_size == 1);
-    for (size_t i = 0; i < in_size; ++i) {
+    for (uint32_t i = 0; i < in_size; ++i) {
       mapping[i] = 0;
     }
   }
@@ -752,15 +748,15 @@ static WP2Status HistogramRemap(const HistogramSet& in, HistogramSet* const out,
   }
 
   // Recompute each out based on raw and symbols.
-  for (size_t i = 0; i < out_size; ++i) {
+  for (uint32_t i = 0; i < out_size; ++i) {
     out_histo[i]->Clear();
   }
 
-  for (size_t i = 0; i < in_size; ++i) {
+  for (uint32_t i = 0; i < in_size; ++i) {
     const int idx = mapping[i];
     HistogramAdd(*in_histo[i], *out_histo[idx], out_histo[idx]);
   }
-  for (size_t i = 0; i < out_size; ++i) {
+  for (uint32_t i = 0; i < out_size; ++i) {
     analyzer->UpdateHistogramCost(out_histo[i]);
   }
   return WP2_STATUS_OK;
@@ -783,9 +779,9 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
   const WP2::ProgressRange reduce_progress(progress, 0.2);
 
   const uint32_t histo_xsize =
-      histogram_bits ? WP2LSubSampleSize(width, histogram_bits) : 1;
+      histogram_bits ? SubSampleSize(width, histogram_bits) : 1;
   const uint32_t histo_ysize =
-      histogram_bits ? WP2LSubSampleSize(height, histogram_bits) : 1;
+      histogram_bits ? SubSampleSize(height, histogram_bits) : 1;
   const uint32_t image_histo_raw_size = histo_xsize * histo_ysize;
   HistogramSet orig_histo;
   WP2_CHECK_ALLOC_OK(orig_histo.Allocate(image_histo_raw_size, symbols_info));
@@ -837,7 +833,7 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
         HistogramRemap(orig_histo, image_histo, &analyzer, histogram_symbols));
 
     // Cost of all the histograms and the entropy image.
-    size_t cost_all;
+    double cost_all;
     // Figure out the entropy of the symbols image.
     {
       WP2::ANSEnc enc;
@@ -849,7 +845,7 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
       WP2::Vector_s16 labels;
       WP2_CHECK_ALLOC_OK(labels.resize(4 * image_histo_raw_size));
 
-      for (size_t i = 0; i < image_histo_raw_size; ++i) {
+      for (uint32_t i = 0; i < image_histo_raw_size; ++i) {
         labels[4 * i + 0] = 0;
         labels[4 * i + 1] = 0;
         labels[4 * i + 2] = histogram_symbols[i];

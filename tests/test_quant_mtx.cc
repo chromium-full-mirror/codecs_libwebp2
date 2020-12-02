@@ -38,7 +38,7 @@ TEST_F(QuantMtxTest, RoundTrip) {
     const uint32_t num_coeffs = kNumCoeffs[trf];
     const uint32_t scale = num_coeffs >> 2;
     SCOPED_TRACE(SPrintf("trf: %s (scale %d)", kTDimNames[trf], scale));
-    for (const uint16_t quant : {128, 493, 1499, 3021, 4523, 5000}) {
+    for (const uint16_t quant : {12, 49, 89, 150, 199, 220}) {
       SCOPED_TRACE(SPrintf("quant: %d", quant));
       QuantMtx mtx;
       ASSERT_WP2_OK(mtx.Allocate());
@@ -63,17 +63,17 @@ TEST_F(QuantMtxTest, RoundTrip) {
 
 TEST_F(QuantMtxTest, DCError) {
   for (TrfSize trf : kAllTrfSizes) {
-    const uint32_t scale = kNumCoeffs[trf] >> 2;
+    const uint32_t scale = kNumCoeffs[trf] << 2;
     SCOPED_TRACE(SPrintf("trf: %s (scale %d)", kTDimNames[trf], scale));
-    for (uint16_t quant : {128, 200, 500, 2001, 4000, 5000}) {
-      SCOPED_TRACE(SPrintf("quant: %d", quant));
+    for (uint16_t quant : {128, 200, 50, 10, 1}) {
+      SCOPED_TRACE(SPrintf("quant step: %d", quant));
       QuantMtx mtx;
       ASSERT_WP2_OK(mtx.Allocate());
       const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
       mtx.Init(/*max_residual=*/150, /*q_scale=*/1, ALL_RECTS, quants);
       for (int32_t dc : {1000 / quant, -1000 / quant}) {
         const int32_t dc_error = mtx.DCError(dc, trf);
-        EXPECT_LT(std::abs(dc_error), (1 + 2 * quant) * scale * 0.03f);
+        EXPECT_LT(std::abs(dc_error), (1 + 2 * quant) * scale * 0.04f);
       }
     }
   }
@@ -87,7 +87,7 @@ TEST_F(QuantMtxTest, DCErrorRoundTrip) {
     const uint32_t num_coeffs = kNumCoeffs[trf];
     const uint32_t scale = num_coeffs >> 2;
     SCOPED_TRACE(SPrintf("trf: %s (scale %d)", kTDimNames[trf], scale));
-    for (uint16_t quant : {128, 200, 507, 2001, 4000, 5000}) {
+    for (uint16_t quant : {128, 200, 51, 36, 23, 228}) {
       SCOPED_TRACE(SPrintf("quant: %d", quant));
       QuantMtx mtx;
       ASSERT_WP2_OK(mtx.Allocate());
@@ -167,8 +167,8 @@ TEST_P(QuantMtxTestCpuInfo, DcQuantizedDynamicRange) {
                        residuals, /*reduced=*/false);
         SCOPED_TRACE(SPrintf("block size: %s  DC: %d  ratio=%.1f",
                              kDimNames[block_size], residuals[0], sqrt(W * H)));
-        for (uint16_t quant : {129u, 149u, 230u, 1003u, 2017u,
-                               4021u, 5722u, (uint32_t)kMaxQuantStep}) {
+        for (uint16_t quant : {0u, 29u, 36u, 123u, 177u,
+                               203u, (uint32_t)kQFactorMax}) {
           SCOPED_TRACE(SPrintf("quant: %d", quant));
           const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
           mtx.Init(kMaxResidual, /*q_scale=*/1, ALL_RECTS, quants);
@@ -205,7 +205,7 @@ TEST_P(QuantMtxTestCpuInfo, DequantizedDynamicRange) {
     const uint32_t num_coeffs = kNumCoeffs[tdim];
     SCOPED_TRACE(SPrintf("transform size: %d", tdim));
 
-    for (uint16_t quant : {512u, 1200u, 4310u, (uint32_t)kMaxQuantStep}) {
+    for (uint16_t quant : {50u, 100u, 190u, (uint32_t)kQFactorMax}) {
       SCOPED_TRACE(SPrintf("quant: %d", quant));
       QuantMtx mtx;
       const uint16_t quants[kNumQuantZones] = { quant, quant, quant, quant };
@@ -215,7 +215,7 @@ TEST_P(QuantMtxTestCpuInfo, DequantizedDynamicRange) {
       int32_t residuals[kMaxCoeffs];
       mtx.Dequantize(coeffs, kNumCoeffs[tdim], tdim, residuals);
 
-      const int32_t kMax = (1 << 18) * num_coeffs;
+      const int32_t kMax = (1 << 19) * num_coeffs;
       for (uint32_t i = 0; i < num_coeffs; ++i) {
         EXPECT_LE(residuals[i], kMax);
         EXPECT_GE(residuals[i], -kMax);
@@ -237,7 +237,7 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
   int16_t dq[2 * kMaxCoeffs];
   for (uint32_t i = 0; i < 2 * kMaxCoeffs; ++i) bias[i] = i % (1 << WP2QBits);
   for (uint32_t i = 0; i < 2 * kMaxCoeffs; ++i) {
-    const uint32_t Q = (i * 17 + 4) % kMaxQuantStep;
+    const uint32_t Q = (i * 17 + 4) % 1024;   // 1024=max quant-step value
     iq[i] = (1u << WP2QBits) / (Q + 1);
     dq[i] = Q;
   }
@@ -272,8 +272,8 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
       }
     }
   }
-  EXPECT_EQ(crc1, 4142269684u);
-  EXPECT_EQ(crc2, 3318598408u);
+  EXPECT_EQ(crc1, 1079346079u);
+  EXPECT_EQ(crc2, 1051933909u);
 }
 
 INSTANTIATE_TEST_SUITE_P(QuantMtxTest1Instantiation, QuantMtxTestCpuInfo,
@@ -373,7 +373,7 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
     }
 
     // Try different quantization levels.
-    for (uint16_t quant : {511, 1366, 2041, 3100, 5000}) {
+    for (uint16_t quant : {3, 64, 97, 168, 221}) {
       SCOPED_TRACE(SPrintf("quant: %d", quant));
       Vector<Segment>& segments = params.segments_;
       for (auto& s : segments) ASSERT_WP2_OK(s.AllocateForEncoder());

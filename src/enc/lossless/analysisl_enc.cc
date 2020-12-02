@@ -18,7 +18,7 @@
 // Author: Vincent Rabaud (vrabaud@google.com)
 
 #include "src/common/color_precision.h"
-#include "src/dsp/lossless/lossless_common.h"
+#include "src/dsp/lossless/dspl.h"
 #include "src/enc/lossless/losslessi_enc.h"
 
 namespace WP2L {
@@ -277,13 +277,13 @@ WP2Status AnalyzeEntropyImpl(const T* argb, uint32_t stride, uint32_t width,
     // For spatial, there are 14 transformations.
     const int transform_bits = encoder->transform_bits_;
     entropy[premult][(uint32_t)EntropyMode::kSpatial] +=
-        WP2LSubSampleSize(width, transform_bits) *
-        WP2LSubSampleSize(height, transform_bits) * WP2Log2(14);
+        SubSampleSize(width, transform_bits) *
+        SubSampleSize(height, transform_bits) * WP2Log2(14);
     // For color transforms: 24 as only 3 channels are considered in a
     // ColorTransformElement.
     entropy[premult][(uint32_t)EntropyMode::kSpatialSubGreen] +=
-        WP2LSubSampleSize(width, transform_bits) *
-        WP2LSubSampleSize(height, transform_bits) * WP2Log2(24);
+        SubSampleSize(width, transform_bits) *
+        SubSampleSize(height, transform_bits) * WP2Log2(24);
 
     // Palettes are always premultiplied. It doesn't make sense to look at
     // entropy for unmultiplied palettes.
@@ -331,7 +331,7 @@ WP2Status AnalyzeEntropyImpl(const T* argb, uint32_t stride, uint32_t width,
   const uint32_t* const blue_histo =
       &histo[*use_premultiplied]
             [histo_len * kHistoPairs[(uint32_t)*best_mode][1]];
-  for (size_t i = 1; i < histo_len; ++i) {
+  for (uint32_t i = 1; i < histo_len; ++i) {
     if ((red_histo[i] | blue_histo[i]) != 0) {
       *red_and_blue_always_zero = false;
       break;
@@ -367,8 +367,8 @@ static int GetHistoBits(int effort, bool use_palette, int width, int height) {
   // value of 5, it matches the old default value of 3.
   uint32_t histo_bits = (use_palette ? 9. : 7.) - effort * 6. / 9.;
   while (true) {
-    const uint32_t huff_image_size = WP2LSubSampleSize(width, histo_bits) *
-                                     WP2LSubSampleSize(height, histo_bits);
+    const uint32_t huff_image_size = SubSampleSize(width, histo_bits) *
+                                     SubSampleSize(height, histo_bits);
     if (huff_image_size <= kMaxHistogramImageSize) break;
     ++histo_bits;
   }

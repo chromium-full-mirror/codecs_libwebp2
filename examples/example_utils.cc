@@ -154,7 +154,7 @@ std::string PrintSummary(const BitstreamFeatures& bitstream,
     str += SPrintf("ICC:           %s\n", bitstream.has_icc ? "yes" : "no");
     str += SPrintf("XMP/EXIF:      %s\n",
                    bitstream.has_trailing_data ? "yes" : "no");
-    str += SPrintf("file size:     %" PRIu64 "\n", (uint64_t)input_data_size);
+    str += SPrintf("file size:     %u\n", (uint32_t)input_data_size);
   }
   return str;
 }

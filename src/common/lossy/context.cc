@@ -286,7 +286,7 @@ void DCPredictor::GetDCPrediction(const CodedBlock& cb,
   values->DCs[0] = 0;
   values->DCs[1] = 0;
   values->DCs[2] = 0;
-  for (size_t i = 0; i < size; ++i) {
+  for (uint32_t i = 0; i < size; ++i) {
     values->DCs[0] += context[i].DCs[0];
     values->DCs[1] += context[i].DCs[1];
     values->DCs[2] += context[i].DCs[2];

@@ -138,7 +138,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
 
   // Setup the top-level coding info for each cblock
   mgr.Clear();
-  for (size_t i = 0; i < mgr.Blocks().size(); ++i) {
+  for (uint32_t i = 0; i < mgr.Blocks().size(); ++i) {
     const auto& blk = mgr.Blocks()[i];
     CodedBlock& cb = cblocks[i];
     cb.SetRange(transf.GetYUVMin(), transf.GetYUVMax());

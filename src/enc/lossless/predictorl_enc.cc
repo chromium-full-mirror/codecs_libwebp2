@@ -20,8 +20,7 @@
 #include <limits>
 
 #include "src/common/color_precision.h"
-#include "src/dsp/lossless/lossless.h"
-#include "src/dsp/lossless/lossless_common.h"
+#include "src/dsp/lossless/encl_dsp.h"
 #include "src/dsp/math.h"
 #include "src/enc/lossless/losslessi_enc.h"
 
@@ -57,19 +56,21 @@ static float PredictionCostSpatialHistogram(const Vector_u32 accumulated[4],
   for (i = 0; i < 4; ++i) {
     const double kExpValue = 0.94;
     retval += PredictionCostSpatial(tile[i], 1, kExpValue);
-    retval += WP2LCombinedShannonEntropy(tile[i].data(), accumulated[i].data(),
-                                         tile[i].size());
+    retval += WP2L::CombinedShannonEntropy(
+        tile[i].data(), accumulated[i].data(), tile[i].size());
   }
   return (float)retval;
 }
 
 static inline void UpdateHisto(Vector_u32 histo_argb[4],
                                const uint16_t* const argb) {
-  for (size_t i = 0; i < 4; ++i) ++histo_argb[i][argb[i]];
+  for (uint32_t i = 0; i < 4; ++i) ++histo_argb[i][argb[i]];
 }
 
 //------------------------------------------------------------------------------
 // Spatial transform functions.
+
+namespace WP2L {
 
 static inline void PredictBatch(int mode, int x_start, int y,
                                 uint32_t num_pixels, uint32_t channel_bits,
@@ -78,10 +79,10 @@ static inline void PredictBatch(int mode, int x_start, int y,
   if (x_start == 0) {
     if (y == 0) {
       // ARGB_BLACK.
-      WP2LPredictorsSub[0](current, has_alpha, nullptr, 1, channel_bits, out);
+      PredictorsSub[0](current, has_alpha, nullptr, 1, channel_bits, out);
     } else {
       // Top one.
-      WP2LPredictorsSub[2](current, has_alpha, upper, 1, channel_bits, out);
+      PredictorsSub[2](current, has_alpha, upper, 1, channel_bits, out);
     }
     ++x_start;
     out += 4;
@@ -89,15 +90,14 @@ static inline void PredictBatch(int mode, int x_start, int y,
   }
   if (y == 0) {
     // Left one.
-    WP2LPredictorsSub[1](&current[4 * x_start], has_alpha, nullptr, num_pixels,
-                         channel_bits, out);
+    PredictorsSub[1](&current[4 * x_start], has_alpha, nullptr, num_pixels,
+                     channel_bits, out);
   } else {
-    WP2LPredictorsSub[mode](&current[4 * x_start], has_alpha,
-                            &upper[4 * x_start], num_pixels, channel_bits, out);
+    PredictorsSub[mode](&current[4 * x_start], has_alpha, &upper[4 * x_start],
+                        num_pixels, channel_bits, out);
   }
 }
 
-namespace WP2L {
 // Stores the difference between the pixel and its prediction in "out".
 // In case of a lossy encoding, updates the source image to avoid propagating
 // the deviation further to pixels which depend on the current pixel for their
@@ -108,7 +108,7 @@ static inline void GetResidual(int width, uint32_t channel_bits,
                                int mode, int x_start, int x_end, int y,
                                uint16_t* const out) {
   const uint16_t mask = (1 << channel_bits) - 1;
-  const WP2LPredictorFunc pred_func = WP2LPredictors[mode];
+  const PredictorFunc pred_func = Predictors[mode];
   int x;
   for (x = x_start; x < x_end; ++x) {
     uint16_t predict[4], residual[4];
@@ -126,7 +126,7 @@ static inline void GetResidual(int width, uint32_t channel_bits,
     } else {
       pred_func(&current_row[4 * (x - 1)], &upper_row[4 * x], mask, predict);
     }
-    WP2LSubPixels(&current_row[4 * x], has_alpha, predict, mask, residual);
+    SubPixels(&current_row[4 * x], has_alpha, predict, mask, residual);
     if (current_row[4 * x] == 0) {
       // If alpha is 0, cleanup RGB. We can choose the RGB values of the
       // residual for best compression. The prediction of alpha itself can be
@@ -171,7 +171,7 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
   // Position and size of the strip covering the tile and adjacent columns if
   // they exist.
   const int context_start_x = start_x - have_left;
-  const int tiles_per_row = WP2LSubSampleSize(width, bits);
+  const int tiles_per_row = SubSampleSize(width, bits);
   // Prediction modes of the left and above neighbor tiles.
   const uint32_t left_mode =
       (tile_x > 0) ? modes[4 * (tile_y * tiles_per_row + tile_x - 1) + 2]
@@ -262,7 +262,7 @@ static void CopyImageWithPrediction(int width, int height, int bits,
                                     uint16_t* const argb_scratch,
                                     uint16_t* const argb, bool has_alpha,
                                     int effort) {
-  const int tiles_per_row = WP2LSubSampleSize(width, bits);
+  const int tiles_per_row = SubSampleSize(width, bits);
   // The width of upper_row and current_row is one pixel larger than image width
   // to allow the top right pixel to point to the leftmost pixel of the next row
   // when at the right edge.
@@ -302,10 +302,10 @@ WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
                         uint32_t channel_bits, int effort, uint16_t* const argb,
                         bool has_alpha, uint16_t* const argb_scratch,
                         int16_t* const image) {
-  const uint32_t tiles_per_row = WP2LSubSampleSize(width, bits);
-  const uint32_t tiles_per_col = WP2LSubSampleSize(height, bits);
+  const uint32_t tiles_per_row = SubSampleSize(width, bits);
+  const uint32_t tiles_per_col = SubSampleSize(height, bits);
   if (effort == 0) {
-    for (size_t i = 0; i < tiles_per_row * tiles_per_col; ++i) {
+    for (uint32_t i = 0; i < tiles_per_row * tiles_per_col; ++i) {
       image[4 * i + 0] = 0;
       image[4 * i + 1] = 0;
       image[4 * i + 2] = kPredLowEffort;
@@ -322,8 +322,8 @@ WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
         WP2_CHECK_ALLOC_OK(tmp_histo[j][i].resize(histo_size));
       }
     }
-    for (size_t tile_y = 0; tile_y < tiles_per_col; ++tile_y) {
-      for (size_t tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
+    for (uint32_t tile_y = 0; tile_y < tiles_per_col; ++tile_y) {
+      for (uint32_t tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
         const int pred = GetBestPredictorForTile(
             width, height, tile_x, tile_y, bits, argb_scratch, argb, has_alpha,
             image, histo, tmp_histo);
@@ -343,20 +343,20 @@ WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
 //------------------------------------------------------------------------------
 // Color transform functions.
 
-static inline void MultipliersClear(WP2LMultipliers* const m) {
+static inline void MultipliersClear(Multipliers* const m) {
   m->green_to_red = 0;
   m->green_to_blue = 0;
   m->red_to_blue = 0;
 }
 
 static inline void ColorCodeToMultipliers(const int16_t* const color,
-                                          WP2LMultipliers* const m) {
+                                          Multipliers* const m) {
   m->green_to_red = color[3];
   m->green_to_blue = color[2];
   m->red_to_blue = color[1];
 }
 
-static inline void MultipliersToColorCode(const WP2LMultipliers* const m,
+static inline void MultipliersToColorCode(const Multipliers* const m,
                                           int16_t* const res) {
   res[0] = 0;
   res[1] = m->red_to_blue;
@@ -370,20 +370,20 @@ static float PredictionCostCrossColor(const Vector_u32& accumulated,
   // Favor small absolute values for PredictionCostSpatial
   static const double kExpValue = 2.4;
   assert(accumulated.size() == counts.size());
-  return WP2LCombinedShannonEntropy(counts.data(), accumulated.data(),
-                                    counts.size()) +
+  return CombinedShannonEntropy(counts.data(), accumulated.data(),
+                                counts.size()) +
          PredictionCostSpatial(counts, 3, kExpValue);
 }
 
 static float GetPredictionCostCrossColorRed(
     const int16_t* argb, uint32_t width, int tile_width, int tile_height,
-    WP2LMultipliers prev_x, WP2LMultipliers prev_y, int16_t green_to_red,
+    Multipliers prev_x, Multipliers prev_y, int16_t green_to_red,
     const Vector_u32& accumulated_red_histo, Vector_u32* const tmp_histo) {
   std::fill(tmp_histo->begin(), tmp_histo->end(), 0);
   float cur_diff;
 
-  WP2LCollectColorRedTransforms(argb, width, tile_width, tile_height,
-                                green_to_red, tmp_histo->data());
+  CollectColorRedTransforms(argb, width, tile_width, tile_height, green_to_red,
+                            tmp_histo->data());
 
   cur_diff =
       PredictionCostCrossColor(accumulated_red_histo, *tmp_histo);
@@ -402,10 +402,10 @@ static float GetPredictionCostCrossColorRed(
 
 static void GetBestGreenToRed(const int16_t* argb, uint32_t width,
                               int tile_width, int tile_height,
-                              WP2LMultipliers prev_x, WP2LMultipliers prev_y,
+                              Multipliers prev_x, Multipliers prev_y,
                               int effort,
                               const Vector_u32& accumulated_red_histo,
-                              WP2LMultipliers* const best_tx,
+                              Multipliers* const best_tx,
                               Vector_u32* const tmp_histo) {
   const int kMaxIters = (effort < 5) ? 4 + effort * 2 / 5 : 6;  // in [4..6]
   int green_to_red_best = 0;
@@ -437,14 +437,14 @@ static void GetBestGreenToRed(const int16_t* argb, uint32_t width,
 
 static float GetPredictionCostCrossColorBlue(
     const int16_t* argb, int stride, int tile_width, int tile_height,
-    WP2LMultipliers prev_x, WP2LMultipliers prev_y, int16_t green_to_blue,
+    Multipliers prev_x, Multipliers prev_y, int16_t green_to_blue,
     int16_t red_to_blue, const Vector_u32& accumulated_blue_histo,
     Vector_u32* tmp_histo) {
   std::fill(tmp_histo->begin(), tmp_histo->end(), 0);
   float cur_diff;
 
-  WP2LCollectColorBlueTransforms(argb, stride, tile_width, tile_height,
-                                 green_to_blue, red_to_blue, tmp_histo->data());
+  CollectColorBlueTransforms(argb, stride, tile_width, tile_height,
+                             green_to_blue, red_to_blue, tmp_histo->data());
 
   cur_diff = PredictionCostCrossColor(accumulated_blue_histo, *tmp_histo);
   // cur_diff -= 3 favors keeping the areas locally similar
@@ -473,10 +473,10 @@ static constexpr uint32_t kGreenRedToBlueNumAxis = 8;
 static constexpr uint32_t kGreenRedToBlueMaxIters = 7;
 static void GetBestGreenRedToBlue(const int16_t* argb, uint32_t width,
                                   int tile_width, int tile_height,
-                                  WP2LMultipliers prev_x,
-                                  WP2LMultipliers prev_y, int effort,
+                                  Multipliers prev_x,
+                                  Multipliers prev_y, int effort,
                                   const Vector_u32& accumulated_blue_histo,
-                                  WP2LMultipliers* const best_tx,
+                                  Multipliers* const best_tx,
                                   Vector_u32* tmp_histo) {
   const int8_t offset[kGreenRedToBlueNumAxis][2] =
       {{0, -1}, {0, 1}, {-1, 0}, {1, 0}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
@@ -522,9 +522,9 @@ static void GetBestGreenRedToBlue(const int16_t* argb, uint32_t width,
   best_tx->red_to_blue = red_to_blue_best;
 }
 
-static WP2LMultipliers GetBestColorTransformForTile(
-    int tile_x, int tile_y, int bits, WP2LMultipliers prev_x,
-    WP2LMultipliers prev_y, int effort, int xsize, int ysize,
+static Multipliers GetBestColorTransformForTile(
+    int tile_x, int tile_y, int bits, Multipliers prev_x,
+    Multipliers prev_y, int effort, int xsize, int ysize,
     const Vector_u32& accumulated_red_histo,
     const Vector_u32& accumulated_blue_histo, const int16_t* const argb,
     Vector_u32* const tmp_histo) {
@@ -537,7 +537,7 @@ static WP2LMultipliers GetBestColorTransformForTile(
   const int tile_height = all_y_max - tile_y_offset;
   const int16_t* const tile_argb =
       &argb[4 * (tile_y_offset * xsize + tile_x_offset)];
-  WP2LMultipliers best_tx;
+  Multipliers best_tx;
   MultipliersClear(&best_tx);
 
   GetBestGreenToRed(tile_argb, xsize, tile_width, tile_height, prev_x, prev_y,
@@ -551,13 +551,13 @@ static WP2LMultipliers GetBestColorTransformForTile(
 static void CopyTileWithColorTransform(uint32_t width, uint32_t height,
                                        int tile_x, int tile_y,
                                        uint32_t max_tile_size,
-                                       WP2LMultipliers color_transform,
+                                       Multipliers color_transform,
                                        int16_t* argb) {
   const int xscan = std::min(max_tile_size, width - tile_x);
   int yscan = std::min(max_tile_size, height - tile_y);
   argb += 4 * (tile_y * width + tile_x);
   while (yscan-- > 0) {
-    WP2LTransformColor(&color_transform, xscan, argb);
+    TransformColor(&color_transform, xscan, argb);
     argb += 4 * width;
   }
 }
@@ -566,10 +566,10 @@ WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
                               WP2SampleFormat format, uint32_t effort,
                               uint16_t* const argb_in, int16_t* image) {
   const int max_tile_size = 1 << bits;
-  const int tile_xsize = WP2LSubSampleSize(width, bits);
-  const int tile_ysize = WP2LSubSampleSize(height, bits);
+  const int tile_xsize = SubSampleSize(width, bits);
+  const int tile_ysize = SubSampleSize(height, bits);
   int tile_x, tile_y;
-  WP2LMultipliers prev_x, prev_y;
+  Multipliers prev_x, prev_y;
   MultipliersClear(&prev_y);
   MultipliersClear(&prev_x);
   Vector_u32 tmp_histo, accumulated_red_histo, accumulated_blue_histo;

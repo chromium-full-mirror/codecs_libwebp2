@@ -32,21 +32,21 @@ class Quantizer {
   enum ConfigType { Raw, Huffman, HuffmanANS };
   // Config defining how a histogram is stored.
   // E.g.  [0,1,8,0,4]
-  // If is_sparse_==true, it is stored as sparse, histogram_ contains [1,8,4]
-  // and 'runs' the mappings differences minus 1: [2,1,2] (the first element is
+  // If 'is_sparse' is true, it is stored as sparse, 'histo' contains [1,8,4]
+  // and "runs" the mapping differences minus 1: [2,1,2] (the first element is
   // a difference to -1) minus 1 hence [1,0,1]
-  // histogram_to_write_ contains how histogram_ will be finally written, which
+  // 'histogram_to_write' contains how 'histo' will be finally written, which
   // in Raw type is the same, but in Huffman is [0,3,2] (the powers of 2 used to
-  // represent the histogram.
-  // histogram_ represents a distribution of symbol and if we were to write
-  // data with it, it would have an overal cost of cost_. Overall means the cost
-  // of writing the symbols with probabilities defined by histogram_ but also
-  // of storing histogram_.
+  // represent the histogram).
+  // 'histo' represents a distribution of symbol and if we were to write
+  // data with it, it would have an overall cost of 'cost'. Overall means the
+  // cost of writing the symbols with probabilities defined by 'histo' but also
+  // of storing 'histo'.
   struct ConfigParam {
     // The following members differentiate the different configurations.
-    ConfigType type_;
-    bool is_sparse_;
-    uint8_t max_freq_bits_;
+    ConfigType type;
+    bool is_sparse;
+    uint8_t max_freq_bits;
   };
   struct HistogramSparse {
     uint32_t* counts;
@@ -54,13 +54,13 @@ class Quantizer {
     uint32_t nnz;  // number of non-zero counts
   };
   struct Config {
-    ConfigParam param_;
+    ConfigParam param;
     // The following members are the results of the above parameters.
-    uint32_t* histogram_to_write_;
-    size_t size_to_write_;
-    HistogramSparse h_;
-    float cost_;
-    Config* next_;
+    uint32_t* histogram_to_write;
+    size_t size_to_write;
+    HistogramSparse histo;
+    float cost;
+    Config* next;
   };
 
   Quantizer() {
@@ -86,7 +86,7 @@ class Quantizer {
     while (c != nullptr) {
       const size_t c_ind = c - &configs_[0];
       configs_used_[c_ind] = false;
-      c = c->next_;
+      c = c->next;
     }
   }
 

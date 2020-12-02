@@ -24,7 +24,7 @@
 #include "src/common/lossy/block_size_io.h"
 #include "src/common/lossy/predictor.h"
 #include "src/common/lossy/transforms.h"
-#include "src/dsp/lossless/lossless_common.h"
+#include "src/dsp/lossless/dspl.h"
 
 //------------------------------------------------------------------------------
 
@@ -281,8 +281,7 @@ WP2Status SymbolsInfo::InitLossy(uint32_t num_segments,
   }
 
   // Initialize coefficient probabilities.
-  WP2_CHECK_STATUS(ResidualIO::InitializeInfo(has_alpha, quality_hint,
-                                              use_aom_coeffs, this));
+  WP2_CHECK_STATUS(ResidualIO::InitializeInfo(has_alpha, use_aom_coeffs, this));
   return WP2_STATUS_OK;
 }
 

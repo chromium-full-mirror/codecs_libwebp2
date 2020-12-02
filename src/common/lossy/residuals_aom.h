@@ -159,7 +159,6 @@ constexpr int kNumQuantizerBaseLevels = 2;
 
 enum {
   kBooleanFieldCdfSize = 3,
-  kCoefficientQuantizerContexts = 4,
   kNumSquareTransformSizes = 5,
   kAllZeroContexts = 13,
   kEobPtContexts = 2,

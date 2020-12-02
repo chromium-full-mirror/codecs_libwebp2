@@ -16,6 +16,7 @@
 
 #include "src/common/color_precision.h"
 #include "src/dec/lossless/losslessi_dec.h"
+#include "src/dsp/lossless/decl_dsp.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/lossless/palette.h"
 #include "src/wp2/decode.h"
@@ -30,7 +31,7 @@ class PaletteTest : public ::testing::TestWithParam<
                         std::tuple<uint32_t, uint32_t, WP2SampleFormat>> {};
 
 TEST_P(PaletteTest, RoundTrip) {
-  WP2LDspInit();
+  WP2L::DecLDspInit();
   const uint32_t num_colors = std::get<0>(GetParam());
   const uint32_t seed = std::get<1>(GetParam());
   const WP2SampleFormat format = std::get<2>(GetParam());
@@ -115,9 +116,9 @@ TEST_P(PaletteTest, RoundTrip) {
   // Reconstruct original buffer.
   Vector_u16 reconstructed;
   ASSERT_TRUE(reconstructed.resize(kWidth * kHeight * 4));
-  WP2LInverseTransform(&transform, /*row_start=*/0, /*row_end=*/kHeight,
-                       /*channel_bits=*/8, paletted_buffer.data(),
-                       /*has_alpha=*/true, reconstructed.data());
+  InverseTransform(&transform, /*row_start=*/0, /*row_end=*/kHeight,
+                   /*channel_bits=*/8, paletted_buffer.data(),
+                   /*has_alpha=*/true, reconstructed.data());
 
   for (uint32_t y = 0; y < kHeight; ++y) {
     uint8_t* const reference_row = premultiplied_buffer.GetRow8(y);

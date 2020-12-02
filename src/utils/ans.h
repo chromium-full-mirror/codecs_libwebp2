@@ -505,11 +505,11 @@ class ANSDec {
 
  public:
   // Returns the number of bytes read from the bitstream.
-  size_t GetNumUsedBytes() const;
+  uint32_t GetNumUsedBytes() const;
   // Returns a lower bound of the number of bytes completely decoded between
   // 'num_bytes_before' and 'num_bytes_after'.
-  static size_t GetMinNumUsedBytesDiff(size_t num_used_bytes_before,
-                                       size_t num_used_bytes_after);
+  static uint32_t GetMinNumUsedBytesDiff(uint32_t num_used_bytes_before,
+                                         uint32_t num_used_bytes_after);
 
  protected:
 #if defined(WP2_BITTRACE)
@@ -860,7 +860,7 @@ class ANSEnc : public ANSEncBase {
   // Retrieves the coded buffer and size (after the last call to Assemble()).
   // This buffer is only valid until the next call to Assemble() or WipeOut().
   const uint8_t* Buffer() const { return buffer_.data() + buffer_pos_; }
-  size_t BufferSize() const { return (buffer_.size() - buffer_pos_); }
+  uint32_t BufferSize() const { return (buffer_.size() - buffer_pos_); }
 
  public:   // overridden methods
   uint32_t PutBit(uint32_t bit, uint32_t proba, WP2_OPT_LABEL) override {
@@ -973,7 +973,7 @@ class ANSEnc : public ANSEncBase {
   uint32_t state_;         // state for the coder
 
   Vector_u8 buffer_;       // output coded stream
-  size_t buffer_pos_;      // position from the *end* of buffer_
+  uint32_t buffer_pos_;    // position from the *end* of buffer_
 
   // Stored message, composed of "tokens" which can be bits, uvalues or symbols.
   // Pointer to the most recent (last) page of tokens. Use tokens_->prev_ to

@@ -124,7 +124,7 @@ class LocalContext {
 
   // 1MB stack size is suggested in CreateFiber() documentation.
   // TODO(yguyon): find out the smallest possible safe size.
-  static constexpr size_t kCallstackSize = (1 << 20);
+  static constexpr uint32_t kCallstackSize = (1 << 20);
 #ifdef _WIN32
   LPVOID local_fiber_ = nullptr;
   LPVOID main_fiber_ = nullptr;  // Doesn't have to be deleted.

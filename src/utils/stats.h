@@ -37,8 +37,8 @@ namespace WP2 {
 
 template<typename K = uint32_t> struct Stats {
   explicit Stats(const char* const name = nullptr,
-                 const char* const format = "%lu",   // how to print type "K"
-                 bool sort_by_count = false)   // just sort and print the counts
+                 const char* const format = "%u",  // how to print type "K"
+                 bool sort_by_count = false)  // just sort and print the counts
       : name_(name), format_(format), sort_by_count_(sort_by_count) {}
   void Add(K key, uint64_t value = 1) {  // TODO(skal): mutex?
     const auto i = stats_.find(key);
@@ -54,9 +54,8 @@ template<typename K = uint32_t> struct Stats {
 
   ~Stats() {
     if (total_ > 0) {
-      printf(" === STATISTICS (%s) count: %lu ===\n",
-             (name_ == nullptr) ? "undef" : name_,
-             (unsigned long)total_);  // NOLINT
+      printf(" === STATISTICS (%s) count: %u ===\n",
+             (name_ == nullptr) ? "undef" : name_, (uint32_t)total_);
       auto stats = GetStats();
       const double norm = 100. / total_;
       for (const auto& i : stats) {
@@ -64,8 +63,7 @@ template<typename K = uint32_t> struct Stats {
         WP2Print(format_, i.first);
         const uint64_t count = i.second.counts_;
         printf(" : average: %.1f", count ? 1.f * i.second.total_ / count : 0);
-        printf(" \tcount: %lu \t(%.2f%%)\n",
-               (unsigned long)count, count * norm);  // NOLINT
+        printf(" \tcount: %u \t(%.2f%%)\n", (uint32_t)count, count * norm);
       }
     }
   }

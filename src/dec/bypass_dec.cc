@@ -32,7 +32,7 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 WP2Status TileDecoder::BypassTileDec() {
-  const size_t num_read_bytes_before =
+  const uint32_t num_read_bytes_before =
       tile_->input->GetNumDiscardedBytes() + tile_->input->GetNumReadBytes();
   if (gparams_->type_ == GlobalParams::GP_LOSSLESS) {
     tile_->output_is_yuv = false;
@@ -126,11 +126,12 @@ WP2Status TileDecoder::BypassTileDec() {
 
     WP2_CHECK_STATUS(bit_unpacker.GetStatus());
   }
-  const size_t num_read_bytes = tile_->input->GetNumDiscardedBytes() +
-                                tile_->input->GetNumReadBytes() -
-                                num_read_bytes_before;
-  (void)num_read_bytes;
-  assert(num_read_bytes == GetTileMaxNumBytes(*gparams_, tile_->rect));
+  const uint32_t num_read_bytes = tile_->input->GetNumDiscardedBytes() +
+                                  tile_->input->GetNumReadBytes() -
+                                  num_read_bytes_before;
+  if (num_read_bytes != GetTileMaxNumBytes(*gparams_, tile_->rect)) {
+    assert(false);
+  }
 
 #if defined(WP2_BITTRACE)
   if (config_->info != nullptr) {

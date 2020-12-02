@@ -196,6 +196,7 @@ class CodedBlock {
                        Channel channel, uint32_t num_channels, bool reduced,
                        const Vector<TransformPair>& transforms,
                        Counters* const counters);
+
   // Assigns the best of the 'preds' (based on pred score only) to the
   // CodingParams of 'channel'.
   void FindBestPred(const Predictors& preds, Channel channel, bool reduced);
@@ -275,6 +276,10 @@ class CodedBlock {
   // Visual debug: stores transform at block position
   void StoreTransform(const WP2::DecoderConfig& config, uint32_t tile_x,
                       uint32_t tile_y, ArgbBuffer* const debug_output) const;
+  // Visual debug: force the transform of a block.
+  TransformPair GetForcedTransform(const EncoderConfig& config,
+                                   uint32_t tile_pos_x, uint32_t tile_pos_y,
+                                   CodedBlock* const cb);
 
   // Visual debug: stores residuals at block position
   void StoreResiduals(const DecoderConfig& config, uint32_t tile_x,
@@ -530,7 +535,7 @@ class CodedBlock {
   uint32_t num_coeffs_[4][kMaxNumTransformsPerBlock];
   BlockAlphaMode alpha_mode_ = kBlockAlphaLossless;
   // Approximate number of bytes taken up by lossless alpha in this block.
-  size_t alpha_lossless_bytes_ = 0;
+  uint32_t alpha_lossless_bytes_ = 0;
   bool y_context_is_constant_ = false;  // only used for encoding
   float pred_scores_[4] = {0};  // per channel, only available during encoding
 

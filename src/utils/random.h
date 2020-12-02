@@ -62,7 +62,7 @@ static IntType GetUniformIntDistribution(Generator* const gen,
 // mt19937 + GetUniformIntDistribution() convenience wrapper
 class UniformIntDistribution {
  public:
-  explicit UniformIntDistribution(size_t seed = 0) : generator_(seed) {}
+  explicit UniformIntDistribution(uint32_t seed = 0) : generator_(seed) {}
 
   template <typename T = int32_t>
   T Get(T min, T max) {   // uniform distribution in [min, max]

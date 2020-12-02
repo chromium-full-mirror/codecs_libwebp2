@@ -311,8 +311,9 @@ WP2Status PreviewData::Optimize(const ArgbBuffer& canvas,
       std::min((uint32_t)best.palette_.size() * 2u, kPreviewMaxNumColors);
   float bigger_size_penalty = config.importance_of_size_over_quality;
 
-  const size_t random_seed = 3 * grid_width_ + 5 * grid_height_ +
-      17 * best.vertices_.size() + 23 * best.palette_.size();
+  const uint32_t random_seed = 3 * grid_width_ + 5 * grid_height_ +
+                               17 * best.vertices_.size() +
+                               23 * best.palette_.size();
   UniformIntDistribution random(random_seed);
 
   // Get starting score.

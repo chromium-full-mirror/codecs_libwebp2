@@ -89,7 +89,12 @@ int32_t HeaderDec::ReadSBits(uint32_t num_bits, WP2_OPT_LABEL) {
 uint32_t HeaderDec::ReadVarUInt(uint32_t min_value, uint32_t max_value,
                                 WP2_OPT_LABEL) {
   assert(min_value <= max_value);
-  if (status_ != WP2_STATUS_OK || min_value == max_value) return 0;
+  if (status_ != WP2_STATUS_OK) return 0;
+  if (min_value == max_value) {
+    WP2Trace("%s: value=%u in [%u:%u]", debug_prefix_, label, min_value,
+             min_value, max_value);
+    return 0;
+  }
   assert(bit_pos_ == 8);  // Not-aligned variable-length ints are not supported.
   uint32_t value;
   status_ = TryReadVarInt(data_source_, min_value, max_value, &value);

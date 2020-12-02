@@ -62,11 +62,11 @@ void Quantizer::Quantize(const uint32_t* const histogram,
     buffer += histogram_size_max_;
     histogram_to_write_[i] = buffer;
     buffer += histogram_size_max_;
-    configs_[i].histogram_to_write_ = buffer;
+    configs_[i].histogram_to_write = buffer;
     buffer += histogram_size_max_;
-    configs_[i].h_.counts = buffer;
+    configs_[i].histo.counts = buffer;
     buffer += histogram_size_max_;
-    configs_[i].h_.mapping = (uint16_t*)buffer;
+    configs_[i].histo.mapping = (uint16_t*)buffer;
     buffer += histogram_size_max_ * sizeof(uint16_t) / sizeof(uint32_t);
   }
   QuantizeImpl(histogram, mapping, size_sparse, symbol_range,
@@ -82,24 +82,24 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
   assert(config_index < kConfigNbr);
   Config* const config_best = &configs_[config_index];
   if (size_sparse == 0) {
-    config_best->param_.type_ = Raw;
-    config_best->param_.is_sparse_ = false;
-    config_best->param_.max_freq_bits_ = 0;
-    config_best->histogram_to_write_ = nullptr;
-    config_best->size_to_write_ = 0;
-    config_best->h_.counts = nullptr;
-    config_best->h_.mapping = nullptr;
-    config_best->h_.nnz = 0;
-    config_best->cost_ = 0;
-    config_best->next_ = nullptr;
+    config_best->param.type = Raw;
+    config_best->param.is_sparse = false;
+    config_best->param.max_freq_bits = 0;
+    config_best->histogram_to_write = nullptr;
+    config_best->size_to_write = 0;
+    config_best->histo.counts = nullptr;
+    config_best->histo.mapping = nullptr;
+    config_best->histo.nnz = 0;
+    config_best->cost = 0;
+    config_best->next = nullptr;
     return;
   }
 
   // We simplify the mapping to be stored as the difference between
   // consecutive terms.
-  config_best->h_.nnz = size_sparse;
-  config_best->next_ = nullptr;
-  std::copy(mapping, mapping + size_sparse, config_best->h_.mapping);
+  config_best->histo.nnz = size_sparse;
+  config_best->next = nullptr;
+  std::copy(mapping, mapping + size_sparse, config_best->histo.mapping);
 
   // Pre-compute some quantization configurations for clarity.
   uint8_t* const bits = bits_[config_index];
@@ -140,7 +140,7 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
     cost_probability_size = WP2Log2(symbol_range + 1 - size_sparse);
     // Small speed improvements: if we use the whole range, no need to even
     // consider a potential mapping.
-    cost_mapping = StoreMapping(config_best->h_.mapping, size_sparse,
+    cost_mapping = StoreMapping(config_best->histo.mapping, size_sparse,
                                 symbol_range, stats_buffer_.data(), nullptr);
   }
   // Cost for the sparse bit and the histogram type.
@@ -148,11 +148,11 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
   n_pixels_bits = std::min(n_pixels_bits, kMaxFreqBits);
 
   // Go over the quantification configurations and pick the best one.
-  config_best->cost_ = cost_max;
+  config_best->cost = cost_max;
   for (size_t i = 0; i < n_max_freq_bits; ++i) {
     // No need to continue if any pre-computed cost we have is already bigger.
-    if (cost_sparse_bit_and_type + cost_mapping > config_best->cost_ &&
-        cost_sparse_bit_and_type + cost_probability_size > config_best->cost_) {
+    if (cost_sparse_bit_and_type + cost_mapping > config_best->cost &&
+        cost_sparse_bit_and_type + cost_probability_size > config_best->cost) {
       break;
     }
     for (const ConfigType type : {Raw, Huffman}) {
@@ -184,7 +184,7 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
 
         // No need to continue if the bit cost without the histogram cost is
         // already bigger.
-        if (cost >= config_best->cost_) continue;
+        if (cost >= config_best->cost) continue;
 
         // Prepare the vector in which we will write the histogram.
         size_t histogram_to_write_size;
@@ -274,10 +274,10 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
             QuantizeImpl(histogram_sub, mapping_sub, ind, 1 + kMaxFreqBits,
                          histogram_to_write_size_bits, effort,
                          config_next - configs_, cost_max_tmp);
-            if (config_next->cost_ < cost_max_tmp) {
+            if (config_next->cost < cost_max_tmp) {
               // Also add to the cost the size of the array.
-              config_next->cost_ += cost0;
-              cost_histo = config_next->cost_;
+              config_next->cost += cost0;
+              cost_histo = config_next->cost;
             } else {
               // If we cannot do better, reset the used configurations.
               ResetConfig(config_next);
@@ -308,29 +308,29 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
         cost += cost_histo;
 
         // Keep the best configuration.
-        if (cost >= config_best->cost_) {
+        if (cost >= config_best->cost) {
           ResetConfig(config_next);
           continue;
         }
         if (config_next == nullptr) {
-          config_best->param_.type_ = type;
+          config_best->param.type = type;
         } else {
-          config_best->param_.type_ = HuffmanANS;
+          config_best->param.type = HuffmanANS;
         }
-        ResetConfig(config_best->next_);
-        config_best->next_ = config_next;
-        config_best->param_.is_sparse_ = is_sparse;
-        config_best->param_.max_freq_bits_ = max_freq_bits;
-        config_best->size_to_write_ = histogram_to_write_size;
-        std::swap(config_best->histogram_to_write_, histogram_to_write);
+        ResetConfig(config_best->next);
+        config_best->next = config_next;
+        config_best->param.is_sparse = is_sparse;
+        config_best->param.max_freq_bits = max_freq_bits;
+        config_best->size_to_write = histogram_to_write_size;
+        std::swap(config_best->histogram_to_write, histogram_to_write);
         if (is_sparse) {
-          std::swap(config_best->h_.counts, histogram_quantized);
+          std::swap(config_best->histo.counts, histogram_quantized);
         } else {
           std::copy(histogram_quantized,
                     histogram_quantized + histogram_to_write_size,
-                    config_best->h_.counts);
+                    config_best->histo.counts);
         }
-        config_best->cost_ = cost;
+        config_best->cost = cost;
       }
     }
   }

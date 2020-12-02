@@ -63,7 +63,7 @@ void FilterBlockMap::Init(const Rectangle& tile_rect,
 }
 
 WP2Status FilterBlockMap::Allocate() {
-  const size_t max_num_blocks = max_num_blocks_x_ * max_num_blocks_y_;
+  const uint32_t max_num_blocks = max_num_blocks_x_ * max_num_blocks_y_;
   WP2_CHECK_ALLOC_OK(features_.resize(max_num_blocks));
   // No need to init 'features_': it will be set by RegisterBlock().
   return WP2_STATUS_OK;

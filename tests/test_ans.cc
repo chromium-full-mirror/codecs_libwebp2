@@ -79,7 +79,7 @@ struct Token {
 // It creates 'n_elements' of type chosen randomly from the ones in
 // 'used_types'.
 // 'tokens' also gets updated.
-void GenerateRandomEnc(size_t n_elements,
+void GenerateRandomEnc(uint32_t n_elements,
                        const std::vector<Token::Type>& used_types,
                        uint32_t max_asymbol, uint32_t n_dict,
                        uint32_t max_symbol, uint32_t max_range,
@@ -98,10 +98,10 @@ void GenerateRandomEnc(size_t n_elements,
       ASSERT_WP2_OK(dicts->Add(max_symbol));
     }
   }
-  const size_t size_ini = tokens->size();
+  const uint32_t size_ini = tokens->size();
   tokens->resize(size_ini + n_elements);
   // Pre-compute the signal.
-  for (size_t i = size_ini; i < tokens->size(); ++i) {
+  for (uint32_t i = size_ini; i < tokens->size(); ++i) {
     const uint32_t type_idx = random->Get(0u, (uint32_t)used_types.size() - 1u);
     const Token::Type t = used_types[type_idx];
     switch (t) {
@@ -164,7 +164,7 @@ void GenerateRandomEnc(size_t n_elements,
   if (has_symbols) {
     EXPECT_WP2_OK(dicts->ToCodingTable());
   }
-  for (size_t i = size_ini; i < tokens->size(); ++i) {
+  for (uint32_t i = size_ini; i < tokens->size(); ++i) {
     const Token& tok = (*tokens)[i];
     switch (tok.type) {
       case Token::Bit: {
@@ -213,7 +213,7 @@ void GenerateRandomEnc(size_t n_elements,
 // Checks that an ANS buffer contains a list of tokens.
 // 'codes' is the usual codes used for symbols in ANS: a vector of SymbolInfo
 // per dictionary.
-bool VerifyBuffer(const uint8_t* const buf, size_t size,
+bool VerifyBuffer(const uint8_t* const buf, uint32_t size,
                   const std::vector<VectorNoCtor<ANSSymbolInfo>>* const codes,
                   ANSBinSymbol* const bin_symbol,
                   ANSAdaptiveSymbol* const asymbol,
@@ -316,7 +316,7 @@ TEST_F(TestANS, Test0) {
       &tokens, &enc);
 
   EXPECT_WP2_OK(enc.Assemble());
-  const size_t size = enc.BufferSize();
+  const uint32_t size = enc.BufferSize();
   const uint8_t* buf = enc.Buffer();
   const int size_expected = (int)std::lround(enc.GetCostFull());
   if (kVerbose) {
@@ -337,7 +337,7 @@ TEST_F(TestANS, Test2) {
   VectorNoCtor<ANSSymbolInfo> codes;
   EXPECT_TRUE(codes.resize(31));   // will be resized later
 
-  for (size_t type : {0, 1, 2}) {
+  for (uint32_t type : {0, 1, 2}) {
     ANSEnc enc;
     ANSDictionaries dicts;
     EXPECT_WP2_OK(dicts.Add(kMaxSymbol));
@@ -358,7 +358,7 @@ TEST_F(TestANS, Test2) {
         // Nominal case, use the normal probabilities.
         const Vector_u32& counts0 = dict->Counts();
         EXPECT_EQ(dict->MaxSymbol(), kMaxSymbol);
-        for (size_t i = 0; i < kMaxSymbol; ++i) {
+        for (uint32_t i = 0; i < kMaxSymbol; ++i) {
           EXPECT_EQ(counts[i], counts0[i]) << "Count error at #" << i;
         }
         break;
@@ -396,13 +396,13 @@ TEST_F(TestANS, Test2) {
     EXPECT_WP2_OK(enc.Assemble());
 
     // Decode the buffer.
-    const size_t size = enc.BufferSize();
+    const uint32_t size = enc.BufferSize();
     const uint8_t* buf = enc.Buffer();
     ExternalDataSource data_source(buf, size);
     ANSDec dec(&data_source);
     ASSERT_WP2_OK(ANSCountsToSpreadTable(&counts[0], kMaxSymbol,
                                          ANS_LOG_TAB_SIZE, codes));
-    for (size_t i = 0; i < kNumSymbols; ++i) {
+    for (uint32_t i = 0; i < kNumSymbols; ++i) {
       const uint32_t s = dec.ReadSymbol(codes.data(), ANS_LOG_TAB_SIZE, "id");
       EXPECT_EQ(s, symbols[i]) << "Error case " << type << " at position " << i;
     }
@@ -468,7 +468,7 @@ TEST_F(TestANS, Test3) {
   // Decode the meta-info.
   VectorNoCtor<ANSSymbolInfo> codes;
   EXPECT_TRUE(codes.resize(535));
-  const size_t size = enc.BufferSize();
+  const uint32_t size = enc.BufferSize();
   const uint8_t* buf = enc.Buffer();
   ExternalDataSource data_source(buf, size);
   ANSDec dec(&data_source);
@@ -493,7 +493,7 @@ TEST_F(TestANS, Test3) {
   }
 
   // Decode the buffer and make sure it matches the input
-  for (size_t i = 0; i < kNumSymbols; ++i) {
+  for (uint32_t i = 0; i < kNumSymbols; ++i) {
     const uint32_t s = dec.ReadSymbol(codes.data(), ANS_LOG_TAB_SIZE, "id");
     EXPECT_EQ(s, symbols[i]) << "Error at position #" << i;
   }
@@ -614,7 +614,7 @@ TEST_F(TestANS, Test5) {
   std::vector<uint32_t> histogram(kMaxSymbol);
   std::vector<uint16_t> mapping(kMaxSymbol);
   uint32_t size_sparse = 0;
-  for (size_t i = 0; i < dict->MaxSymbol(); ++i) {
+  for (uint32_t i = 0; i < dict->MaxSymbol(); ++i) {
     if (counts[i] == 0) continue;
     mapping[size_sparse] = (uint16_t)i;
     histogram[size_sparse++] = counts[i];
@@ -630,28 +630,28 @@ TEST_F(TestANS, Test5) {
 
   // Display results.
   if (kVerbose) {
-    printf("Cost: %f\n", config->cost_);
-    if (config->next_ != nullptr) {
+    printf("Cost: %f\n", config->cost);
+    if (config->next != nullptr) {
       printf("Histogram is recursive:\n");
     }
     while (config != nullptr) {
-      if (config->param_.is_sparse_) {
+      if (config->param.is_sparse) {
         printf("Histogram is sparse:\n(index, count - 1):\n");
-        for (size_t i = 0; i < config->size_to_write_; ++i) {
-          printf("(%d,%d) ", mapping[i], config->histogram_to_write_[i]);
+        for (uint32_t i = 0; i < config->size_to_write; ++i) {
+          printf("(%d,%d) ", mapping[i], config->histogram_to_write[i]);
         }
         printf("\n");
       } else {
         printf("Histogram is not sparse:\n");
-        for (size_t i = 0; i < config->size_to_write_; ++i) {
-          printf("%d ", config->histogram_to_write_[i]);
+        for (uint32_t i = 0; i < config->size_to_write; ++i) {
+          printf("%d ", config->histogram_to_write[i]);
         }
         printf("\n");
       }
-      if (config->param_.type_ == Quantizer::ConfigType::Huffman) {
+      if (config->param.type == Quantizer::ConfigType::Huffman) {
         printf("The counts above should be interpreted as exponents of 2.\n");
       }
-      config = config->next_;
+      config = config->next;
     }
   }
 }
@@ -744,15 +744,15 @@ void GetCodesFromTokens(const std::vector<uint32_t>& max_symbols,
                         const std::vector<Token>& tokens,
                         std::vector<VectorNoCtor<ANSSymbolInfo>>& codes) {
   // Compute the counts of symbols.
-  const size_t n_dicts = max_symbols.size();
+  const uint32_t n_dicts = max_symbols.size();
   std::vector<std::vector<uint32_t>> counts(n_dicts);
-  for (size_t i = 0; i < n_dicts; ++i) counts[i].resize(max_symbols[i], 0);
+  for (uint32_t i = 0; i < n_dicts; ++i) counts[i].resize(max_symbols[i], 0);
   for (const Token& tok : tokens) {
     if (tok.type == Token::Symbol) ++counts[tok.first][tok.second];
   }
 
   codes.resize(n_dicts);
-  for (size_t i = 0; i < n_dicts; ++i) {
+  for (uint32_t i = 0; i < n_dicts; ++i) {
     EXPECT_WP2_OK(ANSCountsToSpreadTable(
         &counts[i][0], max_symbols[i], ANS_LOG_TAB_SIZE, codes[i]));
   }
@@ -791,7 +791,7 @@ TEST_F(TestANS, Test7) {
     ANSEnc enc[2];
     ANSDictionaries dicts[2];
     std::vector<Token> tokens;
-    for (size_t i = 0; i < 2; ++i) {
+    for (uint32_t i = 0; i < 2; ++i) {
       for (uint32_t max_symbol : max_symbols[i]) {
         GenerateRandomEnc(
             kNumElements, {Token::Symbol}, /*max_asymbol=*/0, /*n_dict=*/1,
@@ -804,7 +804,7 @@ TEST_F(TestANS, Test7) {
     EXPECT_WP2_OK(dicts[0].ToCodingTable());
     EXPECT_WP2_OK(enc[0].Assemble());
     // Update the ids in the tokens.
-    size_t n_dict_0 = max_symbols[0].size();
+    uint32_t n_dict_0 = max_symbols[0].size();
     for (uint32_t i = kNumElements * n_dict_0; i < tokens.size(); ++i) {
       tokens[i].first += n_dict_0;
     }
@@ -856,7 +856,7 @@ TEST_P(TestANSBitCounts, Simple) {
     GetCodesFromTokens(max_symbols, tokens, codes);
   }
   EXPECT_WP2_OK(enc.Assemble());
-  const size_t size = enc.BufferSize();
+  const uint32_t size = enc.BufferSize();
   const uint8_t* buf = enc.Buffer();
   const int size_expected = (int)std::lround(enc.GetCostFull(dicts));
   ExternalDataSource data_source(buf, size);
@@ -978,7 +978,7 @@ TEST_P(TestANSAdaptiveSymbol, Simple) {
   enc.Clear();
   for (const uint8_t& s : syms) enc.PutASymbol(s, &w_dict, "asym");
   EXPECT_WP2_OK(enc.Assemble());
-  const size_t size = enc.BufferSize();
+  const uint32_t size = enc.BufferSize();
   const uint8_t* buf = enc.Buffer();
 
   if (kVerbose) {
@@ -1224,7 +1224,7 @@ TEST_P(TestANSMapping, Simple) {
     enc.PutRange(31, 0, 263, "verif-bit");
     EXPECT_WP2_OK(enc.Assemble());
     // Read back the mapping.
-    const size_t size = enc.BufferSize();
+    const uint32_t size = enc.BufferSize();
     const uint8_t* buf = enc.Buffer();
     ExternalDataSource data_source(buf, size);
     ANSDec dec(&data_source);
@@ -1344,7 +1344,7 @@ TEST_F(TestANS, LargeRange) {
 
   // Read.
   ASSERT_WP2_OK(enc.Assemble());
-  const size_t size = enc.BufferSize();
+  const uint32_t size = enc.BufferSize();
   const uint8_t* buf = enc.Buffer();
   ExternalDataSource data_source(buf, size);
   ANSDec dec(&data_source);

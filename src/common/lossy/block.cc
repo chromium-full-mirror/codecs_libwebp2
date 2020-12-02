@@ -213,7 +213,7 @@ void CodedBlock::GetContext(Channel channel, bool fill_in, bool extend_right,
   const bool have_top_right = have_top && (-1 < y_right_occ);
 
   // collect the context samples:
-  size_t m = 0;
+  uint32_t m = 0;
   // this is the value we reuse in case of non-availability
   int16_t last = fill_in ? 0 : kMissing;
   // left (bh samples)
@@ -696,6 +696,8 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
 
   params->tf = GetImplicitTf(channel);
   if (params->tf != kUnknownTf) return WP2_STATUS_OK;
+  params->tf = GetForcedTransform(config, tile_rect.x, tile_rect.y, this);
+  if (params->tf != kUnknownTf) return WP2_STATUS_OK;
   params->tf = transforms.front();
   if (transforms.size() == 1) return WP2_STATUS_OK;
 
@@ -925,12 +927,24 @@ WP2Status CodedBlock::OptimizeModesLuma(
     // Quickly select the best predictor and then choose the best transform.
     FindBestPred(preds, kYChannel, /*reduced=*/false);
   } else {
+    const TransformPair forced_tf =
+        GetForcedTransform(config, tile_rect.x, tile_rect.y, this);
+    const bool tf_is_forced = (forced_tf != kUnknownTf);
+    Vector<TransformPair> forced_tf_vector;
+    if (tf_is_forced) {
+      WP2_CHECK_ALLOC_OK(forced_tf_vector.resize(1));
+      forced_tf_vector[0] = forced_tf;
+    }
+    const Vector<TransformPair>* const transforms_to_try =
+        tf_is_forced ? &forced_tf_vector : &transforms_subset;
     // Select the best predictor+transform pair and then choose the best
     // transform if there are more to try.
     WP2_CHECK_STATUS(FindBestPredTf(config, tile_rect, preds, segment, context,
                                     kYChannel, num_channels, /*reduced=*/false,
-                                    transforms_subset, counters));
-    if (transforms.size() == transforms_subset.size()) found_best_tf = true;
+                                    *transforms_to_try, counters));
+    if (tf_is_forced || transforms.size() == transforms_subset.size()) {
+      found_best_tf = true;
+    }
   }
   if (!found_best_tf) {
     // TODO(yguyon): Do not recompute scores of 'transforms_subset'

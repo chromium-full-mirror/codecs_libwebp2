@@ -398,7 +398,7 @@ uint32_t GetHeight(const Params& params, const WP2::ArgbBuffer& argb_buffer) {
 void PrintSize(const std::string& out_file,
                size_t out_size, float num_pixels, bool short_output) {
   const float bpp = 8.f * out_size / num_pixels;
-  printf("output size:  %" PRIu64 " (%.2f bpp)", (uint64_t)out_size, bpp);
+  printf("output size:  %u (%.2f bpp)", (uint32_t)out_size, bpp);
   if (out_file.empty()) {
     printf("    [not saved]\n");
   } else if (short_output) {

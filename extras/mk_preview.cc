@@ -60,8 +60,9 @@ bool operator==(const AYCoCg19b& a, const AYCoCg19b& b) {
 bool operator==(const VertexIndexedColor& a, const VertexIndexedColor& b) {
   return (a.x == b.x) && (a.y == b.y) && (a.color_index == b.color_index);
 }
-template<typename T> bool SameArray(const T a[], const T b[], size_t size) {
-  for (size_t i = 0; i < size; ++i) {
+template <typename T>
+bool SameArray(const T a[], const T b[], uint32_t size) {
+  for (uint32_t i = 0; i < size; ++i) {
     if (!(a[i] == b[i])) return false;
   }
   return true;

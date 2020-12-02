@@ -37,7 +37,7 @@
 #include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/dsp/dsp.h"
-#include "src/dsp/lossless/lossless_common.h"
+#include "src/dsp/lossless/dspl.h"
 #include "src/dsp/math.h"
 #include "src/enc/partitioner.h"
 #include "src/enc/wp2_enc_i.h"
@@ -218,7 +218,7 @@ WP2Status SetupEncoderInfo(uint32_t width, uint32_t height,
 // Returns true if the 'str' contains the 'token'. Tokens are separated by '/'.
 static bool VDMatch(const char str[], const char token[]) {
   if (str != nullptr && token != nullptr) {
-    const size_t token_length = std::strlen(token);
+    const uint32_t token_length = std::strlen(token);
     if (token_length == 0) return true;
 
     for (const char* pos = str; (pos = std::strstr(pos, token)) != nullptr;
@@ -324,7 +324,7 @@ static bool IsHorizontal(const DecoderConfig& config) {
 // Appends a formatted literal to a std::string. Avoids <sstream>.
 #define WP2SAppend(str_ptr, ...)                                         \
   do {                                                                   \
-    const size_t size = std::snprintf(nullptr, 0, __VA_ARGS__) + 1;      \
+    const uint32_t size = std::snprintf(nullptr, 0, __VA_ARGS__) + 1;    \
     (str_ptr)->resize((str_ptr)->size() + size);                         \
     std::snprintf((char*)&(str_ptr)->at((str_ptr)->size() - size), size, \
                   __VA_ARGS__);                                          \
@@ -403,6 +403,26 @@ void CodedBlock::StoreTransform(const DecoderConfig& config,
     WP2SAppend(str_ptr, "Transform x: %s\n", WP2TransformNames[params.tf_x()]);
     WP2SAppend(str_ptr, "Transform y: %s\n", WP2TransformNames[params.tf_y()]);
   }
+}
+
+TransformPair CodedBlock::GetForcedTransform(const EncoderConfig& config,
+                                             uint32_t tile_pos_x,
+                                             uint32_t tile_pos_y,
+                                             CodedBlock* const cb) {
+  EncoderInfo* const info = config.info;
+  if (info == nullptr) return kUnknownTf;
+
+  for (const EncoderInfo::ForcedTransform& forced : info->force_transform) {
+    if (forced.x != (cb->x_pix() + tile_pos_x) ||
+        forced.y != (cb->y_pix() + tile_pos_y)) {
+      continue;
+    }
+
+    if (forced.transform >= kNumTransformPairs) return kUnknownTf;
+    return (TransformPair)forced.transform;
+  }
+
+  return kUnknownTf;
 }
 
 // If the block is currently selected, outputs the pixel values from 'pixels'
@@ -588,6 +608,16 @@ void CodedBlock::StorePredictionScore(const EncoderConfig& config,
       WP2SAppend(str_ptr, " %s (%s - %s/%s x%u)\n", is_best ? "best" : "    ",
                  pred.GetName().c_str(), WP2TransformNames[kTfX[tf]],
                  WP2TransformNames[kTfY[tf]], GetNumTransforms(channel));
+    } else {
+      // Print in console instead.
+      printf(
+          "Block at (%d %d) Score %9.1f = dist %9.1f + lambda %9.1f * (res "
+          "%7.4f + pred %7.4f + "
+          "tf %7.4f)  %s (%s - %s/%s x%u)\n",
+          x_pix(), y_pix(), score, dist, lambda, res_rate, pred_rate, tf_rate,
+          is_best ? "best" : "    ", pred.GetName().c_str(),
+          WP2TransformNames[kTfX[tf]], WP2TransformNames[kTfY[tf]],
+          GetNumTransforms(channel));
     }
   }
   DisplayPredContext(*this, channel, /*draw_red_border=*/selected,
@@ -944,7 +974,7 @@ WP2Status CodedBlock::Draw(const DecoderConfig& config, uint32_t tile_x,
       uint16_t quant[kNumQuantZones];
       segment.GetQuantSteps(quant, VDChannel(config));
       // Quant expressed in [0 .. 1]
-      const float normalized_quant = (float)quant[0] / (float)kMaxQuantStep;
+      const float normalized_quant = (float)quant[0] / kQFactorMax;
 
       // Gamma it not really necessary but just to show I studied colors.
       constexpr float kGamma = 2.2f;
@@ -1616,7 +1646,7 @@ static void ToGray(const ArgbBuffer& from, uint32_t channel,
   for (uint32_t y = 0; y < to->height(); ++y) {
     const uint8_t* const from_row = from.GetRow8(y);
     uint8_t* const to_row = to->GetRow8(y);
-    for (size_t x = 0; x < to->width(); ++x) {
+    for (uint32_t x = 0; x < to->width(); ++x) {
       const uint8_t* const from_pixel = from_row + x * 4;
       uint8_t* const to_pixel = to_row + x * 4;
       uint32_t gray = from_pixel[channel];
@@ -1913,7 +1943,7 @@ bool TileScoreFunc::RegisterScoreForVDebug(const char label[],
     std::string* const str_ptr = &config_->info->selection_info;
     WP2SAppend(str_ptr, "\n%s: score %.6f, %4u blocks, %4u-byte tile", label,
                score, (uint32_t)blocks_.size(),
-               (uint32_t)enc_tiles_layout_.tiles.front().enc.BufferSize());
+               enc_tiles_layout_.tiles.front().enc.BufferSize());
     if (block.dim() != BLK_LAST) {
       WP2SAppend(str_ptr, ", on block at %3u,%3u (%2ux%2u)", block.x_pix(),
                  block.y_pix(), block.w_pix(), block.h_pix());
@@ -1931,9 +1961,9 @@ void ExhaustivePartitioner::RegisterScoreForVDebug(
     uint64_t num_iterations) const {
   if (VDMatch(*config_, "encoder/partition/score")) {
     std::string* const str_ptr = &config_->info->selection_info;
-    WP2SAppend(str_ptr, "\n\nNum iterations: %" PRIu64 "\n", num_iterations);
-    WP2SAppend(str_ptr, "Best partition score: %8.3f size: %4" PRIu64 "\n",
-               best_partition_score, best_partition_size);
+    WP2SAppend(str_ptr, "\n\nNum iterations: %u\n", (uint32_t)num_iterations);
+    WP2SAppend(str_ptr, "Best partition score: %8.3f size: %4u\n",
+               best_partition_score, (uint32_t)best_partition_size);
   }
 }
 
@@ -2473,8 +2503,8 @@ void Decoder::HeaderVDebug() {
   if (num_clusters == 1) {
     debug_output->Fill(tile_rect, WP2::Argb32b{255, 0, 0, 0});
   } else {
-    const uint32_t num_blocks_x = WP2LSubSampleSize(tile_rect.width, bits);
-    const uint32_t num_blocks_y = WP2LSubSampleSize(tile_rect.height, bits);
+    const uint32_t num_blocks_x = SubSampleSize(tile_rect.width, bits);
+    const uint32_t num_blocks_y = SubSampleSize(tile_rect.height, bits);
     for (uint32_t y = 0; y < num_blocks_y; ++y) {
       for (uint32_t x = 0; x < num_blocks_x; ++x) {
         const WP2::Rectangle rect{

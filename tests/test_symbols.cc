@@ -313,7 +313,7 @@ void VerifyProcessRead(const SymbolsInfoTest& info, uint32_t num_symbols,
     sw->ProcessWithCost(sym.cluster, sym.s, sym.value, "sym", &enc, &enc_cost);
   }
   EXPECT_WP2_OK(enc.Assemble());
-  const size_t size = enc.BufferSize();
+  const uint32_t size = enc.BufferSize();
   const uint8_t* buf = enc.Buffer();
 
   // Decode the symbol reader statistics.
@@ -436,7 +436,7 @@ TEST(SymbolsTest, Uniform) {
   const uint32_t range = max - min + 1;
   EXPECT_GT(range, 0u);
   EXPECT_WP2_OK(enc.Assemble());
-  const size_t size = enc.BufferSize();
+  const uint32_t size = enc.BufferSize();
 
   // With uniform data, the symbol writer should choose the range storage
   // method (there is a little overhead for storing the range).
@@ -492,7 +492,7 @@ TEST(SymbolsTest, MaxValue) {
     }
   }
   EXPECT_WP2_OK(enc.Assemble());
-  const size_t size = enc.BufferSize();
+  const uint32_t size = enc.BufferSize();
   const uint8_t* buf = enc.Buffer();
 
   // Decode the symbol reader statistics.
@@ -550,7 +550,7 @@ TEST(SymbolsTest, StorageMethodAdaptive) {
     sw->Process(sym.cluster, sym.s, sym.value, "sym", &enc);
   }
   EXPECT_WP2_OK(enc.Assemble());
-  size_t size = enc.BufferSize();
+  uint32_t size = enc.BufferSize();
 
   // Since the data is uniform, the adaptive bit shouldn't win much.
   EXPECT_NEAR(symbols.size() * std::log2(kMaxRange) / 8, size, size * 0.1);
@@ -624,7 +624,7 @@ TEST(SymbolsTest, StorageMethodAdaptiveWithAutoSpeed) {
     sw->Process(sym.cluster, sym.s, sym.value, "sym", &enc);
   }
   EXPECT_WP2_OK(enc.Assemble());
-  size_t size = enc.BufferSize();
+  uint32_t size = enc.BufferSize();
 
   // Since the data is very correlated it should be pretty cheap.
   EXPECT_LT(size, kNumSymbol * std::log2(kMaxRange) * 0.02);
@@ -1297,7 +1297,7 @@ TEST(SymbolsTest, MaxValuePrecision) {
   enc.PutUValue(ANS_TAB_SIZE - 1, ANS_LOG_TAB_SIZE, "hack");
   // No need to write data as the stats are stored anyway. Just wrap up.
   EXPECT_WP2_OK(enc.Assemble());
-  const size_t size = enc.BufferSize();
+  const uint32_t size = enc.BufferSize();
   const uint8_t* buf = enc.Buffer();
 
   // Decode the symbol reader statistics.

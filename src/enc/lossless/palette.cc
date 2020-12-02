@@ -24,7 +24,7 @@
 
 #include "src/common/color_precision.h"
 #include "src/common/lossless/color_cache.h"
-#include "src/dsp/lossless/lossless_common.h"
+#include "src/dsp/lossless/encl_dsp.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/utils/ans_utils.h"
 #include "src/wp2/format_constants.h"
@@ -57,11 +57,11 @@ static inline uint32_t PaletteColorDistance(const int16_t col1[],
 static void GreedyMinimizeDeltas(uint32_t num_colors, int16_t colors[],
                                  uint32_t weight_RGB /* in [0..256] */) {
   int16_t predict[4] = {0};
-  for (size_t i = 0; i < num_colors; ++i) {
-    size_t best_ix = i;
+  for (uint32_t i = 0; i < num_colors; ++i) {
+    uint32_t best_ix = i;
     uint32_t best_score =
         PaletteColorDistance(&colors[4 * i], predict, weight_RGB);
-    for (size_t k = i + 1; k < num_colors; ++k) {
+    for (uint32_t k = i + 1; k < num_colors; ++k) {
       const uint32_t cur_score =
           PaletteColorDistance(&colors[4 * k], predict, weight_RGB);
       if (cur_score < best_score) {
@@ -84,7 +84,7 @@ static void GreedyMinimizeDeltas(uint32_t num_colors, int16_t colors[],
 // no benefit to re-organize them greedily. A monotonic development would be
 // spotted in green-only situations (like lossy alpha) or gray-scale images.
 static bool HasNonMonotonousDeltas(const int16_t* const colors,
-                                   size_t num_colors) {
+                                   uint32_t num_colors) {
   uint8_t diff_pos_bits = 0x00, diff_neg_bits = 0x00;
   const int16_t* prev = &colors[4 * 0];
   const int16_t* cur =  &colors[4 * 1];
@@ -105,7 +105,7 @@ static WP2Status SortColors(WP2::Vector_s16& colors_in) {
   struct Color {
     int16_t colors[4];
     bool operator<(const Color& c) const {
-      for (size_t i = 0; i < 4; ++i) {
+      for (uint32_t i = 0; i < 4; ++i) {
         if (colors[i] != c.colors[i]) {
           return (colors[i] < c.colors[i]);
         }
@@ -116,15 +116,15 @@ static WP2Status SortColors(WP2::Vector_s16& colors_in) {
   WP2::VectorNoCtor<Color> colors;
   const uint32_t num_colors = colors_in.size() / 4;
   WP2_CHECK_ALLOC_OK(colors.resize(num_colors));
-  for (size_t i = 0; i < num_colors; ++i) {
-    for (size_t j = 0; j < 4; ++j) {
+  for (uint32_t i = 0; i < num_colors; ++i) {
+    for (uint32_t j = 0; j < 4; ++j) {
       colors[i].colors[j] = colors_in[4 * i + j];
     }
   }
   std::sort(colors.begin(), colors.end());
   // Write back.
-  for (size_t i = 0; i < num_colors; ++i) {
-    for (size_t j = 0; j < 4; ++j) {
+  for (uint32_t i = 0; i < num_colors; ++i) {
+    for (uint32_t j = 0; j < 4; ++j) {
       colors_in[4 * i + j] = colors[i].colors[j];
     }
   }
@@ -243,7 +243,7 @@ WP2Status Palette::Apply(const WP2::ArgbBuffer& pic, uint16_t* dst) const {
   WP2_CHECK_STATUS(color_cache.Allocate(num_colors_));
 
   // Fill the cache.
-  for (size_t i = 0; i < num_colors_; ++i) {
+  for (uint32_t i = 0; i < num_colors_; ++i) {
     color_cache.Insert(&colors_[4 * i], i);
   }
 
@@ -263,7 +263,7 @@ WP2Status Palette::Apply(const WP2::ArgbBuffer& pic, uint16_t* dst) const {
 }
 
 bool Palette::IsGrayScale() const {
-  for (size_t i = 0; i < num_colors_; ++i) {
+  for (uint32_t i = 0; i < num_colors_; ++i) {
     if (!has_alpha_) assert(colors_[4 * i + 0] == WP2::kAlphaMax);
     const auto r = colors_[4 * i + 1];
     const auto g = colors_[4 * i + 2];
@@ -313,7 +313,7 @@ class InternalParams {
 
 WP2Status InternalParams::StoreSigns(WP2::ANSEncBase* const bw) {
   // Store the signs.
-  for (size_t c = 0; c < num_channels_; ++c) {
+  for (uint32_t c = 0; c < num_channels_; ++c) {
     if (c == 0 && !has_alpha_) {
       assert(is_increasing_[c] && is_decreasing_[c]);
       continue;
@@ -329,7 +329,7 @@ WP2Status InternalParams::StoreSigns(WP2::ANSEncBase* const bw) {
           WP2::StoreVector(&is_stored_as_above_[c][1], num_colors_ - 1, 1,
                            stats_.data(), nullptr);
       // Try with storing the opposite.
-      for (size_t i = 0; i < num_colors_ - 1; ++i) {
+      for (uint32_t i = 0; i < num_colors_ - 1; ++i) {
         opposite_[i] = (uint8_t)!is_stored_as_above_[c][i + 1];
       }
       const float cost_opposite = WP2::StoreVector(
@@ -385,14 +385,14 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
   const uint16_t alpha_max = WP2::FormatMax(format_, /*channel=*/0);
 
   // Store the channels one by one.
-  for (size_t c = has_alpha_ ? 0 : 1; c < num_channels_; ++c) {
+  for (uint32_t c = has_alpha_ ? 0 : 1; c < num_channels_; ++c) {
     const uint16_t channel_max = WP2::FormatMax(format_, c);
     const WP2::Vector_u16& diffs = channel_diffs_[c];
     uint16_t alpha_value = has_alpha_ ? channel_diffs_[0][0] : channel_max;
     uint16_t prev_channel = diffs[0];
     // Compute the cost when storing everything as ranges.
     float cost_range = WP2Log2(channel_max + 1);
-    for (size_t i = 1; i < num_colors_; ++i) {
+    for (uint32_t i = 1; i < num_colors_; ++i) {
       // TODO(vrabaud): Check if we should stop here (when reaching the max
       //                and everything else is above).
       if (has_alpha_) {
@@ -434,7 +434,7 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
       // Store everything else as ranges.
       alpha_value = has_alpha_ ? channel_diffs_[0][0] : channel_max;
       prev_channel = diffs[0];
-      for (size_t i = 1; i < num_colors_; ++i) {
+      for (uint32_t i = 1; i < num_colors_; ++i) {
         if (has_alpha_) {
           alpha_value += (is_stored_as_above_[0][i]) ?  channel_diffs_[0][i]
                                                      : -channel_diffs_[0][i];
@@ -466,8 +466,8 @@ WP2Status InternalParams::WriteAsImage(const ProgressRange& progress,
   WP2::Vector_s16 tmp_palette;
   WP2_CHECK_ALLOC_OK(tmp_palette.resize(4 * num_colors_));
   std::fill(tmp_palette.begin(), tmp_palette.end(), 0);
-  for (size_t c = 0; c < num_channels_; ++c) {
-    for (size_t i = 0; i < num_colors_; ++i) {
+  for (uint32_t c = 0; c < num_channels_; ++c) {
+    for (uint32_t i = 0; i < num_colors_; ++i) {
       tmp_palette[4 * i + c] = channel_diffs_[c][i];
       if (c == 0 && !has_alpha_) {
         assert(tmp_palette[4 * i + c] ==
@@ -505,11 +505,11 @@ WP2Status InternalParams::Init(const int16_t colors[]) {
   for (auto& d : channel_diffs_) WP2_CHECK_ALLOC_OK(d.resize(num_colors_));
 
   // Compute the differences between the channels.
-  for (size_t c = 0; c < num_channels_; ++c) {
+  for (uint32_t c = 0; c < num_channels_; ++c) {
     int16_t channel_prev = colors[c];
     channel_diffs_[c][0] = channel_prev;
     // is_stored_as_above_[c][0] is unused.
-    for (size_t i = 1; i < num_colors_; ++i) {
+    for (uint32_t i = 1; i < num_colors_; ++i) {
       if (has_alpha_) {
         const auto alpha = colors[4 * i + 0];
         if (c > 0 && channel_prev > alpha) channel_prev = alpha;

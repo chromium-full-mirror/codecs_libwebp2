@@ -46,11 +46,66 @@ WP2Status QuantMtx::Allocate() {
   return WP2_STATUS_OK;
 }
 
+// clang-format off
+static const uint16_t Qs[kQFactorMax + 1] = {
+     12,   13,   14,   15,   16,   17,   18,   19,   20,   21,   22,   23,   24,
+     25,   26,   27,   28,   29,   30,   31,   32,   33,   34,   35,   36,   37,
+     38,   39,   40,   41,   42,   43,   44,   45,   46,   47,   48,   49,   50,
+     51,   52,   53,   54,   55,   56,   57,   58,   59,   60,   61,   62,   63,
+     64,   65,   66,   67,   68,   70,   71,   72,   73,   74,   75,   76,   77,
+     78,   80,   81,   82,   83,   84,   86,   87,   88,   90,   91,   92,   94,
+     95,   97,   98,   99,  101,  102,  104,  106,  107,  109,  110,  112,  114,
+    115,  117,  119,  121,  122,  124,  126,  128,  130,  132,  134,  136,  138,
+    140,  142,  144,  146,  149,  152,  153,  155,  158,  160,  162,  166,  167,
+    170,  173,  175,  178,  180,  183,  186,  189,  191,  194,  197,  200,  203,
+    206,  209,  212,  215,  219,  222,  225,  229,  232,  236,  239,  243,  246,
+    250,  254,  258,  261,  265,  269,  273,  277,  282,  286,  291,  295,  299,
+    303,  309,  312,  318,  322,  327,  332,  336,  341,  348,  352,  358,  362,
+    368,  374,  381,  385,  390,  397,  402,  409,  414,  420,  428,  434,  439,
+    448,  455,  461,  468,  474,  481,  489,  496,  504,  512,  520,  528,  537,
+    541,  550,  560,  569,  574,  585,  595,  601,  612,  618,  630,  642,  648,
+    661,  668,  682,  689,  697,  712,  720,  728,  744,  753,  762,  780,  789,
+    799,  809,  819,  840,  851,  862,  873,  885,  897,  910,  923,  936,  963,
+    978,  992, 1008, 1024,
+};
+// iQs[i] = (1<<16) / Qs[i], adjusted to maximize precision
+static const uint16_t iQs[kQFactorMax + 1] = {
+  5462, 5042, 4682, 4370, 4096, 3856, 3641, 3450, 3277, 3121, 2979, 2850, 2731,
+  2622, 2521, 2428, 2341, 2260, 2185, 2115, 2048, 1986, 1928, 1873, 1821, 1772,
+  1725, 1681, 1639, 1599, 1561, 1525, 1490, 1457, 1425, 1395, 1366, 1338, 1311,
+  1286, 1261, 1237, 1214, 1192, 1171, 1150, 1130, 1111, 1093, 1075, 1058, 1041,
+  1024, 1009,  993,  979,  964,  937,  924,  911,  898,  886,  874,  863,  852,
+   841,  820,  810,  800,  790,  781,  763,  754,  745,  729,  721,  713,  698,
+   690,  676,  669,  662,  649,  643,  631,  619,  613,  602,  596,  586,  575,
+   570,  561,  551,  542,  538,  529,  521,  512,  505,  497,  490,  482,  475,
+   469,  462,  456,  449,  440,  432,  429,  423,  415,  410,  405,  395,  393,
+   386,  379,  375,  369,  365,  359,  353,  347,  344,  338,  333,  328,  323,
+   319,  314,  310,  305,  300,  296,  292,  287,  283,  278,  275,  270,  267,
+   263,  259,  255,  252,  248,  244,  241,  237,  233,  230,  226,  223,  220,
+   217,  213,  211,  207,  204,  201,  198,  196,  193,  189,  187,  184,  182,
+   179,  176,  173,  171,  169,  166,  164,  161,  159,  157,  154,  152,  150,
+   147,  145,  143,  141,  139,  137,  135,  133,  131,  128,  127,  125,  123,
+   122,  120,  118,  116,  115,  113,  111,  110,  108,  107,  105,  103,  102,
+   100,   99,   97,   96,   95,   93,   92,   91,   89,   88,   87,   85,   84,
+    83,   82,   81,   79,   78,   77,   76,   75,   74,   73,   72,   71,   69,
+    68,   67,   66,   64,
+};
+// clang-format on
+
+// Returns the closest quant-idx to "Qs[idx] / scale".
+static uint32_t FindIdx(uint32_t idx, float scale) {
+  assert(scale > 0.f);
+  const uint16_t real_q = (uint16_t)std::round(Qs[idx] / scale);
+  const uint32_t
+      new_idx = std::lower_bound(&Qs[0], &Qs[kQFactorMax] + 1, real_q) - Qs;
+  return new_idx;
+}
+
 void QuantMtx::Init(uint32_t max_residual, float q_scale,
                     PartitionSet partition_set,
                     const uint16_t steps[kNumQuantZones]) {
   for (uint32_t i = 0; i < kNumQuantZones; ++i) {
-    assert(steps[i] >= kMinQuantStep && steps[i] <= kMaxQuantStep);
+    assert(steps[i] >= 0 && steps[i] <= kQFactorMax);
     quant_steps[i] = steps[i];
   }
 
@@ -68,7 +123,6 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
     // last segment is flat
     for (; s < kMaxBlockSizePix; ++s) qramp[s] = last;
   }
-
   // prepare the quant matrices
   const bool for_decoding = iquant_data.empty();
   int16_t* dq_ptr = dequant_data;
@@ -82,18 +136,15 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
     const uint32_t H = TrfHeight[tdim];
     const uint32_t max_residual_value =
         (uint32_t)(max_residual * std::sqrt(W * H));
-    const float norm = 256. / kMaxQuantStep / q_scale;
     for (uint32_t j = is_used ? 0 : H; j < H; ++j) {
       const uint32_t qy = qramp[j * 32 / H];
       for (uint32_t i = 0; i < W; ++i) {
         const bool is_dc = (i == 0 && j == 0);
         const uint32_t qx = qramp[i * 32 / W];
-        const uint32_t q = 1u + (uint32_t)((qx + qy) * norm);
-        assert(q <= (uint32_t)std::numeric_limits<int16_t>::max());
-        const uint32_t qbias = q - 1;
+        const uint32_t q_idx = FindIdx((qx + qy + 1) >> 1, q_scale);
+        const uint32_t q = Qs[q_idx];
+        const uint32_t IQ = iQs[q_idx];
         const uint32_t idx = i + j * W;
-        assert(q <= (uint32_t)std::numeric_limits<int16_t>::max());
-        const uint32_t IQ = ((1ull << WP2QBits) + qbias) / q;
         const uint32_t B = (1u << WP2QBits) / 3;
         if (!for_decoding) {
           iq_ptr[idx] = IQ;
@@ -133,10 +184,11 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
 void QuantMtx::SetLambda(float lambda) {
   // this expression was fit over the sampling of several images encoded at
   // fixed quality (=quant_steps[1]) with varying lambda.
-  const double lambda_f = 450. * pow(quant_steps[1] / 1019., 1.8);
+  const double lambda_f = 450. * pow(Qs[quant_steps[1]] / 50., 1.2);
   assert(lambda_f > 0.);
   lambda1 = lambda_f;
   lambda2 = 0.84 * lambda_f;
+  lambda3 = lambda_f;
 }
 
 void QuantMtx::Quantize(const int32_t residuals[], TrfSize dim,

@@ -751,11 +751,9 @@ uint32_t ResidualIO::GetClusterMergedUV(Channel channel, uint32_t num_channels,
   return DoGetCluster(c, num_channels, method, dim, sector);
 }
 
-WP2Status InitializeAOMSymbol(Symbol sym, uint32_t quantizer_context,
-                              SymbolsInfo* const info);
+WP2Status InitializeAOMSymbol(Symbol sym, SymbolsInfo* const info);
 
-WP2Status ResidualIO::InitializeInfo(bool has_alpha, uint32_t quality_hint,
-                                     bool use_aom_coeffs,
+WP2Status ResidualIO::InitializeInfo(bool has_alpha, bool use_aom_coeffs,
                                      SymbolsInfo* const info) {
   const uint32_t num_channels = (has_alpha ? 4 : 3);
   for (Channel channel : {kYChannel, kUChannel, kAChannel}) {
@@ -775,13 +773,10 @@ WP2Status ResidualIO::InitializeInfo(bool has_alpha, uint32_t quality_hint,
       }
     }
   }
-  assert(quality_hint <= kMaxLossyQualityHint);
-  const int quantizer_context =
-      3 - DivRound(quality_hint * 3u, kMaxLossyQualityHint);
 
   for (Symbol sym : kSymbolsForAOMCoeffs) {
     if (use_aom_coeffs) {
-      WP2_CHECK_STATUS(InitializeAOMSymbol(sym, quantizer_context, info));
+      WP2_CHECK_STATUS(InitializeAOMSymbol(sym, info));
     } else {
       info->SetInfo(sym, /*min=*/SymbolsInfo::kInvalidBound,
                     /*max=*/SymbolsInfo::kInvalidBound, /*num_clusters=*/0,
@@ -889,10 +884,7 @@ static void FillExtents(Symbol sym, uint32_t* const extents,
     default:
       assert(false);
   }
-  // Remove the first element that corresponds to
-  // kCoefficientQuantizerContexts. The last one is the CDF itself.
-  --*num_extents;
-  std::copy(c + 1, c + 1 + *num_extents, extents);
+  std::copy(c, c + *num_extents, extents);
 }
 
 // Returns the number of clusters for a given symbol as defined in AOM.
@@ -908,10 +900,7 @@ static uint32_t GetNumClusters(Symbol sym) {
 }
 
 // Returns the CDF for a given symbol 'sym' in a given DecoderContext.
-static const uint16_t* GetCDF(Symbol sym, uint32_t quantizer_context,
-                              uint32_t cluster) {
-  const uint32_t num_clusters = GetNumClusters(sym);
-  cluster += quantizer_context * num_clusters;
+static const uint16_t* GetCDF(Symbol sym, uint32_t cluster) {
   switch (sym) {
     case kAOMAllZero:
       return GetCDF(cluster, libgav1::kDefaultAllZeroCdf);
@@ -959,8 +948,7 @@ uint32_t ResidualIO::GetMethodIndex(EncodingMethod method) {
 
 // Initializes the CDFs for symbol 'sym' in 'info', based on the default for the
 // given quantizer context.
-WP2Status InitializeAOMSymbol(Symbol sym, uint32_t quantizer_context,
-                              SymbolsInfo* const info) {
+WP2Status InitializeAOMSymbol(Symbol sym, SymbolsInfo* const info) {
   const uint32_t num_clusters = GetNumClusters(sym);
 
   uint32_t extents[kCoordMaxSize];
@@ -970,7 +958,7 @@ WP2Status InitializeAOMSymbol(Symbol sym, uint32_t quantizer_context,
   info->SetInfo(sym, /*min=*/0, /*max=*/range - 1, num_clusters,
                 SymbolsInfo::StorageMethod::kAdaptiveSym);
   for (uint32_t i = 0; i < num_clusters; ++i) {
-    const uint16_t* cdf = GetCDF(sym, quantizer_context, i);
+    const uint16_t* cdf = GetCDF(sym, i);
     assert(cdf[0] == 0);
     // TODO(vrabaud) all CDFs in the code should have the same max_proba.
     WP2_CHECK_STATUS(info->SetInitialCDF(cdf, /*max_proba=*/1u << 14, i, sym));

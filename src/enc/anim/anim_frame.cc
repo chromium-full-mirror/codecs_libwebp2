@@ -92,7 +92,8 @@ FrameEncoder::FrameEncoder(const EncoderConfig& config,
       frames_(frames),
       image_has_alpha_(!AllFramesAreOpaque(frames)),
       background_color_(ToArgb32b(background_color)),
-      subframe_encoder_(GetQualityHint(config.quality), image_has_alpha_),
+      subframe_encoder_(GetQualityHint(config.quality), image_has_alpha_,
+                        FinalTileShape(config)),
       progress_(progress, 1.f) {}
 
 WP2Status FrameEncoder::SaveSubframeToCanvas(const ArgbBuffer& subframe,
@@ -437,8 +438,13 @@ WP2Status FrameEncoder::Encode(Writer* const output) {
 
 //------------------------------------------------------------------------------
 
-SubframeEncoder::SubframeEncoder(uint32_t quality_hint, bool image_has_alpha)
-    : quality_hint_(quality_hint), image_has_alpha_(image_has_alpha) {}
+SubframeEncoder::SubframeEncoder(uint32_t quality_hint, bool image_has_alpha,
+                                 TileShape tile_shape)
+    : quality_hint_(quality_hint),
+      tile_shape_(tile_shape),
+      image_has_alpha_(image_has_alpha) {
+  assert(tile_shape != TILE_SHAPE_AUTO);
+}
 
 WP2Status SubframeEncoder::EncodeSubframe(const EncoderConfig& config,
                                           const Subframe& subframe,
@@ -446,6 +452,8 @@ WP2Status SubframeEncoder::EncodeSubframe(const EncoderConfig& config,
                                           const ProgressRange& progress,
                                           Writer* const output) const {
   WP2_CHECK_OK(subframe.GetFrameRect().Contains(subframe.window),
+               WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(FinalTileShape(config) == tile_shape_,
                WP2_STATUS_INVALID_PARAMETER);
   if (!image_has_alpha_) {
     WP2_CHECK_OK(

@@ -34,7 +34,7 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
                                VectorNoCtor<ANSSymbolInfo>& infos) {
   // Read the mappings first.
   Vector_u16 mapping;
-  size_t histo_size = nnz;
+  uint32_t histo_size = nnz;
   bool is_sparse;
   if (nnz < symbol_range) {
     is_sparse = dec->ReadBool("is_sparse");
@@ -62,7 +62,7 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
   if (type == 2) {  // HuffmanANS
     // Read the probabilities we depend upon.
     VectorNoCtor<ANSSymbolInfo> infos_sub;
-    const size_t size_sub = dec->ReadRange(1, 1 + kMaxFreqBits, "size");
+    const uint32_t size_sub = dec->ReadRange(1, 1 + kMaxFreqBits, "size");
     WP2_CHECK_STATUS(
         ReadHistogram(size_sub, 1 + kMaxFreqBits, histo_size, dec, infos_sub));
     // Deduce the counts.
@@ -81,7 +81,7 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
         counts_sub.data(), counts_sub.size(), ANS_LOG_TAB_SIZE, codes));
     // Read the symbols that make up the final stats.
     uint32_t nnz_left = nnz;
-    for (size_t i = 0; i < histo_size; ++i) {
+    for (uint32_t i = 0; i < histo_size; ++i) {
       if (nnz_left > 0) {
         counts[i] = dec->ReadSymbol(codes.data(), ANS_LOG_TAB_SIZE, "counts");
       } else {
@@ -112,7 +112,7 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
   // Store everything in the info.
   WP2_CHECK_ALLOC_OK(infos.resize(nnz));
   const bool do_huffman = (type == 1 || type == 2);
-  for (size_t ind = 0, k = 0; k < counts.size(); ++k) {
+  for (uint32_t ind = 0, k = 0; k < counts.size(); ++k) {
     if (counts[k] > 0) {
       assert(ind < nnz);  // We cannot have more non-zeros than needed.
       infos[ind].symbol = mapping.empty() ? k : mapping[k];
@@ -157,7 +157,7 @@ void SymbolReader::AddRange(uint32_t cluster, uint32_t sym,
   stat->type = Stat::Type::kRange;
   if (infos != nullptr) {
     stat->use_mapping = true;
-    for (size_t k = 0; k < infos->size(); ++k) {
+    for (uint32_t k = 0; k < infos->size(); ++k) {
       stat->mappings[k] = (*infos)[k].symbol;
     }
     stat->range = infos->size();
@@ -179,7 +179,7 @@ WP2Status SymbolReader::AddDict(uint32_t cluster, uint32_t sym,
   // Create the mappings.
   Vector_u32 counts;
   WP2_CHECK_ALLOC_OK(counts.resize(infos->size()));
-  for (size_t k = 0; k < counts.size(); ++k) {
+  for (uint32_t k = 0; k < counts.size(); ++k) {
     stat->mappings[k] = (*infos)[k].symbol;
     counts[k] = (*infos)[k].freq;
   }
@@ -608,7 +608,7 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
     WP2_CHECK_STATUS(LoadMapping(dec_, nnz, range, mapping_));
     // Store everything in the info.
     WP2_CHECK_ALLOC_OK(infos_.resize(nnz));
-    for (size_t k = 0; k < infos_.size(); ++k) {
+    for (uint32_t k = 0; k < infos_.size(); ++k) {
       infos_[k].symbol = mapping_[k];
       infos_[k].freq = 1;
     }

@@ -173,7 +173,8 @@ TEST_P(ParameterizedAnimFrameTest, Blend) {
       kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
-  SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha);
+  SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha,
+                                   config.tile_shape);
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
       config, first_frame, /*is_last=*/false, kProgress, &encoded_data));
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
@@ -250,7 +251,8 @@ TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
       kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
-  SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha);
+  SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha,
+                                   config.tile_shape);
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
       config, first_frame, /*is_last=*/false, kProgress, &encoded_data));
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
@@ -367,8 +369,8 @@ TEST_P(ParameterizedAnimFrameTest, RandomFrames) {
   const int num_frames = random.Get(20, 40);
   ASSERT_TRUE(frames.resize(num_frames));
 
-  const uint32_t width = random.Get(1, 50);
-  const uint32_t height = random.Get(1, 50);
+  const uint32_t width = random.Get(250, 500);
+  const uint32_t height = random.Get(250, 500);
 
   for (uint32_t i = 0; i < frames.size(); ++i) {
     Frame& frame = frames[i];
@@ -496,7 +498,8 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
       /*preview_color=*/RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
-  SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha);
+  SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha,
+                                   config.tile_shape);
 
   for (uint32_t i = 0; i < subframes.size(); ++i) {
     const bool is_last = (i == num_subframes - 1);

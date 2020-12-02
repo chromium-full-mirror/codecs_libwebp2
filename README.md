@@ -148,7 +148,7 @@ $ vwp2 in_file...
 ```
 
 `vwp2` takes most of the same flags as `cwp2`, e.g. `-q` for quality. Encoding
-parameters can also be changed dynamically in the tool using key bidings.
+parameters can also be changed dynamically in the tool using key bindings.
 
 Press `h` to a list of key bindings.
 
@@ -201,7 +201,7 @@ $ get_disto [options] compressed_file orig_file
 `get_disto` outputs in order:
 
 - compressed file size
-- overall PNSR (or other metric, if specified through flags)
+- overall PSNR (or other metric, if specified through flags)
 - PSNR (or other metric) for A, R, G and B channels, in order
 - compressed file bits per pixel
 

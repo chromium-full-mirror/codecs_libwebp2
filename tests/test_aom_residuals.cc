@@ -138,7 +138,7 @@ TEST_P(ResidualWriterTest, AOM) {
 
           // Read the data.
           EXPECT_WP2_OK(enc.Assemble());
-          const size_t size = enc.BufferSize();
+          const uint32_t size = enc.BufferSize();
           const uint8_t* buf = enc.Buffer();
           // Initialize decoder and symbol reader.
           ExternalDataSource data_source(buf, size);

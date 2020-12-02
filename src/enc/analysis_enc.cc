@@ -54,10 +54,10 @@ WP2Status SourceStats::AnalyzeSource(const YUVPlane& yuv,
       uint32_t p = 0;
       for (const auto& P : preds) {
         P->Predict(cb, kYChannel, values, kPredWidth);
-        for (size_t j = 0; j < kPredHeight; ++j) {
+        for (uint32_t j = 0; j < kPredHeight; ++j) {
           const int16_t* const src =
               &luma.At(x * kPredWidth, y * kPredHeight + j);
-          for (size_t i = 0; i < kPredWidth; ++i) {
+          for (uint32_t i = 0; i < kPredWidth; ++i) {
             const int16_t v = values[i + kPredWidth * j];
             res[i + j * kPredWidth] = src[i] - v;
           }

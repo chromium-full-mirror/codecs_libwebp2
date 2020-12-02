@@ -63,7 +63,7 @@ class Partitioner : public WP2Allocable {
 
   // Returns true if the 'block' fits within 'max_block', is snapped etc.
   bool IsBlockValid(const Block& block, const Block& max_block,
-                    size_t num_forced_blocks) const;
+                    uint32_t num_forced_blocks) const;
 
   // Verifies that the 'forced_blocks' don't overlap each other.
   // 'max_num_blocks_left' will be decremented by the sum of their areas.
@@ -95,7 +95,7 @@ class TopLeftBestPartitioner : public Partitioner {
 
  private:
   // Returns the 'best_block' size within 'max_block'.
-  WP2Status GetBestSize(const Block& max_block, size_t num_forced_blocks,
+  WP2Status GetBestSize(const Block& max_block, uint32_t num_forced_blocks,
                         Block* const best_block);
 };
 

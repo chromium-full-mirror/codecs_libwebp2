@@ -244,7 +244,8 @@ DSP_DEC_OBJS = \
     src/dsp/quant_sse.o \
     src/dsp/transf_c.o \
     src/dsp/transf_sse.o \
-    src/dsp/lossless/lossless.o \
+    src/dsp/lossless/dspl.o \
+    src/dsp/lossless/decl_dsp.o \
     src/dsp/grain_c.o \
     src/dsp/math.o \
     src/dsp/ssim_dsp.o \
@@ -285,7 +286,7 @@ ENC_OBJS = \
 
 DSP_ENC_OBJS = \
     src/dsp/enc_dsp.o \
-    src/dsp/lossless/lossless_dsp_enc.o \
+    src/dsp/lossless/encl_dsp.o \
     src/dsp/score_dsp.o \
 
 EX_FORMAT_DEC_OBJS = \
@@ -421,8 +422,8 @@ HDRS = \
     src/common/symbols.h \
     src/dsp/dsp.h \
     src/dsp/dsp_x86.h \
-    src/dsp/lossless/lossless.h \
-    src/dsp/lossless/lossless_common.h \
+    src/dsp/lossless/decl_dsp.h \
+    src/dsp/lossless/dspl.h \
     src/dsp/math.h \
     src/dec/filters/alpha_filter.h \
     src/dec/filters/block_map_filter.h \
@@ -645,7 +646,7 @@ CC_TESTS += test_simple_enc_dec test_simple_encode test_slow_enc
 CC_TESTS += test_partition_score_func test_tile_shapes test_version
 CC_TESTS += test_syntax_writer test_anim_frame test_diffusion test_analysis
 CC_TESTS += test_decoder_api test_restoration_filter test_color_precision
-CC_TESTS += test_dsp_speed test_metadata test_bypass
+CC_TESTS += test_dsp_speed test_metadata test_bypass test_screen
 # lossless tests:
 CC_TESTS += lossless/test_color_cache lossless/test_palette
 CC_TESTS += lossless/test_group4 lossless/test_histogram
@@ -976,10 +977,12 @@ DIST_FILES= \
             src/dec/lossless/group4_dec.cc \
             src/dec/lossless/losslessi_dec.cc \
             src/dec/lossless/losslessi_dec.h \
-            src/dsp/lossless/lossless.cc \
-            src/dsp/lossless/lossless.h \
-            src/dsp/lossless/lossless_common.h \
-            src/dsp/lossless/lossless_dsp_enc.cc \
+            src/dsp/lossless/decl_dsp.h \
+            src/dsp/lossless/decl_dsp.cc \
+            src/dsp/lossless/dspl.h \
+            src/dsp/lossless/dspl.cc \
+            src/dsp/lossless/encl_dsp.h \
+            src/dsp/lossless/encl_dsp.cc \
             src/enc/lossless/analysisl_enc.cc \
             src/enc/lossless/histogram_enc.h \
             src/enc/lossless/predictorl_enc.cc \
@@ -1096,6 +1099,7 @@ DIST_FILES= \
             tests/test_preview_api.cc \
             tests/test_progress.cc \
             tests/test_score.cc \
+            tests/test_screen.cc \
             tests/test_quant_mtx.cc \
             tests/test_restoration_filter.cc \
             tests/test_residuals.cc \

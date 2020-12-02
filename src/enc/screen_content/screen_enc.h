@@ -21,6 +21,7 @@
 #define WP2_ENC_ANIM_SCREEN_ENC_H_
 
 #include "src/common/global_params.h"
+#include "src/enc/anim/anim_enc.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
@@ -35,6 +36,12 @@ namespace WP2 {
 // animation with 2 frames. SLOW!
 WP2Status EncodeScreenContent(
     const ArgbBuffer& input, Writer* const output,
+    const EncoderConfig& config = EncoderConfig::kDefault);
+
+// Visible for testing.
+WP2Status EncodeScreenContent(
+    const ArgbBuffer& input, const Plane<bool>& is_lossy, uint32_t block_size,
+    Writer* const output,
     const EncoderConfig& config = EncoderConfig::kDefault);
 
 //------------------------------------------------------------------------------

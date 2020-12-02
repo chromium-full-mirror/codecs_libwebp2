@@ -359,6 +359,41 @@ class Cleaner {
 
 //------------------------------------------------------------------------------
 
+WP2Status MapAomStatus(aom_codec_err_t aom_status) {
+  switch (aom_status) {
+    case AOM_CODEC_OK:
+      return WP2_STATUS_OK;
+    case AOM_CODEC_ERROR:
+      return WP2_STATUS_INVALID_CONFIGURATION;  // Don't know what else to use.
+    case AOM_CODEC_MEM_ERROR:
+      return WP2_STATUS_OUT_OF_MEMORY;
+    case AOM_CODEC_ABI_MISMATCH:
+      return WP2_STATUS_VERSION_MISMATCH;
+    case AOM_CODEC_INCAPABLE:
+      return WP2_STATUS_UNSUPPORTED_FEATURE;
+    case AOM_CODEC_UNSUP_BITSTREAM:
+      return WP2_STATUS_BITSTREAM_ERROR;
+    case AOM_CODEC_UNSUP_FEATURE:
+      return WP2_STATUS_UNSUPPORTED_FEATURE;
+    case AOM_CODEC_CORRUPT_FRAME:
+      return WP2_STATUS_BITSTREAM_ERROR;
+    case AOM_CODEC_INVALID_PARAM:
+      return WP2_STATUS_INVALID_PARAMETER;
+    default:
+      return WP2_STATUS_INVALID_CONFIGURATION;  // Don't know what else to use.
+  }
+}
+
+// performs "if (status != AOM_CODEC_OK) return MapAomStatus(status);"
+#define CHECK_AOM_STATUS(status)             \
+  do {                                       \
+    const aom_codec_err_t __S__ = (status);  \
+    if (__S__ != AOM_CODEC_OK) {             \
+      fprintf(stderr, #status " failed!\n"); \
+      return MapAomStatus(status);           \
+    }                                        \
+  } while (0)
+
 // From twopass_encoder.c / aomenc.c
 WP2Status wp2_get_frame_stats(aom_codec_ctx_t* ctx, const aom_image_t* img,
                               aom_codec_pts_t pts, unsigned int duration,
@@ -367,11 +402,7 @@ WP2Status wp2_get_frame_stats(aom_codec_ctx_t* ctx, const aom_image_t* img,
   *got_stats = false;
   aom_codec_iter_t iter = NULL;
   const aom_codec_cx_pkt_t* pkt = NULL;
-  const aom_codec_err_t res = aom_codec_encode(ctx, img, pts, duration, flags);
-  if (res != AOM_CODEC_OK) {
-    fprintf(stderr, "Failed to get frame stats.\n");
-    return WP2_STATUS_BAD_WRITE;
-  }
+  CHECK_AOM_STATUS(aom_codec_encode(ctx, img, pts, duration, flags));
 
   while ((pkt = aom_codec_get_cx_data(ctx, &iter)) != NULL) {
     *got_stats = true;
@@ -429,10 +460,7 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   }
 
   aom_codec_enc_cfg_t cfg;
-  if (aom_codec_enc_config_default(itf, &cfg, 0) != AOM_CODEC_OK) {
-    fprintf(stderr, "aom_codec_enc_config_default() failed!\n");
-    return WP2_STATUS_INVALID_PARAMETER;
-  }
+  CHECK_AOM_STATUS(aom_codec_enc_config_default(itf, &cfg, 0));
   cfg.g_w = w;
   cfg.g_h = h;
   if (pass == AOM_RC_ONE_PASS) {
@@ -453,46 +481,38 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   cfg.g_pass = pass;
   cfg.rc_twopass_stats_in = stats;
 
-  if (aom_codec_enc_init(codec, itf, &cfg, 0) != AOM_CODEC_OK) {
-    fprintf(stderr, "aom_codec_enc_init() failed!\n");
-    return WP2_STATUS_OUT_OF_MEMORY;
-  }
+  CHECK_AOM_STATUS(aom_codec_enc_init(codec, itf, &cfg, 0));
+
+  // ~~~ Uncomment to disable various AV1 features ~~~
+  // ### Disable palettes.
+  // CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_PALETTE, 0));
+  // ### Disable intra block copy.
+  // CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_INTRABC, 0));
+  // ### Disable "filter" predictors.
+  // CHECK_AOM_STATUS(
+  //     aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA,0));
+  // ### Disable most transforms (only use DCT_DCT and IDENTITY_IDENTITY).
+  // CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_INTRA_DCT_ONLY, 1));
 
   if (params.quality > 95) {
-    if (aom_codec_control(codec, AV1E_SET_LOSSLESS, 1) != AOM_CODEC_OK) {
-      fprintf(stderr, "aom_codec_control(AV1E_SET_LOSSLESS) failed\n");
-      return WP2_STATUS_INVALID_PARAMETER;
-    }
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_LOSSLESS, 1));
   } else {
     const int level = std::lround(63 - params.quality * 63 / 95);
-    if (aom_codec_control(codec, AOME_SET_CQ_LEVEL, level) != AOM_CODEC_OK) {
-      fprintf(stderr, "aom_codec_control(AOME_SET_CQ_LEVEL) failed\n");
-      return WP2_STATUS_INVALID_PARAMETER;
-    }
+    CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_CQ_LEVEL, level));
   }
+
   // The only metrics AV1 can be tuned for are PSNR, SSIM or VMAF.
   WP2_CHECK_OK(params.tuning == PSNR || params.tuning == SSIM,
                WP2_STATUS_INVALID_CONFIGURATION);
   const int tuning = (params.tuning == PSNR) ? 0 : 1;
-  if (aom_codec_control(codec, AOME_SET_TUNING, tuning) != AOM_CODEC_OK) {
-    fprintf(stderr, "aom_codec_control(AOME_SET_TUNING) failed\n");
-    return WP2_STATUS_INVALID_PARAMETER;
-  }
+  CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_TUNING, tuning));
   // AV1's speed param goes opposite to WP2's
   const int speed = std::max(8 - (int)params.effort * 8 / 9, 0);
-  if (aom_codec_control(codec, AOME_SET_CPUUSED, speed) != AOM_CODEC_OK) {
-    fprintf(stderr,
-            "aom_codec_control(AOME_SET_CPUUSED) failed for speed setting\n");
-    return WP2_STATUS_INVALID_PARAMETER;
-  }
-  if (params.filter_strength == 0 &&
-      (aom_codec_control(codec, AV1E_SET_ENABLE_CDEF, 0) != AOM_CODEC_OK ||
-       aom_codec_control(codec, AV1E_SET_ENABLE_RESTORATION, 0) !=
-           AOM_CODEC_OK ||
-       aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA, 0) !=
-           AOM_CODEC_OK)) {
-    fprintf(stderr, "aom_codec_control(AV1E_SET_ENABLE_FILTER) failed\n");
-    return WP2_STATUS_INVALID_PARAMETER;
+  CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_CPUUSED, speed));
+  if (params.filter_strength == 0) {
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_CDEF, 0));
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_RESTORATION, 0));
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA, 0));
   }
   return WP2_STATUS_OK;
 }
@@ -523,10 +543,7 @@ WP2Status FirstPassAV1(const ArgbBuffer& ref, const ParamsAV1& params,
         &codec, NULL, /*pts=*/0, /*duration=*/1, kFlags, stats, &got_stats));
   } while (got_stats);
   if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
-  if (aom_codec_destroy(&codec) != AOM_CODEC_OK) {
-    fprintf(stderr, "aom_codec_destroy() failed!\n");
-    return WP2_STATUS_BITSTREAM_ERROR;
-  }
+  CHECK_AOM_STATUS(aom_codec_destroy(&codec));
   return WP2_STATUS_OK;
 }
 
@@ -557,10 +574,7 @@ WP2Status EncodeAV1WithLibaom(const ArgbBuffer& image, const ParamsAV1& params,
   while (encode_frame(&codec, NULL, -1, 0, bitsteam)) { /* flush encoder */
   }
   if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
-  if (aom_codec_destroy(&codec) != AOM_CODEC_OK) {
-    fprintf(stderr, "aom_codec_destroy() failed!\n");
-    return WP2_STATUS_BITSTREAM_ERROR;
-  }
+  CHECK_AOM_STATUS(aom_codec_destroy(&codec));
 
   return WP2_STATUS_OK;
 }
@@ -583,16 +597,9 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
 
   const aom_codec_dec_cfg cfg = {params.threads, ref.width(), ref.height(), 1};
   aom_codec_ctx_t codec;
-  if (aom_codec_dec_init(&codec, itf, &cfg, 0) != AOM_CODEC_OK) {
-    fprintf(stderr, "aom_codec_dec_init() failed\n");
-    return WP2_STATUS_OUT_OF_MEMORY;
-  }
+  CHECK_AOM_STATUS(aom_codec_dec_init(&codec, itf, &cfg, 0));
 
-  if (aom_codec_control(&codec, AV1_SET_SKIP_LOOP_FILTER,
-                        (params.filter_strength > 0) ? 0 : 1) != AOM_CODEC_OK) {
-    fprintf(stderr, "aom_codec_control(AV1_SET_SKIP_LOOP_FILTER) failed\n");
-    return WP2_STATUS_INVALID_PARAMETER;
-  }
+  CHECK_AOM_STATUS(aom_codec_control(&codec, AV1_SET_SKIP_LOOP_FILTER));
 
 #if defined(WP2_HAVE_AOM_DBG)
   insp_frame_data frame_data;
@@ -610,11 +617,8 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
 #endif  // WP2_HAVE_AOM_DBG
 
   const double start_time = GetStopwatchTime();
-  if (aom_codec_decode(&codec, (const uint8_t*)bitstream.data(),
-                       bitstream.size(), NULL) != AOM_CODEC_OK) {
-    fprintf(stderr, "aom_codec_decode() failed.\n");
-    return WP2_STATUS_OUT_OF_MEMORY;
-  }
+  CHECK_AOM_STATUS(aom_codec_decode(&codec, (const uint8_t*)bitstream.data(),
+                                    bitstream.size(), NULL));
   if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
   aom_image_t* img = NULL;
   aom_codec_iter_t iter = NULL;
@@ -708,10 +712,7 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
   }
 #endif  // WP2_HAVE_AOM_DBG
 
-  if (aom_codec_destroy(&codec) != AOM_CODEC_OK) {
-    fprintf(stderr, "aom_codec_destroy() failed!\n");
-    return WP2_STATUS_OUT_OF_MEMORY;
-  }
+  CHECK_AOM_STATUS(aom_codec_destroy(&codec));
   return WP2_STATUS_OK;
 }
 

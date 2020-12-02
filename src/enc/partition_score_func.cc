@@ -670,8 +670,8 @@ WP2Status SubAreaScoreFunc::GetAreaRemainingDefaultPartition(
   for (const CodedBlock& cb : *area_remaining_blocks) {
     WP2_CHECK_ALLOC_OK(blocks.push_back(cb.blk()));
   }
-  const size_t num_default_blocks_to_ignore = blocks.size();
-  const size_t num_already_added_area_blocks = area_remaining_blocks->size();
+  const uint32_t num_default_blocks_to_ignore = blocks.size();
+  const uint32_t num_already_added_area_blocks = area_remaining_blocks->size();
 
   // Get the default partitioning of the remaining empty spaces into 'blocks'.
   WP2_CHECK_STATUS(partitioner.GetBestPartition(&blocks));
@@ -682,8 +682,8 @@ WP2Status SubAreaScoreFunc::GetAreaRemainingDefaultPartition(
   WP2_CHECK_ALLOC_OK(area_remaining_blocks->resize(
       area_remaining_blocks->size() +
       (blocks.size() - num_default_blocks_to_ignore)));
-  for (size_t i = num_default_blocks_to_ignore,
-              j = num_already_added_area_blocks;
+  for (uint32_t i = num_default_blocks_to_ignore,
+                j = num_already_added_area_blocks;
        i < blocks.size(); ++i, ++j) {
     area_remaining_blocks->at(j).SetDimDefault(blocks[i]);
   }
@@ -1251,8 +1251,7 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
 
   // Compute a score based on distortion and the number of bits per pixel.
   const float ssim = distortion_[4];
-  const float bpp =
-      std::max(1u, (uint32_t)enc.BufferSize()) * 8.f / (width * height);
+  const float bpp = std::max(1u, enc.BufferSize()) * 8.f / (width * height);
   const float lambda = MapQuality(*config_, 7.00f, -2.85f);
   *score = ssim - lambda * bpp;
   return WP2_STATUS_OK;

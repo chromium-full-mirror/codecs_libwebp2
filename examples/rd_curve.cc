@@ -50,6 +50,8 @@ namespace {
 
 typedef enum { WP2_STATS = 0, WEBP_STATS, AV1_STATS,
                JPEG_STATS, NEURAL_STATS } StatType;
+static const char* const kFileExtensions[] = {"wp2", "webp", "av1", "jpg",
+                                              "wp2"};
 
 StatType kAllTypes[] = {WP2_STATS, WEBP_STATS, AV1_STATS, JPEG_STATS,
                         NEURAL_STATS};
@@ -176,22 +178,24 @@ class Task : public Worker {
   // Main task: encode, measure distortion, decode.
   WP2Status Execute() override {
     ArgbBuffer decoded;
+    const std::string out_file = prefix_.empty() ? "" :
+        SPrintf("%s%d.%s", prefix_.c_str(), type_, kFileExtensions[type_]);
     switch (type_) {
       default:
       case WP2_STATS:
-        EncodeWP2(&decoded);
+        EncodeWP2(out_file, &decoded);
         break;
       case WEBP_STATS:
-        EncodeWebP(&decoded);
+        EncodeWebP(out_file, &decoded);
         break;
       case AV1_STATS:
-        EncodeAV1(&decoded);
+        EncodeAV1(out_file, &decoded);
         break;
       case JPEG_STATS:
-        EncodeJPEG(&decoded);
+        EncodeJPEG(out_file, &decoded);
         break;
       case NEURAL_STATS:
-        EncodeNeural(&decoded);
+        EncodeNeural(out_file, &decoded);
         break;
     }
     // finish up
@@ -234,18 +238,18 @@ class Task : public Worker {
 
  private:
   // used by the two methods below
-  void DoEncodeWP2(ArgbBuffer* const decoded);
-  void EncodeWP2(ArgbBuffer* const decoded);
-  void EncodeNeural(ArgbBuffer* const decoded);
+  void DoEncodeWP2(const std::string& out_file, ArgbBuffer* const decoded);
+  void EncodeWP2(const std::string& out_file, ArgbBuffer* const decoded);
+  void EncodeNeural(const std::string& out_file, ArgbBuffer* const decoded);
 
-  void EncodeWebP(ArgbBuffer* const decoded);
-  void EncodeAV1(ArgbBuffer* const decoded);
-  void EncodeJPEG(ArgbBuffer* const decoded);
+  void EncodeWebP(const std::string& out_file, ArgbBuffer* const decoded);
+  void EncodeAV1(const std::string& out_file, ArgbBuffer* const decoded);
+  void EncodeJPEG(const std::string& out_file, ArgbBuffer* const decoded);
 };
 
 //------------------------------------------------------------------------------
 
-void Task::DoEncodeWP2(ArgbBuffer* const decoded) {
+void Task::DoEncodeWP2(const std::string& out_file, ArgbBuffer* const decoded) {
   // Create working copy
   ArgbBuffer src;
   EXIT_IF_ERROR(src.CopyFrom(*ref_), "Can't copy buffer");
@@ -267,6 +271,12 @@ void Task::DoEncodeWP2(ArgbBuffer* const decoded) {
   size_ = memory_writer.size_;
   src.Deallocate();  // let's be nice to others
   params_.config.info = nullptr;
+
+  if (!out_file.empty()) {
+    EXIT_IF_ERROR(WP2::IoUtilWriteFile(memory_writer.mem_, memory_writer.size_,
+                                       out_file.c_str(), /*overwrite=*/true),
+                  "Failed to write file %s", out_file.c_str());
+  }
 
   // decode back
   DecoderConfig dec_config;
@@ -313,24 +323,25 @@ void Task::DoEncodeWP2(ArgbBuffer* const decoded) {
 #endif  // WP2_BITTRACE
 }
 
-void Task::EncodeWP2(ArgbBuffer* const decoded) {
+void Task::EncodeWP2(const std::string& out_file, ArgbBuffer* const decoded) {
   params_.config.quality = params_.q;
   params_.config.alpha_quality = params_.q;
-  DoEncodeWP2(decoded);
+  DoEncodeWP2(out_file, decoded);
 }
 
-void Task::EncodeNeural(ArgbBuffer* const decoded) {
+void Task::EncodeNeural(const std::string& out_file,
+                        ArgbBuffer* const decoded) {
   assert(params_.neural_path != nullptr);
   params_.config.graphdef_path = params_.neural_path;
   params_.config.use_neural_compression = 1;
   // neural-net compression only accepts integer quality in [0..9] range
   params_.config.quality = (int)(params_.q * 9 / 100);
-  DoEncodeWP2(decoded);
+  DoEncodeWP2(out_file, decoded);
 }
 
 //------------------------------------------------------------------------------
 
-void Task::EncodeWebP(ArgbBuffer* const decoded) {
+void Task::EncodeWebP(const std::string& out_file, ArgbBuffer* const decoded) {
 #if defined(WP2_HAVE_WEBP)
   WebPConfig config;
   EXIT_IF_FALSE(WebPConfigPreset(&config, WEBP_PRESET_DEFAULT, params_.q),
@@ -350,6 +361,12 @@ void Task::EncodeWebP(ArgbBuffer* const decoded) {
   enc_time_ = GetStopwatchTime() - start_time;
   size_ = writer.size_;
 
+  if (!out_file.empty()) {
+    EXIT_IF_ERROR(WP2::IoUtilWriteFile(writer.mem_, writer.size_,
+                                       out_file.c_str(), /*overwrite=*/true),
+                  "Failed to write file %s", out_file.c_str());
+  }
+
   // decode back
   start_time = GetStopwatchTime();
   EXIT_IF_ERROR(ReadImage(writer.mem_, writer.size_, decoded, FileFormat::WEBP),
@@ -362,7 +379,7 @@ void Task::EncodeWebP(ArgbBuffer* const decoded) {
 
 //------------------------------------------------------------------------------
 
-void Task::EncodeAV1(ArgbBuffer* const decoded) {
+void Task::EncodeAV1(const std::string& out_file, ArgbBuffer* const decoded) {
   ParamsAV1 p;
   p.quality = params_.q;
   p.use_yuv444 = (params_.config.uv_mode == EncoderConfig::UVMode444);
@@ -377,11 +394,16 @@ void Task::EncodeAV1(ArgbBuffer* const decoded) {
   enc_time_ = timing[0];
   dec_time_ = timing[1];
   size_ = out.size();
+  if (!out_file.empty()) {
+    EXIT_IF_ERROR(WP2::IoUtilWriteFile((uint8_t*)out.data(), out.length(),
+                                       out_file.c_str(), /*overwrite=*/true),
+                  "Failed to write file %s", out_file.c_str());
+  }
 }
 
 //------------------------------------------------------------------------------
 
-void Task::EncodeJPEG(ArgbBuffer* const decoded) {
+void Task::EncodeJPEG(const std::string& out_file, ArgbBuffer* const decoded) {
 #if defined(WP2_HAVE_SJPEG)
   sjpeg::EncoderParam param;
   param.SetQuality(params_.q);
@@ -416,6 +438,12 @@ void Task::EncodeJPEG(ArgbBuffer* const decoded) {
                 "JPEG compression failed!");
   enc_time_ = GetStopwatchTime() - start_time;
   size_ = out.size();
+
+  if (!out_file.empty()) {
+    EXIT_IF_ERROR(WP2::IoUtilWriteFile((uint8_t*)out.data(), out.length(),
+                                       out_file.c_str(), /*overwrite=*/true),
+                  "Failed to write file %s", out_file.c_str());
+  }
 
   // decode back
   start_time = GetStopwatchTime();

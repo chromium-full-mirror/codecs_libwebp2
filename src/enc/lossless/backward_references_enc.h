@@ -219,7 +219,7 @@ class BackwardRefsPool {
     // We round the block size up, so we're guaranteed to have
     // at most MAX_REFS_BLOCK_PER_IMAGE blocks used:
     const uint32_t block_size = (num_pixels - 1) / MAX_REFS_BLOCK_PER_IMAGE + 1;
-    for (size_t i = 0; i < kNumBackwardRefs; ++i) {
+    for (uint32_t i = 0; i < kNumBackwardRefs; ++i) {
       refs_[i].Reset();
       refs_[i].Init(block_size, this);
       is_used_[i] = false;
@@ -231,7 +231,7 @@ class BackwardRefsPool {
   }
   RefsPtr GetFreeBackwardRefs() {
     // Send back the first BackwardRefs that is not used.
-    for (size_t i = 0; i < kNumBackwardRefs; ++i) {
+    for (uint32_t i = 0; i < kNumBackwardRefs; ++i) {
       if (!is_used_[i]) {
         is_used_[i] = true;
         return RefsPtr(&refs_[i], BackwardRefs::FreeFromPool);
@@ -242,7 +242,7 @@ class BackwardRefsPool {
   }
   // Reset the unused backward refs.
   void Reset() {
-    for (size_t i = 0; i < kNumBackwardRefs; ++i) {
+    for (uint32_t i = 0; i < kNumBackwardRefs; ++i) {
       if (!is_used_[i]) refs_[i].Reset();
     }
   }
@@ -250,7 +250,7 @@ class BackwardRefsPool {
 
  private:
   void Release(BackwardRefs* const refs) {
-    for (size_t i = 0; i < kNumBackwardRefs; ++i) {
+    for (uint32_t i = 0; i < kNumBackwardRefs; ++i) {
       if (&refs_[i] == refs) {
         assert(is_used_[i]);
         is_used_[i] = false;
@@ -262,7 +262,7 @@ class BackwardRefsPool {
   // 5 is enough in the code for now: 1 as the chosen backward ref between
   // iterations of the cruncher, 1 best per iteration, and 2 tmps in addition in
   // GetBackwardReferences
-  static constexpr size_t kNumBackwardRefs = 5;
+  static constexpr uint32_t kNumBackwardRefs = 5;
   BackwardRefs refs_[kNumBackwardRefs];
   bool is_used_[kNumBackwardRefs];
 };

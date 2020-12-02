@@ -57,8 +57,8 @@ static constexpr uint32_t kAlphaQualityRange = kMaxLossyQuality + 2;
 
 // For animations:
 // ANMF chunk
-static constexpr size_t kANMFMinHeaderSize = 2;   // 8 bits + duration var int
-static constexpr size_t kANMFMaxHeaderSize = 11;  // 8 bits + 5 clamped var ints
+static constexpr uint32_t kANMFMinHeaderSize = 2;   // 8 bits + duration varint
+static constexpr uint32_t kANMFMaxHeaderSize = 11;  // 8 bits + 5 clamped varint
 static constexpr uint8_t kANMFTagNumBits = 6;
 static constexpr uint32_t kANMFTagDispose = 0x33;
 static constexpr uint32_t kANMFTagFrame = 0x15;
@@ -252,13 +252,15 @@ static constexpr uint32_t kMinAOMAdaptSpeed = 1024u;
 static constexpr uint32_t kMaxAOMAdaptSpeed = 8192u;
 static constexpr uint32_t kAOMAdaptSpeedShift = 5;
 
-// quality-factor scale (used for fixed-point precision)
-static constexpr uint16_t kQFactorScale = 4;
-static inline constexpr uint16_t kQualityToQFactor(float q) {
-  return (uint16_t)(q * kQFactorScale);
-}
 // maximum quality factor (inclusive)
-static constexpr uint16_t kQFactorMax = kQualityToQFactor(kMaxLossyQuality);
+static constexpr uint16_t kQFactorMax = 237;
+// quality-factor scale (used for fixed-point precision)
+static inline constexpr uint16_t kQualityToQFactor(float q) {
+  return (uint16_t)(q * kQFactorMax / kMaxLossyQuality);
+}
+static_assert(kQualityToQFactor(0) == 0, "bad scaling for q=0");
+static_assert(kQualityToQFactor(kMaxLossyQuality) == kQFactorMax,
+              "bad scaling for q=95");
 
 }  // namespace WP2
 
@@ -270,9 +272,9 @@ namespace WP2L {
 // Maximum number of colors in the palette.
 // TODO(vrabaud) replace with something related to the image size (ratio?).
 static constexpr uint32_t kMaxPaletteSize = 256;
-static constexpr size_t kMaxCacheBits = 10;
+static constexpr uint32_t kMaxCacheBits = 10;
 // Small palettes are stored verbatim.
-static constexpr size_t kSmallPaletteLimit = 3;
+static constexpr uint32_t kSmallPaletteLimit = 3;
 
 // Constant defining the special codes for LZ77 distances, for pixels in a
 // neighboring window.

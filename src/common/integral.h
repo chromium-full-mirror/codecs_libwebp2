@@ -62,7 +62,7 @@ class Integral {
   }
 
  protected:
-  size_t pos(uint32_t x, uint32_t y) const { return x + y * wstride_; }
+  uint32_t pos(uint32_t x, uint32_t y) const { return x + y * wstride_; }
   integral_t w1(uint32_t x, uint32_t y) const {
     assert(pos(x, y) >= 0 && pos(x, y) < w1_.size());
     return w1_[pos(x, y)];
@@ -90,7 +90,7 @@ class Integral {
   void SetW(uint32_t i, uint32_t j, integral_t M, integral_t M2);
 
   VectorNoCtor<integral_t> w1_, w2_;
-  size_t wstride_ = 0;
+  uint32_t wstride_ = 0;
   uint32_t w_ = 0, h_ = 0;   // dimension in block unit
   uint32_t size_ = 0;        // unit block size
 };

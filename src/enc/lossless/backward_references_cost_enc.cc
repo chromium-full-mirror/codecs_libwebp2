@@ -23,7 +23,7 @@
 #include <cassert>
 
 #include "src/common/lossless/color_cache.h"
-#include "src/dsp/lossless/lossless_common.h"
+#include "src/dsp/lossless/encl_dsp.h"
 #include "src/enc/lossless/backward_references_enc.h"
 #include "src/enc/lossless/histogram_enc.h"
 #include "src/enc/lossless/losslessi_enc.h"
@@ -67,7 +67,7 @@ class CostModel : public CountsBuffer<double> {
     has_alpha_ = LosslessSymbolsInfo::HasAlpha(info);
     is_label_image_ = LosslessSymbolsInfo::IsLabelImage(info);
 
-    for (size_t i = 0; i < kSymbolNum; ++i) {
+    for (uint32_t i = 0; i < kSymbolNum; ++i) {
       ConvertPopulationCountTableToBitEstimates(
           histo.symbols_info_->GetMaxRange(i), histo.histograms_[0]->counts_[i],
           counts_[i]);
@@ -600,7 +600,7 @@ static WP2Status BackwardReferencesHashChainDistanceOnly(
                                 use_color_cache, 0.f,
                                 cost_manager.costs_.data(), segments);
 
-  for (size_t i = 1; i < num_pixels; ++i) {
+  for (uint32_t i = 1; i < num_pixels; ++i) {
     const float prev_cost = cost_manager.costs_[i - 1];
     uint32_t offset, len;
     hash_chain.FindCopy(i, &offset, &len);

@@ -348,14 +348,17 @@ class Params {
   std::vector<Rectangle> force_partition_;
   std::vector<EncoderInfo::ForcedSegment> force_segment_;
   std::vector<EncoderInfo::ForcedPredictor> force_predictor_;
+  std::vector<EncoderInfo::ForcedTransform> force_transform_;
   void ClearForcedElements();
   bool IsDebugViewVisible() const;
   bool IsPartitionVisible() const;
   bool IsSegmentVisible() const;
   bool IsPredictorVisible() const;
+  bool IsTransformVisible() const;
   void DisplayPartition() const;
   void DisplayForcedSegments() const;
   void DisplayForcedPredictors() const;
+  void DisplayForcedTransforms() const;
 #if defined(WP2_BITTRACE)
   // Displays a sort of bar graph at the bottom of the screen showing the
   // relative size of different syntax elements.
@@ -401,6 +404,9 @@ class Params {
   void HandleSegmentClick(int button, int state, uint32_t img_x_down,
                           uint32_t img_y_down, uint32_t img_x, uint32_t img_y);
   void HandlePredictorClick(int button, int state, uint32_t img_x_down,
+                            uint32_t img_y_down, uint32_t img_x,
+                            uint32_t img_y);
+  void HandleTransformClick(int button, int state, uint32_t img_x_down,
                             uint32_t img_y_down, uint32_t img_x,
                             uint32_t img_y);
   void HandlePartitionClick(int button, int state, uint32_t img_x_down,
@@ -934,6 +940,7 @@ void Params::PrintInfo() {
   DisplayPartition();
   DisplayForcedSegments();
   DisplayForcedPredictors();
+  DisplayForcedTransforms();
   DisplayMenu();
 
   if (show_ == kMenu ||
@@ -1011,9 +1018,8 @@ void Params::PrintInfo() {
       msg.emplace_back(tmp);
     }
 
-    snprintf(tmp, sizeof(tmp),
-             "Size: %" PRIu64 " [%.2f bpp] (enc %u ms + dec %u ms)",
-             (uint64_t)output_.size(),
+    snprintf(tmp, sizeof(tmp), "Size: %u [%.2f bpp] (enc %u ms + dec %u ms)",
+             (uint32_t)output_.size(),
              8.f * output_.size() / (width_ * height_), enc_duration_ms_,
              dec_duration_ms_);
     msg.emplace_back(tmp);
@@ -1277,6 +1283,7 @@ bool Params::EncodeImage() {
     einfo_.force_partition = force_partition_;
     einfo_.force_segment = force_segment_;
     einfo_.force_predictor = force_predictor_;
+    einfo_.force_transform = force_transform_;
 
     StringWriter writer(&output_);
     Metadata metadata;
@@ -1553,11 +1560,11 @@ bool Params::EncodeAV1(bool copy_partition, float av1_quality,
       WP2_STATUS_OK) {
     return false;
   }
-  printf("Done compressing AV1 in just %.2f seconds (%" PRIu64 " bytes)!\n",
-         timing[0], (uint64_t)tmp.size());
+  printf("Done compressing AV1 in just %.2f seconds (%u bytes)!\n", timing[0],
+         (uint32_t)tmp.size());
 
   if (av1_file_size != nullptr) *av1_file_size = tmp.size();
-  alt1_msg_ = SPrintf("AV1 - size = %" PRIu64 "", (uint64_t)tmp.size());
+  alt1_msg_ = SPrintf("AV1 - size = %u", (uint32_t)tmp.size());
 
   if (!cfg.draw_blocks && !cfg.draw_transforms) {
     // Only print distortion if the output image is unaltered by debug overlays.
@@ -2091,6 +2098,7 @@ void Params::ClearForcedElements() {
   force_partition_.clear();
   force_segment_.clear();
   force_predictor_.clear();
+  force_transform_.clear();
   forcing_block_ = Rectangle();
 }
 
@@ -2102,7 +2110,7 @@ bool Params::IsDebugViewVisible() const {
 bool Params::IsPartitionVisible() const {
   return (display_block_ != kDisplayNone ||
           (IsDebugViewVisible() && VDMatch(dec_config_, "partition"))) &&
-         !IsSegmentVisible() && !IsPredictorVisible();
+         !IsSegmentVisible() && !IsPredictorVisible() && !IsTransformVisible();
 }
 
 bool Params::IsSegmentVisible() const {
@@ -2111,6 +2119,10 @@ bool Params::IsSegmentVisible() const {
 
 bool Params::IsPredictorVisible() const {
   return IsDebugViewVisible() && VDMatch(dec_config_, "prediction");
+}
+
+bool Params::IsTransformVisible() const {
+  return IsDebugViewVisible() && VDMatch(dec_config_, "transform");
 }
 
 void Params::DisplayPartition() const {
@@ -2201,6 +2213,37 @@ void Params::DisplayForcedPredictors() const {
         glColor4f(1.f, 0.f, 1.f, 1.f);
         PrintString((predictor.x) * 2.f / width_ - 1,
                     1 - (predictor.y) * 2.f / height_, title);
+
+        break;
+      }
+    }
+  }
+#endif
+}
+
+void Params::DisplayForcedTransforms() const {
+  if (!IsTransformVisible()) return;
+
+#if defined(WP2_BITTRACE)
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+  const uint32_t thick = getLineThickness();
+  glLineStipple(2 * thick, 0xAAAA);
+
+  for (const auto& forced : force_transform_) {
+    for (const BlockInfo& block : einfo_.blocks) {
+      if (block.rect.Contains(forced.x, forced.y)) {
+        const Rectangle rect{block.rect.x, block.rect.y, block.rect.width - 1,
+                             block.rect.height - 1};
+        glColor4f(1.f, 1.f, 1.f, 1.f);
+        glRect(rect, thick * 2);
+
+        const std::string title =
+            SPrintf("%s_%s", WP2TransformNames[kTfX[forced.transform]],
+                    WP2TransformNames[kTfY[forced.transform]]);
+        glColor4f(1.f, 0.f, 1.f, 1.f);
+        PrintString((forced.x) * 2.f / width_ - 1,
+                    1 - (forced.y) * 2.f / height_, title);
 
         break;
       }
@@ -2436,10 +2479,11 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
     SetMessage(SPrintf("Grain amplitude: %d", dec_config_.grain_amplitude));
   } else if (key == 'c' || key == 'C') {
     if (!EncodeAndDecode()) return;
-    AddInfo(SPrintf("Forcing %u blocks %u segments %u predictors",
+    AddInfo(SPrintf("Forcing %u blocks %u segments %u predictors %u transforms",
                     (uint32_t)einfo_.force_partition.size(),
                     (uint32_t)einfo_.force_segment.size(),
-                    (uint32_t)einfo_.force_predictor.size()));
+                    (uint32_t)einfo_.force_predictor.size(),
+                    (uint32_t)einfo_.force_transform.size()));
   } else if (key == 'd') {
     EXIT_IF_FALSE(WritePartition(force_partition_, partition_file_path_),
                   "Error: Unable to write partition file");
@@ -2782,6 +2826,53 @@ void Params::HandlePredictorClick(int button, int state, uint32_t img_x_down,
 #endif
 }
 
+void Params::HandleTransformClick(int button, int state, uint32_t img_x_down,
+                                  uint32_t img_y_down, uint32_t img_x,
+                                  uint32_t img_y) {
+  (void)button;
+  (void)state;
+  (void)img_x_down;
+  (void)img_y_down;
+  (void)img_x;
+  (void)img_y;
+
+#if defined(WP2_BITTRACE)
+  if (!IsTransformVisible() || button == GLUT_LEFT_BUTTON ||
+      state != GLUT_DOWN) {
+    return;
+  }
+
+  const BlockInfo* b = nullptr;
+  for (const BlockInfo& block : einfo_.blocks) {
+    if (block.rect.Contains(img_x_down, img_y_down)) {
+      b = &block;
+      break;
+    }
+  }
+  assert(b != nullptr);
+
+  bool found = false;
+  for (uint32_t i = 0; i < force_transform_.size(); ++i) {
+    auto* const forced = &force_transform_[i];
+    if (forced->x == b->rect.x && forced->y == b->rect.y) {
+      found = true;
+      ++forced->transform;
+      if (button == GLUT_MIDDLE_BUTTON ||
+          forced->transform >= kNumTransformPairs) {
+        // Remove.
+        force_transform_[i] = force_transform_.back();
+        force_transform_.pop_back();
+      }
+      break;
+    }
+  }
+  if (button == GLUT_RIGHT_BUTTON && !found) {
+    EncoderInfo::ForcedTransform forced = {b->rect.x, b->rect.y, 0};
+    force_transform_.emplace_back(forced);
+  }
+#endif
+}
+
 void Params::HandlePartitionClick(int button, int state, uint32_t img_x_down,
                                   uint32_t img_y_down, uint32_t img_x,
                                   uint32_t img_y) {
@@ -2887,6 +2978,7 @@ void Params::HandleMouseClick(int button, int state, int x, int y) {
   HandleMenuClick(button, state, img_x_down, img_y_down, img_x, img_y);
   HandleSegmentClick(button, state, img_x_down, img_y_down, img_x, img_y);
   HandlePredictorClick(button, state, img_x_down, img_y_down, img_x, img_y);
+  HandleTransformClick(button, state, img_x_down, img_y_down, img_x, img_y);
   HandlePartitionClick(button, state, img_x_down, img_y_down, img_x, img_y);
 }
 

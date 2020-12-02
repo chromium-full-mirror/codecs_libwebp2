@@ -55,7 +55,7 @@ class ClusterElement {
   void AssignBestPredictor(const FrontMgr4x4& mgr, const TPredVec& preds) {
     uint8_t best_id = 0;
     uint32_t best_score = ~0u;
-    for (size_t id = 0; id < preds.size(); ++id) {
+    for (uint32_t id = 0; id < preds.size(); ++id) {
       int16_t values[kPredSize];
       Predict(*preds[id], mgr, kPredWidth, values);
       const uint32_t score = ComputeDistance(values);
@@ -99,7 +99,7 @@ void ClusterElement::Predict(const Predictor& p, const FrontMgr4x4& mgr,
 // (in pixel units). 'p' is the full plane (and not the sub-view), with extra
 // hidden pixel boundary.
 void ClusterElement::GetContext(int16_t context[/*bw + 2*(bh+1)*/]) const {
-  size_t m = 0;
+  uint32_t m = 0;
   // left + top_left
   const Plane16& p = GetPlane();
   for (int j = kPredHeight - 1; j >= -1; --j) {

@@ -86,7 +86,7 @@ class CountsBuffer {
   // in the overall buffer_.
   void InitPointers() {
     counts_[0] = buffer_;
-    for (size_t i = 1; i < kSymbolNum; ++i) {
+    for (uint32_t i = 1; i < kSymbolNum; ++i) {
       counts_[i] = counts_[i - 1] + symbols_info_->GetMaxRange((Symbol)(i - 1));
     }
   }
@@ -173,7 +173,7 @@ class PopulationAnalyzer {
   explicit PopulationAnalyzer(uint32_t image_size);
 
   WP2Status Allocate(const LosslessSymbolsInfo& symbols_info) {
-    const size_t histogram_size_max_ = symbols_info.GetMaxRange();
+    const uint32_t histogram_size_max_ = symbols_info.GetMaxRange();
     WP2_CHECK_ALLOC_OK(histogram_.resize(histogram_size_max_));
     WP2_CHECK_ALLOC_OK(mapping_.resize(histogram_size_max_));
     WP2_CHECK_ALLOC_OK(sum_tmp_.resize(histogram_size_max_));

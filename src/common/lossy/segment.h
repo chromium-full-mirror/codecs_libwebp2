@@ -101,18 +101,10 @@ class Segment {
   bool use_quality_factor_ = true;
   uint16_t quality_factor_ = kQualityToQFactor(75.f);
 
-  // Sets the range of YUV values to [yuv_min, yuv_max] inclusive.
-  // q_scale (quantization scale) is updated based on it.
-  void SetYUVBounds(int16_t yuv_min, int16_t yuv_max) {
-    // Because residuals are the subtraction of the actual and the predicted
-    // values, the range is doubled.
-    max_residual_ = std::max(std::abs(yuv_min), std::abs(yuv_max)) * 2;
-    const uint32_t range = 1 + yuv_max - yuv_min;
-    // Adjust quantization based on the actual yuv/alpha range, compared to
-    // the max yuv range which is what the quantizer is tuned for by default.
-    q_scale_ = (float)(1 << (kMaxYuvBits + 1)) / range;
-    q_scale_a_ = (float)(1 << (kMaxYuvBits + 1)) / (kAlphaMax + 1);
-  }
+  // Sets the range of YUV values max_residual_ to [yuv_min, yuv_max] inclusive.
+  // The quantization scale q_scale_ is updated based on it too.
+  // This must be called before FinalizeQuant().
+  void SetYUVBounds(int16_t yuv_min, int16_t yuv_max);
 
   // Fills quant_steps_[][] with flat values based on 'quality_hint' and
   // 'quality_factor' in [0,kQFactorMax]. Note 'quality_factor' is backwards:
@@ -168,8 +160,7 @@ class Segment {
   float avg_lambda_ = kDefaultAvgLambda;  // complexity multiplier for lambda
 
  private:
-  float q_scale_ = 0.f;  // y/u/v quantization precision
-  float q_scale_a_ = 0.f;  // a quantization precision
+  float q_scale_ = 0.f;  // y/u/v quantization precision (depending on range)
   uint32_t max_residual_;
   PartitionSet partition_set_ = ALL_RECTS;
 };

@@ -81,7 +81,7 @@ uint32_t RestorationFilter::Enhances(uint32_t num_rows) {
   if (VDMatch(config_, "restoration-filter")) SavePixelsForVDebug(num_rows);
   if (num_filterable_rows <= num_filtered_rows_) return num_filtered_rows_;
 
-  const size_t block_step = blocks_.max_num_blocks_x_;
+  const uint32_t block_step = blocks_.max_num_blocks_x_;
 
   uint32_t y = num_filtered_rows_;
   while (y < blocks_.tile_rect_.height) {

@@ -171,10 +171,12 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/transf_sse.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/wiener_dsp.cc
   # lossless
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/lossless_common.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/lossless_dsp_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/lossless.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/lossless.h)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/decl_dsp.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/decl_dsp.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/dspl.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/dspl.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_dsp.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_dsp.cc)
 target_include_directories(wp2_dsp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(wp2_dsp PUBLIC ${WP2_DEFINITIONS})
 
@@ -597,6 +599,7 @@ if(WP2_BUILD_EXAMPLES)
 
   if(OPENGL_FOUND
      AND GLUT_FOUND
+     AND GLUT_Xmu_LIBRARY
      AND NOT WP2_BUILD_WP2_JS)
     add_executable(vwp2 ${CMAKE_CURRENT_SOURCE_DIR}/examples/vwp2.cc)
     target_include_directories(vwp2 PRIVATE ${OPENGL_INCLUDE_DIR}

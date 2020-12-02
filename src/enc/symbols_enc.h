@@ -112,7 +112,6 @@ class SymbolRecorder : public SymbolManager {
   // speed.
   const ANSAdaptiveSymbol& GetASymbolWithSpeed(uint32_t cluster,
                                                uint32_t sym) const;
-  float GetCost(uint32_t cluster, uint32_t sym, int32_t value) const;
 
   // Returns the dictionary of recorded values from the previous pass (before
   // the last call to ResetRecord()).
@@ -211,7 +210,7 @@ class SymbolCounter : public SymbolManager, public WP2Allocable {
 // written with Process().
 struct SymbolWriterStatExtra {
   const ANSDictionary* dict;
-  size_t mapping_size;
+  uint32_t mapping_size;
 };
 class SymbolWriter : public SymbolManager,
                      public SymbolIO<SymbolWriterStatExtra>,
@@ -265,7 +264,7 @@ class SymbolWriter : public SymbolManager,
   WP2Status AddDict(uint32_t cluster, uint32_t sym,
                     const uint32_t* const counts,
                     const uint32_t* const quantized_counts,
-                    const uint16_t* const mapping, size_t size,
+                    const uint16_t* const mapping, uint32_t size,
                     ANSDictionaries* const dicts);
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
   // Golomb of prefix size 'prefix_size' using the statistics represented by

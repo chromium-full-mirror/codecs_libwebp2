@@ -63,7 +63,7 @@ uint32_t GetColorCacheRange(CacheConfig config) {
 //------------------------------------------------------------------------------
 // ColorCacheMap.
 
-WP2Status ColorCacheMap::Allocate(size_t color_num) {
+WP2Status ColorCacheMap::Allocate(uint32_t color_num) {
   hash_bits_ = 1 + WP2Log2Floor(color_num);
   WP2_CHECK_ALLOC_OK(colors_.resize(1 << hash_bits_));
   WP2_CHECK_ALLOC_OK(is_present_.resize(colors_.size()));
@@ -79,7 +79,7 @@ void ColorCacheMap::Reset() {
 bool ColorCacheMap::Insert(const int16_t color[4], uint32_t value) {
   uint32_t tag = HashPix(color, hash_bits_);
   const uint32_t start_tag = tag;
-  const size_t size = colors_.size();
+  const uint32_t size = colors_.size();
   while (true) {
     Color* const c = &colors_[tag];
     bool& is_present = is_present_[tag];
@@ -116,7 +116,7 @@ bool ColorCacheMap::Contains(const int16_t color[4],
                              uint32_t* const value) const {
   uint32_t tag = HashPix(color, hash_bits_);
   const uint32_t start_tag = tag;
-  const size_t size = colors_.size();
+  const uint32_t size = colors_.size();
   while (true) {
     const Color& c = colors_[tag];
     if (!is_present_[tag]) {

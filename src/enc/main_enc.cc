@@ -88,7 +88,7 @@ WP2Status WriteChunk(DataView data, Writer* const output) {
   if (data.size == 0) return WP2_STATUS_OK;
   WP2_CHECK_OK(data.size <= kMaxChunkSize, WP2_STATUS_INVALID_PARAMETER);
   uint8_t buf[kMaxVarIntLength];
-  const size_t buf_size = WriteVarInt(data.size, 1, kMaxChunkSize, buf);
+  const uint32_t buf_size = WriteVarInt(data.size, 1, kMaxChunkSize, buf);
   WP2_CHECK_OK(output->Append(buf, buf_size), WP2_STATUS_BAD_WRITE);
   WP2_CHECK_OK(output->Append(data.bytes, data.size), WP2_STATUS_BAD_WRITE);
   return WP2_STATUS_OK;
@@ -160,8 +160,8 @@ WP2Status SetupWorkers(uint32_t width, uint32_t height,
                        EncTilesLayout* const tiles_layout,
                        Vector<TileEncoder>* const workers) {
   // The number of workers is limited by the number of threads and tiles.
-  const size_t num_workers = (uint32_t)std::min(
-      (size_t)config.thread_level + 1, tiles_layout->tiles.size());
+  const uint32_t num_workers = std::min((uint32_t)config.thread_level + 1u,
+                                        (uint32_t)tiles_layout->tiles.size());
   WP2_CHECK_ALLOC_OK(workers->resize(num_workers));
 
   for (TileEncoder& worker : *workers) {
@@ -197,8 +197,8 @@ WP2Status CodeTiles(EncTilesLayout* const tiles_layout,
         GetTileMaxNumBytes(*tiles_layout->gparams, tile.rect);
     {
       uint8_t buffer[kMaxVarIntLength];
-      const size_t size =
-          WriteVarInt(std::min(tile.enc.BufferSize(), (size_t)max_num_bytes), 1,
+      const uint32_t size =
+          WriteVarInt(std::min(tile.enc.BufferSize(), max_num_bytes), 1,
                       max_num_bytes, buffer);
       WP2_CHECK_ALLOC_OK(output->Append(buffer, size));
     }
@@ -310,8 +310,7 @@ WP2Status EncodePreview(const ArgbBuffer& buffer, const EncoderConfig& config,
     WP2_CHECK_STATUS(WriteChunk({preview.mem_, preview.size_}, output));
   } else if (config.preview_size > 0) {
     WP2_CHECK_OK(config.preview != nullptr, WP2_STATUS_INVALID_PARAMETER);
-    WP2_CHECK_STATUS(
-        WriteChunk({config.preview, (size_t)config.preview_size}, output));
+    WP2_CHECK_STATUS(WriteChunk({config.preview, config.preview_size}, output));
   }
   return WP2_STATUS_OK;
 }

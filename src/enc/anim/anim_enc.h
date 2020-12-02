@@ -138,7 +138,11 @@ class SubframeEncoder {
   // global to the whole animation, while the  EncoderConfig, and therefore
   // quality setting, can vary per frame. Setting 'image_has_alpha' to false
   // forbids any alpha sample in the whole animation.
-  explicit SubframeEncoder(uint32_t quality_hint, bool image_has_alpha);
+  // 'tile_shape' is also global to the whole animation and must be a concrete
+  // size, not TILE_SHAPE_AUTO. It is used to sanity check that the tile size
+  // for all subframes match this one.
+  explicit SubframeEncoder(uint32_t quality_hint, bool image_has_alpha,
+                           TileShape tile_shape);
 
   WP2Status EncodeSubframe(const EncoderConfig& config,
                            const Subframe& subframe, bool is_last,
@@ -147,6 +151,7 @@ class SubframeEncoder {
 
  private:
   const uint32_t quality_hint_;
+  TileShape tile_shape_;
   const bool image_has_alpha_;
 };
 

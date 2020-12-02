@@ -190,15 +190,14 @@ TEST(TestSegment, Quantization) {
   // Check the range of quantized values is more or less the same (modulo
   // rounding errors) regardless of the yuv bounds, as long as the yuv range
   // is centered.
-  EXPECT_NEAR(quantized_range1, quantized_range2, 2);
-  EXPECT_NEAR(quantized_range2, quantized_range3, 2);
-  // Here the range of YUV values is not centered so the max quantized value
-  // should be twice as high.
+  EXPECT_NEAR(quantized_range1, quantized_range2, 1);
+  EXPECT_NEAR(quantized_range2, quantized_range3, 1);
+  // Here the range of YUV values is not centered so the max quantized value.
+  // Still the range is eventually the same.
   segment.SetYUVBounds(0, 1000);
   segment.FinalizeQuant(lambda);
-  const uint32_t not_centered_range =
-      segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
-  EXPECT_NEAR(not_centered_range, quantized_range1 * 2, 1);
+  const uint32_t uncentered_range = segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
+  EXPECT_NEAR(uncentered_range, quantized_range3, 1);
 
   segment.SetQuality(GetQualityHint(20.f), kQualityToQFactor(20.f),
                      kDefaultQuantMultiplier, kDefaultQuantMultiplier);

@@ -113,7 +113,7 @@ WP2Status AlphaReader::ReadLossless(CodedBlock* const cb) {
   if (next_line_ < max_line) {
     // Read as many new lines as we need for this block.
     const uint32_t lines_to_read = max_line - next_line_;
-    const size_t num_used_bytes_before = dec_->GetNumUsedBytes();
+    const uint32_t num_used_bytes_before = dec_->GetNumUsedBytes();
 
     if (first_block_) {
       // Initialize the lossless decoder and read the header.
@@ -125,7 +125,7 @@ WP2Status AlphaReader::ReadLossless(CodedBlock* const cb) {
 
     WP2_CHECK_STATUS(lossless_decoder_.DecodeLines(lines_to_read));
 
-    const size_t min_num_used_bytes = ANSDec::GetMinNumUsedBytesDiff(
+    const uint32_t min_num_used_bytes = ANSDec::GetMinNumUsedBytesDiff(
         num_used_bytes_before, dec_->GetNumUsedBytes());
     cb->alpha_lossless_bytes_ = min_num_used_bytes;
 

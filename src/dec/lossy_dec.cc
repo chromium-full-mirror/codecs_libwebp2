@@ -190,7 +190,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     }
 
     // Estimation of the bits-per-pixel for the FilterBlockMap.
-    const size_t num_used_bytes_before = dec->GetNumUsedBytes();
+    const uint32_t num_used_bytes_before = dec->GetNumUsedBytes();
 
     // Read the block's syntax and set the output view.
 #if defined(WP2_BITTRACE)
@@ -320,7 +320,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     }
 #endif
 
-    size_t min_num_used_bytes = ANSDec::GetMinNumUsedBytesDiff(
+    uint32_t min_num_used_bytes = ANSDec::GetMinNumUsedBytesDiff(
         num_used_bytes_before, dec->GetNumUsedBytes());
     if (gparams.has_alpha_) {
       // Don't include lossless alpha. TODO(maryla): remove lossy alpha as well?

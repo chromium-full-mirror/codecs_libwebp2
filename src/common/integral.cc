@@ -69,7 +69,7 @@ WP2Status Integral::Allocate(uint32_t w, uint32_t h, uint32_t size) {
 }
 
 void Integral::SetW(uint32_t i, uint32_t j, integral_t M, integral_t M2) {
-  const size_t off = pos(i, j);
+  const uint32_t off = pos(i, j);
   w1_[off] = M + w1(i, j - 1) + w1(i - 1, j) - w1(i - 1, j - 1);
   w2_[off] = M2 + w2(i, j - 1) + w2(i - 1, j) - w2(i - 1, j - 1);
 }

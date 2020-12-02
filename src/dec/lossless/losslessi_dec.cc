@@ -28,8 +28,7 @@
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/dec/wp2_dec_i.h"
-#include "src/dsp/lossless/lossless.h"
-#include "src/dsp/lossless/lossless_common.h"
+#include "src/dsp/lossless/decl_dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/plane.h"
@@ -138,7 +137,7 @@ uint32_t EmitRows(const uint16_t* row_in, uint32_t mb_w, uint32_t mb_h,
   T* row_out = out;
   while (lines-- > 0) {
     // TODO(vrabaud) support multiple output color spaces.
-    for (size_t i = 0; i < 4 * mb_w; i += 4, row_in += 4) {
+    for (uint32_t i = 0; i < 4 * mb_w; i += 4, row_in += 4) {
       const uint8_t alpha = (uint8_t)row_in[0];
       if (!has_alpha) assert(alpha == WP2::kAlphaMax);
       row_out[i] = alpha;
@@ -205,8 +204,8 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows, uint32_t num_bits,
         WP2_CHECK_OK(r[2] < color_map_size, WP2_STATUS_BITSTREAM_ERROR);
       }
     }
-    WP2LInverseTransform(&transform, start_row, end_row, num_bits, rows_in,
-                         gparams_->has_alpha_, rows_out);
+    InverseTransform(&transform, start_row, end_row, num_bits, rows_in,
+                     gparams_->has_alpha_, rows_out);
     rows_in = rows_out;
   }
   return WP2_STATUS_OK;
@@ -515,7 +514,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
   for (WP2::Vector_u8& vec : is_positive) {
     WP2_CHECK_ALLOC_OK(vec.resize(num_colors_ - 1));
   }
-  for (size_t c = 0; c < num_channels; ++c) {
+  for (uint32_t c = 0; c < num_channels; ++c) {
     if (c == 0 && !gparams_->has_alpha_) continue;
     const bool is_monotonous = dec_->ReadBool("is_monotonous");
     const bool use_opposite_sign = dec_->ReadBool("use_opposite_sign");
@@ -548,8 +547,8 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
     // data[0] stays unchanged and serves as a basis to adding successive
     // differences.
     if (!gparams_->has_alpha_) assert(data[0] == WP2::kAlphaMax);
-    for (size_t i = 1; i < num_colors_; ++i) {
-      for (size_t c = 0; c < num_channels; ++c) {
+    for (uint32_t i = 1; i < num_colors_; ++i) {
+      for (uint32_t c = 0; c < num_channels; ++c) {
         if (c == 0 && !gparams_->has_alpha_) {
           assert(data[4 * i + c] == WP2::kAlphaMax);
           continue;
@@ -571,11 +570,11 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
     // Read the channels one by one.
     const uint32_t alpha_max =
         WP2::FormatMax(hdr_.symbols_info_.SampleFormat(), 0);
-    for (size_t c = 0; c < num_channels; ++c) {
+    for (uint32_t c = 0; c < num_channels; ++c) {
       const uint32_t channel_max =
           WP2::FormatMax(hdr_.symbols_info_.SampleFormat(), c);
       if (c == 0 && !gparams_->has_alpha_) {
-        for (size_t i = 0; i < num_colors_; ++i) {
+        for (uint32_t i = 0; i < num_colors_; ++i) {
           transform->data_[4 * i + 0] = channel_max;
         }
         continue;
@@ -592,7 +591,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
         dec_->AddDebugPrefix("transform_index_vals");
         WP2::ReadVector(dec_, channel_max, diffs);
         dec_->PopDebugPrefix();
-        for (size_t i = 1; i < num_colors_; ++i) {
+        for (uint32_t i = 1; i < num_colors_; ++i) {
           if (gparams_->has_alpha_) {
             const int16_t alpha = transform->data_[4 * i + 0];
             if (c > 0 && channel > alpha) channel = alpha;
@@ -603,7 +602,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
           transform->data_[4 * i + c] = channel;
         }
       } else {
-        for (size_t i = 1; i < num_colors_; ++i) {
+        for (uint32_t i = 1; i < num_colors_; ++i) {
           const int16_t alpha = transform->data_[4 * i + 0];
           assert(alpha >= 0 && alpha <= (int16_t)alpha_max);
           if (gparams_->has_alpha_ && c > 0 && channel > alpha) channel = alpha;
@@ -622,7 +621,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
   }
   // Duplicate the G/B channels if needed.
   if (is_grayscale) {
-    for (size_t i = 0; i < num_colors_; ++i) {
+    for (uint32_t i = 0; i < num_colors_; ++i) {
       const uint32_t channel = transform->data_[4 * i + 1];
       transform->data_[4 * i + 2] = channel;
       transform->data_[4 * i + 3] = channel;
@@ -669,17 +668,17 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       }
       symbols_info.SetNumClusters(1);
       symbols_info.SetCacheRange(0);
-      const uint32_t
-          sub_width = WP2LSubSampleSize(transform->width_, transform->bits_);
-      const uint32_t
-          sub_height = WP2LSubSampleSize(transform->height_, transform->bits_);
+      const uint32_t sub_width =
+          SubSampleSize(transform->width_, transform->bits_);
+      const uint32_t sub_height =
+          SubSampleSize(transform->height_, transform->bits_);
       WP2_CHECK_STATUS(ReadANSStats(sub_width, sub_height, symbols_info));
 
       // Read the transform image.
-      WP2_CHECK_STATUS(DecodeNoProcess(
-          sub_width, sub_height, /*last_row=*/
-          WP2LSubSampleSize(transform->height_, transform->bits_),
-          &transform->data_));
+      WP2_CHECK_STATUS(
+          DecodeNoProcess(sub_width, sub_height, /*last_row=*/
+                          SubSampleSize(transform->height_, transform->bits_),
+                          &transform->data_));
       WP2_CHECK_STATUS(dec_->GetStatus());
 
       dec_->PopDebugPrefix();
@@ -742,7 +741,7 @@ void Metadata::Init(bool has_alpha, WP2SampleFormat format) {
 // Decoder
 
 Decoder::Decoder() {
-  WP2LDspInit();  // Init critical function pointers.
+  DecLDspInit();  // Init critical function pointers.
 }
 
 void Decoder::Init(const WP2::DecoderConfig& config,
@@ -843,9 +842,8 @@ WP2Status Decoder::DecodeHeader() {
   bool more_than_one_hist = false;
   for (max_sampling = kHistogramBitsMax + 1;
        !more_than_one_hist && max_sampling-- > kHistogramBitsMin;) {
-    more_than_one_hist =
-        (WP2LSubSampleSize(tile_->rect.width, max_sampling) > 1 ||
-         WP2LSubSampleSize(tile_->rect.height, max_sampling) > 1);
+    more_than_one_hist = (SubSampleSize(tile_->rect.width, max_sampling) > 1 ||
+                          SubSampleSize(tile_->rect.height, max_sampling) > 1);
   }
 
   // Read the entropy image if needed.
@@ -855,9 +853,9 @@ WP2Status Decoder::DecodeHeader() {
     const uint32_t histogram_precision =
         dec_->ReadRange(kHistogramBitsMin, max_sampling, "histogram_bits");
     const uint32_t histogram_width =
-        WP2LSubSampleSize(tile_->rect.width, histogram_precision);
+        SubSampleSize(tile_->rect.width, histogram_precision);
     const uint32_t histogram_height =
-        WP2LSubSampleSize(tile_->rect.height, histogram_precision);
+        SubSampleSize(tile_->rect.height, histogram_precision);
     assert(histogram_width > 1 || histogram_height > 1);  // more_than_one_hist
 
     num_histo = dec_->ReadRange(
@@ -900,7 +898,7 @@ WP2Status Decoder::DecodeHeader() {
   // Update information about the image.
   const int num_bits = hdr_.histogram_subsample_bits_;
 
-  hdr_.histogram_xsize_ = WP2LSubSampleSize(tile_->rect.width, num_bits);
+  hdr_.histogram_xsize_ = SubSampleSize(tile_->rect.width, num_bits);
   hdr_.histogram_mask_ = (num_bits == 0) ? ~0 : (1 << num_bits) - 1;
 
   HeaderVDebug();

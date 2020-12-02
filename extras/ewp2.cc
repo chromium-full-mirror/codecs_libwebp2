@@ -91,11 +91,10 @@ void PrintSize(const std::string& file_path, size_t size, uint32_t num_pixels,
                bool verbose, bool print_disto) {
   const double bpp = size * 8. / num_pixels;
   if (verbose) {
-    printf("%s %" PRIu64 " bytes (%.3f bpp)\n", file_path.c_str(),
-           (uint64_t)size, bpp);
+    printf("%s %u bytes (%.3f bpp)\n", file_path.c_str(), (uint32_t)size, bpp);
   } else {
-    printf("%s %" PRIu64 " %.3f bpp%s", GetFileName(file_path).c_str(),
-           (uint64_t)size, bpp, print_disto ? "" : "\n");
+    printf("%s %u %.3f bpp%s", GetFileName(file_path).c_str(), (uint32_t)size,
+           bpp, print_disto ? "" : "\n");
   }
 }
 

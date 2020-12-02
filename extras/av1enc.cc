@@ -310,8 +310,8 @@ int main(int argc, const char* argv[]) {
           fprintf(stderr, "Error while computing the distortion.\n");
           return 2;
         }
-        printf("%" PRIu64 " %f   (%f %f %f %f) ", (uint64_t)bits.size(),
-               disto[4], disto[0], disto[1], disto[2], disto[3]);
+        printf("%u %f   (%f %f %f %f) ", (uint32_t)bits.size(), disto[4],
+               disto[0], disto[1], disto[2], disto[3]);
         printf("[ %.2f bpp ] [ %d x %d ] [%.3f / %.3f secs]\n",
                8.f * bits.size() / (ref.width() * ref.height()), ref.width(),
                ref.height(), timing[0], timing[1]);
@@ -347,8 +347,8 @@ int main(int argc, const char* argv[]) {
           fprintf(stderr, "Error saving encoded file (%s)\n", path.c_str());
           return 3;
         } else if (!quiet) {
-          printf("Saved encoded file: %s (%" PRIu64 " bytes)\n", path.c_str(),
-                 (uint64_t)bits.size());
+          printf("Saved encoded file: %s (%u bytes)\n", path.c_str(),
+                 (uint32_t)bits.size());
         }
       }
     }

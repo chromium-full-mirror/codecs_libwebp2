@@ -67,9 +67,8 @@ void Partitioner::Occupy(const Block& block) {
   }
 }
 
-bool Partitioner::IsBlockValid(const Block& block,
-                                          const Block& max_block,
-                                          size_t num_forced_blocks) const {
+bool Partitioner::IsBlockValid(const Block& block, const Block& max_block,
+                               uint32_t num_forced_blocks) const {
   if (block.w() > max_block.w()) return false;
   if (block.h() > max_block.h()) return false;
   // Thanks to the FrontMgrLexico, this 'block' can only be rejected
@@ -203,7 +202,7 @@ WP2Status TopLeftBestPartitioner::GetBestPartition(
 }
 
 WP2Status TopLeftBestPartitioner::GetBestSize(const Block& max_block,
-                                              size_t num_forced_blocks,
+                                              uint32_t num_forced_blocks,
                                               Block* const best_block) {
   const BlockSize* const sizes = GetBlockSizes(config_->partition_set);
   float best_score = 0.f;

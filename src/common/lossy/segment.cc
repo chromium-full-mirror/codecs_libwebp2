@@ -106,8 +106,7 @@ WP2Status Segment::WriteHeader(ANSEnc* const enc, bool write_grain) const {
     // TODO(skal): use better delta-coding.
     for (uint32_t i = 0; i < kNumQuantZones; ++i) {
       for (auto c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-        enc->PutRange(quant_steps_[c][i],
-                      kMinQuantStep, kMaxQuantStep, "quant-factor");
+        enc->PutRange(quant_steps_[c][i], 0, kQFactorMax, "quant-factor");
       }
     }
   }
@@ -158,8 +157,7 @@ WP2Status Segment::ReadHeader(PartitionSet partition_set, uint32_t quality_hint,
   } else {
     for (uint32_t i = 0; i < kNumQuantZones; ++i) {
       for (auto c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-        quant_steps_[c][i] =
-            dec->ReadRange(kMinQuantStep, kMaxQuantStep, "quant-factor");
+        quant_steps_[c][i] = dec->ReadRange(0, kQFactorMax, "quant-factor");
         SetQuantSteps(quant_steps_[c], c);
       }
     }
@@ -219,36 +217,9 @@ uint16_t Segment::GetMaxAbsDC(Channel channel) const {
 
 //------------------------------------------------------------------------------
 
-
-static constexpr uint32_t kQuantizerFrac = 16u;   // 4bit fractional precision
-// Table mapping quality factor to quantizer steps, discretized using a reduced
-// set of values. Linear interpolation is performed for in-between values.
-// The first value (highest quality) is always 128. Subsequent ones are
-// exponentially increasing.
-static constexpr uint32_t kNumQuantizers = 32u;
-static constexpr uint16_t kQuantizers[kNumQuantizers + 1] = {
-  kMinQuantStep,
-  592, 637, 685, 738, 794, 855, 920, 991, 1066, 1148, 1236, 1330, 1432,
-  1541, 1659, 1786, 1922, 2069, 2227, 2397, 2580, 2777, 2990, 3218, 3464,
-  3729, 4013, 4320, 4650, 5005, 5388,
-  kMaxQuantStep
-};
-STATIC_ASSERT_ARRAY_SIZE(kQuantizers, kNumQuantizers+1);
-
 static uint32_t InterpolateQuant(int32_t qf, float mult) {
-  qf = Clamp(qf, 0, (int32_t)kQFactorMax);
-  uint32_t idx = qf * kNumQuantizers * kQuantizerFrac / kQFactorMax;
-  const uint32_t eps = idx % kQuantizerFrac;
-  idx /= kQuantizerFrac;
-  assert(idx <= kNumQuantizers);
-  uint32_t q0 = kQuantizers[idx];
-  if (eps > 0) {   // interpolate
-    q0 = q0 * (kQuantizerFrac - eps) + kQuantizers[idx + 1] * eps;
-    q0 = (q0 + kQuantizerFrac / 2) / kQuantizerFrac;
-  }
-  const int32_t q = std::lround(q0 * mult);
-  return (uint32_t)std::max(std::min(q, (int32_t)kMaxQuantStep),
-                                        (int32_t)kMinQuantStep);
+  const int32_t q = std::lround(qf * mult);
+  return (uint32_t)Clamp(q, 0, (int32_t)kQFactorMax);
 }
 
 void Segment::SetQuality(uint32_t quality_hint, uint32_t quality_factor,
@@ -263,8 +234,8 @@ void Segment::SetQuality(uint32_t quality_hint, uint32_t quality_factor,
   const int32_t q_v = quality_factor + v_quant_multiplier - kNeutralMultiplier;
   const int32_t q_a = quality_factor;
   // Quantize DC less than AC for UV, especially at lower qualities.
-  constexpr float kMinScale = 0.15f;
-  constexpr float kMaxScale = 0.70f;
+  constexpr float kMinScale = 0.25f;
+  constexpr float kMaxScale = 0.60f;
   const float qf =
       1.f * std::min(quality_hint, kMaxLossyQualityHint) / kMaxLossyQualityHint;
   const float uv_dc_scale = kMinScale + (kMaxScale - kMinScale) * qf;
@@ -283,7 +254,7 @@ void Segment::SetQuality(uint32_t quality_hint, uint32_t quality_factor,
 void Segment::SetQuantSteps(uint16_t quants[kNumQuantZones], Channel channel) {
   for (uint32_t i = 0; i < kNumQuantZones; ++i) {
     if (quants[i]) {
-      quant_steps_[channel][i] = std::min((uint32_t)quants[i], kMaxQuantStep);
+      quant_steps_[channel][i] = std::min(quants[i], kQFactorMax);
     }
   }
   use_quality_factor_ = false;
@@ -304,6 +275,13 @@ WP2Status Segment::AllocateForEncoder() {
   return WP2_STATUS_OK;
 }
 
+void Segment::SetYUVBounds(int16_t yuv_min, int16_t yuv_max) {
+  max_residual_ = 1 + yuv_max - yuv_min;
+  // Adjust quantization based on the actual yuv/alpha range, compared to
+  // the max yuv range which is what the quantizer is tuned for by default.
+  q_scale_ = (float)(1 << (kMaxYuvBits + 1)) / max_residual_;
+}
+
 void Segment::FinalizeQuant(float lambda) {
   assert(q_scale_ > 0.f);   // must have been set prior to calling this
   quant_y_.Init(max_residual_, q_scale_, partition_set_,
@@ -316,14 +294,15 @@ void Segment::FinalizeQuant(float lambda) {
   // CSP transform. Alpha is between 0 and kAlphaMax. After subtracting
   // predicted values from actual values, the residuals are between -kAlphaMax
   // and kAlphaMax. So the max absolute value is still kAlphaMax.
-  quant_a_.Init(/*max_residual=*/kAlphaMax, q_scale_a_, partition_set_,
+  quant_a_.Init(/*max_residual=*/kAlphaMax, /*q_scale=*/1.0, partition_set_,
                 quant_steps_[kAChannel]);
   if (lambda > 0) {
     lambda_f_ = lambda;
     quant_y_.SetLambda(lambda / q_scale_);
     quant_u_.SetLambda(lambda / q_scale_);
     quant_v_.SetLambda(lambda / q_scale_);
-    quant_a_.SetLambda(lambda / q_scale_a_);
+    const float q_scale_a = (float)(1 << (kMaxYuvBits + 1)) / (1 + kAlphaMax);
+    quant_a_.SetLambda(lambda / q_scale_a);
   }
 }
 
@@ -343,37 +322,31 @@ WP2Status GlobalParams::AssignQuantizations(const EncoderConfig& config) {
   const uint32_t num_segments = segments_.size();
   assert(num_segments <= (uint32_t)config.segments);
   assert(num_segments <= kMaxNumSegments);
-  uint32_t quants[kMaxNumSegments];
+  uint32_t qualities[kMaxNumSegments];
   const float quant_factor0 =
       kQFactorMax * (kMaxLossyQuality - config.quality) / kMaxLossyQuality;
+  float min_risk = 1.0;
+  for (const auto& s : segments_) min_risk = std::min(min_risk, s.risk_);
+  const float amp = 1.4f * Clamp(config.sns / 100.f, 0.f, 1.f);
+  // Exponent for 'adjust' (1 = linear).
+  const float exponent = 1.0;
   for (uint32_t idx = 0; idx < num_segments; ++idx) {
     const Segment& s = segments_[idx];
     float quant = config.segment_factors[idx];
     if (quant == 0.f) {
-      const float adjust = std::min(s.risk_, 1.f);
-
-      // Now we map from 'adjust' to 'quant'.
-      // General slope of the curve.
-      const float amp = 1.0f * Clamp(config.sns / 100.f, 0.f, 1.f);
-      // Exponent for 'adjust' (1 = linear).
-      const float exponent = 1.0;
-      // Compute slope and intercept values so that an 'adjust' value
-      // of 'fixedX' will have a value of 'fixedY'.
-      const float fixedX = 0.5;
-      const float fixedY = 1.;
-      const float intercept = fixedY + amp;
-      const float slope = -amp / std::pow(fixedX, exponent);
-      quant = quant_factor0 * (intercept + slope * std::pow(adjust, exponent));
+      const float adjust = s.risk_ - min_risk;
+      const float displaced = amp * pow(std::fabs(adjust), exponent);
+      quant = quant_factor0 * (1.3f - displaced);
     } else {
       quant = kQFactorMax * (kMaxLossyQuality - quant) / kMaxLossyQuality;
     }
-    quants[idx] = (uint32_t)std::lround(quant);
+    qualities[idx] = Clamp<int32_t>(std::lround(quant), 0, kQFactorMax);
   }
   for (uint32_t idx = 0; idx < num_segments; ++idx) {
     WP2_CHECK_STATUS(segments_[idx].AllocateForEncoder());
     segments_[idx].SetQuantizationFactor(
         transf_, GetQualityHint(config.quality), u_quant_multiplier_,
-        v_quant_multiplier_, quants[idx], 1.f, config.partition_set);
+        v_quant_multiplier_, qualities[idx], 1.f, config.partition_set);
   }
   return WP2_STATUS_OK;
 }
@@ -400,13 +373,12 @@ WP2Status GlobalParams::AssignAlphaQuantizations(const YUVPlane& yuv,
     const uint32_t quant_factor0 =
         (uint32_t)std::lround(
             kQFactorMax * (max_quality - config.alpha_quality) / max_quality);
-    const float lambda = std::max(85.f, -42.f * config.alpha_quality + 3400.f);
     for (Segment& s : a_segments_) {
       WP2_CHECK_STATUS(s.AllocateForEncoder());
       s.SetQuantizationFactor(
           transf_, GetQualityHint(config.alpha_quality),
           /*u_quant_multiplier=*/0, /*v_quant_multiplier=*/0, quant_factor0,
-          1.f + lambda / kMaxLossyQuality, config.partition_set);
+          /*lambda_mult=*/1.f, config.partition_set);
     }
   }
   return WP2_STATUS_OK;

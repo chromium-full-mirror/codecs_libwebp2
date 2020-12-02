@@ -110,6 +110,12 @@ struct EncoderInfo {
     uint8_t predictor_id;
   };
   std::vector<ForcedPredictor> force_predictor;
+  struct ForcedTransform {
+    // xy coordinates of the block in pixels.
+    uint32_t x, y;
+    uint32_t transform;  // TransformPair
+  };
+  std::vector<ForcedTransform> force_transform;
 
 #if defined(WP2_BITTRACE)
   std::vector<BlockInfo> blocks;  // Information about blocks (output).

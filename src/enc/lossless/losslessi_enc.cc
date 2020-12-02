@@ -28,7 +28,7 @@
 #include "src/common/color_precision.h"
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
-#include "src/dsp/lossless/lossless_common.h"
+#include "src/dsp/lossless/encl_dsp.h"
 #include "src/enc/lossless/backward_references_enc.h"
 #include "src/enc/lossless/histogram_enc.h"
 #include "src/enc/symbols_enc.h"
@@ -95,7 +95,7 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
                       WP2::ANSEncBase* const enc, WP2::SymbolManager* const sw,
                       EncodeInfo* const encode_info) {
   const uint32_t histo_xsize =
-      histo_bits ? WP2LSubSampleSize(width, histo_bits) : 1;
+      histo_bits ? SubSampleSize(width, histo_bits) : 1;
   const uint32_t tile_mask = (histo_bits == 0) ? 0 : ~((1u << histo_bits)-1);
   // x and y trace the position in the image.
   uint32_t x = 0;
@@ -291,8 +291,8 @@ static WP2Status EncodeImageInternal(
     WP2::ANSDictionaries* const dicts, HashChain* const hash_chain,
     BackwardRefsPool* ref_pool, LosslessSymbolsInfo* const symbols_info_best,
     EncodeInfo* const encode_info) {
-  const uint32_t histogram_width = WP2LSubSampleSize(width, histogram_bits);
-  const uint32_t histogram_height = WP2LSubSampleSize(height, histogram_bits);
+  const uint32_t histogram_width = SubSampleSize(width, histogram_bits);
+  const uint32_t histogram_height = SubSampleSize(height, histogram_bits);
   const uint32_t histogram_image_xysize = histogram_width * histogram_height;
   HistogramSet histogram_image;
   WP2::Vector_u16 histogram_symbols;
@@ -368,8 +368,8 @@ static WP2Status EncodeImageInternal(
       bool more_than_one_hist = false;
       for (max_sampling = kHistogramBitsMax + 1;
            !more_than_one_hist && max_sampling-- > kHistogramBitsMin;) {
-        more_than_one_hist = (WP2LSubSampleSize(width, max_sampling) > 1 ||
-                              WP2LSubSampleSize(height, max_sampling) > 1);
+        more_than_one_hist = (SubSampleSize(width, max_sampling) > 1 ||
+                              SubSampleSize(height, max_sampling) > 1);
       }
 
       // Histogram image.
@@ -381,7 +381,7 @@ static WP2Status EncodeImageInternal(
       if (write_histogram_image) {
         WP2::Vector_s16 labels;
         WP2_CHECK_ALLOC_OK(labels.resize(4 * histogram_image_xysize));
-        for (size_t i = 0; i < histogram_image_xysize; ++i) {
+        for (uint32_t i = 0; i < histogram_image_xysize; ++i) {
           labels[4 * i + 0] = 0;
           labels[4 * i + 1] = 0;
           labels[4 * i + 2] = histogram_symbols[i];
@@ -466,7 +466,7 @@ static WP2Status EncodeImageInternal(
 
 static void ApplySubtractGreen(Encoder* const encoder, uint32_t width,
                                uint32_t height, WP2::ANSEnc* const enc) {
-  WP2LSubtractGreenFromBlueAndRed(
+  SubtractGreenFromBlueAndRed(
       encoder->argb_, encoder->symbols_info_.ChannelBits(), width * height);
 }
 
@@ -479,8 +479,8 @@ static WP2Status ApplyPredictFilter(const Encoder* const encoder,
                                     WP2::ANSEnc* const enc,
                                     WP2::ANSDictionaries* const dicts) {
   const int pred_bits = encoder->transform_bits_;
-  const int transform_width = WP2LSubSampleSize(width, pred_bits);
-  const int transform_height = WP2LSubSampleSize(height, pred_bits);
+  const int transform_width = SubSampleSize(width, pred_bits);
+  const int transform_height = SubSampleSize(height, pred_bits);
 
   WP2_CHECK_STATUS(ResidualImage(
       width, height, pred_bits, encoder->symbols_info_.ChannelBits(), effort,
@@ -510,8 +510,8 @@ static WP2Status ApplyCrossColorFilter(const Encoder* const encoder,
                                        WP2::ANSEnc* const enc,
                                        WP2::ANSDictionaries* const dicts) {
   const int ccolor_transform_bits = encoder->transform_bits_;
-  const int transform_width = WP2LSubSampleSize(width, ccolor_transform_bits);
-  const int transform_height = WP2LSubSampleSize(height, ccolor_transform_bits);
+  const int transform_width = SubSampleSize(width, ccolor_transform_bits);
+  const int transform_height = SubSampleSize(height, ccolor_transform_bits);
 
   WP2_CHECK_STATUS(ColorSpaceTransform(width, height, ccolor_transform_bits,
                                        encoder->symbols_info_.SampleFormat(),
@@ -550,8 +550,8 @@ WP2Status Encoder::AllocateTransformBuffer(const CrunchConfig& config,
           : 0;
   const uint64_t transform_data_size =
       (config.use_predict || config.use_cross_color)
-          ? WP2LSubSampleSize(width, transform_bits_) *
-                WP2LSubSampleSize(height, transform_bits_)
+          ? SubSampleSize(width, transform_bits_) *
+                SubSampleSize(height, transform_bits_)
           : 0;
   const uint64_t mem_size =
       image_size + argb_scratch_size + transform_data_size;
@@ -748,7 +748,7 @@ Encoder::Encoder(const WP2::EncoderConfig& config,
   symbols_info_.Init(has_alpha, picture.format());
 
   argb_content_ = kEncoderNone;
-  WP2LEncDspInit();
+  EncLDspInit();
 }
 
 WP2Status Encoder::Allocate() {

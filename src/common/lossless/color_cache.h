@@ -55,7 +55,7 @@ static inline uint32_t HashPix(const T* const color, int n_bits) {
 // color and the value whatever uint32_t the user wants.
 class ColorCacheMap {
  public:
-  WP2Status Allocate(size_t color_num_max);
+  WP2Status Allocate(uint32_t color_num_max);
   void Reset();
 
   // Inserts the tuple (color, value). Returns true if the tuple was actually
