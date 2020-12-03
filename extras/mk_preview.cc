@@ -83,7 +83,7 @@ bool operator==(const PreviewData& A, const PreviewData& B) {
 void Help() {
   ProgramOptions opt;
   opt.Add("Usage:");
-  opt.Add("   preview -convert [-dry] text_files... ");
+  opt.Add("   preview -convert [-dry][-noforce][-b64] text_files... ");
   opt.Add("   preview image [bits|text] [options... ]"
           "[-o output] [-d output]");
   opt.Add("");
@@ -116,6 +116,7 @@ void Help() {
   opt.Add(" -txt", "use Text for preview data");
   opt.Add(" -info", "print full preview info");
   opt.Add(" -short", "print short preview info");
+  opt.Add(" -b64", "print base64 output");
   opt.Add(" -w <int>", "output width for thumbnail");
   opt.Add(" -d <file_prefix>", "prefix for reconstructed thumbnail");
   opt.Add(" -o <file_prefix>", "prefix for output data");
@@ -134,9 +135,17 @@ int ConvertTextFiles(int argc, const char* argv[]) {
   uint32_t total_size = 0;
   uint32_t nb_files = 0;
   bool dry_run = false;
+  bool overwrite = true;
+  bool to_base64 = false;
   for (int c = 2; c < argc; ++c) {
     if (!strcmp(argv[c], "-dry")) {
       dry_run = true;
+      continue;
+    } else if (!strcmp(argv[c], "-noforce")) {
+      overwrite = false;
+      continue;
+    } else if (!strcmp(argv[c], "-b64")) {
+      to_base64 = true;
       continue;
     } else if (!strcmp(argv[c], "-h")) {
       Help();
@@ -149,10 +158,15 @@ int ConvertTextFiles(int argc, const char* argv[]) {
     ANSEnc enc;
     CHECK_STATUS(data.Encode(&enc),
                  "Error encoding to binary! SHOULDN'T HAPPEN!!\n");
-    if (!dry_run) {
+    if (to_base64) {
+      const std::string out = PreviewToBase64(data);
+      CHECK_OK(!out.empty(), "Error during Base64 generation!\n");
+      printf("### argv[c] ###\n%s\n", out.c_str());
+    } else if (!dry_run) {
       const std::string out_name = RemoveFileExtension(argv[c]) + ".bits";
       CHECK_STATUS(
-          IoUtilWriteFile(enc.Buffer(), enc.BufferSize(), out_name.c_str()),
+          IoUtilWriteFile(enc.Buffer(), enc.BufferSize(),
+                          out_name.c_str(), overwrite),
           "Couldn't save compressed bits [%s]!\n", out_name.c_str());
     }
     if (check) {
@@ -205,7 +219,7 @@ int main(int argc, const char* argv[]) {
   const char* preview_file = nullptr;
   bool overwrite = true;
   uint32_t out_w = 256;   // width of decoded preview
-  enum { TEXT, INFO, SHORT } out_format = SHORT;
+  enum { TEXT, INFO, SHORT, BASE64 } out_format = SHORT;
   for (int c = 1; c < argc; ++c) {
     bool parse_error = false;
     if (!strcmp(argv[c], "-h")) {
@@ -226,6 +240,8 @@ int main(int argc, const char* argv[]) {
       out_format = INFO;
     } else if (!strcmp(argv[c], "-short")) {
       out_format = SHORT;
+    } else if (!strcmp(argv[c], "-b64")) {
+      out_format = BASE64;
     } else if (!strcmp(argv[c], "-w") && c + 1 < argc) {
       out_w = std::max(ExUtilGetUInt(argv[++c], &parse_error), 32u);
     } else if (!strcmp(argv[c], "-o") && c + 1 < argc) {
@@ -375,6 +391,8 @@ int main(int argc, const char* argv[]) {
     infos = PrintPreview(data, /* reduced= */true);
   } else if (out_format == TEXT) {
     infos = PreviewToText(data);
+  } else if (out_format == BASE64) {
+    infos = PreviewToBase64(data) + "\n";
   }
   VERBOSE("%s", infos.c_str());
 

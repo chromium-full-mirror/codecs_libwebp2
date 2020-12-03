@@ -24,6 +24,7 @@
 // And then this tool can be called:
 //     ./av1enc src.png -O -setenv STUFF_ON -setenv STUFF_OFF
 // This will generate 'src_dec_STUFF_ON.png' and 'src_dec_STUFF_OFF.png'
+// This tool is not available on _WIN32.
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
@@ -88,9 +89,11 @@ void Help() {
   opt.Add("-mi_data [var_name]", "draw insp_mi_data (.var_name)");
   opt.Add("-mi_number", "draw mi value as a red square");
   opt.Add("-quant", "draw/print quantization");
-#endif
+#if !defined(_WIN32)
   opt.Add("-setenv <name> [value]",
           "set environment variable (one encoding per -setenv)");
+#endif  // !_WIN32
+#endif  // WP2_HAVE_AOM_DBG
   opt.Add("-o <file path>", "path to decoded image");
   opt.Add("-O", "same as -o [in_file]_dec.png");
   opt.Add("-d <file path>", "path to encoded AV1 image");
@@ -113,7 +116,9 @@ int main(int argc, const char* argv[]) {
   bool decoded_path_from_input = false, encoded_path_from_input = false;
   WP2::ParamsAV1 params;
   WP2::MetricType type = WP2::PSNR;
+#if !defined(_WIN32)
   std::vector<std::pair<std::string, std::string>> env_vars;
+#endif  // !_WIN32
   std::vector<const char*> mi_data_names;
   std::vector<WP2::Rectangle> blocks;
   std::vector<WP2::Rectangle> transforms;
@@ -188,11 +193,14 @@ int main(int argc, const char* argv[]) {
     } else if (!strcmp(argv[c], "-quant")) {
       print_quant = true;
       mi_data_names.emplace_back("quant");
+#if !defined(_WIN32)
     } else if (!strcmp(argv[c], "-setenv") && c + 1 < argc) {
       const bool has_value = (c + 2 < argc && argv[c + 2][0] != '-');
       env_vars.emplace_back(argv[c + 1], has_value ? argv[c + 2] : "");
       c += (has_value ? 2 : 1);
-#endif
+#endif  // !_WIN32
+#endif  // WP2_HAVE_AOM_DBG
+
     } else if (!strcmp(argv[c], "-size") && c + 1 < argc) {
       params.size = atoi(argv[++c]);  // NOLINT
     } else if (!strcmp(argv[c], "-threads") && c + 1 < argc) {
@@ -232,10 +240,10 @@ int main(int argc, const char* argv[]) {
     fprintf(stderr, "Error opening file: %s\n", input_path.c_str());
     return 1;
   }
-
   for (size_t i = 0; i < std::max((size_t)1, env_vars.size()); ++i) {
     for (size_t n = 0; n < std::max((size_t)1, mi_data_names.size()); ++n) {
       std::string suffix;
+#if !defined(_WIN32)
       if (!env_vars.empty()) {
         setenv(env_vars[i].first.c_str(), env_vars[i].second.c_str(), 1);
         if (env_vars.size() > 1) {
@@ -244,7 +252,7 @@ int main(int argc, const char* argv[]) {
           if (!env_vars[i].second.empty()) suffix += "_" + env_vars[i].second;
         }
       }
-
+#endif  // !_WIN32
       if (!mi_data_names.empty()) {
         params.draw_mi_data = mi_data_names[n];
         if (mi_data_names[n] != nullptr) {
@@ -276,10 +284,11 @@ int main(int argc, const char* argv[]) {
         fprintf(stderr, "Error compressing to AV1\n");
         return 2;
       }
-
+#if !defined(_WIN32)
       if (!env_vars.empty()) {
         unsetenv(env_vars[i].first.c_str());
       }
+#endif  // !_WIN32
 
       // Align text with bit traces.
       if (count_blocks) {

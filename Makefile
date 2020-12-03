@@ -1169,6 +1169,7 @@ DIST_FILES= \
             wp2_js/index_wasm.html \
             wp2_js/test_wp2_js.wp2 \
             wp2_js/test_wp2_wasm.wp2 \
+            wp2_js/preview.html \
 
 pak: clean
 ifeq ($(strip $(shell uname)), Darwin)

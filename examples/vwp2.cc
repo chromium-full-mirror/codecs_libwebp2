@@ -870,7 +870,9 @@ std::vector<std::string> Params::GetHelp() {
   m.emplace_back("  '9' ............... increase error diffusion strength");
   m.emplace_back("  '0' ............... toggle perceptual tuning");
   m.emplace_back("  'm' ............... toggle use of random matrix");
+#if !defined(_WIN32)
   m.emplace_back("  'x' ............... toggle the env variable WP2DBG");
+#endif
   m.emplace_back("  'f'/'F'/alt+'f/F' . toggle filters");
   m.emplace_back("  'g'/'G' ........... decrease/reset grain amplitude");
   m.emplace_back("  'b' ............... display block side-info");
@@ -2444,11 +2446,13 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
     enc_config_.use_random_matrix = !enc_config_.use_random_matrix;
     if (!EncodeAndDecode()) return;
     SetMessage(SPrintf("Use random matrix: %d", enc_config_.use_random_matrix));
+#if !defined(_WIN32)
   } else if (key == 'x' || key == 'X') {
     Modify(wp2dbg_value_, 2u, key == 'x');
     setenv("WP2DBG", (wp2dbg_value_ == 0) ? "0" : "1", 1);
     if (!EncodeAndDecode()) return;
     AddInfo(SPrintf("export WP2DBG=%d", wp2dbg_value_));
+#endif
   } else if (key == 'f' || key == 'F') {
     if (glutGetModifiers() == GLUT_ACTIVE_ALT) {
       dec_config_.enable_restoration_filter =

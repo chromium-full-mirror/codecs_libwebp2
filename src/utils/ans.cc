@@ -545,23 +545,13 @@ uint32_t ANSDec::ReadUValueInternal(uint32_t bits) {
 }
 
 uint32_t ANSDec::ReadRValueInternal(uint32_t range) {
-  // Deal with the power of 2 case.
-  if ((range & (range - 1)) == 0) {
-    return ReadUValueInternal((uint32_t)WP2Log2Floor(range));
-  }
   assert(range <= (1u << ANSTokenInfoR::kBitsSecond));
-  // Warning! Unlike other symbols, for RValue we read the NextWord()
-  // *before* the extraction operations, therefore making the state_
-  // potentially go larger than 32b.
-  uint32_t s;
-  if (state_ < IO_LIMIT_LO * range) {
-    uint64_t state = (uint64_t)state_;
-    state = (state << IO_LIMIT_BITS) | ReadNextWord(0);
-    s = state % range;
-    state_ = (uint32_t)(state / range);
-  } else {  // only need 32b operations in this case
-    s = state_ % range;
-    state_ /= range;
+  uint32_t s = state_ % range;
+  state_     = state_ / range;
+  if (state_ < IO_LIMIT_LO) {
+    s = ReadNextWord(s);
+    state_ = (state_ << IO_LIMIT_BITS) + s / range;
+    s %= range;
   }
 #if defined(WP2_BITTRACE)
   cur_pos_ += WP2Log2(range);
@@ -1055,12 +1045,6 @@ void ANSEnc::EmitUValue(uint32_t value, int bits) {
 }
 
 void ANSEnc::EmitRValue(uint32_t value, uint32_t range) {
-  // If the range is a power of 2, go with bits: they are faster and more
-  // accurate.
-  if ((range & (range - 1)) == 0) {
-    EmitUValue(value, WP2Log2Floor(range));
-    return;
-  }
   assert(state_ >= IO_LIMIT_LO);
   // Warning! Unlike other symbols, for RValue we call EmitWord() first,
   // and use 64b for temporary state_.
