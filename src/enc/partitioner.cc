@@ -24,9 +24,12 @@
 
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
+#include "src/common/progress_watcher.h"
+#include "src/dsp/math.h"
 #include "src/enc/analysis.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -143,10 +146,11 @@ WP2Status Partitioner::RegisterForcedBlocks(
 //------------------------------------------------------------------------------
 
 WP2Status TopLeftBestPartitioner::GetBestPartition(
-    VectorNoCtor<Block>* const blocks) {
+    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
   std::fill(occupancy_.begin(), occupancy_.end(), false);
   const uint32_t max_num_blocks = num_block_cols_ * num_block_rows_;
   uint32_t max_num_blocks_left = max_num_blocks;
+  const ProgressScale block_progress(progress, 1. / max_num_blocks);
 
   // Begin with the user-defined blocks, if any (debug).
   WP2_CHECK_STATUS(RegisterForcedBlocks(*blocks, &max_num_blocks_left));
@@ -177,10 +181,11 @@ WP2Status TopLeftBestPartitioner::GetBestPartition(
         forced_block_it->x() == max_block.x() &&
         forced_block_it->y() == max_block.y()) {
       best_block = *forced_block_it;
+      WP2_CHECK_STATUS(block_progress.AdvanceBy(1.));
     } else {
       assert(max_num_blocks_left > 0);
-      WP2_CHECK_STATUS(
-          GetBestSize(max_block, forced_blocks.size(), &best_block));
+      WP2_CHECK_STATUS(GetBestSize(max_block, forced_blocks.size(),
+                                   block_progress, &best_block));
       RegisterOrderForVDebug(0, 0, best_block, blocks->size(), max_num_blocks);
       WP2_CHECK_ALLOC_OK(blocks->push_back(best_block));
 
@@ -196,6 +201,9 @@ WP2Status TopLeftBestPartitioner::GetBestPartition(
                                          /*ind=*/0u, nullptr));
     front_mgr.Use(best_block);
     WP2_CHECK_STATUS(score_func_->Use(best_block));
+    // Cover the whole block.
+    WP2_CHECK_STATUS(
+        block_progress.AdvanceBy(best_block.rect().GetArea() - 1.));
   }
   assert(max_num_blocks_left == 0);
   return WP2_STATUS_OK;
@@ -203,7 +211,10 @@ WP2Status TopLeftBestPartitioner::GetBestPartition(
 
 WP2Status TopLeftBestPartitioner::GetBestSize(const Block& max_block,
                                               uint32_t num_forced_blocks,
+                                              const ProgressRange& progress,
                                               Block* const best_block) {
+  const ProgressScale size_progress(
+      progress, 1. / GetNumBlockSizes(config_->partition_set));
   const BlockSize* const sizes = GetBlockSizes(config_->partition_set);
   float best_score = 0.f;
   // Test each size and keep the best score.
@@ -212,7 +223,7 @@ WP2Status TopLeftBestPartitioner::GetBestSize(const Block& max_block,
 
     if (IsBlockValid(block, max_block, num_forced_blocks)) {
       float score;
-      WP2_CHECK_STATUS(score_func_->GetScore(block, &score));
+      WP2_CHECK_STATUS(score_func_->GetScore(block, size_progress, &score));
 
       const bool first_score = (size == sizes);
       // Increasing sizes: keep the largest one if same score (rare).
@@ -220,6 +231,8 @@ WP2Status TopLeftBestPartitioner::GetBestSize(const Block& max_block,
         best_score = score;
         *best_block = block;
       }
+    } else {
+      WP2_CHECK_STATUS(size_progress.AdvanceBy(1.));
     }
   }
   return WP2_STATUS_OK;
@@ -228,21 +241,26 @@ WP2Status TopLeftBestPartitioner::GetBestSize(const Block& max_block,
 //------------------------------------------------------------------------------
 
 WP2Status AreaRDOptPartitioner::GetBestPartition(
-    VectorNoCtor<Block>* const blocks) {
+    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
   std::fill(occupancy_.begin(), occupancy_.end(), false);
   uint32_t max_num_blocks_left = num_block_cols_ * num_block_rows_;
 
   // TODO(yguyon): Handle forced blocks
   WP2_CHECK_OK(blocks->empty(), WP2_STATUS_UNSUPPORTED_FEATURE);
 
-  for (uint32_t area_y = 0; area_y < src_->Y.h_; area_y += area_height_) {
-    for (uint32_t area_x = 0; area_x < src_->Y.w_; area_x += area_width_) {
+  const uint32_t width = src_->GetWidth(), height = src_->GetHeight();
+  const uint32_t num_areas =
+      DivCeil(width, area_width_) * DivCeil(height, area_height_);
+  const ProgressScale per_area_progress(progress, 1. / num_areas);
+
+  for (uint32_t area_y = 0; area_y < height; area_y += area_height_) {
+    for (uint32_t area_x = 0; area_x < width; area_x += area_width_) {
       const Rectangle area =
           Rectangle(area_x, area_y, area_width_, area_height_)
               .ClipWith({0, 0, src_->Y.w_, src_->Y.h_});  // Padded.
 
-      WP2_CHECK_STATUS(
-          GetAreaBestPartition(area, blocks, &max_num_blocks_left));
+      WP2_CHECK_STATUS(GetAreaBestPartition(area, per_area_progress, blocks,
+                                            &max_num_blocks_left));
     }
   }
   assert(max_num_blocks_left == 0);
@@ -250,18 +268,21 @@ WP2Status AreaRDOptPartitioner::GetBestPartition(
 }
 
 WP2Status AreaRDOptPartitioner::GetAreaBestPartition(
-    const Rectangle& area, VectorNoCtor<Block>* const blocks,
-    uint32_t* const max_num_blocks_left) {
+    const Rectangle& area, const ProgressRange& progress,
+    VectorNoCtor<Block>* const blocks, uint32_t* const max_num_blocks_left) {
   AreaScoreFunc* const score_func =
       reinterpret_cast<AreaScoreFunc*>(score_func_);
   assert(area.x == score_func->GetCurrentArea().x &&
          area.y == score_func->GetCurrentArea().y);
   VectorNoCtor<Block> area_blocks, area_best_blocks;
+  const double per_layout_progress =
+      1. / (1 + GetNumBlockSizes(config_->partition_set));
 
   // Start with the default partition as a reference score.
   float best_score;
   WP2_CHECK_STATUS(
       score_func->GetAreaDefaultScore(&area_best_blocks, &best_score));
+  WP2_CHECK_STATUS(progress.AdvanceBy(per_layout_progress));
 
   // Test a uniform block grid for each block size and keep the best score.
   for (const BlockSize* size = GetBlockSizes(config_->partition_set);
@@ -279,6 +300,7 @@ WP2Status AreaRDOptPartitioner::GetAreaBestPartition(
                   area_best_blocks.begin());
       }
     }
+    WP2_CHECK_STATUS(progress.AdvanceBy(per_layout_progress));
   }
 
   // Mark each block of the best partition as final.
@@ -294,19 +316,26 @@ WP2Status AreaRDOptPartitioner::GetAreaBestPartition(
 //------------------------------------------------------------------------------
 
 WP2Status SubAreaRDOptPartitioner::GetBestPartition(
-    VectorNoCtor<Block>* const blocks) {
+    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
   WP2_CHECK_STATUS(front_mgr_.Init(config_->partition_set,
                                    config_->partition_snapping,
                                    tile_rect_.width, tile_rect_.height));
-  return AreaRDOptPartitioner::GetBestPartition(blocks);
+  return AreaRDOptPartitioner::GetBestPartition(progress, blocks);
 }
 
 WP2Status SubAreaRDOptPartitioner::GetAreaBestPartition(
-    const Rectangle& area, VectorNoCtor<Block>* const blocks,
-    uint32_t* const max_num_blocks_left) {
+    const Rectangle& area, const ProgressRange& progress,
+    VectorNoCtor<Block>* const blocks, uint32_t* const max_num_blocks_left) {
   const uint32_t max_num_blocks = num_block_cols_ * num_block_rows_;
   assert(area.x == front_mgr_.GetMaxPossibleBlock().x_pix() &&
          area.y == front_mgr_.GetMaxPossibleBlock().y_pix());
+
+  const uint32_t area_max_num_blocks =
+      DivCeil(area.width, kPredWidth) * DivCeil(area.height, kPredHeight);
+  const ProgressScale block_progress(progress, 1. / area_max_num_blocks);
+  const BlockSize* const sizes = GetBlockSizes(config_->partition_set);
+  const ProgressScale size_progress(
+      block_progress, 1. / GetNumBlockSizes(config_->partition_set));
 
   while (!front_mgr_.Done()) {
     const Block max_block = front_mgr_.GetMaxPossibleBlock();
@@ -316,17 +345,18 @@ WP2Status SubAreaRDOptPartitioner::GetAreaBestPartition(
     assert(*max_num_blocks_left > 0);
     Block best_block;
     float best_score = std::numeric_limits<float>::lowest();
-    const BlockSize* const sizes = GetBlockSizes(config_->partition_set);
     for (const BlockSize* size = sizes; *size != BLK_LAST; ++size) {
       const Block block = Block(max_block.x(), max_block.y(), *size);
       if (block.w() <= max_block.w() && block.h() <= max_block.h()) {
         float score;
-        WP2_CHECK_STATUS(score_func_->GetScore(block, &score));
+        WP2_CHECK_STATUS(score_func_->GetScore(block, size_progress, &score));
 
         if (score >= best_score) {
           best_score = score;
           best_block = block;
         }
+      } else {
+        WP2_CHECK_STATUS(size_progress.AdvanceBy(1.));
       }
     }
     const uint32_t block_index = max_num_blocks - *max_num_blocks_left;
@@ -336,6 +366,10 @@ WP2Status SubAreaRDOptPartitioner::GetAreaBestPartition(
     WP2_CHECK_ALLOC_OK(front_mgr_.UseSize(best_block.dim(), 0u, nullptr));
     front_mgr_.Use(best_block);
     WP2_CHECK_STATUS(score_func_->Use(best_block));
+
+    // Cover the whole block area.
+    WP2_CHECK_STATUS(
+        block_progress.AdvanceBy(best_block.rect().GetArea() - 1.));
   }
   return WP2_STATUS_OK;
 }
@@ -355,7 +389,7 @@ WP2Status SplitRecursePartitioner::Init(const EncoderConfig& config,
 }
 
 WP2Status SplitRecursePartitioner::GetBestPartition(
-    VectorNoCtor<Block>* const blocks) {
+    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
   std::fill(occupancy_.begin(), occupancy_.end(), false);
   split_info_.Fill(kNoSplitInfo);
   const uint32_t max_num_blocks = num_block_cols_ * num_block_rows_;
@@ -394,6 +428,8 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
       WP2_CHECK_ALLOC_OK(front_mgr.UseSize(block.dim(), /*ind=*/0u, nullptr));
       front_mgr.Use(block);
       WP2_CHECK_STATUS(score_func_->Use(block));
+      WP2_CHECK_STATUS(
+          progress.AdvanceBy(1. * block.rect().GetArea() / max_num_blocks));
     } else {
       assert(max_num_blocks_left > 0);
 
@@ -445,6 +481,8 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
           SetSplitInfo(best_pattern_blocks[i], recursive);
           // TODO(yguyon): Recurse in fewer situations to save CPU.
         }
+
+        WP2_CHECK_STATUS(progress.AdvanceBy(0.));  // Nothing decided.
       } else {
         // This 'block' was decided as is with no possibility of recursion.
         const Block block =
@@ -464,6 +502,9 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
         assert(max_num_blocks_left >= block.w() * block.h());
         max_num_blocks_left -= block.w() * block.h();
         assert(block.dim() != BLK_LAST);
+
+        WP2_CHECK_STATUS(
+            progress.AdvanceBy(1. * block.rect().GetArea() / max_num_blocks));
       }
     }
   }
@@ -591,7 +632,7 @@ WP2Status ExhaustivePartitioner::Init(const EncoderConfig& config,
 }
 
 WP2Status ExhaustivePartitioner::GetBestPartition(
-    VectorNoCtor<Block>* const blocks) {
+    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
   std::fill(occupancy_.begin(), occupancy_.end(), false);
 
   WP2_CHECK_ALLOC_OK(forced_blocks_.resize(blocks->size()));
@@ -611,7 +652,11 @@ WP2Status ExhaustivePartitioner::GetBestPartition(
   while (true) {
     bool found;
     float score;
-    WP2_CHECK_STATUS(GetNextPartitionScore(&found, &score));
+    // Using half-by-half because the number of iterations can be very large and
+    // is not convenient to compute.
+    const ProgressRange iteration_progress(progress,
+                                           std::pow(0.5, 1. + num_iterations));
+    WP2_CHECK_STATUS(GetNextPartitionScore(iteration_progress, &found, &score));
     if (!found) break;
 
     // Make sure the partition fills exactly the tile.
@@ -628,13 +673,14 @@ WP2Status ExhaustivePartitioner::GetBestPartition(
     }
     ++num_iterations;
   }
+  WP2_CHECK_STATUS(progress.AdvanceBy(std::pow(0.5, 1. * num_iterations)));
 
   RegisterScoreForVDebug(best_score, best_partition->size(), num_iterations);
   return WP2_STATUS_OK;
 }
 
-WP2Status ExhaustivePartitioner::GetNextPartitionScore(bool* const found,
-                                                       float* const score) {
+WP2Status ExhaustivePartitioner::GetNextPartitionScore(
+    const ProgressRange& progress, bool* const found, float* const score) {
   // Begin the tree search.
   BlockSize next_block_size = next_block_sizes_[kBlkStart];
   bool is_first_branch = partition_.empty();
@@ -664,7 +710,8 @@ WP2Status ExhaustivePartitioner::GetNextPartitionScore(bool* const found,
 
         if (front_mgr_.Done()) {
           // 'partition_' is complete. Get its score.
-          WP2_CHECK_STATUS(tile_score_func_->TryEncode(partition_, score));
+          WP2_CHECK_STATUS(
+              tile_score_func_->TryEncode(partition_, progress, score));
           *found = true;
           return WP2_STATUS_OK;
         } else {
@@ -698,10 +745,13 @@ bool ExhaustivePartitioner::FindNewBranch(BlockSize* const next_block_size) {
 using Pass = MultiScoreFunc::Pass;
 
 WP2Status MultiPassPartitioner::GetBestPartition(
-    VectorNoCtor<Block>* const blocks) {
+    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
   std::fill(occupancy_.begin(), occupancy_.end(), false);
   uint32_t max_num_blocks_left = num_block_cols_ * num_block_rows_;
   WP2_CHECK_STATUS(RegisterForcedBlocks(*blocks, &max_num_blocks_left));
+  const uint32_t max_num_passes =
+      8 + GetNumBlockSizes(config_->partition_set) * 3;
+  const ProgressScale pass_progress(progress, 1. / max_num_passes);
 
   // Run several passes to select matching blocks with a given size.
   // GetBlocks() will skip any pass with a BlockSize not belonging to the
@@ -712,12 +762,13 @@ WP2Status MultiPassPartitioner::GetBestPartition(
   for (BlockSize block_size : {BLK_32x32, BLK_32x16, BLK_16x32, BLK_16x16,
                                BLK_16x8, BLK_8x16, BLK_8x8}) {
     WP2_CHECK_STATUS(GetBlocks(Pass::LumaAlphaGradient, block_size,
-                               Grid::Snapped, &max_num_blocks_left, blocks));
+                               Grid::Snapped, pass_progress,
+                               &max_num_blocks_left, blocks));
   }
   if (config_->effort >= MultiScoreFunc::kMinEffortForGoodQuantDCT) {
     // Blocks having a DCT that still gives a good result when quantized.
     WP2_CHECK_STATUS(GetBlocks(Pass::GoodQuantDCT, BLK_32x32, Grid::Snapped,
-                               &max_num_blocks_left, blocks));
+                               pass_progress, &max_num_blocks_left, blocks));
   }
 
   // Pick a few not-too-small blocks that are following a luma edge.
@@ -726,7 +777,7 @@ WP2Status MultiPassPartitioner::GetBestPartition(
        *block_size != BLK_4x4; --block_size) {
     if (BlockWidth[*block_size] * BlockHeight[*block_size] < 4) continue;
     WP2_CHECK_STATUS(GetBlocks(Pass::Direction, *block_size, Grid::All,
-                               &max_num_blocks_left, blocks));
+                               pass_progress, &max_num_blocks_left, blocks));
   }
 
   // Choose smaller and smaller blocks based on variance.
@@ -737,7 +788,8 @@ WP2Status MultiPassPartitioner::GetBestPartition(
            GetNumBlockSizes(variance_partition_set) - 1u;
        *allowed_block_size != BLK_4x4; --allowed_block_size) {
     WP2_CHECK_STATUS(GetBlocks(Pass::NarrowStdDev, *allowed_block_size,
-                               Grid::All, &max_num_blocks_left, blocks));
+                               Grid::All, pass_progress, &max_num_blocks_left,
+                               blocks));
   }
 
   // Merge all remaining small blocks that are following a luma edge.
@@ -746,19 +798,21 @@ WP2Status MultiPassPartitioner::GetBestPartition(
        *block_size != BLK_4x4; --block_size) {
     if (BlockWidth[*block_size] * BlockHeight[*block_size] >= 4) continue;
     WP2_CHECK_STATUS(GetBlocks(Pass::Direction, *block_size, Grid::All,
-                               &max_num_blocks_left, blocks));
+                               pass_progress, &max_num_blocks_left, blocks));
   }
 
   // Fill the remaining empty areas.
-  WP2_CHECK_STATUS(
-      GetBlocks(Pass::Any, BLK_4x4, Grid::All, &max_num_blocks_left, blocks));
+  WP2_CHECK_STATUS(GetBlocks(Pass::Any, BLK_4x4, Grid::All, pass_progress,
+                             &max_num_blocks_left, blocks));
   assert(max_num_blocks_left == 0);
+  assert(pass_index_ <= max_num_passes);
+  WP2_CHECK_STATUS(pass_progress.AdvanceBy(max_num_passes - pass_index_));
   return WP2_STATUS_OK;
 }
 
-WP2Status MultiPassPartitioner::GetBlocks(Pass pass,
-                                          BlockSize block_size,
+WP2Status MultiPassPartitioner::GetBlocks(Pass pass, BlockSize block_size,
                                           Grid restrict_to,
+                                          const ProgressRange& progress,
                                           uint32_t* const max_num_blocks_left,
                                           VectorNoCtor<Block>* const out) {
   if (GetFittingBlockSize(config_->partition_set, block_size) != block_size) {
@@ -777,8 +831,9 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass,
   // Make sure the 'block_size' is valid and there is at least one remaining.
   if (block.w() > num_block_cols_ || block.h() > num_block_rows_ ||
       block.rect().GetArea() > *max_num_blocks_left) {
-    RegisterPassForVDebug(pass, block_size, out->size() - num_blocks_before);
+    RegisterPassForVDebug(pass, block_size, 0);
     ++pass_index_;
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.));
     return WP2_STATUS_OK;
   }
 
@@ -789,14 +844,19 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass,
   VectorNoCtor<BlockScore> block_scores;
   multi_score_func_->SetPass(pass);
 
-  uint32_t x = 0, y = 0;
+  const uint32_t incr_x = (restrict_to == Grid::Snapped) ? block.w() : 1;
+  const uint32_t incr_y = (restrict_to == Grid::Snapped) ? block.h() : 1;
   const uint32_t max_x = num_block_cols_ - block.w();
   const uint32_t max_y = num_block_rows_ - block.h();
+  const uint32_t num_incr_x = DivCeil(max_x + 1, incr_x);
+  const uint32_t num_incr_y = DivCeil(max_y + 1, incr_y);
+  const ProgressScale incr_progress(progress, 1. / (num_incr_x * num_incr_y));
   const bool* occupancy = occupancy_.data();
 
   // Browse the grid of selectable blocks.
-  while (y <= max_y) {
-    while (x <= max_x) {
+  for (uint32_t y = 0; y <= max_y;
+       y += incr_y, occupancy += incr_y * num_block_cols_) {
+    for (uint32_t x = 0; x <= max_x; x += incr_x) {
       if (!occupancy[x]) {  // Quickly skip top-left-occupied blocks.
         block.SetXY(x, y);
         if (restrict_to == Grid::Snapped) assert(block.IsSnapped());
@@ -806,7 +866,7 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass,
 
         if (!tried_block_earlier && !IsOccupied(block)) {
           float score;
-          WP2_CHECK_STATUS(score_func_->GetScore(block, &score));
+          WP2_CHECK_STATUS(score_func_->GetScore(block, incr_progress, &score));
           if (score >= MultiScoreFunc::kMinScore) {
             if (restrict_to == Grid::Snapped) {
               // Immediately select any passing block.
@@ -817,16 +877,13 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass,
               WP2_CHECK_ALLOC_OK(block_scores.push_back({block, score}));
             }
           }
+        } else {
+          WP2_CHECK_STATUS(incr_progress.AdvanceBy(1.));
         }
+      } else {
+        WP2_CHECK_STATUS(incr_progress.AdvanceBy(1.));
       }
-
-      x += (restrict_to == Grid::Snapped) ? block.w() : 1;
     }
-    const uint32_t num_incr_rows =
-        (restrict_to == Grid::Snapped) ? block.h() : 1;
-    y += num_incr_rows;
-    occupancy += num_incr_rows * num_block_cols_;
-    x = 0;
   }
 
   if (restrict_to != Grid::Snapped) {

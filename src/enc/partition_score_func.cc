@@ -50,7 +50,8 @@ static float MapQuality(const EncoderConfig& config, float min, float slope) {
 WP2Status PartitionScoreFunc::Init(const EncoderConfig& config,
                                    const Rectangle& tile_rect,
                                    const YUVPlane& yuv,
-                                   const GlobalParams& gparams) {
+                                   const GlobalParams& gparams,
+                                   const ProgressRange& progress) {
   config_ = &config;
   gparams_ = &gparams;
   tile_rect_ = tile_rect;
@@ -58,6 +59,7 @@ WP2Status PartitionScoreFunc::Init(const EncoderConfig& config,
   num_block_cols_ = SizeBlocks(yuv.Y.w_);
   num_block_rows_ = SizeBlocks(yuv.Y.h_);
   WP2_CHECK_STATUS(ClearVDebug());
+  WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;
 }
 
@@ -67,9 +69,11 @@ WP2Status PartitionScoreFunc::Use(const Block& block) { return WP2_STATUS_OK; }
 
 WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
                                const Rectangle& tile_rect, const YUVPlane& yuv,
-                               const GlobalParams& gparams) {
+                               const GlobalParams& gparams,
+                               const ProgressRange& progress) {
   WP2EncDspInit();
-  WP2_CHECK_STATUS(PartitionScoreFunc::Init(config, tile_rect, yuv, gparams));
+  WP2_CHECK_STATUS(PartitionScoreFunc::Init(config, tile_rect, yuv, gparams,
+                                            ProgressRange(progress, 0.5)));
 
   const ChromaSubsampling chroma_subsampling =
       DecideChromaSubsampling(*config_, /*more_than_one_block=*/true);
@@ -97,12 +101,16 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
 
   // Initialize the cache.
   WP2_CHECK_STATUS(context_.Init(use_aom_coeffs, yuv.Y.w_, yuv.Y.h_));
-
+  WP2_CHECK_STATUS(progress.AdvanceBy(0.5));
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScoreFunc::GetScore(const Block& block, float* const score) {
-  return GetScore(&block, /*num_blocks=*/1, score);
+WP2Status BlockScoreFunc::GetScore(const Block& block,
+                                   const ProgressRange& progress,
+                                   float* const score) {
+  WP2_CHECK_STATUS(GetScore(&block, /*num_blocks=*/1, score));
+  WP2_CHECK_STATUS(progress.AdvanceBy(1.));
+  return WP2_STATUS_OK;
 }
 
 WP2Status BlockScoreFunc::GetScore(const Block blocks[4], uint32_t num_blocks,
@@ -276,8 +284,13 @@ AreaScoreFunc::AreaScoreFunc(uint32_t area_width, uint32_t area_height)
 
 WP2Status AreaScoreFunc::Init(const EncoderConfig& config,
                               const Rectangle& tile_rect, const YUVPlane& yuv,
-                              const GlobalParams& gparams) {
-  WP2_CHECK_STATUS(PartitionScoreFunc::Init(config, tile_rect, yuv, gparams));
+                              const GlobalParams& gparams,
+                              const ProgressRange& progress) {
+  const ProgressRange init_progress(progress, 0.1);
+  const ProgressRange score_func_init_progress(progress, 0.1);
+  const ProgressRange default_partition_progress(progress, 0.8);
+  WP2_CHECK_STATUS(
+      PartitionScoreFunc::Init(config, tile_rect, yuv, gparams, init_progress));
 
   // This scoring function needs a strict block layout.
   const BlockSize max_block_size =
@@ -300,11 +313,13 @@ WP2Status AreaScoreFunc::Init(const EncoderConfig& config,
 
     EncoderConfig cfg_no_dbg = config;
     cfg_no_dbg.info = nullptr;  // Do not use or output any debugging data.
-    WP2_CHECK_STATUS(score_func.Init(cfg_no_dbg, tile_rect_, *src_, *gparams_));
+    WP2_CHECK_STATUS(score_func.Init(cfg_no_dbg, tile_rect_, *src_, *gparams_,
+                                     score_func_init_progress));
     WP2_CHECK_STATUS(
         partitioner.Init(cfg_no_dbg, *src_, tile_rect_, &score_func));
     // TODO(yguyon): Add forced blocks from 'config' to 'default_partition_'
-    WP2_CHECK_STATUS(partitioner.GetBestPartition(&default_partition_));
+    WP2_CHECK_STATUS(partitioner.GetBestPartition(default_partition_progress,
+                                                  &default_partition_));
     // Sort the blocks to find those in a given area faster.
     std::sort(default_partition_.begin(), default_partition_.end(), comp_);
   }
@@ -358,7 +373,8 @@ static float ComputeScore(const EncoderConfig& config, float ref_disto,
   return 1.f / (1.f + delta * disto + (1.f - delta) * rate);
 }
 
-WP2Status AreaScoreFunc::GetScore(const Block&, float* const) {
+WP2Status AreaScoreFunc::GetScore(const Block&, const ProgressRange&,
+                                  float* const) {
   return WP2_STATUS_UNSUPPORTED_FEATURE;  // Unused.
 }
 
@@ -561,12 +577,17 @@ WP2Status AreaScoreFunc::GetAreaDefaultPartition(
 
 //------------------------------------------------------------------------------
 
-WP2Status SubAreaScoreFunc::GetScore(const Block& block, float* const score) {
+WP2Status SubAreaScoreFunc::GetScore(const Block& block,
+                                     const ProgressRange& progress,
+                                     float* const score) {
+  const ProgressRange default_partitioning_progress(progress, 0.5);
+  const ProgressRange remaining_blocks_progress(progress, 0.5);
   if (default_block_.dim() == BLK_LAST) {
     // Get the default partitioning and score of the remaining non-final blocks.
     // This is done once for each block position within each area.
     Vector<CodedBlock> default_partition;
-    WP2_CHECK_STATUS(GetAreaRemainingDefaultPartition(&default_partition));
+    WP2_CHECK_STATUS(GetAreaRemainingDefaultPartition(
+        default_partitioning_progress, &default_partition));
     assert(!default_partition.empty() &&
            default_partition.front().dim() != BLK_LAST);
     // TODO(yguyon): Also include the 'area_used_blocks_' into the disto/rate
@@ -579,6 +600,8 @@ WP2Status SubAreaScoreFunc::GetScore(const Block& block, float* const score) {
                            default_score, default_block_disto_,
                            default_block_rate_);
     default_block_ = default_partition.front().blk();
+  } else {
+    WP2_CHECK_STATUS(default_partitioning_progress.AdvanceBy(1.));
   }
   // 'default_block_' now contains the size of the first block among the
   // remaining non-final ones given by the default partitioning.
@@ -590,6 +613,7 @@ WP2Status SubAreaScoreFunc::GetScore(const Block& block, float* const score) {
     rate = default_block_rate_;
     *score = ComputeScore(*config_, default_block_disto_, default_block_rate_,
                           disto, rate);
+    WP2_CHECK_STATUS(remaining_blocks_progress.AdvanceBy(1.));
   } else {
     // 'block' here is the currently evaluated size for a given position.
     // 'area_used_blocks_' represent the final blocks previously encoded and
@@ -598,7 +622,8 @@ WP2Status SubAreaScoreFunc::GetScore(const Block& block, float* const score) {
     Vector<CodedBlock> area_remaining_blocks;
     WP2_CHECK_ALLOC_OK(area_remaining_blocks.resize(1));
     area_remaining_blocks.back().SetDimDefault(block);  // Force it.
-    WP2_CHECK_STATUS(GetAreaRemainingDefaultPartition(&area_remaining_blocks));
+    WP2_CHECK_STATUS(GetAreaRemainingDefaultPartition(remaining_blocks_progress,
+                                                      &area_remaining_blocks));
 
     WP2_CHECK_STATUS(GetDistoRate(&area_remaining_blocks, &disto, &rate));
     *score = ComputeScore(*config_, default_block_disto_, default_block_rate_,
@@ -624,7 +649,11 @@ WP2Status SubAreaScoreFunc::Use(const Block& block) {
 }
 
 WP2Status SubAreaScoreFunc::GetAreaRemainingDefaultPartition(
+    const ProgressRange& progress,
     Vector<CodedBlock>* const area_remaining_blocks) const {
+  const ProgressRange score_func_init_progress(progress, 0.01);
+  const ProgressRange partitioner_progress(progress, 0.99);
+
   // It would be faster to reuse the 'AreaScoreFunc::default_partition_' (or
   // part of it) but it is not always compatible with the already selected
   // 'area_used_blocks_' so for simplicity it is always recomputed for each
@@ -634,7 +663,8 @@ WP2Status SubAreaScoreFunc::GetAreaRemainingDefaultPartition(
 
   EncoderConfig config = *config_;
   config.info = nullptr;  // Remove any debugging input/output.
-  WP2_CHECK_STATUS(score_func.Init(config, tile_rect_, *src_, *gparams_));
+  WP2_CHECK_STATUS(score_func.Init(config, tile_rect_, *src_, *gparams_,
+                                   score_func_init_progress));
   WP2_CHECK_STATUS(partitioner.Init(config, *src_, tile_rect_, &score_func));
 
   // 'blocks' will first contain all irrelevant blocks that will be forced into
@@ -674,7 +704,7 @@ WP2Status SubAreaScoreFunc::GetAreaRemainingDefaultPartition(
   const uint32_t num_already_added_area_blocks = area_remaining_blocks->size();
 
   // Get the default partitioning of the remaining empty spaces into 'blocks'.
-  WP2_CHECK_STATUS(partitioner.GetBestPartition(&blocks));
+  WP2_CHECK_STATUS(partitioner.GetBestPartition(partitioner_progress, &blocks));
   // Sort in lexico order only the new blocks.
   std::sort(blocks.begin() + num_default_blocks_to_ignore, blocks.end());
 
@@ -755,11 +785,13 @@ constexpr int MultiScoreFunc::kMinEffortForGoodQuantDCT;
 
 WP2Status MultiScoreFunc::Init(const EncoderConfig& config,
                                const Rectangle& tile_rect, const YUVPlane& yuv,
-                               const GlobalParams& gparams) {
+                               const GlobalParams& gparams,
+                               const ProgressRange& progress) {
   DrctFilterInit();
   ScoreDspInit();
 
-  WP2_CHECK_STATUS(PartitionScoreFunc::Init(config, tile_rect, yuv, gparams));
+  WP2_CHECK_STATUS(PartitionScoreFunc::Init(config, tile_rect, yuv, gparams,
+                                            ProgressRange(progress, 0.5)));
   yuv_range_ =
       (float)(gparams.transf_.GetYUVMax() - gparams.transf_.GetYUVMin());
   a_range_ratio_ = yuv_range_ / kAlphaMax;
@@ -816,12 +848,15 @@ WP2Status MultiScoreFunc::Init(const EncoderConfig& config,
   }
 
   WP2_CHECK_STATUS(DrawVDebug());
+  WP2_CHECK_STATUS(progress.AdvanceBy(0.5));
   return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
 
-WP2Status MultiScoreFunc::GetScore(const Block& block, float* const score) {
+WP2Status MultiScoreFunc::GetScore(const Block& block,
+                                   const ProgressRange& progress,
+                                   float* const score) {
   float value = 0.f, threshold = 1.f;  // Passing if 'value <= threshold'.
   switch (pass_) {
     case Pass::LumaAlphaGradient:
@@ -855,6 +890,7 @@ WP2Status MultiScoreFunc::GetScore(const Block& block, float* const score) {
     *score = 0.499f * threshold / value;  // Will not pass.
   }
   RegisterScoreForVDebug(block, *score);
+  WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;
 }
 
@@ -1133,9 +1169,13 @@ float MultiScoreFunc::GetDirectionThreshold(const Block& block) const {
 
 WP2Status TileScoreFunc::Init(const EncoderConfig& config,
                               const Rectangle& tile_rect, const YUVPlane& yuv,
-                              const GlobalParams& gparams) {
+                              const GlobalParams& gparams,
+                              const ProgressRange& progress) {
   WP2EncDspInit();
-  WP2_CHECK_STATUS(PartitionScoreFunc::Init(config, tile_rect, yuv, gparams));
+  const ProgressRange init_progress(progress, 0.2);
+  const ProgressRange forced_partition_progress(progress, 0.8);
+  WP2_CHECK_STATUS(
+      PartitionScoreFunc::Init(config, tile_rect, yuv, gparams, init_progress));
   local_gparams_.features_ = &features_map_;
   WP2_CHECK_STATUS(GlobalAnalysis(ArgbBuffer(), yuv, gparams.transf_,
                                   config, &local_gparams_));
@@ -1146,16 +1186,18 @@ WP2Status TileScoreFunc::Init(const EncoderConfig& config,
   const Rectangle padded_tile_rect = {tile_rect_.x, tile_rect_.y,
                                       yuv.GetWidth(), yuv.GetHeight()};
   WP2_CHECK_STATUS(AddForcedBlocks(config, padded_tile_rect, &blocks_));
-  WP2_CHECK_STATUS(TryEncode(blocks_, &best_score_));
+  WP2_CHECK_STATUS(TryEncode(blocks_, forced_partition_progress, &best_score_));
   RegisterScoreForVDebug("starting", {}, best_score_);
   cached_best_score_ = 0.f;
   blocks_.clear();
   return WP2_STATUS_OK;
 }
 
-WP2Status TileScoreFunc::GetScore(const Block& block, float* const score) {
+WP2Status TileScoreFunc::GetScore(const Block& block,
+                                  const ProgressRange& progress,
+                                  float* const score) {
   WP2_CHECK_ALLOC_OK(blocks_.push_back(block));
-  WP2_CHECK_STATUS(TryEncode(blocks_, score));
+  WP2_CHECK_STATUS(TryEncode(blocks_, progress, score));
   if (*score > cached_best_score_) cached_best_score_ = *score;
   if (*score > best_score_) RegisterScoreForVDebug("new best", block, *score);
   blocks_.pop_back();
@@ -1208,10 +1250,12 @@ WP2Status TileScoreFunc::InitForEncode() {
 }
 
 WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
+                                   const ProgressRange& progress,
                                    float* const score) {
   ANSEnc& enc = enc_tiles_layout_.tiles.front().enc;
   enc.WipeOut();
   enc_tiles_layout_.gparams = &local_gparams_;
+  tile_encoder_.tile_->progress = progress;
   // Encode the whole tile with the forced 'blocks'.
   WP2_CHECK_STATUS(tile_encoder_.LossyEncode(blocks, &enc));
   WP2_CHECK_STATUS(enc.Assemble());
@@ -1266,8 +1310,11 @@ WP2Status TileScoreFunc::Use(const Block& block) {
 
 //------------------------------------------------------------------------------
 
-WP2Status FixedSizeScoreFunc::GetScore(const Block& block, float* const score) {
+WP2Status FixedSizeScoreFunc::GetScore(const Block& block,
+                                       const ProgressRange& progress,
+                                       float* const score) {
   *score = (block.dim() == size_) ? 1.f : 0.f;
+  WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;
 }
 

@@ -44,6 +44,7 @@ constexpr uint32_t kRDOptAreaSize = kMaxBlockSizePix;
 WP2Status ExtractBlockPartition(const EncoderConfig& config,
                                 const GlobalParams& gparams,
                                 const YUVPlane& yuv, const Rectangle& tile_rect,
+                                const ProgressRange& progress,
                                 VectorNoCtor<Block>* const blocks) {
   const PartitionMethod final_partition_method =
       FinalPartitionMethod(config, tile_rect.width, tile_rect.height);
@@ -126,10 +127,13 @@ WP2Status ExtractBlockPartition(const EncoderConfig& config,
   }
   WP2_CHECK_ALLOC_OK(partitioner != nullptr);
 
-  WP2_CHECK_STATUS(score_func->Init(config, tile_rect, yuv, gparams));
+  const ProgressRange score_func_init_progress(progress, 0.01);
+  const ProgressRange partitioner_progress(progress, 0.99);
+  WP2_CHECK_STATUS(score_func->Init(config, tile_rect, yuv, gparams,
+                                    score_func_init_progress));
 
   WP2_CHECK_STATUS(partitioner->Init(config, yuv, tile_rect, score_func.get()));
-  WP2_CHECK_STATUS(partitioner->GetBestPartition(blocks));
+  WP2_CHECK_STATUS(partitioner->GetBestPartition(partitioner_progress, blocks));
 
 #if defined(BLOCK_STATS)
   static WP2::Stats<const char*> blk_stats("block-type", "%s",

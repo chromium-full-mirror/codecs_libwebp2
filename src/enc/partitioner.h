@@ -54,7 +54,8 @@ class Partitioner : public WP2Allocable {
                          PartitionScoreFunc* const score_func);
 
   // Computes and returns the best layout. Input 'blocks' are considered forced.
-  virtual WP2Status GetBestPartition(VectorNoCtor<Block>* const blocks) = 0;
+  virtual WP2Status GetBestPartition(const ProgressRange& progress,
+                                     VectorNoCtor<Block>* const blocks) = 0;
 
  protected:
   // Gets or sets areas as occupied.
@@ -91,12 +92,13 @@ class Partitioner : public WP2Allocable {
 // For each block (starting with the top-left one), takes the best size.
 class TopLeftBestPartitioner : public Partitioner {
  public:
-  WP2Status GetBestPartition(VectorNoCtor<Block>* const blocks) override;
+  WP2Status GetBestPartition(const ProgressRange& progress,
+                             VectorNoCtor<Block>* const blocks) override;
 
  private:
   // Returns the 'best_block' size within 'max_block'.
   WP2Status GetBestSize(const Block& max_block, uint32_t num_forced_blocks,
-                        Block* const best_block);
+                        const ProgressRange& progress, Block* const best_block);
 };
 
 //------------------------------------------------------------------------------
@@ -107,10 +109,12 @@ class AreaRDOptPartitioner : public Partitioner {
  public:
   AreaRDOptPartitioner(uint32_t area_width, uint32_t area_height)  // In pixels.
       : area_width_(area_width), area_height_(area_height) {}
-  WP2Status GetBestPartition(VectorNoCtor<Block>* const blocks) override;
+  WP2Status GetBestPartition(const ProgressRange& progress,
+                             VectorNoCtor<Block>* const blocks) override;
 
  private:
   virtual WP2Status GetAreaBestPartition(const Rectangle& area,
+                                         const ProgressRange& progress,
                                          VectorNoCtor<Block>* const blocks,
                                          uint32_t* const max_num_blocks_left);
 
@@ -126,10 +130,12 @@ class SubAreaRDOptPartitioner : public AreaRDOptPartitioner {
   SubAreaRDOptPartitioner(uint32_t area_width, uint32_t area_height)
       : AreaRDOptPartitioner(area_width, area_height),
         front_mgr_(area_width, area_height) {}
-  WP2Status GetBestPartition(VectorNoCtor<Block>* const blocks) override;
+  WP2Status GetBestPartition(const ProgressRange& progress,
+                             VectorNoCtor<Block>* const blocks) override;
 
  private:
   WP2Status GetAreaBestPartition(const Rectangle& area,
+                                 const ProgressRange& progress,
                                  VectorNoCtor<Block>* const blocks,
                                  uint32_t* const max_num_blocks_left) override;
   FrontMgrArea front_mgr_;
@@ -144,7 +150,8 @@ class SplitRecursePartitioner : public Partitioner {
   WP2Status Init(const EncoderConfig& config, const YUVPlane& yuv,
                  const Rectangle& tile_rect,
                  PartitionScoreFunc* const score_func) override;
-  WP2Status GetBestPartition(VectorNoCtor<Block>* const blocks) override;
+  WP2Status GetBestPartition(const ProgressRange& progress,
+                             VectorNoCtor<Block>* const blocks) override;
 
  private:
   // Returns the maximum BlockSize fitting in 'max_block' and respecting all the
@@ -205,11 +212,13 @@ class ExhaustivePartitioner : public Partitioner {
                  const Rectangle& tile_rect,
                  PartitionScoreFunc* const score_func) override;
 
-  WP2Status GetBestPartition(VectorNoCtor<Block>* const blocks) override;
+  WP2Status GetBestPartition(const ProgressRange& progress,
+                             VectorNoCtor<Block>* const blocks) override;
 
  private:
   // Finds the next valid partition. If 'found', returns its 'score'.
-  WP2Status GetNextPartitionScore(bool* const found, float* const score);
+  WP2Status GetNextPartitionScore(const ProgressRange& progress,
+                                  bool* const found, float* const score);
 
   // Pops blocks from the 'partition_' until a new path can be explored.
   // Returns false if none found or returns true and the 'next_block_size'.
@@ -239,7 +248,8 @@ class MultiPassPartitioner : public Partitioner {
   explicit MultiPassPartitioner(MultiScoreFunc* const score_func)
       : multi_score_func_(score_func) {}
 
-  WP2Status GetBestPartition(VectorNoCtor<Block>* const blocks) override;
+  WP2Status GetBestPartition(const ProgressRange& progress,
+                             VectorNoCtor<Block>* const blocks) override;
 
  private:
   enum class Grid { Snapped, NonSnapped, All };
@@ -247,7 +257,8 @@ class MultiPassPartitioner : public Partitioner {
   // Selects blocks of dimension 'block_size', good enough according to the
   // given 'pass' and 'restrict_to' some alignment.
   WP2Status GetBlocks(MultiScoreFunc::Pass pass, BlockSize block_size,
-                      Grid restrict_to, uint32_t* const max_num_blocks_left,
+                      Grid restrict_to, const ProgressRange& progress,
+                      uint32_t* const max_num_blocks_left,
                       VectorNoCtor<Block>* const out);
 
   WP2Status SelectBlock(MultiScoreFunc::Pass pass, const Block& block,
@@ -255,8 +266,6 @@ class MultiPassPartitioner : public Partitioner {
                         VectorNoCtor<Block>* const out);
 
   MultiScoreFunc* const multi_score_func_;  // Specific 'score_func_'.
-
-  // VDebug
   uint32_t pass_index_ = 0;
 
   void RegisterPassForVDebug(MultiScoreFunc::Pass pass, BlockSize block_size,

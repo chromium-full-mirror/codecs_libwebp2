@@ -130,8 +130,8 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   std::copy(forced_partition.begin(), forced_partition.end(),
             mgr.Blocks().begin());
   WP2_CHECK_STATUS(ExtractBlockPartition(*config_, gparams, yuv_buffer,
-                                         tile_rect, &mgr.Blocks()));
-  WP2_CHECK_STATUS(partitioning_progress.AdvanceBy(1.));  // TODO(yguyon) Split
+                                         tile_rect, partitioning_progress,
+                                         &mgr.Blocks()));
   WP2_CHECK_STATUS(mgr.Sort());
   // process all blocks
   WP2_CHECK_ALLOC_OK(cblocks.resize(mgr.Blocks().size()));

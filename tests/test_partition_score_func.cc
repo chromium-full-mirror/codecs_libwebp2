@@ -52,12 +52,13 @@ TEST(PartitionScoreFuncTest, BlockScoreFunc) {
   float score;
 
   BlockScoreFunc score_func;
-  ASSERT_WP2_OK(score_func.Init(config, tile_rect, yuv, gparams));
+  ASSERT_WP2_OK(
+      score_func.Init(config, tile_rect, yuv, gparams, ProgressRange()));
 
   // Test block by block.
   for (const Block& block : kBlocks) {
     if (block.y() != 0) continue;  // Blocks above must be used.
-    ASSERT_WP2_OK(score_func.GetScore(block, &score));
+    ASSERT_WP2_OK(score_func.GetScore(block, ProgressRange(), &score));
     EXPECT_GT(score, 0);
   }
 

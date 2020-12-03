@@ -21,6 +21,7 @@
 #define WP2_SRC_ENC_ANALYSIS_H_
 
 #include "src/common/lossy/block.h"
+#include "src/common/progress_watcher.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
 #include "src/wp2/encode.h"
@@ -65,6 +66,7 @@ class FrontMgr4x4;
 WP2Status ExtractBlockPartition(const EncoderConfig& config,
                                 const GlobalParams& gparams,
                                 const YUVPlane& yuv, const Rectangle& tile_rect,
+                                const ProgressRange& progress,
                                 VectorNoCtor<Block>* const blocks);
 
 // Finds a segmentation of the source in clusters with similar-features.

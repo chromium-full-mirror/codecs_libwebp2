@@ -47,10 +47,12 @@ class PartitionScoreFunc : public WP2Allocable {
   // 'tile_rect' is in pixels, not padded.
   virtual WP2Status Init(const EncoderConfig& config,
                          const Rectangle& tile_rect, const YUVPlane& yuv,
-                         const GlobalParams& gparams);
+                         const GlobalParams& gparams,
+                         const ProgressRange& progress);
 
   // For a given block position and size, returns a score (higher means better).
-  virtual WP2Status GetScore(const Block& block, float* const score) = 0;
+  virtual WP2Status GetScore(const Block& block, const ProgressRange& progress,
+                             float* const score) = 0;
 
   // Called every time a block is definitively chosen.
   virtual WP2Status Use(const Block& block);
@@ -75,9 +77,11 @@ class PartitionScoreFunc : public WP2Allocable {
 class BlockScoreFunc : public PartitionScoreFunc {
  public:
   WP2Status Init(const EncoderConfig& config, const Rectangle& tile_rect,
-                 const YUVPlane& yuv, const GlobalParams& gparams) override;
+                 const YUVPlane& yuv, const GlobalParams& gparams,
+                 const ProgressRange& progress) override;
 
-  WP2Status GetScore(const Block& block, float* const score) override;
+  WP2Status GetScore(const Block& block, const ProgressRange& progress,
+                     float* const score) override;
 
   // Returns the score for encoding several 'blocks' (at most 4).
   // Can be used for evaluating a block against its sub-blocks, for example.
@@ -138,11 +142,12 @@ class AreaScoreFunc : public BlockScoreFunc {
   // Dimensions in pixels of the areas.
   AreaScoreFunc(uint32_t area_width, uint32_t area_height);
   WP2Status Init(const EncoderConfig& config, const Rectangle& tile_rect,
-                 const YUVPlane& yuv, const GlobalParams& gparams) override;
+                 const YUVPlane& yuv, const GlobalParams& gparams,
+                 const ProgressRange& progress) override;
   const Rectangle& GetCurrentArea() const { return area_; }
 
   // Unused.
-  WP2Status GetScore(const Block& block, float* const score) override;
+  WP2Status GetScore(const Block&, const ProgressRange&, float* const) override;
 
   // Returns the 'blocks' and 'score' of encoding the 'area_' with the default
   // partitioning (multipass).
@@ -202,13 +207,15 @@ class SubAreaScoreFunc : public AreaScoreFunc {
   SubAreaScoreFunc(uint32_t area_width, uint32_t area_height)
       : AreaScoreFunc(area_width, area_height) {}
 
-  WP2Status GetScore(const Block& block, float* const score) override;
+  WP2Status GetScore(const Block& block, const ProgressRange& progress,
+                     float* const score) override;
   WP2Status Use(const Block& block) override;
 
  protected:
   WP2Status BeginArea(uint32_t area_x, uint32_t area_y) override;
 
   WP2Status GetAreaRemainingDefaultPartition(
+      const ProgressRange& progress,
       Vector<CodedBlock>* const area_remaining_blocks) const;
 
   Vector<CodedBlock> area_used_blocks_;  // Final encoded blocks in this 'area_'
@@ -241,13 +248,15 @@ class MultiScoreFunc : public PartitionScoreFunc {
   };
 
   WP2Status Init(const EncoderConfig& config, const Rectangle& tile_rect,
-                 const YUVPlane& yuv, const GlobalParams& gparams) override;
+                 const YUVPlane& yuv, const GlobalParams& gparams,
+                 const ProgressRange& progress) override;
 
   // Sets the 'pass_' of the next GetScore().
   void SetPass(Pass pass) { pass_ = pass; }
   // Returns a value/threshold ratio of the current 'pass_' in ]0:1].
   // Higher means better, scores above 0.5 are selected.
-  WP2Status GetScore(const Block& block, float* const score) override;
+  WP2Status GetScore(const Block& block, const ProgressRange& progress,
+                     float* const score) override;
 
  protected:
   // Helper functions.
@@ -310,14 +319,17 @@ class TileScoreFunc : public PartitionScoreFunc {
       : sub_partition_method_(sub_partition_method) {}
 
   WP2Status Init(const EncoderConfig& config, const Rectangle& tile_rect,
-                 const YUVPlane& yuv, const GlobalParams& gparams) override;
+                 const YUVPlane& yuv, const GlobalParams& gparams,
+                 const ProgressRange& progress) override;
 
   // Encodes the whole tile with the forced 'blocks' and returns a score based
   // on its distortion and size in bytes.
-  WP2Status TryEncode(const VectorNoCtor<Block>& blocks, float* const score);
+  WP2Status TryEncode(const VectorNoCtor<Block>& blocks,
+                      const ProgressRange& progress, float* const score);
 
   // Temporarily forces the 'block' for a TryEncode() call.
-  WP2Status GetScore(const Block& block, float* const score) override;
+  WP2Status GetScore(const Block& block, const ProgressRange& progress,
+                     float* const score) override;
 
   // Forces the 'block' for all future TryEncode() calls.
   WP2Status Use(const Block& block) override;
@@ -355,7 +367,8 @@ class FixedSizeScoreFunc : public PartitionScoreFunc {
  public:
   explicit FixedSizeScoreFunc(BlockSize size) : size_(size) {}
 
-  WP2Status GetScore(const Block& block, float* const score) override;
+  WP2Status GetScore(const Block& block, const ProgressRange& progress,
+                     float* const score) override;
 
  protected:
   BlockSize size_;
