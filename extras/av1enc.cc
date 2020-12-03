@@ -116,9 +116,7 @@ int main(int argc, const char* argv[]) {
   bool decoded_path_from_input = false, encoded_path_from_input = false;
   WP2::ParamsAV1 params;
   WP2::MetricType type = WP2::PSNR;
-#if !defined(_WIN32)
   std::vector<std::pair<std::string, std::string>> env_vars;
-#endif  // !_WIN32
   std::vector<const char*> mi_data_names;
   std::vector<WP2::Rectangle> blocks;
   std::vector<WP2::Rectangle> transforms;
