@@ -58,12 +58,12 @@ TEST(PartitionScoreFuncTest, BlockScoreFunc) {
   // Test block by block.
   for (const Block& block : kBlocks) {
     if (block.y() != 0) continue;  // Blocks above must be used.
-    ASSERT_WP2_OK(score_func.GetScore(block, ProgressRange(), &score));
+    ASSERT_WP2_OK(score_func.ComputeScore(block, ProgressRange(), &score));
     EXPECT_GT(score, 0);
   }
 
   // Test a group of blocks.
-  ASSERT_WP2_OK(score_func.GetScore(
+  ASSERT_WP2_OK(score_func.ComputeScore(
       kBlocks, sizeof(kBlocks) / sizeof(kBlocks[0]), &score));
   EXPECT_GT(score, 0);
 }

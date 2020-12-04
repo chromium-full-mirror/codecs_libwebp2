@@ -51,8 +51,9 @@ class PartitionScoreFunc : public WP2Allocable {
                          const ProgressRange& progress);
 
   // For a given block position and size, returns a score (higher means better).
-  virtual WP2Status GetScore(const Block& block, const ProgressRange& progress,
-                             float* const score) = 0;
+  virtual WP2Status ComputeScore(const Block& block,
+                                 const ProgressRange& progress,
+                                 float* const score) = 0;
 
   // Called every time a block is definitively chosen.
   virtual WP2Status Use(const Block& block);
@@ -80,13 +81,13 @@ class BlockScoreFunc : public PartitionScoreFunc {
                  const YUVPlane& yuv, const GlobalParams& gparams,
                  const ProgressRange& progress) override;
 
-  WP2Status GetScore(const Block& block, const ProgressRange& progress,
-                     float* const score) override;
+  WP2Status ComputeScore(const Block& block, const ProgressRange& progress,
+                         float* const score) override;
 
   // Returns the score for encoding several 'blocks' (at most 4).
   // Can be used for evaluating a block against its sub-blocks, for example.
-  WP2Status GetScore(const Block blocks[4], uint32_t num_blocks,
-                     float* const score);
+  WP2Status ComputeScore(const Block blocks[4], uint32_t num_blocks,
+                         float* const score);
 
   WP2Status Use(const Block& block) override;
 
@@ -147,7 +148,8 @@ class AreaScoreFunc : public BlockScoreFunc {
   const Rectangle& GetCurrentArea() const { return area_; }
 
   // Unused.
-  WP2Status GetScore(const Block&, const ProgressRange&, float* const) override;
+  WP2Status ComputeScore(const Block&, const ProgressRange&,
+                         float* const) override;
 
   // Returns the 'blocks' and 'score' of encoding the 'area_' with the default
   // partitioning (multipass).
@@ -207,8 +209,8 @@ class SubAreaScoreFunc : public AreaScoreFunc {
   SubAreaScoreFunc(uint32_t area_width, uint32_t area_height)
       : AreaScoreFunc(area_width, area_height) {}
 
-  WP2Status GetScore(const Block& block, const ProgressRange& progress,
-                     float* const score) override;
+  WP2Status ComputeScore(const Block& block, const ProgressRange& progress,
+                         float* const score) override;
   WP2Status Use(const Block& block) override;
 
  protected:
@@ -251,12 +253,12 @@ class MultiScoreFunc : public PartitionScoreFunc {
                  const YUVPlane& yuv, const GlobalParams& gparams,
                  const ProgressRange& progress) override;
 
-  // Sets the 'pass_' of the next GetScore().
+  // Sets the 'pass_' of the next ComputeScore().
   void SetPass(Pass pass) { pass_ = pass; }
   // Returns a value/threshold ratio of the current 'pass_' in ]0:1].
   // Higher means better, scores above 0.5 are selected.
-  WP2Status GetScore(const Block& block, const ProgressRange& progress,
-                     float* const score) override;
+  WP2Status ComputeScore(const Block& block, const ProgressRange& progress,
+                         float* const score) override;
 
  protected:
   // Helper functions.
@@ -328,8 +330,8 @@ class TileScoreFunc : public PartitionScoreFunc {
                       const ProgressRange& progress, float* const score);
 
   // Temporarily forces the 'block' for a TryEncode() call.
-  WP2Status GetScore(const Block& block, const ProgressRange& progress,
-                     float* const score) override;
+  WP2Status ComputeScore(const Block& block, const ProgressRange& progress,
+                         float* const score) override;
 
   // Forces the 'block' for all future TryEncode() calls.
   WP2Status Use(const Block& block) override;
@@ -367,8 +369,8 @@ class FixedSizeScoreFunc : public PartitionScoreFunc {
  public:
   explicit FixedSizeScoreFunc(BlockSize size) : size_(size) {}
 
-  WP2Status GetScore(const Block& block, const ProgressRange& progress,
-                     float* const score) override;
+  WP2Status ComputeScore(const Block& block, const ProgressRange& progress,
+                         float* const score) override;
 
  protected:
   BlockSize size_;

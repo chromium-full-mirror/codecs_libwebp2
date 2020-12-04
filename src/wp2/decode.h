@@ -32,7 +32,6 @@ namespace WP2 {
 // Features gathered from the bitstream
 
 struct BitstreamFeatures {
- public:
   uint32_t raw_width;        // Width in pixels, as read from the bitstream.
   uint32_t raw_height;       // Height in pixels, as read from the bitstream.
 

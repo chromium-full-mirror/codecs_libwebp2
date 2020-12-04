@@ -28,10 +28,11 @@ namespace WP2L {
 // Predictors
 
 // Difference of each component, mod 256.
-static inline void SubPixels(const uint16_t* const a, bool has_alpha,
-                             const uint16_t* const b, uint16_t mask,
-                             uint16_t* const out) {
-  out[0] = has_alpha ? ((a[0] - b[0]) & mask) : WP2::kAlphaMax;
+static inline void SubPixels(const int16_t* const a, bool has_alpha,
+                             const int16_t* const b, uint16_t mask,
+                             int16_t* const out) {
+  // TODO(vrabaud) remove 0xff alpha wrap around.
+  out[0] = has_alpha ? ((a[0] - b[0]) & 0xff) : WP2::kAlphaMax;
   for (uint32_t i = 1; i < 4; ++i) out[i] = (a[i] - b[i]) & mask;
 }
 

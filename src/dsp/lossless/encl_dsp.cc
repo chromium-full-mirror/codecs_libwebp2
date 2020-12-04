@@ -171,26 +171,22 @@ static void BufferAdd_C(const uint32_t* const a, const uint32_t* const b,
 //------------------------------------------------------------------------------
 // Predictors
 
-static void PredictorSub0_C(const uint16_t* in, bool has_alpha,
-                            const uint16_t* const upper, uint32_t num_pixels,
-                            uint32_t num_bits, uint16_t* out) {
-  (void)upper;
-  const uint16_t max_value = (1u << num_bits) - 1;
-  for (const uint16_t* const in_end = in + 4 * num_pixels; in < in_end;
+static void PredictorSub0_C(const int16_t* in, bool has_alpha, const int16_t*,
+                            uint32_t num_pixels, int16_t, int16_t, int16_t mask,
+                            int16_t* out) {
+  for (const int16_t* const in_end = in + 4 * num_pixels; in < in_end;
        in += 4, out += 4) {
-    out[0] = has_alpha ? ((in[0] - max_value) & max_value) : WP2::kAlphaMax;
+    out[0] = has_alpha ? ((in[0] - WP2::kAlphaMax) & mask) : WP2::kAlphaMax;
     out[1] = in[1];
     out[2] = in[2];
     out[3] = in[3];
   }
 }
 
-static void PredictorSub1_C(const uint16_t* in, bool has_alpha,
-                            const uint16_t* const upper, uint32_t num_pixels,
-                            uint32_t num_bits, uint16_t* out) {
-  (void)upper;
-  const uint16_t mask = (1u << num_bits) - 1;
-  for (const uint16_t* const in_end = in + 4 * num_pixels; in < in_end;
+static void PredictorSub1_C(const int16_t* in, bool has_alpha, const int16_t*,
+                            uint32_t num_pixels, int16_t, int16_t, int16_t mask,
+                            int16_t* out) {
+  for (const int16_t* const in_end = in + 4 * num_pixels; in < in_end;
        in += 4, out += 4) {
     SubPixels(in, has_alpha, &in[-4], mask, out);
   }
@@ -201,18 +197,18 @@ static void PredictorSub1_C(const uint16_t* in, bool has_alpha,
 
 // It subtracts the prediction from the input pixel and stores the residual
 // in the output pixel.
-#define GENERATE_PREDICTOR_SUB(PREDICTOR, PREDICTOR_SUB)                      \
-  static void PREDICTOR_SUB(const uint16_t* in, bool has_alpha,               \
-                            const uint16_t* upper, uint32_t num_pixels,       \
-                            uint32_t num_bits, uint16_t* out) {               \
-    uint16_t pred[4];                                                         \
-    const uint16_t mask = (1u << num_bits) - 1;                               \
-    assert(upper != nullptr);                                                 \
-    for (const uint16_t* const out_end = out + 4 * num_pixels; out < out_end; \
-         out += 4, in += 4, upper += 4) {                                     \
-      (PREDICTOR)(&in[-4], upper, mask, pred);                                \
-      SubPixels(in, has_alpha, pred, mask, out);                              \
-    }                                                                         \
+#define GENERATE_PREDICTOR_SUB(PREDICTOR, PREDICTOR_SUB)                     \
+  static void PREDICTOR_SUB(const int16_t* in, bool has_alpha,               \
+                            const int16_t* upper, uint32_t num_pixels,       \
+                            int16_t min_value, int16_t max_value,            \
+                            int16_t mask, int16_t* out) {                    \
+    int16_t pred[4];                                                         \
+    assert(upper != nullptr);                                                \
+    for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
+         out += 4, in += 4, upper += 4) {                                    \
+      (PREDICTOR)(in - 4, upper, min_value, max_value, pred);                \
+      SubPixels(in, has_alpha, pred, mask, out);                             \
+    }                                                                        \
   }
 
 GENERATE_PREDICTOR_SUB(Predictors_C[2], PredictorSub2_C)

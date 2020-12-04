@@ -223,7 +223,7 @@ WP2Status TopLeftBestPartitioner::GetBestSize(const Block& max_block,
 
     if (IsBlockValid(block, max_block, num_forced_blocks)) {
       float score;
-      WP2_CHECK_STATUS(score_func_->GetScore(block, size_progress, &score));
+      WP2_CHECK_STATUS(score_func_->ComputeScore(block, size_progress, &score));
 
       const bool first_score = (size == sizes);
       // Increasing sizes: keep the largest one if same score (rare).
@@ -349,7 +349,8 @@ WP2Status SubAreaRDOptPartitioner::GetAreaBestPartition(
       const Block block = Block(max_block.x(), max_block.y(), *size);
       if (block.w() <= max_block.w() && block.h() <= max_block.h()) {
         float score;
-        WP2_CHECK_STATUS(score_func_->GetScore(block, size_progress, &score));
+        WP2_CHECK_STATUS(
+            score_func_->ComputeScore(block, size_progress, &score));
 
         if (score >= best_score) {
           best_score = score;
@@ -462,8 +463,8 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
             GetSplitPatternBlocks(block, pattern, pattern_blocks);
 
             float score;
-            WP2_CHECK_STATUS(score_func->GetScore(pattern_blocks,
-                                                  pattern.num_blocks, &score));
+            WP2_CHECK_STATUS(score_func->ComputeScore(
+                pattern_blocks, pattern.num_blocks, &score));
             if (best_pattern.num_blocks == 0 || score > best_score) {
               best_pattern = pattern;
               best_score = score;
@@ -866,7 +867,8 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass, BlockSize block_size,
 
         if (!tried_block_earlier && !IsOccupied(block)) {
           float score;
-          WP2_CHECK_STATUS(score_func_->GetScore(block, incr_progress, &score));
+          WP2_CHECK_STATUS(
+              score_func_->ComputeScore(block, incr_progress, &score));
           if (score >= MultiScoreFunc::kMinScore) {
             if (restrict_to == Grid::Snapped) {
               // Immediately select any passing block.

@@ -484,7 +484,7 @@ static WP2Status ApplyPredictFilter(const Encoder* const encoder,
 
   WP2_CHECK_STATUS(ResidualImage(
       width, height, pred_bits, encoder->symbols_info_.ChannelBits(), effort,
-      encoder->argb_, encoder->has_alpha_, encoder->argb_scratch_,
+      (int16_t*)encoder->argb_, encoder->has_alpha_, encoder->argb_scratch_,
       encoder->transform_data_));
   const WP2::ANSDebugPrefix prefix(enc, "predictor");
   enc->PutRange(pred_bits, kTransformBitsMin, kTransformBitsMax,
@@ -555,7 +555,7 @@ WP2Status Encoder::AllocateTransformBuffer(const CrunchConfig& config,
           : 0;
   const uint64_t mem_size =
       image_size + argb_scratch_size + transform_data_size;
-  uint16_t* mem;
+  int16_t* mem;
   if (4 * mem_size > transform_mem_.size()) {
     WP2_CHECK_ALLOC_OK(transform_mem_.resize(4 * mem_size));
     mem = transform_mem_.data();
@@ -563,11 +563,11 @@ WP2Status Encoder::AllocateTransformBuffer(const CrunchConfig& config,
   } else {
     mem = transform_mem_.data();
   }
-  argb_ = mem;
+  argb_ = (uint16_t*)mem;
   mem += 4 * image_size;
   argb_scratch_ = mem;
   mem += 4 * argb_scratch_size;
-  transform_data_ = reinterpret_cast<int16_t*>(mem);
+  transform_data_ = mem;
 
   return WP2_STATUS_OK;
 }

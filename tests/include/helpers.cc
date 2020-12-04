@@ -153,7 +153,7 @@ WP2Status CompressAnimation(const std::vector<const char*>& frames_file_names,
 
 float GetExpectedDistortion(float quality, float alpha_quality) {
   if (quality <= kMaxLossyQuality || alpha_quality <= kMaxLossyQuality) {
-    return (15.f + quality * 0.06f + alpha_quality * 0.02f);  // Lossy
+    return (14.f + quality * 0.06f + alpha_quality * 0.03f);  // Lossy
   } else if (quality < kMaxQuality || alpha_quality < kMaxQuality) {
     quality -= kMaxLossyQuality;
     alpha_quality -= kMaxLossyQuality;

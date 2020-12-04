@@ -134,7 +134,7 @@ class ANSBinSymbol {
     return bit;
   }
   // get the cached probability for symbol '1' out of the current state
-  constexpr uint32_t Proba() const { return p_; }
+  uint32_t Proba() const { return p_; }
 
   // cost of storing the given 'bit'.
   float GetCost(uint32_t bit) const {

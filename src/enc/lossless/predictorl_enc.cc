@@ -63,8 +63,12 @@ static float PredictionCostSpatialHistogram(const Vector_u32 accumulated[4],
 }
 
 static inline void UpdateHisto(Vector_u32 histo_argb[4],
-                               const uint16_t* const argb) {
-  for (uint32_t i = 0; i < 4; ++i) ++histo_argb[i][argb[i]];
+                               const int16_t* const argb) {
+  for (uint32_t i = 0; i < 4; ++i) {
+    // TODO(vrabaud) fix using the new upcoming MakeIndex.
+    assert(argb[i] >= 0);
+    ++histo_argb[i][argb[i]];
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -73,16 +77,19 @@ static inline void UpdateHisto(Vector_u32 histo_argb[4],
 namespace WP2L {
 
 static inline void PredictBatch(int mode, int x_start, int y,
-                                uint32_t num_pixels, uint32_t channel_bits,
-                                const uint16_t* const current, bool has_alpha,
-                                const uint16_t* const upper, uint16_t* out) {
+                                uint32_t num_pixels, int16_t min_value,
+                                int16_t max_value, int16_t mask,
+                                const int16_t* const current, bool has_alpha,
+                                const int16_t* const upper, int16_t* out) {
   if (x_start == 0) {
     if (y == 0) {
       // ARGB_BLACK.
-      PredictorsSub[0](current, has_alpha, nullptr, 1, channel_bits, out);
+      PredictorsSub[0](current, has_alpha, nullptr, 1, min_value, max_value,
+                       mask, out);
     } else {
       // Top one.
-      PredictorsSub[2](current, has_alpha, upper, 1, channel_bits, out);
+      PredictorsSub[2](current, has_alpha, upper, 1, min_value, max_value, mask,
+                       out);
     }
     ++x_start;
     out += 4;
@@ -91,10 +98,10 @@ static inline void PredictBatch(int mode, int x_start, int y,
   if (y == 0) {
     // Left one.
     PredictorsSub[1](&current[4 * x_start], has_alpha, nullptr, num_pixels,
-                     channel_bits, out);
+                     min_value, max_value, mask, out);
   } else {
     PredictorsSub[mode](&current[4 * x_start], has_alpha, &upper[4 * x_start],
-                        num_pixels, channel_bits, out);
+                        num_pixels, min_value, max_value, mask, out);
   }
 }
 
@@ -102,16 +109,15 @@ static inline void PredictBatch(int mode, int x_start, int y,
 // In case of a lossy encoding, updates the source image to avoid propagating
 // the deviation further to pixels which depend on the current pixel for their
 // predictions.
-static inline void GetResidual(int width, uint32_t channel_bits,
-                               uint16_t* const upper_row,
-                               uint16_t* const current_row, bool has_alpha,
+static inline void GetResidual(int width, int16_t min_value, int16_t max_value,
+                               int16_t mask, int16_t* const upper_row,
+                               int16_t* const current_row, bool has_alpha,
                                int mode, int x_start, int x_end, int y,
-                               uint16_t* const out) {
-  const uint16_t mask = (1 << channel_bits) - 1;
+                               int16_t* const out) {
   const PredictorFunc pred_func = Predictors[mode];
   int x;
   for (x = x_start; x < x_end; ++x) {
-    uint16_t predict[4], residual[4];
+    int16_t predict[4], residual[4];
     if (y == 0) {
       if (x == 0) {
         predict[0] = mask;
@@ -124,7 +130,8 @@ static inline void GetResidual(int width, uint32_t channel_bits,
     } else if (x == 0) {
       ColorCopy(&upper_row[4 * x], predict);  // Top.
     } else {
-      pred_func(&current_row[4 * (x - 1)], &upper_row[4 * x], mask, predict);
+      pred_func(&current_row[4 * (x - 1)], &upper_row[4 * x], min_value,
+                max_value, predict);
     }
     SubPixels(&current_row[4 * x], has_alpha, predict, mask, residual);
     if (current_row[4 * x] == 0) {
@@ -156,8 +163,8 @@ static inline void GetResidual(int width, uint32_t channel_bits,
 // Returns best predictor and updates the accumulated histogram.
 static int GetBestPredictorForTile(int width, int height, int tile_x,
                                    int tile_y, uint32_t bits,
-                                   uint16_t* const argb_scratch,
-                                   const uint16_t* const argb, bool has_alpha,
+                                   int16_t* const argb_scratch,
+                                   const int16_t* const argb, bool has_alpha,
                                    const int16_t* const modes,
                                    Vector_u32 accumulated[4],
                                    Vector_u32 tmp_histo[][4]) {
@@ -182,20 +189,23 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
   // The width of upper_row and current_row is one pixel larger than image width
   // to allow the top right pixel to point to the leftmost pixel of the next row
   // when at the right edge.
-  uint16_t* upper_row = argb_scratch;
-  uint16_t* current_row = &upper_row[4 * (width + 1)];
+  int16_t* upper_row = argb_scratch;
+  int16_t* current_row = &upper_row[4 * (width + 1)];
   float best_diff = std::numeric_limits<float>::max();
   uint32_t best_mode = 0;
   uint32_t mode;
   // Need pointers to be able to swap arrays.
   Vector_u32* histo_argb = &tmp_histo[0][0];
   Vector_u32* best_histo = &tmp_histo[1][0];
-  uint16_t residuals[4 * (1 << kTransformBitsMax)];
+  int16_t residuals[4 * (1 << kTransformBitsMax)];
   assert(bits >= kTransformBitsMin && bits <= kTransformBitsMax);
   assert(max_x <= (1 << kTransformBitsMax));
 
   // TODO(vrabaud) fix channel_bits.
-  const uint32_t channel_bits = 8;
+  constexpr uint32_t channel_bits = 8;
+  constexpr int16_t min_value = 0;
+  constexpr int16_t max_value = (1 << channel_bits) - 1;
+  constexpr int16_t mask = (1 << channel_bits) - 1;
   for (mode = 0; mode < kNumPredictors; ++mode) {
     float cur_diff;
     int relative_y;
@@ -225,8 +235,8 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
                     4 * (max_x + have_left + (y + 1 < height))],
                 &current_row[4 * context_start_x]);
 
-      GetResidual(width, channel_bits, upper_row, current_row, has_alpha, mode,
-                  start_x, start_x + max_x, y, residuals);
+      GetResidual(width, min_value, max_value, mask, upper_row, current_row,
+                  has_alpha, mode, start_x, start_x + max_x, y, residuals);
       for (relative_x = 0; relative_x < max_x; ++relative_x) {
         UpdateHisto(histo_argb, &residuals[4 * relative_x]);
       }
@@ -257,17 +267,17 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
 // residuals to multiples of quantization levels up to max_quantization
 // (the actual quantization level depends on smoothness near the given pixel).
 static void CopyImageWithPrediction(int width, int height, int bits,
-                                    uint32_t channel_bits,
-                                    const int16_t* const modes,
-                                    uint16_t* const argb_scratch,
-                                    uint16_t* const argb, bool has_alpha,
+                                    int16_t min_value, int16_t max_value,
+                                    int16_t mask, const int16_t* const modes,
+                                    int16_t* const argb_scratch,
+                                    int16_t* const argb, bool has_alpha,
                                     int effort) {
   const int tiles_per_row = SubSampleSize(width, bits);
   // The width of upper_row and current_row is one pixel larger than image width
   // to allow the top right pixel to point to the leftmost pixel of the next row
   // when at the right edge.
-  uint16_t* upper_row = argb_scratch;
-  uint16_t* current_row = &upper_row[4 * (width + 1)];
+  int16_t* upper_row = argb_scratch;
+  int16_t* current_row = &upper_row[4 * (width + 1)];
   int y;
 
   for (y = 0; y < height; ++y) {
@@ -278,16 +288,16 @@ static void CopyImageWithPrediction(int width, int height, int bits,
               current_row);
 
     if (effort == 0) {
-      PredictBatch(kPredLowEffort, 0, y, width, channel_bits, current_row,
-                   has_alpha, upper_row, &argb[4 * y * width]);
+      PredictBatch(kPredLowEffort, 0, y, width, min_value, max_value, mask,
+                   current_row, has_alpha, upper_row, &argb[4 * y * width]);
     } else {
       for (x = 0; x < width;) {
         const int mode =
             modes[4 * ((y >> bits) * tiles_per_row + (x >> bits)) + 2];
         int x_end = x + (1 << bits);
         if (x_end > width) x_end = width;
-        GetResidual(width, channel_bits, upper_row, current_row, has_alpha,
-                    mode, x, x_end, y, &argb[4 * (y * width + x)]);
+        GetResidual(width, min_value, max_value, mask, upper_row, current_row,
+                    has_alpha, mode, x, x_end, y, &argb[4 * (y * width + x)]);
         x = x_end;
       }
     }
@@ -299,8 +309,8 @@ static void CopyImageWithPrediction(int width, int height, int bits,
 // near lossless processing, shaving off more bits of residuals for lower
 // qualities.
 WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
-                        uint32_t channel_bits, int effort, uint16_t* const argb,
-                        bool has_alpha, uint16_t* const argb_scratch,
+                        uint32_t channel_bits, int effort, int16_t* const argb,
+                        bool has_alpha, int16_t* const argb_scratch,
                         int16_t* const image) {
   const uint32_t tiles_per_row = SubSampleSize(width, bits);
   const uint32_t tiles_per_col = SubSampleSize(height, bits);
@@ -335,8 +345,11 @@ WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
     }
   }
 
-  CopyImageWithPrediction(width, height, bits, channel_bits, image,
-                          argb_scratch, argb, has_alpha, effort);
+  const int16_t min_value = 0;
+  const int16_t max_value = (1 << channel_bits) - 1;
+  const int16_t mask = (1 << channel_bits) - 1;
+  CopyImageWithPrediction(width, height, bits, min_value, max_value, mask,
+                          image, argb_scratch, argb, has_alpha, effort);
   return WP2_STATUS_OK;
 }
 

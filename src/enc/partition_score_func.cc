@@ -105,16 +105,17 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScoreFunc::GetScore(const Block& block,
-                                   const ProgressRange& progress,
-                                   float* const score) {
-  WP2_CHECK_STATUS(GetScore(&block, /*num_blocks=*/1, score));
+WP2Status BlockScoreFunc::ComputeScore(const Block& block,
+                                       const ProgressRange& progress,
+                                       float* const score) {
+  WP2_CHECK_STATUS(ComputeScore(&block, /*num_blocks=*/1, score));
   WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScoreFunc::GetScore(const Block blocks[4], uint32_t num_blocks,
-                                   float* const score) {
+WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
+                                       uint32_t num_blocks,
+                                       float* const score) {
   // Copy the final state into the temporary scratch one.
   WP2_CHECK_STATUS(tmp_dicts_.CopyFrom(dicts_));
   WP2_CHECK_STATUS(tmp_syntax_writer_.CopyFrom(syntax_writer_, &tmp_dicts_));
@@ -354,8 +355,8 @@ WP2Status AreaScoreFunc::Init(const EncoderConfig& config,
 // Returns a score in [0:1] representing how much a 'disto/rate' pair is good
 // compared to a reference, where 0 is discarded, 1 is way better than 'ref' and
 // 1/3 is equivalent to 'ref'.
-static float ComputeScore(const EncoderConfig& config, float ref_disto,
-                          float ref_rate, float disto, float rate) {
+static float GetRelativeScore(const EncoderConfig& config, float ref_disto,
+                              float ref_rate, float disto, float rate) {
   if (disto > ref_disto || rate > ref_rate) return 0.f;  // No mercy.
   if (ref_disto > 0.f) {
     disto /= ref_disto;  // Normalize.
@@ -373,8 +374,8 @@ static float ComputeScore(const EncoderConfig& config, float ref_disto,
   return 1.f / (1.f + delta * disto + (1.f - delta) * rate);
 }
 
-WP2Status AreaScoreFunc::GetScore(const Block&, const ProgressRange&,
-                                  float* const) {
+WP2Status AreaScoreFunc::ComputeScore(const Block&, const ProgressRange&,
+                                      float* const) {
   return WP2_STATUS_UNSUPPORTED_FEATURE;  // Unused.
 }
 
@@ -385,8 +386,8 @@ WP2Status AreaScoreFunc::GetAreaDefaultScore(VectorNoCtor<Block>* const blocks,
   assert(!partition.empty());
   WP2_CHECK_STATUS(GetDistoRate(&partition, &default_disto_, &default_rate_));
   // Compute the score with itself as reference, to be easily comparable.
-  *score = ComputeScore(*config_, default_disto_, default_rate_,
-                        default_disto_, default_rate_);
+  *score = GetRelativeScore(*config_, default_disto_, default_rate_,
+                            default_disto_, default_rate_);
   for (const CodedBlock& cb : partition) {
     WP2_CHECK_ALLOC_OK(blocks->push_back(cb.blk()));
   }
@@ -424,7 +425,8 @@ WP2Status AreaScoreFunc::GetAreaGridScore(BlockSize block_size,
   assert(default_disto_ >= 0.f && default_rate_ >= 0.f);
   float disto = 0.f, rate = 0.f;
   WP2_CHECK_STATUS(GetDistoRate(&partition, &disto, &rate));
-  *score = ComputeScore(*config_, default_disto_, default_rate_, disto, rate);
+  *score =
+      GetRelativeScore(*config_, default_disto_, default_rate_, disto, rate);
 
   RegisterScoreForVDebug(block_size, partition, *score, disto, rate);
   return WP2_STATUS_OK;
@@ -577,9 +579,9 @@ WP2Status AreaScoreFunc::GetAreaDefaultPartition(
 
 //------------------------------------------------------------------------------
 
-WP2Status SubAreaScoreFunc::GetScore(const Block& block,
-                                     const ProgressRange& progress,
-                                     float* const score) {
+WP2Status SubAreaScoreFunc::ComputeScore(const Block& block,
+                                         const ProgressRange& progress,
+                                         float* const score) {
   const ProgressRange default_partitioning_progress(progress, 0.5);
   const ProgressRange remaining_blocks_progress(progress, 0.5);
   if (default_block_.dim() == BLK_LAST) {
@@ -594,8 +596,8 @@ WP2Status SubAreaScoreFunc::GetScore(const Block& block,
     WP2_CHECK_STATUS(GetDistoRate(&default_partition, &default_block_disto_,
                                   &default_block_rate_));
     const float default_score =
-        ComputeScore(*config_, default_block_disto_, default_block_rate_,
-                     default_block_disto_, default_block_rate_);
+        GetRelativeScore(*config_, default_block_disto_, default_block_rate_,
+                         default_block_disto_, default_block_rate_);
     RegisterScoreForVDebug(default_partition.front().blk(), default_partition,
                            default_score, default_block_disto_,
                            default_block_rate_);
@@ -611,8 +613,8 @@ WP2Status SubAreaScoreFunc::GetScore(const Block& block,
   if (block == default_block_) {
     disto = default_block_disto_;
     rate = default_block_rate_;
-    *score = ComputeScore(*config_, default_block_disto_, default_block_rate_,
-                          disto, rate);
+    *score = GetRelativeScore(*config_, default_block_disto_,
+                              default_block_rate_, disto, rate);
     WP2_CHECK_STATUS(remaining_blocks_progress.AdvanceBy(1.));
   } else {
     // 'block' here is the currently evaluated size for a given position.
@@ -626,8 +628,8 @@ WP2Status SubAreaScoreFunc::GetScore(const Block& block,
                                                       &area_remaining_blocks));
 
     WP2_CHECK_STATUS(GetDistoRate(&area_remaining_blocks, &disto, &rate));
-    *score = ComputeScore(*config_, default_block_disto_, default_block_rate_,
-                          disto, rate);
+    *score = GetRelativeScore(*config_, default_block_disto_,
+                              default_block_rate_, disto, rate);
     RegisterScoreForVDebug(block, area_remaining_blocks, *score, disto, rate);
   }
   return WP2_STATUS_OK;
@@ -854,9 +856,9 @@ WP2Status MultiScoreFunc::Init(const EncoderConfig& config,
 
 //------------------------------------------------------------------------------
 
-WP2Status MultiScoreFunc::GetScore(const Block& block,
-                                   const ProgressRange& progress,
-                                   float* const score) {
+WP2Status MultiScoreFunc::ComputeScore(const Block& block,
+                                       const ProgressRange& progress,
+                                       float* const score) {
   float value = 0.f, threshold = 1.f;  // Passing if 'value <= threshold'.
   switch (pass_) {
     case Pass::LumaAlphaGradient:
@@ -1193,9 +1195,9 @@ WP2Status TileScoreFunc::Init(const EncoderConfig& config,
   return WP2_STATUS_OK;
 }
 
-WP2Status TileScoreFunc::GetScore(const Block& block,
-                                  const ProgressRange& progress,
-                                  float* const score) {
+WP2Status TileScoreFunc::ComputeScore(const Block& block,
+                                      const ProgressRange& progress,
+                                      float* const score) {
   WP2_CHECK_ALLOC_OK(blocks_.push_back(block));
   WP2_CHECK_STATUS(TryEncode(blocks_, progress, score));
   if (*score > cached_best_score_) cached_best_score_ = *score;
@@ -1310,9 +1312,9 @@ WP2Status TileScoreFunc::Use(const Block& block) {
 
 //------------------------------------------------------------------------------
 
-WP2Status FixedSizeScoreFunc::GetScore(const Block& block,
-                                       const ProgressRange& progress,
-                                       float* const score) {
+WP2Status FixedSizeScoreFunc::ComputeScore(const Block& block,
+                                           const ProgressRange& progress,
+                                           float* const score) {
   *score = (block.dim() == size_) ? 1.f : 0.f;
   WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;

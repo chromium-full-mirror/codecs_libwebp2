@@ -52,13 +52,14 @@ static inline uint32_t SubSampleSize(uint32_t size, uint32_t sampling_bits) {
 // Predictors
 
 // These Add/Sub function expects upper[-1] and out[-1] to be readable.
-typedef void (*PredictorAddSubFunc)(const uint16_t* in, bool has_alpha,
-                                    const uint16_t* upper, uint32_t num_pixels,
-                                    uint32_t channel_bits, uint16_t* out);
+typedef void (*PredictorAddSubFunc)(const int16_t* in, bool has_alpha,
+                                    const int16_t* upper, uint32_t num_pixels,
+                                    int16_t min_value, int16_t max_value,
+                                    int16_t mask, int16_t* out);
 
-typedef void (*PredictorFunc)(const uint16_t* const left,
-                              const uint16_t* const top, uint16_t max_value,
-                              uint16_t* const out);
+typedef void (*PredictorFunc)(const int16_t* left, const int16_t* top,
+                              int16_t min_value, int16_t max_value,
+                              int16_t* out);
 extern PredictorFunc Predictors[kNumPredictors];
 extern PredictorFunc Predictors_C[kNumPredictors];
 

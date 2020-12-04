@@ -28,57 +28,52 @@
 //------------------------------------------------------------------------------
 // Predictors
 
-typedef void (*PredictoAddFunc)(const uint16_t* in, const uint16_t* upper,
-                                uint32_t num_pixels, uint32_t num_bits,
-                                uint16_t* out);
-
 // Sum of each component, mod 256.
 static WP2_UBSAN_IGNORE_UNSIGNED_OVERFLOW inline void AddPixels(
-    const uint16_t* const a, bool has_alpha, const uint16_t* const b,
-    uint16_t mask, uint16_t* const out) {
-  out[0] = has_alpha ? ((a[0] + b[0]) & mask) : WP2::kAlphaMax;
+    const int16_t* const a, bool has_alpha, const int16_t* const b,
+    uint16_t mask, int16_t* const out) {
+  // TODO(vrabaud) remove 0xff alpha wrap around.
+  out[0] = has_alpha ? ((a[0] + b[0]) & 0xff) : WP2::kAlphaMax;
   for (uint32_t i = 1; i < 4; ++i) out[i] = (a[i] + b[i]) & mask;
 }
 
-static void PredictorAdd0_C(const uint16_t* in, bool has_alpha, const uint16_t*,
-                            uint32_t num_pixels, uint32_t num_bits,
-                            uint16_t* out) {
-  uint16_t pred[4];
-  const uint16_t max_value = (1u << num_bits) - 1;
-  WP2L::Predictors_C[0](/*left=*/nullptr, /*top=*/nullptr, max_value, pred);
-  for (const uint16_t* in_end = in + 4 * num_pixels; in < in_end;
+static void PredictorAdd0_C(const int16_t* in, bool has_alpha, const int16_t*,
+                            uint32_t num_pixels, int16_t min_value,
+                            int16_t max_value, int16_t mask, int16_t* out) {
+  int16_t pred[4];
+  WP2L::Predictors_C[0](/*left=*/nullptr, /*top=*/nullptr, min_value, max_value,
+                        pred);
+  for (const int16_t* in_end = in + 4 * num_pixels; in < in_end;
        in += 4, out += 4) {
-    AddPixels(in, has_alpha, pred, max_value, out);
+    AddPixels(in, has_alpha, pred, mask, out);
   }
 }
-static void PredictorAdd1_C(const uint16_t* in, bool has_alpha, const uint16_t*,
-                            uint32_t num_pixels, uint32_t num_bits,
-                            uint16_t* out) {
-  const uint16_t max_value = (1u << num_bits) - 1;
-  for (const uint16_t* in_end = in + 4 * num_pixels; in < in_end;
+static void PredictorAdd1_C(const int16_t* in, bool has_alpha, const int16_t*,
+                            uint32_t num_pixels, int16_t, int16_t, int16_t mask,
+                            int16_t* out) {
+  for (const int16_t* in_end = in + 4 * num_pixels; in < in_end;
        in += 4, out += 4) {
-    AddPixels(in, has_alpha, &out[-4], max_value, out);
+    AddPixels(in, has_alpha, &out[-4], mask, out);
   }
 }
-
 
 // Macros used to create a batch predictor that iteratively uses a
 // one-pixel predictor.
 
 // The predictor is added to the output pixel (which
 // is therefore considered as a residual) to get the final prediction.
-#define GENERATE_PREDICTOR_ADD(PREDICTOR, PREDICTOR_ADD)                      \
-  static void PREDICTOR_ADD(const uint16_t* in, bool has_alpha,               \
-                            const uint16_t* upper, uint32_t num_pixels,       \
-                            uint32_t num_bits, uint16_t* out) {               \
-    uint16_t pred[4];                                                         \
-    const uint16_t mask = (1u << num_bits) - 1;                               \
-    assert(upper != nullptr);                                                 \
-    for (const uint16_t* const out_end = out + 4 * num_pixels; out < out_end; \
-         out += 4, in += 4, upper += 4) {                                     \
-      (PREDICTOR)(&out[-4], upper, mask, pred);                               \
-      AddPixels(in, has_alpha, pred, mask, out);                              \
-    }                                                                         \
+#define GENERATE_PREDICTOR_ADD(PREDICTOR, PREDICTOR_ADD)                     \
+  static void PREDICTOR_ADD(const int16_t* in, bool has_alpha,               \
+                            const int16_t* upper, uint32_t num_pixels,       \
+                            int16_t min_value, int16_t max_value,            \
+                            int16_t mask, int16_t* out) {                    \
+    int16_t pred[4];                                                         \
+    assert(upper != nullptr);                                                \
+    for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
+         out += 4, in += 4, upper += 4) {                                    \
+      (PREDICTOR)(out - 4, upper, min_value, max_value, pred);               \
+      AddPixels(in, has_alpha, pred, mask, out);                             \
+    }                                                                        \
   }
 
 namespace WP2L {
@@ -103,12 +98,14 @@ GENERATE_PREDICTOR_ADD(Predictors_C[14], PredictorAdd14_C)
 // Inverse prediction.
 static void PredictorInverseTransform_C(const Transform* const transform,
                                         int y_start, int y_end,
-                                        uint32_t num_bits, const uint16_t* in,
-                                        bool has_alpha, uint16_t* out) {
+                                        int16_t min_value, int16_t max_value,
+                                        int16_t mask, const int16_t* in,
+                                        bool has_alpha, int16_t* out) {
   const int width = transform->width_;
   if (y_start == 0) {  // First Row follows the L (mode=1) mode.
-    PredictorAdd0_C(in, has_alpha, nullptr, 1, num_bits, out);
-    PredictorAdd1_C(in + 4, has_alpha, nullptr, width - 1, num_bits, out + 4);
+    PredictorAdd0_C(in, has_alpha, nullptr, 1, min_value, max_value, mask, out);
+    PredictorAdd1_C(in + 4, has_alpha, nullptr, width - 1, min_value, max_value,
+                    mask, out + 4);
     in += 4 * width;
     out += 4 * width;
     ++y_start;
@@ -117,7 +114,7 @@ static void PredictorInverseTransform_C(const Transform* const transform,
   {
     int y = y_start;
     const int tile_width = 1 << transform->bits_;
-    const int mask = tile_width - 1;
+    const int tile_mask = tile_width - 1;
     const int tiles_per_row = SubSampleSize(width, transform->bits_);
     const int16_t* pred_mode_base =
         transform->data_.data() + 4 * (y >> transform->bits_) * tiles_per_row;
@@ -126,21 +123,23 @@ static void PredictorInverseTransform_C(const Transform* const transform,
       const int16_t* pred_mode_src = pred_mode_base;
       int x = 1;
       // First pixel follows the T (mode=2) mode.
-      PredictorAdd2_C(in, has_alpha, out - 4 * width, 1, num_bits, out);
+      PredictorAdd2_C(in, has_alpha, out - 4 * width, 1, min_value, max_value,
+                      mask, out);
       // .. the rest:
       while (x < width) {
         const PredictorAddSubFunc pred_func = PredictorsAdd[pred_mode_src[2]];
-        int x_end = (x & ~mask) + tile_width;
+        int x_end = (x & ~tile_mask) + tile_width;
         if (x_end > width) x_end = width;
         pred_func(in + 4 * x, has_alpha, out + 4 * x - 4 * width, x_end - x,
-                  num_bits, out + 4 * x);
+                  min_value, max_value, mask, out + 4 * x);
         x = x_end;
         pred_mode_src += 4;
       }
       in += 4 * width;
       out += 4 * width;
       ++y;
-      if ((y & mask) == 0) {   // Use the same mask, since tiles are squares.
+      // Use the same mask, since tiles are squares.
+      if ((y & tile_mask) == 0) {
         pred_mode_base += 4 * tiles_per_row;
       }
     }
@@ -274,8 +273,12 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
                            out);
       break;
     case PREDICTOR_TRANSFORM: {
-      PredictorInverseTransform_C(transform, row_start, row_end, channel_bits,
-                                  in, has_alpha, out);
+      const int16_t min_value = 0;
+      const int16_t max_value = (1 << channel_bits) - 1;
+      const int16_t mask = (1 << channel_bits) - 1;
+      PredictorInverseTransform_C(transform, row_start, row_end, min_value,
+                                  max_value, mask, (int16_t*)in, has_alpha,
+                                  (int16_t*)out);
       if (row_end != transform->height_) {
         // The last predicted row in this iteration will be the top-pred row
         // for the first row in next iteration.
@@ -332,6 +335,5 @@ WP2_TSAN_IGNORE_FUNCTION void DecLDspInit() {
   }
   lossless_last_cpuinfo_used = WP2GetCPUInfo;
 }
-#undef COPY_PREDICTOR_ARRAY
 
 }  // namespace WP2L

@@ -64,10 +64,10 @@ class Encoder {
 
   uint16_t* argb_;                       // Transformed argb image data.
   EncoderARGBContent argb_content_;      // Content type of the argb buffer.
-  uint16_t* argb_scratch_;               // Scratch memory for argb rows
+  int16_t* argb_scratch_;                // Scratch memory for argb rows
                                          // (used for prediction).
   int16_t* transform_data_;              // Scratch memory for transform data.
-  WP2::Vector_u16 transform_mem_;        // Currently allocated memory.
+  WP2::Vector_s16 transform_mem_;        // Currently allocated memory.
 
   // Encoding parameters derived from quality parameter.
   uint32_t histo_bits_;
@@ -144,8 +144,8 @@ uint32_t DistanceToPlaneCode(uint32_t width, uint32_t dist);
 // Image transforms in predictor_enc.cc
 
 WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
-                        uint32_t channel_bits, int effort, uint16_t* const argb,
-                        bool has_alpha, uint16_t* const argb_scratch,
+                        uint32_t channel_bits, int effort, int16_t* const argb,
+                        bool has_alpha, int16_t* const argb_scratch,
                         int16_t* const image);
 
 WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
