@@ -120,30 +120,34 @@ void RepulseFutureVerticesFrom(const VertexIndexedColor& point,
 
 //------------------------------------------------------------------------------
 
-float GetDiff(const ArgbBuffer& reference, const ArgbBuffer& canvas,
+float GetDiff(const Plane8u& diff_map,
               uint32_t pixel_x, uint32_t pixel_y,
               uint32_t grid_w, uint32_t grid_h,
-              int radius = 0) {
-  assert(canvas.width() == reference.width());
-  assert(canvas.height() == reference.height());
-  const uint32_t cx = DivRound(pixel_x * (canvas.width() - 1), grid_w - 1);
-  const uint32_t cy = DivRound(pixel_y * (canvas.height() - 1), grid_h - 1);
+              int radius = 3) {
+  const int x_limit = diff_map.w_ - 1;
+  const int y_limit = diff_map.h_ - 1;
+  const int cx = DivRound(pixel_x * x_limit, grid_w - 1);
+  const int cy = DivRound(pixel_y * y_limit, grid_h - 1);
   float diff = 0.f;
-  const int y_limit = canvas.height() - 1;
-  const int x_limit = canvas.width() - 1;
   for (int dy = -radius; dy <= radius; ++dy) {
-    const uint32_t y = (uint32_t)Clamp((int)cy + dy, 0, y_limit);
+    const uint32_t y = Clamp(cy + dy, 0, y_limit);
+    const uint8_t* const diff_ptr = diff_map.Row(y);
     for (int dx = -radius; dx <= radius; ++dx) {
-      const uint32_t x = (uint32_t)Clamp((int)cx + dx, 0, x_limit);
-      const uint8_t* const argb_reference = reference.GetRow8(y) + 4 * x;
-      const uint8_t* const argb_canvas = canvas.GetRow8(y) + 4 * x;
-      for (uint32_t c = 0; c < 4; ++c) {
-        diff += std::abs((float)argb_reference[c] - argb_canvas[c]);
-      }
+      diff += diff_ptr[Clamp(cx + dx, 0, x_limit)];
     }
   }
   const uint32_t dim = 2 * radius + 1;
   return diff / (dim * dim);
+}
+
+WP2Status Randomize(uint32_t size, uint16_t w, uint16_t h, uint32_t seed,
+                    Vector<VertexIndexedColor>& vertices) {
+  WP2_CHECK_ALLOC_OK(vertices.resize(size));
+  UniformIntDistribution rnd(seed);
+  for (auto& v : vertices) {
+    v = { rnd.Get<uint16_t>(0, w), rnd.Get<uint16_t>(0, h), 0 };
+  }
+  return WP2_STATUS_OK;
 }
 
 }  // namespace
@@ -214,6 +218,9 @@ WP2Status CollectVerticesFromColorDiffMaximization(
   ArgbBuffer result;
   WP2_CHECK_STATUS(result.Resize(canvas.width(), canvas.height()));
 
+  Plane8u diff_map;
+  WP2_CHECK_STATUS(diff_map.Resize(canvas.width(), canvas.height()));
+
   const uint32_t w = preview->grid_width_, h = preview->grid_height_;
   Vector_u8 used;  // Vector does not handle bool very well
   WP2_CHECK_ALLOC_OK(used.resize(w * h));
@@ -229,34 +236,53 @@ WP2Status CollectVerticesFromColorDiffMaximization(
   WP2_CHECK_STATUS(triangulation.Create(*preview));
 
   // Greedily add vertices one at a time.
+  float best_diff = 0.;
+  UniformIntDistribution rnd(/*seed=*/52323);
   for (uint32_t i = 0; i < max_num_vertices; ++i) {
     uint32_t num_covered_pixels = 0;
     WP2_CHECK_STATUS(
         triangulation.FillTriangles(*preview, &result, &num_covered_pixels));
     assert(num_covered_pixels >= result.width() * result.height());
 
-    float best_diff = -1.f;
-    uint32_t best_offset = 0;
+    // store the diff map
+    for (uint16_t y = 0; y < result.height(); ++y) {
+      const uint8_t* src1 = canvas.GetRow8(y);
+      const uint8_t* src2 = result.GetRow8(y);
+      uint8_t* const dst = diff_map.Row(y);
+      for (uint16_t x = 0; x < result.width(); ++x) {
+        dst[x] = (std::abs(src1[0] - src2[0]) +
+                  std::abs(src1[1] - src2[1]) +
+                  std::abs(src1[2] - src2[2]) +
+                  std::abs(src1[3] - src2[3])) >> 2;
+        src1 += 4;
+        src2 += 4;
+      }
+    }
+
+    int32_t best_offset = -1;
+    best_diff *= 0.2;  // next vertex will have to be better by 20% at least
     VertexIndexedColor best_vtx = { 0, 0, (uint16_t)palette.size() };
-    for (uint16_t y = 0; y < h; ++y) {
-      for (uint16_t x = 0; x < w; ++x) {
-        if (preview->IsCorner(x, y)) continue;
-        const uint32_t offset = x + y * w;
-        if (used[offset]) continue;
-        const float diff = GetDiff(canvas, result, x, y, w, h);
-        assert(diff >= 0.f);
-        if (diff > best_diff) {
+    // sample ~20% of the image to find the most-offending spot
+    for (uint32_t n = w * h / 5; n > 0; --n) {
+      const uint16_t x = rnd.Get(0u, w - 1);
+      const uint16_t y = rnd.Get(0u, h - 1);
+      if (preview->IsCorner(x, y)) continue;
+      const uint32_t offset = x + y * w;
+      if (used[offset]) continue;
+      const float diff = GetDiff(diff_map, x, y, w, h);
+      assert(diff >= 0.f);
+        if (diff >= best_diff) {
           best_diff = diff;
           best_vtx.x = x;
           best_vtx.y = y;
           best_offset = offset;
         }
-      }
     }
-    if (best_diff < 0) break;
+    if (best_offset < 0) break;
     used[best_offset] = 1u;
     const uint32_t cx = best_vtx.x * (canvas.width() - 1) / (w - 1);
     const uint32_t cy = best_vtx.y * (canvas.height() - 1) / (h - 1);
+
     const AYCoCg19b col =
         ToAYCoCg19b(GetAverageColor(canvas, avg_radius, cx, cy));
     WP2_CHECK_ALLOC_OK(palette.push_back(col));
@@ -279,7 +305,8 @@ WP2Status CollectVerticesFromRandomEdgeSelection(
   WP2_CHECK_STATUS(edges.Resize(preview->grid_width_, preview->grid_height_));
   WP2_CHECK_STATUS(DetectEdges(canvas, &edges));
 
-  // Remove isolated vertices.
+  // Remove isolated edge points.
+  int16_t max_value = 0;
   for (uint16_t y = 1; y < edges.h_ - 1; ++y) {
     auto* const row = edges.Row(y);
     for (uint16_t x = 1; x < edges.w_ - 1; ++x) {
@@ -288,48 +315,47 @@ WP2Status CollectVerticesFromRandomEdgeSelection(
                            (row[x] > row[x - 1]) +
                            (row[x] > row[x - edges.step_]));
       if (nb >= 3) row[x] = 0;
+      max_value = std::max(max_value, row[x]);
     }
   }
-
-  struct Candidate {
-    uint16_t x, y, score;
-    bool operator<(const Candidate& other) const {
-      return (score > other.score);
-    }
-  };
-
-  const uint32_t num_best_candidates = 2 * max_num_vertices;
-  Vector<Candidate> candidates_heap;
-  WP2_CHECK_ALLOC_OK(candidates_heap.reserve(num_best_candidates));
-
-  // Discard but the best 'num_kept_vertices' candidates.
-  for (uint16_t y = 0; y < edges.h_; ++y) {
-    auto* const row = edges.Row(y);
-    for (uint16_t x = 0; x < edges.w_; ++x) {
-      if (preview->IsCorner(x, y)) continue;
-      if (row[x] > 0) {
-        if (candidates_heap.size() == candidates_heap.capacity()) {
-          std::pop_heap(candidates_heap.begin(), candidates_heap.end());
-          candidates_heap.pop_back();
+  WP2_CHECK_STATUS(Randomize(max_num_vertices, edges.w_, edges.h_,
+                             /*seed=*/64212, vertices));
+  constexpr uint32_t kNumIters = 5;
+  // sets the noise floor to be at least '15' unless max_value is large already
+  max_value = std::max(15, max_value / 50);
+  for (uint32_t N = 0; N < kNumIters; ++N) {
+    uint32_t nb_moved = 0;
+    for (uint16_t y = 0; y < edges.h_; ++y) {
+      const int16_t* const row = edges.Row(y);
+      for (uint16_t x = 0; x < edges.w_; ++x) {
+        if (preview->IsCorner(x, y) || row[x] < max_value) continue;
+        VertexIndexedColor* best_v = &vertices[0];
+        uint32_t best_dist2 = 0xffffffff;
+        for (auto& v : vertices) {
+          const uint32_t dist2 = (v.x - x) * (v.x - x) + (v.y - y) * (v.y - y);
+          if (dist2 <= best_dist2) {
+            best_v = &v;
+            best_dist2 = dist2;
+          }
         }
-        WP2_CHECK_ALLOC_OK(candidates_heap.push_back(
-            {x, y, (uint16_t)row[x]}, /*resize_if_needed=*/false));
-        std::push_heap(candidates_heap.begin(), candidates_heap.end());
+        if (best_v->color_index < row[x]) {
+          *best_v = { x, y, (uint16_t)row[x] };
+          ++nb_moved;
+        }
       }
     }
+    if (nb_moved == 0) break;
   }
-  max_num_vertices =
-      std::min((uint32_t)candidates_heap.size(), max_num_vertices);
 
-  // Randomly pick at most 'max_num_vertices' from the 'num_best_candidates'.
-  const uint32_t random_seed = edges.w_ + edges.h_;
-  Shuffle(candidates_heap.begin(), candidates_heap.end(), random_seed);
-
-  WP2_CHECK_ALLOC_OK(vertices.resize(max_num_vertices));
-  for (uint32_t i = 0; i < max_num_vertices; ++i) {
-    const Candidate candidate = candidates_heap[i];
-    vertices[i] = {candidate.x, candidate.y, 0};
+  uint32_t size = 0;
+  for (uint32_t i = 0; i < vertices.size(); ++i) {
+    if (vertices[i].color_index > 0) {
+      if (size < i) vertices[size] = vertices[i];
+      vertices[size].color_index = 0;
+      ++size;
+    }
   }
+  vertices.resize_no_check(size);
   return WP2_STATUS_OK;
 }
 
@@ -604,11 +630,7 @@ WP2Status CollectVerticesFromVoronoiCells(const ArgbBuffer& canvas,
 
   // initial random vertices
   uint32_t num_vertices = std::min(20u, max_num_vertices / 5u);
-  WP2_CHECK_ALLOC_OK(vertices.resize(num_vertices));
-  UniformIntDistribution rnd(/*seed=*/5543);
-  for (auto& v : vertices) {
-    v = { rnd.Get<uint16_t>(0, w), rnd.Get<uint16_t>(0, h), 0 };
-  }
+  WP2_CHECK_STATUS(Randomize(num_vertices, w, h, /*seed=*/5543, vertices));
 
   Vector<VoronoiCell> cells;
   WP2_CHECK_ALLOC_OK(cells.reserve(max_num_vertices));

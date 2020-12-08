@@ -122,6 +122,39 @@ extern WP2ErrorTracer* wp2_error_tracer;
 #endif
 #endif  // WP2_MAX_ALLOCABLE_MEMORY
 
+// This singleton class is used to wrap alloc/calloc/free into
+// a customizable set of function hooks.
+// Not necessarily thread-safe (although the default implementation is):
+// if you change the library hook with WP2SetMemoryHook() while the library
+// is being used, very bad things will happen!
+// Subclass implementation should pay extra attention to mutex and locking.
+struct WP2MemoryHook {
+  // called for book-keeping purpose after WP2Malloc/WP2Calloc.
+  // Should return 'false' if the allocation should be aborted.
+  // Should *not* call Free() in case of abort.
+  virtual bool Register(void* ptr, size_t size) { return ptr; }
+  // called before a disallocation in WP2Free()
+  virtual void Unregister(void* ptr) {}
+
+  // customizable relays toward system calls.
+  virtual void* Malloc(size_t size);
+  virtual void* Calloc(size_t count, size_t size);
+  virtual void Free(void *ptr);
+
+  virtual ~WP2MemoryHook() {}
+
+  // returns false in case of size_t overflow of 'nmemb * size' evaluation
+  static bool CheckSizeArgumentsOverflow(uint64_t nmemb, size_t size);
+};
+
+// Change the global memory hook used by the whole library.
+// Should only be changed *before* any call to the library. Changing these
+// functions in-flight *will* be painful! Please pay attention to any hidden
+// or static allocations (in ctor, for instance) that may occur before you
+// call this function to change the memory hooks!
+// Returns the previous hook, or the currently set hook if 'hook' is null.
+WP2MemoryHook* WP2SetMemoryHook(WP2MemoryHook* hook);
+
 //------------------------------------------------------------------------------
 // Memory functions
 
@@ -131,10 +164,6 @@ extern WP2ErrorTracer* wp2_error_tracer;
 // in order to favor the "calloc(num_foo, sizeof(foo))" pattern.
 WP2_EXTERN void* WP2Malloc(uint64_t num_elements, size_t element_size);
 WP2_EXTERN void* WP2Calloc(uint64_t num_elements, size_t element_size);
-// Don't forget to deallocate 'ptr' if WP2Realloc() returns nullptr.
-WP2_EXTERN void* WP2Realloc(void* const ptr, uint64_t num_elements,
-                            size_t element_size);
-
 // Releases memory allocated by the functions above or by WP2Decode*().
 WP2_EXTERN void WP2Free(void* ptr);
 

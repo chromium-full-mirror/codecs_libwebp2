@@ -583,7 +583,8 @@ void CodedBlock::GetResiduals(Channel channel, const Plane16& prediction,
 void CodedBlock::TransformAndReconstruct(const QuantMtx& quant, Channel channel,
                                          bool reduced_transform,
                                          const Plane16& prediction,
-                                         BlockCoeffs32* const res) {
+                                         const BlockCoeffs32* const res,
+                                         BlockCoeffs32* const tmp) {
   const CodingParams* const params = GetCodingParams(channel);
 
   const BlockSize split_size =
@@ -617,8 +618,8 @@ void CodedBlock::TransformAndReconstruct(const QuantMtx& quant, Channel channel,
       mtx_set_->DecideUseRndMtx(this);  // TODO(skal): later: U/V channel?
     }
   }
-  Dequantize(quant, channel, res);
-  Reconstruct(channel, reduced_transform, res, prediction);
+  Dequantize(quant, channel, tmp);
+  Reconstruct(channel, reduced_transform, tmp, prediction);
 }
 
 void CodedBlock::Reconstruct(Channel channel, bool reduced_transform,
@@ -661,7 +662,7 @@ void CodedBlock::Quantize(const QuantMtx& quant, Channel channel,
   PredictBlock(channel, out->Row(0), out->Step());
   GetResiduals(channel, /*prediction=*/*out, &res);
   TransformAndReconstruct(quant, channel, reduced_transform,
-                          /*prediction=*/*out, &res);
+                          /*prediction=*/*out, &res, /*tmp=*/&res);
 }
 
 void CodedBlock::Dequantize(const QuantMtx& quant, Channel channel,
@@ -725,7 +726,7 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
     }
     StorePredictionScore(config, tile_rect, channel, *params->pred, tf,
                          distortion, lambda, res_rate, /*pred_rate=*/0, tf_rate,
-                         current_score, is_best);
+                         current_score, is_best, SearchType::kTransform);
   }
 
   params->tf = best_tf;
@@ -887,7 +888,7 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
     }
     StorePredictionScore(config, tile_rect, channel, *params->pred, params->tf,
                          distortion, lambda, res_rate, /*pred_rate=*/0, tf_rate,
-                         current_score, is_best);
+                         current_score, is_best, SearchType::kSplit);
   }
 
   params->split_tf = best_split_tf;

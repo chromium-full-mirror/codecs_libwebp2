@@ -620,6 +620,7 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
   WP2_CHECK_OK((width() == ref.width()) && (height() == ref.height()),
                WP2_STATUS_BAD_DIMENSION);
   WP2_CHECK_OK(x < width() && y < height(), WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(ref.format() == format(), WP2_STATUS_INVALID_COLORSPACE);
 
   double total = 0.;
   if (metric_type == PSNR) {
@@ -638,7 +639,7 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     const uint32_t yy = std::max(0, (int)y - 8);
     const uint32_t w = std::min(xx + 16, width()) - xx;
     const uint32_t h = std::min(yy + 16, height()) - yy;
-    ArgbBuffer tmp1, tmp2;
+    ArgbBuffer tmp1(ref.format()), tmp2(format());
     WP2_CHECK_STATUS(tmp1.SetView(ref, {xx, yy, w, h}));
     WP2_CHECK_STATUS(tmp2.SetView(*this, {xx, yy, w, h}));
     float results[5];

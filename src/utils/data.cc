@@ -17,6 +17,7 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>  // for std::min
 #include <cstring>  // for memcpy()
 
 #include "src/utils/utils.h"
@@ -38,15 +39,16 @@ WP2Status Data::Resize(size_t data_size, bool keep_bytes) {
   if (size == data_size) return WP2_STATUS_OK;
   if (data_size == 0) {
     Clear();
-  } else if (keep_bytes) {
-    uint8_t* const new_bytes = (uint8_t*)WP2Realloc(bytes, 1, data_size);
-    WP2_CHECK_ALLOC_OK(new_bytes != nullptr);
-    bytes = new_bytes;
-    size = data_size;
   } else {
-    Clear();
-    bytes = (uint8_t*)WP2Malloc(data_size, sizeof(*bytes));
-    WP2_CHECK_ALLOC_OK(bytes != nullptr);
+    if (!keep_bytes) Clear();
+    uint8_t* const new_bytes = (uint8_t*)WP2Malloc(1ull, data_size);
+    WP2_CHECK_ALLOC_OK(new_bytes != nullptr);
+    if (keep_bytes) {
+      const size_t to_copy = std::min(size, data_size);
+      memcpy(new_bytes, bytes, to_copy);
+      Clear();
+    }
+    bytes = new_bytes;
     size = data_size;
   }
   return WP2_STATUS_OK;

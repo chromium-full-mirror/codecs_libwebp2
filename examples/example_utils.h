@@ -70,6 +70,31 @@ static inline void ExUtilDisableSIMD() {}
 #endif  // WP2_DLL
 
 //------------------------------------------------------------------------------
+// Custom memory allocators
+
+// This custom memory hook will trace alloc/free.
+// An interesting alternative is valgrind's 'massif' tool:
+//    http://valgrind.org/docs/manual/ms-manual.html
+// Here is an example command line:
+/*    valgrind --tool=massif --massif-out-file=massif.out \
+               --stacks=yes --alloc-fn=WP2Malloc --alloc-fn=WP2Calloc && \
+      ms_print massif.out
+*/
+
+extern struct MemoryTrace : public WP2MemoryHook {
+  ~MemoryTrace() override;   // will print information to stderr
+
+  // diverted calls to record/control traffic:
+  bool Register(void* ptr, size_t size) override;
+  void Unregister(void* ptr) override;
+
+  bool print_info = false;      // print summary at destruction (if not implied)
+  bool show_traffic = false;    // prints all the malloc/free calls
+  int countdown_to_fail = 0;    // fails after n mallocs calls. 0 = off.
+  size_t memory_limit = 0;      // limit to total memory allocated. 0 = off.
+} kMemoryTrace;  // singleton
+
+//------------------------------------------------------------------------------
 // Distortion
 
 static const char* const kMetricNames[] = {
@@ -78,14 +103,14 @@ STATIC_ASSERT_ARRAY_SIZE(kMetricNames, WP2::NUM_METRIC_TYPES);
 
 // Computes and prints the distortion of the compressed image stored in 'data'
 // compared to 'refs' (single image or several frames if it's an animation).
-void PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
-                     const uint8_t* const data, size_t data_size,
-                     WP2::MetricType metric, bool short_output);
+WP2Status PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
+                          const uint8_t* const data, size_t data_size,
+                          WP2::MetricType metric, bool short_output);
 
 // One-liner for still images because ArgbBuffer doesn't provide a copy ctor.
-void PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
-                     size_t data_size, WP2::MetricType metric,
-                     bool short_output);
+WP2Status PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
+                          size_t data_size, WP2::MetricType metric,
+                          bool short_output);
 
 //------------------------------------------------------------------------------
 // Bit trace
@@ -228,9 +253,9 @@ static inline void PrintBitTraces(const WP2::DecoderInfo& info,
 }
 #endif  // WP2_BITTRACE
 
-void CollectBitTraces(const uint8_t* const data, size_t data_size,
-                      int bit_trace, uint32_t bit_trace_level,
-                      bool short_output, bool show_histograms);
+WP2Status CollectBitTraces(const uint8_t* const data, size_t data_size,
+                           int bit_trace, uint32_t bit_trace_level,
+                           bool short_output, bool show_histograms);
 
 //------------------------------------------------------------------------------
 
@@ -248,24 +273,28 @@ static inline std::string SPrintf(const char* format, ...) {
   return result;
 }
 
-// verify the status of a 'call' and exit upon error with an error-message
-#define EXIT_IF_ERROR(call, error_format, ...)                              \
-  do {                                                                      \
-    const WP2Status local_status = (call);                                  \
-    if (local_status != WP2_STATUS_OK) {                                    \
-      fprintf(stderr, (error_format), ##__VA_ARGS__);                       \
-      fprintf(stderr, "\nStatus: %s\n", WP2GetStatusMessage(local_status)); \
-      exit(1);                                                              \
-    }                                                                       \
+// verify the status of a 'call' and print some error message to stderr
+#define CHECK_STATUS(call, error_format, ...)                                 \
+  do {                                                                        \
+    const WP2Status local_status = (call);                                    \
+    if (local_status != WP2_STATUS_OK) {                                      \
+      if (strcmp((error_format), "")) {                                       \
+        fprintf(stderr, (error_format), ##__VA_ARGS__);                       \
+        fprintf(stderr, "\nStatus: %s\n", WP2GetStatusMessage(local_status)); \
+      }                                                                       \
+      return local_status;                                                    \
+    }                                                                         \
   } while (0)
 
-#define EXIT_IF_FALSE(call, error_format, ...)        \
-  do {                                                \
-    if (!(call)) {                                    \
-      fprintf(stderr, (error_format), ##__VA_ARGS__); \
-      fprintf(stderr, "\n");                          \
-      exit(1);                                        \
-    }                                                 \
+#define CHECK_TRUE(call, error_format, ...)             \
+  do {                                                  \
+    if (!(call)) {                                      \
+      if (strcmp((error_format), "")) {                 \
+        fprintf(stderr, (error_format), ##__VA_ARGS__); \
+        fprintf(stderr, "\n");                          \
+      }                                                 \
+      return WP2_STATUS_INVALID_PARAMETER;              \
+    }                                                   \
   } while (0)
 
 std::string PrintSummary(const WP2::BitstreamFeatures& bitstream,
@@ -273,6 +302,8 @@ std::string PrintSummary(const WP2::BitstreamFeatures& bitstream,
 
 //------------------------------------------------------------------------------
 // Tools for working with directories.
+
+typedef std::vector<std::string> FileList;   // handy shortcut
 
 // Join 'prefix' and 'suffix' with the OS' path separator, if not already there.
 std::string JoinPath(const std::string& prefix, const std::string& suffix);
@@ -291,7 +322,7 @@ bool IsDirectory(const std::string& path);
 
 // Append the paths of all files in 'dir_path' to 'files'.
 bool GetFilesIn(const std::string& dir_path,
-                std::vector<std::string>* const files, bool recursive);
+                FileList* const files, bool recursive);
 
 // Combine input file name and output directory path to form an output file path
 // with the given 'extension'.
@@ -332,6 +363,8 @@ class ProgramOptions {
   void Add(const char arg[], const std::string& desc);
   // Adds system options -noasm, -version, -h.
   void AddSystemOptionSection();
+  // Add some memory-debugging options (in debug mode)
+  void AddMemoryOptionSection();
   // Adds metric options:  -ssim, -msssim, -psnr, -lsim, -psnrhvs.
   void AddMetricOptions();
   // Prints the compiled options with the formatting described above.
@@ -344,6 +377,10 @@ class ProgramOptions {
   // Leaves type untouched if nothing was found. Returns true if one was found.
   WP2_NO_DISCARD
   static bool ParseMetricOptions(const char* const arg, WP2::MetricType* type);
+  // Parses the 'main' argument for memory-related option.
+  // Returns true if some memory-related options were parsed, false otherwise.
+  WP2_NO_DISCARD
+  static bool ParseMemoryOptions(char* arg[], int argc, int& skip);
 
  private:
   // Contains pairs of argument and description. If it is just a

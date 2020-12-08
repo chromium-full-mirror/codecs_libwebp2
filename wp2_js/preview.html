@@ -258,7 +258,7 @@ Preview.prototype.ReadPalette = function(reader) {
   var stats_cg  = new ValueStats;
   var pred = Color(kYCoCgMax >> 1, kYCoCgMax >> 1, 0, 255);  // predictor
   for (var i = 0; i < this.num_colors; ++i) {
-    if (this.has_alpha) pred.a ^= reader.NextAdaptiveBit(alpha);
+    if (this.has_alpha && reader.NextAdaptiveBit(alpha)) pred.a = 1 - pred.a;
     var y  = pred.r = reader.ReadAValue(stats_yco, false, pred.r);
     var co = pred.g = reader.ReadAValue(stats_yco, false, pred.g);
     var cg = pred.b = reader.ReadAValue(stats_cg,  true,  pred.b);

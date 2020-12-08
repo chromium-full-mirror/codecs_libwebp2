@@ -47,6 +47,10 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
   MemoryWriter memory_writer;
   const WP2Status encoder_status =
       animation_encoder.Encode(&memory_writer, config, loop_forever);
+  if (config.progress_hook != nullptr) {
+    if (encoder_status != WP2_STATUS_USER_ABORT) abort();
+    return 0;
+  }
   if (encoder_status != WP2_STATUS_OK) abort();
 
   // Verify that it decodes fine and that the result is close enough.

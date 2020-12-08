@@ -99,13 +99,8 @@ static WP2Status FillBorders(const BitstreamFeatures& features,
   const Rectangle& window = frame.window;
   assert(window.x + window.width <= width);
   assert(window.y + window.height <= height);
-
-  const Rectangle top(0, 0, width, window.y);
-  const Rectangle bot(0, window.y + window.height, width,
-                      height - (window.y + window.height));
-  const Rectangle lft(0, window.y, window.x, window.height);
-  const Rectangle rgt(window.x + window.width, window.y,
-                      width - (window.x + window.width), window.height);
+  Rectangle top, bot, lft, rgt;
+  Rectangle(0, 0, width, height).Exclude(window, &top, &bot, &lft, &rgt);
 
   if (rgb_output != nullptr) {
     if (WP2FormatBpc(rgb_output->format()) == 1) {

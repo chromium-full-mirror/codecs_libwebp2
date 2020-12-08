@@ -446,7 +446,7 @@ class Params {
   std::string visual_debug_ = "decompressed";    // displayed debug output
 
   bool view_only_ = false;
-  ArgbBuffer in_ = ArgbBuffer(WP2_ARGB_32);  // original samples in RGB
+  ArgbBuffer in_ = ArgbBuffer(WP2_ARGB_32);  // original samples in ARGB
   ArgbBuffer in_yuv_;  // original alpha, Y, U or V samples
   // image shown on spacebar (can be a view on 'in' or 'in_yuv')
   ArgbBuffer original_;
@@ -1182,8 +1182,7 @@ WP2Status ComputeErrorMap(MetricType metric, const ArgbBuffer& original,
                           ArgbBuffer* const error_map,
                           DecoderInfo* const info = nullptr) {
   WP2_CHECK_OK(decoded.width() == original.width() &&
-                   decoded.height() == original.height(),
-               WP2_STATUS_BAD_DIMENSION);
+               decoded.height() == original.height(), WP2_STATUS_BAD_DIMENSION);
   WP2_CHECK_STATUS(error_map->Resize(original.width(), original.height()));
   const double norm = (metric == PSNR) ? 5. : (metric == LSIM) ? 5. : 8.;
   for (uint32_t y = 0; y < error_map->height(); ++y) {
@@ -1353,17 +1352,23 @@ bool Params::DecodeOutput() {
                               : VDMatch(dec_config_, "LSIM")   ? LSIM
                               : VDMatch(dec_config_, "MSSSIM") ? MSSSIM
                                                                : SSIM;
+    ArgbBuffer in_premultiplied(WP2_Argb_32);
+    if (in_premultiplied.ConvertFrom(in_) != WP2_STATUS_OK) {
+      SetError("Error: Conversion to Argb failed!");
+      fprintf(stderr, "Conversion to Argb failed!\n");
+      return false;
+    }
     if (VDMatch(dec_config_, "diff-with-alt")) {
       if (alt1_.IsEmpty()) {
         SetError("alt-1 is empty");
-      } else if (ComputeDiffMap(metric, in_, out_, alt1_,
+      } else if (ComputeDiffMap(metric, in_premultiplied, out_, alt1_,
                                 &dec_config_.info->debug_output,
                                 dec_config_.info) != WP2_STATUS_OK) {
         SetError("Error: Diff map computation failed");
         fprintf(stderr, "Diff map computation failed\n");
         return false;
       }
-    } else if (ComputeErrorMap(metric, in_, out_,
+    } else if (ComputeErrorMap(metric, in_premultiplied, out_,
                                &dec_config_.info->debug_output,
                                dec_config_.info) != WP2_STATUS_OK) {
       SetError("Error: Error map computation failed");
@@ -1903,8 +1908,9 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
     msg->push_back(SPrintf("size: %2d x %2d  pos: %3d x %3d  %s",
                            bw, bh, bx, by, forced ? "(forced)" : ""));
     float disto[5];
-    const Rectangle rect{(uint32_t)bx, (uint32_t)by, (uint32_t)bw,
-                         (uint32_t)bh};
+    const Rectangle rect{(uint32_t)bx, (uint32_t)by,
+                         std::min<uint32_t>(bw, width_ - bx),
+                         std::min<uint32_t>(bh, height_ - by)};
     WP2_ASSERT_STATUS(out_.GetDistortionBlackOrWhiteBackground(
         in_, rect, distortion_metric_, disto));
     msg->push_back(SPrintf("bits:%5.1f (%.2f bpp) %s:%5.1f", b.bits,
@@ -2489,9 +2495,11 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
                     (uint32_t)einfo_.force_predictor.size(),
                     (uint32_t)einfo_.force_transform.size()));
   } else if (key == 'd') {
-    EXIT_IF_FALSE(WritePartition(force_partition_, partition_file_path_),
-                  "Error: Unable to write partition file");
-    AddInfo(SPrintf("Dumped %u blocks", (uint32_t)force_partition_.size()));
+    if (!WritePartition(force_partition_, partition_file_path_)) {
+      fprintf(stderr, "Error: Unable to write partition file");
+    } else {
+      AddInfo(SPrintf("Dumped %u blocks", (uint32_t)force_partition_.size()));
+    }
   } else if (key == 'D') {
     if (ReadAndConvertPartition(/*read_only=*/true)) {
       AddInfo(SPrintf("Loaded %u blocks", (uint32_t)force_partition_.size()));
@@ -3197,6 +3205,7 @@ void Help() {
   opt.Add("-info", "print info overlay");
   opt.Add("-title <text>", "set a custom title for the window");
   opt.Add("");
+  opt.AddMemoryOptionSection();
   // System options.
   opt.AddSystemOptionSection();
   opt.Print();
@@ -3218,7 +3227,7 @@ using WP2::Help;
 using WP2::Params;
 
 int main(int argc, char* argv[]) {
-  EXIT_IF_FALSE(WP2CheckVersion(), "Error! Library version mismatch!");
+  CHECK_TRUE(WP2CheckVersion(), "Error! Library version mismatch!");
 
   Params params;
   WP2::global_params = &params;
@@ -3268,7 +3277,7 @@ int main(int argc, char* argv[]) {
         params.enc_config_.segment_id_mode =
             WP2::EncoderConfig::SEGMENT_ID_IMPLICIT;
       } else {
-        EXIT_IF_FALSE(false, "unsupported segment mode '%s'", argv[c]);
+        CHECK_TRUE(false, "unsupported segment mode '%s'", argv[c]);
       }
     } else if (!strcmp(argv[c], "-pass") && c + 1 < argc) {
       params.enc_config_.pass = ExUtilGetInt(argv[++c], &parse_error);
@@ -3352,8 +3361,12 @@ int main(int argc, char* argv[]) {
       }
     } else if (argv[c][0] == '-') {
       bool must_stop;
+      int skip;
       if (WP2::ProgramOptions::ParseSystemOptions(argv[c], &must_stop)) {
         if (must_stop) return 0;
+      } else if (WP2::ProgramOptions::ParseMemoryOptions(argv + c, argc - c,
+                                                         skip)) {
+        c += skip - 1;
       } else {
         printf("Unknown option '%s'\n", argv[c]);
         parse_error = true;
@@ -3377,13 +3390,12 @@ int main(int argc, char* argv[]) {
   if (!params.SetCurrentFile(0)) return 1;
 
   if (read_initial_partition) {
-    EXIT_IF_FALSE(params.ReadAndConvertPartition(/*read_only=*/false),
-                  "Error: Unable to parse partition file");
+    CHECK_TRUE(params.ReadAndConvertPartition(/*read_only=*/false),
+               "Error: Unable to parse partition file");
   }
 
   if (alt_name != nullptr) {
-    EXIT_IF_FALSE(params.SetAltFile(alt_name),
-                  "Error: Unable to read alt file");
+    CHECK_TRUE(params.SetAltFile(alt_name), "Error: Unable to read alt file");
   }
 
 #if defined(__unix__) || defined(__CYGWIN__)

@@ -712,5 +712,26 @@ extern uint64_t (*WP2SumSquaredErrorBlock)(const int16_t* src1, uint32_t step1,
 void WP2PSNRInit();
 
 //------------------------------------------------------------------------------
+// Rasterization / Preview
+
+namespace WP2 {
+
+constexpr uint32_t kRasterPrec = 16;   // gradient's fixed-point precision
+typedef int32_t grad_t;    // type for holding values in fixed-precision
+
+// compute cur[] at position 'dX' and update grads[]
+extern void (*RasterAdvance)(grad_t grads[3 * 4], grad_t dX, grad_t cur[4]);
+
+// compute squared error on span
+extern void (*RasterLoss)(const uint8_t* src, uint32_t size,
+                          const grad_t value[4], const grad_t gradient[4],
+                          uint32_t loss[4]);
+// draw gradient on span
+extern void (*RasterDraw)(const grad_t value[4], const grad_t gradient[4],
+                          uint8_t* dst, uint32_t size);
+
+void RasterInit();
+
+}  // namespace WP2
 
 #endif  /* WP2_DSP_DSP_H_ */

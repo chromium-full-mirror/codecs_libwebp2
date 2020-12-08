@@ -64,6 +64,12 @@ uint32_t FuzzedParameters::ExtractUInt32(uint32_t min_value,
   return min_value + ExtractUInt32(max_value - min_value);
 }
 
+double FuzzedParameters::ExtractDouble(double min_value, double max_value) {
+  assert(max_value >= min_value);
+  return min_value +
+         (ExtractUInt32(4294967295u) / 4294967295.) * (max_value - min_value);
+}
+
 bool FuzzedParameters::ExtractBool() { return (ExtractUInt32(1) == 1); }
 
 //------------------------------------------------------------------------------

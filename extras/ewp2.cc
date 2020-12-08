@@ -103,7 +103,7 @@ void PrintSize(const std::string& file_path, size_t size, uint32_t num_pixels,
 //------------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
-  EXIT_IF_FALSE(WP2CheckVersion(), "Error! Library version mismatch!");
+  CHECK_TRUE(WP2CheckVersion(), "Error! Library version mismatch!");
   if (argc < 2) {
     fprintf(stderr, "Error: Missing arguments.\n");
     Help();
@@ -137,7 +137,7 @@ int main(int argc, char* argv[]) {
       Help();
       return 0;
     } else if (!strcmp(argv[c], "-o") && c + 1 < argc) {
-      EXIT_IF_FALSE(out_path.empty(), "Error! Output was already specified.");
+      CHECK_TRUE(out_path.empty(), "Error! Output was already specified.");
       out_path = argv[++c];
     } else if (!strcmp(argv[c], "-q") && c + 1 < argc) {
       expecting_lossy_enc = true;
@@ -152,9 +152,9 @@ int main(int argc, char* argv[]) {
     } else if (!strcmp(argv[c], "-depth") && c + 1 < argc) {
       expecting_ccsp_enc = true;
       ccsp_enc_bit_depth = ExUtilGetInt(argv[++c], &parse_error);
-      EXIT_IF_FALSE(
+      CHECK_TRUE(
           ccsp_enc_bit_depth >= WP2::CCSPImageReader::kMinBitDepth &&
-              ccsp_enc_bit_depth <= WP2::CCSPImageReader::kMaxBitDepth,
+          ccsp_enc_bit_depth <= WP2::CCSPImageReader::kMaxBitDepth,
           "Error! Bit depth is outside range.");
     } else if (!strcmp(argv[c], "-444") || !strcmp(argv[c], "-420")) {
       expecting_ccsp_enc = true;
@@ -168,7 +168,7 @@ int main(int argc, char* argv[]) {
         downsampling_filter = &WP2::SamplingTaps::kDownAvg;
         upsampling_filter = &WP2::SamplingTaps::kUpNearest;
       } else {
-        EXIT_IF_FALSE(false, "Error! Unsupported sampling '%s'", argv[c]);
+        CHECK_TRUE(false, "Error! Unsupported sampling '%s'", argv[c]);
       }
     } else if ((!strcmp(argv[c], "-psnr") || !strcmp(argv[c], "-ssim")) &&
                c + 2 < argc) {
@@ -184,7 +184,7 @@ int main(int argc, char* argv[]) {
       STATIC_ASSERT_ARRAY_SIZE(kChanChars, kNumChans);
       for (char character : std::string(argv[++c])) {
         const char* const pos = std::strchr(kChanChars, character);
-        EXIT_IF_FALSE(pos != nullptr, "Error! Unsupported -rm '%c'", character);
+        CHECK_TRUE(pos != nullptr, "Error! Unsupported -rm '%c'", character);
         rm_chan[pos - kChanChars] = true;
       }
     } else if (!strcmp(argv[c], "-metadata")) {
@@ -192,15 +192,15 @@ int main(int argc, char* argv[]) {
     } else if (!strcmp(argv[c], "-nometadata")) {
       keep_metadata = false;
     } else if (!strcmp(argv[c], "--") && c + 1 < argc) {
-      EXIT_IF_FALSE(in_path.empty(), "Error! Input was already specified.");
+      CHECK_TRUE(in_path.empty(), "Error! Input was already specified.");
       in_path = argv[++c];
     } else if (argv[c][0] == '-') {
       bool must_stop;
-      EXIT_IF_FALSE(ProgramOptions::ParseSystemOptions(argv[c], &must_stop),
-                    "Error! Unknown option '%s'", argv[c]);
+      CHECK_TRUE(ProgramOptions::ParseSystemOptions(argv[c], &must_stop),
+                 "Error! Unknown option '%s'", argv[c]);
       if (must_stop) return 0;
     } else {
-      EXIT_IF_FALSE(in_path.empty(), "Error! Input was already specified.");
+      CHECK_TRUE(in_path.empty(), "Error! Input was already specified.");
       in_path = argv[c];
     }
     if (parse_error) return 1;
@@ -208,21 +208,21 @@ int main(int argc, char* argv[]) {
 
   const bool print_disto = !ref_path.empty();
 
-  EXIT_IF_FALSE(!in_path.empty(), "Error! No input specified.");
-  EXIT_IF_FALSE(!expecting_lossy_enc || !expecting_ccsp_enc,
-                "Error! Output format mixup.");
-  EXIT_IF_FALSE(
+  CHECK_TRUE(!in_path.empty(), "Error! No input specified.");
+  CHECK_TRUE(!expecting_lossy_enc || !expecting_ccsp_enc,
+             "Error! Output format mixup.");
+  CHECK_TRUE(
       (!expecting_lossy_enc && !expecting_ccsp_enc) || !out_path.empty(),
       "Error! No output specified.");
-  EXIT_IF_FALSE(wp2_enc_config.IsValid(), "Error! Invalid configuration.");
+  CHECK_TRUE(wp2_enc_config.IsValid(), "Error! Invalid configuration.");
 
   WP2::YUVPlane ccsp_buffer;
   WP2::CSPMtx ccsp_to_rgb = {};
   WP2::Metadata metadata;
 
   WP2::Data in_data;
-  EXIT_IF_ERROR(WP2::IoUtilReadFile(in_path.c_str(), &in_data),
-                "Error! Failed to read file '%s'.", in_path.c_str());
+  CHECK_STATUS(WP2::IoUtilReadFile(in_path.c_str(), &in_data),
+               "Error! Failed to read file '%s'.", in_path.c_str());
   const FileFormat in_format =
       WP2::GuessImageFormat(in_data.bytes, in_data.size);
 
@@ -230,13 +230,13 @@ int main(int argc, char* argv[]) {
   if (out_format == FileFormat::Y4M_420 || out_format == FileFormat::Y4M_444) {
     out_format = (ccsp_enc_420 ? FileFormat::Y4M_420 : FileFormat::Y4M_444);
   } else {
-    EXIT_IF_FALSE(!ccsp_enc_420,
-                  "Error! Output format %s does not support 4:2:0.",
-                  WP2::GetFileFormatStr(out_format));
+    CHECK_TRUE(!ccsp_enc_420,
+               "Error! Output format %s does not support 4:2:0.",
+                WP2::GetFileFormatStr(out_format));
   }
 
   if (print_size) {
-    EXIT_IF_FALSE(out_path != "-", "Error! Printing stdout size is unhandled.");
+    CHECK_TRUE(out_path != "-", "Error! Printing stdout size is unhandled.");
   }
   size_t output_file_size = 0;
   size_t* const file_size_ptr = print_size ? &output_file_size : nullptr;
@@ -247,19 +247,19 @@ int main(int argc, char* argv[]) {
                                        out_format == FileFormat::Y4M_420)) {
     // Bypass conversion to and from RGB by decoding directly into YCbCr.
     WP2::BitstreamFeatures features;
-    EXIT_IF_ERROR(features.Read(in_data.bytes, in_data.size),
-                  "Error! Failed to decode the wp2 image header.");
+    CHECK_STATUS(features.Read(in_data.bytes, in_data.size),
+                 "Error! Failed to decode the wp2 image header.");
     const uint32_t rgb_to_ycbcr_shift =
         WP2::kRGBToYCbCrShift - (ccsp_enc_bit_depth - 8);
 
     // Allocate a padded buffer to avoid doing it internally.
     // TODO(yguyon): Check if 'has_alpha' is needed beforehand (decode GParams).
-    EXIT_IF_ERROR(
+    CHECK_STATUS(
         ccsp_buffer.Resize(features.width, features.height,
                            /*pad=*/WP2::kPredWidth, /*has_alpha=*/true),
         "Error! Failed to allocate buffer.");
 
-    EXIT_IF_ERROR(
+    CHECK_STATUS(
         WP2::Decode(
             in_data.bytes, in_data.size, WP2::kRGBToYCbCrMatrix,
             rgb_to_ycbcr_shift,
@@ -270,7 +270,7 @@ int main(int argc, char* argv[]) {
             keep_metadata ? &metadata : nullptr),
         "Error! Failed to decode the wp2 image.");
 
-    EXIT_IF_FALSE(
+    CHECK_TRUE(
         !rm_chan[kR] && !rm_chan[kG] && !rm_chan[kB],
         "Error! Input wp2 is decoded straight to YUV so -rm RGB is invalid.");
     if (rm_chan[kA]) ccsp_buffer.A.Clear();
@@ -283,36 +283,36 @@ int main(int argc, char* argv[]) {
         ccsp_buffer, {0, 0, features.width, features.height}));
 
     if (WP2::IsChromaSubsampled(out_format)) {
-      EXIT_IF_ERROR(ccsp_buffer.Downsample(*downsampling_filter),
-                    "Error! Failed to downsample to 4:2:0.");
+      CHECK_STATUS(ccsp_buffer.Downsample(*downsampling_filter),
+                   "Error! Failed to downsample to 4:2:0.");
     }
 
     if (!out_path.empty()) {
       if (verbose) printf("Saving to '%s'\n", out_path.c_str());
       FILE* const fout = (out_path == "-") ? WP2::IoUtilSetBinaryMode(stdout)
                                            : std::fopen(out_path.c_str(), "wb");
-      EXIT_IF_FALSE(fout != nullptr, "Error! Failed to write file '%s'.",
-                    out_path.c_str());
+      CHECK_TRUE(fout != nullptr, "Error! Failed to write file '%s'.",
+                 out_path.c_str());
       const WP2Status status =
           WP2::WriteY4M(ccsp_buffer, ccsp_enc_bit_depth, fout);
       if (file_size_ptr != nullptr) *file_size_ptr = std::ftell(fout);
       if (fout != stdout) fclose(fout);  // Close file even if error.
-      EXIT_IF_ERROR(status, "Error! Failed to write image '%s'.",
-                    out_path.c_str());
+      CHECK_STATUS(status, "Error! Failed to write image '%s'.",
+                   out_path.c_str());
       if (!metadata.IsEmpty()) fprintf(stderr, "Warning: Ignored metadata.\n");
     }
   } else {  // General case: any format -> RGB -> any format.
-    EXIT_IF_ERROR(
+    CHECK_STATUS(
         WP2::ReadImage(in_data.bytes, in_data.size, &ccsp_buffer, &ccsp_to_rgb,
                        keep_metadata ? &metadata : nullptr),
         "Error! Failed to read input '%s'.", in_path.c_str());
 
     if (WP2::IsCustomColorSpace(in_format)) {
-      EXIT_IF_FALSE(!rm_chan[kR] && !rm_chan[kG] && !rm_chan[kB],
-                    "Error! Input is considered YUV so -rm RGB is invalid.");
+      CHECK_TRUE(!rm_chan[kR] && !rm_chan[kG] && !rm_chan[kB],
+                 "Error! Input is considered YUV so -rm RGB is invalid.");
     } else {
-      EXIT_IF_FALSE(!rm_chan[kY] && !rm_chan[kU] && !rm_chan[kV],
-                    "Error! Input is considered RGB so -rm YUV is invalid.");
+      CHECK_TRUE(!rm_chan[kY] && !rm_chan[kU] && !rm_chan[kV],
+                 "Error! Input is considered RGB so -rm YUV is invalid.");
     }
     if (rm_chan[kA]) ccsp_buffer.A.Clear();
     if (rm_chan[kY] || rm_chan[kR]) ccsp_buffer.Y.Fill(0);
@@ -321,17 +321,17 @@ int main(int argc, char* argv[]) {
 
     if (!out_path.empty()) {
       if (!WP2::IsChromaSubsampled(out_format) && ccsp_buffer.IsDownsampled()) {
-        EXIT_IF_ERROR(ccsp_buffer.Upsample(*upsampling_filter),
-                      "Error! Failed to upsample to 4:4:4.");
+        CHECK_STATUS(ccsp_buffer.Upsample(*upsampling_filter),
+                     "Error! Failed to upsample to 4:4:4.");
       }
 
       if (expecting_ccsp_enc) {
-        EXIT_IF_FALSE(
+        CHECK_TRUE(
             WP2::IsCustomColorSpace(out_format),
             "Error! Expected custom color space output instead of %s format.",
             WP2::GetFileFormatStr(out_format));
       } else if (expecting_lossy_enc) {
-        EXIT_IF_FALSE(
+        CHECK_TRUE(
             out_format == FileFormat::WP2 ||
                 (!expecting_wp2_enc && out_format == FileFormat::WEBP),
             "Error! Expected wp2%s output instead of %s format.",
@@ -342,7 +342,7 @@ int main(int argc, char* argv[]) {
       if (verbose) printf("Saving to '%s'\n", out_path.c_str());
       if (out_format == FileFormat::WP2) {
         WP2::MemoryWriter writer;
-        EXIT_IF_ERROR(
+        CHECK_STATUS(
             WP2::Encode(ccsp_buffer.GetWidth(), ccsp_buffer.GetHeight(),
                         ccsp_buffer.Y.Row(0), ccsp_buffer.Y.Step(),
                         ccsp_buffer.U.Row(0), ccsp_buffer.U.Step(),
@@ -352,28 +352,28 @@ int main(int argc, char* argv[]) {
                         ccsp_to_rgb.shift, &writer, wp2_enc_config, metadata),
             "Error! Failed to encode as wp2.");
 
-        EXIT_IF_ERROR(
+        CHECK_STATUS(
             WP2::IoUtilWriteFile(writer.mem_, writer.size_, out_path.c_str(),
                                  /*overwrite=*/true, file_size_ptr),
             "Error! Failed to write image '%s'.", out_path.c_str());
       } else if (out_format == FileFormat::WEBP) {
         WP2::ArgbBuffer argb_buffer;
-        EXIT_IF_ERROR(ccsp_buffer.Export(ccsp_to_rgb, /*resize_if_needed=*/true,
-                                         &argb_buffer, upsampling_filter),
-                      "Error! Failed to convert to Argb.");
+        CHECK_STATUS(ccsp_buffer.Export(ccsp_to_rgb, /*resize_if_needed=*/true,
+                                        &argb_buffer, upsampling_filter),
+                     "Error! Failed to convert to Argb.");
         if (!metadata.IsEmpty()) fprintf(stderr, "Warning: Ignored metadata\n");
 
         WP2::MemoryWriter writer;
-        EXIT_IF_ERROR(WP2::CompressWebP(argb_buffer, wp2_enc_config.quality,
-                                        wp2_enc_config.effort, &writer),
-                      "Error! Failed to encode as WebP.");
+        CHECK_STATUS(WP2::CompressWebP(argb_buffer, wp2_enc_config.quality,
+                                       wp2_enc_config.effort, &writer),
+                     "Error! Failed to encode as WebP.");
 
-        EXIT_IF_ERROR(
+        CHECK_STATUS(
             WP2::IoUtilWriteFile(writer.mem_, writer.size_, out_path.c_str(),
                                  /*overwrite=*/true, file_size_ptr),
             "Error! Failed to write image '%s'.", out_path.c_str());
       } else {
-        EXIT_IF_ERROR(
+        CHECK_STATUS(
             WP2::SaveImage(ccsp_buffer, ccsp_to_rgb, ccsp_enc_bit_depth,
                            out_path.c_str(), /*overwrite=*/true, out_format,
                            metadata, *downsampling_filter, file_size_ptr),
@@ -404,41 +404,41 @@ int main(int argc, char* argv[]) {
       swap(ccsp_buffer, cmp);
       cmp_matrix = ccsp_to_rgb;
     } else {  // Compare 'ref' with output.
-      EXIT_IF_ERROR(
+      CHECK_STATUS(
           WP2::ReadImage(cmp_path.c_str(), &cmp, &cmp_matrix),
           "Error! Failed to read '%s'.", cmp_path.c_str());
     }
-    EXIT_IF_ERROR(
+    CHECK_STATUS(
         WP2::ReadImage(ref_path.c_str(), &ref, &ref_matrix),
         "Error! Failed to read reference '%s'.", ref_path.c_str());
 
-    EXIT_IF_FALSE(
+    CHECK_TRUE(
         cmp_matrix == ref_matrix,
         "Error! Can only compute distortion for the same color space.");
     uint32_t cmp_bit_depth, ref_bit_depth;
-    EXIT_IF_ERROR(WP2::ReadBitDepth(cmp_path.c_str(), &cmp_bit_depth),
-                  "Error! Failed to read bit depth of '%s'.", cmp_path.c_str());
-    EXIT_IF_ERROR(WP2::ReadBitDepth(ref_path.c_str(), &ref_bit_depth),
-                  "Error! Failed to read bit depth of '%s'.", ref_path.c_str());
+    CHECK_STATUS(WP2::ReadBitDepth(cmp_path.c_str(), &cmp_bit_depth),
+                 "Error! Failed to read bit depth of '%s'.", cmp_path.c_str());
+    CHECK_STATUS(WP2::ReadBitDepth(ref_path.c_str(), &ref_bit_depth),
+                 "Error! Failed to read bit depth of '%s'.", ref_path.c_str());
     // Otherwise the matrix or the shift should have been different.
     assert(cmp_bit_depth == ref_bit_depth);
 
     if (cmp.HasAlpha() != ref.HasAlpha()) {
       // Set image with missing alpha plane to opaque.
       if (!cmp.HasAlpha()) {
-        EXIT_IF_ERROR(cmp.A.Resize(cmp.GetWidth(), cmp.GetHeight()),
-                      "Error! Allocation failure.");
+        CHECK_STATUS(cmp.A.Resize(cmp.GetWidth(), cmp.GetHeight()),
+                     "Error! Allocation failure.");
         cmp.A.Fill(WP2::kAlphaMax);
       } else {
-        EXIT_IF_ERROR(ref.A.Resize(ref.GetWidth(), ref.GetHeight()),
-                      "Error! Allocation failure.");
+        CHECK_STATUS(ref.A.Resize(ref.GetWidth(), ref.GetHeight()),
+                     "Error! Allocation failure.");
         ref.A.Fill(WP2::kAlphaMax);
       }
     }
 
     float distortion[5];
-    EXIT_IF_ERROR(cmp.GetDistortion(ref, ref_bit_depth, ref_metric, distortion),
-                  "Error! Failed to compute distortion.");
+    CHECK_STATUS(cmp.GetDistortion(ref, ref_bit_depth, ref_metric, distortion),
+                 "Error! Failed to compute distortion.");
 
     if (verbose) {
       printf("Distortion %f (alpha %f, %f, %f, %f) between '%s' and '%s'\n",
@@ -449,7 +449,7 @@ int main(int argc, char* argv[]) {
              print_size ? "   " : GetFileName(cmp_path).c_str(), distortion[4],
              distortion[0], distortion[1], distortion[2], distortion[3]);
     }
-    EXIT_IF_FALSE(
+    CHECK_TRUE(
         distortion[4] >= ref_distortion,
         "Error! Distortion %f from %s to %s is worse than the required %f.",
         distortion[4], GetFileName(ref_path).c_str(),

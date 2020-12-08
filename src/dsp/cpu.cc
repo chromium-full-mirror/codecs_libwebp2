@@ -362,6 +362,10 @@ void WP2DspReset() {
 
   WP2::ANSUpdateCDF = nullptr;
 
+  WP2::RasterAdvance = nullptr;
+  WP2::RasterLoss = nullptr;
+  WP2::RasterDraw = nullptr;
+
   WP2Quantize = nullptr;
   WP2Dequantize = nullptr;
 }

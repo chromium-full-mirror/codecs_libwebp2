@@ -52,6 +52,7 @@ class FuzzedParameters {
   // Only powers of two are uniformly distributed.
   uint32_t ExtractUInt32(uint32_t max_value);
   uint32_t ExtractUInt32(uint32_t min_value, uint32_t max_value);
+  double ExtractDouble(double min_value, double max_value);
 
   bool ExtractBool();
 

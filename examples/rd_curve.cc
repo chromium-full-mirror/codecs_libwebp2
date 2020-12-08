@@ -176,26 +176,26 @@ class Task : public Worker {
   }
 
   // Main task: encode, measure distortion, decode.
-  WP2Status Execute() override {
+  WP2_NO_DISCARD WP2Status Execute() override {
     ArgbBuffer decoded;
     const std::string out_file = prefix_.empty() ? "" :
         SPrintf("%s%d.%s", prefix_.c_str(), type_, kFileExtensions[type_]);
     switch (type_) {
       default:
       case WP2_STATS:
-        EncodeWP2(out_file, &decoded);
+        WP2_CHECK_STATUS(EncodeWP2(out_file, &decoded));
         break;
       case WEBP_STATS:
-        EncodeWebP(out_file, &decoded);
+        WP2_CHECK_STATUS(EncodeWebP(out_file, &decoded));
         break;
       case AV1_STATS:
-        EncodeAV1(out_file, &decoded);
+        WP2_CHECK_STATUS(EncodeAV1(out_file, &decoded));
         break;
       case JPEG_STATS:
-        EncodeJPEG(out_file, &decoded);
+        WP2_CHECK_STATUS(EncodeJPEG(out_file, &decoded));
         break;
       case NEURAL_STATS:
-        EncodeNeural(out_file, &decoded);
+        WP2_CHECK_STATUS(EncodeNeural(out_file, &decoded));
         break;
     }
     // finish up
@@ -203,20 +203,20 @@ class Task : public Worker {
 
     // compute distortions
     float values[5];
-    EXIT_IF_ERROR(
+    CHECK_STATUS(
         decoded.GetDistortionBlackOrWhiteBackground(*ref_, PSNR, values),
         "GetDistortionBlackOrWhiteBackground() failed.");
     psnr_ = values[4];
     if (params_.metric != PSNR) {
-      EXIT_IF_ERROR(decoded.GetDistortionBlackOrWhiteBackground(
-                        *ref_, params_.metric, values),
-                    "GetDistortionBlackOrWhiteBackground() failed.");
+      CHECK_STATUS(decoded.GetDistortionBlackOrWhiteBackground(
+                   *ref_, params_.metric, values),
+                   "GetDistortionBlackOrWhiteBackground() failed.");
       disto_ = values[4];
     }
     if (!prefix_.empty()) {
       const std::string file = prefix_ + SPrintf("%d.png", type_);
-      EXIT_IF_ERROR(SaveImage(decoded, file.c_str(), /*overwrite=*/true),
-                    "Cannot save output [%s]", file.c_str());
+      CHECK_STATUS(SaveImage(decoded, file.c_str(), /*overwrite=*/true),
+                   "Cannot save output [%s]", file.c_str());
     }
     return WP2_STATUS_OK;
   }
@@ -238,44 +238,46 @@ class Task : public Worker {
 
  private:
   // used by the two methods below
-  void DoEncodeWP2(const std::string& out_file, ArgbBuffer* const decoded);
-  void EncodeWP2(const std::string& out_file, ArgbBuffer* const decoded);
-  void EncodeNeural(const std::string& out_file, ArgbBuffer* const decoded);
+  WP2Status DoEncodeWP2(const std::string& out_file, ArgbBuffer* const decoded);
+  WP2Status EncodeWP2(const std::string& out_file, ArgbBuffer* const decoded);
+  WP2Status EncodeNeural(const std::string& out_file,
+                         ArgbBuffer* const decoded);
 
-  void EncodeWebP(const std::string& out_file, ArgbBuffer* const decoded);
-  void EncodeAV1(const std::string& out_file, ArgbBuffer* const decoded);
-  void EncodeJPEG(const std::string& out_file, ArgbBuffer* const decoded);
+  WP2Status EncodeWebP(const std::string& out_file, ArgbBuffer* const decoded);
+  WP2Status EncodeAV1(const std::string& out_file, ArgbBuffer* const decoded);
+  WP2Status EncodeJPEG(const std::string& out_file, ArgbBuffer* const decoded);
 };
 
 //------------------------------------------------------------------------------
 
-void Task::DoEncodeWP2(const std::string& out_file, ArgbBuffer* const decoded) {
+WP2Status Task::DoEncodeWP2(const std::string& out_file,
+                            ArgbBuffer* const decoded) {
   // Create working copy
   ArgbBuffer src;
-  EXIT_IF_ERROR(src.CopyFrom(*ref_), "Can't copy buffer");
+  CHECK_STATUS(src.CopyFrom(*ref_), "Can't copy buffer");
 
   params_.config.thread_level = (int)params_.use_mt;
   EncoderInfo einfo;
   einfo.force_partition = params_.force_partition;
   params_.config.info = &einfo;
-  EXIT_IF_FALSE(params_.config.IsValid(),
-                "Error! Invalid configuration. Some parameters are erroneous.");
+  CHECK_TRUE(params_.config.IsValid(),
+             "Error! Invalid configuration. Some parameters are erroneous.");
 
   // Set up the memory writer
   MemoryWriter memory_writer;
 
   double start_time = GetStopwatchTime();
-  EXIT_IF_ERROR(Encode(src, &memory_writer, params_.config),
-                "Error! Cannot encode picture as WP2");
+  CHECK_STATUS(Encode(src, &memory_writer, params_.config),
+               "Error! Cannot encode picture as WP2");
   enc_time_ = GetStopwatchTime() - start_time;
   size_ = memory_writer.size_;
   src.Deallocate();  // let's be nice to others
   params_.config.info = nullptr;
 
   if (!out_file.empty()) {
-    EXIT_IF_ERROR(WP2::IoUtilWriteFile(memory_writer.mem_, memory_writer.size_,
-                                       out_file.c_str(), /*overwrite=*/true),
-                  "Failed to write file %s", out_file.c_str());
+    CHECK_STATUS(WP2::IoUtilWriteFile(memory_writer.mem_, memory_writer.size_,
+                                      out_file.c_str(), /*overwrite=*/true),
+                 "Failed to write file %s", out_file.c_str());
   }
 
   // decode back
@@ -289,7 +291,7 @@ void Task::DoEncodeWP2(const std::string& out_file, ArgbBuffer* const decoded) {
   DecoderInfo dinfo;
   dec_config.info = &dinfo;
   start_time = GetStopwatchTime();
-  EXIT_IF_ERROR(
+  CHECK_STATUS(
       Decode(memory_writer.mem_, memory_writer.size_, decoded, dec_config),
       "FATAL: Decoding failed for quality %f!", params_.config.quality);
   dec_time_ = GetStopwatchTime() - start_time;
@@ -321,31 +323,34 @@ void Task::DoEncodeWP2(const std::string& out_file, ArgbBuffer* const decoded) {
     size_ += total_size / 8;
   }
 #endif  // WP2_BITTRACE
+  return WP2_STATUS_OK;
 }
 
-void Task::EncodeWP2(const std::string& out_file, ArgbBuffer* const decoded) {
+WP2Status Task::EncodeWP2(const std::string& out_file,
+                          ArgbBuffer* const decoded) {
   params_.config.quality = params_.q;
   params_.config.alpha_quality = params_.q;
-  DoEncodeWP2(out_file, decoded);
+  return DoEncodeWP2(out_file, decoded);
 }
 
-void Task::EncodeNeural(const std::string& out_file,
-                        ArgbBuffer* const decoded) {
-  assert(params_.neural_path != nullptr);
+WP2Status Task::EncodeNeural(const std::string& out_file,
+                             ArgbBuffer* const decoded) {
+  CHECK_TRUE(params_.neural_path != nullptr, "missing neural path");
   params_.config.graphdef_path = params_.neural_path;
   params_.config.use_neural_compression = 1;
   // neural-net compression only accepts integer quality in [0..9] range
   params_.config.quality = (int)(params_.q * 9 / 100);
-  DoEncodeWP2(out_file, decoded);
+  return DoEncodeWP2(out_file, decoded);
 }
 
 //------------------------------------------------------------------------------
 
-void Task::EncodeWebP(const std::string& out_file, ArgbBuffer* const decoded) {
+WP2Status Task::EncodeWebP(const std::string& out_file,
+                           ArgbBuffer* const decoded) {
 #if defined(WP2_HAVE_WEBP)
   WebPConfig config;
-  EXIT_IF_FALSE(WebPConfigPreset(&config, WEBP_PRESET_DEFAULT, params_.q),
-                "Can't initialize WebP. Wrong library version?");
+  CHECK_TRUE(WebPConfigPreset(&config, WEBP_PRESET_DEFAULT, params_.q),
+             "Can't initialize WebP. Wrong library version?");
   if (params_.use_mt) ++config.thread_level;
   config.method = (params_.config.effort * 6 + 4) / 9;
   config.segments = params_.config.segments;
@@ -356,30 +361,32 @@ void Task::EncodeWebP(const std::string& out_file, ArgbBuffer* const decoded) {
   // encode
   MemoryWriter writer;
   double start_time = GetStopwatchTime();
-  EXIT_IF_ERROR(CompressWebP(*ref_, config, &writer),
-                "Error! Could not encode WebP.");
+  CHECK_STATUS(CompressWebP(*ref_, config, &writer),
+               "Error! Could not encode WebP.");
   enc_time_ = GetStopwatchTime() - start_time;
   size_ = writer.size_;
 
   if (!out_file.empty()) {
-    EXIT_IF_ERROR(WP2::IoUtilWriteFile(writer.mem_, writer.size_,
-                                       out_file.c_str(), /*overwrite=*/true),
-                  "Failed to write file %s", out_file.c_str());
+    CHECK_STATUS(WP2::IoUtilWriteFile(writer.mem_, writer.size_,
+                                      out_file.c_str(), /*overwrite=*/true),
+                 "Failed to write file %s", out_file.c_str());
   }
 
   // decode back
   start_time = GetStopwatchTime();
-  EXIT_IF_ERROR(ReadImage(writer.mem_, writer.size_, decoded, FileFormat::WEBP),
-                "Can't decode back the WebP output!");
+  CHECK_STATUS(ReadImage(writer.mem_, writer.size_, decoded, FileFormat::WEBP),
+               "Can't decode back the WebP output!");
   dec_time_ = GetStopwatchTime() - start_time;
 #else
   (void)decoded;
 #endif  // WP2_HAVE_WEBP
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
 
-void Task::EncodeAV1(const std::string& out_file, ArgbBuffer* const decoded) {
+WP2Status Task::EncodeAV1(const std::string& out_file,
+                          ArgbBuffer* const decoded) {
   ParamsAV1 p;
   p.quality = params_.q;
   p.use_yuv444 = (params_.config.uv_mode == EncoderConfig::UVMode444);
@@ -389,21 +396,23 @@ void Task::EncodeAV1(const std::string& out_file, ArgbBuffer* const decoded) {
 
   std::string out;
   double timing[2];
-  EXIT_IF_FALSE(CompressAV1(*ref_, p, decoded, &out, timing) == WP2_STATUS_OK,
-                "CompressAV1() failed!");
+  CHECK_TRUE(CompressAV1(*ref_, p, decoded, &out, timing) == WP2_STATUS_OK,
+             "CompressAV1() failed!");
   enc_time_ = timing[0];
   dec_time_ = timing[1];
   size_ = out.size();
   if (!out_file.empty()) {
-    EXIT_IF_ERROR(WP2::IoUtilWriteFile((uint8_t*)out.data(), out.length(),
-                                       out_file.c_str(), /*overwrite=*/true),
-                  "Failed to write file %s", out_file.c_str());
+    CHECK_STATUS(WP2::IoUtilWriteFile((uint8_t*)out.data(), out.length(),
+                                      out_file.c_str(), /*overwrite=*/true),
+                 "Failed to write file %s", out_file.c_str());
   }
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
 
-void Task::EncodeJPEG(const std::string& out_file, ArgbBuffer* const decoded) {
+WP2Status Task::EncodeJPEG(const std::string& out_file,
+                           ArgbBuffer* const decoded) {
 #if defined(WP2_HAVE_SJPEG)
   sjpeg::EncoderParam param;
   param.SetQuality(params_.q);
@@ -411,17 +420,17 @@ void Task::EncodeJPEG(const std::string& out_file, ArgbBuffer* const decoded) {
   param.adaptive_quantization = (params_.config.effort >= 2);
   param.Huffman_compress = (params_.config.effort >= 1);
   param.yuv_mode =
-      (params_.config.uv_mode == EncoderConfig::UVMode444)   ? SJPEG_YUV_444
-      : (params_.config.uv_mode == EncoderConfig::UVMode420) ? SJPEG_YUV_420
-      : params_.use_sharp_yuv                                ? SJPEG_YUV_SHARP
-                                                             : SJPEG_YUV_AUTO;
+      (params_.config.uv_mode == EncoderConfig::UVMode444) ? SJPEG_YUV_444 :
+      (params_.config.uv_mode == EncoderConfig::UVMode420) ? SJPEG_YUV_420 :
+      params_.use_sharp_yuv                                ? SJPEG_YUV_SHARP :
+                                                             SJPEG_YUV_AUTO;
 
   const uint32_t w = ref_->width();
   const uint32_t h = ref_->height();
   const size_t stride = 3 * w;
   // Extract RGB
   Vector_u8 rgb;
-  EXIT_IF_FALSE(rgb.resize(stride * h), "Malloc failure for rgb[]");
+  CHECK_TRUE(rgb.resize(stride * h), "Malloc failure for rgb[]");
   for (uint32_t y = 0; y < h; ++y) {
     const uint8_t* const row = ref_->GetRow8(y);
     for (uint32_t x = 0; x < w; ++x) {
@@ -434,26 +443,27 @@ void Task::EncodeJPEG(const std::string& out_file, ArgbBuffer* const decoded) {
   // encode
   std::string out;
   double start_time = GetStopwatchTime();
-  EXIT_IF_FALSE(sjpeg::Encode(rgb.data(), w, h, stride, param, &out),
-                "JPEG compression failed!");
+  CHECK_TRUE(sjpeg::Encode(rgb.data(), w, h, stride, param, &out),
+             "JPEG compression failed!");
   enc_time_ = GetStopwatchTime() - start_time;
   size_ = out.size();
 
   if (!out_file.empty()) {
-    EXIT_IF_ERROR(WP2::IoUtilWriteFile((uint8_t*)out.data(), out.length(),
-                                       out_file.c_str(), /*overwrite=*/true),
-                  "Failed to write file %s", out_file.c_str());
+    CHECK_STATUS(WP2::IoUtilWriteFile((uint8_t*)out.data(), out.length(),
+                                      out_file.c_str(), /*overwrite=*/true),
+                 "Failed to write file %s", out_file.c_str());
   }
 
   // decode back
   start_time = GetStopwatchTime();
-  EXIT_IF_ERROR(ReadImage((const uint8_t*)out.data(), out.size(), decoded,
-                          FileFormat::JPEG),
-                "Can't decode back the JPEG output!");
+  CHECK_STATUS(ReadImage((const uint8_t*)out.data(), out.size(), decoded,
+                         FileFormat::JPEG),
+               "Can't decode back the JPEG output!");
   dec_time_ = GetStopwatchTime() - start_time;
 #else
   (void)decoded;
 #endif  // WP2_HAVE_SJPEG
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
@@ -769,7 +779,7 @@ std::vector<std::string> Split(const std::string& s, char delim) {
 //------------------------------------------------------------------------------
 
 int RdCurveMain(int argc, char* argv[], std::string* output_str) {
-  EXIT_IF_FALSE(WP2CheckVersion(), "Error! Library version mismatch!");
+  CHECK_TRUE(WP2CheckVersion(), "Error! Library version mismatch!");
 
   TestParams params;
   OutputFormat output_format = OutputFormat::kText;
@@ -937,13 +947,13 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
 
   // Read the input
   ArgbBuffer ref;
-  EXIT_IF_ERROR(ReadImage(params.in_file.c_str(), &ref),
-                "Error! Cannot read input picture file '%s'",
-                params.in_file.c_str());
+  CHECK_STATUS(ReadImage(params.in_file.c_str(), &ref),
+               "Error! Cannot read input picture file '%s'",
+               params.in_file.c_str());
 
   ref.metadata_.Clear();  // remove metadata for the test
   if (crop) {
-    EXIT_IF_ERROR(ref.SetView(ref, crop_area), "Cropping operation failed.");
+    CHECK_STATUS(ref.SetView(ref, crop_area), "Cropping operation failed.");
   }
   if (convert_to_gray) {
     for (uint32_t y = 0; y < ref.height(); ++y) {
@@ -959,9 +969,9 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   }
 
   if (partition_file_path != nullptr) {
-    EXIT_IF_FALSE(ReadPartition(partition_file_path, /*read_only=*/false,
-                                &params.force_partition),
-                  "Error: Unable to parse partition file");
+    CHECK_TRUE(ReadPartition(partition_file_path, /*read_only=*/false,
+                             &params.force_partition),
+               "Error: Unable to parse partition file");
     ConvertPartition(ref.width(), ref.height(), params.config.partition_set,
                      /*ignore_invalid=*/true, &params.force_partition);
   }
@@ -990,7 +1000,7 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   const uint32_t num_tasks =
       (do_wp2 + do_webp + do_jpeg + do_av1 + do_neural) * (params.qsteps + 1);
   Vector<Task> tasks;
-  EXIT_IF_FALSE(tasks.resize(num_tasks), "Task allocation failed.");
+  CHECK_TRUE(tasks.resize(num_tasks), "Task allocation failed.");
 
   Task* task = &tasks[0];
   for (uint32_t step = 0; step <= params.qsteps; ++step) {
@@ -999,34 +1009,34 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
     if (save_output) prefix = SPrintf("%s/out.%.3d.", save_folder, step);
     if (do_wp2) {
       task->Init(params, ref, prefix, WP2_STATS, include, exclude);
-      EXIT_IF_FALSE(itf.Reset(task, params.use_mt, params.stack_size),
-                    "Bad WP2 thread initialization!.");
+      CHECK_TRUE(itf.Reset(task, params.use_mt, params.stack_size),
+                 "Bad WP2 thread initialization!.");
       ++task;
     }
     if (do_webp) {
       task->Init(params, ref, prefix, WEBP_STATS);
-      EXIT_IF_FALSE(itf.Reset(task, params.use_mt,
-                              std::max(params.stack_size, 131072u)),
-                    "Bad WebP thread initialization!.");
+      CHECK_TRUE(itf.Reset(task, params.use_mt,
+                           std::max(params.stack_size, 131072u)),
+                 "Bad WebP thread initialization!.");
       ++task;
     }
     if (do_av1) {
       task->Init(params, ref, prefix, AV1_STATS);
-      EXIT_IF_FALSE(itf.Reset(task, params.use_mt,
-                              std::max(params.stack_size, 524288u)),
-                    "Bad AV1 thread initialization!.");
+      CHECK_TRUE(itf.Reset(task, params.use_mt,
+                           std::max(params.stack_size, 524288u)),
+                 "Bad AV1 thread initialization!.");
       ++task;
     }
     if (do_jpeg) {
       task->Init(params, ref, prefix, JPEG_STATS);
-      EXIT_IF_FALSE(itf.Reset(task, params.use_mt, params.stack_size),
-                    "Bad JPEG thread initialization!.");
+      CHECK_TRUE(itf.Reset(task, params.use_mt, params.stack_size),
+                 "Bad JPEG thread initialization!.");
       ++task;
     }
     if (do_neural) {
       task->Init(params, ref, prefix, NEURAL_STATS);
-      EXIT_IF_FALSE(itf.Reset(task, params.use_mt),
-                    "Bad NEURAL thread initialization!.");
+      CHECK_TRUE(itf.Reset(task, params.use_mt),
+                 "Bad NEURAL thread initialization!.");
       ++task;
     }
   }
@@ -1034,7 +1044,7 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   // Main loop.
   for (auto& t : tasks) itf.Launch(&t);   // launch (or execute) all tasks
   for (auto& t : tasks) {
-    EXIT_IF_ERROR(itf.Sync(&t), "Bad thread state!");
+    CHECK_STATUS(itf.Sync(&t), "Bad thread state!");
     itf.End(&t);
   }
 

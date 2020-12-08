@@ -155,7 +155,8 @@ WP2Status CompressAnimation(
 // Returns a lower-bound expected PSNR.
 float GetExpectedDistortion(
     float quality = EncoderConfig::kDefault.quality,
-    float alpha_quality = EncoderConfig::kDefault.alpha_quality);
+    float alpha_quality = EncoderConfig::kDefault.alpha_quality,
+    int effort = EncoderConfig::kDefault.effort);
 
 float GetExpectedDistortion(const EncoderConfig& encoder_config);
 

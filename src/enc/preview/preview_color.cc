@@ -149,7 +149,8 @@ Argb32b GetAverageColor(const ArgbBuffer& canvas, uint32_t radius,
   Argb32b average = accumulator.GetAverage();
   if (canvas.format() == WP2_ARGB_32) {
     // Premultiply.
-    return {average.a, (uint8_t)WP2::DivBy255(average.r * average.a),
+    return {average.a,
+            (uint8_t)WP2::DivBy255(average.r * average.a),
             (uint8_t)WP2::DivBy255(average.g * average.a),
             (uint8_t)WP2::DivBy255(average.b * average.a)};
   } else {

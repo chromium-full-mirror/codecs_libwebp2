@@ -54,19 +54,19 @@ static void PrintDistortion(WP2::MetricType metric, float values[5],
   }
 }
 
-void PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
-                     const uint8_t* const data, size_t data_size,
-                     WP2::MetricType metric, bool short_output) {
+WP2Status PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
+                          const uint8_t* const data, size_t data_size,
+                          WP2::MetricType metric, bool short_output) {
   WP2::ArrayDecoder decoder(data, data_size);
   uint32_t num_frames = 0;
   float avg_values[5] = {0};
   while (decoder.ReadFrame()) {
-    EXIT_IF_FALSE(refs.size() > num_frames,
-                  "Round trip error!! This shouldn't happen.");
+    CHECK_TRUE(refs.size() > num_frames,
+               "Round trip error!! This shouldn't happen.");
     float values[5];
-    EXIT_IF_ERROR(decoder.GetPixels().GetDistortionBlackOrWhiteBackground(
-                      refs[num_frames], metric, values),
-                  "Error while computing distortion!");
+    CHECK_STATUS(decoder.GetPixels().GetDistortionBlackOrWhiteBackground(
+                 refs[num_frames], metric, values),
+                 "Error while computing distortion!");
     if (!short_output) {
       fprintf(stderr, "Frame %3u distortion ", num_frames);
       PrintDistortion(metric, values, data_size, short_output);
@@ -74,8 +74,8 @@ void PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
     for (int i = 0; i < 5; ++i) avg_values[i] += values[i];
     ++num_frames;
   }
-  EXIT_IF_ERROR(decoder.GetStatus(),
-                "Round trip error!! This shouldn't happen.");
+  CHECK_STATUS(decoder.GetStatus(),
+               "Round trip error!! This shouldn't happen.");
 
   if (num_frames > 0) {
     for (int i = 0; i < 5; ++i) avg_values[i] /= num_frames;
@@ -85,36 +85,36 @@ void PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
     PrintDistortion(metric, avg_values, data_size, short_output);
   } else {
     float values[5];
-    EXIT_IF_FALSE(refs.size() == 1,
-                  "Round trip error!! This shouldn't happen.");
-    EXIT_IF_ERROR(decoder.GetPixels().GetDistortionBlackOrWhiteBackground(
-                      refs.front(), metric, values),
-                  "Error while computing distortion!");
+    CHECK_TRUE(refs.size() == 1, "Round trip error!! This shouldn't happen.");
+    CHECK_STATUS(decoder.GetPixels().GetDistortionBlackOrWhiteBackground(
+                     refs.front(), metric, values),
+                 "Error while computing distortion!");
     PrintDistortion(metric, values, data_size, short_output);
   }
+  return WP2_STATUS_OK;
 }
 
-void PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
-                     size_t data_size, WP2::MetricType metric,
-                     bool short_output) {
+WP2Status PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
+                          size_t data_size, WP2::MetricType metric,
+                          bool short_output) {
   std::vector<WP2::ArgbBuffer> refs(1);
-  if (refs.front().SetView(ref) != WP2_STATUS_OK) assert(false);
-  PrintDistortion(refs, data, data_size, metric, short_output);
+  CHECK_STATUS(refs.front().SetView(ref), "SetView failed");
+  return PrintDistortion(refs, data, data_size, metric, short_output);
 }
 
 //------------------------------------------------------------------------------
 
-void CollectBitTraces(const uint8_t* const data, size_t data_size,
-                      int bit_trace, uint32_t bit_trace_level,
-                      bool short_output, bool show_histograms) {
+WP2Status CollectBitTraces(const uint8_t* const data, size_t data_size,
+                           int bit_trace, uint32_t bit_trace_level,
+                           bool short_output, bool show_histograms) {
   WP2::DecoderConfig config;
   WP2::DecoderInfo info;
   config.info = &info;
 
   WP2::ArrayDecoder decoder(data, data_size, config);
   while (decoder.ReadFrame()) continue;  // Decode everything.
-  EXIT_IF_ERROR(decoder.GetStatus(),
-                "Round trip error!! This shouldn't happen.");
+  CHECK_STATUS(decoder.GetStatus(),
+               "Round trip error!! This shouldn't happen.");
 
 #if defined(WP2_BITTRACE)
   PrintBitTraces(info, data_size, /*sort_value=*/true,
@@ -128,6 +128,7 @@ void CollectBitTraces(const uint8_t* const data, size_t data_size,
           "Bit traces are not available without "
           "WP2_BITTRACE compile flag.\n");
 #endif  // WP2_BITTRACE
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
@@ -191,7 +192,7 @@ bool IsDirectory(const std::string& path) {
 }
 
 bool GetFilesIn(const std::string& dir_path,
-                std::vector<std::string>* const files, bool recursive) {
+                FileList* const files, bool recursive) {
 #ifdef _WIN32
   WIN32_FIND_DATA ffd;
   HANDLE handle = FindFirstFile(JoinPath(dir_path, "*").c_str(), &ffd);

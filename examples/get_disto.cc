@@ -111,7 +111,7 @@ void Help() {
 }  // namespace
 
 int main(int argc, const char *argv[]) {
-  EXIT_IF_FALSE(WP2CheckVersion(), "Error! Library version mismatch!");
+  CHECK_TRUE(WP2CheckVersion(), "Error! Library version mismatch!");
 
   WP2::MetricType type = WP2::PSNR;
   bool scale = false;
@@ -158,7 +158,7 @@ int main(int argc, const char *argv[]) {
       Help();
       return 0;
     } else if (!strcmp(arg, "-o")) {
-      EXIT_IF_FALSE(c + 1 < argc, "missing file name after %s option.", arg);
+      CHECK_TRUE(c + 1 < argc, "missing file name after %s option.", arg);
       output = argv[++c];
     } else if (argv[c][0] == '-') {
       bool must_stop;
@@ -188,20 +188,20 @@ int main(int argc, const char *argv[]) {
 
   size_t file_size1, file_size2;
   ArgbBuffer pic1_rgb, pic2_rgb;
-  EXIT_IF_ERROR(WP2::ReadImage(path1, &pic1_rgb, &file_size1),
-                "Can't decode input file '%s'.", path1);
-  EXIT_IF_ERROR(WP2::ReadImage(path2, &pic2_rgb, &file_size2),
-                "Can't decode input file '%s'.", path2);
+  CHECK_STATUS(WP2::ReadImage(path1, &pic1_rgb, &file_size1),
+               "Can't decode input file '%s'.", path1);
+  CHECK_STATUS(WP2::ReadImage(path2, &pic2_rgb, &file_size2),
+               "Can't decode input file '%s'.", path2);
 
   // save original dimensions (before crop) for bpp calculation.
   const uint32_t width = pic1_rgb.width(), height = pic1_rgb.height();
   if (crop != NO_CROP) {
     if (crop == CROP_BOTH) {
-      EXIT_IF_ERROR(pic1_rgb.SetView(pic1_rgb, crop_area),
-                    "Cropping operation failed! Wrong parameters?");
+      CHECK_STATUS(pic1_rgb.SetView(pic1_rgb, crop_area),
+                   "Cropping operation failed! Wrong parameters?");
     }
-    EXIT_IF_ERROR(pic2_rgb.SetView(pic2_rgb, crop_area),
-                  "Cropping operation failed! Wrong parameters?");
+    CHECK_STATUS(pic2_rgb.SetView(pic2_rgb, crop_area),
+                 "Cropping operation failed! Wrong parameters?");
   }
   if (downscale) {
     pic1_rgb.SimpleHalfDownsample();
@@ -210,13 +210,13 @@ int main(int argc, const char *argv[]) {
 
   size_t ref_size = file_size1;
   if (ref_file != nullptr) {
-    EXIT_IF_ERROR(WP2::IoUtilFileSize(ref_file, &ref_size),
-                  "Could not read size of reference file");
+    CHECK_STATUS(WP2::IoUtilFileSize(ref_file, &ref_size),
+                 "Could not read size of reference file");
   }
   const float bpp = 8.f * ref_size / (width * height);
 
   float disto[5];
-  EXIT_IF_ERROR(
+  CHECK_STATUS(
       pic1_rgb.GetDistortionBlackOrWhiteBackground(pic2_rgb, type, disto),
       "Error while computing the distortion.");
 
@@ -244,8 +244,8 @@ int main(int argc, const char *argv[]) {
     }
     fprintf(stderr, "\n");
     if (use_gray) ConvertToGray(&pic1_rgb);
-    EXIT_IF_ERROR(WP2::SaveImage(pic1_rgb, output, /*overwrite=*/true),
-                  "Error during saving [%s].", output);
+    CHECK_STATUS(WP2::SaveImage(pic1_rgb, output, /*overwrite=*/true),
+                 "Error during saving [%s].", output);
   }
   return 0;
 }

@@ -136,12 +136,12 @@ endif()
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/compiler.cmake)
 
 # Strip symbols when compiling in release to reduce binary size.
-if(NOT WIN32 AND
+# -s is deprecated with Apple ld and win32 clang-cl targets have not been
+# tested. The 'install/strip' target can be used instead.
+if(NOT MSVC AND
    NOT APPLE AND
-   (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
-    CMAKE_CXX_COMPILER_ID MATCHES "GNU"))
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -s")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -s")
+   CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -s")
 endif()
 
 # ##############################################################################
@@ -159,6 +159,7 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/deblocking_filter_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/dec_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/enc_dsp.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/raster_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/grain_c.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/intra_c.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/math.cc
@@ -571,6 +572,7 @@ if(WP2_BUILD_EXAMPLES)
   # utils
   add_library(
     example_utils STATIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/custom_memory.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/example_utils.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/example_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/stopwatch.h)

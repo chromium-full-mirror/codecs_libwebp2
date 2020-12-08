@@ -371,28 +371,53 @@ static int16_t ToPixel8(uint32_t value, uint32_t num_values) {
   return (uint8_t)DivRound(value * 255u, num_values - 1u);
 }
 
+static const Argb32b ColorMult(Argb32b color, float mutiplier) {
+  return {color.a, (uint8_t)(color.r * mutiplier),
+          (uint8_t)(color.g * mutiplier), (uint8_t)(color.b * mutiplier)};
+}
+
 void CodedBlock::StoreTransform(const DecoderConfig& config,
                                 uint32_t tile_x, uint32_t tile_y,
                                 ArgbBuffer* const debug_output) const {
   const CodingParams& params = GetCodingParams(kYChannel);
-  uint32_t value, max_value;
   if (VDMatch(config, "xy")) {
-    value = params.tf;
-    max_value = kNumTransformPairs - 1;
   } else {
-    value = (VDMatch(config, "x") ? params.tf_x() : params.tf_y());
-    max_value = kNumTransforms - 1;
   }
-  value = max_value - value;  // It makes more sense to flip values on screen.
+  const WP2TransformType tf_x = kTfX[params.tf];
+  const WP2TransformType tf_y = kTfY[params.tf];
 
   const bool all_zero = !HasCoeffs(kYChannel);
-  const Rectangle r_px{x_pix(), y_pix(),
-                       std::min(w_pix(), debug_output->width() - x_pix()),
-                       std::min(h_pix(), debug_output->height() - y_pix())};
-  const uint8_t r = (uint8_t)(value * 255u / max_value);
-  const uint8_t g = all_zero ? 0x00 : 0xCC;
-  const uint8_t b = r;
-  debug_output->Fill(r_px, Argb32b{0xff, r, g, b});
+  static constexpr std::array<Argb32b, kNumTransforms> kColors = {
+      {{0xff, 0xff, 0xff, 0xff},  // DCT is white.
+       {0xff, 0xff, 0, 0xff},     // Adst is pink.
+       {0xff, 0, 0xff, 0xff},     // Hadamaart is
+       {0xff, 0xff, 0xff, 0}}};   // Identity is yellow.
+
+  const Argb32b x_color = ColorMult(kColors[tf_x], all_zero ? 0.3f : 1.f);
+  const Argb32b y_color = ColorMult(kColors[tf_y], all_zero ? 0.3f : 1.f);
+
+  const uint32_t w = std::min(w_pix(), debug_output->width() - x_pix());
+  const uint32_t h = std::min(h_pix(), debug_output->height() - y_pix());
+  const Rectangle r_px{x_pix(), y_pix(), w, h};
+  if (VDMatch(config, "x") || (tf_x == tf_y)) {
+    debug_output->Fill(r_px, x_color);
+  } else if (VDMatch(config, "y")) {
+    debug_output->Fill(r_px, y_color);
+  } else {
+    // Two different transforms. Show them as a checkerboard.
+    const Argb32b x_color_dark = ColorMult(x_color, 0.8f);
+    const Argb32b y_color_dark = ColorMult(y_color, 0.8f);
+    for (uint32_t y = 0; y < h; ++y) {
+      for (uint32_t x = 0; x < w; ++x) {
+        const Rectangle pixel = {x_pix() + x, y_pix() + y, 1, 1};
+        if (((x >> 1) % 2) == ((y >> 1) % 2)) {
+          debug_output->Fill(pixel, (y % 2) ? x_color : x_color_dark);
+        } else {
+          debug_output->Fill(pixel, (x % 2) ? y_color : y_color_dark);
+        }
+      }
+    }
+  }
 
   if (VDSelected(tile_x, tile_y, r_px, config)) {
     debug_output->DrawRect(r_px, Argb32b{0xff, 0xff, 0x00, 0x00});
@@ -571,13 +596,13 @@ static void DisplayPredContext(const CodedBlock& cb, Channel channel,
   }
 }
 
-void CodedBlock::StorePredictionScore(const EncoderConfig& config,
-                                      const Rectangle& tile_rect,
-                                      Channel channel, const Predictor& pred,
-                                      TransformPair tf, float dist,
-                                      float lambda, float res_rate,
-                                      float pred_rate, float tf_rate,
-                                      float score, bool is_best) const {
+static constexpr const char* kSearchTypeNames[] = {"tf", "pred&tf", "split"};
+
+void CodedBlock::StorePredictionScore(
+    const EncoderConfig& config, const Rectangle& tile_rect, Channel channel,
+    const Predictor& pred, TransformPair tf, float dist, float lambda,
+    float res_rate, float pred_rate, float tf_rate, float score, bool is_best,
+    SearchType type) const {
   if (!VDMatch(config, "prediction-scores")) return;
   if (VDChannel(config) != channel) return;
 
@@ -605,19 +630,20 @@ void CodedBlock::StorePredictionScore(const EncoderConfig& config,
       WP2SAppend(str_ptr,
                  " + lambda %9.1f * (res %7.4f + pred %7.4f + tf %7.4f)",
                  lambda, res_rate, pred_rate, tf_rate);
-      WP2SAppend(str_ptr, " %s (%s - %s/%s x%u)\n", is_best ? "best" : "    ",
-                 pred.GetName().c_str(), WP2TransformNames[kTfX[tf]],
-                 WP2TransformNames[kTfY[tf]], GetNumTransforms(channel));
+      WP2SAppend(str_ptr, " %s (%s - %s/%s x%u) (%s)\n",
+                 is_best ? "best" : "    ", pred.GetName().c_str(),
+                 WP2TransformNames[kTfX[tf]], WP2TransformNames[kTfY[tf]],
+                 GetNumTransforms(channel), kSearchTypeNames[(int)type]);
     } else {
       // Print in console instead.
       printf(
           "Block at (%d %d) Score %9.1f = dist %9.1f + lambda %9.1f * (res "
           "%7.4f + pred %7.4f + "
-          "tf %7.4f)  %s (%s - %s/%s x%u)\n",
+          "tf %7.4f)  %s (%s - %s/%s x%u) (%s)\n",
           x_pix(), y_pix(), score, dist, lambda, res_rate, pred_rate, tf_rate,
           is_best ? "best" : "    ", pred.GetName().c_str(),
           WP2TransformNames[kTfX[tf]], WP2TransformNames[kTfY[tf]],
-          GetNumTransforms(channel));
+          GetNumTransforms(channel), kSearchTypeNames[(int)type]);
     }
   }
   DisplayPredContext(*this, channel, /*draw_red_border=*/selected,

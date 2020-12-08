@@ -113,6 +113,18 @@ Rectangle Rectangle::MergeWith(const Rectangle& r) const {
   return merged;
 }
 
+void Rectangle::Exclude(const Rectangle& r, Rectangle* const top,
+                        Rectangle* const bot, Rectangle* const lft,
+                        Rectangle* const rgt) {
+  const Rectangle excluded = r.ClipWith(*this);
+  *top = {x, y, width, excluded.y - y};
+  *bot = {x, excluded.y + excluded.height, width,
+          (y + height) - (excluded.y + excluded.height)};
+  *lft = {x, excluded.y, excluded.x - x, excluded.height};
+  *rgt = {excluded.x + excluded.width, excluded.y,
+          (x + width) - (excluded.x + excluded.width), excluded.height};
+}
+
 //------------------------------------------------------------------------------
 
 ArgbBuffer::ArgbBuffer(WP2SampleFormat format_in) noexcept

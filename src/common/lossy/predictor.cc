@@ -791,7 +791,8 @@ class PredictorScorer {
           config_, tile_rect_, channel, p, cb->GetCodingParams(channel)->tf,
           dist[channel], cb->lambda_mult_ * quant.lambda2, res_rate[channel],
           pred_rate[channel], /*tf_rate=*/0.f, scores[channel],
-          /*is_best=*/(score_ < best_score_));
+          /*is_best=*/(score_ < best_score_),
+          CodedBlock::SearchType::kPredAndTransform);
     }
     return WP2_STATUS_OK;
   }
@@ -800,7 +801,8 @@ class PredictorScorer {
   // applied to 'cb'.
   WP2Status UpdateYAPredScore(const Predictor& p, const Plane16& prediction,
                               TransformPair tf, uint32_t num_transforms,
-                              BlockCoeffs32* const res, CodedBlock* const cb) {
+                              const BlockCoeffs32* const res,
+                              BlockCoeffs32* const tmp, CodedBlock* const cb) {
     assert(channel_ == kYChannel || channel_ == kAChannel);
     CodedBlock::CodingParams* const params = cb->GetCodingParams(channel_);
     params->tf = tf;
@@ -810,7 +812,8 @@ class PredictorScorer {
     const QuantMtx& quant = segment_.GetQuant(channel_);
     float res_rate, pred_rate, tf_rate;
 
-    cb->TransformAndReconstruct(quant, channel_, reduced_, prediction, res);
+    cb->TransformAndReconstruct(quant, channel_, reduced_, prediction, res,
+                                tmp);
 
     WP2_CHECK_STATUS(cb->TransformRate(channel_, num_transforms,
                                        counters_->transform(), &tf_rate));
@@ -822,7 +825,8 @@ class PredictorScorer {
     cb->StorePredictionScore(config_, tile_rect_, channel_, p, params->tf,
                              dist_, cb->lambda_mult_ * quant.lambda1, res_rate,
                              pred_rate, tf_rate, score_,
-                             /*is_best=*/(score_ < best_score_));
+                             /*is_best=*/(score_ < best_score_),
+                             CodedBlock::SearchType::kPredAndTransform);
     return WP2_STATUS_OK;
   }
 
@@ -830,11 +834,13 @@ class PredictorScorer {
   // it is the best.
   WP2Status UpdatePredScore(const Predictor* const p, const Plane16& prediction,
                             TransformPair tf, uint32_t num_tf,
-                            BlockCoeffs32* const res, CodedBlock* const cb) {
+                            const BlockCoeffs32* const res,
+                            BlockCoeffs32* const tmp, CodedBlock* const cb) {
     if (channel_ == kUChannel) {
       WP2_CHECK_STATUS(UpdateUVPredScore(*p, cb));
     } else {
-      WP2_CHECK_STATUS(UpdateYAPredScore(*p, prediction, tf, num_tf, res, cb));
+      WP2_CHECK_STATUS(
+          UpdateYAPredScore(*p, prediction, tf, num_tf, res, tmp, cb));
     }
     if (score_ < best_score_) {
       best_score_ = score_;
@@ -892,7 +898,7 @@ WP2Status Predictors::FindBest(
   Plane16 pred_view;
   WP2_CHECK_STATUS(pred_view.SetView(prediction, kMaxBlockSizePix,
                                      kMaxBlockSizePix, kMaxBlockSizePix));
-  BlockCoeffs32 res;
+  BlockCoeffs32 res, tmp;
   TransformPair overridden_tf;
 
   // Test the non-angle predictors.
@@ -904,11 +910,11 @@ WP2Status Predictors::FindBest(
     }
     if (p->OverridesTransform(channel_, &overridden_tf)) {
       WP2_CHECK_STATUS(scorer.UpdatePredScore(p, pred_view, overridden_tf,
-                                              /*num_tf=*/1, &res, cb));
+                                              /*num_tf=*/1, &res, &tmp, cb));
     } else {
       for (TransformPair tf : transforms) {
         WP2_CHECK_STATUS(
-            scorer.UpdatePredScore(p, pred_view, tf, num_tf, &res, cb));
+            scorer.UpdatePredScore(p, pred_view, tf, num_tf, &res, &tmp, cb));
       }
     }
   }
@@ -934,13 +940,13 @@ WP2Status Predictors::FindBest(
     }
     if (p->OverridesTransform(channel_, &overridden_tf)) {
       WP2_CHECK_STATUS(scorer.UpdatePredScore(p, pred_view, overridden_tf,
-                                              /*num_tf=*/1, &res, cb));
+                                              /*num_tf=*/1, &res, &tmp, cb));
       angle_scores.push_back_no_resize(
           {scorer.GetLastScore(), scorer.GetLastDist(), p, overridden_tf});
     } else {
       for (TransformPair tf : transforms) {
         WP2_CHECK_STATUS(
-            scorer.UpdatePredScore(p, pred_view, tf, num_tf, &res, cb));
+            scorer.UpdatePredScore(p, pred_view, tf, num_tf, &res, &tmp, cb));
         angle_scores.push_back_no_resize(
             {scorer.GetLastScore(), scorer.GetLastDist(), p, tf});
       }
@@ -974,7 +980,7 @@ WP2Status Predictors::FindBest(
           }
           const bool ovrd_tf = p->OverridesTransform(channel_, &overridden_tf);
           WP2_CHECK_STATUS(scorer.UpdatePredScore(
-              p, pred_view, s.tf, ovrd_tf ? 1 : num_tf, &res, cb));
+              p, pred_view, s.tf, ovrd_tf ? 1 : num_tf, &res, &tmp, cb));
         }
       }
     }

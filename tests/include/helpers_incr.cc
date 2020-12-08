@@ -21,6 +21,7 @@
 
 #include "./helpers.h"
 #include "src/utils/orientation.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -352,14 +353,13 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
             incremental_output.Resize(features->width, features->height));
       }
 
-      if (previous_decoded_area.GetArea() > 0) {
-        // Check the pixels from last loop before overwriting them.
-        float disto[5];
-        WP2_CHECK_STATUS(incremental_output.GetDistortion(
-            output, previous_decoded_area, PSNR, disto));
-        CHECK_OR_DIE(disto[4] == 99.f);
-      }
-      WP2_CHECK_STATUS(ImportRect(output, decoded_area, &incremental_output));
+      // Copy newly decoded pixels.
+      Rectangle top, bot, lft, rgt;
+      decoded_area.Exclude(previous_decoded_area, &top, &bot, &lft, &rgt);
+      WP2_CHECK_STATUS(ImportRect(output, top, &incremental_output));
+      WP2_CHECK_STATUS(ImportRect(output, bot, &incremental_output));
+      WP2_CHECK_STATUS(ImportRect(output, lft, &incremental_output));
+      WP2_CHECK_STATUS(ImportRect(output, rgt, &incremental_output));
       previous_decoded_area = decoded_area;
     }
 

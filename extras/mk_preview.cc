@@ -35,14 +35,6 @@
 
 //------------------------------------------------------------------------------
 
-#define CHECK_OK(COND, STR...) do {   \
-  if (!(COND)) {                      \
-    fprintf(stderr, STR);             \
-    return 1;                         \
-  }                                   \
-} while (false)
-#define CHECK_STATUS(CALL, STR...) CHECK_OK(((CALL) == WP2_STATUS_OK), STR)
-
 namespace {
 static int verbose = 1;
 static bool check = false;
@@ -130,7 +122,7 @@ void Help() {
 
 //------------------------------------------------------------------------------
 
-int ConvertTextFiles(int argc, const char* argv[]) {
+WP2_NO_DISCARD WP2Status ConvertTextFiles(int argc, const char* argv[]) {
   // pure txt->bits conversion mode
   uint32_t total_size = 0;
   uint32_t nb_files = 0;
@@ -149,7 +141,7 @@ int ConvertTextFiles(int argc, const char* argv[]) {
       continue;
     } else if (!strcmp(argv[c], "-h")) {
       Help();
-      return 0;
+      return WP2_STATUS_OK;
     }
     std::string in;
     CHECK_STATUS(IoUtilReadFile(argv[c], &in), "bad input [%s]\n", argv[c]);
@@ -160,7 +152,7 @@ int ConvertTextFiles(int argc, const char* argv[]) {
                  "Error encoding to binary! SHOULDN'T HAPPEN!!\n");
     if (to_base64) {
       const std::string out = PreviewToBase64(data);
-      CHECK_OK(!out.empty(), "Error during Base64 generation!\n");
+      CHECK_TRUE(!out.empty(), "Error during Base64 generation!\n");
       printf("### argv[c] ###\n%s\n", out.c_str());
     } else if (!dry_run) {
       const std::string out_name = RemoveFileExtension(argv[c]) + ".bits";
@@ -173,13 +165,13 @@ int ConvertTextFiles(int argc, const char* argv[]) {
       PreviewData verif;
       CHECK_STATUS(verif.Decode(enc.Buffer(), enc.BufferSize()),
                    "Round-trip Decode() failed.\n");
-      CHECK_STATUS(verif == data, "Round-trip verification failed!\n");
+      CHECK_TRUE(verif == data, "Round-trip verification failed!\n");
     }
     total_size += enc.BufferSize();
     ++nb_files;
   }
   VERBOSE("%u files, size: %u bytes\n", nb_files, total_size);
-  return 0;
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
@@ -267,7 +259,7 @@ int main(int argc, const char* argv[]) {
           !strcmp(argv[c + 1], "csub") ? &config.proba_color_sub :
           !strcmp(argv[c + 1], "cidx") ? &config.proba_color_index_move :
           nullptr;
-        CHECK_OK(dst != nullptr, "Invalid -p move '%s'\n", argv[c + 1]);
+        CHECK_TRUE(dst != nullptr, "Invalid -p move '%s'\n", argv[c + 1]);
         *dst = ExUtilGetUInt(argv[c + 2], &parse_error);
         c += 2;
       }
@@ -285,7 +277,7 @@ int main(int argc, const char* argv[]) {
       } else if (!strcmp(argv[c], "voronoi")) {
         config.analysis_method = PreviewConfig::AnalysisMethod::kVoronoi;
       } else {
-        CHECK_OK(false, "Unknown analysis method '%s'\n", argv[c]);
+        CHECK_TRUE(false, "Unknown analysis method '%s'\n", argv[c]);
       }
     } else if (!strcmp(argv[c], "-n") && c + 1 < argc) {
       config.num_vertices = ExUtilGetUInt(argv[++c], &parse_error);
@@ -313,8 +305,8 @@ int main(int argc, const char* argv[]) {
       return 1;
     }
   }
-  CHECK_OK(img_file != nullptr, "Missing input image");
-  CHECK_OK(config.IsValid(), "PreviewConfig is invalid.\n");
+  CHECK_TRUE(img_file != nullptr, "Missing input image");
+  CHECK_TRUE(config.IsValid(), "PreviewConfig is invalid.\n");
 
   WP2::ArgbBuffer original;
   CHECK_STATUS(WP2::ReadImage(img_file, &original),

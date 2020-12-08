@@ -33,6 +33,10 @@ int TestImageEncConfig(const ArgbBuffer& original, const EncoderConfig& config,
 
   MemoryWriter memory_writer;
   const WP2Status status = Encode(original, &memory_writer, config);
+  if (config.progress_hook != nullptr) {
+    if (status != WP2_STATUS_USER_ABORT) abort();
+    return 0;
+  }
   if (status != WP2_STATUS_OK) abort();
 
   // Verify that it decodes fine and that the result is close enough.

@@ -97,6 +97,7 @@ void Help() {
   opt.Add("-histos", "display histograms per symbol when -bt is set");
 #endif
   opt.Add("");
+  opt.AddMemoryOptionSection();
   opt.AddSystemOptionSection();
   opt.Print();
 }
@@ -132,16 +133,16 @@ struct DecodingSettings {
 //------------------------------------------------------------------------------
 
 // Get images to decode from input arguments.
-std::vector<std::string> GetFilesToDecode(const std::vector<std::string>& paths,
-                                          bool recursive_input, bool verbose,
-                                          bool quiet) {
-  std::vector<std::string> files_to_decode;
+WP2Status GetFilesToDecode(const WP2::FileList& paths,
+                           bool recursive_input, bool verbose,
+                           bool quiet, WP2::FileList* const files_to_decode) {
+  files_to_decode->clear();
   for (const std::string& path : paths) {
     if (WP2::IsDirectory(path)) {
       if (recursive_input) {
-        std::vector<std::string> files_in_dir;
-        EXIT_IF_FALSE(WP2::GetFilesIn(path, &files_in_dir, /*recursive=*/true),
-                      "Error! Opening directory %s failed.", path.c_str());
+        WP2::FileList files_in_dir;
+        CHECK_TRUE(WP2::GetFilesIn(path, &files_in_dir, /*recursive=*/true),
+                   "Error! Opening directory %s failed.", path.c_str());
 
         // Only keep files with a wp2 extension.
         for (const std::string& file : files_in_dir) {
@@ -157,7 +158,7 @@ std::vector<std::string> GetFilesToDecode(const std::vector<std::string>& paths,
               printf("File %s has no WP2 header: skipping.\n", file.c_str());
             }
           } else {
-            files_to_decode.push_back(file);
+            files_to_decode->push_back(file);
           }
         }
       } else if (!quiet) {
@@ -167,10 +168,10 @@ std::vector<std::string> GetFilesToDecode(const std::vector<std::string>& paths,
       }
     } else {
       // No extension checking for explicit input files.
-      files_to_decode.push_back(path);
+      files_to_decode->push_back(path);
     }
   }
-  return files_to_decode;
+  return WP2_STATUS_OK;
 }
 
 uint8_t GetNumDigits(size_t number) {
@@ -192,7 +193,7 @@ std::string GetFrameFilename(size_t index, uint32_t duration_ms) {
 class ImageDecoder : public WP2::WorkerBase {
  public:
   ImageDecoder(const DecodingSettings& settings,
-               const std::vector<std::string>& image_pool,
+               const WP2::FileList& image_pool,
                size_t* const next_image_index, WP2::ThreadLock* const mutex,
                WP2::MultiProgressPrinter* const progress_printer)
       : settings_(settings),
@@ -389,7 +390,7 @@ class ImageDecoder : public WP2::WorkerBase {
   const DecodingSettings& settings_;
 
   // Shared pool of images to decode.
-  const std::vector<std::string>& image_pool_;
+  const WP2::FileList& image_pool_;
   size_t* const next_image_index_ = nullptr;
   WP2::ThreadLock* const mutex_ = nullptr;  // Acquire/release if not null.
 
@@ -401,13 +402,12 @@ class ImageDecoder : public WP2::WorkerBase {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  std::vector<std::string> in_paths;
+  WP2::FileList in_paths;
   bool recursive_input = false;
   DecodingSettings settings = {};
   uint32_t thread_level = 0;
-  WP2::MultiProgressPrinter progress_printer;
 
-  EXIT_IF_FALSE(WP2CheckVersion(), "Error! Library version mismatch!");
+  CHECK_TRUE(WP2CheckVersion(), "Error! Library version mismatch!");
 
   for (int c = 1; c < argc; ++c) {
     bool parse_error = false;
@@ -415,8 +415,8 @@ int main(int argc, char* argv[]) {
       Help();
       return 0;
     } else if (!strcmp(argv[c], "-o") && c + 1 < argc) {
-      EXIT_IF_FALSE(settings.out_path.empty() && !settings.inplace_output,
-                    "Error! Output was already specified.");
+      CHECK_TRUE(settings.out_path.empty() && !settings.inplace_output,
+                 "Error! Output was already specified.");
       settings.out_path = argv[++c];
     } else if (!strcmp(argv[c], "-png")) {
       settings.out_format = WP2::FileFormat::PNG;
@@ -451,14 +451,14 @@ int main(int argc, char* argv[]) {
     } else if (!strcmp(argv[c], "-r")) {
       recursive_input = true;
     } else if (!strcmp(argv[c], "-inplace")) {
-      EXIT_IF_FALSE(!settings.output_frames_to_directory,
-                    "Error! -inplace is not compatible with -frames.");
-      EXIT_IF_FALSE(settings.out_path.empty(),
-                    "Error! Output was already specified.");
+      CHECK_TRUE(!settings.output_frames_to_directory,
+                 "Error! -inplace is not compatible with -frames.");
+      CHECK_TRUE(settings.out_path.empty(),
+                 "Error! Output was already specified.");
       settings.inplace_output = true;
     } else if (!strcmp(argv[c], "-frames")) {
-      EXIT_IF_FALSE(!settings.inplace_output,
-                    "Error! -frames is not compatible with -inplace.");
+      CHECK_TRUE(!settings.inplace_output,
+                 "Error! -frames is not compatible with -inplace.");
       settings.output_frames_to_directory = true;
     } else if (!strcmp(argv[c], "-force")) {
       settings.allow_overwrite = true;
@@ -492,8 +492,11 @@ int main(int argc, char* argv[]) {
       break;
     } else if (argv[c][0] == '-') {
       bool must_stop;
+      int skip;
       if (ProgramOptions::ParseSystemOptions(argv[c], &must_stop)) {
         if (must_stop) return 0;
+      } else if (ProgramOptions::ParseMemoryOptions(argv + c, argc - c, skip)) {
+        c += skip - 1;
       } else {
         printf("Unknown option '%s'\n", argv[c]);
         Help();
@@ -509,13 +512,10 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  const std::vector<std::string> in_files = GetFilesToDecode(
-      in_paths, recursive_input, settings.verbose, settings.quiet);
-  if (in_files.empty()) {
-    fprintf(stderr, "missing input file!!\n");
-    Help();
-    return 1;
-  }
+  WP2::FileList in_files;
+  CHECK_STATUS(GetFilesToDecode(in_paths, recursive_input, settings.verbose,
+                                settings.quiet, &in_files),
+               "missing input file!!");
 
   if (settings.quiet) settings.verbose = false;
   if (settings.quiet) settings.report_progress = false;
@@ -526,17 +526,19 @@ int main(int argc, char* argv[]) {
   if (!settings.output_to_directory) settings.allow_overwrite = true;
 
   if (settings.output_frames_to_directory) {
-    EXIT_IF_FALSE(in_files.size() == 1,
-                  "Error! -frames requires a single input file.");
-    EXIT_IF_FALSE(settings.output_to_directory,
-                  "Error! -frames requires a single output directory.");
+    CHECK_TRUE(in_files.size() == 1,
+               "Error! -frames requires a single input file.");
+    CHECK_TRUE(settings.output_to_directory,
+               "Error! -frames requires a single output directory.");
   } else {
-    EXIT_IF_FALSE(
-        in_files.size() == 1 || settings.output_to_directory ||
-            settings.out_path.empty(),
+    CHECK_TRUE(in_files.size() == 1 || settings.output_to_directory ||
+               settings.out_path.empty(),
         "Error! Several input images require the output to be an existing "
         "directory.");
   }
+
+  // Warning! This object is allocating underneath. Bad interference with -mem*!
+  WP2::MultiProgressPrinter progress_printer;
 
   if (settings.report_progress) progress_printer.Init(in_files.size());
 
@@ -569,7 +571,7 @@ int main(int argc, char* argv[]) {
     if (status == WP2_STATUS_OK) status = end_status;
     // Still wait for others to finish in case of error.
   }
-  EXIT_IF_ERROR(status, "Error: %s", WP2GetStatusText(status));
+  CHECK_STATUS(status, "Error: %s", WP2GetStatusText(status));
 
   if (!settings.quiet && settings.out_path.empty()) {
     printf("Nothing written; use -o flag to save the result.\n");

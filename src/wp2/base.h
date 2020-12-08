@@ -270,8 +270,13 @@ struct Rectangle {
     return ((x >= r.x && x < r.x + r.width) || (r.x >= x && r.x < x + width)) &&
            ((y >= r.y && y < r.y + r.height) || (r.y >= y && r.y < y + height));
   }
+  // Returns the maximum rectangle covered by both this and 'r'.
   Rectangle ClipWith(const Rectangle& r) const;
+  // Returns the minimum rectangle covering both this and 'r'.
   Rectangle MergeWith(const Rectangle& r) const;
+  // Returns the areas covered by this but not covered by 'r'.
+  void Exclude(const Rectangle& r, Rectangle* const top, Rectangle* const bot,
+               Rectangle* const lft, Rectangle* const rgt);
 };
 
 enum class Orientation { kOriginal = 0, k90Clockwise, k180, k270Clockwise };

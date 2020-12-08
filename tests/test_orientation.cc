@@ -295,5 +295,43 @@ TEST(OrientationTest, Preview) {
 
 //------------------------------------------------------------------------------
 
+TEST(OrientationTest, Rectangle) {
+  EXPECT_EQ(Rectangle(0, 2, 10, 6).ClipWith(Rectangle(2, 0, 6, 10)),
+            Rectangle(2, 2, 6, 6));
+  EXPECT_EQ(Rectangle(0, 2, 10, 6).MergeWith(Rectangle(2, 0, 6, 10)),
+            Rectangle(0, 0, 10, 10));
+
+  Rectangle top, bot, lft, rgt;
+  Rectangle(0, 2, 10, 6)
+      .Exclude(Rectangle(2, 0, 6, 10), &top, &bot, &lft, &rgt);
+  EXPECT_EQ(top.GetArea(), 0u);
+  EXPECT_EQ(bot.GetArea(), 0u);
+  EXPECT_EQ(lft, Rectangle(0, 2, 2, 6));
+  EXPECT_EQ(rgt, Rectangle(8, 2, 2, 6));
+
+  Rectangle(0, 1, 10, 8)
+      .Exclude(Rectangle(4, 5, 1, 2), &top, &bot, &lft, &rgt);
+  EXPECT_EQ(top, Rectangle(0, 1, 10, 4));
+  EXPECT_EQ(bot, Rectangle(0, 7, 10, 2));
+  EXPECT_EQ(lft, Rectangle(0, 5, 4, 2));
+  EXPECT_EQ(rgt, Rectangle(5, 5, 5, 2));
+
+  Rectangle(0, 0, 10, 10)
+      .Exclude(Rectangle(0, 0, 0, 10), &top, &bot, &lft, &rgt);
+  EXPECT_EQ(top.GetArea(), 0u);
+  EXPECT_EQ(bot.GetArea(), 0u);
+  EXPECT_EQ(lft.GetArea(), 0u);
+  EXPECT_EQ(rgt, Rectangle(0, 0, 10, 10));
+
+  Rectangle(0, 0, 10, 10)
+      .Exclude(Rectangle(0, 0, 10, 0), &top, &bot, &lft, &rgt);
+  EXPECT_EQ(top.GetArea(), 0u);
+  EXPECT_EQ(bot, Rectangle(0, 0, 10, 10));
+  EXPECT_EQ(lft.GetArea(), 0u);
+  EXPECT_EQ(rgt.GetArea(), 0u);
+}
+
+//------------------------------------------------------------------------------
+
 }  // namespace
 }  // namespace WP2

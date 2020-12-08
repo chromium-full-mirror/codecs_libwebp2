@@ -163,6 +163,7 @@ void HelpLong() {
           "enable neural compression and specify "
           "directory with enc/decoder graphdefs");
   opt.Add("");
+  opt.AddMemoryOptionSection();
   opt.AddSystemOptionSection();
   opt.Print();
 }
@@ -177,21 +178,20 @@ struct InputFrame {
 };
 
 // Gets frames to encode as an animation (-frames).
-std::vector<std::string> GetFramesToEncode(
-    const std::vector<std::string>& files, WP2::LogLevel log_level,
-    std::vector<uint32_t>* const durations) {
+WP2_NO_DISCARD WP2Status GetFramesToEncode(WP2::LogLevel log_level,
+    std::vector<uint32_t>* const durations, WP2::FileList* const frames_paths) {
   // Keep only files with a matching frame name.
   std::vector<InputFrame> input_frames;
-  for (const std::string& file_path : files) {
+  for (const std::string& file_path : *frames_paths) {
     const std::string file_name = WP2::GetFileName(file_path);
     uint32_t frame_index;
     uint32_t duration_ms;
     const int num_assigned_variables =
         sscanf(file_name.c_str(), "frame%u_%ums", &frame_index, &duration_ms);
     if (num_assigned_variables == 2) {
-      EXIT_IF_FALSE(input_frames.size() < WP2::kMaxNumFrames,
-                    "Error! Frame count can not exceed %u (file '%s')",
-                    WP2::kMaxNumFrames, file_path.c_str());
+      CHECK_TRUE(input_frames.size() < WP2::kMaxNumFrames,
+                 "Error! Frame count can not exceed %u (file '%s')",
+                 WP2::kMaxNumFrames, file_path.c_str());
       input_frames.emplace_back(
           InputFrame({&file_path, frame_index, duration_ms}));
     } else if (log_level >= WP2::LogLevel::VERBOSE) {
@@ -203,34 +203,34 @@ std::vector<std::string> GetFramesToEncode(
   std::sort(input_frames.begin(), input_frames.end());
 
   // Parse them in order until index is no longer incremental.
-  std::vector<std::string> frames_paths;
   durations->clear();
+  WP2::FileList new_list;
   uint32_t last_index = 0;
   for (const InputFrame& input_frame : input_frames) {
-    EXIT_IF_FALSE(last_index == 0 || input_frame.index > last_index,
-                  "Error! Duplicate frame index %u at '%s'",
-                  input_frame.index, input_frame.file_path->c_str());
-    frames_paths.push_back(*input_frame.file_path);
+    CHECK_TRUE(last_index == 0 || input_frame.index > last_index,
+               "Error! Duplicate frame index %u at '%s'",
+               input_frame.index, input_frame.file_path->c_str());
+    new_list.push_back(*input_frame.file_path);
     durations->push_back(input_frame.duration);
     last_index = input_frame.index;
   }
-  return frames_paths;
+  std::swap(new_list, *frames_paths);
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
 
 // Gets files to encode from input arguments.
-std::vector<std::string> GetFilesToEncode(
-    const std::vector<std::string>& paths, bool recursive_input,
-    WP2::LogLevel log_level, bool input_frames,
-    std::vector<uint32_t>* const frame_durations) {
-  std::vector<std::string> files;
+WP2_NO_DISCARD WP2Status GetFilesToEncode(
+    const WP2::FileList& paths, bool recursive_input, WP2::LogLevel log_level,
+    bool input_frames, std::vector<uint32_t>* const frame_durations,
+    WP2::FileList* const files) {
   for (const std::string& path : paths) {
     if (WP2::IsDirectory(path)) {
       if (recursive_input) {
-        std::vector<std::string> files_in_dir;
-        EXIT_IF_FALSE(WP2::GetFilesIn(path, &files_in_dir, /*recursive=*/true),
-                      "Error! Opening directory %s failed.", path.c_str());
+        WP2::FileList files_in_dir;
+        CHECK_TRUE(WP2::GetFilesIn(path, &files_in_dir, /*recursive=*/true),
+                   "Error! Opening directory %s failed.", path.c_str());
 
         // Only keep files with a handled extension.
         for (const std::string& file : files_in_dir) {
@@ -238,7 +238,7 @@ std::vector<std::string> GetFilesToEncode(
               WP2::GetFormatFromExtension(file.c_str());
           if (format != WP2::FileFormat::UNSUPPORTED &&
               format != WP2::FileFormat::BMP) {
-            files.push_back(file);
+            files->push_back(file);
           } else if (log_level >= WP2::LogLevel::VERBOSE) {
             fprintf(stderr, "Ignoring file %s.\n", file.c_str());
           }
@@ -250,36 +250,39 @@ std::vector<std::string> GetFilesToEncode(
       }
     } else {
       // No extension checking for explicit input files.
-      files.push_back(path);
+      files->push_back(path);
     }
   }
 
   if (input_frames) {
-    files = GetFramesToEncode(files, log_level, frame_durations);
+    return GetFramesToEncode(log_level, frame_durations, files);
   }
-  return files;
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
 
 // Crops the canvas and resets the metadata of 'buffer' depending on 'params'.
-void ApplyModifications(const char* const file, const Params& params,
-                        WP2::ArgbBuffer* const buffer,
-                        WP2::Metadata* const metadata) {
+WP2_NO_DISCARD
+WP2Status ApplyModifications(const char* const file, const Params& params,
+                             WP2::ArgbBuffer* const buffer,
+                             WP2::Metadata* const metadata) {
   if (params.no_metadata && metadata != nullptr) metadata->Clear();
   if (params.crop) {
-    EXIT_IF_ERROR(buffer->SetView(*buffer, params.crop_area),
-                  "Error! Cropping operation of '%s' failed.", file);
+    CHECK_STATUS(buffer->SetView(*buffer, params.crop_area),
+                 "Error! Cropping operation of '%s' failed.", file);
   }
+  return WP2_STATUS_OK;
 }
 
 // Encodes 'frames' into 'writer'.
-void CompressAnimation(const std::vector<std::string>& frames,
-                       const std::vector<uint32_t>& frame_durations,
-                       const Params& params,
-                       std::vector<WP2::ArgbBuffer>* const refs,
-                       WP2::ArgbBuffer* const rgb_buffer,
-                       WP2::Writer* const writer) {
+WP2_NO_DISCARD
+WP2Status CompressAnimation(const WP2::FileList& frames,
+                            const std::vector<uint32_t>& frame_durations,
+                            const Params& params,
+                            std::vector<WP2::ArgbBuffer>* const refs,
+                            WP2::ArgbBuffer* const rgb_buffer,
+                            WP2::Writer* const writer) {
   assert(frames.size() == frame_durations.size());
   WP2::AnimationEncoder animation_encoder;
 
@@ -288,22 +291,23 @@ void CompressAnimation(const std::vector<std::string>& frames,
   for (size_t i = 0; i < frames.size(); ++i) {
     const char* const file_path = frames[i].c_str();
     WP2::Data data;
-    EXIT_IF_ERROR(IoUtilReadFile(file_path, &data),
-                  "Error! Cannot open input file '%s'", file_path);
-    EXIT_IF_ERROR(WP2::ReadImage(data.bytes, data.size, rgb_buffer,
-                                 WP2::FileFormat::AUTO, params.log_level),
-                  "Error! Cannot read input file '%s'", file_path);
-    ApplyModifications(file_path, params, rgb_buffer, &rgb_buffer->metadata_);
+    CHECK_STATUS(IoUtilReadFile(file_path, &data),
+                 "Error! Cannot open input file '%s'", file_path);
+    CHECK_STATUS(WP2::ReadImage(data.bytes, data.size, rgb_buffer,
+                                WP2::FileFormat::AUTO, params.log_level),
+                 "Error! Cannot read input file '%s'", file_path);
+    WP2_CHECK_STATUS(ApplyModifications(file_path, params, rgb_buffer,
+                                        &rgb_buffer->metadata_));
 
     if (refs != nullptr) {
       refs->emplace_back(rgb_buffer->format());
-      EXIT_IF_ERROR(RotateBuffer(params.config.decoding_orientation,
-                                 *rgb_buffer, &refs->back()),
-                    "Error! Image copy failed.");
+      CHECK_STATUS(RotateBuffer(params.config.decoding_orientation,
+                                *rgb_buffer, &refs->back()),
+                   "Error! Image copy failed.");
     }
 
-    EXIT_IF_ERROR(animation_encoder.AddFrame(*rgb_buffer, frame_durations[i]),
-                  "Error! Cannot add input frame '%s'", file_path);
+    CHECK_STATUS(animation_encoder.AddFrame(*rgb_buffer, frame_durations[i]),
+                 "Error! Cannot add input frame '%s'", file_path);
   }
   if (params.log_level >= WP2::LogLevel::VERBOSE) {
     const double elapsed = GetStopwatchTime() - start;
@@ -314,20 +318,23 @@ void CompressAnimation(const std::vector<std::string>& frames,
   start = GetStopwatchTime();
   // TODO(yguyon): Warn that no metadata is copied over when compressing
   //               several still images into an animation with cwp2
-  EXIT_IF_ERROR(
+  CHECK_STATUS(
       animation_encoder.Encode(writer, params.config, params.loop_forever),
       "Error! Cannot encode animation as WP2");
   if (params.log_level >= WP2::LogLevel::VERBOSE) {
     const double encode_time = GetStopwatchTime() - start;
     fprintf(stderr, "Time to encode animation: %.3fs\n", encode_time);
   }
+  return WP2_STATUS_OK;
 }
 
 // Encodes 'file' into 'writer'.
-void CompressImage(const char* const file_path,
-                   const Params& params,
-                   std::vector<WP2::ArgbBuffer>* const refs,
-                   WP2::ArgbBuffer* const buffer, WP2::Writer* const writer) {
+WP2_NO_DISCARD
+WP2Status CompressImage(const char* const file_path,
+                        const Params& params,
+                        std::vector<WP2::ArgbBuffer>* const refs,
+                        WP2::ArgbBuffer* const buffer,
+                        WP2::Writer* const writer) {
   // Read input image.
   double start = GetStopwatchTime();
   WP2::ImageReader image_reader(file_path, buffer, WP2::FileFormat::AUTO,
@@ -340,24 +347,26 @@ void CompressImage(const char* const file_path,
   WP2::AnimationEncoder animation_encoder;
 
   for (uint32_t i = 0; !is_last_frame; ++i) {
-    EXIT_IF_FALSE(i < WP2::kMaxNumFrames,
-                  "Error! There are too many frames in '%s'", file_path);
-    EXIT_IF_ERROR(image_reader.ReadFrame(&is_last_frame, &duration_ms),
-                  "Error! Cannot read input '%s'", file_path);
-    EXIT_IF_ERROR(frame.SetView(*buffer), "Error! Cannot set view.");
-    ApplyModifications(file_path, params, &frame, &buffer->metadata_);
+    CHECK_TRUE(i < WP2::kMaxNumFrames,
+               "Error! There are too many frames in '%s'", file_path);
+    CHECK_STATUS(image_reader.ReadFrame(&is_last_frame, &duration_ms),
+                 "Error! Cannot read input '%s'", file_path);
+    CHECK_STATUS(frame.SetView(*buffer), "Error! Cannot set view.");
+    WP2_CHECK_STATUS(ApplyModifications(file_path, params, &frame,
+                                        &buffer->metadata_));
 
     if (refs != nullptr) {
       refs->emplace_back(frame.format());
-      EXIT_IF_ERROR(RotateBuffer(params.config.decoding_orientation, frame,
-                                 &refs->back()),
-                    "Error! Image copy failed.");
+      CHECK_STATUS(RotateBuffer(params.config.decoding_orientation,
+                                frame, &refs->back()),
+                  "Error! Image copy failed.");
     }
 
     // Infinite duration means it's a still image.
     if (duration_ms != WP2::ImageReader::kInfiniteDuration) {
-      EXIT_IF_ERROR(animation_encoder.AddFrame(frame, duration_ms),
-                    "Error! Cannot add input frame %u from '%s'", i, file_path);
+      CHECK_STATUS(animation_encoder.AddFrame(frame, duration_ms),
+                   "Error! Cannot add input frame %u from '%s'",
+                   i, file_path);
     } else {
       assert(is_last_frame);
     }
@@ -370,20 +379,21 @@ void CompressImage(const char* const file_path,
   // Encode image.
   start = GetStopwatchTime();
   if (duration_ms == WP2::ImageReader::kInfiniteDuration) {
-    EXIT_IF_ERROR(WP2::Encode(frame, writer, params.config, params.pic_hint),
-                  "Error! Cannot encode '%s' as WP2", file_path);
+    CHECK_STATUS(WP2::Encode(frame, writer, params.config, params.pic_hint),
+                 "Error! Cannot encode '%s' as WP2", file_path);
   } else {
     const bool loop_forever = params.loop_forever_was_specified
                                   ? params.loop_forever
                                   : (image_reader.GetLoopCount() != 1);
-    EXIT_IF_ERROR(animation_encoder.Encode(writer, params.config, loop_forever,
-                                           buffer->metadata_),
-                  "Error! Cannot encode '%s' as WP2", file_path);
+    CHECK_STATUS(animation_encoder.Encode(writer, params.config, loop_forever,
+                                          buffer->metadata_),
+                 "Error! Cannot encode '%s' as WP2", file_path);
   }
   if (params.log_level >= WP2::LogLevel::VERBOSE) {
     const double encode_time = GetStopwatchTime() - start;
     fprintf(stderr, "Time to encode picture: %.3fs\n", encode_time);
   }
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
@@ -408,33 +418,35 @@ void PrintSize(const std::string& out_file,
   }
 }
 
-void SaveImage(const WP2::MemoryWriter& memory_writer, const Params& params,
-               const std::string& out_file, uint32_t width, uint32_t height) {
+WP2_NO_DISCARD
+WP2Status SaveImage(const WP2::MemoryWriter& memory_writer,
+                    const Params& params, const std::string& out_file,
+                    uint32_t width, uint32_t height) {
   if (!out_file.empty()) {
     const WP2Status status =
         WP2::IoUtilWriteFile(memory_writer.mem_, memory_writer.size_,
                              out_file.c_str(), params.allow_overwrite);
-    EXIT_IF_ERROR(
-        status, "Error while saving file '%s'%s", out_file.c_str(),
-        (status == WP2_STATUS_BAD_WRITE)
-            ? ""
-            : " (hint: use -force flag to overwrite an existing file)");
+    CHECK_STATUS(status, "Error while saving file '%s'%s", out_file.c_str(),
+                 (status == WP2_STATUS_BAD_WRITE) ? "" :
+                 " (hint: use -force flag to overwrite an existing file)");
   }
 
   if (params.bit_trace > 0) {
-    WP2::CollectBitTraces(memory_writer.mem_, memory_writer.size_,
-                          params.bit_trace, params.bit_trace_level,
-                          params.short_output, params.show_histograms);
+    WP2_CHECK_STATUS(
+        WP2::CollectBitTraces(memory_writer.mem_, memory_writer.size_,
+                              params.bit_trace, params.bit_trace_level,
+                              params.short_output, params.show_histograms));
   }
 
   if (params.log_level >= WP2::LogLevel::DEFAULT && params.print_summary) {
     WP2::BitstreamFeatures bitstream;
-    EXIT_IF_ERROR(bitstream.Read(memory_writer.mem_, memory_writer.size_),
-                  "FATAL: Roundtrip error!");
-    EXIT_IF_FALSE(bitstream.raw_width == width, "FATAL: invalid width");
-    EXIT_IF_FALSE(bitstream.raw_height == height, "FATAL: invalid height");
+    CHECK_STATUS(bitstream.Read(memory_writer.mem_, memory_writer.size_),
+                 "FATAL: Roundtrip error!");
+    CHECK_TRUE(bitstream.raw_width == width, "FATAL: invalid width");
+    CHECK_TRUE(bitstream.raw_height == height, "FATAL: invalid height");
     printf("%s", WP2::PrintSummary(bitstream, memory_writer.size_).c_str());
   }
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
@@ -442,9 +454,9 @@ void SaveImage(const WP2::MemoryWriter& memory_writer, const Params& params,
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  EXIT_IF_FALSE(WP2CheckVersion(), "Error! Library version mismatch!");
+  CHECK_TRUE(WP2CheckVersion(), "Error! Library version mismatch!");
 
-  std::vector<std::string> in_paths;
+  WP2::FileList in_paths;
   std::vector<uint32_t> frame_durations;  // It's an animation if at least one.
   std::string out_path;
   std::string decoded_file;
@@ -468,21 +480,21 @@ int main(int argc, char* argv[]) {
       HelpLong();
       return 0;
     } else if (!strcmp(argv[c], "-o") && c + 1 < argc) {
-      EXIT_IF_FALSE(out_path.empty() && !inplace_output,
-                    "Error! Output was already specified.");
+      CHECK_TRUE(out_path.empty() && !inplace_output,
+                 "Error! Output was already specified.");
       out_path = argv[++c];
     } else if (!strcmp(argv[c], "-d") && c + 1 < argc) {
       decoded_file = argv[++c];
     } else if (!strcmp(argv[c], "-r")) {
       recursive_input = true;
     } else if (!strcmp(argv[c], "-frames")) {
-      EXIT_IF_FALSE(!inplace_output,
-                    "Error! -frames is not compatible with -inplace.");
+      CHECK_TRUE(!inplace_output,
+                 "Error! -frames is not compatible with -inplace.");
       input_frames = true;
     } else if (!strcmp(argv[c], "-inplace")) {
-      EXIT_IF_FALSE(!input_frames,
-                    "Error! -inplace is not compatible with -frames.");
-      EXIT_IF_FALSE(out_path.empty(), "Error! Output was already specified.");
+      CHECK_TRUE(!input_frames,
+                 "Error! -inplace is not compatible with -frames.");
+      CHECK_TRUE(out_path.empty(), "Error! Output was already specified.");
       inplace_output = true;
     } else if (!strcmp(argv[c], "-force")) {
       params.allow_overwrite = true;
@@ -570,7 +582,7 @@ int main(int argc, char* argv[]) {
         params.config.segment_id_mode =
             WP2::EncoderConfig::SEGMENT_ID_IMPLICIT;
       } else {
-        EXIT_IF_FALSE(false, "unsupported segment mode '%s'", argv[c]);
+        CHECK_TRUE(false, "unsupported segment mode '%s'", argv[c]);
       }
     } else if (!strcmp(argv[c], "-sns") && c + 1 < argc) {
       params.config.sns = ExUtilGetFloat(argv[++c], &parse_error);
@@ -643,12 +655,12 @@ int main(int argc, char* argv[]) {
       params.config.use_neural_compression = 1;
       params.config.graphdef_path = argv[++c];
     } else if (!strcmp(argv[c], "--")) {
-      EXIT_IF_FALSE(frame_durations.empty(),
-                    "Error! Can't specify another input when -f is specified.");
+      CHECK_TRUE(frame_durations.empty(),
+                 "Error! Can't specify another input when -f is specified.");
       if (c + 1 < argc) in_paths.emplace_back(argv[++c]);
     } else if (!strcmp(argv[c], "-f")) {
-      EXIT_IF_FALSE(in_paths.empty(),
-                    "Error! Can't specify another input when -f is specified.");
+      CHECK_TRUE(in_paths.empty(),
+                 "Error! Can't specify another input when -f is specified.");
       while (c + 2 < argc) {  // Parse as long as it's not another option.
         if (!strcmp(argv[c + 1], "--") && c + 3 < argc) {
           ++c;
@@ -659,22 +671,25 @@ int main(int argc, char* argv[]) {
         frame_durations.push_back(ExUtilGetUInt(argv[c + 2], &parse_error));
         c += 2;
       }
-      EXIT_IF_FALSE(!in_paths.empty(), "Error! Missing frame after -f.");
+      CHECK_TRUE(!in_paths.empty(), "Error! Missing frame after -f.");
     } else if (argv[c][0] == '-') {
       bool must_stop;
       WP2::MetricType metric_type = WP2::NUM_METRIC_TYPES;
+      int skip;
       if (ProgramOptions::ParseSystemOptions(argv[c], &must_stop)) {
         if (must_stop) return 0;
       } else if (ProgramOptions::ParseMetricOptions(argv[c], &metric_type)) {
         params.print_distortion = (int)metric_type;
+      } else if (ProgramOptions::ParseMemoryOptions(argv + c, argc - c, skip)) {
+        c += skip - 1;
       } else {
         fprintf(stderr, "Error! Unknown option '%s'\n", argv[c]);
         HelpLong();
         return 1;
       }
     } else {
-      EXIT_IF_FALSE(frame_durations.empty(),
-                    "Error! Can't specify another input when -f is specified.");
+      CHECK_TRUE(frame_durations.empty(),
+                 "Error! Can't specify another input when -f is specified.");
       in_paths.emplace_back(argv[c]);
     }
 
@@ -685,20 +700,16 @@ int main(int argc, char* argv[]) {
   }
 
   // Parse input directories to have the full list of files.
-  const std::vector<std::string> in_files =
-      GetFilesToEncode(in_paths, recursive_input, params.log_level,
-                       input_frames, &frame_durations);
+  WP2::FileList in_files;
+  CHECK_STATUS(GetFilesToEncode(in_paths, recursive_input, params.log_level,
+                                input_frames, &frame_durations, &in_files),
+               "No input file specified!");
 
-  if (in_files.empty()) {
-    fprintf(stderr, "No input file specified!\n");
-    HelpShort();
-    return 1;
-  }
-  EXIT_IF_FALSE(preview_file == nullptr || (in_files.size() == 1),
-                "Can only use -preview option with a single input image.");
+  CHECK_TRUE(preview_file == nullptr || (in_files.size() == 1),
+             "Can only use -preview option with a single input image.");
   if (preview_file != nullptr) {
-    EXIT_IF_ERROR(IoUtilReadFile(preview_file, &preview),
-                  "Error! Cannot open preview file '%s'", preview_file);
+    CHECK_STATUS(IoUtilReadFile(preview_file, &preview),
+                 "Error! Cannot open preview file '%s'", preview_file);
     params.config.preview_size = preview.size;
     params.config.preview = preview.bytes;
   }
@@ -722,8 +733,8 @@ int main(int argc, char* argv[]) {
     if (params.config.pass == 1) params.config.pass = 6;
   }
 
-  EXIT_IF_FALSE(params.config.IsValid(), "Error! Invalid configuration. "
-                                         "Some parameters are erroneous.");
+  CHECK_TRUE(params.config.IsValid(), "Error! Invalid configuration. "
+                                      "Some parameters are erroneous.");
 
   const bool is_animation = !frame_durations.empty();
   const bool output_to_directory =
@@ -736,8 +747,8 @@ int main(int argc, char* argv[]) {
   WP2::Counter counter;
 
   if (is_animation) {
-    EXIT_IF_FALSE(!output_to_directory,
-                  "Error! Animation output file must be explicitly specified.");
+    CHECK_TRUE(!output_to_directory,
+               "Error! Animation output file must be explicitly specified.");
 
     WP2::ArgbBuffer rgb_buffer(WP2_Argb_32);
     const std::string& out_file = out_path;
@@ -755,24 +766,28 @@ int main(int argc, char* argv[]) {
     if (write_to_memory) {
       if (params.print_distortion >= 0) {
         std::vector<WP2::ArgbBuffer> refs;
-        CompressAnimation(in_files, frame_durations, params, &refs, &rgb_buffer,
-                          &writer);
+        WP2_CHECK_STATUS(CompressAnimation(in_files, frame_durations, params,
+                                           &refs, &rgb_buffer, &writer));
 
-        PrintDistortion(refs, writer.mem_, writer.size_,
-                        (WP2::MetricType)params.print_distortion,
-                        params.short_output);
+        WP2_CHECK_STATUS(
+            PrintDistortion(refs, writer.mem_, writer.size_,
+                            (WP2::MetricType)params.print_distortion,
+                            params.short_output));
       } else {
-        CompressAnimation(in_files, frame_durations, params, nullptr,
-                          &rgb_buffer, &writer);
+        WP2_CHECK_STATUS(CompressAnimation(in_files, frame_durations, params,
+                                           nullptr, &rgb_buffer, &writer));
       }
 
       out_size = writer.size_;
-      SaveImage(writer, params, out_file, GetWidth(params, rgb_buffer),
-                GetHeight(params, rgb_buffer));
+      CHECK_STATUS(SaveImage(writer, params, out_file,
+                             GetWidth(params, rgb_buffer),
+                             GetHeight(params, rgb_buffer)),
+                   "Error saving image");
       writer.size_ = 0;
     } else {
-      CompressAnimation(in_files, frame_durations, params, nullptr, &rgb_buffer,
-                        &counter);
+      WP2_CHECK_STATUS(
+          CompressAnimation(in_files, frame_durations, params,
+                            nullptr, &rgb_buffer, &counter));
       out_size = counter.total_size_;
       counter.total_size_ = 0;
     }
@@ -785,12 +800,12 @@ int main(int argc, char* argv[]) {
       PrintSize(out_path, out_size, num_pixels, params.short_output);
     }
   } else {  // !is_animation
-    EXIT_IF_FALSE(
+    CHECK_TRUE(
         (in_files.size() == 1) || output_to_directory || out_path.empty(),
         "Error! Several input images require the output to be an existing "
         "directory.");
-    EXIT_IF_FALSE(decoded_file.empty() || in_files.size() == 1,
-        "Can only use -d option with a single input image.");
+    CHECK_TRUE(decoded_file.empty() || in_files.size() == 1,
+               "Can only use -d option with a single input image.");
 
     WP2::MultiProgressPrinter progress_printer;
     if (report_progress) progress_printer.Init(in_files.size());
@@ -829,30 +844,38 @@ int main(int argc, char* argv[]) {
       if (write_to_memory) {
         if (params.print_distortion >= 0) {
           std::vector<WP2::ArgbBuffer> refs;
-          CompressImage(in_file.c_str(), params, &refs, &rgb_buffer, &writer);
+          WP2_CHECK_STATUS(
+              CompressImage(in_file.c_str(), params,
+                            &refs, &rgb_buffer, &writer));
 
-          PrintDistortion(refs, writer.mem_, writer.size_,
-                          (WP2::MetricType)params.print_distortion,
-                          params.short_output);
+          WP2_CHECK_STATUS(
+              PrintDistortion(refs, writer.mem_, writer.size_,
+                              (WP2::MetricType)params.print_distortion,
+                              params.short_output));
         } else {
-          CompressImage(in_file.c_str(), params, nullptr, &rgb_buffer, &writer);
+          WP2_CHECK_STATUS(
+              CompressImage(in_file.c_str(), params, nullptr,
+                            &rgb_buffer, &writer));
         }
 
         out_size = writer.size_;
-        SaveImage(writer, params, out_file, GetWidth(params, rgb_buffer),
-                  GetHeight(params, rgb_buffer));
+        CHECK_STATUS(SaveImage(writer, params, out_file,
+                               GetWidth(params, rgb_buffer),
+                               GetHeight(params, rgb_buffer)),
+                     "Error saving image");
         if (!decoded_file.empty()) {
           WP2::ArgbBuffer argb;
-          EXIT_IF_ERROR(Decode(writer.mem_, writer.size_, &argb, dec_config),
-              "Could not read the compressed WP2 bitstream. "
-              "This should NOT happen!");
-          EXIT_IF_ERROR(
+          CHECK_STATUS(Decode(writer.mem_, writer.size_, &argb, dec_config),
+                       "Could not read the compressed WP2 bitstream. "
+                       "This should NOT happen!");
+          CHECK_STATUS(
               SaveImage(argb, decoded_file.c_str(), params.allow_overwrite),
               "Could not save the decoded sample to file.");
         }
         writer.size_ = 0;
       } else {
-        CompressImage(in_file.c_str(), params, nullptr, &rgb_buffer, &counter);
+        WP2_CHECK_STATUS(CompressImage(in_file.c_str(), params, nullptr,
+                                       &rgb_buffer, &counter));
         out_size = counter.total_size_;
         counter.total_size_ = 0;
       }

@@ -38,6 +38,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   if (use_advanced_config) {
     params.ExtractAdvancedConfig(use_fast_config, &config);
   }
+  WP2::testing::ProgressTester progress_tester;
+  if (params.ExtractBool()) {
+    config.progress_hook = &progress_tester;
+    progress_tester.fail_at_ = params.ExtractDouble(0., 1.);
+  }
 
   // Extract a random (maximum) number of frames and random durations.
   uint32_t num_frames_x = params.ExtractUInt32(1, use_fast_config ? 4 : 1);

@@ -24,10 +24,20 @@
 
 //------------------------------------------------------------------------------
 
-extern void WP2SetMallocFailAt(int num_malloc_before_failure);
-
 namespace WP2 {
 namespace {
+
+static struct FailMemoryTrace : public WP2MemoryHook {
+  bool Register(void* ptr, size_t) override {
+    return (countdown == 0 || --countdown > 0);
+  }
+  int countdown = 0;
+} kFailMemory;   // singleton, highly non-reentrant!
+
+void SetMallocFailAt(int num_malloc_before_failure) {
+  kFailMemory.countdown = num_malloc_before_failure;
+  WP2SetMemoryHook(&kFailMemory);
+}
 
 // In order to generate only WP2_STATUS_OUT_OF_MEMORY failures, MemoryWriter is
 // replaced by this class.
@@ -69,7 +79,7 @@ TEST_P(MallocFailureTest, Encoding) {
   while (malloc_fail_at <= max_malloc_fail_at) {
     src.Deallocate();
     data.Reset();
-    WP2SetMallocFailAt(malloc_fail_at);
+    SetMallocFailAt(malloc_fail_at);
     status = testing::CompressImage(src_file_name, &data, &src, quality, effort,
                                     thread_level);
     if (status != WP2_STATUS_OK) {
@@ -88,7 +98,7 @@ TEST_P(MallocFailureTest, Encoding) {
   if (status == WP2_STATUS_OK) {
     // Check a few more times that it was not a false positive.
     for (int i = 1; i <= 5; ++i) {
-      WP2SetMallocFailAt(malloc_fail_at + i);
+      SetMallocFailAt(malloc_fail_at + i);
       ArgbBuffer another_src;  // Keep first OK output though.
       NoAllocationFailureMemoryWriter another_data;
       ASSERT_WP2_OK(testing::CompressImage(src_file_name, &another_data,
@@ -99,7 +109,7 @@ TEST_P(MallocFailureTest, Encoding) {
     }
 
     // Decode to see if it matches.
-    WP2SetMallocFailAt(0);
+    SetMallocFailAt(0);
     ArgbBuffer output;
     DecoderConfig config;
     config.thread_level = 8;
@@ -122,7 +132,7 @@ TEST_P(MallocFailureTest, Decoding) {
   // Compress without allocation failure.
   ArgbBuffer src;
   MemoryWriter data;
-  WP2SetMallocFailAt(0);
+  SetMallocFailAt(0);
   ASSERT_WP2_OK(testing::CompressImage(src_file_name, &data, &src, quality,
                                        effort, /*thread_level=*/1));
 
@@ -133,7 +143,7 @@ TEST_P(MallocFailureTest, Decoding) {
   WP2Status status = WP2_STATUS_INVALID_PARAMETER;
   while (malloc_fail_at <= max_malloc_fail_at) {
     output.Deallocate();
-    WP2SetMallocFailAt(malloc_fail_at);
+    SetMallocFailAt(malloc_fail_at);
     status = Decode(data.mem_, data.size_, &output, config);
     if (status != WP2_STATUS_OK) {
       ASSERT_EQ(status, WP2_STATUS_OUT_OF_MEMORY)
@@ -151,14 +161,14 @@ TEST_P(MallocFailureTest, Decoding) {
   if (status == WP2_STATUS_OK) {
     // Check a few more times that it was not a false positive.
     for (int i = 1; i <= 5; ++i) {
-      WP2SetMallocFailAt(malloc_fail_at + i);
+      SetMallocFailAt(malloc_fail_at + i);
       ArgbBuffer another_output;  // Keep first OK output though.
       ASSERT_WP2_OK(Decode(data.mem_, data.size_, &another_output, config))
           << "False positives from " << malloc_fail_at << " to "
           << (malloc_fail_at + i - 1);
     }
 
-    WP2SetMallocFailAt(0);
+    SetMallocFailAt(0);
     ASSERT_TRUE(testing::Compare(src, output, src_file_name,
                                  testing::GetExpectedDistortion(quality)));
   }
@@ -228,7 +238,7 @@ TEST(MallocFailureTest, WP2VectorResize) {
     Vector<CtorStruct> vector;
 
     // Successfully put at least one element.
-    WP2SetMallocFailAt(2);
+    SetMallocFailAt(2);
     size_t valid_size = 0;
     while (vector.resize(valid_size + 1)) {
       ASSERT_EQ(vector.size(), valid_size + 1);
@@ -240,7 +250,7 @@ TEST(MallocFailureTest, WP2VectorResize) {
     ASSERT_EQ(vector.size(), valid_size);
 
     // Make sure data stored before failure can be retrieved.
-    WP2SetMallocFailAt(0);
+    SetMallocFailAt(0);
     for (const CtorStruct& constructed : vector) {
       ASSERT_EQ(constructed.value, element.value);
     }
@@ -255,7 +265,7 @@ TEST(MallocFailureTest, WP2VectorPushBack) {
     Vector<CtorStruct> vector;
 
     // Successfully put at least one element.
-    WP2SetMallocFailAt(2);
+    SetMallocFailAt(2);
     size_t valid_size = 0;
     while (vector.push_back(element, /*resize_if_needed=*/true)) {
       ASSERT_EQ(vector.size(), valid_size + 1);
@@ -266,7 +276,7 @@ TEST(MallocFailureTest, WP2VectorPushBack) {
     ASSERT_EQ(vector.size(), valid_size);
 
     // Make sure data stored before failure can be retrieved.
-    WP2SetMallocFailAt(0);
+    SetMallocFailAt(0);
     for (const CtorStruct& constructed : vector) {
       ASSERT_EQ(constructed.value, element.value);
     }
@@ -281,7 +291,7 @@ TEST(MallocFailureTest, WP2VectorReservePushBack) {
     Vector<CtorStruct> vector;
 
     // Successfully put at least one element.
-    WP2SetMallocFailAt(2);
+    SetMallocFailAt(2);
     size_t valid_size = 0;
     while (vector.reserve(valid_size + 1)) {
       ASSERT_EQ(vector.size(), valid_size);
@@ -296,7 +306,7 @@ TEST(MallocFailureTest, WP2VectorReservePushBack) {
     ASSERT_EQ(vector.capacity(), valid_size);
 
     // Make sure data stored before failure can be retrieved.
-    WP2SetMallocFailAt(0);
+    SetMallocFailAt(0);
     for (const CtorStruct& constructed : vector) {
       ASSERT_EQ(constructed.value, element.value);
     }

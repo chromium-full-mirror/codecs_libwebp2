@@ -39,6 +39,7 @@ class Rasterizer {
   Rasterizer() : vertical_span_{0, 0} {}
 
   WP2Status Init(const ArgbBuffer& canvas, const PreviewData& preview) {
+    RasterInit();
     img_w_ = canvas.width();
     img_h_ = canvas.height();
     if (img_w_ > (1u << 31) / img_h_) return WP2_STATUS_INVALID_PARAMETER;
@@ -98,7 +99,6 @@ class Rasterizer {
   Vector<Span> row_spans_;
 };
 
-// TODO(yguyon): Remove double from these functions, it's not portable enough
 //------------------------------------------------------------------------------
 
 void Rasterizer::RecordEdgeSpan(VertexArgb v0, VertexArgb v1) {
@@ -129,87 +129,68 @@ void Rasterizer::RecordEdgeSpan(VertexArgb v0, VertexArgb v1) {
 }
 
 //------------------------------------------------------------------------------
+// Gradient
 
-static void CalcArea(VertexArgb v0, VertexArgb v1, VertexArgb v2,
-                     double iM[4]) {
-  const double dx1 = v1.x - v0.x, dy1 = v1.y - v0.y;
-  const double dx2 = v2.x - v0.x, dy2 = v2.y - v0.y;
-  const double area = dx1 * dy2 - dx2 * dy1;
-  const double iArea = (area == 0.) ? 0. : 1. / area;
-  iM[0] =  dy2 * iArea;
-  iM[1] = -dy1 * iArea;
-  iM[2] = -dx2 * iArea;
-  iM[3] =  dx1 * iArea;
+constexpr grad_t ToFixedPrec(float v) {
+  return (grad_t)((1 << kRasterPrec) * v);
 }
 
-static void CalcGradient(const double iM[4],
-                         float v0x, float v0y,
-                         float f0, float f1, float f2,
-                         double grad[3]) {
-  const double df1 = f1 - f0;
-  const double df2 = f2 - f0;
-  grad[0] = iM[0] * df1 + iM[1] * df2;
-  grad[1] = iM[2] * df1 + iM[3] * df2;
-  grad[2] = f0 - grad[0] * v0x - grad[1] * v0y;
+static void CalcTransform(VertexArgb v0, VertexArgb v1, VertexArgb v2,
+                          float iM[4]) {
+  const int32_t dx1 = v1.x - v0.x, dy1 = v1.y - v0.y;   // ~14b
+  const int32_t dx2 = v2.x - v0.x, dy2 = v2.y - v0.y;
+  const int32_t area = dx1 * dy2 - dx2 * dy1;           // ~28b
+  const float iArea = (area == 0) ? 0. : 1. / area;
+  iM[0] = ( dy2 * iArea);
+  iM[1] = (-dy1 * iArea);
+  iM[2] = (-dx2 * iArea);
+  iM[3] = ( dx1 * iArea);
 }
 
-static uint8_t RoundToUInt8(double v) {
-  return (uint8_t)((v < 0.) ? 0u : (v > 255.) ? 255u : std::lround(v));
+static void CalcGradient(const float iM[4],
+                         int32_t f0, int32_t f1, int32_t f2,
+                         grad_t grad[], grad_t dy) {
+  const float df1 = f1 - f0;
+  const float df2 = f2 - f0;
+  grad[0] = ToFixedPrec(iM[0] * df1 + iM[1] * df2);
+  grad[4] = ToFixedPrec(iM[2] * df1 + iM[3] * df2);
+  grad[8] = ToFixedPrec(f0) + dy * grad[4];
 }
 
 static void GetGradients(VertexArgb v0, VertexArgb v1, VertexArgb v2,
-                         double gradA[3],
-                         double gradR[3], double gradG[3], double gradB[3]) {
-  double iM[4];
-  CalcArea(v0, v1, v2, iM);
-  CalcGradient(iM, v0.x, v0.y, v0.color.a, v1.color.a, v2.color.a, gradA);
-  CalcGradient(iM, v0.x, v0.y, v0.color.r, v1.color.r, v2.color.r, gradR);
-  CalcGradient(iM, v0.x, v0.y, v0.color.g, v1.color.g, v2.color.g, gradG);
-  CalcGradient(iM, v0.x, v0.y, v0.color.b, v1.color.b, v2.color.b, gradB);
+                         grad_t grads[3 * 4], grad_t dy) {
+  float iM[4];
+  CalcTransform(v0, v1, v2, iM);
+  CalcGradient(iM, v0.color.a, v1.color.a, v2.color.a, grads + 0, dy);
+  CalcGradient(iM, v0.color.r, v1.color.r, v2.color.r, grads + 1, dy);
+  CalcGradient(iM, v0.color.g, v1.color.g, v2.color.g, grads + 2, dy);
+  CalcGradient(iM, v0.color.b, v1.color.b, v2.color.b, grads + 3, dy);
 }
 
 void Rasterizer::DrawScans(VertexArgb v0, VertexArgb v1, VertexArgb v2,
                            ArgbBuffer* const canvas,
                            uint32_t* const num_pixels) const {
   assert(canvas->width() == img_w_ && canvas->height() == img_h_);
-  double gradA[3], gradR[3], gradG[3], gradB[3];
-  GetGradients(v0, v1, v2, gradA, gradR, gradG, gradB);
-  double base_A = gradA[1] * vertical_span_.from + gradA[2];
-  double base_R = gradR[1] * vertical_span_.from + gradR[2];
-  double base_G = gradG[1] * vertical_span_.from + gradG[2];
-  double base_B = gradB[1] * vertical_span_.from + gradB[2];
+  const grad_t dY = vertical_span_.from - v0.y;
+  grad_t grads[3 * 4];
+  GetGradients(v0, v1, v2, grads, dY);
 
   for (uint32_t y = vertical_span_.from; y < vertical_span_.to; ++y) {
     uint8_t* const argb = canvas->GetRow8(y);
-    const Span& horizontal_span = row_spans_[y];
-
-    double cur_A = base_A + gradA[0] * horizontal_span.from;
-    double cur_R = base_R + gradR[0] * horizontal_span.from;
-    double cur_G = base_G + gradG[0] * horizontal_span.from;
-    double cur_B = base_B + gradB[0] * horizontal_span.from;
-    base_A += gradA[1];
-    base_R += gradR[1];
-    base_G += gradG[1];
-    base_B += gradB[1];
-
-    for (uint32_t x = horizontal_span.from; x < horizontal_span.to; ++x) {
-      uint8_t* const argb_pixel = argb + x * 4;
-      argb_pixel[0] = RoundToUInt8(cur_A);
-      argb_pixel[1] = RoundToUInt8(cur_R);
-      argb_pixel[2] = RoundToUInt8(cur_G);
-      argb_pixel[3] = RoundToUInt8(cur_B);
-      cur_A += gradA[0];
-      cur_R += gradR[0];
-      cur_G += gradG[0];
-      cur_B += gradB[0];
-      ++*num_pixels;
-    }
+    const Span& span = row_spans_[y];
+    grad_t cur[4];
+    RasterAdvance(grads, span.from - v0.x, cur);
+    const int32_t size = span.to - span.from;
+    if (size > 0) {  // because of rounding errors, size can be < 0
+      *num_pixels += size;
+      RasterDraw(cur, grads, argb + 4 * span.from, size);
 #if 0   // uncomment to show the triangles:
-    argb[4 * horizontal_span.from + 0] = 0xff;
-    argb[4 * horizontal_span.from + 1] = 0xff;
-    argb[4 * horizontal_span.from + 2] = 0xff;
-    argb[4 * horizontal_span.from + 3] = 0xff;
+      argb[4 * span.from + 0] = 0xff;
+      argb[4 * span.from + 1] = 0xff;
+      argb[4 * span.from + 2] = 0xff;
+      argb[4 * span.from + 3] = 0xff;
 #endif
+    }
   }
 }
 
@@ -238,8 +219,8 @@ void Rasterizer::CollectColors(const ArgbBuffer& reference,
   WienerOptimizer<2, 4> opt;  // linearly predict four A,R,G,B values from x,y
   for (uint16_t y = vertical_span_.from; y < vertical_span_.to; ++y) {
     const uint8_t* const argb = reference.GetRow8(y);
-    const Span& horizontal_span = row_spans_[y];
-    for (uint16_t x = horizontal_span.from; x < horizontal_span.to; ++x) {
+    const Span& span = row_spans_[y];
+    for (uint16_t x = span.from; x < span.to; ++x) {
       const uint8_t* const src = argb + x * 4;
       const int16_t xy[2] = { (int16_t)x, (int16_t)y };
       const int16_t samples[4] = { src[0], src[1], src[2], src[3] };
@@ -260,50 +241,26 @@ void Rasterizer::CollectColors(const ArgbBuffer& reference,
 
 //------------------------------------------------------------------------------
 
-static uint32_t Square(double a, uint8_t b) {
-  const int32_t v = (int32_t)RoundToUInt8(a) - b;
-  return (uint32_t)(v * v);
-}
-
 float Rasterizer::GetLossInScans(const ArgbBuffer& reference,
                                  VertexArgb v0, VertexArgb v1, VertexArgb v2,
                                  uint32_t* const num_pixels) const {
   assert(reference.width() == img_w_ && reference.height() == img_h_);
-  double gradA[3], gradR[3], gradG[3], gradB[3];
-  GetGradients(v0, v1, v2, gradA, gradR, gradG, gradB);
-  double base_A = gradA[1] * vertical_span_.from + gradA[2];
-  double base_R = gradR[1] * vertical_span_.from + gradR[2];
-  double base_G = gradG[1] * vertical_span_.from + gradG[2];
-  double base_B = gradB[1] * vertical_span_.from + gradB[2];
-
-  uint32_t a_loss = 0, r_loss = 0, g_loss = 0, b_loss = 0;
+  grad_t grads[3 * 4];
+  const grad_t dY = vertical_span_.from - v0.y;
+  GetGradients(v0, v1, v2, grads, dY);
+  uint32_t loss[4] = { 0, 0, 0, 0 };
   for (uint32_t y = vertical_span_.from; y < vertical_span_.to; ++y) {
-    const uint8_t* const argb_reference = reference.GetRow8(y);
-    const Span& horizontal_span = row_spans_[y];
-
-    double cur_A = base_A + gradA[0] * horizontal_span.from;
-    double cur_R = base_R + gradR[0] * horizontal_span.from;
-    double cur_G = base_G + gradG[0] * horizontal_span.from;
-    double cur_B = base_B + gradB[0] * horizontal_span.from;
-    base_A += gradA[1];
-    base_R += gradR[1];
-    base_G += gradG[1];
-    base_B += gradB[1];
-
-    for (uint32_t x = horizontal_span.from; x < horizontal_span.to; ++x) {
-      const uint8_t* argb_pixel_reference = argb_reference + 4 * x;
-      a_loss += Square(cur_A, argb_pixel_reference[0]);
-      r_loss += Square(cur_R, argb_pixel_reference[1]);
-      g_loss += Square(cur_G, argb_pixel_reference[2]);
-      b_loss += Square(cur_B, argb_pixel_reference[3]);
-      cur_A += gradA[0];
-      cur_R += gradR[0];
-      cur_G += gradG[0];
-      cur_B += gradB[0];
-      ++*num_pixels;
+    const uint8_t* const argb = reference.GetRow8(y);
+    const Span& span = row_spans_[y];
+    grad_t cur[4];
+    RasterAdvance(grads, span.from - v0.x, cur);
+    const int32_t size = span.to - span.from;
+    if (size > 0) {  // because of rounding errors, size can be < 0
+      *num_pixels += size;
+      RasterLoss(argb + 4 * span.from, size, cur, grads, loss);
     }
   }
-  return a_loss + .3f * r_loss + .6f * g_loss + .1f * b_loss;
+  return loss[0] + .3f * loss[1] + .6f * loss[2] + .1f * loss[3];
 }
 
 //------------------------------------------------------------------------------

@@ -246,6 +246,7 @@ DSP_DEC_OBJS = \
     src/dsp/transf_sse.o \
     src/dsp/lossless/dspl.o \
     src/dsp/lossless/decl_dsp.o \
+    src/dsp/raster_dsp.o \
     src/dsp/grain_c.o \
     src/dsp/math.o \
     src/dsp/ssim_dsp.o \
@@ -373,6 +374,7 @@ COMMON_DEC_OBJS = \
     src/common/vdebug.o \
 
 EXAMPLE_UTILS_OBJS = \
+    examples/custom_memory.o \
     examples/example_utils.o \
 
 EXTRAS_OBJS = \
@@ -740,6 +742,7 @@ DIST_FILES= \
             examples/vwp2.cc \
             examples/get_disto.cc \
             examples/rd_curve.cc \
+            examples/custom_memory.cc \
             examples/example_utils.cc \
             examples/example_utils.h \
             examples/stopwatch.h \
@@ -885,6 +888,7 @@ DIST_FILES= \
             src/dsp/dsp.h \
             src/dsp/dsp_x86.h \
             src/dsp/enc_dsp.cc \
+            src/dsp/raster_dsp.cc \
             src/dsp/grain_c.cc \
             src/dsp/math.cc \
             src/dsp/math.h \

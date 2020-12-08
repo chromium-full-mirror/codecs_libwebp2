@@ -253,10 +253,13 @@ class CodedBlock {
 
   // Applies the TransformPair to 'res', quantizes the 'coeffs_' and
   // reconstructs the pixels to 'out_' using the 'prediction'.
+  // 'tmp' is used for temporary computation. It can be the same as 'res' if
+  // the caller doesn't mind losing the data.
   void TransformAndReconstruct(const QuantMtx& quant, Channel channel,
                                bool reduced_transform,
                                const Plane16& prediction,
-                               BlockCoeffs32* const res);
+                               const BlockCoeffs32* const res,
+                               BlockCoeffs32* const tmp);
 
   // Quantizes and reconstructs channel 'channel'. If 'reduced_transform' is
   // true, 2x downsampling of residuals is performed.
@@ -292,11 +295,17 @@ class CodedBlock {
       int32_t original_res[kMaxNumTransformsPerBlock][kMaxBlockSizePix2],
       Plane16* const dst_plane) const;
   // Visual debug: stores prediction scores
+  enum class SearchType {
+    kTransform,
+    kPredAndTransform,
+    kSplit,
+  };
   void StorePredictionScore(const EncoderConfig& config,
                             const Rectangle& tile_rect, Channel channel,
                             const Predictor& pred, TransformPair tf, float dist,
                             float lambda, float res_rate, float pred_rate,
-                            float tf_rate, float score, bool is_best) const;
+                            float tf_rate, float score, bool is_best,
+                            SearchType type) const;
   // Visual debug: stores prediction modes
   void StorePredictionModes(const WP2::DecoderConfig& config,
                             const Rectangle& tile_rect, Channel channel,
