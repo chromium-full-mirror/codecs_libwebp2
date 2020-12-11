@@ -24,6 +24,7 @@
 #include <random>
 #include <string>
 #include <vector>
+#include <chrono>  // NOLINT
 
 #include "src/common/lossy/block_size.h"
 #include "src/utils/random.h"
@@ -177,8 +178,20 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config);
 class ProgressTester : public ProgressHook {
  public:
   bool OnUpdate(double progress) override;
-  void Reset() { *this = ProgressTester(); }
+  virtual void Reset() { *this = ProgressTester(); }
   double last_progress_ = -1.f, fail_at_ = 2.f;  // No USER_ABORT by default.
+};
+
+// ProgressHook example. Fails after 'max_seconds' elapsed.
+class ProgressTimeout : public ProgressTester {
+ public:
+  typedef std::chrono::steady_clock Clock;
+  explicit ProgressTimeout(double max_seconds)
+      : max_seconds_(max_seconds), start_(Clock::now()) {}
+  bool OnUpdate(double progress) override;
+  void Reset() override;
+  const double max_seconds_;
+  std::chrono::time_point<Clock> start_;
 };
 
 //------------------------------------------------------------------------------

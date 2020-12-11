@@ -79,6 +79,7 @@ struct TestParams {
   bool use_mt = true;
   uint32_t stack_size = 50 * 4096u;   // must be a multiple of system's pagesize
   bool disable_filters = false;
+  bool disable_transforms = false;  // disable transforms other than dct
   bool use_sharp_yuv = false;
   MetricType metric = PSNR;
   const char* neural_path = nullptr;
@@ -135,6 +136,7 @@ void PrintHelpAndExit(int return_code) {
   opt.Add("-segment_mode [mode]", "one of auto, explicit, implicit");
   opt.Add("-pass <int>", SPrintf("number of passes (%u)", kDefaultConfig.pass));
   opt.Add("-nofilter", "disable all filters during decoding");
+  opt.Add("-notransforms", "disable transforms other than DCT");
   opt.Add("-sns <int>", "SNS strength to use (0..100)");
   opt.Add("-[no_]perceptual", "turn perceptual tuning on/off");
   opt.Add("-snap", "snap blocks to power-of-two position");
@@ -259,6 +261,7 @@ WP2Status Task::DoEncodeWP2(const std::string& out_file,
   params_.config.thread_level = (int)params_.use_mt;
   EncoderInfo einfo;
   einfo.force_partition = params_.force_partition;
+  einfo.disable_transforms = params_.disable_transforms;
   params_.config.info = &einfo;
   CHECK_TRUE(params_.config.IsValid(),
              "Error! Invalid configuration. Some parameters are erroneous.");
@@ -393,6 +396,10 @@ WP2Status Task::EncodeAV1(const std::string& out_file,
   if (params_.config.thread_level > 1) p.threads = 4;
   p.effort = params_.config.effort;
   p.pass = (params_.config.pass > 1) ? 2 : 1;
+  if (params_.disable_filters) {
+    p.filter_strength = 0;
+  }
+  p.disable_transforms = params_.disable_transforms;
 
   std::string out;
   double timing[2];
@@ -867,6 +874,8 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       params.config.segments = ExUtilGetUInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-nofilter")) {
       params.disable_filters = true;
+    } else if (!strcmp(argv[c], "-notransforms")) {
+      params.disable_transforms = true;
     } else if (!strcmp(argv[c], "-pass") && c + 1 < argc) {
       params.config.pass = ExUtilGetUInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-qmin") && c + 1 < argc) {

@@ -513,7 +513,7 @@ void WP2::ImageReader::SetImplGIF(WP2::ArgbBuffer* const buffer,
     fprintf(stderr, "GIF support not compiled. Please install the libgif "
                     "development package before building.\n");
   }
-  status_ = WP2_STATUS_VERSION_MISMATCH;
+  status_ = WP2_STATUS_UNSUPPORTED_FEATURE;
 }
 
 #endif  // WP2_HAVE_GIF

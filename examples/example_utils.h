@@ -94,6 +94,10 @@ extern struct MemoryTrace : public WP2MemoryHook {
   size_t memory_limit = 0;      // limit to total memory allocated. 0 = off.
 } kMemoryTrace;  // singleton
 
+// Called when malloc is forced to fail.
+// Declared visible here, so one can put a break point in the debugger.
+extern bool WP2MemoryFailNow(size_t size);
+
 //------------------------------------------------------------------------------
 // Distortion
 

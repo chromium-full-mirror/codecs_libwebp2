@@ -3190,6 +3190,7 @@ void Help() {
   opt.Add("-pass <int>", "number of entropy-analysis passes (1..10)");
   opt.Add("-[no_]dblk_filter", "enable/disable deblocking filter.");
   opt.Add("-[no_]drct_filter", "enable/disable directional filter.");
+  opt.Add("-notransforms", "disable transforms other than DCT");
   opt.Add("-crop <x> <y> <w> <h>", "crop picture with the given rectangle");
   opt.Add("-set_block <x> <y> <w> <h>", "force one block (in px)");
   opt.Add("-set_partition <file>", "force blocks partition (x y w h per line)");
@@ -3328,6 +3329,8 @@ int main(int argc, char* argv[]) {
                !strcmp(argv[c], "-no_rstr_filter")) {
       params.dec_config_.enable_restoration_filter =
           !strcmp(argv[c], "-rstr_filter");
+    } else if (!strcmp(argv[c], "-notransforms")) {
+      params.einfo_.disable_transforms = true;
     } else if (!strcmp(argv[c], "-title") && c + 1 < argc) {
       window_title = argv[++c];
     } else if (!strcmp(argv[c], "-crop") && c + 4 < argc) {

@@ -238,7 +238,7 @@ WP2Status WritePNG(const ArgbBuffer&, FILE* fout, const char*, bool, bool,
   fprintf(stderr, "PNG support not compiled. Please install the libpng "
                   "development package before building.\n");
   fprintf(stderr, "You can run with -ppm flag to decode in PPM format.\n");
-  return WP2_STATUS_BAD_WRITE;
+  return WP2_STATUS_UNSUPPORTED_FEATURE;
 }
 
 #endif

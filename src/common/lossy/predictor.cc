@@ -483,11 +483,6 @@ class GradientPredictor : public ContextPredictor {
   std::string GetName() const override { return "gradient predictor"; }
   void Draw(const WP2::Rectangle& rect,
             ArgbBuffer* const debug_output) const override {}
-  bool OverridesTransform(Channel channel,
-                          TransformPair* const tf) const override {
-    if (tf != nullptr) *tf = kAdstAdst;
-    return true;
-  }
 
  protected:
   void Predict(const int16_t c[], uint32_t w, uint32_t h, int16_t output[],
@@ -928,9 +923,26 @@ WP2Status Predictors::FindBest(
     const Predictor* p;
     TransformPair tf;
   };
-  VectorNoCtor<AngleScore> angle_scores;
-  WP2_CHECK_ALLOC_OK(
-      angle_scores.reserve((uint32_t)AnglePredictor::Type::Num * num_tf));
+  // Store AngleScore in a static array if possible, dynamic otherwise.
+  // Ideally, the static array would be of size
+  // AnglePredictor::Type::Num * kNumTransformPairs but that is 1344 bytes.
+  // So we limit to AnglePredictor::Type::Num.
+  // Those could be moved to Predictors if it were not part of GlobalParams.
+  VectorNoCtor<AngleScore> angle_score_dynamic;
+  std::array<AngleScore, (uint32_t)AnglePredictor::Type::Num>
+      angle_score_static;
+  const uint32_t angle_score_size =
+      (uint32_t)AnglePredictor::Type::Num * num_tf;
+  AngleScore* beg;
+  // Decide whether we use the dynamic array or the static one.
+  if (angle_score_size > angle_score_static.size()) {
+    WP2_CHECK_ALLOC_OK(angle_score_dynamic.resize(
+        (uint32_t)AnglePredictor::Type::Num * num_tf));
+    beg = &angle_score_dynamic[0];
+  } else {
+    beg = &angle_score_static[0];
+  }
+  AngleScore* end = beg;
 
   for (const Predictor* const p : preds_main_angle_) {
     cb->SetPredictor(channel_, p);
@@ -941,31 +953,31 @@ WP2Status Predictors::FindBest(
     if (p->OverridesTransform(channel_, &overridden_tf)) {
       WP2_CHECK_STATUS(scorer.UpdatePredScore(p, pred_view, overridden_tf,
                                               /*num_tf=*/1, &res, &tmp, cb));
-      angle_scores.push_back_no_resize(
-          {scorer.GetLastScore(), scorer.GetLastDist(), p, overridden_tf});
+
+      *(end++) = {scorer.GetLastScore(), scorer.GetLastDist(), p,
+                  overridden_tf};
     } else {
       for (TransformPair tf : transforms) {
         WP2_CHECK_STATUS(
             scorer.UpdatePredScore(p, pred_view, tf, num_tf, &res, &tmp, cb));
-        angle_scores.push_back_no_resize(
-            {scorer.GetLastScore(), scorer.GetLastDist(), p, tf});
+        *(end++) = {scorer.GetLastScore(), scorer.GetLastDist(), p, tf};
       }
     }
   }
+  assert(angle_score_size == end - beg);
 
-  std::sort(angle_scores.begin(), angle_scores.end(),
-            [](const AngleScore& a, const AngleScore& b) {
-              return (a.score < b.score);
-            });
+  std::sort(beg, end, [](const AngleScore& a, const AngleScore& b) {
+    return (a.score < b.score);
+  });
 
   // Choose to refine all the ones within a percentage of the lowest score. This
   // helps refine predictors that give similar scores.
   const int effort = config.effort;
   const float min_allowed_score =
-      angle_scores[0].score +
-      (angle_scores.back().score - angle_scores[0].score) * effort / 9.f + 1;
-  assert(effort != 9 || angle_scores.back().score <= min_allowed_score);
-  for (const AngleScore& s : angle_scores) {
+      beg->score + ((end - 1)->score - beg->score) * effort / 9.f + 1;
+  assert(effort != 9 || (end - 1)->score <= min_allowed_score);
+  for (uint32_t i = 0; i < angle_score_size; ++i) {
+    const AngleScore& s = beg[i];
     // We refine every predictor with a better score, or distortion and make
     // sure we refine all the ones within a percentage of the lowest score.
     if (s.score <= best_score_no_angle || s.dist <= best_dist_no_angle ||

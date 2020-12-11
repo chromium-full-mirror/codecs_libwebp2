@@ -101,6 +101,7 @@ void Help() {
   opt.Add("-prefix <string>", "add a prefix label");
   opt.Add("-suffix <string>", "add a suffix label");
   opt.Add("");
+  opt.AddMemoryOptionSection();
   opt.AddSystemOptionSection();
   opt.Add(
       " Also handles PNG, PPM, JPG, WEBP and TIFF files, in addition to WP2.");
@@ -110,7 +111,7 @@ void Help() {
 
 }  // namespace
 
-int main(int argc, const char *argv[]) {
+int main(int argc, char* argv[]) {
   CHECK_TRUE(WP2CheckVersion(), "Error! Library version mismatch!");
 
   WP2::MetricType type = WP2::PSNR;
@@ -162,8 +163,12 @@ int main(int argc, const char *argv[]) {
       output = argv[++c];
     } else if (argv[c][0] == '-') {
       bool must_stop;
+      int skip;
       if (ProgramOptions::ParseSystemOptions(argv[c], &must_stop)) {
         if (must_stop) return 0;
+      } else if (WP2::ProgramOptions::ParseMemoryOptions(argv + c, argc - c,
+                                                         skip)) {
+        c += skip - 1;
       } else if (ProgramOptions::ParseMetricOptions(argv[c], &type)) {
       } else {
         printf("Unknown option '%s'\n", argv[c]);

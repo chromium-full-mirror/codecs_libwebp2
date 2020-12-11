@@ -303,6 +303,16 @@ bool ProgressTester::OnUpdate(double progress) {
   return (progress < fail_at_);
 }
 
+bool ProgressTimeout::OnUpdate(double progress) {
+  const std::chrono::duration<double> diff = Clock::now() - start_;
+  return (ProgressTester::OnUpdate(progress) && diff.count() < max_seconds_);
+}
+
+void ProgressTimeout::Reset() {
+  ProgressTester::Reset();
+  start_ = Clock::now();
+}
+
 //------------------------------------------------------------------------------
 
 ::testing::AssertionResult EncodeDecodeCompare(

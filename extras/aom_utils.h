@@ -44,6 +44,7 @@ struct ParamsAV1 {
   const char* draw_mi_data = nullptr;
   bool draw_mi_number = false;  // draw value of mi data as red square (9 bits)
   bool use_libgav1_decoder = false;  // use libaom decoder if false
+  bool disable_transforms = false;   // disable tf other than DCT (av1 only)
 };
 
 struct QuantAV1 {

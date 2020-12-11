@@ -2884,7 +2884,7 @@ void WP2InvTransform(const int32_t src[], WP2TransformType type, uint32_t size,
     case WP2TransformType::kHadamard: transform = WP2InvHadamard[idx]; break;
     case WP2TransformType::kIdentity:
       for (size_t j = 0; j < num_rows; ++j)
-        iIdentity(src + j * size, dst + j * size, size, /*divider=*/(size / 2));
+        iIdentity(src + j * size, dst + j * size, size, /*divider=*/1);
       return;
     default:
       assert(false);
@@ -2905,9 +2905,9 @@ void WP2Transform(const int32_t src[], WP2TransformType type, uint32_t size,
     case WP2TransformType::kAdst: transform = WP2FwdAdst[idx]; break;
     case WP2TransformType::kHadamard: transform = WP2FwdHadamard[idx]; break;
     case WP2TransformType::kIdentity:
-      for (size_t j = 0; j < num_rows; ++j)
-        Identity(src + j * size, dst + j * size, size,
-                 /*multiplier=*/(size / 2));
+      for (size_t j = 0; j < num_rows; ++j) {
+        Identity(src + j * size, dst + j * size, size, /*multiplier=*/1);
+      }
       return;
     default:
       assert(false);

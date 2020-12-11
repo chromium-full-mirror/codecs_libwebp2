@@ -78,6 +78,7 @@ void Help() {
   opt.Add("-420", "use YUV420 encoding (default)");
   opt.Add("-444", "use YUV444 encoding");
   opt.Add("-tune <metric>", "choose PSNR or SSIM for tuning");
+  opt.Add("-notransforms", "disable transforms other than DCT");
   opt.AddMetricOptions();
 #if defined(WP2_HAVE_AOM_DBG)
   opt.Add("-bt / -BT", "report bit use (if compiled)");
@@ -142,6 +143,8 @@ int main(int argc, const char* argv[]) {
       params.use_yuv444 = false;
     } else if (!strcmp(argv[c], "-444")) {
       params.use_yuv444 = true;
+    } else if (!strcmp(argv[c], "-notransforms")) {
+      params.disable_transforms = true;
     } else if (!strcmp(argv[c], "-tune") && c + 1 < argc) {
       ++c;
       if (!strcmp(argv[c], "psnr") || !strcmp(argv[c], "PSNR")) {

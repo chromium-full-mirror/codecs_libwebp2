@@ -37,6 +37,12 @@ static std::mutex mutex;
 
 namespace WP2 {
 
+bool WP2MemoryFailNow(size_t size) {
+  fprintf(stderr, "=== FAILING to allocate %u more bytes NOW ===\n",
+          (uint32_t)size);
+  return false;
+}
+
 MemoryTrace::~MemoryTrace() {
   if (print_info || show_traffic || memory_limit > 0 || countdown_to_fail > 0 ||
       mem_allocated > 0) {
@@ -71,9 +77,7 @@ bool MemoryTrace::Register(void* ptr, size_t size) {
       return false;
     }
     if (--countdown_to_fail == 1) {
-      fprintf(stderr, "=== FAILING to allocate %u more bytes NOW ===\n",
-              (uint32_t)size);
-      return false;
+      return WP2MemoryFailNow(size);
     }
   }
   if (memory_limit > 0 && mem_allocated + size > memory_limit) {

@@ -30,7 +30,7 @@ namespace testing {
 int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
                       const std::vector<uint32_t>& durations_ms,
                       bool loop_forever, const EncoderConfig& config,
-                      bool compare_after_decoding, float expected_distortion) {
+                      float expected_distortion) {
   // std::cerr << config << std::endl;  // Uncomment to print config
   if (!config.IsValid()) abort();
 
@@ -47,11 +47,13 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
   MemoryWriter memory_writer;
   const WP2Status encoder_status =
       animation_encoder.Encode(&memory_writer, config, loop_forever);
-  if (config.progress_hook != nullptr) {
-    if (encoder_status != WP2_STATUS_USER_ABORT) abort();
-    return 0;
+  if (encoder_status != WP2_STATUS_OK) {
+    if (config.progress_hook != nullptr &&
+        encoder_status == WP2_STATUS_USER_ABORT) {
+      return 0;
+    }
+    abort();
   }
-  if (encoder_status != WP2_STATUS_OK) abort();
 
   // Verify that it decodes fine and that the result is close enough.
   ArgbBuffer decoded;
@@ -64,7 +66,7 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
     assert(!decoder.Failed());
     if (duration_ms != durations_ms[i]) abort();
 
-    if (compare_after_decoding) {
+    if (expected_distortion > 0.f) {
       // 'decoded' can't be modified as long as 'decoder' is used, so
       // 'decoded_unoriented' is compared instead.
       if (config.decoding_orientation == Orientation::kOriginal) {

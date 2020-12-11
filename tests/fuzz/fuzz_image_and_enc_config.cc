@@ -21,36 +21,30 @@
 #include "tests/fuzz/fuzz_utils.h"
 #include "tests/include/helpers.h"
 
+using WP2::testing::GetExpectedDistortion;
+using WP2::testing::TestImageEncConfig;
+
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Input is considered random data and converted to parameters.
   WP2::testing::FuzzedParameters params(data, size);
 
   // Extract a random config.
-  // Encoding settings are limited to guarantee a reasonable test duration.
-  const bool use_fast_config = params.ExtractBool();
-  const bool use_advanced_config = params.ExtractBool();
-
   WP2::EncoderConfig config;
-  params.ExtractSimpleConfig(/*max_effort=*/use_fast_config ? 2 : 5, &config);
-  if (use_advanced_config) {
-    params.ExtractAdvancedConfig(use_fast_config, &config);
-  }
-  WP2::testing::ProgressTester progress_tester;
-  if (params.ExtractBool()) {
-    config.progress_hook = &progress_tester;
-    progress_tester.fail_at_ = params.ExtractDouble(0., 1.);
-  }
+  params.ExtractConfig(&config);
+
+  // Make sure the encoding stops before the fuzzer timeout (600 seconds).
+  WP2::testing::ProgressTimeout progress(/*max_seconds=*/120.);
+  config.progress_hook = &progress;
+  progress.fail_at_ = params.ExtractBool() ? params.ExtractDouble(0., 1.) : 2.;
 
   // Create a randomly sized valid buffer with random pixels. It's best to
   // extract other params before because it will try to use all remaining bytes.
-  WP2::ArgbBuffer original = params.ExtractArgbBuffer(
-      /*max_num_pixels=*/use_fast_config ? 256u * 256u : 64u * 64u);
+  WP2::ArgbBuffer original =
+      params.ExtractArgbBuffer(/*max_num_pixels=*/256u * 256u);
   if (original.IsEmpty()) return 0;  // No byte left to extract as raw pixels.
 
-  const bool compare_after_decoding = !use_advanced_config;
   // Input can be random noise; output can get heavily distorted but it's fine.
   const float expected_distortion =
-      WP2::testing::GetExpectedDistortion(config) - 10.f;
-  return WP2::testing::TestImageEncConfig(
-      original, config, compare_after_decoding, expected_distortion);
+      WP2::testing::GetExpectedDistortion(config) - 15.f;
+  return TestImageEncConfig(original, config, expected_distortion);
 }

@@ -467,7 +467,7 @@ void ImageReader::SetImplJPEG(ArgbBuffer* const buffer, LogLevel log_level,
     fprintf(stderr, "JPEG support not compiled. Please install the libjpeg "
                     "development package before building.\n");
   }
-  status_ = WP2_STATUS_VERSION_MISMATCH;
+  status_ = WP2_STATUS_UNSUPPORTED_FEATURE;
 }
 
 }  // namespace WP2

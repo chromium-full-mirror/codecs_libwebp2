@@ -18,6 +18,7 @@
 
 #include "src/enc/lossless/histogram_enc.h"
 
+#include <algorithm>
 #include <functional>
 #include <limits>
 #include <numeric>
@@ -112,6 +113,7 @@ bool HistogramSet::Allocate(uint32_t size,
     histograms_[i] = &histo_buffer_[i];
     histo_buffer_[i].Init();
     histo_buffer_[i].SetBuffer(memory, symbols_info);
+    histo_buffer_[i].id_ = i;
     memory += cache_num;
   }
   tmp_histo_ = &histo_buffer_[size];
@@ -308,8 +310,7 @@ WP2Status BuildHistograms(uint32_t width, uint32_t height, uint32_t histo_bits,
   WP2_CHECK_STATUS(recorder.Allocate(symbols_info_counter, /*num_records=*/0));
   WP2_CHECK_STATUS(StorePixels(width, height, histo_bits, refs,
                                WP2::ProgressRange(nullptr, 0.),
-                               /*histogram_symbols=*/nullptr, &enc_noop,
-                               &recorder));
+                               /*segments=*/nullptr, &enc_noop, &recorder));
 
   // Copy the dictionaries to the HistogramSet.
   Histogram** const histograms = histogram_set->histograms_.data();
@@ -358,11 +359,14 @@ class BinMerger {
     }
   }
   // Merges empty histograms together.
-  static WP2Status RemoveEmptyHistograms(HistogramSet* const image_histo) {
+  static WP2Status RemoveEmptyHistograms(HistogramSet* const image_histo,
+                                         SegmentImgWrapper* const segments) {
     uint32_t new_size = 0;
     auto& histograms = image_histo->histograms_;
     for (uint32_t i = 0; i < histograms.size(); ++i) {
-      if (histograms[i]->bit_cost_ != 0.) {
+      if (histograms[i]->bit_cost_ == 0.) {
+        (*segments)[histograms[i]->id_] = -1;
+      } else {
         std::swap(histograms[i], histograms[new_size]);
         ++new_size;
       }
@@ -421,7 +425,8 @@ class BinMerger {
   // if it's advantageous.
   WP2Status CombineEntropyBin(const WP2::Vector_u16& bin_map,
                               PopulationAnalyzer* const analyzer,
-                              HistogramSet* const image_histo) const {
+                              HistogramSet* const image_histo,
+                              SegmentImgWrapper* const segments) const {
     Histogram** const histograms = image_histo->histograms_.data();
     // Work in-place: processed histograms are put at the beginning of
     // image_histo[]. At the end, we just have to truncate the array.
@@ -457,6 +462,9 @@ class BinMerger {
             *histograms[first], *histograms[idx], image_histo->tmp_histo_,
             bit_cost_thresh);
         if (curr_cost_diff < bit_cost_thresh) {
+          (*segments)[histograms[first]->id_] =
+              (*segments)[histograms[idx]->id_] = image_histo->tmp_histo_->id_ =
+                  std::min(histograms[first]->id_, histograms[idx]->id_);
           std::swap(image_histo->tmp_histo_, histograms[first]);
         } else {
           histograms[size++] = histograms[idx];
@@ -522,14 +530,18 @@ WP2Status HistoQueue::Resize(uint32_t size) {
   return WP2_STATUS_OK;
 }
 
-void HistoQueue::MergeFront() {
+void HistoQueue::MergeFront(SegmentImgWrapper* const segments) {
   const uint16_t idx1 = queue_.front().idx1;
   const uint16_t idx2 = queue_.front().idx2;
   assert(idx1 < idx2);
   // Merge idx2 into idx1.
-  HistogramAdd(*(*histograms_)[idx2], *(*histograms_)[idx1],
-               (*histograms_)[idx1]);
-  (*histograms_)[idx1]->bit_cost_ = queue_.front().cost_combo;
+  Histogram* const histo1 = (*histograms_)[idx1];
+  const Histogram& histo2 = *(*histograms_)[idx2];
+  HistogramAdd(histo2, *histo1, histo1);
+  histo1->bit_cost_ = queue_.front().cost_combo;
+  const int16_t min_id = std::min(histo1->id_, histo2.id_);
+  (*segments)[histo1->id_] = (*segments)[histo2.id_] = min_id;
+  histo1->id_ = min_id;
 
   for (uint32_t i = 0; i < queue_.size();) {
     HistogramPair* const p = &queue_[i];
@@ -605,6 +617,7 @@ void HistoQueue::MaybeUpdateHead(HistogramPair* const pair) {
 // reduction.
 // Returns true on success, false otherwise.
 static WP2Status HistogramCombineGreedy(HistogramSet* const image_histo,
+                                        SegmentImgWrapper* const segments,
                                         PopulationAnalyzer* const analyzer) {
   const uint32_t image_histo_size = image_histo->histograms_.size();
 
@@ -621,7 +634,7 @@ static WP2Status HistogramCombineGreedy(HistogramSet* const image_histo,
 
   while (queue.ValidIndices().size() > 1 && !queue.empty()) {
     const uint32_t idx1 = queue.front().idx1;
-    queue.MergeFront();
+    queue.MergeFront(segments);
 
      // Push new pairs formed with combined histogram to the queue.
     for (uint32_t i : queue.ValidIndices()) {
@@ -643,6 +656,7 @@ static WP2Status HistogramCombineGreedy(HistogramSet* const image_histo,
 static WP2Status HistogramCombineStochastic(HistogramSet* const image_histo,
                                             uint32_t min_cluster_size,
                                             float min_diff,
+                                            SegmentImgWrapper* const segments,
                                             PopulationAnalyzer* const analyzer,
                                             bool* const do_greedy) {
   WP2::UniformIntDistribution random;
@@ -689,7 +703,7 @@ static WP2Status HistogramCombineStochastic(HistogramSet* const image_histo,
     if (queue.empty()) continue;
 
     // Merge the two best histograms.
-    queue.MergeFront();
+    queue.MergeFront(segments);
     valid_size = queue.ValidIndices().size();
 
     tries_with_no_success = 0;
@@ -702,50 +716,82 @@ static WP2Status HistogramCombineStochastic(HistogramSet* const image_histo,
 // -----------------------------------------------------------------------------
 // Histogram refinement
 
+// Make sure the ARGB image is a label image.
+// ARB are 0 and only G contains indices.
+// Each G value is either:
+//  - <= to the previous ones
+//  - equal to the max so far + 1
+bool SegmentImgWrapper::IsLabelImage(uint32_t size) const {
+  if (size % 4 != 0) return false;
+  int16_t max_value = 0;
+  const int16_t* v = data_;
+  for (const int16_t* const v_end = v + size; v < v_end; v += 4) {
+    if (v[0] != 0 || v[1] != 0 || v[3] != 0) return false;
+    if (v[2] <= max_value) continue;
+    if (v[2] - max_value > 1) return false;
+    max_value = v[2];
+  }
+  return true;
+}
+
 // Find the best 'out' histogram for each of the 'in' histograms.
 // Note: we assume that out[]->bit_cost_ is already up-to-date.
 static WP2Status HistogramRemap(const HistogramSet& in, HistogramSet* const out,
                                 PopulationAnalyzer* const analyzer,
-                                uint16_t* const mapping) {
+                                int16_t* const segments) {
   Histogram* const* const in_histo = in.histograms_.data();
   Histogram* const* const out_histo = out->histograms_.data();
   const uint32_t in_size = in.histograms_.size();
   const uint32_t out_size = out->histograms_.size();
-  if (out_size > 1) {
-    for (uint32_t i = 0; i < in_size; ++i) {
-      int best_out = 0;
-      double best_bits = std::numeric_limits<double>::max();
-      for (uint32_t k = 0; k < out_size; ++k) {
-        const double cur_bits = analyzer->HistogramAddThresh(
-            *out_histo[k], *in_histo[i], best_bits);
-        if (k == 0 || cur_bits < best_bits) {
-          best_bits = cur_bits;
-          best_out = k;
-        }
-      }
-      mapping[i] = best_out;
-    }
-  } else {
-    assert(out_size == 1);
-    for (uint32_t i = 0; i < in_size; ++i) {
-      mapping[i] = 0;
-    }
+  // If all histograms have been merged into 1, they all belong to the same
+  // segment.
+  SegmentImgWrapper segments_wrap(segments);
+  if (out->histograms_.size() == 1) {
+    for (uint32_t i = 0; i < in_size; ++i) segments_wrap[i] = 0;
+    analyzer->UpdateHistogramCost(out->histograms_[0]);
+    return WP2_STATUS_OK;
   }
-  // Re-write histogram_symbols so that it is a proper label image with values
+  WP2::Vector_u32 mapping_count;
+  WP2_CHECK_ALLOC_OK(mapping_count.resize(in_size));
+  std::fill(mapping_count.begin(), mapping_count.end(), 0);
+
+  // Make sure the mapping is as minimal as possible.
+  for (int16_t i = 0; i < (int16_t)in_size; ++i) {
+    int16_t* const segment = &segments_wrap[i];
+    // If we have an empty histogram.
+    if (*segment == -1) continue;
+    if (*segment != i) {
+      // If we have a histogram that is not its own segment.
+      assert(*segment < i);
+      *segment = segments_wrap[*segment];
+    }
+    ++mapping_count[*segment];
+    // Make sure we reached the minimal mapping.
+    assert(segments_wrap[*segment] == *segment);
+  }
+  // Assign empty histograms to the most common used segment to improve
+  // compression.
+  // TODO(vrabaud) Test with assigning to the same as the previous block to
+  //               favor LZ77.
+  const uint32_t best_segment =
+      std::max_element(mapping_count.begin(), mapping_count.end()) -
+      mapping_count.begin();
+  for (uint32_t i = 0; i < in_size; ++i) {
+    if (segments_wrap[i] < 0) segments_wrap[i] = best_segment;
+  }
+
+  // Re-write 'segments' so that it is a proper label image with values
   // increasing.
-  // TODO(vrabaud) Which index should be given to empty histograms ? The most
-  //               common one or the same as the previous block to favor LZ77 ?
-  const uint32_t num_histos = in.histograms_.size();
-  WP2::Vector_u32 mapping_tmp;
-  WP2_CHECK_ALLOC_OK(mapping_tmp.resize(num_histos));
-  std::fill(mapping_tmp.begin(), mapping_tmp.end(), num_histos);
+  std::fill(mapping_count.begin(), mapping_count.end(), in_size);
   uint32_t mapping_max = 0;
-  for (uint32_t i = 0; i < num_histos; ++i) {
-    if (mapping_tmp[mapping[i]] == num_histos) {
-      mapping_tmp[mapping[i]] = mapping_max++;
+  for (uint32_t i = 0; i < in_size; ++i) {
+    int16_t* const segment = &segments_wrap[i];
+    if (mapping_count[*segment] == in_size) {
+      mapping_count[*segment] = mapping_max++;
     }
-    mapping[i] = mapping_tmp[mapping[i]];
+    *segment = mapping_count[*segment];
   }
+  assert(segments_wrap.IsLabelImage(4 * in_size));
 
   // Recompute each out based on raw and symbols.
   for (uint32_t i = 0; i < out_size; ++i) {
@@ -753,7 +799,7 @@ static WP2Status HistogramRemap(const HistogramSet& in, HistogramSet* const out,
   }
 
   for (uint32_t i = 0; i < in_size; ++i) {
-    const int idx = mapping[i];
+    const int idx = segments_wrap[i];
     HistogramAdd(*in_histo[i], *out_histo[idx], out_histo[idx]);
   }
   for (uint32_t i = 0; i < out_size; ++i) {
@@ -772,8 +818,8 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
                                const WP2::ProgressRange& progress,
                                int histogram_bits,
                                const LosslessSymbolsInfo& symbols_info,
-                               HistogramSet* const image_histo,
-                               uint16_t* const histogram_symbols) {
+                               HistogramSet* const merged_histo,
+                               int16_t* const segments) {
   const WP2::ProgressRange combine_progress(progress, 0.2);
   const WP2::ProgressRange encode_progress(progress, 0.6);
   const WP2::ProgressRange reduce_progress(progress, 0.2);
@@ -782,30 +828,38 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
       histogram_bits ? SubSampleSize(width, histogram_bits) : 1;
   const uint32_t histo_ysize =
       histogram_bits ? SubSampleSize(height, histogram_bits) : 1;
-  const uint32_t image_histo_raw_size = histo_xsize * histo_ysize;
+  const uint32_t num_segments = histo_xsize * histo_ysize;
   HistogramSet orig_histo;
-  WP2_CHECK_ALLOC_OK(orig_histo.Allocate(image_histo_raw_size, symbols_info));
+  WP2_CHECK_ALLOC_OK(orig_histo.Allocate(num_segments, symbols_info));
 
   // Construct the histograms from backward references.
   WP2_CHECK_STATUS(BuildHistograms(width, height, histogram_bits, symbols_info,
                                    refs, &orig_histo));
-  // Copies the histograms and computes its bit_cost.
-  PopulationAnalyzer analyzer(image_histo_raw_size);
+  // Copies the histograms and computes their bit_cost.
+  PopulationAnalyzer analyzer(num_segments);
   WP2_CHECK_STATUS(analyzer.Allocate(symbols_info));
   for (Histogram* const h : orig_histo.histograms_) {
     analyzer.UpdateHistogramCost(h);
   }
-  WP2_CHECK_STATUS(HistogramSetCopy(orig_histo, symbols_info, image_histo));
+  WP2_CHECK_STATUS(HistogramSetCopy(orig_histo, symbols_info, merged_histo));
+  SegmentImgWrapper segments_wrap(segments);
+  // Invalidate all histograms.
+  for (uint32_t i = 0; i < num_segments; ++i) segments_wrap[i] = -1;
+  // Validate non-empty histograms.
+  for (const Histogram* histo : merged_histo->histograms_) {
+    segments_wrap[histo->id_] = histo->id_;
+  }
 
   WP2::Vector_u16 bin_map;
   BinMerger merger(orig_histo.histograms_.size(), effort);
-  WP2_CHECK_STATUS(merger.RemoveEmptyHistograms(image_histo));
-  WP2_CHECK_ALLOC_OK(bin_map.resize(image_histo->histograms_.size()));
+  WP2_CHECK_STATUS(merger.RemoveEmptyHistograms(merged_histo, &segments_wrap));
+  WP2_CHECK_ALLOC_OK(bin_map.resize(merged_histo->histograms_.size()));
   const bool entropy_combine =
-      merger.AnalyzeEntropyBin(*image_histo, bin_map.data());
+      merger.AnalyzeEntropyBin(*merged_histo, bin_map.data());
   if (entropy_combine) {
-    // Collapse histograms with similar entropy.
-    WP2_CHECK_STATUS(merger.CombineEntropyBin(bin_map, &analyzer, image_histo));
+    // Merge histograms with similar entropy.
+    WP2_CHECK_STATUS(merger.CombineEntropyBin(bin_map, &analyzer, merged_histo,
+                                              &segments_wrap));
   }
 
   // Don't combine the histograms using stochastic and greedy heuristics for
@@ -815,84 +869,75 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
     // cubic ramp between 1 and MAX_HISTO_GREEDY:
     const auto threshold_size = (int)(1 + (x * x * x) * (MAX_HISTO_GREEDY - 1));
     bool do_greedy;
-    WP2_CHECK_STATUS(HistogramCombineStochastic(image_histo, threshold_size,
-                                                0.f, &analyzer, &do_greedy));
+    WP2_CHECK_STATUS(HistogramCombineStochastic(merged_histo, threshold_size,
+                                                0.f, &segments_wrap, &analyzer,
+                                                &do_greedy));
     if (do_greedy) {
-      WP2_CHECK_STATUS(HistogramCombineGreedy(image_histo, &analyzer));
+      WP2_CHECK_STATUS(
+          HistogramCombineGreedy(merged_histo, &segments_wrap, &analyzer));
     }
   }
   WP2_CHECK_STATUS(combine_progress.AdvanceBy(1.));
 
+  // In case we have too many histograms, merge the least bad pairs.
+  while (merged_histo->histograms_.size() > kMaxHistogramImageSize) {
+    bool do_greedy;
+    WP2_CHECK_STATUS(HistogramCombineStochastic(
+        merged_histo, kMaxHistogramImageSize, std::numeric_limits<float>::max(),
+        &segments_wrap, &analyzer, &do_greedy));
+  }
+  WP2_CHECK_STATUS(reduce_progress.AdvanceBy(1.));
+
+  WP2_CHECK_STATUS(
+      HistogramRemap(orig_histo, merged_histo, &analyzer, segments));
+
   // Sometimes, combining histograms provides worse entropy. But if we
   // combine all the histograms, we could have the overall extra entropy be
   // less than the cost of adding the entropy image.
-  if (image_histo->histograms_.size() > 1 &&
-      image_histo->histograms_.size() < kAllHistogramMergingNum &&
-      image_histo->histograms_.size() < (orig_histo.histograms_.size() - 1)) {
-    WP2_CHECK_STATUS(
-        HistogramRemap(orig_histo, image_histo, &analyzer, histogram_symbols));
-
+  if (merged_histo->histograms_.size() > 1 &&
+      merged_histo->histograms_.size() < kAllHistogramMergingNum &&
+      merged_histo->histograms_.size() < (orig_histo.histograms_.size() - 1)) {
     // Cost of all the histograms and the entropy image.
     double cost_all;
     // Figure out the entropy of the symbols image.
     {
       WP2::ANSEnc enc;
       HashChain hash_chain;
-      WP2_CHECK_ALLOC_OK(hash_chain.Allocate(image_histo_raw_size));
+      WP2_CHECK_ALLOC_OK(hash_chain.Allocate(num_segments));
       BackwardRefsPool ref_pool;
-      ref_pool.Init(image_histo_raw_size);
+      ref_pool.Init(num_segments);
 
-      WP2::Vector_s16 labels;
-      WP2_CHECK_ALLOC_OK(labels.resize(4 * image_histo_raw_size));
-
-      for (uint32_t i = 0; i < image_histo_raw_size; ++i) {
-        labels[4 * i + 0] = 0;
-        labels[4 * i + 1] = 0;
-        labels[4 * i + 2] = histogram_symbols[i];
-        labels[4 * i + 3] = 0;
-      }
       WP2::ANSDictionaries dicts;
       LosslessSymbolsInfo symbols_info_tmp;
       // 'has_alpha' is false as it is a label image.
       symbols_info_tmp.Init(/*has_alpha=*/false, symbols_info.SampleFormat());
       symbols_info_tmp.SetAsLabelImage();
       WP2_CHECK_STATUS(EncodeImageNoClusters(
-          &enc, &dicts, labels.data(), &hash_chain, &ref_pool, histo_ysize,
+          &enc, &dicts, segments, &hash_chain, &ref_pool, histo_ysize,
           histo_xsize, symbols_info_tmp, effort, encode_progress));
       cost_all = enc.GetCost(dicts);
     }
 
     // Compute the cost if we merge all histograms and update cost_all with the
     // cost of each histogram.
-    Histogram* const tmp_histo = image_histo->tmp_histo_;
-    image_histo->histograms_[0]->CopyTo(tmp_histo);
-    cost_all += image_histo->histograms_[0]->bit_cost_;
-    for (uint32_t i = 1; i < image_histo->histograms_.size(); ++i) {
-      cost_all += image_histo->histograms_[i]->bit_cost_;
-      HistogramAdd(*image_histo->histograms_[i], *tmp_histo, tmp_histo);
+    Histogram* const tmp_histo = merged_histo->tmp_histo_;
+    merged_histo->histograms_[0]->CopyTo(tmp_histo);
+    cost_all += merged_histo->histograms_[0]->bit_cost_;
+    for (uint32_t i = 1; i < merged_histo->histograms_.size(); ++i) {
+      cost_all += merged_histo->histograms_[i]->bit_cost_;
+      HistogramAdd(*merged_histo->histograms_[i], *tmp_histo, tmp_histo);
     }
     analyzer.UpdateHistogramCost(tmp_histo);
 
     if (tmp_histo->bit_cost_ < cost_all) {
       // Use that merged histogram.
-      WP2_CHECK_ALLOC_OK(image_histo->histograms_.resize(1));
-      tmp_histo->CopyTo(image_histo->histograms_[0]);
+      WP2_CHECK_ALLOC_OK(merged_histo->histograms_.resize(1));
+      tmp_histo->CopyTo(merged_histo->histograms_[0]);
+      for (uint32_t i = 0; i < num_segments; ++i) segments_wrap[i] = 0;
     }
   } else {
     WP2_CHECK_STATUS(encode_progress.AdvanceBy(1.));
   }
-
-  // In case we have too many histograms, merge the least bad pairs.
-  while (image_histo->histograms_.size() > kMaxHistogramImageSize) {
-    bool do_greedy;
-    WP2_CHECK_STATUS(HistogramCombineStochastic(
-        image_histo, kMaxHistogramImageSize, std::numeric_limits<float>::max(),
-        &analyzer, &do_greedy));
-  }
-  WP2_CHECK_STATUS(reduce_progress.AdvanceBy(1.));
-
-  WP2_CHECK_STATUS(HistogramRemap(orig_histo, image_histo, &analyzer,
-                                  histogram_symbols));
 
   return WP2_STATUS_OK;
 }

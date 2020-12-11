@@ -696,10 +696,12 @@ test_enc_dir: $(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES)
 	cd tests && ./test_enc_dir.sh ../examples
 test_enc_anim: $(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES)
 	cd tests && ./test_enc_anim.sh ../examples
+test_memory: $(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES)
+	cd tests && ./test_memory.sh ../examples
 
 SH_TESTS =
 SH_TESTS += test_assert test_ansz test_io_pnm test_cmd
-SH_TESTS += test_enc test_enc_dir test_enc_anim
+SH_TESTS += test_enc test_enc_dir test_enc_anim test_memory
 
 test: $(CC_TESTS) $(SH_TESTS)
 
@@ -1091,6 +1093,7 @@ DIST_FILES= \
             tests/test_io_ewp2.sh \
             tests/test_math.cc \
             tests/test_malloc_fail_at.cc \
+            tests/test_memory.sh \
             tests/test_metadata.cc \
             tests/test_optim.cc \
             tests/test_orientation.cc \

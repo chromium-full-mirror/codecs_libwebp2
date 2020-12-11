@@ -81,7 +81,11 @@ TEST(LosslessHistogram, HistoQueue) {
     }
 
     EXPECT_FALSE(queue.empty());
-    queue.MergeFront();
+    WP2::Vector_s16 segments_vec;
+    EXPECT_TRUE(segments_vec.resize(4 * kNumHistos));
+    std::fill(segments_vec.begin(), segments_vec.end(), 0);
+    SegmentImgWrapper segments(segments_vec.data());
+    queue.MergeFront(&segments);
     EXPECT_EQ(valid_indices.size(), size_before - 1);
   }
 }

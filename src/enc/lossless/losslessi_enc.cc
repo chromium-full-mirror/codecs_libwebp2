@@ -48,22 +48,6 @@ static void swap(EncodeInfo& a, EncodeInfo& b) {
   swap(a.bits_per_pixel, b.bits_per_pixel);
 }
 
-// Make sure the array contains indices in the green channel.
-// From one to the next, those should be the same or less, and if they increase,
-// they increase only by one.
-static bool IsArrayMadeOfLabels(const int16_t v[], uint32_t size) {
-  if (size == 0) return true;
-  assert(size % 4 == 0);
-  int16_t max_value = v[2];
-  if (max_value != 0) return false;
-  for (uint32_t i = 6; i < size; i += 4) {
-    if (v[i] <= max_value) continue;
-    if (v[i] - max_value > 1) return false;
-    max_value = v[i];
-  }
-  return true;
-}
-
 // Writes a 'value' as Golomb where the prefix is stored as symbol 'sym' in
 // cluster 'cluster'.
 static void WriteLZ77Golomb(uint32_t cluster, uint32_t sym, int32_t value,
@@ -91,8 +75,8 @@ static void WriteLZ77Golomb(uint32_t cluster, uint32_t sym, int32_t value,
 
 WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
                       const BackwardRefs& refs, const ProgressRange& progress,
-                      const uint16_t* const histogram_symbols,
-                      WP2::ANSEncBase* const enc, WP2::SymbolManager* const sw,
+                      const int16_t* const segments, WP2::ANSEncBase* const enc,
+                      WP2::SymbolManager* const sw,
                       EncodeInfo* const encode_info) {
   const uint32_t histo_xsize =
       histo_bits ? SubSampleSize(width, histo_bits) : 1;
@@ -102,8 +86,7 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
   uint32_t y = 0;
   uint32_t tile_x = x & tile_mask;
   uint32_t tile_y = y & tile_mask;
-  uint32_t histogram_ix =
-      (histogram_symbols == nullptr) ? 0 : histogram_symbols[0];
+  uint32_t histogram_ix = (segments == nullptr) ? 0 : segments[4 * 0 + 2];
 
   const WP2::ProgressScale row_progress(progress, 1. / height);
 
@@ -131,8 +114,7 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
         tile_y = y & tile_mask;
         const uint32_t ind =
             (y >> histo_bits) * histo_xsize + (x >> histo_bits);
-        histogram_ix =
-            (histogram_symbols == nullptr) ? ind : histogram_symbols[ind];
+        histogram_ix = (segments == nullptr) ? ind : segments[4 * ind + 2];
       }
     }
     const PixelMode& v = *c.cur_pos_;
@@ -202,8 +184,7 @@ WP2Status StorePixels(uint32_t width, const BackwardRefs& refs,
                       WP2::ANSEncBase* const enc,
                       WP2::SymbolManager* const sw) {
   WP2_CHECK_STATUS(StorePixels(width, /*height=*/0, /*histo_bits=*/0, refs,
-                               ProgressRange(), /*histogram_symbols=*/nullptr,
-                               enc, sw));
+                               ProgressRange(), /*segments=*/nullptr, enc, sw));
   return WP2_STATUS_OK;
 }
 
@@ -280,7 +261,7 @@ WP2Status EncodeImageNoClusters(WP2::ANSEncBase* const enc,
 
   // Store actual literals.
   WP2_CHECK_STATUS(StorePixels(width, height, /*histo_bits=*/0, *refs, progress,
-                               /*histogram_symbols=*/nullptr, enc, &sw));
+                               /*segments=*/nullptr, enc, &sw));
   return WP2_STATUS_OK;
 }
 
@@ -293,9 +274,8 @@ static WP2Status EncodeImageInternal(
     EncodeInfo* const encode_info) {
   const uint32_t histogram_width = SubSampleSize(width, histogram_bits);
   const uint32_t histogram_height = SubSampleSize(height, histogram_bits);
-  const uint32_t histogram_image_xysize = histogram_width * histogram_height;
+  const uint32_t num_segments_max = histogram_width * histogram_height;
   HistogramSet histogram_image;
-  WP2::Vector_u16 histogram_symbols;
   WP2::ANSEnc enc_best;
   WP2::ANSDictionaries dicts_best;
   WP2::ANSEnc enc_init;
@@ -303,7 +283,7 @@ static WP2Status EncodeImageInternal(
   float best_cost = std::numeric_limits<float>::max();
   WP2::SymbolWriter sw;
 
-  assert(width * height >= 1 && histogram_image_xysize >= 1);
+  assert(width * height >= 1 && num_segments_max >= 1);
   assert(histogram_bits >= kHistogramBitsMin);
   assert(histogram_bits <= kHistogramBitsMax);
 
@@ -323,7 +303,10 @@ static WP2Status EncodeImageInternal(
   WP2_CHECK_STATUS(dicts_init.CopyFrom(*dicts));
   WP2_CHECK_STATUS(enc_best.Clone(*enc));
   WP2_CHECK_STATUS(dicts_best.CopyFrom(*dicts));
-  WP2_CHECK_ALLOC_OK(histogram_symbols.resize(histogram_image_xysize));
+  // Label image where only the green channel is filled.
+  WP2::Vector_s16 segments;
+  WP2_CHECK_ALLOC_OK(segments.resize(4 * num_segments_max));
+  std::fill(segments.begin(), segments.end(), 0);
   WP2_CHECK_STATUS(hash_chain->Fill(effort, argb, width, height));
   for (uint32_t lz77s_idx = 0; lz77s_idx < config.lz77s_types_to_try_size;
        ++lz77s_idx) {
@@ -346,13 +329,12 @@ static WP2Status EncodeImageInternal(
         &refs_best));
     symbols_info.SetCacheRange(GetColorCacheRange(cache_config));
     WP2_CHECK_ALLOC_OK(
-        histogram_image.Allocate(histogram_image_xysize, symbols_info));
+        histogram_image.Allocate(num_segments_max, symbols_info));
 
     // Build histogram image and symbols from backward references.
     WP2_CHECK_STATUS(GetHistoImageSymbols(
         width, height, *refs_best, effort, histo_symbols_progress,
-        histogram_bits, symbols_info, &histogram_image,
-        histogram_symbols.data()));
+        histogram_bits, symbols_info, &histogram_image, segments.data()));
 
     {
       WP2::ANSDebugPrefix prefix_gh(enc, "GlobalHeader");
@@ -373,38 +355,26 @@ static WP2Status EncodeImageInternal(
       }
 
       // Histogram image.
-      const uint32_t num_clusters = histogram_image.histograms_.size();
-      if (num_clusters > 1) assert(more_than_one_hist);
+      const uint32_t num_segments = histogram_image.histograms_.size();
+      if (num_segments > 1) assert(more_than_one_hist);
       const bool write_histogram_image =
           (more_than_one_hist &&
-           enc->PutBool(num_clusters > 1, "write_histogram_image"));
+           enc->PutBool(num_segments > 1, "write_histogram_image"));
       if (write_histogram_image) {
-        WP2::Vector_s16 labels;
-        WP2_CHECK_ALLOC_OK(labels.resize(4 * histogram_image_xysize));
-        for (uint32_t i = 0; i < histogram_image_xysize; ++i) {
-          labels[4 * i + 0] = 0;
-          labels[4 * i + 1] = 0;
-          labels[4 * i + 2] = histogram_symbols[i];
-          labels[4 * i + 3] = 0;
-        }
-        if (!IsArrayMadeOfLabels(labels.data(), labels.size())) {
-          assert(false);
-        }
-
         WP2::ANSDebugPrefix prefix_histogram_image(enc, "histogram_image");
         enc->PutRange(histogram_bits, kHistogramBitsMin, max_sampling,
                       "histogram_bits");
-        enc->PutRange(num_clusters, 2,
-                      std::min(kMaxHistogramImageSize, histogram_image_xysize),
+        enc->PutRange(num_segments, 2,
+                      std::min(kMaxHistogramImageSize, num_segments_max),
                       "num_histograms_m2");
         LosslessSymbolsInfo symbols_info_tmp;
         WP2_CHECK_STATUS(symbols_info_tmp.CopyFrom(symbols_info));
         symbols_info_tmp.SetCacheRange(0);
         symbols_info_tmp.SetAsLabelImage();
         symbols_info_tmp.SetMinMax(kSymbolG, /*min=*/0,
-                                   /*max=*/num_clusters - 1);
+                                   /*max=*/num_segments - 1);
         WP2_CHECK_STATUS(EncodeImageNoClusters(
-            enc, dicts, labels.data(), hash_chain, ref_pool, histogram_width,
+            enc, dicts, segments.data(), hash_chain, ref_pool, histogram_width,
             histogram_height, symbols_info_tmp, effort, histo_image_progress));
       } else {
         WP2_CHECK_STATUS(histo_image_progress.AdvanceBy(1.));
@@ -414,11 +384,11 @@ static WP2Status EncodeImageInternal(
       const uint32_t num_pixels = width * height;
       WP2::ANSEncNoop enc_noop;
       WP2::SymbolRecorder recorder;
-      symbols_info.SetNumClusters(num_clusters);
+      symbols_info.SetNumClusters(num_segments);
       WP2_CHECK_STATUS(recorder.Allocate(symbols_info, /*num_records=*/0));
-      WP2_CHECK_STATUS(StorePixels(
-          width, height, histogram_bits, *refs_best, symbol_stats_progress,
-          histogram_symbols.data(), &enc_noop, &recorder));
+      WP2_CHECK_STATUS(StorePixels(width, height, histogram_bits, *refs_best,
+                                   symbol_stats_progress, segments.data(),
+                                   &enc_noop, &recorder));
 
       // Store symbol headers.
       WP2_CHECK_STATUS(
@@ -435,8 +405,8 @@ static WP2Status EncodeImageInternal(
           encode_info->bits_per_pixel.size()));
     }
     WP2_CHECK_STATUS(StorePixels(width, height, histogram_bits, *refs_best,
-                                 literals_progress, histogram_symbols.data(),
-                                 enc, &sw, &current_encode_info));
+                                 literals_progress, segments.data(), enc, &sw,
+                                 &current_encode_info));
 
     // Keep track of the smallest image so far.
     if (enc->GetCost(*dicts) < best_cost) {

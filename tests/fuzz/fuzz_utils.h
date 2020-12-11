@@ -73,10 +73,8 @@ class FuzzedParameters {
   // Returns a (possibly invalid) wp2 bitstream, starting with the wp2 tag.
   bool TryExtractWP2Bitstream(Data* const encoded_data);
 
-  // Extracts main encoding settings (quality, speed etc.) and sets 'config'.
-  void ExtractSimpleConfig(uint32_t max_effort, EncoderConfig* const config);
-  // Extracts other settings (partition_set etc.) and sets 'config'.
-  void ExtractAdvancedConfig(bool fast, EncoderConfig* const config);
+  // Extracts encoding settings (quality, effort etc.). Can be very slow.
+  void ExtractConfig(EncoderConfig* const config);
 
   // Extracts decoding settings.
   void ExtractConfig(DecoderConfig* const config);
@@ -87,15 +85,15 @@ class FuzzedParameters {
   size_t bit_pos_ = 0;
 };
 
-// Verifies that 'original' can be encoded with 'config' or aborts.
-// Also checks that the decoded image is similar if 'compare_after_decoding'.
+// Verifies that 'original' can be encoded with 'config' or aborts. Also checks
+// that the decoded image is not worse than the 'expected_distortion' if not 0.
 int TestImageEncConfig(const ArgbBuffer& original, const EncoderConfig& config,
-                       bool compare_after_decoding, float expected_distortion);
+                       float expected_distortion);
 
 int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
                       const std::vector<uint32_t>& durations_ms,
                       bool loop_forever, const EncoderConfig& config,
-                      bool compare_after_decoding, float expected_distortion);
+                      float expected_distortion);
 
 // Verifies that 'encoded_data' does not crash when decoded with 'config'.
 // Aborts if it's not decoded without error in case of 'expected_success'.

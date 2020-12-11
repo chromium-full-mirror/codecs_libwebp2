@@ -29,7 +29,7 @@ cd build
 cmake -D CMAKE_BUILD_TYPE=RelWithDebInfo -D WP2_ENABLE_TESTS=ON \
 -D WP2_BUILD_EXAMPLES=ON -D WP2_BUILD_EXTRAS=ON -D WP2_BUILD_SWIG_PY=ON ..
 make -j 8
-ctest -j 8
+ctest --output-on-failure -j 8
 
 rm -rf ./*
 
@@ -37,7 +37,7 @@ rm -rf ./*
 cmake -D CMAKE_BUILD_TYPE=Debug -D WP2_ENABLE_TESTS=ON \
 -D WP2_BUILD_EXAMPLES=ON -D WP2_BUILD_EXTRAS=ON ..
 make -j 8
-# ctest -j 8  # Tests take too much time to run in Debug.
+# ctest --output-on-failure -j 8  # Tests take too much time to run in Debug.
 
 rm -rf ./*
 

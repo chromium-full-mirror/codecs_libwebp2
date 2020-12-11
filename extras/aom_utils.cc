@@ -490,9 +490,11 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   // CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_INTRABC, 0));
   // ### Disable "filter" predictors.
   // CHECK_AOM_STATUS(
-  //     aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA,0));
-  // ### Disable most transforms (only use DCT_DCT and IDENTITY_IDENTITY).
-  // CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_INTRA_DCT_ONLY, 1));
+  //     aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA, 0));
+
+  if (params.disable_transforms) {
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_INTRA_DCT_ONLY, 1));
+  }
 
   if (params.quality > 95) {
     CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_LOSSLESS, 1));

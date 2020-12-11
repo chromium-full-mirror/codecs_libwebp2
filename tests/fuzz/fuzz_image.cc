@@ -27,17 +27,18 @@ namespace WP2 {
 namespace testing {
 
 int TestImageEncConfig(const ArgbBuffer& original, const EncoderConfig& config,
-                       bool compare_after_decoding, float expected_distortion) {
+                       float expected_distortion) {
   // std::cerr << config << std::endl;  // Uncomment to print config
   if (!config.IsValid()) abort();
 
   MemoryWriter memory_writer;
   const WP2Status status = Encode(original, &memory_writer, config);
-  if (config.progress_hook != nullptr) {
-    if (status != WP2_STATUS_USER_ABORT) abort();
-    return 0;
+  if (status != WP2_STATUS_OK) {
+    if (config.progress_hook != nullptr && status == WP2_STATUS_USER_ABORT) {
+      return 0;
+    }
+    abort();
   }
-  if (status != WP2_STATUS_OK) abort();
 
   // Verify that it decodes fine and that the result is close enough.
   ArgbBuffer decoded;
@@ -45,13 +46,13 @@ int TestImageEncConfig(const ArgbBuffer& original, const EncoderConfig& config,
       WP2_STATUS_OK) {
     abort();
   }
-  if (compare_after_decoding) {
+  if (expected_distortion > 0.f) {
     if (RotateBuffer(GetInverseOrientation(config.decoding_orientation),
                      &decoded) != WP2_STATUS_OK) {
       abort();
     }
     // Tiny images are not interesting to compare.
-    if (original.width() * original.height() >= 64 &&
+    if (std::min(original.width(), original.height()) >= 8 &&
         !Compare(original, decoded, "image", expected_distortion)) {
       // Uncomment to save the original and decoded images as PNG files.
       // WP2::testing::SaveBeforeAfter(original, decoded, "/tmp/comparison");

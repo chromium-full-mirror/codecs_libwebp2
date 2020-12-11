@@ -122,8 +122,8 @@ TEST(PreprocessNearLosslessTest, Mask) {
     ASSERT_WP2_OK(Encode(preprocessed, &memory_writer, encoder_config));
     const uint32_t size = memory_writer.size_;
     // Would be nice if it was always smaller, but that's not the case... Allow
-    // a 2% increase :(
-    EXPECT_LT(size, previous_size * 1.02);
+    // a 3% increase :(
+    EXPECT_LT(size, previous_size * 1.03);
     previous_size = size;
 
     // Check that fully white and fully black pixels are unchanged.

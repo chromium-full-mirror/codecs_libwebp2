@@ -190,54 +190,56 @@ bool FuzzedParameters::TryExtractWP2Bitstream(Data* const encoded_data) {
 
 //------------------------------------------------------------------------------
 
-void FuzzedParameters::ExtractSimpleConfig(uint32_t max_effort,
-                                           EncoderConfig* const config) {
-  config->quality = (float)ExtractUInt32(kMaxQuality);
-  config->alpha_quality = (float)ExtractUInt32(kMaxQuality);
-  config->effort = (int)ExtractUInt32(max_effort);
-  config->decoding_orientation = (Orientation)ExtractUInt32(3);
-  // config->create_preview = ExtractBool();  // Too slow.
-  config->thread_level = (int)ExtractUInt32((1u << 31) - 1u);
-}
+void FuzzedParameters::ExtractConfig(EncoderConfig* const config) {
+  config->quality = (float)ExtractDouble(0., kMaxQuality);
+  config->target_size = ExtractBool() ? 0 : (size_t)ExtractUInt32(1 << 20);
+  config->target_psnr = ExtractBool() ? 0.f : (float)ExtractDouble(.01, 99.);
+  config->alpha_quality = (float)ExtractDouble(0., kMaxQuality);
+  config->effort = (int)ExtractUInt32(9);
 
-void FuzzedParameters::ExtractAdvancedConfig(bool fast,
-                                             EncoderConfig* const config) {
-  config->transfer_function = (TransferFunction)ExtractUInt32(
-      (uint32_t)WP2_TF_ARIB_STD_B67_HLG);  // Unimplemented.
+  config->decoding_orientation = (Orientation)ExtractUInt32(3);
+  config->create_preview = ExtractBool();
+  // 'preview' and 'preview_size' are not fuzzed.
+
+  config->transfer_function =
+      (TransferFunction)ExtractUInt32((uint32_t)WP2_TF_ARIB_STD_B67_HLG);
+
+  config->pass = (int)ExtractUInt32(1, 10);
+  config->sns = (float)ExtractDouble(0., 100.);
+  config->error_diffusion = (int)ExtractUInt32(100);
+
+  config->segments = (int)ExtractUInt32(1, kMaxNumSegments);
   config->segment_id_mode = (EncoderConfig::SegmentIdMode)ExtractUInt32(2);
   for (uint32_t segment = 0; segment < kMaxNumSegments; ++segment) {
     config->segment_factors[segment] = (float)ExtractUInt32(kMaxLossyQuality);
   }
+
   config->tile_shape = (TileShape)ExtractUInt32((uint32_t)TILE_SHAPE_AUTO);
 
-  constexpr PartitionMethod kFastEnoughPM[] = {
-      MULTIPASS_PARTITIONING, ALL_4X4_PARTITIONING,   ALL_8X8_PARTITIONING,
-      ALL_16X16_PARTITIONING, ALL_32X32_PARTITIONING, AUTO_PARTITIONING};
-  config->partition_method = kFastEnoughPM[ExtractUInt32(
-      sizeof(kFastEnoughPM) / sizeof(kFastEnoughPM[0]) - 1)];
+  config->partition_method =
+      (PartitionMethod)ExtractUInt32(NUM_PARTITION_METHODS - 1);
   config->partition_set = (PartitionSet)ExtractUInt32(NUM_PARTITION_SETS - 1);
-  config->partition_snapping = ExtractBool();
+  config->partition_snapping =
+      (config->partition_method == AREA_ENCODE_PARTITIONING ||
+       config->partition_method == SUB_AREA_ENCODE_PARTITIONING)
+          ? true
+          : ExtractBool();
 
   config->csp_type = (Csp)ExtractUInt32(kNumCspTypes - 1);
   config->uv_mode = (EncoderConfig::UVMode)ExtractUInt32(
       (uint32_t)EncoderConfig::NumUVMode - 1);
-  config->preprocessing = (int)ExtractUInt32(2);             // Unimplemented.
-  config->preprocessing_strength = (int)ExtractUInt32(100);  // Unimplemented.
-  config->use_delta_palette = ExtractBool();                 // Unimplemented.
-  config->low_memory = ExtractBool();                        // Unimplemented.
-  config->enable_alpha_filter = ExtractBool();
+  config->preprocessing = (int)ExtractUInt32(2);
+  config->preprocessing_strength = (int)ExtractUInt32(100);
+  config->use_random_matrix = ExtractBool();
+  config->store_grain = ExtractBool();
+  config->tune_perceptual = ExtractBool();
+  config->use_delta_palette = ExtractBool();
 
-  if (fast) {
-    config->sns = 0.f;
-  } else {
-    // config->pass = (int)ExtractUInt32(1, 10);  // Too slow.
-    config->sns = (float)ExtractUInt32(100);
-    config->error_diffusion = (int)ExtractUInt32(100);
-    config->segments = (int)ExtractUInt32(1, kMaxNumSegments);
-    config->use_random_matrix = ExtractBool();  // Experimental.
-    config->store_grain = ExtractBool();        // Experimental.
-    config->tune_perceptual = ExtractBool();    // Experimental.
-  }
+  config->thread_level = (int)ExtractUInt32((1u << 31) - 1u);
+  config->low_memory = ExtractBool();
+  // 'use_neural_compression' is not fuzzed.
+
+  config->enable_alpha_filter = ExtractBool();
 }
 
 //------------------------------------------------------------------------------

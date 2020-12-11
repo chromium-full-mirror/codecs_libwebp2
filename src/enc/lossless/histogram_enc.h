@@ -104,6 +104,7 @@ class Histogram : public CountsBuffer<uint32_t> {
     memcpy(dst->trivial_symbols_, trivial_symbols_, sizeof(trivial_symbols_));
     memcpy(dst->nonzeros_, nonzeros_, sizeof(nonzeros_));
     dst->bit_cost_ = bit_cost_;
+    dst->id_ = id_;
     memcpy(dst->costs_, costs_, sizeof(costs_));
   }
   void Init() noexcept {
@@ -124,6 +125,7 @@ class Histogram : public CountsBuffer<uint32_t> {
   uint32_t nonzeros_[kSymbolNum];
   double bit_cost_;           // cached value of bit cost.
   double costs_[kSymbolNum];  // cached values of entropy costs.
+  int16_t id_;                // Unique id in a HistogramSet
 
  private:
   typedef CountsBuffer<uint32_t> super;
@@ -157,13 +159,15 @@ WP2Status BuildHistograms(uint32_t width, uint32_t height, uint32_t histo_bits,
                           HistogramSet* const histogram_set);
 
 // Builds the histogram image.
+// 'segments' is an ARGB image where the segment is stored in G and other
+// components are pre-filled with 0.
 WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
                                const BackwardRefs& refs, int effort,
                                const WP2::ProgressRange& progress,
                                int histogram_bits,
                                const LosslessSymbolsInfo& symbols_info,
-                               HistogramSet* const image_histo,
-                               uint16_t* const histogram_symbols);
+                               HistogramSet* const merged_histo,
+                               int16_t* const segments);
 
 // Class comparing histograms for the sake of merging them.
 // It contains several buffers that speed-up the computation of the different
@@ -233,6 +237,19 @@ typedef struct {
   double cost_combo;
 } HistogramPair;
 
+// Wrapper around a segment image to easily access elements in the green
+// channel.
+class SegmentImgWrapper {
+ public:
+  explicit SegmentImgWrapper(int16_t* const data) : data_(data) {}
+  int16_t& operator[](int i) { return data_[4 * i + 2]; }
+  const int16_t& operator[](int i) const { return data_[4 * i + 2]; }
+  bool IsLabelImage(uint32_t size) const;
+
+ private:
+  int16_t* data_;
+};
+
 // Queue storing pairs of symbol histograms and maintaining the best one (with
 // minimal cost) at the front. It is not a traditional queue because when the
 // front is popped, the two histograms are merged and all pairs using one of the
@@ -259,7 +276,7 @@ class HistoQueue {
   // Merges the histograms from the front (idx1 and idx2), invalidate idx2 and
   // also checks if any pair that dealt with idx1 or idx2 is still worth it (by
   // updating the cost or removing the pair).
-  void MergeFront();
+  void MergeFront(SegmentImgWrapper* const segments);
 
   // Creates a pair from indices "idx1" and "idx2" provided its cost
   // is inferior to "threshold", a negative entropy.

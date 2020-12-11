@@ -296,7 +296,7 @@ void WP2::ImageReader::SetImplTIFF(WP2::ArgbBuffer* const buffer,
     fprintf(stderr, "TIFF support not compiled. Please install the libtiff "
                     "development package before building.\n");
   }
-  status_ = WP2_STATUS_VERSION_MISMATCH;
+  status_ = WP2_STATUS_UNSUPPORTED_FEATURE;
 }
 
 #endif  // WP2_HAVE_TIFF

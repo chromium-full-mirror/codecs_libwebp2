@@ -131,6 +131,8 @@ struct EncoderInfo {
   // gather information about a pixel or a zone into 'selection_info'.
   Rectangle selection;         // Unused if width or height < 1. (input)
   std::string selection_info;  // May contain line breaks.       (output)
+
+  bool disable_transforms = false;  // Disable transforms other than DCT.
 };
 
 // Structure given to the decoder as an instance in DecoderConfig to access

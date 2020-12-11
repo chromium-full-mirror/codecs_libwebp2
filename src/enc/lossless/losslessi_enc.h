@@ -119,13 +119,15 @@ WP2Status EncodeImage(const WP2::EncoderConfig& config,
                       EncodeInfo* const encode_info = nullptr);
 
 // Stores the pixels of the image, without caring about the header.
+// 'segments' is an ARGB image where the cluster is stored in G and other
+// components are pre-filled with 0.
 WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
                       const BackwardRefs& refs,
                       const WP2::ProgressRange& progress,
-                      const uint16_t* const histogram_symbols,
-                      WP2::ANSEncBase* const enc, WP2::SymbolManager* const sw,
+                      const int16_t* const segments, WP2::ANSEncBase* const enc,
+                      WP2::SymbolManager* const sw,
                       EncodeInfo* const encode_info = nullptr);
-// Same as above except for an image were there are no entropy clusters.
+// Same as above except for an image where there are no entropy segments.
 WP2Status StorePixels(uint32_t width, const BackwardRefs& refs,
                       WP2::ANSEncBase* const enc, WP2::SymbolManager* const sw);
 // Stores the different symbol headers and sets up 'sw' with the right symbol

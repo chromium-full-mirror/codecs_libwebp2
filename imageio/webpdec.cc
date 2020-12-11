@@ -243,7 +243,7 @@ void WP2::ImageReader::SetImplWEBP(WP2::ArgbBuffer* const buffer,
     fprintf(stderr, "WEBP support not compiled. Please install the libwebp "
                     "development package before building.\n");
   }
-  status_ = WP2_STATUS_VERSION_MISMATCH;
+  status_ = WP2_STATUS_UNSUPPORTED_FEATURE;
 }
 
 #endif  // WP2_HAVE_WEBP

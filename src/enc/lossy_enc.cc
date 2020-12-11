@@ -58,6 +58,7 @@ bool DecideAOMCoeffs(const EncoderConfig& config, const Rectangle& tile_rect) {
 WP2Status DecideTransforms(const EncoderConfig& config,
                            Vector<TransformPair>* const transforms,
                            Vector<TransformPair>* const transforms_subset) {
+  // TODO(maryla): add kIdentityDct and kDctIdentity
   WP2_CHECK_ALLOC_OK(transforms->reserve(5));
   transforms->push_back_no_resize(kDctDct);
   if (config.effort >= 3) {
@@ -72,7 +73,7 @@ WP2Status DecideTransforms(const EncoderConfig& config,
   }
   // This is used to find a predictor faster
   // (= not testing every transform with each predictor).
-  WP2_CHECK_ALLOC_OK(transforms_subset->reserve(5));
+  WP2_CHECK_ALLOC_OK(transforms_subset->reserve(transforms->size()));
   transforms_subset->push_back_no_resize(kDctDct);
   if (config.effort >= 6) {
     transforms_subset->push_back_no_resize(kAdstAdst);
