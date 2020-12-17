@@ -89,7 +89,7 @@ TEST_P(DspTest, SSETest4x8u) {
 
 //------------------------------------------------------------------------------
 
-TEST_P(DspTest, ANS) {
+TEST_P(DspTest, ANSUpdateCDF) {
   ANSInit();
   const uint16_t kCDFBase[] = {0, 1, 2, 3, 4, 5, 6, 7};
   const uint16_t kCDFVar[] = {0,     16377, 16377, 16377,
@@ -101,7 +101,7 @@ TEST_P(DspTest, ANS) {
 }
 
 // Special case where 'mult' is 65535 meaning factor is 1.
-TEST_P(DspTest, ANSCopy) {
+TEST_P(DspTest, ANSUpdateCDFCopy) {
   ANSInit();
   const uint16_t kCDFBase[] = {0, 1, 2, 3, 4, 5, 6, 7};
   const uint16_t kCDFVar[] = {0,     16377, 16377, 16377,
@@ -112,6 +112,22 @@ TEST_P(DspTest, ANSCopy) {
                                      cumul[4], cumul[5], cumul[6]};
   EXPECT_THAT(cumul_to_check, ::testing::ElementsAre(0, 16378, 16379, 16380,
                                                      16381, 16382, 16383));
+}
+
+TEST_P(DspTest, ANSGetSymbol) {
+  ANSInit();
+  uint16_t cumul[APROBA_MAX_SYMBOL];
+  for (uint32_t i = 0; i < APROBA_MAX_SYMBOL; ++i) {
+    cumul[i] = (i == 0)                       ? 0
+               : (i == APROBA_MAX_SYMBOL - 1) ? 16383
+                                              : cumul[i - 1] + (i % 3) * 10;
+  }
+  for (uint32_t proba : {0, 9, 10, 11, 30, 150, 160, 250, 270, 300, 16383}) {
+    EXPECT_EQ(
+        ANSGetSymbol(APROBA_MAX_SYMBOL, cumul, proba),
+        (std::upper_bound(cumul, cumul + APROBA_MAX_SYMBOL, proba) - cumul) - 1)
+        << "proba " << proba;
+  }
 }
 
 //------------------------------------------------------------------------------

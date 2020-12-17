@@ -175,7 +175,7 @@ class PreviewData {
 
  protected:  // encoding
   // Removes least used colors until palette_ contains at most 'max_num_colors'.
-  WP2Status ReduceColors(uint32_t max_num_colors);
+  WP2Status ReduceColors(const ArgbBuffer& canvas, uint32_t max_num_colors);
 
   // Computes grid width and height based on canvas dimensions and expected
   // grid size. Preserves aspect ratio as possible.
@@ -200,6 +200,8 @@ class PreviewData {
 
   // Returns best index matching the canvas' colors around x,y (in grid units)
   uint16_t GetBestIndex(const ArgbBuffer& canvas, uint32_t x, uint32_t y) const;
+  // Find closest matching color in palette_ for all vertices_.
+  void AssignBestVertices(const ArgbBuffer& canvas);
 
  public:
   bool IsCorner(uint32_t x, uint32_t y) const {

@@ -85,7 +85,7 @@ constexpr uint32_t kDirectionalMaxAngleDeltaUV = 1u;
 constexpr uint32_t kYBasePredNum = 8;
 constexpr uint32_t kABasePredNum = 8;
 constexpr uint32_t kUVBasePredNum = 4;
-constexpr uint32_t kAnglePredNum = 8;
+constexpr uint32_t kAnglePredNum = 9;
 
 enum BasePredictor {
   BPRED_DC = 0,
@@ -156,6 +156,15 @@ typedef enum {
   WP2_TF_ARIB_STD_B67_HLG
 } TransferFunction;
 
+// Predefined ICC chunk
+static constexpr uint32_t kPredefinedICC1Size = 524;
+extern const uint8_t kPredefinedICC1[];
+
+static constexpr uint32_t kPredefinedICC2Size = 3144;
+static constexpr uint32_t kPredefinedICC2Offset = 67;  // variable byte
+extern const uint8_t kPredefinedICC2[];
+
+// Channels
 typedef enum { kYChannel = 0, kUChannel, kVChannel, kAChannel } Channel;
 
 static constexpr uint32_t kRgbBits = 8u;

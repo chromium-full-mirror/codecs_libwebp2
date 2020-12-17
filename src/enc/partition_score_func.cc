@@ -1178,7 +1178,7 @@ WP2Status TileScoreFunc::Init(const EncoderConfig& config,
   const ProgressRange forced_partition_progress(progress, 0.8);
   WP2_CHECK_STATUS(
       PartitionScoreFunc::Init(config, tile_rect, yuv, gparams, init_progress));
-  local_gparams_.features_ = &features_map_;
+  local_gparams_.features_ = &local_features_map_;
   WP2_CHECK_STATUS(GlobalAnalysis(ArgbBuffer(), yuv, gparams.transf_,
                                   config, &local_gparams_));
   WP2_CHECK_STATUS(InitForEncode());
@@ -1216,7 +1216,8 @@ WP2Status TileScoreFunc::InitForEncode() {
   WP2_CHECK_ALLOC_OK(enc_tiles_layout_.tiles.resize(1));
   enc_tiles_layout_.first_unassigned_tile_index = 0;
 
-  enc_tiles_layout_.tiles.front().rect = tile_rect_;
+  enc_tiles_layout_.tiles.front().rect = {0, 0, tile_rect_.width,
+                                          tile_rect_.height};
   enc_tiles_layout_.tiles.front().rgb_input.Deallocate();  // This is lossy.
   assert(!src_->IsEmpty());
   WP2_CHECK_STATUS(enc_tiles_layout_.tiles.front().yuv_input.SetView(*src_));

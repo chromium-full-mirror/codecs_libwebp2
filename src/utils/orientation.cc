@@ -19,6 +19,7 @@
 
 #include "src/utils/orientation.h"
 
+#include <algorithm>
 #include <cassert>
 
 #include "src/dsp/dsp.h"
@@ -28,64 +29,84 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
-uint32_t RotateWidth(Orientation orientation, uint32_t width, uint32_t height) {
+uint32_t OrientateWidth(Orientation orientation, uint32_t width,
+                        uint32_t height) {
   return (orientation == Orientation::k90Clockwise ||
-          orientation == Orientation::k270Clockwise)
+          orientation == Orientation::k270Clockwise ||
+          orientation == Orientation::kFlipBotLeftToTopRgt ||
+          orientation == Orientation::kFlipTopLeftToBotRgt)
              ? height
              : width;
 }
 
-uint32_t RotateHeight(Orientation orientation,
-                      uint32_t width, uint32_t height) {
+uint32_t OrientateHeight(Orientation orientation, uint32_t width,
+                         uint32_t height) {
   return (orientation == Orientation::k90Clockwise ||
-          orientation == Orientation::k270Clockwise)
+          orientation == Orientation::k270Clockwise ||
+          orientation == Orientation::kFlipBotLeftToTopRgt ||
+          orientation == Orientation::kFlipTopLeftToBotRgt)
              ? width
              : height;
 }
 
 //------------------------------------------------------------------------------
 
-uint32_t RotatePointX(Orientation orientation,
-                      uint32_t old_width, uint32_t old_height,
-                      uint32_t x, uint32_t y) {
+uint32_t OrientatePointX(Orientation orientation, uint32_t old_width,
+                         uint32_t old_height, uint32_t x, uint32_t y) {
   assert(x < old_width && y < old_height);
 
-  if (orientation == Orientation::k90Clockwise)  return old_height - y - 1u;
-  if (orientation == Orientation::k180)          return old_width - x - 1u;
-  if (orientation == Orientation::k270Clockwise) return y;
+  if (orientation == Orientation::k90Clockwise ||
+      orientation == Orientation::kFlipTopLeftToBotRgt) {
+    return old_height - y - 1u;
+  } else if (orientation == Orientation::k180 ||
+             orientation == Orientation::kFlipLeftToRight) {
+    return old_width - x - 1u;
+  } else if (orientation == Orientation::k270Clockwise ||
+             orientation == Orientation::kFlipBotLeftToTopRgt) {
+    return y;
+  }
   return x;
 }
 
-uint32_t RotatePointY(Orientation orientation,
-                      uint32_t old_width, uint32_t old_height,
-                      uint32_t x, uint32_t y) {
+uint32_t OrientatePointY(Orientation orientation, uint32_t old_width,
+                         uint32_t old_height, uint32_t x, uint32_t y) {
   assert(x < old_width && y < old_height);
 
-  if (orientation == Orientation::k90Clockwise)  return x;
-  if (orientation == Orientation::k180)          return old_height - y - 1u;
-  if (orientation == Orientation::k270Clockwise) return old_width - x - 1u;
+  if (orientation == Orientation::k90Clockwise ||
+      orientation == Orientation::kFlipBotLeftToTopRgt) {
+    return x;
+  } else if (orientation == Orientation::k180 ||
+             orientation == Orientation::kFlipTopToBottom) {
+    return old_height - y - 1u;
+  } else if (orientation == Orientation::k270Clockwise ||
+             orientation == Orientation::kFlipTopLeftToBotRgt) {
+    return old_width - x - 1u;
+  }
   return y;
 }
 
 //------------------------------------------------------------------------------
 
-Rectangle RotateRectangle(Orientation orientation,
-                          uint32_t old_width, uint32_t old_height,
-                          const Rectangle& rect) {
+Rectangle OrientateRectangle(Orientation orientation, uint32_t old_width,
+                             uint32_t old_height, const Rectangle& rect) {
   assert(rect.x + rect.width <= old_width &&
          rect.y + rect.height <= old_height);
   Rectangle rotated_rect(
-      RotatePointX(orientation, old_width, old_height, rect.x, rect.y),
-      RotatePointY(orientation, old_width, old_height, rect.x, rect.y),
-      RotateWidth(orientation, rect.width, rect.height),
-      RotateHeight(orientation, rect.width, rect.height));
+      OrientatePointX(orientation, old_width, old_height, rect.x, rect.y),
+      OrientatePointY(orientation, old_width, old_height, rect.x, rect.y),
+      OrientateWidth(orientation, rect.width, rect.height),
+      OrientateHeight(orientation, rect.width, rect.height));
   // x, y represents top left, not any corner.
   if (orientation == Orientation::k90Clockwise ||
-      orientation == Orientation::k180) {
+      orientation == Orientation::k180 ||
+      orientation == Orientation::kFlipLeftToRight ||
+      orientation == Orientation::kFlipTopLeftToBotRgt) {
     if (rotated_rect.width > 1) rotated_rect.x -= rotated_rect.width - 1;
   }
   if (orientation == Orientation::k180 ||
-      orientation == Orientation::k270Clockwise) {
+      orientation == Orientation::k270Clockwise ||
+      orientation == Orientation::kFlipTopToBottom ||
+      orientation == Orientation::kFlipTopLeftToBotRgt) {
     if (rotated_rect.height > 1) rotated_rect.y -= rotated_rect.height - 1;
   }
   return rotated_rect;
@@ -93,18 +114,20 @@ Rectangle RotateRectangle(Orientation orientation,
 
 //------------------------------------------------------------------------------
 
-WP2Status RotateBuffer(Orientation orientation, ArgbBuffer* const buffer) {
+WP2Status OrientateBuffer(Orientation orientation, ArgbBuffer* const buffer) {
   WP2_CHECK_OK(buffer != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!buffer->IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
 
   if (orientation == Orientation::k90Clockwise ||
-      orientation == Orientation::k270Clockwise) {
-    // Note: Rotating a non-square image in place is not trivial; using a
-    // temporary array instead.
+      orientation == Orientation::k270Clockwise ||
+      orientation == Orientation::kFlipBotLeftToTopRgt ||
+      orientation == Orientation::kFlipTopLeftToBotRgt) {
+    // Note: Rotating or mirroring a non-square image in place is not trivial;
+    //       using a temporary array instead.
     // TODO(yguyon): rotate directly during decoding
     ArgbBuffer tmp(buffer->format());
     WP2_CHECK_STATUS(tmp.Resize(buffer->height(), buffer->width()));
-    WP2_CHECK_STATUS(RotateSubBuffer(
+    WP2_CHECK_STATUS(OrientateSubBuffer(
         orientation, *buffer, {0, 0, buffer->width(), buffer->height()}, &tmp));
 
     if (buffer->IsView()) {
@@ -113,7 +136,7 @@ WP2Status RotateBuffer(Orientation orientation, ArgbBuffer* const buffer) {
       WP2_CHECK_STATUS(buffer->Swap(&tmp));
     }
   } else if (orientation == Orientation::k180) {
-    // Swap first half with opposites.
+    // Swap first half of all pixels in scan-order with opposites.
     const uint32_t pixel_depth = WP2FormatBpp(buffer->format());
     uint8_t* row = buffer->GetRow8(0);
     uint8_t* opposite_row = buffer->GetRow8(buffer->height() - 1) +
@@ -131,24 +154,50 @@ WP2Status RotateBuffer(Orientation orientation, ArgbBuffer* const buffer) {
       row += buffer->stride();
       opposite_row -= buffer->stride();
     }
+  } else if (orientation == Orientation::kFlipLeftToRight) {
+    // Reverse each line.
+    const uint32_t pixel_depth = WP2FormatBpp(buffer->format());
+    uint8_t* row = buffer->GetRow8(0);
+    for (uint32_t y = 0; y < buffer->height(); ++y, row += buffer->stride()) {
+      uint8_t* pixel = row;
+      uint8_t* opposite_pixel = row + (buffer->width() - 1) * pixel_depth;
+      while (pixel < opposite_pixel) {
+        for (uint32_t c = 0; c < pixel_depth; ++c) {
+          std::swap(pixel[c], opposite_pixel[c]);
+        }
+        pixel += pixel_depth;
+        opposite_pixel -= pixel_depth;
+      }
+    }
+  } else if (orientation == Orientation::kFlipTopToBottom) {
+    // Swap each line with its opposite.
+    const uint32_t pixel_depth = WP2FormatBpp(buffer->format());
+    uint8_t* row = buffer->GetRow8(0);
+    uint8_t* opposite_row = buffer->GetRow8(buffer->height() - 1);
+    while (row < opposite_row) {
+      std::swap_ranges(row, row + buffer->width() * pixel_depth, opposite_row);
+      row += buffer->stride();
+      opposite_row -= buffer->stride();
+    }
   }
   return WP2_STATUS_OK;
 }
 
-WP2Status RotateBuffer(Orientation orientation, const ArgbBuffer& src,
-                       ArgbBuffer* const dst) {
+WP2Status OrientateBuffer(Orientation orientation, const ArgbBuffer& src,
+                          ArgbBuffer* const dst) {
   WP2_CHECK_OK(dst != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!src.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_STATUS(
-      dst->Resize(RotateWidth(orientation, src.width(), src.height()),
-                  RotateHeight(orientation, src.width(), src.height())));
-  WP2_CHECK_STATUS(RotateSubBuffer(
+      dst->Resize(OrientateWidth(orientation, src.width(), src.height()),
+                  OrientateHeight(orientation, src.width(), src.height())));
+  WP2_CHECK_STATUS(OrientateSubBuffer(
       orientation, src, Rectangle(0, 0, src.width(), src.height()), dst));
   return WP2_STATUS_OK;
 }
 
-WP2Status RotateSubBuffer(Orientation orientation, const ArgbBuffer& src,
-                          const Rectangle& rect_in_src, ArgbBuffer* const dst) {
+WP2Status OrientateSubBuffer(Orientation orientation, const ArgbBuffer& src,
+                             const Rectangle& rect_in_src,
+                             ArgbBuffer* const dst) {
   WP2_CHECK_OK(dst != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!src.IsEmpty() && !dst->IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(src.format() == WP2_Argb_32 || src.format() == WP2_ARGB_32 ||
@@ -159,14 +208,14 @@ WP2Status RotateSubBuffer(Orientation orientation, const ArgbBuffer& src,
                WP2_STATUS_INVALID_PARAMETER);
   if (rect_in_src.width == 0 || rect_in_src.height == 0) return WP2_STATUS_OK;
 
-  const uint32_t dst_x = RotatePointX(orientation, src.width(), src.height(),
-                                      rect_in_src.x, rect_in_src.y);
-  const uint32_t dst_y = RotatePointY(orientation, src.width(), src.height(),
-                                      rect_in_src.x, rect_in_src.y);
+  const uint32_t dst_x = OrientatePointX(orientation, src.width(), src.height(),
+                                         rect_in_src.x, rect_in_src.y);
+  const uint32_t dst_y = OrientatePointY(orientation, src.width(), src.height(),
+                                         rect_in_src.x, rect_in_src.y);
   const uint32_t dst_width =
-      RotateWidth(orientation, rect_in_src.width, rect_in_src.height);
+      OrientateWidth(orientation, rect_in_src.width, rect_in_src.height);
   const uint32_t dst_height =
-      RotateHeight(orientation, rect_in_src.width, rect_in_src.height);
+      OrientateHeight(orientation, rect_in_src.width, rect_in_src.height);
   WP2_CHECK_OK(dst_width <= dst->width(), WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(dst_height <= dst->height(), WP2_STATUS_INVALID_PARAMETER);
 
@@ -178,7 +227,10 @@ WP2Status RotateSubBuffer(Orientation orientation, const ArgbBuffer& src,
 
   int32_t dst_next_line;
   int32_t dst_next_pixel;
-  if (orientation == Orientation::k90Clockwise) {
+  if (orientation == Orientation::kOriginal) {
+    dst_next_line = (int32_t)dst->stride();
+    dst_next_pixel = (int32_t)dst_pixel_depth;
+  } else if (orientation == Orientation::k90Clockwise) {
     dst_next_line = -(int32_t)dst_pixel_depth;
     dst_next_pixel = (int32_t)dst->stride();
   } else if (orientation == Orientation::k180) {
@@ -187,9 +239,19 @@ WP2Status RotateSubBuffer(Orientation orientation, const ArgbBuffer& src,
   } else if (orientation == Orientation::k270Clockwise) {
     dst_next_line = (int32_t)dst_pixel_depth;
     dst_next_pixel = -(int32_t)dst->stride();
-  } else {
+  } else if (orientation == Orientation::kFlipLeftToRight) {
     dst_next_line = (int32_t)dst->stride();
+    dst_next_pixel = -(int32_t)dst_pixel_depth;
+  } else if (orientation == Orientation::kFlipBotLeftToTopRgt) {
+    dst_next_line = (int32_t)dst_pixel_depth;
+    dst_next_pixel = (int32_t)dst->stride();
+  } else if (orientation == Orientation::kFlipTopToBottom) {
+    dst_next_line = -(int32_t)dst->stride();
     dst_next_pixel = (int32_t)dst_pixel_depth;
+  } else {
+    assert(orientation == Orientation::kFlipTopLeftToBotRgt);
+    dst_next_line = -(int32_t)dst_pixel_depth;
+    dst_next_pixel = -(int32_t)dst->stride();
   }
 
   if (src.format() == dst->format()) {
@@ -228,19 +290,20 @@ WP2Status RotateSubBuffer(Orientation orientation, const ArgbBuffer& src,
 
 //------------------------------------------------------------------------------
 
-WP2Status RotateBuffer(Orientation orientation, Plane16* const buffer) {
+WP2Status OrientateBuffer(Orientation orientation, Plane16* const buffer) {
   WP2_CHECK_OK(buffer != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!buffer->IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
 
   if (orientation == Orientation::k90Clockwise ||
-      orientation == Orientation::k270Clockwise) {
-    // Note: Rotating a non-square image in place is not trivial; using a
-    // temporary array instead.
-    // TODO(yguyon): rotate directly during decoding
+      orientation == Orientation::k270Clockwise ||
+      orientation == Orientation::kFlipBotLeftToTopRgt ||
+      orientation == Orientation::kFlipTopLeftToBotRgt) {
+    // Note: Rotating or mirroring a non-square image in place is not trivial;
+    //       using a temporary array instead.
     Plane16 tmp;
     WP2_CHECK_STATUS(tmp.Resize(buffer->h_, buffer->w_));
-    WP2_CHECK_STATUS(RotateSubBuffer(orientation, *buffer,
-                                     {0, 0, buffer->w_, buffer->h_}, &tmp));
+    WP2_CHECK_STATUS(OrientateSubBuffer(orientation, *buffer,
+                                        {0, 0, buffer->w_, buffer->h_}, &tmp));
     if (buffer->IsView()) {
       WP2_CHECK_STATUS(buffer->Copy(tmp, /*resize_if_needed=*/false));
     } else {
@@ -262,24 +325,39 @@ WP2Status RotateBuffer(Orientation orientation, Plane16* const buffer) {
       row += buffer->Step();
       opposite_row -= buffer->Step();
     }
+  } else if (orientation == Orientation::kFlipLeftToRight) {
+    // Reverse each line.
+    int16_t* row = buffer->Row(0);
+    for (uint32_t y = 0; y < buffer->h_; ++y, row += buffer->step_) {
+      std::reverse(row, row + buffer->w_);
+    }
+  } else if (orientation == Orientation::kFlipTopToBottom) {
+    // Swap each line with its opposite.
+    int16_t* row = buffer->Row(0);
+    int16_t* opposite_row = buffer->Row(buffer->h_ - 1);
+    while (row < opposite_row) {
+      std::swap_ranges(row, row + buffer->w_, opposite_row);
+      row += buffer->step_;
+      opposite_row -= buffer->step_;
+    }
   }
   return WP2_STATUS_OK;
 }
 
-WP2Status RotateBuffer(Orientation orientation, const Plane16& src,
-                       Plane16* const dst) {
+WP2Status OrientateBuffer(Orientation orientation, const Plane16& src,
+                          Plane16* const dst) {
   WP2_CHECK_OK(dst != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!src.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
-  const uint32_t dst_width = RotateWidth(orientation, src.w_, src.h_);
-  const uint32_t dst_height = RotateHeight(orientation, src.w_, src.h_);
+  const uint32_t dst_width = OrientateWidth(orientation, src.w_, src.h_);
+  const uint32_t dst_height = OrientateHeight(orientation, src.w_, src.h_);
   if (!dst->IsView()) WP2_CHECK_STATUS(dst->Resize(dst_width, dst_height));
-  WP2_CHECK_STATUS(RotateSubBuffer(
-      orientation, src, Rectangle(0, 0, src.w_, src.h_), dst));
+  WP2_CHECK_STATUS(OrientateSubBuffer(orientation, src,
+                                      Rectangle(0, 0, src.w_, src.h_), dst));
   return WP2_STATUS_OK;
 }
 
-WP2Status RotateSubBuffer(Orientation orientation, const Plane16& src,
-                          const Rectangle& rect_in_src, Plane16* const dst) {
+WP2Status OrientateSubBuffer(Orientation orientation, const Plane16& src,
+                             const Rectangle& rect_in_src, Plane16* const dst) {
   WP2_CHECK_OK(dst != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!src.IsEmpty() && !dst->IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK((rect_in_src.x + rect_in_src.width <= src.w_) &&
@@ -287,14 +365,14 @@ WP2Status RotateSubBuffer(Orientation orientation, const Plane16& src,
                WP2_STATUS_INVALID_PARAMETER);
   if (rect_in_src.width == 0 || rect_in_src.height == 0) return WP2_STATUS_OK;
 
-  const uint32_t dst_x =
-      RotatePointX(orientation, src.w_, src.h_, rect_in_src.x, rect_in_src.y);
-  const uint32_t dst_y =
-      RotatePointY(orientation, src.w_, src.h_, rect_in_src.x, rect_in_src.y);
+  const uint32_t dst_x = OrientatePointX(orientation, src.w_, src.h_,
+                                         rect_in_src.x, rect_in_src.y);
+  const uint32_t dst_y = OrientatePointY(orientation, src.w_, src.h_,
+                                         rect_in_src.x, rect_in_src.y);
   const uint32_t dst_width =
-      RotateWidth(orientation, rect_in_src.width, rect_in_src.height);
+      OrientateWidth(orientation, rect_in_src.width, rect_in_src.height);
   const uint32_t dst_height =
-      RotateHeight(orientation, rect_in_src.width, rect_in_src.height);
+      OrientateHeight(orientation, rect_in_src.width, rect_in_src.height);
   WP2_CHECK_OK(dst_width <= dst->w_, WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(dst_height <= dst->h_, WP2_STATUS_INVALID_PARAMETER);
 
@@ -303,7 +381,10 @@ WP2Status RotateSubBuffer(Orientation orientation, const Plane16& src,
 
   int32_t dst_next_line;
   int32_t dst_next_pixel;
-  if (orientation == Orientation::k90Clockwise) {
+  if (orientation == Orientation::kOriginal) {
+    dst_next_line = (int32_t)dst->Step();
+    dst_next_pixel = 1;
+  } else if (orientation == Orientation::k90Clockwise) {
     dst_next_line = -1;
     dst_next_pixel = (int32_t)dst->Step();
   } else if (orientation == Orientation::k180) {
@@ -312,9 +393,19 @@ WP2Status RotateSubBuffer(Orientation orientation, const Plane16& src,
   } else if (orientation == Orientation::k270Clockwise) {
     dst_next_line = 1;
     dst_next_pixel = -(int32_t)dst->Step();
-  } else {
+  } else if (orientation == Orientation::kFlipLeftToRight) {
     dst_next_line = (int32_t)dst->Step();
+    dst_next_pixel = -1;
+  } else if (orientation == Orientation::kFlipBotLeftToTopRgt) {
+    dst_next_line = 1;
+    dst_next_pixel = (int32_t)dst->Step();
+  } else if (orientation == Orientation::kFlipTopToBottom) {
+    dst_next_line = -(int32_t)dst->Step();
     dst_next_pixel = 1;
+  } else {
+    assert(orientation == Orientation::kFlipTopLeftToBotRgt);
+    dst_next_line = -1;
+    dst_next_pixel = -(int32_t)dst->Step();
   }
 
   for (uint32_t y = 0; y < rect_in_src.height; ++y) {
@@ -333,18 +424,19 @@ WP2Status RotateSubBuffer(Orientation orientation, const Plane16& src,
 
 //------------------------------------------------------------------------------
 
-WP2Status RotateBuffer(Orientation orientation, YUVPlane* const buffer) {
+WP2Status OrientateBuffer(Orientation orientation, YUVPlane* const buffer) {
   WP2_CHECK_OK(buffer != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!buffer->IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (channel == kAChannel && buffer->GetChannel(channel).IsEmpty()) continue;
-    WP2_CHECK_STATUS(RotateBuffer(orientation, &buffer->GetChannel(channel)));
+    WP2_CHECK_STATUS(
+        OrientateBuffer(orientation, &buffer->GetChannel(channel)));
   }
   return WP2_STATUS_OK;
 }
 
-WP2Status RotateBuffer(Orientation orientation, const YUVPlane& src,
-                       YUVPlane* const dst) {
+WP2Status OrientateBuffer(Orientation orientation, const YUVPlane& src,
+                          YUVPlane* const dst) {
   WP2_CHECK_OK(!src.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(dst != nullptr, WP2_STATUS_NULL_PARAMETER);
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
@@ -352,22 +444,26 @@ WP2Status RotateBuffer(Orientation orientation, const YUVPlane& src,
       dst->GetChannel(channel).Clear();
       continue;
     }
-    WP2_CHECK_STATUS(RotateBuffer(orientation, src.GetChannel(channel),
-                                  &dst->GetChannel(channel)));
+    WP2_CHECK_STATUS(OrientateBuffer(orientation, src.GetChannel(channel),
+                                     &dst->GetChannel(channel)));
   }
   return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
 
-static constexpr Orientation kInverseOrientation[4]{
-    Orientation::kOriginal,
-    Orientation::k270Clockwise,
-    Orientation::k180,
-    Orientation::k90Clockwise};
-
 Orientation GetInverseOrientation(Orientation orientation) {
-  return kInverseOrientation[((uint32_t)orientation) & 3u];
+  static constexpr Orientation kInverseOrientation[8]{
+      Orientation::kOriginal,
+      Orientation::k270Clockwise,
+      Orientation::k180,
+      Orientation::k90Clockwise,
+      Orientation::kFlipLeftToRight,
+      Orientation::kFlipBotLeftToTopRgt,
+      Orientation::kFlipTopToBottom,
+      Orientation::kFlipTopLeftToBotRgt};
+
+  return kInverseOrientation[(uint32_t)orientation];
 }
 
 //------------------------------------------------------------------------------

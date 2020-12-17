@@ -170,7 +170,8 @@ static int16_t GetAverageColor(const Plane16& plane) {
   return DivRound(accumulator, num_pixels);
 }
 
-WP2Status PreviewData::ReduceColors(uint32_t max_num_colors) {
+WP2Status PreviewData::ReduceColors(const ArgbBuffer& canvas,
+                                    uint32_t max_num_colors) {
   if (max_num_colors >= palette_.size()) return WP2_STATUS_OK;  // nothing to do
   Vector_u16 counts;
   WP2_CHECK_STATUS(GetPaletteHistogram(vertices_, palette_, &counts));
@@ -196,7 +197,8 @@ WP2Status PreviewData::ReduceColors(uint32_t max_num_colors) {
                 least_used_color, least_used_color_count,
                 &palette_[closest_color_index], &counts[closest_color_index]);
   }
-  // note: at this point, vertices_[].color_index are mostly invalid!
+  // At this point, vertices_[].color_index are mostly invalid so fix them.
+  AssignBestVertices(canvas);
   return WP2_STATUS_OK;
 }
 
@@ -210,6 +212,12 @@ uint16_t PreviewData::GetBestIndex(const ArgbBuffer& canvas,
   y = (y * (canvas.height() - 1) + round_y) / (grid_height_ - 1);
   const Argb32b color = GetAverageColor(canvas, /*radius=*/5, x, y);
   return FindClosestColorIndex(palette_, ToAYCoCg19b(color));
+}
+
+void PreviewData::AssignBestVertices(const ArgbBuffer& canvas) {
+  for (VertexIndexedColor& vertex : vertices_) {
+    vertex.color_index = GetBestIndex(canvas, vertex.x, vertex.y);
+  }
 }
 
 WP2Status MakePaletteValid(Vector<AYCoCg19b>* const palette) {
@@ -282,15 +290,13 @@ WP2Status PreviewData::CollectColors(const ArgbBuffer& canvas,
     }
   }
 
-  // Make sure we have the minimum required number of colors
+  // Make sure we have the minimum required number of colors.
   WP2_CHECK_STATUS(MakePaletteValid(&palette_));
-  // ...and reduce the palette if needed.
-  WP2_CHECK_STATUS(ReduceColors(max_colors));
+  // Vertex indices are not tied to the palette_ yet.
+  AssignBestVertices(canvas);
+  // Reduce the palette_ based on vertices_ indices if needed.
+  WP2_CHECK_STATUS(ReduceColors(canvas, max_colors));
 
-  // find closest matching color for all vertices
-  for (VertexIndexedColor& vertex : vertices_) {
-    vertex.color_index = GetBestIndex(canvas, vertex.x, vertex.y);
-  }
   // And corners too:
   corners_[0] = GetBestIndex(canvas, 0, 0);
   corners_[1] = GetBestIndex(canvas, w, 0);
@@ -330,15 +336,13 @@ WP2Status PreviewData::CollectColors2(const ArgbBuffer& canvas,
     }
   }
 
-  // Make sure we have the minimum required number of colors
+  // Make sure we have the minimum required number of colors.
   WP2_CHECK_STATUS(MakePaletteValid(&palette_));
-  // ...and reduce the palette if needed.
-  WP2_CHECK_STATUS(ReduceColors(max_colors));
+  // Vertex indices are not tied to the palette_ yet.
+  AssignBestVertices(canvas);
+  // Reduce the palette_ based on vertices_ indices if needed.
+  WP2_CHECK_STATUS(ReduceColors(canvas, max_colors));
 
-  // find closest matching color for all vertices
-  for (VertexIndexedColor& vertex : vertices_) {
-    vertex.color_index = GetBestIndex(canvas, vertex.x, vertex.y);
-  }
   // And corners too:
   const uint32_t w = grid_width_ - 1;
   const uint32_t h = grid_height_ - 1;
@@ -357,7 +361,10 @@ WP2Status GetPaletteHistogram(const Vector<VertexIndexedColor>& vertices,
                               Vector_u16* const counts) {
   WP2_CHECK_ALLOC_OK(counts->resize(palette.size()));
   std::fill(counts->begin(), counts->end(), 0);
-  for (const VertexIndexedColor& v : vertices) ++counts->at(v.color_index);
+  for (const VertexIndexedColor& v : vertices) {
+    assert(v.color_index < counts->size());
+    ++counts->at(v.color_index);
+  }
   return WP2_STATUS_OK;
 }
 

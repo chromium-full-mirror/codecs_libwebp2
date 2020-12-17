@@ -208,7 +208,7 @@ WP2Status Palette::AnalyzeAndCreate(const WP2::ArgbBuffer& pic) {
 template <typename T>
 void ApplyT(const T* src, uint32_t src_stride, uint32_t width, uint32_t height,
             const ColorCacheMap& color_cache, uint32_t max_alpha,
-            bool premultiply, uint16_t* dst) {
+            bool premultiply, int16_t* dst) {
   int16_t prev_pix[4] = {(int16_t)~src[0], (int16_t)~src[1], (int16_t)~src[2],
                          (int16_t)~src[3]};
   uint32_t prev_idx = 0;
@@ -234,7 +234,7 @@ void ApplyT(const T* src, uint32_t src_stride, uint32_t width, uint32_t height,
   }
 }
 
-WP2Status Palette::Apply(const WP2::ArgbBuffer& pic, uint16_t* dst) const {
+WP2Status Palette::Apply(const WP2::ArgbBuffer& pic, int16_t* dst) const {
   WP2_CHECK_OK(pic.format() == WP2_Argb_32 || pic.format() == WP2_Argb_38 ||
                    pic.format() == WP2_ARGB_32,
                WP2_STATUS_INVALID_COLORSPACE);

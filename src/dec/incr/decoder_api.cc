@@ -163,7 +163,7 @@ Rectangle Decoder::GetDecodedArea() const {
   }
 
   // For consistency even an empty rectangle is rotated (for x, y).
-  return RotateRectangle(
+  return OrientateRectangle(
       features_.orientation, features_.raw_width, features_.raw_height,
       Rectangle(0, 0, num_decoded_columns, num_decoded_rows));
 }

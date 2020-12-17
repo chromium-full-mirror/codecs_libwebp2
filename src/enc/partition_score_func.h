@@ -63,8 +63,8 @@ class PartitionScoreFunc : public WP2Allocable {
   const GlobalParams* gparams_ = nullptr;
   Rectangle tile_rect_;            // In pixels, not padded.
   const YUVPlane* src_ = nullptr;  // Original image (tile).
-  uint32_t num_block_cols_ = 0;  // Maximum number of blocks on the horizontal
-  uint32_t num_block_rows_ = 0;  // and vertical axis.
+  uint32_t num_block_cols_ = 0;    // Maximum number of blocks on the horizontal
+  uint32_t num_block_rows_ = 0;    // and vertical axis.
 
   // Visual debug.
   WP2Status ClearVDebug() const;
@@ -344,9 +344,13 @@ class TileScoreFunc : public PartitionScoreFunc {
   VectorNoCtor<Block> blocks_;
   EncTilesLayout enc_tiles_layout_;
   TileEncoder tile_encoder_;
-  GlobalParams local_gparams_;
   ArgbBuffer argb_;
-  FeatureMap features_map_;
+
+  // These two are used per tile. More convenient than the already computed one
+  // for the whole image.
+  FeatureMap local_features_map_;
+  GlobalParams local_gparams_;
+
   float best_score_ = 0.f;         // Best score before last call to Use().
   float cached_best_score_ = 0.f;  // Best score since last call to Use().
 

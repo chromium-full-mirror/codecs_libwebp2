@@ -279,7 +279,16 @@ struct Rectangle {
                Rectangle* const lft, Rectangle* const rgt);
 };
 
-enum class Orientation { kOriginal = 0, k90Clockwise, k180, k270Clockwise };
+enum class Orientation {
+  kOriginal = 0,
+  k90Clockwise,
+  k180,
+  k270Clockwise,
+  kFlipLeftToRight,      // Mirror horizontally = vertical symmetry axis
+  kFlipBotLeftToTopRgt,  // 90 clockwise then mirror horizontally
+  kFlipTopToBottom,      // Mirror vertically = horizontal symmetry axis
+  kFlipTopLeftToBotRgt   // 270 clockwise then mirror horizontally
+};
 
 //------------------------------------------------------------------------------
 // Main Input/Output buffer structure

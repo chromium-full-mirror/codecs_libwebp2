@@ -577,7 +577,7 @@ static void CopyTileWithColorTransform(uint32_t width, uint32_t height,
 
 WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
                               WP2SampleFormat format, uint32_t effort,
-                              uint16_t* const argb_in, int16_t* image) {
+                              int16_t* const argb, int16_t* image) {
   const int max_tile_size = 1 << bits;
   const int tile_xsize = SubSampleSize(width, bits);
   const int tile_ysize = SubSampleSize(height, bits);
@@ -595,11 +595,6 @@ WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
   std::fill(accumulated_red_histo.begin(), accumulated_red_histo.end(), 0);
   WP2_CHECK_ALLOC_OK(accumulated_blue_histo.resize(max_index_blue + 1));
   std::fill(accumulated_blue_histo.begin(), accumulated_blue_histo.end(), 0);
-  WP2::VectorNoCtor<int16_t> argb_signed;
-  WP2_CHECK_ALLOC_OK(argb_signed.resize(4 * width * height));
-  // Convert data to signed first.
-  int16_t* const argb = argb_signed.data();
-  std::copy(argb_in, argb_in + 4 * width * height, argb);
   for (tile_y = 0; tile_y < tile_ysize; ++tile_y) {
     for (tile_x = 0; tile_x < tile_xsize; ++tile_x) {
       int y;
@@ -642,10 +637,10 @@ WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
       }
     }
   }
-  // Copy back data and wrap around.
+  // Wrap around.
   for (uint32_t i = 0; i < 4 * width * height; i += 4) {
-    argb_in[i + 1] = argb[i + 1] & 0xff;
-    argb_in[i + 3] = argb[i + 3] & 0xff;
+    argb[i + 1] &= 0xff;
+    argb[i + 3] &= 0xff;
   }
 
   return WP2_STATUS_OK;

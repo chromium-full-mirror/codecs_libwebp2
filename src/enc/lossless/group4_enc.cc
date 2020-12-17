@@ -25,11 +25,13 @@
 
 namespace WP2L {
 
-static uint16_t GetColor(const uint16_t* const argb, int x,
+static uint16_t GetColor(const int16_t* const argb, int x,
                          uint16_t fallback = 0) {
   if (x < 0) return fallback;
   // Get the color from the green channel.
-  return argb[x * 4 + 2];
+  const int16_t res = argb[x * 4 + 2];
+  assert(res >= 0);
+  return res;
 }
 
 static void WriteColor(uint16_t current_color, uint16_t expected_new_color,
@@ -61,7 +63,7 @@ static void WriteColor(uint16_t current_color, uint16_t expected_new_color,
 
 // Implementation taken from https://www.itu.int/rec/T-REC-T.6-198811-I/en.
 // See the above for diagrams showing the meaning of a0/a1/b1/b2.
-static WP2Status Impl(const uint16_t* const argb, uint32_t width,
+static WP2Status Impl(const int16_t* const argb, uint32_t width,
                       uint32_t height, const WP2::ProgressRange& progress,
                       MoveToFrontCache* const mtf, WP2::ANSEncBase* const enc,
                       WP2::SymbolManager* const sm,
@@ -73,8 +75,8 @@ static WP2Status Impl(const uint16_t* const argb, uint32_t width,
   const WP2::ProgressScale row_progress(progress, 1. / height);
 
   for (uint32_t y = 0; y < height; ++y) {
-    const uint16_t* prev = (y > 0) ? &argb[(y - 1) * width * 4] : nullptr;
-    const uint16_t* cur = &argb[y * width * 4];
+    const int16_t* prev = (y > 0) ? &argb[(y - 1) * width * 4] : nullptr;
+    const int16_t* cur = &argb[y * width * 4];
 
     mtf->MoveToFront(first_color);
 
@@ -226,7 +228,7 @@ static WP2Status Impl(const uint16_t* const argb, uint32_t width,
   return WP2_STATUS_OK;
 }
 
-WP2Status Group4Encode(const uint16_t* const argb, uint32_t width,
+WP2Status Group4Encode(const int16_t* const argb, uint32_t width,
                        uint32_t height, uint32_t num_colors,
                        bool use_move_to_front,
                        const WP2::ProgressRange& progress,

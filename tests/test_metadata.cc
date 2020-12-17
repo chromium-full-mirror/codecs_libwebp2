@@ -57,7 +57,8 @@ TEST(MetadataTest, MaxChunkSize) {
                           &original));
 
   Metadata& a = original.metadata_;
-  ASSERT_WP2_OK(a.iccp.Resize(kMaxChunkSize, /*keep_bytes=*/false));
+  // ICC needs to reserve 1 byte for the ICC type. Hence the '-1':
+  ASSERT_WP2_OK(a.iccp.Resize(kMaxChunkSize - 1, /*keep_bytes=*/false));
   ASSERT_WP2_OK(a.exif.Resize(kMaxChunkSize, /*keep_bytes=*/false));
   ASSERT_WP2_OK(a.xmp.Resize(kMaxChunkSize, /*keep_bytes=*/false));
   std::fill(a.iccp.bytes, a.iccp.bytes + a.iccp.size, 42);

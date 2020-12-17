@@ -253,29 +253,30 @@ constexpr int32_t kOne = (1u << kAnglePredPrecision);
 constexpr uint32_t kMask = kOne - 1;
 // (int32_t)(1. / std::tan(alpha) * (1u << kAnglePredPrecision))
 static constexpr int32_t kCoTanTable[] = {
-  46182, 41089, 36667, 32768, 29283, 26131, 23250, 20589,
-  18110, 15780, 13572, 11466, 9440, 7479, 5567, 3692, 1840,
-  0,  // 90 degree
-  -1840, -3692, -5567, -7479, -9440, -11466,  -13572, -15780, -18110, -20589,
-  -23250, -26131, -29283, -32767, -36667, -41089, -46182, -52149, -59289,
-  -68043, -79108, -93645, -113740, -143565, -192858, -290824, -583488,
-  -2147483648,  // 180 degree
-  583488, 290824, 192858, 143565, 113740, 93645, 79108, 68043, 59289, 52149
-};
+    143565,      113740,  93645,   79108,  68043,  59289,  52149,   46182,
+    41089,       36667,   32768,   29283,  26131,  23250,  20589,   18110,
+    15780,       13572,   11466,   9440,   7479,   5567,   3692,    1840,
+    0,  // 90 degree
+    -1840,       -3692,   -5567,   -7479,  -9440,  -11466, -13572,  -15780,
+    -18110,      -20589,  -23250,  -26131, -29283, -32767, -36667,  -41089,
+    -46182,      -52149,  -59289,  -68043, -79108, -93645, -113740, -143565,
+    -192858,     -290824, -583488,
+    -2147483648,  // 180 degree
+    583488,      290824,  192858,  143565, 113740, 93645,  79108,   68043,
+    59289,       52149};
 STATIC_ASSERT_ARRAY_SIZE(kCoTanTable, kNumDirectionalAngles);
 
 // (int32_t)(std::tan(alpha) * (1u << kAnglePredPrecision))
 static constexpr int32_t kTanTable[] = {
-  // (these 'angle < 90' entries are not actually used)
-  23250, 26131, 29283, 32767, 36667, 41089, 46182, 52149,
-  59289, 68043, 79108, 93645, 113740, 143565, 192858, 290824, 583488,
-  // 90 degrees and up...
-  -2147483648, -583488, -290824, -192858, -143565, -113740, -93645,
-  -79108, -68043, -59289, -52149, -46182, -41089, -36667, -32768,
-  -29283, -26131, -23250, -20589, -18110, -15780, -13572, -11466,
-  -9440, -7479, -5567, -3692, -1840, 0, 1840, 3692,
-  5567, 7479, 9440, 11466, 13572, 15780, 18110, 20589,
-};
+    // (these 'angle < 90' entries are not actually used)
+    7479, 9440, 11466, 13572, 15780, 18110, 20589, 23250, 26131, 29283, 32767,
+    36667, 41089, 46182, 52149, 59289, 68043, 79108, 93645, 113740, 143565,
+    192858, 290824, 583488,
+    // 90 degrees and up...
+    -2147483648, -583488, -290824, -192858, -143565, -113740, -93645, -79108,
+    -68043, -59289, -52149, -46182, -41089, -36667, -32768, -29283, -26131,
+    -23250, -20589, -18110, -15780, -13572, -11466, -9440, -7479, -5567, -3692,
+    -1840, 0, 1840, 3692, 5567, 7479, 9440, 11466, 13572, 15780, 18110, 20589};
 STATIC_ASSERT_ARRAY_SIZE(kTanTable, kNumDirectionalAngles);
 
 static void AnglePredInterpolate_C(const int16_t* src,
@@ -329,15 +330,20 @@ void SimpleAnglePredictor(uint8_t angle_idx, const int16_t ctx[],
           // If we reach outside the context, repeat the last element of the
           // line above.
           assert(y > 0);
-          std::fill(dst, dst + bw, dst[-step + bw - 1]);
+          std::fill(dst, dst + bw, dst[-(int)step + (int)bw - 1]);
         } else if (ind + 1 >= context_size) {
           // If we cannot interpolate with the next element because it is out
           // of context, repeat the last context element.
           std::fill(dst, dst + bw, ctx[ind]);
         } else {
+          const uint32_t interpolength = std::min(bw, context_size - (ind + 1));
           const int32_t decimal = (X & kMask);
-          assert(context_size - ind - 1 >= bw);
-          AnglePredInterpolate(ctx + ind, decimal, dst, bw);
+          // Copy pixels from 'ctx' to 'dst' then spatially-left-shift them by
+          // 'decimal' (which is in [0:1[).
+          AnglePredInterpolate(ctx + ind, decimal, dst, interpolength);
+          // For the remaining pixels that have no source within 'context_size',
+          // copy the last 'ctx' value.
+          std::fill(dst + interpolength, dst + bw, ctx[context_size - 1]);
         }
       }
     } else {        // angle >= 90.f

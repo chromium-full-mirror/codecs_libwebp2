@@ -251,7 +251,7 @@ WP2Status EncodeHeader(const EncoderConfig& config,
     // infos
     henc.PutBits(width - 1, kImageDimNumBits, "width_m1");
     henc.PutBits(height - 1, kImageDimNumBits, "height_m1");
-    henc.PutBits((uint32_t)config.decoding_orientation, 2, "orientation");
+    henc.PutBits((uint32_t)config.decoding_orientation, 3, "orientation");
     henc.PutBits(has_alpha ? 1 : 0, 1, "has_alpha");
     henc.PutBits(is_anim ? 1 : 0, 1, "is_animation");
 
@@ -267,7 +267,7 @@ WP2Status EncodeHeader(const EncoderConfig& config,
     static_assert(TileShape::TILE_SHAPE_AUTO <= (1 << kTileShapeBits),
                   "invalid TILE_SHAPE_AUTO value");
     henc.PutBits(FinalTileShape(config), kTileShapeBits, "tile_shape");
-    henc.PutBits(0x2u, 2, "filler");  // reserved
+    henc.PutBits(0x1u, 1, "filler");  // reserved
 
     if (is_anim) {
       henc.PutBits(loop_forever ? 1 : 0, 1, "loop");
@@ -317,7 +317,32 @@ WP2Status EncodePreview(const ArgbBuffer& buffer, const EncoderConfig& config,
 
 WP2Status EncodeICC(DataView iccp, Writer* const output) {
   if (iccp.size > 0) {
-    WP2_CHECK_STATUS(WriteChunk(iccp, output));
+    uint8_t type = 0;  // default: verbatim
+    if (iccp.size == kPredefinedICC1Size &&
+        !memcmp(iccp.bytes, kPredefinedICC1, kPredefinedICC1Size)) {
+      type = 1;
+    } else if (iccp.size == kPredefinedICC2Size &&
+               !memcmp(iccp.bytes, kPredefinedICC2, kPredefinedICC2Offset) &&
+               !memcmp(iccp.bytes + kPredefinedICC2Offset + 1,
+                       kPredefinedICC2 + kPredefinedICC2Offset + 1,
+                       kPredefinedICC2Size - (kPredefinedICC2Offset + 1))) {
+      const uint8_t byte67 = iccp.bytes[kPredefinedICC2Offset];
+      if (byte67 == 0x00  || byte67 == 0x01) {
+        type = (byte67 == 0x00) ? 2 : 3;
+      }
+    }
+    WP2_CHECK_OK(iccp.size <= kMaxChunkSize, WP2_STATUS_INVALID_PARAMETER);
+    uint8_t buf[kMaxVarIntLength + /*type byte=*/1];
+    const uint8_t* data_bytes = iccp.bytes;
+    uint32_t data_size = iccp.size;
+    if (type != 0) data_size = 0;
+    uint32_t buf_size = WriteVarInt(data_size + 1, 1, kMaxChunkSize, buf);
+    buf[buf_size++] = type;
+    WP2_CHECK_OK(output->Append(buf, buf_size), WP2_STATUS_BAD_WRITE);
+    if (data_size > 0) {
+      // TODO(skal): use 0-order ANS coding?
+      WP2_CHECK_OK(output->Append(data_bytes, data_size), WP2_STATUS_BAD_WRITE);
+    }
   }
   return WP2_STATUS_OK;
 }

@@ -35,7 +35,7 @@ struct BitstreamFeatures {
   uint32_t raw_width;        // Width in pixels, as read from the bitstream.
   uint32_t raw_height;       // Height in pixels, as read from the bitstream.
 
-  Orientation orientation;   // Rotation applied during decoding.
+  Orientation orientation;   // Rotation or mirroring applied during decoding.
   uint32_t width;            // Width after the orientation is applied.
   uint32_t height;           // Height after the orientation is applied.
   uint32_t tile_width;       // Width of tiles in pixels.

@@ -49,8 +49,8 @@ class Transform;  // Defined in dec/lossless/losslessi_dec.h.
 // corresponding to the intermediate row (row_start).
 void InverseTransform(const Transform* const transform, uint32_t row_start,
                       uint32_t row_end, uint32_t channel_bits,
-                      const uint16_t* const in, bool has_alpha,
-                      uint16_t* const out);
+                      const int16_t* const in, bool has_alpha,
+                      int16_t* const out);
 
 // Fills 'dst' with the samples from the 'color_map' at the indices specified by
 // the green channel of the pixels in 'src'.

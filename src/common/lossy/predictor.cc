@@ -302,6 +302,7 @@ class AnglePredictor : public ContextPredictor {
   // Use AV1 convention to name angle predictors.
   enum class Type {
     // Angles must be in the same order as in Predictors::Pred
+    D23_PRED,
     D45_PRED,
     D67_PRED,
     V_PRED,  // 90 degrees
@@ -323,7 +324,8 @@ class AnglePredictor : public ContextPredictor {
   }
 
   ModeContext mode_context() const override {
-    if (type_ == Type::D45_PRED || type_ == Type::D67_PRED) {
+    if (type_ == Type::D23_PRED || type_ == Type::D45_PRED ||
+        type_ == Type::D67_PRED) {
       return ModeContext::kTopRight;
     } else if (type_ == Type::V_PRED) {
       return ModeContext::kVertical;
@@ -339,7 +341,7 @@ class AnglePredictor : public ContextPredictor {
   }
 
   // Returns the angle index for precalculated angles.
-  // Index goes from 0 (35.35 degrees) to 55 (212.14 degrees).
+  // Index goes from 0 (12.85 degrees) to 62 (212.14 degrees).
   static uint8_t AngleIdx(Type type, Channel channel, int16_t angle_step) {
     const int16_t max_delta = kDirectionalMaxAngleDeltaYA;
     if (channel == kUChannel || channel == kVChannel) {
@@ -354,7 +356,7 @@ class AnglePredictor : public ContextPredictor {
   }
 
   float GetAngleDegrees() const {
-    return 45.f + 22.5f * ((int)angle_idx_ - 3) / 7.;
+    return 22.5f + 22.5f * ((int)angle_idx_ - 3) / 7.f;
   }
 
   void WriteParams(const CodedBlock& cb, Channel channel,
@@ -661,6 +663,7 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
         pred =
             new (WP2Allocable::nothrow) GradientPredictor(min_value, max_value);
         break;
+      case Pred::kAngle23:
       case Pred::kAngle45:
       case Pred::kAngle67:
       case Pred::kAngle90:
@@ -675,7 +678,7 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
           // We assume they're in the same order in ContextPredictor and in
           // AnglePredictor::Type
           const auto type =
-              (AnglePredictor::Type)((int)p - (int)Pred::kAngle45);
+              (AnglePredictor::Type)((int)p - (int)Pred::kAngle23);
           pred = new (WP2Allocable::nothrow)
               AnglePredictor(type, channel_, step, min_value, max_value);
           WP2_CHECK_ALLOC_OK(pred != nullptr);
@@ -922,6 +925,7 @@ WP2Status Predictors::FindBest(
     uint32_t dist;
     const Predictor* p;
     TransformPair tf;
+    bool operator<(const AngleScore& s) const { return (score < s.score); }
   };
   // Store AngleScore in a static array if possible, dynamic otherwise.
   // Ideally, the static array would be of size
@@ -936,8 +940,7 @@ WP2Status Predictors::FindBest(
   AngleScore* beg;
   // Decide whether we use the dynamic array or the static one.
   if (angle_score_size > angle_score_static.size()) {
-    WP2_CHECK_ALLOC_OK(angle_score_dynamic.resize(
-        (uint32_t)AnglePredictor::Type::Num * num_tf));
+    WP2_CHECK_ALLOC_OK(angle_score_dynamic.resize(angle_score_size));
     beg = &angle_score_dynamic[0];
   } else {
     beg = &angle_score_static[0];
@@ -964,18 +967,19 @@ WP2Status Predictors::FindBest(
       }
     }
   }
-  assert(angle_score_size == end - beg);
+  assert(angle_score_size == end - beg && angle_score_size >= 1);
 
-  std::sort(beg, end, [](const AngleScore& a, const AngleScore& b) {
-    return (a.score < b.score);
-  });
+  std::sort(beg, end);
 
   // Choose to refine all the ones within a percentage of the lowest score. This
   // helps refine predictors that give similar scores.
   const int effort = config.effort;
+  const float min_score = beg->score;
+  const float max_score = end[-1].score;
+  const float fraction = effort / 9.f;
   const float min_allowed_score =
-      beg->score + ((end - 1)->score - beg->score) * effort / 9.f + 1;
-  assert(effort != 9 || (end - 1)->score <= min_allowed_score);
+      min_score * (1.f - fraction) + max_score * fraction + 1.f;
+  assert(effort != 9 || max_score <= min_allowed_score);
   for (uint32_t i = 0; i < angle_score_size; ++i) {
     const AngleScore& s = beg[i];
     // We refine every predictor with a better score, or distortion and make
@@ -1015,10 +1019,10 @@ WP2Status YPredictors::Fill(int16_t min_value, int16_t max_value) {
   constexpr Pred kYPreds[] = {
       Pred::kDcAll,      Pred::kDcLeft,         Pred::kDcTop,
       Pred::kSmooth2D,   Pred::kSmoothVertical, Pred::kSmoothHorizontal,
-      Pred::kTrueMotion, Pred::kGradient,       Pred::kAngle45,
-      Pred::kAngle67,    Pred::kAngle90,        Pred::kAngle113,
-      Pred::kAngle135,   Pred::kAngle157,       Pred::kAngle180,
-      Pred::kAngle203};
+      Pred::kTrueMotion, Pred::kGradient,       Pred::kAngle23,
+      Pred::kAngle45,    Pred::kAngle67,        Pred::kAngle90,
+      Pred::kAngle113,   Pred::kAngle135,       Pred::kAngle157,
+      Pred::kAngle180,   Pred::kAngle203};
 
   STATIC_ASSERT_ARRAY_SIZE(kYPreds, kYPredModeNum);
   WP2_CHECK_STATUS(FillImpl(kYPreds, kYPredModeNum, min_value, max_value,
@@ -1032,14 +1036,23 @@ APredictors::APredictors() { channel_ = kAChannel; }
 
 WP2Status APredictors::Fill(int16_t min_value, int16_t max_value,
                             const CSPTransform* const transform) {
-  constexpr Pred kAPreds[] = {Pred::kDcAll,          Pred::kSmooth2D,
-                              Pred::kSmoothVertical, Pred::kSmoothHorizontal,
-                              Pred::kTrueMotion,     Pred::kAngle45,
-                              Pred::kAngle67,        Pred::kAngle90,
-                              Pred::kAngle113,       Pred::kAngle135,
-                              Pred::kAngle157,       Pred::kAngle180,
-                              Pred::kAngle203,       Pred::kCfl,
-                              Pred::kSignalingCfl,   Pred::kZero};
+  constexpr Pred kAPreds[] = {Pred::kDcAll,
+                              Pred::kSmooth2D,
+                              Pred::kSmoothVertical,
+                              Pred::kSmoothHorizontal,
+                              Pred::kTrueMotion,
+                              Pred::kAngle23,
+                              Pred::kAngle45,
+                              Pred::kAngle67,
+                              Pred::kAngle90,
+                              Pred::kAngle113,
+                              Pred::kAngle135,
+                              Pred::kAngle157,
+                              Pred::kAngle180,
+                              Pred::kAngle203,
+                              Pred::kCfl,
+                              Pred::kSignalingCfl,
+                              Pred::kZero};
 
   assert(transform != nullptr);
   STATIC_ASSERT_ARRAY_SIZE(kAPreds, kAPredModeNum);
@@ -1055,8 +1068,9 @@ UVPredictors::UVPredictors() { channel_ = kUChannel; }
 WP2Status UVPredictors::Fill(int16_t min_value, int16_t max_value) {
   constexpr Pred kUVPreds[] = {
       Pred::kCfl,      Pred::kDcAll,    Pred::kSignalingCfl, Pred::kSmooth2D,
-      Pred::kAngle45,  Pred::kAngle67,  Pred::kAngle90,      Pred::kAngle113,
-      Pred::kAngle135, Pred::kAngle157, Pred::kAngle180,     Pred::kAngle203};
+      Pred::kAngle23,  Pred::kAngle45,  Pred::kAngle67,      Pred::kAngle90,
+      Pred::kAngle113, Pred::kAngle135, Pred::kAngle157,     Pred::kAngle180,
+      Pred::kAngle203};
 
   STATIC_ASSERT_ARRAY_SIZE(kUVPreds, kUVPredModeNum);
   WP2_CHECK_STATUS(FillImpl(kUVPreds, kUVPredModeNum, min_value, max_value,

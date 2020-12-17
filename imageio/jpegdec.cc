@@ -73,6 +73,12 @@ const MetadataSignature kXMPSignature = {
 const MetadataSignature kICCPSignature = {
     JPEG_APP2, (const uint8_t*)"ICC_PROFILE", 12, 14};
 
+void SetSaveMarkers(struct jpeg_decompress_struct* const dinfo) {
+  const uint32_t max_marker_length = 0xffffu;
+  jpeg_save_markers(dinfo, JPEG_APP1, max_marker_length);  // Exif/XMP
+  jpeg_save_markers(dinfo, JPEG_APP2, max_marker_length);  // ICC profile
+}
+
 #undef JPEG_APP1
 #undef JPEG_APP2
 
@@ -221,7 +227,6 @@ WP2Status MergeICCP(ICCPSegment iccp_segments[255],
 // -----------------------------------------------------------------------------
 // Metadata processing
 
-// Returns WP2_STATUS_OK on success.
 WP2Status ExtractMetadataFromJPEG(j_decompress_ptr dinfo,
                                   WP2::Metadata* const metadata,
                                   WP2::LogLevel log_level) {
@@ -238,7 +243,6 @@ WP2Status ExtractMetadataFromJPEG(j_decompress_ptr dinfo,
   for (marker = dinfo->marker_list; marker != NULL; marker = marker->next) {
     const int marker_code = marker->marker;
     const WP2::DataView marker_data = {marker->data, marker->data_length};
-
     if (MarkerHasSignature(marker_code, marker_data, kEXIFSignature)) {
       WP2_CHECK_STATUS(ExtractMetadataFromMarker(marker_data, kEXIFSignature,
                                                  &metadata->exif, log_level));
@@ -291,20 +295,20 @@ struct JPEGReadContext {
   size_t data_size;
 };
 
-void ContextInit(j_decompress_ptr cinfo) {
-  JPEGReadContext* const ctx = (JPEGReadContext*)cinfo->src;
+void ContextInit(j_decompress_ptr dinfo) {
+  JPEGReadContext* const ctx = (JPEGReadContext*)dinfo->src;
   ctx->pub.next_input_byte = ctx->data;
   ctx->pub.bytes_in_buffer = ctx->data_size;
 }
 
-boolean ContextFill(j_decompress_ptr cinfo) {
+boolean ContextFill(j_decompress_ptr dinfo) {
   // We shouldn't get here.
-  ERREXIT(cinfo, JERR_FILE_READ);
+  ERREXIT(dinfo, JERR_FILE_READ);
   return FALSE;
 }
 
-void ContextSkip(j_decompress_ptr cinfo, long jump_size) {  // NOLINT (long)
-  JPEGReadContext* const ctx = (JPEGReadContext*)cinfo->src;
+void ContextSkip(j_decompress_ptr dinfo, long jump_size) {  // NOLINT (long)
+  JPEGReadContext* const ctx = (JPEGReadContext*)dinfo->src;
   size_t jump = (size_t)jump_size;
   if (jump > ctx->pub.bytes_in_buffer) {  // Don't overflow the buffer.
     jump = ctx->pub.bytes_in_buffer;
@@ -313,14 +317,14 @@ void ContextSkip(j_decompress_ptr cinfo, long jump_size) {  // NOLINT (long)
   ctx->pub.next_input_byte += jump;
 }
 
-void ContextTerm(j_decompress_ptr cinfo) {
-  (void)cinfo;
+void ContextTerm(j_decompress_ptr dinfo) {
+  (void)dinfo;
 }
 
-void ContextSetup(volatile struct jpeg_decompress_struct* const cinfo,
+void ContextSetup(j_decompress_ptr dinfo,
                   JPEGReadContext* const ctx) {
   assert((void*)ctx == (void*)&ctx->pub);
-  cinfo->src = &ctx->pub;
+  dinfo->src = &ctx->pub;
   ctx->pub.init_source = ContextInit;
   ctx->pub.fill_input_buffer = ContextFill;
   ctx->pub.skip_input_data = ContextSkip;
@@ -381,7 +385,8 @@ class ImageReaderJPEG : public ImageReader::Impl {
       // 'max_memory_to_use' variable, leave it to its default value so memory
       // is not limited to a lower-than-specified bound.
     }
-    ContextSetup(&dinfo, &ctx);
+    SetSaveMarkers((j_decompress_ptr)&dinfo);
+    ContextSetup((j_decompress_ptr)&dinfo, &ctx);
 
     jpeg_read_header((j_decompress_ptr)&dinfo, TRUE);
 

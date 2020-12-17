@@ -58,8 +58,14 @@ bool DecideAOMCoeffs(const EncoderConfig& config, const Rectangle& tile_rect) {
 WP2Status DecideTransforms(const EncoderConfig& config,
                            Vector<TransformPair>* const transforms,
                            Vector<TransformPair>* const transforms_subset) {
-  // TODO(maryla): add kIdentityDct and kDctIdentity
-  WP2_CHECK_ALLOC_OK(transforms->reserve(5));
+  if (config.info != nullptr && config.info->disable_transforms) {
+    WP2_CHECK_ALLOC_OK(transforms->reserve(1));
+    transforms->push_back_no_resize(kDctDct);
+    WP2_CHECK_ALLOC_OK(transforms_subset->copy_from(*transforms));
+    return WP2_STATUS_OK;
+  }
+
+  WP2_CHECK_ALLOC_OK(transforms->reserve(kNumTransformPairs));
   transforms->push_back_no_resize(kDctDct);
   if (config.effort >= 3) {
     transforms->push_back_no_resize(kAdstAdst);
@@ -68,6 +74,10 @@ WP2Status DecideTransforms(const EncoderConfig& config,
       transforms->push_back_no_resize(kAdstDct);
       if (config.effort >= 5) {
         transforms->push_back_no_resize(kIdentityIdentity);
+        if (config.effort >= 6) {
+          transforms->push_back_no_resize(kDctIdentity);
+          transforms->push_back_no_resize(kIdentityDct);
+        }
       }
     }
   }
@@ -82,6 +92,10 @@ WP2Status DecideTransforms(const EncoderConfig& config,
       transforms_subset->push_back_no_resize(kAdstDct);
       if (config.effort >= 8) {
         transforms_subset->push_back_no_resize(kIdentityIdentity);
+        if (config.effort >= 9) {
+          transforms_subset->push_back_no_resize(kDctIdentity);
+          transforms_subset->push_back_no_resize(kIdentityDct);
+        }
       }
     }
   }

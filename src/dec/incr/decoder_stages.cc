@@ -471,12 +471,12 @@ void Decoder::DecodeAvailableData() {
   // Blend/rotate/copy to output, if needed.
   if (TryGetDecodedFeatures() != nullptr && state_->using_raw_output_buffer &&
       !output_->IsEmpty()) {
-    const Rectangle previous_raw_decoded_area = RotateRectangle(
-        GetInverseOrientation(features_.orientation),
-        features_.width, features_.height, previous_decoded_area);
-    const Rectangle raw_decoded_area = RotateRectangle(
-        GetInverseOrientation(features_.orientation),
-        features_.width, features_.height, GetDecodedArea());
+    const Rectangle previous_raw_decoded_area = OrientateRectangle(
+        GetInverseOrientation(features_.orientation), features_.width,
+        features_.height, previous_decoded_area);
+    const Rectangle raw_decoded_area =
+        OrientateRectangle(GetInverseOrientation(features_.orientation),
+                           features_.width, features_.height, GetDecodedArea());
     assert(raw_decoded_area.x == 0 && raw_decoded_area.y == 0);
     assert(raw_decoded_area.height >= previous_raw_decoded_area.height);
     assert(previous_raw_decoded_area.width == 0 ||
@@ -503,11 +503,11 @@ void Decoder::DecodeAvailableData() {
       if (postprocess_status == WP2_STATUS_OK &&
           state_->must_use_raw_output_buffer) {
         // Also handles the conversion from Argb32 to something else, if needed.
-        postprocess_status = RotateSubBuffer(features_.orientation,
-                                             state_->using_blended_buffer
-                                                 ? state_->blended_buffer
-                                                 : state_->raw_output_buffer,
-                                             new_raw_decoded_area, output_);
+        postprocess_status = OrientateSubBuffer(features_.orientation,
+                                                state_->using_blended_buffer
+                                                    ? state_->blended_buffer
+                                                    : state_->raw_output_buffer,
+                                                new_raw_decoded_area, output_);
       }
       if (postprocess_status != WP2_STATUS_OK) {
         state_->status = postprocess_status;

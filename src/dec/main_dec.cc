@@ -346,16 +346,16 @@ WP2Status InternalDecode(const DecoderConfig& config,
 
   // TODO(yguyon): rotate directly during decoding
   if (rgb_output_wanted) {
-    WP2_CHECK_STATUS(RotateBuffer(features.orientation, rgb_output));
+    WP2_CHECK_STATUS(OrientateBuffer(features.orientation, rgb_output));
   } else {  // yuv_output_wanted
     // If 'padded_yuv' is a view, it means 'yuv_output' already contains the
     // right output and must only be rotated. Otherwise 'padded_yuv' owns the
     // pixels and the view 'non_padded_yuv' should be rotated to 'yuv_output'.
     if (padded_yuv.IsView()) {
-      WP2_CHECK_STATUS(RotateBuffer(features.orientation, yuv_output));
+      WP2_CHECK_STATUS(OrientateBuffer(features.orientation, yuv_output));
     } else {
       WP2_CHECK_STATUS(
-          RotateBuffer(features.orientation, non_padded_yuv, yuv_output));
+          OrientateBuffer(features.orientation, non_padded_yuv, yuv_output));
     }
   }
   WP2_CHECK_STATUS(progress.Finish());
@@ -526,28 +526,30 @@ WP2Status ExtractPreview(const uint8_t* const data, size_t data_size,
 
     if (output_buffer->format() != WP2_Argb_32 || output_buffer->IsSlow() ||
         features.orientation == Orientation::k90Clockwise ||
-        features.orientation == Orientation::k270Clockwise) {
+        features.orientation == Orientation::k270Clockwise ||
+        features.orientation == Orientation::kFlipBotLeftToTopRgt ||
+        features.orientation == Orientation::kFlipTopLeftToBotRgt) {
       // Create another buffer to leave intact the layout of 'output_buffer'
       // that would be modified by a rotation of 90 or 270 degrees.
       // This is also needed if output is not in Argb32 format or is slow.
       ArgbBuffer raw_output_buffer(WP2_Argb_32);
       WP2_CHECK_STATUS(raw_output_buffer.Resize(
-          RotateWidth(GetInverseOrientation(features.orientation),
-                      output_buffer->width(), output_buffer->height()),
-          RotateHeight(GetInverseOrientation(features.orientation),
-                       output_buffer->width(), output_buffer->height())));
+          OrientateWidth(GetInverseOrientation(features.orientation),
+                         output_buffer->width(), output_buffer->height()),
+          OrientateHeight(GetInverseOrientation(features.orientation),
+                          output_buffer->width(), output_buffer->height())));
 
       WP2_CHECK_STATUS(
           DecodePreview(&data_source, features, &raw_output_buffer));
 
-      WP2_CHECK_STATUS(RotateSubBuffer(
+      WP2_CHECK_STATUS(OrientateSubBuffer(
           features.orientation, raw_output_buffer,
           {0, 0, raw_output_buffer.width(), raw_output_buffer.height()},
           output_buffer));
     } else {
       // The layout of 'output_buffer' will not be modified, only its content.
       WP2_CHECK_STATUS(DecodePreview(&data_source, features, output_buffer));
-      WP2_CHECK_STATUS(RotateBuffer(features.orientation, output_buffer));
+      WP2_CHECK_STATUS(OrientateBuffer(features.orientation, output_buffer));
     }
   } else {
     if (output_buffer->IsEmpty()) {

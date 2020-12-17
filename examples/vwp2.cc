@@ -55,6 +55,13 @@
 #endif
 
 #if defined(WP2_HAVE_OPENGL)
+#if defined(WP2_HAVE_FREEGLUT)
+
+#include <GL/freeglut.h>
+#include <GL/freeglut_ext.h>
+
+#else
+
 #define GL_SILENCE_DEPRECATION  // to avoid deprecation warnings on MacOS
 #if defined(HAVE_GLUT_GLUT_H)
 #include <OpenGL/gl.h>
@@ -63,10 +70,7 @@
 #include <GL/gl.h>
 #include <GL/glut.h>
 #endif
-
-#if defined(WP2_HAVE_GLUT) && defined(FREEGLUT)
-#include <GL/freeglut.h>
-#endif
+#endif  // !WP2_HAVE_FREEGLUT
 
 #if defined(_MSC_VER) && _MSC_VER < 1900
 #define snprintf _snprintf
@@ -373,7 +377,7 @@ class Params {
   bool VDMatchEncDec(const char* token) const;
 
   bool IsHamburgerMenuVisible() const;
-  void SetMenuSelection(const std::string& selection);
+  bool SetMenuSelection(const std::string& selection);
   void DisplayMenu();
   bool DisplaySubMenu(int32_t x, int32_t y, const VDToken& prefix,
                       std::string* const current_selection);
@@ -402,19 +406,21 @@ class Params {
   void HandleKeyUp(unsigned char key, int pos_x, int pos_y);
   void HandleMouseMove(int x, int y, bool button_pressed);
   void HandleSegmentClick(int button, int state, uint32_t img_x_down,
-                          uint32_t img_y_down, uint32_t img_x, uint32_t img_y);
+                          uint32_t img_y_down, uint32_t img_x, uint32_t img_y,
+                          int incr = 1);
   void HandlePredictorClick(int button, int state, uint32_t img_x_down,
                             uint32_t img_y_down, uint32_t img_x,
-                            uint32_t img_y);
+                            uint32_t img_y, int incr = 1);
   void HandleTransformClick(int button, int state, uint32_t img_x_down,
                             uint32_t img_y_down, uint32_t img_x,
-                            uint32_t img_y);
+                            uint32_t img_y, int incr = 1);
   void HandlePartitionClick(int button, int state, uint32_t img_x_down,
                             uint32_t img_y_down, uint32_t img_x,
                             uint32_t img_y);
   void HandleMenuClick(int button, int state, uint32_t img_x_down,
                        uint32_t img_y_down, uint32_t img_x, uint32_t img_y);
   void HandleMouseClick(int button, int state, int x, int y);
+  void HandleMouseWheel(bool is_up, int x, int y);
   void HandleDisplay();
 
   enum Background {
@@ -443,6 +449,7 @@ class Params {
   EncoderConfig enc_config_;  // encoding parameters
   DecoderConfig dec_config_;
   std::string menu_selection_ = "decompressed";  // hovered menu selection
+  std::string menu_selection_prev_ = "decompressed";  // last menu selected
   std::string visual_debug_ = "decompressed";    // displayed debug output
 
   bool view_only_ = false;
@@ -480,7 +487,7 @@ class Params {
 // Made accessible to plain C function callbacks of glut.
 Params* global_params = nullptr;
 
-void Params::SetMenuSelection(const std::string& selection) {
+bool Params::SetMenuSelection(const std::string& selection) {
   menu_selection_ = selection;
   assert(!menu_selection_.empty());
   visual_debug_ = menu_selection_;
@@ -495,6 +502,12 @@ void Params::SetMenuSelection(const std::string& selection) {
     // "encoder" is reserved to EncoderConfig.
     dinfo_.visual_debug = nullptr;
   }
+  if (VDMatch(enc_config_, "encoder")) {
+    if (!EncodeAndDecode()) return false;
+  } else {
+    if (!DecodeOutput()) return false;
+  }
+  return true;
 }
 
 //------------------------------------------------------------------------------
@@ -892,6 +905,7 @@ std::vector<std::string> Params::GetHelp() {
 #if defined(WP2_HAVE_AOM_DBG)
   m.emplace_back("  'R' ............... copy AV1 partition (luma transforms)");
 #endif
+  m.emplace_back("  '`' ............... jump to previously selected menu");
   m.emplace_back(std::string("  'l'/'L' ........... "
                              "load or dump the current bitstream as ") +
                  dump_wp2_path_);
@@ -916,6 +930,9 @@ std::vector<std::string> Params::GetHelp() {
   m.emplace_back("  through predictors, then press 'c' to apply. Middle click");
   m.emplace_back("  to remove. A red square means predictor was ignored ");
   m.emplace_back("  because context is constant.");
+  m.emplace_back("Transform edition: In transform view, right click to cycle");
+  m.emplace_back("  through transform pairs, then press 'c' to apply.");
+  m.emplace_back("  Middle click to remove.");
   return m;
 }
 
@@ -2170,17 +2187,16 @@ void Params::DisplayForcedSegments() const {
   glLineStipple(2 * thick, 0xAAAA);
 
   for (const auto& segment : force_segment_) {
-    for (const BlockInfo& block : einfo_.blocks) {
-      if (block.rect.Contains(segment.x, segment.y)) {
-        const Rectangle rect{block.rect.x, block.rect.y, block.rect.width - 1,
-                             block.rect.height - 1};
-        glColor4f(0.f, 0.f, 0.f, 1.f);
-        glRect(rect, thick * 2);
-        const Argb32b color = kSegmentColors[segment.segment_id];
-        glColor4f(color.r / 255.f, color.g / 255.f, color.b / 255.f, 1.f);
-        glRect(rect, thick);
-        break;
-      }
+    const BlockInfo* const b = einfo_.FindBlock(segment.x, segment.y);
+    if (b != nullptr) {
+      const Rectangle rect{b->rect.x, b->rect.y,
+                           b->rect.width - 1, b->rect.height - 1};
+      glColor4f(0.f, 0.f, 0.f, 1.f);
+      glRect(rect, thick * 2);
+      const Argb32b color = kSegmentColors[segment.segment_id];
+      glColor4f(color.r / 255.f, color.g / 255.f, color.b / 255.f, 1.f);
+      glRect(rect, thick);
+      break;
     }
   }
 #endif
@@ -2197,33 +2213,32 @@ void Params::DisplayForcedPredictors() const {
 
   for (const auto& predictor : force_predictor_) {
     if (predictor.channel != channel) continue;
-    for (const BlockInfo& block : einfo_.blocks) {
-      if (block.rect.Contains(predictor.x, predictor.y)) {
-        if (channel == kYChannel && block.y_context_is_constant) {
-          glColor4f(1.f, 0.f, 0.f, 1.f);
-        } else {
-          glColor4f(0.f, 1.f, 0.f, 1.f);
-        }
-        glRect(block.rect, 4.f);
+    const BlockInfo* const b = einfo_.FindBlock(predictor.x, predictor.y);
+    if (b != nullptr) {
+      if (channel == kYChannel && b->y_context_is_constant) {
+        glColor4f(1.f, 0.f, 0.f, 1.f);
+      } else {
+        glColor4f(0.f, 1.f, 0.f, 1.f);
+      }
+      glRect(b->rect, 4.f);
 
-        const std::vector<std::string>& predictors =
-            (channel == kYChannel)   ? dinfo_.y_predictors
-            : (channel == kAChannel) ? dinfo_.a_predictors
-                                     : dinfo_.uv_predictors;
-        const uint32_t predictor_id =
+      const std::vector<std::string>& predictors =
+            (channel == kYChannel) ? dinfo_.y_predictors :
+            (channel == kAChannel) ? dinfo_.a_predictors :
+                                     dinfo_.uv_predictors;
+      const uint32_t predictor_id =
             std::min(predictor.predictor_id, (uint8_t)(predictors.size() - 1));
 
-        const float color = (float)predictor_id / (predictors.size() - 1);
-        glColor4f(color, color, color, 1.f);
-        glRect(block.rect, 2.f);
+      const float color = (float)predictor_id / (predictors.size() - 1);
+      glColor4f(color, color, color, 1.f);
+      glRect(b->rect, 2.f);
 
-        const std::string& title = predictors[predictor_id];
-        glColor4f(1.f, 0.f, 1.f, 1.f);
-        PrintString((predictor.x) * 2.f / width_ - 1,
-                    1 - (predictor.y) * 2.f / height_, title);
+      const std::string& title = predictors[predictor_id];
+      glColor4f(1.f, 0.f, 1.f, 1.f);
+      PrintString((predictor.x) * 2.f / width_ - 1,
+                  1 - (predictor.y) * 2.f / height_, title);
 
-        break;
-      }
+      break;
     }
   }
 #endif
@@ -2239,22 +2254,21 @@ void Params::DisplayForcedTransforms() const {
   glLineStipple(2 * thick, 0xAAAA);
 
   for (const auto& forced : force_transform_) {
-    for (const BlockInfo& block : einfo_.blocks) {
-      if (block.rect.Contains(forced.x, forced.y)) {
-        const Rectangle rect{block.rect.x, block.rect.y, block.rect.width - 1,
-                             block.rect.height - 1};
-        glColor4f(1.f, 1.f, 1.f, 1.f);
-        glRect(rect, thick * 2);
+    const BlockInfo* const b = einfo_.FindBlock(forced.x, forced.y);
+    if (b != nullptr) {
+      const Rectangle rect{b->rect.x, b->rect.y,
+                           b->rect.width - 1, b->rect.height - 1};
+      glColor4f(1.f, 1.f, 1.f, 1.f);
+      glRect(rect, thick * 2);
 
-        const std::string title =
-            SPrintf("%s_%s", WP2TransformNames[kTfX[forced.transform]],
-                    WP2TransformNames[kTfY[forced.transform]]);
-        glColor4f(1.f, 0.f, 1.f, 1.f);
-        PrintString((forced.x) * 2.f / width_ - 1,
-                    1 - (forced.y) * 2.f / height_, title);
+      const std::string title = SPrintf("%s_%s",
+          WP2TransformNames[kTfX[forced.transform]],
+          WP2TransformNames[kTfY[forced.transform]]);
+      glColor4f(1.f, 0.f, 1.f, 1.f);
+      PrintString((forced.x) * 2.f / width_ - 1,
+                  1 - (forced.y) * 2.f / height_, title);
 
-        break;
-      }
+      break;
     }
   }
 #endif
@@ -2289,11 +2303,16 @@ bool Params::ReadAndConvertPartition(bool read_only) {
 // Handlers
 
 // T must be cast-able to and from 'int'
+
 template <class T>
-void Modify(T& value, int max, bool increment, int increment_step = 1) {
-  int v = (int)value + (increment ? increment_step : -increment_step);
+void ModifyInRange(T& value, int max, int increment) {
+  int v = (int)value + increment;
   v = (v + max) % max;  // deals with negative values
   value = (T)v;
+}
+template <class T>
+void Modify(T& value, int max, bool increment, int increment_step = 1) {
+  ModifyInRange(value, max, increment ? increment_step : -increment_step);
 }
 // For ranges
 template <class T>
@@ -2347,7 +2366,7 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
       }
       AddInfo("Selection cleared. Press escape again to quit.");
     } else {
-#if defined(WP2_HAVE_GLUT) && defined(FREEGLUT)
+#if defined(WP2_HAVE_FREEGLUT)
       glutLeaveMainLoop();
 #else
       exit(0);
@@ -2421,8 +2440,8 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
     if (selection.find("error-map") != 0) {  // NOLINT
       selection = "error-map/PSNR";
     }
-    SetMenuSelection(selection);
-    if (!DecodeOutput()) return;
+    menu_selection_prev_ = menu_selection_;
+    if (!SetMenuSelection(selection)) return;
   } else if (key == 's' || key == 'S') {
     ModifyR(enc_config_.effort, 10, key == 's');
     if (!EncodeAndDecode()) return;
@@ -2618,13 +2637,13 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
       SetMessage(keep_metadata_ ? "Metadata: on" : "Metadata: off");
     }
   } else if (key == 'v' || key == 'V') {
-    SetMenuSelection(
-        GetLeaf(menu_selection_, /*leaf_offset=*/(key == 'v') ? 1 : -1));
-    if (VDMatch(enc_config_, "encoder")) {
-      if (!EncodeAndDecode()) return;
-    } else {
-      if (!DecodeOutput()) return;
-    }
+    menu_selection_prev_ = menu_selection_;
+    if (!SetMenuSelection(GetLeaf(menu_selection_,
+                          /*leaf_offset=*/(key == 'v') ? 1 : -1))) return;
+  } else if (key == '`') {
+    // jump back to previous menu
+    std::swap(menu_selection_prev_, menu_selection_);
+    if (!SetMenuSelection(menu_selection_)) return;
   } else if (key == 'z' || key == 'Z') {
     zoom_level_ += (key == 'z') ? +1 : -1;  // Zoom in or out.
     ReshapeWindow();
@@ -2729,9 +2748,9 @@ void HandleMouseMoveButtonPressed(int x, int y) {
   global_params->HandleMouseMove(x, y, /*button_pressed=*/true);
 }
 
-void Params::HandleSegmentClick(int button, int state, uint32_t img_x_down,
-                                uint32_t img_y_down, uint32_t img_x,
-                                uint32_t img_y) {
+void Params::HandleSegmentClick(int button, int state,
+                                uint32_t img_x_down, uint32_t img_y_down,
+                                uint32_t img_x, uint32_t img_y, int incr) {
   (void)button;
   (void)state;
   (void)img_x_down;
@@ -2754,25 +2773,21 @@ void Params::HandleSegmentClick(int button, int state, uint32_t img_x_down,
   if (num_segments == 1) return;
 
   uint32_t block_x = 0, block_y = 0;
-  for (const BlockInfo& block : einfo_.blocks) {
-    if (block.rect.Contains(img_x_down, img_y_down)) {
-      block_x = block.rect.x;
-      block_y = block.rect.y;
-      break;
-    }
+  const BlockInfo* const b = einfo_.FindBlock(img_x_down, img_y_down);
+  if (b != nullptr) {
+    block_x = b->rect.x;
+    block_y = b->rect.y;
   }
 
   bool found = false;
-  for (uint32_t i = 0; i < force_segment_.size(); ++i) {
-    EncoderInfo::ForcedSegment* const forced_segment = &force_segment_[i];
-    if (forced_segment->x == block_x && forced_segment->y == block_y) {
+  for (auto& forced_segment : force_segment_) {
+    if (forced_segment.x == block_x && forced_segment.y == block_y) {
       found = true;
-      forced_segment->segment_id = (forced_segment->segment_id + 1);
-      if (button == GLUT_MIDDLE_BUTTON ||
-          forced_segment->segment_id == num_segments) {
-        // Remove.
-        force_segment_[i] = force_segment_.back();
+      if (button == GLUT_MIDDLE_BUTTON) {   // Remove.
+        forced_segment = force_segment_.back();
         force_segment_.pop_back();
+      } else {
+        ModifyInRange(forced_segment.segment_id, num_segments, incr);
       }
       break;
     }
@@ -2784,9 +2799,10 @@ void Params::HandleSegmentClick(int button, int state, uint32_t img_x_down,
 #endif
 }
 
-void Params::HandlePredictorClick(int button, int state, uint32_t img_x_down,
-                                  uint32_t img_y_down, uint32_t img_x,
-                                  uint32_t img_y) {
+void Params::HandlePredictorClick(int button, int state,
+                                  uint32_t img_x_down, uint32_t img_y_down,
+                                  uint32_t img_x, uint32_t img_y,
+                                  int incr) {
   (void)button;
   (void)state;
   (void)img_x_down;
@@ -2801,32 +2817,24 @@ void Params::HandlePredictorClick(int button, int state, uint32_t img_x_down,
   Channel channel = VDChannel(dec_config_);
   if (channel == kVChannel) channel = kUChannel;
 
-  const BlockInfo* b = nullptr;
-  for (const BlockInfo& block : einfo_.blocks) {
-    if (block.rect.Contains(img_x_down, img_y_down)) {
-      b = &block;
-      break;
-    }
-  }
+  const BlockInfo* const b = einfo_.FindBlock(img_x_down, img_y_down);
   assert(b != nullptr);
 
-  const uint32_t num_predictors =
-      (channel == kYChannel)   ? dinfo_.y_predictors.size()
-      : (channel == kAChannel) ? dinfo_.a_predictors.size()
-                               : dinfo_.uv_predictors.size();
-
   bool found = false;
-  for (uint32_t i = 0; i < force_predictor_.size(); ++i) {
-    auto* const forced_predictor = &force_predictor_[i];
-    if (forced_predictor->x == b->rect.x && forced_predictor->y == b->rect.y &&
-        forced_predictor->channel == channel) {
+  for (auto& forced_predictor : force_predictor_) {
+    if (forced_predictor.x == b->rect.x &&
+        forced_predictor.y == b->rect.y &&
+        forced_predictor.channel == channel) {
       found = true;
-      ++forced_predictor->predictor_id;
-      if (button == GLUT_MIDDLE_BUTTON ||
-          forced_predictor->predictor_id >= num_predictors) {
-        // Remove.
-        force_predictor_[i] = force_predictor_.back();
+      if (button == GLUT_MIDDLE_BUTTON) {  // remove forced predictor
+        forced_predictor = force_predictor_.back();
         force_predictor_.pop_back();
+      } else {   // increment / decrement id
+        const int num_predictors =
+          (channel == kYChannel) ? dinfo_.y_predictors.size() :
+          (channel == kAChannel) ? dinfo_.a_predictors.size() :
+                                   dinfo_.uv_predictors.size();
+        ModifyInRange(forced_predictor.predictor_id, num_predictors, incr);
       }
       break;
     }
@@ -2838,9 +2846,9 @@ void Params::HandlePredictorClick(int button, int state, uint32_t img_x_down,
 #endif
 }
 
-void Params::HandleTransformClick(int button, int state, uint32_t img_x_down,
-                                  uint32_t img_y_down, uint32_t img_x,
-                                  uint32_t img_y) {
+void Params::HandleTransformClick(int button, int state,
+                                  uint32_t img_x_down, uint32_t img_y_down,
+                                  uint32_t img_x, uint32_t img_y, int incr) {
   (void)button;
   (void)state;
   (void)img_x_down;
@@ -2854,26 +2862,18 @@ void Params::HandleTransformClick(int button, int state, uint32_t img_x_down,
     return;
   }
 
-  const BlockInfo* b = nullptr;
-  for (const BlockInfo& block : einfo_.blocks) {
-    if (block.rect.Contains(img_x_down, img_y_down)) {
-      b = &block;
-      break;
-    }
-  }
+  const BlockInfo* const b = einfo_.FindBlock(img_x_down, img_y_down);
   assert(b != nullptr);
 
   bool found = false;
-  for (uint32_t i = 0; i < force_transform_.size(); ++i) {
-    auto* const forced = &force_transform_[i];
-    if (forced->x == b->rect.x && forced->y == b->rect.y) {
+  for (auto& forced : force_transform_) {
+    if (forced.x == b->rect.x && forced.y == b->rect.y) {
       found = true;
-      ++forced->transform;
-      if (button == GLUT_MIDDLE_BUTTON ||
-          forced->transform >= kNumTransformPairs) {
-        // Remove.
-        force_transform_[i] = force_transform_.back();
+      if (button == GLUT_MIDDLE_BUTTON) {  // Remove.
+        forced = force_transform_.back();
         force_transform_.pop_back();
+      } else {
+        ModifyInRange(forced.transform, kNumTransformPairs, incr);
       }
       break;
     }
@@ -2885,9 +2885,9 @@ void Params::HandleTransformClick(int button, int state, uint32_t img_x_down,
 #endif
 }
 
-void Params::HandlePartitionClick(int button, int state, uint32_t img_x_down,
-                                  uint32_t img_y_down, uint32_t img_x,
-                                  uint32_t img_y) {
+void Params::HandlePartitionClick(int button, int state,
+                                  uint32_t img_x_down, uint32_t img_y_down,
+                                  uint32_t img_x, uint32_t img_y) {
   if (button != GLUT_RIGHT_BUTTON && button != GLUT_MIDDLE_BUTTON) return;
 
   if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
@@ -2935,9 +2935,9 @@ void Params::HandlePartitionClick(int button, int state, uint32_t img_x_down,
   forcing_block_ = {0, 0, 0, 0};
 }
 
-void Params::HandleMenuClick(int button, int state, uint32_t img_x_down,
-                             uint32_t img_y_down, uint32_t img_x,
-                             uint32_t img_y) {
+void Params::HandleMenuClick(int button, int state,
+                             uint32_t img_x_down, uint32_t img_y_down,
+                             uint32_t img_x, uint32_t img_y) {
   if (button != GLUT_LEFT_BUTTON) return;
 
   if (state == GLUT_DOWN) {
@@ -2948,20 +2948,16 @@ void Params::HandleMenuClick(int button, int state, uint32_t img_x_down,
       show_ = kDebug;
       if (!menu_selection_.empty()) {
         // Select the first available leaf (DFS) if not already the case.
-        SetMenuSelection(GetLeaf(menu_selection_));
+        if (!SetMenuSelection(GetLeaf(menu_selection_))) return;
       }
       einfo_.selection = dinfo_.selection = {0, 0, 0, 0};
       forcing_block_ = {0, 0, 0, 0};
-      if (VDMatch(enc_config_, "encoder")) {
-        if (!EncodeAndDecode()) return;
-      } else {
-        if (!DecodeOutput()) return;
-      }
     } else {
       const uint32_t min_x = std::min(img_x_down, img_x);
       const uint32_t min_y = std::min(img_y_down, img_y);
       einfo_.selection = dinfo_.selection = {
-          min_x, min_y, std::max(img_x_down, img_x) - min_x + 1,
+          min_x, min_y,
+          std::max(img_x_down, img_x) - min_x + 1,
           std::max(img_y_down, img_y) - min_y + 1};
       forcing_block_ = {0, 0, 0, 0};
 
@@ -2994,8 +2990,29 @@ void Params::HandleMouseClick(int button, int state, int x, int y) {
   HandlePartitionClick(button, state, img_x_down, img_y_down, img_x, img_y);
 }
 
+void Params::HandleMouseWheel(bool is_up, int x, int y) {
+  mouse_x_ = x;
+  mouse_y_ = y;
+  const uint32_t img_x = ToImageX(x), img_y = ToImageY(y);
+  const uint32_t img_x_down = ToImageX(mouse_x_down_);
+  const uint32_t img_y_down = ToImageY(mouse_y_down_);
+
+  const int incr = is_up ? 1 : -1;
+  HandlePredictorClick(GLUT_RIGHT_BUTTON, GLUT_DOWN,
+                       img_x_down, img_y_down, img_x, img_y, incr);
+  HandleSegmentClick(GLUT_RIGHT_BUTTON, GLUT_DOWN,
+                     img_x_down, img_y_down, img_x, img_y, incr);
+  HandleTransformClick(GLUT_RIGHT_BUTTON, GLUT_DOWN,
+                       img_x_down, img_y_down, img_x, img_y, incr);
+}
+
 void HandleMouseClick(int button, int state, int x, int y) {
   global_params->HandleMouseClick(button, state, x, y);
+}
+
+void HandleMouseWheel(int button, int dir, int x, int y) {
+  // wheel down: dir=-1    up: dir=1
+  global_params->HandleMouseWheel(dir > 0, x, y);
 }
 
 void Params::SetQuality(float incr) {
@@ -3145,6 +3162,11 @@ void StartDisplay(const char* window_title, uint32_t width, uint32_t height) {
   glutPassiveMotionFunc(HandleMouseMove);
   glutMotionFunc(HandleMouseMoveButtonPressed);
   glutMouseFunc(HandleMouseClick);
+#if defined(WP2_HAVE_FREEGLUT)
+  glutMouseWheelFunc(HandleMouseWheel);
+#else
+  (void)HandleMouseWheel;
+#endif
   glutSpecialFunc(HandleSpecialKeys);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glEnable(GL_BLEND);
@@ -3409,7 +3431,7 @@ int main(int argc, char* argv[]) {
 
   // Start display (and timer)
   glutInit(&argc, argv);
-#if defined(WP2_HAVE_GLUT) && defined(FREEGLUT)
+#if defined(WP2_HAVE_FREEGLUT)
   glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_CONTINUE_EXECUTION);
 #endif
   WP2::StartDisplay(window_title, params.width_, params.height_);

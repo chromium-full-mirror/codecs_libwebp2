@@ -73,7 +73,7 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
         if (decoded_unoriented.SetView(decoded) != WP2_STATUS_OK) {
           abort();
         }
-      } else if (RotateBuffer(
+      } else if (OrientateBuffer(
                      GetInverseOrientation(config.decoding_orientation),
                      decoded, &decoded_unoriented) != WP2_STATUS_OK) {
         abort();

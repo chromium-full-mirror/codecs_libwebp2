@@ -101,9 +101,9 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
   raw_width = 1 + dec.ReadBits(kImageDimNumBits, "width_m1");
   raw_height = 1 + dec.ReadBits(kImageDimNumBits, "height_m1");
 
-  orientation = (Orientation)dec.ReadBits(2, "orientation");
-  width = RotateWidth(orientation, raw_width, raw_height);
-  height = RotateHeight(orientation, raw_width, raw_height);
+  orientation = (Orientation)dec.ReadBits(3, "orientation");
+  width = OrientateWidth(orientation, raw_width, raw_height);
+  height = OrientateHeight(orientation, raw_width, raw_height);
   is_opaque = !dec.ReadBits(1, "has_alpha");
   is_animation = !!dec.ReadBits(1, "is_animation");
 
@@ -120,7 +120,7 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
   const auto tile_shape = (TileShape)dec.ReadBits(kTileShapeBits, "tile_shape");
   tile_width = TileWidth(tile_shape, raw_width);
   tile_height = TileHeight(tile_shape, /*image_width=*/raw_width);
-  WP2_CHECK_OK(dec.ReadBits(2, "filler") == 0x2u, WP2_STATUS_BITSTREAM_ERROR);
+  WP2_CHECK_OK(dec.ReadBits(1, "filler") == 0x1u, WP2_STATUS_BITSTREAM_ERROR);
 
   if (is_animation) {
     loop_forever = !!dec.ReadBits(1, "loop");
@@ -172,7 +172,24 @@ WP2Status DecodeHeader(DataSource* const data_source,
 WP2Status DecodeICC(DataSource* const data_source,
                     const BitstreamFeatures& features, Data* const iccp) {
   if (features.has_icc) {
-    WP2_CHECK_STATUS(CopyChunk(data_source, iccp));
+    if (iccp == nullptr || !iccp->IsEmpty()) {
+      WP2_CHECK_STATUS(SkipChunk(data_source));
+    } else {
+      DataView view;
+      WP2_CHECK_STATUS(ReadChunk(data_source, &view));
+      WP2_CHECK_OK(view.size >= 1, WP2_STATUS_BITSTREAM_ERROR);
+      const uint8_t type = view.bytes[0];
+      if (type == 0) {
+        WP2_CHECK_STATUS(iccp->CopyFrom(view.bytes + 1, view.size - 1));
+      } else if (type == 1) {
+        WP2_CHECK_STATUS(iccp->CopyFrom(kPredefinedICC1, kPredefinedICC1Size));
+      } else if (type == 2 || type == 3) {
+        WP2_CHECK_STATUS(iccp->CopyFrom(kPredefinedICC2, kPredefinedICC2Size));
+        iccp->bytes[kPredefinedICC2Offset] = (type == 2) ? 0x00 : 0x01;
+      } else {
+        return WP2_STATUS_BITSTREAM_ERROR;
+      }
+    }
   }
   return WP2_STATUS_OK;
 }

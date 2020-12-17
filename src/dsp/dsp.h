@@ -238,6 +238,8 @@ void WP2CSPConverterInit();
 
 namespace WP2 {
 
+#define APROBA_MAX_SYMBOL 32u  // for now, hardcoded for 4, 8, 16 or 32.
+
 // Updates the discrete cumulative distribution function.
 // The number of elements in 'cdf_base', 'cdf_var' and 'cumul' must be a
 // multiple of 8 at least as big as 'n'.
@@ -245,6 +247,11 @@ typedef void (*ANSUpdateCDFFunc)(uint32_t n, const uint16_t cdf_base[],
                                  const uint16_t cdf_var[], uint32_t mult,
                                  uint16_t cumul[]);
 extern ANSUpdateCDFFunc ANSUpdateCDF;
+
+// Returns the symbol in 'cumul' at 'proba' which is in [0, APROBA_MAX[.
+typedef uint32_t (*ANSGetSymbolFunc)(uint32_t max_symbol,
+                                     const uint16_t cumul[], uint32_t proba);
+extern ANSGetSymbolFunc ANSGetSymbol;
 
 void ANSInit();
 
@@ -511,14 +518,14 @@ extern void (*AnglePredInterpolate)(const int16_t* src, int32_t frac,
 
 // Number of angle subdivision within a 22.5 degrees span.
 constexpr uint32_t kDirectionalMaxDelta = (2 * kDirectionalMaxAngleDeltaYA + 1);
-// number of indexed angled: 8 based angles: {45.0, 67.5, ... 202.5} + 7 deltas
-constexpr uint32_t kNumDirectionalAngles = 8 * kDirectionalMaxDelta;
-// angle_idx goes for 0 (=35.35.. degrees) to 55 (=212.14 degrees).
+// number of indexed angled: 9 based angles: {23.0, 45.0, ... 202.5} + 7 deltas
+constexpr uint32_t kNumDirectionalAngles = kAnglePredNum * kDirectionalMaxDelta;
+// angle_idx goes for 0 (12.85 degrees) to 62 (212.14 degrees).
 // Some notable values:
-constexpr uint32_t kAngle_45 = 3;
-constexpr uint32_t kAngle_90 = 17;
-constexpr uint32_t kAngle_135 = 31;
-constexpr uint32_t kAngle_180 = 45;
+constexpr uint32_t kAngle_45 = 10;
+constexpr uint32_t kAngle_90 = 24;
+constexpr uint32_t kAngle_135 = 38;
+constexpr uint32_t kAngle_180 = 52;
 static_assert(kAngle_90 - kAngle_45 == 2 * kDirectionalMaxDelta,
               "bad kAngle 90-45");
 static_assert(kAngle_135 - kAngle_90 == 2 * kDirectionalMaxDelta,

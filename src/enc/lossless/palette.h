@@ -48,7 +48,7 @@ class Palette {
   // palette.
   // Should be called after calling FindBestMethod() since the order of colors
   // can be changed on write.
-  WP2Status Apply(const WP2::ArgbBuffer& pic, uint16_t* dst) const;
+  WP2Status Apply(const WP2::ArgbBuffer& pic, int16_t* dst) const;
   // Returns the number of colors in the palette. Returns 0 if AnalyzeAndCreate
   // hasn't been called or if it was called on an image with more than
   // kMaxPaletteSize unique colors or less than two colors.

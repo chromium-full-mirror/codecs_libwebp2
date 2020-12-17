@@ -99,8 +99,8 @@ WP2Status DecodeFrameInfo(const DecoderConfig& config,
                      kMaxNumDependentFrames + 1,
                  WP2_STATUS_BITSTREAM_ERROR);
 
-    frame.window = RotateRectangle(features.orientation, features.raw_width,
-                                   features.raw_height, frame.info.window);
+    frame.window = OrientateRectangle(features.orientation, features.raw_width,
+                                      features.raw_height, frame.info.window);
     if (is_frame_regular) {
       // Merge previous preframe windows with the current regular frame window.
       for (uint32_t i = frame_index; i > 0; --i) {

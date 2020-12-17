@@ -42,6 +42,10 @@ add_test(
   NAME test_memory
   COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/test_memory.sh ${CMAKE_BINARY_DIR}
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(
+  NAME test_icc
+  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/test_icc.sh ${CMAKE_BINARY_DIR}
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 if(WP2_BUILD_EXTRAS)
   add_test(
@@ -203,7 +207,7 @@ if(GTEST_FOUND AND NOT WP2_BUILD_WP2_JS)
   add_wp2_test(test_analysis 1)
   add_wp2_test(test_anim 4)
   add_wp2_test(test_anim_incr 4 tests_helpers_incr)
-  add_wp2_test(test_anim_frame 4)
+  add_wp2_test(test_anim_frame 2)
   add_wp2_test(test_anim_rectangle 1)
   add_wp2_test(test_ans 1 example_utils)
   add_wp2_test(test_aom_residuals 4)

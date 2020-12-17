@@ -106,12 +106,9 @@ class ParameterizedAnimFrameTest : public ::testing::TestWithParam<Param> {
     const Orientation orientation = std::get<0>(GetParam());
     const bool is_slow = std::get<1>(GetParam());
 
-    if (orientation == Orientation::kOriginal ||
-        orientation == Orientation::k180) {
-      WP2_CHECK_STATUS(decoded_frame_internal_.Resize(width, height));
-    } else {
-      WP2_CHECK_STATUS(decoded_frame_internal_.Resize(height, width));
-    }
+    WP2_CHECK_STATUS(decoded_frame_internal_.Resize(
+        OrientateWidth(orientation, width, height),
+        OrientateHeight(orientation, width, height)));
     // Allows setting "is_slow".
     WP2_CHECK_STATUS(decoded_frame_.SetExternal(
         decoded_frame_internal_.width(), decoded_frame_internal_.height(),
@@ -127,7 +124,7 @@ class ParameterizedAnimFrameTest : public ::testing::TestWithParam<Param> {
 };
 
 TEST_P(ParameterizedAnimFrameTest, Blend) {
-  Orientation orientation = std::get<0>(GetParam());
+  const Orientation orientation = std::get<0>(GetParam());
 
   std::vector<ArgbBuffer> buffers;
   ASSERT_WP2_OK(testing::ReadImages(
@@ -204,7 +201,7 @@ TEST_P(ParameterizedAnimFrameTest, Blend) {
 }
 
 TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
-  Orientation orientation = std::get<0>(GetParam());
+  const Orientation orientation = std::get<0>(GetParam());
 
   std::vector<ArgbBuffer> buffers;
   ASSERT_WP2_OK(testing::ReadImages(
@@ -342,7 +339,7 @@ WP2Status SaveDebug(const ArgbBuffer& expected_buffer,
   if (std::strlen(kDebugOutputPath) > 0) {
     ArgbBuffer expected_rotated;
     WP2_CHECK_STATUS(expected_rotated.CopyFrom(expected_buffer));
-    WP2_CHECK_STATUS(RotateBuffer(orientation, &expected_rotated));
+    WP2_CHECK_STATUS(OrientateBuffer(orientation, &expected_rotated));
     WP2_CHECK_STATUS(
         WP2::SaveImage(decoded_frame,
                        SPrintf("%s/test%d-%d-decoded.png", kDebugOutputPath,
@@ -366,11 +363,11 @@ TEST_P(ParameterizedAnimFrameTest, RandomFrames) {
   UniformIntDistribution random(test_id);
 
   Vector<Frame> frames;
-  const int num_frames = random.Get(20, 40);
+  const int num_frames = random.Get(5, 10);
   ASSERT_TRUE(frames.resize(num_frames));
 
-  const uint32_t width = random.Get(250, 500);
-  const uint32_t height = random.Get(250, 500);
+  const uint32_t width = random.Get(100, 600);
+  const uint32_t height = random.Get(25, 50);
 
   for (uint32_t i = 0; i < frames.size(); ++i) {
     Frame& frame = frames[i];
@@ -562,11 +559,27 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    ParameterizedAnimFrameTestInstantiation, ParameterizedAnimFrameTest,
+    ParameterizedAnimFrameTestInstantiationIsSlow, ParameterizedAnimFrameTest,
     ::testing::Combine(::testing::Values(Orientation::kOriginal,
-                                         Orientation::k90Clockwise,
+                                         Orientation::k270Clockwise),
+                       ::testing::Values(true, false)  // is_slow
+                       ));
+
+INSTANTIATE_TEST_SUITE_P(
+    ParameterizedAnimFrameTestInstantiationRotate, ParameterizedAnimFrameTest,
+    ::testing::Combine(::testing::Values(Orientation::k90Clockwise,
                                          Orientation::k180),
-                       ::testing::Values(true, false)));  // is_slow
+                       ::testing::Values(false)  // is_slow
+                       ));
+
+INSTANTIATE_TEST_SUITE_P(
+    ParameterizedAnimFrameTestInstantiationFlip, ParameterizedAnimFrameTest,
+    ::testing::Combine(::testing::Values(Orientation::kFlipLeftToRight,
+                                         Orientation::kFlipBotLeftToTopRgt,
+                                         Orientation::kFlipTopToBottom,
+                                         Orientation::kFlipTopLeftToBotRgt),
+                       ::testing::Values(false)  // is_slow
+                       ));
 
 }  // namespace
 }  // namespace WP2

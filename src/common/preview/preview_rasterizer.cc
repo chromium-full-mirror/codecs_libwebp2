@@ -131,7 +131,7 @@ void Rasterizer::RecordEdgeSpan(VertexArgb v0, VertexArgb v1) {
 //------------------------------------------------------------------------------
 // Gradient
 
-constexpr grad_t ToFixedPrec(float v) {
+constexpr int32_t ToFixedPrec(float v) {
   return (grad_t)((1 << kRasterPrec) * v);
 }
 
@@ -140,21 +140,25 @@ static void CalcTransform(VertexArgb v0, VertexArgb v1, VertexArgb v2,
   const int32_t dx1 = v1.x - v0.x, dy1 = v1.y - v0.y;   // ~14b
   const int32_t dx2 = v2.x - v0.x, dy2 = v2.y - v0.y;
   const int32_t area = dx1 * dy2 - dx2 * dy1;           // ~28b
-  const float iArea = (area == 0) ? 0. : 1. / area;
-  iM[0] = ( dy2 * iArea);
-  iM[1] = (-dy1 * iArea);
-  iM[2] = (-dx2 * iArea);
-  iM[3] = ( dx1 * iArea);
+  const float inv_area = (area == 0) ? 0.f : 1.f / area;
+  iM[0] = ( dy2 * inv_area);
+  iM[1] = (-dy1 * inv_area);
+  iM[2] = (-dx2 * inv_area);
+  iM[3] = ( dx1 * inv_area);
 }
 
-static void CalcGradient(const float iM[4],
-                         int32_t f0, int32_t f1, int32_t f2,
+static void CalcGradient(const float iM[4], int32_t f0, int32_t f1, int32_t f2,
                          grad_t grad[], grad_t dy) {
   const float df1 = f1 - f0;
   const float df2 = f2 - f0;
-  grad[0] = ToFixedPrec(iM[0] * df1 + iM[1] * df2);
-  grad[4] = ToFixedPrec(iM[2] * df1 + iM[3] * df2);
-  grad[8] = ToFixedPrec(f0) + dy * grad[4];
+  // Keep reasonable ranges so that fixed point computation fits in grad_t.
+  constexpr int32_t kMaxGrad = (1 << (kRgbBits + kRasterPrec + 1)) - 1;
+  // Color increase per x.
+  grad[0] = Clamp(ToFixedPrec(iM[0] * df1 + iM[1] * df2), -kMaxGrad, kMaxGrad);
+  // Color increase per y.
+  grad[4] = Clamp(ToFixedPrec(iM[2] * df1 + iM[3] * df2), -kMaxGrad, kMaxGrad);
+  // Top-left color starting point.
+  grad[8] = Clamp(ToFixedPrec(f0) + dy * grad[4], -kMaxGrad, kMaxGrad);
 }
 
 static void GetGradients(VertexArgb v0, VertexArgb v1, VertexArgb v2,

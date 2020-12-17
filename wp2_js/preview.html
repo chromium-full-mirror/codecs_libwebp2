@@ -71,6 +71,7 @@ var kPreviewMaxGridSize = 256;
 var kProbaMax = 1 << 16;
 var kPreviewOpaqueProba = 3 * kProbaMax / 4;
 var kPreviewNoiseProba = kProbaMax / 2;
+var kMaxSum = 256;
 
 ////////////////////////////////////////////////////////////////////////////////
 // ANS
@@ -81,8 +82,10 @@ function ANSBinSymbol(p0, p1) {
 }
 
 ANSBinSymbol.prototype.Update = function(bit) {
-  if (!bit) ++this.p0_;
-  ++this.sum_;
+  if (this.sum_ < kMaxSum) {
+    if (!bit) ++this.p0_;
+    ++this.sum_;
+  }
   return bit;
 }
 
@@ -250,7 +253,7 @@ Preview.prototype.ReadPalette = function(reader) {
   this.has_alpha = reader.NextBit(kPreviewOpaqueProba);
 
   this.txt += this.grid_x + " " + this.grid_y + " ";
-  this.txt += this.num_colors + " " + (this.has_alpha ? 1 : 0) + "<br />";
+  this.txt += this.num_colors + " " + (this.has_alpha ? 1 : 0) + "\n";
 
   this.cmap = new Array(this.num_colors);
   var alpha = new ANSBinSymbol(2, 2);
@@ -263,7 +266,7 @@ Preview.prototype.ReadPalette = function(reader) {
     var co = pred.g = reader.ReadAValue(stats_yco, false, pred.g);
     var cg = pred.b = reader.ReadAValue(stats_cg,  true,  pred.b);
     this.cmap[i] = YCoCg_to_RGB(y, co, cg, pred.a);   // YCoCg -> RGB
-    this.txt += y + " " + co + " " + cg + " " + (pred.a > 0 ? 1 : 0) + "<br />";
+    this.txt += y + " " + co + " " + cg + " " + (pred.a > 0 ? 1 : 0) + "\n";
   }
 }
 
@@ -326,7 +329,7 @@ Preview.prototype.ReadVertices = function(reader) {
       }
       this.txt += letter;
     }
-    this.txt += "<br />";
+    this.txt += "\n";
   }
 }
 
@@ -532,6 +535,33 @@ Preview.prototype.Render= function(w, canvas, show_triangles) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// URL manipulation
+
+// sets ?preview=xxxx param value in URL
+function SetPreviewURL(data64) {
+  var param = "preview";
+  var pattern = new RegExp('\\b('+ param +'=).*?(&|#|$)');
+  var url = window.location.href;
+  var new_url;
+  if (url.search(pattern) >= 0) {
+    new_url = url.replace(pattern,'$1' + data64 + '$2');
+  } else {
+    new_url = url.replace(/[?#]$/, '');
+    new_url = new_url
+            + (new_url.indexOf('?') > 0 ? '&' : '?') + param + '=' + data64;
+  }
+  window.history.pushState("", "", new_url);
+}
+// break down URL params in key/value. Example: ZwnQWM?preview=543254634643
+function GetParamsFromURL() {
+  var vars = {};
+  var url = window.location.href;
+  url.replace(/[?&]+([^=&]+)=([^&]*)/gi,
+              function(m, key, value) { vars[key] = value; });
+  return vars;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Main call.
 
 function decode(data64) {
@@ -539,7 +569,7 @@ function decode(data64) {
   var show_tri = document.getElementById('show_tri').checked;
   var size = parseInt(document.getElementById('size').value);
   if (size < 16) size = 16;
-  window.location.hash = "#" + data64;
+  SetPreviewURL(data64);
 
   // Parsing starts.
   var reader    = new ANSDec(atob(data64));
@@ -559,7 +589,10 @@ function decode(data64) {
   p.Render(size, canvas, show_tri);
 
   // Print side infos
-  document.getElementById('comp_data').innerHTML = p.GetBinText();
+  var elm = document.getElementById('comp_data');
+  elm.innerHTML = p.GetBinText();
+  elm.rows = p.grid_y + p.num_colors + 2;
+  elm.cols = p.grid_x;
   document.getElementById('info').innerHTML = p.GetInfoText();
   document.getElementById('text').innerHTML = reader.max_pos_ + " bytes ";
 
@@ -571,6 +604,10 @@ function decode(data64) {
 
   // Draw the small cmap
   document.getElementById('cmap').innerHTML = p.GetCMapText();
+}
+function copy_to_clipboard() {
+  document.getElementById('comp_data').select();
+  document.execCommand('copy');
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -589,6 +626,12 @@ function setPrecalc(idx) {
     "AgV0AyCH4vltVQ4o8GYeFjUb0lyMZNAgDkGWf3IlYGA/dooDKAIHl+crn/i1PRIVfqUhFvyPUp4W37yDg0LhZwEI08lPsFTPBKWFptT5ywKTQ3a9cEzzhSy3ZwfjfIgl966D26jVz+caxrZ29mynYlvXfAooeeMIidXX0fpZkUQgbtI3TwCJg6flzDPEzyPWyd1dSsWNbHzy79gAxYI7llL4Is0F+/uhybAE3evJxj8dx15ze5DCd985rYkL2AI8rfcrmN7diK7anSwUomXv5sJVagGelMQeD6UEq1Goabg+yBnfe2w9a5w3ffGNaEISrB9um/OQFb9LglSdDAgBqklP/e4=",
     // Grumpy cat
     "AAKHk3aqfepiUppmgQTdxMz4bLjxZEgwGhpaiZwoBPeuhDabCH/DcGO091rMKb4VCgz7NC0js3EuYFlC7LmXOzTcmEyrgwEhy161dvqsz+TgVbs35EryEFSy64A6mbDx2j8IyUdAbZBSVCjVX+7MFVyov6BxDWZ1odtA0y6jTAE01/0Fq3XHbVVyik0A0pYbffbtlesMNTcO6erh4HWWtfYT+fexRhBc3okvmm/eROXnRSsNKKp/2nH++nq62DqoT/91wANeoMW0q44CuH0Slfdo",
+    // POTUS
+    "AZICmDDCqiP/P/uG3bdk0WFviwIpzlbnQnl/vj9CaF9zr+cCTZk6lXsOzfyGDDgwkw+3HFvFMG0mO3vqxLN8sr5IbSpyT05bu96QVDdkvNS7wPWI5wus57g8X8y4aLPj0Ykk+W0iqeG1wj5cgmzzYPgwO990cQUVcXw3pRHrOCkdVfE78YUUmXsKqJV+VVf9hIXIWA==",
+    // Am the one who knocks
+    "AfwrBdIb7WOGuXuLbgLk6782Fak3GzM6oce4qlORsFyE4HIUv1Wz6/5b48PlBYFjxGKwMz1emlTLcCgE+IF6t+1ji3smVVG1TpyqtFqkNKdatbPS85WSHwlPkmfK+rt/PEqLz8zufIyUeTwr6o9zm1OsikZ8HXXtJ946RAZ+yrk760Z/KWJrl+DdnkL36+AXQSG9o46Dq2xO4udsMt7RCumnpI01W6eCq6Bdsf9dGBnb9/sSSU5phdI3nj30Ryr1U/gRJ6u+OMZU8hc4ak6YRaQrmcn7CJYTsCT8BO7VcZM=",
+    // Wish you were there!
+    "AJvcW2AKgRIS5Tay3S+n42T1OjBDxJlwr+fOOqAj7/fJJLx15rWEvp15aygk1jL4WhrKSP+V9gotwN3FRnfuWMUxaRRmeyptjaWBS4ZSDk950YYuhaHVQMakZFEfs5YLDsthQA==",
   ];
   idx = Math.max(0, Math.min(idx, precalc.length - 1));
   document.getElementById('data').value = precalc[idx];
@@ -596,10 +639,10 @@ function setPrecalc(idx) {
 }
 
 function main_launch() {
-  var hash = window.location.hash;
   var idx = 0;
-  if (hash != undefined && hash[0] == '#') {
-    idx = hash.substr(1);  // remove the leading '#'
+  var preview_data = GetParamsFromURL()["preview"];
+  if (preview_data != undefined) {
+    idx = decodeURI(preview_data);
     if (idx.length > 4) {
       document.getElementById('data').value = idx;
       decode_text();
@@ -638,6 +681,9 @@ function main_launch() {
   <input type="button" value="Van Gogh" onclick="setPrecalc(1);">
   <input type="button" value="Logo" onclick="setPrecalc(2);">
   <input type="button" value="No" onclick="setPrecalc(3);">
+  <input type="button" value="POTUS" onclick="setPrecalc(4);">
+  <input type="button" value="Knock" onclick="setPrecalc(5);">
+  <input type="button" value="you WISH you were there!" onclick="setPrecalc(6);">
   <br />
   <hr />
 
@@ -680,10 +726,12 @@ function main_launch() {
       <tr>
 
         <td colspan="2">
-          <h6>
-            Text version of the compressed data:<br />
-            <pre><span id="comp_data"></span></pre>
-          </h6>
+          <h5>
+            Text version of the compressed data:
+            <input type="button" value="Copy!" onclick="copy_to_clipboard();">
+            <br />
+            <textarea id="comp_data"></textarea><br />
+          </h5>
         </td>
       </tr>
     </table>

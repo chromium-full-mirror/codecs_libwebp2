@@ -119,6 +119,12 @@ struct EncoderInfo {
 
 #if defined(WP2_BITTRACE)
   std::vector<BlockInfo> blocks;  // Information about blocks (output).
+  const BlockInfo* FindBlock(uint32_t x, uint32_t y) const {
+    for (const auto& b : blocks) {
+      if (b.rect.Contains(x, y)) return &b;
+    }
+    return nullptr;
+  }
 #endif  // WP2_BITTRACE
   bool store_blocks = false;  // Fills 'blocks' if true (input).
 

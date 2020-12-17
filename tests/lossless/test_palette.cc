@@ -89,7 +89,7 @@ TEST_P(PaletteTest, RoundTrip) {
   ASSERT_WP2_OK(palette.Write(ProgressRange(), &enc, &dicts, &encoder));
 
   // Apply palette on buffer.
-  Vector_u16 paletted_buffer;
+  Vector_s16 paletted_buffer;
   ASSERT_TRUE(paletted_buffer.resize(kWidth * kHeight * 4));
   ASSERT_WP2_OK(palette.Apply(buffer, paletted_buffer.data()));
 
@@ -114,7 +114,7 @@ TEST_P(PaletteTest, RoundTrip) {
   }
 
   // Reconstruct original buffer.
-  Vector_u16 reconstructed;
+  Vector_s16 reconstructed;
   ASSERT_TRUE(reconstructed.resize(kWidth * kHeight * 4));
   InverseTransform(&transform, /*row_start=*/0, /*row_end=*/kHeight,
                    /*channel_bits=*/8, paletted_buffer.data(),
@@ -122,11 +122,11 @@ TEST_P(PaletteTest, RoundTrip) {
 
   for (uint32_t y = 0; y < kHeight; ++y) {
     uint8_t* const reference_row = premultiplied_buffer.GetRow8(y);
-    uint16_t* const reconstructed_row = &reconstructed[y * kWidth * 4];
+    int16_t* const reconstructed_row = &reconstructed[y * kWidth * 4];
     for (uint32_t x = 0; x < kWidth; ++x) {
       for (uint32_t c = 0; c < 4; ++c) {
         ASSERT_EQ(reconstructed_row[4 * x + c],
-                  (uint16_t)reference_row[4 * x + c]);
+                  (int16_t)reference_row[4 * x + c]);
       }
     }
   }

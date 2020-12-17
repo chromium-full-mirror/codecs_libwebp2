@@ -20,56 +20,56 @@
 #ifndef WP2_UTILS_ORIENTATION_H_
 #define WP2_UTILS_ORIENTATION_H_
 
-#include "src/wp2/base.h"
 #include "src/utils/plane.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
 // Rotations are clockwise and with the origin (0, 0) at the top left corner.
 
-// Swaps 'width' and 'height' if orientation is 90 or 270.
-uint32_t RotateWidth(Orientation orientation, uint32_t width, uint32_t height);
-uint32_t RotateHeight(Orientation orientation, uint32_t width, uint32_t height);
+// Applies the 'orientation' on 'width, height' and returns the updated size.
+uint32_t OrientateWidth(Orientation orientation, uint32_t width,
+                        uint32_t height);
+uint32_t OrientateHeight(Orientation orientation, uint32_t width,
+                         uint32_t height);
 
 // All coordinates stay positive and must be below 'old_width', 'old_height'.
-uint32_t RotatePointX(Orientation orientation,
-                      uint32_t old_width, uint32_t old_height,
-                      uint32_t x, uint32_t y);
-uint32_t RotatePointY(Orientation orientation,
-                      uint32_t old_width, uint32_t old_height,
-                      uint32_t x, uint32_t y);
+uint32_t OrientatePointX(Orientation orientation, uint32_t old_width,
+                         uint32_t old_height, uint32_t x, uint32_t y);
+uint32_t OrientatePointY(Orientation orientation, uint32_t old_width,
+                         uint32_t old_height, uint32_t x, uint32_t y);
 
 // Keeps x,y as top-left.
-Rectangle RotateRectangle(Orientation orientation,
-                          uint32_t old_width, uint32_t old_height,
-                          const Rectangle& rect);
+Rectangle OrientateRectangle(Orientation orientation, uint32_t old_width,
+                             uint32_t old_height, const Rectangle& rect);
 
-// Rotates all pixels of 'buffer'.
-WP2Status RotateBuffer(Orientation orientation, ArgbBuffer* const buffer);
+// Orientates all pixels of 'buffer'.
+WP2Status OrientateBuffer(Orientation orientation, ArgbBuffer* const buffer);
 
-// Rotates all pixels from 'src' to 'dst'. The latter is resized to fit the
+// Orientates all pixels from 'src' to 'dst'. The latter is resized to fit the
 // entire oriented image.
 // Handles conversion from WP2_Argb_32 format to 'dst->format' if needed.
-WP2Status RotateBuffer(Orientation orientation, const ArgbBuffer& src,
-                       ArgbBuffer* const dst);
+WP2Status OrientateBuffer(Orientation orientation, const ArgbBuffer& src,
+                          ArgbBuffer* const dst);
 
-// Rotates pixels in 'rect_in_src' from 'src' to 'dst'. The latter must be
+// Orientates pixels in 'rect_in_src' from 'src' to 'dst'. The latter must be
 // allocated and big enough to fit the area.
 // Handles conversion from WP2_Argb_32 format to 'dst->format' if needed.
-WP2Status RotateSubBuffer(Orientation orientation, const ArgbBuffer& src,
-                          const Rectangle& rect_in_src, ArgbBuffer* const dst);
+WP2Status OrientateSubBuffer(Orientation orientation, const ArgbBuffer& src,
+                             const Rectangle& rect_in_src,
+                             ArgbBuffer* const dst);
 
 // Same functions but for Plane16.
-WP2Status RotateBuffer(Orientation orientation, Plane16* const buffer);
-WP2Status RotateBuffer(Orientation orientation, const Plane16& src,
-                       Plane16* const dst);
-WP2Status RotateSubBuffer(Orientation orientation, const Plane16& src,
-                          const Rectangle& rect_in_src, Plane16* const dst);
+WP2Status OrientateBuffer(Orientation orientation, Plane16* const buffer);
+WP2Status OrientateBuffer(Orientation orientation, const Plane16& src,
+                          Plane16* const dst);
+WP2Status OrientateSubBuffer(Orientation orientation, const Plane16& src,
+                             const Rectangle& rect_in_src, Plane16* const dst);
 
 // Same functions but done separately for each channel of YUVPlane.
-WP2Status RotateBuffer(Orientation orientation, YUVPlane* const buffer);
-WP2Status RotateBuffer(Orientation orientation, const YUVPlane& src,
-                       YUVPlane* const dst);
+WP2Status OrientateBuffer(Orientation orientation, YUVPlane* const buffer);
+WP2Status OrientateBuffer(Orientation orientation, const YUVPlane& src,
+                          YUVPlane* const dst);
 
 // Returns the inverse orientation such as it gives the original image if both
 // the 'orientation' and its inverse are applied.

@@ -310,8 +310,9 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
           if (expected_total_num_frames == 0u) {
             expected_total_num_frames = idec->GetNumAvailableFrames() + 1u;
           } else {
-            CHECK_OR_DIE(expected_total_num_frames ==
-                         idec->GetNumAvailableFrames() + 1u);
+            WP2_CHECK_OK(
+                expected_total_num_frames == idec->GetNumAvailableFrames() + 1u,
+                WP2_STATUS_BITSTREAM_ERROR);
           }
         }
       }
@@ -329,8 +330,8 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
         CHECK_OR_DIE(features->height == output.height());
       }
       const Rectangle unoriented =
-          RotateRectangle(GetInverseOrientation(features->orientation),
-                          features->width, features->height, decoded_area);
+          OrientateRectangle(GetInverseOrientation(features->orientation),
+                             features->width, features->height, decoded_area);
       CHECK_OR_DIE(unoriented.x == 0u);
       CHECK_OR_DIE(unoriented.y == 0u);
     }

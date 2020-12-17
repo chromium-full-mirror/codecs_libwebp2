@@ -193,6 +193,7 @@ class Predictors {
     kSmoothHorizontal,
     kTrueMotion,
     kGradient,
+    kAngle23,
     kAngle45,
     kAngle67,
     kAngle90,

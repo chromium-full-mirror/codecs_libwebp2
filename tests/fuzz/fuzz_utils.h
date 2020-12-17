@@ -37,10 +37,13 @@
 namespace WP2 {
 namespace testing {
 
-// Limit read image size to avoid out-of-memory and timeout issues.
+// Limit read image size to avoid out-of-memory issues.
 // Hint:  kMaxNumPixels * kMaxBytesPerPixel (4) * kMaxNumFullCanvasAlloc (3)
 //        should be below kMaxFuzzMemory (2 GB).
 constexpr size_t kMaxNumPixels = 1u << 26;
+
+// Limit encoding duration to avoid timeout issues (< 90 seconds).
+constexpr double kEncodingMaxNumSeconds = 60.;
 
 // Used to extract test parameters from a bitstream of any size and content.
 class FuzzedParameters {

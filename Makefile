@@ -25,16 +25,21 @@ GTEST_FLAGS  = -I$(GTEST_DIR)/googletest/include
 GTEST_FLAGS += -I$(GTEST_DIR)/googlemock/include
 GTEST_LIBS = -L$(GTEST_DIR)/lib -lgtest -lgtest_main
 
+# OPENGL setup
+EXTRA_FLAGS += -I/usr/local/include -DWP2_HAVE_OPENGL
+EXTRA_LIBS  += -L/usr/local/lib
 ifeq ($(strip $(shell uname)), Darwin)
   # Work around a problem linking tables marked as common symbols,
   # cf., src/enc/yuv.[hc]
   # Failure observed with: gcc 4.2.1 and 4.0.1.
   EXTRA_FLAGS += -fno-common
-  EXTRA_FLAGS += -DHAVE_GLUT_GLUT_H -DWP2_HAVE_OPENGL
   EXTRA_FLAGS += -Wno-deprecated-declarations
-  EXTRA_FLAGS += -I/usr/local/include
-  EXTRA_LIBS  += -L/usr/local/lib
-  GL_LIBS = -framework GLUT -framework OpenGL
+  # this is for using regular glut:
+  #    EXTRA_FLAGS += -DHAVE_GLUT_GLUT_H
+  #    GL_LIBS = -framework GLUT -framework OpenGL -lglut
+  # anmd this is for freeglut:
+  EXTRA_FLAGS += -DWP2_HAVE_FREEGLUT
+  GL_LIBS = -lglut -lGL
   # for now, we force linking again MacOS 10.14 sdk, since
   # OpenGL is broken with 10.15.
   SYSROOT=-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.14.sdk
@@ -42,8 +47,6 @@ ifeq ($(strip $(shell uname)), Darwin)
   CXXFLAGS += $(SYSROOT)
   LDFLAGS += $(SYSROOT)
 else
-  EXTRA_FLAGS += -I/usr/local/include -DWP2_HAVE_OPENGL
-  EXTRA_LIBS  += -L/usr/local/lib
   GL_LIBS = -lglut -lGL
 endif
 
@@ -212,6 +215,7 @@ DEC_OBJS = \
     src/dec/filters/intertile_filter.o \
     src/dec/filters/intratile_filter.o \
     src/dec/filters/restoration_filter.o \
+    src/dec/icc_dec.o \
     src/dec/incr/decoder_api.o \
     src/dec/incr/decoder_context.o \
     src/dec/incr/decoder_info.o \
@@ -698,10 +702,12 @@ test_enc_anim: $(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES)
 	cd tests && ./test_enc_anim.sh ../examples
 test_memory: $(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES)
 	cd tests && ./test_memory.sh ../examples
+test_icc: $(OUT_EXAMPLES) $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES)
+	cd tests && ./test_icc.sh ../examples
 
 SH_TESTS =
 SH_TESTS += test_assert test_ansz test_io_pnm test_cmd
-SH_TESTS += test_enc test_enc_dir test_enc_anim test_memory
+SH_TESTS += test_enc test_enc_dir test_enc_anim test_memory test_icc
 
 test: $(CC_TESTS) $(SH_TESTS)
 
@@ -854,6 +860,7 @@ DIST_FILES= \
             src/dec/filters/intratile_filter.cc \
             src/dec/filters/restoration_filter.h \
             src/dec/filters/restoration_filter.cc \
+            src/dec/icc_dec.cc \
             src/dec/incr/decoder_api.cc \
             src/dec/incr/decoder_context.h \
             src/dec/incr/decoder_context.cc \
@@ -1082,6 +1089,7 @@ DIST_FILES= \
             tests/test_front_mgr.cc \
             tests/test_header.cc \
             tests/test_global_params.cc \
+            tests/test_icc.sh \
             tests/test_imageio.cc \
             tests/test_imageio_anim.cc \
             tests/test_imageio_conversion.cc \
@@ -1128,6 +1136,10 @@ DIST_FILES= \
             tests/test_vector.cc \
             tests/test_version.cc \
             tests/testdata \
+            tests/testdata/ICC_524_type1.bin \
+            tests/testdata/ICC_3144_type2.bin \
+            tests/testdata/ICC_3144_type3.bin \
+            alpha_ramp.lossy.webp \
             tests/testdata/alpha_ramp.lossy.webp \
             tests/testdata/alpha_ramp.pam \
             tests/testdata/alpha_ramp.png \

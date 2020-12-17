@@ -95,7 +95,6 @@ static constexpr uint32_t kANSMaxUniformBits = IO_BITS;
 #define APROBA_MAX (1 << APROBA_BITS)
 #define APROBA_ADAPT_SPEED 4096   // must be strictly less than 32768
 static constexpr uint32_t kANSAProbaInvalidSpeed = (1 << PROBA_BITS);
-#define APROBA_MAX_SYMBOL 16u     // for now, hardcoded for 4,8 or 16.
 
 #if IO_BITS == 8
 static constexpr uint32_t kANSPaddingCost = 3 * 8;
@@ -198,34 +197,7 @@ class ANSAdaptiveSymbol {
 
   // proba is in [0, APROBA_MAX) range
   ANSSymbolInfo GetSymbol(uint32_t proba) const {
-    uint32_t s = 0;
-    // TODO(yguyon): Move SSE/C code to dsp/
-#if defined(WP2_USE_SSE)
-    const __m128i A0 = _mm_loadu_si128((const __m128i*)&cumul_[0]);
-    const __m128i A1 = _mm_loadu_si128((const __m128i*)&cumul_[8]);
-    const __m128i B = _mm_set1_epi16(proba + 1);
-    const __m128i C0 = _mm_cmplt_epi16(A0, B);  // we'd need mm_cmple_epi16 !!
-    const __m128i C1 = _mm_cmplt_epi16(A1, B);
-    const __m128i D = _mm_packs_epi16(C0, C1);
-    const uint32_t bits = _mm_movemask_epi8(D);
-    s = WP2Log2Floor(bits);
-#else
-#if 0
-    for (; s < max_symbol_ - 1; ++s) {
-      if (proba < cumul_[s + 1]) break;
-    }
-#else  // dichotomy
-#if (APROBA_MAX_SYMBOL > 8)
-    if (proba >= cumul_[8]) s += 8;
-#endif
-#if (APROBA_MAX_SYMBOL > 4)
-    if (proba >= cumul_[s + 4]) s += 4;
-#endif
-    if (proba >= cumul_[s + 2]) s += 2;
-    if (proba >= cumul_[s + 1]) s += 1;
-#endif
-#endif  // !WP2_USE_SSE
-    return GetInfo(s);
+    return GetInfo(ANSGetSymbol(max_symbol_, cumul_.data(), proba));
   }
   // Convenience representation of ranges as ANSSymbolInfo.
   // 'sym' must be in [0, max_symbol_) range.

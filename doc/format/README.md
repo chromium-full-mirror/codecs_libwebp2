@@ -22,27 +22,27 @@ Hard-coded 3 bytes with the value 0x6ffff4.
 
 Using bit-packing, the main image header is 7 to 13-byte long:
 
-| Value                         | Bits |                                       |
-|-------------------------------|------|---------------------------------------|
-| Width                         | 14   | In \[1:16384\]                        |
-| Height                        | 14   | In \[1:16384\]                        |
-| Orientation                   | 2    | 0°, 90°, 180°, 270°                   |
-| Is opaque                     | 1    | If true: no alpha                     |
-| Is animation                  | 1    | If true: expect ANMF                  |
-| Preview color                 | 12   | RGB444                                |
-| Quality hint                  | 4    | Compression rate estimate             |
-| Has preview                   | 1    | If true: preview chunk                |
-| Has ICC profile               | 1    | If true: ICC chunk                    |
-| Has XMP and/or EXIF           | 1    | If true: metadata tag                 |
-| Default transfer function     | 1    | If false: read custom                 |
-| Tile shape                    | 2    | 256x256, 512x512 etc.                 |
-| Filler                        | 2    | Value 0x2                             |
-| \[Loop forever\]              | 1    | For animation only                    |
-| \[Custom background color\]   | 1    | For animation only                    |
-| \[\[Background color\]\]      | 38   | For animation and custom bg only      |
-| \[\[Filler\]\]                | 6    | For animation and not custom bg only  |
-| \[Transfer function\]         | 4    | If not default transfer func          |
-| \[Filler\]                    | 4    | Value 0x0                             |
+| Value                        | Bits |                                        |
+|------------------------------|------|----------------------------------------|
+| Width                        | 14   | In \[1:16384\]                         |
+| Height                       | 14   | In \[1:16384\]                         |
+| Orientation                  | 3    | 0°, 90°, 180°, 270° + |, -, /, \ flips |
+| Is opaque                    | 1    | If true: no alpha                      |
+| Is animation                 | 1    | If true: expect ANMF                   |
+| Preview color                | 12   | RGB444                                 |
+| Quality hint                 | 4    | Compression rate estimate              |
+| Has preview                  | 1    | If true: preview chunk                 |
+| Has ICC profile              | 1    | If true: ICC chunk                     |
+| Has XMP and/or EXIF          | 1    | If true: metadata tag                  |
+| Default transfer function    | 1    | If false: read custom                  |
+| Tile shape                   | 2    | 256x256, 512x512 etc.                  |
+| Filler                       | 1    | Value 0x1                              |
+| \[Loop forever\]             | 1    | For animation only                     |
+| \[Custom background color\]  | 1    | For animation only                     |
+| \[\[Background color\]\]     | 38   | For animation and custom bg only       |
+| \[\[Filler\]\]               | 6    | For animation and not custom bg only   |
+| \[Transfer function\]        | 4    | If not default transfer func           |
+| \[Filler\]                   | 4    | Value 0x0                              |
 
 ## Preview
 

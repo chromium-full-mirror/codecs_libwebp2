@@ -62,6 +62,7 @@ struct Params {
   int print_distortion = -1;  // -1=off, >=0 -> (int)MetricType
   bool print_summary = false;
   bool no_metadata = false;
+  WP2::Metadata forced_metadata;
   int bit_trace = 0;  // 0=none, 1=trace in bits, 2=trace in bytes
   uint32_t bit_trace_level = 0;
   bool show_histograms = false;  // show symbol histograms
@@ -120,6 +121,8 @@ void HelpLong() {
           "number of clockwise rotations by 90 degrees during decoding");
   opt.Add("-tf <int>", "transfer function");
   opt.Add("-nometadata", "ignore source metadata");
+  opt.Add("-metadata [dst] file", "force metadata with content of 'file'. "
+          "'dst' is one of iccp, exif or xmp\n");
   opt.Add("-crop <x> <y> <w> <h>", "crop picture with the given rectangle");
   opt.Add("-segments <int>", "number of segments");
   opt.Add("-segment_mode <mode>",
@@ -266,8 +269,23 @@ WP2_NO_DISCARD WP2Status GetFilesToEncode(
 WP2_NO_DISCARD
 WP2Status ApplyModifications(const char* const file, const Params& params,
                              WP2::ArgbBuffer* const buffer,
-                             WP2::Metadata* const metadata) {
-  if (params.no_metadata && metadata != nullptr) metadata->Clear();
+                             bool is_first_frame) {
+  if (params.no_metadata || !is_first_frame) buffer->metadata_.Clear();
+  const auto& metadata = params.forced_metadata;
+  if (is_first_frame && !metadata.IsEmpty()) {
+    if (!metadata.iccp.IsEmpty()) {
+      WP2_CHECK_STATUS(buffer->metadata_.iccp.CopyFrom(
+          metadata.iccp.bytes, metadata.iccp.size));
+    }
+    if (!metadata.xmp.IsEmpty()) {
+      WP2_CHECK_STATUS(buffer->metadata_.xmp.CopyFrom(
+          metadata.xmp.bytes, metadata.xmp.size));
+    }
+    if (!metadata.exif.IsEmpty()) {
+      WP2_CHECK_STATUS(buffer->metadata_.exif.CopyFrom(
+          metadata.exif.bytes, metadata.exif.size));
+    }
+  }
   if (params.crop) {
     CHECK_STATUS(buffer->SetView(*buffer, params.crop_area),
                  "Error! Cropping operation of '%s' failed.", file);
@@ -285,6 +303,7 @@ WP2Status CompressAnimation(const WP2::FileList& frames,
                             WP2::Writer* const writer) {
   assert(frames.size() == frame_durations.size());
   WP2::AnimationEncoder animation_encoder;
+  WP2::Metadata metadata;
 
   // Read and add all frames.
   double start = GetStopwatchTime();
@@ -296,13 +315,17 @@ WP2Status CompressAnimation(const WP2::FileList& frames,
     CHECK_STATUS(WP2::ReadImage(data.bytes, data.size, rgb_buffer,
                                 WP2::FileFormat::AUTO, params.log_level),
                  "Error! Cannot read input file '%s'", file_path);
-    WP2_CHECK_STATUS(ApplyModifications(file_path, params, rgb_buffer,
-                                        &rgb_buffer->metadata_));
+    if (i > 0 && !rgb_buffer->metadata_.IsEmpty()) {
+      fprintf(stderr, "Warning: metadata from frame #%u will be ignored!\n",
+              (uint32_t)(i + 1));
+    }
+    WP2_CHECK_STATUS(ApplyModifications(file_path, params, rgb_buffer, i == 0));
+    if (i == 0) swap(metadata, rgb_buffer->metadata_);  // save for later call
 
     if (refs != nullptr) {
       refs->emplace_back(rgb_buffer->format());
-      CHECK_STATUS(RotateBuffer(params.config.decoding_orientation,
-                                *rgb_buffer, &refs->back()),
+      CHECK_STATUS(OrientateBuffer(params.config.decoding_orientation,
+                                   *rgb_buffer, &refs->back()),
                    "Error! Image copy failed.");
     }
 
@@ -316,10 +339,9 @@ WP2Status CompressAnimation(const WP2::FileList& frames,
 
   // Encode animation.
   start = GetStopwatchTime();
-  // TODO(yguyon): Warn that no metadata is copied over when compressing
-  //               several still images into an animation with cwp2
   CHECK_STATUS(
-      animation_encoder.Encode(writer, params.config, params.loop_forever),
+      animation_encoder.Encode(writer, params.config, params.loop_forever,
+                               metadata),
       "Error! Cannot encode animation as WP2");
   if (params.log_level >= WP2::LogLevel::VERBOSE) {
     const double encode_time = GetStopwatchTime() - start;
@@ -352,14 +374,23 @@ WP2Status CompressImage(const char* const file_path,
     CHECK_STATUS(image_reader.ReadFrame(&is_last_frame, &duration_ms),
                  "Error! Cannot read input '%s'", file_path);
     CHECK_STATUS(frame.SetView(*buffer), "Error! Cannot set view.");
-    WP2_CHECK_STATUS(ApplyModifications(file_path, params, &frame,
-                                        &buffer->metadata_));
+    if (i == 0) {
+      swap(frame.metadata_, buffer->metadata_);
+      buffer->metadata_.Clear();
+    } else {
+      if (!buffer->metadata_.IsEmpty()) {
+        fprintf(stderr, "Warning: metadata from frame #%u will be ignored!\n",
+                i + 1);
+        buffer->metadata_.Clear();
+      }
+    }
+    WP2_CHECK_STATUS(ApplyModifications(file_path, params, &frame, i == 0));
 
     if (refs != nullptr) {
       refs->emplace_back(frame.format());
-      CHECK_STATUS(RotateBuffer(params.config.decoding_orientation,
-                                frame, &refs->back()),
-                  "Error! Image copy failed.");
+      CHECK_STATUS(OrientateBuffer(params.config.decoding_orientation, frame,
+                                   &refs->back()),
+                   "Error! Image copy failed.");
     }
 
     // Infinite duration means it's a still image.
@@ -453,6 +484,12 @@ WP2Status SaveImage(const WP2::MemoryWriter& memory_writer,
 
 }  // namespace
 
+#define NEED_ARGS(nb) do {                                          \
+  CHECK_TRUE(c + (nb) < argc,                                       \
+             "Expected at least %d arguments after option %s!",     \
+             (nb), argv[c]);                                        \
+} while (false)
+
 int main(int argc, char* argv[]) {
   CHECK_TRUE(WP2CheckVersion(), "Error! Library version mismatch!");
 
@@ -479,11 +516,13 @@ int main(int argc, char* argv[]) {
     if (!strcmp(argv[c], "-h") || !strcmp(argv[c], "-help")) {
       HelpLong();
       return 0;
-    } else if (!strcmp(argv[c], "-o") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-o")) {
+      NEED_ARGS(1);
       CHECK_TRUE(out_path.empty() && !inplace_output,
                  "Error! Output was already specified.");
       out_path = argv[++c];
-    } else if (!strcmp(argv[c], "-d") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-d")) {
+      NEED_ARGS(1);
       decoded_file = argv[++c];
     } else if (!strcmp(argv[c], "-r")) {
       recursive_input = true;
@@ -511,29 +550,37 @@ int main(int argc, char* argv[]) {
       }
     } else if (!strcmp(argv[c], "-histos")) {
       params.show_histograms = true;
-    } else if ((!strcmp(argv[c], "-z") || !strcmp(argv[c], "-effort")) &&
-               c + 1 < argc) {
+    } else if ((!strcmp(argv[c], "-z") || !strcmp(argv[c], "-effort"))) {
+      NEED_ARGS(1);
       params.config.effort = ExUtilGetInt(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-tile_shape") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-tile_shape")) {
+      NEED_ARGS(1);
       params.config.tile_shape =
           (WP2::TileShape)ExUtilGetInt(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-q") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-q")) {
+      NEED_ARGS(1);
       params.config.quality = ExUtilGetFloat(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-quants") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-quants")) {
+      NEED_ARGS(1);
       ExUtilGetFloats(argv[++c],
                       params.config.segment_factors, WP2::kMaxNumSegments,
                       &parse_error);
-    } else if (!strcmp(argv[c], "-alpha_q") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-alpha_q")) {
+      NEED_ARGS(1);
       params.config.alpha_quality = ExUtilGetFloat(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-csp") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-csp")) {
+      NEED_ARGS(1);
       params.config.csp_type = (WP2::Csp)ExUtilGetInt(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-uv_mode") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-uv_mode")) {
+      NEED_ARGS(1);
       params.config.uv_mode =
           (WP2::EncoderConfig::UVMode)ExUtilGetInt(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-pm") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-pm")) {
+      NEED_ARGS(1);
       params.config.partition_method =
           (WP2::PartitionMethod)ExUtilGetInt(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-ps") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-ps")) {
+      NEED_ARGS(1);
       params.config.partition_set =
           (WP2::PartitionSet)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-partition_snapping")) {
@@ -543,35 +590,43 @@ int main(int argc, char* argv[]) {
     } else if (!strcmp(argv[c], "-delta_palette")) {
       params.config.use_delta_palette = true;
       params.config.quality = 100;  // delta-palette is for lossless only
-    } else if (!strcmp(argv[c], "-transfer") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-transfer")) {
+      NEED_ARGS(1);
       const int tfunction = ExUtilGetInt(argv[++c], &parse_error);
       params.config.transfer_function = (WP2::TransferFunction)tfunction;
     } else if (!strcmp(argv[c], "-create_preview")) {
       params.config.create_preview = true;
-    } else if (!strcmp(argv[c], "-preview") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-preview")) {
+      NEED_ARGS(1);
       preview_file = argv[++c];
-    } else if (!strcmp(argv[c], "-target_size") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-target_size")) {
+      NEED_ARGS(1);
       params.config.target_size = ExUtilGetInt(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-target_psnr") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-target_psnr")) {
+      NEED_ARGS(1);
       params.config.target_psnr = ExUtilGetFloat(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-orientation") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-orientation")) {
+      NEED_ARGS(1);
       params.config.decoding_orientation =
-          (WP2::Orientation)(ExUtilGetUInt(argv[++c], &parse_error) & 3);
+          (WP2::Orientation)(ExUtilGetUInt(argv[++c], &parse_error) & 7);
     } else if (!strcmp(argv[c], "-no_loop")) {
       params.loop_forever = false;
       params.loop_forever_was_specified = true;
     } else if (!strcmp(argv[c], "-loop_forever")) {
       params.loop_forever = true;
       params.loop_forever_was_specified = true;
-    } else if (!strcmp(argv[c], "-crop") && c + 4 < argc) {
+    } else if (!strcmp(argv[c], "-crop")) {
+      NEED_ARGS(4);
       params.crop = true;
       params.crop_area.x = (uint32_t)ExUtilGetInt(argv[++c], &parse_error);
       params.crop_area.y = (uint32_t)ExUtilGetInt(argv[++c], &parse_error);
       params.crop_area.width = (uint32_t)ExUtilGetInt(argv[++c], &parse_error);
       params.crop_area.height = (uint32_t)ExUtilGetInt(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-segments") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-segments")) {
+      NEED_ARGS(1);
       params.config.segments = ExUtilGetInt(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-segment_mode") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-segment_mode")) {
+      NEED_ARGS(1);
       ++c;
       if (!strcmp(argv[c], "auto")) {
         params.config.segment_id_mode = WP2::EncoderConfig::SEGMENT_ID_AUTO;
@@ -584,9 +639,11 @@ int main(int argc, char* argv[]) {
       } else {
         CHECK_TRUE(false, "unsupported segment mode '%s'", argv[c]);
       }
-    } else if (!strcmp(argv[c], "-sns") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-sns")) {
+      NEED_ARGS(1);
       params.config.sns = ExUtilGetFloat(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-diffusion") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-diffusion")) {
+      NEED_ARGS(1);
       params.config.error_diffusion = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-rnd_mtx")) {
       params.config.use_random_matrix = true;
@@ -609,19 +666,34 @@ int main(int argc, char* argv[]) {
       dec_config.enable_deblocking_filter = false;
       dec_config.enable_directional_filter = false;
       dec_config.enable_restoration_filter = false;
-    } else if (!strcmp(argv[c], "-pass") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-pass")) {
+      NEED_ARGS(1);
       params.config.pass = ExUtilGetInt(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-pre") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-pre")) {
+      NEED_ARGS(1);
       params.config.preprocessing = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-nometadata")) {
       params.no_metadata = true;
+    } else if (!strcmp(argv[c], "-metadata")) {
+      NEED_ARGS(2);
+      WP2::Data* dst = nullptr;
+      ++c;
+      if (!strcmp(argv[c], "iccp")) dst = &params.forced_metadata.iccp;
+      if (!strcmp(argv[c], "xmp"))  dst = &params.forced_metadata.xmp;
+      if (!strcmp(argv[c], "exif")) dst = &params.forced_metadata.exif;
+      CHECK_TRUE(dst != nullptr,
+                 "Error! unknown metadata type '%s'.\n", argv[c]);
+      ++c;
+      CHECK_STATUS(IoUtilReadFile(argv[c], dst),
+                   "Error! Can't read data for '%s' metadata.", argv[c - 1]);
     } else if (!strcmp(argv[c], "-progress")) {
       report_progress = true;
     } else if (!strcmp(argv[c], "-quiet")) {
       params.log_level = WP2::LogLevel::QUIET;
     } else if (!strcmp(argv[c], "-summary")) {
       params.print_summary = true;
-    } else if (!strcmp(argv[c], "-hint") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-hint")) {
+      NEED_ARGS(1);
       ++c;
       if (!strcmp(argv[c], "default")) {
         params.pic_hint = WP2::HINT_NONE;
@@ -636,12 +708,12 @@ int main(int argc, char* argv[]) {
       } else if (!strcmp(argv[c], "text")) {
         params.pic_hint = WP2::HINT_TEXT;
       } else {
-        fprintf(stderr, "Error! Unrecognized picture hint: %s\n", argv[c]);
-        return 1;
+        CHECK_TRUE(false, "Error! Unrecognized picture hint: %s\n", argv[c]);
       }
     } else if (!strcmp(argv[c], "-v")) {
       params.log_level = WP2::LogLevel::VERBOSE;
-    } else if (!strcmp(argv[c], "-neural") && c + 1 < argc) {
+    } else if (!strcmp(argv[c], "-neural")) {
+      NEED_ARGS(1);
       // The -neural argument takes a path to a directory that holds enc/decoder
       // graphdefs in subdirectories, one for each quality level. Specifically,
       // the full path to a graphdef is formed as:
@@ -662,7 +734,8 @@ int main(int argc, char* argv[]) {
       CHECK_TRUE(in_paths.empty(),
                  "Error! Can't specify another input when -f is specified.");
       while (c + 2 < argc) {  // Parse as long as it's not another option.
-        if (!strcmp(argv[c + 1], "--") && c + 3 < argc) {
+        if (!strcmp(argv[c + 1], "--")) {
+          NEED_ARGS(3);
           ++c;
         } else if (argv[c + 1][0] == '-') {
           break;

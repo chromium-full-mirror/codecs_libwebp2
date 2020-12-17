@@ -62,7 +62,7 @@ class Encoder {
   // whether pixels should be encoded premultiplied with the alpha value
   bool use_premultiplied_ = true;
 
-  uint16_t* argb_;                       // Transformed argb image data.
+  int16_t* argb_;                        // Transformed argb image data.
   EncoderARGBContent argb_content_;      // Content type of the argb buffer.
   int16_t* argb_scratch_;                // Scratch memory for argb rows
                                          // (used for prediction).
@@ -152,7 +152,7 @@ WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
 
 WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
                               WP2SampleFormat format, uint32_t effort,
-                              uint16_t* const argb, int16_t* image);
+                              int16_t* const argb, int16_t* image);
 
 //------------------------------------------------------------------------------
 
@@ -181,7 +181,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
 //------------------------------------------------------------------------------
 // Group 4.
 
-WP2Status Group4Encode(const uint16_t* const argb, uint32_t width,
+WP2Status Group4Encode(const int16_t* const argb, uint32_t width,
                        uint32_t height, uint32_t num_colors,
                        bool use_move_to_front,
                        const WP2::ProgressRange& progress,

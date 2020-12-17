@@ -118,7 +118,7 @@ TEST(PreviewTest, NoOptim) {
 
   MemoryWriter writer;
   PreviewConfig config;
-  config.num_vertices = 100;
+  config.num_vertices = 10;
   config.num_colors = 14;
   config.grid_size = 32;
   config.grid_density = 1.0;
@@ -132,7 +132,7 @@ TEST(PreviewTest, NoOptim) {
   ASSERT_WP2_OK(
       DecodePreview(writer.mem_, writer.size_, &decompressed_preview));
 
-  ASSERT_TRUE(testing::Compare(original_image, decompressed_preview, file_name,
+  EXPECT_TRUE(testing::Compare(original_image, decompressed_preview, file_name,
                                kMinExpectedSimilarity));
 
   ShowOutput(file_name, original_image, decompressed_preview);
@@ -152,13 +152,13 @@ TEST(PreviewTest, EncodeDecode) {
   config.effort = 2;
   config.create_preview = true;
   MemoryWriter memory_writer;
-  EXPECT_WP2_OK(Encode(original_image, &memory_writer, config));
+  ASSERT_WP2_OK(Encode(original_image, &memory_writer, config));
 
   ArgbBuffer decompressed_preview(original_image.format());
   ASSERT_WP2_OK(ExtractPreview(memory_writer.mem_, memory_writer.size_,
                                &decompressed_preview));
 
-  ASSERT_TRUE(testing::Compare(original_image, decompressed_preview, file_name,
+  EXPECT_TRUE(testing::Compare(original_image, decompressed_preview, file_name,
                                kMinExpectedSimilarity));
 
   ShowOutput(file_name, original_image, decompressed_preview);

@@ -271,6 +271,7 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/symbols_dec.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/icc_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/incr/decoder_api.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/incr/decoder_context.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/incr/decoder_context.h

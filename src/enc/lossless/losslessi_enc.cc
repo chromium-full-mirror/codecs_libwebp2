@@ -266,7 +266,7 @@ WP2Status EncodeImageNoClusters(WP2::ANSEncBase* const enc,
 }
 
 static WP2Status EncodeImageInternal(
-    const uint16_t* const argb_in, const CrunchConfig& config, uint32_t width,
+    const int16_t* const argb, const CrunchConfig& config, uint32_t width,
     uint32_t height, uint32_t histogram_bits, uint32_t cache_bits_max,
     uint32_t effort, const ProgressRange& progress, WP2::ANSEnc* const enc,
     WP2::ANSDictionaries* const dicts, HashChain* const hash_chain,
@@ -291,12 +291,6 @@ static WP2Status EncodeImageInternal(
   // palette analysis.
   LosslessSymbolsInfo symbols_info_init;
   WP2_CHECK_STATUS(symbols_info_init.CopyFrom(*symbols_info_best));
-
-  // Convert input to int16_t.
-  WP2::Vector_s16 argb_vec;
-  WP2_CHECK_ALLOC_OK(argb_vec.resize(4 * width * height));
-  int16_t* const argb = argb_vec.data();
-  std::copy(argb_in, argb_in + 4 * width * height, argb);
 
   // Calculate backward references from ARGB image.
   WP2_CHECK_STATUS(enc_init.Clone(*enc));
@@ -436,8 +430,9 @@ static WP2Status EncodeImageInternal(
 
 static void ApplySubtractGreen(Encoder* const encoder, uint32_t width,
                                uint32_t height, WP2::ANSEnc* const enc) {
-  SubtractGreenFromBlueAndRed(
-      encoder->argb_, encoder->symbols_info_.ChannelBits(), width * height);
+  SubtractGreenFromBlueAndRed((uint16_t*)encoder->argb_,
+                              encoder->symbols_info_.ChannelBits(),
+                              width * height);
 }
 
 // Finds the best spatial predictor for each prediction block (of size
@@ -454,7 +449,7 @@ static WP2Status ApplyPredictFilter(const Encoder* const encoder,
 
   WP2_CHECK_STATUS(ResidualImage(
       width, height, pred_bits, encoder->symbols_info_.ChannelBits(), effort,
-      (int16_t*)encoder->argb_, encoder->has_alpha_, encoder->argb_scratch_,
+      encoder->argb_, encoder->has_alpha_, encoder->argb_scratch_,
       encoder->transform_data_));
   const WP2::ANSDebugPrefix prefix(enc, "predictor");
   enc->PutRange(pred_bits, kTransformBitsMin, kTransformBitsMax,
@@ -533,7 +528,7 @@ WP2Status Encoder::AllocateTransformBuffer(const CrunchConfig& config,
   } else {
     mem = transform_mem_.data();
   }
-  argb_ = (uint16_t*)mem;
+  argb_ = mem;
   mem += 4 * image_size;
   argb_scratch_ = mem;
   mem += 4 * argb_scratch_size;
@@ -553,7 +548,7 @@ static WP2Status MakeInputImageCopy(const CrunchConfig& config,
   if (encoder->argb_content_ == kEncoderARGB) return WP2_STATUS_OK;
   assert(WP2FormatBpc(pic.format()) == 1 || WP2FormatBpc(pic.format()) == 2);
   for (uint32_t y = 0; y < height; ++y) {
-    uint16_t* const dst_row = &encoder->argb_[4 * y * width];
+    int16_t* const dst_row = &encoder->argb_[4 * y * width];
     if (WP2FormatBpc(pic.format()) == 1) {
       const uint8_t* const src_row = pic.GetRow8(y);
       if (WP2IsPremultiplied(pic.format()) || !encoder->has_alpha_) {
@@ -656,7 +651,8 @@ static WP2Status ApplyAndWriteTransforms(
         encoder->palette_.Write(group4_progress, enc, dicts, encoder));
     WP2_CHECK_STATUS(MapImageFromPalette(config, encoder));
     // Green channel of first pixel.
-    const uint16_t first_color = encoder->argb_[2];
+    const int16_t first_color = encoder->argb_[2];
+    assert(first_color >= 0);
     enc->PutRValue(first_color, encoder->palette_.Size(), "first_color");
     if (encoder->palette_.Size() > 3) {
       // MoveToFront is only relevant when there are more than 3 colors. With

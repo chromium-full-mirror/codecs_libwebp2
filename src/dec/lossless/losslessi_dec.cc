@@ -171,7 +171,7 @@ static inline int GetMetaIndex(const WP2::Vector_s16& image, uint32_t width,
 // Main loop, with custom row-processing function
 
 WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows, uint32_t num_bits,
-                                          const int16_t* const rows) {
+                                          const int16_t* rows) {
   uint32_t n = next_transform_;
   const uint32_t cache_pixs = tile_->rect.width * num_rows;
 
@@ -184,13 +184,7 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows, uint32_t num_bits,
   const uint32_t start_row = last_row_;
   const uint32_t end_row = start_row + num_rows;
 
-  // TODO(vrabaud) remove when switching to int16_t.
-  WP2::Vector_u16 data_vec;
-  WP2_CHECK_ALLOC_OK(data_vec.resize(4 * cache_pixs));
-  std::copy(rows, rows + 4 * cache_pixs, data_vec.data());
-
-  const uint16_t* rows_in = data_vec.data();
-  uint16_t* const rows_out = argb_cache_;
+  int16_t* const rows_out = (int16_t*)argb_cache_;
   // Inverse transforms.
   while (n-- > 0) {
     const Transform& transform = transforms_[n];
@@ -198,15 +192,16 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows, uint32_t num_bits,
         transform.type_ == WP2L::GROUP4) {
       // Check that all color map indices are valid here rather than in dsp.
       // TODO(yguyon): Remove pessimization.
-      const uint32_t color_map_size = (uint32_t)transform.data_.size() / 4;
-      const uint16_t* const r_end = rows_in + 4 * num_rows * transform.width_;
-      for (const uint16_t* r = rows_in; r < r_end; r += 4) {
-        WP2_CHECK_OK(r[2] < color_map_size, WP2_STATUS_BITSTREAM_ERROR);
+      const int16_t color_map_size = (int16_t)transform.data_.size() / 4;
+      const int16_t* const r_end = rows + 4 * num_rows * transform.width_;
+      for (const int16_t* r = rows; r < r_end; r += 4) {
+        WP2_CHECK_OK(r[2] >= 0 && r[2] < color_map_size,
+                     WP2_STATUS_BITSTREAM_ERROR);
       }
     }
-    InverseTransform(&transform, start_row, end_row, num_bits, rows_in,
+    InverseTransform(&transform, start_row, end_row, num_bits, rows,
                      gparams_->has_alpha_, rows_out);
-    rows_in = rows_out;
+    rows = rows_out;
   }
   return WP2_STATUS_OK;
 }

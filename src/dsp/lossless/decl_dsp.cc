@@ -261,24 +261,23 @@ static void ColorIndexInverseTransform_C(const Transform* const transform,
 
 void InverseTransform(const Transform* const transform, uint32_t row_start,
                       uint32_t row_end, uint32_t channel_bits,
-                      const uint16_t* const in, bool has_alpha,
-                      uint16_t* const out) {
+                      const int16_t* const in, bool has_alpha,
+                      int16_t* const out) {
   const uint32_t width = transform->width_;
   assert(row_start < row_end);
   assert(row_end <= transform->height_);
 
   switch (transform->type_) {
     case SUBTRACT_GREEN:
-      AddGreenToBlueAndRed(in, (row_end - row_start) * width, channel_bits,
-                           out);
+      AddGreenToBlueAndRed((uint16_t*)in, (row_end - row_start) * width,
+                           channel_bits, (uint16_t*)out);
       break;
     case PREDICTOR_TRANSFORM: {
       const int16_t min_value = 0;
       const int16_t max_value = (1 << channel_bits) - 1;
       const int16_t mask = (1 << channel_bits) - 1;
       PredictorInverseTransform_C(transform, row_start, row_end, min_value,
-                                  max_value, mask, (int16_t*)in, has_alpha,
-                                  (int16_t*)out);
+                                  max_value, mask, in, has_alpha, out);
       if (row_end != transform->height_) {
         // The last predicted row in this iteration will be the top-pred row
         // for the first row in next iteration.
@@ -289,11 +288,12 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
     }
     case CROSS_COLOR_TRANSFORM:
       ColorSpaceInverseTransform_C(transform, row_start, row_end, channel_bits,
-                                   in, out);
+                                   (uint16_t*)in, (uint16_t*)out);
       break;
     case GROUP4:
     case COLOR_INDEXING_TRANSFORM:
-      ColorIndexInverseTransform_C(transform, row_start, row_end, in, out);
+      ColorIndexInverseTransform_C(transform, row_start, row_end, (uint16_t*)in,
+                                   (uint16_t*)out);
       break;
     default:
       assert(false);

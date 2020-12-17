@@ -32,8 +32,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   WP2::EncoderConfig config;
   params.ExtractConfig(&config);
 
-  // Make sure the encoding stops before the fuzzer timeout (600 seconds).
-  WP2::testing::ProgressTimeout progress(/*max_seconds=*/120.);
+  // Make sure the encoding stops before the fuzzer timeout.
+  WP2::testing::ProgressTimeout progress(WP2::testing::kEncodingMaxNumSeconds);
   config.progress_hook = &progress;
   progress.fail_at_ = params.ExtractBool() ? params.ExtractDouble(0., 1.) : 2.;
 

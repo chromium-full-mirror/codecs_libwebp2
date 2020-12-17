@@ -197,7 +197,7 @@ void FuzzedParameters::ExtractConfig(EncoderConfig* const config) {
   config->alpha_quality = (float)ExtractDouble(0., kMaxQuality);
   config->effort = (int)ExtractUInt32(9);
 
-  config->decoding_orientation = (Orientation)ExtractUInt32(3);
+  config->decoding_orientation = (Orientation)ExtractUInt32(7);
   config->create_preview = ExtractBool();
   // 'preview' and 'preview_size' are not fuzzed.
 

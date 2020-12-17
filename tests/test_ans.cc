@@ -1076,7 +1076,7 @@ TEST_P(TestANSAdaptiveSymbol, VsDictionary) {
 
   // tolerance of ASym vs Dictionary
   const float kTolerance[16] = {
-      350.f, 150.f, 75.f, 50.f, 15.f, 7.2f, 3.5f, 2.8f, 1.9f, 1.9f,
+      350.f, 150.f, 100.f, 50.f, 15.f, 7.2f, 3.5f, 2.8f, 2.5f, 2.2f,
       // For some reasons, starting at speed=10, it becomes more unstable.
       6.0f, 20.0f, 50.0f, 70.f, 50.f,
       // Speed=15 is really non-adaptive, though, with low error.

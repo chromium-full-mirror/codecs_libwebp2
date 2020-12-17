@@ -57,7 +57,7 @@ struct EncoderConfig {
                                 // Range: [0=faster-bigger .. 9=slower-better]
 
   // Side parameters:
-  // Set whether the image will be rotated during decoding.
+  // Set whether the image will be rotated or mirrored during decoding.
   Orientation decoding_orientation = Orientation::kOriginal;
   // Add a heavily compressed preview to be decoded and displayed before final
   // pixels (small size overhead up to kMaxPreviewSize).

@@ -454,6 +454,9 @@ class BinMerger {
         bin_info[bin_id].first = size++;
       } else if (effort_ == 0) {
         HistogramAdd(*histograms[idx], *histograms[first], histograms[first]);
+        (*segments)[histograms[first]->id_] =
+            (*segments)[histograms[idx]->id_] =
+                std::min(histograms[first]->id_, histograms[idx]->id_);
       } else {
         // try to merge #idx into #first (both share the same bin_id)
         const double bit_cost = histograms[idx]->bit_cost_;

@@ -175,9 +175,9 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config) {
                                    float expected_distortion, MetricType metric,
                                    Orientation decoding_orientation) {
   if (src.width() !=
-          RotateWidth(decoding_orientation, dec.width(), dec.height()) ||
+          OrientateWidth(decoding_orientation, dec.width(), dec.height()) ||
       src.height() !=
-          RotateHeight(decoding_orientation, dec.width(), dec.height())) {
+          OrientateHeight(decoding_orientation, dec.width(), dec.height())) {
     return ::testing::AssertionFailure()
            << "Original image dimensions " << src.width() << "x" << src.height()
            << " are different than the decompressed ones " << dec.width() << "x"
@@ -204,8 +204,8 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config) {
 
   WP2::ArgbBuffer dec_oriented(dec_converted.format());
   if (decoding_orientation != WP2::Orientation::kOriginal) {
-    if (WP2::RotateBuffer(WP2::GetInverseOrientation(decoding_orientation), dec,
-                          &dec_oriented) != WP2_STATUS_OK) {
+    if (WP2::OrientateBuffer(WP2::GetInverseOrientation(decoding_orientation),
+                             dec, &dec_oriented) != WP2_STATUS_OK) {
       return ::testing::AssertionFailure() << "Failed to rotate buffer";
     }
   } else {

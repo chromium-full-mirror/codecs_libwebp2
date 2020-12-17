@@ -47,8 +47,8 @@ int TestImageEncConfig(const ArgbBuffer& original, const EncoderConfig& config,
     abort();
   }
   if (expected_distortion > 0.f) {
-    if (RotateBuffer(GetInverseOrientation(config.decoding_orientation),
-                     &decoded) != WP2_STATUS_OK) {
+    if (OrientateBuffer(GetInverseOrientation(config.decoding_orientation),
+                        &decoded) != WP2_STATUS_OK) {
       abort();
     }
     // Tiny images are not interesting to compare.

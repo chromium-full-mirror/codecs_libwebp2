@@ -28,7 +28,7 @@ namespace {
 
 //------------------------------------------------------------------------------
 
-TEST(OrientationTest, ArgbBuffer) {
+TEST(OrientationTest, ArgbBufferRotation) {
   const std::string& file_name = "source1_64x48.png";
   ArgbBuffer original;
   ArgbBuffer oriented;
@@ -36,52 +36,107 @@ TEST(OrientationTest, ArgbBuffer) {
       ReadImage(testing::GetTestDataPath(file_name).c_str(), &original));
   ASSERT_WP2_OK(oriented.CopyFrom(original));
 
-  ASSERT_WP2_OK(RotateBuffer(Orientation::kOriginal, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kOriginal, &oriented));
   EXPECT_TRUE(testing::Compare(original, oriented, file_name));
 
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k90Clockwise, &oriented));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k270Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k90Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k270Clockwise, &oriented));
   EXPECT_TRUE(testing::Compare(original, oriented, file_name));
 
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k180, &oriented));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k270Clockwise, &oriented));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k270Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k180, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k270Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k270Clockwise, &oriented));
   EXPECT_TRUE(testing::Compare(original, oriented, file_name));
 
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k90Clockwise, &oriented));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k180, &oriented));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k90Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k90Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k180, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k90Clockwise, &oriented));
   EXPECT_TRUE(testing::Compare(original, oriented, file_name));
 
   // Make sure a rotation happens.
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k90Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k90Clockwise, &oriented));
   EXPECT_FALSE(testing::Compare(original, oriented, file_name));
 
   ASSERT_WP2_OK(oriented.CopyFrom(original));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k180, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k180, &oriented));
   EXPECT_FALSE(testing::Compare(original, oriented, file_name));
 
   ASSERT_WP2_OK(oriented.CopyFrom(original));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k270Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k270Clockwise, &oriented));
   EXPECT_FALSE(testing::Compare(original, oriented, file_name));
 
   ArgbBuffer view;
   ASSERT_WP2_OK(view.SetView(oriented));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::kOriginal, &view));
-  ASSERT_NE(RotateBuffer(Orientation::k90Clockwise, &view), WP2_STATUS_OK);
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k180, &view));
-  ASSERT_NE(RotateBuffer(Orientation::k270Clockwise, &view), WP2_STATUS_OK);
+  // Can only orientate a view if the dimensions match.
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kOriginal, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::k90Clockwise, &view), WP2_STATUS_OK);
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k180, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::k270Clockwise, &view), WP2_STATUS_OK);
 
-  ASSERT_NE(RotateBuffer(Orientation::kOriginal, original, &view),
+  // Can only orientate into a view if the dimensions match.
+  ASSERT_NE(OrientateBuffer(Orientation::kOriginal, original, &view),
             WP2_STATUS_OK);
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k90Clockwise, original, &view));
-  ASSERT_NE(RotateBuffer(Orientation::k180, original, &view), WP2_STATUS_OK);
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k270Clockwise, original, &view));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k90Clockwise, original, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::k180, original, &view), WP2_STATUS_OK);
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k270Clockwise, original, &view));
 }
 
 //------------------------------------------------------------------------------
 
-TEST(OrientationTest, YUVPlane) {
+TEST(OrientationTest, ArgbBufferFlip) {
+  const std::string& file_name = "source1_64x48.png";
+  ArgbBuffer original;
+  ArgbBuffer oriented;
+  ASSERT_WP2_OK(
+      ReadImage(testing::GetTestDataPath(file_name).c_str(), &original));
+  ASSERT_WP2_OK(oriented.CopyFrom(original));
+
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipBotLeftToTopRgt, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipTopLeftToBotRgt, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipLeftToRight, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipTopToBottom, &oriented));
+  EXPECT_TRUE(testing::Compare(original, oriented, file_name));
+
+  // Make sure a flip happens.
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipLeftToRight, &oriented));
+  EXPECT_FALSE(testing::Compare(original, oriented, file_name));
+
+  ASSERT_WP2_OK(oriented.CopyFrom(original));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipBotLeftToTopRgt, &oriented));
+  EXPECT_FALSE(testing::Compare(original, oriented, file_name));
+
+  ASSERT_WP2_OK(oriented.CopyFrom(original));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipTopToBottom, &oriented));
+  EXPECT_FALSE(testing::Compare(original, oriented, file_name));
+
+  ASSERT_WP2_OK(oriented.CopyFrom(original));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipTopLeftToBotRgt, &oriented));
+  EXPECT_FALSE(testing::Compare(original, oriented, file_name));
+
+  ArgbBuffer view;
+  ASSERT_WP2_OK(view.SetView(oriented));
+  // Can only orientate a view if the dimensions match.
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipLeftToRight, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::kFlipBotLeftToTopRgt, &view),
+            WP2_STATUS_OK);
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipTopToBottom, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::kFlipTopLeftToBotRgt, &view),
+            WP2_STATUS_OK);
+
+  // Can only orientate into a view if the dimensions match.
+  ASSERT_NE(OrientateBuffer(Orientation::kFlipLeftToRight, original, &view),
+            WP2_STATUS_OK);
+  ASSERT_WP2_OK(
+      OrientateBuffer(Orientation::kFlipBotLeftToTopRgt, original, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::kFlipTopToBottom, original, &view),
+            WP2_STATUS_OK);
+  ASSERT_WP2_OK(
+      OrientateBuffer(Orientation::kFlipTopLeftToBotRgt, original, &view));
+}
+
+//------------------------------------------------------------------------------
+
+TEST(OrientationTest, YUVPlaneRotation) {
   const std::string& file_name = "source1_64x48.png";
   ArgbBuffer rgb;
   ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(), &rgb));
@@ -93,48 +148,108 @@ TEST(OrientationTest, YUVPlane) {
   YUVPlane oriented;
   ASSERT_WP2_OK(oriented.Copy(original, /*resize_if_needed=*/true));
 
-  ASSERT_WP2_OK(RotateBuffer(Orientation::kOriginal, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kOriginal, &oriented));
   EXPECT_TRUE(testing::Compare(original, oriented, bit_depth, file_name));
 
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k90Clockwise, &oriented));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k270Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k90Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k270Clockwise, &oriented));
   EXPECT_TRUE(testing::Compare(original, oriented, bit_depth, file_name));
 
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k180, &oriented));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k270Clockwise, &oriented));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k270Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k180, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k270Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k270Clockwise, &oriented));
   EXPECT_TRUE(testing::Compare(original, oriented, bit_depth, file_name));
 
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k90Clockwise, &oriented));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k180, &oriented));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k90Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k90Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k180, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k90Clockwise, &oriented));
   EXPECT_TRUE(testing::Compare(original, oriented, bit_depth, file_name));
 
   // Make sure a rotation happens.
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k90Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k90Clockwise, &oriented));
   EXPECT_FALSE(testing::Compare(original, oriented, bit_depth, file_name));
 
   ASSERT_WP2_OK(oriented.Copy(original, /*resize_if_needed=*/true));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k180, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k180, &oriented));
   EXPECT_FALSE(testing::Compare(original, oriented, bit_depth, file_name));
 
   ASSERT_WP2_OK(oriented.Copy(original, /*resize_if_needed=*/true));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k270Clockwise, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k270Clockwise, &oriented));
   EXPECT_FALSE(testing::Compare(original, oriented, bit_depth, file_name));
 
   YUVPlane view;
   ASSERT_WP2_OK(view.SetView(
       oriented, {0, 0, oriented.GetWidth(), oriented.GetHeight()}));
-  ASSERT_WP2_OK(RotateBuffer(Orientation::kOriginal, &view));
-  ASSERT_NE(RotateBuffer(Orientation::k90Clockwise, &view), WP2_STATUS_OK);
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k180, &view));
-  ASSERT_NE(RotateBuffer(Orientation::k270Clockwise, &view), WP2_STATUS_OK);
+  // Can only orientate a view if the dimensions match.
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kOriginal, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::k90Clockwise, &view), WP2_STATUS_OK);
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k180, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::k270Clockwise, &view), WP2_STATUS_OK);
 
-  ASSERT_NE(RotateBuffer(Orientation::kOriginal, original, &view),
+  // Can only orientate into a view if the dimensions match.
+  ASSERT_NE(OrientateBuffer(Orientation::kOriginal, original, &view),
             WP2_STATUS_OK);
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k90Clockwise, original, &view));
-  ASSERT_NE(RotateBuffer(Orientation::k180, original, &view), WP2_STATUS_OK);
-  ASSERT_WP2_OK(RotateBuffer(Orientation::k270Clockwise, original, &view));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k90Clockwise, original, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::k180, original, &view), WP2_STATUS_OK);
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::k270Clockwise, original, &view));
+}
+
+//------------------------------------------------------------------------------
+
+TEST(OrientationTest, YUVPlaneFlip) {
+  const std::string& file_name = "source1_64x48.png";
+  ArgbBuffer rgb;
+  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(), &rgb));
+  CSPTransform csp_transform;
+  const uint32_t bit_depth = csp_transform.GetYUVPrecisionBits() + 1;
+  YUVPlane original;
+  ASSERT_WP2_OK(original.Import(rgb, rgb.HasTransparency(), csp_transform,
+                                /*resize_if_needed=*/true));
+  YUVPlane oriented;
+  ASSERT_WP2_OK(oriented.Copy(original, /*resize_if_needed=*/true));
+
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipBotLeftToTopRgt, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipTopLeftToBotRgt, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipLeftToRight, &oriented));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipTopToBottom, &oriented));
+  EXPECT_TRUE(testing::Compare(original, oriented, bit_depth, file_name));
+
+  // Make sure a flip happens.
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipLeftToRight, &oriented));
+  EXPECT_FALSE(testing::Compare(original, oriented, bit_depth, file_name));
+
+  ASSERT_WP2_OK(oriented.Copy(original, /*resize_if_needed=*/true));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipBotLeftToTopRgt, &oriented));
+  EXPECT_FALSE(testing::Compare(original, oriented, bit_depth, file_name));
+
+  ASSERT_WP2_OK(oriented.Copy(original, /*resize_if_needed=*/true));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipTopToBottom, &oriented));
+  EXPECT_FALSE(testing::Compare(original, oriented, bit_depth, file_name));
+
+  ASSERT_WP2_OK(oriented.Copy(original, /*resize_if_needed=*/true));
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipTopLeftToBotRgt, &oriented));
+  EXPECT_FALSE(testing::Compare(original, oriented, bit_depth, file_name));
+
+  YUVPlane view;
+  ASSERT_WP2_OK(view.SetView(
+      oriented, {0, 0, oriented.GetWidth(), oriented.GetHeight()}));
+  // Can only orientate a view if the dimensions match.
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipLeftToRight, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::kFlipBotLeftToTopRgt, &view),
+            WP2_STATUS_OK);
+  ASSERT_WP2_OK(OrientateBuffer(Orientation::kFlipTopToBottom, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::kFlipTopLeftToBotRgt, &view),
+            WP2_STATUS_OK);
+
+  // Can only orientate into a view if the dimensions match.
+  ASSERT_NE(OrientateBuffer(Orientation::kFlipLeftToRight, original, &view),
+            WP2_STATUS_OK);
+  ASSERT_WP2_OK(
+      OrientateBuffer(Orientation::kFlipBotLeftToTopRgt, original, &view));
+  ASSERT_NE(OrientateBuffer(Orientation::kFlipTopToBottom, original, &view),
+            WP2_STATUS_OK);
+  ASSERT_WP2_OK(
+      OrientateBuffer(Orientation::kFlipTopLeftToBotRgt, original, &view));
 }
 
 //------------------------------------------------------------------------------
@@ -148,10 +263,12 @@ TEST(OrientationTest, EncodeDecode) {
   EncoderConfig config;
   for (Orientation orientation :
        {Orientation::kOriginal, Orientation::k90Clockwise, Orientation::k180,
-        Orientation::k270Clockwise}) {
+        Orientation::k270Clockwise, Orientation::kFlipLeftToRight,
+        Orientation::kFlipBotLeftToTopRgt, Orientation::kFlipTopToBottom,
+        Orientation::kFlipTopLeftToBotRgt}) {
     config.decoding_orientation = orientation;
 
-    for (float quality : {0.f, 50.f, 100.f}) {
+    for (float quality : {50.f, 100.f}) {
       config.quality = quality;
 
       MemoryWriter memory_writer;
@@ -159,7 +276,8 @@ TEST(OrientationTest, EncodeDecode) {
 
       ArgbBuffer decoded;
       EXPECT_WP2_OK(Decode(memory_writer.mem_, memory_writer.size_, &decoded));
-      ASSERT_WP2_OK(RotateBuffer(GetInverseOrientation(orientation), &decoded));
+      ASSERT_WP2_OK(
+          OrientateBuffer(GetInverseOrientation(orientation), &decoded));
       EXPECT_TRUE(testing::Compare(original, decoded, file_name,
                                    testing::GetExpectedDistortion(config)));
     }
@@ -178,7 +296,9 @@ TEST(OrientationTest, Incremental) {
   EncoderConfig config;
   for (Orientation orientation :
        {Orientation::kOriginal, Orientation::k90Clockwise, Orientation::k180,
-        Orientation::k270Clockwise}) {
+        Orientation::k270Clockwise, Orientation::kFlipLeftToRight,
+        Orientation::kFlipBotLeftToTopRgt, Orientation::kFlipTopToBottom,
+        Orientation::kFlipTopLeftToBotRgt}) {
     config.decoding_orientation = orientation;
 
     for (float quality : {25.f, 100.f}) {
@@ -238,7 +358,8 @@ TEST(OrientationTest, Incremental) {
       EXPECT_EQ(decoded_area.width, decoded.width());
       EXPECT_EQ(decoded_area.height, decoded.height());
 
-      ASSERT_WP2_OK(RotateBuffer(GetInverseOrientation(orientation), &decoded));
+      ASSERT_WP2_OK(
+          OrientateBuffer(GetInverseOrientation(orientation), &decoded));
       EXPECT_TRUE(testing::Compare(original, decoded, file_name,
                                    testing::GetExpectedDistortion(config)));
     }
@@ -268,8 +389,11 @@ TEST(OrientationTest, Preview) {
                                  &preview_reference));
   }
 
-  for (Orientation orientation : {Orientation::k90Clockwise, Orientation::k180,
-                                  Orientation::k270Clockwise}) {
+  for (Orientation orientation :
+       {Orientation::k90Clockwise, Orientation::k180,
+        Orientation::k270Clockwise, Orientation::kFlipLeftToRight,
+        Orientation::kFlipBotLeftToTopRgt, Orientation::kFlipTopToBottom,
+        Orientation::kFlipTopLeftToBotRgt}) {
     config.decoding_orientation = orientation;
 
     MemoryWriter memory_writer;
@@ -279,7 +403,8 @@ TEST(OrientationTest, Preview) {
     ASSERT_WP2_OK(
         ExtractPreview(memory_writer.mem_, memory_writer.size_, &preview));
 
-    ASSERT_WP2_OK(RotateBuffer(GetInverseOrientation(orientation), &preview));
+    ASSERT_WP2_OK(
+        OrientateBuffer(GetInverseOrientation(orientation), &preview));
     EXPECT_TRUE(testing::Compare(preview_reference, preview, file_name));
 
     // Also test custom sizes.
@@ -295,7 +420,45 @@ TEST(OrientationTest, Preview) {
 
 //------------------------------------------------------------------------------
 
-TEST(OrientationTest, Rectangle) {
+TEST(OrientationTest, RectangleRotate) {
+  constexpr uint32_t kWidth = 3, kHeight = 2;
+  const Rectangle kRect = {1, 0, 2, 1};
+  // | XX|     |  |     |   |     |X |
+  // |   |     | X|     |XX |     |X |
+  //           | X|               |  |
+  EXPECT_EQ(OrientateRectangle(Orientation::kOriginal, kWidth, kHeight, kRect),
+            Rectangle(1, 0, 2, 1));
+  EXPECT_EQ(
+      OrientateRectangle(Orientation::k90Clockwise, kWidth, kHeight, kRect),
+      Rectangle(1, 1, 1, 2));
+  EXPECT_EQ(OrientateRectangle(Orientation::k180, kWidth, kHeight, kRect),
+            Rectangle(0, 1, 2, 1));
+  EXPECT_EQ(
+      OrientateRectangle(Orientation::k270Clockwise, kWidth, kHeight, kRect),
+      Rectangle(0, 0, 1, 2));
+}
+
+TEST(OrientationTest, RectangleFlip) {
+  constexpr uint32_t kWidth = 3, kHeight = 2;
+  const Rectangle kRect = {1, 0, 2, 1};
+  // |XX |     |  |     |   |     | X|
+  // |   |     |X |     | XX|     | X|
+  //           |X |               |  |
+  EXPECT_EQ(
+      OrientateRectangle(Orientation::kFlipLeftToRight, kWidth, kHeight, kRect),
+      Rectangle(0, 0, 2, 1));
+  EXPECT_EQ(OrientateRectangle(Orientation::kFlipBotLeftToTopRgt, kWidth,
+                               kHeight, kRect),
+            Rectangle(0, 1, 1, 2));
+  EXPECT_EQ(
+      OrientateRectangle(Orientation::kFlipTopToBottom, kWidth, kHeight, kRect),
+      Rectangle(1, 1, 2, 1));
+  EXPECT_EQ(OrientateRectangle(Orientation::kFlipTopLeftToBotRgt, kWidth,
+                               kHeight, kRect),
+            Rectangle(1, 0, 1, 2));
+}
+
+TEST(OrientationTest, RectangleClipMergeExclude) {
   EXPECT_EQ(Rectangle(0, 2, 10, 6).ClipWith(Rectangle(2, 0, 6, 10)),
             Rectangle(2, 2, 6, 6));
   EXPECT_EQ(Rectangle(0, 2, 10, 6).MergeWith(Rectangle(2, 0, 6, 10)),
@@ -309,8 +472,7 @@ TEST(OrientationTest, Rectangle) {
   EXPECT_EQ(lft, Rectangle(0, 2, 2, 6));
   EXPECT_EQ(rgt, Rectangle(8, 2, 2, 6));
 
-  Rectangle(0, 1, 10, 8)
-      .Exclude(Rectangle(4, 5, 1, 2), &top, &bot, &lft, &rgt);
+  Rectangle(0, 1, 10, 8).Exclude(Rectangle(4, 5, 1, 2), &top, &bot, &lft, &rgt);
   EXPECT_EQ(top, Rectangle(0, 1, 10, 4));
   EXPECT_EQ(bot, Rectangle(0, 7, 10, 2));
   EXPECT_EQ(lft, Rectangle(0, 5, 4, 2));
