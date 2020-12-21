@@ -29,7 +29,7 @@ namespace {
 using ::testing::ElementsAre;
 
 TEST(ClusterHistogramTest, Simple) {
-  const uint32_t histogram[10] = {1, 10, 2, 0, 1, 5, 6, 50, 3, 10};
+  const uint32_t histogram[10] = {1, 10, 2, 0, 1, 5, 6, 30, 3, 10};
   uint32_t result[10];
 
   uint32_t max_clusters = 1;
@@ -39,34 +39,33 @@ TEST(ClusterHistogramTest, Simple) {
                                   center_positions);
   EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
   EXPECT_EQ(max_clusters, num_clusters);
-  EXPECT_EQ(6u, center_positions[0]);
+  EXPECT_EQ(5u, center_positions[0]);
 
   max_clusters = 2;
   num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
                                   center_positions);
   EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 0, 1, 1, 1, 1, 1));
   EXPECT_EQ(max_clusters, num_clusters);
-  EXPECT_EQ(1u, center_positions[0]);
+  EXPECT_EQ(2u, center_positions[0]);
   EXPECT_EQ(7u, center_positions[1]);
 
   max_clusters = 3;
   num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
                                   center_positions);
-  EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 1, 1, 1, 2, 2, 2));
+  EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1, 2, 2));
   EXPECT_EQ(max_clusters, num_clusters);
   EXPECT_EQ(1u, center_positions[0]);
-  EXPECT_EQ(5u, center_positions[1]);
-  EXPECT_EQ(7u, center_positions[2]);
+  EXPECT_EQ(6u, center_positions[1]);
+  EXPECT_EQ(8u, center_positions[2]);
 
   max_clusters = 4;
   num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
                                   center_positions);
-  EXPECT_THAT(result, ElementsAre(0, 0, 0, 1, 1, 1, 2, 2, 3, 3));
-  EXPECT_EQ(max_clusters, num_clusters);
+  EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1, 2, 2));
+  EXPECT_EQ(max_clusters - 1, num_clusters);   // can't really split in 4!
   EXPECT_EQ(1u, center_positions[0]);
-  EXPECT_EQ(4u, center_positions[1]);
-  EXPECT_EQ(6u, center_positions[2]);
-  EXPECT_EQ(8u, center_positions[3]);
+  EXPECT_EQ(6u, center_positions[1]);
+  EXPECT_EQ(8u, center_positions[2]);
 }
 
 TEST(ClusterHistogramTest, FewNonZeroValues) {
@@ -86,20 +85,18 @@ TEST(ClusterHistogramTest, FewNonZeroValues) {
   max_clusters = 3;
   num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
                                   center_positions);
-  EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1, 1, 2));
-  EXPECT_EQ(max_clusters, num_clusters);
+  EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 0, 1, 1, 1, 1, 1));
+  EXPECT_EQ(max_clusters - 1, num_clusters);   // can't really split in 3
   EXPECT_EQ(0u, center_positions[0]);
-  EXPECT_EQ(7u, center_positions[1]);
-  EXPECT_EQ(9u, center_positions[2]);
+  EXPECT_EQ(8u, center_positions[1]);
 
   max_clusters = 4;
   num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
                                   center_positions);
-  EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1, 1, 2));
-  EXPECT_EQ(max_clusters - 1, num_clusters);   // one less cluster than expected
+  EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 0, 1, 1, 1, 1, 1));
+  EXPECT_EQ(max_clusters - 2, num_clusters);   // one less cluster than expected
   EXPECT_EQ(0u, center_positions[0]);
-  EXPECT_EQ(7u, center_positions[1]);
-  EXPECT_EQ(9u, center_positions[2]);
+  EXPECT_EQ(8u, center_positions[1]);
 }
 
 Vector<CodedBlock> SplitInBlocks(const YUVPlane& yuv) {

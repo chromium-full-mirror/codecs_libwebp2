@@ -76,6 +76,7 @@ struct TestParams {
   EncoderConfig config;
   std::vector<Rectangle> force_partition;
   float q = 0;                       // in [0..100]
+  float alpha_q = -1.f;              // < 0: same as 'q', otherwise [0..100]
   bool use_mt = true;
   uint32_t stack_size = 50 * 4096u;   // must be a multiple of system's pagesize
   bool disable_filters = false;
@@ -106,6 +107,7 @@ void PrintHelpAndExit(int return_code) {
   opt.Add("-qmin", SPrintf("starting quality (%.1f)", kDefaultQMin));
   opt.Add("-qmax", SPrintf("ending quality (%.1f)", kDefaultQMax));
   opt.Add("-qsteps", SPrintf("number of points per curve (%d)", kDefaultSteps));
+  opt.Add("-alpha_q", "force the corresponding value for alpha_quality");
   opt.Add("-html", "emit HTML report");
   opt.Add("-gnuplot",
           "emit Gnuplot report (incompatible with -html and -lumascope)");
@@ -332,7 +334,8 @@ WP2Status Task::DoEncodeWP2(const std::string& out_file,
 WP2Status Task::EncodeWP2(const std::string& out_file,
                           ArgbBuffer* const decoded) {
   params_.config.quality = params_.q;
-  params_.config.alpha_quality = params_.q;
+  params_.config.alpha_quality =
+      (params_.alpha_q < 0) ? params_.q : params_.alpha_q;
   return DoEncodeWP2(out_file, decoded);
 }
 
@@ -884,6 +887,8 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       params.qmax = ExUtilGetFloat(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-qsteps") && c + 1 < argc) {
       params.qsteps = ExUtilGetUInt(argv[++c], &parse_error);
+    } else if (!strcmp(argv[c], "-alpha_q") && c + 1 < argc) {
+      params.alpha_q = ExUtilGetFloat(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-set_partition") && c + 1 < argc) {
       partition_file_path = argv[++c];
     } else if (!strcmp(argv[c], "-html")) {

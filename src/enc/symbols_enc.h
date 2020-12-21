@@ -86,6 +86,8 @@ class SymbolManager {
 };
 
 // Class for counting the usage of symbols.
+// Values are stored as value - value_min, where value_min is the minimal value
+// the symbol can have.
 class SymbolRecorder : public SymbolManager {
  public:
   const SymbolsInfo& symbols_info() const override { return symbols_info_; }

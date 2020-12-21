@@ -72,16 +72,27 @@ class CostModel : public CountsBuffer<double> {
           histo.symbols_info_->GetMaxRange(i), histo.histograms_[0]->counts_[i],
           counts_[i]);
     }
+    // Figure out the minimal values of the symbol.
+    static_assert(1 + (int)kSymbolA == (int)kSymbolR, "Invalid kSymbolA");
+    static_assert(1 + (int)kSymbolR == (int)kSymbolG, "Invalid kSymbolR");
+    static_assert(1 + (int)kSymbolG == (int)kSymbolB, "Invalid kSymbolG");
+    for (uint32_t i = 0; i < 4; ++i) {
+      const auto sym = (Symbol)((int)kSymbolA + i);
+      literal_minima_[i] = (int16_t)info.Min(/*cluster=*/0, sym);
+    }
     return WP2_STATUS_OK;
   }
 
   inline double GetLiteralCost(const int16_t* const v) const {
-    return counts_[kSymbolType][kSymbolTypeLiteral] +
-           (has_alpha_ ? counts_[kSymbolA][MakeIndex(v[0])] : 0.) +
-           (is_label_image_ ? 0.
-                            : counts_[kSymbolR][MakeIndex(v[1])] +
-                                  counts_[kSymbolB][MakeIndex(v[3])]) +
-           counts_[kSymbolG][MakeIndex(v[2])];
+    // Add the cost to have a literal and the cost of storing G.
+    double res = counts_[kSymbolType][kSymbolTypeLiteral] +
+                 counts_[kSymbolG][v[2] - literal_minima_[2]];
+    if (!is_label_image_) {
+      if (has_alpha_) res += counts_[kSymbolA][v[0] - literal_minima_[0]];
+      res += counts_[kSymbolR][v[1] - literal_minima_[1]] +
+             counts_[kSymbolB][v[3] - literal_minima_[3]];
+    }
+    return res;
   }
 
   inline double GetCacheCost(uint32_t idx) const {
@@ -105,6 +116,7 @@ class CostModel : public CountsBuffer<double> {
   uint32_t width_;
   bool has_alpha_;
   bool is_label_image_;
+  int16_t literal_minima_[4];
 };
 
 // Describes how a segment of pixels of length 'len' is represented (copy ...)

@@ -209,6 +209,8 @@ WP2Status BlockScoreFunc::FindBestBlockParams(const FrontMgrNxNBase& front_mgr,
   cb->id_ = AssignSegmentId(*config_, *gparams_, padded_tile_rect, cb->blk());
   const Segment& segment = gparams_->segments_.at(cb->id_);
   cb->mtx_set_ = gparams_->use_rnd_mtx_ ? &gparams_->mtx_set_ : nullptr;
+  cb->is420_ = false;  // Set in OptimizeModesChroma() but might trigger the
+                       // undefined-behavior-sanitizer in OptimizeModesLuma().
 
   cb->ResetContextCache();
   cb->y_context_is_constant_ = cb->ContextIsConstant(kYChannel);

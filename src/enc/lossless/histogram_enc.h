@@ -153,6 +153,7 @@ class HistogramSet {
 // Fills the histograms initialized in HistogramSet from the backward
 // references. If there is only one histogram, the parameters 'width',
 // 'height'and 'histo_bits' do not matter.
+// Histogram indices correspond to value - value_min like in the SymbolRecorder.
 WP2Status BuildHistograms(uint32_t width, uint32_t height, uint32_t histo_bits,
                           const LosslessSymbolsInfo& symbols_info,
                           const BackwardRefs& refs,

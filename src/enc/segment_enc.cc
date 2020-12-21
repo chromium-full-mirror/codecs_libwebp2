@@ -88,21 +88,19 @@ uint32_t ClusterHistogram(const uint32_t histogram[], uint32_t histogram_size,
   }
 
   // initial center positions, split by roughly equal area
-  uint32_t last_sum = 0, cur_sum = 0;
-  uint32_t last_wsum = 0, cur_wsum = 0;  // wsum = weighted-sum
+  uint32_t cur_sum = 0;
   uint32_t num_clusters = 0;
+  uint32_t last_idx = 0;
   for (uint32_t i = 0; num_clusters < max_clusters && i < histogram_size; ++i) {
     cur_sum += histogram[i];
-    cur_wsum += histogram[i] * i;
-    if (cur_sum > last_sum &&
-        cur_sum * max_clusters > total_sum * num_clusters) {
-      const uint32_t avg = (cur_wsum - last_wsum) / (cur_sum - last_sum);
-      if (num_clusters == 0 || centers[num_clusters - 1] != avg) {
-        centers[num_clusters++] = avg;
-      }
-      last_sum = cur_sum;
-      last_wsum = cur_wsum;
+    if (cur_sum * max_clusters > total_sum) {
+      centers[num_clusters++] = (i + last_idx) >> 1;  // center = middle point
+      last_idx = i + 1;
+      cur_sum = 0;
     }
+  }
+  if (cur_sum > 0 && num_clusters < max_clusters) {
+    centers[num_clusters++] = (histogram_size + last_idx) >> 1;
   }
 
   const uint32_t kMaxIter = 3;

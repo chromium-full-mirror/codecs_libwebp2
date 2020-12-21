@@ -219,7 +219,8 @@ int32_t SymbolRecorder::ProcessInternal(uint32_t cluster, uint32_t sym,
                                         int32_t value, bool use_max_value,
                                         uint32_t max_value, WP2_OPT_LABEL,
                                         ANSEncBase* const enc, double* const) {
-  assert((uint32_t)std::abs(value) < symbols_info_.Range(cluster, sym));
+  assert(value <= symbols_info_.Max(cluster, sym));
+  assert(value >= symbols_info_.Min(cluster, sym));
   assert(!use_max_value || (uint32_t)std::abs(value) <= max_value);
   switch (symbols_info_.Method(sym)) {
     case SymbolsInfo::StorageMethod::kAuto:
@@ -902,7 +903,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
   const uint32_t range = symbols_info_.Range(cluster, sym);
   if (range < 2) {
     assert(range > 0);
-    AddTrivial(cluster, sym, 0);
+    AddTrivial(cluster, sym, symbols_info_.Min(cluster, sym));
     return WP2_STATUS_OK;
   }
   // We only allow negative values if we have kAuto.

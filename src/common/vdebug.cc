@@ -1018,7 +1018,9 @@ WP2Status CodedBlock::Draw(const DecoderConfig& config, uint32_t tile_x,
       std::string* const str_ptr = &config.info->selection_info;
       WP2SAppend(str_ptr, "\nSegment id: %u\n", id_);
       if (segment.use_quality_factor_) {
-        WP2SAppend(str_ptr, " quant_factor: %d\n", segment.quality_factor_);
+        const float q = 1.f * segment.quality_factor_ / kQFactorMax;
+        WP2SAppend(str_ptr, " quality_factor_: %d  (q ~= %.1f)\n",
+                   segment.quality_factor_, kMaxLossyQuality * (1.f - q));
       }
       if (is_alpha) {
         WP2SAppend(str_ptr, " A quant_steps:   %d %d %d %d\n",

@@ -245,7 +245,7 @@ void Segment::SetQuality(uint32_t quality_hint, uint32_t quality_factor,
     quant_steps_[kYChannel][i] = InterpolateQuant(q_y, 1.0f);
     quant_steps_[kUChannel][i] = InterpolateQuant(q_u, kUVScales[i]);
     quant_steps_[kVChannel][i] = InterpolateQuant(q_v, kUVScales[i]);
-    quant_steps_[kAChannel][i] = InterpolateQuant(q_a, 1.0f);
+    quant_steps_[kAChannel][i] = InterpolateQuant(q_a, 0.5f);
   }
   quality_factor_ = quality_factor;
   use_quality_factor_ = true;
@@ -325,18 +325,23 @@ WP2Status GlobalParams::AssignQuantizations(const EncoderConfig& config) {
   uint32_t qualities[kMaxNumSegments];
   const float quant_factor0 =
       kQFactorMax * (kMaxLossyQuality - config.quality) / kMaxLossyQuality;
-  float min_risk = 1.0;
+  float min_risk = 1.0f;
+  float max_risk = 0.0f;
   for (const auto& s : segments_) min_risk = std::min(min_risk, s.risk_);
+  for (const auto& s : segments_) max_risk = std::max(max_risk, s.risk_);
+  min_risk -= 0.01f;   // to avoid divide-by-zero
   const float amp = 1.4f * Clamp(config.sns / 100.f, 0.f, 1.f);
+  const float adjust_amp =
+      std::min(1.f, num_segments / 4.f) / (max_risk - min_risk);
   // Exponent for 'adjust' (1 = linear).
-  const float exponent = 1.0;
+  const float exponent = 2.0f;
   for (uint32_t idx = 0; idx < num_segments; ++idx) {
     const Segment& s = segments_[idx];
     float quant = config.segment_factors[idx];
     if (quant == 0.f) {
-      const float adjust = s.risk_ - min_risk;
-      const float displaced = amp * pow(std::fabs(adjust), exponent);
-      quant = quant_factor0 * (1.3f - displaced);
+      const float adjust = adjust_amp * (s.risk_ - min_risk);
+      const float displaced = amp * pow(adjust, exponent);
+      quant = quant_factor0 * (1.0f - displaced);
     } else {
       quant = kQFactorMax * (kMaxLossyQuality - quant) / kMaxLossyQuality;
     }
@@ -377,8 +382,8 @@ WP2Status GlobalParams::AssignAlphaQuantizations(const YUVPlane& yuv,
       WP2_CHECK_STATUS(s.AllocateForEncoder());
       s.SetQuantizationFactor(
           transf_, GetQualityHint(config.alpha_quality),
-          /*u_quant_multiplier=*/0, /*v_quant_multiplier=*/0, quant_factor0,
-          /*lambda_mult=*/1.f, config.partition_set);
+          /*u_quant_multiplier=*/0, /*v_quant_multiplier=*/0,
+          quant_factor0, /*lambda_mult=*/1.f, config.partition_set);
     }
   }
   return WP2_STATUS_OK;
