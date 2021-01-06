@@ -26,7 +26,7 @@ Using bit-packing, the main image header is 7 to 13-byte long:
 |------------------------------|------|----------------------------------------|
 | Width                        | 14   | In \[1:16384\]                         |
 | Height                       | 14   | In \[1:16384\]                         |
-| Orientation                  | 3    | 0°, 90°, 180°, 270° + |, -, /, \ flips |
+| Orientation                  | 3    | 0°, 90°, 180°, 270° and/or mirror      |
 | Is opaque                    | 1    | If true: no alpha                      |
 | Is animation                 | 1    | If true: expect ANMF                   |
 | Preview color                | 12   | RGB444                                 |

@@ -31,6 +31,10 @@
 #include "src/utils/data_source.h"
 #include "src/utils/utils.h"
 
+// some derived constants:
+#define IO_BYTES 2    // IO_BITS = 8 << IO_BYTES
+#define IO_LIMIT (1ull << IO_LIMIT_BITS)
+
 namespace WP2 {
 
 ANSSymbolInfo ANSSymbolInfo::Rescale(const ANSSymbolInfo& max,
@@ -439,14 +443,14 @@ uint32_t ANSDec::ReadBitInternal(uint32_t p0) {
   } else if (q0 == 0) {
     return 0;
   } else {
-    const uint32_t xfrac = state_ & PROBA_MASK;
+    const uint32_t xfrac = state_ & (PROBA_MAX - 1);
     const uint32_t bit = (xfrac >= p0);
     if (!bit) {
       state_ = p0 * (state_ >> PROBA_BITS) + xfrac;
     } else {
       state_ = q0 * (state_ >> PROBA_BITS) + xfrac - p0;
     }
-    if (state_ < IO_LIMIT_LO) state_ = ReadNextWord(state_);
+    if (state_ < IO_LIMIT) state_ = ReadNextWord(state_);
 #if defined(WP2_BITTRACE)
     cur_pos_ += PROBA_BITS - WP2Log2(bit ? q0 : p0);
 #endif
@@ -482,7 +486,7 @@ uint32_t ANSDec::ReadSymbolInternal(const ANSSymbolInfo codes[],
   s.symbol = codes[i].symbol;
   assert(res >= s.offset && res < offset_next);
   state_ = s.freq * (state_ >> log2_tab_size) + (res - s.offset);
-  if (state_ < IO_LIMIT_LO) state_ = ReadNextWord(state_);
+  if (state_ < IO_LIMIT) state_ = ReadNextWord(state_);
 #if defined(WP2_BITTRACE)
   cur_pos_ += log2_tab_size - WP2Log2(s.freq);
 #endif
@@ -503,7 +507,7 @@ uint32_t ANSDec::ReadSymbolInternal(const ANSAdaptiveSymbol& asym,
   }
   assert(res >= s.offset);
   state_ = s.freq * (state_ >> ANS_LOG_TAB_SIZE) + (res - s.offset);
-  if (state_ < IO_LIMIT_LO) state_ = ReadNextWord(state_);
+  if (state_ < IO_LIMIT) state_ = ReadNextWord(state_);
 #if defined(WP2_BITTRACE)
   cur_pos_ += ANS_LOG_TAB_SIZE - WP2Log2(s.freq);
 #endif
@@ -515,7 +519,7 @@ uint32_t ANSDec::ReadSymbolInternal(const ANSSymbolInfo codes[],
   const uint32_t res = state_ & ((1u << log2_tab_size) - 1);
   const ANSSymbolInfo s = codes[res];
   state_ = s.freq * (state_ >> log2_tab_size) + s.offset;
-  if (state_ < IO_LIMIT_LO) state_ = ReadNextWord(state_);
+  if (state_ < IO_LIMIT) state_ = ReadNextWord(state_);
 #if defined(WP2_BITTRACE)
   cur_pos_ += log2_tab_size - WP2Log2(s.freq);
 #endif
@@ -526,7 +530,7 @@ uint32_t ANSDec::ReadSymbolInternal(const ANSAdaptiveSymbol& asym) {
   const uint32_t proba = state_ & (APROBA_MAX - 1);
   const ANSSymbolInfo s = asym.GetSymbol(proba);
   state_ = s.freq * (state_ >> APROBA_BITS) + (proba - s.offset);
-  if (state_ < IO_LIMIT_LO) state_ = ReadNextWord(state_);
+  if (state_ < IO_LIMIT) state_ = ReadNextWord(state_);
 #if defined(WP2_BITTRACE)
   cur_pos_ += ANSAdaptiveSymbol::GetFreqCost(s.freq);
 #endif
@@ -537,7 +541,7 @@ uint32_t ANSDec::ReadUValueInternal(uint32_t bits) {
   assert(bits <= kANSMaxUniformBits);
   const uint32_t value = state_ & ((1u << bits) - 1);
   state_ >>= bits;
-  if (state_ < IO_LIMIT_LO) state_ = ReadNextWord(state_);
+  if (state_ < IO_LIMIT) state_ = ReadNextWord(state_);
 #if defined(WP2_BITTRACE)
   cur_pos_ += bits;
 #endif
@@ -548,7 +552,7 @@ uint32_t ANSDec::ReadRValueInternal(uint32_t range) {
   assert(range <= (1u << ANSTokenInfoR::kBitsSecond));
   uint32_t s = state_ % range;
   state_     = state_ / range;
-  if (state_ < IO_LIMIT_LO) {
+  if (state_ < IO_LIMIT) {
     s = ReadNextWord(s);
     state_ = (state_ << IO_LIMIT_BITS) + s / range;
     s %= range;
@@ -572,7 +576,7 @@ void ANSDec::Init(DataSource* const data_source) {
     state_ = ReadNextWord(state_);
 #endif
   }
-  if (status_ == WP2_STATUS_OK && state_ < IO_LIMIT_LO) {
+  if (status_ == WP2_STATUS_OK && state_ < IO_LIMIT) {
     status_ = WP2_STATUS_BITSTREAM_ERROR;
   }
 }
@@ -749,27 +753,13 @@ float ANSDictionary::Cost() const {
   return cost;
 }
 
-static void CountsToInfos(const Vector_u32& counts,
-                          VectorNoCtor<ANSSymbolInfo>& infos) {
-  assert(counts.size() <= infos.size());
-  for (uint32_t total = 0, s = 0; s < counts.size(); ++s) {
-    const uint32_t freq = counts[s];
-    infos[s].freq = freq;
-    infos[s].offset = total;
-    infos[s].symbol = s;  // not really needed
-    total += freq;
-  }
-}
-
 WP2Status ANSCountsToSpreadTable(uint32_t counts[], uint32_t max_symbol,
-                                 uint32_t log2_tab_size,
-                                 VectorNoCtor<ANSSymbolInfo>& codes) {
+                                 uint32_t table_size, ANSCodes& codes) {
   if (max_symbol == 0) return WP2_STATUS_OK;
-  assert(log2_tab_size > 0);
-  const uint32_t tab_size = (1u << log2_tab_size);
+  assert(table_size >= max_symbol);
 
-  WP2_CHECK_STATUS(ANSNormalizeCounts(counts, max_symbol, tab_size));
-  WP2_CHECK_ALLOC_OK(codes.resize(tab_size));
+  WP2_CHECK_STATUS(ANSNormalizeCounts(counts, max_symbol, table_size));
+  WP2_CHECK_ALLOC_OK(codes.resize(table_size));
   uint32_t pos = 0;
   for (uint16_t s = 0; s < max_symbol; ++s) {
     const uint16_t freq = counts[s];
@@ -780,6 +770,17 @@ WP2Status ANSCountsToSpreadTable(uint32_t counts[], uint32_t max_symbol,
     }
   }
   return WP2_STATUS_OK;
+}
+
+static void CountsToInfos(const Vector_u32& counts, ANSCodes& infos) {
+  assert(counts.size() <= infos.size());
+  for (uint32_t total = 0, s = 0; s < counts.size(); ++s) {
+    const uint32_t freq = counts[s];
+    infos[s].freq = freq;
+    infos[s].offset = total;
+    infos[s].symbol = s;  // not really needed
+    total += freq;
+  }
 }
 
 WP2Status ANSDictionary::ToCodingTable() {
@@ -924,7 +925,7 @@ void ANSEnc::ResetBuffer() {
   buffer_.clear();
   buffer_pos_ = 0;
   state_ = ANS_SIGNATURE;
-  assert(state_ >= IO_LIMIT_LO);
+  assert(state_ >= IO_LIMIT);
 }
 
 ANSEnc::ANSEnc() {
@@ -932,7 +933,7 @@ ANSEnc::ANSEnc() {
   list_ = nullptr;
   status_ = WP2_STATUS_OK;
   ResetBuffer();
-  Reset(true);
+  Reset();
 }
 
 ANSEnc::~ANSEnc() { WipeOut(); }
@@ -961,9 +962,6 @@ WP2Status ANSEnc::Clone(const ANSEnc& e) {
     page_e = page_e->prev;
   }
   nb_tokens_ = e.nb_tokens_;
-  nb_asymbols_ = e.nb_asymbols_;
-  nb_uvalues_ = e.nb_uvalues_;
-  nb_bits_ = e.nb_bits_;
   return WP2_STATUS_OK;
 }
 
@@ -1007,7 +1005,7 @@ void ANSEnc::EmitBit(uint32_t bit, uint32_t p0) {
     uint32_t s = state_;
     if ((s >> (IO_LIMIT_BITS + IO_BITS - PROBA_BITS)) >= (bit ? q0 : p0)) {
       s = EmitWord(s);
-      assert(s < IO_LIMIT_LO);
+      assert(s < IO_LIMIT);
     }
     if (bit) {
       s = ((s / q0) << PROBA_BITS) + (s % q0) + p0;
@@ -1016,7 +1014,7 @@ void ANSEnc::EmitBit(uint32_t bit, uint32_t p0) {
     }
     state_ = s;
   }
-  assert(state_ >= IO_LIMIT_LO);
+  assert(state_ >= IO_LIMIT);
 }
 
 void ANSEnc::EmitASymbol(uint32_t offset, uint32_t freq) {
@@ -1027,7 +1025,7 @@ void ANSEnc::EmitASymbol(uint32_t offset, uint32_t freq) {
     s = EmitWord(s);
   }
   state_ = ((s / freq) << APROBA_BITS) + (s % freq) + offset;
-  assert(state_ >= IO_LIMIT_LO);
+  assert(state_ >= IO_LIMIT);
 }
 
 void ANSEnc::EmitUValue(uint32_t value, int bits) {
@@ -1037,54 +1035,29 @@ void ANSEnc::EmitUValue(uint32_t value, int bits) {
   // bits in the promoted left operand, the behavior is undefined.
   if (bits == 0) return;
   uint32_t s = state_;
-  if (s >> (IO_LIMIT_BITS + IO_BITS - bits) > 0) {
-    s = EmitWord(s);
-  }
+  if (s >> (IO_LIMIT_BITS + IO_BITS - bits) > 0) s = EmitWord(s);
   state_ = (s << bits) + value;
-  assert(state_ >= IO_LIMIT_LO);
+  assert(state_ >= IO_LIMIT);
 }
 
 void ANSEnc::EmitRValue(uint32_t value, uint32_t range) {
-  assert(state_ >= IO_LIMIT_LO);
+  assert(state_ >= IO_LIMIT);
   // Warning! Unlike other symbols, for RValue we call EmitWord() first,
   // and use 64b for temporary state_.
   uint64_t state = state_ * (uint64_t)range + value;
-  if (state >= IO_LIMIT_HI) {
+  constexpr uint64_t kLimitHi = 1ull << (IO_LIMIT_BITS + IO_BITS);
+  if (state >= kLimitHi) {
     EmitWord((uint32_t)state);   // flush the lower bits of 'state'
     state >>= IO_LIMIT_BITS;     // rotate-in the higher bits
   }
-  assert(state >= IO_LIMIT_LO && state < IO_LIMIT_HI);
+  assert(state >= IO_LIMIT && state < kLimitHi);
   state_ = (uint32_t)state;
 }
 
 //------------------------------------------------------------------------------
 
-WP2Status ANSEnc::FinishStream() {
-  state_ = EmitWord(state_);
-  state_ = EmitWord(state_);
-#if IO_BITS == 8
-  state_ = EmitWord(state_);
-#endif
-  return status_;
-}
-
-WP2Status ANSEnc::EmitOnlyBits() {
-  const ANSTokenPage* page = tokens_;
-  while (page != nullptr) {
-    int n = page->nb_tokens;
-    while (--n >= 0) {
-      const ANSToken tok = page->tokens[n];
-      const uint32_t p0 = ANSTokenInfoBit::Second(tok);
-      const int bit = ANSTokenInfoBit::First(tok);
-      assert(ANSTokenGetType(tok) == ANSTokenTypeBit);
-      EmitBit(bit, p0);
-    }
-    page = page->prev;
-  }
-  return FinishStream();
-}
-
-WP2Status ANSEnc::EmitAll() {
+WP2Status ANSEnc::Assemble() {
+  ResetBuffer();
   const ANSTokenPage* page = tokens_;
   while (page != nullptr) {
     int n = page->nb_tokens;
@@ -1119,88 +1092,92 @@ WP2Status ANSEnc::EmitAll() {
     }
     page = page->prev;
   }
-  return FinishStream();
+  state_ = EmitWord(state_);
+  state_ = EmitWord(state_);
+#if IO_BITS == 8
+  state_ = EmitWord(state_);
+#endif
+  return status_;
 }
 
 //------------------------------------------------------------------------------
 
 // Analyze counts[] and renormalize with Squeaky Wheel fix, so that
-// the total is rescaled to be equal to 'tab_size' exactly.
-// Returns 0 in case of failure. Otherwise, returns the final size.
-WP2Status ANSNormalizeCounts(uint32_t counts[], uint32_t max_symbol,
-                             uint32_t tab_size) {
-  if (max_symbol == 0) return WP2_STATUS_OK;   // corner case, but ok.
+// the total is rescaled to be equal to 'sum' exactly.
+WP2Status ANSNormalizeCounts(uint32_t counts[], uint32_t size, uint32_t sum) {
+  if (size == 0) return WP2_STATUS_OK;   // corner case, but ok.
+
+  WP2_CHECK_OK(size <= 0xffffu, WP2_STATUS_INVALID_PARAMETER);
 
   uint64_t total = 0;
-  for (uint32_t s = 0; s < max_symbol; ++s) {
+  uint32_t num_symbols = 0;
+  for (uint32_t s = 0; s < size; ++s) {
     total += counts[s];
+    num_symbols += (counts[s] > 0);
   }
   WP2_CHECK_OK(total <= 0xffffffffu, WP2_STATUS_INVALID_PARAMETER);  // overflow
-  if (total == tab_size) return WP2_STATUS_OK;   // already ok.
+  WP2_CHECK_OK(sum >= num_symbols, WP2_STATUS_INVALID_PARAMETER);
+  if (total == sum) return WP2_STATUS_OK;   // already ok.
   if (total == 0) {   // force a sane state
-    counts[0] = tab_size;
+    counts[0] = sum;
     return WP2_STATUS_OK;
   }
 
-  Vector_u32 keys;
-  WP2_CHECK_ALLOC_OK(keys.resize(max_symbol));
+  constexpr uint32_t kFix = 16u;  // fixed-point precision
+  static_assert(kFix <= 16u, "invalid fixed-point precision");
+  // we combine error+symbol into a single uint32_t as
+  //  key = (error << 16) | symbol;
+  // => We can sort by decreasing error, and also resolve tie-breaks.
+  VectorNoCtor<uint32_t> keys;
+  WP2_CHECK_ALLOC_OK(keys.resize(num_symbols));
 
-  const float norm = 1.f * tab_size / total;
-  const float kKeyNorm = (float)(1u << 24) / ANS_MAX_SYMBOLS;
-  int miss = tab_size, non_zero = 0;
-  for (uint32_t s = 0; s < max_symbol; ++s) {
+  const uint32_t norm = sum << kFix;
+  assert((sum >> (32 - kFix)) == 0);
+  uint32_t sub_sum = 0;
+  for (uint32_t n = 0, s = 0; s < size; ++s) {
     if (counts[s] > 0) {
-      const float target = norm * counts[s];
-      counts[s] = (uint32_t)(target + .5);  // round
-      if (counts[s] == 0) counts[s] = 1;
-      miss -= counts[s];
-      const uint32_t error = (uint32_t)fabsf(kKeyNorm * (target - counts[s]));
-      keys[non_zero++] = (error * ANS_MAX_SYMBOLS) + s;
+      const uint64_t v = (uint64_t)norm * counts[s] / total;
+      counts[s] = std::max(1u, (uint32_t)(v >> kFix));  // round down
+      sub_sum += counts[s];
+      const uint32_t error = v & ((1u << kFix) - 1u);  // fractional error, 16b
+      keys[n++] = (error << 16) | s;
     }
   }
-  if (miss == 0) return WP2_STATUS_OK;
-
-  if (miss > 0) {
-    if (miss < non_zero) {
-      std::nth_element(&keys[0], &keys[non_zero - miss], &keys[non_zero]);
-    }
-    for (int n = (miss < non_zero) ? non_zero - miss : 0; n < non_zero; ++n) {
-      ++counts[keys[n] % ANS_MAX_SYMBOLS];
-    }
-  } else if (non_zero <= (int)tab_size) {
-    const uint32_t cap_count = (1u << 23) - 1;  // to avoid overflow
-    // Overflow case. We need to decrease some counts, but need extra care
-    // to not make any counts[] go to zero. So we just loop and shave off
-    // the largest elements greater than 2 until we're good. It's guaranteed
-    // to terminate.
-    non_zero = 0;
-    for (uint32_t s = 0; s < max_symbol; ++s) {
-      if (counts[s] > 1) {
-        const uint32_t c = (counts[s] > cap_count) ? cap_count : counts[s];
-        keys[non_zero++] = (c * ANS_MAX_SYMBOLS) + s;
+  if (sub_sum == sum) return WP2_STATUS_OK;   // done!
+  if (sub_sum < sum) {
+    // Under-shoot -> increase the count of symbols with most errors.
+    const uint32_t missing = sum - sub_sum;
+    std::nth_element(keys.begin(), &keys[missing], keys.end(),
+                     std::greater<uint32_t>());
+    for (uint32_t i = 0; i < missing; ++i) ++counts[keys[i] & 0xffffu];
+  } else {
+    // Over-shoot -> decrease the count of symbols with largest counts.
+    const uint32_t missing = sub_sum - sum;
+    constexpr uint32_t kCountMax = 0xffffu;
+    uint32_t n = 0;
+    for (uint32_t s = 0; s < size; ++s) {
+      if (counts[s] > 1u) {
+        const uint32_t key = std::min(counts[s], kCountMax);
+        keys[n++] = (key << 16) | s;
       }
     }
-    assert(non_zero > 0);
-    miss = -miss;
-    if (miss < non_zero) {
-      std::nth_element(&keys[0], &keys[non_zero - miss], &keys[non_zero]);
+    if (missing < n) {
+      std::nth_element(&keys[0], &keys[missing], &keys[n],
+                       std::greater<uint32_t>());
+    } else {
+      std::sort(&keys[0], &keys[n], std::greater<uint32_t>());
     }
-    {
-      int to_fix = miss;
-      while (to_fix > 0) {
-        for (int n = (miss < non_zero) ? non_zero - miss : 0;
-             n < non_zero && to_fix > 0; ++n) {
-          const uint32_t idx = keys[n] % ANS_MAX_SYMBOLS;
-          if (counts[idx] > 1) {
-            --counts[idx];
-            --to_fix;
-          }
+
+    // we loop until we've decreased enough entries. This *will* terminate.
+    while (sub_sum > sum) {
+      for (uint32_t i = 0; i < n; ++i) {
+        const uint32_t s = keys[i] & 0xffffu;
+        if (counts[s] > 1u) {
+          --counts[s];
+          if (--sub_sum == sum) break;
         }
       }
     }
-  } else {
-    assert(0);  // impossible: more symbols than final table size expected.
-    return WP2_STATUS_INVALID_PARAMETER;
   }
   return WP2_STATUS_OK;
 }
@@ -1281,23 +1258,9 @@ float ANSEncBase::GetCostFull(const ANSDictionaries& dicts) const {
   return GetCost(dicts) + kANSPaddingCost;
 }
 
-WP2Status ANSEnc::Assemble() {
-  ResetBuffer();
-  if (nb_uvalues_ == 0 && nb_rvalues_ == 0 && nb_asymbols_ == 0) {
-    WP2_CHECK_STATUS(EmitOnlyBits());     // only bits
-  } else {
-    WP2_CHECK_STATUS(EmitAll());   // bits + uvalues + rvalues + asym
-  }
-  return status_;
-}
-
 void ANSEnc::WipeOut() {
   ResetBuffer();
   Clear();
-}
-
-WP2Status ANSEnc::Append(const ANSEnc& enc) {
-  return AppendTokens(enc, 0, enc.NumTokens());
 }
 
 WP2Status ANSEnc::AppendTokens(const ANSEnc& enc, uint32_t start_token,
@@ -1371,7 +1334,6 @@ WP2Status ANSEnc::AppendTokens(const ANSEnc& enc, uint32_t start_token,
 uint32_t ANSEnc::PutBitInternal(uint32_t bit, uint32_t proba) {
   assert((proba == 0) ? (bit == 1) : (proba != PROBA_MAX || bit == 0));
   EnqueueToken(ANSTokenInfoBit::Init(bit, proba));
-  ++nb_bits_;
   return bit;
 }
 
@@ -1391,7 +1353,6 @@ void ANSEnc::PutSymbolInternal(const ANSSymbolInfo& info, bool is_adaptive) {
   } else {
     EnqueueToken(ANSTokenInfoSym::Init(info.offset, info.freq));
   }
-  ++nb_asymbols_;
 }
 
 // Append a 'value' uniformly distributed in the range [0..1 << bits).
@@ -1401,7 +1362,6 @@ uint32_t ANSEnc::PutUValueInternal(uint32_t value, uint32_t bits) {
   EnqueueToken(ANSTokenInfoU::Init(value, bits));
   assert(bits <= kANSMaxUniformBits);
   assert(value < (1u << bits));
-  ++nb_uvalues_;
   return value;
 }
 
@@ -1411,7 +1371,6 @@ uint32_t ANSEnc::PutUValueInternal(uint32_t value, uint32_t bits) {
 uint32_t ANSEnc::PutRValueInternal(uint32_t value, uint32_t range) {
   EnqueueToken(ANSTokenInfoR::Init(value, range));
   assert(value < range);
-  ++nb_rvalues_;
   return value;
 }
 
@@ -1431,15 +1390,11 @@ void ANSEnc::Reset(bool delete_pages) {
   }
   tokens_ = nullptr;
   nb_tokens_ = 0;
-  nb_asymbols_ = 0;
-  nb_uvalues_ = 0;
-  nb_rvalues_ = 0;
-  nb_bits_ = 0;
 }
 
 // Reset the bistream, the message and free old pages.
 void ANSEnc::Clear() {
-  Reset(true);
+  Reset();
   state_ = ANS_SIGNATURE;
   while (list_ != nullptr) {
     ANSTokenPage* const next = (ANSTokenPage*)list_->prev;
@@ -1494,9 +1449,6 @@ void swap(ANSEnc& e1, ANSEnc& e2) {
   swap(e1.tokens_, e2.tokens_);
   swap(e1.list_, e2.list_);
   swap(e1.nb_tokens_, e2.nb_tokens_);
-  swap(e1.nb_asymbols_, e2.nb_asymbols_);
-  swap(e1.nb_uvalues_, e2.nb_uvalues_);
-  swap(e1.nb_bits_, e2.nb_bits_);
 }
 
 }   // namespace WP2

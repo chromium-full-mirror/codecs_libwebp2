@@ -253,6 +253,28 @@ void FuzzedParameters::ExtractConfig(DecoderConfig* const config) {
   config->incremental_mode = (DecoderConfig::IncrementalMode)ExtractUInt32(1);
 }
 
+void LimitConfigForBigImages(const Data& bitstream,
+                             DecoderConfig* const config) {
+  // Try to keep the peak allocated memory below 2 GB by reducing the number of
+  // concurrently decoded tiles for big images.
+  WP2::BitstreamFeatures features;
+  if (features.Read(bitstream.bytes, bitstream.size) == WP2_STATUS_OK) {
+    if (features.width * features.height <= (1u << 20)) {
+      // Small image, leave as is.
+    } else {
+      constexpr uint32_t kMaxPeakMem = (1u << 28);  // 256 MB
+      // Estimation of the peak memory allocation within each tile
+      // (roughly 16 times the 16-bit 4-channel tile canvas).
+      const uint32_t bytes_used_per_tile = features.tile_width *
+                                           features.tile_height *
+                                           (sizeof(int16_t) * 4) * 16;
+      config->thread_level =
+          std::min(config->thread_level,
+                   std::max(kMaxPeakMem / bytes_used_per_tile, 1u) - 1u);
+    }
+  }
+}
+
 //------------------------------------------------------------------------------
 
 void SaveBeforeAfter(const ArgbBuffer& original, const ArgbBuffer& decompressed,

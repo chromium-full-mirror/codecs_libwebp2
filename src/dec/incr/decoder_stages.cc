@@ -54,7 +54,7 @@ static WP2Status PrepareTiles(const DecoderConfig& config,
                               Decoder::State* const state) {
   WP2_CHECK_STATUS(
       DecodeGLBL(state->data_source, config, features, &state->gparams));
-  FillDecoderInfo(state->gparams, config);
+  WP2_CHECK_STATUS(FillDecoderInfo(state->gparams, config));
   WP2_CHECK_STATUS(state->current_frame_progress.AdvanceBy(kOnePercent));
 
   const bool discard_frame =
@@ -190,9 +190,7 @@ static WP2Status SetupOutputBuffer(const AnimationFrame& frame_info,
 WP2Status Decoder::BlendFrame(Rectangle window, bool dispose) {
   ArgbBuffer* const bg =
       state_->using_blended_buffer ? &state_->blended_buffer : output_;
-  if (dispose) {
-    bg->Fill(ToArgb32b(features_.background_color));
-  }
+  if (dispose) bg->Fill(window, ToArgb32b(features_.background_color));
   WP2_CHECK_STATUS(bg->CompositeUnder(state_->raw_output_buffer, window));
   return WP2_STATUS_OK;
 }

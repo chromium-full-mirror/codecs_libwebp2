@@ -453,7 +453,8 @@ class Params {
   std::string visual_debug_ = "decompressed";    // displayed debug output
 
   bool view_only_ = false;
-  ArgbBuffer in_ = ArgbBuffer(WP2_ARGB_32);  // original samples in ARGB
+  bool use_premultiplied_ = false;  // original samples in ARGB
+  ArgbBuffer in_ = ArgbBuffer(use_premultiplied_ ? WP2_Argb_32 : WP2_ARGB_32);
   ArgbBuffer in_yuv_;  // original alpha, Y, U or V samples
   // image shown on spacebar (can be a view on 'in' or 'in_yuv')
   ArgbBuffer original_;
@@ -906,6 +907,7 @@ std::vector<std::string> Params::GetHelp() {
   m.emplace_back("  'R' ............... copy AV1 partition (luma transforms)");
 #endif
   m.emplace_back("  '`' ............... jump to previously selected menu");
+  m.emplace_back("  '+'/'_' ........... go to next/previous file");
   m.emplace_back(std::string("  'l'/'L' ........... "
                              "load or dump the current bitstream as ") +
                  dump_wp2_path_);
@@ -2946,12 +2948,12 @@ void Params::HandleMenuClick(int button, int state,
   } else if (state == GLUT_UP) {
     if (show_ == kMenu) {
       show_ = kDebug;
+      einfo_.selection = dinfo_.selection = {0, 0, 0, 0};
+      forcing_block_ = {0, 0, 0, 0};
       if (!menu_selection_.empty()) {
         // Select the first available leaf (DFS) if not already the case.
         if (!SetMenuSelection(GetLeaf(menu_selection_))) return;
       }
-      einfo_.selection = dinfo_.selection = {0, 0, 0, 0};
-      forcing_block_ = {0, 0, 0, 0};
     } else {
       const uint32_t min_x = std::min(img_x_down, img_x);
       const uint32_t min_y = std::min(img_y_down, img_y);
@@ -3206,7 +3208,7 @@ void Help() {
   opt.Add("-snap", "force quadtree-like partitioning");
   opt.Add("-sns <float>", "segmentation strength (0=off..100)");
   opt.Add("-uv_mode <int>", "UV subsampling mode (0=Adapt,1=420,2=444,3=Auto)");
-  opt.Add("-csp <int>", "color space");
+  opt.Add("-csp <int>", "color space (0=YCoCg, 1=YCbCr 2=Custom 3=YIQ)");
   opt.Add("-segments <int>", "number of segments ([1..8])");
   opt.Add("-segment_mode [mode]", "one of auto, explicit, implicit");
   opt.Add("-pass <int>", "number of entropy-analysis passes (1..10)");
@@ -3361,6 +3363,10 @@ int main(int argc, char* argv[]) {
       params.crop_area_.y = ExUtilGetUInt(argv[++c], &parse_error);
       params.crop_area_.width = ExUtilGetUInt(argv[++c], &parse_error);
       params.crop_area_.height = ExUtilGetUInt(argv[++c], &parse_error);
+    } else if (!strcmp(argv[c], "-premult")) {  // debugging option!
+      params.use_premultiplied_ = true;
+    } else if (!strcmp(argv[c], "-nopremult")) {  // debugging option!
+      params.use_premultiplied_ = false;
     } else if (!strcmp(argv[c], "-set_block") && c + 4 < argc) {
       params.force_partition_.emplace_back(
           ExUtilGetUInt(argv[c + 1], &parse_error),

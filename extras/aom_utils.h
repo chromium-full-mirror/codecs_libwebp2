@@ -35,6 +35,7 @@ struct ParamsAV1 {
   uint32_t threads = 1;         // 1 means no multi-threading
   uint32_t pass = 2;
   bool use_yuv444 = true;
+  // if 0, CDEF and restoration filters are disabled (but deblocking is kept)
   float filter_strength = 50.f;  // in [0..100]
   MetricType tuning = SSIM;      // either PSNR or SSIM
   uint32_t bittrace = 0;         // 0=off, 1=bits, 2=bytes

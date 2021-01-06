@@ -64,22 +64,6 @@ uint32_t DiffScaleChannel(ArgbBuffer* const pic1, const ArgbBuffer* const pic2,
   return max;
 }
 
-// Convert an argb picture to luminance.
-void ConvertToGray(ArgbBuffer* const pic) {
-  assert(pic != nullptr);
-  for (uint32_t y = 0; y < pic->height(); ++y) {
-    uint8_t* const row = pic->GetRow8(y);
-    for (uint32_t x = 0; x < pic->width(); ++x) {
-      const uint32_t r = row[4 * x + 1];
-      const uint32_t g = row[4 * x + 2];
-      const uint32_t b = row[4 * x + 3];
-      // We use BT.709 for converting to luminance.
-      const uint8_t Y = (uint8_t)(0.2126 * r + 0.7152 * g + 0.0722 * b + .5);
-      row[4 * x + 1] = row[4 * x + 2] = row[4 * x + 3] = Y;
-    }
-  }
-}
-
 void Help() {
   ProgramOptions opt;
   opt.Add("Usage:");

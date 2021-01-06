@@ -294,6 +294,10 @@ DSP_ENC_OBJS = \
     src/dsp/lossless/encl_dsp.o \
     src/dsp/score_dsp.o \
 
+EX_FORMAT_DEC_HDRS = \
+    imageio/image_dec.h \
+    imageio/anim_image_dec.h \
+
 EX_FORMAT_DEC_OBJS = \
     imageio/anim_image_dec.o \
     imageio/bmpdec.o \
@@ -308,6 +312,10 @@ EX_FORMAT_DEC_OBJS = \
     imageio/webpenc.o \
     imageio/wp2dec.o \
 
+EX_FORMAT_ENC_HDRS= \
+    imageio/file_format.h \
+    imageio/image_enc.h \
+
 EX_FORMAT_ENC_OBJS = \
     imageio/bmpenc.o \
     imageio/image_enc.o \
@@ -317,6 +325,9 @@ EX_FORMAT_ENC_OBJS = \
     imageio/tiffenc.o \
 
 EX_UTIL_OBJS = \
+
+IMAGE_UTIL_HDRS= \
+    imageio/imageio_util.h \
 
 IMAGE_UTIL_OBJS = \
     imageio/imageio_util.o \
@@ -376,6 +387,10 @@ COMMON_DEC_OBJS = \
     src/common/progress_watcher.o \
     src/common/symbols.o \
     src/common/vdebug.o \
+
+EXAMPLE_UTILS_HDRS = \
+    examples/stopwatch.h \
+    examples/example_utils.h \
 
 EXAMPLE_UTILS_OBJS = \
     examples/custom_memory.o \
@@ -522,10 +537,10 @@ all: ex $(EXTRA_EXAMPLES) $(OTHER_EXAMPLES) $(CC_TESTS) $(SH_TESTS)
 %.o: %.cc $(HDRS)
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
-imageio/libimagedec.a: $(EX_FORMAT_DEC_OBJS)
-imageio/libimageenc.a: $(EX_FORMAT_ENC_OBJS)
-imageio/libimageio_util.a: $(IMAGE_UTIL_OBJS)
-examples/example_utils.a: $(EXAMPLE_UTILS_OBJS)
+imageio/libimagedec.a: $(EX_FORMAT_DEC_OBJS) $(EX_FORMAT_DEC_HDRS)
+imageio/libimageenc.a: $(EX_FORMAT_ENC_OBJS) $(EX_FORMAT_ENC_HDRS)
+imageio/libimageio_util.a: $(IMAGE_UTIL_OBJS) $(IMAGE_UTIL_HDRS)
+examples/example_utils.a: $(EXAMPLE_UTILS_OBJS) $(EXAMPLE_UTILS_HDRS)
 extras/libextras.a: $(EXTRAS_OBJS)
 src/libwebp2decoder.a: $(LIBWP2DECODER_OBJS)
 src/libwebp2ans.a: $(LIBWP2ANS_OBJS)

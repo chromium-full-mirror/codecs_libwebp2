@@ -24,10 +24,10 @@
 
 #include "src/common/lossless/color_cache.h"
 #include "src/dsp/lossless/encl_dsp.h"
+#include "src/dsp/math.h"
 #include "src/enc/lossless/backward_references_enc.h"
 #include "src/enc/lossless/histogram_enc.h"
 #include "src/enc/lossless/losslessi_enc.h"
-#include "src/enc/symbols_enc.h"
 
 namespace WP2L {
 
@@ -277,7 +277,8 @@ bool CostManager::Init(Segment* const segments, uint32_t num_pixels,
   Reset();
   segments_ = segments;
 
-  const uint32_t cost_cache_size = std::min(kMaxLZ77Length, num_pixels);
+  const uint32_t cost_cache_size =
+      WP2::Clamp(num_pixels, kMinLZ77Length + 1, kMaxLZ77Length);
   if (!cost_cache_.resize(cost_cache_size)) return false;
 
   // Fill in the cost_cache_.

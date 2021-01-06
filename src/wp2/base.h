@@ -312,6 +312,9 @@ class ArgbBuffer {
   uint8_t* GetRow8(uint32_t y);
   const uint16_t* GetRow16(uint32_t y) const;
   uint16_t* GetRow16(uint32_t y);
+  // Returns memory location for sample x,y as a generic pointer. Rather slow.
+  const uint8_t* GetPosition(uint32_t x, uint32_t y) const;
+  uint8_t* GetPosition(uint32_t x, uint32_t y);
 
   // Sets the format but only if the buffer is empty.
   WP2Status SetFormat(WP2SampleFormat format_in);

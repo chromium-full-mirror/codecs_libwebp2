@@ -187,14 +187,17 @@ static void CopyPredictorNames(const V& predictors,
   }
 }
 
-void FillDecoderInfo(const GlobalParams& gparams, const DecoderConfig& config) {
+WP2Status FillDecoderInfo(const GlobalParams& gparams,
+                          const DecoderConfig& config) {
   if (config.info != nullptr) {  // Clear output values.
     config.info->num_segments = gparams.segments_.size();
     CopyPredictorNames(gparams.y_preds_, &config.info->y_predictors);
     CopyPredictorNames(gparams.uv_preds_, &config.info->uv_predictors);
     CopyPredictorNames(gparams.a_preds_, &config.info->a_predictors);
     config.info->explicit_segment_ids = gparams.explicit_segment_ids_;
+    if (config.info->csp != nullptr) *config.info->csp = gparams.transf_;
   }
+  return WP2_STATUS_OK;
 }
 
 WP2Status SetupEncoderInfo(uint32_t width, uint32_t height,
@@ -1677,14 +1680,16 @@ static void ToGray(const ArgbBuffer& from, uint32_t channel,
     for (uint32_t x = 0; x < to->width(); ++x) {
       const uint8_t* const from_pixel = from_row + x * 4;
       uint8_t* const to_pixel = to_row + x * 4;
-      uint32_t gray = from_pixel[channel];
+      uint8_t gray = from_pixel[channel];
       if (channel != kAlpha) {  // Unpremultiply by alpha.
         uint8_t alpha = from_pixel[kAlpha];
         assert(gray <= alpha);
-        gray = (alpha > 0) ? ((gray * 255 + alpha / 2) / alpha) : 0;
+        if (alpha < 255) {
+          gray = (alpha > 0) ? ((gray * 255 + alpha / 2) / alpha) : 0;
+        }
       }
       to_pixel[0] = 255;
-      to_pixel[1] = to_pixel[2] = to_pixel[3] = (uint8_t)gray;
+      to_pixel[1] = to_pixel[2] = to_pixel[3] = gray;
     }
   }
 }
@@ -1716,8 +1721,8 @@ void ApplyVDebugBeforeAfter(const DecoderConfig& config,
       WP2_ASSERT_STATUS(plane.ToGray(debug_output, yuv_bits));
     }
   } else {
-    const bool a = VDMatch(config, "a"), r = VDMatch(config, "r"),
-               g = VDMatch(config, "g"), b = VDMatch(config, "b");
+    const bool a = VDMatch(config, "a"), r = VDMatch(config, "r");
+    const bool g = VDMatch(config, "g"), b = VDMatch(config, "b");
     if (a || r || g || b) {
       const uint32_t channel = a ? 0 : r ? 1 : g ? 2 : 3;
       if (VDMatch(config, "original")) {

@@ -200,7 +200,7 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
   Rectangle previous_decoded_area(0, 0, 0, 0);
   ArgbBuffer incremental_output;
   bool rewinded = false;
-  bool skipped_frames = false;
+  uint32_t num_skipped_frames = 0;
   uint32_t expected_total_num_frames = 0;
 
   // Start, continue, rewind decoding as long as there is something left to do.
@@ -235,7 +235,7 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
         if (decoded_frames != nullptr) decoded_frames->clear();
         if (decoded_durations_ms != nullptr) decoded_durations_ms->clear();
         rewinded = true;
-        skipped_frames = false;
+        num_skipped_frames = 0;
       } else if (action.type == DecoderAction::Type::kSkip) {
         const uint32_t num_frames_to_skip = action.value;
         idec->SkipNumNextFrames(num_frames_to_skip);
@@ -243,7 +243,7 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
           frame_index = std::min(frame_index + action.value, kMaxNumFrames);
           previous_decoded_area = Rectangle(0, 0, 0, 0);
           incremental_output.Deallocate();
-          skipped_frames = true;
+          num_skipped_frames += num_frames_to_skip;
         }
       }
       ++current_action_index;
@@ -277,7 +277,7 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
     if (idec->TryGetDecodedFeatures() != nullptr &&
         idec->TryGetDecodedFeatures()->is_animation) {
       const uint32_t num_known_frames = idec->GetNumFrameDecodedFeatures();
-      if (!skipped_frames || decoded_a_full_frame) {
+      if (num_skipped_frames == 0 || decoded_a_full_frame) {
         CHECK_OR_DIE(idec->GetCurrentFrameIndex() == frame_index);
         if (!rewinded) {
           CHECK_OR_DIE(frame_index <= num_known_frames);
@@ -294,11 +294,21 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
           CHECK_OR_DIE(idec->TryGetFrameDecodedFeatures(i)->is_last ==
                        (i == num_known_frames - 1u));
         }
-        CHECK_OR_DIE(idec->GetNumFrameDecodedFeatures() ==
-                     idec->GetNumAvailableFrames());
-        if (expected_total_num_frames > 0u) {
-          CHECK_OR_DIE(idec->GetNumAvailableFrames() ==
-                       expected_total_num_frames);
+        const bool num_available_frames_is_ok =
+            idec->GetNumAvailableFrames() ==
+                idec->GetNumFrameDecodedFeatures() &&
+            (expected_total_num_frames == 0 ||
+             idec->GetNumAvailableFrames() == expected_total_num_frames);
+        if (num_skipped_frames >= num_known_frames &&
+            !idec->TryGetDecodedFeatures()->has_trailing_data) {
+          // No guarantee that the last frame was truly available because the
+          // bitstream end was skipped, even if truncated.
+          if (available_input_size >= input.size) {
+            WP2_CHECK_OK(num_available_frames_is_ok,
+                         WP2_STATUS_NOT_ENOUGH_DATA);
+          }
+        } else {
+          CHECK_OR_DIE(num_available_frames_is_ok);
         }
       } else {
         CHECK_OR_DIE(idec->GetNumFrameDecodedFeatures() >=

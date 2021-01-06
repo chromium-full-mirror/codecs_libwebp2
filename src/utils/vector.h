@@ -245,13 +245,7 @@ class VectorNoCtor : public Internal::VectorBase<T> {
   // Allocated memory grows every power-of-two items.
   WP2_NO_DISCARD bool resize(size_t new_num_items) {
     typedef Internal::VectorBase<T> super;
-    if (super::num_items_ < new_num_items) {
-      if (super::capacity_ < new_num_items) {
-        if (!super::reserve(Internal::NextCapacity(new_num_items))) {
-          return false;
-        }
-      }
-    }
+    if (!super::reserve(new_num_items)) return false;
     super::num_items_ = new_num_items;
     return true;
   }
@@ -266,10 +260,8 @@ class Vector : public Internal::VectorBase<T> {
   WP2_NO_DISCARD bool resize(size_t new_num_items) {
     typedef Internal::VectorBase<T> super;
     if (super::num_items_ < new_num_items) {
-      if (super::capacity_ < new_num_items) {
-        if (!super::reserve(Internal::NextCapacity(new_num_items))) {
-          return false;
-        }
+      if (!super::reserve(new_num_items)) {
+        return false;
       }
       while (super::num_items_ < new_num_items) {
         new (&super::items_[super::num_items_]) T();

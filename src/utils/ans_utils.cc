@@ -307,14 +307,14 @@ enum class MappingMethod {
 static constexpr uint32_t kNumMapping = 4;
 
 WP2Status LoadMapping(ANSDec* const dec, uint32_t size, uint32_t range,
-                      Vector_u16& mapping) {
+                      uint16_t* const mapping) {
   assert(size <= range);
-  WP2_CHECK_ALLOC_OK(mapping.resize(size));
+  assert(mapping != nullptr);
   if (size == 0) return WP2_STATUS_OK;
   ANSDebugPrefix prefix(dec, "mapping");
   // TODO(vrabaud) Have it be a ReadBit with learned probability.
   if (size == range || dec->ReadBool("is_series")) {
-    std::iota(mapping.begin(), mapping.end(), 0);
+    std::iota(mapping, mapping + size, 0);
     return WP2_STATUS_OK;
   }
 

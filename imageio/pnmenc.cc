@@ -22,6 +22,8 @@
 #include "src/dsp/dsp.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/utils/plane.h"
+#include "src/utils/csp.h"
 
 namespace WP2 {
 
@@ -73,25 +75,37 @@ WP2Status WritePAM(const ArgbBuffer& buffer, FILE* const fout) {
 //------------------------------------------------------------------------------
 // Raw PGM
 
-// Save 16b mode (RGBA4444, RGB565, ...) for debugging purpose.
-WP2Status Write16bAsPGM(const ArgbBuffer& buffer, FILE* const fout) {
-  WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(buffer.format() == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
+static WP2Status SaveRow(const Plane16& src, uint32_t y, FILE* const out,
+                         uint32_t shift, Vector_u8& tmp) {
+  const uint32_t width = src.w_;
+  const int16_t* const row = src.Row(y);
+  WP2_CHECK_ALLOC_OK(tmp.resize(width));
+  for (uint32_t i = 0; i < width; ++i) {
+    tmp[i] = Clamp<int32_t>((row[i] >> shift) + 128, 0, 255);
+  }
+  WP2_CHECK_OK(fwrite(&tmp[0], width, 1, out) == 1, WP2_STATUS_BAD_WRITE);
+  return WP2_STATUS_OK;
+}
 
+WP2Status WritePGM(const ArgbBuffer& buffer, FILE* const fout,
+                   const CSPTransform& transform) {
+  WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
+  YUVPlane yuva;
+  const bool has_alpha = buffer.HasTransparency();
   const uint32_t width = buffer.width();
   const uint32_t height = buffer.height();
-  const uint8_t* rgba = buffer.GetRow8(0);
-  const uint32_t stride = buffer.stride();
-  const uint32_t bytes_per_px = 2;
-  uint32_t y;
-
-  WP2_CHECK_OK(rgba != nullptr, WP2_STATUS_NULL_PARAMETER);
-
-  fprintf(fout, "P5\n%u %u\n255\n", width * bytes_per_px, height);
-  for (y = 0; y < height; ++y) {
-    WP2_CHECK_OK(fwrite(rgba, width, bytes_per_px, fout) == bytes_per_px,
-                 WP2_STATUS_BAD_WRITE);
-    rgba += stride;
+  WP2_CHECK_STATUS(yuva.Import(buffer, has_alpha, transform,
+                   /*resize_if_needed=*/true));
+  fprintf(fout, "P5\n%u %u\n255\n", width * (has_alpha ? 4 : 3), height);
+  Vector_u8 tmp;
+  const uint32_t shift = (transform.GetYUVPrecisionBits() + 1) - kRgbBits;
+  for (uint32_t y = 0; y < height; ++y) {
+    WP2_CHECK_STATUS(SaveRow(yuva.GetChannel(kYChannel), y, fout, shift, tmp));
+    WP2_CHECK_STATUS(SaveRow(yuva.GetChannel(kUChannel), y, fout, shift, tmp));
+    WP2_CHECK_STATUS(SaveRow(yuva.GetChannel(kVChannel), y, fout, shift, tmp));
+    if (has_alpha) {
+      WP2_CHECK_STATUS(SaveRow(yuva.GetChannel(kAChannel), y, fout, 0, tmp));
+    }
   }
   return WP2_STATUS_OK;
 }

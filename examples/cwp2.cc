@@ -111,7 +111,7 @@ void HelpLong() {
   opt.Add("-loop_forever",
           "the animation will play in a loop "
           "(if it cannot be deduced from input, default is loop_forever)");
-  opt.Add("-csp <int>", "color space");
+  opt.Add("-csp <int>", "color space (0=YCoCg, 1=YCbCr 2=Custom 3=YIQ)");
   opt.Add("-uv_mode <int>", "UV subsampling mode (0=Adapt,1=420,2=444,3=Auto)");
   opt.Add("-pass <int>", "entropy-analysis passes (1..10)");
   opt.Add("-nofilter", "disable all filters during decoding");
@@ -499,7 +499,14 @@ int main(int argc, char* argv[]) {
   std::string decoded_file;
   const char* preview_file = nullptr;
   WP2::Data preview;
+
   WP2::DecoderConfig dec_config;
+  WP2::DecoderInfo dec_info;
+  dec_config.info = &dec_info;
+  WP2::CSPTransform transform;
+  dec_info.csp = &transform;
+
+  bool premult = false;
   bool recursive_input = false;
   bool input_frames = false;
   bool inplace_output = false;
@@ -710,6 +717,10 @@ int main(int argc, char* argv[]) {
       } else {
         CHECK_TRUE(false, "Error! Unrecognized picture hint: %s\n", argv[c]);
       }
+    } else if (!strcmp(argv[c], "-premult")) {  // debugging option!
+      premult = true;
+    } else if (!strcmp(argv[c], "-nopremult")) {  // debugging option!
+      premult = false;
     } else if (!strcmp(argv[c], "-v")) {
       params.log_level = WP2::LogLevel::VERBOSE;
     } else if (!strcmp(argv[c], "-neural")) {
@@ -819,11 +830,14 @@ int main(int argc, char* argv[]) {
   WP2::MemoryWriter writer;
   WP2::Counter counter;
 
+  // Load images unmultiplied, as some images compress better this way
+  // (only useful for lossless).
+  WP2::ArgbBuffer rgb_buffer(premult ? WP2_Argb_32 : WP2_ARGB_32);
+
   if (is_animation) {
     CHECK_TRUE(!output_to_directory,
                "Error! Animation output file must be explicitly specified.");
 
-    WP2::ArgbBuffer rgb_buffer(WP2_Argb_32);
     const std::string& out_file = out_path;
     const bool write_to_memory =
         (!out_file.empty() || params.print_distortion >= 0 ||
@@ -884,9 +898,6 @@ int main(int argc, char* argv[]) {
     if (report_progress) progress_printer.Init(in_files.size());
     uint32_t job_index = 0;
 
-    // Load images unmultiplied, as some images compress better this way
-    // (only useful for lossless).
-    WP2::ArgbBuffer rgb_buffer(WP2_ARGB_32);
     // Compress each image.
     for (const std::string& in_file : in_files) {
       if (in_files.size() > 1 && params.log_level >= WP2::LogLevel::DEFAULT &&
@@ -942,7 +953,8 @@ int main(int argc, char* argv[]) {
                        "Could not read the compressed WP2 bitstream. "
                        "This should NOT happen!");
           CHECK_STATUS(
-              SaveImage(argb, decoded_file.c_str(), params.allow_overwrite),
+              WP2::SaveImage(argb, decoded_file.c_str(), params.allow_overwrite,
+                             WP2::FileFormat::AUTO, nullptr, transform),
               "Could not save the decoded sample to file.");
         }
         writer.size_ = 0;

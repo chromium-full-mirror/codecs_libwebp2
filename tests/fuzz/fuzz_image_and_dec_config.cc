@@ -33,6 +33,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // remaining bytes.
   WP2::Data encoded_data;
   if (!params.TryExtractWP2Bitstream(&encoded_data)) return 0;  // malloc fail.
+  WP2::testing::LimitConfigForBigImages(encoded_data, &config);
 
   // Success is not expected but it shouldn't crash.
   return WP2::testing::TestImageDecConfig(

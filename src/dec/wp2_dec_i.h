@@ -95,7 +95,8 @@ void RegisterBitTrace(const DecoderConfig& config, uint32_t num_bytes,
 // (Discard(GetNumNextBytes())).
 
 // Fills DecoderInfo in 'config' based on provided GlobalParams.
-void FillDecoderInfo(const GlobalParams& gparams, const DecoderConfig& config);
+WP2Status FillDecoderInfo(const GlobalParams& gparams,
+                          const DecoderConfig& config);
 
 WP2Status DecodeHeader(DataSource* const data_source,
                        BitstreamFeatures* const features);

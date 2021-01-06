@@ -29,6 +29,7 @@
 #include "./file_format.h"
 #include "src/wp2/base.h"
 #include "src/wp2/encode.h"
+#include "src/utils/csp.h"
 #ifdef WP2_HAVE_WEBP
 #include "webp/encode.h"
 #endif
@@ -42,7 +43,8 @@ namespace WP2 {
 WP2Status SaveImage(const ArgbBuffer& buffer, const char* file_path,
                     bool overwrite = false,
                     FileFormat format = FileFormat::AUTO,
-                    size_t* file_size = nullptr);
+                    size_t* file_size = nullptr,
+                    const CSPTransform& transform = CSPTransform() /*=kYCoCg*/);
 
 // Encode 'buffer' to 'fout'.
 // WritePNG() might need other arguments than 'fout' if HAVE_WINCODEC_H.
@@ -52,7 +54,8 @@ WP2Status WriteTIFF(const ArgbBuffer& buffer, FILE* fout);
 WP2Status WriteBMP(const ArgbBuffer& buffer, FILE* fout);
 WP2Status WritePPM(const ArgbBuffer& buffer, FILE* fout);
 WP2Status WritePAM(const ArgbBuffer& buffer, FILE* fout);
-WP2Status Write16bAsPGM(const ArgbBuffer& buffer, FILE* fout);
+WP2Status WritePGM(const ArgbBuffer& buffer, FILE* fout,
+                   const CSPTransform& transform = CSPTransform() /*=kYCoCg*/);
 
 #ifdef WP2_HAVE_WEBP
 // Encodes 'buffer' as a WebP image with a given 'config' to 'output'.

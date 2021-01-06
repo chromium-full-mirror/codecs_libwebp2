@@ -171,7 +171,7 @@ WP2Status InternalDecode(const DecoderConfig& config,
     tiles_layout.gparams = &gparams;
     WP2_CHECK_STATUS(DecodeGLBL(data_source, config, features, &gparams));
     if (csp_transform != nullptr) *csp_transform = gparams.transf_;
-    FillDecoderInfo(gparams, config);
+    WP2_CHECK_STATUS(FillDecoderInfo(gparams, config));
     const uint32_t padded_frame_width = Pad(frame.window.width, kPredWidth);
     const uint32_t padded_frame_height = Pad(frame.window.height, kPredWidth);
 

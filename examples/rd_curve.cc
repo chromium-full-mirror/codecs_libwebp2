@@ -124,7 +124,7 @@ void PrintHelpAndExit(int return_code) {
   opt.Add("-av1", "compute AV1 rd-curve (if compiled)");
   opt.Add("-jpeg", "compute JPEG rd-curve (if compiled)");
   opt.Add("-nowp2", "skip WP2 rd-curve");
-  opt.Add("-csp <int>", "color space to use");
+  opt.Add("-csp <int>", "color space (0=YCoCg, 1=YCbCr 2=Custom 3=YIQ)");
   opt.Add("-sharp_yuv", "use slower / sharper YUV conversion");
   opt.Add("-pm <int>",
           SPrintf("partition method (0..%d, default = %d)",
@@ -137,7 +137,8 @@ void PrintHelpAndExit(int return_code) {
           SPrintf("number of segments to use (%u)", kDefaultConfig.segments));
   opt.Add("-segment_mode [mode]", "one of auto, explicit, implicit");
   opt.Add("-pass <int>", SPrintf("number of passes (%u)", kDefaultConfig.pass));
-  opt.Add("-nofilter", "disable all filters during decoding");
+  opt.Add("-nofilter",
+      "disable all filters during decoding (or all except deblocking for av1)");
   opt.Add("-notransforms", "disable transforms other than DCT");
   opt.Add("-sns <int>", "SNS strength to use (0..100)");
   opt.Add("-[no_]perceptual", "turn perceptual tuning on/off");
@@ -257,9 +258,6 @@ class Task : public Worker {
 WP2Status Task::DoEncodeWP2(const std::string& out_file,
                             ArgbBuffer* const decoded) {
   // Create working copy
-  ArgbBuffer src;
-  CHECK_STATUS(src.CopyFrom(*ref_), "Can't copy buffer");
-
   params_.config.thread_level = (int)params_.use_mt;
   EncoderInfo einfo;
   einfo.force_partition = params_.force_partition;
@@ -272,11 +270,10 @@ WP2Status Task::DoEncodeWP2(const std::string& out_file,
   MemoryWriter memory_writer;
 
   double start_time = GetStopwatchTime();
-  CHECK_STATUS(Encode(src, &memory_writer, params_.config),
+  CHECK_STATUS(Encode(*ref_, &memory_writer, params_.config),
                "Error! Cannot encode picture as WP2");
   enc_time_ = GetStopwatchTime() - start_time;
   size_ = memory_writer.size_;
-  src.Deallocate();  // let's be nice to others
   params_.config.info = nullptr;
 
   if (!out_file.empty()) {
@@ -363,6 +360,10 @@ WP2Status Task::EncodeWebP(const std::string& out_file,
   config.sns_strength = params_.config.sns;
   config.pass = params_.config.pass;
   config.use_sharp_yuv = params_.use_sharp_yuv;
+  if (params_.disable_filters) {
+    config.filter_strength = 0;
+    config.autofilter = 0;
+  }
 
   // encode
   MemoryWriter writer;
@@ -800,6 +801,7 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   bool do_neural = false;
   bool crop = false;
   bool convert_to_gray = false;
+  bool premult = true;
   Rectangle crop_area;
   bool save_output = false;
   const char* save_folder = ".";
@@ -903,6 +905,10 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       output_format = OutputFormat::kLumascope;
       lumascope_path = argv[++c];
       save_output = true;
+    } else if (!strcmp(argv[c], "-premult")) {  // debugging option!
+      premult = true;
+    } else if (!strcmp(argv[c], "-nopremult")) {  // debugging option!
+      premult = false;
     } else if (!strcmp(argv[c], "-webp")) {
       do_webp = true;
     } else if (!strcmp(argv[c], "-jpeg")) {
@@ -960,7 +966,7 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   }
 
   // Read the input
-  ArgbBuffer ref;
+  ArgbBuffer ref(premult ? WP2_Argb_32 : WP2_ARGB_32);
   CHECK_STATUS(ReadImage(params.in_file.c_str(), &ref),
                "Error! Cannot read input picture file '%s'",
                params.in_file.c_str());
@@ -969,18 +975,7 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   if (crop) {
     CHECK_STATUS(ref.SetView(ref, crop_area), "Cropping operation failed.");
   }
-  if (convert_to_gray) {
-    for (uint32_t y = 0; y < ref.height(); ++y) {
-      uint8_t* const row = ref.GetRow8(y);
-      for (uint32_t x = 0; x < ref.width(); ++x) {
-        const uint32_t r = row[4 * x + 1];
-        const uint32_t g = row[4 * x + 2];
-        const uint32_t b = row[4 * x + 3];
-        const uint8_t Y = (uint8_t)(0.2126 * r + 0.7152 * g + 0.0722 * b + .5);
-        row[4 * x + 1] = row[4 * x + 2] = row[4 * x + 3] = Y;
-      }
-    }
-  }
+  if (convert_to_gray) ConvertToGray(&ref);
 
   if (partition_file_path != nullptr) {
     CHECK_TRUE(ReadPartition(partition_file_path, /*read_only=*/false,

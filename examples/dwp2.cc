@@ -57,6 +57,7 @@ void Help() {
   opt.Add("-bmp", "save as uncompressed BMP format");
   opt.Add("-tiff", "save as uncompressed TIFF format");
   opt.Add("-png", "save the raw RGBA samples as PNG (default)");
+  opt.Add("-pgm", "save the raw Y/U/V/A samples as PGM (for debugging)");
   opt.Add("");
   opt.Add("Other options are:");
   opt.Add("-mt [int]", SPrintf("enable multi-threading, with %u extra threads "
@@ -111,6 +112,7 @@ struct DecodingSettings {
   bool output_frames_to_directory = false;
   bool output_to_directory = false;
   bool allow_overwrite = false;
+  bool need_transform = false;
   WP2::FileFormat out_format = WP2::FileFormat::AUTO;
 
   // Standard output settings.
@@ -128,6 +130,11 @@ struct DecodingSettings {
   uint32_t bit_trace_level = 0;
   bool show_histograms = false;
   bool count_blocks = false;
+
+  bool NeedInfo() const {
+    return (verbose || bit_trace || count_blocks || visual_debug != nullptr ||
+            need_transform);
+  }
 };
 
 //------------------------------------------------------------------------------
@@ -183,7 +190,7 @@ uint8_t GetNumDigits(size_t number) {
 std::string GetFrameFilename(size_t index, uint32_t duration_ms) {
   std::string index_str = std::to_string(index);
   // Add leading zeros.
-  const size_t max_num_digits = GetNumDigits(WP2::kMaxNumFrames - 1);
+  static const size_t max_num_digits = GetNumDigits(WP2::kMaxNumFrames - 1);
   index_str = std::string(max_num_digits - index_str.size(), '0') + index_str;
   return "frame" + index_str + "_" + std::to_string(duration_ms) + "ms";
 }
@@ -231,7 +238,8 @@ class ImageDecoder : public WP2::WorkerBase {
       const double start = GetStopwatchTime();
       const WP2Status status =
           WP2::SaveImage(buffer, final_out_path.c_str(),
-                         settings_.allow_overwrite, settings_.out_format);
+                         settings_.allow_overwrite, settings_.out_format,
+                         nullptr, transform_);
       if (!settings_.quiet && status != WP2_STATUS_OK) {
         *standard_err +=
             SPrintf("Could not save to '%s'\n", final_out_path.c_str());
@@ -271,14 +279,15 @@ class ImageDecoder : public WP2::WorkerBase {
       return WP2_STATUS_OK;
     }
 
+    // Grab a local copy of the config, that we can modify.
     WP2::DecoderConfig config = settings_.config;
     config.progress_hook = progress_hook;
     WP2::DecoderInfo info;
-    if (settings_.verbose || settings_.bit_trace || settings_.count_blocks ||
-        settings_.visual_debug != nullptr) {
+    if (settings_.NeedInfo()) {
       info.visual_debug = settings_.visual_debug;
-      config.info = &info;  // report extra statistics
       if (settings_.count_blocks) info.store_blocks = true;
+      if (settings_.need_transform) info.csp = &transform_;
+      config.info = &info;
     }
 
     const WP2::ArgbBuffer& buffer_to_save =
@@ -395,6 +404,7 @@ class ImageDecoder : public WP2::WorkerBase {
   WP2::ThreadLock* const mutex_ = nullptr;  // Acquire/release if not null.
 
   WP2::MultiProgressPrinter* const progress_printer_;  // Thread-safe.
+  WP2::CSPTransform transform_;  // to capture csp
 };
 
 //------------------------------------------------------------------------------
@@ -428,6 +438,8 @@ int main(int argc, char* argv[]) {
       settings.out_format = WP2::FileFormat::BMP;
     } else if (!strcmp(argv[c], "-tiff")) {
       settings.out_format = WP2::FileFormat::TIFF;
+    } else if (!strcmp(argv[c], "-pgm")) {
+      settings.out_format = WP2::FileFormat::PGM;
     } else if (!strcmp(argv[c], "-mt")) {
       if (c + 1 < argc && ExUtilTryGetUInt(argv[c + 1], &thread_level)) {
         ++c;
@@ -522,9 +534,18 @@ int main(int argc, char* argv[]) {
 
   settings.output_to_directory =
       (settings.inplace_output || WP2::IsDirectory(settings.out_path));
-  // Destination is explicitly specified, allow overwriting it.
-  if (!settings.output_to_directory) settings.allow_overwrite = true;
 
+  if (!settings.output_to_directory) {
+    // Destination is explicitly specified, allow overwriting it.
+    settings.allow_overwrite = true;
+    if (settings.out_format == WP2::FileFormat::AUTO) {
+      settings.out_format =
+          WP2::GetFormatFromExtension(settings.out_path.c_str());
+    }
+  }
+  if (settings.out_format == WP2::FileFormat::PGM) {
+    settings.need_transform = true;
+  }
   if (settings.output_frames_to_directory) {
     CHECK_TRUE(in_files.size() == 1,
                "Error! -frames requires a single input file.");

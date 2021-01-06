@@ -78,11 +78,15 @@ WP2Status PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
                "Round trip error!! This shouldn't happen.");
 
   if (num_frames > 0) {
-    for (int i = 0; i < 5; ++i) avg_values[i] /= num_frames;
-    if (!short_output) {
-      fprintf(stderr, "Total avg distortion over %u frames ", num_frames);
+    // we only want to print the average stats if there's more than 1
+    // frame (since the stats for frame #0 are already printed above).
+    if (num_frames > 1) {
+      for (int i = 0; i < 5; ++i) avg_values[i] /= num_frames;
+      if (!short_output) {
+        fprintf(stderr, "Total avg distortion over %u frames ", num_frames);
+      }
+      PrintDistortion(metric, avg_values, data_size, short_output);
     }
-    PrintDistortion(metric, avg_values, data_size, short_output);
   } else {
     float values[5];
     CHECK_TRUE(refs.size() == 1, "Round trip error!! This shouldn't happen.");
@@ -100,6 +104,23 @@ WP2Status PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
   std::vector<WP2::ArgbBuffer> refs(1);
   CHECK_STATUS(refs.front().SetView(ref), "SetView failed");
   return PrintDistortion(refs, data, data_size, metric, short_output);
+}
+
+//------------------------------------------------------------------------------
+
+void ConvertToGray(ArgbBuffer* const pic) {
+  assert(pic != nullptr);
+  for (uint32_t y = 0; y < pic->height(); ++y) {
+    uint8_t* const row = pic->GetRow8(y);
+    for (uint32_t x = 0; x < pic->width(); ++x) {
+      const uint32_t r = row[4 * x + 1];
+      const uint32_t g = row[4 * x + 2];
+      const uint32_t b = row[4 * x + 3];
+      // We use BT.709 for converting to luminance.
+      const uint8_t Y = std::lroundf(0.2126f * r + 0.7152f * g + 0.0722f * b);
+      row[4 * x + 1] = row[4 * x + 2] = row[4 * x + 3] = Y;
+    }
+  }
 }
 
 //------------------------------------------------------------------------------

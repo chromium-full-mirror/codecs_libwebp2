@@ -906,6 +906,7 @@ class SymbolReaderForTest : public SymbolReader {
   using SymbolReader::AddAdaptiveSymbol;
   using SymbolReader::AddDict;
   using SymbolReader::AddGolomb;
+  using SymbolReader::AddMapping;
   using SymbolReader::AddRange;
 };
 
@@ -1024,7 +1025,7 @@ TEST_P(SymbolCostTest, RangeCost) {
   ASSERT_WP2_OK(sr.Init(info, &dec));
   ASSERT_WP2_OK(sr.Allocate());
 
-  sr.AddRange(kCluster, kSymbol, /*infos=*/nullptr, kRange);
+  sr.AddRange(kCluster, kSymbol, kRange);
 
   const double dec_cost = Decode(&sr, values, max_values);
 
@@ -1042,7 +1043,7 @@ TEST_P(SymbolCostTest, DictCost) {
   std::vector<uint32_t> histogram = {10, 2, 50, 20, 5};
   std::vector<uint16_t> mapping = {0, 2, 3, 6, 7};
   const uint32_t symbol_size = histogram.size();
-  VectorNoCtor<ANSSymbolInfo> infos;
+  ANSCodes infos;
   ASSERT_TRUE(infos.resize(symbol_size));
   for (uint32_t i = 0; i < symbol_size; ++i) {
     infos[i].freq = histogram[i];
@@ -1106,7 +1107,7 @@ TEST_P(SymbolCostTest, GolombCost) {
   std::vector<uint32_t> golomb_histogram = {3, 7, 1, 2, 1};
   std::vector<uint16_t> golomb_mapping = {0, 1, 2, 3, 4};
   const uint32_t golomb_size = golomb_histogram.size();
-  VectorNoCtor<ANSSymbolInfo> golomb_infos;
+  ANSCodes golomb_infos;
   ASSERT_TRUE(golomb_infos.resize(golomb_size));
   for (uint32_t i = 0; i < golomb_size; ++i) {
     golomb_infos[i].freq = golomb_histogram[i];

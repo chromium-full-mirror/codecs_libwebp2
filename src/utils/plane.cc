@@ -335,16 +335,15 @@ WP2Status YUVPlane::Import(const ArgbBuffer& rgb, bool import_alpha,
     for (size_t x = 0; x < rgb.width(); ++x, rgb_row += x_stride) {
       // If import_alpha is false, alpha should always be kAlphaMax.
       assert(import_alpha || rgb_row[0] == kAlphaMax);
-      if (premultiply && rgb_row[0] != kAlphaMax) {
-        csp_transform.ToYUV((uint8_t)WP2::DivBy255(rgb_row[1] * rgb_row[0]),
-                            (uint8_t)WP2::DivBy255(rgb_row[2] * rgb_row[0]),
-                            (uint8_t)WP2::DivBy255(rgb_row[3] * rgb_row[0]),
-                            &y_row[x], &u_row[x], &v_row[x]);
-      } else {
-        csp_transform.ToYUV(rgb_row[1], rgb_row[2], rgb_row[3], &y_row[x],
-                            &u_row[x], &v_row[x]);
+      uint8_t r = rgb_row[1], g = rgb_row[2], b = rgb_row[3];
+      const uint8_t a = rgb_row[0];
+      if (premultiply && a != kAlphaMax) {
+        r = WP2::DivBy255(r * a);
+        g = WP2::DivBy255(g * a);
+        b = WP2::DivBy255(b * a);
       }
-      if (import_alpha) a_row[x] = rgb_row[0];
+      csp_transform.ToYUV(r, g, b, &y_row[x], &u_row[x], &v_row[x]);
+      if (a_row != nullptr) a_row[x] = a;
     }
   }
   WP2_CHECK_STATUS(FillPad(rgb.width(), rgb.height()));

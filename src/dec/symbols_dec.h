@@ -75,21 +75,19 @@ class SymbolReader : public SymbolIO<StatExtra> {
 
  protected:
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to range value,
-  // in [0:'max_range'[
-  // 'infos' is only useful for the mapping.
-  void AddRange(uint32_t cluster, uint32_t sym,
-                const VectorNoCtor<ANSSymbolInfo>* const infos,
-                uint16_t max_range);
+  // in [0:'range').
+  void AddRange(uint32_t cluster, uint32_t sym, uint16_t range);
+  // For the 'cluster'th cluster of symbol 'sym', set the mapping_[] to
+  // the content of 'mapping'.
+  void AddMapping(uint32_t cluster, uint32_t sym, const Vector_u16& mapping);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to dictionary
   // value, using info from 'infos'. 'infos' is modified in this call.
-  WP2Status AddDict(uint32_t cluster, uint32_t sym,
-                    VectorNoCtor<ANSSymbolInfo>* const infos);
+  WP2Status AddDict(uint32_t cluster, uint32_t sym, ANSCodes* const infos);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to Golomb
   // value, using info from 'infos'. 'infos' is modified in this call.
   // 'prefix_size' is the number of bits in the Golomb prefix.
   WP2Status AddGolomb(uint32_t cluster, uint32_t sym,
-                      VectorNoCtor<ANSSymbolInfo>* const infos,
-                      uint32_t prefix_size);
+                      ANSCodes* const infos, uint32_t prefix_size);
 
  private:
   // Generic implementation called by the different Read specializations above.
@@ -103,9 +101,8 @@ class SymbolReader : public SymbolIO<StatExtra> {
   // Tmp variables to use during the update.
   Vector_u16 mapping_;
   // Codes used for fast probability check for symbols relying on dictionaries.
-  typedef VectorNoCtor<ANSSymbolInfo> Codes;
-  Vector<Codes> codes_;
-  VectorNoCtor<ANSSymbolInfo> infos_;
+  Vector<ANSCodes> codes_;
+  ANSCodes infos_;
 };
 
 }  // namespace WP2

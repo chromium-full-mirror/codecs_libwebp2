@@ -514,7 +514,6 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   if (params.filter_strength == 0) {
     CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_CDEF, 0));
     CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_RESTORATION, 0));
-    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA, 0));
   }
   return WP2_STATUS_OK;
 }

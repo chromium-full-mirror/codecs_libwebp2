@@ -81,6 +81,7 @@ static inline void ExUtilDisableSIMD() {}
       ms_print massif.out
 */
 
+// TODO(skal): doesn't need to be exposed in .h. Move to custom_memory.cc.
 extern struct MemoryTrace : public WP2MemoryHook {
   ~MemoryTrace() override;   // will print information to stderr
 
@@ -115,6 +116,12 @@ WP2Status PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
 WP2Status PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
                           size_t data_size, WP2::MetricType metric,
                           bool short_output);
+
+//------------------------------------------------------------------------------
+// Buffer utils
+
+// Convert an argb picture to luminance.
+void ConvertToGray(ArgbBuffer* const pic);
 
 //------------------------------------------------------------------------------
 // Bit trace

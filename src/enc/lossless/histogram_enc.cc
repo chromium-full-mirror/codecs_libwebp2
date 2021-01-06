@@ -28,6 +28,7 @@
 #endif
 
 #include "src/common/color_precision.h"
+#include "src/common/progress_watcher.h"
 #include "src/dsp/lossless/encl_dsp.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/symbols_enc.h"
@@ -656,12 +657,10 @@ static WP2Status HistogramCombineGreedy(HistogramSet* const image_histo,
 // 'do_greedy' is set to 1 if a greedy approach needs to be performed
 // afterwards, 0 otherwise.
 // Returns true on success, false otherwise.
-static WP2Status HistogramCombineStochastic(HistogramSet* const image_histo,
-                                            uint32_t min_cluster_size,
-                                            float min_diff,
-                                            SegmentImgWrapper* const segments,
-                                            PopulationAnalyzer* const analyzer,
-                                            bool* const do_greedy) {
+static WP2Status HistogramCombineStochastic(
+    HistogramSet* const image_histo, uint32_t min_cluster_size, float min_diff,
+    SegmentImgWrapper* const segments, PopulationAnalyzer* const analyzer,
+    const WP2::ProgressRange& progress, bool* const do_greedy) {
   WP2::UniformIntDistribution random;
   const uint32_t outer_iters = image_histo->histograms_.size();
   const uint32_t num_tries_no_success = outer_iters / 2;
@@ -670,6 +669,8 @@ static WP2Status HistogramCombineStochastic(HistogramSet* const image_histo,
   // compression.
   HistoQueue queue;
   constexpr uint32_t kHistoQueueSize = 9;
+  const WP2::ProgressScale iter_progress(progress,
+                                         1. / std::max(1u, outer_iters));
 
   WP2_CHECK_STATUS(queue.Init(&image_histo->histograms_, analyzer));
   WP2_CHECK_STATUS(queue.Resize(kHistoQueueSize));
@@ -677,9 +678,9 @@ static WP2Status HistogramCombineStochastic(HistogramSet* const image_histo,
   // Collapse similar histograms in 'image_histo'.
   ++min_cluster_size;
   uint32_t valid_size = queue.ValidIndices().size();
-  for (uint32_t iter = 0, tries_with_no_success = 0;
-       iter < outer_iters && valid_size >= min_cluster_size &&
-       ++tries_with_no_success < num_tries_no_success;
+  uint32_t iter = 0, tries_with_no_success = 0;
+  for (; iter < outer_iters && valid_size >= min_cluster_size &&
+         ++tries_with_no_success < num_tries_no_success;
        ++iter) {
     double best_cost = queue.empty() ? 0. : queue.front().cost_diff;
     // valid_size / 2 was chosen empirically. Less means faster but worse
@@ -703,6 +704,7 @@ static WP2Status HistogramCombineStochastic(HistogramSet* const image_histo,
         if (queue.full()) break;
       }
     }
+    WP2_CHECK_STATUS(iter_progress.AdvanceBy(1.));
     if (queue.empty()) continue;
 
     // Merge the two best histograms.
@@ -713,6 +715,7 @@ static WP2Status HistogramCombineStochastic(HistogramSet* const image_histo,
   }
   WP2_CHECK_STATUS(queue.RemoveInvalidHistograms());
   *do_greedy = (valid_size <= min_cluster_size);
+  WP2_CHECK_STATUS(iter_progress.AdvanceBy(outer_iters - iter));
   return WP2_STATUS_OK;
 }
 
@@ -874,20 +877,23 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
     bool do_greedy;
     WP2_CHECK_STATUS(HistogramCombineStochastic(merged_histo, threshold_size,
                                                 0.f, &segments_wrap, &analyzer,
-                                                &do_greedy));
+                                                combine_progress, &do_greedy));
     if (do_greedy) {
       WP2_CHECK_STATUS(
           HistogramCombineGreedy(merged_histo, &segments_wrap, &analyzer));
     }
+  } else {
+    WP2_CHECK_STATUS(combine_progress.AdvanceBy(1.));
   }
-  WP2_CHECK_STATUS(combine_progress.AdvanceBy(1.));
 
   // In case we have too many histograms, merge the least bad pairs.
   while (merged_histo->histograms_.size() > kMaxHistogramImageSize) {
+    // Unknown loop count but ProgressWatcher should still be called.
+    const WP2::ProgressScale merge_progress(reduce_progress, 0.);
     bool do_greedy;
     WP2_CHECK_STATUS(HistogramCombineStochastic(
         merged_histo, kMaxHistogramImageSize, std::numeric_limits<float>::max(),
-        &segments_wrap, &analyzer, &do_greedy));
+        &segments_wrap, &analyzer, merge_progress, &do_greedy));
   }
   WP2_CHECK_STATUS(reduce_progress.AdvanceBy(1.));
 

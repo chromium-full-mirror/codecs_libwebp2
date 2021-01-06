@@ -214,7 +214,7 @@ void GenerateRandomEnc(uint32_t n_elements,
 // 'codes' is the usual codes used for symbols in ANS: a vector of SymbolInfo
 // per dictionary.
 bool VerifyBuffer(const uint8_t* const buf, uint32_t size,
-                  const std::vector<VectorNoCtor<ANSSymbolInfo>>* const codes,
+                  const std::vector<ANSCodes>* const codes,
                   ANSBinSymbol* const bin_symbol,
                   ANSAdaptiveSymbol* const asymbol,
                   const std::vector<Token>& tokens) {
@@ -334,7 +334,7 @@ TEST_F(TestANS, Test2) {
   const uint32_t kNumSymbols = 700 * kTestFactor;
   UniformIntDistribution random(kBaseSeed);
   const uint32_t kMaxSymbol = 256;
-  VectorNoCtor<ANSSymbolInfo> codes;
+  ANSCodes codes;
   EXPECT_TRUE(codes.resize(31));   // will be resized later
 
   for (uint32_t type : {0, 1, 2}) {
@@ -401,7 +401,7 @@ TEST_F(TestANS, Test2) {
     ExternalDataSource data_source(buf, size);
     ANSDec dec(&data_source);
     ASSERT_WP2_OK(ANSCountsToSpreadTable(&counts[0], kMaxSymbol,
-                                         ANS_LOG_TAB_SIZE, codes));
+                                         ANS_TAB_SIZE, codes));
     for (uint32_t i = 0; i < kNumSymbols; ++i) {
       const uint32_t s = dec.ReadSymbol(codes.data(), ANS_LOG_TAB_SIZE, "id");
       EXPECT_EQ(s, symbols[i]) << "Error case " << type << " at position " << i;
@@ -466,7 +466,7 @@ TEST_F(TestANS, Test3) {
   EXPECT_WP2_OK(enc.Assemble());
 
   // Decode the meta-info.
-  VectorNoCtor<ANSSymbolInfo> codes;
+  ANSCodes codes;
   EXPECT_TRUE(codes.resize(535));
   const uint32_t size = enc.BufferSize();
   const uint8_t* buf = enc.Buffer();
@@ -489,7 +489,7 @@ TEST_F(TestANS, Test3) {
           std::equal(sub_vector, sub_vector + vector_size, &vector_read[0]));
     }
     ASSERT_WP2_OK(ANSCountsToSpreadTable(&counts[0], kMaxSymbol,
-                                         ANS_LOG_TAB_SIZE, codes));
+                                         ANS_TAB_SIZE, codes));
   }
 
   // Decode the buffer and make sure it matches the input
@@ -742,7 +742,7 @@ TEST_F(TestANS, Test6d) {
 // Generate the codes for each dictionary, given a list of tokens.
 void GetCodesFromTokens(const std::vector<uint32_t>& max_symbols,
                         const std::vector<Token>& tokens,
-                        std::vector<VectorNoCtor<ANSSymbolInfo>>& codes) {
+                        std::vector<ANSCodes>& codes) {
   // Compute the counts of symbols.
   const uint32_t n_dicts = max_symbols.size();
   std::vector<std::vector<uint32_t>> counts(n_dicts);
@@ -754,7 +754,7 @@ void GetCodesFromTokens(const std::vector<uint32_t>& max_symbols,
   codes.resize(n_dicts);
   for (uint32_t i = 0; i < n_dicts; ++i) {
     EXPECT_WP2_OK(ANSCountsToSpreadTable(
-        &counts[i][0], max_symbols[i], ANS_LOG_TAB_SIZE, codes[i]));
+        &counts[i][0], max_symbols[i], ANS_TAB_SIZE, codes[i]));
   }
 }
 
@@ -776,7 +776,7 @@ TEST_F(TestANS, Test7) {
                         /*bin_symbol=*/nullptr, /*asymbol=*/nullptr, &dicts,
                         &random, &tokens, &enc);
     }
-    std::vector<VectorNoCtor<ANSSymbolInfo>> codes;
+    std::vector<ANSCodes> codes;
     GetCodesFromTokens(max_symbols, tokens, codes);
     EXPECT_WP2_OK(enc.Assemble());
     EXPECT_TRUE(VerifyBuffer(enc.Buffer(), enc.BufferSize(), &codes,
@@ -799,7 +799,7 @@ TEST_F(TestANS, Test7) {
             /*asymbol=*/nullptr, &dicts[i], &random, &tokens, &enc[i]);
       }
     }
-    EXPECT_WP2_OK(enc[0].Append(enc[1]));
+    EXPECT_WP2_OK(enc[0].AppendTokens(enc[1], 0, enc[1].NumTokens()));
     EXPECT_WP2_OK(dicts[0].AppendAndClear(&dicts[1]));
     EXPECT_WP2_OK(dicts[0].ToCodingTable());
     EXPECT_WP2_OK(enc[0].Assemble());
@@ -814,7 +814,7 @@ TEST_F(TestANS, Test7) {
                            max_symbols[1].end());
 
     // Decode the buffer.
-    std::vector<VectorNoCtor<ANSSymbolInfo>> codes;
+    std::vector<ANSCodes> codes;
     GetCodesFromTokens(max_symbols_new, tokens, codes);
     EXPECT_TRUE(VerifyBuffer(enc[0].Buffer(), enc[0].BufferSize(), &codes,
                              /*bin_symbol=*/nullptr, /*asymbol=*/nullptr,
@@ -850,7 +850,7 @@ TEST_P(TestANSBitCounts, Simple) {
                     /*max_asymbol=*/0, kNumDicts, /*max_symbol=*/256,
                     /*max_range=*/3263, /*bin_symbol=*/nullptr,
                     /*asymbol=*/nullptr, &dicts, &random, &tokens, &enc);
-  std::vector<VectorNoCtor<ANSSymbolInfo>> codes(kNumDicts);
+  std::vector<ANSCodes> codes(kNumDicts);
   if (std::find(info.types.begin(), info.types.end(), Token::Symbol) !=
       info.types.end()) {
     GetCodesFromTokens(max_symbols, tokens, codes);
@@ -1228,7 +1228,8 @@ TEST_P(TestANSMapping, Simple) {
     const uint8_t* buf = enc.Buffer();
     ExternalDataSource data_source(buf, size);
     ANSDec dec(&data_source);
-    EXPECT_WP2_OK(LoadMapping(&dec, n, range, mapping_res));
+    EXPECT_TRUE(mapping_res.resize(n));
+    EXPECT_WP2_OK(LoadMapping(&dec, n, range, mapping_res.data()));
     for (uint32_t i = 0; i < n; ++i) {
       EXPECT_EQ(mapping_ini[i], mapping_res[i]);
     }

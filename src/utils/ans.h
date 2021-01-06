@@ -63,24 +63,19 @@ namespace WP2 {
 
 #define ANS_LOG_TAB_SIZE 14
 #define ANS_TAB_SIZE (1u << ANS_LOG_TAB_SIZE)
-#define ANS_TAB_MASK (ANS_TAB_SIZE - 1)
-#define ANS_MAX_SYMBOLS_BITS 10
-#define ANS_MAX_SYMBOLS (1 << ANS_MAX_SYMBOLS_BITS)
 
-#define PROBA_BITS 16
+// maximum numbers of symbols for dictionaries and tables
+#define ANS_MAX_SYMBOLS 1024   // 10 bits
+
 // bits have a probability within [0, PROBA_MAX]
+#define PROBA_BITS 16
 #define PROBA_MAX (1u << PROBA_BITS)
-#define PROBA_MASK (PROBA_MAX - 1)
 
+// how many bits used during I/O between state_ and bitstream
 #define IO_BITS 16    // 8 or 16 only
-#define IO_BYTES 2    // IO_BITS = 8 << IO_BYTES
-#define IO_MASK ((1u << IO_BITS) - 1u)
 
 #define IO_LIMIT_BITS 16
-#define IO_LIMIT_LO (1ull << IO_LIMIT_BITS)
-#define IO_LIMIT_LO_MASK (IO_LIMIT_LO - 1)
-#define IO_LIMIT_HI (1ull << (IO_LIMIT_BITS + IO_BITS))
-#define ANS_SIGNATURE (0xf3 * IO_LIMIT_LO)    // Initial state, used as CRC.
+#define ANS_SIGNATURE (0xf3 * IO_LIMIT)    // Initial state, used as CRC.
 
 // Max number (inclusive) of bits for the range used during range-value coding.
 static constexpr uint32_t kANSMaxRangeBits = 14;
@@ -152,18 +147,17 @@ class ANSBinSymbol {
   void UpdateCount(uint32_t bit);
 };
 
+// Decoder only:
 // Generate a 'flat' spread table from a set of frequencies. The counts[]
-// distributions is re-normalized such that its sum is equal to 1<<log2_tab_size
-// and codes will be resized to '1<<log2_tab_size' if needed.
+// distributions is re-normalized such that its sum is equal to 'table_size'.
+// 'codes' will be resized to 'table_size' if needed.
 // Returns ok if there are no ill-defined counts.
 WP2Status ANSCountsToSpreadTable(uint32_t counts[], uint32_t max_symbol,
-                                 uint32_t log2_tab_size,
-                                 VectorNoCtor<ANSSymbolInfo>& codes);
+                                 uint32_t table_size, ANSCodes& codes);
 
-// Analyze counts[] and renormalize with the total is rescaled to be equal
-// to 'tab_size' exactly.
-WP2Status ANSNormalizeCounts(uint32_t counts[], uint32_t max_symbol,
-                             uint32_t tab_size);
+// Analyze counts[0..size) and renormalize it so that the total is equal to
+// 'sum' exactly.
+WP2Status ANSNormalizeCounts(uint32_t counts[], uint32_t size, uint32_t sum);
 
 // Stores and adapts small APROBA_MAX_SYMBOL-dictionary
 class ANSAdaptiveSymbol {
@@ -485,8 +479,8 @@ class ANSDec {
 
  protected:
 #if defined(WP2_BITTRACE)
-  double last_pos_ = 0;
-  double cur_pos_ = 0;
+  double last_pos_ = 0.;
+  double cur_pos_ = 0.;
   WP2BitCounts counters_;
   // Next reads will be registered in 'counters_custom_' with this key.
   std::string counters_custom_key_;
@@ -608,7 +602,7 @@ class ANSDictionary : public WP2Allocable {
   // (0="default to ANS_LOG_TAB_SIZE")
   // Must be in [0,16] range.
 
-  VectorNoCtor<ANSSymbolInfo> infos_;    // used during final coding
+  ANSCodes infos_;    // used during final coding
 };
 
 //------------------------------------------------------------------------------
@@ -748,10 +742,10 @@ class ANSEncBase {
   float GetCostFull() const;
   float GetCostFull(const ANSDictionaries& dicts) const;
 
-  // Returns the number of tokens (bits, symbols, uvalues, rvalues...) that have
-  // been buffered in this encoder.
+  // Returns the number of tokens that have been buffered.
   virtual uint32_t NumTokens() const = 0;
 
+  // Returns the current status.
   virtual WP2Status GetStatus() const = 0;
 
   // Adds something to the prefix that will appear when adding bits.
@@ -805,8 +799,7 @@ class ANSEnc : public ANSEncBase {
 
   // Generates a bitstream from the current state.
   // The bitstream is stored internally and can be accessed using
-  // Buffer() and BufferSize(). If any symbol was used, 'dicts' must not be
-  // nullptr.
+  // Buffer() and BufferSize(). Previous buffer is erased.
   WP2Status Assemble();
 
   // Reclaims all memory, reset the encoder.
@@ -816,13 +809,10 @@ class ANSEnc : public ANSEncBase {
   // Resets the stored message (but not the bitstream, if any).
   // If delete_pages is true, past message pages are free'd. Otherwise, they are
   // marked for re-use in a future message.
-  void Reset(bool delete_pages);
+  void Reset(bool delete_pages = true);
 
   // Frees write-buffer memory (in case of error, for instance)
   void WipeOut();
-
-  // Appends the tokens of 'enc' into the invoking object.
-  WP2Status Append(const ANSEnc& enc);
 
   // Appends tokens from 'enc' into the invoking object, starting from
   // 'start_token' (0 indexed), and stopping after the given number of tokens.
@@ -926,11 +916,6 @@ class ANSEnc : public ANSEncBase {
   void EnqueueToken(uint32_t tok);
   bool NewPage();
 
-  // to be called last
-  WP2Status FinishStream();
-  WP2Status EmitOnlyBits();
-  WP2Status EmitAll();
-
   // emits the lower bits of 's' and returns the new value
   inline uint32_t EmitWord(uint32_t s);
 
@@ -954,12 +939,8 @@ class ANSEnc : public ANSEncBase {
   // Pointer to old allocated pages, which can be reused next time we need a
   // new page (see the delete_pages parameter of Reset()).
   ANSTokenPage* list_;
-  // misc stats:
-  int nb_tokens_;          // total number of tokens in the message
-  int nb_asymbols_;        // number of adaptive symbols stored
-  int nb_uvalues_;         // number of uniform values stored
-  int nb_rvalues_;         // number of range-based values stored
-  int nb_bits_;            // number of binary symbols stored
+  // total number of tokens in the message
+  uint32_t nb_tokens_;
 };
 
 void swap(ANSEnc& e1, ANSEnc&e2);

@@ -172,6 +172,14 @@ uint16_t* ArgbBuffer::GetRow16(uint32_t y) {
   assert(y < height_ && WP2FormatBpc(format_) == 2);
   return (uint16_t*)((uint8_t*)pixels_ + y * stride_);
 }
+const uint8_t* ArgbBuffer::GetPosition(uint32_t x, uint32_t y) const {
+  assert(y < height_ && x < width_);
+  return ((const uint8_t*)pixels_ + y * stride_ + x * WP2FormatBpp(format_));
+}
+uint8_t* ArgbBuffer::GetPosition(uint32_t x, uint32_t y) {
+  assert(y < height_ && x < width_);
+  return ((uint8_t*)pixels_ + y * stride_ + x * WP2FormatBpp(format_));
+}
 
 WP2Status ArgbBuffer::SetFormat(WP2SampleFormat format_in) {
   WP2_CHECK_OK(IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
@@ -261,7 +269,7 @@ WP2Status ArgbBuffer::Import(WP2SampleFormat input_format,
   const WP2ArgbConverterF convert =
       WP2ConversionFunction(input_format, format_);
   for (uint32_t y = 0; y < new_height; ++y) {
-    convert(samples, new_width, (uint8_t*)GetRow(y));
+    convert(samples, new_width, GetRow8(y));
     samples += samples_stride;
   }
   return WP2_STATUS_OK;
@@ -277,7 +285,7 @@ WP2Status ArgbBuffer::ImportRow(WP2SampleFormat input_format,
   WP2ArgbConverterInit();
   const WP2ArgbConverterF convert =
       WP2ConversionFunction(input_format, format_);
-  convert(samples, width_, (uint8_t*)GetRow(row_index));
+  convert(samples, width_, GetRow8(row_index));
   return WP2_STATUS_OK;
 }
 
@@ -302,7 +310,7 @@ void ArgbBuffer::FillImpl(const Rectangle& window, const void* color) {
   if (r.width == 0 || r.height == 0) return;
   // Even if channels are uint16_t, uint8_t is used as the stride and
   // pixel_depth take care of memory increments.
-  uint8_t* dst_row = (uint8_t*)GetRow(r.y) + r.x * pixel_depth;
+  uint8_t* dst_row = GetPosition(r.x, r.y);
   for (uint32_t y = 0; y < r.height; ++y) {
     uint8_t* dst_pixel = dst_row;
     for (uint32_t x = 0; x < r.width; ++x) {
@@ -339,7 +347,7 @@ WP2Status ArgbBuffer::CompositeOver(Argb32b background) {
   WP2_CHECK_OK(format_ == WP2_Argb_32, WP2_STATUS_INVALID_COLORSPACE);
   WP2_CHECK_OK(CheckPremultiplied(background), WP2_STATUS_INVALID_PARAMETER);
   for (uint32_t y = 0; y < height_; ++y) {
-    uint8_t* row = (uint8_t*)GetRow(y);
+    uint8_t* const row = GetRow8(y);
     for (uint32_t x = 0; x < width_; ++x) {
       const uint8_t b = kAlphaMax - row[4 * x + 0];  // ~ 255 * (1-alpha)
       row[4 * x + 0] += DivBy255(b * background.a);
@@ -373,10 +381,10 @@ static WP2Status CompositeBuffers(const ArgbBuffer& background,
                WP2_STATUS_INVALID_PARAMETER);
 
   for (uint32_t y = w.y; y < w.y + w.height; ++y) {
-    const uint8_t* const fg_row = foreground.GetRow8(y);
-    const uint8_t* const bg_row = background.GetRow8(y);
-    uint8_t* const dest_row = dest->GetRow8(y);
-    for (uint32_t x = w.x; x < w.x + w.width; ++x) {
+    const uint8_t* const fg_row = foreground.GetPosition(w.x, y);
+    const uint8_t* const bg_row = background.GetPosition(w.x, y);
+    uint8_t* const dest_row = dest->GetPosition(w.x, y);
+    for (uint32_t x = 0; x < w.width; ++x) {
       const uint8_t b = kAlphaMax - fg_row[4 * x + 0];  // ~ 255 * (1-alpha)
       for (uint32_t c = 0; c < 4; ++c) {
         dest_row[4 * x + c] =
@@ -419,8 +427,7 @@ WP2Status ArgbBuffer::SetView(const ArgbBuffer& src, const Rectangle& window) {
                  WP2_STATUS_INVALID_PARAMETER);
   }
   if (&src != this) Deallocate();
-  pixels_ =
-      (uint8_t*)src.GetRow(window.y) + window.x * WP2FormatBpp(src.format());
+  pixels_ = (void*)src.GetPosition(window.x, window.y);
   width_ = window.width;
   height_ = window.height;
   stride_ = src.stride_;
@@ -470,12 +477,12 @@ bool ArgbBuffer::HasTransparency() const {
   if (WP2FormatBpc(format_) == 1) {
     WP2AlphaInit();
     for (uint32_t y = 0; y < height_; ++y) {
-      const uint8_t* const row = (const uint8_t*)GetRow(y);
+      const uint8_t* const row = GetRow8(y);
       if (WP2HasOtherValue8b32b(row, width_, 0xff)) return true;
     }
   } else {
     for (uint32_t y = 0; y < height_; ++y) {
-      const int16_t* const row = (const int16_t*)GetRow(y);
+      const uint16_t* const row = GetRow16(y);
       for (uint32_t x = 0; x < width_; ++x) {
         if (row[4 * x + 0] != WP2::kAlphaMax) return true;
       }
@@ -511,10 +518,10 @@ void ArgbBuffer::SimpleHalfDownsample() {
   const uint32_t half_w_low = width_ >> 1;
   const uint32_t half_h = (height_ + 1) >> 1;
   for (uint32_t y = 0; y < half_h; ++y) {
-    const uint8_t* row1 = (const uint8_t*)GetRow(2 * y + 0);
+    const uint8_t* row1 = GetRow8(2 * y + 0);
     const uint32_t next_row = (2 * y + 1 == height_) ? 0 : 1;
-    const uint8_t* row2 = (const uint8_t*)GetRow(2 * y + next_row);
-    uint8_t* dst = (uint8_t*)GetRow(y);
+    const uint8_t* row2 = GetRow8(2 * y + next_row);
+    uint8_t* dst = GetRow8(y);
     for (uint32_t x = 0; x < half_w_low; ++x) {
       // TODO(skal): implement in dsp/
       for (uint32_t c = 0; c < 4; ++c) {

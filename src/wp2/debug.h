@@ -33,6 +33,7 @@ namespace WP2 {
 
 template <typename T>
 class Plane;
+class CSPTransform;
 
 //------------------------------------------------------------------------------
 
@@ -175,6 +176,10 @@ struct DecoderInfo {
   // If not null, will be filled with the cost of each pixel in bits.
   // Requires WP2_BITTRACE if the image is lossy.
   Plane<float>* bits_per_pixel = nullptr;
+
+  // If not null, will be filled with a copy of the internal colorspace
+  // transform if present in the bitstream.
+  CSPTransform* csp = nullptr;
 };
 
 //------------------------------------------------------------------------------

@@ -31,7 +31,7 @@ namespace WP2 {
 // 'max_count' is the maximum value of a count in the histogram.
 static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
                                uint32_t max_count, ANSDec* const dec,
-                               VectorNoCtor<ANSSymbolInfo>& infos) {
+                               ANSCodes& infos) {
   // Read the mappings first.
   Vector_u16 mapping;
   uint32_t histo_size = nnz;
@@ -39,7 +39,8 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
   if (nnz < symbol_range) {
     is_sparse = dec->ReadBool("is_sparse");
     if (is_sparse) {
-      WP2_CHECK_STATUS(LoadMapping(dec, nnz, symbol_range, mapping));
+      WP2_CHECK_ALLOC_OK(mapping.resize(nnz));
+      WP2_CHECK_STATUS(LoadMapping(dec, nnz, symbol_range, mapping.data()));
     } else {
       histo_size = dec->ReadRange(nnz, symbol_range, "histogram_size");
     }
@@ -61,7 +62,7 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
       std::min(kMaxFreqBits, 1u + (uint32_t)WP2Log2Floor(max_count));
   if (type == 2) {  // HuffmanANS
     // Read the probabilities we depend upon.
-    VectorNoCtor<ANSSymbolInfo> infos_sub;
+    ANSCodes infos_sub;
     const uint32_t size_sub = dec->ReadRange(1, 1 + kMaxFreqBits, "size");
     WP2_CHECK_STATUS(
         ReadHistogram(size_sub, 1 + kMaxFreqBits, histo_size, dec, infos_sub));
@@ -76,9 +77,9 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
     std::fill(counts_sub.begin(), counts_sub.end(), 0);
     for (const auto& i : infos_sub) counts_sub[i.symbol] = i.freq;
     // Build the spread table.
-    VectorNoCtor<ANSSymbolInfo> codes;
+    ANSCodes codes;
     WP2_CHECK_STATUS(ANSCountsToSpreadTable(
-        counts_sub.data(), counts_sub.size(), ANS_LOG_TAB_SIZE, codes));
+        counts_sub.data(), counts_sub.size(), ANS_TAB_SIZE, codes));
     // Read the symbols that make up the final stats.
     uint32_t nnz_left = nnz;
     for (uint32_t i = 0; i < histo_size; ++i) {
@@ -149,32 +150,31 @@ void SymbolReader::AddTrivial(uint32_t cluster, uint32_t sym, int32_t value) {
   stat->param.trivial_value = value;
 }
 
-void SymbolReader::AddRange(uint32_t cluster, uint32_t sym,
-                            const VectorNoCtor<ANSSymbolInfo>* const infos,
-                            uint16_t max_range) {
+void SymbolReader::AddMapping(uint32_t cluster, uint32_t sym,
+                              const Vector_u16& mapping) {
   Stat* const stat = GetStats(cluster, sym);
-
   stat->type = Stat::Type::kRange;
-  if (infos != nullptr) {
-    stat->use_mapping = true;
-    for (uint32_t k = 0; k < infos->size(); ++k) {
-      stat->mappings[k] = (*infos)[k].symbol;
-    }
-    stat->range = infos->size();
-  } else {
-    stat->use_mapping = false;
-    stat->range = max_range;
-  }
+  stat->use_mapping = true;
+  for (uint32_t k = 0; k < mapping.size(); ++k) stat->mappings[k] = mapping[k];
+  stat->range = mapping_.size();
+}
+
+void SymbolReader::AddRange(uint32_t cluster, uint32_t sym, uint16_t range) {
+  Stat* const stat = GetStats(cluster, sym);
+  stat->type = Stat::Type::kRange;
+  stat->use_mapping = false;
+  stat->range = range;
 }
 
 WP2Status SymbolReader::AddDict(uint32_t cluster, uint32_t sym,
-                                VectorNoCtor<ANSSymbolInfo>* const infos) {
+                                ANSCodes* const infos) {
   Stat* const stat = GetStats(cluster, sym);
 
   assert(infos->size() > 1);
   stat->type = Stat::Type::kDict;
   stat->use_mapping = true;
   // Make sure the symbols are ordered like in the encoding.
+  // TODO(vrabaud): this should be prevented by the bitstream syntax
   std::sort(infos->begin(), infos->end(), ANSSymbolInfoCmp);
   // Create the mappings.
   Vector_u32 counts;
@@ -189,14 +189,14 @@ WP2Status SymbolReader::AddDict(uint32_t cluster, uint32_t sym,
   WP2_CHECK_ALLOC_OK(codes_.resize(codes_.size() + 1));
   stat->extra.log2_tab_size = ANS_LOG_TAB_SIZE;
   WP2_CHECK_STATUS(ANSCountsToSpreadTable(
-      &counts[0], counts.size(), stat->extra.log2_tab_size,
+      &counts[0], counts.size(), 1u << stat->extra.log2_tab_size,
       codes_.back()));   // will allocate codes_.back()
   stat->extra.codes = codes_.back().data();
   return WP2_STATUS_OK;
 }
 
 WP2Status SymbolReader::AddGolomb(uint32_t cluster, uint32_t sym,
-                                  VectorNoCtor<WP2::ANSSymbolInfo>* const infos,
+                                  ANSCodes* const infos,
                                   uint32_t prefix_size) {
   WP2_CHECK_STATUS(AddDict(cluster, sym, infos));
   SetGolombStat(cluster, sym, prefix_size);
@@ -605,14 +605,11 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
     WP2_CHECK_STATUS(AddDict(cluster, sym, &infos_));
   } else {                 // kRange
     const uint32_t nnz = dec_->ReadRange(1, nnz_range, "size_m1");
-    WP2_CHECK_STATUS(LoadMapping(dec_, nnz, range, mapping_));
-    // Store everything in the info.
-    WP2_CHECK_ALLOC_OK(infos_.resize(nnz));
-    for (uint32_t k = 0; k < infos_.size(); ++k) {
-      infos_[k].symbol = mapping_[k];
-      infos_[k].freq = 1;
-    }
-    AddRange(cluster, sym, &infos_, range - nnz);
+    Stat* const stat = GetStats(cluster, sym);
+    stat->type = Stat::Type::kRange;
+    stat->use_mapping = true;
+    stat->range = nnz;
+    WP2_CHECK_STATUS(LoadMapping(dec_, nnz, range, stat->mappings));
   }
   return dec_->GetStatus();
 }

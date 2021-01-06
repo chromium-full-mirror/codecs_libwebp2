@@ -39,6 +39,8 @@ GET_DISTO=${BINARY_DIR}/get_disto
 
 TMP_IMG=/tmp/test_io
 TMP_WP2="${TMP_IMG}.wp2"
+TMP_PGM1="${TMP_IMG}_1.pgm"
+TMP_PGM2="${TMP_IMG}_2.pgm"
 
 formats_to_test="png ppm tiff pam bmp"
 sources1="source0.ppm alpha_ramp.tiff source4.webp"
@@ -57,7 +59,10 @@ check_roundtrip() {
   echo "=== $1 ==="
   min_psnr=$2
   min_msssim=$3
-  do_cmd ${CWP2} "${1}" $4 -o "${TMP_WP2}" -psnr -short -effort 0
+  do_cmd ${CWP2} "${1}" $4 -o "${TMP_WP2}" -psnr -short -effort 0 -d ${TMP_PGM1}
+  # verify the pgm Y/U/V/A output with PGM format
+  do_cmd ${DWP2} "${TMP_WP2}" -quiet -o "${TMP_PGM2}"
+  ${GET_DISTO} "${TMP_PGM1}" "${TMP_PGM2}" -exact
   for fmt in ${formats_to_test}; do
     do_cmd ${DWP2} -quiet -v "${TMP_WP2}" -${fmt} -o "${TMP_IMG}.${fmt}"
     if [ "x${fmt}" != "xppm" ]; then
@@ -73,12 +78,19 @@ check_roundtrip() {
 
 # Minimal quality checks
 for file in ${sources1}; do
-  check_roundtrip "${TESTDATA_DIR}/${file}" 33.1 19.25
+  check_roundtrip "${TESTDATA_DIR}/${file}" 36.0 22.0
 done
 
-check_roundtrip "${TESTDATA_DIR}/source3_222x167.jpg" 28.8 18.8 "-pass 3"
+for csp in 0 1 2 3; do
+  check_roundtrip "${TESTDATA_DIR}/alpha_ramp.tiff" 47.0 18.8 \
+                  "-csp ${csp}"
+  check_roundtrip "${TESTDATA_DIR}/alpha_ramp.tiff" 99.0 99.0 \
+                  "-csp ${csp} -q 100"
+done
 
-check_roundtrip "${TESTDATA_DIR}/source1_64x48.png" 29.3 19.8 "-alpha_q 80"
+check_roundtrip "${TESTDATA_DIR}/source3_222x167.jpg" 31.0 22.0 "-pass 3"
+
+check_roundtrip "${TESTDATA_DIR}/source1_64x48.png" 32.0 22.0 "-alpha_q 80"
 
 ${DWP2} -i "${TMP_WP2}"
 

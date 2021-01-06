@@ -501,9 +501,9 @@ class ANSEncNoop : public ANSEncBase {
 // Loads a mapping where all values are in the range [ 0, 'range' ).
 // A mapping is such that value i is mapped to 'mapping'[i]. All values are
 // strictly increasing and are in the range [ 0, 'range' ).
-// 'mapping' is resized to 'size'.
+// 'mapping' must point to a memory buffer of size at least 'size'.
 WP2Status LoadMapping(ANSDec* const dec, uint32_t size, uint32_t range,
-                      Vector_u16& mapping);
+                      uint16_t* const mapping);
 
 // Stores a mapping.
 // 'stats' is the same as in StoreVector.
