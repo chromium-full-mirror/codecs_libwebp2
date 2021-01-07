@@ -57,7 +57,9 @@ WP2Status GrainFilter::Allocate() {
 uint32_t GrainFilter::Apply(uint32_t num_rows) {
   if (!enabled_) return num_rows;
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "grain-filter")) SavePixelsForVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
 
   assert(num_rows <= blocks_.tile_rect_.height);
   YUVPlane* const pixels = blocks_.pixels_;
@@ -87,7 +89,9 @@ uint32_t GrainFilter::Apply(uint32_t num_rows) {
   }
   last_row_ = y;
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "grain-filter")) ApplyVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
   return std::min(last_row_, num_rows);
 }
 

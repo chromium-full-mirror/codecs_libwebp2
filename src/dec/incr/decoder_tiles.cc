@@ -37,6 +37,7 @@ bool TryReadTileChunkSize(const GlobalParams& gparams,
   assert(tile->rect.GetArea() > 0);
   if (!tile->chunk_size_is_known) {  // If not previously decoded.
     const size_t size_before = data_source->GetNumReadBytes();
+    (void)size_before;
     const WP2Status chunk_size_status = DecodeTileChunkSize(
         gparams, tile->rect, data_source, &tile->chunk_size);
     if (chunk_size_status != WP2_STATUS_OK) {
@@ -46,8 +47,9 @@ bool TryReadTileChunkSize(const GlobalParams& gparams,
       return false;
     }
     tile->chunk_size_is_known = true;
-    RegisterBitTrace(config, data_source->GetNumReadBytes() - size_before,
-                     "chunk_size");
+    WP2_CHECK_REDUCED_STATUS(
+        RegisterBitTrace(config, data_source->GetNumReadBytes() - size_before,
+                         "chunk_size"));
   }
   return true;
 }

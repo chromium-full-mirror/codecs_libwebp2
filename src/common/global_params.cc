@@ -75,18 +75,16 @@ WP2Status GlobalParams::Write(uint32_t quality_hint, bool image_has_alpha,
                       "uv_quant_multiplier");
       }
     }
+    bool write_alpha = maybe_use_lossy_alpha_;
     for (const Segment& s : segments_) {
-      WP2_CHECK_STATUS(s.WriteHeader(enc, use_grain));
+      WP2_CHECK_STATUS(s.WriteHeader(enc, write_alpha, use_grain));
+      write_alpha = false;   // only for the first segment
     }
     // TODO(skal): use some fixed-value probas
     enc->PutBool(use_rnd_mtx_, "rnd_mtx");  // TODO(skal): write num_mtx?
 
     if (maybe_use_lossy_alpha_) {
       enc->PutBool(enable_alpha_filter_, "enable_alpha_filter");
-      assert(a_segments_.size() == 1);
-      for (const Segment& s : a_segments_) {
-        WP2_CHECK_STATUS(s.WriteHeader(enc, /*write_grain=*/false));
-      }
     } else {
       assert(!enable_alpha_filter_);
     }
@@ -142,26 +140,22 @@ WP2Status GlobalParams::Read(uint32_t quality_hint, bool image_has_alpha,
       }
     }
 
+    bool read_alpha = maybe_use_lossy_alpha_;
     for (Segment& segment : segments_) {
       segment.SetYUVBounds(transf_.GetYUVMin(), transf_.GetYUVMax());
       WP2_CHECK_STATUS(segment.ReadHeader(partition_set_, quality_hint,
                                           u_quant_multiplier_,
-                                          v_quant_multiplier_, use_grain, dec));
+                                          v_quant_multiplier_,
+                                          read_alpha,
+                                          use_grain, dec));
+      read_alpha = false;   // only for the first segment
     }
     use_rnd_mtx_ = dec->ReadBool("rnd_mtx");
     WP2_CHECK_STATUS(InitRndMtxSet());
     WP2_CHECK_STATUS(InitFixedPredictors());
+
     enable_alpha_filter_ =
         maybe_use_lossy_alpha_ && dec->ReadBool("enable_alpha_filter");
-    if (maybe_use_lossy_alpha_) {
-      WP2_CHECK_ALLOC_OK(a_segments_.resize(1));
-      for (Segment& segment : a_segments_) {
-        segment.SetYUVBounds(transf_.GetYUVMin(), transf_.GetYUVMax());
-        WP2_CHECK_STATUS(segment.ReadHeader(
-            partition_set_, quality_hint, /*u_quant_multiplier=*/0,
-            /*v_quant_multiplier=*/0, /*read_grain=*/false, dec));
-      }
-    }
   }
   if (type_ != GP_LOSSY) {  // read lossless
   }
@@ -207,9 +201,7 @@ bool GlobalParams::IsOk() const {
 
 uint16_t GlobalParams::GetMaxAbsDC(Channel channel) const {
   uint16_t max_abs_dc = 0;
-  const Vector<Segment>& segments =
-      (channel == kAChannel) ? a_segments_ : segments_;
-  for (const Segment& s : segments) {
+  for (const Segment& s : segments_) {
     // Figure out the maximum range.
     max_abs_dc = std::max(max_abs_dc, s.GetMaxAbsDC(channel));
   }
@@ -227,7 +219,6 @@ void GlobalParams::Reset() {
   has_alpha_ = false;
   transf_.InitYCoCg();
   segments_.reset();
-  a_segments_.reset();
   y_preds_.reset();
   uv_preds_.reset();
   maybe_use_lossy_alpha_ = false;

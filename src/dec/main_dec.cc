@@ -36,6 +36,66 @@ const DecoderConfig DecoderConfig::kDefault;
 
 //------------------------------------------------------------------------------
 
+template<class V>
+static void CopyPredictorNames(const V& predictors,
+                               std::vector<std::string>* const names) {
+  names->clear();
+  names->reserve(predictors.size());
+  for (Predictor* predictor : predictors) {
+    names->push_back(predictor->GetName());
+  }
+}
+
+// Fills DecoderInfo in 'config' based on provided GlobalParams.
+WP2Status FillDecoderInfo(const GlobalParams& gparams,
+                          const DecoderConfig& config) {
+  if (config.info != nullptr) {  // Clear output values.
+    config.info->num_segments = gparams.segments_.size();
+    CopyPredictorNames(gparams.y_preds_, &config.info->y_predictors);
+    CopyPredictorNames(gparams.uv_preds_, &config.info->uv_predictors);
+    CopyPredictorNames(gparams.a_preds_, &config.info->a_predictors);
+    config.info->explicit_segment_ids = gparams.explicit_segment_ids_;
+    if (config.info->csp != nullptr) *config.info->csp = gparams.transf_;
+  }
+  return WP2_STATUS_OK;
+}
+
+// Called once 'features' are known to initialize 'DecoderConfig::info'.
+WP2Status SetupDecoderInfo(const BitstreamFeatures& features,
+                           const DecoderConfig& config) {
+#if !defined(WP2_REDUCE_BINARY_SIZE)
+  if (VDMatch(config, "")) {  // Matches any visual debug.
+    ArgbBuffer* const debug_output = &config.info->debug_output;
+    if (VDMatch(config, "original")) {
+      // Keep the content of the buffer but check the size.
+      WP2_CHECK_OK(!debug_output->IsEmpty() &&
+                       debug_output->width() == features.raw_width &&
+                       debug_output->height() == features.raw_height,
+                   WP2_STATUS_BAD_DIMENSION);
+      // TODO(yguyon): Rotate 'debug_output' if 'orientation' is not kOriginal
+    } else {
+      WP2_CHECK_STATUS(
+          debug_output->Resize(features.raw_width, features.raw_height));
+      VDDrawUndefinedPattern(debug_output);
+    }
+  }
+#endif  // WP2_REDUCE_BINARY_SIZE
+
+  if (config.info != nullptr) {  // Clear output values.
+#if defined(WP2_BITTRACE)
+    config.info->bit_traces.clear();
+    config.info->blocks.clear();
+#endif  // WP2_BITTRACE
+    WP2_CHECK_REDUCED_STATUS(
+        RegisterBitTrace(config, features.header_size, "BitstreamFeatures"));
+    config.info->header_size = features.header_size;
+    config.info->selection_info.clear();
+  }
+  return WP2_STATUS_OK;
+}
+
+//------------------------------------------------------------------------------
+
 namespace {
 
 // Returns true if the 'buffer_size' and 'buffer_stride' can hold an image of
@@ -56,11 +116,13 @@ WP2Status ReadTiles(const DecoderConfig& config, DataSource* const data_source,
                     TilesLayout* const tiles_layout) {
   for (Tile& tile : tiles_layout->tiles) {
     const size_t size_before = data_source->GetNumReadBytes();
+    (void)size_before;
     WP2_CHECK_STATUS(DecodeTileChunkSize(*tiles_layout->gparams, tile.rect,
                                          data_source, &tile.chunk_size));
     tile.chunk_size_is_known = true;
-    RegisterBitTrace(config, data_source->GetNumReadBytes() - size_before,
-                     "ChunkSize");
+    WP2_CHECK_REDUCED_STATUS(
+        RegisterBitTrace(config, data_source->GetNumReadBytes() - size_before,
+                         "ChunkSize"));
     WP2_CHECK_OK(data_source->TryReadNext(tile.chunk_size, &tile.data_handle),
                  WP2_STATUS_NOT_ENOUGH_DATA);
   }

@@ -78,7 +78,11 @@ uint32_t RestorationFilter::Enhances(uint32_t num_rows) {
     num_filterable_rows = SafeSub(num_rows, kWieFltTapDist);
   }
 
+
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "restoration-filter")) SavePixelsForVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
+
   if (num_filterable_rows <= num_filtered_rows_) return num_filtered_rows_;
 
   const uint32_t block_step = blocks_.max_num_blocks_x_;
@@ -165,9 +169,12 @@ uint32_t RestorationFilter::Enhances(uint32_t num_rows) {
         }
       }
     }
+
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     if (VDMatch(config_, "restoration-filter")) {
       RegisterPixelsForVDebug(0, width - 1u, y, y + height - 1u);
     }
+#endif  // WP2_REDUCE_BINARY_SIZE
 
     if (backup_bottom) {
       using std::swap;
@@ -178,7 +185,10 @@ uint32_t RestorationFilter::Enhances(uint32_t num_rows) {
   }
   num_filtered_rows_ = y;
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "restoration-filter")) ApplyVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
+
   return num_filtered_rows_;
 }
 

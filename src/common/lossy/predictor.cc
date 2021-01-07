@@ -764,7 +764,9 @@ class PredictorScorer {
         best_score_(best_score),  // Needed for VDebug 'is_best'.
         best_dist_(std::numeric_limits<uint32_t>::max()),
         best_predictor_(nullptr),
-        best_tf_(kUnknownTf) {}
+        best_tf_(kUnknownTf) {
+    (void)config_;  // only used by VDebug
+  }
 
   // Computes the score and dist of the given predictor 'p' applied to 'cb'.
   WP2Status UpdateUVPredScore(const Predictor& p, CodedBlock* const cb) {
@@ -782,6 +784,7 @@ class PredictorScorer {
     score_ = (scores[kUChannel] + scores[kVChannel]) / 2.f;
     dist_ = (dist[kUChannel] + dist[kVChannel]) / 2;
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     // Store scores for debug.
     for (Channel channel : {kUChannel, kVChannel}) {
       const QuantMtx& quant = segment_.GetQuant(channel);
@@ -792,6 +795,8 @@ class PredictorScorer {
           /*is_best=*/(score_ < best_score_),
           CodedBlock::SearchType::kPredAndTransform);
     }
+#endif  // WP2_REDUCE_BINARY_SIZE
+
     return WP2_STATUS_OK;
   }
 
@@ -819,12 +824,15 @@ class PredictorScorer {
                                   num_channels_, tf_rate, counters_, &dist_,
                                   &res_rate, &pred_rate, &score_));
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     // Store score for debug.
     cb->StorePredictionScore(config_, tile_rect_, channel_, p, params->tf,
                              dist_, cb->lambda_mult_ * quant.lambda1, res_rate,
                              pred_rate, tf_rate, score_,
                              /*is_best=*/(score_ < best_score_),
                              CodedBlock::SearchType::kPredAndTransform);
+#endif  // WP2_REDUCE_BINARY_SIZE
+
     return WP2_STATUS_OK;
   }
 

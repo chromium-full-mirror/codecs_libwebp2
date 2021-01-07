@@ -66,8 +66,9 @@ WP2Status DecodeANMF(const DecoderConfig& config, DataSource* const data_source,
         WP2_CHECK_OK(!frame->is_last, WP2_STATUS_BITSTREAM_ERROR);
       }
     }
-    RegisterBitTrace(
-        config, data_source->GetNumReadBytes() - num_read_bytes_before, "ANMF");
+    WP2_CHECK_REDUCED_STATUS(
+      RegisterBitTrace(config,
+          data_source->GetNumReadBytes() - num_read_bytes_before, "ANMF"));
   } else {
     frame->dispose = true;
     frame->blend = false;

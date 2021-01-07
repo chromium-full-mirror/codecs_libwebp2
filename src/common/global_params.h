@@ -98,7 +98,6 @@ class GlobalParams {
   // True if the image might contain lossy alpha.
   bool maybe_use_lossy_alpha_ = false;
   bool enable_alpha_filter_ = false;  // For lossy alpha only.
-  Vector<Segment> a_segments_;
   FeatureMap* features_ = nullptr;  // only used by the encoder
 
  public:   // lossless part

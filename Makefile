@@ -158,6 +158,12 @@ ifeq ($(BITTRACE), 1)
   CXXFLAGS += -DWP2_BITTRACE
 endif
 
+ifeq ($(REDUCED), 1)
+  CFLAGS += -DWP2_REDUCE_BINARY_SIZE
+  CXXFLAGS += -DWP2_REDUCE_BINARY_SIZE
+endif
+
+
 # for AOM_ACCOUNTING/INSPECTION, we need a specially built libaom, with the
 # flags CONFIG_ACCOUNTING/CONFIG_INSPECTION defined and access to inner
 # headers av1/decoder/...

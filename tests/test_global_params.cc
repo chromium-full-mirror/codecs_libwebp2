@@ -70,7 +70,6 @@ TEST(GlobalParmas, ReadWriteUVQUantMultiplier) {
 TEST(GlobalParmas, FixedPredictors) {
   GlobalParams params;
   ASSERT_TRUE(params.segments_.resize(3));
-  ASSERT_TRUE(params.a_segments_.resize(1));
   params.has_alpha_ = params.maybe_use_lossy_alpha_ = true;
   // Init twice (should not matter).
   ASSERT_WP2_OK(params.InitFixedPredictors());

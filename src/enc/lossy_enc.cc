@@ -221,6 +221,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   }
 #endif
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   ArgbBuffer debug_output;  // Tile view of 'config.info->debug_output'
   Plane16 vd_plane;
   if (VDMatch(*config_, "")) {
@@ -234,6 +235,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       vd_plane.Fill(-512);
     }
   }
+#endif  // WP2_REDUCE_BINARY_SIZE
 
   Vector<TransformPair> transforms, transforms_subset;
   WP2_CHECK_STATUS(DecideTransforms(*config_, &transforms, &transforms_subset));
@@ -288,6 +290,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
         WP2_CHECK_STATUS(writer.RecordAlpha(cb));
       }
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
       // original_coeffs is only available in BITTRACE mode.
 #if defined(WP2_BITTRACE)
       if (VDMatch(*config_, "original-residuals")) {
@@ -347,6 +350,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
         }
 #endif  // defined(WP2_BITTRACE)
       }
+#endif  // WP2_REDUCE_BINARY_SIZE
 
       WP2_CHECK_STATUS(writer.FindBestEncodingMethods(&cb));
       WP2_CHECK_STATUS(writer.Record(cb));
@@ -387,6 +391,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   WP2_CHECK_STATUS(writer.WriteBlocks(cblocks, &mgr, enc));
   WP2_CHECK_STATUS(write_progress.AdvanceBy(1.));
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (!vd_plane.IsEmpty()) {
     if (VDMatch(*config_, "a")) {
       WP2_CHECK_STATUS(
@@ -396,6 +401,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       WP2_CHECK_STATUS(vd_plane.ToGray(&debug_output, /*num_bits=*/10));
     }
   }
+#endif  // WP2_REDUCE_BINARY_SIZE
 
   return enc->GetStatus();
 }

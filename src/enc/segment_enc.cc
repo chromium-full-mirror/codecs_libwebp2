@@ -231,6 +231,7 @@ WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
         map->noise_map_[idx].cut[channel] = X + Y;
       }
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
       if (VDMatch(config, "encoder/segmentation")) {
         const Rectangle rect = {x * kMinBlockSizePix, y * kMinBlockSizePix,
                                 kMinBlockSizePix, kMinBlockSizePix};
@@ -241,6 +242,7 @@ WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
           SegmentationGridVDebug(config, rect, tile_x, tile_y, score);
         }
       }
+#endif  // WP2_REDUCE_BINARY_SIZE
     }
   }
 
@@ -462,6 +464,7 @@ WP2Status AssignSegmentIds(const EncoderConfig& config,
                            const GlobalParams& gparams,
                            const Rectangle& padded_tile,
                            Vector<CodedBlock>* const cblocks) {
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config, "encoder/segmentation/id")) {
     const FeatureMap& map = *gparams.features_;
     const uint32_t tile_x = padded_tile.x / kMinBlockSizePix;
@@ -478,16 +481,19 @@ WP2Status AssignSegmentIds(const EncoderConfig& config,
       }
     }
   }
+#endif  // WP2_REDUCE_BINARY_SIZE
 
   for (CodedBlock& cb : *cblocks) {
     uint32_t score;
     cb.id_ = AssignSegmentId(config, gparams, padded_tile, cb.blk(), &score);
     cb.lambda_mult_ = AssignLambda(config, gparams, padded_tile, cb);
+    assert(cb.id_ < gparams.segments_.size());
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     if (VDMatch(config, "encoder/segmentation/blocks")) {
       SegmentationBlockVDebug(config, cb, padded_tile.x, padded_tile.y, score,
                               gparams.segments_[cb.id_]);
     }
-    assert(cb.id_ < gparams.segments_.size());
+#endif  // WP2_REDUCE_BINARY_SIZE
   }
   return WP2_STATUS_OK;
 }

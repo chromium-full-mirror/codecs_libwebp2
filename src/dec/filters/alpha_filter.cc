@@ -58,7 +58,7 @@ bool IsAlphaFilterEnabled(const DecoderConfig& config,
                           const GlobalParams& gparams) {
   return gparams.maybe_use_lossy_alpha_ &&
          (gparams.enable_alpha_filter_ || VDMatch(config, "alpha-filter")) &&
-         (gparams.a_segments_[0].quality_factor_ >= kEnableThreshold);
+         (gparams.segments_[0].a_quality_factor_ >= kEnableThreshold);
 }
 
 AlphaFilter::AlphaFilter(const DecoderConfig& config,
@@ -68,8 +68,8 @@ AlphaFilter::AlphaFilter(const DecoderConfig& config,
       config_(config),
       blocks_(blocks) {
   if (!enabled_) return;
-  assert(gparams.a_segments_.size() == 1);
-  const uint16_t quality_factor = gparams.a_segments_[0].quality_factor_;
+  assert(!gparams.segments_.empty());
+  const uint16_t quality_factor = gparams.segments_[0].a_quality_factor_;
   // TODO(maryla): fine tune thresholds/sigma values.
   if (quality_factor < 50) {
     kernel_radius_ = 1;
@@ -105,7 +105,9 @@ uint32_t AlphaFilter::Smooth(uint32_t num_rows) {
     return num_rows;
   }
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "alpha-filter")) SavePixelsForVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
 
   int32_t num_filterable_rows;
   if (num_rows == blocks_.tile_rect_.height) {
@@ -174,7 +176,9 @@ uint32_t AlphaFilter::Smooth(uint32_t num_rows) {
   }
   num_filtered_rows_ = y;
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "alpha-filter")) ApplyVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
   return num_filtered_rows_;
 }
 

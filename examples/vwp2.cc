@@ -54,7 +54,7 @@
 #include "extras/aom_utils.h"
 #endif
 
-#if defined(WP2_HAVE_OPENGL)
+#if defined(WP2_HAVE_OPENGL) && !defined(WP2_REDUCE_BINARY_SIZE)
 #if defined(WP2_HAVE_FREEGLUT)
 
 #include <GL/freeglut.h>
@@ -3448,10 +3448,15 @@ int main(int argc, char* argv[]) {
   return 0;
 }
 
-#else  // !WP2_HAVE_OPENGL
+#else  // !WP2_HAVE_OPENGL || WP2_REDUCE_BINARY_SIZE
 
 int main(int argc, const char *argv[]) {
+#if defined(WP2_REDUCE_BINARY_SIZE)
+  fprintf(stderr, "WARNING! Binary compiled using WP2_REDUCE_BINARY_SIZE!\n");
+  fprintf(stderr, "All features are disabled in %s!\n", argv[0]);
+#else
   fprintf(stderr, "OpenGL support not enabled in %s.\n", argv[0]);
+#endif
   (void)argc;
   return 0;
 }

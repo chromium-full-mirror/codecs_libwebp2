@@ -89,23 +89,33 @@ bool Segment::IsMergeableWith(const Segment& other) const {
       (use_grain_ == other.use_grain_) &&
       (!use_grain_ || grain_ == other.grain_);
   if (!same) return false;
-  for (uint32_t c = 0; c < 4; ++c) {
-    for (uint32_t i = 0; i < kNumQuantZones; ++i) {
-      if (quant_steps_[c][i] != other.quant_steps_[c][i]) return false;
+  if (use_quality_factor_) {
+    if (quality_factor_ != other.quality_factor_) return false;
+    if (a_quality_factor_ != other.a_quality_factor_) return false;
+  } else {
+    for (uint32_t c = 0; c < 4; ++c) {
+      for (uint32_t i = 0; i < kNumQuantZones; ++i) {
+        if (quant_steps_[c][i] != other.quant_steps_[c][i]) return false;
+      }
     }
   }
   return true;
 }
 
-WP2Status Segment::WriteHeader(ANSEnc* const enc, bool write_grain) const {
+WP2Status Segment::WriteHeader(ANSEnc* const enc,
+                               bool write_alpha, bool write_grain) const {
   enc->PutBool(use_quality_factor_, "quant-factor");
 
   if (use_quality_factor_) {
     enc->PutRValue(quality_factor_, kQFactorMax + 1, "quant-factor");
+    if (write_alpha) {
+      enc->PutRValue(a_quality_factor_, kQFactorMax + 1, "quant-factor");
+    }
   } else {
     // TODO(skal): use better delta-coding.
     for (uint32_t i = 0; i < kNumQuantZones; ++i) {
       for (auto c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+        if (c == kAChannel && !write_alpha) continue;
         enc->PutRange(quant_steps_[c][i], 0, kQFactorMax, "quant-factor");
       }
     }
@@ -145,7 +155,8 @@ void Segment::StoreEncodingMethods(const CodedBlock& cb,
 
 WP2Status Segment::ReadHeader(PartitionSet partition_set, uint32_t quality_hint,
                               uint32_t u_quant_multiplier,
-                              uint32_t v_quant_multiplier, bool read_grain,
+                              uint32_t v_quant_multiplier,
+                              bool read_alpha, bool read_grain,
                               ANSDec* const dec) {
   partition_set_ = partition_set;
   const bool use_quality_factor = dec->ReadBool("quant-factor");
@@ -154,15 +165,22 @@ WP2Status Segment::ReadHeader(PartitionSet partition_set, uint32_t quality_hint,
         dec->ReadRValue(kQFactorMax + 1, "quant-factor");
     SetQuality(quality_hint, quality_factor,
                u_quant_multiplier, v_quant_multiplier);
+    if (read_alpha) {
+      const uint32_t a_quality_factor =
+          dec->ReadRValue(kQFactorMax + 1, "quant-factor");
+      SetAlphaQuality(a_quality_factor);
+    }
   } else {
     for (uint32_t i = 0; i < kNumQuantZones; ++i) {
       for (auto c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+        if (c == kAChannel && !read_alpha) continue;
         quant_steps_[c][i] = dec->ReadRange(0, kQFactorMax, "quant-factor");
         SetQuantSteps(quant_steps_[c], c);
       }
     }
   }
   FinalizeQuant();
+  if (read_alpha) FinalizeAlphaQuant();
 
   if (read_grain) {
     use_grain_ = dec->ReadUValue(1, "grain");
@@ -232,7 +250,6 @@ void Segment::SetQuality(uint32_t quality_hint, uint32_t quality_factor,
   const int32_t q_y = quality_factor;
   const int32_t q_u = quality_factor + u_quant_multiplier - kNeutralMultiplier;
   const int32_t q_v = quality_factor + v_quant_multiplier - kNeutralMultiplier;
-  const int32_t q_a = quality_factor;
   // Quantize DC less than AC for UV, especially at lower qualities.
   constexpr float kMinScale = 0.25f;
   constexpr float kMaxScale = 0.60f;
@@ -245,10 +262,17 @@ void Segment::SetQuality(uint32_t quality_hint, uint32_t quality_factor,
     quant_steps_[kYChannel][i] = InterpolateQuant(q_y, 1.0f);
     quant_steps_[kUChannel][i] = InterpolateQuant(q_u, kUVScales[i]);
     quant_steps_[kVChannel][i] = InterpolateQuant(q_v, kUVScales[i]);
-    quant_steps_[kAChannel][i] = InterpolateQuant(q_a, 0.5f);
   }
   quality_factor_ = quality_factor;
   use_quality_factor_ = true;
+}
+
+void Segment::SetAlphaQuality(uint32_t quality_factor) {
+  assert(use_quality_factor_);
+  a_quality_factor_ = std::min(quality_factor, (uint32_t)kQFactorMax);
+  for (uint32_t i = 0; i < kNumQuantZones; ++i) {
+    quant_steps_[kAChannel][i] = InterpolateQuant(a_quality_factor_, 0.5f);
+  }
 }
 
 void Segment::SetQuantSteps(uint16_t quants[kNumQuantZones], Channel channel) {
@@ -290,6 +314,14 @@ void Segment::FinalizeQuant(float lambda) {
                 quant_steps_[kUChannel]);
   quant_v_.Init(max_residual_, q_scale_, partition_set_,
                 quant_steps_[kVChannel]);
+  if (lambda > 0) {
+    quant_y_.SetLambda(lambda / q_scale_);
+    quant_u_.SetLambda(lambda / q_scale_);
+    quant_v_.SetLambda(lambda / q_scale_);
+  }
+}
+
+void Segment::FinalizeAlphaQuant(float lambda) {
   // Max residual value is different for alpha since it doesn't go through the
   // CSP transform. Alpha is between 0 and kAlphaMax. After subtracting
   // predicted values from actual values, the residuals are between -kAlphaMax
@@ -297,10 +329,6 @@ void Segment::FinalizeQuant(float lambda) {
   quant_a_.Init(/*max_residual=*/kAlphaMax, /*q_scale=*/1.0, partition_set_,
                 quant_steps_[kAChannel]);
   if (lambda > 0) {
-    lambda_f_ = lambda;
-    quant_y_.SetLambda(lambda / q_scale_);
-    quant_u_.SetLambda(lambda / q_scale_);
-    quant_v_.SetLambda(lambda / q_scale_);
     const float q_scale_a = (float)(1 << (kMaxYuvBits + 1)) / (1 + kAlphaMax);
     quant_a_.SetLambda(lambda / q_scale_a);
   }
@@ -374,17 +402,13 @@ WP2Status GlobalParams::AssignAlphaQuantizations(const YUVPlane& yuv,
     // TODO(maryla): we could detect automatically cases where the alpha
     // filter should not be applied.
     enable_alpha_filter_ = config.enable_alpha_filter;
-    WP2_CHECK_ALLOC_OK(a_segments_.resize(1));
     const uint32_t max_quality = kMaxLossyQuality;
     const uint32_t quant_factor0 =
         (uint32_t)std::lround(
             kQFactorMax * (max_quality - config.alpha_quality) / max_quality);
-    for (Segment& s : a_segments_) {
-      WP2_CHECK_STATUS(s.AllocateForEncoder());
-      s.SetQuantizationFactor(
-          transf_, GetQualityHint(config.alpha_quality),
-          /*u_quant_multiplier=*/0, /*v_quant_multiplier=*/0,
-          quant_factor0, /*lambda_mult=*/1.f, config.partition_set);
+    assert(!segments_.empty());
+    for (auto& s : segments_) {
+      s.SetAlphaQuantizationFactor(quant_factor0, /*lambda=*/1.f);
     }
   }
   return WP2_STATUS_OK;
@@ -400,6 +424,11 @@ void Segment::SetQuantizationFactor(const CSPTransform& transform,
   SetYUVBounds(transform.GetYUVMin(), transform.GetYUVMax());
   SetQuality(quality_hint, qfactor, u_quant_multiplier, v_quant_multiplier);
   FinalizeQuant(lambda_mult);
+}
+
+void Segment::SetAlphaQuantizationFactor(uint32_t qfactor, float lambda) {
+  SetAlphaQuality(qfactor);
+  FinalizeAlphaQuant(lambda);
 }
 
 //------------------------------------------------------------------------------

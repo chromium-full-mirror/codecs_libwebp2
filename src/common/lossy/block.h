@@ -276,14 +276,14 @@ class CodedBlock {
                    BlockCoeffs32* const res,
                    const Plane16& prediction = Plane16()) const;
 
-  // Visual debug: stores transform at block position
-  void StoreTransform(const WP2::DecoderConfig& config, uint32_t tile_x,
-                      uint32_t tile_y, ArgbBuffer* const debug_output) const;
   // Visual debug: force the transform of a block.
   TransformPair GetForcedTransform(const EncoderConfig& config,
                                    uint32_t tile_pos_x, uint32_t tile_pos_y,
                                    CodedBlock* const cb);
 
+  // Visual debug: stores transform at block position
+  void StoreTransform(const WP2::DecoderConfig& config, uint32_t tile_x,
+                      uint32_t tile_y, ArgbBuffer* const debug_output) const;
   // Visual debug: stores residuals at block position
   void StoreResiduals(const DecoderConfig& config, uint32_t tile_x,
                       uint32_t tile_y, const QuantMtx& quant, Channel channel,
@@ -357,10 +357,10 @@ class CodedBlock {
                          Plane16* const dst_plane,
                          std::string* const debug_str) const;
   // Visual debug: stores information around the chroma subsampling decision.
-  void Store420Scores(const EncoderConfig& config, uint32_t pos_x,
-                      uint32_t pos_y, float lambda_u, float lambda_v,
-                      bool reduced, uint32_t disto,
-                      float rate_u, float rate_v);
+  WP2Status Store420Scores(const EncoderConfig& config, uint32_t pos_x,
+                           uint32_t pos_y, float lambda_u, float lambda_v,
+                           bool reduced, uint32_t disto,
+                           float rate_u, float rate_v);
   enum class Debug420Decision { k444EarlyExit, k444, k420 };
   WP2Status Store420Decision(const EncoderConfig& config, uint32_t pos_x,
                              uint32_t pos_y, Debug420Decision decision) const;

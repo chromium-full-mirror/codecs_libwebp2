@@ -36,8 +36,10 @@ void RegisterBlock(uint16_t x, uint16_t y, BlockSize dim, bool has_lossy_alpha,
 
 void Filter(const FilterBlockMap& blocks, uint32_t h) {
   GlobalParams gparams;
-  ASSERT_TRUE(gparams.a_segments_.resize(1));
-  gparams.a_segments_[0].quality_factor_ = 30;
+  ASSERT_TRUE(gparams.segments_.resize(1));
+  gparams.segments_[0].use_quality_factor_ = true;
+  gparams.segments_[0].quality_factor_ = 30;
+  gparams.segments_[0].a_quality_factor_ = 60;
   gparams.has_alpha_ = true;
   gparams.maybe_use_lossy_alpha_ = true;
   gparams.enable_alpha_filter_ = true;

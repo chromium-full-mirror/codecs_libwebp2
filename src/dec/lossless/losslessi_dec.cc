@@ -213,7 +213,10 @@ WP2Status Decoder::ProcessRows(uint32_t row,
 
   if (row > last_row_) {    // Emit output.
     const uint32_t num_rows = row - last_row_;
-    RegisterUnprocessedRowForVDebug(num_rows, num_bits_, rows, decoder_info);
+    (void)num_rows;
+    WP2_CHECK_REDUCED_STATUS(
+        RegisterUnprocessedRowForVDebug(num_rows, num_bits_,
+                                        rows, decoder_info));
     // We can't process more than kNumARGBCacheRows at a time (that's the size
     // of argb_cache_), but we currently don't need more than that.
     assert(num_rows <= kNumARGBCacheRows);
@@ -360,8 +363,10 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
       WP2_CHECK_OK(false, WP2_STATUS_BITSTREAM_ERROR);  // For error reporting.
     }
     if (get_cost) {
-      RegisterSymbolForVDebug(type, /*is_group4=*/false, last_pixel_ + i_pixel,
-                              length, cost, decoder_info);
+      WP2_CHECK_REDUCED_STATUS(
+          RegisterSymbolForVDebug(type, /*is_group4=*/false,
+                                  last_pixel_ + i_pixel,
+                                  length, cost, decoder_info));
       if (bits_per_pixel != nullptr) {
         const double bits = cost / length;
         for (uint32_t j = 0; j < length; ++j) {
@@ -896,7 +901,7 @@ WP2Status Decoder::DecodeHeader() {
   hdr_.histogram_xsize_ = SubSampleSize(tile_->rect.width, num_bits);
   hdr_.histogram_mask_ = (num_bits == 0) ? ~0 : (1 << num_bits) - 1;
 
-  HeaderVDebug();
+  WP2_CHECK_REDUCED_STATUS(HeaderVDebug());
 
   return WP2_STATUS_OK;
 }
@@ -919,7 +924,7 @@ WP2Status Decoder::DecodeLines(uint32_t n_lines) {
   // Decode.
   WP2_CHECK_STATUS(DecodeImageData(tile_->rect.width, tile_->rect.height,
                                    last_row_ + n_lines, bits_per_pixel));
-
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "bits-per-pixel") && last_row_ == tile_->rect.height) {
     WP2::ArgbBuffer debug_output;
     WP2_CHECK_STATUS(
@@ -927,6 +932,7 @@ WP2Status Decoder::DecodeLines(uint32_t n_lines) {
     WP2_CHECK_STATUS(
         bits_per_pixel_.ToGray(&debug_output, /*num_bits=*/5, /*shift=*/false));
   }
+#endif  // WP2_REDUCE_BINARY_SIZE
 
   return WP2_STATUS_OK;
 }

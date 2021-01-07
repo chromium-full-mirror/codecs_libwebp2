@@ -208,7 +208,7 @@ WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
       gparams_->a_preds_, config_, tile_rect_.x, tile_rect_.y, kAChannel, cb);
 
   const APredictors& preds = gparams_->a_preds_;
-  const Segment& segment = gparams_->a_segments_[0];
+  const Segment& segment = gparams_->segments_[0];
   cb->GetCodingParams(kAChannel)->tf = kDctDct;
 
   if (forced_predictor) {

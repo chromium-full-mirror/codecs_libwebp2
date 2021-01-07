@@ -66,10 +66,11 @@ class GrainParams {
 
 class Segment {
  public:
-  WP2Status WriteHeader(ANSEnc* const enc, bool write_grain) const;
+  WP2Status WriteHeader(ANSEnc* const enc,
+                        bool write_alpha, bool write_grain) const;
   WP2Status ReadHeader(PartitionSet partition_set, uint32_t quality_hint,
                        uint32_t u_quant_multiplier, uint32_t v_quant_multiplier,
-                       bool read_grain, ANSDec* const dec);
+                       bool read_alpha, bool read_grain, ANSDec* const dec);
 
  public:
   // quantization
@@ -97,9 +98,9 @@ class Segment {
   uint16_t GetMaxAbsDC(Channel channel) const;
 
   uint16_t quant_steps_[4][kNumQuantZones] = {{0}, {0}, {0}, {0}};  // Y/U/V/A
-  float lambda_f_ = 0.f;
   bool use_quality_factor_ = true;
   uint16_t quality_factor_ = kQualityToQFactor(75.f);
+  uint16_t a_quality_factor_ = kQualityToQFactor(75.f);
 
   // Sets the range of YUV values max_residual_ to [yuv_min, yuv_max] inclusive.
   // The quantization scale q_scale_ is updated based on it too.
@@ -111,6 +112,9 @@ class Segment {
   // the higher it is, the more the image is compressed.
   void SetQuality(uint32_t quality_hint, uint32_t quality_factor,
                   uint32_t u_quant_multiplier, uint32_t v_quant_multiplier);
+  // Same, for kAChannel. Must be called *after* SetQuality().
+  void SetAlphaQuality(uint32_t quality_factor);
+
   // Fills the corresponding quant_steps_[]
   void SetQuantSteps(uint16_t quants[kNumQuantZones], Channel channel);
   void GetQuantSteps(uint16_t quants[kNumQuantZones], Channel channel) const;
@@ -118,6 +122,8 @@ class Segment {
   // Initializes the quant_mtx based on quant_steps_[].
   // q_scale must be set before calling this.
   void FinalizeQuant(float lambda = 0.f);
+  // Same, for kAChannel. Must be called *after* FinalizeQuant().
+  void FinalizeAlphaQuant(float lambda = 0.f);
 
   WP2Status AllocateForEncoder();   // must be called before FinalizeQuant()
 
@@ -127,10 +133,13 @@ class Segment {
 
   // Sets the YUV bounds, the quality and the quant mtx based on 'qfactor'.
   // 'qfactor' should be in [0, kFactorMax] range.
+  // The alpha quantization factor will be set to default value.
   void SetQuantizationFactor(const CSPTransform& transform,
                              uint32_t quality_hint, uint32_t u_quant_multiplier,
                              uint32_t v_quant_multiplier, uint32_t qfactor,
                              float lambda_mult, PartitionSet partition_set);
+  // Same, but for alpha channel. Must be called *after* SetQuantizationFactor()
+  void SetAlphaQuantizationFactor(uint32_t qfactor, float lambda);
 
   // Returns true if this segment is "close enough" to 'other' that they can be
   // merged (some fields might still be different).

@@ -214,9 +214,10 @@ WP2Status Decoder::DecodeGroup4(uint32_t width, uint32_t last_row,
       }
 
       if (get_cost) {
-        RegisterSymbolForVDebug((int)mode, /*is_group4=*/true,
-                                y * width + start_x, x - start_x, cost,
-                                config_.info);
+        WP2_CHECK_REDUCED_STATUS(
+            RegisterSymbolForVDebug((int)mode, /*is_group4=*/true,
+                                    y * width + start_x, x - start_x, cost,
+                                    config_.info));
         if (bits_per_pixel != nullptr) {
           const float bits = cost / (x - start_x);
           bits_per_pixel->Fill({start_x, y, x - start_x, 1}, bits);

@@ -112,17 +112,18 @@ class Decoder {
 
   // Visual debug. 'symbol_type' should either be a SymbolType or a Group4Mode
   // if 'is_group4' is true.
-  void RegisterSymbolForVDebug(int symbol_type, bool is_group4, uint32_t pos,
-                               uint32_t length, double cost,
-                               WP2::DecoderInfo* const decoder_info);
+  WP2Status RegisterSymbolForVDebug(
+      int symbol_type, bool is_group4, uint32_t pos, uint32_t length,
+      double cost, WP2::DecoderInfo* const decoder_info);
   // Visual debug. 'rows' should contain the raw decoded pixels before inverse
   // transforms are applied. 'decoder_info' can be nullptr (in which case
   // nothing is done).
-  void RegisterUnprocessedRowForVDebug(uint32_t num_rows, uint32_t num_bits,
-                                       const int16_t* const rows,
-                                       WP2::DecoderInfo* const decoder_info);
+  WP2Status RegisterUnprocessedRowForVDebug(
+      uint32_t num_rows, uint32_t num_bits, const int16_t* const rows,
+      WP2::DecoderInfo* const decoder_info);
+
   // Visual debug for header info.
-  void HeaderVDebug();
+  WP2Status HeaderVDebug();
 
   // Maximum number of rows we can hold in the cache.
   static constexpr uint32_t kNumARGBCacheRows = WP2::kMaxBlockSizePix;

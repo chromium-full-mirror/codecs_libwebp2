@@ -63,13 +63,14 @@ class PartitionScoreFunc : public WP2Allocable {
   const GlobalParams* gparams_ = nullptr;
   Rectangle tile_rect_;            // In pixels, not padded.
   const YUVPlane* src_ = nullptr;  // Original image (tile).
+  bool with_alpha_ = false;        // depends on gparams_
   uint32_t num_block_cols_ = 0;    // Maximum number of blocks on the horizontal
   uint32_t num_block_rows_ = 0;    // and vertical axis.
 
   // Visual debug.
   WP2Status ClearVDebug() const;
-  bool RegisterScoreForVDebug(const Block& block, float score,
-                              bool ending_new_line = true) const;
+  WP2Status RegisterScoreForVDebug(const Block& block, float score,
+                                   bool ending_new_line = true) const;
 };
 
 //------------------------------------------------------------------------------
@@ -129,9 +130,10 @@ class BlockScoreFunc : public PartitionScoreFunc {
   BlockContext context_;
 
  private:
-  bool RegisterScoreForVDebug(const Block blocks[], uint32_t num_blocks,
-                              const float rate[4], const float disto[4],
-                              float total_rate, float total_disto, float score);
+  WP2Status RegisterScoreForVDebug(const Block blocks[], uint32_t num_blocks,
+                                   const float rate[4], const float disto[4],
+                                   float total_rate, float total_disto,
+                                   float score);
 };
 
 //------------------------------------------------------------------------------
@@ -192,11 +194,10 @@ class AreaScoreFunc : public BlockScoreFunc {
   // Cached default partitioning stats of the current 'area_' for comparison.
   float default_disto_ = -1.f, default_rate_ = -1.f;
 
- private:
-  // Visual debug.
-  bool RegisterScoreForVDebug(BlockSize grid_size,
-                              const Vector<CodedBlock>& area_blocks,
-                              float score, float disto, float rate) const;
+ private:  // Visual debug.
+  WP2Status RegisterScoreForVDebug(BlockSize grid_size,
+                                   const Vector<CodedBlock>& area_blocks,
+                                   float score, float disto, float rate) const;
 };
 
 //------------------------------------------------------------------------------
@@ -226,11 +227,10 @@ class SubAreaScoreFunc : public AreaScoreFunc {
   Block default_block_;  // BLK_LAST if undefined.
   float default_block_disto_ = 0.f, default_block_rate_ = 0.f;
 
- private:
-  // Visual debug.
-  bool RegisterScoreForVDebug(const Block& block,
-                              const Vector<CodedBlock>& area_remaining_blocks,
-                              float score, float disto, float rate) const;
+ private:  // Visual debug.
+  WP2Status RegisterScoreForVDebug(
+      const Block& block, const Vector<CodedBlock>& area_remaining_blocks,
+      float score, float disto, float rate) const;
 };
 
 //------------------------------------------------------------------------------
@@ -361,9 +361,9 @@ class TileScoreFunc : public PartitionScoreFunc {
   TilesLayout tiles_layout_;
   float distortion_[5];
 
-  // Visual debug.
-  bool RegisterScoreForVDebug(const char label[], const Block& block,
-                              float score) const;
+ private:  // Visual debug.
+  WP2Status RegisterScoreForVDebug(const char label[], const Block& block,
+                                   float score) const;
 };
 
 //------------------------------------------------------------------------------

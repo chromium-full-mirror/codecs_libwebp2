@@ -86,18 +86,17 @@ struct AnimationFrame {
 // Initialize and register debug data.
 WP2Status SetupDecoderInfo(const BitstreamFeatures& features,
                            const DecoderConfig& config);
-void RegisterBitTrace(const DecoderConfig& config, uint32_t num_bytes,
-                      WP2_OPT_LABEL);
-
-// Decode steps are split into functions for incremental decoding. These
-// functions only call DataSource::MarkNumBytesAsRead(). This way the calling
-// function can decide whether to retry later (UnmarkAllReadBytes()) or not
-// (Discard(GetNumNextBytes())).
+WP2Status RegisterBitTrace(const DecoderConfig& config, uint32_t num_bytes,
+                           WP2_OPT_LABEL);
 
 // Fills DecoderInfo in 'config' based on provided GlobalParams.
 WP2Status FillDecoderInfo(const GlobalParams& gparams,
                           const DecoderConfig& config);
 
+// Decode steps are split into functions for incremental decoding. These
+// functions only call DataSource::MarkNumBytesAsRead(). This way the calling
+// function can decide whether to retry later (UnmarkAllReadBytes()) or not
+// (Discard(GetNumNextBytes())).
 WP2Status DecodeHeader(DataSource* const data_source,
                        BitstreamFeatures* const features);
 
@@ -192,7 +191,7 @@ class AlphaReader : public WP2Allocable {
   // Reconstructs the alpha plane for the given block.
   void Reconstruct(CodedBlock* const cb) const;
   // Copies the lossless alpha data for this block to the given plane (at 0, 0).
-  void ReconstructLossless(CodedBlock* const cb, Plane16* const plane) const;
+  void ReconstructLossless(const CodedBlock& cb, Plane16* const plane) const;
 
   AlphaMode GetAlphaMode() const { return alpha_mode_; }
 
@@ -211,8 +210,6 @@ class AlphaReader : public WP2Allocable {
   AlphaMode alpha_mode_;
   // Next line to read in pixels.
   uint32_t next_line_ = 0;
-  // Whether the next processed block is the first block of the image.
-  bool first_block_ = true;
 
   // Block alpha mode predictor when using lossy.
   AlphaModePredictor mode_predictor_;
@@ -288,6 +285,7 @@ class SyntaxReader {
 
 //------------------------------------------------------------------------------
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
 // Returns true if 'DecoderInfo::visual_debug' in the 'config' exists and
 // contains the 'token'. Tokens are separated by '/'.
 bool VDMatch(const DecoderConfig& config, const char token[]);
@@ -304,6 +302,28 @@ void ApplyVDebugBeforeAfter(const DecoderConfig& config,
                             const CSPTransform& csp_tranform,
                             const Tile& tile,
                             ArgbBuffer* const debug_output);
+
+void VDDrawUndefinedPattern(ArgbBuffer* const debug_output);
+
+#else
+inline bool VDMatch(const DecoderConfig& config, const char token[]) {
+  (void)config;
+  (void)token;
+  return false;
+}
+inline Channel VDChannel(const DecoderConfig& config) {
+  (void)config;
+  return kYChannel;
+}
+inline bool VDSelected(uint32_t tile_x, uint32_t tile_y, const Rectangle& rect,
+                       const DecoderConfig& config) {
+  (void)config;
+  (void)tile_x;
+  (void)tile_y;
+  (void)rect;
+  return false;
+}
+#endif  // WP2_REDUCE_BINARY_SIZE
 
 //------------------------------------------------------------------------------
 

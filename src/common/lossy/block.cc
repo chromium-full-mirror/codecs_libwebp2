@@ -464,8 +464,9 @@ static WP2Status UVScore(const EncoderConfig& config, uint32_t tile_pos_x,
                      tmp_coeffs_v, &tmp_num_coeffs_v);
   // early out if there's ~only DC
   if (!reduced && tmp_num_coeffs_u <= 1 && tmp_num_coeffs_v <= 1) {
-    cb->Store420Scores(config, tile_pos_x, tile_pos_y, lambda_u, lambda_v,
-                       reduced, disto, 0, 0);
+    WP2_CHECK_REDUCED_STATUS(
+        cb->Store420Scores(config, tile_pos_x, tile_pos_y, lambda_u, lambda_v,
+                           reduced, disto, 0, 0));
     *score = 0;
     return WP2_STATUS_OK;
   }
@@ -478,8 +479,9 @@ static WP2Status UVScore(const EncoderConfig& config, uint32_t tile_pos_x,
       kVChannel, num_channels, dim, tmp_coeffs_v, tmp_num_coeffs_v,
       cb->IsFirstCoeffDC(kVChannel), counter, &rate_v));
   *score = disto + lambda_u * rate_u + lambda_v * rate_v;
-  cb->Store420Scores(config, tile_pos_x, tile_pos_y, lambda_u, lambda_v,
-                     reduced, disto, rate_u, rate_v);
+  WP2_CHECK_REDUCED_STATUS(
+      cb->Store420Scores(config, tile_pos_x, tile_pos_y, lambda_u, lambda_v,
+                         reduced, disto, rate_u, rate_v));
   return WP2_STATUS_OK;
 }
 
@@ -525,8 +527,8 @@ WP2Status CodedBlock::DecideChromaSubsampling(
                            &score444));
   if (score444 == 0) {
     is420_ = false;
-    WP2_CHECK_STATUS(Store420Decision(config, tile_pos_x, tile_pos_y,
-                                      Debug420Decision::k444EarlyExit));
+    WP2_CHECK_REDUCED_STATUS(Store420Decision(config, tile_pos_x, tile_pos_y,
+                                              Debug420Decision::k444EarlyExit));
     return WP2_STATUS_OK;
   }
 
@@ -540,7 +542,7 @@ WP2Status CodedBlock::DecideChromaSubsampling(
                            &score420));
 
   is420_ = (score420 < score444);
-  WP2_CHECK_STATUS(Store420Decision(
+  WP2_CHECK_REDUCED_STATUS(Store420Decision(
       config, tile_pos_x, tile_pos_y,
       is420_ ? Debug420Decision::k420 : Debug420Decision::k444));
   return WP2_STATUS_OK;
@@ -685,6 +687,33 @@ void CodedBlock::Dequantize(const QuantMtx& quant, Channel channel,
 
 //------------------------------------------------------------------------------
 
+TransformPair CodedBlock::GetForcedTransform(const EncoderConfig& config,
+                                             uint32_t tile_pos_x,
+                                             uint32_t tile_pos_y,
+                                             CodedBlock* const cb) {
+  (void)config;
+  (void)tile_pos_x;
+  (void)tile_pos_y;
+  (void)cb;
+#if !defined(WP2_REDUCE_BINARY_SIZE)
+  EncoderInfo* const info = config.info;
+  if (info == nullptr) return kUnknownTf;
+
+  for (const EncoderInfo::ForcedTransform& forced : info->force_transform) {
+    if (forced.x != (cb->x_pix() + tile_pos_x) ||
+        forced.y != (cb->y_pix() + tile_pos_y)) {
+      continue;
+    }
+
+    if (forced.transform >= kNumTransformPairs) return kUnknownTf;
+    return (TransformPair)forced.transform;
+  }
+#endif  // WP2_REDUCE_BINARY_SIZE
+  return kUnknownTf;
+}
+
+//------------------------------------------------------------------------------
+
 WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
                                  const Rectangle& tile_rect,
                                  const QuantMtx& quant,
@@ -724,9 +753,12 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
       best_tf = tf;
       best_score = current_score;
     }
+
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     StorePredictionScore(config, tile_rect, channel, *params->pred, tf,
                          distortion, lambda, res_rate, /*pred_rate=*/0, tf_rate,
                          current_score, is_best, SearchType::kTransform);
+#endif  // WP2_REDUCE_BINARY_SIZE
   }
 
   params->tf = best_tf;
@@ -886,9 +918,12 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
       best_split_tf = split_tf;
       best_score = current_score;
     }
+
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     StorePredictionScore(config, tile_rect, channel, *params->pred, params->tf,
                          distortion, lambda, res_rate, /*pred_rate=*/0, tf_rate,
                          current_score, is_best, SearchType::kSplit);
+#endif  // WP2_REDUCE_BINARY_SIZE
   }
 
   params->split_tf = best_split_tf;

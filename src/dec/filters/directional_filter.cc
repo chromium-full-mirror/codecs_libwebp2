@@ -128,7 +128,10 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
     num_filterable_rows = SafeSub(num_rows, kDrctFltTapDist);
   }
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "directional-filter")) SavePixelsForVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
+
   if (num_filterable_rows <= num_filtered_rows_) return num_filtered_rows_;
 
   const uint32_t block_step = blocks_.max_num_blocks_x_;
@@ -251,6 +254,7 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
                       (int32_t)pixels_plane->Step());
       }
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
       if (VDMatch(config_, "directional-filter")) {
         RegisterPixelsForVDebug(
             x, x + width - 1u, y, y + height - 1u,
@@ -258,6 +262,7 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
             GetCdefStr(features_.quality_hint, min_bpp, res_den[0], kMaxSecStr),
             direction, variance);
       }
+#endif  // WP2_REDUCE_BINARY_SIZE
 
       // One's right column is another one's left taps.
       if (backup_right) {
@@ -275,7 +280,11 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
   }
   num_filtered_rows_ = y;
 
+
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "directional-filter")) ApplyVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
+
   return num_filtered_rows_;
 }
 

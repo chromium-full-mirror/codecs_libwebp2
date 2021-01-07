@@ -82,9 +82,9 @@ class Partitioner : public WP2Allocable {
 
   // Visual debug: display the order in which the 'block' was chosen and during
   // which pass.
-  void RegisterOrderForVDebug(uint32_t pass, uint32_t pass_index,
-                              const Block& block, uint32_t block_index,
-                              uint32_t max_num_blocks) const;
+  WP2Status RegisterOrderForVDebug(uint32_t pass, uint32_t pass_index,
+                                   const Block& block, uint32_t block_index,
+                                   uint32_t max_num_blocks) const;
 };
 
 //------------------------------------------------------------------------------
@@ -234,9 +234,9 @@ class ExhaustivePartitioner : public Partitioner {
   VectorNoCtor<Block> partition_;  // Matches the layout of the 'front_mgr_'.
 
   // VDebug
-  void RegisterScoreForVDebug(float best_partition_score,
-                              uint64_t best_partition_size,
-                              uint64_t num_iterations) const;
+  WP2Status RegisterScoreForVDebug(float best_partition_score,
+                                   uint64_t best_partition_size,
+                                   uint64_t num_iterations) const;
 };
 
 //------------------------------------------------------------------------------
@@ -268,8 +268,9 @@ class MultiPassPartitioner : public Partitioner {
   MultiScoreFunc* const multi_score_func_;  // Specific 'score_func_'.
   uint32_t pass_index_ = 0;
 
-  void RegisterPassForVDebug(MultiScoreFunc::Pass pass, BlockSize block_size,
-                             uint32_t num_chosen_blocks) const;
+  WP2Status RegisterPassForVDebug(MultiScoreFunc::Pass pass,
+                                  BlockSize block_size,
+                                  uint32_t num_chosen_blocks) const;
 };
 
 //------------------------------------------------------------------------------

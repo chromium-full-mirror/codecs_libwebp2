@@ -275,6 +275,9 @@ TEST(TestSegment, MinQuant) {
   EXPECT_LT(segment.GetMaxAbsDC(kYChannel), kMaxDcValue);
   EXPECT_LT(segment.GetMaxAbsDC(kUChannel), kMaxDcValue);
   EXPECT_LT(segment.GetMaxAbsDC(kVChannel), kMaxDcValue);
+
+  segment.SetAlphaQuality(/*quality_factor=*/0);
+  segment.FinalizeAlphaQuant(/*lambda=*/33.);
   EXPECT_LT(segment.GetMaxAbsDC(kAChannel), kMaxDcValue);
 }
 

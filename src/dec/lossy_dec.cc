@@ -101,13 +101,14 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
                          rstr_params);
   WP2_CHECK_STATUS(filter.Allocate());
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   // VisualDebug
   Vector<CodedBlock> all_blocks;
   ArgbBuffer debug_output;  // Tile view of 'config.info->debug_output'
   Plane16 vd_plane;         // Visual debug plane.
   Plane16 vd_block_view;    // View of vd_plane for the current block.
   if (VDMatch(config, "")) {
-    WP2_CHECK_STATUS(
+    WP2_CHECK_REDUCED_STATUS(
         debug_output.SetView(config.info->debug_output, tile->rect));
     if (VDMatch(config, "prediction/raw") || VDMatch(config, "residuals") ||
         VDMatch(config, "coeff-method") || VDMatch(config, "bits-per-pixel") ||
@@ -133,6 +134,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     if (VDMatch(config, "bits-per-pixel")) vd_plane.Clear();
 #endif
   }
+#endif  // WP2_REDUCE_BINARY_SIZE
 
 #if defined(WP2_BITTRACE)
   double blocks_bit_traces_sum = dec->GetBitCount();  // Start with header.
@@ -185,9 +187,11 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     assert(cb.y_pix() + cb.h_pix() <= tile->yuv_output.Y.h_);
     cb.mtx_set_ = &gparams.mtx_set_;
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     if (!vd_plane.IsEmpty()) {
       WP2_CHECK_STATUS(vd_block_view.SetView(vd_plane, cb.blk().rect_pix()));
     }
+#endif  // WP2_REDUCE_BINARY_SIZE
 
     // Estimation of the bits-per-pixel for the FilterBlockMap.
     const uint32_t num_used_bytes_before = dec->GetNumUsedBytes();
@@ -218,20 +222,23 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     if (gparams.has_alpha_) {
       reader.alpha_reader().Reconstruct(&cb);
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
       if (VDMatch(config, "a/lossless")) {
-        reader.alpha_reader().ReconstructLossless(&cb, &vd_block_view);
+        reader.alpha_reader().ReconstructLossless(cb, &vd_block_view);
       } else if (VDMatch(config, "a/lossy") && cb.HasLossyAlpha()) {
         WP2_CHECK_STATUS(
             vd_block_view.Copy(cb.out_.A, /*resize_if_needed=*/false));
       } else if (VDMatch(config, "a/is_lossy")) {
         vd_block_view.Fill(cb.HasLossyAlpha() ? 255 : 0);
       }
+#endif  // WP2_REDUCE_BINARY_SIZE
     }
 
 #if defined(WP2_ENC_DEC_DEEP_MATCH)
     reader.ReadAndCompareRawPixels(cb.blk(), cb.out_, dec);  // Debug
 #endif
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     // VisualDebug
     if (VDMatch(config, "prediction/raw")) {
       const Channel c = VDChannel(config);
@@ -270,7 +277,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
                           segment.GetQuant(c), c, &vd_plane);
       } else if (cb.HasLossyAlpha()) {
         cb.StoreResiduals(config, tile->rect.x, tile->rect.y,
-                          gparams.a_segments_[0].quant_a_, kAChannel,
+                          gparams.segments_[0].quant_a_, kAChannel,
                           &vd_plane);
       }
     } else if (VDMatch(config, "prediction/modes")) {
@@ -291,6 +298,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
       reader.StoreBitCost(config, tile->rect.x, tile->rect.y, cb.blk(),
                           &vd_plane);
     }
+#endif  // WP2_REDUCE_BINARY_SIZE
 
 #if defined(WP2_BITTRACE)
     const double num_bits =
@@ -329,9 +337,11 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     }
     tile->block_map.RegisterBlock(cb, (uint32_t)min_num_used_bytes);
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     if (VDMatch(config, "blocks")) {
       WP2_CHECK_ALLOC_OK(all_blocks.push_back(std::move(cb)));
     }
+#endif  // WP2_REDUCE_BINARY_SIZE
   }
 
   WP2_CHECK_STATUS(dec->GetStatus());
@@ -360,6 +370,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   tile->num_decoded_rows = num_decoded_rows;
   assert(tile->num_decoded_rows == tile->rect.height);
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   // VisualDebug
   if (VDMatch(config, "original") || VDMatch(config, "compressed")) {
     ApplyVDebugBeforeAfter(config, gparams.transf_, *tile, &debug_output);
@@ -383,7 +394,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
       WP2_CHECK_STATUS(vd_plane.ToGray(&debug_output, /*num_bits=*/10));
     }
   }
-
+#endif  // WP2_REDUCE_BINARY_SIZE
   // Only clear data that is no longer valid. The rest might be used by the
   // IntertileFilter.
   tile->block_map.pixels_ = nullptr;

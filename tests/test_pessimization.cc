@@ -51,7 +51,8 @@ class ErrorTracer : public WP2ErrorTracer {
 
   void Log(const char* const file, int line, WP2Status, const char*) override {
     // Lighten the callstack.
-    const std::string call = GetFileName(file) + ":" + std::to_string(line);
+    const std::string call =
+        WP2::GetFileName(file) + ":" + std::to_string(line);
     if (!callstack_.empty()) callstack_ += ", ";
     callstack_ += call;  // Reversed call order but more convenient text output.
   }
@@ -130,14 +131,10 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
         (config.alpha_quality <= kMaxLossyQuality) && random->FlipACoin();
     gparams->enable_alpha_filter_ =
         gparams->maybe_use_lossy_alpha_ && config.enable_alpha_filter;
-    WP2_CHECK_ALLOC_OK(gparams->a_segments_.resize(1));
     const float quant_factor =
         99.f * (kMaxLossyQuality - config.alpha_quality) / kMaxLossyQuality;
     const float lambda = std::max(85.f, -42.f * config.alpha_quality + 3400.f);
-    gparams->a_segments_.front().SetQuantizationFactor(
-        gparams->transf_, GetQualityHint(config.quality),
-        /*u_quant_multiplier=*/0, /*v_quant_multiplier=*/0, quant_factor,
-        lambda, ALL_RECTS);
+    gparams->segments_.front().SetAlphaQuantizationFactor(quant_factor, lambda);
 
     WP2_CHECK_STATUS(gparams->InitFixedPredictors());
   }

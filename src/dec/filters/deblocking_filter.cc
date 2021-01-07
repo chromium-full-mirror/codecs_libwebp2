@@ -110,7 +110,9 @@ uint32_t DeblockingFilter::Deblock(uint32_t num_rows) {
 
   uint32_t num_deblockable_rows = num_rows;
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "deblocking-filter")) SavePixelsForVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
 
   // All vertical edges up to 'num_deblockable_rows' can be horizontally
   // deblocked now.
@@ -136,7 +138,9 @@ uint32_t DeblockingFilter::Deblock(uint32_t num_rows) {
       std::min(num_vertically_deblocked_rows_ + blocks_.max_registered_height_,
                blocks_.tile_rect_.height);
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "deblocking-filter")) ApplyVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
   return num_vertically_deblocked_rows_;
 }
 
@@ -301,9 +305,6 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
   // Store whether each alpha pixel line across the edge was deblocked.
   uint8_t a_halfs[kMaxBlockSizePix];
 
-  const bool vd_match =
-      VDMatch(config, intertile ? "intertile-filter" : "deblocking-filter");
-
   int16_t cache[4 * (2 * kDblkMaxHalf)];  // scratch buffer.  TODO(skal): align?
   for (Channel c : {kAChannel, kYChannel, kUChannel, kVChannel}) {
     if (c == kAChannel && !has_alpha) continue;
@@ -352,6 +353,9 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
     uint8_t halfs[kMaxBlockSizePix];
     MeasureFlatLengths(sharpness, half, src, src_step, halfs, edge_length);
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
+    const bool vd_match =
+        VDMatch(config, intertile ? "intertile-filter" : "deblocking-filter");
     if (vd_match) {
       for (uint32_t pos = 0; pos < edge_length; ++pos) {
         RegisterPixelsForVDebug(config,
@@ -362,6 +366,7 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
             src + pos * src_step, /*step=*/1);
       }
     }
+#endif  // WP2_REDUCE_BINARY_SIZE
 
     // Process the 'edge_length' rows.
     uint8_t max_half = 0;
@@ -395,6 +400,7 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
       }
     }
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     if (vd_match) {
       for (uint32_t pos = 0; pos < edge_length; ++pos) {
         RegisterPixelsForVDebug(config,
@@ -405,6 +411,7 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
             src + pos * src_step, /*step=*/1);
       }
     }
+#endif  // WP2_REDUCE_BINARY_SIZE
   }
 }
 

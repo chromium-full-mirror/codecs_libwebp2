@@ -48,14 +48,21 @@
 namespace WP2 {
 namespace {
 
-typedef enum { WP2_STATS = 0, WEBP_STATS, AV1_STATS,
-               JPEG_STATS, NEURAL_STATS } StatType;
-static const char* const kFileExtensions[] = {"wp2", "webp", "av1", "jpg",
-                                              "wp2"};
+typedef enum {
+  WP2_STATS = 0,
+  WEBP_STATS,
+  AV1_STATS,
+  AVIF_STATS,
+  JPEG_STATS,
+  NEURAL_STATS
+} StatType;
+static const char* const kFileExtensions[] = {"wp2",  "webp", "av1",
+                                              "avif", "jpg",  "wp2"};
 
-StatType kAllTypes[] = {WP2_STATS, WEBP_STATS, AV1_STATS, JPEG_STATS,
-                        NEURAL_STATS};
-const char* const kTypeNames[] = {"WP2", "WebP", "AV1", "JPEG", "Neural"};
+StatType kAllTypes[] = {WP2_STATS,  WEBP_STATS, AV1_STATS,
+                        AVIF_STATS, JPEG_STATS, NEURAL_STATS};
+const char* const kTypeNames[] = {"WP2",  "WebP", "AV1",
+                                  "AVIF", "JPEG", "Neural"};
 
 const int kDefaultSteps = 8;  // default number of steps
 
@@ -122,6 +129,7 @@ void PrintHelpAndExit(int return_code) {
   opt.AddMetricOptions();
   opt.Add("-webp", "compute WebP rd-curve (if compiled)");
   opt.Add("-av1", "compute AV1 rd-curve (if compiled)");
+  opt.Add("-avif", "compute AVIF rd-curve (if compiled)");
   opt.Add("-jpeg", "compute JPEG rd-curve (if compiled)");
   opt.Add("-nowp2", "skip WP2 rd-curve");
   opt.Add("-csp <int>", "color space (0=YCoCg, 1=YCbCr 2=Custom 3=YIQ)");
@@ -196,6 +204,9 @@ class Task : public Worker {
       case AV1_STATS:
         WP2_CHECK_STATUS(EncodeAV1(out_file, &decoded));
         break;
+      case AVIF_STATS:
+        WP2_CHECK_STATUS(EncodeAVIF(out_file, &decoded));
+        break;
       case JPEG_STATS:
         WP2_CHECK_STATUS(EncodeJPEG(out_file, &decoded));
         break;
@@ -244,12 +255,15 @@ class Task : public Worker {
  private:
   // used by the two methods below
   WP2Status DoEncodeWP2(const std::string& out_file, ArgbBuffer* const decoded);
+  WP2Status DoEncodeAV1(const std::string& out_file, bool use_avif,
+                        ArgbBuffer* const decoded);
   WP2Status EncodeWP2(const std::string& out_file, ArgbBuffer* const decoded);
   WP2Status EncodeNeural(const std::string& out_file,
                          ArgbBuffer* const decoded);
 
   WP2Status EncodeWebP(const std::string& out_file, ArgbBuffer* const decoded);
   WP2Status EncodeAV1(const std::string& out_file, ArgbBuffer* const decoded);
+  WP2Status EncodeAVIF(const std::string& out_file, ArgbBuffer* const decoded);
   WP2Status EncodeJPEG(const std::string& out_file, ArgbBuffer* const decoded);
 };
 
@@ -392,11 +406,11 @@ WP2Status Task::EncodeWebP(const std::string& out_file,
 
 //------------------------------------------------------------------------------
 
-WP2Status Task::EncodeAV1(const std::string& out_file,
-                          ArgbBuffer* const decoded) {
+WP2Status Task::DoEncodeAV1(const std::string& out_file, bool use_avif,
+                            ArgbBuffer* const decoded) {
   ParamsAV1 p;
   p.quality = params_.q;
-  p.use_yuv444 = (params_.config.uv_mode == EncoderConfig::UVMode444);
+  p.use_yuv444 = (params_.config.uv_mode != EncoderConfig::UVMode420);
   if (params_.config.thread_level > 1) p.threads = 4;
   p.effort = params_.config.effort;
   p.pass = (params_.config.pass > 1) ? 2 : 1;
@@ -407,8 +421,13 @@ WP2Status Task::EncodeAV1(const std::string& out_file,
 
   std::string out;
   double timing[2];
-  CHECK_TRUE(CompressAV1(*ref_, p, decoded, &out, timing) == WP2_STATUS_OK,
-             "CompressAV1() failed!");
+  if (use_avif) {
+    CHECK_TRUE(CompressAVIF(*ref_, p, decoded, &out, timing) == WP2_STATUS_OK,
+               "CompressAVIF() failed!");
+  } else {
+    CHECK_TRUE(CompressAV1(*ref_, p, decoded, &out, timing) == WP2_STATUS_OK,
+               "CompressAV1() failed!");
+  }
   enc_time_ = timing[0];
   dec_time_ = timing[1];
   size_ = out.size();
@@ -418,6 +437,18 @@ WP2Status Task::EncodeAV1(const std::string& out_file,
                  "Failed to write file %s", out_file.c_str());
   }
   return WP2_STATUS_OK;
+}
+
+//------------------------------------------------------------------------------
+
+WP2Status Task::EncodeAV1(const std::string& out_file,
+                          ArgbBuffer* const decoded) {
+  return DoEncodeAV1(out_file, /*use_avif=*/false, decoded);
+}
+
+WP2Status Task::EncodeAVIF(const std::string& out_file,
+                           ArgbBuffer* const decoded) {
+  return DoEncodeAV1(out_file, /*use_avif=*/true, decoded);
 }
 
 //------------------------------------------------------------------------------
@@ -759,10 +790,8 @@ class LumascopeOutputWriter : public OutputWriter {
     if (!first) {
       report_ += ",\n";
     }
-    const std::string names[] = {"WP2", "WEBP", "AV1", "JPEG", "NEURAL"};
     report_ += SPrintf("\"%s ; Size: %d ; bpp: %.3f ; PSNR : %2.2lf ;",
-                       names[type].c_str(), task->size_,
-                       task->bpp_, task->psnr_);
+                       kTypeNames[type], task->size_, task->bpp_, task->psnr_);
     if (params_.metric != PSNR) {
       report_ +=
           SPrintf(" %s: %2.2lf ;", kMetricNames[params_.metric], task->disto_);
@@ -798,6 +827,7 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   bool do_jpeg = false;
   bool do_wp2 = true;
   bool do_av1 = false;
+  bool do_avif = false;
   bool do_neural = false;
   bool crop = false;
   bool convert_to_gray = false;
@@ -915,6 +945,8 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       do_jpeg = true;
     } else if (!strcmp(argv[c], "-av1")) {
       do_av1 = true;
+    } else if (!strcmp(argv[c], "-avif")) {
+      do_avif = true;
     } else if (!strcmp(argv[c], "-nowp2")) {
       do_wp2 = false;
     } else if (!strcmp(argv[c], "-save")) {
@@ -957,6 +989,7 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   if (do_wp2) types.push_back(WP2_STATS);
   if (do_webp) types.push_back(WEBP_STATS);
   if (do_av1) types.push_back(AV1_STATS);
+  if (do_avif) types.push_back(AVIF_STATS);
   if (do_jpeg) types.push_back(JPEG_STATS);
   if (do_neural) types.push_back(NEURAL_STATS);
 
@@ -1007,7 +1040,8 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   const auto& itf = GetWorkerInterface();
 
   const uint32_t num_tasks =
-      (do_wp2 + do_webp + do_jpeg + do_av1 + do_neural) * (params.qsteps + 1);
+      (do_wp2 + do_webp + do_jpeg + do_av1 + do_avif + do_neural) *
+      (params.qsteps + 1);
   Vector<Task> tasks;
   CHECK_TRUE(tasks.resize(num_tasks), "Task allocation failed.");
 
@@ -1034,6 +1068,13 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       CHECK_TRUE(itf.Reset(task, params.use_mt,
                            std::max(params.stack_size, 524288u)),
                  "Bad AV1 thread initialization!.");
+      ++task;
+    }
+    if (do_avif) {
+      task->Init(params, ref, prefix, AVIF_STATS);
+      CHECK_TRUE(
+          itf.Reset(task, params.use_mt, std::max(params.stack_size, 524288u)),
+          "Bad AVIF thread initialization!.");
       ++task;
     }
     if (do_jpeg) {
@@ -1066,7 +1107,8 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       bool first = true;
       for (auto type : kAllTypes) {
         if ((type == WP2_STATS && do_wp2) || (type == WEBP_STATS && do_webp) ||
-            (type == AV1_STATS && do_av1) || (type == JPEG_STATS && do_jpeg) ||
+            (type == AV1_STATS && do_av1) || (type == AVIF_STATS && do_avif) ||
+            (type == JPEG_STATS && do_jpeg) ||
             (type == NEURAL_STATS && do_neural)) {
           output->TaskStats(type, task, first);
           ++task;

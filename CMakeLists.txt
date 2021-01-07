@@ -63,6 +63,7 @@ option(
 option(WP2_ENABLE_ANS_CHECK "Enable enc/dec ANS comparison." OFF)
 option(WP2_ENABLE_ANS_DEEP_CHECK "Enable more verbose ANS and pixel comparison."
        OFF)
+option(WP2_REDUCED "Remove non-essential code to save binary size." OFF)
 option(WP2_ENABLE_BITTRACE "Enable tracing." OFF)
 option(WP2_ENABLE_TRACE "Enable tracing." OFF)
 # Other build options.
@@ -81,6 +82,11 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE
       "Release"
       CACHE STRING "Build type: Release, Debug or RelWithDebInfo" FORCE)
+endif()
+if(WP2_REDUCED)
+  list(APPEND WP2_DEFINITIONS WP2_REDUCE_BINARY_SIZE)
+  # disable BITTRACE in this case!
+  set(WP2_ENABLE_BITTRACE OFF)
 endif()
 if(WP2_ENABLE_ANS_CHECK OR WP2_ENABLE_ANS_DEEP_CHECK)
   list(APPEND WP2_DEFINITIONS WP2_ENC_DEC_MATCH)

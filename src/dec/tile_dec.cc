@@ -119,7 +119,9 @@ WP2Status TileDecoder::Execute() {
 #endif
     }
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     if (VDMatch(*config_, "blocks/partition")) tile_->Draw(*config_);
+#endif  // WP2_REDUCE_BINARY_SIZE
 
     WP2_CHECK_STATUS(TryAssignNextTile());
   }

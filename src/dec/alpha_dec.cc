@@ -37,11 +37,11 @@ WP2Status AlphaReader::Allocate() {
 }
 
 WP2Status AlphaReader::ReadHeader(const GlobalParams& gparams) {
+  gparams_ = &gparams;
   ANSDebugPrefix prefix(dec_, "Alpha");
-  alpha_mode_ = gparams.maybe_use_lossy_alpha_
+  alpha_mode_ = gparams_->maybe_use_lossy_alpha_
                     ? (AlphaMode)dec_->ReadRValue(kAlphaModeNum, "alpha_mode")
                     : kAlphaModeLossless;
-  gparams_ = &gparams;
   if (alpha_mode_ == kAlphaModeLossy) {
     WP2_CHECK_STATUS(
         mode_predictor_.Init(alpha_tile_.rect.width, alpha_tile_.rect.height));
@@ -68,11 +68,13 @@ WP2Status AlphaReader::GetBlock(CodedBlock* const cb) {
 void AlphaReader::Reconstruct(CodedBlock* const cb) const {
   switch (cb->alpha_mode_) {
     case kBlockAlphaLossless:
-      ReconstructLossless(cb, &cb->out_.A);
+      ReconstructLossless(*cb, &cb->out_.A);
       break;
     case kBlockAlphaLossy:
       BlockCoeffs32 res;
-      cb->Dequantize(gparams_->a_segments_[0].quant_a_, kAChannel, &res);
+      // all alpha blocks use segment #0's quant_a_
+      // TODO(skal): use cb->id_ instead?
+      cb->Dequantize(gparams_->segments_[0].quant_a_, kAChannel, &res);
       cb->Reconstruct(kAChannel, /*reduced_transform=*/false, &res);
       break;
     case kBlockAlphaFullTransp:
@@ -84,25 +86,28 @@ void AlphaReader::Reconstruct(CodedBlock* const cb) const {
   }
 }
 
-void AlphaReader::ReconstructLossless(CodedBlock* const cb,
+void AlphaReader::ReconstructLossless(const CodedBlock& cb,
                                       Plane16* const plane) const {
-  // Copy from buffer to block.
-  const uint32_t block_width = cb->w_pix();
-  const uint32_t block_height = cb->h_pix();
-  for (uint32_t y = 0, y_offset = cb->y_pix(); y < block_height;
-       ++y, ++y_offset) {
-    for (uint32_t x = 0, x_offset = cb->x_pix(); x < block_width;
-         ++x, ++x_offset) {
-      if (x_offset >= alpha_tile_.rect.width) {
-        plane->At(x, y) = plane->At(x - 1, y);
-      } else if (y_offset >= alpha_tile_.rect.height) {
-        plane->At(x, y) = plane->At(x, y - 1);
-      } else {
-        const uint8_t* const alpha_row =
-            (uint8_t*)alpha_tile_.rgb_output.GetRow(y_offset);
-        plane->At(x, y) = alpha_row[4 * x_offset + 1];
-      }
+  // Copy from buffer to plane, possibly replicating the right/bottom samples.
+  const uint32_t block_width = cb.w_pix();
+  const uint32_t block_height = cb.h_pix();
+  const uint32_t max_x =
+      std::min(block_width, alpha_tile_.rect.width - cb.x_pix());
+  const uint32_t max_y =
+      std::min(block_height, alpha_tile_.rect.height - cb.y_pix());
+  assert(max_x > 0 && max_y > 0);
+  for (uint32_t y = 0; y < max_y; ++y) {
+    const uint8_t* const alpha_row =
+        alpha_tile_.rgb_output.GetRow8(cb.y_pix() + y) + 4 * cb.x_pix() + 1;
+    for (uint32_t x = 0; x < max_x; ++x) plane->At(x, y) = alpha_row[4 * x];
+    // replicate right samples
+    for (uint32_t x = max_x; x < block_width; ++x) {
+      plane->At(x, y) = alpha_row[4 * (max_x - 1)];
     }
+  }
+  // replicate bottom samples
+  for (uint32_t y = max_y; y < block_height; ++y) {
+    memcpy(plane->Row(y), plane->Row(max_y - 1), block_width * sizeof(int16_t));
   }
 }
 
@@ -115,12 +120,10 @@ WP2Status AlphaReader::ReadLossless(CodedBlock* const cb) {
     const uint32_t lines_to_read = max_line - next_line_;
     const uint32_t num_used_bytes_before = dec_->GetNumUsedBytes();
 
-    if (first_block_) {
+    if (next_line_ == 0) {
       // Initialize the lossless decoder and read the header.
       lossless_decoder_.Init(DecoderConfig(), *gparams_, dec_, &alpha_tile_);
       WP2_CHECK_STATUS(lossless_decoder_.DecodeHeader());
-
-      first_block_ = false;
     }
 
     WP2_CHECK_STATUS(lossless_decoder_.DecodeLines(lines_to_read));
@@ -130,6 +133,7 @@ WP2Status AlphaReader::ReadLossless(CodedBlock* const cb) {
     cb->alpha_lossless_bytes_ = min_num_used_bytes;
 
     next_line_ = max_line;
+    assert(next_line_ > 0);  // so that we won't init the decoder again
   } else {
     cb->alpha_lossless_bytes_ = 0;
   }

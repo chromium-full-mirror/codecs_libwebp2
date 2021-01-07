@@ -56,9 +56,10 @@ WP2Status PartitionScoreFunc::Init(const EncoderConfig& config,
   gparams_ = &gparams;
   tile_rect_ = tile_rect;
   src_ = &yuv;
+  with_alpha_ = src_->HasAlpha() && gparams_->maybe_use_lossy_alpha_;
   num_block_cols_ = SizeBlocks(yuv.Y.w_);
   num_block_rows_ = SizeBlocks(yuv.Y.h_);
-  WP2_CHECK_STATUS(ClearVDebug());
+  WP2_CHECK_REDUCED_STATUS(ClearVDebug());
   WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;
 }
@@ -82,7 +83,7 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
 
   // Store the reconstructed pixels of the temporary and final blocks.
   WP2_CHECK_STATUS(
-      buffer_.Resize(src_->Y.w_, src_->Y.h_, /*pad=*/1, src_->HasAlpha()));
+      buffer_.Resize(src_->Y.w_, src_->Y.h_, /*pad=*/1, with_alpha_));
   WP2_CHECK_STATUS(front_mgr_.Init(config_->partition_set,
                                    config_->partition_snapping,
                                    tile_rect_.width, tile_rect_.height));
@@ -154,7 +155,7 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
     disto[i] = 0.f;
     constexpr float disto_scale[] = {0.4f, 0.2f, 0.2f, 0.2f};
     for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-      if (c == kAChannel && !gparams_->has_alpha_) continue;
+      if (c == kAChannel && !with_alpha_) continue;
       disto[i] += disto_scale[c] * tmp_cb_.GetDisto(c, tile_rect_);
     }
     disto[i] /= num_pixels;  // Per pixel is not necessary, just nicer debug.
@@ -181,8 +182,9 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
   const float lambda = MapQuality(*config_, 10.f, -9.f);  // Empirical.
   constexpr float kNiceScale = 0.01f;  // Has no impact on the result.
   *score = 1.0f / (1.0f + kNiceScale * (lambda * total_rate + total_disto));
-  RegisterScoreForVDebug(blocks, num_blocks, rate, disto, total_rate,
-                         total_disto, *score);
+  WP2_CHECK_REDUCED_STATUS(
+    RegisterScoreForVDebug(blocks, num_blocks, rate, disto, total_rate,
+                           total_disto, *score));
   return WP2_STATUS_OK;
 }
 
@@ -226,7 +228,7 @@ WP2Status BlockScoreFunc::FindBestBlockParams(const FrontMgrNxNBase& front_mgr,
       writer->chroma_subsampling(), dc_error_u, dc_error_v,
       writer->counters()));
 
-  if (gparams_->has_alpha_) {
+  if (with_alpha_) {
     WP2_CHECK_STATUS(writer->DecideAlpha(cb));
     if (!cb->HasLossyAlpha()) {
       // Consider no loss by copying original samples to the buffer.
@@ -255,7 +257,7 @@ WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrNxNBase& front_mgr,
   WP2_CHECK_STATUS(syntax_writer->FindBestEncodingMethods(cb));
   WP2_CHECK_STATUS(syntax_writer->RecordSize(front_mgr, cb->dim()));
   WP2_CHECK_STATUS(syntax_writer->Record(*cb));
-  if (gparams_->has_alpha_) {
+  if (with_alpha_) {
     WP2_CHECK_STATUS(syntax_writer->RecordAlpha(*cb));
   }
   return WP2_STATUS_OK;
@@ -344,7 +346,7 @@ WP2Status AreaScoreFunc::Init(const EncoderConfig& config,
   // Store the reconstructed pixels of the current area partitioning and of
   // the final selected blocks.
   WP2_CHECK_STATUS(
-      buffer_.Resize(src_->Y.w_, src_->Y.h_, /*pad=*/1, src_->HasAlpha()));
+      buffer_.Resize(src_->Y.w_, src_->Y.h_, /*pad=*/1, with_alpha_));
 
   // Setup the first area as the top-left corner.
   WP2_CHECK_STATUS(area_front_mgr_.Init(config_->partition_set,
@@ -394,8 +396,9 @@ WP2Status AreaScoreFunc::GetAreaDefaultScore(VectorNoCtor<Block>* const blocks,
     WP2_CHECK_ALLOC_OK(blocks->push_back(cb.blk()));
   }
 
-  RegisterScoreForVDebug(BLK_LAST, partition, *score, default_disto_,
-                         default_rate_);
+  WP2_CHECK_REDUCED_STATUS(
+    RegisterScoreForVDebug(BLK_LAST, partition, *score, default_disto_,
+                           default_rate_));
   return WP2_STATUS_OK;
 }
 
@@ -430,7 +433,8 @@ WP2Status AreaScoreFunc::GetAreaGridScore(BlockSize block_size,
   *score =
       GetRelativeScore(*config_, default_disto_, default_rate_, disto, rate);
 
-  RegisterScoreForVDebug(block_size, partition, *score, disto, rate);
+  WP2_CHECK_REDUCED_STATUS(
+      RegisterScoreForVDebug(block_size, partition, *score, disto, rate));
   return WP2_STATUS_OK;
 }
 
@@ -493,7 +497,7 @@ WP2Status AreaScoreFunc::GetDistoRate(Vector<CodedBlock>* const area_blocks,
   {
     constexpr float disto_scale[] = {0.4f, 0.2f, 0.2f, 0.2f};
     for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-      if (c == kAChannel && !gparams_->has_alpha_) continue;
+      if (c == kAChannel && !with_alpha_) continue;
       Plane16 src_area_view, buffer_area_view;
       WP2_CHECK_STATUS(src_area_view.SetView(src_->GetChannel(c), area_));
       WP2_CHECK_STATUS(buffer_area_view.SetView(buffer_.GetChannel(c), area_));
@@ -597,12 +601,15 @@ WP2Status SubAreaScoreFunc::ComputeScore(const Block& block,
     // TODO(yguyon): Also include the 'area_used_blocks_' into the disto/rate
     WP2_CHECK_STATUS(GetDistoRate(&default_partition, &default_block_disto_,
                                   &default_block_rate_));
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     const float default_score =
         GetRelativeScore(*config_, default_block_disto_, default_block_rate_,
                          default_block_disto_, default_block_rate_);
-    RegisterScoreForVDebug(default_partition.front().blk(), default_partition,
-                           default_score, default_block_disto_,
-                           default_block_rate_);
+    WP2_CHECK_REDUCED_STATUS(
+        RegisterScoreForVDebug(default_partition.front().blk(),
+                               default_partition, default_score,
+                               default_block_disto_, default_block_rate_));
+#endif  // WP2_REDUCE_BINARY_SIZE
     default_block_ = default_partition.front().blk();
   } else {
     WP2_CHECK_STATUS(default_partitioning_progress.AdvanceBy(1.));
@@ -632,7 +639,9 @@ WP2Status SubAreaScoreFunc::ComputeScore(const Block& block,
     WP2_CHECK_STATUS(GetDistoRate(&area_remaining_blocks, &disto, &rate));
     *score = GetRelativeScore(*config_, default_block_disto_,
                               default_block_rate_, disto, rate);
-    RegisterScoreForVDebug(block, area_remaining_blocks, *score, disto, rate);
+    WP2_CHECK_REDUCED_STATUS(
+        RegisterScoreForVDebug(block, area_remaining_blocks,
+                               *score, disto, rate));
   }
   return WP2_STATUS_OK;
 }
@@ -813,9 +822,9 @@ WP2Status MultiScoreFunc::Init(const EncoderConfig& config,
   if (config_->effort >= kMinEffortForGoodQuantDCT) {
     // Image processing.
     WP2_CHECK_STATUS(spread_.Resize(src_->GetWidth(), src_->GetHeight(),
-                                    /*pad=*/1, src_->HasAlpha()));
+                                    /*pad=*/1, with_alpha_));
     for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-      if (channel == kAChannel && !src_->HasAlpha()) continue;
+      if (channel == kAChannel && !with_alpha_) continue;
       GetSpread(src_->GetChannel(channel), &spread_.GetChannel(channel));
     }
   }
@@ -825,7 +834,7 @@ WP2Status MultiScoreFunc::Init(const EncoderConfig& config,
       stddev_.Allocate(num_block_cols_, num_block_rows_, kMinBlockSizePix));
   stddev_.AddValues(*src_);
 
-  if (src_->HasAlpha()) {
+  if (with_alpha_) {
     WP2_CHECK_STATUS(
         a_stddev_.Allocate(num_block_cols_, num_block_rows_, kMinBlockSizePix));
     a_stddev_.AddValues(src_->A);
@@ -851,7 +860,8 @@ WP2Status MultiScoreFunc::Init(const EncoderConfig& config,
     }
   }
 
-  WP2_CHECK_STATUS(DrawVDebug());
+  WP2_CHECK_REDUCED_STATUS(DrawVDebug());
+
   WP2_CHECK_STATUS(progress.AdvanceBy(0.5));
   return WP2_STATUS_OK;
 }
@@ -893,7 +903,7 @@ WP2Status MultiScoreFunc::ComputeScore(const Block& block,
   } else {
     *score = 0.499f * threshold / value;  // Will not pass.
   }
-  RegisterScoreForVDebug(block, *score);
+  WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug(block, *score));
   WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;
 }
@@ -926,7 +936,7 @@ void MultiScoreFunc::QuantizeCoeffs(Channel channel, const Block& block,
   // Find the segment of the block.
   const Rectangle padded_tile_rect = {tile_rect_.x, tile_rect_.y,
                                       src_->GetWidth(), src_->GetHeight()};
-  const uint8_t segment_id =
+  const uint8_t segment_id = (channel == kAChannel) ? 0 :
       AssignSegmentId(*config_, *gparams_, padded_tile_rect, block);
   const QuantMtx& quant_mtx =
       gparams_->segments_[segment_id].GetQuant(channel);
@@ -1012,7 +1022,7 @@ float MultiScoreFunc::GetLumaAlphaGradient(const Block& block) const {
   // kUChannel and kVChannel do not bring valuable partition decision-making
   // here so skip them for speed.
   for (Channel c : {kYChannel, kAChannel}) {
-    if (c == kAChannel && !src_->HasAlpha()) continue;
+    if (c == kAChannel && !with_alpha_) continue;
     const int32_t diff = GetGradientDiff(
         &src_->GetChannel(c).At(block.x_pix(), block.y_pix()),
         src_->GetChannel(c).Step(), block.w_pix(), block.h_pix());
@@ -1118,7 +1128,7 @@ float MultiScoreFunc::GetQuantDCT(const Block& block) const {
   return std::max({GetQuantDCT(block, kYChannel) * kScale[kYChannel],
                    GetQuantDCT(block, kUChannel) * kScale[kUChannel],
                    GetQuantDCT(block, kVChannel) * kScale[kVChannel],
-                   src_->HasAlpha()
+                   with_alpha_
                        ? GetQuantDCT(block, kAChannel) * kScale[kAChannel]
                        : 0.f});
 }
@@ -1191,9 +1201,9 @@ WP2Status TileScoreFunc::Init(const EncoderConfig& config,
                                       yuv.GetWidth(), yuv.GetHeight()};
   WP2_CHECK_STATUS(AddForcedBlocks(config, padded_tile_rect, &blocks_));
   WP2_CHECK_STATUS(TryEncode(blocks_, forced_partition_progress, &best_score_));
-  RegisterScoreForVDebug("starting", {}, best_score_);
   cached_best_score_ = 0.f;
   blocks_.clear();
+  WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug("starting", {}, best_score_));
   return WP2_STATUS_OK;
 }
 
@@ -1203,7 +1213,9 @@ WP2Status TileScoreFunc::ComputeScore(const Block& block,
   WP2_CHECK_ALLOC_OK(blocks_.push_back(block));
   WP2_CHECK_STATUS(TryEncode(blocks_, progress, score));
   if (*score > cached_best_score_) cached_best_score_ = *score;
-  if (*score > best_score_) RegisterScoreForVDebug("new best", block, *score);
+  if (*score > best_score_) {
+    WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug("new best", block, *score));
+  }
   blocks_.pop_back();
   return WP2_STATUS_OK;
 }
@@ -1247,7 +1259,7 @@ WP2Status TileScoreFunc::InitForEncode() {
   MemoryWriter writer;
   WP2_CHECK_STATUS(
       EncodeHeader(tmp_config_, tile_rect_.width, tile_rect_.height,
-                   src_->HasAlpha(), /*is_anim=*/false, /*loop_forever=*/true,
+                   with_alpha_, /*is_anim=*/false, /*loop_forever=*/true,
                    kDefaultBackgroundColor, /*preview_color=*/{},
                    /*has_icc=*/false, /*has_trailing_data=*/false, &writer));
   WP2_CHECK_STATUS(features_.Read(writer.mem_, writer.size_));

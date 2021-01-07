@@ -46,7 +46,111 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 
+//------------------------------------------------------------------------------
+// Non-essential code starts here:
+
+#if !defined(WP2_REDUCE_BINARY_SIZE)
+
 namespace WP2 {
+
+//------------------------------------------------------------------------------
+// Unused functions at the moment
+
+void SyntaxWriter::PutRawPixels(const Block& block, const YUVPlane& pixels,
+                                ANSEnc* const enc) {
+  enc->PutRValue(block.x(), SizeBlocks(tile_rect_.width), "DEEP_MATCH_X");
+  enc->PutRValue(block.y(), SizeBlocks(tile_rect_.height), "DEEP_MATCH_Y");
+  enc->PutRValue(block.w(), kMaxBlockSize + 1, "DEEP_MATCH_W");
+  enc->PutRValue(block.h(), kMaxBlockSize + 1, "DEEP_MATCH_H");
+  for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+    if (pixels.GetChannel(channel).IsEmpty()) continue;
+    for (uint32_t y = 0; y < block.h_pix(); ++y) {
+      for (uint32_t x = 0; x < block.w_pix(); ++x) {
+        enc->PutSUValue(pixels.GetChannel(channel).At(x, y),
+                        gparams_->transf_.GetYUVPrecisionBits() + 1,
+                        kChannelStr[channel]);
+      }
+    }
+  }
+}
+
+void SyntaxReader::ReadAndCompareRawPixels(const Block& block,
+                                           const YUVPlane& pixels,
+                                           ANSDec* const dec) {
+  const uint32_t block_x = dec->ReadRValue(SizeBlocks(width_), "DEEP_MATCH_X");
+  const uint32_t block_y = dec->ReadRValue(SizeBlocks(height_), "DEEP_MATCH_Y");
+  const uint32_t block_w = dec->ReadRValue(kMaxBlockSize + 1, "DEEP_MATCH_W");
+  const uint32_t block_h = dec->ReadRValue(kMaxBlockSize + 1, "DEEP_MATCH_H");
+  if (block_x != block.x() || block_y != block.y()) assert(false);
+  if (block_w != block.w() || block_h != block.h()) assert(false);
+  for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+    if (pixels.GetChannel(channel).IsEmpty()) continue;
+    for (uint32_t y = 0; y < block.h_pix(); ++y) {
+      for (uint32_t x = 0; x < block.w_pix(); ++x) {
+        const int32_t px = dec->ReadSUValue(
+            gparams_->transf_.GetYUVPrecisionBits() + 1, kChannelStr[channel]);
+        if (px != pixels.GetChannel(channel).At(x, y)) assert(false);
+      }
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
+// Related to BitTrace
+
+WP2Status RegisterBitTrace(const DecoderConfig& config, uint32_t num_bytes,
+                           WP2_OPT_LABEL) {
+  (void)config, (void)num_bytes, (void)label;
+#if defined(WP2_BITTRACE)
+  if (config.info != nullptr) {
+    LabelStats* const stats = &config.info->bit_traces[label];
+    stats->bits += num_bytes * 8.;
+    stats->num_occurrences += 1;
+    stats->type = LabelStats::Type::Symbol;
+    stats->histo[0] += 1;
+  }
+#endif  // WP2_BITTRACE
+  return WP2_STATUS_OK;
+}
+
+//------------------------------------------------------------------------------
+
+#if defined(WP2_BITTRACE)
+void CodedBlock::ToBlockInfo(BlockInfo* const blk) const {
+  const CodingParams& y_params = GetCodingParams(kYChannel);
+
+  blk->rect = {x_pix(), y_pix(), w_pix(), h_pix()};
+  blk->segment_id = id_;
+  blk->is420 = is420_;
+  blk->tf_x = (uint8_t)y_params.tf_x();
+  blk->tf_y = (uint8_t)y_params.tf_y();
+  blk->y_context_is_constant = y_context_is_constant_;
+
+  blk->y_pred = y_params.pred->mode();
+  blk->has_lossy_alpha = HasLossyAlpha();
+  if (HasLossyAlpha()) {
+    const CodingParams& a_params = GetCodingParams(kAChannel);
+    blk->a_pred = a_params.pred->mode();
+  }
+  blk->uv_pred = GetCodingParams(kUChannel).pred->mode();
+  std::memcpy(blk->pred_scores, pred_scores_, sizeof(pred_scores_));
+
+  std::memset(blk->coeffs, 0, sizeof(blk->coeffs));
+  std::fill(blk->split_tf, blk->split_tf + 4, false);
+  std::fill(blk->encoding_method[0], blk->encoding_method[0] + 4 * 4, -1);
+  for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+    if (c == kAChannel && !HasLossyAlpha()) continue;
+    blk->split_tf[c] = GetCodingParams(c).split_tf;
+    for (uint32_t i = 0; i < GetNumTransforms(c); ++i) {
+      blk->encoding_method[c][i] = (int8_t)method_[c][i];
+      std::copy(coeffs_[c][i], coeffs_[c][i] + NumCoeffsPerTransform(c),
+                blk->coeffs[c][i]);
+    }
+  }
+  blk->bits = 0;  // unknown for now
+}
+
+#endif  // WP2_BITTRACE
 
 //------------------------------------------------------------------------------
 
@@ -107,7 +211,7 @@ static void DrawPixelArray(uint32_t x, uint32_t y, uint32_t w, uint32_t h,
 
 //------------------------------------------------------------------------------
 
-static void DrawUndefinedPattern(ArgbBuffer* const debug_output) {
+void VDDrawUndefinedPattern(ArgbBuffer* const debug_output) {
   // Easily recognizable striped background.
   for (uint32_t y = 0; y < debug_output->height(); ++y) {
     for (uint32_t x = 0; x < debug_output->width(); ++x) {
@@ -131,89 +235,6 @@ static void DrawUndefinedPattern(ArgbBuffer* const debug_output) {
                  },
                  /*scale=*/Clamp(debug_output->width() / 128u, 1u, 4u),
                  debug_output);
-}
-
-// Called once 'features' are known to initialize 'DecoderConfig::info'.
-WP2Status SetupDecoderInfo(const BitstreamFeatures& features,
-                           const DecoderConfig& config) {
-  if (VDMatch(config, "")) {  // Matches any visual debug.
-    ArgbBuffer* const debug_output = &config.info->debug_output;
-    if (VDMatch(config, "original")) {
-      // Keep the content of the buffer but check the size.
-      WP2_CHECK_OK(!debug_output->IsEmpty() &&
-                       debug_output->width() == features.raw_width &&
-                       debug_output->height() == features.raw_height,
-                   WP2_STATUS_BAD_DIMENSION);
-      // TODO(yguyon): Rotate 'debug_output' if 'orientation' is not kOriginal
-    } else {
-      WP2_CHECK_STATUS(
-          debug_output->Resize(features.raw_width, features.raw_height));
-      DrawUndefinedPattern(debug_output);
-    }
-  }
-  if (config.info != nullptr) {  // Clear output values.
-#if defined(WP2_BITTRACE)
-    config.info->bit_traces.clear();
-    config.info->blocks.clear();
-#endif  // WP2_BITTRACE
-    RegisterBitTrace(config, features.header_size, "BitstreamFeatures");
-    config.info->header_size = features.header_size;
-    config.info->selection_info.clear();
-  }
-  return WP2_STATUS_OK;
-}
-
-void RegisterBitTrace(const DecoderConfig& config, uint32_t num_bytes,
-                      WP2_OPT_LABEL) {
-  (void)config, (void)num_bytes, (void)label;
-#if defined(WP2_BITTRACE)
-  if (config.info != nullptr) {
-    LabelStats* const stats = &config.info->bit_traces[label];
-    stats->bits += num_bytes * 8.;
-    stats->num_occurrences += 1;
-    stats->type = LabelStats::Type::Symbol;
-    stats->histo[0] += 1;
-  }
-#endif  // WP2_BITTRACE
-}
-
-template<class V>
-static void CopyPredictorNames(const V& predictors,
-                               std::vector<std::string>* const names) {
-  names->clear();
-  names->reserve(predictors.size());
-  for (Predictor* predictor : predictors) {
-    names->push_back(predictor->GetName());
-  }
-}
-
-WP2Status FillDecoderInfo(const GlobalParams& gparams,
-                          const DecoderConfig& config) {
-  if (config.info != nullptr) {  // Clear output values.
-    config.info->num_segments = gparams.segments_.size();
-    CopyPredictorNames(gparams.y_preds_, &config.info->y_predictors);
-    CopyPredictorNames(gparams.uv_preds_, &config.info->uv_predictors);
-    CopyPredictorNames(gparams.a_preds_, &config.info->a_predictors);
-    config.info->explicit_segment_ids = gparams.explicit_segment_ids_;
-    if (config.info->csp != nullptr) *config.info->csp = gparams.transf_;
-  }
-  return WP2_STATUS_OK;
-}
-
-WP2Status SetupEncoderInfo(uint32_t width, uint32_t height,
-                           const EncoderConfig& config) {
-  if (VDMatch(config, "")) {  // Matches any visual debug.
-    ArgbBuffer* const debug_output = &config.info->debug_output;
-    WP2_CHECK_STATUS(debug_output->Resize(width, height));
-    DrawUndefinedPattern(debug_output);
-  }
-  if (config.info != nullptr) {
-#if defined(WP2_BITTRACE)
-    config.info->blocks.clear();
-#endif
-    config.info->selection_info.clear();
-  }
-  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
@@ -316,12 +337,6 @@ float VDGetParam(const EncoderConfig& config, float default_value) {
              : default_value;
 }
 
-static bool IsHorizontal(const DecoderConfig& config) {
-  if (VDMatch(config, "horizontal")) return true;
-  assert(VDMatch(config, "vertical"));
-  return false;
-}
-
 //------------------------------------------------------------------------------
 
 // Appends a formatted literal to a std::string. Avoids <sstream>.
@@ -334,33 +349,6 @@ static bool IsHorizontal(const DecoderConfig& config) {
     (str_ptr)->pop_back(); /* Remove ending '\0' */                      \
   } while (false)
 
-// Simple tool for gathering and displaying min, max and average values.
-class MinMaxAvg {
- public:
-  void Add(double value) {
-    if (num_values_ == 0) min_ = max_ = sum_ = value;
-    min_ = std::min(min_, value), max_ = std::max(max_, value), sum_ += value;
-    ++num_values_;
-  }
-
-  uint32_t GetNumValues() const { return num_values_; }
-  double GetMin() const { return min_; }
-  double GetMax() const { return max_; }
-  double GetAvg() const { return (num_values_ > 0) ? sum_ / num_values_ : 0; }
-
-  std::string ToString() const {
-    std::string str;
-    WP2SAppend(&str, "min: %.3f, avg: %.3f, avg: %.3f (%u)", min_, GetAvg(),
-               max_, num_values_);
-    return str;
-  }
-
- private:
-  uint32_t num_values_ = 0;
-  double sum_ = 0, min_ = 0, max_ = 0;
-};
-
-//------------------------------------------------------------------------------
 
 // Maps a value in [0; num_values) to the [-512;512] range.
 static int16_t ToPixel10(uint32_t value, uint32_t num_values) {
@@ -378,6 +366,8 @@ static const Argb32b ColorMult(Argb32b color, float mutiplier) {
   return {color.a, (uint8_t)(color.r * mutiplier),
           (uint8_t)(color.g * mutiplier), (uint8_t)(color.b * mutiplier)};
 }
+
+//------------------------------------------------------------------------------
 
 void CodedBlock::StoreTransform(const DecoderConfig& config,
                                 uint32_t tile_x, uint32_t tile_y,
@@ -431,26 +421,6 @@ void CodedBlock::StoreTransform(const DecoderConfig& config,
     WP2SAppend(str_ptr, "Transform x: %s\n", WP2TransformNames[params.tf_x()]);
     WP2SAppend(str_ptr, "Transform y: %s\n", WP2TransformNames[params.tf_y()]);
   }
-}
-
-TransformPair CodedBlock::GetForcedTransform(const EncoderConfig& config,
-                                             uint32_t tile_pos_x,
-                                             uint32_t tile_pos_y,
-                                             CodedBlock* const cb) {
-  EncoderInfo* const info = config.info;
-  if (info == nullptr) return kUnknownTf;
-
-  for (const EncoderInfo::ForcedTransform& forced : info->force_transform) {
-    if (forced.x != (cb->x_pix() + tile_pos_x) ||
-        forced.y != (cb->y_pix() + tile_pos_y)) {
-      continue;
-    }
-
-    if (forced.transform >= kNumTransformPairs) return kUnknownTf;
-    return (TransformPair)forced.transform;
-  }
-
-  return kUnknownTf;
 }
 
 // If the block is currently selected, outputs the pixel values from 'pixels'
@@ -989,8 +959,7 @@ WP2Status CodedBlock::Draw(const DecoderConfig& config, uint32_t tile_x,
       debug_output->Fill({x, y, w, h}, Argb32b{255, 0, 0, 0});
       return WP2_STATUS_OK;
     }
-    const Segment& segment =
-        is_alpha ? gparams.a_segments_[0] : gparams.segments_[id_];
+    const Segment& segment = gparams.segments_[is_alpha ? 0 : id_];
 
     Argb32b color;
     if (VDMatch(config, "segment-ids")) {
@@ -1079,47 +1048,12 @@ WP2Status CodedBlock::Draw(const DecoderConfig& config, uint32_t tile_x,
 
 //------------------------------------------------------------------------------
 
-void CodedBlock::ToBlockInfo(BlockInfo* const blk) const {
-  const CodingParams& y_params = GetCodingParams(kYChannel);
-
-  blk->rect = {x_pix(), y_pix(), w_pix(), h_pix()};
-  blk->segment_id = id_;
-  blk->is420 = is420_;
-  blk->tf_x = (uint8_t)y_params.tf_x();
-  blk->tf_y = (uint8_t)y_params.tf_y();
-  blk->y_context_is_constant = y_context_is_constant_;
-
-  blk->y_pred = y_params.pred->mode();
-  blk->has_lossy_alpha = HasLossyAlpha();
-  if (HasLossyAlpha()) {
-    const CodingParams& a_params = GetCodingParams(kAChannel);
-    blk->a_pred = a_params.pred->mode();
-  }
-  blk->uv_pred = GetCodingParams(kUChannel).pred->mode();
-  std::memcpy(blk->pred_scores, pred_scores_, sizeof(pred_scores_));
-
-  std::memset(blk->coeffs, 0, sizeof(blk->coeffs));
-  std::fill(blk->split_tf, blk->split_tf + 4, false);
-  std::fill(blk->encoding_method[0], blk->encoding_method[0] + 4 * 4, -1);
-  for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    if (c == kAChannel && !HasLossyAlpha()) continue;
-    blk->split_tf[c] = GetCodingParams(c).split_tf;
-    for (uint32_t i = 0; i < GetNumTransforms(c); ++i) {
-      blk->encoding_method[c][i] = (int8_t)method_[c][i];
-      std::copy(coeffs_[c][i], coeffs_[c][i] + NumCoeffsPerTransform(c),
-                blk->coeffs[c][i]);
-    }
-  }
-  blk->bits = 0;  // unknown for now
-}
-
-//------------------------------------------------------------------------------
-
-void CodedBlock::Store420Scores(const EncoderConfig& config, uint32_t pos_x,
-                                uint32_t pos_y, float lambda_u, float lambda_v,
-                                bool reduced, uint32_t disto, float rate_u,
-                                float rate_v) {
-  if (!VDMatch(config, "is420-scores")) return;
+WP2Status CodedBlock::Store420Scores(const EncoderConfig& config,
+                                     uint32_t pos_x, uint32_t pos_y,
+                                     float lambda_u, float lambda_v,
+                                     bool reduced, uint32_t disto,
+                                     float rate_u, float rate_v) {
+  if (!VDMatch(config, "is420-scores")) return WP2_STATUS_OK;
   if (VDSelected(pos_x, pos_y, blk().rect_pix(), config)) {
     WP2SAppend(&config.info->selection_info,
                "%s score: %f = disto %d + lambda_u %f * rate_u %f + lambda_v "
@@ -1128,6 +1062,7 @@ void CodedBlock::Store420Scores(const EncoderConfig& config, uint32_t pos_x,
                disto + lambda_u * rate_u + lambda_v * rate_v, disto,
                lambda_u, rate_u, lambda_v, rate_v);
   }
+  return WP2_STATUS_OK;
 }
 
 WP2Status CodedBlock::Store420Decision(const EncoderConfig& config,
@@ -1293,42 +1228,35 @@ static void ApplyVDebugAlphaDiff(const YUVPlane& unfiltered_pixels,
   }
 }
 
-static void ApplyVDebugDiff(const ArgbBuffer& unfiltered_pixels,
-                            const ArgbBuffer& filtered_pixels,
-                            int32_t multiplier,
-                            ArgbBuffer* const debug_output) {
-  assert(unfiltered_pixels.format() == filtered_pixels.format());
-  assert(unfiltered_pixels.width() == filtered_pixels.width());
-  assert(unfiltered_pixels.height() == filtered_pixels.height());
-  assert(unfiltered_pixels.format() == debug_output->format());
-  assert(unfiltered_pixels.width() == debug_output->width());
-  assert(unfiltered_pixels.height() == debug_output->height());
-  const uint32_t num_channels = WP2FormatBpp(debug_output->format());
-  const uint32_t alpha_channel = WP2AlphaChannelIndex(debug_output->format());
-
-  for (uint32_t y = 0; y < unfiltered_pixels.height(); ++y) {
-    for (uint32_t x = 0; x < unfiltered_pixels.width(); ++x) {
-      for (uint32_t c = 0; c < num_channels; ++c) {
-        const int32_t unfiltered =
-            (unfiltered_pixels.GetRow8(y))[x * num_channels + c];
-        const int32_t filtered =
-            (filtered_pixels.GetRow8(y))[x * num_channels + c];
-
-        int32_t diff = (filtered - unfiltered) * multiplier;
-        if (c == alpha_channel) {
-          diff = 255 - std::abs(diff);  // Opaque by default.
-        } else {
-          diff = 128 + diff;  // Grey by default.
-        }
-
-        uint8_t* const pixel = debug_output->GetRow8(y) + x * num_channels + c;
-        *pixel = (uint8_t)Clamp(diff, 0, 255);
-      }
-    }
-  }
-}
-
 //------------------------------------------------------------------------------
+// Filters
+
+// Simple tool for gathering and displaying min, max and average values.
+class MinMaxAvg {
+ public:
+  void Add(double value) {
+    if (num_values_ == 0) min_ = max_ = sum_ = value;
+    min_ = std::min(min_, value), max_ = std::max(max_, value), sum_ += value;
+    ++num_values_;
+  }
+
+  uint32_t GetNumValues() const { return num_values_; }
+  double GetMin() const { return min_; }
+  double GetMax() const { return max_; }
+  double GetAvg() const { return (num_values_ > 0) ? sum_ / num_values_ : 0; }
+
+  std::string ToString() const {
+    std::string str;
+    WP2SAppend(&str, "min: %.3f, avg: %.3f, avg: %.3f (%u)", min_, GetAvg(),
+               max_, num_values_);
+    return str;
+  }
+
+ private:
+  uint32_t num_values_ = 0;
+  double sum_ = 0, min_ = 0, max_ = 0;
+};
+
 
 void FilterBlockMap::ApplyVDebug(const DecoderConfig& config,
                                  ArgbBuffer* const debug_output) {
@@ -1383,6 +1311,12 @@ void DeblockingFilter::SavePixelsForVDebug(uint32_t num_rows) {
     }
     num_debug_rows_ = num_rows;
   }
+}
+
+static bool IsHorizontal(const DecoderConfig& config) {
+  if (VDMatch(config, "horizontal")) return true;
+  assert(VDMatch(config, "vertical"));
+  return false;
 }
 
 void DeblockingFilter::RegisterPixelsForVDebug(
@@ -1460,6 +1394,7 @@ void DeblockingFilter::ApplyVDebug(uint32_t num_rows) {
     }
   }
 }
+
 
 //------------------------------------------------------------------------------
 
@@ -1668,6 +1603,41 @@ void AlphaFilter::ApplyVDebug(uint32_t num_rows) {
 
 //------------------------------------------------------------------------------
 
+static void ApplyVDebugDiff(const ArgbBuffer& unfiltered_pixels,
+                            const ArgbBuffer& filtered_pixels,
+                            int32_t multiplier,
+                            ArgbBuffer* const debug_output) {
+  assert(unfiltered_pixels.format() == filtered_pixels.format());
+  assert(unfiltered_pixels.width() == filtered_pixels.width());
+  assert(unfiltered_pixels.height() == filtered_pixels.height());
+  assert(unfiltered_pixels.format() == debug_output->format());
+  assert(unfiltered_pixels.width() == debug_output->width());
+  assert(unfiltered_pixels.height() == debug_output->height());
+  const uint32_t num_channels = WP2FormatBpp(debug_output->format());
+  const uint32_t alpha_channel = WP2AlphaChannelIndex(debug_output->format());
+
+  for (uint32_t y = 0; y < unfiltered_pixels.height(); ++y) {
+    for (uint32_t x = 0; x < unfiltered_pixels.width(); ++x) {
+      for (uint32_t c = 0; c < num_channels; ++c) {
+        const int32_t unfiltered =
+            (unfiltered_pixels.GetRow8(y))[x * num_channels + c];
+        const int32_t filtered =
+            (filtered_pixels.GetRow8(y))[x * num_channels + c];
+
+        int32_t diff = (filtered - unfiltered) * multiplier;
+        if (c == alpha_channel) {
+          diff = 255 - std::abs(diff);  // Opaque by default.
+        } else {
+          diff = 128 + diff;  // Grey by default.
+        }
+
+        uint8_t* const pixel = debug_output->GetRow8(y) + x * num_channels + c;
+        *pixel = (uint8_t)Clamp(diff, 0, 255);
+      }
+    }
+  }
+}
+
 // Sets all R, G and B channels to the value of a single 'channel'.
 static void ToGray(const ArgbBuffer& from, uint32_t channel,
                    ArgbBuffer* const to) {
@@ -1780,6 +1750,7 @@ void ApplyVDebugBeforeAfter(const DecoderConfig& config,
 }
 
 //------------------------------------------------------------------------------
+// Encoder-related
 
 // Fills the background of the current tile with luma and display some info.
 WP2Status PartitionScoreFunc::ClearVDebug() const {
@@ -1812,14 +1783,14 @@ WP2Status PartitionScoreFunc::ClearVDebug() const {
 }
 
 // Should be called after ClearVDebug() and for each block score computed.
-bool PartitionScoreFunc::RegisterScoreForVDebug(const Block& block, float score,
-                                                bool ending_new_line) const {
+WP2Status PartitionScoreFunc::RegisterScoreForVDebug(
+    const Block& block, float score, bool ending_new_line) const {
   if (!VDMatch(*config_, "encoder/partition/score") ||
       !VDSelected(
           tile_rect_.x, tile_rect_.y,
           {block.x_pix(), block.y_pix(), kMinBlockSizePix, kMinBlockSizePix},
           *config_)) {
-    return false;
+    return WP2_STATUS_OK;
   }
   // Highlight the block with a color dependent on its size.
   const uint8_t color_w = (uint8_t)(191 + block.w() * 64 / kMaxBlockSize);
@@ -1829,19 +1800,20 @@ bool PartitionScoreFunc::RegisterScoreForVDebug(const Block& block, float score,
        block.w_pix() - 2, block.h_pix() - 2},
       Argb32b{255, color_w, color_h, 0});
 
-  std::string* const str_ptr = &config_->info->selection_info;
-  WP2SAppend(str_ptr, "Block at %4u, %4u (%2u x %2u px), score: %9.3f",
-             tile_rect_.x + block.x_pix(), tile_rect_.y + block.y_pix(),
-             block.w_pix(), block.h_pix(), score);
-  if (ending_new_line) WP2SAppend(str_ptr, "\n");
-  return true;
+  if (config_->info != nullptr) {
+    std::string* const str_ptr = &config_->info->selection_info;
+    WP2SAppend(str_ptr, "Block at %4u, %4u (%2u x %2u px), score: %9.3f",
+               tile_rect_.x + block.x_pix(), tile_rect_.y + block.y_pix(),
+               block.w_pix(), block.h_pix(), score);
+    if (ending_new_line) WP2SAppend(str_ptr, "\n");
+  }
+  return WP2_STATUS_OK;
 }
 
 // Should be called after ClearVDebug() and for each block actually encoded.
-void Partitioner::RegisterOrderForVDebug(uint32_t pass, uint32_t pass_index,
-                                         const Block& block,
-                                         uint32_t block_index,
-                                         uint32_t max_num_blocks) const {
+WP2Status Partitioner::RegisterOrderForVDebug(
+    uint32_t pass, uint32_t pass_index,
+    const Block& block, uint32_t block_index, uint32_t max_num_blocks) const {
   if (VDMatch(*config_, "encoder/partition")) {
     ArgbBuffer* const debug_output = &config_->info->debug_output;
     Rectangle rect;
@@ -1894,9 +1866,10 @@ void Partitioner::RegisterOrderForVDebug(uint32_t pass, uint32_t pass_index,
       debug_output->DrawRect(rect, Argb32b{255, 64, 128, 64});
     }
   }
+  return WP2_STATUS_OK;
 }
 
-bool BlockScoreFunc::RegisterScoreForVDebug(
+WP2Status BlockScoreFunc::RegisterScoreForVDebug(
     const Block blocks[], uint32_t num_blocks, const float rate[4],
     const float disto[4], float total_rate, float total_disto, float score) {
   Rectangle hull = blocks[0].rect();  // Print surrounding block if possible.
@@ -1904,31 +1877,31 @@ bool BlockScoreFunc::RegisterScoreForVDebug(
     hull = hull.MergeWith(blocks[i].rect());
   }
   const Block hull_block(hull.x, hull.y, GetBlockSize(hull.width, hull.height));
-  if (!PartitionScoreFunc::RegisterScoreForVDebug(hull_block, score,
-                                                  /*ending_new_line=*/false)) {
-    return false;
-  }
+  WP2_CHECK_STATUS(PartitionScoreFunc::RegisterScoreForVDebug(
+      hull_block, score, /*ending_new_line=*/false));
 
-  std::string* const str_ptr = &config_->info->selection_info;
-  WP2SAppend(str_ptr, "  rate %8.2f disto %8.2f", total_rate, total_disto);
-  if (num_blocks > 1) {  // Print sub-blocks stats.
-    WP2SAppend(str_ptr, "  %u blks: ", num_blocks);
-    for (uint32_t i = 0; i < num_blocks; ++i) {
-      WP2SAppend(str_ptr, " %ux%u(r%.2f,d%.2f)", blocks[i].w_pix(),
-                 blocks[i].h_pix(), rate[i], disto[i]);
+  if (config_->info != nullptr) {
+    std::string* const str_ptr = &config_->info->selection_info;
+    WP2SAppend(str_ptr, "  rate %8.2f disto %8.2f", total_rate, total_disto);
+    if (num_blocks > 1) {  // Print sub-blocks stats.
+     WP2SAppend(str_ptr, "  %u blks: ", num_blocks);
+     for (uint32_t i = 0; i < num_blocks; ++i) {
+        WP2SAppend(str_ptr, " %ux%u(r%.2f,d%.2f)", blocks[i].w_pix(),
+                   blocks[i].h_pix(), rate[i], disto[i]);
+     }
     }
+    WP2SAppend(str_ptr, "\n");
   }
-  WP2SAppend(str_ptr, "\n");
-  return true;
+  return WP2_STATUS_OK;
 }
 
-bool AreaScoreFunc::RegisterScoreForVDebug(
+WP2Status AreaScoreFunc::RegisterScoreForVDebug(
     BlockSize grid_size, const Vector<CodedBlock>& area_blocks, float score,
     float disto, float rate) const {
   // Only display something when the current 'area_' is selected.
   if (!VDMatch(*config_, "encoder/partition/score") ||
       !VDSelected(tile_rect_.x, tile_rect_.y, area_, *config_)) {
-    return false;
+    return WP2_STATUS_OK;
   }
 
   std::string* const str_ptr = &config_->info->selection_info;
@@ -1954,24 +1927,23 @@ bool AreaScoreFunc::RegisterScoreForVDebug(
     WP2SAppend(str_ptr, "  (grid of %2u x %2u px)\n", BlockWidthPix(grid_size),
                BlockHeightPix(grid_size));
   }
-  return true;
+  return WP2_STATUS_OK;
 }
 
-bool SubAreaScoreFunc::RegisterScoreForVDebug(
+WP2Status SubAreaScoreFunc::RegisterScoreForVDebug(
     const Block& block, const Vector<CodedBlock>& area_remaining_blocks,
     float score, float disto, float rate) const {
-  if (PartitionScoreFunc::RegisterScoreForVDebug(block, score)) {
+  WP2_CHECK_STATUS(PartitionScoreFunc::RegisterScoreForVDebug(block, score));
+  if (config_->info != nullptr) {
     std::string* const str_ptr = &config_->info->selection_info;
     WP2SAppend(str_ptr, "  disto %7.3f + rate %7.3f%s\n", disto, rate,
                (default_block_.dim() == BLK_LAST) ? " (default)" : "");
-    return true;
   }
-  return false;
+  return WP2_STATUS_OK;
 }
 
-bool TileScoreFunc::RegisterScoreForVDebug(const char label[],
-                                           const Block& block,
-                                           float score) const {
+WP2Status TileScoreFunc::RegisterScoreForVDebug(
+    const char label[], const Block& block, float score) const {
   if (VDMatch(*config_, "encoder/partition/score")) {
     std::string* const str_ptr = &config_->info->selection_info;
     WP2SAppend(str_ptr, "\n%s: score %.6f, %4u blocks, %4u-byte tile", label,
@@ -1982,14 +1954,13 @@ bool TileScoreFunc::RegisterScoreForVDebug(const char label[],
                  block.y_pix(), block.w_pix(), block.h_pix());
     }
     WP2SAppend(str_ptr, ", tile distortion %.4f dB", distortion_[4]);
-    return true;
   }
-  return false;
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
 
-void ExhaustivePartitioner::RegisterScoreForVDebug(
+WP2Status ExhaustivePartitioner::RegisterScoreForVDebug(
     float best_partition_score, uint64_t best_partition_size,
     uint64_t num_iterations) const {
   if (VDMatch(*config_, "encoder/partition/score")) {
@@ -1998,24 +1969,24 @@ void ExhaustivePartitioner::RegisterScoreForVDebug(
     WP2SAppend(str_ptr, "Best partition score: %8.3f size: %4u\n",
                best_partition_score, (uint32_t)best_partition_size);
   }
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
 
-void MultiPassPartitioner::RegisterPassForVDebug(
+WP2Status MultiPassPartitioner::RegisterPassForVDebug(
     MultiScoreFunc::Pass pass, BlockSize block_size,
     uint32_t num_chosen_blocks) const {
-  if (!VDMatch(*config_, "encoder/partition/pass")) return;
-  if (!VDSelected(tile_rect_, *config_)) return;
-
+  if (!VDMatch(*config_, "encoder/partition/pass")) return WP2_STATUS_OK;
+  if (!VDSelected(tile_rect_, *config_)) return WP2_STATUS_OK;
   const char* const kPassStr[] = {"FlatLumaAlpha", "NarrowStdDev",
                                   "GoodQuantDCT", "Direction", "Any"};
   STATIC_ASSERT_ARRAY_SIZE(kPassStr, (int)MultiScoreFunc::Pass::Any + 1);
-
   std::string* const str_ptr = &config_->info->selection_info;
   WP2SAppend(str_ptr, "Pass: %2u - %s - %2ux%2u - %4u blocks\n", pass_index_,
              kPassStr[(int)pass], BlockWidthPix(block_size),
              BlockHeightPix(block_size), num_chosen_blocks);
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
@@ -2109,6 +2080,8 @@ WP2Status MultiScoreFunc::DrawSelection(const Block& block,
       std::min(block_rect.y + block_rect.height + 1u, debug_output->height()) -
       border.y;
   debug_output->DrawRect(border, Argb32b{255, 255, 255, 0});
+
+  if (config_->info == nullptr) return WP2_STATUS_OK;
 
   std::string* const str_ptr = &config_->info->selection_info;
   WP2SAppend(str_ptr, "\nBlock at %4u, %4u (%2u x %2u px)\n",
@@ -2317,48 +2290,10 @@ void SegmentationBlockVDebug(const EncoderConfig& config, const CodedBlock& cb,
 
 //------------------------------------------------------------------------------
 
-void SyntaxWriter::PutRawPixels(const Block& block, const YUVPlane& pixels,
-                                ANSEnc* const enc) {
-  enc->PutRValue(block.x(), SizeBlocks(tile_rect_.width), "DEEP_MATCH_X");
-  enc->PutRValue(block.y(), SizeBlocks(tile_rect_.height), "DEEP_MATCH_Y");
-  enc->PutRValue(block.w(), kMaxBlockSize + 1, "DEEP_MATCH_W");
-  enc->PutRValue(block.h(), kMaxBlockSize + 1, "DEEP_MATCH_H");
-  for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    if (pixels.GetChannel(channel).IsEmpty()) continue;
-    for (uint32_t y = 0; y < block.h_pix(); ++y) {
-      for (uint32_t x = 0; x < block.w_pix(); ++x) {
-        enc->PutSUValue(pixels.GetChannel(channel).At(x, y),
-                        gparams_->transf_.GetYUVPrecisionBits() + 1,
-                        kChannelStr[channel]);
-      }
-    }
-  }
-}
-
-void SyntaxReader::ReadAndCompareRawPixels(const Block& block,
-                                           const YUVPlane& pixels,
-                                           ANSDec* const dec) {
-  const uint32_t block_x = dec->ReadRValue(SizeBlocks(width_), "DEEP_MATCH_X");
-  const uint32_t block_y = dec->ReadRValue(SizeBlocks(height_), "DEEP_MATCH_Y");
-  const uint32_t block_w = dec->ReadRValue(kMaxBlockSize + 1, "DEEP_MATCH_W");
-  const uint32_t block_h = dec->ReadRValue(kMaxBlockSize + 1, "DEEP_MATCH_H");
-  if (block_x != block.x() || block_y != block.y()) assert(false);
-  if (block_w != block.w() || block_h != block.h()) assert(false);
-  for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    if (pixels.GetChannel(channel).IsEmpty()) continue;
-    for (uint32_t y = 0; y < block.h_pix(); ++y) {
-      for (uint32_t x = 0; x < block.w_pix(); ++x) {
-        const int32_t px = dec->ReadSUValue(
-            gparams_->transf_.GetYUVPrecisionBits() + 1, kChannelStr[channel]);
-        if (px != pixels.GetChannel(channel).At(x, y)) assert(false);
-      }
-    }
-  }
-}
+}  // namespace WP2
 
 //------------------------------------------------------------------------------
-
-}  // namespace WP2
+// Lossless decoder
 
 namespace WP2L {
 
@@ -2403,15 +2338,14 @@ static const WP2::Argb32b kSymbolColors[2][3] = {
     {{255, 255, 255, 0}, {255, 0, 255, 255}, {255, 255, 0, 255}}  // Group4
 };
 
-void Decoder::RegisterSymbolForVDebug(int symbol_type, bool is_group4,
-                                      uint32_t pos, uint32_t length,
-                                      double cost,
-                                      WP2::DecoderInfo* const decoder_info) {
+WP2Status Decoder::RegisterSymbolForVDebug(
+    int symbol_type, bool is_group4, uint32_t pos, uint32_t length,
+    double cost, WP2::DecoderInfo* const decoder_info) {
   assert(length > 0);
-  if (decoder_info == nullptr) return;
+  if (decoder_info == nullptr) return WP2_STATUS_OK;
   if (!WP2::VDMatch(decoder_info->visual_debug, "bits-per-pixel/overall") &&
       !WP2::VDMatch(decoder_info->visual_debug, "lossless/symbols")) {
-    return;
+    return WP2_STATUS_OK;
   }
 
   if (WP2::VDMatch(decoder_info->visual_debug, "lossless/symbols")) {
@@ -2453,18 +2387,19 @@ void Decoder::RegisterSymbolForVDebug(int symbol_type, bool is_group4,
                          : kSymbolTypeNames[symbol_type],
                length, cost, cost / length);
   }
+  return WP2_STATUS_OK;
 }
 
 static const char* const kTransformNames[] = {
     "Predictor", "CrossColor", "SubstractGreen", "ColorIndexing", "Group4"};
 STATIC_ASSERT_ARRAY_SIZE(kTransformNames, NUM_TRANSFORMS);
 
-void Decoder::RegisterUnprocessedRowForVDebug(
+WP2Status Decoder::RegisterUnprocessedRowForVDebug(
     uint32_t num_rows, uint32_t num_bits, const int16_t* const rows,
     WP2::DecoderInfo* const decoder_info) {
-  if (decoder_info == nullptr) return;
+  if (decoder_info == nullptr) return WP2_STATUS_OK;
   if (!WP2::VDMatch(decoder_info->visual_debug, "lossless/transformed")) {
-    return;
+    return WP2_STATUS_OK;
   }
 
   // Only show once per tile.
@@ -2513,14 +2448,15 @@ void Decoder::RegisterUnprocessedRowForVDebug(
     decoder_info->debug_output.DrawRect(tile_->rect,
                                         WP2::Argb32b{255, 255, 0, 0});
   }
+  return WP2_STATUS_OK;
 }
 
-void Decoder::HeaderVDebug() {
+WP2Status Decoder::HeaderVDebug() {
   WP2::DecoderInfo* const decoder_info = config_.info;
-  if (decoder_info == nullptr) return;
+  if (decoder_info == nullptr) return WP2_STATUS_OK;
 
   if (!WP2::VDMatch(decoder_info->visual_debug, "lossless/clusters")) {
-    return;
+    return WP2_STATUS_OK;
   }
 
   const uint32_t bits = hdr_.histogram_subsample_bits_;
@@ -2560,6 +2496,9 @@ void Decoder::HeaderVDebug() {
   if (VDSelected(0, 0, tile_rect, config_)) {
     debug_output->DrawRect(tile_rect, WP2::Argb32b{255, 0, 255, 0});
   }
+  return WP2_STATUS_OK;
 }
 
 }  // namespace WP2L
+
+#endif  // WP2_REDUCE_BINARY_SIZE

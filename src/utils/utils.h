@@ -97,6 +97,13 @@ void WP2ErrorLog(const char* const file, int line, WP2Status s,
     assert(__S__ == WP2_STATUS_OK);           \
   } while (0)
 
+// Only performs the CHECK if WP2_REDUCE_BINARY_SIZE is *not* defined.
+#if !defined(WP2_REDUCE_BINARY_SIZE)
+#define WP2_CHECK_REDUCED_STATUS(status) WP2_CHECK_STATUS(status)
+#else
+#define WP2_CHECK_REDUCED_STATUS(status) do {} while (false)
+#endif
+
 // Can be overridden and called instead of WP2ErrorLog() if 'wp2_error_tracer'
 // is not null. Beware of concurrent accesses during multithreading.
 #if defined(WP2_TRACE) || defined(WP2_ERROR_TRACE)

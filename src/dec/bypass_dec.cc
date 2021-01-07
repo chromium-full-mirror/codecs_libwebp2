@@ -136,7 +136,8 @@ WP2Status TileDecoder::BypassTileDec() {
 #if defined(WP2_BITTRACE)
   if (config_->info != nullptr) {
     WP2_CHECK_STATUS(tiles_layout_->assignment_lock.Acquire());
-    RegisterBitTrace(*config_, num_read_bytes, "BypassPixels");
+    WP2_CHECK_STATUS(
+        RegisterBitTrace(*config_, num_read_bytes, "BypassPixels"));
     tiles_layout_->assignment_lock.Release();
   }
 #endif

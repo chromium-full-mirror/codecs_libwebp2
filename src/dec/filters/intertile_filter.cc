@@ -94,12 +94,16 @@ void IntertileFilter::Deblock(uint32_t num_rows) {
     num_vertically_deblocked_rows_ = num_horizontally_deblocked_rows_;
   } else {
     assert(num_rows <= canvas_.Y.h_);
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     if (VDMatch(*config_, "intertile-filter")) SavePixelsForVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
 
     DeblockHorizontally(num_rows);
     DeblockVertically(num_horizontally_deblocked_rows_);
 
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     if (VDMatch(*config_, "intertile-filter")) ApplyVDebug(num_rows);
+#endif  // WP2_REDUCE_BINARY_SIZE
   }
 }
 

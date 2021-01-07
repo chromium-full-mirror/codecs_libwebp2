@@ -227,6 +227,27 @@ bool HasPreview(const EncoderConfig& config) {
 
 //------------------------------------------------------------------------------
 
+WP2Status SetupEncoderInfo(uint32_t width, uint32_t height,
+                           const EncoderConfig& config) {
+#if !defined(WP2_REDUCE_BINARY_SIZE)
+  if (VDMatch(config, "")) {  // Matches any visual debug.
+    ArgbBuffer* const debug_output = &config.info->debug_output;
+    WP2_CHECK_STATUS(debug_output->Resize(width, height));
+    VDDrawUndefinedPattern(debug_output);
+  }
+#endif  // WP2_REDUCE_BINARY_SIZE
+
+  if (config.info != nullptr) {
+#if defined(WP2_BITTRACE)
+    config.info->blocks.clear();
+#endif
+    config.info->selection_info.clear();
+  }
+  return WP2_STATUS_OK;
+}
+
+//------------------------------------------------------------------------------
+
 // Encode header to 'output'.
 WP2Status EncodeHeader(const EncoderConfig& config,
                        uint32_t width, uint32_t height,

@@ -33,6 +33,59 @@ namespace WP2 {
 SyntaxReader::SyntaxReader(ANSDec* const dec, const Rectangle& rect)
     : dec_(dec), width_(rect.width), height_(rect.height) {}
 
+WP2Status SyntaxReader::ReadHeader(const BitstreamFeatures& features,
+                                   const GlobalParams& gparams,
+                                   const Tile& tile) {
+  // TODO(skal): use differential coding to update gparam locally
+  gparams_ = &gparams;
+
+  if (gparams_->has_alpha_) {
+    alpha_reader_.reset(new (WP2Allocable::nothrow) AlphaReader(dec_, tile));
+    WP2_CHECK_ALLOC_OK(alpha_reader_ != nullptr);
+    WP2_CHECK_STATUS(alpha_reader_->Allocate());
+  }
+
+  ANSDebugPrefix prefix(dec_, "GlobalHeader");
+
+  use_aom_coeffs_ = dec_->ReadBool("use_aom_coeffs");
+  WP2_CHECK_STATUS(context_.Init(use_aom_coeffs_, width_, height_));
+  residual_reader_.Init(use_aom_coeffs_);
+
+  WP2_CHECK_STATUS(symbols_info_.InitLossy(
+      (uint32_t)gparams_->segments_.size(), gparams.partition_set_,
+      gparams_->maybe_use_lossy_alpha_, features.quality_hint,
+      use_aom_coeffs_));
+  const uint32_t num_channels = (gparams_->maybe_use_lossy_alpha_ ? 4 : 3);
+  for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+    if (c == kAChannel && !gparams_->maybe_use_lossy_alpha_) continue;
+    WP2_CHECK_STATUS(symbols_info_.SetMinMax(
+        ResidualIO::GetCluster(c, num_channels), kSymbolDC, /*min=*/0,
+        /*max=*/gparams_->GetMaxDCRange(c) - 1));
+  }
+  symbols_info_.SetClusters(kSymbolDC, symbols_info_.NumClusters(kSymbolDC));
+  WP2_CHECK_STATUS(sr_.Init(symbols_info_, dec_));
+  WP2_CHECK_STATUS(sr_.Allocate());
+
+  const uint32_t max_num_blocks = SizeBlocks(width_) * SizeBlocks(height_);
+  const uint32_t min_num_blocks = std::max(1u, max_num_blocks / kMaxBlockSize2);
+  num_blocks_ =
+      ReadLargeRange(min_num_blocks, max_num_blocks, dec_, "num_blocks");
+  num_transforms_ = std::min(num_blocks_ * 4, max_num_blocks);
+
+  if (num_blocks_ == 1) {
+    chroma_subsampling_ = ChromaSubsampling::kSingleBlock;
+  } else {
+    chroma_subsampling_ = (ChromaSubsampling)dec_->ReadRValue(
+        (int)ChromaSubsampling::kSingleBlock, "chroma_subsampling");
+  }
+
+  WP2_CHECK_STATUS(LoadDictionaries());
+
+  return dec_->GetStatus();
+}
+
+//------------------------------------------------------------------------------
+
 WP2Status SyntaxReader::LoadDictionaries() {
   const uint32_t max_num_blocks = SizeBlocks(width_) * SizeBlocks(height_);
   if (gparams_->explicit_segment_ids_) {
@@ -129,59 +182,6 @@ WP2Status SyntaxReader::ReadPredModes(CodedBlock* const cb) {
   const CodedBlock::CodingParams& params = *cb->GetCodingParams(kUChannel);
   cb->SetUVPredictor(uv_preds.GetWithMode(uv_mode, params.pred_sub_mode));
   return WP2_STATUS_OK;
-}
-
-//------------------------------------------------------------------------------
-
-WP2Status SyntaxReader::ReadHeader(const BitstreamFeatures& features,
-                                   const GlobalParams& gparams,
-                                   const Tile& tile) {
-  // TODO(skal): use differential coding to update gparam locally
-  gparams_ = &gparams;
-
-  if (gparams_->has_alpha_) {
-    alpha_reader_.reset(new (WP2Allocable::nothrow) AlphaReader(dec_, tile));
-    WP2_CHECK_ALLOC_OK(alpha_reader_ != nullptr);
-    WP2_CHECK_STATUS(alpha_reader_->Allocate());
-  }
-
-  ANSDebugPrefix prefix(dec_, "GlobalHeader");
-
-  use_aom_coeffs_ = dec_->ReadBool("use_aom_coeffs");
-  WP2_CHECK_STATUS(context_.Init(use_aom_coeffs_, width_, height_));
-  residual_reader_.Init(use_aom_coeffs_);
-
-  WP2_CHECK_STATUS(symbols_info_.InitLossy(
-      (uint32_t)gparams_->segments_.size(), gparams.partition_set_,
-      gparams_->maybe_use_lossy_alpha_, features.quality_hint,
-      use_aom_coeffs_));
-  const uint32_t num_channels = (gparams_->maybe_use_lossy_alpha_ ? 4 : 3);
-  for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    if (c == kAChannel && !gparams_->maybe_use_lossy_alpha_) continue;
-    WP2_CHECK_STATUS(symbols_info_.SetMinMax(
-        ResidualIO::GetCluster(c, num_channels), kSymbolDC, /*min=*/0,
-        /*max=*/gparams_->GetMaxDCRange(c) - 1));
-  }
-  symbols_info_.SetClusters(kSymbolDC, symbols_info_.NumClusters(kSymbolDC));
-  WP2_CHECK_STATUS(sr_.Init(symbols_info_, dec_));
-  WP2_CHECK_STATUS(sr_.Allocate());
-
-  const uint32_t max_num_blocks = SizeBlocks(width_) * SizeBlocks(height_);
-  const uint32_t min_num_blocks = std::max(1u, max_num_blocks / kMaxBlockSize2);
-  num_blocks_ =
-      ReadLargeRange(min_num_blocks, max_num_blocks, dec_, "num_blocks");
-  num_transforms_ = std::min(num_blocks_ * 4, max_num_blocks);
-
-  if (num_blocks_ == 1) {
-    chroma_subsampling_ = ChromaSubsampling::kSingleBlock;
-  } else {
-    chroma_subsampling_ = (ChromaSubsampling)dec_->ReadRValue(
-        (int)ChromaSubsampling::kSingleBlock, "chroma_subsampling");
-  }
-
-  WP2_CHECK_STATUS(LoadDictionaries());
-
-  return dec_->GetStatus();
 }
 
 //------------------------------------------------------------------------------

@@ -186,7 +186,9 @@ WP2Status TopLeftBestPartitioner::GetBestPartition(
       assert(max_num_blocks_left > 0);
       WP2_CHECK_STATUS(GetBestSize(max_block, forced_blocks.size(),
                                    block_progress, &best_block));
-      RegisterOrderForVDebug(0, 0, best_block, blocks->size(), max_num_blocks);
+      WP2_CHECK_REDUCED_STATUS(
+          RegisterOrderForVDebug(0, 0, best_block, blocks->size(),
+                                 max_num_blocks));
       WP2_CHECK_ALLOC_OK(blocks->push_back(best_block));
 
       // The following instructions are done only for assertions/debug
@@ -361,7 +363,9 @@ WP2Status SubAreaRDOptPartitioner::GetAreaBestPartition(
       }
     }
     const uint32_t block_index = max_num_blocks - *max_num_blocks_left;
-    RegisterOrderForVDebug(0, 0, best_block, block_index, max_num_blocks);
+    (void)block_index;
+    WP2_CHECK_REDUCED_STATUS(
+        RegisterOrderForVDebug(0, 0, best_block, block_index, max_num_blocks));
     *max_num_blocks_left -= best_block.rect().GetArea();
     WP2_CHECK_ALLOC_OK(blocks->push_back(best_block));
     WP2_CHECK_ALLOC_OK(front_mgr_.UseSize(best_block.dim(), 0u, nullptr));
@@ -490,7 +494,9 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
             Block(max_block.x(), max_block.y(), split_info.size);
         assert(IsBlockValid(block, max_block, forced_blocks.size()));
         assert(IsSplitInfo(block, split_info));
-        RegisterOrderForVDebug(0, 0, block, blocks->size(), max_num_blocks);
+        WP2_CHECK_REDUCED_STATUS(
+            RegisterOrderForVDebug(0, 0, block, blocks->size(),
+                                   max_num_blocks));
         WP2_CHECK_ALLOC_OK(blocks->push_back(block));
         WP2_CHECK_ALLOC_OK(front_mgr.UseSize(block.dim(), /*ind=*/0u, nullptr));
         front_mgr.Use(block);
@@ -676,7 +682,9 @@ WP2Status ExhaustivePartitioner::GetBestPartition(
   }
   WP2_CHECK_STATUS(progress.AdvanceBy(std::pow(0.5, 1. * num_iterations)));
 
-  RegisterScoreForVDebug(best_score, best_partition->size(), num_iterations);
+  WP2_CHECK_REDUCED_STATUS(
+      RegisterScoreForVDebug(best_score, best_partition->size(),
+                             num_iterations));
   return WP2_STATUS_OK;
 }
 
@@ -832,7 +840,7 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass, BlockSize block_size,
   // Make sure the 'block_size' is valid and there is at least one remaining.
   if (block.w() > num_block_cols_ || block.h() > num_block_rows_ ||
       block.rect().GetArea() > *max_num_blocks_left) {
-    RegisterPassForVDebug(pass, block_size, 0);
+    WP2_CHECK_REDUCED_STATUS(RegisterPassForVDebug(pass, block_size, 0));
     ++pass_index_;
     WP2_CHECK_STATUS(progress.AdvanceBy(1.));
     return WP2_STATUS_OK;
@@ -902,7 +910,9 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass, BlockSize block_size,
     }
   }
 
-  RegisterPassForVDebug(pass, block_size, out->size() - num_blocks_before);
+  (void)num_blocks_before;
+  WP2_CHECK_REDUCED_STATUS(
+      RegisterPassForVDebug(pass, block_size, out->size() - num_blocks_before));
   ++pass_index_;
   return WP2_STATUS_OK;
 }
@@ -911,8 +921,9 @@ WP2Status MultiPassPartitioner::SelectBlock(MultiScoreFunc::Pass pass,
                                             const Block& block,
                                             uint32_t* const max_num_blocks_left,
                                             VectorNoCtor<Block>* const out) {
-  RegisterOrderForVDebug((uint32_t)pass, pass_index_, block, out->size(),
-                         num_block_cols_ * num_block_rows_);
+  WP2_CHECK_REDUCED_STATUS(
+      RegisterOrderForVDebug((uint32_t)pass, pass_index_, block, out->size(),
+                             num_block_cols_ * num_block_rows_));
   Occupy(block);
   const uint32_t block_area = block.w() * block.h();
   assert(*max_num_blocks_left >= block_area);
