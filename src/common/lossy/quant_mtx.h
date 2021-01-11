@@ -34,28 +34,6 @@ class RndMtxSet;
 
 static constexpr uint32_t kNumQuantZones = 4;
 
-class QuantStat {
- public:
-  void Record(TrfSize tdim,
-              int32_t* const coeffs,  /* unquantized coeffs */
-              int16_t* const qcoeffs  /* quantized coeffs */);
-  void Reset();
-  // Returns true if one quant_steps[] value was changed at least.
-  bool AdjustQuantSteps(uint16_t quant_steps[kNumQuantZones]) const;
-
-  void Print() const;   // for debug
-
- private:
-  void Record(TrfSize tdim, uint32_t idx, int32_t qvalue, int32_t value);
-  // Whether any values are quantized to > 1
-  bool is_large_[TRF_LAST][kMaxBlockSizePix2];
-  // Count of values that are quantized to 1 (per quant zone).
-  uint32_t count_[kNumQuantZones];
-  // Sum of values that are quantized to 1 (per quant zone).
-  float value_[kNumQuantZones];
-  uint32_t last_idx_[TRF_LAST];
-};
-
 struct QuantMtx {
  public:
   // allocate the *encoding* data space
@@ -90,9 +68,6 @@ struct QuantMtx {
   int16_t DCError(int32_t DC, TrfSize dim) const;
 
   uint16_t GetMaxAbsResDC(TrfSize tdim) const { return max_abs_res_dc[tdim]; }
-
-  QuantStat* qstats = nullptr;
-  void SetQuantStats(QuantStat* const stats) { qstats = stats; }
 
   void Print() const;  // debug
 

@@ -404,17 +404,16 @@ WP2Status ResidualWriter::FindBestEncodingMethod(
 }
 
 WP2Status ResidualWriter::RecordCoeffs(const CodedBlock& cb, Channel channel,
-                                       SymbolRecorder* const recorder,
-                                       libgav1::AOMContext* const aom_context) {
+                                       SymbolRecorder* const recorder) {
   // Using a counter because it updates adaptive bits, which we do want.
   // TODO(maryla): be more consistant with using counter vs noop.
   ANSEncCounter enc;
-  return WriteCoeffs(cb, channel, &enc, recorder, aom_context);
+  return WriteCoeffs(cb, channel, &enc, recorder);
 }
 
 WP2Status ResidualWriter::WriteCoeffs(const CodedBlock& cb, Channel channel,
-                                      ANSEncBase* enc, SymbolManager* const sm,
-                                      libgav1::AOMContext* const aom_context) {
+                                      ANSEncBase* enc,
+                                      SymbolManager* const sm) {
   const ANSDebugPrefix prefix(enc, (channel == kYChannel)   ? "Y"
                                    : (channel == kAChannel) ? "A"
                                                             : "UV");
@@ -433,8 +432,7 @@ WP2Status ResidualWriter::WriteCoeffs(const CodedBlock& cb, Channel channel,
         WP2_CHECK_STATUS(aom_writer_.WriteCoeffs(
             cb.x_pix() + split_x, cb.y_pix() + split_y, split_size,
             coding_params.tf, cb.IsFirstCoeffDC(channel), max_num_coeffs,
-            cb.is420_, coeffs,
-            channel, /*do_update=*/true, sm, enc, aom_context));
+            cb.is420_, coeffs, channel, sm, enc));
       } else {
         const EncodingMethod method = cb.method_[channel][tf_i];
         if (method == EncodingMethod::kAllZero) {
@@ -495,7 +493,6 @@ WP2Status ResidualWriter::GetRate(Channel channel, uint32_t num_channels,
 }
 
 WP2Status ResidualWriter::GetRateAOM(const CodedBlock& cb, Channel channel,
-                                     const libgav1::AOMContext& aom_context,
                                      SymbolCounter* const counter,
                                      float* const rate) {
   counter->Clear();
@@ -512,8 +509,7 @@ WP2Status ResidualWriter::GetRateAOM(const CodedBlock& cb, Channel channel,
       WP2_CHECK_STATUS(libgav1::AOMResidualWriter::WriteCoeffs(
           cb.x_pix() + split_x, cb.y_pix() + split_y, split_size,
           coding_params.tf, cb.IsFirstCoeffDC(channel), max_num_coeffs,
-          cb.is420_, cb.coeffs_[channel][tf_i], channel, /*do_update=*/false,
-          counter, &enc, const_cast<libgav1::AOMContext*>(&aom_context)));
+          cb.is420_, cb.coeffs_[channel][tf_i], channel, counter, &enc));
       ++tf_i;
     }
   }

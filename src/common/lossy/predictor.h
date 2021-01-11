@@ -39,9 +39,10 @@ namespace WP2 {
 // Returns a string containing the values of the pixels inside the 'block' of
 // 'w' by 'h' pixels and its surrounding 'context'.
 std::string GetContextAndBlockPixelsStr(const int16_t context[],
-                                        const int16_t context_tr[], uint32_t w,
-                                        uint32_t h, const int16_t block[],
-                                        uint32_t step);
+                                        const int16_t context_right[],
+                                        const int16_t context_left[],
+                                        uint32_t w, uint32_t h,
+                                        const int16_t block[], uint32_t step);
 
 //------------------------------------------------------------------------------
 // Predictors
@@ -202,6 +203,7 @@ class Predictors {
     kAngle157,
     kAngle180,
     kAngle203,
+    kAngle225,
     kCfl,
     kSignalingCfl,
     kZero,
@@ -268,10 +270,10 @@ class ContextPredictor : public Predictor {
  protected:
   virtual void Predict(const int16_t context[], uint32_t w, uint32_t h,
                        int16_t output[], uint32_t step) const = 0;
-  std::string GetPredStr(const int16_t context[], const int16_t context_tr[],
-                         bool extend_right, uint32_t width,
-                         uint32_t height) const;
-  bool extend_context_ = false;  // whether we extend the top context right
+  std::string GetPredStr(const int16_t context[], const int16_t context_right[],
+                         const int16_t context_left[], ContextType context_type,
+                         uint32_t width, uint32_t height) const;
+  ContextType context_type_ = kContextSmall;
 };
 
 //------------------------------------------------------------------------------

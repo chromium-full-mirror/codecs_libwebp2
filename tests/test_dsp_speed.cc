@@ -16,6 +16,8 @@
 
 #include <memory>
 
+#include "src/dsp/dsp.h"
+#include "src/dsp/lossless/encl_dsp.h"
 #include "examples/example_utils.h"
 #include "include/helpers.h"
 #include "src/utils/plane.h"
@@ -32,6 +34,7 @@ class SpeedTestCpuInfo : public ::testing::TestWithParam<WP2CPUInfo> {
     WP2EncDspInit();
     WP2SSIMInit();
     WP2PSNRInit();
+    WP2L::EncLDspInit();
   }
 };
 
@@ -102,6 +105,42 @@ TEST_P(SpeedTestCpuInfo, TestAddSubBlock) {
     }
     EXPECT_EQ(nb_errors, 0u) << " rate: " << (100 * nb_errors / kMaxLen) << "%";
   }
+}
+
+//------------------------------------------------------------------------------
+
+TEST_P(SpeedTestCpuInfo, TestBufferAdd) {
+  constexpr uint32_t kMaxLen = 1 << 14;
+  Vector_u32 A, B, C, D;
+  ASSERT_TRUE(A.resize(kMaxLen) && B.resize(kMaxLen));
+  ASSERT_TRUE(C.resize(kMaxLen) && D.resize(kMaxLen));
+  constexpr uint32_t kNumTests = 10;
+  constexpr uint32_t kNumLoops = 500;
+  PseudoRNG rng;
+  uint32_t CRC = 412325;
+  for (auto& c : C) c = 0;
+  for (auto& d : D) d = 0;
+  for (uint32_t t = 0; t < kNumTests; ++t) {
+    testing::PrecalculatedRandom<kMaxLen * 2, uint32_t> rnd32(0, 1 << 12);
+    const uint32_t proba = rng.GetUnsigned(255);
+    uint32_t nzero = rng.GetUnsigned(532);  // shouldn't matter
+    uint32_t* nzero_ptr = &nzero;
+    if (rng.GetUnsigned(10) < 5) nzero_ptr = nullptr;
+    for (uint32_t i = 0; i < rnd32.Size(); ++i) {
+      if (rng.GetUnsigned(1000) < proba) rnd32[i] = 0;
+    }
+    for (uint32_t l = 0; l < kNumLoops; ++l) {
+      const uint32_t len = kMaxLen / 2 + rng.GetUnsigned(kMaxLen / 2 - 1);
+      rnd32.Fill(&A[0], len);
+      rnd32.Fill(&B[0], len);
+      WP2L::BufferAdd(&A[0], &B[0], len, &C[0], nzero_ptr);
+      WP2L::BufferAdd(&A[0], &D[0], len, &D[0], nzero_ptr);
+      CRC = testing::SillyCRC(CRC, nzero);
+    }
+  }
+  for (auto& c : C) CRC = testing::SillyCRC(CRC, c);
+  for (auto& d : D) CRC = testing::SillyCRC(CRC, d);
+  ASSERT_EQ(468228884u, CRC);
 }
 
 //------------------------------------------------------------------------------

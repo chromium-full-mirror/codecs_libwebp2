@@ -26,6 +26,9 @@
 #include "./anim_image_dec.h"
 
 #ifdef WP2_HAVE_PNG
+#ifndef PNG_USER_MEM_SUPPORTED
+#define PNG_USER_MEM_SUPPORTED  // for png_create_read_struct_2
+#endif
 #include <png.h>
 #include <setjmp.h>  // note: this must be included *after* png.h
 #include <cstdlib>
@@ -34,6 +37,15 @@
 #include "./imageio_util.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
+
+#define LOCAL_PNG_VERSION ((PNG_LIBPNG_VER_MAJOR << 8) | PNG_LIBPNG_VER_MINOR)
+#define LOCAL_PNG_PREREQ(maj, min) \
+   (LOCAL_PNG_VERSION >= (((maj) << 8) | (min)))
+#if LOCAL_PNG_PREREQ(1, 4)
+typedef png_alloc_size_t LocalPngAllocSize;
+#else
+typedef png_size_t LocalPngAllocSize;
+#endif
 
 namespace {
 
@@ -51,6 +63,19 @@ void PNGAPI ErrorFunction(png_structp png, png_const_charp error) {
     fprintf(stderr, "unknown libpng error\n");
   }
   ErrorFunctionNoLog(png, error);
+}
+
+png_voidp PNGAPI MallocFunction(png_structp png_ptr,
+                                LocalPngAllocSize size) {
+  (void)png_ptr;
+  const png_voidp mem = (png_voidp)WP2Malloc(1, (size_t)size);
+  if (mem == NULL) *(bool*)png_get_mem_ptr(png_ptr) = true;
+  return mem;
+}
+
+void PNGAPI FreeFunction(png_structp png_ptr, png_voidp ptr) {
+  (void)png_ptr;
+  WP2Free(ptr);
 }
 
 //------------------------------------------------------------------------------
@@ -204,11 +229,10 @@ WP2Status ExtractMetadataFromPNG(png_const_structrp png, png_infop const info,
 
   if (metadata->iccp.IsEmpty()) {
     // Look for an ICC profile.
-#if ((PNG_LIBPNG_VER_MAJOR << 8) | PNG_LIBPNG_VER_MINOR << 0) < \
-    ((1 << 8) | (5 << 0))
-    png_charp profile;
-#else  // >= libpng 1.5.0
+#if LOCAL_PNG_PREREQ(1, 5)
     png_bytep profile;
+#else  // < libpng 1.5.0
+    png_charp profile;
 #endif
     png_uint_32 length;
 
@@ -269,11 +293,14 @@ class ImageReaderPNG : public ImageReader::Impl {
     png_infop volatile head_info = NULL;
     png_infop volatile end_info = NULL;
     tmp_rgb_ = nullptr;
+    had_malloc_error_ = false;
 
     png_error_ptr error_function =
         (log_level_ >= LogLevel::DEFAULT) ? ErrorFunction : ErrorFunctionNoLog;
-    png_structp const png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL,
-                                                   error_function, NULL);
+    png_structp const png =
+        png_create_read_struct_2(PNG_LIBPNG_VER_STRING, NULL, error_function,
+                                 NULL, (png_voidp)&had_malloc_error_,
+                                 MallocFunction, FreeFunction);
     WP2_CHECK_ALLOC_OK(png != NULL);
 
     if (setjmp(png_jmpbuf(png))) {
@@ -282,7 +309,20 @@ class ImageReaderPNG : public ImageReader::Impl {
                               (png_infopp)&end_info);
       WP2Free(tmp_rgb_);
       tmp_rgb_ = nullptr;  // for good measure
-      return WP2_STATUS_BITSTREAM_ERROR;
+      return had_malloc_error_ ? WP2_STATUS_OUT_OF_MEMORY
+                               : WP2_STATUS_BITSTREAM_ERROR;
+    }
+
+    // If it looks like the bitstream is going to need more memory than libpng's
+    // internal limit (default: 8M), try to (reasonably) raise it.
+    // The WP2_MAX_ALLOCABLE_MEMORY limit is probably too high, use lower limit.
+    const size_t kMaxPNGMemory = (1u << 24);
+    if (data_size_ > png_get_chunk_malloc_max(png) &&
+        data_size_ <= kMaxPNGMemory) {
+      if (log_level_ >= WP2::LogLevel::DEFAULT) {
+        fprintf(stderr, "PNGDec: raising memory limit.\n");
+      }
+      png_set_chunk_malloc_max(png, data_size_);
     }
 
     if ((head_info = png_create_info_struct(png)) == NULL ||
@@ -395,6 +435,7 @@ class ImageReaderPNG : public ImageReader::Impl {
   // Volatile because allocation happens between setjmp() and longjmp() and
   // needs to be freed afterwards.
   uint8_t* volatile tmp_rgb_;
+  volatile bool had_malloc_error_;
 };
 
 void ImageReader::SetImplPNG(ArgbBuffer* const buffer, LogLevel log_level,

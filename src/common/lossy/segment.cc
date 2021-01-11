@@ -334,18 +334,6 @@ void Segment::FinalizeAlphaQuant(float lambda) {
   }
 }
 
-void Segment::AdjustQuantSteps() {
-  if (quant_y_.qstats != nullptr) {
-    uint16_t quant_steps[kNumQuantZones];
-    GetQuantSteps(quant_steps, kYChannel);
-    quant_y_.qstats->AdjustQuantSteps(quant_steps);
-    SetQuantSteps(quant_steps, kYChannel);
-  }
-  // TODO(skal): quant_uv_
-
-  FinalizeQuant();
-}
-
 WP2Status GlobalParams::AssignQuantizations(const EncoderConfig& config) {
   const uint32_t num_segments = segments_.size();
   assert(num_segments <= (uint32_t)config.segments);

@@ -61,46 +61,54 @@ void PredictorVector::reset() {
   } while (false)
 
 std::string GetContextAndBlockPixelsStr(const int16_t context[],
-                                        const int16_t context_tr[], uint32_t w,
-                                        uint32_t h, const int16_t block[],
-                                        uint32_t step) {
+                                        const int16_t context_right[],
+                                        const int16_t context_left[],
+                                        uint32_t w, uint32_t h,
+                                        const int16_t block[], uint32_t step) {
   std::string str;
-  WP2SAppend(&str, "%4d | ", context[h]);
+  WP2SAppend(&str, "     %4d | ", context[h]);
   for (uint32_t i = 0; i < w; ++i) WP2SAppend(&str, "%4d ", context[h + 1 + i]);
   WP2SAppend(&str, "| %4d", context[h + 1 + w]);
   uint32_t num_extra_dashes = 0;
-  const uint32_t tr_size = ContextWithTRSize(w, h);
+  const uint32_t tr_size = ContextSize(kContextExtendRight, w, h);
   uint32_t tr_i = h + 1 + w + 1;
-  if (context_tr != nullptr) {
+  if (context_right != nullptr) {
     str += " ";
     // Display the first extended right context values.
     for (uint32_t x = 0; x < 7 && tr_i < tr_size;
          ++x, ++tr_i, ++num_extra_dashes) {
-      WP2SAppend(&str, "%4d ", context_tr[tr_i]);
+      WP2SAppend(&str, "%4d ", context_right[tr_i]);
     }
   }
-  str += "\n-----+-";
+  str += "\n----------+-";
   for (uint32_t i = 0; i < w; ++i) str += "-----";
   str += "+-----";
   for (uint32_t i = 0; i < num_extra_dashes; ++i) str += "-----";
   str += "\n";
-  for (uint32_t y = 0; y < h || (context_tr != nullptr && tr_i < tr_size);
+  for (uint32_t y = 0; y < h || (context_right != nullptr && tr_i < tr_size);
        ++y) {
     if (y < h) {
+      if (context_left != nullptr) {
+        WP2SAppend(&str, "%4d ", context_left[y]);
+      } else {
+        WP2SAppend(&str, "     ");
+      }
       WP2SAppend(&str, "%4d | ", context[h - 1 - y]);
       for (uint32_t x = 0; x < w; ++x) {
         WP2SAppend(&str, "%4d ", block[x + y * step]);
       }
       WP2SAppend(&str, "| %4d", context[h + 1 + w + 1 + y]);
+    } else if (y == h) {
+      WP2SAppend(&str, "  ^___| %*s", 7 + w * 5 + 6 - 8, " ");
     } else {
       WP2SAppend(&str, "%*s", 7 + w * 5 + 6, " ");
     }
     // Display remaining extended right context in small batches on the right.
-    if (context_tr != nullptr) {
+    if (context_right != nullptr) {
       if (tr_i < tr_size) {
         WP2SAppend(&str, "               ");
         for (uint32_t x = 0; x < 4 && tr_i < tr_size; ++x, ++tr_i) {
-          WP2SAppend(&str, " %4d", context_tr[tr_i]);
+          WP2SAppend(&str, " %4d", context_right[tr_i]);
         }
       }
     }
@@ -142,37 +150,41 @@ class ZeroPredictor : public Predictor {
 
 void ContextPredictor::Predict(const CodedBlock& cb, Channel channel,
                                int16_t output[], uint32_t step) const {
-  const int16_t* const context = cb.GetContext(
-      channel, /*fill_in=*/true, /*extend_right=*/extend_context_);
+  const int16_t* const context = cb.GetContext(channel, context_type_);
   Predict(context, cb.w_pix(), cb.h_pix(), output, step);
 }
 
 std::string ContextPredictor::GetFakePredStr() const {
-  return GetPredStr(kFakeContext, kFakeContext, /*extend_right=*/false,
+  return GetPredStr(kFakeContext, kFakeContext, kFakeContext, kContextSmall,
                     kPredWidth, kPredHeight);
 }
 
 std::string ContextPredictor::GetPredStr(const CodedBlock& cb,
                                          Channel channel) const {
-  const int16_t* const context =
-      cb.GetContext(channel, /*fill_in=*/true, /*extend_right=*/false);
+  const int16_t* const context = cb.GetContext(channel, kContextSmall);
   // Always display the top right context.
-  const int16_t* const context_tr =
-      cb.GetContext(channel, /*fill_in=*/true, /*extend_right=*/true);
+  const int16_t* const context_right =
+      cb.GetContext(channel, kContextExtendRight);
+  const int16_t* const context_left =
+      cb.GetContext(channel, kContextExtendLeft);
 
-  return GetPredStr(context, context_tr, extend_context_, cb.w_pix(),
-                    cb.h_pix());
+  return GetPredStr(context, context_right, context_left, context_type_,
+                    cb.w_pix(), cb.h_pix());
 }
 
 std::string ContextPredictor::GetPredStr(const int16_t context[],
-                                         const int16_t context_tr[],
-                                         bool extend_right, uint32_t width,
+                                         const int16_t context_right[],
+                                         const int16_t context_left[],
+                                         ContextType context_type,
+                                         uint32_t width,
                                          uint32_t height) const {
   int16_t output[kMaxBlockSizePix2];
-  Predict(extend_right ? context_tr : context, width, height,
-          output, /*step=*/width);
-  return GetContextAndBlockPixelsStr(context, context_tr, width, height,
-                                     output, /*step=*/width);
+  Predict((context_type == kContextExtendRight)  ? context_right
+          : (context_type == kContextExtendLeft) ? context_left
+                                                 : context,
+          width, height, output, /*step=*/width);
+  return GetContextAndBlockPixelsStr(context, context_right, context_left,
+                                     width, height, output, /*step=*/width);
 }
 
 //------------------------------------------------------------------------------
@@ -311,6 +323,7 @@ class AnglePredictor : public ContextPredictor {
     D157_PRED,
     H_PRED,  // 180 degrees
     D203_PRED,
+    D225_PRED,
     Num
   };
   AnglePredictor(Type type, Channel channel, int16_t angle_delta,
@@ -320,7 +333,7 @@ class AnglePredictor : public ContextPredictor {
         type_(type),
         angle_delta_(angle_delta),
         angle_idx_(AngleIdx(type, channel, angle_delta)) {
-    extend_context_ = (angle_idx_ < kAngle_90);
+    context_type_ = GetContextType(angle_idx_);
   }
 
   ModeContext mode_context() const override {
@@ -330,7 +343,8 @@ class AnglePredictor : public ContextPredictor {
     } else if (type_ == Type::V_PRED) {
       return ModeContext::kVertical;
     } else if (type_ == Type::D113_PRED || type_ == Type::D135_PRED ||
-               type_ == Type::D157_PRED || type_ == Type::D203_PRED) {
+               type_ == Type::D157_PRED || type_ == Type::D203_PRED ||
+               type_ == Type::D225_PRED) {
       return ModeContext::kLeft;
     } else if (type_ == Type::H_PRED) {
       return ModeContext::kHorizontal;
@@ -341,9 +355,9 @@ class AnglePredictor : public ContextPredictor {
   }
 
   // Returns the angle index for precalculated angles.
-  // Index goes from 0 (12.85 degrees) to 62 (212.14 degrees).
+  // Index goes from 0 (12.86 degrees) to 69 (234.64 degrees).
   static uint8_t AngleIdx(Type type, Channel channel, int16_t angle_step) {
-    const int16_t max_delta = kDirectionalMaxAngleDeltaYA;
+    constexpr int16_t max_delta = kDirectionalMaxAngleDeltaYA;
     if (channel == kUChannel || channel == kVChannel) {
       // Note that the U/V prediction angles are not exactly even spaced.
       // But they map to already existing angles for Y/A.
@@ -410,8 +424,7 @@ class AnglePredictor : public ContextPredictor {
  protected:
   void Predict(const int16_t context[], uint32_t w, uint32_t h,
                int16_t output[], uint32_t step) const override {
-    const uint32_t context_size =
-      (angle_idx_ < kAngle_90) ? ContextWithTRSize(w, h) : ContextSize(w, h);
+    const uint32_t context_size = ContextSize(context_type_, w, h);
     for (uint32_t i = 0; i < context_size; ++i) {
       assert(context[i] >= min_value_ && context[i] <= max_value_);
     }
@@ -557,11 +570,10 @@ class AlphaPredictor : public Predictor {
     str += "==> adjusted by alpha predictor:\n";
     int16_t output[kMaxBlockSizePix2];
     Predict(cb, channel, output, cb.w_pix());
-    const int16_t* const context = cb.GetContext(
-      channel, /*fill_in=*/true, /*extend_right=*/false);
-    str +=
-        GetContextAndBlockPixelsStr(context, /*context_tr=*/nullptr, cb.w_pix(),
-                                    cb.h_pix(), output, cb.w_pix());
+    const int16_t* const context = cb.GetContext(channel, kContextSmall);
+    str += GetContextAndBlockPixelsStr(context, /*context_right=*/nullptr,
+                                       /*context_left=*/nullptr, cb.w_pix(),
+                                       cb.h_pix(), output, cb.w_pix());
     return str;
   }
   void Draw(const WP2::Rectangle& rect,
@@ -672,6 +684,7 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
       case Pred::kAngle157:
       case Pred::kAngle180:
       case Pred::kAngle203:
+      case Pred::kAngle225:
         is_angle = true;
         for (int step = -max_delta; step <= max_delta; ++step) {
           is_angle = true;
@@ -1030,7 +1043,7 @@ WP2Status YPredictors::Fill(int16_t min_value, int16_t max_value) {
       Pred::kTrueMotion, Pred::kGradient,       Pred::kAngle23,
       Pred::kAngle45,    Pred::kAngle67,        Pred::kAngle90,
       Pred::kAngle113,   Pred::kAngle135,       Pred::kAngle157,
-      Pred::kAngle180,   Pred::kAngle203};
+      Pred::kAngle180,   Pred::kAngle203,       Pred::kAngle225};
 
   STATIC_ASSERT_ARRAY_SIZE(kYPreds, kYPredModeNum);
   WP2_CHECK_STATUS(FillImpl(kYPreds, kYPredModeNum, min_value, max_value,
@@ -1044,23 +1057,15 @@ APredictors::APredictors() { channel_ = kAChannel; }
 
 WP2Status APredictors::Fill(int16_t min_value, int16_t max_value,
                             const CSPTransform* const transform) {
-  constexpr Pred kAPreds[] = {Pred::kDcAll,
-                              Pred::kSmooth2D,
-                              Pred::kSmoothVertical,
-                              Pred::kSmoothHorizontal,
-                              Pred::kTrueMotion,
-                              Pred::kAngle23,
-                              Pred::kAngle45,
-                              Pred::kAngle67,
-                              Pred::kAngle90,
-                              Pred::kAngle113,
-                              Pred::kAngle135,
-                              Pred::kAngle157,
-                              Pred::kAngle180,
-                              Pred::kAngle203,
-                              Pred::kCfl,
-                              Pred::kSignalingCfl,
-                              Pred::kZero};
+  constexpr Pred kAPreds[] = {Pred::kDcAll,          Pred::kSmooth2D,
+                              Pred::kSmoothVertical, Pred::kSmoothHorizontal,
+                              Pred::kTrueMotion,     Pred::kAngle23,
+                              Pred::kAngle45,        Pred::kAngle67,
+                              Pred::kAngle90,        Pred::kAngle113,
+                              Pred::kAngle135,       Pred::kAngle157,
+                              Pred::kAngle180,       Pred::kAngle203,
+                              Pred::kAngle225,       Pred::kCfl,
+                              Pred::kSignalingCfl,   Pred::kZero};
 
   assert(transform != nullptr);
   STATIC_ASSERT_ARRAY_SIZE(kAPreds, kAPredModeNum);
@@ -1078,7 +1083,7 @@ WP2Status UVPredictors::Fill(int16_t min_value, int16_t max_value) {
       Pred::kCfl,      Pred::kDcAll,    Pred::kSignalingCfl, Pred::kSmooth2D,
       Pred::kAngle23,  Pred::kAngle45,  Pred::kAngle67,      Pred::kAngle90,
       Pred::kAngle113, Pred::kAngle135, Pred::kAngle157,     Pred::kAngle180,
-      Pred::kAngle203};
+      Pred::kAngle203, Pred::kAngle225};
 
   STATIC_ASSERT_ARRAY_SIZE(kUVPreds, kUVPredModeNum);
   WP2_CHECK_STATUS(FillImpl(kUVPreds, kUVPredModeNum, min_value, max_value,
@@ -1134,10 +1139,11 @@ void CflPredictor::ContextLinearRegression(Channel channel,
                                            int16_t* const a,
                                            int16_t* const b) const {
   const int16_t* const luma_context =
-      cb.GetContext(kYChannel, /*fill_in=*/false, /*extend_right=*/false);
+      cb.GetContext(kYChannel, kContextSmallNoFillIn);
   const int16_t* const chroma_context =
-      cb.GetContext(channel, /*fill_in=*/false, /*extend_right=*/false);
-  const uint32_t context_size = ContextSize(cb.w_pix(), cb.h_pix());
+      cb.GetContext(channel, kContextSmallNoFillIn);
+  const uint32_t context_size =
+      ContextSize(kContextSmall, cb.w_pix(), cb.h_pix());
   LinearRegression(luma_context, chroma_context, context_size, a, b);
 }
 

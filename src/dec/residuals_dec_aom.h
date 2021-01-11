@@ -21,9 +21,6 @@
 #ifndef WP2_DEC_RESIDUALS_DEC_AOM_H_
 #define WP2_DEC_RESIDUALS_DEC_AOM_H_
 
-#include <array>
-
-#include "src/common/lossy/aom/array_2d.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/residuals.h"
 #include "src/common/lossy/residuals_aom.h"
@@ -49,17 +46,17 @@ class AOMResidualReader : public ResidualIO, public AOMResidualIO {
   void ReadCoeffs(Channel channel, uint32_t x_pix, uint32_t y_pix,
                   WP2::BlockSize dim, bool is420, TransformPair tx_type,
                   bool first_is_dc, int max_num_coeffs, ANSDec* const dec,
-                  SymbolReader* const sr, AOMContext* const aom_context,
+                  SymbolReader* const sr,
                   int16_t* const coeffs, uint32_t* const num_coeffs);
 
  private:
   // Returns the number of non-zero coefficients read.
-  uint32_t ReadTransformCoefficients(Channel channel, int start_x, int start_y,
+  uint32_t ReadTransformCoefficients(Channel channel, bool is_reduced,
+                                     int start_x, int start_y,
                                      TransformSize tx_size,
                                      TransformPair tx_type,
                                      bool first_is_dc, int max_num_coeffs,
-                                     int16_t* const coeffs,
-                                     AOMContext* const aom_context);
+                                     int16_t* const coeffs);
 
   // Reads End-of-Block element.
   int ReadEOB(int max_num_coeffs,

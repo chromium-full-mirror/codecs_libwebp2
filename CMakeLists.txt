@@ -292,7 +292,6 @@ add_library(
   # common encode/decoder
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/filters/rstr_flt_params.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/filters/rstr_flt_params.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/aom/array_2d.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/aom/cdfs.inc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/block.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/block.cc

@@ -23,6 +23,7 @@
 #if defined(WP2_USE_SSE)
 
 #include <assert.h>
+#include <algorithm>
 
 // handy struct for holding N uint32_t words
 template<uint32_t N>

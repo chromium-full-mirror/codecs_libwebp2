@@ -238,6 +238,9 @@ template<size_t N, typename T> struct PrecalculatedRandom {
   PrecalculatedRandom(uint32_t min, uint32_t max) {
     for (auto& b : buffer) b = min + rng.GetSigned(max - min);
   }
+  T& operator[](int i) { return buffer[i]; }
+  size_t Size() const { return N; }
+
   void Fill(T* dst, uint32_t w, uint32_t h, uint32_t step) {
     assert(w < N);
     for (uint32_t j = 0; j < h; ++j) {

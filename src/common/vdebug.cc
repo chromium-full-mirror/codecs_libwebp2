@@ -436,13 +436,15 @@ static void OutputPixelValuesWithContext(const DecoderConfig& config,
                tile_x + cb.x_pix(), tile_y + cb.y_pix(), cb.w_pix(),
                cb.h_pix());
     WP2SAppend(str_ptr, "\n\n\n\n");  // See DisplayPredictionMode().
-    const int16_t* const context = cb.GetContext(
-        VDChannel(config), /*fill_in=*/true, /*extend_right=*/false);
-    const int16_t* const context_str = cb.GetContext(
-        VDChannel(config), /*fill_in=*/true, /*extend_right=*/true);
-    *str_ptr +=
-        GetContextAndBlockPixelsStr(context, context_str, cb.w_pix(),
-                                    cb.h_pix(), pixels.Row(0), pixels.Step());
+    const int16_t* const context =
+        cb.GetContext(VDChannel(config), kContextSmall);
+    const int16_t* const context_right =
+        cb.GetContext(VDChannel(config), kContextExtendRight);
+    const int16_t* const context_left =
+        cb.GetContext(VDChannel(config), kContextExtendLeft);
+    *str_ptr += GetContextAndBlockPixelsStr(
+        context, context_right, context_left, cb.w_pix(), cb.h_pix(),
+        pixels.Row(0), pixels.Step());
   }
 }
 
@@ -528,15 +530,16 @@ static void DisplayPredContext(const CodedBlock& cb, Channel channel,
   if (draw_red_border) {  // Encircle the left, top, right context lines.
     const uint32_t bx = SafeSub(x, 2u), by = SafeSub(y, 2u);
     const Argb32b red = {0xff, 0xff, 0, 0};
-    debug_output->DrawRect({bx, by, x - bx + 1, y + rect.height - by}, red);
+    debug_output->DrawRect({bx, by, x - bx + 1, y + rect.height * 2 - by}, red);
     debug_output->DrawRect({bx, by, x + rect.width - bx, y - by + 1}, red);
     debug_output->DrawRect({x + w - 1, by, 3, y + rect.height - by}, red);
     debug_output->DrawRect(
-        {x + w - 1, by, 2 + ContextWithTRSize(w, h) - (h + 1 + w), 3}, red);
+        {x + w - 1, by,
+         2 + ContextSize(kContextExtendRight, w, h) - (h + 1 + w), 3},
+        red);
   }
 
-  const int16_t* const context =
-      cb.GetContext(channel, /*fill_in=*/true, /*extend_right=*/false);
+  const int16_t* const context = cb.GetContext(channel, kContextSmall);
   if (x >= 1) {
     for (uint32_t j = 0; j < rect.height; ++j) {  // Left
       debug_output->Fill({x - 1, y + j, 1, 1}, CtxtToColor(context[h - j - 1]));
@@ -561,11 +564,18 @@ static void DisplayPredContext(const CodedBlock& cb, Channel channel,
   }
 
   // Extended right
-  const int16_t* const tr_context =
-      cb.GetContext(channel, /*fill_in=*/true, /*extend_right=*/true);
-  const uint32_t tr_size = ContextWithTRSize(w, h);
+  const int16_t* const tr_context = cb.GetContext(channel, kContextExtendRight);
+  const uint32_t tr_size = ContextSize(kContextExtendRight, w, h);
   for (uint32_t i = h + 1 + w + 1, tr_x = x + w + 1; i < tr_size; ++i, ++tr_x) {
     debug_output->Fill({tr_x, y - 1, 1, 1}, CtxtToColor(tr_context[i]));
+  }
+  // Extended left
+  const int16_t* const left_context =
+      cb.GetContext(channel, kContextExtendLeft);
+  for (uint32_t j = h; j < 2 * h; ++j) {
+    if (y + j + 1 >= debug_output->height()) break;
+    debug_output->Fill({x - 1, y + j, 1, 1},
+                       CtxtToColor(left_context[2 * h - j - 1]));
   }
 }
 
@@ -1662,6 +1672,45 @@ static void ToGray(const ArgbBuffer& from, uint32_t channel,
       to_pixel[1] = to_pixel[2] = to_pixel[3] = gray;
     }
   }
+}
+
+// Spreads the values of the 'channel' of 'src' into at most 'histogram_size'
+// buckets. Returns the number of buckets used.
+static uint32_t GetHistogram(const ArgbBuffer& src, uint32_t channel,
+                             uint32_t max_num_buckets, uint32_t histogram[],
+                             uint8_t* const min_value,
+                             uint8_t* const max_value) {
+  assert(max_num_buckets > 0);
+  const uint32_t num_channels = WP2FormatBpp(src.format());
+  const uint8_t* row = src.GetRow8(0) + channel;
+  uint8_t min = row[0], max = row[0];
+  for (uint32_t y = 0; y < src.height(); ++y) {
+    for (uint32_t x = 0; x < src.width(); ++x) {
+      const uint8_t value = row[x * num_channels];
+      min = std::min(min, value);
+      max = std::max(max, value);
+    }
+    row += src.stride();
+  }
+  if (min_value != nullptr) *min_value = min;
+  if (max_value != nullptr) *max_value = max;
+
+  std::fill(histogram, histogram + max_num_buckets, 0u);
+  const uint32_t range = std::max(1, max - min);
+  max_num_buckets = std::min(range, max_num_buckets);
+  const uint32_t max_bucket = max_num_buckets - 1;
+
+  row = src.GetRow8(0) + channel;
+  for (uint32_t y = 0; y < src.height(); ++y) {
+    for (uint32_t x = 0; x < src.width(); ++x) {
+      const uint8_t value = row[x * num_channels];
+      const uint32_t bucket =
+          DivRound((uint32_t)(value - min) * max_bucket, range);
+      ++histogram[bucket];
+    }
+    row += src.stride();
+  }
+  return max_num_buckets;
 }
 
 // Handles VisualDebug for "compressed" and "original". Declared in wp2_dec_i.h.

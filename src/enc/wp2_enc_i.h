@@ -177,8 +177,7 @@ class ResidualWriter : public ResidualIO {
 
   // Records residuals from 'cb'.
   WP2Status RecordCoeffs(const CodedBlock& cb, Channel channel,
-                         SymbolRecorder* const recorder,
-                         libgav1::AOMContext* const aom_context);
+                         SymbolRecorder* const recorder);
 
   // Writes the data (e.g. dictionaries) needed to interpret the symbols that
   // will later be written one by one.
@@ -190,8 +189,7 @@ class ResidualWriter : public ResidualIO {
 
   // Writes residuals from 'cb'.
   WP2Status WriteCoeffs(const CodedBlock& cb, Channel channel,
-                          ANSEncBase* enc, SymbolManager* const sm,
-                          libgav1::AOMContext* const aom_context);
+                          ANSEncBase* enc, SymbolManager* const sm);
 
   // Returns a (very) crude estimation of the number of bits needed to code
   // the residuals.
@@ -211,7 +209,6 @@ class ResidualWriter : public ResidualIO {
                            float* const rate,
                            EncodingMethod* const encoding_method = nullptr);
   static WP2Status GetRateAOM(const CodedBlock& cb, Channel channel,
-                              const libgav1::AOMContext& aom_context,
                               SymbolCounter* const counter, float* const rate);
 
  private:

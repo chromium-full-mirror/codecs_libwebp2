@@ -143,7 +143,6 @@ inline void ReadBounds(Channel channel, uint32_t num_channels,
 WP2Status ResidualReader::ReadCoeffs(Channel channel, ANSDec* const dec,
                                      SymbolReader* const sr,
                                      CodedBlock* const cb,
-                                     libgav1::AOMContext* const aom_context,
                                      BlockInfo* const info) {
   const bool is_uv = (channel == kUChannel || channel == kVChannel);
   ANSDebugPrefix prefix(dec, is_uv ? "UV" : (channel == kAChannel) ? "A" : "Y");
@@ -165,7 +164,7 @@ WP2Status ResidualReader::ReadCoeffs(Channel channel, ANSDec* const dec,
         aom_reader_.ReadCoeffs(
             channel, cb->x_pix() + split_x, cb->y_pix() + split_y, split_size,
             cb->is420_, params->tf, cb->IsFirstCoeffDC(channel), max_num_coeffs,
-            dec, sr, aom_context, coeffs, &cb->num_coeffs_[channel][tf_i]);
+            dec, sr, coeffs, &cb->num_coeffs_[channel][tf_i]);
         SetGeometry(cb->num_coeffs_[channel][tf_i],
                     &cb->method_[channel][tf_i]);
       } else if (cb->method_[channel][tf_i] == EncodingMethod::kAllZero) {

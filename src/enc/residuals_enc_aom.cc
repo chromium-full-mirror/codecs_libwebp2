@@ -27,32 +27,21 @@ namespace libgav1 {
 WP2Status AOMResidualWriter::WriteCoeffs(
     uint32_t x_pix, uint32_t y_pix, WP2::BlockSize dim, TransformPair tx_type,
     bool first_is_dc, int max_num_coeffs, bool is420,
-    const int16_t* const coeffs, Channel channel, bool do_update,
-    SymbolManager* const sm, ANSEncBase* const enc,
-    AOMContext* const aom_context) {
+    const int16_t* const coeffs, Channel channel,
+    SymbolManager* const sm, ANSEncBase* const enc) {
   // Convert WP2 data to libgav1 data.
   const TransformSize tx_size = ConvertSize(dim);
-  aom_context->SetIs420(is420);
-  is420 = ((channel == kUChannel || channel == kVChannel) && is420);
+  const bool is_reduced =
+      ((channel == kUChannel || channel == kVChannel) && is420);
 
   // Write the coefficients.
   int coefficient_level;
-  const uint32_t subsampling =
-      (is420 && (channel == kUChannel || channel == kVChannel));
-  WriteTransformCoefficients(coeffs, max_num_coeffs, *aom_context, is420,
+  const uint32_t subsampling = is_reduced ? 1 : 0;
+  WriteTransformCoefficients(coeffs, max_num_coeffs, is_reduced,
                              channel,
                              x_pix >> subsampling, y_pix >> subsampling,
                              tx_size, tx_type, first_is_dc, sm, enc,
                              &coefficient_level);
-  if (do_update) {
-    const int x4 = DivideBy4(x_pix >> subsampling);
-    const int y4 = DivideBy4(y_pix >> subsampling);
-    const int w4 = kTransformWidth4x4[tx_size];
-    const int h4 = kTransformHeight4x4[tx_size];
-    SetEntropyContexts(x4, y4, w4, h4, channel, std::min(4, coefficient_level),
-                       aom_context);
-  }
-
   return WP2_STATUS_OK;
 }
 
@@ -162,14 +151,13 @@ void AOMResidualWriter::WriteEOB(
 }
 
 void AOMResidualWriter::WriteTransformCoefficients(
-    const int16_t* const res, int max_num_coeffs,
-    const AOMContext& aom_context, bool is420,
+    const int16_t* const res, int max_num_coeffs, bool is_reduced,
     Channel channel, int start_x, int start_y, TransformSize tx_size,
     TransformPair tx_type, bool first_is_dc, SymbolManager* const sm,
     ANSEncBase* const enc, int* const coefficient_level) {
   const int tx_size_context = kTransformSizeContext[tx_size];
   int eob = max_num_coeffs - 1;
-  const uint16_t* scan = UberZigZag(tx_size, aom_context.IsReduced(channel));
+  const uint16_t* scan = UberZigZag(tx_size, is_reduced);
   for (; eob >= 0 && res[scan[eob]] == 0; --eob) {
   }
   ++eob;  // is actually the size.

@@ -202,78 +202,7 @@ constexpr uint8_t kCoeffBaseContextOffset[kNumTransformSizes][5][5] = {
 
 constexpr uint8_t kCoeffBasePositionContextOffset[3] = {26, 31, 36};
 
-// Returns the minimum of |length| or |max|-|start|. This is used to clamp array
-// indices when accessing arrays whose bound is equal to |max|.
-int GetNumElements(int length, int start, int max) {
-  return std::min(length, max - start);
-}
-
 }  // namespace
-
-static int PlaneCount() {
-  return kMaxPlanes;
-}
-
-WP2Status AOMContext::Init(uint32_t width, uint32_t height) {
-  is420_ = false;
-  columns4x4_ = (width + 3) >> 2;
-  rows4x4_ = (height + 3) >> 2;
-  for (uint32_t i = 0; i < coefficient_levels_.size(); ++i) {
-    const int contexts_per_plane =
-        (i == kEntropyContextLeft) ? rows4x4_ : columns4x4_;
-    WP2_CHECK_ALLOC_OK(
-        coefficient_levels_[i].Reset(PlaneCount(), contexts_per_plane));
-  }
-  return WP2_STATUS_OK;
-}
-
-WP2Status AOMContext::CopyFrom(const AOMContext& other) {
-  for (uint32_t i = 0; i < coefficient_levels_.size(); ++i) {
-    WP2_CHECK_ALLOC_OK(
-        coefficient_levels_[i].CopyFrom(other.coefficient_levels_[i]));
-  }
-  columns4x4_ = other.columns4x4_;
-  rows4x4_ = other.rows4x4_;
-  is420_ = other.is420_;
-  return WP2_STATUS_OK;
-}
-
-void AOMContext::Reset() {
-  for (uint32_t i = 0; i < coefficient_levels_.size(); ++i) {
-    const int contexts_per_plane =
-        (i == kEntropyContextLeft) ? rows4x4_ : columns4x4_;
-    if (!coefficient_levels_[i].Reset(PlaneCount(), contexts_per_plane)) {
-      assert(false);
-    }
-  }
-}
-
-// Contrary to the AV1 spec, the transform size and the residual size have the
-// same size.
-int AOMResidualIO::GetTransformAllZeroContext(const AOMContext& aom_context,
-                                              Channel channel,
-                                              TransformSize tx_size, int x4,
-                                              int y4, int w4, int h4) {
-  const int max_x4x4 = aom_context.Columns4x4(channel);
-  const int max_y4x4 = aom_context.Rows4x4(channel);
-
-  int top = 0;
-  int left = 0;
-  const int num_top_elements = GetNumElements(w4, x4, max_x4x4);
-  const int num_left_elements = GetNumElements(h4, y4, max_y4x4);
-  if (channel == kUChannel || channel == kVChannel) return 0;
-  const uint8_t* coefficient_levels =
-      &aom_context.coefficient_levels_[kEntropyContextTop][channel][x4];
-  for (int i = 0; i < num_top_elements; ++i) {
-    top |= coefficient_levels[i];
-  }
-  coefficient_levels =
-      &aom_context.coefficient_levels_[kEntropyContextLeft][channel][y4];
-  for (int i = 0; i < num_left_elements; ++i) {
-    left |= coefficient_levels[i];
-  }
-  return static_cast<int>(top != 0) + static_cast<int>(left != 0) + 7;
-}
 
 // Section 8.3.2 in the spec, under coeff_base_eob.
 int AOMResidualIO::GetCoeffBaseContextEob(TransformSize tx_size, int index) {
@@ -419,21 +348,6 @@ int AOMResidualIO::GetCoeffBaseRangeContextEob(int adjusted_tx_width_log2,
   const int row = pos >> adjusted_tx_width_log2;
   const int column = pos & (tx_width - 1);
   return ((row | column) < 2) ? 7 : 14;
-}
-
-void AOMResidualIO::SetEntropyContexts(int x4, int y4, int w4, int h4,
-                                       Channel channel,
-                                       uint8_t coefficient_level,
-                                       AOMContext* const aom_context) {
-  const int max_x4x4 = aom_context->Columns4x4(channel);
-  const int num_top_elements = GetNumElements(w4, x4, max_x4x4);
-  assert(sizeof(aom_context->coefficient_levels_[0][0][0]) == 1);
-  memset(&aom_context->coefficient_levels_[kEntropyContextTop][channel][x4],
-         coefficient_level, num_top_elements);
-  const int max_y4x4 = aom_context->Rows4x4(channel);
-  const int num_left_elements = GetNumElements(h4, y4, max_y4x4);
-  memset(&aom_context->coefficient_levels_[kEntropyContextLeft][channel][y4],
-         coefficient_level, num_left_elements);
 }
 
 }  // namespace libgav1

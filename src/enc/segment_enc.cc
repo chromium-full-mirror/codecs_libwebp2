@@ -34,42 +34,6 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 // Segmentation
 
-uint32_t GetHistogram(const ArgbBuffer& src, uint32_t channel,
-                      uint32_t max_num_buckets, uint32_t histogram[],
-                      uint8_t* const min_value, uint8_t* const max_value) {
-  assert(max_num_buckets > 0);
-  const uint32_t num_channels = WP2FormatBpp(src.format());
-  const uint8_t* row = src.GetRow8(0) + channel;
-  uint8_t min = row[0], max = row[0];
-  for (uint32_t y = 0; y < src.height(); ++y) {
-    for (uint32_t x = 0; x < src.width(); ++x) {
-      const uint8_t value = row[x * num_channels];
-      min = std::min(min, value);
-      max = std::max(max, value);
-    }
-    row += src.stride();
-  }
-  if (min_value != nullptr) *min_value = min;
-  if (max_value != nullptr) *max_value = max;
-
-  std::fill(histogram, histogram + max_num_buckets, 0u);
-  const uint32_t range = std::max(1, max - min);
-  max_num_buckets = std::min(range, max_num_buckets);
-  const uint32_t max_bucket = max_num_buckets - 1;
-
-  row = src.GetRow8(0) + channel;
-  for (uint32_t y = 0; y < src.height(); ++y) {
-    for (uint32_t x = 0; x < src.width(); ++x) {
-      const uint8_t value = row[x * num_channels];
-      const uint32_t bucket =
-          DivRound((uint32_t)(value - min) * max_bucket, range);
-      ++histogram[bucket];
-    }
-    row += src.stride();
-  }
-  return max_num_buckets;
-}
-
 uint32_t ClusterHistogram(const uint32_t histogram[], uint32_t histogram_size,
                           uint32_t max_clusters, uint32_t clusters[],
                           uint32_t centers[kMaxNumSegments]) {

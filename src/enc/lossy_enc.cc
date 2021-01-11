@@ -209,17 +209,6 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
 
   const uint32_t num_passes =
       std::max(config_->pass, (config_->effort >= 7) ? 2 : 1);
-#if 0
-  VectorNoCtor<QuantStat> qstats;
-  if (num_passes > 1) {
-    // we'll be recording stats for luma quantizer adjustment
-    WP2_CHECK_ALLOC_OK(qstats.resize(segments.size()));
-    for (uint32_t i = 0; i < segments.size(); ++i) {
-      qstats[i].Reset();
-      segments[i].quant_y_.SetQuantStats(&qstats[i]);
-    }
-  }
-#endif
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
   ArgbBuffer debug_output;  // Tile view of 'config.info->debug_output'
@@ -241,15 +230,6 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   WP2_CHECK_STATUS(DecideTransforms(*config_, &transforms, &transforms_subset));
 
   for (uint32_t pass = 0; pass < num_passes; ++pass) {
-#if 0
-    if (!qstats.empty()) {
-      if (pass == 1) {
-        for (auto& s : segments) s.AdjustQuantSteps();
-        qstats.clear();   // no longer needed
-      }
-    }
-#endif
-
     const ProgressRange pass_progress(passes_progress, 1. / num_passes);
     const ProgressScale row_progress(pass_progress, 1. / tile_rect.height);
 

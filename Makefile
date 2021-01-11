@@ -439,7 +439,6 @@ HDRS = \
     src/common/lossy/residuals.h \
     src/common/lossy/residuals_aom.h \
     src/common/lossy/rnd_mtx.h \
-    src/common/lossy/aom/array_2d.h \
     src/common/lossy/aom/cdfs.inc \
     src/common/global_params.h \
     src/common/header_enc_dec.h \
@@ -450,6 +449,7 @@ HDRS = \
     src/dsp/dsp.h \
     src/dsp/dsp_x86.h \
     src/dsp/lossless/decl_dsp.h \
+    src/dsp/lossless/encl_dsp.h \
     src/dsp/lossless/dspl.h \
     src/dsp/math.h \
     src/dec/filters/alpha_filter.h \
@@ -829,7 +829,6 @@ DIST_FILES= \
             src/common/integral.cc \
             src/common/lossless/color_cache.h \
             src/common/lossless/color_cache.cc \
-            src/common/lossy/aom/array_2d.h \
             src/common/lossy/aom/cdfs.inc \
             src/common/lossy/block.h \
             src/common/lossy/block.cc \

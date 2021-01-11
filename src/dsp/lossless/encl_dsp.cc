@@ -23,14 +23,17 @@
 #include <cstdint>
 
 #include "src/dsp/dsp.h"
+#include "src/dsp/dsp_x86.h"
 #include "src/dsp/math.h"
+
+namespace {
 
 //------------------------------------------------------------------------------
 // Methods to calculate Entropy (Shannon).
 
 // Compute the combined Shanon's entropy for distribution {X} and {X+Y}
-static float CombinedShannonEntropy_C(const uint32_t* X, const uint32_t* Y,
-                                      uint32_t length) {
+float CombinedShannonEntropy_C(const uint32_t* X, const uint32_t* Y,
+                               uint32_t length) {
   double retval = 0.;
   uint32_t sumX = 0, sumXY = 0;
   for (uint32_t i = 0; i < length; ++i) {
@@ -53,8 +56,6 @@ static float CombinedShannonEntropy_C(const uint32_t* X, const uint32_t* Y,
 //------------------------------------------------------------------------------
 // Color transforms.
 
-namespace WP2L {
-
 void SubtractGreenFromBlueAndRed_C(uint16_t* argb_data, uint32_t channel_bits,
                                    uint32_t num_pixels) {
   uint16_t mask = (1u << channel_bits) - 1;
@@ -65,11 +66,11 @@ void SubtractGreenFromBlueAndRed_C(uint16_t* argb_data, uint32_t channel_bits,
   }
 }
 
-static inline int32_t ColorTransformDelta(int16_t color_pred, int16_t color) {
+inline int32_t ColorTransformDelta(int16_t color_pred, int16_t color) {
   return (((int32_t)color_pred * (int8_t)color) >> 5);
 }
 
-void TransformColor_C(const Multipliers* const m, int num_pixels,
+void TransformColor_C(const WP2L::Multipliers* const m, int num_pixels,
                       int16_t* const data) {
   int i;
   for (i = 0; i < num_pixels; ++i) {
@@ -85,17 +86,17 @@ void TransformColor_C(const Multipliers* const m, int num_pixels,
   }
 }
 
-static inline int16_t TransformColorRed(int16_t green_to_red,
-                                        const int16_t* const argb) {
+inline int16_t TransformColorRed(int16_t green_to_red,
+                                 const int16_t* const argb) {
   const int16_t green = argb[2];
   int16_t new_red = argb[1];
   new_red -= ColorTransformDelta(green_to_red, green);
   return new_red;
 }
 
-static inline int16_t TransformColorBlue(int16_t green_to_blue,
-                                         int16_t red_to_blue,
-                                         const int16_t* const argb) {
+inline int16_t TransformColorBlue(int16_t green_to_blue,
+                                  int16_t red_to_blue,
+                                  const int16_t* const argb) {
   const int16_t green = argb[2];
   const int16_t red = argb[1];
   int16_t new_blue = argb[3];
@@ -109,7 +110,7 @@ void CollectColorRedTransforms_C(const int16_t* argb, uint32_t width,
                                  int16_t green_to_red, uint32_t* const histo) {
   while (tile_height-- > 0) {
     for (uint32_t x = 0; x < tile_width; ++x) {
-      ++histo[MakeIndex(TransformColorRed(green_to_red, &argb[4 * x]))];
+      ++histo[WP2L::MakeIndex(TransformColorRed(green_to_red, &argb[4 * x]))];
     }
     argb += 4 * width;
   }
@@ -121,7 +122,7 @@ void CollectColorBlueTransforms_C(const int16_t* argb, uint32_t width,
                                   uint32_t* const histo) {
   while (tile_height-- > 0) {
     for (uint32_t x = 0; x < tile_width; ++x) {
-      ++histo[MakeIndex(
+      ++histo[WP2L::MakeIndex(
           TransformColorBlue(green_to_blue, red_to_blue, &argb[4 * x]))];
     }
     argb += 4 * width;
@@ -130,14 +131,14 @@ void CollectColorBlueTransforms_C(const int16_t* argb, uint32_t width,
 
 //------------------------------------------------------------------------------
 
-static double ExtraCost_C(const uint32_t* population, int length) {
+double ExtraCost_C(const uint32_t* population, int length) {
   int i;
   double cost = 0.;
   for (i = 2; i < length - 2; ++i) cost += (i >> 1) * population[i + 2];
   return cost;
 }
 
-static double ExtraCostCombined_C(const uint32_t* X, const uint32_t* Y,
+double ExtraCostCombined_C(const uint32_t* X, const uint32_t* Y,
                                   int length) {
   int i;
   double cost = 0.;
@@ -150,9 +151,9 @@ static double ExtraCostCombined_C(const uint32_t* X, const uint32_t* Y,
 
 //------------------------------------------------------------------------------
 
-static void BufferAdd_C(const uint32_t* const a, const uint32_t* const b,
-                        uint32_t size, uint32_t* const out,
-                        uint32_t* const nonzeros) {
+void BufferAdd_C(const uint32_t* const a, const uint32_t* const b,
+                 uint32_t size, uint32_t* const out,
+                 uint32_t* const nonzeros) {
   assert(out != nullptr);
   if (nonzeros != nullptr) *nonzeros = 0;
   if (b != out) {
@@ -171,9 +172,9 @@ static void BufferAdd_C(const uint32_t* const a, const uint32_t* const b,
 //------------------------------------------------------------------------------
 // Predictors
 
-static void PredictorSub0_C(const int16_t* in, bool has_alpha, const int16_t*,
-                            uint32_t num_pixels, int16_t, int16_t, int16_t mask,
-                            int16_t* out) {
+void PredictorSub0_C(const int16_t* in, bool has_alpha, const int16_t*,
+                     uint32_t num_pixels, int16_t, int16_t, int16_t mask,
+                     int16_t* out) {
   for (const int16_t* const in_end = in + 4 * num_pixels; in < in_end;
        in += 4, out += 4) {
     out[0] = has_alpha ? ((in[0] - WP2::kAlphaMax) & mask) : WP2::kAlphaMax;
@@ -183,12 +184,12 @@ static void PredictorSub0_C(const int16_t* in, bool has_alpha, const int16_t*,
   }
 }
 
-static void PredictorSub1_C(const int16_t* in, bool has_alpha, const int16_t*,
-                            uint32_t num_pixels, int16_t, int16_t, int16_t mask,
-                            int16_t* out) {
+void PredictorSub1_C(const int16_t* in, bool has_alpha, const int16_t*,
+                     uint32_t num_pixels, int16_t, int16_t, int16_t mask,
+                     int16_t* out) {
   for (const int16_t* const in_end = in + 4 * num_pixels; in < in_end;
        in += 4, out += 4) {
-    SubPixels(in, has_alpha, &in[-4], mask, out);
+    WP2L::SubPixels(in, has_alpha, &in[-4], mask, out);
   }
 }
 
@@ -198,16 +199,16 @@ static void PredictorSub1_C(const int16_t* in, bool has_alpha, const int16_t*,
 // It subtracts the prediction from the input pixel and stores the residual
 // in the output pixel.
 #define GENERATE_PREDICTOR_SUB(PREDICTOR, PREDICTOR_SUB)                     \
-  static void PREDICTOR_SUB(const int16_t* in, bool has_alpha,               \
-                            const int16_t* upper, uint32_t num_pixels,       \
-                            int16_t min_value, int16_t max_value,            \
-                            int16_t mask, int16_t* out) {                    \
+  void PREDICTOR_SUB(const int16_t* in, bool has_alpha,                      \
+                     const int16_t* upper, uint32_t num_pixels,              \
+                     int16_t min_value, int16_t max_value,                   \
+                     int16_t mask, int16_t* out) {                           \
     int16_t pred[4];                                                         \
     assert(upper != nullptr);                                                \
     for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
          out += 4, in += 4, upper += 4) {                                    \
-      (PREDICTOR)(in - 4, upper, min_value, max_value, pred);                \
-      SubPixels(in, has_alpha, pred, mask, out);                             \
+      (WP2L::PREDICTOR)(in - 4, upper, min_value, max_value, pred);          \
+      WP2L::SubPixels(in, has_alpha, pred, mask, out);                       \
     }                                                                        \
   }
 
@@ -226,6 +227,44 @@ GENERATE_PREDICTOR_SUB(Predictors_C[13], PredictorSub13_C)
 GENERATE_PREDICTOR_SUB(Predictors_C[14], PredictorSub14_C)
 
 //------------------------------------------------------------------------------
+// SSE version
+
+#if defined(WP2_USE_SSE)
+
+void BufferAdd_SSE(const uint32_t* const a, const uint32_t* const b,
+                   uint32_t size, uint32_t* const out,
+                   uint32_t* const nonzeros) {
+  assert(out != nullptr);
+  const __m128i zero = _mm_setzero_si128();
+  VecI32_SSE zero_cnt(0);
+  uint32_t i = 0;
+  for (; i + 4 <= size; i += 4) {
+    const VecI32_SSE m = VecI32_SSE(a + i) + VecI32_SSE(b + i);
+    m.Store(out + i);
+    zero_cnt = zero_cnt - _mm_cmpeq_epi32(m, zero);
+  }
+  if (nonzeros != nullptr) {
+    uint32_t tmp[4];
+    zero_cnt.Store(tmp);
+    *nonzeros = i - (tmp[0] + tmp[1] + tmp[2] + tmp[3]);
+  }
+  for (; i < size; ++i) {
+    out[i] = a[i] + b[i];
+    if (nonzeros != nullptr && out[i]) ++*nonzeros;
+  }
+}
+
+WP2_TSAN_IGNORE_FUNCTION void EncLDspInitSSE() {
+  WP2L::BufferAdd = BufferAdd_SSE;
+}
+
+#endif  // WP2_USE_SSE
+
+}    // namespace
+
+//------------------------------------------------------------------------------
+
+namespace WP2L {
 
 ProcessEncBlueAndRedFunc SubtractGreenFromBlueAndRed;
 
@@ -269,7 +308,9 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInit() {
 
   // If defined, use CPUInfo() to overwrite some pointers with faster versions.
   if (WP2GetCPUInfo != NULL) {
-  // TODO(skal): SSE2, etc.
+#if defined(WP2_USE_SSE)
+    if (WP2GetCPUInfo(kSSE)) EncLDspInitSSE();
+#endif
   }
   lossless_enc_last_cpuinfo_used = WP2GetCPUInfo;
 }

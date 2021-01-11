@@ -83,31 +83,23 @@ class BlockContext {
   // pixels.
   WP2Status Init(bool use_aom, uint32_t width, uint32_t height) {
     use_aom_ = use_aom;
-    if (use_aom) WP2_CHECK_STATUS(aom_.Init(width, height));
     WP2_CHECK_STATUS(modes_.InitMap(width, height));
     return WP2_STATUS_OK;
   }
   WP2Status CopyFrom(const BlockContext& other) {
     use_aom_ = other.use_aom_;
-    if (use_aom_) WP2_CHECK_STATUS(aom_.CopyFrom(other.aom_));
     WP2_CHECK_STATUS(modes_.CopyFrom(other.modes_));
     return WP2_STATUS_OK;
   }
   void Reset() {
-    if (use_aom_) aom_.Reset();
     modes_.Reset();
   }
-  // Returns a pointer to the AOM context, or nullptr if AOM residuals are not
-  // used.
-  const libgav1::AOMContext* aom() const { return use_aom_ ? &aom_ : nullptr; }
-  libgav1::AOMContext* aom() { return use_aom_ ? &aom_ : nullptr; }
   bool use_aom() const { return use_aom_; }
   const YModePredictor& ymodes() const { return modes_; }
   YModePredictor& ymodes() { return modes_; }
 
  private:
   bool use_aom_ = false;
-  libgav1::AOMContext aom_;
   YModePredictor modes_;
 };
 
@@ -118,19 +110,18 @@ class BlockContext {
 class ContextCache {
  public:
   // Gets the large context for a given block.
-  // TODO(vrabaud) fill_in == false and extend_right == true seems unused.
-  const int16_t* GetLarge(const CodedBlock& cb, Channel channel, bool fill_in,
-                          bool extend_right);
+  const int16_t* GetLarge(const CodedBlock& cb, Channel channel,
+                          ContextType context_type);
   // Sets contexts for all parameters as uncomputed.
   void Reset();
 
  private:
-  // Large context per channel, per fill_in, per extend right.
-  int16_t large_[4][2][2][kMaxContextSize];
-  bool is_computed_[4][2][2] = {{{false, false}, {false, false}},
-                                {{false, false}, {false, false}},
-                                {{false, false}, {false, false}},
-                                {{false, false}, {false, false}}};
+  // Large context per channel, per context type.
+  int16_t large_[4][kNumContextType][kMaxContextSize];
+  bool is_computed_[4][kNumContextType] = {{false, false, false, false},
+                                           {false, false, false, false},
+                                           {false, false, false, false},
+                                           {false, false, false, false}};
 };
 
 //------------------------------------------------------------------------------
@@ -384,12 +375,8 @@ class CodedBlock {
   static constexpr int16_t kMissing = std::numeric_limits<int16_t>::max();
 
   // Retrieves boundary samples for the whole block.
-  // If 'extend_right' is set to true, the context is extended horizontally to
-  // the right instead of along the right boundary.
-  // If 'fill_in' is true, missing context pixels are filled in
-  // with neighboring values. Otherwise, they are set to kMissing.
-  virtual const int16_t* GetContext(Channel channel, bool fill_in,
-                                    bool extend_right) const;
+  virtual const int16_t* GetContext(Channel channel,
+                                    ContextType context_type) const;
   void SetContextCache(ContextCache* const context_cache);
   void ResetContextCache() const;
 
@@ -514,7 +501,7 @@ class CodedBlock {
                            float* const a, float* const b,
                            std::string* const debug_str) const;
 
-  void GetContext(Channel channel, bool fill_in, bool extend_right,
+  void GetContext(Channel channel, ContextType context_type,
                   int16_t context[kMaxContextSize]) const;
 
  public:

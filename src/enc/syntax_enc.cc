@@ -472,7 +472,7 @@ WP2Status SyntaxWriter::Record(const CodedBlock& cb) {
     }
 
     WP2_CHECK_STATUS(residual_writer_.RecordCoeffs(
-        cb, channel, &symbol_recorder_, context_.aom()));
+        cb, channel, &symbol_recorder_));
   }
 
   ++recorded_blocks_;
@@ -510,8 +510,7 @@ WP2Status SyntaxWriter::WriteBlock(const CodedBlock& cb, uint32_t block_index,
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !cb.HasLossyAlpha()) continue;
 
-    WP2_CHECK_STATUS(residual_writer_.WriteCoeffs(cb, c, enc, &symbol_writer_,
-                                                  context_.aom()));
+    WP2_CHECK_STATUS(residual_writer_.WriteCoeffs(cb, c, enc, &symbol_writer_));
     if (kDebugPrintRate) {
       const float cost = enc->GetCost();
       const float cost_diff = cost - previous_cost;

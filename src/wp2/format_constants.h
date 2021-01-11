@@ -85,7 +85,7 @@ constexpr uint32_t kDirectionalMaxAngleDeltaUV = 1u;
 constexpr uint32_t kYBasePredNum = 8;
 constexpr uint32_t kABasePredNum = 8;
 constexpr uint32_t kUVBasePredNum = 4;
-constexpr uint32_t kAnglePredNum = 9;
+constexpr uint32_t kAnglePredNum = 10;
 
 enum BasePredictor {
   BPRED_DC = 0,
@@ -225,23 +225,39 @@ static constexpr uint32_t kPredWidth = 4;
 static constexpr uint32_t kPredHeight = 4;
 static constexpr uint32_t kPredSize = (kPredWidth * kPredHeight);
 static constexpr uint32_t kLinearPredBits = 10;  // For calculation.
-// Size of the usual context for prediction (it goes all around a block).
-static constexpr uint32_t ContextSize(uint32_t bw, uint32_t bh) {
-  return bw + 2 * (bh + 1);
-}
+// Type of context.   Missing context pixels are filled in with neighboring
+// values except for kContextSmallNoFillIn.
+// For kContextExtendRight, the context is extended horizontally to
+// the right instead of along the right boundary.
+// For kContextExtendLeft, left context is twice as high.
+enum ContextType {
+  kContextSmall,          // left + top + right
+  kContextSmallNoFillIn,  // same as above, but using CodedBlock::kMissing
+  kContextExtendRight,    // left + top + extended right
+  kContextExtendLeft,     // extended left + left
+  kNumContextType
+};
 // Size of the context going left of a block, top, and top right extending the
 // top context. Extending by kMaxBlockSizePix is good enough for 45 degree
 // predictors but we need more for lower angles, hence 2 * kMaxBlockSizePix.
 static constexpr uint32_t kMaxContextTRExtent = 2 * kMaxBlockSizePix;
-static constexpr uint32_t ContextWithTRSize(uint32_t bw, uint32_t bh) {
-  return bh + 1 + bw + kMaxContextTRExtent;
+// Size of the usual context for prediction (it goes all around a block).
+static constexpr uint32_t ContextSize(ContextType context_type, uint32_t bw,
+                                      uint32_t bh) {
+  return (context_type == kContextSmall ||
+          context_type == kContextSmallNoFillIn)
+             ? (bw + 2 * (bh + 1))
+         : (context_type == kContextExtendRight)
+             ? (bh + 1 + bw + kMaxContextTRExtent)
+             : (2 * bh);
 }
-static constexpr uint32_t kContextSize = ContextSize(kPredWidth, kPredHeight);
+static constexpr uint32_t kContextSize =
+    ContextSize(kContextSmall, kPredWidth, kPredHeight);
 // Maximum context size (for stack reservation).
 static constexpr uint32_t kMaxContextSize =
-    ContextWithTRSize(kMaxBlockSizePix, kMaxBlockSizePix);
-static_assert(kMaxContextSize >=
-                  ContextSize(kMaxBlockSizePix, kMaxBlockSizePix),
+    ContextSize(kContextExtendRight, kMaxBlockSizePix, kMaxBlockSizePix);
+static_assert(kMaxContextSize >= ContextSize(kContextSmall, kMaxBlockSizePix,
+                                             kMaxBlockSizePix),
               "Wrong kMaxContextSize");
 
 // Maximum (inclusive) number of bits to use to represent a frequency in ANS

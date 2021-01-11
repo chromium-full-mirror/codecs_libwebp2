@@ -34,14 +34,14 @@ class QuantMtxTest : public ::testing::Test {
 
 TEST_F(QuantMtxTest, RoundTrip) {
   const uint32_t kMaxResidual = 150;
+  QuantMtx mtx;
+  ASSERT_WP2_OK(mtx.Allocate());
   for (TrfSize trf : kAllTrfSizes) {
     const uint32_t num_coeffs = kNumCoeffs[trf];
     const uint32_t scale = num_coeffs >> 2;
     SCOPED_TRACE(SPrintf("trf: %s (scale %d)", kTDimNames[trf], scale));
     for (const uint16_t quant : {12, 49, 89, 150, 199, 220}) {
       SCOPED_TRACE(SPrintf("quant: %d", quant));
-      QuantMtx mtx;
-      ASSERT_WP2_OK(mtx.Allocate());
       const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
       mtx.Init(kMaxResidual, /*q_scale=*/1, ALL_RECTS, quants);
       int32_t residuals[kMaxBlockSizePix2];
@@ -59,6 +59,7 @@ TEST_F(QuantMtxTest, RoundTrip) {
       }
     }
   }
+  mtx.Print();   // just for coverage!
 }
 
 TEST_F(QuantMtxTest, DCError) {

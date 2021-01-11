@@ -23,7 +23,6 @@
 
 #include <array>
 
-#include "src/common/lossy/aom/array_2d.h"
 #include "src/common/lossy/residuals.h"
 #include "src/common/symbols.h"
 #include "src/wp2/base.h"
@@ -222,8 +221,6 @@ struct SymbolDecoderContext {
 constexpr uint8_t kEobMultiSizeLookup[kNumTransformSizes] = {
     0, 1, 2, 1, 2, 3, 4, 2, 3, 4, 5, 5, 4, 5, 6, 6, 5, 6, 6};
 
-class AOMContext;
-
 typedef int (*CoeffBaseContextFunc)(
     const uint8_t qlevels[], TransformSize tx_size,
     int adjusted_tx_width_log2, uint16_t pos);
@@ -311,56 +308,9 @@ class AOMResidualIO {
   //    every transform block.
   using ResidualPtr = uint8_t*;
 
-  // |x4| and |y4| are the column and row positions of the 4x4 block. |w4| and
-  // |h4| are the width and height in 4x4 units of |tx_size|.
-  static int GetTransformAllZeroContext(const AOMContext& aom_context,
-                                        Channel channel, TransformSize tx_size,
-                                        int x4, int y4, int w4, int h4);
-
   static int GetCoeffBaseContextEob(TransformSize tx_size, int index);
 
   static int GetCoeffBaseRangeContextEob(int adjusted_tx_width_log2, int pos);
-  static void SetEntropyContexts(int x4, int y4, int w4, int h4,
-                                 Channel channel, uint8_t coefficient_level,
-                                 AOMContext* const aom_context);
-};
-
-// Class containing the updated context from one set of residuals to the next.
-class AOMContext {
- public:
-  WP2Status Init(uint32_t width, uint32_t height);
-  WP2Status CopyFrom(const AOMContext& other);
-  void Reset();
-
-  uint32_t Rows4x4(Channel channel) const {
-    return rows4x4_ >> (IsReduced(channel) ? 1 : 0);
-  }
-  uint32_t Columns4x4(Channel channel) const {
-    return columns4x4_ >> (IsReduced(channel) ? 1 : 0);
-  }
-  bool Is420() const { return is420_; }
-  void SetIs420(bool is420) { is420_ = is420; }
-  bool IsReduced(Channel channel) const {
-    return ((channel == kUChannel || channel == kVChannel) && is420_);
-  }
-
-  // One array (|coefficient_levels_|) is used to
-  // store the entropy context. Their dimensions are as follows: First -
-  // left/top; Second - plane; Third - row4x4 (if first dimension is
-  // left)/column4x4 (if first dimension is top).
-  //
-  // This is equivalent to the LeftLevelContext and AboveLevelContext arrays in
-  // the spec. In the spec, it stores values from 0 through 63 (inclusive). The
-  // stored values are used to compute the left and top contexts in
-  // GetTransformAllZeroContext. In that function, we only care about the
-  // following values: 0, 1, 2, 3 and >= 4. So instead of clamping to 63, we
-  // clamp to 4 (i.e.) all the values greater than 4 are stored as 4.
-  std::array<Array2D<uint8_t>, 2> coefficient_levels_;
-
- private:
-  uint32_t columns4x4_;
-  uint32_t rows4x4_;
-  bool is420_;
 };
 
 //------------------------------------------------------------------------------
@@ -380,8 +330,6 @@ constexpr int kQuantizerCoefficientBaseRangeContextClamp =
     kQuantizerCoefficientBaseRange + kNumQuantizerBaseLevels + 1;
 constexpr int kCoeffBaseRangeMaxIterations =
     kQuantizerCoefficientBaseRange / (kCoeffBaseRangeSymbolCount - 1);
-constexpr int kEntropyContextLeft = 0;
-constexpr int kEntropyContextTop = 1;
 
 constexpr TransformSize kSizeWP2ToAOM[] = {
     kTransformSize4x4,   kTransformSize8x4,   kTransformSize16x4,

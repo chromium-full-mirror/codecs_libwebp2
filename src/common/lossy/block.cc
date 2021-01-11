@@ -89,21 +89,19 @@ WP2Status Counters::CopyFrom(const Counters& other,
 //------------------------------------------------------------------------------
 
 const int16_t* ContextCache::GetLarge(const CodedBlock& cb, Channel channel,
-                                      bool fill_in, bool extend_right) {
-  if (!is_computed_[channel][fill_in][extend_right]) {
-    cb.GetContext(channel, fill_in, extend_right,
-                  large_[channel][fill_in][extend_right]);
-    is_computed_[channel][fill_in][extend_right] = true;
+                                      ContextType context_type) {
+  if (!is_computed_[channel][context_type]) {
+    cb.GetContext(channel, context_type, large_[channel][context_type]);
+    is_computed_[channel][context_type] = true;
   }
-  return large_[channel][fill_in][extend_right];
+  return large_[channel][context_type];
 }
 
 void ContextCache::Reset() {
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    for (bool fill_in : {false, true}) {
-      for (bool extend_right : {false, true}) {
-        is_computed_[channel][fill_in][extend_right] = false;
-      }
+    for (uint32_t context_type = 0; context_type < kNumContextType;
+         ++context_type) {
+      is_computed_[channel][context_type] = false;
     }
   }
 }
@@ -182,18 +180,19 @@ void CodedBlock::ResetContextCache() const {
   context_cache_->Reset();
 }
 
-const int16_t* CodedBlock::GetContext(Channel channel, bool fill_in,
-                                      bool extend_right) const {
+const int16_t* CodedBlock::GetContext(Channel channel,
+                                      ContextType context_type) const {
   assert(context_cache_ != nullptr);
-  return context_cache_->GetLarge(*this, channel, fill_in, extend_right);
+  return context_cache_->GetLarge(*this, channel, context_type);
 }
 
 // Macro replicating AtUnclamped for speed-up.
 #define CONTEXT_SRC_AT_UNCLAMPED(X, Y) \
   *(context_src_data + (X) + (Y) * context_src_step)
 
-void CodedBlock::GetContext(Channel channel, bool fill_in, bool extend_right,
+void CodedBlock::GetContext(Channel channel, ContextType context_type,
                             int16_t context[]) const {
+  const bool fill_in = (context_type != kContextSmallNoFillIn);
   const uint32_t w = blk_.w_pix(), h = blk_.h_pix();
   const Plane16& context_src = predict_from_.GetChannel(channel);
   if (context_src.IsEmpty()) {
@@ -220,9 +219,10 @@ void CodedBlock::GetContext(Channel channel, bool fill_in, bool extend_right,
   const int16_t* const context_src_data =
       context_src.IsEmpty() ? nullptr : &context_src.AtUnclamped(0, 0);
   const int context_src_step = context_src.Step();
+  const int left_size = ((context_type == kContextExtendLeft) ? 2 * h : h);
   if (left_context_size > 0) {
     if (fill_in) last = CONTEXT_SRC_AT_UNCLAMPED(-1, left_context_size - 1);
-    int j = h - 1;
+    int j = left_size - 1;
     for (; j >= left_context_size; --j) context[m++] = last;
     for (; j >= 0; --j) context[m++] = CONTEXT_SRC_AT_UNCLAMPED(-1, j);
     if (fill_in) last = context[m - 1];
@@ -231,55 +231,59 @@ void CodedBlock::GetContext(Channel channel, bool fill_in, bool extend_right,
       last =
           have_top ? CONTEXT_SRC_AT_UNCLAMPED(have_top_left ? -1 : 0, -1) : 0;
     }
-    for (uint32_t j = 0; j < h; ++j) context[m++] = last;
-  }
-  // top-left
-  if (have_top_left) {
-    context[m++] = CONTEXT_SRC_AT_UNCLAMPED(-1, -1);
-    if (fill_in) last = context[m - 1];
-  } else {
-    context[m++] = last;
-  }
-  // top (bw samples)
-  if (have_top) {
-    for (uint32_t i = 0; i < w; ++i) {
-      context[m++] = CONTEXT_SRC_AT_UNCLAMPED(i, -1);
-    }
-    if (fill_in) last = context[m - 1];
-  } else {
-    if (fill_in) {
-      last = (left_context_size > 0) ? CONTEXT_SRC_AT_UNCLAMPED(-1, 0) : 0;
-    }
-    for (uint32_t i = 0; i < w; ++i) context[m++] = last;
+    for (uint32_t j = 0; j < (uint32_t)left_size; ++j) context[m++] = last;
   }
 
-  if (extend_right) {
-    const uint32_t context_size = ContextWithTRSize(w, h);
-    right_extent *= kMinBlockSizePix;
-    int j = 0;
-    for (; j < right_extent && m < context_size; ++j) {
-      context[m++] = CONTEXT_SRC_AT_UNCLAMPED(w + j, -1);
-    }
-    if (fill_in) last = context[m - 1];
-    for (; m < context_size; ++j) context[m++] = last;
-  } else {
-    // top-right
-    if (have_top_right) {
-      context[m++] = CONTEXT_SRC_AT_UNCLAMPED(w, -1);
+  if (context_type != kContextExtendLeft) {
+    // top-left
+    if (have_top_left) {
+      context[m++] = CONTEXT_SRC_AT_UNCLAMPED(-1, -1);
+      if (fill_in) last = context[m - 1];
     } else {
       context[m++] = last;
     }
-    // right (bh samples)
-    uint32_t j = 0;
-    const uint32_t right_context_size =
-        std::min(h, std::max(0, (int)y_right_occ) * kMinBlockSizePix);
-    for (; j < right_context_size; ++j) {
-      context[m++] = CONTEXT_SRC_AT_UNCLAMPED(w, j);
+    // top (bw samples)
+    if (have_top) {
+      for (uint32_t i = 0; i < w; ++i) {
+        context[m++] = CONTEXT_SRC_AT_UNCLAMPED(i, -1);
+      }
+      if (fill_in) last = context[m - 1];
+    } else {
+      if (fill_in) {
+        last = (left_context_size > 0) ? CONTEXT_SRC_AT_UNCLAMPED(-1, 0) : 0;
+      }
+      for (uint32_t i = 0; i < w; ++i) context[m++] = last;
     }
-    if (fill_in) last = context[m - 1];
-    for (; j < h; ++j) context[m++] = last;
-    assert(m == ContextSize(w, h));
+
+    if (context_type == kContextExtendRight) {
+      const uint32_t context_size = ContextSize(kContextExtendRight, w, h);
+      right_extent *= kMinBlockSizePix;
+      int j = 0;
+      for (; j < right_extent && m < context_size; ++j) {
+        context[m++] = CONTEXT_SRC_AT_UNCLAMPED(w + j, -1);
+      }
+      if (fill_in) last = context[m - 1];
+      for (; m < context_size; ++j) context[m++] = last;
+    } else {
+      // top-right
+      if (have_top_right) {
+        context[m++] = CONTEXT_SRC_AT_UNCLAMPED(w, -1);
+      } else {
+        context[m++] = last;
+      }
+      // right (bh samples)
+      uint32_t j = 0;
+      const uint32_t right_context_size =
+          std::min(h, std::max(0, (int)y_right_occ) * kMinBlockSizePix);
+      for (; j < right_context_size; ++j) {
+        context[m++] = CONTEXT_SRC_AT_UNCLAMPED(w, j);
+      }
+      if (fill_in) last = context[m - 1];
+      for (; j < h; ++j) context[m++] = last;
+      assert(m == ContextSize(kContextSmall, w, h));
+    }
   }
+
   const uint32_t kSizeThreshold = 48;  // context size above which to filter
   const int32_t kDiffThreshold = 96;   // slope threshold below which to filter
   if (m > kSizeThreshold) {   // block is large enough?
@@ -389,7 +393,7 @@ WP2Status CodedBlock::ResidualRate(const BlockContext& context, Channel channel,
   const bool is_uv = (channel == kUChannel || channel == kVChannel);
   // TODO(vrabaud) Using AOM context for U/V is worse for now...
   if (context.use_aom() && !is_uv) {
-    WP2_CHECK_STATUS(ResidualWriter::GetRateAOM(*this, channel, *context.aom(),
+    WP2_CHECK_STATUS(ResidualWriter::GetRateAOM(*this, channel,
                                                 aom_counter, rate));
   } else {
     // Whether to use the more accurate but a lot more expensive rate.
@@ -613,9 +617,6 @@ void CodedBlock::TransformAndReconstruct(const QuantMtx& quant, Channel channel,
     }
     quant.Quantize(tf_res, tdim(channel), IsFirstCoeffDC(channel),
                    coeffs_[channel][tf_i], &num_coeffs_[channel][tf_i]);
-    if (quant.qstats != nullptr && channel == kYChannel) {
-      quant.qstats->Record(tdim(channel), tf_res, coeffs_[channel][tf_i]);
-    }
     if (channel == kYChannel && mtx_set_ != nullptr) {
       mtx_set_->DecideUseRndMtx(this);  // TODO(skal): later: U/V channel?
     }
@@ -1069,9 +1070,10 @@ WP2Status CodedBlock::OptimizeModesChroma(
 
 bool CodedBlock::ContextIsConstant(Channel channel) const {
   assert(context_cache_ != nullptr);
-  const int16_t* context = context_cache_->GetLarge(
-      *this, channel, /*fill_in=*/true, /*extend_right=*/false);
-  const uint32_t context_size = ContextSize(blk_.w_pix(), blk_.h_pix());
+  const int16_t* context =
+      context_cache_->GetLarge(*this, channel, kContextSmall);
+  const uint32_t context_size =
+      ContextSize(kContextSmall, blk_.w_pix(), blk_.h_pix());
   for (uint32_t i = 1; i < context_size; ++i) {
     if (context[i] != context[0]) {
       return false;

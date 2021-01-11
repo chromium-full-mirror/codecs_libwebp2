@@ -45,14 +45,16 @@ TEST_P(EncDecProgressTest, Encode) {
   encoder_config.thread_level = std::get<2>(GetParam());
 
   ArgbBuffer src;
-  MemoryWriter data;
   ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(), &src));
 
   testing::ProgressTester progress_tester;
   encoder_config.progress_hook = &progress_tester;
 
   // Test that it fails as expected.
+  std::string output;
+  StringWriter data(&output);
   for (float fail_at : kFailurePoints) {
+    output.clear();
     progress_tester.Reset();
     progress_tester.fail_at_ = fail_at;
     ASSERT_EQ(Encode(src, &data, encoder_config), WP2_STATUS_USER_ABORT);
@@ -60,8 +62,10 @@ TEST_P(EncDecProgressTest, Encode) {
 
   // Test that it ends at 1.
   progress_tester.Reset();
+  output.clear();
   ASSERT_WP2_OK(Encode(src, &data, encoder_config));
   ASSERT_EQ(progress_tester.last_progress_, 1.);
+  EXPECT_GT(output.size(), 0u);
 }
 
 // Decode() progression

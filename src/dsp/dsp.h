@@ -518,20 +518,25 @@ extern void (*AnglePredInterpolate)(const int16_t* src, int32_t frac,
 
 // Number of angle subdivision within a 22.5 degrees span.
 constexpr uint32_t kDirectionalMaxDelta = (2 * kDirectionalMaxAngleDeltaYA + 1);
-// number of indexed angled: 9 based angles: {23.0, 45.0, ... 202.5} + 7 deltas
+// number of indexed angled: 10 based angles: {23.0, 45.0, ... 225} + 7 deltas
 constexpr uint32_t kNumDirectionalAngles = kAnglePredNum * kDirectionalMaxDelta;
-// angle_idx goes for 0 (12.85 degrees) to 62 (212.14 degrees).
+// angle_idx goes for 0 (12.86 degrees) to 69 (234.64 degrees).
 // Some notable values:
 constexpr uint32_t kAngle_45 = 10;
 constexpr uint32_t kAngle_90 = 24;
 constexpr uint32_t kAngle_135 = 38;
 constexpr uint32_t kAngle_180 = 52;
-static_assert(kAngle_90 - kAngle_45 == 2 * kDirectionalMaxDelta,
-              "bad kAngle 90-45");
-static_assert(kAngle_135 - kAngle_90 == 2 * kDirectionalMaxDelta,
-              "bad kAngle 135-90");
-static_assert(kAngle_180 - kAngle_135 == 2 * kDirectionalMaxDelta,
-              "bad kAngle 180-135");
+constexpr uint32_t kAngle_225 = 66;
+static_assert(kAngle_90 - kAngle_45 == 2 * kDirectionalMaxDelta &&
+                  kAngle_135 - kAngle_90 == 2 * kDirectionalMaxDelta &&
+                  kAngle_180 - kAngle_135 == 2 * kDirectionalMaxDelta &&
+                  kAngle_225 - kAngle_180 == 2 * kDirectionalMaxDelta,
+              "bad kAngle");
+static constexpr ContextType GetContextType(uint32_t angle_idx) {
+  return (angle_idx < kAngle_90)    ? kContextExtendRight
+         : (angle_idx > kAngle_180) ? kContextExtendLeft
+                                    : kContextSmall;
+}
 
 // Precalculation of 'fuse' weight. 'strength' in [0..1].
 static constexpr uint32_t LargeWeightTableDim = 16u;

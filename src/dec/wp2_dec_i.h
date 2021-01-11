@@ -158,7 +158,6 @@ class ResidualReader : public ResidualIO {
   // Reads residual coefficients.
   WP2Status ReadCoeffs(Channel channel, ANSDec* const dec,
                        SymbolReader* const sr, CodedBlock* const cb,
-                       libgav1::AOMContext* const aom_context,
                        BlockInfo* const info);
 
  private:

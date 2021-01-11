@@ -42,17 +42,15 @@ class AOMResidualWriter : public ResidualIO, public AOMResidualIO {
                                WP2::BlockSize dim, TransformPair tx_type,
                                bool first_is_dc, int max_num_coeffs, bool is420,
                                const int16_t* const coeffs, Channel channel,
-                               bool do_update, SymbolManager* const sm,
-                               ANSEncBase* const enc,
-                               AOMContext* const aom_context);
+                               SymbolManager* const sm,
+                               ANSEncBase* const enc);
 
  private:
   static void WriteEOB(int eob, int max_num_coeffs,
                        TransformSize tx_size, PlaneType plane_type, int context,
                        SymbolManager* const sm, ANSEncBase* const enc);
   static void WriteTransformCoefficients(
-      const int16_t* const res, int max_num_coeffs,
-      const AOMContext& aom_context, bool is420,
+      const int16_t* const res, int max_num_coeffs, bool is_reduced,
       Channel channel, int start_x, int start_y, TransformSize tx_size,
       TransformPair tx_type, bool first_is_dc, SymbolManager* const sm,
       ANSEncBase* const enc, int* const coefficient_level);

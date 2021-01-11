@@ -256,27 +256,32 @@ static constexpr int32_t kCoTanTable[] = {
     143565,      113740,  93645,   79108,  68043,  59289,  52149,   46182,
     41089,       36667,   32768,   29283,  26131,  23250,  20589,   18110,
     15780,       13572,   11466,   9440,   7479,   5567,   3692,    1840,
-    0,  // 90 degree
+    0,  // 90 degrees
     -1840,       -3692,   -5567,   -7479,  -9440,  -11466, -13572,  -15780,
     -18110,      -20589,  -23250,  -26131, -29283, -32767, -36667,  -41089,
     -46182,      -52149,  -59289,  -68043, -79108, -93645, -113740, -143565,
     -192858,     -290824, -583488,
-    -2147483648,  // 180 degree
+    -2147483648,  // 180 degrees
     583488,      290824,  192858,  143565, 113740, 93645,  79108,   68043,
-    59289,       52149};
+    59289,       52149,   46182,   41089,  36667,  32767,  29283,   26131,
+    23250};
 STATIC_ASSERT_ARRAY_SIZE(kCoTanTable, kNumDirectionalAngles);
 
 // (int32_t)(std::tan(alpha) * (1u << kAnglePredPrecision))
 static constexpr int32_t kTanTable[] = {
     // (these 'angle < 90' entries are not actually used)
-    7479, 9440, 11466, 13572, 15780, 18110, 20589, 23250, 26131, 29283, 32767,
-    36667, 41089, 46182, 52149, 59289, 68043, 79108, 93645, 113740, 143565,
-    192858, 290824, 583488,
-    // 90 degrees and up...
-    -2147483648, -583488, -290824, -192858, -143565, -113740, -93645, -79108,
-    -68043, -59289, -52149, -46182, -41089, -36667, -32768, -29283, -26131,
-    -23250, -20589, -18110, -15780, -13572, -11466, -9440, -7479, -5567, -3692,
-    -1840, 0, 1840, 3692, 5567, 7479, 9440, 11466, 13572, 15780, 18110, 20589};
+    7479,        9440,    11466,   13572,   15780,   18110,  20589,  23250,
+    26131,       29283,   32767,   36667,   41089,   46182,  52149,  59289,
+    68043,       79108,   93645,   113740,  143565,  192858, 290824, 583488,
+    -2147483648,  // 90 degrees
+    -583488,     -290824, -192858, -143565, -113740, -93645, -79108, -68043,
+    -59289,      -52149,  -46182,  -41089,  -36667,  -32768, -29283, -26131,
+    -23250,      -20589,  -18110,  -15780,  -13572,  -11466, -9440,  -7479,
+    -5567,       -3692,   -1840,
+    0,  // 180 degrees
+    1840,        3692,    5567,    7479,    9440,    11466,  13572,  15780,
+    18110,       20589,   23250,   26131,   29283,   32768,  36667,  41089,
+    46182};
 STATIC_ASSERT_ARRAY_SIZE(kTanTable, kNumDirectionalAngles);
 
 static void AnglePredInterpolate_C(const int16_t* src,
@@ -294,8 +299,9 @@ void SimpleAnglePredictor(uint8_t angle_idx, const int16_t ctx[],
                           int16_t* dst, size_t step) {
   const uint32_t bw = 1u << log2_bw;
   const uint32_t bh = 1u << log2_bh;
-  const uint32_t context_size =
-      (angle_idx < kAngle_90) ? ContextWithTRSize(bw, bh) : ContextSize(bw, bh);
+  const ContextType context_type = GetContextType(angle_idx);
+  const uint32_t context_size = ContextSize(context_type, bw, bh);
+
   if (angle_idx == kAngle_45) {
     for (uint32_t y = 0; y < bh; ++y, dst += step) {
       for (uint32_t x = 0; x < bw; ++x) dst[x] = ctx[bh + 1 + y + 1 + x];
@@ -348,15 +354,17 @@ void SimpleAnglePredictor(uint8_t angle_idx, const int16_t ctx[],
       }
     } else {        // angle >= 90.f
       const int32_t t = kTanTable[angle_idx];
-      const int32_t bh_minus_1 =
-          ChangePrecision((int32_t)bh - 1, 0, kAnglePredPrecision);
+      const int32_t ctx_height =
+          ((context_type == kContextExtendLeft) ? 2 * bh : bh);
+      const int32_t ctx_height_minus_1 =
+          ChangePrecision((int32_t)ctx_height - 1, 0, kAnglePredPrecision);
       AssertInt32_TBounds(t);
       for (int32_t y = 0; y < (int32_t)bh; ++y, dst += step) {
         int32_t x_max;
         // Figure out the x that hits a boundary of the left context.
         if (angle_idx > kAngle_180) {
-          // Hits the left context for X = -1 and Y = bh - 1;
-          x_max = -kOne + (bh - 1) * cot - y * cot;
+          // Hits the left context for X = -1 and Y = ctx_height - 1;
+          x_max = -kOne + (ctx_height - 1) * cot - y * cot;
         } else {
           // Hits the left context for X = -1 and Y = -1;
           x_max = -kOne + (-1) * cot - y * cot;
@@ -371,8 +379,8 @@ void SimpleAnglePredictor(uint8_t angle_idx, const int16_t ctx[],
         for (; x <= x_max; ++x) {
           AssertInt32_TBounds((int64_t)t + (x * t + y * kOne));
           const int32_t Y = t + (x * t + y * kOne);
-          assert(Y >= -kOne && Y <= bh_minus_1);
-          uint32_t ind = bh_minus_1 - Y;
+          assert(Y >= -kOne && Y <= ctx_height_minus_1);
+          uint32_t ind = ctx_height_minus_1 - Y;
           const int32_t decimal = (ind & kMask);
           ind >>= kAnglePredPrecision;
           assert(ind < context_size);

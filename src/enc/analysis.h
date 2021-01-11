@@ -104,13 +104,6 @@ void SegmentationBlockVDebug(const EncoderConfig& config, const CodedBlock& cb,
                              uint32_t tile_pos_x, uint32_t tile_pos_y,
                              float score, const Segment& segment);
 
-// Spreads the values of the 'channel' of 'src' into at most 'histogram_size'
-// buckets. Returns the number of buckets used.
-uint32_t GetHistogram(const ArgbBuffer& src, uint32_t channel,
-                      uint32_t max_num_buckets, uint32_t histogram[],
-                      uint8_t* const min_value = nullptr,
-                      uint8_t* const max_value = nullptr);
-
 // Clusters the given 'histogram' using the k-means algorithm.
 // 'clusters[]' must be 'histogram_size' long, and will contain the cluster id
 // for each histogram bucket. Ids are in [0:num_clusters[, num_clusters being
@@ -119,23 +112,6 @@ uint32_t GetHistogram(const ArgbBuffer& src, uint32_t channel,
 uint32_t ClusterHistogram(const uint32_t histogram[], uint32_t histogram_size,
                           uint32_t max_clusters, uint32_t clusters[],
                           uint32_t centers[]);
-
-struct SourceStats {
-  typedef uint64_t score_t;
-  struct BlockStat {
-    VectorNoCtor<score_t> scores;
-    uint8_t best_mode;
-    score_t best_score;
-  };
-  uint32_t num_block_predictors;   // number of predictors per block
-  uint32_t bw, bh;                 // dimension of image in block units
-  Vector<BlockStat> stats;
-
-  WP2Status AnalyzeSource(const YUVPlane& yuv,
-                          const PredictorVector& preds);
-
-  WP2Status ExtractToMap(Vector_u8* const map) const;
-};
 
 //------------------------------------------------------------------------------
 // Prediction block size: kPredWidth * kPredHeight

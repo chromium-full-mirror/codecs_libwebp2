@@ -56,19 +56,6 @@ typedef void (*CollectColorRedTransformsFunc)(
     uint32_t tile_height, int16_t green_to_red, uint32_t* const histo);
 extern CollectColorRedTransformsFunc CollectColorRedTransforms;
 
-// Expose some C-only fallback functions
-void TransformColor_C(const Multipliers* const m, int num_pixels,
-                      int16_t* const data);
-void SubtractGreenFromBlueAndRed_C(uint16_t* argb_data, uint32_t channel_bits,
-                                   uint32_t num_pixels);
-void CollectColorRedTransforms_C(const int16_t* argb, uint32_t width,
-                                 uint32_t tile_width, uint32_t tile_height,
-                                 int16_t green_to_red, uint32_t* const histo);
-void CollectColorBlueTransforms_C(const int16_t* argb, uint32_t width,
-                                  uint32_t tile_width, uint32_t tile_height,
-                                  int16_t green_to_blue, int16_t red_to_blue,
-                                  uint32_t* const histo);
-
 extern PredictorAddSubFunc PredictorsSub[kNumPredictors];
 extern PredictorAddSubFunc PredictorsSub_C[kNumPredictors];
 

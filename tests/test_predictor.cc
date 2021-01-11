@@ -15,6 +15,7 @@
 // Unit tests for predictors.
 
 #include "examples/example_utils.h"
+#include "imageio/image_enc.h"
 #include "include/helpers.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/predictor.h"
@@ -34,7 +35,7 @@ class CodedBlockForTest : public CodedBlock {
               context_[channel]);
   }
 
-  const int16_t* GetContext(Channel channel, bool, bool) const override {
+  const int16_t* GetContext(Channel channel, ContextType) const override {
     return context_[channel];
   }
 
@@ -263,7 +264,7 @@ TEST(LargePredictors, UniformTest) {
   const uint32_t kNumTests = 5;
   for (BlockSize dim : kAllBlockSizes) {
     const uint32_t w = BlockWidthPix(dim), h = BlockHeightPix(dim);
-    const uint32_t ctx_size = ContextSize(w, h);
+    const uint32_t ctx_size = ContextSize(kContextSmall, w, h);
     int16_t ctx[kMaxContextSize];
     const int16_t max = 1 << WP2::kMaxYuvBits;
     const int16_t min = -max;
@@ -324,8 +325,8 @@ TEST(LargePredictors, TestSimpleAngle) {
       const uint32_t w = BlockWidthPix(dim), h = BlockHeightPix(dim);
       const uint32_t w_idx = TrfLog2[w];
       const uint32_t h_idx = TrfLog2[h];
-      const uint32_t ctx_size =
-          (ind < (int)kAngle_45) ? ContextWithTRSize(w, h) : ContextSize(w, h);
+      const ContextType context_type = GetContextType(ind);
+      const uint32_t ctx_size = ContextSize(context_type, w, h);
       int16_t ctx[kMaxContextSize];
       const int16_t max = 1 << WP2::kMaxYuvBits;
       const int16_t min = -max;
@@ -346,6 +347,26 @@ TEST(LargePredictors, TestSimpleAngle) {
   }
 }
 
+WP2Status SaveOutput(BlockSize dim, uint32_t angle_idx,
+                     const Plane16& prediction) {
+#ifdef WP2_TEST_ANGLE_PREDICTOR_SAVE_OUTPUT
+  ArgbBuffer debug_image;
+  const uint32_t w = BlockWidthPix(dim), h = BlockHeightPix(dim);
+  WP2_CHECK_STATUS(debug_image.Resize(w, h));
+  WP2_CHECK_STATUS(prediction.ToGray(&debug_image,
+                                     /*num_bits=*/WP2::kMaxYuvBits,
+                                     /*shift=*/true));
+  WP2_CHECK_STATUS(
+      SaveImage(debug_image,
+                SPrintf("/tmp/pred-%d-%d.png", angle_idx, dim).c_str(), true));
+#else
+  (void)dim;
+  (void)angle_idx;
+  (void)prediction;
+#endif
+  return WP2_STATUS_OK;
+}
+
 TEST(LargePredictors, TestSimpleAnglePredictorSpeed) {
   WP2::PredictionInit();
   UniformIntDistribution gen(76234);
@@ -353,8 +374,7 @@ TEST(LargePredictors, TestSimpleAnglePredictorSpeed) {
   constexpr int16_t min = -max;
   int16_t ctx[kMaxContextSize];
   for (auto& v : ctx) v = gen.Get(min, max);
-  const uint32_t step = kMaxBlockSizePix + 7;
-  int16_t prediction[kMaxBlockSizePix * step];
+  Plane16 prediction;
   constexpr uint32_t kNumTests = 1000;
   for (uint32_t ind = 0; ind < kNumDirectionalAngles; ++ind) {
     uint32_t CRC = 0;
@@ -362,14 +382,18 @@ TEST(LargePredictors, TestSimpleAnglePredictorSpeed) {
       const uint32_t w = BlockWidthPix(dim), h = BlockHeightPix(dim);
       const uint32_t w_idx = TrfLog2[w];
       const uint32_t h_idx = TrfLog2[h];
+      ASSERT_WP2_OK(prediction.Resize(w, h));
       for (uint32_t N = 0; N < kNumTests; ++N) {
-        SimpleAnglePredictor(ind, ctx, w_idx, h_idx, prediction, step);
+        SimpleAnglePredictor(ind, ctx, w_idx, h_idx, &prediction.At(0, 0),
+                             prediction.step_);
       }
       for (uint32_t j = 0; j < h; ++j) {
         for (uint32_t i = 0; i < w; ++i) {
-          CRC = testing::SillyCRC(CRC, prediction[i + j * step]);
+          CRC = testing::SillyCRC(CRC, prediction.At(i, j));
         }
       }
+
+      ASSERT_WP2_OK(SaveOutput(dim, ind, prediction));
     }
     // It's a bit extreme to hardcode a CRC for each angle_idx, but it
     // will hopefully make the debugging easier for some particular angles
@@ -383,9 +407,10 @@ TEST(LargePredictors, TestSimpleAnglePredictorSpeed) {
         0x4b67e1d2, 0xa8d8ef27, 0xc067f6a2, 0x6b81ad22, 0xad969dc5, 0x43cfa60c,
         0x28809de1, 0xc272024e, 0xef4d3d45, 0xee4f256b, 0xe8d34800, 0xfc31e532,
         0x9566491e, 0x5e130153, 0x9006678f, 0x203b30c0, 0x9100f6ca, 0xd378e42f,
-        0x0f6dc9a5, 0x0377ddd9, 0xebbe7dfb, 0x1dde713c, 0x210c9655, 0x901aac59,
-        0x04e2e256, 0xb5b9fc5f, 0x31a52495, 0x5182df7d, 0xbe18889f, 0x841ce1fb,
-        0x09de7afe, 0xcc13dc00, 0xfc14f13d};
+        0x0f6dc9a5, 0x0377ddd9, 0xebbe7dfb, 0x1dde713c, 0x210c9655, 0xdec6539a,
+        0x28458c89, 0xda383a24, 0x8c1fb4d1, 0xa5562033, 0x14347471, 0xb8913681,
+        0x85263518, 0xc2e90c17, 0x4628fca5, 0x83056ce9, 0xaf7f1bd5, 0xf1585dc4,
+        0x5ef83869, 0xbcf4a9c6, 0xf45c6506, 0x5d7a7888};
     STATIC_ASSERT_ARRAY_SIZE(kCRCs, kNumDirectionalAngles);
     EXPECT_EQ(CRC, kCRCs[ind]) << "Angle idx : " << ind;
   }

@@ -27,6 +27,7 @@
 #include <cstring>
 
 #include "src/dsp/dsp.h"
+#include "src/dsp/dsp_x86.h"
 
 //------------------------------------------------------------------------------
 
@@ -368,7 +369,7 @@ static float Log2Slow_SSE(uint32_t v) {
 }
 #endif
 
-WP2_TSAN_IGNORE_FUNCTION void WP2MathInitSSE() {
+WP2_TSAN_IGNORE_FUNCTION void MathInitSSE() {
   WP2InnerProduct = InnerProduct_SSE;
 //  WP2Log2Slow = Log2Slow_SSE;
 }
@@ -466,7 +467,7 @@ WP2_TSAN_IGNORE_FUNCTION void WP2MathInit() {
 
   if (WP2GetCPUInfo != nullptr) {
 #if defined(WP2_USE_SSE)
-    if (WP2GetCPUInfo(kSSE)) WP2MathInitSSE();
+    if (WP2GetCPUInfo(kSSE)) MathInitSSE();
 #endif
   }
   math_last_cpuinfo_used = WP2GetCPUInfo;

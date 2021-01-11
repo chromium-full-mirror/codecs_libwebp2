@@ -312,7 +312,7 @@ WP2Status SyntaxReader::GetBlock(CodedBlock* const cb, YUVPlane* const out,
     if (c == kAChannel && !cb->HasLossyAlpha()) continue;
     dec_->PushBitTracesCustomPrefix(kCoeffsStr[c]);
     WP2_CHECK_STATUS(
-        residual_reader_.ReadCoeffs(c, dec_, &sr_, cb, context_.aom(), info));
+        residual_reader_.ReadCoeffs(c, dec_, &sr_, cb, info));
     dec_->PopBitTracesCustomPrefix(kCoeffsStr[c]);
   }
 

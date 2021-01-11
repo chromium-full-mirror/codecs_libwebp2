@@ -127,10 +127,6 @@ class Segment {
 
   WP2Status AllocateForEncoder();   // must be called before FinalizeQuant()
 
-  // Adjusts the quantization steps if some stats were recorded.
-  // TODO(skal): right now it only adjusts the Y-Channel.
-  void AdjustQuantSteps();
-
   // Sets the YUV bounds, the quality and the quant mtx based on 'qfactor'.
   // 'qfactor' should be in [0, kFactorMax] range.
   // The alpha quantization factor will be set to default value.

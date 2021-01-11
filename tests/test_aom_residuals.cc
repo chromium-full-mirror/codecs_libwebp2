@@ -40,7 +40,6 @@ TEST_P(ResidualWriterTest, AOM) {
       mgr.Init(ALL_RECTS, /*snapped=*/false, /*width=*/10, /*height=*/10));
   libgav1::AOMResidualWriter writer;
   libgav1::AOMResidualReader reader;
-  libgav1::AOMContext aom_context_enc, aom_context_dec;
   const uint32_t quality_hint = GetQualityHint(std::get<1>(GetParam()));
   const AOMTuple aom_tuple = std::get<0>(GetParam());
   const uint32_t num_iters = std::get<1>(aom_tuple);
@@ -50,8 +49,6 @@ TEST_P(ResidualWriterTest, AOM) {
                                /*has_alpha=*/false, quality_hint,
                                /*use_aom_coeffs=*/true));
   // Create some data.
-  const uint32_t bw = BlockWidth[dim];
-  const uint32_t bh = BlockHeight[dim];
   const uint32_t bw_pix = BlockWidthPix(dim);
   const uint32_t bh_pix = BlockHeightPix(dim);
   const uint32_t num_elem = bw_pix * bh_pix;
@@ -63,8 +60,6 @@ TEST_P(ResidualWriterTest, AOM) {
   cb.is420_ = false;
   writer.Init();
   reader.Init();
-  EXPECT_WP2_OK(aom_context_enc.Init(bw, bh));
-  EXPECT_WP2_OK(aom_context_dec.Init(bw, bh));
   for (bool do_reset : {false, true}) {
     std::unique_ptr<WP2::SymbolWriter>
       sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
@@ -104,21 +99,19 @@ TEST_P(ResidualWriterTest, AOM) {
           if (do_reset) {
             recorder.ResetRecord(/*reset_backup=*/true);
             writer.Init();
-            aom_context_enc.Reset();
           }
           const int max_num_coeffs =
               all_zero ? 0 : WP2::kNumCoeffs[cb.tdim(channel)];
           ANSEncNoop enc_noop;
           EXPECT_WP2_OK(writer.WriteCoeffs(
               cb.x_pix(), cb.y_pix(), cb.dim(), kDctDct, /*first_is_dc=*/true,
-              max_num_coeffs, cb.is420_, coeffs, channel,  /*do_update=*/false,
-              &recorder, &enc_noop, &aom_context_enc));
+              max_num_coeffs, cb.is420_, coeffs, channel, &recorder,
+              &enc_noop));
 
           // Write the data.
           ANSEnc enc;
           if (do_reset) {
             writer.Init();
-            aom_context_enc.Reset();
           }
           // Write the headers.
           const uint32_t max_nnz = 32 * 32;
@@ -133,8 +126,7 @@ TEST_P(ResidualWriterTest, AOM) {
           // Write the coefficients.
           EXPECT_WP2_OK(writer.WriteCoeffs(
               cb.x_pix(), cb.y_pix(), cb.dim(), kDctDct, /*first_is_dc=*/true,
-              max_num_coeffs, cb.is420_, coeffs, channel, /*do_update=*/true,
-              sw.get(), &enc, &aom_context_enc));
+              max_num_coeffs, cb.is420_, coeffs, channel, sw.get(), &enc));
 
           // Read the data.
           EXPECT_WP2_OK(enc.Assemble());
@@ -154,7 +146,6 @@ TEST_P(ResidualWriterTest, AOM) {
 
           if (do_reset) {
             reader.Init();
-            aom_context_dec.Reset();
           }
           CodedBlock cb_out;
           cb_out.SetDim(block, mgr);
@@ -167,7 +158,7 @@ TEST_P(ResidualWriterTest, AOM) {
               channel, cb.x_pix(), cb.y_pix(), cb.dim(), cb.is420_,
               cb_out.GetCodingParams(channel)->tf,
               cb_out.IsFirstCoeffDC(channel), max_num_coeffs, &dec,
-              &sr, &aom_context_dec, cb_out.coeffs_[channel][tf_i],
+              &sr, cb_out.coeffs_[channel][tf_i],
               &cb_out.num_coeffs_[channel][tf_i]);
           for (uint32_t i = 0; i < num_elem; ++i) {
             EXPECT_EQ(cb.coeffs_[channel][tf_i][i],
