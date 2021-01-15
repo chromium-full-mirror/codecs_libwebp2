@@ -70,7 +70,6 @@ WP2Status SyntaxWriter::Init(ANSDictionaries* const dicts,
   } else {
     WP2_CHECK_STATUS(alpha_progress.AdvanceBy(1.));
   }
-  WP2_CHECK_STATUS(InitPass());
 
   if (kDebugPrintRate) {
     WP2_CHECK_ALLOC_OK(residual_rate_.resize(num_blocks));
@@ -129,7 +128,7 @@ WP2Status SyntaxWriter::InitPass() {
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !gparams_->maybe_use_lossy_alpha_) continue;
     WP2_CHECK_STATUS(symbols_info.SetMinMax(
-        ResidualIO::GetCluster(c, num_channels), kSymbolDC, /*min=*/0,
+        kSymbolDC, ResidualIO::GetCluster(c, num_channels), /*min=*/0,
         /*max=*/gparams_->GetMaxDCRange(c) - 1));
   }
   symbols_info.SetClusters(kSymbolDC, symbols_info.NumClusters(kSymbolDC));
@@ -174,43 +173,43 @@ WP2Status SyntaxWriter::WriteHeader(ANSEncBase* const enc) {
   }
 
   if (gparams_->explicit_segment_ids_) {
-    WP2_CHECK_STATUS(symbol_writer_.WriteHeader(num_blocks_, kSymbolSegmentId,
+    WP2_CHECK_STATUS(symbol_writer_.WriteHeader(kSymbolSegmentId, num_blocks_,
                                                 symbol_recorder_, "segment_id",
                                                 enc, dicts_));
   }
 
   if (gparams_->use_rnd_mtx_) {
     WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
-        num_blocks_, kSymbolRndMtx0, symbol_recorder_, "rnd_mtx", enc, dicts_));
+        kSymbolRndMtx0, num_blocks_, symbol_recorder_, "rnd_mtx", enc, dicts_));
     WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
-        num_blocks_, kSymbolUseRandomMatrix, symbol_recorder_, "use_rnd_mtx",
+        kSymbolUseRandomMatrix, num_blocks_, symbol_recorder_, "use_rnd_mtx",
         enc, dicts_));
   }
   WP2_CHECK_STATUS(
-      symbol_writer_.WriteHeader(num_blocks_, kSymbolSplitTransform,
+      symbol_writer_.WriteHeader(kSymbolSplitTransform, num_blocks_,
                                  symbol_recorder_, "split_tf", enc, dicts_));
   if (chroma_subsampling_ == ChromaSubsampling::kSingleBlock ||
       chroma_subsampling_ == ChromaSubsampling::kAdaptive) {
     WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
-        num_blocks_, kSymbolYuv420, symbol_recorder_, "yuv420", enc, dicts_));
+        kSymbolYuv420, num_blocks_, symbol_recorder_, "yuv420", enc, dicts_));
   }
-  WP2_CHECK_STATUS(symbol_writer_.WriteHeader(num_blocks_, kSymbolTransform,
+  WP2_CHECK_STATUS(symbol_writer_.WriteHeader(kSymbolTransform, num_blocks_,
                                               symbol_recorder_, "transform",
                                               enc, dicts_));
 
   WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
-      num_blocks_, kSymbolModeY, symbol_recorder_, "mode", enc, dicts_));
+      kSymbolModeY, num_blocks_, symbol_recorder_, "mode", enc, dicts_));
   WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
-      num_blocks_, kSymbolModeUV, symbol_recorder_, "mode", enc, dicts_));
+      kSymbolModeUV, num_blocks_, symbol_recorder_, "mode", enc, dicts_));
 
   // TODO(maryla): not necessary if the SignalingCflPredictor isn't used.
   WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
-      2 * num_blocks_, kSymbolCflSlope, symbol_recorder_, "cfl", enc, dicts_));
+      kSymbolCflSlope, 2 * num_blocks_, symbol_recorder_, "cfl", enc, dicts_));
 
   for (uint32_t i = 0; i < GetNumUniqueBounds(gparams_->partition_set_); ++i) {
-    WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
-        /*cluster=*/i, num_blocks_, kSymbolBlockSize, symbol_recorder_,
-        "block_size", enc, dicts_));
+    WP2_CHECK_STATUS(symbol_writer_.WriteHeader(kSymbolBlockSize, /*cluster=*/i,
+                                                num_blocks_, symbol_recorder_,
+                                                "block_size", enc, dicts_));
   }
 
   const uint32_t num_coeffs_max =
@@ -228,12 +227,12 @@ WP2Status SyntaxWriter::WriteHeader(ANSEncBase* const enc) {
 
     if (alpha_writer_.GetAlphaMode() == kAlphaModeLossy) {
       WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
-          num_blocks_, kSymbolBlockAlphaMode, symbol_recorder_,
+          kSymbolBlockAlphaMode, num_blocks_, symbol_recorder_,
           "block_alpha_mode", enc, dicts_));
     }
     if (alpha_writer_.GetAlphaMode() != kAlphaModeLossless) {
       WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
-          num_blocks_, kSymbolModeA, symbol_recorder_, "mode", enc, dicts_));
+          kSymbolModeA, num_blocks_, symbol_recorder_, "mode", enc, dicts_));
     }
   }
 
@@ -348,7 +347,7 @@ void SyntaxWriter::WriteHasCoeffs(const CodedBlock& cb, Channel channel,
       assert(tf_has_coeffs);
     } else {
       const uint32_t cluster = (uint32_t)channel;
-      sm->Process(cluster, kSymbolHasCoeffs, tf_has_coeffs ? 1 : 0,
+      sm->Process(kSymbolHasCoeffs, cluster, tf_has_coeffs ? 1 : 0,
                   "has_coeffs", enc);
     }
     if (tf_has_coeffs) block_has_coeffs = true;

@@ -308,11 +308,14 @@ float ANSAdaptiveSymbol::ScoreSequence(Method method, uint32_t speed,
 typedef uint32_t ANSToken;
 
 enum ANSTokenType {
-  ANSTokenTypeBit  = (1u << 29),
-  ANSTokenTypeU    = (2u << 29),
-  ANSTokenTypeR    = (3u << 29),
-  ANSTokenTypeSym  = (4u << 29),
-  ANSTokenTypeASym = (5u << 29)
+  ANSTokenTypeBit    = (1u << 29),
+  ANSTokenTypeU      = (2u << 29),
+  ANSTokenTypeR      = (3u << 29),
+  ANSTokenTypeSym    = (4u << 29),
+  ANSTokenTypeASym   = (5u << 29),
+#if defined(WP2_ENC_DEC_MATCH)
+  ANSTokenTypeDebugU = (6u << 29)
+#endif
 };
 inline ANSTokenType ANSTokenGetType(const ANSToken& t) {
   return (ANSTokenType)(t & (7u << 29));
@@ -358,6 +361,9 @@ typedef ANSTokenInfo<ANSTokenTypeASym, APROBA_BITS> ANSTokenInfoASym;
 // We need enough bits to represent the number of bits with which the symbol
 // will be represented. 5 is enough as (1 << 5) bits is enough to represent
 // the symbol.
+#if defined(WP2_ENC_DEC_MATCH)
+typedef ANSTokenInfo<ANSTokenTypeDebugU, 5> ANSTokenInfoDebugU;
+#endif
 typedef ANSTokenInfo<ANSTokenTypeU, 5> ANSTokenInfoU;
 static_assert(kANSMaxUniformBits < (1u << ANSTokenInfoU::kBitsSecond),
               "Too many bits for maximum uniform value.");
@@ -583,6 +589,12 @@ void ANSDec::Init(DataSource* const data_source) {
 
 //------------------------------------------------------------------------------
 // Bit-counters
+
+#if defined(WP2_ENC_DEC_MATCH)
+uint32_t ANSDec::ReadDebugUValue(uint32_t bits) {
+  return ReadUValueInternal(bits);
+}
+#endif
 
 #if defined(WP2_BITTRACE)
 void ANSDec::BitTrace(uint32_t value, const char* const type,
@@ -1073,6 +1085,12 @@ WP2Status ANSEnc::Assemble() {
         case (ANSTokenTypeU):
           EmitUValue(ANSTokenInfoU::First(tok), ANSTokenInfoU::Second(tok));
           break;
+#if defined(WP2_ENC_DEC_MATCH)
+        case (ANSTokenTypeDebugU):
+          EmitUValue(ANSTokenInfoDebugU::First(tok),
+                     ANSTokenInfoDebugU::Second(tok));
+          break;
+#endif
         case (ANSTokenTypeR):
           EmitRValue(ANSTokenInfoR::First(tok), ANSTokenInfoR::Second(tok));
           break;
@@ -1185,7 +1203,8 @@ WP2Status ANSNormalizeCounts(uint32_t counts[], uint32_t size, uint32_t sum) {
 //------------------------------------------------------------------------------
 // Main call, that will gather stats and code the buffer out.
 
-// Returns the cost of a token that is not a ANSTokenTypeSym.
+// Returns the cost of a token that is not a ANSTokenTypeSym. Debug tokens are
+// ignored and have no cost.
 static inline float GetTokenCost(const ANSToken& tok) {
   switch (ANSTokenGetType(tok)) {
     case ANSTokenTypeBit: {
@@ -1204,6 +1223,10 @@ static inline float GetTokenCost(const ANSToken& tok) {
       break;
     case ANSTokenTypeU:
       return ANSTokenInfoU::Second(tok);
+#if defined(WP2_ENC_DEC_MATCH)
+    case ANSTokenTypeDebugU:
+      return 0.f;
+#endif
     case ANSTokenTypeR:
       return WP2Log2(ANSTokenInfoR::Second(tok));
     default:
@@ -1303,6 +1326,12 @@ WP2Status ANSEnc::AppendTokens(const ANSEnc& enc, uint32_t start_token,
           PutUValueInternal(ANSTokenInfoU::First(tok),
                             ANSTokenInfoU::Second(tok));
           break;
+#if defined(WP2_ENC_DEC_MATCH)
+        case ANSTokenTypeDebugU:
+          PutDebugUValue(ANSTokenInfoDebugU::First(tok),
+                         ANSTokenInfoDebugU::Second(tok));
+          break;
+#endif
         case ANSTokenTypeR:
           PutRValueInternal(ANSTokenInfoR::First(tok),
                             ANSTokenInfoR::Second(tok));
@@ -1434,6 +1463,16 @@ void ANSEnc::EnqueueToken(ANSToken tok) {
 }
 
 uint32_t ANSEnc::NumTokens() const { return nb_tokens_; }
+
+// Append a debug token whose cost is not counted.
+#if defined(WP2_ENC_DEC_MATCH)
+uint32_t ANSEnc::PutDebugUValue(uint32_t value, uint32_t bits) {
+  EnqueueToken(ANSTokenInfoDebugU::Init(value, bits));
+  assert(bits <= kANSMaxUniformBits);
+  assert(value < (1u << bits));
+  return value;
+}
+#endif
 
 //------------------------------------------------------------------------------
 

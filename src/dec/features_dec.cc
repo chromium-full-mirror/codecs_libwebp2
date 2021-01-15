@@ -97,7 +97,7 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
 
   ExternalDataSource data_source(data, data_size);
   data_source.MarkNumBytesAsRead(3);  // For kSignature
-  HeaderDec dec(&data_source, "image_features");
+  HeaderDec dec(&data_source, "image_features/");
   raw_width = 1 + dec.ReadBits(kImageDimNumBits, "width_m1");
   raw_height = 1 + dec.ReadBits(kImageDimNumBits, "height_m1");
 

@@ -39,7 +39,12 @@
 #include "src/dsp/dsp.h"
 #include "src/dsp/lossless/dspl.h"
 #include "src/dsp/math.h"
-#include "src/enc/partitioner.h"
+#include "src/enc/partitioning/partition_score_func_area.h"
+#include "src/enc/partitioning/partition_score_func_block.h"
+#include "src/enc/partitioning/partition_score_func_multi.h"
+#include "src/enc/partitioning/partitioner.h"
+#include "src/enc/partitioning/partitioner_exhaustive.h"
+#include "src/enc/partitioning/partitioner_multi.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
@@ -2441,7 +2446,7 @@ WP2Status Decoder::RegisterSymbolForVDebug(
 
 static const char* const kTransformNames[] = {
     "Predictor", "CrossColor", "SubstractGreen", "ColorIndexing", "Group4"};
-STATIC_ASSERT_ARRAY_SIZE(kTransformNames, NUM_TRANSFORMS);
+STATIC_ASSERT_ARRAY_SIZE(kTransformNames, (uint32_t)TransformType::kNum);
 
 WP2Status Decoder::RegisterUnprocessedRowForVDebug(
     uint32_t num_rows, uint32_t num_bits, const int16_t* const rows,
@@ -2459,12 +2464,12 @@ WP2Status Decoder::RegisterUnprocessedRowForVDebug(
     for (uint32_t i = 0; i < next_transform_; ++i) {
       const Transform& transform = transforms_[i];
       WP2SAppend(str_ptr, "Transform #%d: %s", i,
-                 kTransformNames[transform.type_]);
-      if (transform.type_ == CROSS_COLOR_TRANSFORM ||
-          transform.type_ == PREDICTOR_TRANSFORM) {
+                 kTransformNames[(uint32_t)transform.type_]);
+      if (transform.type_ == TransformType::kCrossColor ||
+          transform.type_ == TransformType::kPredictor) {
         WP2SAppend(str_ptr, " Bits: %d", transform.bits_);
-      } else if (transform.type_ == COLOR_INDEXING_TRANSFORM ||
-                 transform.type_ == GROUP4) {
+      } else if (transform.type_ == TransformType::kColorIndexing ||
+                 transform.type_ == TransformType::kGroup4) {
         WP2SAppend(str_ptr, " Num colors: %d", num_colors_);
       }
       WP2SAppend(str_ptr, "\n");

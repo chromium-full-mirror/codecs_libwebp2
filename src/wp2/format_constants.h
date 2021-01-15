@@ -338,6 +338,39 @@ static constexpr uint32_t kRedToBlueMax = 63;
 static constexpr uint32_t kGreenToBlueMax = 128;
 static constexpr uint32_t kGreenToRedMax = 128;
 
+enum class TransformType {
+  kPredictor,
+  kCrossColor,
+  kSubtractGreen,
+  kColorIndexing,
+  kGroup4,
+  kNum
+};
+// Possible image transform combinations that can be applied.
+static constexpr TransformType kPossibleTransformCombinations[][3] = {
+    // No transform.
+    {TransformType::kNum, TransformType::kNum, TransformType::kNum},
+    // Only one.
+    {TransformType::kGroup4, TransformType::kNum, TransformType::kNum},
+    {TransformType::kSubtractGreen, TransformType::kNum, TransformType::kNum},
+    {TransformType::kColorIndexing, TransformType::kNum, TransformType::kNum},
+    {TransformType::kPredictor, TransformType::kNum, TransformType::kNum},
+    {TransformType::kCrossColor, TransformType::kNum, TransformType::kNum},
+    // Allowed pairs.
+    {TransformType::kSubtractGreen, TransformType::kPredictor,
+     TransformType::kNum},
+    {TransformType::kSubtractGreen, TransformType::kCrossColor,
+     TransformType::kNum},
+    {TransformType::kColorIndexing, TransformType::kPredictor,
+     TransformType::kNum},
+    {TransformType::kPredictor, TransformType::kCrossColor,
+     TransformType::kNum},
+    // Triplets.
+    {TransformType::kSubtractGreen, TransformType::kPredictor,
+     TransformType::kCrossColor},
+    {TransformType::kColorIndexing, TransformType::kPredictor,
+     TransformType::kCrossColor}};
+
 }  // namespace WP2L
 
 #endif  /* WP2_WP2_FORMAT_CONSTANTS_H_ */

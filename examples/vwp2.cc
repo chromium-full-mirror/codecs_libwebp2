@@ -2198,7 +2198,6 @@ void Params::DisplayForcedSegments() const {
       const Argb32b color = kSegmentColors[segment.segment_id];
       glColor4f(color.r / 255.f, color.g / 255.f, color.b / 255.f, 1.f);
       glRect(rect, thick);
-      break;
     }
   }
 #endif

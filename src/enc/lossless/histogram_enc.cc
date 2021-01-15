@@ -101,7 +101,7 @@ static void HistogramAdd(const Histogram& a, const Histogram& b,
 }
 
 bool HistogramSet::Allocate(uint32_t size,
-                            const LosslessSymbolsInfo& symbols_info) {
+                            const WP2::SymbolsInfo& symbols_info) {
   symbols_info_ = &symbols_info;
   const uint32_t cache_num = symbols_info.MaxRangeSum();
   if (!histograms_.resize(size) || !histo_buffer_.resize(size + 1) ||
@@ -214,10 +214,10 @@ int PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
 
   // Deal with all the symbols.
   for (uint32_t s = 0; s < kSymbolNum; ++s) {
-    if (a.symbols_info_->IsSymbolUseless((Symbol)s, is_used) &&
-        b.symbols_info_->IsSymbolUseless((Symbol)s, is_used)) {
+    if (a.symbols_info_->IsUnused(s) || b.symbols_info_->IsUnused(s)) {
       continue;
     }
+    if (!WP2L::IsSymbolUsed((Symbol)s, is_used)) continue;
     double tmp;
     GetCombinedEntropy(a.counts_[s], b.counts_[s], a.nonzeros_[s],
                        b.nonzeros_[s], a.trivial_symbols_[s],
@@ -281,7 +281,7 @@ void PopulationAnalyzer::UpdateHistogramCost(Histogram* const h) {
   }
   for (uint32_t s = 0; s < kSymbolNum; ++s) {
     const Symbol sym = (Symbol)s;
-    if (h->symbols_info_->IsSymbolUseless(sym, is_used)) {
+    if (h->symbols_info_->IsUnused(s) || !IsSymbolUsed(sym, is_used)) {
       h->costs_[s] = 0.;
     } else {
       PopulationCost(h->counts_[s], h->symbols_info_->GetMaxRange(sym),
@@ -317,8 +317,8 @@ WP2Status BuildHistograms(uint32_t width, uint32_t height, uint32_t histo_bits,
   Histogram** const histograms = histogram_set->histograms_.data();
   for (uint32_t i = 0; i < num_histos; ++i) {
     for (uint32_t s = 0; s < kSymbolNum; ++s) {
-      if (symbols_info_counter.Range(i, s) == 0) continue;
-      const WP2::Vector_u32& counts = recorder.GetRecordedDict(i, s).Counts();
+      if (symbols_info_counter.Range(s, i) == 0) continue;
+      const WP2::Vector_u32& counts = recorder.GetRecordedDict(s, i).Counts();
       std::copy(counts.begin(), counts.end(), histograms[i]->counts_[s]);
     }
   }
@@ -327,7 +327,7 @@ WP2Status BuildHistograms(uint32_t width, uint32_t height, uint32_t histo_bits,
 
 // Copies the histograms and computes its bit_cost.
 static WP2Status HistogramSetCopy(const HistogramSet& in,
-                                  const LosslessSymbolsInfo& symbols_info,
+                                  const WP2::SymbolsInfo& symbols_info,
                                   HistogramSet* const out) {
   uint32_t size = 0;
   for (Histogram* const histo : in.histograms_) {

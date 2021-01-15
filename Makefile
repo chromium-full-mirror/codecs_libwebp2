@@ -250,8 +250,7 @@ DSP_DEC_OBJS = \
     src/dsp/deblocking_filter_dsp.o \
     src/dsp/dec_dsp.o \
     src/dsp/intra_c.o \
-    src/dsp/quant_c.o \
-    src/dsp/quant_sse.o \
+    src/dsp/quant_dsp.o \
     src/dsp/transf_c.o \
     src/dsp/transf_sse.o \
     src/dsp/lossless/dspl.o \
@@ -284,9 +283,18 @@ ENC_OBJS = \
     src/enc/lossy_enc.o \
     src/enc/main_enc.o \
     src/enc/nearlossless_enc.o \
-    src/enc/partition_enc.o \
-    src/enc/partition_score_func.o \
-    src/enc/partitioner.o \
+    src/enc/partitioning/partition_enc.o \
+    src/enc/partitioning/partition_score_func.o \
+    src/enc/partitioning/partition_score_func_area.o \
+    src/enc/partitioning/partition_score_func_block.o \
+    src/enc/partitioning/partition_score_func_multi.o \
+    src/enc/partitioning/partition_score_func_tile.o \
+    src/enc/partitioning/partitioner.o \
+    src/enc/partitioning/partitioner_area.o \
+    src/enc/partitioning/partitioner_exhaustive.o \
+    src/enc/partitioning/partitioner_multi.o \
+    src/enc/partitioning/partitioner_split.o \
+    src/enc/partitioning/partitioner_top_left.o \
     src/enc/predictor_enc.o \
     src/enc/residuals_enc.o \
     src/enc/residuals_enc_aom.o \
@@ -473,8 +481,18 @@ HDRS = \
     src/enc/analysis.h \
     src/enc/anim/anim_enc.h \
     src/enc/lossless/losslessi_enc.h \
-    src/enc/partition_score_func.h \
-    src/enc/partitioner.h \
+    src/enc/lossless/histogram_enc.h \
+    src/enc/partitioning/partition_score_func.h \
+    src/enc/partitioning/partition_score_func_area.h \
+    src/enc/partitioning/partition_score_func_block.h \
+    src/enc/partitioning/partition_score_func_multi.h \
+    src/enc/partitioning/partition_score_func_tile.h \
+    src/enc/partitioning/partitioner.h \
+    src/enc/partitioning/partitioner_area.h \
+    src/enc/partitioning/partitioner_exhaustive.h \
+    src/enc/partitioning/partitioner_multi.h \
+    src/enc/partitioning/partitioner_split.h \
+    src/enc/partitioning/partitioner_top_left.h \
     src/enc/preview/preview_enc.h \
     src/enc/residuals_enc_aom.h \
     src/enc/screen_content/screen_enc.h \
@@ -746,9 +764,9 @@ clean: ex_clean
 	         src/utils tests man doc swig cmake src/enc/lossless \
 	         src/dec/filters src/dec/incr src/dec/lossless src/dsp/lossless \
 	         src/utils/lossless src/common/lossless src/common/lossy \
-	         src/enc/preview src/dec/preview src/common/preview \
-	         src/common/filters/ src/common src/enc/anim src/enc/screen_content \
-	         tests/include; \
+	         src/enc/preview src/enc/partitioning src/dec/preview \
+	         src/common/preview src/common/filters/ src/common \
+	         src/enc/anim src/enc/screen_content tests/include; \
 	do \
            $(RM) -f $$d/*.o $$d/*~ $$d/*.a; \
         done
@@ -924,8 +942,7 @@ DIST_FILES= \
             src/dsp/score_dsp.cc \
             src/dsp/ssim_dsp.cc \
             src/dsp/intra_c.cc  \
-            src/dsp/quant_c.cc  \
-            src/dsp/quant_sse.cc  \
+            src/dsp/quant_dsp.cc  \
             src/dsp/transf_c.cc  \
             src/dsp/transf_sse.cc  \
             src/dsp/wiener_dsp.cc \
@@ -943,11 +960,29 @@ DIST_FILES= \
             src/enc/lossy_enc.cc \
             src/enc/main_enc.cc \
             src/enc/nearlossless_enc.cc \
-            src/enc/partition_enc.cc \
-            src/enc/partition_score_func.h \
-            src/enc/partition_score_func.cc \
-            src/enc/partitioner.h \
-            src/enc/partitioner.cc \
+            src/enc/partitioning/partition_enc.cc \
+            src/enc/partitioning/partition_score_func.h \
+            src/enc/partitioning/partition_score_func.cc \
+            src/enc/partitioning/partition_score_func_area.h \
+            src/enc/partitioning/partition_score_func_area.cc \
+            src/enc/partitioning/partition_score_func_block.h \
+            src/enc/partitioning/partition_score_func_block.cc \
+            src/enc/partitioning/partition_score_func_multi.h \
+            src/enc/partitioning/partition_score_func_multi.cc \
+            src/enc/partitioning/partition_score_func_tile.h \
+            src/enc/partitioning/partition_score_func_tile.cc \
+            src/enc/partitioning/partitioner.h \
+            src/enc/partitioning/partitioner.cc \
+            src/enc/partitioning/partitioner_area.h \
+            src/enc/partitioning/partitioner_area.cc \
+            src/enc/partitioning/partitioner_exhaustive.h \
+            src/enc/partitioning/partitioner_exhaustive.cc \
+            src/enc/partitioning/partitioner_multi.h \
+            src/enc/partitioning/partitioner_multi.cc \
+            src/enc/partitioning/partitioner_split.h \
+            src/enc/partitioning/partitioner_split.cc \
+            src/enc/partitioning/partitioner_top_left.h \
+            src/enc/partitioning/partitioner_top_left.cc \
             src/enc/predictor_enc.cc \
             src/enc/syntax_enc.cc \
             src/enc/preview/preview_analysis.cc \

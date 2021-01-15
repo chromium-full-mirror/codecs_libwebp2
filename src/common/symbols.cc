@@ -32,18 +32,19 @@ namespace WP2 {
 
 const SymbolsInfo::ClusterInfo SymbolsInfo::kDefaultClusterInfo = {};
 
-bool SymbolsInfo::operator==(const SymbolsInfo& info) const {
-  if (num_symbols_ != info.num_symbols_) return false;
-  for (uint32_t sym = 0; sym < num_symbols_; ++sym) {
-    if (!(GetSymbolInfo(sym) == info.GetSymbolInfo(sym))) return false;
-    for (uint32_t cluster = 0; cluster < NumClusters(sym); ++cluster) {
-      if (!(GetClusterInfo(cluster, sym) ==
-            info.GetClusterInfo(cluster, sym))) {
-        return false;
-      }
-    }
-  }
-  return true;
+WP2Status SymbolsInfo::CopyFrom(const SymbolsInfo& other) {
+  num_symbols_ = other.num_symbols_;
+  symbols_info_ = other.symbols_info_;
+  WP2_CHECK_ALLOC_OK(cluster_info_.resize(other.cluster_info_.size()));
+  std::copy(other.cluster_info_.begin(), other.cluster_info_.end(),
+            cluster_info_.begin());
+  next_cluster_info_index_ = other.next_cluster_info_index_;
+  return WP2_STATUS_OK;
+}
+
+void SymbolsInfo::SetUnused(uint32_t sym, uint32_t num_clusters) {
+  SetInfo(sym, /*min=*/kInvalidBound, /*max=*/kInvalidBound,
+          num_clusters, StorageMethod::kUnused);
 }
 
 void SymbolsInfo::SetInfo(uint32_t sym, int32_t min, int32_t max,
@@ -86,34 +87,12 @@ bool SymbolsInfo::SymbolInfo::MinMaxIsValid(int32_t new_min,
   return true;
 }
 
-bool SymbolsInfo::SymbolInfo::operator==(
-    const SymbolsInfo::SymbolInfo& rhs) const {
-  return num_clusters == rhs.num_clusters &&
-         storage_method == rhs.storage_method && min == rhs.min &&
-         max == rhs.max;
-}
-bool SymbolsInfo::ClusterInfo::operator==(
-    const SymbolsInfo::ClusterInfo& rhs) const {
-  return (p0 == rhs.p0 && p1 == rhs.p1 && min == rhs.min && max == rhs.max &&
-          cdf == rhs.cdf);
-}
-
-WP2Status SymbolsInfo::CopyFrom(const SymbolsInfo& other) {
-  num_symbols_ = other.num_symbols_;
-  symbols_info_ = other.symbols_info_;
-  WP2_CHECK_ALLOC_OK(cluster_info_.resize(other.cluster_info_.size()));
-  std::copy(other.cluster_info_.begin(), other.cluster_info_.end(),
-            cluster_info_.begin());
-  next_cluster_info_index_ = other.next_cluster_info_index_;
-  return WP2_STATUS_OK;
-}
-
-WP2Status SymbolsInfo::SetMinMax(uint32_t cluster, uint32_t sym, int32_t min,
+WP2Status SymbolsInfo::SetMinMax(uint32_t sym, uint32_t cluster, int32_t min,
                                  int32_t max) {
   assert(sym < kSymbolNumMax);
   assert(cluster < GetSymbolInfo(sym)->num_clusters);
   assert(GetSymbolInfo(sym)->MinMaxIsValid(min, max));
-  ClusterInfo* const info = GetOrMakeClusterInfo(cluster, sym);
+  ClusterInfo* const info = GetOrMakeClusterInfo(sym, cluster);
   WP2_CHECK_ALLOC_OK(info != nullptr);
   info->min = min;
   info->max = max;
@@ -123,41 +102,89 @@ WP2Status SymbolsInfo::SetMinMax(uint32_t cluster, uint32_t sym, int32_t min,
 void SymbolsInfo::SetMinMax(uint32_t sym, int32_t min, int32_t max) {
   SymbolInfo* const info = GetSymbolInfo(sym);
   // Check Init() was called.
-  assert(info->storage_method == StorageMethod::kUnused ||
-         info->num_clusters > 0);
+  assert(IsUnused(sym) || info->num_clusters > 0);
   assert(info->MinMaxIsValid(min, max));
   info->min = min;
   info->max = max;
   for (uint32_t c = 0; c < info->num_clusters; ++c) {
     // Should not set a global range after setting per-cluster range.
-    assert(GetClusterInfo(c, sym).min == kInvalidBound &&
-           GetClusterInfo(c, sym).max == kInvalidBound);
+    assert(GetClusterInfo(sym, c).min == kInvalidBound &&
+           GetClusterInfo(sym, c).max == kInvalidBound);
   }
+}
+
+uint32_t SymbolsInfo::MaxRangeSum() const {
+  uint32_t sum = 0;
+  for (uint32_t sym = 0; sym < num_symbols_; ++sym) sum += GetMaxRange(sym);
+  return sum;
+}
+
+uint32_t SymbolsInfo::RangeSum() const {
+  uint32_t sum = 0;
+  for (uint32_t sym = 0; sym < num_symbols_; ++sym) {
+    for (uint32_t c = 0; c < NumClusters(sym); ++c) sum += Range(sym, c);
+  }
+  return sum;
+}
+
+uint32_t SymbolsInfo::GetMaxRange() const {
+  const auto iter =
+      std::max_element(symbols_info_.begin(), symbols_info_.end(),
+                       [](const SymbolInfo& lhs, const SymbolInfo& rhs) {
+                         return (lhs.max - lhs.min < rhs.max - rhs.min);
+                       });
+  return iter->max - iter->min + 1;
+}
+
+uint32_t SymbolsInfo::GetMaxRange(uint32_t sym) const {
+  uint32_t max_range = 0;
+  for (uint32_t c = 0; c < NumClusters(sym); ++c) {
+    max_range = std::max(max_range, Range(sym, c));
+  }
+  return max_range;
+}
+
+WP2Status SymbolsInfo::SetInitialCDF(
+    uint32_t sym, uint32_t cluster,
+    const uint16_t* const cdf, uint16_t max_proba) {
+  assert(IsAdaptiveMethod(sym));
+  ClusterInfo* const info = GetOrMakeClusterInfo(sym, cluster);
+  WP2_CHECK_ALLOC_OK(info != nullptr);
+  info->cdf = cdf;
+  info->max_proba = max_proba;
+  return WP2_STATUS_OK;
+}
+
+void SymbolsInfo::GetInitialCDF(
+    uint32_t sym, uint32_t cluster, const uint16_t** const cdf,
+    uint16_t* const max_proba) const {
+  assert(IsAdaptiveMethod(sym));
+  *cdf = GetClusterInfo(sym, cluster).cdf;
+  *max_proba = GetClusterInfo(sym, cluster).max_proba;
 }
 
 void SymbolsInfo::SetClusters(uint32_t sym, uint32_t num_clusters) {
   assert(sym < kSymbolNumMax);
   // Check Init() was called.
-  assert(Method(sym) == StorageMethod::kUnused ||
-         GetSymbolInfo(sym)->num_clusters > 0);
+  assert(IsUnused(sym) || GetSymbolInfo(sym)->num_clusters > 0);
   assert(num_clusters > 0);
   GetSymbolInfo(sym)->num_clusters = num_clusters;
 }
 
-WP2Status SymbolsInfo::SetStartingProba(uint32_t cluster, uint32_t sym,
+WP2Status SymbolsInfo::SetStartingProba(uint32_t sym, uint32_t cluster,
                                         uint32_t p0, uint32_t p1) {
   assert(p0 > 0);
   assert(p1 > 0);
   assert(Method(sym) == StorageMethod::kAdaptiveBit);
-  ClusterInfo* const info = GetOrMakeClusterInfo(cluster, sym);
+  ClusterInfo* const info = GetOrMakeClusterInfo(sym, cluster);
   WP2_CHECK_ALLOC_OK(info != nullptr);
   info->p0 = p0;
   info->p1 = p1;
   return WP2_STATUS_OK;
 }
 
-SymbolsInfo::ClusterInfo* SymbolsInfo::GetOrMakeClusterInfo(uint32_t cluster,
-                                                            uint32_t sym) {
+SymbolsInfo::ClusterInfo* SymbolsInfo::GetOrMakeClusterInfo(uint32_t sym,
+                                                            uint32_t cluster) {
   SymbolInfo* const info = GetSymbolInfo(sym);
   assert(cluster < info->num_clusters);
   if (info->cluster_info_index == SymbolInfo::kNoPerClusterInfo) {
@@ -171,7 +198,7 @@ SymbolsInfo::ClusterInfo* SymbolsInfo::GetOrMakeClusterInfo(uint32_t cluster,
 }
 
 const SymbolsInfo::ClusterInfo& SymbolsInfo::GetClusterInfo(
-    uint32_t cluster, uint32_t sym) const {
+    uint32_t sym, uint32_t cluster) const {
   assert(cluster < NumClusters(sym));
   const SymbolInfo& info = GetSymbolInfo(sym);
   if (info.cluster_info_index == SymbolInfo::kNoPerClusterInfo) {
@@ -240,12 +267,8 @@ WP2Status SymbolsInfo::InitLossy(uint32_t num_segments,
             /*max=*/(int)EncodingMethod::kNumMethod - 1, /*num_clusters=*/1,
             StorageMethod::kAdaptiveWithAutoSpeed);
   } else {
-    SetInfo(kSymbolModeA, /*min=*/SymbolsInfo::kInvalidBound,
-            /*max=*/SymbolsInfo::kInvalidBound, /*num_clusters=*/1,
-            StorageMethod::kUnused);
-    SetInfo(kSymbolEncodingMethodA, /*min=*/SymbolsInfo::kInvalidBound,
-            /*max=*/SymbolsInfo::kInvalidBound, /*num_clusters=*/1,
-            StorageMethod::kUnused);
+    SetUnused(kSymbolModeA, /*num_clusters=*/1);
+    SetUnused(kSymbolEncodingMethodA, /*num_clusters=*/1);
   }
   SetInfo(kSymbolEncodingMethod, /*min=*/0,
           /*max=*/(int32_t)EncodingMethod::kNumMethod - 1,
@@ -261,7 +284,7 @@ WP2Status SymbolsInfo::InitLossy(uint32_t num_segments,
     const BlockSize bounds = GetUniqueBounds(partition_set, i);
     const uint32_t num_sizes = GetNumBlockSizes(partition_set, bounds);
     assert(num_sizes <= max_num_sizes);
-    WP2_CHECK_STATUS(SetMinMax(/*cluster=*/i, kSymbolBlockSize,
+    WP2_CHECK_STATUS(SetMinMax(kSymbolBlockSize, /*cluster=*/i,
                                /*min=*/0, /*max=*/num_sizes - 1));
   }
 
@@ -361,11 +384,7 @@ void InitGroup4(uint32_t width, uint32_t num_colors,
 }
 
 LosslessSymbolsInfo::LosslessSymbolsInfo() : sample_format_(WP2_FORMAT_NUM) {
-  for (uint32_t i = 0; i < kSymbolNum; ++i) {
-    SetInfo(i, /*min=*/SymbolsInfo::kInvalidBound,
-            /*max=*/SymbolsInfo::kInvalidBound, /*num_clusters=*/1,
-            StorageMethod::kAuto);
-  }
+  for (uint32_t i = 0; i < kSymbolNum; ++i) SetUnused(i);
 }
 
 void LosslessSymbolsInfo::Init(bool has_alpha, WP2SampleFormat sample_format,
@@ -374,8 +393,12 @@ void LosslessSymbolsInfo::Init(bool has_alpha, WP2SampleFormat sample_format,
   constexpr StorageMethod storage_method = StorageMethod::kAuto;
   SetInfo(kSymbolType, /*min=*/0, /*max=*/kSymbolTypeNum - 1, num_clusters,
           storage_method);
-  SetInfo(kSymbolA, /*min=*/0, /*max=*/WP2::FormatMax(sample_format, 0),
-          num_clusters, storage_method);
+  if (has_alpha) {
+    SetInfo(kSymbolA, /*min=*/0, /*max=*/WP2::FormatMax(sample_format, 0),
+            num_clusters, storage_method);
+  } else {
+    SetUnused(kSymbolA);
+  }
   SetInfo(kSymbolR, /*min=*/0, /*max=*/WP2::FormatMax(sample_format, 1),
           num_clusters, storage_method);
   SetInfo(kSymbolG, /*min=*/0, /*max=*/WP2::FormatMax(sample_format, 2),
@@ -394,11 +417,6 @@ void LosslessSymbolsInfo::Init(bool has_alpha, WP2SampleFormat sample_format,
           storage_method);
 
   SetCacheRange(0);
-  if (!has_alpha) {
-    SetInfo(kSymbolA, /*min=*/SymbolsInfo::kInvalidBound,
-            /*max=*/SymbolsInfo::kInvalidBound, /*num_clusters=*/0,
-            StorageMethod::kUnused);
-  }
 }
 
 WP2Status LosslessSymbolsInfo::CopyFrom(const LosslessSymbolsInfo& other) {
@@ -417,9 +435,7 @@ void LosslessSymbolsInfo::SetCacheRange(uint32_t cache_range) {
     // Do not consider kSymbolTypeCacheIdx if the cache is unused.
     SetInfo(kSymbolType, /*min=*/0, /*max=*/kSymbolTypeNum - 2, num_clusters,
             StorageMethod::kAuto);
-    SetInfo(kSymbolCache, /*min=*/SymbolsInfo::kInvalidBound,
-            /*max=*/SymbolsInfo::kInvalidBound, /*num_clusters=*/0,
-            StorageMethod::kUnused);
+    SetUnused(kSymbolCache);
   } else {
     SetInfo(kSymbolType, /*min=*/0, /*max=*/kSymbolTypeNum - 1, num_clusters,
             StorageMethod::kAuto);
@@ -429,59 +445,48 @@ void LosslessSymbolsInfo::SetCacheRange(uint32_t cache_range) {
 }
 
 void LosslessSymbolsInfo::SetAsLabelImage() {
-  SetInfo(kSymbolA, /*min=*/SymbolsInfo::kInvalidBound,
-          /*max=*/SymbolsInfo::kInvalidBound, /*num_clusters=*/0,
-          StorageMethod::kUnused);
-  SetInfo(kSymbolR, /*min=*/SymbolsInfo::kInvalidBound,
-          /*max=*/SymbolsInfo::kInvalidBound, /*num_clusters=*/0,
-          StorageMethod::kUnused);
-  SetInfo(kSymbolB, /*min=*/SymbolsInfo::kInvalidBound,
-          /*max=*/SymbolsInfo::kInvalidBound, /*num_clusters=*/0,
-          StorageMethod::kUnused);
+  SetUnused(kSymbolA);
+  SetUnused(kSymbolR);
+  SetUnused(kSymbolB);
 }
 
 void LosslessSymbolsInfo::SetAsCrossColorImage() {
-  SetInfo(kSymbolA, /*min=*/SymbolsInfo::kInvalidBound,
-          /*max=*/SymbolsInfo::kInvalidBound, /*num_clusters=*/0,
-          StorageMethod::kUnused);
+  SetUnused(kSymbolA);
   SetMinMax(kSymbolR, /*min=*/-(int32_t)kRedToBlueMax, /*max=*/kRedToBlueMax);
   SetMinMax(kSymbolG, /*min=*/-(int32_t)kGreenToBlueMax,
             /*max=*/kGreenToBlueMax);
   SetMinMax(kSymbolB, /*min=*/-(int32_t)kGreenToRedMax, /*max=*/kGreenToRedMax);
 }
 
-bool LosslessSymbolsInfo::IsSymbolUseless(
-    const Symbol sym, const bool is_maybe_used[kSymbolTypeNum]) const {
-  if (Method(sym) == StorageMethod::kUnused) return true;
+bool IsSymbolUsed(const Symbol sym, const bool is_maybe_used[kSymbolTypeNum]) {
   switch (sym) {
     case kSymbolType:
       // We always have symbols so the type is always useful.
-      return false;
+      return true;
     case kSymbolA:
     case kSymbolR:
     case kSymbolG:
     case kSymbolB:
-      return !is_maybe_used[kSymbolTypeLiteral];
+      return is_maybe_used[kSymbolTypeLiteral];
     case kSymbolCache:
-      return !is_maybe_used[kSymbolTypeCacheIdx];
+      return is_maybe_used[kSymbolTypeCacheIdx];
     case kSymbolDist:
     case kSymbolLen:
-      return !is_maybe_used[kSymbolTypeCopy];
+      return is_maybe_used[kSymbolTypeCopy];
     default:
       assert(false);
-      return false;
+      return true;
   }
 }
 
 bool LosslessSymbolsInfo::HasAlpha(const SymbolsInfo& info) {
-  return (info.Method(kSymbolA) != StorageMethod::kUnused);
+  return !info.IsUnused(kSymbolA);
 }
 
 bool LosslessSymbolsInfo::IsLabelImage(const SymbolsInfo& info) {
-  const bool is_label_image = (info.Method(kSymbolR) == StorageMethod::kUnused);
+  const bool is_label_image = info.IsUnused(kSymbolR);
   if (is_label_image) {
-    assert(info.Method(kSymbolA) == StorageMethod::kUnused &&
-           info.Method(kSymbolB) == StorageMethod::kUnused);
+    assert(info.IsUnused(kSymbolA) && info.IsUnused(kSymbolB));
   }
   return is_label_image;
 }

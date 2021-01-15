@@ -79,7 +79,12 @@ class SymbolsInfo {
                       bool has_alpha, uint32_t quality_hint,
                       bool use_aom_coeffs);
 
-  bool operator==(const SymbolsInfo& info) const;  // only for tests
+  // Whether a symbol is used at all.
+  inline bool IsUnused(uint32_t sym) const {
+    return (Method(sym) == StorageMethod::kUnused);
+  }
+  // Invalidate the use of a given symbol.
+  void SetUnused(uint32_t sym, uint32_t num_clusters = 0);
 
   void SetInfo(uint32_t sym, int32_t min, int32_t max, uint32_t num_clusters,
                StorageMethod method, bool probably_geometric = false);
@@ -92,45 +97,33 @@ class SymbolsInfo {
   void SetMinMax(uint32_t sym, int32_t min, int32_t max);
   // Sets symbol range for a specific cluster. Overrides any value previously
   // set through SetMinMax(sym,min,max) for that cluster.
-  WP2Status SetMinMax(uint32_t cluster, uint32_t sym, int32_t min, int32_t max);
+  WP2Status SetMinMax(uint32_t sym, uint32_t cluster, int32_t min, int32_t max);
 
   void SetClusters(uint32_t sym, uint32_t num_clusters);
 
-  WP2Status SetStartingProba(uint32_t cluster, uint32_t sym,
-                             uint32_t p0, uint32_t p1);
+  WP2Status SetStartingProba(uint32_t sym, uint32_t cluster, uint32_t p0,
+                             uint32_t p1);
 
-  uint32_t StartingProbaP0(uint32_t cluster, uint32_t sym) const {
+  uint32_t StartingProbaP0(uint32_t sym, uint32_t cluster) const {
     assert(Method(sym) == StorageMethod::kAdaptiveBit &&
-           Range(cluster, sym) == 2);
-    return GetClusterInfo(cluster, sym).p0;
+        Range(sym, cluster) == 2);
+    return GetClusterInfo(sym, cluster).p0;
   }
 
-  uint32_t StartingProbaP1(uint32_t cluster, uint32_t sym) const {
+  uint32_t StartingProbaP1(uint32_t sym, uint32_t cluster) const {
     assert(Method(sym) == StorageMethod::kAdaptiveBit &&
-           Range(cluster, sym) == 2);
-    return GetClusterInfo(cluster, sym).p1;
+        Range(sym, cluster) == 2);
+    return GetClusterInfo(sym, cluster).p1;
   }
 
-  WP2Status SetInitialCDF(const uint16_t* const cdf, uint16_t max_proba,
-                          uint32_t cluster, uint32_t sym) {
-    assert(IsAdaptiveMethod(sym));
-    ClusterInfo* const info = GetOrMakeClusterInfo(cluster, sym);
-    WP2_CHECK_ALLOC_OK(info != nullptr);
-    info->cdf = cdf;
-    info->max_proba = max_proba;
-    return WP2_STATUS_OK;
-  }
-
-  void InitialCDF(uint32_t cluster, uint32_t sym, const uint16_t** const cdf,
-                  uint16_t* const max_proba) const {
-    assert(IsAdaptiveMethod(sym));
-    *cdf = GetClusterInfo(cluster, sym).cdf;
-    *max_proba = GetClusterInfo(cluster, sym).max_proba;
-  }
+  void GetInitialCDF(uint32_t sym, uint32_t cluster, const uint16_t** const cdf,
+                  uint16_t* const max_proba) const;
+  WP2Status SetInitialCDF(uint32_t sym, uint32_t cluster,
+                          const uint16_t* const cdf, uint16_t max_proba);
 
   // Range of the symbol of bounds [min,max]: max-min+1.
-  inline uint32_t Range(uint32_t cluster, uint32_t sym) const {
-    const ClusterInfo& info_cluster = GetClusterInfo(cluster, sym);
+  inline uint32_t Range(uint32_t sym, uint32_t cluster) const {
+    const ClusterInfo& info_cluster = GetClusterInfo(sym, cluster);
     if (info_cluster.min != kInvalidBound &&
         info_cluster.max != kInvalidBound) {
       return info_cluster.max - info_cluster.min + 1;
@@ -142,8 +135,8 @@ class SymbolsInfo {
     return 0u;
   }
 
-  inline int32_t Min(uint32_t cluster, uint32_t sym) const {
-    const ClusterInfo& info_cluster = GetClusterInfo(cluster, sym);
+  inline int32_t Min(uint32_t sym, uint32_t cluster) const {
+    const ClusterInfo& info_cluster = GetClusterInfo(sym, cluster);
     if (info_cluster.min != kInvalidBound &&
         info_cluster.max != kInvalidBound) {
       return info_cluster.min;
@@ -151,8 +144,8 @@ class SymbolsInfo {
     return GetSymbolInfo(sym).min;
   }
 
-  inline int32_t Max(uint32_t cluster, uint32_t sym) const {
-    const ClusterInfo& info_cluster = GetClusterInfo(cluster, sym);
+  inline int32_t Max(uint32_t sym, uint32_t cluster) const {
+    const ClusterInfo& info_cluster = GetClusterInfo(sym, cluster);
     if (info_cluster.min != kInvalidBound &&
         info_cluster.max != kInvalidBound) {
       return info_cluster.max;
@@ -160,11 +153,11 @@ class SymbolsInfo {
     return GetSymbolInfo(sym).max;
   }
 
-  inline StorageMethod Method(const uint32_t sym) const {
+  inline StorageMethod Method(uint32_t sym) const {
     return GetSymbolInfo(sym).storage_method;
   }
 
-  inline bool IsAdaptiveMethod(const uint32_t sym) const {
+  inline bool IsAdaptiveMethod(uint32_t sym) const {
     const StorageMethod method = Method(sym);
     return (method == StorageMethod::kAdaptiveSym ||
             method == StorageMethod::kAdaptiveWithAutoSpeed);
@@ -184,44 +177,18 @@ class SymbolsInfo {
   // Gets the sum of the max ranges of all the symbols.
   // TODO(maryla): not sure this is needed, it seems it's usually called for
   // symbols that have 1 cluster, in which case it's equivalent to RangeSum().
-  uint32_t MaxRangeSum() const {
-    uint32_t sum = 0;
-    for (uint32_t sym = 0; sym < num_symbols_; ++sym) {
-      sum += GetMaxRange(sym);
-    }
-    return sum;
-  }
+  uint32_t MaxRangeSum() const;
   // Gets the sum of the ranges of all the symbols/clusters.
-  uint32_t RangeSum() const {
-    uint32_t sum = 0;
-    for (uint32_t sym = 0; sym < num_symbols_; ++sym) {
-      for (uint32_t c = 0; c < NumClusters(sym); ++c) {
-        sum += Range(c, sym);
-      }
-    }
-    return sum;
-  }
+  uint32_t RangeSum() const;
   // Gets the maximum range among all the symbols and clusters.
-  uint32_t GetMaxRange() const {
-    const auto iter =
-        std::max_element(symbols_info_.begin(), symbols_info_.end(),
-                         [](const SymbolInfo& lhs, const SymbolInfo& rhs) {
-                           return (lhs.max - lhs.min < rhs.max - rhs.min);
-                         });
-    return iter->max - iter->min + 1;
-  }
+  uint32_t GetMaxRange() const;
   // Gets the maximum range for a given symbol among all clusters.
-  uint32_t GetMaxRange(uint32_t sym) const {
-    uint32_t max_range = 0;
-    for (uint32_t c = 0; c < NumClusters(sym); ++c) {
-      max_range = std::max(max_range, Range(c, sym));
-    }
-    return max_range;
-  }
+  uint32_t GetMaxRange(uint32_t sym) const;
 
+  // maximum number of symbols potentially used
   uint32_t Size() const { return num_symbols_; }
 
- private:
+ protected:
   struct ClusterInfo {
     // Overrides SymbolInfo.min if min <= max.
     int min = kInvalidBound;
@@ -232,9 +199,6 @@ class SymbolsInfo {
     const uint16_t* cdf = nullptr;
     // Max proba in the CDF.
     uint16_t max_proba;
-
-    // not a real comparison operator, just used for tests
-    bool operator==(const ClusterInfo& rhs) const;
   };
 
   struct SymbolInfo {
@@ -250,9 +214,6 @@ class SymbolsInfo {
     static constexpr int kNoPerClusterInfo = -1;
 
     bool MinMaxIsValid(int new_min, int new_max) const;
-
-    // not a real comparison operator, just used for tests
-    bool operator==(const SymbolInfo& rhs) const;
   };
 
   inline SymbolInfo* GetSymbolInfo(uint32_t sym) {
@@ -267,12 +228,13 @@ class SymbolsInfo {
 
   // Returns the ClusterInfo for the given cluster/sym, initializing the
   // per-cluster info storage if needed.
-  ClusterInfo* GetOrMakeClusterInfo(uint32_t cluster, uint32_t sym);
+  ClusterInfo* GetOrMakeClusterInfo(uint32_t sym, uint32_t cluster);
 
-  const ClusterInfo& GetClusterInfo(uint32_t cluster, uint32_t sym) const;
+  const ClusterInfo& GetClusterInfo(uint32_t sym, uint32_t cluster) const;
 
   static const ClusterInfo kDefaultClusterInfo;
 
+ protected:
   uint32_t num_symbols_ = 0;
   std::array<SymbolInfo, kSymbolNumMax> symbols_info_;
 
@@ -384,7 +346,7 @@ class SymbolIO {
         all_stats_[ind].use_mapping = false;
         all_stats_[ind].range = 0;
         all_stats_[ind].mappings = mapping_buffer;
-        mapping_buffer += symbols_info_.Range(c, sym);
+        mapping_buffer += symbols_info_.Range(sym, c);
         ++ind;
       }
     }
@@ -392,7 +354,7 @@ class SymbolIO {
   }
   // Fills the array 'is_maybe_used' with true when the symbol might be used,
   // false if we are sure it is not used.
-  virtual void GetPotentialUsage(uint32_t cluster, uint32_t sym,
+  virtual void GetPotentialUsage(uint32_t sym, uint32_t cluster,
                                  bool is_maybe_used[], uint32_t size) const = 0;
 
  protected:
@@ -443,12 +405,12 @@ class SymbolIO {
     EXTRA extra;
   };
   // Gets the statistics for symbol 'sym' in cluster 'cluster'.
-  inline Stat* GetStats(uint32_t cluster, uint32_t sym) {
+  inline Stat* GetStats(uint32_t sym, uint32_t cluster) {
     assert(sym < symbols_info_.Size() &&
            cluster < symbols_info_.NumClusters(sym));
     return &stats_start_[sym][cluster];
   }
-  inline const Stat* GetStats(uint32_t cluster, uint32_t sym) const {
+  inline const Stat* GetStats(uint32_t sym, uint32_t cluster) const {
     assert(sym < symbols_info_.Size() &&
            cluster < symbols_info_.NumClusters(sym));
     return &stats_start_[sym][cluster];
@@ -456,19 +418,19 @@ class SymbolIO {
 
   // Helper function to set the stats of symbol 'sym' at 'cluster' to be proper
   // Golomb.
-  void SetGolombStat(uint32_t cluster, uint32_t sym, uint32_t prefix_size) {
-    Stat* const stat = GetStats(cluster, sym);
+  void SetGolombStat(uint32_t sym, uint32_t cluster, uint32_t prefix_size) {
+    Stat* const stat = GetStats(sym, cluster);
     stat->type = Stat::Type::kGolomb;
-    stat->range = symbols_info_.Range(cluster, sym);
+    stat->range = symbols_info_.Range(sym, cluster);
     const Golomb g = Golomb(stat->range - 1, prefix_size);
     stat->param.golomb.range = g.prefix + 1;
     stat->param.golomb.prefix_size = prefix_size;
   }
 
   // Sets up the given symbol as an adaptive bit.
-  WP2Status AddAdaptiveBit(uint32_t cluster, uint32_t sym,
+  WP2Status AddAdaptiveBit(uint32_t sym, uint32_t cluster,
                            uint32_t p0 = 1, uint32_t p1 = 1) {
-    Stat* const stat = GetStats(cluster, sym);
+    Stat* const stat = GetStats(sym, cluster);
     stat->type = Stat::Type::kAdaptiveBit;
     stat->use_mapping = false;
     stat->range = 2;
@@ -478,19 +440,19 @@ class SymbolIO {
   }
 
   // Sets up the given symbol as an adaptive symbol.
-  WP2Status AddAdaptiveSymbol(uint32_t cluster, uint32_t sym,
+  WP2Status AddAdaptiveSymbol(uint32_t sym, uint32_t cluster,
                               ANSAdaptiveSymbol::Method method,
                               uint32_t speed) {
-    Stat* const stat = GetStats(cluster, sym);
+    Stat* const stat = GetStats(sym, cluster);
     stat->type = Stat::Type::kAdaptiveSymbol;
     stat->use_mapping = false;
-    const uint32_t range = symbols_info_.Range(cluster, sym);
+    const uint32_t range = symbols_info_.Range(sym, cluster);
     stat->range = range;
     stat->param.a_symbol_index = a_symbols_.size();
     WP2_CHECK_ALLOC_OK(a_symbols_.Add(range));
     const uint16_t* cdf;
     uint16_t max_proba;
-    symbols_info_.InitialCDF(cluster, sym, &cdf, &max_proba);
+    symbols_info_.GetInitialCDF(sym, cluster, &cdf, &max_proba);
     auto& asym = a_symbols_[stat->param.a_symbol_index];
     if (cdf == nullptr) {
       // If no CDF has been set, assume a uniform distribution.
@@ -695,12 +657,16 @@ enum SymbolType {
   kSymbolTypeNum
 };
 
+// Returns whether a symbol will be potentially used, depending on type.
+bool IsSymbolUsed(const Symbol sym, const bool is_maybe_used[kSymbolTypeNum]);
+
 // Class containing info about the size (in bits) of the different symbols
 // (colors, cache index and LZ77 distance/length).
 class LosslessSymbolsInfo : public WP2::SymbolsInfo {
  public:
   LosslessSymbolsInfo();
-  void Init(bool has_alpha, WP2SampleFormat format, uint32_t num_clusters = 1);
+  void Init(bool has_alpha = false, WP2SampleFormat format = WP2_Argb_32,
+            uint32_t num_clusters = 1);
 
   virtual ~LosslessSymbolsInfo() = default;
 
@@ -721,10 +687,7 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
   //               clean-up.
   uint32_t ChannelBits() const { return 8; }
   WP2SampleFormat SampleFormat() const { return sample_format_; }
-  // Returns whether a symbol is useless to encode given the counts of its type.
-  // E.g., if there is no literal, the A,R,G,B symbols are useless.
-  bool IsSymbolUseless(const Symbol sym,
-                       const bool is_maybe_used[kSymbolTypeNum]) const;
+
   // Returns whether alpha is used and whether it is a label image (ARB unused).
   static bool HasAlpha(const SymbolsInfo& info);
   static bool IsLabelImage(const SymbolsInfo& info);

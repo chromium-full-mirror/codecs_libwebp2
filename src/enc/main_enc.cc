@@ -24,7 +24,7 @@
 #include "src/common/constants.h"
 #include "src/common/header_enc_dec.h"
 #include "src/dec/tile_dec.h"
-#include "src/enc/partitioner.h"
+#include "src/enc/partitioning/partitioner.h"
 #include "src/enc/preview/preview_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/ans.h"
@@ -265,7 +265,7 @@ WP2Status EncodeHeader(const EncoderConfig& config,
 
   {
     uint8_t header[kHeaderMaxSize];
-    HeaderEnc henc(header, sizeof(header), "image_features");
+    HeaderEnc henc(header, sizeof(header), "image_features/");
 
     // signature
     henc.PutBits(kSignature, 24, "signature");

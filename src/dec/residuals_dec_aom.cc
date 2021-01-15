@@ -33,13 +33,13 @@ namespace libgav1 {
 
 template <bool is_dc_coefficient>
 void AOMResidualReader::ReadSignAndApplyDequantization(
-    int adjusted_tx_width_log2, uint16_t dc_sign_cluster,
-    int16_t* const coeffs, int* const coefficient_level) {
+    int adjusted_tx_width_log2, uint16_t dc_sign_cluster, int16_t* const coeffs,
+    int* const coefficient_level) {
   int32_t coeff = *coeffs;
   if (coeff == 0) return;
-  const bool sign = is_dc_coefficient ?
-      sr_->Read(dc_sign_cluster, kAOMDCSign, "is_negative_dc") :
-      dec_->ReadBool("is_negative");
+  const bool sign = is_dc_coefficient ? sr_->Read(kAOMDCSign, dc_sign_cluster,
+                                                  "is_negative_dc")
+                                      : dec_->ReadBool("is_negative");
   if (coeff >= kQuantizerCoefficientBaseRangeContextClamp) {
     constexpr int16_t max_range = is_dc_coefficient ? kMaxDcValue
                                                     : kMaxCoeffValue;
@@ -56,9 +56,10 @@ int AOMResidualReader::ReadCoeffBaseRange(int clamped_tx_size_context,
   int level = 0;
   for (int j = 0; j < kCoeffBaseRangeMaxIterations; ++j) {
     const int coeff_base_range =
-        sr_->Read(GetClusterAOM3<kAOMCoeffBaseRange>(clamped_tx_size_context,
-                                plane_type, cdf_context),
-                  kAOMCoeffBaseRange, "coeff_base_range");
+        sr_->Read(kAOMCoeffBaseRange,
+                  GetClusterAOM3<kAOMCoeffBaseRange>(clamped_tx_size_context,
+                                                     plane_type, cdf_context),
+                  "coeff_base_range");
     level += coeff_base_range;
     if (coeff_base_range < (kCoeffBaseRangeSymbolCount - 1)) break;
   }
@@ -94,41 +95,49 @@ int AOMResidualReader::ReadEOB(int max_num_coeffs,
   int eob_pt;
   switch (eob_multi_size) {
     case 0:
-      eob_pt = sr_->Read(GetClusterAOM2<kAOMEOBPT4>(plane_type, context),
-                         kAOMEOBPT4, "eob_pt");
+      eob_pt =
+          sr_->Read(kAOMEOBPT4, GetClusterAOM2<kAOMEOBPT4>(plane_type, context),
+                    "eob_pt");
       break;
     case 1:
-      eob_pt = sr_->Read(GetClusterAOM2<kAOMEOBPT8>(plane_type, context),
-                         kAOMEOBPT8, "eob_pt");
+      eob_pt =
+          sr_->Read(kAOMEOBPT8, GetClusterAOM2<kAOMEOBPT8>(plane_type, context),
+                    "eob_pt");
       break;
     case 2:
-      eob_pt = sr_->Read(GetClusterAOM2<kAOMEOBPT16>(plane_type, context),
-                         kAOMEOBPT16, "eob_pt");
+      eob_pt = sr_->Read(kAOMEOBPT16,
+                         GetClusterAOM2<kAOMEOBPT16>(plane_type, context),
+                         "eob_pt");
       break;
     case 3:
-      eob_pt = sr_->Read(GetClusterAOM2<kAOMEOBPT32>(plane_type, context),
-                         kAOMEOBPT32, "eob_pt");
+      eob_pt = sr_->Read(kAOMEOBPT32,
+                         GetClusterAOM2<kAOMEOBPT32>(plane_type, context),
+                         "eob_pt");
       break;
     case 4:
-      eob_pt = sr_->Read(GetClusterAOM2<kAOMEOBPT64>(plane_type, context),
-                         kAOMEOBPT64, "eob_pt");
+      eob_pt = sr_->Read(kAOMEOBPT64,
+                         GetClusterAOM2<kAOMEOBPT64>(plane_type, context),
+                         "eob_pt");
       break;
     case 5:
-      eob_pt = sr_->Read(GetClusterAOM2<kAOMEOBPT128>(plane_type, context),
-                         kAOMEOBPT128, "eob_pt");
+      eob_pt = sr_->Read(kAOMEOBPT128,
+                         GetClusterAOM2<kAOMEOBPT128>(plane_type, context),
+                         "eob_pt");
       break;
     case 6:
-      eob_pt = sr_->Read(GetClusterAOM2<kAOMEOBPT256>(plane_type, context),
-                         kAOMEOBPT256, "eob_pt");
+      eob_pt = sr_->Read(kAOMEOBPT256,
+                         GetClusterAOM2<kAOMEOBPT256>(plane_type, context),
+                         "eob_pt");
       break;
     case 7:
-      eob_pt = sr_->Read(GetClusterAOM1<kAOMEOBPT512>(plane_type),
-                         kAOMEOBPT512, "eob_pt");
+      eob_pt = sr_->Read(kAOMEOBPT512, GetClusterAOM1<kAOMEOBPT512>(plane_type),
+                         "eob_pt");
       break;
     case 8:
     default:
-      eob_pt = sr_->Read(GetClusterAOM1<kAOMEOBPT1024>(plane_type),
-                         kAOMEOBPT1024, "eob_pt");
+      eob_pt =
+          sr_->Read(kAOMEOBPT1024, GetClusterAOM1<kAOMEOBPT1024>(plane_type),
+                    "eob_pt");
       break;
   }
 
@@ -137,10 +146,11 @@ int AOMResidualReader::ReadEOB(int max_num_coeffs,
     eob += 1 << (eob_pt - 1);  // leading bit
     if (eob_pt >= 2) {
       eob_pt -= 2;
-      const uint32_t bit2 = (1 << eob_pt);   // 2nd-leading bit
+      const uint32_t bit2 = (1 << eob_pt);  // 2nd-leading bit
       const bool eob_extra = sr_->Read(
+          kAOMEOBExtra,
           GetClusterAOM3<kAOMEOBExtra>(tx_size_context, plane_type, eob_pt),
-          kAOMEOBExtra, "eob_extra");
+          "eob_extra");
       if (eob_extra) eob += bit2;
       // remaining extra bits
       if (bit2 > 1) eob += dec_->ReadRange(0, bit2 - 1, "eob_more");
@@ -193,7 +203,7 @@ uint32_t AOMResidualReader::ReadTransformCoefficients(
     const uint16_t pos = scan[eob - 1];
     const uint32_t cluster =
         GetClusterAOM3<kAOMCoeffBaseEOB>(tx_size_context, plane_type, context);
-    int level = 1 + sr_->Read(cluster, kAOMCoeffBaseEOB, "level");
+    int level = 1 + sr_->Read(kAOMCoeffBaseEOB, cluster, "level");
     if (level > kNumQuantizerBaseLevels) {
       level += ReadCoeffBaseRange(
           clamped_tx_size_context,
@@ -218,7 +228,7 @@ uint32_t AOMResidualReader::ReadTransformCoefficients(
                                           adjusted_tx_width_log2, pos);
     const uint32_t cluster =
         GetClusterAOM3<kAOMCoeffBase>(tx_size_context, plane_type, context);
-    int level = sr_->Read(cluster, kAOMCoeffBase, "level");
+    int level = sr_->Read(kAOMCoeffBase, cluster, "level");
     if (level > kNumQuantizerBaseLevels) {
       const uint32_t cdf_context = get_coeff_base_range_context_func(
           quantized2, adjusted_tx_width_log2, pos);

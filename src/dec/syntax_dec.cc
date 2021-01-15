@@ -59,7 +59,7 @@ WP2Status SyntaxReader::ReadHeader(const BitstreamFeatures& features,
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !gparams_->maybe_use_lossy_alpha_) continue;
     WP2_CHECK_STATUS(symbols_info_.SetMinMax(
-        ResidualIO::GetCluster(c, num_channels), kSymbolDC, /*min=*/0,
+        kSymbolDC, ResidualIO::GetCluster(c, num_channels), /*min=*/0,
         /*max=*/gparams_->GetMaxDCRange(c) - 1));
   }
   symbols_info_.SetClusters(kSymbolDC, symbols_info_.NumClusters(kSymbolDC));
@@ -90,32 +90,32 @@ WP2Status SyntaxReader::LoadDictionaries() {
   const uint32_t max_num_blocks = SizeBlocks(width_) * SizeBlocks(height_);
   if (gparams_->explicit_segment_ids_) {
     WP2_CHECK_STATUS(
-        sr_.ReadHeader(num_blocks_, kSymbolSegmentId, "segment_id"));
+        sr_.ReadHeader(kSymbolSegmentId, num_blocks_, "segment_id"));
   }
   if (gparams_->use_rnd_mtx_) {
-    WP2_CHECK_STATUS(sr_.ReadHeader(num_blocks_, kSymbolRndMtx0, "rnd_mtx"));
+    WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolRndMtx0, num_blocks_, "rnd_mtx"));
     WP2_CHECK_STATUS(
-        sr_.ReadHeader(num_blocks_, kSymbolUseRandomMatrix, "use_rnd_mtx"));
+        sr_.ReadHeader(kSymbolUseRandomMatrix, num_blocks_, "use_rnd_mtx"));
   }
   WP2_CHECK_STATUS(
-      sr_.ReadHeader(num_blocks_, kSymbolSplitTransform, "split_tf"));
+      sr_.ReadHeader(kSymbolSplitTransform, num_blocks_, "split_tf"));
   if (chroma_subsampling_ == ChromaSubsampling::kSingleBlock ||
       chroma_subsampling_ == ChromaSubsampling::kAdaptive) {
-    WP2_CHECK_STATUS(sr_.ReadHeader(num_blocks_, kSymbolYuv420, "yuv420"));
+    WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolYuv420, num_blocks_, "yuv420"));
   }
-  WP2_CHECK_STATUS(sr_.ReadHeader(num_blocks_, kSymbolTransform, "transform"));
+  WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolTransform, num_blocks_, "transform"));
   sr_.SetRange(kSymbolModeY, /*min=*/0,
                /*max=*/gparams_->y_preds_.GetMaxMode());
-  WP2_CHECK_STATUS(sr_.ReadHeader(num_blocks_, kSymbolModeY, "mode"));
+  WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolModeY, num_blocks_, "mode"));
   sr_.SetRange(kSymbolModeUV, /*min=*/0,
                /*max=*/gparams_->uv_preds_.GetMaxMode());
-  WP2_CHECK_STATUS(sr_.ReadHeader(num_blocks_, kSymbolModeUV, "mode"));
+  WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolModeUV, num_blocks_, "mode"));
 
-  WP2_CHECK_STATUS(sr_.ReadHeader(2 * num_blocks_, kSymbolCflSlope, "cfl"));
+  WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolCflSlope, 2 * num_blocks_, "cfl"));
 
   for (uint32_t i = 0; i < GetNumUniqueBounds(gparams_->partition_set_); ++i) {
-    WP2_CHECK_STATUS(sr_.ReadHeader(/*cluster=*/i, num_blocks_,
-                                    kSymbolBlockSize, "block_size"));
+    WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolBlockSize, /*cluster=*/i,
+                                    num_blocks_, "block_size"));
   }
 
   const uint32_t num_coeffs_max =
@@ -132,12 +132,12 @@ WP2Status SyntaxReader::LoadDictionaries() {
     WP2_CHECK_STATUS(alpha_reader_->ReadHeader(*gparams_));
 
     if (alpha_reader_->GetAlphaMode() == kAlphaModeLossy) {
-      WP2_CHECK_STATUS(sr_.ReadHeader(num_blocks_, kSymbolBlockAlphaMode,
+      WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolBlockAlphaMode, num_blocks_,
                                       "block_alpha_mode"));
     }
     if (alpha_reader_->GetAlphaMode() != kAlphaModeLossless) {
       sr_.SetRange(kSymbolModeA, /*min=*/0, /*max=*/kAPredModeNum - 1);
-      WP2_CHECK_STATUS(sr_.ReadHeader(num_blocks_, kSymbolModeA, "mode"));
+      WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolModeA, num_blocks_, "mode"));
     }
   }
 
@@ -206,7 +206,8 @@ void SyntaxReader::ReadHasCoeffs(Channel channel, CodedBlock* const cb) {
       tf_has_coeffs = true;
     } else {
       const uint32_t cluster = (uint32_t)channel;
-      tf_has_coeffs = (bool)sr_.Read(cluster, kSymbolHasCoeffs, "has_coeffs");
+      tf_has_coeffs =
+          (bool)sr_.Read(kSymbolHasCoeffs, cluster, "has_coeffs", nullptr);
     }
     // 1 means "at least one coeff is not zero", 0 means "all coeffs are 0".
     cb->num_coeffs_[channel][tf_i] = tf_has_coeffs ? 1 : 0;
@@ -311,8 +312,7 @@ WP2Status SyntaxReader::GetBlock(CodedBlock* const cb, YUVPlane* const out,
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !cb->HasLossyAlpha()) continue;
     dec_->PushBitTracesCustomPrefix(kCoeffsStr[c]);
-    WP2_CHECK_STATUS(
-        residual_reader_.ReadCoeffs(c, dec_, &sr_, cb, info));
+    WP2_CHECK_STATUS(residual_reader_.ReadCoeffs(c, dec_, &sr_, cb, info));
     dec_->PopBitTracesCustomPrefix(kCoeffsStr[c]);
   }
 

@@ -119,7 +119,7 @@ TEST_P(ResidualWriterTest, AOM) {
           // Write the headers.
           for (uint32_t s = 0; s < info.Size(); ++s) {
             for (uint32_t c = 0; c < info.NumClusters(s); ++c) {
-              ASSERT_WP2_OK(sw->WriteHeader(c, max_nnz, s, recorder, "counts",
+              ASSERT_WP2_OK(sw->WriteHeader(s, c, max_nnz, recorder, "counts",
                                             &enc, &dicts));
             }
           }
@@ -140,7 +140,7 @@ TEST_P(ResidualWriterTest, AOM) {
           ASSERT_WP2_OK(sr.Allocate());
           for (uint32_t s = 0; s < info.Size(); ++s) {
             for (uint32_t c = 0; c < info.NumClusters(s); ++c) {
-              ASSERT_WP2_OK(sr.ReadHeader(c, max_nnz, s, "counts"));
+              ASSERT_WP2_OK(sr.ReadHeader(s, c, max_nnz, "counts"));
             }
           }
 

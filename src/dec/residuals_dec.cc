@@ -40,21 +40,21 @@ WP2Status ResidualReader::ReadHeaderForResidualSymbols(uint32_t num_coeffs_max,
     const uint32_t method_index = GetMethodIndex(method);
     (void)method_index;
     WP2SPrint(&label, "%s_num_zeros_%d", kChannelStr[channel], method_index);
-    WP2_CHECK_STATUS(sr->ReadHeader(cluster, num_coeffs_max, kSymbolResNumZeros,
+    WP2_CHECK_STATUS(sr->ReadHeader(kSymbolResNumZeros, cluster, num_coeffs_max,
                                     label.c_str()));
 
     // Read the dictionaries for small residuals.
     WP2SPrint(&label, "%s_bits0_%d", kChannelStr[channel], method_index);
     WP2_CHECK_STATUS(
-        sr->ReadHeader(cluster, num_coeffs_max, kSymbolBits0, label.c_str()));
-    sr->GetPotentialUsage(cluster, kSymbolBits0, is_maybe_used,
+        sr->ReadHeader(kSymbolBits0, cluster, num_coeffs_max, label.c_str()));
+    sr->GetPotentialUsage(kSymbolBits0, cluster, is_maybe_used,
                           kResidual1Max + 1);
 
     if (is_maybe_used[kResidual1Max]) {
       // Read the dictionaries for prefixes of big residuals.
       WP2SPrint(&label, "%s_bits1_%d", kChannelStr[channel], method_index);
       WP2_CHECK_STATUS(
-          sr->ReadHeader(cluster, num_coeffs_max, kSymbolBits1, label.c_str()));
+          sr->ReadHeader(kSymbolBits1, cluster, num_coeffs_max, label.c_str()));
     }
   }
   return WP2_STATUS_OK;
@@ -68,7 +68,7 @@ WP2Status ResidualReader::ReadHeader(SymbolReader* const sr,
   num_channels_ = (has_alpha ? 4 : 3);
   if (use_aom_coeffs_) {
     for (Symbol sym : kSymbolsForAOMCoeffs) {
-      WP2_CHECK_STATUS(sr->ReadHeader(num_transforms, sym, "aom_symbols"));
+      WP2_CHECK_STATUS(sr->ReadHeader(sym, num_transforms, "aom_symbols"));
     }
   } else {
     for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
@@ -82,22 +82,22 @@ WP2Status ResidualReader::ReadHeader(SymbolReader* const sr,
 
     for (Symbol sym : kSymbolsForCoeffs) {
       WP2_CHECK_STATUS(
-          sr->ReadHeader(num_coeffs_max_y, sym, "residual_symbols"));
+          sr->ReadHeader(sym, num_coeffs_max_y, "residual_symbols"));
     }
 
     for (Symbol sym : kSymbolsForCoeffsPerTf) {
-      WP2_CHECK_STATUS(sr->ReadHeader(num_transforms, sym, "block_symbols"));
+      WP2_CHECK_STATUS(sr->ReadHeader(sym, num_transforms, "block_symbols"));
     }
   }
 
   if (has_lossy_alpha) {
-    WP2_CHECK_STATUS(sr->ReadHeader(num_transforms, kSymbolEncodingMethodA,
+    WP2_CHECK_STATUS(sr->ReadHeader(kSymbolEncodingMethodA, num_transforms,
                                     "coeff_method_alpha"));
   }
   WP2_CHECK_STATUS(
-      sr->ReadHeader(num_transforms, kSymbolHasCoeffs, "has_coeffs"));
+      sr->ReadHeader(kSymbolHasCoeffs, num_transforms, "has_coeffs"));
   WP2_CHECK_STATUS(
-      sr->ReadHeader(num_transforms, kSymbolEncodingMethod, "coeff_method"));
+      sr->ReadHeader(kSymbolEncodingMethod, num_transforms, "coeff_method"));
   return WP2_STATUS_OK;
 }
 
@@ -105,8 +105,8 @@ WP2Status ResidualReader::ReadHeader(SymbolReader* const sr,
 
 static int16_t ReadDC(Channel channel, uint32_t num_channels, bool can_be_zero,
                       SymbolReader* const sr) {
-  int n =
-      sr->Read(ResidualIO::GetCluster(channel, num_channels), kSymbolDC, "DC");
+  int n = sr->Read(kSymbolDC, ResidualIO::GetCluster(channel, num_channels),
+                   "DC");
   if (!can_be_zero) ++n;
   // Converting the unsigned value to a signed one.
   return (n % 2 == 0) ? n / 2 : -((n + 1) / 2);
@@ -132,8 +132,9 @@ inline void ReadBounds(Channel channel, uint32_t num_channels,
   }
   if (min2 != 255 && min2 <= max2) {
     *use_bounds2 = sr->Read(
+        kSymbolResidualUseBound2,
         ResidualReader::GetClusterMergedUV(channel, num_channels, method, tdim),
-        kSymbolResidualUseBound2, "use_bound2");
+        "use_bound2");
   } else {
     *use_bounds2 = false;
   }
@@ -217,8 +218,9 @@ WP2Status ResidualReader::ReadCoeffsMethod01(Channel channel, uint32_t tf_i,
   bool can_use_bounds_x, can_use_bounds_y;
   ResidualBoxAnalyzer::CanUseBounds(tdim, &can_use_bounds_x, &can_use_bounds_y);
   if ((can_use_bounds_x || can_use_bounds_y) &&
-      sr->Read(GetClusterMergedUV(channel, num_channels_, method, tdim),
-               kSymbolResidualUseBounds, "use_bounds")) {
+      sr->Read(kSymbolResidualUseBounds,
+               GetClusterMergedUV(channel, num_channels_, method, tdim),
+               "use_bounds")) {
     bool is_x_first;
     if (can_use_bounds_x && !can_use_bounds_y) {
       is_x_first = true;
@@ -226,8 +228,9 @@ WP2Status ResidualReader::ReadCoeffsMethod01(Channel channel, uint32_t tf_i,
       is_x_first = false;
     } else {
       is_x_first =
-          sr->Read(GetClusterMergedUV(channel, num_channels_, method, tdim),
-                   kSymbolResidualBound1IsX, "is_x_first");
+          sr->Read(kSymbolResidualBound1IsX,
+                   GetClusterMergedUV(channel, num_channels_, method, tdim),
+                   "is_x_first");
     }
     if (is_x_first) {
       use_bounds_x = true;
@@ -283,7 +286,7 @@ WP2Status ResidualReader::ReadCoeffsMethod01(Channel channel, uint32_t tf_i,
     // If we have more than one element left and not written 0s before, check if
     // there is any 0 coming.
     if (!has_written_zeros && iter.MaxNumCoeffsLeft() > 1 &&
-        sr->Read(sector_cluster, kSymbolResidualIsZero, "is_zero")) {
+        sr->Read(kSymbolResidualIsZero, sector_cluster, "is_zero")) {
       // Read the number of consecutive 0s we have, by batches of
       // kResidualCons0Max.
       ++iter;
@@ -295,8 +298,9 @@ WP2Status ResidualReader::ReadCoeffsMethod01(Channel channel, uint32_t tf_i,
           // feasibility.
           num_zeros_tmp = dec->ReadRValue(iter.MaxNumCoeffsLeft(), "num_zeros");
         } else {
-          num_zeros_tmp = sr->Read(GetCluster(channel, num_channels_, method),
-                                   kSymbolResNumZeros, "num_zeros");
+          num_zeros_tmp = sr->Read(kSymbolResNumZeros,
+                                   GetCluster(channel, num_channels_, method),
+                                   "num_zeros");
         }
         for (int32_t j = 0; j < num_zeros_tmp; ++j) ++iter;
       } while (num_zeros_tmp == kResidualCons0Max);
@@ -309,19 +313,19 @@ WP2Status ResidualReader::ReadCoeffsMethod01(Channel channel, uint32_t tf_i,
 
     uint32_t abs_v;
     if (has_only_ones_left ||
-        sr->Read(sector_cluster, kSymbolResidualIsOne, "is_one")) {
+        sr->Read(kSymbolResidualIsOne, sector_cluster, "is_one")) {
       abs_v = 1;
     } else {
-      if (sr->Read(sector_cluster, kSymbolResidualIsTwo, "is_two")) {
+      if (sr->Read(kSymbolResidualIsTwo, sector_cluster, "is_two")) {
         abs_v = 2;
       } else {
         const uint32_t residual1 =
-            sr->Read(GetCluster(channel, num_channels_, method), kSymbolBits0,
+            sr->Read(kSymbolBits0, GetCluster(channel, num_channels_, method),
                      "residual1");
         if (residual1 == kResidual1Max) {
           abs_v = 3 + kResidual1Max;
           const uint32_t prefix =
-              sr->Read(GetCluster(channel, num_channels_, method), kSymbolBits1,
+              sr->Read(kSymbolBits1, GetCluster(channel, num_channels_, method),
                        "residual2_prefix");
           const uint32_t extra =
               dec->ReadUValue(Golomb::NumExtraBits(prefix, /*prefix_size=*/1),
@@ -341,12 +345,13 @@ WP2Status ResidualReader::ReadCoeffsMethod01(Channel channel, uint32_t tf_i,
     if (iter.IsDone()) break;
     // Read an End Of Block if we have reached both sides of the box.
     if (zigzag_ind >= ind_min && iter.CanEOB() &&
-        sr->Read(sector_cluster, kSymbolResidualEndOfBlock, "eob")) {
+        sr->Read(kSymbolResidualEndOfBlock, sector_cluster, "eob")) {
       break;
     }
     if (abs_v == 1 && !has_only_ones_left && !previous_is_a_one) {
-      has_only_ones_left = (bool)sr->Read(
-          sector_cluster, kSymbolResidualHasOnlyOnesLeft, "has_only_ones_left");
+      has_only_ones_left =
+          (bool)sr->Read(kSymbolResidualHasOnlyOnesLeft, sector_cluster,
+                         "has_only_ones_left");
     }
     previous_is_a_one = (abs_v == 1);
   }

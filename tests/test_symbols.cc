@@ -36,6 +36,33 @@ using StorageMethod = SymbolsInfo::StorageMethod;
 class SymbolsInfoTest : public SymbolsInfo {
  public:
   using SymbolsInfo::SetInfo;
+
+  bool operator==(const SymbolsInfoTest& info) const {
+    if (Size() != info.Size()) return false;
+    for (uint32_t sym = 0; sym < Size(); ++sym) {
+      if (!Equal(GetSymbolInfo(sym), info.GetSymbolInfo(sym))) return false;
+      for (uint32_t cluster = 0; cluster < NumClusters(sym); ++cluster) {
+        if (!Equal(GetClusterInfo(sym, cluster),
+                   info.GetClusterInfo(sym, cluster))) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+ protected:
+  bool Equal(const SymbolInfo& a, const SymbolInfo& b) const {
+    return a.num_clusters == b.num_clusters &&
+           a.storage_method == b.storage_method &&
+           a.min == b.min && a.max == b.max;
+  }
+
+  bool Equal(const ClusterInfo& a, const ClusterInfo& b) const {
+    return (a.p0 == b.p0 && a.p1 == b.p1 &&
+            a.min == b.min && a.max == b.max &&
+            a.cdf == b.cdf);
+  }
 };
 
 //------------------------------------------------------------------------------
@@ -112,11 +139,11 @@ class DataGenerator {
     }
 
     // Create some stream using the biased statistics.
-    const bool can_be_negative = (symbols_info_->Min(/*cluster=*/0, sym) < 0);
+    const bool can_be_negative = (symbols_info_->Min(sym, /*cluster=*/0) < 0);
     bool has_at_least_one_negative = false;
     for (uint32_t i = 0; i < num_symbols; ++i) {
       const uint32_t cluster = random_->Get(0u, num_clusters - 1);
-      int32_t value = std::numeric_limits<int32_t>::max();;
+      int32_t value = std::numeric_limits<int32_t>::max();
       switch (distribution) {
         case kHint::kDict:
         case kHint::kGolomb:
@@ -135,13 +162,13 @@ class DataGenerator {
       }
       Symbol s;
       s.s = sym;
-      s.value = value + symbols_info_->Min(/*cluster=*/0, sym);
+      s.value = value + symbols_info_->Min(sym, /*cluster=*/0);
       has_at_least_one_negative |= (s.value < 0);
       s.can_be_negative = can_be_negative;
       s.cluster = cluster;
       symbols->push_back(s);
       ++(counts_)[sym][cluster][value];
-      recorder->Process(cluster, sym, s.value, "label", &enc);
+      recorder->Process(sym, cluster, s.value, "label", &enc);
     }
     // Make sure there is at least one negative value if asked.
     EXPECT_TRUE(!can_be_negative || has_at_least_one_negative);
@@ -156,7 +183,7 @@ class DataGenerator {
     // clusters.
     *max_nnz = 0;
     for (uint32_t s = 0; s < symbols_info_->Size(); ++s) {
-      if (counts_[s].empty() > 0) continue;
+      if (counts_[s].empty()) continue;
       for (uint32_t c = 0; c < symbols_info_->NumClusters(s); ++c) {
         *max_nnz = std::max(*max_nnz, std::accumulate(counts_[s][c].begin(),
                                                       counts_[s][c].end(), 0u));
@@ -166,7 +193,7 @@ class DataGenerator {
     for (uint32_t s = 0; s < symbols_info_->Size(); ++s) {
       for (uint32_t c = 0; c < symbols_info_->NumClusters(s); ++c) {
         ASSERT_WP2_OK(
-            sw->WriteHeader(c, *max_nnz, s, recorder, "counts", enc, dicts));
+            sw->WriteHeader(s, c, *max_nnz, recorder, "counts", enc, dicts));
       }
     }
   }
@@ -177,7 +204,7 @@ class DataGenerator {
     ASSERT_WP2_OK(sr->Allocate());
     for (uint32_t s = 0; s < symbols_info_->Size(); ++s) {
       for (uint32_t c = 0; c < symbols_info_->NumClusters(s); ++c) {
-        ASSERT_WP2_OK(sr->ReadHeader(c, max_nnz, s, "counts"));
+        ASSERT_WP2_OK(sr->ReadHeader(s, c, max_nnz, "counts"));
       }
     }
   }
@@ -200,15 +227,15 @@ TEST(SymbolsInfo, BasicTest) {
   info.SetInfo(/*sym=*/0, /*min=*/-9, /*max=*/9, /*num_clusters=*/2,
                StorageMethod::kAuto);
   EXPECT_WP2_OK(
-      info.SetMinMax(/*cluster=*/1, /*sym=*/0, /*min=*/-4, /*max=*/4));
+      info.SetMinMax(/*sym=*/0, /*cluster=*/1, /*min=*/-4, /*max=*/4));
   info.SetInfo(/*sym=*/1, /*min=*/0, /*max=*/1, /*num_clusters=*/3,
                StorageMethod::kAdaptiveBit);
-  EXPECT_WP2_OK(info.SetStartingProba(/*cluster=*/0, /*sym=*/1, 3, 12));
-  EXPECT_WP2_OK(info.SetStartingProba(/*cluster=*/2, /*sym=*/1, 8, 2));
+  EXPECT_WP2_OK(info.SetStartingProba(/*sym=*/1, /*cluster=*/0, 3, 12));
+  EXPECT_WP2_OK(info.SetStartingProba(/*sym=*/1, /*cluster=*/2, 8, 2));
   info.SetInfo(/*sym=*/3, /*min=*/0, /*max=*/3,
                /*num_clusters=*/3, StorageMethod::kAuto);
   EXPECT_WP2_OK(
-      info.SetMinMax(/*cluster=*/2, /*sym=*/3, /*min=*/0, /*max=*/19));
+      info.SetMinMax(/*sym=*/3, /*cluster=*/2, /*min=*/0, /*max=*/19));
 
   // Number of symbol. Even though we didn't set any info for symbol '2', it is
   // assumed to exist.
@@ -217,17 +244,17 @@ TEST(SymbolsInfo, BasicTest) {
   EXPECT_EQ(info.MaxRangeSum(), 41u);
   EXPECT_EQ(info.RangeSum(), 62u);
 
-  EXPECT_EQ(info.Range(/*cluster=*/0, 0), 19u);
-  EXPECT_EQ(info.Range(/*cluster=*/1, 0), 9u);
+  EXPECT_EQ(info.Range(0, /*cluster=*/0), 19u);
+  EXPECT_EQ(info.Range(0, /*cluster=*/1), 9u);
   EXPECT_EQ(info.GetMaxRange(0), 19u);
-  EXPECT_EQ(info.Range(/*cluster=*/0, 1), 2u);
-  EXPECT_EQ(info.Range(/*cluster=*/1, 1), 2u);
-  EXPECT_EQ(info.Range(/*cluster=*/2, 1), 2u);
+  EXPECT_EQ(info.Range(1, /*cluster=*/0), 2u);
+  EXPECT_EQ(info.Range(1, /*cluster=*/1), 2u);
+  EXPECT_EQ(info.Range(1, /*cluster=*/2), 2u);
   EXPECT_EQ(info.GetMaxRange(1), 2u);
   EXPECT_EQ(info.GetMaxRange(2), 0u);
-  EXPECT_EQ(info.Range(/*cluster=*/0, 3), 4u);
-  EXPECT_EQ(info.Range(/*cluster=*/1, 3), 4u);
-  EXPECT_EQ(info.Range(/*cluster=*/2, 3), 20u);
+  EXPECT_EQ(info.Range(3, /*cluster=*/0), 4u);
+  EXPECT_EQ(info.Range(3, /*cluster=*/1), 4u);
+  EXPECT_EQ(info.Range(3, /*cluster=*/2), 20u);
   EXPECT_EQ(info.GetMaxRange(3), 20u);
 
   EXPECT_EQ(info.NumClusters(0), 2u);
@@ -251,26 +278,26 @@ TEST(SymbolsInfo, BasicTest) {
   EXPECT_EQ(copy.MaxRangeSum(), 46u);
   EXPECT_EQ(copy.RangeSum(), 67u);
 
-  EXPECT_EQ(info.StartingProbaP0(/*cluster=*/0, /*sym=*/1), 3u);
-  EXPECT_EQ(info.StartingProbaP1(/*cluster=*/0, /*sym=*/1), 12u);
-  EXPECT_EQ(info.StartingProbaP0(/*cluster=*/1, /*sym=*/1), 1u);
-  EXPECT_EQ(info.StartingProbaP1(/*cluster=*/1, /*sym=*/1), 1u);
-  EXPECT_EQ(info.StartingProbaP0(/*cluster=*/2, /*sym=*/1), 8u);
-  EXPECT_EQ(info.StartingProbaP1(/*cluster=*/2, /*sym=*/1), 2u);
+  EXPECT_EQ(info.StartingProbaP0(/*sym=*/1, /*cluster=*/0), 3u);
+  EXPECT_EQ(info.StartingProbaP1(/*sym=*/1, /*cluster=*/0), 12u);
+  EXPECT_EQ(info.StartingProbaP0(/*sym=*/1, /*cluster=*/1), 1u);
+  EXPECT_EQ(info.StartingProbaP1(/*sym=*/1, /*cluster=*/1), 1u);
+  EXPECT_EQ(info.StartingProbaP0(/*sym=*/1, /*cluster=*/2), 8u);
+  EXPECT_EQ(info.StartingProbaP1(/*sym=*/1, /*cluster=*/2), 2u);
 }
 
 TEST(SymbolsInfo, LossessSymbolsInfo) {
   WP2L::LosslessSymbolsInfo info;
   info.Init(/*has_alpha=*/true, WP2_Argb_32, /*num_clusters=*/3);
   info.SetCacheRange(1 << 2);
-  EXPECT_EQ(info.Range(/*cluster=*/0, WP2L::kSymbolA), (uint32_t)(1 << 8));
+  EXPECT_EQ(info.Range(WP2L::kSymbolA, /*cluster=*/0), (uint32_t)(1 << 8));
   EXPECT_EQ(info.NumClusters(WP2L::kSymbolA), 3u);
 
-  EXPECT_EQ(info.Range(/*cluster=*/0, WP2L::kSymbolCache), (uint32_t)(1 << 2));
+  EXPECT_EQ(info.Range(WP2L::kSymbolCache, /*cluster=*/0), (uint32_t)(1 << 2));
   EXPECT_EQ(info.NumClusters(WP2L::kSymbolCache), 3u);
 
   info.SetCacheRange(1 << 4);
-  EXPECT_EQ(info.Range(/*cluster=*/0, WP2L::kSymbolCache), (uint32_t)(1 << 4));
+  EXPECT_EQ(info.Range(WP2L::kSymbolCache, /*cluster=*/0), (uint32_t)(1 << 4));
   EXPECT_EQ(info.NumClusters(WP2L::kSymbolCache), 3u);
 
   info.SetNumClusters(2);
@@ -295,8 +322,8 @@ void VerifyProcessRead(const SymbolsInfoTest& info, uint32_t num_symbols,
   Shuffle(symbols.begin(), symbols.end(), 0);
 
   // Create the symbol writer.
-  std::unique_ptr<WP2::SymbolWriter>
-      sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
+  std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
+                                            WP2::SymbolWriter);
   ASSERT_TRUE(sw != nullptr);
   ANSEnc enc;
   ANSDictionaries dicts;
@@ -310,7 +337,7 @@ void VerifyProcessRead(const SymbolsInfoTest& info, uint32_t num_symbols,
   // signal in the ANS encoder.
   double enc_cost = 0;
   for (const DataGenerator::Symbol& sym : symbols) {
-    sw->ProcessWithCost(sym.cluster, sym.s, sym.value, "sym", &enc, &enc_cost);
+    sw->ProcessWithCost(sym.s, sym.cluster, sym.value, "sym", &enc, &enc_cost);
   }
   EXPECT_WP2_OK(enc.Assemble());
   const uint32_t size = enc.BufferSize();
@@ -325,7 +352,7 @@ void VerifyProcessRead(const SymbolsInfoTest& info, uint32_t num_symbols,
   // Verify the symbols do match the original data.
   double dec_cost = 0;
   for (const DataGenerator::Symbol& sym : symbols) {
-    ASSERT_EQ(sr.Read(sym.cluster, sym.s, "sym", &dec_cost), sym.value);
+    ASSERT_EQ(sr.Read(sym.s, sym.cluster, "sym", &dec_cost), sym.value);
   }
   const double symbol_cost = enc.GetCost() - header_cost;
   EXPECT_NEAR(symbol_cost, enc_cost, 0.2f);
@@ -383,10 +410,10 @@ TEST(SymbolsTest, CDF) {
     }
   }
   for (uint32_t i = 0; i < kNumSymbolTypes; ++i) {
-    info.SetInfo(i, /*min=*/0, /*max=*/info.Range(/*cluster=*/0, i) - 1,
+    info.SetInfo(i, /*min=*/0, /*max=*/info.Range(i, /*cluster=*/0) - 1,
                  info.NumClusters(i), StorageMethod::kAdaptiveSym);
-    EXPECT_WP2_OK(info.SetInitialCDF(cdfs[i], ANS_MAX_SYMBOLS,
-                                     /*cluster=*/0, i));
+    EXPECT_WP2_OK(info.SetInitialCDF(i, /*cluster=*/0,
+                                     cdfs[i], ANS_MAX_SYMBOLS));
   }
   DataGenerator generator(info, &random);
 
@@ -415,8 +442,8 @@ TEST(SymbolsTest, Uniform) {
                     &symbols);
 
   // Create the symbol writer.
-  std::unique_ptr<WP2::SymbolWriter>
-      sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
+  std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
+                                            WP2::SymbolWriter);
   ASSERT_TRUE(sw != nullptr);
   ANSEnc enc;
   ANSDictionaries dicts;
@@ -429,7 +456,7 @@ TEST(SymbolsTest, Uniform) {
   // signal in the ANS encoder.
   int32_t min = 0, max = 0;
   for (const DataGenerator::Symbol& sym : symbols) {
-    sw->Process(sym.cluster, sym.s, sym.value, "sym", &enc);
+    sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
     min = std::min(min, sym.value);
     max = std::max(max, sym.value);
   }
@@ -476,8 +503,8 @@ TEST(SymbolsTest, MaxValue) {
   Shuffle(symbols.begin(), symbols.end(), 0);
 
   // Create the symbol writer.
-  std::unique_ptr<WP2::SymbolWriter>
-      sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
+  std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
+                                            WP2::SymbolWriter);
   ASSERT_TRUE(sw != nullptr);
   ANSEnc enc;
   ANSDictionaries dicts;
@@ -487,7 +514,7 @@ TEST(SymbolsTest, MaxValue) {
   // Write the data. We artificially cap to multiples of the value.
   for (float mul : {1.f, 1.2f, 2.f, 100.f}) {
     for (const DataGenerator::Symbol& sym : symbols) {
-      sw->Process(sym.cluster, sym.s, sym.value, /*max_value=*/
+      sw->Process(sym.s, sym.cluster, sym.value, /*max_value=*/
                   std::abs(sym.value) * mul, "sym", &enc);
     }
   }
@@ -505,9 +532,9 @@ TEST(SymbolsTest, MaxValue) {
   for (float mul : {1.f, 1.2f, 2.f, 100.f}) {
     for (const DataGenerator::Symbol& sym : symbols) {
       int32_t value;
-      ASSERT_WP2_OK(
-          sr.TryRead(sym.cluster, sym.s,
-                     /*max_value=*/std::abs(sym.value) * mul, "sym", &value));
+      ASSERT_WP2_OK(sr.TryRead(sym.s, sym.cluster,
+                               /*max_value=*/std::abs(sym.value) * mul, "sym",
+                               &value, nullptr));
       ASSERT_EQ(std::abs(value), std::abs(sym.value)) << "mul " << mul;
     }
   }
@@ -535,8 +562,8 @@ TEST(SymbolsTest, StorageMethodAdaptive) {
                     &symbols);
 
   // Create the symbol writer.
-  std::unique_ptr<WP2::SymbolWriter>
-      sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
+  std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
+                                            WP2::SymbolWriter);
   ASSERT_TRUE(sw != nullptr);
   ANSEnc enc;
   ANSDictionaries dicts;
@@ -547,7 +574,7 @@ TEST(SymbolsTest, StorageMethodAdaptive) {
 
   // Write the symbols.
   for (const DataGenerator::Symbol& sym : symbols) {
-    sw->Process(sym.cluster, sym.s, sym.value, "sym", &enc);
+    sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
   }
   EXPECT_WP2_OK(enc.Assemble());
   uint32_t size = enc.BufferSize();
@@ -564,7 +591,7 @@ TEST(SymbolsTest, StorageMethodAdaptive) {
 
   // Verify the symbols do match the original data.
   for (const DataGenerator::Symbol& sym : symbols) {
-    ASSERT_EQ(sr.Read(sym.cluster, sym.s, "sym"), sym.value);
+    ASSERT_EQ(sr.Read(sym.s, sym.cluster, "sym", nullptr), sym.value);
   }
   ASSERT_WP2_OK(dec.GetStatus());
 
@@ -573,7 +600,7 @@ TEST(SymbolsTest, StorageMethodAdaptive) {
   for (uint32_t i = 0; i < kNumSymbol; ++i) {
     // Long string of zeros followed by a long string of ones.
     const uint32_t value = (i < kNumSymbol / 2) ? 0 : 1;
-    sw->Process(/*cluster=*/0, /*sym=*/0, value, "sym", &enc);
+    sw->Process(/*sym=*/0, /*cluster=*/0, value, "sym", &enc);
   }
   EXPECT_WP2_OK(enc.Assemble());
   size = enc.BufferSize();
@@ -605,12 +632,12 @@ TEST(SymbolsTest, StorageMethodAdaptiveWithAutoSpeed) {
     const int32_t value = (i < kNumSymbol / 2) ? 0 : 1;
     symbols.push_back(
         {/*s=*/0, value, /*cluster=*/0, /*can_be_negative=*/true});
-    recorder.Process(/*cluster=*/0, /*sym=*/0, value, "sym", &noop);
+    recorder.Process(/*sym=*/0, /*cluster=*/0, value, "sym", &noop);
   }
 
   // Create the symbol writer.
-  std::unique_ptr<WP2::SymbolWriter>
-      sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
+  std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
+                                            WP2::SymbolWriter);
   ASSERT_TRUE(sw != nullptr);
   ASSERT_WP2_OK(sw->Init(info));
   ASSERT_WP2_OK(sw->Allocate());
@@ -618,10 +645,10 @@ TEST(SymbolsTest, StorageMethodAdaptiveWithAutoSpeed) {
   ANSDictionaries dicts;
   uint32_t max_nnz = kNumSymbol;
   ASSERT_WP2_OK(
-      sw->WriteHeader(max_nnz, /*sym=*/0, recorder, "header", &enc, &dicts));
+      sw->WriteHeader( /*sym=*/0, max_nnz, recorder, "header", &enc, &dicts));
 
   for (const DataGenerator::Symbol& sym : symbols) {
-    sw->Process(sym.cluster, sym.s, sym.value, "sym", &enc);
+    sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
   }
   EXPECT_WP2_OK(enc.Assemble());
   uint32_t size = enc.BufferSize();
@@ -636,11 +663,11 @@ TEST(SymbolsTest, StorageMethodAdaptiveWithAutoSpeed) {
   SymbolReader sr;
   ASSERT_WP2_OK(sr.Init(info, &dec));
   ASSERT_WP2_OK(sr.Allocate());
-  ASSERT_WP2_OK(sr.ReadHeader(max_nnz, /*sym=*/0, "header"));
+  ASSERT_WP2_OK(sr.ReadHeader(/*sym=*/0, max_nnz, "header"));
 
   // Verify the symbols do match the original data.
   for (const DataGenerator::Symbol& sym : symbols) {
-    ASSERT_EQ(sr.Read(sym.cluster, sym.s, "sym"), sym.value);
+    ASSERT_EQ(sr.Read(sym.s, sym.cluster, "sym", nullptr), sym.value);
   }
   ASSERT_WP2_OK(dec.GetStatus());
 }
@@ -663,9 +690,9 @@ TEST(SymbolsTest, SymbolCounter) {
   info.SetInfo(3, /*min=*/0, /*max=*/1, /*num_clusters=*/4,
                StorageMethod::kAdaptiveBit);
   EXPECT_WP2_OK(
-      info.SetStartingProba(/*cluster=*/2, /*sym=*/3, /*p0=*/3, /*p1=*/7));
+      info.SetStartingProba(/*sym=*/3, /*cluster=*/2, /*p0=*/3, /*p1=*/7));
   EXPECT_WP2_OK(
-      info.SetStartingProba(/*cluster=*/3, /*sym=*/3, /*p0=*/100, /*p1=*/1));
+      info.SetStartingProba(/*sym=*/3, /*cluster=*/3, /*p0=*/100, /*p1=*/1));
   // Adaptive symbol.
   info.SetInfo(info.Size(), /*min=*/0, /*max=*/9, /*num_clusters=*/3,
                StorageMethod::kAdaptiveSym);
@@ -691,8 +718,8 @@ TEST(SymbolsTest, SymbolCounter) {
   Shuffle(symbols.begin(), symbols.end(), 0);
 
   // Create the symbol writer and write the header.
-  std::unique_ptr<WP2::SymbolWriter>
-      sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
+  std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
+                                            WP2::SymbolWriter);
   ASSERT_TRUE(sw != nullptr);
   ANSEnc enc;
   ANSDictionaries dicts;
@@ -705,7 +732,7 @@ TEST(SymbolsTest, SymbolCounter) {
   // they do not require the SymbolWriter, they usually are just sent as raw
   // signal in the ANS encoder.
   for (const DataGenerator::Symbol& sym : symbols) {
-    sw->Process(sym.cluster, sym.s, sym.value, "sym", &enc);
+    sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
   }
   const float real_cost = enc.GetCost() - header_cost;
 
@@ -714,7 +741,7 @@ TEST(SymbolsTest, SymbolCounter) {
   SymbolCounter symbol_counter(&recorder);
   ASSERT_WP2_OK(symbol_counter.Allocate(/*syms=*/{3, 4, 5}));
   for (const DataGenerator::Symbol& sym : symbols) {
-    symbol_counter.Process(sym.cluster, sym.s, sym.value, "sym", &enc_counter);
+    symbol_counter.Process(sym.s, sym.cluster, sym.value, "sym", &enc_counter);
   }
 
   EXPECT_NEAR(enc_counter.GetCost(), real_cost, 9.1);
@@ -790,9 +817,9 @@ TEST(SymbolsTest, SymbolCounter_Midway) {
   info.SetInfo(0, /*min=*/0, /*max=*/1, /*num_clusters=*/4,
                StorageMethod::kAdaptiveBit);
   EXPECT_WP2_OK(
-      info.SetStartingProba(/*cluster=*/2, /*sym=*/0, /*p0=*/3, /*p1=*/7));
+      info.SetStartingProba(/*sym=*/0, /*cluster=*/2, /*p0=*/3, /*p1=*/7));
   EXPECT_WP2_OK(
-      info.SetStartingProba(/*cluster=*/3, /*sym=*/0, /*p0=*/100, /*p1=*/1));
+      info.SetStartingProba(/*sym=*/0, /*cluster=*/3, /*p0=*/100, /*p1=*/1));
   // Adaptive symbol.
   info.SetInfo(1, /*min=*/0, /*max=*/9, /*num_clusters=*/3,
                StorageMethod::kAdaptiveSym);
@@ -814,8 +841,8 @@ TEST(SymbolsTest, SymbolCounter_Midway) {
   Shuffle(symbols.begin(), symbols.end(), 0);
 
   // Create the symbol writer and write the header.
-  std::unique_ptr<WP2::SymbolWriter>
-      sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
+  std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
+                                            WP2::SymbolWriter);
   ASSERT_TRUE(sw != nullptr);
   ANSEnc enc;
   ANSDictionaries dicts;
@@ -831,8 +858,8 @@ TEST(SymbolsTest, SymbolCounter_Midway) {
   const uint32_t half = symbols.size() / 2;
   for (uint32_t i = 0; i < half; ++i) {
     const DataGenerator::Symbol& sym = symbols[i];
-    sw->Process(sym.cluster, sym.s, sym.value, "sym", &enc);
-    recorder.Process(sym.cluster, sym.s, sym.value, "sym", &enc);
+    sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
+    recorder.Process(sym.s, sym.cluster, sym.value, "sym", &enc);
   }
 
   const float half_cost = enc.GetCost();
@@ -840,7 +867,7 @@ TEST(SymbolsTest, SymbolCounter_Midway) {
   // Write the second half of symbols.
   for (uint32_t i = half; i < symbols.size(); ++i) {
     const DataGenerator::Symbol& sym = symbols[i];
-    sw->Process(sym.cluster, sym.s, sym.value, "sym", &enc);
+    sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
   }
   const float real_cost = enc.GetCost() - half_cost;
 
@@ -849,7 +876,7 @@ TEST(SymbolsTest, SymbolCounter_Midway) {
   ASSERT_WP2_OK(symbol_counter.Allocate(/*syms=*/{0, 1}));
   for (uint32_t i = half; i < symbols.size(); ++i) {
     const DataGenerator::Symbol& sym = symbols[i];
-    symbol_counter.Process(sym.cluster, sym.s, sym.value, "sym", &enc_counter);
+    symbol_counter.Process(sym.s, sym.cluster, sym.value, "sym", &enc_counter);
   }
 
   EXPECT_NEAR(enc_counter.GetCost(), real_cost, 1);
@@ -920,8 +947,8 @@ class SymbolCostTest : public ::testing::TestWithParam<bool> {
       SCOPED_TRACE(SPrintf("value  %d", i));
       if (!max_values.empty()) {
         int32_t v = 0;
-        EXPECT_WP2_OK(sr->TryRead(kCluster, kSymbol, max_values[i], "label", &v,
-                              &dec_cost));
+        EXPECT_WP2_OK(sr->TryRead(kSymbol, kCluster, max_values[i], "label", &v,
+                                  &dec_cost));
         EXPECT_EQ(values[i], v);
       } else {
         EXPECT_EQ(values[i], sr->Read(kSymbol, "label", &dec_cost));
@@ -953,7 +980,7 @@ TEST_P(SymbolCostTest, TrivialCost) {
   SymbolWriterForTest sw;
   ASSERT_WP2_OK(sw.Init(info));
   ASSERT_WP2_OK(sw.Allocate());
-  sw.AddTrivial(kCluster, kSymbol, kValue);
+  sw.AddTrivial(kSymbol, kCluster, kValue);
 
   std::vector<int32_t> values;
   std::vector<uint32_t> max_values;
@@ -963,11 +990,11 @@ TEST_P(SymbolCostTest, TrivialCost) {
     values.push_back(kValue);
     if (use_max) {
       const uint32_t max = random_.Get(kValue, kRange - 1);
-      sw.ProcessWithCost(kCluster, kSymbol, kValue, max, "label", &enc,
+      sw.ProcessWithCost(kSymbol, kCluster, kValue, max, "label", &enc,
                          &enc_cost);
       max_values.push_back(max);
     } else {
-      sw.ProcessWithCost(kCluster, kSymbol, kValue, "label", &enc, &enc_cost);
+      sw.ProcessWithCost(kSymbol, kCluster, kValue, "label", &enc, &enc_cost);
     }
   }
 
@@ -979,7 +1006,7 @@ TEST_P(SymbolCostTest, TrivialCost) {
   ASSERT_WP2_OK(sr.Init(info, &dec));
   ASSERT_WP2_OK(sr.Allocate());
 
-  sr.AddTrivial(kCluster, kSymbol, kValue);
+  sr.AddTrivial(kSymbol, kCluster, kValue);
 
   const double dec_cost = Decode(&sr, values, max_values);
 
@@ -998,7 +1025,7 @@ TEST_P(SymbolCostTest, RangeCost) {
   SymbolWriterForTest sw;
   ASSERT_WP2_OK(sw.Init(info));
   ASSERT_WP2_OK(sw.Allocate());
-  sw.AddRange(kCluster, kSymbol, /*mapping=*/nullptr, /*size=*/0, kRange);
+  sw.AddRange(kSymbol, kCluster, /*mapping=*/nullptr, /*size=*/0, kRange);
 
   std::vector<int32_t> values;
   std::vector<uint32_t> max_values;
@@ -1011,9 +1038,9 @@ TEST_P(SymbolCostTest, RangeCost) {
     values.push_back(v);
     if (use_max) {
       max_values.push_back(max);
-      sw.ProcessWithCost(kCluster, kSymbol, v, max, "label", &enc, &enc_cost);
+      sw.ProcessWithCost(kSymbol, kCluster, v, max, "label", &enc, &enc_cost);
     } else {
-      sw.ProcessWithCost(kCluster, kSymbol, v, "label", &enc, &enc_cost);
+      sw.ProcessWithCost(kSymbol, kCluster, v, "label", &enc, &enc_cost);
     }
   }
 
@@ -1055,7 +1082,7 @@ TEST_P(SymbolCostTest, DictCost) {
   ASSERT_WP2_OK(sw.Allocate());
 
   ANSDictionaries dicts;
-  ASSERT_WP2_OK(sw.AddDict(kCluster, kSymbol, histogram.data(),
+  ASSERT_WP2_OK(sw.AddDict(kSymbol, kCluster, histogram.data(),
                            histogram.data(), mapping.data(), symbol_size,
                            &dicts));
 
@@ -1072,9 +1099,9 @@ TEST_P(SymbolCostTest, DictCost) {
     values.push_back(v);
     if (use_max) {
       max_values.push_back(max);
-      sw.ProcessWithCost(kCluster, kSymbol, v, max, "label", &enc, &enc_cost);
+      sw.ProcessWithCost(kSymbol, kCluster, v, max, "label", &enc, &enc_cost);
     } else {
-      sw.ProcessWithCost(kCluster, kSymbol, v, "label", &enc, &enc_cost);
+      sw.ProcessWithCost(kSymbol, kCluster, v, "label", &enc, &enc_cost);
     }
   }
 
@@ -1118,7 +1145,7 @@ TEST_P(SymbolCostTest, GolombCost) {
   ASSERT_WP2_OK(sw.Init(info));
   ASSERT_WP2_OK(sw.Allocate());
   ANSDictionaries dicts;
-  ASSERT_WP2_OK(sw.AddGolomb(kCluster, kSymbol, golomb_histogram.data(),
+  ASSERT_WP2_OK(sw.AddGolomb(kSymbol, kCluster, golomb_histogram.data(),
                              golomb_histogram.data(), golomb_mapping.data(),
                              golomb_size, kGolombPrefixSize, &dicts));
 
@@ -1135,9 +1162,9 @@ TEST_P(SymbolCostTest, GolombCost) {
     values.push_back(v);
     if (use_max) {
       max_values.push_back(max);
-      sw.ProcessWithCost(kCluster, kSymbol, v, max, "label", &enc, &enc_cost);
+      sw.ProcessWithCost(kSymbol, kCluster, v, max, "label", &enc, &enc_cost);
     } else {
-      sw.ProcessWithCost(kCluster, kSymbol, v, "label", &enc, &enc_cost);
+      sw.ProcessWithCost(kSymbol, kCluster, v, "label", &enc, &enc_cost);
     }
   }
 
@@ -1172,7 +1199,7 @@ TEST_P(SymbolCostTest, AdaptiveBitCost) {
   SymbolWriterForTest sw;
   ASSERT_WP2_OK(sw.Init(info));
   ASSERT_WP2_OK(sw.Allocate());
-  ASSERT_WP2_OK(sw.AddAdaptiveBit(kCluster, kSymbol, p0, p1));
+  ASSERT_WP2_OK(sw.AddAdaptiveBit(kSymbol, kCluster, p0, p1));
 
   std::vector<int32_t> values;
   std::vector<uint32_t> max_values;
@@ -1184,9 +1211,9 @@ TEST_P(SymbolCostTest, AdaptiveBitCost) {
     values.push_back(v);
     if (use_max) {
       max_values.push_back(max);
-      sw.ProcessWithCost(kCluster, kSymbol, v, max, "label", &enc, &enc_cost);
+      sw.ProcessWithCost(kSymbol, kCluster, v, max, "label", &enc, &enc_cost);
     } else {
-      sw.ProcessWithCost(kCluster, kSymbol, v, "label", &enc, &enc_cost);
+      sw.ProcessWithCost(kSymbol, kCluster, v, "label", &enc, &enc_cost);
     }
   }
 
@@ -1198,7 +1225,7 @@ TEST_P(SymbolCostTest, AdaptiveBitCost) {
   ASSERT_WP2_OK(sr.Init(info, &dec));
   ASSERT_WP2_OK(sr.Allocate());
 
-  ASSERT_WP2_OK(sr.AddAdaptiveBit(kCluster, kSymbol, p0, p1));
+  ASSERT_WP2_OK(sr.AddAdaptiveBit(kSymbol, kCluster, p0, p1));
 
   const double dec_cost = Decode(&sr, values, max_values);
 
@@ -1225,7 +1252,7 @@ TEST_P(SymbolCostTest, AdaptiveSymCost) {
     ASSERT_WP2_OK(sw.Init(info));
     ASSERT_WP2_OK(sw.Allocate());
     ASSERT_WP2_OK(sw.AddAdaptiveSymbol(
-        kCluster, kSymbol, (ANSAdaptiveSymbol::Method)method, speed));
+        kSymbol, kCluster, (ANSAdaptiveSymbol::Method)method, speed));
 
     std::vector<int32_t> values;
     std::vector<uint32_t> max_values;
@@ -1238,9 +1265,9 @@ TEST_P(SymbolCostTest, AdaptiveSymCost) {
       values.push_back(v);
       if (use_max) {
         max_values.push_back(max);
-        sw.ProcessWithCost(kCluster, kSymbol, v, max, "label", &enc, &enc_cost);
+        sw.ProcessWithCost(kSymbol, kCluster, v, max, "label", &enc, &enc_cost);
       } else {
-        sw.ProcessWithCost(kCluster, kSymbol, v, "label", &enc, &enc_cost);
+        sw.ProcessWithCost(kSymbol, kCluster, v, "label", &enc, &enc_cost);
       }
     }
 
@@ -1253,7 +1280,7 @@ TEST_P(SymbolCostTest, AdaptiveSymCost) {
     ASSERT_WP2_OK(sr.Allocate());
 
     ASSERT_WP2_OK(sr.AddAdaptiveSymbol(
-        kCluster, kSymbol, (ANSAdaptiveSymbol::Method)method, speed));
+        kSymbol, kCluster, (ANSAdaptiveSymbol::Method)method, speed));
 
     const double dec_cost = Decode(&sr, values, max_values);
 
@@ -1280,16 +1307,16 @@ TEST(SymbolsTest, MaxValuePrecision) {
   constexpr uint32_t counts[kRange] = {4096, 2048, 8192, 512, 1024, 512};
 
   // Create the symbol writer.
-  std::unique_ptr<WP2::SymbolWriter>
-      sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
+  std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
+                                            WP2::SymbolWriter);
   ASSERT_TRUE(sw != nullptr);
   ANSEnc enc;
   ANSDictionaries dicts;
   ASSERT_WP2_OK(sw->Init(info));
   ASSERT_WP2_OK(sw->Allocate());
   constexpr uint32_t max_nnz = 10000;
-  ASSERT_WP2_OK(sw->WriteHeader(/*cluster=*/0, max_nnz, /*sym=*/0,
-                                counts, "counts", &enc, &dicts));
+  ASSERT_WP2_OK(sw->WriteHeader(/*sym=*/0, /*cluster=*/0, max_nnz, counts,
+                                "counts", &enc, &dicts));
 
   // This value is actually the value of the ANS state that can crash the capped
   // decoding. It is right at the end of the last interval, which is not
@@ -1307,12 +1334,12 @@ TEST(SymbolsTest, MaxValuePrecision) {
   SymbolReader sr;
   ASSERT_WP2_OK(sr.Init(info, &dec));
   ASSERT_WP2_OK(sr.Allocate());
-  ASSERT_WP2_OK(sr.ReadHeader(/*cluster=*/0, max_nnz, /*sym=*/0, "counts"));
+  ASSERT_WP2_OK(sr.ReadHeader(/*sym=*/0, /*cluster=*/0, max_nnz, "counts"));
 
   // Check the decoder does not crash.
   int32_t value;
-  ASSERT_WP2_OK(
-      sr.TryRead(/*cluster=*/0, /*sym=*/0, /*max_value=*/1, "sym", &value));
+  ASSERT_WP2_OK(sr.TryRead(/*sym=*/0, /*cluster=*/0, /*max_value=*/1, "sym",
+                           &value, nullptr));
 }
 #endif
 

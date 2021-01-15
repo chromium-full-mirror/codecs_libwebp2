@@ -17,7 +17,7 @@
 #include <string>
 
 #include "include/helpers.h"
-#include "src/enc/partition_score_func.h"
+#include "src/enc/partitioning/partition_score_func.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"

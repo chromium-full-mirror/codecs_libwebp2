@@ -62,7 +62,7 @@ static inline int32_t ReadLZ77Golomb(uint32_t cluster, uint32_t sym,
                                      WP2_OPT_LABEL, WP2::SymbolReader* const sr,
                                      WP2::ANSDec* const dec,
                                      double* const cost) {
-  const uint32_t prefix = sr->Read(cluster, sym, label, cost);
+  const uint32_t prefix = sr->Read(sym, cluster, label, cost);
 
   const uint32_t extra_bits =
       WP2::Golomb::NumExtraBits(prefix, kLZZGolombPrefixSize);
@@ -112,15 +112,16 @@ WP2Status Decoder::ReadANSStats(uint32_t width, uint32_t height,
   const uint32_t num_clusters = symbols_info.NumClusters(0);
   for (uint32_t cluster = 0; cluster < num_clusters; ++cluster) {
     // Deal with the first symbol.
-    WP2_CHECK_STATUS(sr->ReadHeader(cluster, width * height, kSymbolType,
+    WP2_CHECK_STATUS(sr->ReadHeader(kSymbolType, cluster, width * height,
                                     kSymbolNames[kSymbolType]));
     bool is_maybe_used[kSymbolTypeNum];
-    sr->GetPotentialUsage(cluster, kSymbolType, is_maybe_used, kSymbolTypeNum);
+    sr->GetPotentialUsage(kSymbolType, cluster, is_maybe_used, kSymbolTypeNum);
     for (int s = 1; s < kSymbolNum; ++s) {
+      if (symbols_info.IsUnused(s)) continue;
       const Symbol sym = (Symbol)(s);
-      if (symbols_info.IsSymbolUseless(sym, is_maybe_used)) continue;
+      if (!IsSymbolUsed(sym, is_maybe_used)) continue;
       WP2_CHECK_STATUS(
-          sr->ReadHeader(cluster, width * height, sym, kSymbolNames[s]));
+          sr->ReadHeader(sym, cluster, width * height, kSymbolNames[s]));
     }
   }
   return WP2_STATUS_OK;
@@ -188,8 +189,8 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows, uint32_t num_bits,
   // Inverse transforms.
   while (n-- > 0) {
     const Transform& transform = transforms_[n];
-    if (transform.type_ == WP2L::COLOR_INDEXING_TRANSFORM ||
-        transform.type_ == WP2L::GROUP4) {
+    if (transform.type_ == TransformType::kColorIndexing ||
+        transform.type_ == TransformType::kGroup4) {
       // Check that all color map indices are valid here rather than in dsp.
       // TODO(yguyon): Remove pessimization.
       const int16_t color_map_size = (int16_t)transform.data_.size() / 4;
@@ -308,13 +309,13 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
     double* cost_ptr = get_cost ? &cost : nullptr;
     uint32_t length;
     const auto type =
-        (SymbolType)sr->Read(cluster, kSymbolType, "lossless_mode", cost_ptr);
+        (SymbolType) sr->Read(kSymbolType, cluster, "lossless_mode", cost_ptr);
     WP2_CHECK_STATUS(dec_->GetStatus());
     if (type == kSymbolTypeLiteral) {
       WP2::ANSDebugPrefix prefix(dec_, "literal");
       length = 1;
       if (has_alpha) {
-        src[0] = sr->Read(cluster, kSymbolA, "A", cost_ptr);
+        src[0] = sr->Read(kSymbolA, cluster, "A", cost_ptr);
       } else {
         // For transform images/entropy image, alpha is not used: any value
         // works. The default value only matters for real ARGB samples.
@@ -324,10 +325,10 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
       if (is_label_image) {
         src[1] = src[3] = 0;
       } else {
-        src[1] = sr->Read(cluster, kSymbolR, "R", cost_ptr);
-        src[3] = sr->Read(cluster, kSymbolB, "B", cost_ptr);
+        src[1] = sr->Read(kSymbolR, cluster, "R", cost_ptr);
+        src[3] = sr->Read(kSymbolB, cluster, "B", cost_ptr);
       }
-      src[2] = sr->Read(cluster, kSymbolG, "G", cost_ptr);
+      src[2] = sr->Read(kSymbolG, cluster, "G", cost_ptr);
       WP2_CHECK_STATUS(dec_->GetStatus());
     } else if (type == kSymbolTypeCopy) {
       WP2::ANSDebugPrefix prefix(dec_, "copy");
@@ -354,7 +355,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
         last_cached += 4;
       }
       int32_t cache_index;
-      WP2_CHECK_STATUS(sr->TryRead(cluster, kSymbolCache,
+      WP2_CHECK_STATUS(sr->TryRead(kSymbolCache, cluster,
                                    color_cache->IndexRange() - 1, "cache_idx",
                                    &cache_index, cost_ptr));
       color_cache->Lookup(cache_index, src);
@@ -497,10 +498,6 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
   const bool is_grayscale = dec_->ReadBool("is_grayscale");
   const uint32_t num_channels = (is_grayscale ? 2 : 4);
 
-  // Modify the main image ranges.
-  hdr_.symbols_info_.SetAsLabelImage();
-  hdr_.symbols_info_.SetMinMax(kSymbolG, /*min=*/0, /*max=*/num_colors_ - 1);
-
   if (num_colors_ <= kSmallPaletteLimit) {
     WP2_CHECK_STATUS(ReadPaletteVerbatim(
         num_colors_, hdr_.symbols_info_.SampleFormat(), gparams_->has_alpha_,
@@ -632,22 +629,22 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
 }
 
 WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
-                                ImageTransformType type) {
+                                 TransformType type) {
   Transform* const transform = &transforms_[next_transform_];
 
   transform->type_ = type;
   transform->width_ = width;
   transform->height_ = height;
   ++next_transform_;
-  assert(next_transform_ <= NUM_TRANSFORMS);
+  assert(next_transform_ <= (uint32_t)TransformType::kNum);
 
   switch (type) {
-    case PREDICTOR_TRANSFORM:
-    case CROSS_COLOR_TRANSFORM: {
-      if (type == CROSS_COLOR_TRANSFORM) {
+    case TransformType::kPredictor:
+    case TransformType::kCrossColor: {
+      if (type == TransformType::kCrossColor) {
         dec_->AddDebugPrefix("cross_color");
       } else {
-        assert(type == PREDICTOR_TRANSFORM);
+        assert(type == TransformType::kPredictor);
         dec_->AddDebugPrefix("predictor");
       }
       transform->bits_ = dec_->ReadRange(kTransformBitsMin, kTransformBitsMax,
@@ -660,7 +657,7 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
                            /*max=*/WP2::SymbolsInfo::kInvalidBound,
                            /*num_clusters=*/0,
                            WP2::SymbolsInfo::StorageMethod::kUnused);
-      if (type == PREDICTOR_TRANSFORM) {
+      if (type == TransformType::kPredictor) {
         symbols_info.SetAsLabelImage();
         symbols_info.SetMinMax(kSymbolG, /*min=*/0, /*max=*/kNumPredictors - 1);
       } else {
@@ -684,11 +681,11 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       dec_->PopDebugPrefix();
       break;
     }
-    case COLOR_INDEXING_TRANSFORM: {
+    case TransformType::kColorIndexing: {
       WP2_CHECK_STATUS(ReadPalette(transform));
       break;
     }
-    case GROUP4: {
+    case TransformType::kGroup4: {
       WP2_CHECK_STATUS(ReadPalette(transform));
       const uint32_t color_map_size = (uint32_t)transform->data_.size() / 4;
       group4_first_color_ = dec_->ReadRValue(color_map_size, "first_color");
@@ -712,15 +709,15 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
             continue;
           }
           const uint32_t max_nnz = width * height;
-          WP2_CHECK_STATUS(sr->ReadHeader(max_nnz, s, kSymbolGroup4Names[s]));
+          WP2_CHECK_STATUS(sr->ReadHeader(s, max_nnz, kSymbolGroup4Names[s]));
         }
       }
       break;
     }
-    case SUBTRACT_GREEN:
+    case TransformType::kSubtractGreen:
       break;
     default:
-      assert(0);    // can't happen
+      assert(false);    // can't happen
       break;
   }
 
@@ -791,39 +788,41 @@ WP2Status Decoder::DecodeHeader() {
 
   // Read the transforms.
   use_group4_ = false;
-  {
-    const WP2::ANSDebugPrefix prefix2(dec_, "transforms");
-    if (dec_->ReadBool("transform_present")) {
-      if (dec_->ReadBool("use_color_indexing")) {
-        WP2_CHECK_STATUS(ReadTransform(tile_->rect.width, tile_->rect.height,
-                                       COLOR_INDEXING_TRANSFORM));
-      } else if (dec_->ReadBool("use_group4")) {
-        // TODO(vrabaud) Merge with color indexing as it is a subcase.
-        use_group4_ = true;
-        WP2_CHECK_STATUS(ReadTransform(tile_->rect.width, tile_->rect.height,
-                                       GROUP4));
-        return WP2_STATUS_OK;
-      } else {
-        // Color indexing cannot be used with other transforms.
-        premultiply_ =
-            (gparams_->has_alpha_ ? dec_->ReadBool("premultiply") : false);
-        const bool use_subtract_green = dec_->ReadBool("use_subtract_green");
-        const bool use_predictor = dec_->ReadBool("use_predictor");
-        const bool use_cross_color = dec_->ReadBool("use_cross_color");
-        if (use_subtract_green) {
-          WP2_CHECK_STATUS(ReadTransform(tile_->rect.width, tile_->rect.height,
-                                         SUBTRACT_GREEN));
-        }
-        if (use_predictor) {
-          WP2_CHECK_STATUS(ReadTransform(tile_->rect.width, tile_->rect.height,
-                                         PREDICTOR_TRANSFORM));
-        }
-        if (use_cross_color) {
-          WP2_CHECK_STATUS(ReadTransform(tile_->rect.width, tile_->rect.height,
-                                         CROSS_COLOR_TRANSFORM));
-        }
-      }
+  dec_->AddDebugPrefix("transforms");
+  constexpr uint32_t kNumCombinations =
+      std::extent<decltype(kPossibleTransformCombinations), 0>::value;
+  constexpr uint32_t kNumTransformsMax =
+      std::extent<decltype(kPossibleTransformCombinations), 1>::value;
+  const uint32_t index =
+      dec_->ReadRValue(kNumCombinations, "index");
+  const TransformType* transforms = kPossibleTransformCombinations[index];
+  uint32_t num_transforms = 0;
+  for (; num_transforms < kNumTransformsMax; ++num_transforms) {
+    if (kPossibleTransformCombinations[index][num_transforms] ==
+        TransformType::kNum) {
+      break;
     }
+  }
+
+  for (uint32_t i = 0; i < num_transforms; ++i) {
+    TransformType type = transforms[i];
+    WP2_CHECK_STATUS(
+        ReadTransform(tile_->rect.width, tile_->rect.height, type));
+    if (type == TransformType::kGroup4) {
+      use_group4_ = true;
+      // Make sure it is the only used transform.
+      assert(num_transforms == 1);
+      dec_->PopDebugPrefix();
+      return WP2_STATUS_OK;
+    }
+  }
+  premultiply_ = (gparams_->has_alpha_ ? dec_->ReadBool("premultiply") : false);
+  dec_->PopDebugPrefix();
+
+  // Modify the main image ranges if we only use the palette.
+  if (num_transforms == 1 && transforms[0] == TransformType::kColorIndexing) {
+    hdr_.symbols_info_.SetAsLabelImage();
+    hdr_.symbols_info_.SetMinMax(kSymbolG, /*min=*/0, /*max=*/num_colors_ - 1);
   }
 
   // Color cache

@@ -172,16 +172,24 @@ WP2_EXTERN WP2CPUInfo WP2GetCPUInfo;
 // Encoding
 
 static constexpr uint32_t WP2QBits = 16;  // fixed-point precision for quant
+static inline int16_t WP2Quantize16b(uint32_t v, uint32_t iq, uint32_t bias) {
+  return (int16_t)(((uint64_t)v * iq + bias) >> WP2QBits);
+}
+// all quant/iquat/bias matrix have the same stride:
+static constexpr uint32_t WP2QStride = 32u;
+static_assert(WP2QStride >= WP2::kMaxBlockSizePix, "WP2QMaxW stride too short");
+
 // Quantize: coeffs[] = (res[] * iq[] + bias[]) >> WP2Bits (with sign handling).
 // iq[], bias[], res[] and coeffs[] are assumed to be pointing to at
 // least 8 elements (uint32_t or int16_t) of memory underneath.
 extern void (*WP2Quantize)(const uint32_t iq[], const uint32_t bias[],
                            const int32_t res[], int16_t coeffs[],
-                           uint32_t len);
+                           uint32_t W, uint32_t H);
 // Performs unclamped out[] = in[] * dequant[] for i in [0..len), and pad the
 // rest of out[] with 0s. It's assumed that in[] is padded with 0s for i >= len.
 extern void (*WP2Dequantize)(const int16_t in[], const int16_t dequants[],
-                             int32_t out[], uint32_t len , uint32_t max_len);
+                             int32_t out[],
+                             uint32_t W, uint32_t H, uint32_t len);
 
 void WP2QuantizeInit();
 

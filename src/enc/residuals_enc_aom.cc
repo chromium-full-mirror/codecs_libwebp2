@@ -55,7 +55,7 @@ void AOMResidualWriter::WriteSignAndApplyDequantization(
   int32_t val = std::abs(res);
   val = std::min(is_dc_coefficient ? kMaxDcValue : kMaxCoeffValue, (int)val);
   if (is_dc_coefficient) {
-    sm->Process(dc_sign_cluster, kAOMDCSign, sign, "is_negative_dc", enc);
+    sm->Process(kAOMDCSign, dc_sign_cluster, sign, "is_negative_dc", enc);
   } else {
     enc->PutBool(sign, "is_negative");
   }
@@ -77,9 +77,10 @@ uint32_t AOMResidualWriter::WriteCoeffBaseRange(uint32_t level,
   for (int j = 0; j < kCoeffBaseRangeMaxIterations; ++j) {
     uint32_t chunk = std::min(level, (uint32_t)kCoeffBaseRangeSymbolCount - 1);
     sum += chunk;
-    sm->Process(GetClusterAOM3<kAOMCoeffBaseRange>(clamped_tx_size_context,
-                              plane_type, cdf_context),
-                kAOMCoeffBaseRange, chunk, "coeff_base_range", enc);
+    sm->Process(kAOMCoeffBaseRange,
+                GetClusterAOM3<kAOMCoeffBaseRange>(clamped_tx_size_context,
+                                                   plane_type, cdf_context),
+                chunk, "coeff_base_range", enc);
     level -= chunk;
     if (chunk < (kCoeffBaseRangeSymbolCount - 1)) break;
   }
@@ -100,50 +101,53 @@ void AOMResidualWriter::WriteEOB(
   assert(eob_pt <= kEobPt1024SymbolCount);
   switch (eob_multi_size) {
     case 0:
-      sm->Process(GetClusterAOM2<kAOMEOBPT4>(plane_type, context), kAOMEOBPT4,
+      sm->Process(kAOMEOBPT4, GetClusterAOM2<kAOMEOBPT4>(plane_type, context),
                   eob_pt, "eob_pt", enc);
       break;
     case 1:
-      sm->Process(GetClusterAOM2<kAOMEOBPT8>(plane_type, context), kAOMEOBPT8,
+      sm->Process(kAOMEOBPT8, GetClusterAOM2<kAOMEOBPT8>(plane_type, context),
                   eob_pt, "eob_pt", enc);
       break;
     case 2:
-      sm->Process(GetClusterAOM2<kAOMEOBPT16>(plane_type, context), kAOMEOBPT16,
+      sm->Process(kAOMEOBPT16, GetClusterAOM2<kAOMEOBPT16>(plane_type, context),
                   eob_pt, "eob_pt", enc);
       break;
     case 3:
-      sm->Process(GetClusterAOM2<kAOMEOBPT32>(plane_type, context), kAOMEOBPT32,
+      sm->Process(kAOMEOBPT32, GetClusterAOM2<kAOMEOBPT32>(plane_type, context),
                   eob_pt, "eob_pt", enc);
       break;
     case 4:
-      sm->Process(GetClusterAOM2<kAOMEOBPT64>(plane_type, context), kAOMEOBPT64,
+      sm->Process(kAOMEOBPT64, GetClusterAOM2<kAOMEOBPT64>(plane_type, context),
                   eob_pt, "eob_pt", enc);
       break;
     case 5:
-      sm->Process(GetClusterAOM2<kAOMEOBPT128>(plane_type, context),
-                  kAOMEOBPT128, eob_pt, "eob_pt", enc);
+      sm->Process(kAOMEOBPT128,
+                  GetClusterAOM2<kAOMEOBPT128>(plane_type, context), eob_pt,
+                  "eob_pt", enc);
       break;
     case 6:
-      sm->Process(GetClusterAOM2<kAOMEOBPT256>(plane_type, context),
-                  kAOMEOBPT256, eob_pt, "eob_pt", enc);
+      sm->Process(kAOMEOBPT256,
+                  GetClusterAOM2<kAOMEOBPT256>(plane_type, context), eob_pt,
+                  "eob_pt", enc);
       break;
     case 7:
-      sm->Process(GetClusterAOM1<kAOMEOBPT512>(plane_type), kAOMEOBPT512,
+      sm->Process(kAOMEOBPT512, GetClusterAOM1<kAOMEOBPT512>(plane_type),
                   eob_pt, "eob_pt", enc);
       break;
     case 8:
     default:
-      sm->Process(GetClusterAOM1<kAOMEOBPT1024>(plane_type), kAOMEOBPT1024,
+      sm->Process(kAOMEOBPT1024, GetClusterAOM1<kAOMEOBPT1024>(plane_type),
                   eob_pt, "eob_pt", enc);
       break;
   }
 
-  if (eob_pt >= 2) {     // eob > 1
+  if (eob_pt >= 2) {  // eob > 1
     eob_pt -= 2;
     const bool eob_extra = (eob >> eob_pt) & 1;
     sm->Process(
+        kAOMEOBExtra,
         GetClusterAOM3<kAOMEOBExtra>(tx_size_context, plane_type, eob_pt),
-        kAOMEOBExtra, eob_extra, "eob_extra", enc);
+        eob_extra, "eob_extra", enc);
     // remaining extra bits
     const uint32_t bit2 = 1 << eob_pt;   // second-leading bit
     if (bit2 > 1) enc->PutRange(eob & (bit2 - 1), 0, bit2 - 1, "eob_more");
@@ -196,8 +200,9 @@ void AOMResidualWriter::WriteTransformCoefficients(
     uint32_t chunk = std::min(level, (uint32_t)kCoeffBaseEobSymbolCount - 1);
     context = GetCoeffBaseContextEob(tx_size, eob - 1);
     sm->Process(
+        kAOMCoeffBaseEOB,
         GetClusterAOM3<kAOMCoeffBaseEOB>(tx_size_context, plane_type, context),
-        kAOMCoeffBaseEOB, chunk, "level", enc);
+        chunk, "level", enc);
     int real_level = 1 + chunk;
     if (1 + chunk > kNumQuantizerBaseLevels) {
       level -= chunk;
@@ -226,8 +231,9 @@ void AOMResidualWriter::WriteTransformCoefficients(
     const uint32_t level_ini = std::abs(res[pos]);
     uint32_t chunk = std::min(level_ini, (uint32_t)kCoeffBaseEobSymbolCount);
     sm->Process(
+        kAOMCoeffBase,
         GetClusterAOM3<kAOMCoeffBase>(tx_size_context, plane_type, context),
-        kAOMCoeffBase, chunk, "level", enc);
+        chunk, "level", enc);
     int real_level = chunk;
     if (chunk > kNumQuantizerBaseLevels) {
       const uint32_t cdf_context = get_coeff_base_range_context_func(

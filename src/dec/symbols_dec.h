@@ -47,51 +47,51 @@ class SymbolReader : public SymbolIO<StatExtra> {
 
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to trivial value
   // with value 'value'.
-  void AddTrivial(uint32_t cluster, uint32_t sym, int32_t value);
+  void AddTrivial(uint32_t sym, uint32_t cluster, int32_t value);
   // For the 'cluster'th cluster of symbol 'sym' (given a maximum value of
   // non-zero values of 'max_nnz', which can be the number of pixels for
   // examples) reads its header to later decide how to read it.
-  WP2Status ReadHeader(uint32_t cluster, uint32_t max_nnz, uint32_t sym,
+  WP2Status ReadHeader(uint32_t sym, uint32_t cluster, uint32_t max_nnz,
                        WP2_OPT_LABEL);
   // Same as above but reads headers for all clusters.
-  WP2Status ReadHeader(uint32_t max_nnz, uint32_t sym, WP2_OPT_LABEL);
+  WP2Status ReadHeader(uint32_t sym, uint32_t max_nnz, WP2_OPT_LABEL);
   // Reads the symbol of type 'sym' in the 'cluster'th cluster.
   // If 'cost' is not nullptr, the cost in bits of storing 'sym' is ADDED to
   // 'cost'.
-  int32_t Read(uint32_t cluster, uint32_t sym, WP2_OPT_LABEL,
+  int32_t Read(uint32_t sym, uint32_t cluster, WP2_OPT_LABEL,
                double* const cost = nullptr);
   int32_t Read(uint32_t sym, WP2_OPT_LABEL, double* const cost = nullptr) {
-    return Read(/*cluster=*/0, sym, label, cost);
+    return Read(sym, /*cluster=*/0, label, cost);
   }
   // Same as above except we know that the read value cannot be strictly
   // superior to 'max_value'.
-  WP2Status TryRead(uint32_t cluster, uint32_t sym, uint32_t max_value,
+  WP2Status TryRead(uint32_t sym, uint32_t cluster, uint32_t max_value,
                     WP2_OPT_LABEL, int32_t* const value,
                     double* const cost = nullptr);
   // Fills the array 'is_maybe_used' with true when the symbol might be used,
   // false if we are sure it is not used.
-  void GetPotentialUsage(uint32_t cluster, uint32_t sym, bool is_maybe_used[],
+  void GetPotentialUsage(uint32_t sym, uint32_t cluster, bool is_maybe_used[],
                          uint32_t size) const override;
 
  protected:
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to range value,
   // in [0:'range').
-  void AddRange(uint32_t cluster, uint32_t sym, uint16_t range);
+  void AddRange(uint32_t sym, uint32_t cluster, uint16_t range);
   // For the 'cluster'th cluster of symbol 'sym', set the mapping_[] to
   // the content of 'mapping'.
-  void AddMapping(uint32_t cluster, uint32_t sym, const Vector_u16& mapping);
+  void AddMapping(uint32_t sym, uint32_t cluster, const Vector_u16& mapping);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to dictionary
   // value, using info from 'infos'. 'infos' is modified in this call.
-  WP2Status AddDict(uint32_t cluster, uint32_t sym, ANSCodes* const infos);
+  WP2Status AddDict(uint32_t sym, uint32_t cluster, ANSCodes* const infos);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to Golomb
   // value, using info from 'infos'. 'infos' is modified in this call.
   // 'prefix_size' is the number of bits in the Golomb prefix.
-  WP2Status AddGolomb(uint32_t cluster, uint32_t sym,
-                      ANSCodes* const infos, uint32_t prefix_size);
+  WP2Status AddGolomb(uint32_t sym, uint32_t cluster, ANSCodes* const infos,
+                      uint32_t prefix_size);
 
  private:
   // Generic implementation called by the different Read specializations above.
-  WP2Status ReadInternal(uint32_t cluster, uint32_t sym, bool use_max_value,
+  WP2Status ReadInternal(uint32_t sym, uint32_t cluster, bool use_max_value,
                          uint32_t max_value, WP2_OPT_LABEL,
                          int32_t* const value, double* const cost = nullptr);
   // Finds the biggest symbol 'sym' such that 'stat.mappings[sym] <= max_value'.

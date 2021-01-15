@@ -617,9 +617,10 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
        AOM_CODEC_OK);
 #endif  // WP2_HAVE_AOM_DBG
 
+  Av1DecodeReturn user_priv = {nullptr, 0, 0};  // Necessary to enable inspect
   const double start_time = GetStopwatchTime();
   CHECK_AOM_STATUS(aom_codec_decode(&codec, (const uint8_t*)bitstream.data(),
-                                    bitstream.size(), NULL));
+                                    bitstream.size(), &user_priv));
   if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
   aom_image_t* img = NULL;
   aom_codec_iter_t iter = NULL;

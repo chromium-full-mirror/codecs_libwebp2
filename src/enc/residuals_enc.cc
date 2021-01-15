@@ -43,25 +43,25 @@ WP2Status ResidualWriter::WriteHeaderForResidualSymbols(
     (void)method_index;
     WP2SPrint(&label, "%s_num_zeros_%d", kChannelStr[channel], method_index);
     const uint32_t cluster = GetCluster(channel, num_channels_, method);
-    WP2_CHECK_STATUS(sw->WriteHeader(cluster, num_coeffs_max,
-                                     kSymbolResNumZeros, recorder,
-                                     label.c_str(), enc, dicts_in));
+    WP2_CHECK_STATUS(sw->WriteHeader(
+        kSymbolResNumZeros, cluster, num_coeffs_max, recorder,
+        label.c_str(), enc, dicts_in));
 
     // Write the dictionaries for small residuals.
     WP2SPrint(&label, "%s_bits0_%d", kChannelStr[channel], method_index);
-    WP2_CHECK_STATUS(sw->WriteHeader(cluster, num_coeffs_max, kSymbolBits0,
+    WP2_CHECK_STATUS(sw->WriteHeader(kSymbolBits0, cluster, num_coeffs_max,
                                      recorder, label.c_str(), enc, dicts_in));
-    sw->GetPotentialUsage(cluster, kSymbolBits0, is_maybe_used,
+    sw->GetPotentialUsage(kSymbolBits0, cluster, is_maybe_used,
                           kResidual1Max + 1);
 
     if (is_maybe_used[kResidual1Max]) {
       // Write the dictionaries for prefixes of big residuals.
       WP2SPrint(&label, "%s_bits1_%d", kChannelStr[channel], method_index);
-      WP2_CHECK_STATUS(sw->WriteHeader(cluster, num_coeffs_max, kSymbolBits1,
+      WP2_CHECK_STATUS(sw->WriteHeader(kSymbolBits1, cluster, num_coeffs_max,
                                        recorder, label.c_str(), enc, dicts_in));
     } else {
       const WP2::ANSDictionary& d =
-          recorder.GetRecordedDict(cluster, kSymbolBits1);
+          recorder.GetRecordedDict(kSymbolBits1, cluster);
       (void)d;
       assert(*std::max_element(d.Counts().begin(), d.Counts().end()) == 0);
     }
@@ -76,7 +76,7 @@ WP2Status ResidualWriter::WriteHeader(
     ANSEncBase* const enc, SymbolWriter* const sw) {
   if (use_aom_coeffs_) {
     for (Symbol sym : kSymbolsForAOMCoeffs) {
-      WP2_CHECK_STATUS(sw->WriteHeader(num_transforms, sym, recorder,
+      WP2_CHECK_STATUS(sw->WriteHeader(sym, num_transforms, recorder,
                                        "aom_symbols", enc, dicts));
     }
   } else {
@@ -93,24 +93,24 @@ WP2Status ResidualWriter::WriteHeader(
     for (Symbol sym : kSymbolsForCoeffs) {
       // For U/V, num_coeffs_max_y should be num_coeffs_max_uv instead, but in
       // practice it makes no difference and this is simpler.
-      WP2_CHECK_STATUS(sw->WriteHeader(num_coeffs_max_y, sym, recorder,
+      WP2_CHECK_STATUS(sw->WriteHeader(sym, num_coeffs_max_y, recorder,
                                        "residual_symbols", enc, dicts));
     }
 
     for (Symbol sym : kSymbolsForCoeffsPerTf) {
-      WP2_CHECK_STATUS(sw->WriteHeader(num_transforms, sym, recorder,
+      WP2_CHECK_STATUS(sw->WriteHeader(sym, num_transforms, recorder,
                                        "block_symbols", enc, dicts));
     }
   }
 
   if (has_lossy_alpha) {
-    WP2_CHECK_STATUS(sw->WriteHeader(num_transforms, kSymbolEncodingMethodA,
+    WP2_CHECK_STATUS(sw->WriteHeader(kSymbolEncodingMethodA, num_transforms,
                                      recorder, "coeff_method_alpha", enc,
                                      dicts));
   }
-  WP2_CHECK_STATUS(sw->WriteHeader(num_transforms, kSymbolHasCoeffs, recorder,
+  WP2_CHECK_STATUS(sw->WriteHeader(kSymbolHasCoeffs, num_transforms, recorder,
                                    "has_coeffs", enc, dicts));
-  WP2_CHECK_STATUS(sw->WriteHeader(num_transforms, kSymbolEncodingMethod,
+  WP2_CHECK_STATUS(sw->WriteHeader(kSymbolEncodingMethod, num_transforms,
                                    recorder, "coeff_method", enc, dicts));
 
   return WP2_STATUS_OK;
@@ -123,7 +123,7 @@ void ResidualWriter::StoreDC(Channel channel, uint32_t num_channels,
   // Converting the signed value to an unsigned one.
   uint32_t n = (v >= 0) ? 2 * v : -2 * v - 1;
   if (!can_be_zero) --n;
-  sm->Process(GetCluster(channel, num_channels), kSymbolDC, n, "DC", enc);
+  sm->Process(kSymbolDC, GetCluster(channel, num_channels), n, "DC", enc);
 }
 
 inline void WriteBounds(Channel channel, uint32_t num_channels,
@@ -139,9 +139,10 @@ inline void WriteBounds(Channel channel, uint32_t num_channels,
     ResidualBoxAnalyzer::GetRangePerY(tdim, val1, &min2, &max2);
   }
   if (min2 != 255 && min2 <= max2 &&
-      sm->Process(ResidualWriter::GetClusterMergedUV(channel, num_channels,
+      sm->Process(kSymbolResidualUseBound2,
+                  ResidualWriter::GetClusterMergedUV(channel, num_channels,
                                                      method, tdim),
-                  kSymbolResidualUseBound2, use_bounds2, "use_bound2", enc)) {
+                  use_bounds2, "use_bound2", enc)) {
     enc->PutRange(val2, min2, max2, "bound2");
   }
 }
@@ -208,8 +209,9 @@ void ResidualWriter::StoreCoeffs(const int16_t* const coeffs,
   }
 
   if (can_use_bounds_x || can_use_bounds_y) {
-    sm->Process(GetClusterMergedUV(channel, num_channels, method, tdim),
-                kSymbolResidualUseBounds, use_bounds, "use_bounds", enc);
+    sm->Process(kSymbolResidualUseBounds,
+                GetClusterMergedUV(channel, num_channels, method, tdim),
+                use_bounds, "use_bounds", enc);
   }
   if (use_bounds) {
     uint8_t range_min_x, range_max_x, range_min_y, range_max_y;
@@ -229,8 +231,9 @@ void ResidualWriter::StoreCoeffs(const int16_t* const coeffs,
         is_x_first = (range_max_x - range_min_x <= range_max_y - range_min_y);
       }
 
-      sm->Process(GetClusterMergedUV(channel, num_channels, method, tdim),
-                  kSymbolResidualBound1IsX, is_x_first, "is_x_first", enc);
+      sm->Process(kSymbolResidualBound1IsX,
+                  GetClusterMergedUV(channel, num_channels, method, tdim),
+                  is_x_first, "is_x_first", enc);
     }
     if (is_x_first) {
       WriteBounds(channel, num_channels, method, tdim, /*is_x_first=*/true,
@@ -296,7 +299,7 @@ void ResidualWriter::StoreCoeffs(const int16_t* const coeffs,
     if (v == 0) {
       // Write down the number of consecutive zeros by batches of
       // kResidualCons0Max.
-      sm->Process(sector_cluster, kSymbolResidualIsZero, 1, "is_zero", enc);
+      sm->Process(kSymbolResidualIsZero, sector_cluster, 1, "is_zero", enc);
       ++iter;
       do {
         uint32_t num_zeros_tmp = 0;
@@ -312,8 +315,9 @@ void ResidualWriter::StoreCoeffs(const int16_t* const coeffs,
           enc->PutRange(num_zeros_tmp, 0, max_num_coeffs_left - 1, "num_zeros");
         } else {
           // TODO(vrabaud) ANSAdaptiveSymbol performs 4% worse, investigate why.
-          sm->Process(GetCluster(channel, num_channels, method),
-                      kSymbolResNumZeros, num_zeros_tmp, "num_zeros", enc);
+          sm->Process(kSymbolResNumZeros,
+                      GetCluster(channel, num_channels, method), num_zeros_tmp,
+                      "num_zeros", enc);
         }
         if (num_zeros_tmp != kResidualCons0Max) break;
       } while (true);
@@ -323,7 +327,7 @@ void ResidualWriter::StoreCoeffs(const int16_t* const coeffs,
     } else {
       // If we are the last element, we know we are not 0.
       if (!has_written_zeros && iter.MaxNumCoeffsLeft() > 1) {
-        sm->Process(sector_cluster, kSymbolResidualIsZero, 0, "is_zero", enc);
+        sm->Process(kSymbolResidualIsZero, sector_cluster, 0, "is_zero", enc);
       }
     }
     has_written_zeros = false;
@@ -332,18 +336,18 @@ void ResidualWriter::StoreCoeffs(const int16_t* const coeffs,
     // If we don't know yet we only have 1s left.
     const uint16_t abs_v = std::abs(v);
     if (!has_only_ones_left &&
-        !sm->Process(sector_cluster, kSymbolResidualIsOne, abs_v <= 1, "is_one",
+        !sm->Process(kSymbolResidualIsOne, sector_cluster, abs_v <= 1, "is_one",
                      enc)) {
-      if (!sm->Process(sector_cluster, kSymbolResidualIsTwo, abs_v <= 2,
+      if (!sm->Process(kSymbolResidualIsTwo, sector_cluster, abs_v <= 2,
                        "is_two", enc)) {
         const uint16_t residual1 =
             std::min((uint32_t)(abs_v - 3), kResidual1Max);
-        sm->Process(GetCluster(channel, num_channels, method), kSymbolBits0,
+        sm->Process(kSymbolBits0, GetCluster(channel, num_channels, method),
                     residual1, "residual1", enc);
         if (residual1 == kResidual1Max) {
           const uint16_t residual2 = abs_v - 3 - kResidual1Max;
           const Golomb golomb(residual2, /*prefix_size=*/1);
-          sm->Process(GetCluster(channel, num_channels, method), kSymbolBits1,
+          sm->Process(kSymbolBits1, GetCluster(channel, num_channels, method),
                       golomb.prefix, "residual2_prefix", enc);
           enc->PutUValue(golomb.extra_bits_value, golomb.extra_bits_num,
                          "residual2_extra");
@@ -356,13 +360,13 @@ void ResidualWriter::StoreCoeffs(const int16_t* const coeffs,
     ++iter;
     if (iter.IsDone()) break;
     if (zigzag_ind >= ind_min && iter.CanEOB() &&
-        sm->Process(sector_cluster, kSymbolResidualEndOfBlock,
+        sm->Process(kSymbolResidualEndOfBlock, sector_cluster,
                     (i == last_non_zero_index), "eob", enc)) {
       break;
     }
     if (abs_v == 1 && !has_only_ones_left && !previous_is_a_one) {
       has_only_ones_left = (i == first_ending_one);
-      sm->Process(sector_cluster, kSymbolResidualHasOnlyOnesLeft,
+      sm->Process(kSymbolResidualHasOnlyOnesLeft, sector_cluster,
                   has_only_ones_left, "has_only_ones_left", enc);
     }
     previous_is_a_one = (abs_v == 1);

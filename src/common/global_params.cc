@@ -143,7 +143,7 @@ WP2Status GlobalParams::Read(uint32_t quality_hint, bool image_has_alpha,
     bool read_alpha = maybe_use_lossy_alpha_;
     for (Segment& segment : segments_) {
       segment.SetYUVBounds(transf_.GetYUVMin(), transf_.GetYUVMax());
-      WP2_CHECK_STATUS(segment.ReadHeader(partition_set_, quality_hint,
+      WP2_CHECK_STATUS(segment.ReadHeader(quality_hint,
                                           u_quant_multiplier_,
                                           v_quant_multiplier_,
                                           read_alpha,

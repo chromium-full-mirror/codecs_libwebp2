@@ -40,9 +40,8 @@ static uint32_t Interpolate(const uint16_t values[],
 }
 
 WP2Status QuantMtx::Allocate() {
-  WP2_CHECK_ALLOC_OK(iquant_data.resize(kDataSize));
-  WP2_CHECK_ALLOC_OK(bias_data.resize(kDataSize));
-  WP2_CHECK_ALLOC_OK(range_data.resize(kDataSize));
+  WP2_CHECK_ALLOC_OK(iquants.resize(kDataSize));
+  WP2_CHECK_ALLOC_OK(bias.resize(kDataSize));
   return WP2_STATUS_OK;
 }
 
@@ -102,7 +101,6 @@ static uint32_t FindIdx(uint32_t idx, float scale) {
 }
 
 void QuantMtx::Init(uint32_t max_residual, float q_scale,
-                    PartitionSet partition_set,
                     const uint16_t steps[kNumQuantZones]) {
   for (uint32_t i = 0; i < kNumQuantZones; ++i) {
     assert(steps[i] >= 0 && steps[i] <= kQFactorMax);
@@ -123,62 +121,32 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
     // last segment is flat
     for (; s < kMaxBlockSizePix; ++s) qramp[s] = last;
   }
-  // prepare the quant matrices
-  const bool for_decoding = iquant_data.empty();
-  int16_t* dq_ptr = dequant_data;
-  uint32_t* iq_ptr = iquant_data.data();
-  uint32_t* b_ptr = bias_data.data();
-  uint16_t* range_ptr = range_data.data();
-  for (const TrfSize tdim : kAllTrfSizes) {
-    // Check if tdim is used in the PartitionSet.
-    const bool is_used = TrfIsUsed(partition_set, tdim);
-    const uint32_t W = TrfWidth[tdim];
-    const uint32_t H = TrfHeight[tdim];
-    const uint32_t max_residual_value =
-        (uint32_t)(max_residual * std::sqrt(W * H));
-    for (uint32_t j = is_used ? 0 : H; j < H; ++j) {
-      const uint32_t qy = qramp[j * 32 / H];
-      for (uint32_t i = 0; i < W; ++i) {
-        const bool is_dc = (i == 0 && j == 0);
-        const uint32_t qx = qramp[i * 32 / W];
-        const uint32_t q_idx = FindIdx((qx + qy + 1) >> 1, q_scale);
-        const uint32_t q = Qs[q_idx];
-        const uint32_t IQ = iQs[q_idx];
-        const uint32_t idx = i + j * W;
-        const uint32_t B = (1u << WP2QBits) / 3;
-        if (!for_decoding) {
-          iq_ptr[idx] = IQ;
-          b_ptr[idx] = B;
-        }
-        if (!for_decoding || is_dc) {
-          const uint32_t max_range = is_dc ? kMaxDcValue : kMaxCoeffValue;
-          // for max_range calculation, one must use the actual quantization
-          // formula, instead of the exact divide by q.
-          // This quantization formulae is the same as the one used in dsp/,
-          // only rounded up for safety.
-          const uint16_t range = std::min(max_range,
-              (max_residual_value * IQ + (1 << WP2QBits) - 1) >> WP2QBits);
-          if (!for_decoding) range_ptr[idx] = range;
-          if (is_dc) max_abs_res_dc[tdim] = range;
-        }
-        dq_ptr[idx] = (int16_t)q;
+
+  // Compute quantization params for the big 32x32 unique matrix
+  const bool for_encoding = !iquants.empty();
+  uint32_t IQ0 = 0;
+  for (uint32_t j = 0; j < 32; ++j) {
+    const uint32_t qy = qramp[j];
+    for (uint32_t i = 0; i < 32; ++i) {
+      const uint32_t qx = qramp[i];
+      const uint32_t q_idx = FindIdx((qx + qy + 1) >> 1, q_scale);
+      const uint32_t idx = i + j * WP2QStride;
+      if (for_encoding) {
+        iquants[idx] = iQs[q_idx];
+        bias[idx] = (1u << WP2QBits) / 3;
       }
-    }
-    // Because of the assumption of WP2Quantize(), we need to round up the size
-    // to next multiple of 8.
-    const uint32_t size8 = (W * H + 7) & ~7;
-    dequants[tdim] = dq_ptr;
-    iquants[tdim] = iq_ptr;
-    bias[tdim] = b_ptr;
-    max_abs_res[tdim] = range_ptr;
-    dq_ptr += size8;
-    if (!for_decoding) {
-      iq_ptr += size8;
-      b_ptr += size8;
-      range_ptr += size8;
+      dequants[idx] = (int16_t)Qs[q_idx];
+      if (idx == 0) IQ0 = iQs[q_idx];   // save dc inv-quant
     }
   }
-  assert(dq_ptr == &dequant_data[kDataSize]);
+  for (const TrfSize tdim : kAllTrfSizes) {
+    const uint32_t W = TrfWidth[tdim], H = TrfHeight[tdim];
+    const uint32_t max_residual_value =
+          (uint32_t)(max_residual * std::sqrt(W * H));
+    const int32_t max_res =
+          WP2Quantize16b(max_residual_value, IQ0, (1 << WP2QBits) - 1);
+    max_abs_res_dc[tdim] = std::min(kMaxDcValue, max_res);
+  }
 }
 
 void QuantMtx::SetLambda(float lambda) {
@@ -195,16 +163,15 @@ void QuantMtx::SetLambda(float lambda) {
 void QuantMtx::Quantize(const int32_t residuals[], TrfSize dim,
                         bool first_is_dc, int16_t coeffs[],
                         uint32_t* const num_coeffs) const {
-  const uint32_t num_coeffs_full = kNumCoeffs[dim];
-  WP2Quantize(iquants[dim], bias[dim], residuals, coeffs, num_coeffs_full);
-  uint32_t last_nz = num_coeffs_full;
+  WP2Quantize(iquants.data(), bias.data(),
+              residuals, coeffs, TrfWidth[dim], TrfHeight[dim]);
+  uint32_t last_nz = kNumCoeffs[dim];
   while (last_nz > 0 && coeffs[last_nz - 1] == 0) --last_nz;
   *num_coeffs = last_nz;
 
 #if defined(WP2_ERROR_TRACE) || defined(WP2_TRACE)
-  for (uint32_t i = 0; i < num_coeffs_full; ++i) {
+  for (uint32_t i = 0; i < kNumCoeffs[dim]; ++i) {
     const uint32_t v = std::abs(coeffs[i]);
-    assert(v <= max_abs_res[dim][i]);
     if (i == 0 && v > kMaxDcValue) {
       // TODO(maryla): make sure clipping never occurs? Clipping is bad, it's
       // a form of unexpected quantization that happens at high quality (but
@@ -226,16 +193,17 @@ void QuantMtx::Quantize(const int32_t residuals[], TrfSize dim,
 }
 
 int16_t QuantMtx::DCError(int32_t DC, TrfSize dim) const {
-  const uint32_t iq = iquants[dim][0];
-  const uint32_t b = bias[dim][0];
-  int32_t v = ((uint64_t)std::abs(DC) * iq + b) >> WP2QBits;
-  v = std::min(v, kMaxDcValue) * dequants[dim][0] * (DC < 0 ? -1 : 1);
+  const uint32_t iq = iquants[0];
+  const uint32_t b = bias[0];
+  int16_t v = WP2Quantize16b(std::abs(DC), iq, b);
+  v = std::min(v, (int16_t)kMaxDcValue) * dequants[0] * (DC < 0 ? -1 : 1);
   return DC - v;
 }
 
 void QuantMtx::Dequantize(const int16_t coeffs[], uint32_t num_coeffs,
                           TrfSize dim, int32_t residuals[]) const {
-  WP2Dequantize(coeffs, dequants[dim], residuals, num_coeffs, kNumCoeffs[dim]);
+  WP2Dequantize(coeffs, dequants, residuals,
+                TrfWidth[dim], TrfHeight[dim], num_coeffs);
 }
 
 uint32_t QuantMtx::RoundTrip(const int32_t residuals[], TrfSize dim,
@@ -244,7 +212,8 @@ uint32_t QuantMtx::RoundTrip(const int32_t residuals[], TrfSize dim,
   int32_t tmp[kMaxBlockSizePix2];
   Quantize(residuals, dim, first_is_dc, coeffs, num_coeffs);
   // TODO(skal): rnd_mtx ?
-  WP2Dequantize(coeffs, dequants[dim], tmp, *num_coeffs, kNumCoeffs[dim]);
+  WP2Dequantize(coeffs, dequants, tmp,
+                TrfWidth[dim], TrfHeight[dim], *num_coeffs);
 
   uint32_t error = 0;
   for (uint32_t i = 0; i < kNumCoeffs[dim]; ++i) {
@@ -255,17 +224,12 @@ uint32_t QuantMtx::RoundTrip(const int32_t residuals[], TrfSize dim,
 }
 
 void QuantMtx::Print() const {
-  for (const TrfSize tdim : kAllTrfSizes) {
-    printf(" --- Q-%s ---\n", kTDimNames[tdim]);
-    const uint32_t W = TrfWidth[tdim];
-    const uint32_t H = TrfHeight[tdim];
-    for (uint32_t j = 0; j < H; ++j) {
-      for (uint32_t i = 0; i < W; ++i) {
-        const uint32_t idx = i + W * j;
-        printf("%4u ", (uint32_t)((1ull << WP2QBits) / iquants[tdim][idx]));
-      }
-      printf("\n");
+  for (uint32_t j = 0; j < 32; ++j) {
+    for (uint32_t i = 0; i < 32; ++i) {
+      const uint32_t idx = i + WP2QStride * j;
+      printf("%4u ", (uint32_t)((1ull << WP2QBits) / iquants[idx]));
     }
+    printf("\n");
   }
   printf("quant_steps[]: ");
   for (const auto& q : quant_steps) printf("[%d]", q);

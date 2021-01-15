@@ -54,7 +54,7 @@ static void WriteLZ77Golomb(uint32_t cluster, uint32_t sym, int32_t value,
                             WP2_OPT_LABEL, WP2::SymbolManager* const sw,
                             WP2::ANSEncBase* const enc, double* const cost) {
   WP2::Golomb golomb(value, kLZZGolombPrefixSize);
-  sw->ProcessWithCost(cluster, sym, golomb.prefix, label, enc, cost);
+  sw->ProcessWithCost(sym, cluster, golomb.prefix, label, enc, cost);
   if (golomb.extra_bits_num == 0) return;
   if (golomb.extra_bits_num <= IO_BITS) {
     std::string label_bits;
@@ -118,28 +118,28 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
       }
     }
     const PixelMode& v = *c.cur_pos_;
-    sw->ProcessWithCost(histogram_ix, kSymbolType, v.GetMode(), "lossless_mode",
+    sw->ProcessWithCost(kSymbolType, histogram_ix, v.GetMode(), "lossless_mode",
                         enc, cost_ptr);
     switch (v.GetMode()) {
       case kSymbolTypeLiteral: {
         WP2::ANSDebugPrefix prefix(enc, "literal");
         if (has_alpha) {
-          sw->ProcessWithCost(histogram_ix, kSymbolA, v.GetLiteral(0), "A", enc,
+          sw->ProcessWithCost(kSymbolA, histogram_ix, v.GetLiteral(0), "A", enc,
                               cost_ptr);
         }
         if (!is_label_image) {
-          sw->ProcessWithCost(histogram_ix, kSymbolR, v.GetLiteral(1), "R", enc,
+          sw->ProcessWithCost(kSymbolR, histogram_ix, v.GetLiteral(1), "R", enc,
                               cost_ptr);
-          sw->ProcessWithCost(histogram_ix, kSymbolB, v.GetLiteral(3), "B", enc,
+          sw->ProcessWithCost(kSymbolB, histogram_ix, v.GetLiteral(3), "B", enc,
                               cost_ptr);
         }
-        sw->ProcessWithCost(histogram_ix, kSymbolG, v.GetLiteral(2), "G", enc,
+        sw->ProcessWithCost(kSymbolG, histogram_ix, v.GetLiteral(2), "G", enc,
                             cost_ptr);
         break;
       }
       case kSymbolTypeCacheIdx: {
         const uint32_t code = v.GetCacheIdx();
-        sw->ProcessWithCost(histogram_ix, kSymbolCache, code,
+        sw->ProcessWithCost(kSymbolCache, histogram_ix, code,
                             v.GetCacheIdxRange() - 1, "cache_idx", enc,
                             cost_ptr);
         break;
@@ -205,7 +205,7 @@ WP2Status WriteHeaders(const WP2::SymbolRecorder& recorder,
   // Iterate over all histograms and get the aggregate number of codes used.
   for (uint32_t i = 0; i < symbols_info.NumClusters(kSymbolType); ++i) {
     // Deal with the first symbol type.
-    WP2_CHECK_STATUS(sw->WriteHeader(i, num_pixels, kSymbolType, recorder,
+    WP2_CHECK_STATUS(sw->WriteHeader(kSymbolType, i, num_pixels, recorder,
                                      kSymbolNames[kSymbolType], enc, dicts));
     bool is_maybe_used[kSymbolTypeNum];
     // TODO(vrabaud) For kSymbolType, it's either a dictionary, or a trivial
@@ -213,14 +213,15 @@ WP2Status WriteHeaders(const WP2::SymbolRecorder& recorder,
     // We would get exact counts when decoding and we would therefore know
     // exactly what is used or not. That would lead to a very small gain in
     // compressibility.
-    sw->GetPotentialUsage(i, kSymbolType, is_maybe_used, kSymbolTypeNum);
+    sw->GetPotentialUsage(kSymbolType, i, is_maybe_used, kSymbolTypeNum);
 
     // Figure out the number of elements and the max values in bits.
     for (int s = 1; s < kSymbolNum; ++s) {
-      const Symbol sym = static_cast<Symbol>(s);
+      if (symbols_info.IsUnused(s)) continue;
       // Ignore symbols we don't even use.
-      if (symbols_info.IsSymbolUseless(sym, is_maybe_used)) continue;
-      WP2_CHECK_STATUS(sw->WriteHeader(i, num_pixels, sym, recorder,
+      Symbol sym = (Symbol)s;
+      if (!IsSymbolUsed(sym, is_maybe_used)) continue;
+      WP2_CHECK_STATUS(sw->WriteHeader(sym, i, num_pixels, recorder,
                                        kSymbolNames[s], enc, dicts));
     }
   }
@@ -455,7 +456,7 @@ static WP2Status ApplyPredictFilter(const Encoder* const encoder,
   enc->PutRange(pred_bits, kTransformBitsMin, kTransformBitsMax,
                 "transform_bits");
   LosslessSymbolsInfo symbols_info;
-  symbols_info.Init(/*has_alpha=*/false, encoder->symbols_info_.SampleFormat());
+  symbols_info.Init();
   symbols_info.SetMinMax(kSymbolG, /*min=*/0, /*max=*/kNumPredictors - 1);
   symbols_info.SetAsLabelImage();
   const WP2Status status = EncodeImageNoClusters(
@@ -486,7 +487,7 @@ static WP2Status ApplyCrossColorFilter(const Encoder* const encoder,
   enc->PutRange(ccolor_transform_bits, kTransformBitsMin, kTransformBitsMax,
                 "transform_bits");
   LosslessSymbolsInfo symbols_info;
-  symbols_info.Init(/*has_alpha=*/false, encoder->symbols_info_.SampleFormat());
+  symbols_info.Init();
   symbols_info.SetAsCrossColorImage();
   WP2_CHECK_STATUS(EncodeImageNoClusters(
       enc, dicts, encoder->transform_data_, (HashChain*)&encoder->hash_chain_,
@@ -507,14 +508,18 @@ WP2Status Encoder::AllocateTransformBuffer(const CrunchConfig& config,
   const uint64_t image_size = width * height;
   // ResidualImage needs room for 2 scanlines of uint32 pixels with an extra
   // pixel in each, plus 2 regular scanlines of bytes.
-  // TODO(skal): Clean up by using arithmetic in bytes instead of words.
+  const TransformType* end = config.transforms + config.num_transforms;
+  const bool use_predict =
+      std::find(config.transforms, end, TransformType::kPredictor) != end;
+  const bool use_cross_color =
+      std::find(config.transforms, end, TransformType::kCrossColor) != end;
+
   const uint64_t argb_scratch_size =
-      config.use_predict
-          ? (width + 1) * 2 +
-                (width * 2 + sizeof(uint32_t) - 1) / sizeof(uint32_t)
-          : 0;
+      use_predict ? (width + 1) * 2 +
+                        (width * 2 + sizeof(uint32_t) - 1) / sizeof(uint32_t)
+                  : 0;
   const uint64_t transform_data_size =
-      (config.use_predict || config.use_cross_color)
+      (use_predict || use_cross_color)
           ? SubSampleSize(width, transform_bits_) *
                 SubSampleSize(height, transform_bits_)
           : 0;
@@ -611,88 +616,97 @@ static WP2Status ApplyAndWriteTransforms(
   const bool decoder_must_premultiply =
       encoder->has_alpha_ && !encoder->use_premultiplied_;
 
-  if (enc->PutBool(config.use_palette || config.use_subtract_green ||
-                       config.use_predict || config.use_cross_color ||
-                       config.use_group4 || decoder_must_premultiply,
-                   "transform_present")) {
-    if (!enc->PutBool(config.use_palette, "use_color_indexing") &&
-        !enc->PutBool(config.use_group4, "use_group4")) {
-      // Color indexing cannot be used with other transforms.
-      if (encoder->has_alpha_) {
-        enc->PutBool(decoder_must_premultiply, "premultiply");
-      }
-      enc->PutBool(config.use_subtract_green, "use_subtract_green");
-      enc->PutBool(config.use_predict, "use_predictor");
-      enc->PutBool(config.use_cross_color, "use_cross_color");
+  uint32_t index = 0;
+  constexpr uint32_t kNumCombinations =
+      std::extent<decltype(kPossibleTransformCombinations), 0>::value;
+  constexpr uint32_t kNumTransformsMax =
+      std::extent<decltype(kPossibleTransformCombinations), 1>::value;
+  for (; index < kNumCombinations; ++index) {
+    if (std::equal(config.transforms, config.transforms + config.num_transforms,
+                   kPossibleTransformCombinations[index]) &&
+        (config.num_transforms == kNumTransformsMax ||
+         kPossibleTransformCombinations[index][config.num_transforms] ==
+             TransformType::kNum)) {
+      break;
     }
   }
 
-  const ProgressRange palette_progress(progress, 0.2);
-  const ProgressRange group4_progress(progress, 0.2);
-  const ProgressRange subtract_green_progress(progress, 0.2);
-  const ProgressRange predict_progress(progress, 0.2);
-  const ProgressRange cross_color_progress(progress, 0.2);
+  enc->PutRValue(index, kNumCombinations, "index");
 
-  // Encode palette
-  if (config.use_palette) {
+  bool need_copy = (encoder->argb_content_ != kEncoderNearLossless &&
+                    encoder->argb_content_ != kEncoderPalette);
+
+  for (uint32_t i = 0; i < config.num_transforms; ++i) {
+    const TransformType type = config.transforms[i];
+    ProgressRange progress_local(progress, 1. / config.num_transforms);
+    switch (type) {
+      case TransformType::kColorIndexing: {
+        // Encode palette
+        WP2_CHECK_STATUS(
+            encoder->palette_.Write(progress_local, enc, dicts, encoder));
+        WP2_CHECK_STATUS(MapImageFromPalette(config, encoder));
+        need_copy = false;
+        break;
+      }
+      case TransformType::kGroup4: {
+        // Group4 cannot be used with other transforms.
+        assert(config.num_transforms == 1);
+        assert(encoder->palette_.Size() >= 2);
+        WP2_CHECK_STATUS(
+            encoder->palette_.Write(progress_local, enc, dicts, encoder));
+        WP2_CHECK_STATUS(MapImageFromPalette(config, encoder));
+        // Green channel of first pixel.
+        const int16_t first_color = encoder->argb_[2];
+        assert(first_color >= 0);
+        enc->PutRValue(first_color, encoder->palette_.Size(), "first_color");
+        if (encoder->palette_.Size() > 3) {
+          // MoveToFront is only relevant when there are more than 3 colors.
+          // With 2 colors, any color change is necessarily the other color
+          // (different from the current one). With 3 colors, we use a boolean
+          // to encode whether the new color is the one expected (from the row
+          // above), or the other one, and that is enough.
+          enc->PutBool(config.group4_use_move_to_front, "use_move_to_front");
+        } else {
+          assert(!config.group4_use_move_to_front);
+        }
+        return WP2_STATUS_OK;
+      }
+      case TransformType::kSubtractGreen:
+      case TransformType::kPredictor:
+      case TransformType::kCrossColor:
+        if (need_copy) {
+          WP2_CHECK_STATUS(MakeInputImageCopy(config, encoder));
+          need_copy = false;
+        }
+        if (type == TransformType::kSubtractGreen) {
+          ApplySubtractGreen(encoder, width, height, enc);
+          WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
+        } else if (type == TransformType::kPredictor) {
+          WP2_CHECK_STATUS(ApplyPredictFilter(encoder, width, height, effort,
+                                              progress_local, enc, dicts));
+        } else {
+          WP2_CHECK_STATUS(ApplyCrossColorFilter(encoder, width, height, effort,
+                                                 progress_local, enc, dicts));
+        }
+        break;
+      case TransformType::kNum:
+        assert(false);
+    }
+  }
+
+  if (encoder->has_alpha_) {
+    enc->PutBool(decoder_must_premultiply, "premultiply");
+  }
+  if (config.num_transforms == 0) {
+    ProgressRange progress_local(progress, 1.);
+    WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
+  } else if (config.num_transforms == 1 &&
+             config.transforms[0] == TransformType::kColorIndexing) {
     symbols_info->SetAsLabelImage();
     const uint32_t palette_size = encoder->palette_.Size();
     symbols_info->SetMinMax(kSymbolG, /*min=*/0, /*max=*/palette_size - 1);
-    WP2_CHECK_STATUS(
-        encoder->palette_.Write(palette_progress, enc, dicts, encoder));
-    WP2_CHECK_STATUS(MapImageFromPalette(config, encoder));
-  } else {
-    WP2_CHECK_STATUS(palette_progress.AdvanceBy(1.));
   }
-
-  if (config.use_group4) {
-    assert(encoder->palette_.Size() >= 2);
-    WP2_CHECK_STATUS(
-        encoder->palette_.Write(group4_progress, enc, dicts, encoder));
-    WP2_CHECK_STATUS(MapImageFromPalette(config, encoder));
-    // Green channel of first pixel.
-    const int16_t first_color = encoder->argb_[2];
-    assert(first_color >= 0);
-    enc->PutRValue(first_color, encoder->palette_.Size(), "first_color");
-    if (encoder->palette_.Size() > 3) {
-      // MoveToFront is only relevant when there are more than 3 colors. With
-      // 2 colors, any color change is necessarily the other color (different
-      // from the current one). With 3 colors, we use a boolean to encode
-      // whether the new color is the one expected (from the row above), or the
-      // other one, and that is enough.
-      enc->PutBool(config.group4_use_move_to_front, "use_move_to_front");
-    } else {
-      assert(!config.group4_use_move_to_front);
-    }
-  } else {
-    WP2_CHECK_STATUS(group4_progress.AdvanceBy(1.));
-  }
-
-  // In case image is not packed, copy it to the argb_ buffer.
-  if (encoder->argb_content_ != kEncoderNearLossless &&
-      encoder->argb_content_ != kEncoderPalette) {
-    WP2_CHECK_STATUS(MakeInputImageCopy(config, encoder));
-  }
-
-  // Apply transforms and write transform data.
-  if (config.use_subtract_green) {
-    ApplySubtractGreen(encoder, width, height, enc);
-  }
-  WP2_CHECK_STATUS(subtract_green_progress.AdvanceBy(1.));
-
-  if (config.use_predict) {
-    WP2_CHECK_STATUS(ApplyPredictFilter(encoder, width, height, effort,
-                                        predict_progress, enc, dicts));
-  } else {
-    WP2_CHECK_STATUS(predict_progress.AdvanceBy(1.));
-  }
-
-  if (config.use_cross_color) {
-    WP2_CHECK_STATUS(ApplyCrossColorFilter(encoder, width, height, effort,
-                                           cross_color_progress, enc, dicts));
-  } else {
-    WP2_CHECK_STATUS(cross_color_progress.AdvanceBy(1.));
-  }
+  if (need_copy) WP2_CHECK_STATUS(MakeInputImageCopy(config, encoder));
 
   return WP2_STATUS_OK;
 }
@@ -711,7 +725,7 @@ Encoder::Encoder(const WP2::EncoderConfig& config,
   histo_bits_ = 0;
   transform_bits_ = 0;
   // TODO(vrabaud) Deal with channel_bits
-  symbols_info_.Init(has_alpha, picture.format());
+  symbols_info_.Init(has_alpha_, pic_.format());
 
   argb_content_ = kEncoderNone;
   EncLDspInit();
@@ -780,7 +794,13 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
           current_encode_info.bits_per_pixel.resize(width * height));
     }
 
-    if (config->use_group4) {
+    const TransformType* end = config->transforms + config->num_transforms;
+    const bool use_group4 =
+        std::find(config->transforms, end, TransformType::kGroup4) != end;
+    const bool use_palette = std::find(config->transforms, end,
+                                       TransformType::kColorIndexing) != end;
+
+    if (use_group4) {
       WP2_CHECK_STATUS(
           Group4Encode(encoder->argb_, width, height, encoder->palette_.Size(),
                        config->group4_use_move_to_front, encode_progress, &enc,
@@ -789,9 +809,8 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
       // If using a color cache, do not have it bigger than the number of
       // colors.
       const uint32_t cache_bits_max =
-          config->use_palette
-              ? (1u + (uint32_t)WP2Log2Floor(encoder->palette_.Size()))
-              : kMaxCacheBits;
+          use_palette ? (1u + (uint32_t)WP2Log2Floor(encoder->palette_.Size()))
+                      : kMaxCacheBits;
       WP2_CHECK_STATUS(EncodeImageInternal(
           encoder->argb_, *config, width, height, encoder->histo_bits_,
           cache_bits_max, effort, encode_progress, &enc, &dicts,

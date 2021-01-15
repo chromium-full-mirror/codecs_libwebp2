@@ -122,8 +122,7 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
       gparams->segments_[i].SetQuantizationFactor(
           gparams->transf_, GetQualityHint(config.quality),
           kDefaultQuantMultiplier, kDefaultQuantMultiplier,
-          random->Get(1, 128) / 1.28f, random->Get(1, 128) / 1.28f * 40.f,
-          ALL_RECTS);
+          random->Get(1, 128) / 1.28f, random->Get(1, 128) / 1.28f * 40.f);
       gparams->segments_[i].use_grain_ = false;  // Nah.
     }
     gparams->maybe_use_lossy_alpha_ =

@@ -141,34 +141,36 @@ WP2Status SymbolReader::Init(const SymbolsInfo& symbols_info,
     }
   }
   WP2_CHECK_ALLOC_OK(codes_.reserve(num_auto));
-  return SymbolIO<StatExtra>::Init(symbols_info);
+  WP2_CHECK_STATUS(SymbolIO<StatExtra>::Init(symbols_info));
+  return WP2_STATUS_OK;
 }
 
-void SymbolReader::AddTrivial(uint32_t cluster, uint32_t sym, int32_t value) {
-  Stat* const stat = GetStats(cluster, sym);
+void SymbolReader::AddTrivial(uint32_t sym, uint32_t cluster, int32_t value) {
+  Stat* const stat = GetStats(sym, cluster);
   stat->type = Stat::Type::kTrivial;
   stat->param.trivial_value = value;
 }
 
-void SymbolReader::AddMapping(uint32_t cluster, uint32_t sym,
+void SymbolReader::AddMapping(uint32_t sym,
+                              uint32_t cluster,
                               const Vector_u16& mapping) {
-  Stat* const stat = GetStats(cluster, sym);
+  Stat* const stat = GetStats(sym, cluster);
   stat->type = Stat::Type::kRange;
   stat->use_mapping = true;
   for (uint32_t k = 0; k < mapping.size(); ++k) stat->mappings[k] = mapping[k];
   stat->range = mapping_.size();
 }
 
-void SymbolReader::AddRange(uint32_t cluster, uint32_t sym, uint16_t range) {
-  Stat* const stat = GetStats(cluster, sym);
+void SymbolReader::AddRange(uint32_t sym, uint32_t cluster, uint16_t range) {
+  Stat* const stat = GetStats(sym, cluster);
   stat->type = Stat::Type::kRange;
   stat->use_mapping = false;
   stat->range = range;
 }
 
-WP2Status SymbolReader::AddDict(uint32_t cluster, uint32_t sym,
+WP2Status SymbolReader::AddDict(uint32_t sym, uint32_t cluster,
                                 ANSCodes* const infos) {
-  Stat* const stat = GetStats(cluster, sym);
+  Stat* const stat = GetStats(sym, cluster);
 
   assert(infos->size() > 1);
   stat->type = Stat::Type::kDict;
@@ -190,25 +192,24 @@ WP2Status SymbolReader::AddDict(uint32_t cluster, uint32_t sym,
   stat->extra.log2_tab_size = ANS_LOG_TAB_SIZE;
   WP2_CHECK_STATUS(ANSCountsToSpreadTable(
       &counts[0], counts.size(), 1u << stat->extra.log2_tab_size,
-      codes_.back()));   // will allocate codes_.back()
+      codes_.back()));  // will allocate codes_.back()
   stat->extra.codes = codes_.back().data();
   return WP2_STATUS_OK;
 }
 
-WP2Status SymbolReader::AddGolomb(uint32_t cluster, uint32_t sym,
-                                  ANSCodes* const infos,
-                                  uint32_t prefix_size) {
-  WP2_CHECK_STATUS(AddDict(cluster, sym, infos));
-  SetGolombStat(cluster, sym, prefix_size);
+WP2Status SymbolReader::AddGolomb(uint32_t sym, uint32_t cluster,
+                                  ANSCodes* const infos, uint32_t prefix_size) {
+  WP2_CHECK_STATUS(AddDict(sym, cluster, infos));
+  SetGolombStat(sym, cluster, prefix_size);
 
   return WP2_STATUS_OK;
 }
 
-int32_t SymbolReader::Read(uint32_t cluster, uint32_t sym, WP2_OPT_LABEL,
+int32_t SymbolReader::Read(uint32_t sym, uint32_t cluster, WP2_OPT_LABEL,
                            double* const cost) {
   int32_t value;
-  const WP2Status status = ReadInternal(cluster, sym, /*use_max_value=*/false,
-                                        /*max_value=*/0, label, &value, cost);
+  const WP2Status status = ReadInternal(sym, cluster, /*use_max_value=*/false,
+      /*max_value=*/0, label, &value, cost);
   (void)status;
   assert(status == WP2_STATUS_OK);
   // TODO(yguyon): Enforce dec_->GetStatus() checking more widely.
@@ -216,10 +217,10 @@ int32_t SymbolReader::Read(uint32_t cluster, uint32_t sym, WP2_OPT_LABEL,
   return value;
 }
 
-WP2Status SymbolReader::TryRead(uint32_t cluster, uint32_t sym,
+WP2Status SymbolReader::TryRead(uint32_t sym, uint32_t cluster,
                                 uint32_t max_value, WP2_OPT_LABEL,
                                 int32_t* const value, double* const cost) {
-  const WP2Status status = ReadInternal(cluster, sym, /*use_max_value=*/true,
+  const WP2Status status = ReadInternal(sym, cluster, /*use_max_value=*/true,
                                         max_value, label, value, cost);
   if (dec_->GetStatus() != WP2_STATUS_OK) return dec_->GetStatus();
   return status;
@@ -327,14 +328,14 @@ static uint32_t ScaleFreq(const ANSSymbolInfo* codes, uint32_t log2_tab_size,
   return offset_next - offset;
 }
 
-WP2Status SymbolReader::ReadInternal(uint32_t cluster, uint32_t sym,
+WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
                                      bool use_max_value, uint32_t max_value,
                                      WP2_OPT_LABEL, int32_t* const value,
                                      double* const cost) {
   // Consider reading a symbol as a single read occurrence.
   dec_->PushBitTracesCustomPrefix(label, /*merge_until_pop=*/true);
 
-  const Stat& stat = *GetStats(cluster, sym);
+  const Stat& stat = *GetStats(sym, cluster);
   if (use_max_value && stat.use_mapping) {
     // Make sure at least one value in the mapping is inferior to the max_value.
     // We check the minimal/first one.
@@ -500,7 +501,7 @@ WP2Status SymbolReader::ReadInternal(uint32_t cluster, uint32_t sym,
       return WP2_STATUS_BITSTREAM_ERROR;
   }
   if (*value != 0 && stat.type != Stat::Type::kTrivial &&
-      symbols_info_.Min(cluster, sym) < 0) {
+      symbols_info_.Min(sym, cluster) < 0) {
     // TODO(vrabaud) implement other methods to store negative values.
     if (dec_->ReadBool("is_negative")) *value = -(*value);
     if (cost != nullptr) *cost += 1.;
@@ -510,24 +511,24 @@ WP2Status SymbolReader::ReadInternal(uint32_t cluster, uint32_t sym,
   return WP2_STATUS_OK;
 }
 
-WP2Status SymbolReader::ReadHeader(uint32_t max_nnz, uint32_t sym,
+WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t max_nnz,
                                    WP2_OPT_LABEL) {
   for (uint32_t cluster = 0; cluster < symbols_info_.NumClusters(sym);
        ++cluster) {
-    WP2_CHECK_STATUS(ReadHeader(cluster, max_nnz, sym, label));
+    WP2_CHECK_STATUS(ReadHeader(sym, cluster, max_nnz, label));
   }
   return dec_->GetStatus();
 }
 
-WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
-                                   uint32_t sym, WP2_OPT_LABEL) {
+WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t cluster,
+                                   uint32_t max_nnz, WP2_OPT_LABEL) {
   if (symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kUnused) {
     return WP2_STATUS_OK;
   }
-  const uint32_t range = symbols_info_.Range(cluster, sym);
+  const uint32_t range = symbols_info_.Range(sym, cluster);
   if (range < 2) {
     assert(range > 0);
-    AddTrivial(cluster, sym, 0);
+    AddTrivial(sym, cluster, 0);
     return WP2_STATUS_OK;
   }
 
@@ -539,11 +540,11 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
       break;
     case SymbolsInfo::StorageMethod::kAdaptiveBit:
       WP2_CHECK_STATUS(AddAdaptiveBit(
-          cluster, sym, symbols_info_.StartingProbaP0(cluster, sym),
-          symbols_info_.StartingProbaP1(cluster, sym)));
+          sym, cluster, symbols_info_.StartingProbaP0(sym, cluster),
+          symbols_info_.StartingProbaP1(sym, cluster)));
       return dec_->GetStatus();
     case SymbolsInfo::StorageMethod::kAdaptiveSym: {
-      WP2_CHECK_STATUS(AddAdaptiveSymbol(cluster, sym,
+      WP2_CHECK_STATUS(AddAdaptiveSymbol(sym, cluster,
                                          ANSAdaptiveSymbol::Method::kAOM,
                                          kANSAProbaInvalidSpeed));
       return dec_->GetStatus();
@@ -551,7 +552,7 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
     case SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed: {
       if (max_nnz <= 1) {
         // Adaptation method/speed don't matter if we only use this symbol once.
-        return AddAdaptiveSymbol(cluster, sym,
+        return AddAdaptiveSymbol(sym, cluster,
                                  ANSAdaptiveSymbol::Method::kConstant, 0);
       }
       const auto method = (ANSAdaptiveSymbol::Method)dec_->ReadRValue(
@@ -563,7 +564,7 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
       } else {
         speed = kANSAProbaInvalidSpeed;
       }
-      WP2_CHECK_STATUS(AddAdaptiveSymbol(cluster, sym, method, speed));
+      WP2_CHECK_STATUS(AddAdaptiveSymbol(sym, cluster, method, speed));
       return dec_->GetStatus();
     }
     case SymbolsInfo::StorageMethod::kUnused:
@@ -576,36 +577,35 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
 
   // Deal with trivial cases.
   if (c == kSymbolCountZero) {
-    AddTrivial(cluster, sym, 0);
+    AddTrivial(sym, cluster, 0);
     return dec_->GetStatus();
   }
   if (c == kSymbolCountOne) {
     const int32_t value =
-        dec_->ReadRange(symbols_info_.Min(cluster, sym),
-                        symbols_info_.Max(cluster, sym), "symbol");
-    AddTrivial(cluster, sym, value);
+        dec_->ReadRange(symbols_info_.Min(sym, cluster),
+                        symbols_info_.Max(sym, cluster), "symbol");
+    AddTrivial(sym, cluster, value);
     return dec_->GetStatus();
   }
 
   const uint32_t type = dec_->ReadRValue(3, "type");
-  if (type == 2) {         // kGolomb
+  if (type == 2) {  // kGolomb
     const uint32_t golomb_prefix_size = dec_->ReadRange(1, 2, "prefix_size_m1");
     const Golomb golomb(range - 1, golomb_prefix_size);
     const uint32_t range_golomb = golomb.prefix + 1;
     const uint32_t nnz =
         dec_->ReadRange(2, std::min(max_nnz, range_golomb), "size_m2");
-    WP2_CHECK_STATUS(
-        ReadHistogram(nnz, range_golomb, max_nnz, dec_, infos_));
-    WP2_CHECK_STATUS(AddGolomb(cluster, sym, &infos_, golomb_prefix_size));
+    WP2_CHECK_STATUS(ReadHistogram(nnz, range_golomb, max_nnz, dec_, infos_));
+    WP2_CHECK_STATUS(AddGolomb(sym, cluster, &infos_, golomb_prefix_size));
   } else if (type == 1) {  // kDict
     // a kDict can't use more than ANS_MAX_SYMBOLS
     const uint32_t dict_range = std::min(nnz_range, (uint32_t)ANS_MAX_SYMBOLS);
     const uint32_t nnz = dec_->ReadRange(2, dict_range, "size_m2");
     WP2_CHECK_STATUS(ReadHistogram(nnz, range, max_nnz, dec_, infos_));
-    WP2_CHECK_STATUS(AddDict(cluster, sym, &infos_));
-  } else {                 // kRange
+    WP2_CHECK_STATUS(AddDict(sym, cluster, &infos_));
+  } else {  // kRange
     const uint32_t nnz = dec_->ReadRange(1, nnz_range, "size_m1");
-    Stat* const stat = GetStats(cluster, sym);
+    Stat* const stat = GetStats(sym, cluster);
     stat->type = Stat::Type::kRange;
     stat->use_mapping = true;
     stat->range = nnz;
@@ -614,10 +614,10 @@ WP2Status SymbolReader::ReadHeader(uint32_t cluster, uint32_t max_nnz,
   return dec_->GetStatus();
 }
 
-void SymbolReader::GetPotentialUsage(uint32_t cluster, uint32_t sym,
+void SymbolReader::GetPotentialUsage(uint32_t sym, uint32_t cluster,
                                      bool is_maybe_used[],
                                      uint32_t size) const {
-  const Stat& stat = *GetStats(cluster, sym);
+  const Stat& stat = *GetStats(sym, cluster);
   switch (stat.type) {
     case (Stat::Type::kTrivial):
       // Nothing is used but the one value.

@@ -159,31 +159,30 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/alpha.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/ans_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/argb_converter.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/cpu.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/cdef_dsp.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/cpu.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/csp_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/deblocking_filter_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/dec_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/enc_dsp.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/raster_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/grain_c.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/intra_c.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/math.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/math.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/ssim_dsp.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/quant_c.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/quant_sse.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/quant_dsp.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/raster_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/score_dsp.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/ssim_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/transf_c.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/transf_sse.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/wiener_dsp.cc
   # lossless
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/decl_dsp.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/decl_dsp.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/dspl.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/decl_dsp.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/dspl.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_dsp.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_dsp.cc)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/dspl.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_dsp.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_dsp.h)
 target_include_directories(wp2_dsp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(wp2_dsp PUBLIC ${WP2_DEFINITIONS})
 
@@ -220,14 +219,14 @@ add_library(
   wp2_utils OBJECT
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/color_precision.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/constants.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/global_params.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/global_params.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/header_enc_dec.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/global_params.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/header_enc_dec.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/integral.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/header_enc_dec.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/integral.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/progress_watcher.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/integral.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/progress_watcher.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/progress_watcher.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/argb_buffer.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/context_switch.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/context_switch.h
@@ -273,10 +272,6 @@ endif()
 add_library(
   wp2_enc_dec OBJECT
   # common lossy/lossless
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/symbols_dec.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/symbols_dec.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/icc_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/incr/decoder_api.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/incr/decoder_context.cc
@@ -289,33 +284,37 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/incr/decoder_state.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/incr/decoder_state.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/incr/decoder_tiles.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/symbols_dec.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/symbols_dec.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.h
   # common encode/decoder
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/filters/rstr_flt_params.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/filters/rstr_flt_params.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/filters/rstr_flt_params.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/aom/cdfs.inc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/block.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/block.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/block_size.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/block.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/block_size.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/block_size_io.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/block_size.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/block_size_io.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/context.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/block_size_io.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/context.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/predictor.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/context.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/predictor.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/quant_mtx.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/predictor.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/quant_mtx.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/quant_mtx.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/residuals.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/residuals.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/residuals_aom.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/residuals_aom.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/segment.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/segment.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/transforms.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/transforms.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/rnd_mtx.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/symbols.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/segment.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/segment.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/transforms.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossy/transforms.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/symbols.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/symbols.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/vdebug.cc
   # lossy
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/alpha_dec.cc
@@ -345,12 +344,12 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/residuals_dec_aom.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/residuals_dec_aom.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/syntax_dec.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/tile_dec.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/tile_dec.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/tile_dec.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/alpha_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/analysis_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_frame.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_rectangle.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/bypass_enc.cc
@@ -360,9 +359,18 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossy_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/main_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/nearlossless_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partition_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partition_score_func.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioner.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partition_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partition_score_func.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partition_score_func_area.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partition_score_func_block.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partition_score_func_multi.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partition_score_func_tile.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partitioner.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partitioner_area.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partitioner_exhaustive.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partitioner_multi.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partitioner_split.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partitioner_top_left.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/predictor_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/residuals_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/residuals_enc_aom.cc
@@ -379,17 +387,17 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/losslessi_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/losslessi_dec.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/analysisl_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/backward_references_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/backward_references_cost_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/backward_references_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/backward_references_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/group4_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/histogram_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/histogram_enc.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/losslessi_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/losslessi_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/palette.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/palette.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/predictorl_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/losslessi_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/losslessi_enc.h)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/predictorl_enc.cc)
 target_include_directories(wp2_enc_dec PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(wp2_enc_dec PUBLIC ${WP2_DEFINITIONS})
 
@@ -437,8 +445,8 @@ add_library(
   imageio
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/anim_image_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/anim_image_dec.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/imageio/bmpenc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/bmpdec.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/imageio/bmpenc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/file_format.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/file_format.h
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/gifdec.cc
@@ -704,12 +712,12 @@ endif()
 if(WP2_BUILD_EXTRAS)
   add_library(
     extras
-    ${CMAKE_CURRENT_SOURCE_DIR}/extras/aom_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/extras/aom_utils.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/extras/ccsp_imageio.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/extras/aom_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/extras/ccsp_imageio.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/extras/extras.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/extras/ccsp_imageio.h
     ${CMAKE_CURRENT_SOURCE_DIR}/extras/extras.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/extras/extras.h
     ${CMAKE_CURRENT_SOURCE_DIR}/extras/wp2_dec_12b.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/extras/y4mdec.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/extras/y4menc.cc)

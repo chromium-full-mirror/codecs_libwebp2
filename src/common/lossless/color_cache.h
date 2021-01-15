@@ -17,8 +17,8 @@
 //
 // Authors: Vincent Rabaud (vrabaud@google.com)
 
-#ifndef WP2_UTILS_LOSSLESS_COLOR_CACHE_H_
-#define WP2_UTILS_LOSSLESS_COLOR_CACHE_H_
+#ifndef WP2_COMMON_LOSSLESS_COLOR_CACHE_H_
+#define WP2_COMMON_LOSSLESS_COLOR_CACHE_H_
 
 #include <cassert>
 #include <cstring>
@@ -216,4 +216,4 @@ class MoveToFrontCache {
 
 }  // namespace WP2L
 
-#endif  // WP2_UTILS_LOSSLESS_COLOR_CACHE_H_
+#endif  // WP2_COMMON_LOSSLESS_COLOR_CACHE_H_

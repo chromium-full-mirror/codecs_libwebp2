@@ -66,11 +66,19 @@ class GrainParams {
 
 class Segment {
  public:
+  // I/O for header
   WP2Status WriteHeader(ANSEnc* const enc,
                         bool write_alpha, bool write_grain) const;
-  WP2Status ReadHeader(PartitionSet partition_set, uint32_t quality_hint,
+  WP2Status ReadHeader(uint32_t quality_hint,
                        uint32_t u_quant_multiplier, uint32_t v_quant_multiplier,
                        bool read_alpha, bool read_grain, ANSDec* const dec);
+
+  // I/O for Encoding methods.
+  WP2Status ReadEncodingMethods(SymbolReader* const sr,
+                                CodedBlock* const cb) const;
+
+  void StoreEncodingMethods(const CodedBlock& cb, SymbolManager* const sm,
+                            ANSEncBase* const enc) const;
 
  public:
   // quantization
@@ -125,7 +133,8 @@ class Segment {
   // Same, for kAChannel. Must be called *after* FinalizeQuant().
   void FinalizeAlphaQuant(float lambda = 0.f);
 
-  WP2Status AllocateForEncoder();   // must be called before FinalizeQuant()
+  // must be called before FinalizeQuant()
+  WP2Status AllocateForEncoder(bool for_alpha = false);
 
   // Sets the YUV bounds, the quality and the quant mtx based on 'qfactor'.
   // 'qfactor' should be in [0, kFactorMax] range.
@@ -133,26 +142,19 @@ class Segment {
   void SetQuantizationFactor(const CSPTransform& transform,
                              uint32_t quality_hint, uint32_t u_quant_multiplier,
                              uint32_t v_quant_multiplier, uint32_t qfactor,
-                             float lambda_mult, PartitionSet partition_set);
+                             float lambda_mult);
   // Same, but for alpha channel. Must be called *after* SetQuantizationFactor()
   void SetAlphaQuantizationFactor(uint32_t qfactor, float lambda);
 
   // Returns true if this segment is "close enough" to 'other' that they can be
   // merged (some fields might still be different).
   bool IsMergeableWith(const Segment& other) const;
-  WP2Status CopyFrom(const Segment& other);
 
   // Filtering and noise/grain generation.
   bool use_grain_ = false;
   GrainParams grain_;
 
-  // Encoding methods.
-  WP2Status ReadEncodingMethods(SymbolReader* const sr,
-                                CodedBlock* const cb) const;
-
-  void StoreEncodingMethods(const CodedBlock& cb, SymbolManager* const sm,
-                            ANSEncBase* const enc) const;
-
+ public:
   // Basic characteristics of a segment, which can be use to determine
   // quantization and other compression parameters. Used by encoder only.
   // 'risk_' is heuristic a value between 0 (high risk of visible artifacts)
@@ -167,7 +169,6 @@ class Segment {
  private:
   float q_scale_ = 0.f;  // y/u/v quantization precision (depending on range)
   uint32_t max_residual_;
-  PartitionSet partition_set_ = ALL_RECTS;
 };
 
 //------------------------------------------------------------------------------

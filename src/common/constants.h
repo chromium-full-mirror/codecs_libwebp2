@@ -135,15 +135,6 @@ static inline uint32_t TileHeight(TileShape tile_shape, uint32_t image_width) {
 
 namespace WP2L {
 
-typedef enum {
-  PREDICTOR_TRANSFORM      = 0,
-  CROSS_COLOR_TRANSFORM    = 1,
-  SUBTRACT_GREEN           = 2,
-  COLOR_INDEXING_TRANSFORM = 3,
-  GROUP4                   = 4,
-  NUM_TRANSFORMS           = 5
-} ImageTransformType;
-
 // Modes used in Group4 compression: pass is just about skipping the definition
 // of a segment, horizontal mode is about defining the next two segments,
 // vertical is about defining a segment with respect to the line above.

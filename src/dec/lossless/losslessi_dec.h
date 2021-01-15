@@ -37,7 +37,7 @@ typedef enum { READ_DATA = 0, READ_HDR = 1, READ_DIM = 2 } DecodeState;
 
 class Transform {
  public:
-  ImageTransformType type_ = PREDICTOR_TRANSFORM;  // transform type.
+  TransformType type_ = TransformType::kPredictor;  // transform type.
   uint32_t bits_ = 0;     // subsampling bits defining transform window.
   uint32_t width_ = 0;    // transform window X index.
   uint32_t height_ = 0;   // transform window Y index.
@@ -107,8 +107,7 @@ class Decoder {
   WP2Status DecodeImageData(uint32_t width, uint32_t height, uint32_t last_row,
                             WP2::Planef* const bits_per_pixel);
   // Reads a transform of a certain size from the stream.
-  WP2Status ReadTransform(uint32_t width, uint32_t height,
-                          ImageTransformType type);
+  WP2Status ReadTransform(uint32_t width, uint32_t height, TransformType type);
 
   // Visual debug. 'symbol_type' should either be a SymbolType or a Group4Mode
   // if 'is_group4' is true.
@@ -147,7 +146,7 @@ class Decoder {
   Metadata hdr_;
 
   uint32_t next_transform_ = 0;
-  Transform transforms_[NUM_TRANSFORMS];
+  Transform transforms_[(uint32_t)TransformType::kNum];
   bool use_group4_ = false;
   uint16_t group4_first_color_ = 0;  // starting color for group4 compression
   MoveToFrontCache mtf_;

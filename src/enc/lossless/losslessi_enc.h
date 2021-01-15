@@ -161,17 +161,14 @@ static constexpr uint32_t kCrunchLZ77Max = 2;
 struct CrunchConfig {
   uint32_t lz77s_types_to_try[kCrunchLZ77Max];
   uint32_t lz77s_types_to_try_size;
-  // Encoding parameters derived from image characteristics.
-  bool use_cross_color;
-  bool use_subtract_green;
-  bool use_predict;
-  bool use_palette;
-  bool use_group4;
+  // Image transforms to apply in order. Each transform is only used once.
+  TransformType transforms[(uint32_t)TransformType::kNum];
+  uint32_t num_transforms;
   // Use a MoveToFrontCache in group4 to signal new colors.
   bool group4_use_move_to_front;
 };
 
-static constexpr uint32_t kCrunchNumMax = 7;
+static constexpr uint32_t kCrunchNumMax = 8;
 
 WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
                          Encoder* const encoder,

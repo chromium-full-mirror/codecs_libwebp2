@@ -85,6 +85,11 @@ class FilterBlockMap {
 
  public:
   void ApplyVDebug(const DecoderConfig& config, ArgbBuffer* const debug_output);
+
+ private:
+  void RegisterBlock(uint32_t x, uint32_t y, BlockSize dim, uint32_t segment_id,
+                     uint8_t min_bpp, bool has_lossy_alpha,
+                     uint32_t res_den[4]);
 };
 
 //------------------------------------------------------------------------------

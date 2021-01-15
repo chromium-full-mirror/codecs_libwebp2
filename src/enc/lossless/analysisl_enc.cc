@@ -385,21 +385,27 @@ uint32_t GetTransformBits(uint32_t effort, uint32_t histo_bits) {
 }
 
 // Translates an entropy mode to a CrunchConfig.
+// TODO(vrabaud) The order of transforms could be toyed with: the format allows
+//               it like in V1.
 void TranslateEntropyMode(EntropyMode entropy_idx, uint32_t effort,
                           bool red_and_blue_always_zero,
                           CrunchConfig* const config) {
-  config->use_group4 = false;
-  config->use_palette = (entropy_idx == EntropyMode::kPalette);
-  config->use_subtract_green = (entropy_idx == EntropyMode::kSubGreen) ||
-                               (entropy_idx == EntropyMode::kSpatialSubGreen);
-  config->use_predict = (entropy_idx == EntropyMode::kSpatial) ||
-                        (entropy_idx == EntropyMode::kSpatialSubGreen);
-  if (effort == 0) {
-    config->use_cross_color = false;
-  } else {
-    config->use_cross_color =
-        red_and_blue_always_zero ? false : config->use_predict;
+  uint32_t num = 0;
+  if (entropy_idx == EntropyMode::kPalette) {
+    config->transforms[num++] = TransformType::kColorIndexing;
   }
+  if (entropy_idx == EntropyMode::kSubGreen ||
+      entropy_idx == EntropyMode::kSpatialSubGreen) {
+    config->transforms[num++] = TransformType::kSubtractGreen;
+  }
+  if (entropy_idx == EntropyMode::kSpatial ||
+      entropy_idx == EntropyMode::kSpatialSubGreen) {
+    config->transforms[num++] = TransformType::kPredictor;
+    if (effort != 0 && !red_and_blue_always_zero) {
+      config->transforms[num++] = TransformType::kCrossColor;
+    }
+  }
+  config->num_transforms = num;
 }
 
 }  // namespace
@@ -443,12 +449,9 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
     // Try group4 for images with a palette.
     CrunchConfig* config;
     config = &crunch_configs[*crunch_configs_size];
-    config->use_group4 = true;
+    config->num_transforms = 1;
+    config->transforms[0] = TransformType::kGroup4;
     config->group4_use_move_to_front = false;
-    config->use_palette = false;
-    config->use_subtract_green = false;
-    config->use_predict = false;
-    config->use_cross_color = false;
     ++(*crunch_configs_size);
 
     if (encoder->palette_.Size() > 3 && effort > 0) {
@@ -501,6 +504,15 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
       TranslateEntropyMode(best_mode, effort, red_and_blue_always_zero,
                            &crunch_configs[(*crunch_configs_size)++]);
       WP2_CHECK_STATUS(translate_progress.AdvanceBy(1.));
+    }
+    // If we have a palette, also check in combination with spatial.
+    if ((effort == 9 && use_palette) || best_mode == EntropyMode::kPalette) {
+      crunch_configs[*crunch_configs_size].num_transforms = 2;
+      crunch_configs[*crunch_configs_size].transforms[0] =
+          TransformType::kColorIndexing;
+      crunch_configs[*crunch_configs_size].transforms[1] =
+          TransformType::kPredictor;
+      ++(*crunch_configs_size);
     }
   }
   // Fill in the different LZ77s.

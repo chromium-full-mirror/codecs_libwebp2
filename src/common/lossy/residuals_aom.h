@@ -179,43 +179,6 @@ enum {
   kCoeffBaseRangeSymbolCount = 4
 };  // anonymous enum
 
-struct SymbolDecoderContext {
-  SymbolDecoderContext() = default;
-
-  // 'quantizer_context' is 0 for highest qualities, and 3 for lowest qualities.
-  void Initialize(int quantizer_context);
-
-  uint16_t all_zero_cdf[kNumSquareTransformSizes][kAllZeroContexts]
-                       [kBooleanFieldCdfSize];
-  uint16_t eob_pt_4_cdf[kNumPlaneTypes][kEobPtContexts]
-                        [kEobPt4SymbolCount + 1];
-  uint16_t eob_pt_8_cdf[kNumPlaneTypes][kEobPtContexts]
-                        [kEobPt8SymbolCount + 1];
-  uint16_t eob_pt_16_cdf[kNumPlaneTypes][kEobPtContexts]
-                        [kEobPt16SymbolCount + 1];
-  uint16_t eob_pt_32_cdf[kNumPlaneTypes][kEobPtContexts]
-                        [kEobPt32SymbolCount + 1];
-  uint16_t eob_pt_64_cdf[kNumPlaneTypes][kEobPtContexts]
-                        [kEobPt64SymbolCount + 1];
-  uint16_t eob_pt_128_cdf[kNumPlaneTypes][kEobPtContexts]
-                         [kEobPt128SymbolCount + 1];
-  uint16_t eob_pt_256_cdf[kNumPlaneTypes][kEobPtContexts]
-                         [kEobPt256SymbolCount + 1];
-  uint16_t eob_pt_512_cdf[kNumPlaneTypes][kEobPt512SymbolCount + 1];
-  uint16_t eob_pt_1024_cdf[kNumPlaneTypes][kEobPt1024SymbolCount + 1];
-  uint16_t eob_extra_cdf[kNumSquareTransformSizes][kNumPlaneTypes]
-                        [kEobExtraContexts][kBooleanFieldCdfSize];
-  uint16_t coeff_base_eob_cdf[kNumSquareTransformSizes][kNumPlaneTypes]
-                             [kCoeffBaseEobContexts]
-                             [kCoeffBaseEobSymbolCount + 1];
-  uint16_t coeff_base_cdf[kNumSquareTransformSizes][kNumPlaneTypes]
-                         [kCoeffBaseContexts][kCoeffBaseSymbolCount + 1];
-  uint16_t coeff_base_range_cdf[kNumSquareTransformSizes][kNumPlaneTypes]
-                               [kCoeffBaseRangeContexts]
-                               [kCoeffBaseRangeSymbolCount + 1];
-  uint16_t dc_sign_cdf[kNumPlaneTypes][kBooleanFieldCdfSize];
-};
-
 // This is computed as:
 // min(transform_width_log2, 5) + min(transform_height_log2, 5) - 4.
 constexpr uint8_t kEobMultiSizeLookup[kNumTransformSizes] = {

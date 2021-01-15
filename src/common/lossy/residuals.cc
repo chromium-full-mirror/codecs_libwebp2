@@ -763,13 +763,15 @@ WP2Status ResidualIO::InitializeInfo(bool has_alpha, bool use_aom_coeffs,
     for (const TrfSize dim : kAllTrfSizes) {
       for (uint32_t sector = 0; sector < ResidualIO::kNumSectors; ++sector) {
         WP2_CHECK_STATUS(info->SetStartingProba(
+            kSymbolResidualIsZero,
             ResidualIO::GetClusterMergedUV(
                 channel, num_channels, EncodingMethod::kMethod0, dim, sector),
-            kSymbolResidualIsZero, 2, 8));
+            2, 8));
         WP2_CHECK_STATUS(info->SetStartingProba(
+            kSymbolResidualIsZero,
             ResidualIO::GetClusterMergedUV(
                 channel, num_channels, EncodingMethod::kMethod1, dim, sector),
-            kSymbolResidualIsZero, 8, 2));
+            8, 2));
       }
     }
   }
@@ -957,11 +959,12 @@ WP2Status InitializeAOMSymbol(Symbol sym, SymbolsInfo* const info) {
   const uint32_t range = extents[num_extents - 1];
   info->SetInfo(sym, /*min=*/0, /*max=*/range - 1, num_clusters,
                 SymbolsInfo::StorageMethod::kAdaptiveSym);
-  for (uint32_t i = 0; i < num_clusters; ++i) {
-    const uint16_t* cdf = GetCDF(sym, i);
+  for (uint32_t cluster = 0; cluster < num_clusters; ++cluster) {
+    const uint16_t* cdf = GetCDF(sym, cluster);
     assert(cdf[0] == 0);
     // TODO(vrabaud) all CDFs in the code should have the same max_proba.
-    WP2_CHECK_STATUS(info->SetInitialCDF(cdf, /*max_proba=*/1u << 14, i, sym));
+    constexpr uint32_t kMaxProba = 1u << 14;
+    WP2_CHECK_STATUS(info->SetInitialCDF(sym, cluster, cdf, kMaxProba));
   }
   return WP2_STATUS_OK;
 }

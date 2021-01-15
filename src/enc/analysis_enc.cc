@@ -74,6 +74,78 @@ static WP2Status SimplifySegments(Vector<Segment>* const segments) {
 #endif
 
 //------------------------------------------------------------------------------
+// Perceptual: assignment of quantizer steps from the evaluated 'risk'
+
+WP2Status GlobalParams::AssignQuantizations(const EncoderConfig& config) {
+  const uint32_t num_segments = segments_.size();
+  assert(num_segments <= (uint32_t)config.segments);
+  assert(num_segments <= kMaxNumSegments);
+  uint32_t qualities[kMaxNumSegments];
+  const float quant_factor0 =
+      kQFactorMax * (kMaxLossyQuality - config.quality) / kMaxLossyQuality;
+  float min_risk = 1.0f;
+  float max_risk = 0.0f;
+  for (const auto& s : segments_) min_risk = std::min(min_risk, s.risk_);
+  for (const auto& s : segments_) max_risk = std::max(max_risk, s.risk_);
+  min_risk -= 0.01f;   // to avoid divide-by-zero
+  const float amp = 1.4f * Clamp(config.sns / 100.f, 0.f, 1.f);
+  const float adjust_amp =
+      std::min(1.f, num_segments / 4.f) / (max_risk - min_risk);
+  // Exponent for 'adjust' (1 = linear).
+  const float exponent = 2.0f;
+  for (uint32_t idx = 0; idx < num_segments; ++idx) {
+    const Segment& s = segments_[idx];
+    float quant = config.segment_factors[idx];
+    if (quant == 0.f) {
+      const float adjust = adjust_amp * (s.risk_ - min_risk);
+      const float displaced = amp * pow(adjust, exponent);
+      quant = quant_factor0 * (1.0f - displaced);
+    } else {
+      quant = kQFactorMax * (kMaxLossyQuality - quant) / kMaxLossyQuality;
+    }
+    qualities[idx] = Clamp<int32_t>(std::lround(quant), 0, kQFactorMax);
+  }
+  for (uint32_t idx = 0; idx < num_segments; ++idx) {
+    WP2_CHECK_STATUS(segments_[idx].AllocateForEncoder());
+    segments_[idx].SetQuantizationFactor(
+        transf_, GetQualityHint(config.quality), u_quant_multiplier_,
+        v_quant_multiplier_, qualities[idx], 1.f);
+  }
+  return WP2_STATUS_OK;
+}
+
+WP2Status GlobalParams::AssignAlphaQuantizations(const YUVPlane& yuv,
+                                                 const EncoderConfig& config) {
+  WP2AlphaInit();
+  has_alpha_ = false;
+  if (!yuv.A.IsEmpty()) {
+    for (uint32_t y = 0; y < yuv.A.h_; ++y) {
+      const int16_t* const row = yuv.A.Row(y);
+      has_alpha_ = has_alpha_ || WP2HasOtherValue16b(row, yuv.A.w_, kAlphaMax);
+      if (has_alpha_) break;
+    }
+  }
+  maybe_use_lossy_alpha_ =
+      has_alpha_ && (config.alpha_quality <= kMaxLossyQuality);
+
+  if (maybe_use_lossy_alpha_) {
+    // TODO(maryla): we could detect automatically cases where the alpha
+    // filter should not be applied.
+    enable_alpha_filter_ = config.enable_alpha_filter;
+    const uint32_t max_quality = kMaxLossyQuality;
+    const uint32_t quant_factor0 =
+        (uint32_t)std::lround(
+            kQFactorMax * (max_quality - config.alpha_quality) / max_quality);
+    assert(!segments_.empty());
+    for (auto& s : segments_) {
+      WP2_CHECK_STATUS(s.AllocateForEncoder(/*for_alpha=*/true));
+      s.SetAlphaQuantizationFactor(quant_factor0, /*lambda=*/1.f);
+    }
+  }
+  return WP2_STATUS_OK;
+}
+
+//------------------------------------------------------------------------------
 
 GlobalParams::Type DecideGlobalParamsType(const EncoderConfig& config) {
   // Neural compression is considered as GP_BOTH for now because it is lossy

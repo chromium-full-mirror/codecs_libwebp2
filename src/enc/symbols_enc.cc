@@ -48,8 +48,8 @@ void SymbolRecorder::ResetRecord(bool reset_backup) {
     }
     for (uint32_t cluster = 0; cluster < symbols_info_.NumClusters(sym);
          ++cluster) {
-      a_bits_[i] = ANSBinSymbol(symbols_info_.StartingProbaP0(cluster, sym),
-                                symbols_info_.StartingProbaP1(cluster, sym));
+      a_bits_[i] = ANSBinSymbol(symbols_info_.StartingProbaP0(sym, cluster),
+                                symbols_info_.StartingProbaP1(sym, cluster));
       ++i;
     }
   }
@@ -100,7 +100,7 @@ WP2Status SymbolRecorder::Allocate(const SymbolsInfo& symbols_info,
       case SymbolsInfo::StorageMethod::kAuto: {
         index_[sym] = dicts_.size();
         for (uint32_t cluster = 0; cluster < num_clusters; ++cluster) {
-          const uint32_t range = symbols_info_.Range(cluster, sym);
+          const uint32_t range = symbols_info_.Range(sym, cluster);
           if (range > 0) {
             WP2_CHECK_STATUS(dicts_.Add(range));
             WP2_CHECK_STATUS(dicts_previous_pass_.Add(range));
@@ -111,8 +111,8 @@ WP2Status SymbolRecorder::Allocate(const SymbolsInfo& symbols_info,
       case SymbolsInfo::StorageMethod::kAdaptiveBit: {
         index_[sym] = a_bits_.size();
         for (uint32_t cluster = 0; cluster < num_clusters; ++cluster) {
-          const ANSBinSymbol s(symbols_info_.StartingProbaP0(cluster, sym),
-                               symbols_info_.StartingProbaP1(cluster, sym));
+          const ANSBinSymbol s(symbols_info_.StartingProbaP0(sym, cluster),
+                               symbols_info_.StartingProbaP1(sym, cluster));
           WP2_CHECK_ALLOC_OK(a_bits_.push_back(s));
         }
         break;
@@ -120,7 +120,7 @@ WP2Status SymbolRecorder::Allocate(const SymbolsInfo& symbols_info,
       case SymbolsInfo::StorageMethod::kAdaptiveSym: {
         index_[sym] = a_symbols_.size();
         for (uint32_t cluster = 0; cluster < num_clusters; ++cluster) {
-          const uint32_t range = symbols_info_.Range(cluster, sym);
+          const uint32_t range = symbols_info_.Range(sym, cluster);
           if (range > 0) WP2_CHECK_ALLOC_OK(a_symbols_.Add(range));
         }
         break;
@@ -132,7 +132,7 @@ WP2Status SymbolRecorder::Allocate(const SymbolsInfo& symbols_info,
         values_index_[sym] = values_.size();
         WP2_CHECK_ALLOC_OK(values_.resize(values_.size() + num_clusters));
         for (uint32_t cluster = 0; cluster < num_clusters; ++cluster) {
-          const uint32_t range = symbols_info_.Range(cluster, sym);
+          const uint32_t range = symbols_info_.Range(sym, cluster);
           if (range > 0) {
             WP2_CHECK_ALLOC_OK(a_symbols_.Add(range));
             WP2_CHECK_ALLOC_OK(
@@ -149,96 +149,89 @@ WP2Status SymbolRecorder::Allocate(const SymbolsInfo& symbols_info,
   return WP2_STATUS_OK;
 }
 
-const ANSDictionary& SymbolRecorder::GetRecordedDict(uint32_t cluster,
-                                                     uint32_t sym) const {
-  assert(symbols_info_.Range(cluster, sym) != 0);
+const ANSDictionary& SymbolRecorder::GetRecordedDict(uint32_t sym,
+                                                     uint32_t cluster) const {
+  assert(symbols_info_.Range(sym, cluster) != 0);
   assert(symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAuto);
   return *dicts_[index_[sym] + cluster];
 }
 
-const ANSDictionary& SymbolRecorder::GetDictPreviousPass(uint32_t cluster,
-                                                         uint32_t sym) const {
-  assert(symbols_info_.Range(cluster, sym) != 0);
+const ANSDictionary& SymbolRecorder::GetDictPreviousPass(
+    uint32_t sym, uint32_t cluster) const {
+  assert(symbols_info_.Range(sym, cluster) != 0);
   assert(symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAuto);
   return *dicts_previous_pass_[index_[sym] + cluster];
 }
 
-ANSDictionary& SymbolRecorder::GetDictPreviousPass(uint32_t cluster,
-                                                   uint32_t sym) {
-  assert(symbols_info_.Range(cluster, sym) != 0);
-  assert(symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAuto);
-  return *dicts_previous_pass_[index_[sym] + cluster];
-}
-
-ANSDictionary* SymbolRecorder::GetDict(uint32_t cluster, uint32_t sym) {
-  assert(symbols_info_.Range(cluster, sym) != 0);
+ANSDictionary* SymbolRecorder::GetDict(uint32_t sym, uint32_t cluster) {
+  assert(symbols_info_.Range(sym, cluster) != 0);
   assert(symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAuto);
   return dicts_[index_[sym] + cluster];
 }
 
-const ANSBinSymbol& SymbolRecorder::GetABit(uint32_t cluster,
-                                            uint32_t sym) const {
+const ANSBinSymbol& SymbolRecorder::GetABit(uint32_t sym,
+                                            uint32_t cluster) const {
   assert(symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAdaptiveBit);
   return a_bits_[index_[sym] + cluster];
 }
 
-ANSBinSymbol* SymbolRecorder::GetABit(uint32_t cluster, uint32_t sym) {
+ANSBinSymbol* SymbolRecorder::GetABit(uint32_t sym, uint32_t cluster) {
   assert(symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAdaptiveBit);
   return &a_bits_[index_[sym] + cluster];
 }
 
-const ANSAdaptiveSymbol& SymbolRecorder::GetASymbol(uint32_t cluster,
-                                                    uint32_t sym) const {
-  assert(symbols_info_.Range(cluster, sym) != 0);
+const ANSAdaptiveSymbol& SymbolRecorder::GetASymbol(uint32_t sym,
+                                                    uint32_t cluster) const {
+  assert(symbols_info_.Range(sym, cluster) != 0);
   assert(symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAdaptiveSym);
   return a_symbols_[index_[sym] + cluster];
 }
 
-ANSAdaptiveSymbol* SymbolRecorder::GetASymbol(uint32_t cluster, uint32_t sym) {
-  assert(symbols_info_.Range(cluster, sym) != 0);
+ANSAdaptiveSymbol* SymbolRecorder::GetASymbol(uint32_t sym, uint32_t cluster) {
+  assert(symbols_info_.Range(sym, cluster) != 0);
   assert(symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAdaptiveSym);
   return &a_symbols_[index_[sym] + cluster];
 }
 
 const ANSAdaptiveSymbol& SymbolRecorder::GetASymbolWithSpeed(
-    uint32_t cluster, uint32_t sym) const {
-  assert(symbols_info_.Range(cluster, sym) != 0);
+    uint32_t sym, uint32_t cluster) const {
+  assert(symbols_info_.Range(sym, cluster) != 0);
   assert(symbols_info_.Method(sym) ==
          SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed);
   return a_symbols_[index_[sym] + cluster];
 }
 
-const Vector_u8& SymbolRecorder::GetRecordedValues(uint32_t cluster,
-                                                   uint32_t sym) const {
+const Vector_u8& SymbolRecorder::GetRecordedValues(uint32_t sym,
+                                                   uint32_t cluster) const {
   assert(symbols_info_.Method(sym) ==
          SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed);
   return values_[values_index_[sym] + cluster];
 }
 
-int32_t SymbolRecorder::ProcessInternal(uint32_t cluster, uint32_t sym,
+int32_t SymbolRecorder::ProcessInternal(uint32_t sym, uint32_t cluster,
                                         int32_t value, bool use_max_value,
                                         uint32_t max_value, WP2_OPT_LABEL,
                                         ANSEncBase* const enc, double* const) {
-  assert(value <= symbols_info_.Max(cluster, sym));
-  assert(value >= symbols_info_.Min(cluster, sym));
+  assert(value <= symbols_info_.Max(sym, cluster));
+  assert(value >= symbols_info_.Min(sym, cluster));
   assert(!use_max_value || (uint32_t)std::abs(value) <= max_value);
   switch (symbols_info_.Method(sym)) {
     case SymbolsInfo::StorageMethod::kAuto:
-      GetDict(cluster, sym)
-          ->RecordSymbol(value - symbols_info().Min(cluster, sym));
+      GetDict(sym, cluster)
+          ->RecordSymbol(value - symbols_info().Min(sym, cluster));
       break;
     case SymbolsInfo::StorageMethod::kAdaptiveBit:
-      GetABit(cluster, sym)->Update(value);
+      GetABit(sym, cluster)->Update(value);
       break;
     case SymbolsInfo::StorageMethod::kAdaptiveSym:
-      GetASymbol(cluster, sym)
-          ->Update(value - symbols_info().Min(cluster, sym));
+      GetASymbol(sym, cluster)
+          ->Update(value - symbols_info().Min(sym, cluster));
       break;
     case SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed:
       a_symbols_[index_[sym] + cluster].Update(
-          value - symbols_info().Min(cluster, sym));
+          value - symbols_info().Min(sym, cluster));
       if (!values_[values_index_[sym] + cluster].push_back(
-              value - symbols_info().Min(cluster, sym),
+              value - symbols_info().Min(sym, cluster),
               /*resize_if_needed=*/false)) {
         // Fail if we get more values than expected.
         assert(false);
@@ -258,15 +251,11 @@ int32_t SymbolRecorder::ProcessInternal(uint32_t cluster, uint32_t sym,
 constexpr uint32_t SymbolCounter::kInvalidIndex;
 
 WP2Status SymbolCounter::Allocate(std::initializer_list<uint32_t> syms) {
-  std::array<bool, kSymbolNumMax> is_used;
-  is_used.fill(false);
-  for (uint32_t sym : syms) is_used[sym] = true;
-
   num_a_bits_ = 0u;
   num_a_symbols_ = 0u;
   indices_.fill(kInvalidIndex);
-  for (uint32_t sym = 0; sym < kSymbolNumMax; ++sym) {
-    if (!is_used[sym]) continue;
+  for (uint32_t sym : syms) {
+    assert(sym < kSymbolNumMax);
     // In some partitioning (e.g. BlockScoreFunc), symbols_info is
     // actually empty, so choose the maximum possible.
     const uint32_t num_clusters = (symbols_info_.Size() == 0)
@@ -314,24 +303,23 @@ WP2Status SymbolCounter::CopyFrom(const SymbolCounter& other) {
 
 void SymbolCounter::Clear() {
   // Somehow, memset is faster than std::fill.
-  memset(&a_bit_initialized_[0], 0, num_a_bits_ * sizeof(true));
-  memset(&a_symbol_initialized_[0], 0, num_a_symbols_ * sizeof(true));
+  memset(&a_bit_initialized_[0], 0, num_a_bits_ * sizeof(false));
+  memset(&a_symbol_initialized_[0], 0, num_a_symbols_ * sizeof(false));
 }
 
-ANSBinSymbol* SymbolCounter::GetABit(uint32_t cluster, uint32_t sym) {
-  assert(symbols_info_.Method(sym) ==
-         SymbolsInfo::StorageMethod::kAdaptiveBit);
+ANSBinSymbol* SymbolCounter::GetABit(uint32_t sym, uint32_t cluster) {
+  assert(symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAdaptiveBit);
   assert(indices_[sym] != kInvalidIndex);
   const uint32_t ind = indices_[sym] + cluster;
   if (!a_bit_initialized_[ind]) {
-    a_bits_[ind] = recorder_->GetABit(cluster, sym);
+    a_bits_[ind] = recorder_->GetABit(sym, cluster);
     a_bit_initialized_[ind] = true;
   }
   return &a_bits_[ind];
 }
 
-ANSAdaptiveSymbol* SymbolCounter::GetASymbol(uint32_t cluster, uint32_t sym) {
-  assert(symbols_info_.Range(cluster, sym) != 0);
+ANSAdaptiveSymbol* SymbolCounter::GetASymbol(uint32_t sym, uint32_t cluster) {
+  assert(symbols_info_.Range(sym, cluster) != 0);
   const SymbolsInfo::StorageMethod method = symbols_info_.Method(sym);
   assert(method == SymbolsInfo::StorageMethod::kAdaptiveSym ||
          method == SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed);
@@ -339,39 +327,39 @@ ANSAdaptiveSymbol* SymbolCounter::GetASymbol(uint32_t cluster, uint32_t sym) {
   const uint32_t ind = indices_[sym] + cluster;
   if (!a_symbol_initialized_[ind]) {
     if (method == SymbolsInfo::StorageMethod::kAdaptiveSym) {
-      a_symbols_[ind] = recorder_->GetASymbol(cluster, sym);
+      a_symbols_[ind] = recorder_->GetASymbol(sym, cluster);
     } else {
       // Adaptive symbol with auto speed. We approximate it as regular adaptive
       // symbol with the default speed.
       // TODO(maryla): not sure this is the best. Maybe just assume a range?
-      a_symbols_[ind] = recorder_->GetASymbolWithSpeed(cluster, sym);
+      a_symbols_[ind] = recorder_->GetASymbolWithSpeed(sym, cluster);
     }
     a_symbol_initialized_[ind] = true;
   }
   return &a_symbols_[ind];
 }
 
-int32_t SymbolCounter::ProcessInternal(uint32_t cluster, uint32_t sym,
+int32_t SymbolCounter::ProcessInternal(uint32_t sym, uint32_t cluster,
                                        int32_t value_in, bool use_max_value,
                                        uint32_t max_value, WP2_OPT_LABEL,
                                        ANSEncBase* const enc, double* const) {
-  assert((uint32_t)std::abs(value_in) < symbols_info_.Range(cluster, sym));
+  assert((uint32_t)std::abs(value_in) < symbols_info_.Range(sym, cluster));
   assert(!use_max_value || (uint32_t)std::abs(value_in) <= max_value);
   switch (symbols_info_.Method(sym)) {
     case SymbolsInfo::StorageMethod::kAuto: {
       const ANSDictionary& current_dict =
-          recorder_->GetRecordedDict(cluster, sym);
+          recorder_->GetRecordedDict(sym, cluster);
       const ANSDictionary& previous_dict =
-          recorder_->GetDictPreviousPass(cluster, sym);
+          recorder_->GetDictPreviousPass(sym, cluster);
 
       // Whether the recorder has accumulated enough stats (by some arbitrary
       // criteria).
       const bool enough_stats =
           (current_dict.Total() > 50 ||
-           current_dict.Total() > 10 * symbols_info_.Range(cluster, sym));
+           current_dict.Total() > 10 * symbols_info_.Range(sym, cluster));
       const ANSDictionary* const dict =
           enough_stats ? &current_dict : &previous_dict;
-      const uint32_t value = value_in - symbols_info().Min(cluster, sym);
+      const uint32_t value = value_in - symbols_info().Min(sym, cluster);
       const bool symbol_present = (dict->Counts()[value] > 0);
       if (symbol_present) {
         // TODO(maryla): average the two dicts instead of sharply transitioning
@@ -389,7 +377,7 @@ int32_t SymbolCounter::ProcessInternal(uint32_t cluster, uint32_t sym,
       } else {
         // Otherwise we assume all values have the same probability, i.e. it's
         // a range.
-        uint32_t range = symbols_info_.Range(cluster, sym);
+        uint32_t range = symbols_info_.Range(sym, cluster);
         if (use_max_value) range = std::min(range, max_value + 1);
         if (symbols_info_.ProbablyGeometric(sym)) {
           // Very approximate. Favors lower values. TODO(maryla): find a better
@@ -401,11 +389,11 @@ int32_t SymbolCounter::ProcessInternal(uint32_t cluster, uint32_t sym,
       break;
     }
     case SymbolsInfo::StorageMethod::kAdaptiveBit:
-      enc->PutABit(value_in, GetABit(cluster, sym), label);
+      enc->PutABit(value_in, GetABit(sym, cluster), label);
       break;
     case SymbolsInfo::StorageMethod::kAdaptiveSym:
     case SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed:
-      enc->PutASymbol(value_in, GetASymbol(cluster, sym), label);
+      enc->PutASymbol(value_in, GetASymbol(sym, cluster), label);
       break;
     case SymbolsInfo::StorageMethod::kUnused:
       // Even though the object can be created with unused symbols (e.g. alpha
@@ -590,8 +578,8 @@ static bool ANSSymbolInfoCmp(const ANSSymbolInfo& i1, const ANSSymbolInfo& i2) {
   return (i1.symbol < i2.symbol);
 }
 
-void SymbolWriter::AddTrivial(uint32_t cluster, uint32_t sym, int32_t value) {
-  Stat* const stat = GetStats(cluster, sym);
+void SymbolWriter::AddTrivial(uint32_t sym, uint32_t cluster, int32_t value) {
+  Stat* const stat = GetStats(sym, cluster);
 
   // No dictionary for trivial symbols.
   stat->type = Stat::Type::kTrivial;
@@ -600,10 +588,10 @@ void SymbolWriter::AddTrivial(uint32_t cluster, uint32_t sym, int32_t value) {
   stat->extra.mapping_size = 0;
 }
 
-void SymbolWriter::AddRange(uint32_t cluster, uint32_t sym,
+void SymbolWriter::AddRange(uint32_t sym, uint32_t cluster,
                             const uint16_t* const mapping, uint32_t size,
-                            uint16_t range) {
-  Stat* const stat = GetStats(cluster, sym);
+                            uint16_t max_range) {
+  Stat* const stat = GetStats(sym, cluster);
 
   stat->type = Stat::Type::kRange;
   stat->use_mapping = (mapping != nullptr);
@@ -619,11 +607,11 @@ void SymbolWriter::AddRange(uint32_t cluster, uint32_t sym,
       stat->mappings[mapping[i]] = i;
     }
   } else {
-    stat->range = range - size;
+    stat->range = max_range - size;
   }
 }
 
-WP2Status SymbolWriter::AddDict(uint32_t cluster, uint32_t sym,
+WP2Status SymbolWriter::AddDict(uint32_t sym, uint32_t cluster,
                                 const uint32_t* const counts,
                                 const uint32_t* const quantized_counts,
                                 const uint16_t* const mapping, uint32_t size,
@@ -631,7 +619,7 @@ WP2Status SymbolWriter::AddDict(uint32_t cluster, uint32_t sym,
   assert(mapping != nullptr);
   assert(quantized_counts != nullptr);
 
-  Stat* const stat = GetStats(cluster, sym);
+  Stat* const stat = GetStats(sym, cluster);
 
   stat->type = Stat::Type::kDict;
   stat->use_mapping = true;
@@ -669,15 +657,15 @@ WP2Status SymbolWriter::AddDict(uint32_t cluster, uint32_t sym,
   return WP2_STATUS_OK;
 }
 
-WP2Status SymbolWriter::AddGolomb(uint32_t cluster, uint32_t sym,
+WP2Status SymbolWriter::AddGolomb(uint32_t sym, uint32_t cluster,
                                   const uint32_t* const counts,
                                   const uint32_t* const quantized_counts,
                                   const uint16_t* const mapping, uint32_t size,
                                   uint32_t prefix_size,
                                   ANSDictionaries* const dicts) {
   WP2_CHECK_STATUS(
-      AddDict(cluster, sym, counts, quantized_counts, mapping, size, dicts));
-  SetGolombStat(cluster, sym, prefix_size);
+      AddDict(sym, cluster, counts, quantized_counts, mapping, size, dicts));
+  SetGolombStat(sym, cluster, prefix_size);
   return WP2_STATUS_OK;
 }
 
@@ -701,13 +689,13 @@ uint32_t SymbolWriter::FindBiggestMappingIndex(const Stat& stat,
   return index;
 }
 
-int32_t SymbolWriter::ProcessInternal(uint32_t cluster, uint32_t sym,
+int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
                                       int32_t value_in, bool use_max_value,
                                       uint32_t max_value, WP2_OPT_LABEL,
                                       ANSEncBase* const enc,
                                       double* const cost) {
   if (use_max_value) assert(value_in <= (int32_t)max_value);
-  const Stat& stat = *GetStats(cluster, sym);
+  const Stat& stat = *GetStats(sym, cluster);
   // Only write a symbol if it is not trivial.
   if (stat.type == Stat::Type::kTrivial) {
     assert(value_in == stat.param.trivial_value);
@@ -846,7 +834,7 @@ int32_t SymbolWriter::ProcessInternal(uint32_t cluster, uint32_t sym,
       break;
   }
   // Store the sign.
-  if (value_in != 0 && symbols_info().Min(cluster, sym) < 0) {
+  if (value_in != 0 && symbols_info().Min(sym, cluster) < 0) {
     enc->PutBool(value_in < 0, "is_negative");
     if (cost != nullptr) *cost += 1.;
   }
@@ -892,32 +880,32 @@ void SymbolWriter::ComputeGolombCost(uint32_t range, uint32_t max_nnz,
   *cost += 1.f + WP2Log2(nnz_range_golomb - 1);
 }
 
-WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
-                                    uint32_t sym,
+WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
+                                    uint32_t max_nnz,
                                     const SymbolRecorder& recorder,
                                     WP2_OPT_LABEL, ANSEncBase* const enc,
                                     ANSDictionaries* const dicts) {
   if (symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kUnused) {
     return WP2_STATUS_OK;
   }
-  const uint32_t range = symbols_info_.Range(cluster, sym);
+  const uint32_t range = symbols_info_.Range(sym, cluster);
   if (range < 2) {
     assert(range > 0);
-    AddTrivial(cluster, sym, symbols_info_.Min(cluster, sym));
+    AddTrivial(sym, cluster, symbols_info_.Min(sym, cluster));
     return WP2_STATUS_OK;
   }
   // We only allow negative values if we have kAuto.
-  assert(symbols_info_.Min(cluster, sym) >= 0 ||
+  assert(symbols_info_.Min(sym, cluster) >= 0 ||
          symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAuto);
 
   switch (symbols_info_.Method(sym)) {
     case SymbolsInfo::StorageMethod::kAdaptiveBit:
       WP2_CHECK_STATUS(AddAdaptiveBit(
-          cluster, sym, symbols_info_.StartingProbaP0(cluster, sym),
-          symbols_info_.StartingProbaP1(cluster, sym)));
+          sym, cluster, symbols_info_.StartingProbaP0(sym, cluster),
+          symbols_info_.StartingProbaP1(sym, cluster)));
       break;
     case SymbolsInfo::StorageMethod::kAdaptiveSym: {
-      WP2_CHECK_STATUS(AddAdaptiveSymbol(cluster, sym,
+      WP2_CHECK_STATUS(AddAdaptiveSymbol(sym, cluster,
                                          ANSAdaptiveSymbol::Method::kAOM,
                                          kANSAProbaInvalidSpeed));
       break;
@@ -925,17 +913,17 @@ WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
     case SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed: {
       if (max_nnz <= 1) {
         // Adaptation method/speed don't matter if we only use this symbol once.
-        return AddAdaptiveSymbol(cluster, sym,
+        return AddAdaptiveSymbol(sym, cluster,
                                  ANSAdaptiveSymbol::Method::kConstant, 0);
       }
       ANSDebugPrefix prefix(enc, label);
       ANSAdaptiveSymbol s;
       s.SetAdaptationSpeed(ANSAdaptiveSymbol::Method::kAOM);
-      s.InitFromUniform(symbols_info_.Range(cluster, sym));
+      s.InitFromUniform(symbols_info_.Range(sym, cluster));
       ANSAdaptiveSymbol::Method method;
       uint32_t speed;
-      s.FindBestAdaptationSpeed(recorder.GetRecordedValues(cluster, sym),
-                                &method, &speed);
+      s.FindBestAdaptationSpeed(
+          recorder.GetRecordedValues(sym, cluster), &method, &speed);
       enc->PutRValue((uint32_t)method,
                      (uint32_t)ANSAdaptiveSymbol::Method::kNum,
                      "adaptation_method");
@@ -945,13 +933,14 @@ WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
       } else {
         speed = kANSAProbaInvalidSpeed;
       }
-      WP2_CHECK_STATUS(AddAdaptiveSymbol(cluster, sym, method, speed));
+      WP2_CHECK_STATUS(AddAdaptiveSymbol(sym, cluster, method, speed));
       return enc->GetStatus();
     }
     case SymbolsInfo::StorageMethod::kAuto: {
-      return WriteHeader(cluster, max_nnz, sym,
-                         recorder.GetRecordedDict(cluster, sym).Counts().data(),
-                         label, enc, dicts);
+      return WriteHeader(
+          sym, cluster, max_nnz,
+          recorder.GetRecordedDict(sym, cluster).Counts().data(),
+          label, enc, dicts);
     }
     case SymbolsInfo::StorageMethod::kUnused:
       // Dealt with above.
@@ -961,29 +950,30 @@ WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
   return WP2_STATUS_OK;
 }
 
-WP2Status SymbolWriter::WriteHeader(uint32_t max_nnz, uint32_t sym,
-                                    const SymbolRecorder& recorder,
+WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t max_nnz,
+                                    const SymbolRecorder& syntax_recorder,
                                     WP2_OPT_LABEL, ANSEncBase* const enc,
                                     ANSDictionaries* const dicts) {
   for (uint32_t cluster = 0; cluster < symbols_info_.NumClusters(sym);
        ++cluster) {
     WP2_CHECK_STATUS(
-        WriteHeader(cluster, max_nnz, sym, recorder, label, enc, dicts));
+        WriteHeader(sym, cluster, max_nnz, syntax_recorder, label, enc, dicts));
   }
   return WP2_STATUS_OK;
 }
 
-WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
-                                    uint32_t sym, const uint32_t* const counts,
-                                    WP2_OPT_LABEL, ANSEncBase* const enc,
+WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
+                                    uint32_t max_nnz,
+                                    const uint32_t* const counts, WP2_OPT_LABEL,
+                                    ANSEncBase* const enc,
                                     ANSDictionaries* const dicts) {
   // Figure out how many symbols are used and the sizes in bits of the
   // probabilities and difference of consecutive symbols.
   uint32_t size = 0;
-  const uint32_t range = symbols_info_.Range(cluster, sym);
+  const uint32_t range = symbols_info_.Range(sym, cluster);
   uint32_t counts_total = 0;
-  const int32_t min = symbols_info_.Min(cluster, sym);
-  const int32_t max = symbols_info_.Max(cluster, sym);
+  const int32_t min = symbols_info_.Min(sym, cluster);
+  const int32_t max = symbols_info_.Max(sym, cluster);
   const bool can_be_negative = (min < 0);
   assert(min == 0 || min == -max);
   int32_t trivial_value = std::numeric_limits<int32_t>::max();
@@ -1022,13 +1012,13 @@ WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
       enc->PutRValue(kSymbolCountZero,
                      nnz_range == 1 ? kSymbolCountLast - 1 : kSymbolCountLast,
                      "scount");
-      AddTrivial(cluster, sym, 0);
+      AddTrivial(sym, cluster, 0);
     } else {
       enc->PutRValue(kSymbolCountOne,
                      nnz_range == 1 ? kSymbolCountLast - 1 : kSymbolCountLast,
                      "scount");
       enc->PutRange(trivial_value, min, max, "symbol");
-      AddTrivial(cluster, sym, trivial_value);
+      AddTrivial(sym, cluster, trivial_value);
     }
     return WP2_STATUS_OK;
   }
@@ -1103,7 +1093,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
                                     max_nnz, enc));
     // Create needed dictionaries.
     WP2_CHECK_STATUS(AddGolomb(
-        cluster, sym, histogram_golomb_.data(), config_golomb->histo.counts,
+        sym, cluster, histogram_golomb_.data(), config_golomb->histo.counts,
         mapping_golomb_.data(), size_golomb, golomb_prefix_size, dicts));
   } else if (type == Stat::Type::kDict) {
     // The number of symbols is bounded by the number of possible symbols
@@ -1114,7 +1104,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
     // Store the dictionary.
     WP2_CHECK_STATUS(WriteHistogram(*config, range, max_nnz, enc));
     // Create needed dictionaries.
-    WP2_CHECK_STATUS(AddDict(cluster, sym, histogram_.data(),
+    WP2_CHECK_STATUS(AddDict(sym, cluster, histogram_.data(),
                              config->histo.counts, mapping_.data(), size,
                              dicts));
   } else {  // kRange
@@ -1122,15 +1112,15 @@ WP2Status SymbolWriter::WriteHeader(uint32_t cluster, uint32_t max_nnz,
     // Store the mapping.
     StoreMapping(mapping_.data(), size, range, stats_buffer_.data(), enc);
     // Initialize the SymbolWriter.
-    AddRange(cluster, sym, mapping_.data(), size, range);
+    AddRange(sym, cluster, mapping_.data(), size, range);
   }
   return WP2_STATUS_OK;
 }
 
-void SymbolWriter::GetPotentialUsage(uint32_t cluster, uint32_t sym,
+void SymbolWriter::GetPotentialUsage(uint32_t sym, uint32_t cluster,
                                      bool is_maybe_used[],
                                      uint32_t size) const {
-  const Stat& stat = *GetStats(cluster, sym);
+  const Stat& stat = *GetStats(sym, cluster);
   switch (stat.type) {
     case (Stat::Type::kTrivial):
       // Nothing is used but the one value.

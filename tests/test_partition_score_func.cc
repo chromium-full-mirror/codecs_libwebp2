@@ -19,7 +19,7 @@
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
 #include "src/common/global_params.h"
-#include "src/enc/partition_score_func.h"
+#include "src/enc/partitioning/partition_score_func_block.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/wp2/decode.h"

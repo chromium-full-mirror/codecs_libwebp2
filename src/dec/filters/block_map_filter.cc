@@ -84,6 +84,26 @@ static uint32_t ComputeResidualDensity(const CodedBlock& cb, Channel channel,
   return DivRound(num_nz_coeffs * multiplier, num_coeffs * num_transforms);
 }
 
+void FilterBlockMap::RegisterBlock(uint32_t x, uint32_t y, BlockSize dim,
+                                   uint32_t segment_id, uint8_t min_bpp,
+                                   bool has_lossy_alpha, uint32_t res_den[4]) {
+  const uint32_t stride = max_num_blocks_x_;
+  for (uint32_t j = 0; j < BlockHeight[dim]; ++j) {
+    BlockFeatures* const row = &features_[(y + j) * stride + x];
+    for (uint32_t i = 0; i < BlockWidth[dim]; ++i) {
+      row[i].index = current_block_index_;
+      row[i].size = dim;
+      row[i].segment_id = segment_id;
+      row[i].min_bpp = min_bpp;
+      row[i].has_lossy_alpha = has_lossy_alpha;
+      for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+        row[i].res_den[c] = (uint8_t)res_den[c];
+      }
+    }
+  }
+  ++current_block_index_;
+}
+
 void FilterBlockMap::RegisterBlock(const CodedBlock& cb,
                                    uint32_t min_num_bytes) {
   if (features_.empty()) return;
@@ -102,23 +122,20 @@ void FilterBlockMap::RegisterBlock(const CodedBlock& cb,
 
   // Fill the block 'features_' in a grid. This way they can be parsed and
   // easily jumped over in filters.
-  const uint32_t stride = max_num_blocks_x_;
-  for (uint32_t y = 0; y < cb.h(); ++y) {
-    BlockFeatures* const row = &features_[(cb.y() + y) * stride + cb.x()];
-    for (uint32_t x = 0; x < cb.w(); ++x) {
-      row[x].index = current_block_index_;
-      row[x].size = cb.dim();
-      row[x].segment_id = cb.id_;
-      row[x].min_bpp = (uint8_t)min_bpp;
-      row[x].has_lossy_alpha = cb.HasLossyAlpha();
-      for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-        row[x].res_den[c] = (uint8_t)res_den[c];
-      }
+  // If the block has split_tf, we register it as several blocks. For simplicity
+  // the split_tf of the Y channel counts for all channels.
+  const bool split_tf = cb.GetCodingParams(kYChannel).split_tf;
+  const BlockSize split_size = GetSplitSize(cb.dim(), split_tf);
+  const uint32_t split_w = BlockWidth[split_size];
+  const uint32_t split_h = BlockHeight[split_size];
+  for (uint32_t split_y = 0; split_y < cb.h(); split_y += split_h) {
+    for (uint32_t split_x = 0; split_x < cb.w(); split_x += split_w) {
+      RegisterBlock(cb.x() + split_x, cb.y() + split_y, split_size, cb.id_,
+                    min_bpp, cb.HasLossyAlpha(), res_den);
     }
   }
 
   max_registered_height_ = std::max(max_registered_height_, cb.h_pix());
-  ++current_block_index_;
 }
 
 void FilterBlockMap::Clear() {

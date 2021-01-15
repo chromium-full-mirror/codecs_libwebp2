@@ -858,7 +858,6 @@ TEST_P(TestANSBitCounts, Simple) {
   EXPECT_WP2_OK(enc.Assemble());
   const uint32_t size = enc.BufferSize();
   const uint8_t* buf = enc.Buffer();
-  const int size_expected = (int)std::lround(enc.GetCostFull(dicts));
   ExternalDataSource data_source(buf, size);
   ANSDec dec(&data_source);
   for (const Token& tok : tokens) {
@@ -891,19 +890,6 @@ TEST_P(TestANSBitCounts, Simple) {
            error * 100);
   }
   EXPECT_LE(std::abs(error), ANSDec::kBitCountAccuracy);
-
-  // difference between GetCost() and bit-trace:
-  const double internal_error = 1. - size_expected / bit_count;
-  const double kInternalErrorTolerance = 0.001;
-  if (kVerbose) {
-    const auto report = dec.GetBitTraces();
-    for (auto it = report.begin(); it != report.end(); ++it) {
-      printf("%s : %.lf bits\n", it->first.c_str(), it->second.bits);
-    }
-    printf("-------------\n");
-  }
-  EXPECT_LE(std::abs(internal_error), kInternalErrorTolerance);
-
 #endif
 }
 

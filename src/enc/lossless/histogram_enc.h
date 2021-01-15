@@ -32,67 +32,35 @@
 namespace WP2L {
 
 // Class that abstracts the storage of counts for all the existing symbols.
+// This is a fragmented view on the (non-owned) buffer supplied to SetBuffer().
 template <typename T>
 class CountsBuffer {
  public:
-  CountsBuffer() noexcept { Init(); }
-  ~CountsBuffer() { Reset(); }
-  void Init() noexcept {
-    buffer_ = nullptr;
-    has_own_buffer_ = false;
+  void SetBuffer(T* buffer, const WP2::SymbolsInfo& symbols_info) {
+    symbols_info_ = &symbols_info;
+    buffer_ = buffer;
+    // Set the pointers for the counts of each histogram to the right spots
+    // in the overall buffer_.
+    for (uint32_t i = 0; i < kSymbolNum; ++i) {
+      counts_[i] = buffer;
+      buffer += symbols_info_->GetMaxRange((Symbol)i);
+    }
   }
-  // Allocate the buffer and set it to 0.
-  WP2_NO_DISCARD
-  bool Allocate(const LosslessSymbolsInfo* const symbols_info) {
-    Reset();
-    symbols_info_ = symbols_info;
-    buffer_ = (T*)WP2Calloc(symbols_info_->MaxRangeSum(), sizeof(*buffer_));
-    if (buffer_ == nullptr) return false;
-    has_own_buffer_ = true;
-    InitPointers();
-    return true;
-  }
+
+  T* counts_[kSymbolNum];
+  const WP2::SymbolsInfo* symbols_info_ = nullptr;
+
+ protected:
+  void Init() noexcept { buffer_ = nullptr; }
+
   // Reset the counts to 0.
   void Clear() {
     memset(buffer_, 0, sizeof(*buffer_) * symbols_info_->MaxRangeSum());
   }
 
-  void CopyTo(CountsBuffer<T>* const dst) const {
-    memcpy(dst->buffer_, buffer_,
-           sizeof(*buffer_) * symbols_info_->MaxRangeSum());
-    dst->InitPointers();
-  }
-
-  void SetBuffer(T* buffer, const LosslessSymbolsInfo& symbols_info) {
-    symbols_info_ = &symbols_info;
-    Reset();
-    assert(buffer != nullptr);
-    buffer_ = buffer;
-    InitPointers();
-  }
-
-  T* counts_[kSymbolNum];
-  const LosslessSymbolsInfo* symbols_info_;
-
- private:
-  void Reset() {
-    if (has_own_buffer_) {
-      WP2Free(buffer_);
-      buffer_ = nullptr;
-      has_own_buffer_ = false;
-    }
-  }
-  // Set the pointers for the counts of each histogram to the right spots
-  // in the overall buffer_.
-  void InitPointers() {
-    counts_[0] = buffer_;
-    for (uint32_t i = 1; i < kSymbolNum; ++i) {
-      counts_[i] = counts_[i - 1] + symbols_info_->GetMaxRange((Symbol)(i - 1));
-    }
-  }
-  bool has_own_buffer_;
-  T* buffer_;  // The buffer contains all the symbol histograms one after
-               // another.
+  // The external buffer that contains all the symbol histograms one after
+  // another. counts_[] are pointing inside this buffer_.
+  T* buffer_ = nullptr;
 };
 
 // A simple container for histograms of data.
@@ -100,7 +68,9 @@ class Histogram : public CountsBuffer<uint32_t> {
  public:
   Histogram() noexcept : CountsBuffer<uint32_t>() { Init(); }
   void CopyTo(Histogram* const dst) const {
-    super::CopyTo(dst);
+    assert(dst->symbols_info_->MaxRangeSum() == symbols_info_->MaxRangeSum());
+    memcpy(dst->buffer_, buffer_,
+           sizeof(*buffer_) * symbols_info_->MaxRangeSum());
     memcpy(dst->trivial_symbols_, trivial_symbols_, sizeof(trivial_symbols_));
     memcpy(dst->nonzeros_, nonzeros_, sizeof(nonzeros_));
     dst->bit_cost_ = bit_cost_;
@@ -138,12 +108,12 @@ class HistogramSet {
   // Allocate an array of pointer to histograms, allocated and initialized
   // using the number of bits of 'symbols_info'.
   WP2_NO_DISCARD
-  bool Allocate(uint32_t size, const LosslessSymbolsInfo& symbols_info);
+  bool Allocate(uint32_t size, const WP2::SymbolsInfo& symbols_info);
 
   Histogram* tmp_histo_;
   // histograms sharing the same buffer
   WP2::VectorNoCtor<Histogram*> histograms_;
-  const LosslessSymbolsInfo* symbols_info_ = nullptr;
+  const WP2::SymbolsInfo* symbols_info_ = nullptr;
 
  private:
   WP2::Vector<Histogram> histo_buffer_;  // internal buffer of histograms
@@ -177,7 +147,7 @@ class PopulationAnalyzer {
  public:
   explicit PopulationAnalyzer(uint32_t image_size);
 
-  WP2Status Allocate(const LosslessSymbolsInfo& symbols_info) {
+  WP2Status Allocate(const WP2::SymbolsInfo& symbols_info) {
     const uint32_t histogram_size_max_ = symbols_info.GetMaxRange();
     WP2_CHECK_ALLOC_OK(histogram_.resize(histogram_size_max_));
     WP2_CHECK_ALLOC_OK(mapping_.resize(histogram_size_max_));

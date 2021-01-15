@@ -434,12 +434,12 @@ class ANSDec {
 #if defined(WP2_ENC_DEC_MATCH)
 #if defined(WP2_ENC_DEC_DEEP_MATCH)
     const std::string str = ANSString(debug_prefix_, label, extra...);
-    std::string str_read(ReadUValueInternal(8), '.');
-    for (char& c : str_read) c = (char)ReadUValueInternal(8);
+    std::string str_read(ReadDebugUValue(8), '.');
+    for (char& c : str_read) c = (char)ReadDebugUValue(8);
     if (str_read != str) assert(false);
 #else
     const uint16_t hash = ANSStringHash(debug_prefix_, label, extra...);
-    const uint16_t hash_read = ReadUValueInternal(16);
+    const uint16_t hash_read = ReadDebugUValue(16);
     if (hash_read != hash) assert(false);
 #endif  // defined(WP2_ENC_DEC_DEEP_MATCH)
 #endif  // defined(WP2_ENC_DEC_MATCH)
@@ -465,6 +465,9 @@ class ANSDec {
   DataSource* data_source_;
   uint32_t state_;
   WP2Status status_;
+#if defined(WP2_ENC_DEC_MATCH)
+  uint32_t ReadDebugUValue(uint32_t bits);
+#endif
 #if defined(WP2_BITTRACE) || defined(WP2_TRACE) || defined(WP2_ENC_DEC_MATCH)
   std::string debug_prefix_;
 #endif
@@ -730,7 +733,8 @@ class ANSEncBase {
     return value;
   }
 
-  // Returns the estimated cost of the final stream in bits.
+  // Returns the estimated cost of the final stream in bits, without debug
+  // information.
   virtual float GetCost() const = 0;
   // Returns the estimated cost of the final stream in bits.
   // This overload is a speed optimization: the cost for symbols will be
@@ -896,6 +900,10 @@ class ANSEnc : public ANSEncBase {
     return info.symbol;
   }
 
+#if defined(WP2_ENC_DEC_MATCH)
+  uint32_t PutDebugUValue(uint32_t value, uint32_t bits);
+#endif
+
   template<typename ...Ts>
   inline void Trace(const char* format, const char label[], Ts...extra) {
     (void)sizeof...(extra);
@@ -904,11 +912,11 @@ class ANSEnc : public ANSEncBase {
 #if defined(WP2_ENC_DEC_MATCH)
 #if defined(WP2_ENC_DEC_DEEP_MATCH)
     const std::string str = ANSString(debug_prefix_, label, extra...);
-    PutUValueInternal(str.size(), 8);
-    for (char c : str) PutUValueInternal(c, 8);
+    PutDebugUValue(str.size(), 8);
+    for (char c : str) PutDebugUValue(c, 8);
 #else
     const uint16_t hash = ANSStringHash(debug_prefix_, label, extra...);
-    if (GetStatus() == WP2_STATUS_OK) PutUValueInternal(hash, 16);
+    if (GetStatus() == WP2_STATUS_OK) PutDebugUValue(hash, 16);
 #endif  // defined(WP2_ENC_DEC_DEEP_MATCH)
 #endif  // defined(WP2_ENC_DEC_MATCH)
   }

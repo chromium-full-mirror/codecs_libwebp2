@@ -268,11 +268,11 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
   assert(row_end <= transform->height_);
 
   switch (transform->type_) {
-    case SUBTRACT_GREEN:
+    case TransformType::kSubtractGreen:
       AddGreenToBlueAndRed((uint16_t*)in, (row_end - row_start) * width,
                            channel_bits, (uint16_t*)out);
       break;
-    case PREDICTOR_TRANSFORM: {
+    case TransformType::kPredictor: {
       const int16_t min_value = 0;
       const int16_t max_value = (1 << channel_bits) - 1;
       const int16_t mask = (1 << channel_bits) - 1;
@@ -286,12 +286,12 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
       }
       break;
     }
-    case CROSS_COLOR_TRANSFORM:
+    case TransformType::kCrossColor:
       ColorSpaceInverseTransform_C(transform, row_start, row_end, channel_bits,
                                    (uint16_t*)in, (uint16_t*)out);
       break;
-    case GROUP4:
-    case COLOR_INDEXING_TRANSFORM:
+    case TransformType::kGroup4:
+    case TransformType::kColorIndexing:
       ColorIndexInverseTransform_C(transform, row_start, row_end, (uint16_t*)in,
                                    (uint16_t*)out);
       break;

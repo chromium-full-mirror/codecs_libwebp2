@@ -43,7 +43,7 @@ TEST_F(QuantMtxTest, RoundTrip) {
     for (const uint16_t quant : {12, 49, 89, 150, 199, 220}) {
       SCOPED_TRACE(SPrintf("quant: %d", quant));
       const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
-      mtx.Init(kMaxResidual, /*q_scale=*/1, ALL_RECTS, quants);
+      mtx.Init(kMaxResidual, /*q_scale=*/1, quants);
       int32_t residuals[kMaxBlockSizePix2];
       for (uint32_t i = 0; i < num_coeffs; ++i) {
         residuals[i] = i * (kMaxResidual / num_coeffs) * scale;
@@ -71,7 +71,7 @@ TEST_F(QuantMtxTest, DCError) {
       QuantMtx mtx;
       ASSERT_WP2_OK(mtx.Allocate());
       const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
-      mtx.Init(/*max_residual=*/150, /*q_scale=*/1, ALL_RECTS, quants);
+      mtx.Init(/*max_residual=*/150, /*q_scale=*/1, quants);
       for (int32_t dc : {1000 / quant, -1000 / quant}) {
         const int32_t dc_error = mtx.DCError(dc, trf);
         EXPECT_LT(std::abs(dc_error), (1 + 2 * quant) * scale * 0.04f);
@@ -93,7 +93,7 @@ TEST_F(QuantMtxTest, DCErrorRoundTrip) {
       QuantMtx mtx;
       ASSERT_WP2_OK(mtx.Allocate());
       const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
-      mtx.Init(kMaxResidual, /*q_scale=*/1, ALL_RECTS, quants);
+      mtx.Init(kMaxResidual, /*q_scale=*/1, quants);
       int32_t residuals[kMaxBlockSizePix2] = {0};
       int32_t range = kMaxResidual / num_coeffs * scale;
       residuals[0] = random.Get(-range, range);
@@ -172,7 +172,7 @@ TEST_P(QuantMtxTestCpuInfo, DcQuantizedDynamicRange) {
                                203u, (uint32_t)kQFactorMax}) {
           SCOPED_TRACE(SPrintf("quant: %d", quant));
           const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
-          mtx.Init(kMaxResidual, /*q_scale=*/1, ALL_RECTS, quants);
+          mtx.Init(kMaxResidual, /*q_scale=*/1, quants);
           int16_t coeffs[kMaxCoeffs];
           const TrfSize tdim = GetTransform(block_size);
           uint32_t num_coeffs;
@@ -210,8 +210,7 @@ TEST_P(QuantMtxTestCpuInfo, DequantizedDynamicRange) {
       SCOPED_TRACE(SPrintf("quant: %d", quant));
       QuantMtx mtx;
       const uint16_t quants[kNumQuantZones] = { quant, quant, quant, quant };
-      mtx.Init(/*max_residual=*/(1 << kMaxYuvBits), /*q_scale=*/1, ALL_RECTS,
-               quants);
+      mtx.Init(/*max_residual=*/(1 << kMaxYuvBits), /*q_scale=*/1, quants);
 
       int32_t residuals[kMaxCoeffs];
       mtx.Dequantize(coeffs, kNumCoeffs[tdim], tdim, residuals);
@@ -259,8 +258,9 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
       for (uint32_t i = len; i < bsize; ++i) out0[i] = 0;
       for (uint32_t k = 0; k < kLoop; ++k) {   // timing loop
         WP2Quantize(&iq[num % kMaxCoeffs], &bias[num % kMaxCoeffs],
-                    out0, out1, bsize);
-        WP2Dequantize(out1, &dq[num % kMaxCoeffs], out2, len, bsize);
+                    out0, out1, TrfWidth[tdim], TrfHeight[tdim]);
+        WP2Dequantize(out1, &dq[num % kMaxCoeffs], out2,
+                      TrfWidth[tdim], TrfHeight[tdim], len);
       }
       for (uint32_t i = len; i < bsize; ++i) {
         EXPECT_EQ(out0[i], 0);
@@ -273,8 +273,8 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
       }
     }
   }
-  EXPECT_EQ(crc1, 1079346079u);
-  EXPECT_EQ(crc2, 1051933909u);
+  EXPECT_EQ(crc1, 2948834497u);
+  EXPECT_EQ(crc2, 1683281745u);
 }
 
 INSTANTIATE_TEST_SUITE_P(QuantMtxTest1Instantiation, QuantMtxTestCpuInfo,
@@ -382,11 +382,11 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
       // Quantize!
       const uint16_t quants[kNumQuantZones] = { quant, quant, quant, quant };
       segments[0].quant_y_.Init(/*max_residual=*/(1 << kMaxYuvBits),
-                                /*q_scale=*/1, ALL_RECTS, quants);
+                                /*q_scale=*/1, quants);
       segments[0].quant_u_.Init(/*max_residual=*/(1 << kMaxYuvBits),
-                                /*q_scale=*/1, ALL_RECTS, quants);
+                                /*q_scale=*/1, quants);
       segments[0].quant_v_.Init(/*max_residual=*/(1 << kMaxYuvBits),
-                                /*q_scale=*/1, ALL_RECTS, quants);
+                                /*q_scale=*/1, quants);
 
       for (bool first_coeff_is_dc : {true, false}) {
         segments[0].quant_y_.Quantize(residuals, tdim, first_coeff_is_dc,
@@ -409,6 +409,7 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
         ASSERT_WP2_OK(syntax_writer.Init(
             &dicts, config, params, yuv, ChromaSubsampling::k420, rect,
             (uint32_t)cblocks.size(), kUseAOMCoeffs, ProgressRange()));
+        ASSERT_WP2_OK(syntax_writer.InitPass());
 
         // Just check that we can get the pseudo rate without crashing.
         // WARNING! We must call this *after* syntax_writer.Init() because

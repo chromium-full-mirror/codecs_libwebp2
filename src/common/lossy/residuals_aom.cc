@@ -20,37 +20,10 @@
 
 #include "src/common/lossy/residuals_aom.h"
 
-#include <numeric>
-
-#include "src/common/lossy/aom/cdfs.inc"
 #include "src/utils/utils.h"
 
 namespace WP2 {
 namespace libgav1 {
-
-//------------------------------------------------------------------------------
-// From libgav1/src/symbol_decoder_context.cc
-
-#define CDF_COPY(source, destination) \
-  memcpy(destination, source, sizeof(source))
-
-void SymbolDecoderContext::Initialize(int quantizer_context) {
-  CDF_COPY(kDefaultAllZeroCdf[quantizer_context], all_zero_cdf);
-  CDF_COPY(kDefaultEobPt16Cdf[quantizer_context], eob_pt_16_cdf);
-  CDF_COPY(kDefaultEobPt32Cdf[quantizer_context], eob_pt_32_cdf);
-  CDF_COPY(kDefaultEobPt64Cdf[quantizer_context], eob_pt_64_cdf);
-  CDF_COPY(kDefaultEobPt128Cdf[quantizer_context], eob_pt_128_cdf);
-  CDF_COPY(kDefaultEobPt256Cdf[quantizer_context], eob_pt_256_cdf);
-  CDF_COPY(kDefaultEobPt512Cdf[quantizer_context], eob_pt_512_cdf);
-  CDF_COPY(kDefaultEobPt1024Cdf[quantizer_context], eob_pt_1024_cdf);
-  CDF_COPY(kDefaultEobExtraCdf[quantizer_context], eob_extra_cdf);
-  CDF_COPY(kDefaultCoeffBaseEobCdf[quantizer_context], coeff_base_eob_cdf);
-  CDF_COPY(kDefaultCoeffBaseCdf[quantizer_context], coeff_base_cdf);
-  CDF_COPY(kDefaultCoeffBaseRangeCdf[quantizer_context], coeff_base_range_cdf);
-  CDF_COPY(kDefaultDcSignCdf[quantizer_context], dc_sign_cdf);
-}
-
-#undef CDF_COPY
 
 //------------------------------------------------------------------------------
 // From libgav1/src/utils/constants.cc

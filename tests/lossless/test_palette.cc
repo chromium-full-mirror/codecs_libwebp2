@@ -103,7 +103,7 @@ TEST_P(PaletteTest, RoundTrip) {
   Tile tile;
   decoder.Init(WP2::DecoderConfig::kDefault, gparams, &dec, &tile);
   WP2L::Transform transform;
-  transform.type_ = WP2L::COLOR_INDEXING_TRANSFORM;
+  transform.type_ = WP2L::TransformType::kColorIndexing;
   transform.width_ = kWidth;
   transform.height_ = kHeight;
   ASSERT_WP2_OK(decoder.ReadPalette(&transform));

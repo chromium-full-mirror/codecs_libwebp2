@@ -41,7 +41,7 @@ static void WriteColor(uint16_t current_color, uint16_t expected_new_color,
   assert(actual_new_color != current_color);
   assert(expected_new_color != current_color);
   const bool color_change = (actual_new_color != expected_new_color);
-  sm->Process(/*cluster=*/0, kSymbolG4ColorChange, color_change, "color_change",
+  sm->Process(kSymbolG4ColorChange, /*cluster=*/0, color_change, "color_change",
               enc);
 
   const uint32_t current_color_idx = mtf->GetIndex(current_color);
@@ -57,7 +57,7 @@ static void WriteColor(uint16_t current_color, uint16_t expected_new_color,
   if (actual_new_color_idx > expected_new_color_idx) --coded_color;
   // TODO(maryla): optionally use a color cache? or a 'move-to-front' queue for
   //  most used colors.
-  sm->Process(/*cluster=*/0, kSymbolG4NewColor, coded_color, "color_change",
+  sm->Process(kSymbolG4NewColor, /*cluster=*/0, coded_color, "color_change",
               enc);
 }
 
@@ -133,7 +133,7 @@ static WP2Status Impl(const int16_t* const argb, uint32_t width,
       if (b2 < a1) {
         assert(pass_mode_allowed);
         // Pass mode.
-        sm->Process(/*cluster=*/0, kSymbolG4Type,
+        sm->Process(kSymbolG4Type, /*cluster=*/0,
                     std::min((uint32_t)Group4Mode::kPass, max_mode), max_mode,
                     "mode", enc);
         a0 = b2;
@@ -142,14 +142,14 @@ static WP2Status Impl(const int16_t* const argb, uint32_t width,
         if ((uint32_t)std::abs(dist) <= kGroup4Window) {
           // Vertical mode.
           if (max_mode > 0) {
-            sm->Process(/*cluster=*/0, kSymbolG4Type,
+            sm->Process(kSymbolG4Type, /*cluster=*/0,
                         (uint32_t)Group4Mode::kVertical, max_mode, "mode", enc);
           }
           // Restricting the range as below is actually worse.
           const int min_dist = -(int)kGroup4Window;
           const int max_dist = (int)std::min(b1 + kGroup4Window, width) - b1;
 
-          sm->Process(/*cluster=*/0, kSymbolG4VerticalDist, dist - min_dist,
+          sm->Process(kSymbolG4VerticalDist, /*cluster=*/0, dist - min_dist,
                       max_dist - min_dist, "vdist", enc);
 
           if (a1 < (int)width && num_colors > 2) {
@@ -161,7 +161,7 @@ static WP2Status Impl(const int16_t* const argb, uint32_t width,
         } else {
           // Horizontal mode.
           assert(horizontal_mode_allowed);
-          sm->Process(/*cluster=*/0, kSymbolG4Type,
+          sm->Process(kSymbolG4Type, /*cluster=*/0,
                       std::min((uint32_t)Group4Mode::kHorizontal, max_mode),
                       max_mode, "mode", enc);
           const char* const str[2] = {"hdist_bg_minus1", "hdist_fg_minus1"};
@@ -173,20 +173,20 @@ static WP2Status Impl(const int16_t* const argb, uint32_t width,
           // images with 3 or 4 colors) does not seem to help.
           // TODO(maryla): around 14% of images do benefit from having only one
           // cluster.
-          sm->Process(
-              /*cluster=*/(uint32_t)(a0_color != first_color),
-              kSymbolG4HorizontalDist, a1 - a0 - 1, a0a1_max - 1,
-              str[a0_color != first_color], enc);
+          sm->Process(kSymbolG4HorizontalDist,
+                      /*cluster=*/(uint32_t)(a0_color != first_color),
+                      a1 - a0 - 1, a0a1_max - 1, str[a0_color != first_color],
+                      enc);
           const int a1a2_max = (int)width - a1;
           int a2 = a1 + 1;
           if (a1a2_max > 0) {
             while (a2 < (int)width && GetColor(cur, a2) == a1_color) {
               ++a2;
             }
-            sm->Process(
-                /*cluster=*/(uint32_t)(a0_color == first_color),
-                kSymbolG4HorizontalDist, a2 - a1 - 1, a1a2_max - 1,
-                str[a0_color == first_color], enc);
+            sm->Process(kSymbolG4HorizontalDist,
+                        /*cluster=*/(uint32_t)(a0_color == first_color),
+                        a2 - a1 - 1, a1a2_max - 1, str[a0_color == first_color],
+                        enc);
 
             if (num_colors > 2) {
               WriteColor(a0_color, /*expected_new_color=*/b1_color,
@@ -269,7 +269,7 @@ WP2Status Group4Encode(const int16_t* const argb, uint32_t width,
         continue;
       }
       WP2_CHECK_STATUS(
-          sw.WriteHeader(max_nnz, s, sr, kSymbolGroup4Names[s], enc, &dicts));
+          sw.WriteHeader(s, max_nnz, sr, kSymbolGroup4Names[s], enc, &dicts));
     }
   }
   enc->PopDebugPrefix();

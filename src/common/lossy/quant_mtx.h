@@ -43,8 +43,7 @@ struct QuantMtx {
   // max_residual is the maximum absolute input values to be quantized.
   // q_scale is the expected precision scale of the input Y/U/V coeffs
   // (typically 1<<yuv_bits with yuv_bits ~= 8-10bits, depending on the CSP).
-  // Does not initialize for TrfSizes that are not part of the 'partition_set'.
-  void Init(uint32_t max_residual, float q_scale, PartitionSet partition_set,
+  void Init(uint32_t max_residual, float q_scale,
             const uint16_t steps[kNumQuantZones]);
   // Set the lambda magic constants (encoder), using quant_steps[].
   // Must be called after Init().
@@ -85,22 +84,13 @@ struct QuantMtx {
   //   level[] = (coeff[] * iquant[] + bias[]) >> WP2QBits
   //   coeffs[] = level[] * dequant[]
   // quant[] incorporates the transform scaling constant sqrt(W * H / 4).
-  const int16_t* dequants[TRF_LAST];   // 15bits (always > 0)
-  const uint32_t* iquants[TRF_LAST];
-  const uint32_t* bias[TRF_LAST];
-  // Ranges of quantized residuals - 1, i.e. their max absolute values.
-  const uint16_t* max_abs_res[TRF_LAST];
-  uint16_t max_abs_res_dc[TRF_LAST];   // permanent storage for DC
-
-  // data for all quant matrices
-  static constexpr uint32_t kDataSize =
-      8 +  // < should be 2 * 2, but we round up to 8 bytes for WP2Quantize()
-      4 * 4 + 8 * 8 + 16 * 16 + 32 * 32 +
-      2 * (2 * 4 + 2 * 8 + 4 * 8 + 4 * 16 + 8 * 16 + 8 * 32 + 16 * 32);
-  int16_t dequant_data[kDataSize];
-  Vector_u32 iquant_data;
-  Vector_u32 bias_data;
-  Vector_u16 range_data;
+  static constexpr uint32_t kDataSize = WP2QStride * WP2QStride;
+  int16_t dequants[kDataSize];   // 15bits (always > 0)
+  // for encoder:
+  Vector_u32 iquants;
+  Vector_u32 bias;
+  // ranges of quantized DC residuals, for each transform
+  uint16_t max_abs_res_dc[TRF_LAST];
 };
 
 //------------------------------------------------------------------------------

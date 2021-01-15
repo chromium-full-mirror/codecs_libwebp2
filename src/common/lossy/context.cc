@@ -215,7 +215,7 @@ WP2Status DCPredictor::WriteHeader(uint32_t cluster, uint32_t max_count,
                                    SymbolWriter* const sw) {
   // For now, we consider the statistics as being the same for the whole image.
   assert(cluster == 0);
-  WP2_CHECK_STATUS(sw->WriteHeader(cluster, max_count, kSymbolDCDict, recorder,
+  WP2_CHECK_STATUS(sw->WriteHeader(kSymbolDCDict, cluster, max_count, recorder,
                                    "dc_dict", enc, dicts));
   return WP2_STATUS_OK;
 }
@@ -252,7 +252,7 @@ WP2Status DCPredictor::InitRead(uint32_t cluster, SymbolReader* const sr,
                                 uint32_t prefix_bits, uint32_t max_count) {
   prefix_bits_ = prefix_bits;
   assert(cluster == 0);
-  return sr->ReadHeader(cluster, max_count, kSymbolDCDict, "dc_dict");
+  return sr->ReadHeader(kSymbolDCDict, cluster, max_count, "dc_dict");
 }
 
 void DCPredictor::Read(ANSDec* const dec, SymbolReader* const sr,
@@ -331,7 +331,7 @@ void YModePredictor::Write(const CodedBlock& cb, const Predictor& pred,
                            bool do_update, ANSEncBase* const enc,
                            SymbolManager* const sw) {
   const uint32_t cluster = GetCluster(predictor_ctxt_, cb);
-  sw->Process(cluster, kSymbolModeY, pred.mode(), "predictor", enc);
+  sw->Process(kSymbolModeY, cluster, pred.mode(), "predictor", enc);
   if (do_update) {
     const Predictor::ModeContext ctxt = pred.mode_context();
     predictor_ctxt_.Set(cb.blk(), (int)ctxt);
@@ -341,7 +341,7 @@ void YModePredictor::Write(const CodedBlock& cb, const Predictor& pred,
 uint32_t YModePredictor::Read(const CodedBlock& cb, const Predictors& preds,
                               SymbolReader* const sr) {
   const uint32_t cluster = GetCluster(predictor_ctxt_, cb);
-  const uint32_t mode = sr->Read(cluster, kSymbolModeY, "predictor");
+  const uint32_t mode = sr->Read(kSymbolModeY, cluster, "predictor", nullptr);
   const Predictor::ModeContext ctxt =
       preds.GetFirstWithMode(mode)->mode_context();
   predictor_ctxt_.Set(cb.blk(), (int)ctxt);

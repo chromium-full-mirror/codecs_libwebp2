@@ -88,6 +88,10 @@ static WP2Status CheckDimensions(uint32_t width, uint32_t height,
                WP2_STATUS_BAD_DIMENSION);
   WP2_CHECK_OK((uint64_t)stride >= (uint64_t)WP2FormatBpp(format) * width,
                WP2_STATUS_BAD_DIMENSION);
+#if defined(WP2_MAX_ARGB_MEMORY)
+  WP2_CHECK_OK((uint64_t)stride * height <= WP2_MAX_ARGB_MEMORY,
+               WP2_STATUS_OUT_OF_MEMORY);
+#endif
   return WP2_STATUS_OK;
 }
 

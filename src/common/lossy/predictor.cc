@@ -1295,7 +1295,7 @@ void SignalingCflPredictor::ReadParams(CodedBlock* const cb, Channel channel,
                                        SymbolReader* const sr,
                                        ANSDec* const dec) const {
   const uint32_t a_unsigned =
-      sr->Read(/*cluster=*/0, kSymbolCflSlope, "cfl_slope");
+      sr->Read(kSymbolCflSlope, /*cluster=*/0, "cfl_slope");
   cb->cfl_[channel - 1] = a_unsigned;
   const uint32_t sign = dec->ReadUValue(1, "cfl_slope_sign");
   if (sign) {

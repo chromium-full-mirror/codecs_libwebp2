@@ -39,15 +39,15 @@ class SymbolManager {
 
   // Processes the symbol of type 'sym' and value 'value' in the 'cluster'th
   // cluster. Returns the value.
-  int32_t Process(uint32_t cluster, uint32_t sym, int32_t value, WP2_OPT_LABEL,
+  int32_t Process(uint32_t sym, uint32_t cluster, int32_t value, WP2_OPT_LABEL,
                   ANSEncBase* const enc) {
-    return ProcessInternal(cluster, sym, value, /*use_max_value=*/false,
+    return ProcessInternal(sym, cluster, value, /*use_max_value=*/false,
                            /*max_value=*/0, label, enc, /*cost=*/nullptr);
   }
 
   int32_t Process(uint32_t sym, int32_t value, WP2_OPT_LABEL,
                   ANSEncBase* const enc) {
-    return Process(/*cluster=*/0, sym, value, label, enc);
+    return Process(sym, /*cluster=*/0, value, label, enc);
   }
 
   // Does the same as above except that it caps the value to be in
@@ -55,31 +55,31 @@ class SymbolManager {
   // requires a binary search in [0, max_value]. This function is usually to
   // be used at the end of an interval where we know we can cap values because
   // they cannot be out of it.
-  int32_t Process(uint32_t cluster, uint32_t sym, int32_t value,
+  int32_t Process(uint32_t sym, uint32_t cluster, int32_t value,
                   uint32_t max_value, WP2_OPT_LABEL, ANSEncBase* const enc) {
-    return ProcessInternal(cluster, sym, value, /*use_max_value=*/true,
+    return ProcessInternal(sym, cluster, value, /*use_max_value=*/true,
                            max_value, label, enc, /*cost=*/nullptr);
   }
 
   // Same as process, but if 'cost' is not nullptr, it is set to the cost of
   // storing this symbol.
-  void ProcessWithCost(uint32_t cluster, uint32_t sym, int32_t value,
+  void ProcessWithCost(uint32_t sym, uint32_t cluster, int32_t value,
                        WP2_OPT_LABEL, ANSEncBase* const enc,
                        double* const cost) {
-    ProcessInternal(cluster, sym, value, /*use_max_value=*/false,
+    ProcessInternal(sym, cluster, value, /*use_max_value=*/false,
                     /*max_value=*/0, label, enc, cost);
   }
-  void ProcessWithCost(uint32_t cluster, uint32_t sym, int32_t value,
+  void ProcessWithCost(uint32_t sym, uint32_t cluster, int32_t value,
                        uint32_t max_value, WP2_OPT_LABEL, ANSEncBase* const enc,
                        double* const cost) {
-    ProcessInternal(cluster, sym, value, /*use_max_value=*/true, max_value,
+    ProcessInternal(sym, cluster, value, /*use_max_value=*/true, max_value,
                     label, enc, cost);
   }
 
   virtual const SymbolsInfo& symbols_info() const = 0;
 
  protected:
-  virtual int32_t ProcessInternal(uint32_t cluster, uint32_t sym, int32_t value,
+  virtual int32_t ProcessInternal(uint32_t sym, uint32_t cluster, int32_t value,
                                   bool use_max_value, uint32_t max_value,
                                   WP2_OPT_LABEL, ANSEncBase* const enc,
                                   double* const cost) = 0;
@@ -106,32 +106,29 @@ class SymbolRecorder : public SymbolManager {
   // Resets stats.
   void ResetRecord(bool reset_backup);
 
-  const ANSDictionary& GetRecordedDict(uint32_t cluster, uint32_t sym) const;
-  const Vector_u8& GetRecordedValues(uint32_t cluster, uint32_t sym) const;
-  const ANSBinSymbol& GetABit(uint32_t cluster, uint32_t sym) const;
-  const ANSAdaptiveSymbol& GetASymbol(uint32_t cluster, uint32_t sym) const;
+  const ANSDictionary& GetRecordedDict(uint32_t sym, uint32_t cluster) const;
+  const Vector_u8& GetRecordedValues(uint32_t sym, uint32_t cluster) const;
+  const ANSBinSymbol& GetABit(uint32_t sym, uint32_t cluster) const;
+  const ANSAdaptiveSymbol& GetASymbol(uint32_t sym, uint32_t cluster) const;
   // Returns the current value updated with everything stored so far at default
   // speed.
-  const ANSAdaptiveSymbol& GetASymbolWithSpeed(uint32_t cluster,
-                                               uint32_t sym) const;
+  const ANSAdaptiveSymbol& GetASymbolWithSpeed(uint32_t sym,
+                                               uint32_t cluster) const;
 
   // Returns the dictionary of recorded values from the previous pass (before
   // the last call to ResetRecord()).
-  const ANSDictionary& GetDictPreviousPass(uint32_t cluster,
-                                           uint32_t sym) const;
-  // Returns the dictionary of recorded values from the previous pass. Can be
-  // used to manually set initial statistics.
-  ANSDictionary& GetDictPreviousPass(uint32_t cluster, uint32_t sym);
+  const ANSDictionary& GetDictPreviousPass(uint32_t sym,
+                                           uint32_t cluster) const;
 
  protected:
-  int32_t ProcessInternal(uint32_t cluster, uint32_t sym, int32_t value,
+  int32_t ProcessInternal(uint32_t sym, uint32_t cluster, int32_t value,
                           bool use_max_value, uint32_t max_value, WP2_OPT_LABEL,
                           ANSEncBase* const enc, double* const) override;
 
  private:
-  ANSDictionary* GetDict(uint32_t cluster, uint32_t sym);
-  ANSBinSymbol* GetABit(uint32_t cluster, uint32_t sym);
-  ANSAdaptiveSymbol* GetASymbol(uint32_t cluster, uint32_t sym);
+  ANSDictionary* GetDict(uint32_t sym, uint32_t cluster);
+  ANSBinSymbol* GetABit(uint32_t sym, uint32_t cluster);
+  ANSAdaptiveSymbol* GetASymbol(uint32_t sym, uint32_t cluster);
 
   SymbolsInfo symbols_info_;
   // For each symbol 'sym', the statistics for all clusters start at
@@ -174,13 +171,13 @@ class SymbolCounter : public SymbolManager, public WP2Allocable {
   void Clear();
 
  protected:
-  int32_t ProcessInternal(uint32_t cluster, uint32_t sym, int32_t value_in,
+  int32_t ProcessInternal(uint32_t sym, uint32_t cluster, int32_t value_in,
                           bool use_max_value, uint32_t max_value, WP2_OPT_LABEL,
                           ANSEncBase* const enc, double* const) override;
 
  private:
-  ANSBinSymbol* GetABit(uint32_t cluster, uint32_t sym);
-  ANSAdaptiveSymbol* GetASymbol(uint32_t cluster, uint32_t sym);
+  ANSBinSymbol* GetABit(uint32_t sym, uint32_t cluster);
+  ANSAdaptiveSymbol* GetASymbol(uint32_t sym, uint32_t cluster);
 
   const SymbolRecorder* const recorder_;
   const SymbolsInfo& symbols_info_;
@@ -230,40 +227,40 @@ class SymbolWriter : public SymbolManager,
 
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
   // trivial.
-  void AddTrivial(uint32_t cluster, uint32_t sym, int32_t value);
+  void AddTrivial(uint32_t sym, uint32_t cluster, int32_t value);
   // For the 'cluster'th cluster of symbol 'sym', (given a maximum value of
   // non-zero values of 'max_nnz', which can be the number of pixels for
   // examples) of statistics 'counts' (first element being the count for the
   // minimum value of the symbol), decides how to store it
   // (trivial/range/dictionary) and writes the meta-information used to later be
   // able to decode the symbols.
-  WP2Status WriteHeader(uint32_t cluster, uint32_t max_nnz, uint32_t sym,
+  WP2Status WriteHeader(uint32_t sym, uint32_t cluster, uint32_t max_nnz,
                         const uint32_t* const counts, WP2_OPT_LABEL,
                         ANSEncBase* const enc, ANSDictionaries* const dicts);
   // Same as above but uses counts from the provided SymbolRecorder.
-  WP2Status WriteHeader(uint32_t cluster, uint32_t max_nnz, uint32_t sym,
+  WP2Status WriteHeader(uint32_t sym, uint32_t cluster, uint32_t max_nnz,
                         const SymbolRecorder& syntax_recorder, WP2_OPT_LABEL,
                         ANSEncBase* const enc, ANSDictionaries* const dicts);
   // Same as above but writes headers for all clusters.
-  WP2Status WriteHeader(uint32_t max_nnz, uint32_t sym,
+  WP2Status WriteHeader(uint32_t sym, uint32_t max_nnz,
                         const SymbolRecorder& syntax_recorder, WP2_OPT_LABEL,
                         ANSEncBase* const enc, ANSDictionaries* const dicts);
 
   // Fills the array 'is_maybe_used' with true when the symbol might be used,
   // false if we are sure it is not used.
-  void GetPotentialUsage(uint32_t cluster, uint32_t sym, bool is_maybe_used[],
+  void GetPotentialUsage(uint32_t sym, uint32_t cluster, bool is_maybe_used[],
                          uint32_t size) const override;
 
  protected:
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
   // a range.
   // 'mapping' is used in case we don't use the raw values but a mapping.
-  void AddRange(uint32_t cluster, uint32_t sym, const uint16_t* const mapping,
+  void AddRange(uint32_t sym, uint32_t cluster, const uint16_t* const mapping,
                 uint32_t size, uint16_t max_range);
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
   // a dictionary of statistics represented by 'counts', 'quantized_counts' and
   // 'mapping'.
-  WP2Status AddDict(uint32_t cluster, uint32_t sym,
+  WP2Status AddDict(uint32_t sym, uint32_t cluster,
                     const uint32_t* const counts,
                     const uint32_t* const quantized_counts,
                     const uint16_t* const mapping, uint32_t size,
@@ -271,7 +268,7 @@ class SymbolWriter : public SymbolManager,
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
   // Golomb of prefix size 'prefix_size' using the statistics represented by
   // 'counts', 'quantized_counts' and 'mapping'.
-  WP2Status AddGolomb(uint32_t cluster, uint32_t sym,
+  WP2Status AddGolomb(uint32_t sym, uint32_t cluster,
                       const uint32_t* const counts,
                       const uint32_t* const quantized_counts,
                       const uint16_t* const mapping, uint32_t size,
@@ -282,14 +279,14 @@ class SymbolWriter : public SymbolManager,
   // needs to have been called before so that the SymbolWriter knows how to
   // store 'sym'. If 'cost' is not nullptr, it's set to the cost in bits of
   // storing 'sym'.
-  int32_t ProcessInternal(uint32_t cluster, uint32_t sym, int32_t value_in,
+  int32_t ProcessInternal(uint32_t sym, uint32_t cluster, int32_t value_in,
                           bool use_max_value, uint32_t max_value, WP2_OPT_LABEL,
                           ANSEncBase* const enc, double* const cost) override;
 
   // Writes a histogram as defined by the quantizer.
   WP2Status WriteHistogram(const Quantizer::Config& config,
-                           uint32_t symbol_range,
-                           uint32_t max_count, ANSEncBase* const enc);
+                           uint32_t symbol_range, uint32_t max_count,
+                           ANSEncBase* const enc);
   // Computes the cost of storing a histogram as Golomb.
   void ComputeGolombCost(uint32_t range, uint32_t max_nnz, uint32_t size,
                          uint32_t prefix_size, float* cost,

@@ -177,7 +177,7 @@ void WriteBlockSize(const FrontMgrNxNBase& mgr, BlockSize dim,
   const uint32_t i = stats.slots_[bounds][dim];
   assert(i != PartitionSetStats::kInvalidSlot);
   const uint32_t cluster = stats.unique_bounds_index_[bounds];
-  sm->Process(cluster, kSymbolBlockSize, i, "block_size", enc);
+  sm->Process(kSymbolBlockSize, cluster, i, "block_size", enc);
 }
 
 BlockSize ReadBlockSize(const FrontMgrNxNBase& mgr, SymbolReader* const sr) {
@@ -185,7 +185,7 @@ BlockSize ReadBlockSize(const FrontMgrNxNBase& mgr, SymbolReader* const sr) {
   const BlockSize bounds =
       stats.smallest_bounds_[mgr.GetMaxPossibleBlock().dim()];
   const uint32_t cluster = stats.unique_bounds_index_[bounds];
-  const uint32_t i = sr->Read(cluster, kSymbolBlockSize, "block_size");
+  const uint32_t i = sr->Read(kSymbolBlockSize, cluster, "block_size", nullptr);
   const BlockSize dim = stats.blocks_[bounds][i];
   assert(dim != BLK_LAST);
   return dim;

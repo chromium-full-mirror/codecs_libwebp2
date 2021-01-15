@@ -78,8 +78,14 @@ class CostModel : public CountsBuffer<double> {
     static_assert(1 + (int)kSymbolG == (int)kSymbolB, "Invalid kSymbolG");
     for (uint32_t i = 0; i < 4; ++i) {
       const auto sym = (Symbol)((int)kSymbolA + i);
-      literal_minima_[i] = (int16_t)info.Min(/*cluster=*/0, sym);
+      literal_minima_[i] = (int16_t)info.Min(sym, /*cluster=*/0);
     }
+    return WP2_STATUS_OK;
+  }
+  WP2Status Allocate(const WP2::SymbolsInfo& symbols_info) {
+    WP2_CHECK_ALLOC_OK(base_buffer_.resize(symbols_info.MaxRangeSum()));
+    SetBuffer(base_buffer_.data(), symbols_info);
+    Clear();
     return WP2_STATUS_OK;
   }
 
@@ -117,6 +123,7 @@ class CostModel : public CountsBuffer<double> {
   bool has_alpha_;
   bool is_label_image_;
   int16_t literal_minima_[4];
+  WP2::VectorNoCtor<double> base_buffer_;
 };
 
 // Describes how a segment of pixels of length 'len' is represented (copy ...)
@@ -594,7 +601,7 @@ static WP2Status BackwardReferencesHashChainDistanceOnly(
   int first_offset_is_constant = -1;  // initialized with 'impossible' value
   uint32_t reach = 0;
 
-  WP2_CHECK_ALLOC_OK(cost_model.Allocate(&symbols_info));
+  WP2_CHECK_STATUS(cost_model.Allocate(symbols_info));
   const bool use_color_cache = (cache_config.type != CacheType::kNone);
   ColorCachePtr color_cache;
   WP2_CHECK_STATUS(color_cache.Init(cache_config));

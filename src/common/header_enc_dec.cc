@@ -81,8 +81,8 @@ uint32_t HeaderDec::ReadBits(uint32_t num_bits, WP2_OPT_LABEL) {
 int32_t HeaderDec::ReadSBits(uint32_t num_bits, WP2_OPT_LABEL) {
   const int32_t value =
       (int32_t)ReadBitsInternal(num_bits) - (1 << (num_bits - 1));
-  WP2Trace("%s: value=%d num_bits=%d (signed)", debug_prefix_, label, value,
-           num_bits);
+  WP2Trace("%s: value=%d num_bits=%d (signed)",
+           debug_prefix_, label, value, num_bits);
   return value;
 }
 
@@ -91,15 +91,15 @@ uint32_t HeaderDec::ReadVarUInt(uint32_t min_value, uint32_t max_value,
   assert(min_value <= max_value);
   if (status_ != WP2_STATUS_OK) return 0;
   if (min_value == max_value) {
-    WP2Trace("%s: value=%u in [%u:%u]", debug_prefix_, label, min_value,
-             min_value, max_value);
+    WP2Trace("%s: value=%u in [%u:%u]",
+             debug_prefix_, label, min_value, min_value, max_value);
     return 0;
   }
   assert(bit_pos_ == 8);  // Not-aligned variable-length ints are not supported.
   uint32_t value;
   status_ = TryReadVarInt(data_source_, min_value, max_value, &value);
-  WP2Trace("%s: value=%u in [%u:%u]", debug_prefix_, label, value, min_value,
-           max_value);
+  WP2Trace("%s: value=%u in [%u:%u]",
+           debug_prefix_, label, value, min_value, max_value);
   // No need to update 'byte_' or 'bit_pos_' because whole bytes were read.
   return (status_ == WP2_STATUS_OK) ? value : 0;
 }
@@ -154,8 +154,8 @@ void HeaderEnc::PutBits(uint32_t value, uint32_t num_bits, WP2_OPT_LABEL) {
 void HeaderEnc::PutSBits(int32_t value, uint32_t num_bits, WP2_OPT_LABEL) {
   const int32_t max_abs_value = (1 << (num_bits - 1));
   assert(value >= -max_abs_value && value < max_abs_value);
-  WP2Trace("%s: value=%d num_bits=%u (signed)", debug_prefix_, label, value,
-           num_bits);
+  WP2Trace("%s: value=%d num_bits=%u (signed)",
+           debug_prefix_, label, value, num_bits);
   PutBitsInternal((uint32_t)(value + max_abs_value), num_bits);
 }
 
@@ -168,8 +168,8 @@ void HeaderEnc::PutVarUInt(uint32_t value, uint32_t min_value,
     error_ = true;
   } else {
     assert((bit_pos_ & 7) == 0);
-    WP2Trace("%s: value=%u in [%u:%u]", debug_prefix_, label, value, min_value,
-             max_value);
+    WP2Trace("%s: value=%u in [%u:%u]",
+             debug_prefix_, label, value, min_value, max_value);
     const uint32_t num_written_bytes =
         WriteVarInt(value, min_value, max_value, buf_ + (bit_pos_ >> 3));
     bit_pos_ += num_written_bytes << 3;
