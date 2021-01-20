@@ -147,6 +147,7 @@ WP2Status SyntaxReader::LoadDictionaries() {
       gparams_->has_alpha_ &&
           (alpha_reader_->GetAlphaMode() != kAlphaModeLossless)));
 
+  sr_.Clear();   // reclaim some tmp memory
   return WP2_STATUS_OK;
 }
 

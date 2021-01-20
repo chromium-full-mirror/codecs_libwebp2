@@ -233,8 +233,8 @@ WP2Status AnalyzeEntropyImpl(const T* argb, uint32_t stride, uint32_t width,
     }
   }
 
-  double entropy_comp[kNumPremultModes][kHistoTotal];
-  double entropy[kNumPremultModes][(uint32_t)EntropyMode::kNum];
+  float entropy_comp[kNumPremultModes][kHistoTotal];
+  float entropy[kNumPremultModes][(uint32_t)EntropyMode::kNum];
 
   for (uint32_t premult = first_premult_mode; premult < kNumPremultModes;
        ++premult) {
@@ -293,7 +293,7 @@ WP2Status AnalyzeEntropyImpl(const T* argb, uint32_t stride, uint32_t width,
           entropy_comp[premult][kHistoPalette] + encoder->palette_.GetCost();
     } else {
       entropy[premult][(uint32_t)EntropyMode::kPalette] =
-          std::numeric_limits<double>::max();
+          std::numeric_limits<float>::max();
     }
   }
 

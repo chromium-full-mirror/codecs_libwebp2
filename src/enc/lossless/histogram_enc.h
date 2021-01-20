@@ -93,9 +93,9 @@ class Histogram : public CountsBuffer<uint32_t> {
 
   uint32_t trivial_symbols_[kSymbolNum];
   uint32_t nonzeros_[kSymbolNum];
-  double bit_cost_;           // cached value of bit cost.
-  double costs_[kSymbolNum];  // cached values of entropy costs.
-  int16_t id_;                // Unique id in a HistogramSet
+  float bit_cost_;           // cached value of bit cost.
+  float costs_[kSymbolNum];  // cached values of entropy costs.
+  int16_t id_;               // Unique id in a HistogramSet
 
  private:
   typedef CountsBuffer<uint32_t> super;
@@ -157,17 +157,17 @@ class PopulationAnalyzer {
   }
   void PopulationCost(const uint32_t* const population, uint32_t range,
                       uint32_t* const nonzeros, uint32_t* const trivial_sym,
-                      double* cost);
+                      float* cost);
 
   void GetCombinedEntropy(const uint32_t* const X, const uint32_t* const Y,
                           uint32_t X_nonzeros, uint32_t Y_nonzeros,
                           uint32_t X_trivial, uint32_t Y_trivial,
-                          uint32_t length, double* cost);
+                          uint32_t length, float* cost);
 
   // Various histogram combine/cost-eval functions
 
   int GetCombinedHistogramEntropy(const Histogram& a, const Histogram& b,
-                                  double cost_threshold, double* cost);
+                                  float cost_threshold, float* cost);
 
   // Performs out = a + b, computing the cost C(a+b) - C(a) - C(b) while
   // comparing to the threshold value 'cost_threshold'. The score returned is
@@ -175,14 +175,14 @@ class PopulationAnalyzer {
   // Since the previous score passed is 'cost_threshold', we only need to
   // compare the partial cost against 'cost_threshold + C(a) + C(b)' to possibly
   // bail-out early.
-  double HistogramAddEval(const Histogram& a, const Histogram& b,
-                          Histogram* const out, double cost_threshold);
+  float HistogramAddEval(const Histogram& a, const Histogram& b,
+                         Histogram* const out, float cost_threshold);
 
   // Same as HistogramAddEval(), except that the resulting histogram
   // is not stored. Only the cost C(a+b) - C(a) is evaluated. We omit
   // the term C(b) which is constant over all the evaluations.
-  double HistogramAddThresh(const Histogram& a, const Histogram& b,
-                            double cost_threshold);
+  float HistogramAddThresh(const Histogram& a, const Histogram& b,
+                           float cost_threshold);
 
   // Update the individual/overall bit costs of an histogram.
   void UpdateHistogramCost(Histogram* const h);
@@ -203,9 +203,9 @@ typedef struct {
   uint16_t idx2;
   // Cost difference between the merged histogram cost and the individual costs
   // for idx1 and idx2.
-  double cost_diff;
+  float cost_diff;
   // Cost of the histogram merging the histograms at idx1 and idx2.
-  double cost_combo;
+  float cost_combo;
 } HistogramPair;
 
 // Wrapper around a segment image to easily access elements in the green
@@ -252,8 +252,8 @@ class HistoQueue {
   // Creates a pair from indices "idx1" and "idx2" provided its cost
   // is inferior to "threshold", a negative entropy.
   // It returns the cost of the pair, or 0. if it superior to threshold.
-  WP2Status Push(uint16_t idx1, uint16_t idx2, double threshold,
-                 double* const cost_diff = nullptr);
+  WP2Status Push(uint16_t idx1, uint16_t idx2, float threshold,
+                 float* const cost_diff = nullptr);
 
   // Removes histograms that are not part of the valid indices. Also empties the
   // queue as elements become invalid. The queue needs to be resized to be used

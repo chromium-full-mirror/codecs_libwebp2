@@ -878,11 +878,6 @@ static void FillExtents(Symbol sym, uint32_t* const extents,
                                           num_extents);
       break;
     }
-    case kAOMDCSign: {
-      CoordinateFiller<kCoordMaxSize>::Do(libgav1::kDefaultDcSignCdf, c,
-                                          num_extents);
-      break;
-    }
     default:
       assert(false);
   }
@@ -932,8 +927,6 @@ static const uint16_t* GetCDF(Symbol sym, uint32_t cluster) {
       return GetCDF(cluster, libgav1::kDefaultCoeffBaseCdf);
     case kAOMCoeffBaseRange:
       return GetCDF(cluster, libgav1::kDefaultCoeffBaseRangeCdf);
-    case kAOMDCSign:
-      return GetCDF(cluster, libgav1::kDefaultDcSignCdf);
     default:
       assert(false);
   }

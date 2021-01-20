@@ -309,6 +309,11 @@ class PseudoRNG {
     } while (diff >= amp);
     return diff;
   }
+  // returns a value in [min, max]
+  int32_t Get(int32_t min, int32_t max) {
+    assert(max >= min);
+    return GetUnsigned((uint32_t)(max + 1 - min)) + min;
+  }
 
  private:
   int32_t Update();  // update state and return uniform 31b-signed number

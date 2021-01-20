@@ -504,17 +504,6 @@ typedef void (*AnglePredictorF)(uint8_t angle, const int16_t* ctx, uint32_t bw,
 // generic predictors (dc, smooth, ...)
 extern LPredictF BasePredictors[BPRED_LAST];
 
-// Computes a weight based on the distance from the context point (x, y) to the
-// direction axis (defined by the cos/sin of its angle, axes X going right and Y
-// up, VP9 convention) going through the block point (x0, y0).
-// Helper function used by angle predictors.
-float ProjWeight(float x0, float y0, float c, float s, float x, float y);
-
-// Generic directional predictors. 'angle_deg' is in degrees.
-extern void BaseAnglePredictor(float angle_deg, const int16_t ctx[],
-                               uint32_t bw, uint32_t bh, int16_t* dst,
-                               size_t step, int16_t min_value,
-                               int16_t max_value);
 // Simple version of the generic directional predictors: interpolations are
 // closer to how AV1 does it.
 extern void SimpleAnglePredictor(uint8_t angle_idx, const int16_t ctx[],
@@ -592,6 +581,22 @@ typedef void (*AddBlockFunc)(const int16_t src[], uint32_t src_step,
 // the array is indexed by log2(width / 4): 0=4, 1=8, 2=16, 3=32
 extern SubtractBlockFunc SubtractBlock[4];
 extern AddBlockFunc AddBlock[4];
+
+// Chroma-From-Luma and Alpha-From-Luma
+// precision of the linear a/b constants.
+// 'a' is in 1:2:12 format (hence, int16). The 'a' range is [-4.f, 4.f)
+// 'b' is in 1:11:12 format (int32). The 'b' range is [-1024.f, 1024.f]
+constexpr uint32_t kCflFracBits = 12;
+
+// Linear prediction: dst[] = clamp((a * src[] + b) >> kCflFracBits, min, max)
+// 'len' is assumed to be a multiple of 4.
+extern void (*CflPredict)(const int16_t* src, int16_t a, int32_t b,
+                          int16_t* dst, int16_t min, int16_t max, uint32_t len);
+static inline int16_t CflScale(int16_t v, int16_t a, int32_t b,
+                               int16_t min, int16_t max) {
+  const int32_t V = ((int32_t)a * v + b) >> kCflFracBits;
+  return (int16_t)(V < min ? min : V > max ? max : V);
+}
 
 // Will initialize the above functions.
 void PredictionInit();

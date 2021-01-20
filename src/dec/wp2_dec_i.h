@@ -169,7 +169,6 @@ class ResidualReader : public ResidualIO {
                                CodedBlock* const cb, BlockInfo* const info);
 
   uint32_t num_channels_;
-  libgav1::AOMResidualReader aom_reader_;
 };
 
 //------------------------------------------------------------------------------

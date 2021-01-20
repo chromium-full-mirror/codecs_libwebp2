@@ -24,52 +24,22 @@
 namespace WP2 {
 namespace libgav1 {
 
-WP2Status AOMResidualWriter::WriteCoeffs(
-    uint32_t x_pix, uint32_t y_pix, WP2::BlockSize dim, TransformPair tx_type,
-    bool first_is_dc, int max_num_coeffs, bool is420,
-    const int16_t* const coeffs, Channel channel,
-    SymbolManager* const sm, ANSEncBase* const enc) {
-  // Convert WP2 data to libgav1 data.
-  const TransformSize tx_size = ConvertSize(dim);
-  const bool is_reduced =
-      ((channel == kUChannel || channel == kVChannel) && is420);
-
-  // Write the coefficients.
-  int coefficient_level;
-  const uint32_t subsampling = is_reduced ? 1 : 0;
-  WriteTransformCoefficients(coeffs, max_num_coeffs, is_reduced,
-                             channel,
-                             x_pix >> subsampling, y_pix >> subsampling,
-                             tx_size, tx_type, first_is_dc, sm, enc,
-                             &coefficient_level);
-  return WP2_STATUS_OK;
-}
-
 // 'levels' contains the quantized coefficients in zigzag order.
-template <bool is_dc_coefficient>
 void AOMResidualWriter::WriteSignAndApplyDequantization(
-    int16_t res, uint32_t dc_sign_cluster, int* coefficient_level,
+    int16_t res, uint32_t max_value,
     SymbolManager* const sm, ANSEncBase* const enc) {
   assert(res != 0);
-  const bool sign = (res < 0);
-  int32_t val = std::abs(res);
-  val = std::min(is_dc_coefficient ? kMaxDcValue : kMaxCoeffValue, (int)val);
-  if (is_dc_coefficient) {
-    sm->Process(kAOMDCSign, dc_sign_cluster, sign, "is_negative_dc", enc);
-  } else {
-    enc->PutBool(sign, "is_negative");
-  }
-  *coefficient_level += val;
+  uint32_t val = std::abs(res);
+  val = std::min(val, max_value);  // TODO(skal): assert instead?
   if (val >= kQuantizerCoefficientBaseRangeContextClamp) {
-    constexpr int16_t max_range = is_dc_coefficient ? kMaxDcValue
-                                                    : kMaxCoeffValue;
-    WriteGolomb(val, kQuantizerCoefficientBaseRangeContextClamp, max_range,
+    WriteGolomb(val, kQuantizerCoefficientBaseRangeContextClamp, max_value,
                 /*prefix_size=*/1, enc, "golomb");
   }
+  enc->PutBool(res < 0, "is_negative");
 }
 
 uint32_t AOMResidualWriter::WriteCoeffBaseRange(uint32_t level,
-                                                int clamped_tx_size_context,
+                                                int tx_size_context,
                                                 int cdf_context, int plane_type,
                                                 SymbolManager* const sm,
                                                 ANSEncBase* const enc) {
@@ -78,7 +48,7 @@ uint32_t AOMResidualWriter::WriteCoeffBaseRange(uint32_t level,
     uint32_t chunk = std::min(level, (uint32_t)kCoeffBaseRangeSymbolCount - 1);
     sum += chunk;
     sm->Process(kAOMCoeffBaseRange,
-                GetClusterAOM3<kAOMCoeffBaseRange>(clamped_tx_size_context,
+                GetClusterAOM3<kAOMCoeffBaseRange>(tx_size_context,
                                                    plane_type, cdf_context),
                 chunk, "coeff_base_range", enc);
     level -= chunk;
@@ -88,11 +58,10 @@ uint32_t AOMResidualWriter::WriteCoeffBaseRange(uint32_t level,
 }
 
 void AOMResidualWriter::WriteEOB(
-    int eob, int max_num_coeffs, TransformSize tx_size, PlaneType plane_type,
+    int eob, TrfSize tdim, PlaneType plane_type,
     int context, SymbolManager* const sm, ANSEncBase* const enc) {
-  const int tx_size_context = kTransformSizeContext[tx_size];
-  assert((max_num_coeffs % 4) == 0 && max_num_coeffs <= 1024);
-  const int eob_multi_size = WP2Log2Floor(max_num_coeffs >> 2);
+  const int tx_size_context = kTrfContext[tdim];
+  const int eob_multi_size = WP2Log2Floor(kNumCoeffs[tdim] >> 2);
 
   eob -= 1;  // in [0..max_num_coeffs)
   int16_t eob_pt = 0;
@@ -154,51 +123,44 @@ void AOMResidualWriter::WriteEOB(
   }
 }
 
-void AOMResidualWriter::WriteTransformCoefficients(
-    const int16_t* const res, int max_num_coeffs, bool is_reduced,
-    Channel channel, int start_x, int start_y, TransformSize tx_size,
-    TransformPair tx_type, bool first_is_dc, SymbolManager* const sm,
-    ANSEncBase* const enc, int* const coefficient_level) {
-  const int tx_size_context = kTransformSizeContext[tx_size];
-  int eob = max_num_coeffs - 1;
-  const uint16_t* scan = UberZigZag(tx_size, is_reduced);
-  for (; eob >= 0 && res[scan[eob]] == 0; --eob) {
-  }
-  ++eob;  // is actually the size.
-  *coefficient_level = 0;
+void AOMResidualWriter::WriteCoeffs(
+    const int16_t res[], Channel channel, TrfSize tdim, TransformPair tx_type,
+    bool first_is_dc, SymbolManager* const sm, ANSEncBase* const enc) {
+  const int tx_size_context = kTrfContext[tdim];
+  const uint16_t* const scan = ResidualIterator::GetZigzag(tdim);
+  int eob = kNumCoeffs[tdim];
+  while ((eob > 0) && (res[scan[eob - 1]] == 0)) --eob;
   if (eob == 0) return;  // all_zero
 
-  const int tx_width = kTransformWidth[tx_size];
-  const int tx_height = kTransformHeight[tx_size];
-  const int clamped_tx_width = std::min(tx_width, 32);
-  const int clamped_tx_height = std::min(tx_height, 32);
-  const int padded_tx_width =
-      clamped_tx_width + kQuantizedCoefficientBufferPadding;
-  const int padded_tx_height =
-      clamped_tx_height + kQuantizedCoefficientBufferPadding;
+  const int tx_width = TrfWidth[tdim];
+  const int tx_height = TrfHeight[tdim];
+  const int padded_tx_width = tx_width + kQuantizedCoefficientBufferPadding;
+  const int padded_tx_height = tx_height + kQuantizedCoefficientBufferPadding;
   const PlaneType plane_type = GetPlaneType(channel);
 
   const uint32_t tx_class = (uint32_t)GetTransformClass(tx_type);
   int context = (tx_class != (uint32_t)TransformClass::kTwoD) ? 1 : 0;
 
-  WriteEOB(eob, max_num_coeffs, tx_size, plane_type, context, sm, enc);
+  WriteEOB(eob, tdim, plane_type, context, sm, enc);
 
-  uint8_t quantized[2048], quantized2[2048];
-  int16_t levels[kMaxBlockSizePix2];   // non-padded
-  std::fill(quantized, quantized + padded_tx_width * padded_tx_height, 0u);
+  assert(padded_tx_width <= (int)kMaxTxBufferDim);
+  assert(padded_tx_height <= (int)kMaxTxBufferDim);
+  uint8_t quantized1[kMaxTxBufferDim * kMaxTxBufferDim];
+  uint8_t quantized2[kMaxTxBufferDim * kMaxTxBufferDim];
+  std::fill(quantized1, quantized1 + padded_tx_width * padded_tx_height, 0u);
   std::fill(quantized2, quantized2 + padded_tx_width * padded_tx_height, 0u);
-  const TransformSize adjusted_tx_size = kAdjustedTransformSize[tx_size];
-  const int adjusted_tx_width_log2 = kTransformWidthLog2[adjusted_tx_size];
-  const int clamped_tx_size_context = std::min(tx_size_context, 3);
+  const int adjusted_tx_width_log2 = TrfLog2[tx_width];
 
   // Write the last coefficient.
   {
     const uint16_t pos = scan[eob - 1];
+    const uint16_t adjusted_pos = PaddedIndex(pos, adjusted_tx_width_log2);
     uint32_t level = std::abs(res[pos]);
     assert(level != 0);
     --level;
-    uint32_t chunk = std::min(level, (uint32_t)kCoeffBaseEobSymbolCount - 1);
-    context = GetCoeffBaseContextEob(tx_size, eob - 1);
+    const uint32_t chunk =
+        std::min(level, (uint32_t)kCoeffBaseEobSymbolCount - 1);
+    context = GetCoeffBaseContextEob(tdim, eob - 1);
     sm->Process(
         kAOMCoeffBaseEOB,
         GetClusterAOM3<kAOMCoeffBaseEOB>(tx_size_context, plane_type, context),
@@ -207,14 +169,12 @@ void AOMResidualWriter::WriteTransformCoefficients(
     if (1 + chunk > kNumQuantizerBaseLevels) {
       level -= chunk;
       real_level += WriteCoeffBaseRange(
-          level, clamped_tx_size_context,
+          level, tx_size_context,
           GetCoeffBaseRangeContextEob(adjusted_tx_width_log2, pos), plane_type,
           sm, enc);
     }
-    levels[eob - 1] = real_level;
-    quantized[PaddedIndex(pos, adjusted_tx_width_log2)] =
-        std::min(real_level, 3);
-    quantized2[PaddedIndex(pos, adjusted_tx_width_log2)] =
+    quantized1[adjusted_pos] = std::min(real_level, 3);
+    quantized2[adjusted_pos] =
         std::min(real_level, kQuantizerCoefficientBaseRangeContextClamp);
   }
 
@@ -226,9 +186,10 @@ void AOMResidualWriter::WriteTransformCoefficients(
   // Write all the other coefficients.
   for (int i = eob - 2; i >= 0; --i) {
     const uint16_t pos = scan[i];
-    context = get_coeff_base_context_func(quantized, tx_size,
-                                          adjusted_tx_width_log2, pos);
+    const uint16_t adjusted_pos = PaddedIndex(pos, adjusted_tx_width_log2);
     const uint32_t level_ini = std::abs(res[pos]);
+    context = get_coeff_base_context_func(quantized1, tdim,
+                                          adjusted_tx_width_log2, pos);
     uint32_t chunk = std::min(level_ini, (uint32_t)kCoeffBaseEobSymbolCount);
     sm->Process(
         kAOMCoeffBase,
@@ -239,26 +200,22 @@ void AOMResidualWriter::WriteTransformCoefficients(
       const uint32_t cdf_context = get_coeff_base_range_context_func(
           quantized2, adjusted_tx_width_log2, pos);
       const uint32_t level = level_ini - chunk;
-      real_level += WriteCoeffBaseRange(level, clamped_tx_size_context,
+      real_level += WriteCoeffBaseRange(level, tx_size_context,
                                         cdf_context, plane_type, sm, enc);
     }
-    quantized[PaddedIndex(pos, adjusted_tx_width_log2)] =
-        std::min(real_level, 3);
-    quantized2[PaddedIndex(pos, adjusted_tx_width_log2)] =
+    quantized1[adjusted_pos] = std::min(real_level, 3);
+    quantized2[adjusted_pos] =
         std::min(real_level, kQuantizerCoefficientBaseRangeContextClamp);
-    levels[i] = real_level;
   }
 
   assert(scan[0] == 0);
   if (first_is_dc && res[0]) {
-    const uint32_t dc_sign_cluster = GetClusterAOM1<kAOMDCSign>(plane_type);
-    WriteSignAndApplyDequantization<true>(res[0], dc_sign_cluster,
-                                          coefficient_level, sm, enc);
+    WriteSignAndApplyDequantization(res[0], kMaxDcValue, sm, enc);
   }
   for (int i = (first_is_dc ? 1 : 0); i < eob; ++i) {
-    if (levels[i] == 0) continue;
-    WriteSignAndApplyDequantization<false>(res[scan[i]], /*dc_sign_cluster=*/0,
-                                           coefficient_level, sm, enc);
+    if (res[scan[i]]) {
+      WriteSignAndApplyDequantization(res[scan[i]], kMaxCoeffValue, sm, enc);
+    }
   }
 }
 

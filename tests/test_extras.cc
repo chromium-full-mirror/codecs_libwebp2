@@ -72,6 +72,9 @@ TEST(RandomTest, Deterministic) {
 //------------------------------------------------------------------------------
 
 TEST(PreviewTest, TestBase64) {
+#if defined(WP2_BITTRACE)
+  WP2MathInit();
+#endif
   PreviewData p;
   std::string s;
   EXPECT_EQ(PreviewFromBase64("dasdascacas", &p), WP2_STATUS_BITSTREAM_ERROR);

@@ -79,7 +79,10 @@ namespace WP2 {
 
 // Max number (inclusive) of bits for the range used during range-value coding.
 static constexpr uint32_t kANSMaxRangeBits = 14;
-static constexpr uint32_t kANSMaxRange = (1u << kANSMaxRangeBits) - 1;
+// Maximum range that can be used. As a range is always > 0, it is stored -1. We
+// can hence go up to (1u << kANSMaxRangeBits) included so that the storage fits
+// on kANSMaxRangeBits bits.
+static constexpr uint32_t kANSMaxRange = (1u << kANSMaxRangeBits);
 // Max number (inclusive) of bits to use to describe a uniform value.
 static constexpr uint32_t kANSMaxUniformBits = IO_BITS;
 

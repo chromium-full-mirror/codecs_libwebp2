@@ -235,7 +235,6 @@ class ResidualWriter : public ResidualIO {
                           ANSEncBase* enc, SymbolManager* const sm,
                           bool is_pseudo_rate);
   uint32_t num_channels_;
-  libgav1::AOMResidualWriter aom_writer_;
 };
 
 // Class for writing the alpha plane.

@@ -238,6 +238,36 @@ TEST_P(SpeedTestCpuInfo, TestPSNR_8b) {
 
 //------------------------------------------------------------------------------
 
+TEST_P(SpeedTestCpuInfo, TestCflPrediction) {
+  WP2::PredictionInit();
+  PseudoRNG rng;
+  constexpr uint32_t kMaxSize = 51353;
+  constexpr uint32_t kNumTests = 60;
+  constexpr uint32_t kNumLoops = 500;
+  for (uint32_t t = 0; t < kNumTests; ++t) {
+    int16_t in[kMaxSize], out[kMaxSize] = { 0 };
+    uint32_t len  = (t < 16) ? 4 * t : 1 + rng.GetUnsigned(kMaxSize - 1);
+    len = (len & ~3);
+    const int32_t min_value = -rng.GetUnsigned(511);
+    const int32_t max_value = +rng.GetUnsigned(511);
+    const int32_t a = -rng.Get(-1020, 1240);
+    const int32_t b = +rng.Get(-512, 511);
+    for (auto& v : in) v = rng.Get(-511, 511);
+    for (uint32_t l = 0; l < kNumLoops; ++l) {
+      CflPredict(in, a, b, out, min_value, max_value, len);
+    }
+    for (uint32_t l = 0; l < len; ++l) {
+      ASSERT_EQ(out[l], CflScale(in[l], a, b, min_value, max_value))
+          << "[" << in[l] << " * a=" << a << " + b=" << b << " = "
+          << out[l] << "  clipped to ["
+          << min_value << ", " << max_value << "]";
+    }
+    for (uint32_t l = len; l < kMaxSize; ++l) ASSERT_EQ(out[l], 0);
+  }
+}
+
+//------------------------------------------------------------------------------
+
 INSTANTIATE_TEST_SUITE_P(SpeedTestInstantiation, SpeedTestCpuInfo,
                          ::testing::ValuesIn(testing::kWP2CpuInfos));
 

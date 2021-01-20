@@ -32,7 +32,7 @@
 namespace WP2L {
 
 static void ConvertPopulationCountTableToBitEstimates(
-    int num_symbols, const uint32_t population_counts[], double output[]) {
+    int num_symbols, const uint32_t population_counts[], float output[]) {
   uint32_t sum = 0;
   int nonzeros = 0;
   int i;
@@ -45,7 +45,7 @@ static void ConvertPopulationCountTableToBitEstimates(
   if (nonzeros <= 1) {
     memset(output, 0, num_symbols * sizeof(*output));
   } else {
-    const double logsum = WP2Log2(sum);
+    const float logsum = WP2Log2(sum);
     for (i = 0; i < num_symbols; ++i) {
       output[i] = logsum - WP2Log2(population_counts[i]);
     }
@@ -53,7 +53,7 @@ static void ConvertPopulationCountTableToBitEstimates(
 }
 
 // Class storing the cost of each symbol in bits ,based on its count.
-class CostModel : public CountsBuffer<double> {
+class CostModel : public CountsBuffer<float> {
  public:
   // 'refs' must not have its distance modified by DistanceToPlaneCode.
   WP2Status Build(uint32_t width, const LosslessSymbolsInfo& info,
@@ -89,10 +89,10 @@ class CostModel : public CountsBuffer<double> {
     return WP2_STATUS_OK;
   }
 
-  inline double GetLiteralCost(const int16_t* const v) const {
+  inline float GetLiteralCost(const int16_t* const v) const {
     // Add the cost to have a literal and the cost of storing G.
-    double res = counts_[kSymbolType][kSymbolTypeLiteral] +
-                 counts_[kSymbolG][v[2] - literal_minima_[2]];
+    float res = counts_[kSymbolType][kSymbolTypeLiteral] +
+                counts_[kSymbolG][v[2] - literal_minima_[2]];
     if (!is_label_image_) {
       if (has_alpha_) res += counts_[kSymbolA][v[0] - literal_minima_[0]];
       res += counts_[kSymbolR][v[1] - literal_minima_[1]] +
@@ -101,18 +101,18 @@ class CostModel : public CountsBuffer<double> {
     return res;
   }
 
-  inline double GetCacheCost(uint32_t idx) const {
+  inline float GetCacheCost(uint32_t idx) const {
     return counts_[kSymbolType][kSymbolTypeCacheIdx] +
            counts_[kSymbolCache][idx];
   }
 
-  inline double GetLengthCost(uint32_t length) const {
+  inline float GetLengthCost(uint32_t length) const {
     WP2::Golomb golomb(length - kMinLZ77Length, kLZZGolombPrefixSize);
     return counts_[kSymbolType][kSymbolTypeCopy] +
            counts_[kSymbolLen][golomb.prefix] + golomb.extra_bits_num;
   }
 
-  inline double GetDistanceCost(uint32_t distance) const {
+  inline float GetDistanceCost(uint32_t distance) const {
     const int32_t code = DistanceToPlaneCode(width_, distance);
     WP2::Golomb golomb(code, kLZZGolombPrefixSize);
     return counts_[kSymbolDist][golomb.prefix] + golomb.extra_bits_num;
@@ -123,7 +123,7 @@ class CostModel : public CountsBuffer<double> {
   bool has_alpha_;
   bool is_label_image_;
   int16_t literal_minima_[4];
-  WP2::VectorNoCtor<double> base_buffer_;
+  WP2::Vector_f base_buffer_;
 };
 
 // Describes how a segment of pixels of length 'len' is represented (copy ...)
@@ -136,12 +136,12 @@ static inline void AddSingleLiteralWithCostModel(
     const int16_t* const argb, ColorCache* const color_cache,
     const CostModel& cost_model, int idx, int use_color_cache, float prev_cost,
     float* const cost, Segment* const segments) {
-  double cost_val = prev_cost;
+  float cost_val = prev_cost;
   const int16_t* const color = &argb[4 * idx];
   uint32_t tag;
   if (use_color_cache && color_cache->Contains(color, &tag)) {
     // use_color_cache is true and color_cache contains color
-    const double mul0 = 0.68;
+    const float mul0 = 0.68f;
     cost_val += cost_model.GetCacheCost(tag) * mul0;
     if (cost[idx] > cost_val) {
       cost[idx] = (float)cost_val;
@@ -150,7 +150,7 @@ static inline void AddSingleLiteralWithCostModel(
       segments[idx].mode = kSymbolTypeCacheIdx;
     }
   } else {
-    const double mul1 = 0.82;
+    const float mul1 = 0.82f;
     if (use_color_cache) color_cache->Insert(color, /*index_ptr=*/nullptr);
     cost_val += cost_model.GetLiteralCost(color) * mul1;
     if (cost[idx] > cost_val) {
@@ -193,7 +193,7 @@ struct CostInterval : WP2Allocable {
 
 // The GetLengthCost(cost_model, k) are cached in a CostCacheInterval.
 typedef struct {
-  double cost;
+  float cost;
   int start;
   int end;  // Exclusive.
 } CostCacheInterval;
@@ -216,7 +216,7 @@ class CostManager {
   WP2::VectorNoCtor<CostCacheInterval> cache_intervals_;
   size_t cache_intervals_size_ = 0;
   // Contains the GetLengthCost(cost_model, k). Size max: kMaxLZ77Length.
-  WP2::VectorNoCtor<double> cost_cache_;
+  WP2::Vector_f cost_cache_;
   WP2::Vector_f costs_;
   Segment* segments_ = nullptr;
   // Most of the time, we only need few intervals -> use a free-list, to avoid
@@ -319,7 +319,7 @@ bool CostManager::Init(Segment* const segments, uint32_t num_pixels,
     cur->end = 1;
     cur->cost = cost_cache_[kMinLZ77Length];
     for (uint32_t i = kMinLZ77Length + 1; i < cost_cache_size; ++i) {
-      const double cost_val = cost_cache_[i];
+      const float cost_val = cost_cache_[i];
       if (cost_val != cur->cost) {
         ++cur;
         // Initialize an interval.
@@ -480,7 +480,7 @@ static inline WP2Status InsertInterval(CostManager* const manager,
 // If handling the interval or one of its subintervals becomes to heavy, its
 // contribution is added to the costs right away.
 static inline WP2Status PushInterval(CostManager* const manager,
-                                     double distance_cost, int position,
+                                     float distance_cost, int position,
                                      int len) {
   size_t i;
   CostInterval* interval = manager->head_;
@@ -597,7 +597,7 @@ static WP2Status BackwardReferencesHashChainDistanceOnly(
 
   CostModel cost_model;
   uint32_t offset_prev = -1, len_prev = -1;
-  double offset_cost = -1;
+  float offset_cost = -1.f;
   int first_offset_is_constant = -1;  // initialized with 'impossible' value
   uint32_t reach = 0;
 

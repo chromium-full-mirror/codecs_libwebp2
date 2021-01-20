@@ -33,33 +33,33 @@ static const int kPredLowEffort = 11;
 // Methods to calculate Entropy (Shannon).
 
 static float PredictionCostSpatial(const Vector_u32& counts, int weight_0,
-                                   double exp_val) {
+                                   float exp_val) {
   // TODO(vrabaud) make this constant be dependent on counts.size().
   //               This will matter for 10-bit.
   const uint32_t counts_size = 256;
   const uint32_t significant_symbols = counts_size >> 4;
-  const double exp_decay_factor = 0.6;
-  double bits = weight_0 * counts[0];
+  const float exp_decay_factor = 0.6f;
+  float bits = weight_0 * counts[0];
   for (uint32_t i = 1; i < significant_symbols; ++i) {
     // TODO(vrabaud) once subsequent usage of argb is signed, use MakeIndex
     //               to compute the cost.
     bits += exp_val * (counts[i] + counts[counts_size - i]);
     exp_val *= exp_decay_factor;
   }
-  return (float)(-0.1 * bits);
+  return -0.1f * bits;
 }
 
 static float PredictionCostSpatialHistogram(const Vector_u32 accumulated[4],
                                             const Vector_u32 tile[4]) {
   int i;
-  double retval = 0;
+  float retval = 0.f;
   for (i = 0; i < 4; ++i) {
-    const double kExpValue = 0.94;
+    const float kExpValue = 0.94f;
     retval += PredictionCostSpatial(tile[i], 1, kExpValue);
     retval += WP2L::CombinedShannonEntropy(
         tile[i].data(), accumulated[i].data(), tile[i].size());
   }
-  return (float)retval;
+  return retval;
 }
 
 static inline void UpdateHisto(Vector_u32 histo_argb[4],
@@ -381,7 +381,7 @@ static float PredictionCostCrossColor(const Vector_u32& accumulated,
                                       const Vector_u32& counts) {
   // Favor low entropy, locally and globally.
   // Favor small absolute values for PredictionCostSpatial
-  static const double kExpValue = 2.4;
+  static const float kExpValue = 2.4f;
   assert(accumulated.size() == counts.size());
   return CombinedShannonEntropy(counts.data(), accumulated.data(),
                                 counts.size()) +

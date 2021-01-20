@@ -440,13 +440,14 @@ WP2Status SyntaxWriter::SetInitialSegmentIds() {
   CodedBlock cb;
   cb.SetDimDefault(Block(0, 0, BLK_4x4));
   FrontMgr4x4 mgr;
-  WP2_CHECK_STATUS(mgr.Init(config_->partition_set, config_->partition_snapping,
-                            padded_tile_rect.width, padded_tile_rect.height));
+  WP2_CHECK_STATUS(
+      mgr.InitBase(padded_tile_rect.width, padded_tile_rect.height));
   for (uint32_t y = 0; y < SizeBlocks(padded_tile_rect.height); ++y) {
     for (uint32_t x = 0; x < SizeBlocks(padded_tile_rect.width); ++x) {
       cb.SetXY(mgr, x, y);
       cb.id_ = AssignSegmentId(*config_, *gparams_, padded_tile_rect, cb.blk());
       segment_ids_.InitInitialSegmentId(cb, cb.id_);
+      mgr.Use4x4();
     }
   }
   return WP2_STATUS_OK;

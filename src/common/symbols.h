@@ -37,7 +37,7 @@
 namespace WP2 {
 
 // Maximum number of symbol types to use.
-static constexpr uint32_t kSymbolNumMax = 43;
+static constexpr uint32_t kSymbolNumMax = 42;
 // Number of residual clusters, not including sectors.
 // Y/UV/A * Method0/Method1 * transform.
 static constexpr uint32_t kResidualClusters = 3 * kNumResidualStats * TRF_LAST;
@@ -392,8 +392,9 @@ class SymbolIO {
         // Size in bits of the Golomb prefix (1 or 2 for now).
         uint8_t prefix_size;
       } golomb;
-      // For type kTrivial, there is only one value.
-      int trivial_value;
+      // For type kTrivial, there is only one value. If the range contains
+      // negative and positive values, the sign is stored apart.
+      uint16_t trivial_value;
       // For type kAdaptive where range is 2.
       // Index of this adaptive bit a_bits_.
       uint32_t a_bit_index;
@@ -562,7 +563,6 @@ enum Symbol {
   kAOMCoeffBaseEOB,
   kAOMCoeffBase,
   kAOMCoeffBaseRange,
-  kAOMDCSign,
   kSymbolNum
 };
 
@@ -578,8 +578,8 @@ constexpr Symbol kSymbolsForAOMCoeffs[] = {
     kAOMAllZero,  kAOMEOBPT4,       kAOMEOBPT8,
     kAOMEOBPT16,  kAOMEOBPT32,      kAOMEOBPT64,
     kAOMEOBPT128, kAOMEOBPT256,     kAOMEOBPT512,  kAOMEOBPT1024,
-    kAOMEOBExtra, kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange,
-    kAOMDCSign};
+    kAOMEOBExtra, kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange
+};
 
 enum SymbolCount {
   kSymbolCountZero = 0,

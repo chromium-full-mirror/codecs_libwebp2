@@ -159,13 +159,12 @@ WP2Status ResidualReader::ReadCoeffs(Channel channel, ANSDec* const dec,
       std::fill(coeffs, coeffs + cb->NumCoeffsPerTransform(channel), 0);
 
       if (use_aom_coeffs_) {
-        const int max_num_coeffs = (cb->num_coeffs_[channel][tf_i] > 0)
-                                       ? WP2::kNumCoeffs[cb->tdim(channel)]
-                                       : 0;
-        aom_reader_.ReadCoeffs(
-            channel, cb->x_pix() + split_x, cb->y_pix() + split_y, split_size,
-            cb->is420_, params->tf, cb->IsFirstCoeffDC(channel), max_num_coeffs,
-            dec, sr, coeffs, &cb->num_coeffs_[channel][tf_i]);
+        if (cb->num_coeffs_[channel][tf_i] > 0) {  // need to read coeffs?
+          cb->num_coeffs_[channel][tf_i] =
+            libgav1::AOMResidualReader::ReadCoeffs(
+              channel, cb->tdim(channel), params->tf,
+              cb->IsFirstCoeffDC(channel), sr, dec, coeffs);
+        }
         SetGeometry(cb->num_coeffs_[channel][tf_i],
                     &cb->method_[channel][tf_i]);
       } else if (cb->method_[channel][tf_i] == EncodingMethod::kAllZero) {

@@ -631,27 +631,21 @@ TEST_F(TestANS, Test5) {
   // Display results.
   if (kVerbose) {
     printf("Cost: %f\n", config->cost);
-    if (config->next != nullptr) {
-      printf("Histogram is recursive:\n");
+    if (config->param.is_sparse) {
+      printf("Histogram is sparse:\n(index, count - 1):\n");
+      for (uint32_t i = 0; i < config->size_to_write; ++i) {
+        printf("(%d,%d) ", mapping[i], config->histogram_to_write[i]);
+      }
+      printf("\n");
+    } else {
+      printf("Histogram is not sparse:\n");
+      for (uint32_t i = 0; i < config->size_to_write; ++i) {
+        printf("%d ", config->histogram_to_write[i]);
+      }
+      printf("\n");
     }
-    while (config != nullptr) {
-      if (config->param.is_sparse) {
-        printf("Histogram is sparse:\n(index, count - 1):\n");
-        for (uint32_t i = 0; i < config->size_to_write; ++i) {
-          printf("(%d,%d) ", mapping[i], config->histogram_to_write[i]);
-        }
-        printf("\n");
-      } else {
-        printf("Histogram is not sparse:\n");
-        for (uint32_t i = 0; i < config->size_to_write; ++i) {
-          printf("%d ", config->histogram_to_write[i]);
-        }
-        printf("\n");
-      }
-      if (config->param.type == Quantizer::ConfigType::Huffman) {
-        printf("The counts above should be interpreted as exponents of 2.\n");
-      }
-      config = config->next;
+    if (config->param.type == Quantizer::ConfigType::Huffman) {
+      printf("The counts above should be interpreted as exponents of 2.\n");
     }
   }
 }
@@ -1295,14 +1289,14 @@ TEST_F(TestANS, DictionarySymbolCost) {
 
 TEST_F(TestANS, LargeRange) {
   // List of <value, min, max>
-  // Some edge cases.
+  // Some edge cases with range <= kANSMaxRange.
   std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> test_cases = {
+      {100, 0, kANSMaxRange - 3},
       {100, 0, kANSMaxRange - 2},
       {100, 0, kANSMaxRange - 1},
-      {100, 0, kANSMaxRange},
+      {kANSMaxRange - 3, 0, kANSMaxRange - 3},
       {kANSMaxRange - 2, 0, kANSMaxRange - 2},
       {kANSMaxRange - 1, 0, kANSMaxRange - 1},
-      {kANSMaxRange, 0, kANSMaxRange},
   };
   // More random test cases.
   UniformIntDistribution random(kBaseSeed);

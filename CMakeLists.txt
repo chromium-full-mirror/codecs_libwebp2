@@ -166,7 +166,7 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/dec_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/enc_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/grain_c.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/intra_c.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/intra_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/math.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/math.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/quant_dsp.cc

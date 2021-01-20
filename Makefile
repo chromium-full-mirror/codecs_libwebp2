@@ -249,7 +249,7 @@ DSP_DEC_OBJS = \
     src/dsp/csp_dsp.o \
     src/dsp/deblocking_filter_dsp.o \
     src/dsp/dec_dsp.o \
-    src/dsp/intra_c.o \
+    src/dsp/intra_dsp.o \
     src/dsp/quant_dsp.o \
     src/dsp/transf_c.o \
     src/dsp/transf_sse.o \
@@ -766,7 +766,8 @@ clean: ex_clean
 	         src/utils/lossless src/common/lossless src/common/lossy \
 	         src/enc/preview src/enc/partitioning src/dec/preview \
 	         src/common/preview src/common/filters/ src/common \
-	         src/enc/anim src/enc/screen_content tests/include; \
+	         src/enc/anim src/enc/screen_content tests/include \
+	         src/common/lossy/aom; \
 	do \
            $(RM) -f $$d/*.o $$d/*~ $$d/*.a; \
         done
@@ -941,7 +942,7 @@ DIST_FILES= \
             src/dsp/math.h \
             src/dsp/score_dsp.cc \
             src/dsp/ssim_dsp.cc \
-            src/dsp/intra_c.cc  \
+            src/dsp/intra_dsp.cc  \
             src/dsp/quant_dsp.cc  \
             src/dsp/transf_c.cc  \
             src/dsp/transf_sse.cc  \

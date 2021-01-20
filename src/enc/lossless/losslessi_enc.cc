@@ -52,7 +52,7 @@ static void swap(EncodeInfo& a, EncodeInfo& b) {
 // cluster 'cluster'.
 static void WriteLZ77Golomb(uint32_t cluster, uint32_t sym, int32_t value,
                             WP2_OPT_LABEL, WP2::SymbolManager* const sw,
-                            WP2::ANSEncBase* const enc, double* const cost) {
+                            WP2::ANSEncBase* const enc, float* const cost) {
   WP2::Golomb golomb(value, kLZZGolombPrefixSize);
   sw->ProcessWithCost(sym, cluster, golomb.prefix, label, enc, cost);
   if (golomb.extra_bits_num == 0) return;
@@ -104,8 +104,8 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
   const bool is_label_image =
       LosslessSymbolsInfo::IsLabelImage(sw->symbols_info());
 
-  double cost;
-  double* const cost_ptr = get_cost ? &cost : nullptr;
+  float cost;
+  float* const cost_ptr = get_cost ? &cost : nullptr;
   for (RefsCursor c(refs); c.Ok(); c.Next()) {
     cost = 0.;
     if (histo_bits != 0u) {

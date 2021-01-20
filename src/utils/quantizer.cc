@@ -91,14 +91,12 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
     config_best->histo.mapping = nullptr;
     config_best->histo.nnz = 0;
     config_best->cost = 0;
-    config_best->next = nullptr;
     return;
   }
 
   // We simplify the mapping to be stored as the difference between
   // consecutive terms.
   config_best->histo.nnz = size_sparse;
-  config_best->next = nullptr;
   std::copy(mapping, mapping + size_sparse, config_best->histo.mapping);
 
   // Pre-compute some quantization configurations for clarity.
@@ -201,7 +199,6 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
         }
 
         // Fill the histogram.
-        Config* config_next = nullptr;
         float cost_histo;
         if (type == Huffman) {
           uint32_t max_n_bits = 0;
@@ -227,63 +224,6 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
                 (1 << max_freq_bits) - 1, stats_buffer_.data(), nullptr);
           }
           cost_histo += WP2Log2Fast(1 + WP2Log2Floor(n_pixels_bits));
-          // For Huffman, and huffman only, we try to compress the coefficients
-          // again. We only do it for that mode as it has more compact data:
-          // numbers in [0, kMaxFreqBits].
-          for (size_t k = 0; k < kConfigNbr; ++k) {
-            if (!configs_used_[k]) {
-              config_next = &configs_[k];
-              configs_used_[k] = true;
-              break;
-            }
-          }
-          if (config_next != nullptr) {
-            // Define the histogram to use for recursion.
-            uint32_t* const histogram_sub = histogram_sub_[config_index].data();
-            uint16_t* const mapping_sub = mapping_sub_[config_index].data();
-            const size_t histogram_sub_size_max = kMaxFreqBits + 1;
-
-            std::fill(histogram_sub, histogram_sub + histogram_sub_size_max, 0);
-            uint32_t nnz_left = size_sparse;
-            for (uint32_t k = 0; k < histogram_to_write_size; ++k) {
-              assert(histogram_to_write[k] < histogram_sub_size_max);
-              if (!is_sparse && k + nnz_left == histogram_to_write_size) {
-                // If we only have non-zeros left, we can store counts - 1.
-                assert(histogram_to_write[k] > 0u);
-                ++histogram_sub[histogram_to_write[k] - 1];
-                --nnz_left;
-              } else {
-                ++histogram_sub[histogram_to_write[k]];
-                if (histogram_to_write[k] > 0) --nnz_left;
-              }
-            }
-            // Define the sparse version of the histogram.
-            uint32_t ind = 0;
-            for (size_t k = 0; k < histogram_sub_size_max; ++k) {
-              if (histogram_sub[k] != 0) {
-                assert(ind < histogram_sub_size_max);
-                histogram_sub[ind] = histogram_sub[k];
-                mapping_sub[ind] = k;
-                ++ind;
-              }
-            }
-            const float cost0 = WP2Log2Fast(1 + kMaxFreqBits);
-            const float cost_max_tmp = cost_histo - cost0;
-            const uint32_t histogram_to_write_size_bits =
-                1 + WP2Log2Floor(histogram_to_write_size);
-            QuantizeImpl(histogram_sub, mapping_sub, ind, 1 + kMaxFreqBits,
-                         histogram_to_write_size_bits, effort,
-                         config_next - configs_, cost_max_tmp);
-            if (config_next->cost < cost_max_tmp) {
-              // Also add to the cost the size of the array.
-              config_next->cost += cost0;
-              cost_histo = config_next->cost;
-            } else {
-              // If we cannot do better, reset the used configurations.
-              ResetConfig(config_next);
-              config_next = nullptr;
-            }
-          }
         } else {
           assert(stats_buffer_.size() >= histogram_to_write_size);
           if (is_sparse) {
@@ -309,16 +249,9 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
 
         // Keep the best configuration.
         if (cost >= config_best->cost) {
-          ResetConfig(config_next);
           continue;
         }
-        if (config_next == nullptr) {
-          config_best->param.type = type;
-        } else {
-          config_best->param.type = HuffmanANS;
-        }
-        ResetConfig(config_best->next);
-        config_best->next = config_next;
+        config_best->param.type = type;
         config_best->param.is_sparse = is_sparse;
         config_best->param.max_freq_bits = max_freq_bits;
         config_best->size_to_write = histogram_to_write_size;

@@ -40,13 +40,18 @@ class FrontMgrBase {
 
   // Allocates storage. Returns false in case of memory error.
   // Must be called first (once) before using the other methods.
-  virtual WP2Status Init(PartitionSet partition_set, bool snapped,
-                         uint32_t width, uint32_t height);
+  WP2Status InitBase(uint32_t width, uint32_t height);
 
-  // Clears the front manager and set it to an initial state.
+  // Clears the front manager and sets it to an initial state.
   virtual void Clear();
 
-  // Returns the y position of the first free sub-block at column position 'x'
+  // Marks the block as used. The block must be on the "wavefront", i.e.
+  // blocks to its top and left must already have been used.
+  void Use(const Block& block);
+  // Undoes Use() for the given block.
+  void UndoUse(const Block& block);
+
+  // Returns the y position of the first unused sub-block at column position 'x'
   // (hence, returns 0 if column is empty). Note that parameter 'x' can be out
   // of bound, in which case it returns 0.
   // 'x' and the returned value are in kMinBlockSizePix units.
@@ -58,24 +63,21 @@ class FrontMgrBase {
 
   // Returns true if the block at position x, y (in kMinBlockSizePix units)
   // has already been marked as 'used'.
-  bool IsDone(uint32_t x, uint32_t y) const;
+  bool IsUsed(uint32_t x, uint32_t y) const;
 
-  // Returns true if all the surface is covered.
+  // Returns true if all the surface is covered (has been marked 'used').
   bool Done() const { return (left_ == 0); }
 
-  PartitionSet GetPartitionSet() const { return partition_set_; }
+  // Finds the coordinates of the next unused block in lexicographic order.
+  void FindNextLexico(uint32_t* const bx, uint32_t* const by) const;
+  // Same as above but we know the last block that got added (speed optim).
+  void FindNextLexico(const Block& added_last, uint32_t* const bx,
+                      uint32_t* const by) const;
 
- protected:
   WP2Status CopyInternal(const FrontMgrBase& other);
 
-  // Fills the 'occupancy' for a given block.
-  void UseInternal(const Block& block, Vector_u32* const occupancy) const;
-  void UndoUseInternal(const Block& block, Vector_u32* const occupancy) const;
-
-  PartitionSet partition_set_ = NUM_PARTITION_SETS;  // Undefined.
-  bool snapped_ = false;
+ protected:
   Vector_u32 occupancy_;
-  uint32_t width_ = 0, height_ = 0;    // In pixels.
   uint32_t bwidth_ = 0, bheight_ = 0;  // In kMinBlockSizePix units.
   uint32_t left_ = 0;
 };
@@ -91,8 +93,8 @@ class FrontMgr4x4 : public FrontMgrBase {
   WP2Status CopyFrom(const FrontMgr4x4& other);
   void Clear() override;
 
-  // Use the next available block in lexicographic order.
-  void Use();
+  // Uses the next available 4x4 block in lexicographic order.
+  void Use4x4();
 
  private:
   uint32_t bx_ = 0, by_ = 0;
@@ -105,6 +107,8 @@ class FrontMgr4x4 : public FrontMgrBase {
 // Those two can be managed independently: the size of a block can depend on
 // other block sizes according to different logics while the content is a given.
 // There is a size order, and a block order.
+// Block order: order of encoding/decoding of block pixels.
+// Size order: order in which block sizes are written to the bitstream.
 // TODO(vrabaud): split this file in enc/dec to get lighter APIs.
 class FrontMgrNxNBase : public FrontMgrBase {
  public:
@@ -117,12 +121,15 @@ class FrontMgrNxNBase : public FrontMgrBase {
 
   // Allocates storage. Returns false in case of memory error.
   // Must be called first (once) before using the other methods.
-  WP2Status Init(PartitionSet partition_set, bool snapped,
-                 uint32_t width, uint32_t height) override;
+  virtual WP2Status Init(PartitionSet partition_set, bool snapped,
+                         uint32_t width, uint32_t height);
+
+  PartitionSet GetPartitionSet() const { return partition_set_; }
 
   void Clear() override;
 
-  // Returns all the underlying blocks of the tile.
+  // Returns all the underlying blocks of the tile, in arbitrary order(?)
+  // or in block order if Sort() has been called.
   const VectorNoCtor<Block>& Blocks() const { return blocks_; }
   VectorNoCtor<Block>& Blocks() { return blocks_; }
 
@@ -134,9 +141,6 @@ class FrontMgrNxNBase : public FrontMgrBase {
   virtual WP2Status Sort() = 0;
 
   // Block-order related functions.
-
-  // Marks a given block as occupied.
-  virtual void Use(const Block& block) = 0;
 
   // Returns whether an element is considered to be computable, i.e. its context
   // is considered filled at its maximum.
@@ -171,22 +175,19 @@ class FrontMgrNxNBase : public FrontMgrBase {
  protected:
   WP2Status CopyInternal(const FrontMgrNxNBase& other);
 
-  // Finds the coordinates of the next block in lexicographic order.
-  void FindNextLexico(uint32_t* const bx, uint32_t* const by) const;
-  // Same as above but we know the last block that got added.
-  void FindNextLexico(const Block& added_last, uint32_t* const bx,
-                      uint32_t* const by) const;
   // Updates the coordinates of the next block to (x, y), and find the
   // dimensions that fit.
   void UpdateNextBlock(uint32_t x, uint32_t y);
 
+  PartitionSet partition_set_ = NUM_PARTITION_SETS;  // Undefined.
+  bool snapped_ = false;
   // Stack keeping track of the written sizes that need to be popped when the
   // rest of the block is written.
   VectorNoCtor<Info> size_stack_;
-  Vector_u32 occupancy_size_;
+  FrontMgrBase occupancy_size_;
   VectorNoCtor<Block> blocks_;
   Vector_u16 size_indices_;
-  // Next max possible block.
+  // Next max possible block (for reading/writing block sizes).
   Block next_;
 };
 
@@ -203,8 +204,6 @@ class FrontMgrLexico : public FrontMgrNxNBase {
   WP2Status CopyFrom(const FrontMgrLexico& other);
   WP2_NO_DISCARD
   bool TryGetNextBlock(BlockSize size, Block* const block) const override;
-  void Use(const Block& block) override;
-  virtual void UndoUse(const Block& block);
   WP2_NO_DISCARD
   bool UseSize(BlockSize dim, uint32_t ind, Block* const block) override;
   virtual void UndoUseSize(const Block& block);
@@ -226,7 +225,6 @@ class FrontMgrMax : public FrontMgrNxNBase {
   WP2Status CopyFrom(const FrontMgrMax& other);
   WP2_NO_DISCARD
   bool TryGetNextBlock(BlockSize size, Block* const block) const override;
-  void Use(const Block& block) override;
   WP2_NO_DISCARD
   bool UseSize(BlockSize dim, uint32_t ind, Block* const block) override;
   WP2Status Sort() override;
@@ -283,7 +281,6 @@ class FrontMgrArea : public FrontMgrNxNBase {
   WP2Status CopyFrom(const FrontMgrArea& other);
   WP2_NO_DISCARD
   bool TryGetNextBlock(BlockSize size, Block* const block) const override;
-  void Use(const Block& block) override;
   WP2_NO_DISCARD
   bool UseSize(BlockSize dim, uint32_t ind, Block* const block) override;
   WP2Status Sort() override;
@@ -292,8 +289,8 @@ class FrontMgrArea : public FrontMgrNxNBase {
  protected:
   // Returns the next available block in the current area, or the first block in
   // the next area if the current area is full.
-  void FindNextInArea(const Vector_u32& occupancy,
-                      uint32_t* const bx, uint32_t* const by) const;
+  void FindNextInArea(const FrontMgrBase& occupancy, uint32_t* const bx,
+                      uint32_t* const by) const;
 
   const uint32_t area_width_, area_height_;  // In kMinBlockSizePix units.
 };

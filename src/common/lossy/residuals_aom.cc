@@ -28,52 +28,39 @@ namespace libgav1 {
 //------------------------------------------------------------------------------
 // From libgav1/src/utils/constants.cc
 
-const uint8_t kBlockWidthPixels[kMaxBlockSizes] = {
-    4,  4,  4,  8,  8,  8,  8,  16, 16, 16,  16,
-    16, 32, 32, 32, 32, 64, 64, 64, 64, 128, 128};
-
-const uint8_t kBlockHeightPixels[kMaxBlockSizes] = {
-    4,  8, 16, 4,  8,  16, 32, 4,  8,   16, 32,
-    64, 8, 16, 32, 64, 16, 32, 64, 128, 64, 128};
-
-const uint8_t kTransformWidth[kNumTransformSizes] = {
-    4, 4, 4, 8, 8, 8, 8, 16, 16, 16, 16, 16, 32, 32, 32, 32, 64, 64, 64};
-
-const uint8_t kTransformHeight[kNumTransformSizes] = {
-    4, 8, 16, 4, 8, 16, 32, 4, 8, 16, 32, 64, 8, 16, 32, 64, 16, 32, 64};
-
-const uint8_t kTransformWidth4x4[kNumTransformSizes] = {
-    1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 8, 8, 8, 8, 16, 16, 16};
-
-const uint8_t kTransformHeight4x4[kNumTransformSizes] = {
-    1, 2, 4, 1, 2, 4, 8, 1, 2, 4, 8, 16, 2, 4, 8, 16, 4, 8, 16};
-
-const uint8_t kTransformWidthLog2[kNumTransformSizes] = {
-    2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6};
-
-//------------------------------------------------------------------------------
-
 namespace {
 
 /* clang-format off */
-constexpr uint8_t kCoeffBaseContextOffset[kNumTransformSizes][5][5] = {
+constexpr uint8_t kCoeffBaseContextOffset[TRF_LAST][5][5] = {
+    {{0,  1,  0,  0, 0},
+     {1,  6,  0,  0, 0},
+     {0,  0,  0,  0, 0},
+     {0,  0,  0,  0, 0},
+     {0,  0,  0,  0, 0}},    // 2x2
+
+    {{0,  1,  6,  6, 0},
+     {1,  6,  6, 21, 0},
+     {0,  0,  0,  0, 0},
+     {0,  0,  0,  0, 0},
+     {0,  0,  0,  0, 0}},    // 4x2
+
+    {{0,  1,  6,  6, 21},
+     {1,  6,  6, 21, 21},
+     {0,  0,  0,  0, 0},
+     {0,  0,  0,  0, 0},
+     {0,  0,  0,  0, 0}},    // 8x2
+
+    {{0,  1,  0,  0, 0},
+     {1,  6,  0,  0, 0},
+     {6,  6,  0,  0, 0},
+     {6, 21,  0,  0, 0},
+     {0,  0,  0,  0, 0}},    // 2x4
+
     {{0,  1,  6,  6, 0},
      {1,  6,  6, 21, 0},
      {6,  6, 21, 21, 0},
      {6, 21, 21, 21, 0},
      {0,  0,  0,  0, 0}},    // 4x4
-
-    {{ 0, 11, 11, 11, 0},
-     {11, 11, 11, 11, 0},
-     { 6,  6, 21, 21, 0},
-     { 6, 21, 21, 21, 0},
-     {21, 21, 21, 21, 0}},   // 4x8
-
-    {{ 0, 11, 11, 11, 0},
-     {11, 11, 11, 11, 0},
-     { 6,  6, 21, 21, 0},
-     { 6, 21, 21, 21, 0},
-     {21, 21, 21, 21, 0}},   // 4x16
 
     {{ 0, 16,  6,  6, 21},
      {16, 16,  6, 21, 21},
@@ -81,29 +68,29 @@ constexpr uint8_t kCoeffBaseContextOffset[kNumTransformSizes][5][5] = {
      {16, 16, 21, 21, 21},
      { 0,  0,  0,  0,  0}},  // 8x4
 
-    {{ 0,  1,  6,  6, 21},
-     { 1,  6,  6, 21, 21},
-     { 6,  6, 21, 21, 21},
-     { 6, 21, 21, 21, 21},
-     {21, 21, 21, 21, 21}},  // 8x8
-
-    {{ 0, 11, 11, 11, 11},
-     {11, 11, 11, 11, 11},
-     { 6,  6, 21, 21, 21},
-     { 6, 21, 21, 21, 21},
-     {21, 21, 21, 21, 21}},  // 8x16
-
-    {{ 0, 11, 11, 11, 11},
-     {11, 11, 11, 11, 11},
-     { 6,  6, 21, 21, 21},
-     { 6, 21, 21, 21, 21},
-     {21, 21, 21, 21, 21}},  // 8x32
-
     {{ 0, 16,  6,  6, 21},
      {16, 16,  6, 21, 21},
      {16, 16, 21, 21, 21},
      {16, 16, 21, 21, 21},
      { 0,  0,  0,  0,  0}},  // 16x4
+
+    {{ 0,  1,  0,  0, 0},
+     { 1,  6,  0,  0, 0},
+     { 6,  6,  0,  0, 0},
+     { 6, 21,  0,  0, 0},
+     {21, 21,  0,  0, 0}},    // 2x8
+
+    {{ 0, 11, 11, 11, 0},
+     {11, 11, 11, 11, 0},
+     { 6,  6, 21, 21, 0},
+     { 6, 21, 21, 21, 0},
+     {21, 21, 21, 21, 0}},   // 4x8
+
+    {{ 0,  1,  6,  6, 21},
+     { 1,  6,  6, 21, 21},
+     { 6,  6, 21, 21, 21},
+     { 6, 21, 21, 21, 21},
+     {21, 21, 21, 21, 21}},  // 8x8
 
     {{ 0, 16,  6,  6, 21},
      {16, 16,  6, 21, 21},
@@ -111,29 +98,29 @@ constexpr uint8_t kCoeffBaseContextOffset[kNumTransformSizes][5][5] = {
      {16, 16, 21, 21, 21},
      {16, 16, 21, 21, 21}},  // 16x8
 
-    {{ 0,  1,  6,  6, 21},
-     { 1,  6,  6, 21, 21},
-     { 6,  6, 21, 21, 21},
-     { 6, 21, 21, 21, 21},
-     {21, 21, 21, 21, 21}},  // 16x16
-
-    {{ 0, 11, 11, 11, 11},
-     {11, 11, 11, 11, 11},
-     { 6,  6, 21, 21, 21},
-     { 6, 21, 21, 21, 21},
-     {21, 21, 21, 21, 21}},  // 16x32
-
-    {{ 0, 11, 11, 11, 11},
-     {11, 11, 11, 11, 11},
-     { 6,  6, 21, 21, 21},
-     { 6, 21, 21, 21, 21},
-     {21, 21, 21, 21, 21}},  // 16x64
-
     {{ 0, 16,  6,  6, 21},
      {16, 16,  6, 21, 21},
      {16, 16, 21, 21, 21},
      {16, 16, 21, 21, 21},
      {16, 16, 21, 21, 21}},  // 32x8
+
+    {{ 0, 11, 11, 11, 0},
+     {11, 11, 11, 11, 0},
+     { 6,  6, 21, 21, 0},
+     { 6, 21, 21, 21, 0},
+     {21, 21, 21, 21, 0}},   // 4x16
+
+    {{ 0, 11, 11, 11, 11},
+     {11, 11, 11, 11, 11},
+     { 6,  6, 21, 21, 21},
+     { 6, 21, 21, 21, 21},
+     {21, 21, 21, 21, 21}},  // 8x16
+
+    {{ 0,  1,  6,  6, 21},
+     { 1,  6,  6, 21, 21},
+     { 6,  6, 21, 21, 21},
+     { 6, 21, 21, 21, 21},
+     {21, 21, 21, 21, 21}},  // 16x16
 
     {{ 0, 16,  6,  6, 21},
      {16, 16,  6, 21, 21},
@@ -141,35 +128,23 @@ constexpr uint8_t kCoeffBaseContextOffset[kNumTransformSizes][5][5] = {
      {16, 16, 21, 21, 21},
      {16, 16, 21, 21, 21}},  // 32x16
 
-    {{ 0,  1,  6,  6, 21},
-     { 1,  6,  6, 21, 21},
+    {{ 0, 11, 11, 11, 11},
+     {11, 11, 11, 11, 11},
      { 6,  6, 21, 21, 21},
      { 6, 21, 21, 21, 21},
-     {21, 21, 21, 21, 21}},  // 32x32
+     {21, 21, 21, 21, 21}},  // 8x32
 
     {{ 0, 11, 11, 11, 11},
      {11, 11, 11, 11, 11},
      { 6,  6, 21, 21, 21},
      { 6, 21, 21, 21, 21},
-     {21, 21, 21, 21, 21}},  // 32x64
-
-    {{ 0, 16,  6,  6, 21},
-     {16, 16,  6, 21, 21},
-     {16, 16, 21, 21, 21},
-     {16, 16, 21, 21, 21},
-     {16, 16, 21, 21, 21}},  // 64x16
-
-    {{ 0, 16,  6,  6, 21},
-     {16, 16,  6, 21, 21},
-     {16, 16, 21, 21, 21},
-     {16, 16, 21, 21, 21},
-     {16, 16, 21, 21, 21}},  // 64x32
+     {21, 21, 21, 21, 21}},  // 16x32
 
     {{ 0,  1,  6,  6, 21},
      { 1,  6,  6, 21, 21},
      { 6,  6, 21, 21, 21},
      { 6, 21, 21, 21, 21},
-     {21, 21, 21, 21, 21}}   // 64x64
+     {21, 21, 21, 21, 21}},  // 32x32
 };
 /* clang-format on */
 
@@ -178,11 +153,10 @@ constexpr uint8_t kCoeffBasePositionContextOffset[3] = {26, 31, 36};
 }  // namespace
 
 // Section 8.3.2 in the spec, under coeff_base_eob.
-int AOMResidualIO::GetCoeffBaseContextEob(TransformSize tx_size, int index) {
+int AOMResidualIO::GetCoeffBaseContextEob(TrfSize tdim, int index) {
   if (index == 0) return 0;
-  const TransformSize adjusted_tx_size = kAdjustedTransformSize[tx_size];
-  const int tx_width_log2 = kTransformWidthLog2[adjusted_tx_size];
-  const int tx_height = kTransformHeight[adjusted_tx_size];
+  const int tx_width_log2 = TrfLog2[TrfWidth[tdim]];
+  const int tx_height = TrfHeight[tdim];
   if (index <= DivideBy8(tx_height << tx_width_log2)) return 1;
   if (index <= DivideBy4(tx_height << tx_width_log2)) return 2;
   return 3;
@@ -190,7 +164,7 @@ int AOMResidualIO::GetCoeffBaseContextEob(TransformSize tx_size, int index) {
 
 // Section 8.3.2 in the spec, under coeff_base.
 static int GetCoeffBaseContext2D(const uint8_t qlevels[],
-                                 TransformSize tx_size,
+                                 TrfSize tdim,
                                  int adjusted_tx_width_log2,
                                  uint16_t pos) {
   if (pos == 0) return 0;
@@ -205,13 +179,14 @@ static int GetCoeffBaseContext2D(const uint8_t qlevels[],
                        levels[2 * padded_tx_width]));
   const int row = pos >> adjusted_tx_width_log2;
   const int column = pos & (tx_width - 1);
-  return context + kCoeffBaseContextOffset[tx_size][std::min(row, 4)]
-                                          [std::min(column, 4)];
+  return context +
+         kCoeffBaseContextOffset[tdim][std::min(row, 4)]
+                                      [std::min(column, 4)];
 }
 
 // Section 8.3.2 in the spec, under coeff_base.
 static int GetCoeffBaseContextHorizontal(
-    const uint8_t qlevels[], TransformSize /*tx_size*/,
+    const uint8_t qlevels[], TrfSize /*tdim*/,
     int adjusted_tx_width_log2, uint16_t pos) {
   const int tx_width = 1 << adjusted_tx_width_log2;
   const int padded_tx_width = tx_width + kQuantizedCoefficientBufferPadding;
@@ -226,7 +201,7 @@ static int GetCoeffBaseContextHorizontal(
 
 // Section 8.3.2 in the spec, under coeff_base.
 static int GetCoeffBaseContextVertical(
-    const uint8_t qlevels[], TransformSize /*tx_size*/,
+    const uint8_t qlevels[], TrfSize /*tdim*/,
     int adjusted_tx_width_log2, uint16_t pos) {
   const int tx_width = 1 << adjusted_tx_width_log2;
   const int padded_tx_width = tx_width + kQuantizedCoefficientBufferPadding;

@@ -252,9 +252,10 @@ WP2Status SymbolsInfo::InitLossy(uint32_t num_segments,
   SetInfo(kSymbolUseRandomMatrix, /*min=*/0, /*max=*/1,
           /*num_clusters=*/1, StorageMethod::kAdaptiveBit);
 
-  // Minus 1 bit because it doesn't include the sign.
-  SetInfo(kSymbolCflSlope, /*min=*/0,
-          /*max=*/(1 << (SignalingCflPredictor::kAResBits - 1)) - 1,
+  constexpr static uint32_t
+      kMaxAbsValueDeltaA = (1 << (SignalingCflPredictor::kIOBits - 1));
+  SetInfo(kSymbolCflSlope,
+          /*min=*/-kMaxAbsValueDeltaA, /*max=*/kMaxAbsValueDeltaA,
           /*num_clusters=*/1, StorageMethod::kAuto,
           /*probably_geometric=*/true);
 

@@ -34,7 +34,7 @@ namespace {
 // Compute the combined Shanon's entropy for distribution {X} and {X+Y}
 float CombinedShannonEntropy_C(const uint32_t* X, const uint32_t* Y,
                                uint32_t length) {
-  double retval = 0.;
+  float retval = 0.f;
   uint32_t sumX = 0, sumXY = 0;
   for (uint32_t i = 0; i < length; ++i) {
     const uint32_t x = X[i];
@@ -131,17 +131,16 @@ void CollectColorBlueTransforms_C(const int16_t* argb, uint32_t width,
 
 //------------------------------------------------------------------------------
 
-double ExtraCost_C(const uint32_t* population, int length) {
+float ExtraCost_C(const uint32_t* population, int length) {
   int i;
-  double cost = 0.;
+  float cost = 0.f;
   for (i = 2; i < length - 2; ++i) cost += (i >> 1) * population[i + 2];
   return cost;
 }
 
-double ExtraCostCombined_C(const uint32_t* X, const uint32_t* Y,
-                                  int length) {
+float ExtraCostCombined_C(const uint32_t* X, const uint32_t* Y, int length) {
   int i;
-  double cost = 0.;
+  float cost = 0.f;
   for (i = 2; i < length - 2; ++i) {
     const int xy = X[i + 2] + Y[i + 2];
     cost += (i >> 1) * xy;

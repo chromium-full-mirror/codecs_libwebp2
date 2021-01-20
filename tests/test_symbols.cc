@@ -125,7 +125,7 @@ class DataGenerator {
       case kHint::kGolomb:
         probas.reserve(num_symbol_types);
         for (uint32_t r = 0; r < range; ++r) {
-          const double rand_max = 1000. * std::exp(-(double)r);
+          const float rand_max = 1000.f * std::exp(-(float)r);
           const uint32_t tmp =
               random_->Get(0u, std::max((uint32_t)rand_max, 1u));
           for (uint32_t j = 0; j <= tmp; ++j) probas.push_back(r);
@@ -162,7 +162,7 @@ class DataGenerator {
       }
       Symbol s;
       s.s = sym;
-      s.value = value + symbols_info_->Min(sym, /*cluster=*/0);
+      s.value = value + symbols_info_->Min(sym, cluster);
       has_at_least_one_negative |= (s.value < 0);
       s.can_be_negative = can_be_negative;
       s.cluster = cluster;
@@ -329,13 +329,13 @@ void VerifyProcessRead(const SymbolsInfoTest& info, uint32_t num_symbols,
   ANSDictionaries dicts;
   uint32_t max_nnz = 0;
   generator->WriteHeader(info, recorder, &max_nnz, &dicts, &enc, sw.get());
-  const double header_cost = enc.GetCost();
+  const float header_cost = enc.GetCost();
 
   // Write the symbols.
   // We do not send max_nnz, the ranges, the clusters and the symbol types as
   // they do not require the SymbolWriter, they usually are just sent as raw
   // signal in the ANS encoder.
-  double enc_cost = 0;
+  float enc_cost = 0.f;
   for (const DataGenerator::Symbol& sym : symbols) {
     sw->ProcessWithCost(sym.s, sym.cluster, sym.value, "sym", &enc, &enc_cost);
   }
@@ -350,11 +350,16 @@ void VerifyProcessRead(const SymbolsInfoTest& info, uint32_t num_symbols,
   generator->ReadHeader(info, max_nnz, &dec, &sr);
 
   // Verify the symbols do match the original data.
-  double dec_cost = 0;
+  float dec_cost = enc_cost;
+  float* cost_ptr = nullptr;
+#if defined(WP2_BITTRACE)
+  dec_cost = 0.;
+  cost_ptr = &dec_cost;
+#endif
   for (const DataGenerator::Symbol& sym : symbols) {
-    ASSERT_EQ(sr.Read(sym.s, sym.cluster, "sym", &dec_cost), sym.value);
+    ASSERT_EQ(sr.Read(sym.s, sym.cluster, "sym", cost_ptr), sym.value);
   }
-  const double symbol_cost = enc.GetCost() - header_cost;
+  const float symbol_cost = enc.GetCost() - header_cost;
   EXPECT_NEAR(symbol_cost, enc_cost, 0.2f);
   EXPECT_NEAR(symbol_cost, dec_cost, 0.2f);
   ASSERT_WP2_OK(dec.GetStatus());
@@ -454,7 +459,7 @@ TEST(SymbolsTest, Uniform) {
   // We do not send max_nnz, the ranges, the clusters and the symbol types as
   // they do not require the SymbolWriter, they usually are just sent as raw
   // signal in the ANS encoder.
-  int32_t min = 0, max = 0;
+  int32_t min = symbols[0].value, max = symbols[0].value;
   for (const DataGenerator::Symbol& sym : symbols) {
     sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
     min = std::min(min, sym.value);
@@ -935,23 +940,29 @@ class SymbolReaderForTest : public SymbolReader {
   using SymbolReader::AddGolomb;
   using SymbolReader::AddMapping;
   using SymbolReader::AddRange;
+  using SymbolReader::AddTrivial;
 };
 
 // bool: use_max
 class SymbolCostTest : public ::testing::TestWithParam<bool> {
  protected:
-  double Decode(SymbolReader* const sr, const std::vector<int32_t>& values,
-                const std::vector<uint32_t>& max_values) {
-    double dec_cost = 0;
+  float Decode(SymbolReader* const sr, const std::vector<int32_t>& values,
+               const std::vector<uint32_t>& max_values, float enc_cost) {
+    float dec_cost = enc_cost;
+    float* cost_ptr = nullptr;
+#if defined(WP2_BITTRACE)
+    dec_cost = 0;
+    cost_ptr = &dec_cost;
+#endif
     for (uint32_t i = 0; i < kNumValues; ++i) {
       SCOPED_TRACE(SPrintf("value  %d", i));
       if (!max_values.empty()) {
         int32_t v = 0;
         EXPECT_WP2_OK(sr->TryRead(kSymbol, kCluster, max_values[i], "label", &v,
-                                  &dec_cost));
+                                  cost_ptr));
         EXPECT_EQ(values[i], v);
       } else {
-        EXPECT_EQ(values[i], sr->Read(kSymbol, "label", &dec_cost));
+        EXPECT_EQ(values[i], sr->Read(kSymbol, "label", cost_ptr));
       }
     }
     return dec_cost;
@@ -962,78 +973,85 @@ class SymbolCostTest : public ::testing::TestWithParam<bool> {
   static constexpr uint32_t kCluster = 0;
   static constexpr uint32_t kSymbol = 0;
   static constexpr uint32_t kNumValues = 1000;
-  static constexpr uint32_t kRange = 10;
+  static constexpr int16_t kMaxSymbol = 10;
   // Allow 0.05% error per value.
-  static constexpr double kCostError =
+  static constexpr float kCostError =
       (kNumValues * 0.05 / 100) < 0.01 ? 0.01 : (kNumValues * 0.05 / 100);
 };
 
 TEST_P(SymbolCostTest, TrivialCost) {
   const bool use_max = GetParam();
 
-  const uint32_t kValue = 8;
+  const int16_t kValue = 8;
 
-  SymbolsInfo info;
-  info.SetInfo(kSymbol, /*min=*/0, /*max=*/kRange - 1, /*num_clusters=*/1,
-               StorageMethod::kAuto);
+  for (bool do_sign : {false, true}) {
+    SymbolsInfo info;
+    info.SetInfo(kSymbol, /*min=*/do_sign ? -kMaxSymbol : 0, kMaxSymbol,
+                 /*num_clusters=*/1, StorageMethod::kAuto);
 
-  SymbolWriterForTest sw;
-  ASSERT_WP2_OK(sw.Init(info));
-  ASSERT_WP2_OK(sw.Allocate());
-  sw.AddTrivial(kSymbol, kCluster, kValue);
+    SymbolWriterForTest sw;
+    ASSERT_WP2_OK(sw.Init(info));
+    ASSERT_WP2_OK(sw.Allocate());
+    sw.AddTrivial(kSymbol, kCluster, kValue);
 
-  std::vector<int32_t> values;
-  std::vector<uint32_t> max_values;
-  double enc_cost = 0;
-  ANSEnc enc;
-  for (uint32_t i = 0; i < kNumValues; ++i) {
-    values.push_back(kValue);
-    if (use_max) {
-      const uint32_t max = random_.Get(kValue, kRange - 1);
-      sw.ProcessWithCost(kSymbol, kCluster, kValue, max, "label", &enc,
-                         &enc_cost);
-      max_values.push_back(max);
-    } else {
-      sw.ProcessWithCost(kSymbol, kCluster, kValue, "label", &enc, &enc_cost);
+    std::vector<int32_t> values;
+    std::vector<uint32_t> max_values;
+    float enc_cost = 0.f;
+    ANSEnc enc;
+    for (uint32_t i = 0; i < kNumValues; ++i) {
+      const int32_t v =
+          do_sign && !use_max && random_.Get(0, 1) ? -kValue : kValue;
+      values.push_back(v);
+      if (use_max) {
+        const uint32_t max = random_.Get(kValue, kMaxSymbol);
+        sw.ProcessWithCost(kSymbol, kCluster, v, max, "label", &enc,
+                           &enc_cost);
+        max_values.push_back(max);
+      } else {
+        sw.ProcessWithCost(kSymbol, kCluster, v, "label", &enc, &enc_cost);
+      }
+    }
+
+    ASSERT_WP2_OK(enc.Assemble());
+    ExternalDataSource data_source(enc.Buffer(), enc.BufferSize());
+    ANSDec dec(&data_source);
+
+    SymbolReaderForTest sr;
+    ASSERT_WP2_OK(sr.Init(info, &dec));
+    ASSERT_WP2_OK(sr.Allocate());
+
+    sr.AddTrivial(kSymbol, kCluster, kValue);
+
+    float dec_cost = Decode(&sr, values, max_values, enc_cost);
+
+    EXPECT_EQ(enc_cost, dec_cost);
+    if (!do_sign) {
+      EXPECT_EQ(0., enc.GetCost());
+      EXPECT_EQ(0., enc_cost);
     }
   }
-
-  ASSERT_WP2_OK(enc.Assemble());
-  ExternalDataSource data_source(enc.Buffer(), enc.BufferSize());
-  ANSDec dec(&data_source);
-
-  SymbolReaderForTest sr;
-  ASSERT_WP2_OK(sr.Init(info, &dec));
-  ASSERT_WP2_OK(sr.Allocate());
-
-  sr.AddTrivial(kSymbol, kCluster, kValue);
-
-  const double dec_cost = Decode(&sr, values, max_values);
-
-  EXPECT_EQ(0., enc.GetCost());
-  EXPECT_EQ(0., enc_cost);
-  EXPECT_EQ(0., dec_cost);
 }
 
 TEST_P(SymbolCostTest, RangeCost) {
   const bool use_max = GetParam();
 
   SymbolsInfo info;
-  info.SetInfo(kSymbol, /*min=*/0, /*max=*/kRange - 1, /*num_clusters=*/1,
+  info.SetInfo(kSymbol, /*min=*/0, kMaxSymbol, /*num_clusters=*/1,
                StorageMethod::kAuto);
 
   SymbolWriterForTest sw;
   ASSERT_WP2_OK(sw.Init(info));
   ASSERT_WP2_OK(sw.Allocate());
-  sw.AddRange(kSymbol, kCluster, /*mapping=*/nullptr, /*size=*/0, kRange);
+  sw.AddRange(kSymbol, kCluster, /*mapping=*/nullptr, /*size=*/0,
+              kMaxSymbol + 1);
 
   std::vector<int32_t> values;
   std::vector<uint32_t> max_values;
-  double enc_cost = 0;
+  float enc_cost = 0.f;
   ANSEnc enc;
   for (uint32_t i = 0; i < kNumValues; ++i) {
     const uint32_t max =
-        use_max ? random_.Get<uint32_t>(0, kRange - 1) : kRange - 1;
+        use_max ? random_.Get<uint32_t>(0, kMaxSymbol) : kMaxSymbol;
     const uint32_t v = random_.Get(0u, max);
     values.push_back(v);
     if (use_max) {
@@ -1052,9 +1070,9 @@ TEST_P(SymbolCostTest, RangeCost) {
   ASSERT_WP2_OK(sr.Init(info, &dec));
   ASSERT_WP2_OK(sr.Allocate());
 
-  sr.AddRange(kCluster, kSymbol, kRange);
+  sr.AddRange(kSymbol, kCluster, kMaxSymbol + 1);
 
-  const double dec_cost = Decode(&sr, values, max_values);
+  const float dec_cost = Decode(&sr, values, max_values, enc_cost);
 
   EXPECT_NEAR(enc.GetCost(), enc_cost, kCostError);
   EXPECT_NEAR(enc.GetCost(), dec_cost, kCostError);
@@ -1064,7 +1082,7 @@ TEST_P(SymbolCostTest, DictCost) {
   const bool use_max = GetParam();
 
   SymbolsInfo info;
-  info.SetInfo(kSymbol, /*min=*/0, /*max=*/kRange - 1, /*num_clusters=*/1,
+  info.SetInfo(kSymbol, /*min=*/0, kMaxSymbol, /*num_clusters=*/1,
                StorageMethod::kAuto);
 
   std::vector<uint32_t> histogram = {10, 2, 50, 20, 5};
@@ -1088,7 +1106,7 @@ TEST_P(SymbolCostTest, DictCost) {
 
   std::vector<int32_t> values;
   std::vector<uint32_t> max_values;
-  double enc_cost = 0;
+  float enc_cost = 0.f;
   ANSEnc enc;
   for (uint32_t i = 0; i < kNumValues; ++i) {
     const uint32_t max_i = use_max
@@ -1113,9 +1131,9 @@ TEST_P(SymbolCostTest, DictCost) {
   ASSERT_WP2_OK(sr.Init(info, &dec));
   ASSERT_WP2_OK(sr.Allocate());
 
-  ASSERT_WP2_OK(sr.AddDict(kCluster, kSymbol, &infos));
+  ASSERT_WP2_OK(sr.AddDict(kSymbol, kCluster, &infos));
 
-  const double dec_cost = Decode(&sr, values, max_values);
+  const float dec_cost = Decode(&sr, values, max_values, enc_cost);
 
   EXPECT_NEAR(enc.GetCost(), enc_cost, kCostError);
   EXPECT_NEAR(enc.GetCost(), dec_cost, kCostError);
@@ -1125,7 +1143,7 @@ TEST_P(SymbolCostTest, GolombCost) {
   const bool use_max = GetParam();
 
   SymbolsInfo info;
-  info.SetInfo(kSymbol, /*min=*/0, /*max=*/kRange - 1, /*num_clusters=*/1,
+  info.SetInfo(kSymbol, /*min=*/0, kMaxSymbol, /*num_clusters=*/1,
                StorageMethod::kAuto);
 
   std::vector<uint16_t> mapping = {1, 2, 4, 6, 9};
@@ -1151,7 +1169,7 @@ TEST_P(SymbolCostTest, GolombCost) {
 
   std::vector<int32_t> values;
   std::vector<uint32_t> max_values;
-  double enc_cost = 0;
+  float enc_cost = 0.f;
   ANSEnc enc;
   for (uint32_t i = 0; i < kNumValues; ++i) {
     const uint32_t max_i = use_max
@@ -1177,9 +1195,9 @@ TEST_P(SymbolCostTest, GolombCost) {
   ASSERT_WP2_OK(sr.Allocate());
 
   ASSERT_WP2_OK(
-      sr.AddGolomb(kCluster, kSymbol, &golomb_infos, kGolombPrefixSize));
+      sr.AddGolomb(kSymbol, kCluster, &golomb_infos, kGolombPrefixSize));
 
-  const double dec_cost = Decode(&sr, values, max_values);
+  const float dec_cost = Decode(&sr, values, max_values, enc_cost);
 
   EXPECT_NEAR(enc.GetCost(), enc_cost, kCostError);
   EXPECT_NEAR(enc.GetCost(), dec_cost, kCostError);
@@ -1203,7 +1221,7 @@ TEST_P(SymbolCostTest, AdaptiveBitCost) {
 
   std::vector<int32_t> values;
   std::vector<uint32_t> max_values;
-  double enc_cost = 0;
+  float enc_cost = 0.f;
   ANSEnc enc;
   for (uint32_t i = 0; i < kNumValues; ++i) {
     const uint32_t max = use_max ? random_.FlipACoin() : 1;
@@ -1227,7 +1245,7 @@ TEST_P(SymbolCostTest, AdaptiveBitCost) {
 
   ASSERT_WP2_OK(sr.AddAdaptiveBit(kSymbol, kCluster, p0, p1));
 
-  const double dec_cost = Decode(&sr, values, max_values);
+  const float dec_cost = Decode(&sr, values, max_values, enc_cost);
 
   EXPECT_NEAR(enc.GetCost(), enc_cost, kCostError);
   EXPECT_NEAR(enc.GetCost(), dec_cost, kCostError);
@@ -1245,7 +1263,7 @@ TEST_P(SymbolCostTest, AdaptiveSymCost) {
                                : 42;
 
     SymbolsInfo info;
-    info.SetInfo(kSymbol, /*min=*/0, /*max=*/kRange - 1, /*num_clusters=*/1,
+    info.SetInfo(kSymbol, /*min=*/0, kMaxSymbol, /*num_clusters=*/1,
                  StorageMethod::kAdaptiveSym);
 
     SymbolWriterForTest sw;
@@ -1256,11 +1274,11 @@ TEST_P(SymbolCostTest, AdaptiveSymCost) {
 
     std::vector<int32_t> values;
     std::vector<uint32_t> max_values;
-    double enc_cost = 0;
+    float enc_cost = 0.f;
     ANSEnc enc;
     for (uint32_t i = 0; i < kNumValues; ++i) {
       const uint32_t max =
-          use_max ? random_.Get<uint32_t>(0, kRange - 1) : kRange - 1;
+          use_max ? random_.Get<uint32_t>(0, kMaxSymbol) : kMaxSymbol;
       const uint32_t v = random_.Get<uint32_t>(0, max);
       values.push_back(v);
       if (use_max) {
@@ -1282,7 +1300,7 @@ TEST_P(SymbolCostTest, AdaptiveSymCost) {
     ASSERT_WP2_OK(sr.AddAdaptiveSymbol(
         kSymbol, kCluster, (ANSAdaptiveSymbol::Method)method, speed));
 
-    const double dec_cost = Decode(&sr, values, max_values);
+    const float dec_cost = Decode(&sr, values, max_values, enc_cost);
 
     EXPECT_NEAR(enc.GetCost(), enc_cost, kCostError);
     EXPECT_NEAR(enc.GetCost(), dec_cost, kCostError);

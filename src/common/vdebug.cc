@@ -796,15 +796,16 @@ void CodedBlock::StoreCoeffMethod(const DecoderConfig& config,
 
 // Similar to CflPredictor::LinearRegression, but uses the actual block
 // instead of the block context.
-void CodedBlock::CflLinearRegression(Channel channel, int16_t yuv_min,
-                                     int16_t yuv_max, float* const a,
-                                     float* const b,
+static constexpr float CflNorm = 1.f / (1 << kCflFracBits);
+void CodedBlock::CflLinearRegression(Channel channel,
+                                     int16_t yuv_min, int16_t yuv_max,
+                                     float* const a, float* const b,
                                      std::string* const debug_str) const {
-  int16_t a_int, b_int;
+  int32_t a_int, b_int;
   CflPredictor cfl_predictor(yuv_min, yuv_max);
   cfl_predictor.BlockLinearRegression(channel, *this, &a_int, &b_int);
-  *a = (float)a_int / (1 << CflPredictor::kAPrecShift);
-  *b = (float)b_int / (1 << CflPredictor::kBPrecShift);
+  *a = CflNorm * a_int;
+  *b = CflNorm * b_int;
 
   if (debug_str != nullptr) {
     WP2SAppend(debug_str, "Chroma = %.2f * luma + %.2f\n", *a, *b);
@@ -822,34 +823,31 @@ void CodedBlock::StoreBestCflSlope(Channel channel, int16_t yuv_min,
 void CodedBlock::StoreCflSlope(Channel channel, int16_t yuv_min,
                                int16_t yuv_max, Plane16* const dst_plane,
                                std::string* const debug_str) const {
-  int16_t a, b;
+  int32_t a, b;
   CflPredictor cfl_predictor(yuv_min, yuv_max);
   cfl_predictor.ContextLinearRegression(channel, *this, &a, &b);
   dst_plane->Fill(
-      blk_.rect_pix(),
-      (int16_t)std::lround(a * 100.f / (1 << CflPredictor::kAPrecShift)));
+      blk_.rect_pix(), (int16_t)std::lround(a * 100.f * CflNorm));
 
   if (debug_str != nullptr) {
     WP2SAppend(debug_str, "Chroma = %.2f * luma + %.2f\n",
-               (float)a / (1 << CflPredictor::kAPrecShift),
-               (float)b / (1 << CflPredictor::kBPrecShift));
+               CflNorm * a, CflNorm * b);
   }
 }
 
 void CodedBlock::StoreCflIntercept(Channel channel, int16_t yuv_min,
                                    int16_t yuv_max, Plane16* const dst_plane,
                                    std::string* const debug_str) const {
-  int16_t a, b;
+  int32_t a, b;
   CflPredictor cfl_predictor(yuv_min, yuv_max);
   cfl_predictor.ContextLinearRegression(channel, *this, &a, &b);
   dst_plane->Fill(
       blk_.rect_pix(),
-      (int16_t)std::lround(b / (1 << (CflPredictor::kBPrecShift + 1))));
+      (int16_t)std::lround(0.5f * CflNorm * b));
 
   if (debug_str != nullptr) {
     WP2SAppend(debug_str, "Chroma = %.2f * luma + %.2f\n",
-               (float)a / (1 << CflPredictor::kAPrecShift),
-               (float)b / (1 << CflPredictor::kBPrecShift));
+               CflNorm * a, CflNorm * b);
   }
 }
 
@@ -2394,7 +2392,7 @@ static const WP2::Argb32b kSymbolColors[2][3] = {
 
 WP2Status Decoder::RegisterSymbolForVDebug(
     int symbol_type, bool is_group4, uint32_t pos, uint32_t length,
-    double cost, WP2::DecoderInfo* const decoder_info) {
+    float cost, WP2::DecoderInfo* const decoder_info) {
   assert(length > 0);
   if (decoder_info == nullptr) return WP2_STATUS_OK;
   if (!WP2::VDMatch(decoder_info->visual_debug, "bits-per-pixel/overall") &&

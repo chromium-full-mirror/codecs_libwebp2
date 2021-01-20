@@ -45,9 +45,6 @@ class SymbolReader : public SymbolIO<StatExtra> {
     symbols_info_.SetMinMax(sym, min, max);
   }
 
-  // For the 'cluster'th cluster of symbol 'sym', sets the mode to trivial value
-  // with value 'value'.
-  void AddTrivial(uint32_t sym, uint32_t cluster, int32_t value);
   // For the 'cluster'th cluster of symbol 'sym' (given a maximum value of
   // non-zero values of 'max_nnz', which can be the number of pixels for
   // examples) reads its header to later decide how to read it.
@@ -55,25 +52,31 @@ class SymbolReader : public SymbolIO<StatExtra> {
                        WP2_OPT_LABEL);
   // Same as above but reads headers for all clusters.
   WP2Status ReadHeader(uint32_t sym, uint32_t max_nnz, WP2_OPT_LABEL);
+  // can be called once ReadHeader() calls are finished
+  void Clear() { infos_.reset(); }
+
   // Reads the symbol of type 'sym' in the 'cluster'th cluster.
   // If 'cost' is not nullptr, the cost in bits of storing 'sym' is ADDED to
   // 'cost'.
   int32_t Read(uint32_t sym, uint32_t cluster, WP2_OPT_LABEL,
-               double* const cost = nullptr);
-  int32_t Read(uint32_t sym, WP2_OPT_LABEL, double* const cost = nullptr) {
+               float* const cost = nullptr);
+  int32_t Read(uint32_t sym, WP2_OPT_LABEL, float* const cost = nullptr) {
     return Read(sym, /*cluster=*/0, label, cost);
   }
   // Same as above except we know that the read value cannot be strictly
   // superior to 'max_value'.
   WP2Status TryRead(uint32_t sym, uint32_t cluster, uint32_t max_value,
                     WP2_OPT_LABEL, int32_t* const value,
-                    double* const cost = nullptr);
+                    float* const cost = nullptr);
   // Fills the array 'is_maybe_used' with true when the symbol might be used,
   // false if we are sure it is not used.
   void GetPotentialUsage(uint32_t sym, uint32_t cluster, bool is_maybe_used[],
                          uint32_t size) const override;
 
  protected:
+  // For the 'cluster'th cluster of symbol 'sym', sets the mode to trivial value
+  // with value 'value'.
+  void AddTrivial(uint32_t sym, uint32_t cluster, int32_t value);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to range value,
   // in [0:'range').
   void AddRange(uint32_t sym, uint32_t cluster, uint16_t range);
@@ -93,15 +96,14 @@ class SymbolReader : public SymbolIO<StatExtra> {
   // Generic implementation called by the different Read specializations above.
   WP2Status ReadInternal(uint32_t sym, uint32_t cluster, bool use_max_value,
                          uint32_t max_value, WP2_OPT_LABEL,
-                         int32_t* const value, double* const cost = nullptr);
+                         int32_t* const value, float* const cost = nullptr);
   // Finds the biggest symbol 'sym' such that 'stat.mappings[sym] <= max_value'.
   static uint32_t FindSymbol(const Stat& stat, uint32_t max_value);
 
   ANSDec* dec_;
-  // Tmp variables to use during the update.
-  Vector_u16 mapping_;
   // Codes used for fast probability check for symbols relying on dictionaries.
   Vector<ANSCodes> codes_;
+  // Tmp variable to use during the update (to avoid re-allocations).
   ANSCodes infos_;
 };
 

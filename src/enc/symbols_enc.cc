@@ -20,6 +20,7 @@
 #include "src/enc/symbols_enc.h"
 
 #include <algorithm>
+#include <limits>
 
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"
@@ -211,7 +212,7 @@ const Vector_u8& SymbolRecorder::GetRecordedValues(uint32_t sym,
 int32_t SymbolRecorder::ProcessInternal(uint32_t sym, uint32_t cluster,
                                         int32_t value, bool use_max_value,
                                         uint32_t max_value, WP2_OPT_LABEL,
-                                        ANSEncBase* const enc, double* const) {
+                                        ANSEncBase* const enc, float* const) {
   assert(value <= symbols_info_.Max(sym, cluster));
   assert(value >= symbols_info_.Min(sym, cluster));
   assert(!use_max_value || (uint32_t)std::abs(value) <= max_value);
@@ -342,8 +343,9 @@ ANSAdaptiveSymbol* SymbolCounter::GetASymbol(uint32_t sym, uint32_t cluster) {
 int32_t SymbolCounter::ProcessInternal(uint32_t sym, uint32_t cluster,
                                        int32_t value_in, bool use_max_value,
                                        uint32_t max_value, WP2_OPT_LABEL,
-                                       ANSEncBase* const enc, double* const) {
-  assert((uint32_t)std::abs(value_in) < symbols_info_.Range(sym, cluster));
+                                       ANSEncBase* const enc, float* const) {
+  assert(value_in <= symbols_info_.Max(sym, cluster));
+  assert(value_in >= symbols_info_.Min(sym, cluster));
   assert(!use_max_value || (uint32_t)std::abs(value_in) <= max_value);
   switch (symbols_info_.Method(sym)) {
     case SymbolsInfo::StorageMethod::kAuto: {
@@ -511,63 +513,28 @@ WP2Status SymbolWriter::WriteHistogram(const Quantizer::Config& config,
   if (param.is_sparse) assert(config.size_to_write == config.histo.nnz);
   assert(config.size_to_write >= config.histo.nnz);
 
-  enc->PutRValue(param.type, 3, "coding_type");
+  enc->PutUValue(param.type, 1, "coding_type");
   // Save the probabilities.
   const uint32_t max_count_bits =
       std::min(kMaxFreqBits, 1u + (uint32_t)WP2Log2Floor(max_count));
   for (uint32_t i = 0; i < config.histo.nnz; ++i) {
     assert(config.histo.counts[i] < (1u << (max_count_bits + 1)));
   }
-  if (param.type == Quantizer::HuffmanANS) {
-    // First, save the following probabilities.
-    assert(config.next != nullptr);
-    const auto& config_next = *config.next;
-    enc->PutRange(config_next.histo.nnz, 1, 1 + kMaxFreqBits, "size");
-    WP2_CHECK_STATUS(WriteHistogram(config_next, 1 + kMaxFreqBits,
-                                    config.size_to_write, enc));
-    // Convert to an histogram.
-    const uint32_t h_size =
-        config_next.histo.mapping[config_next.histo.nnz - 1] + 1;
-    ANSDictionary dict;
-    WP2_CHECK_STATUS(dict.Init(h_size));
-    for (uint32_t k = 0; k < config_next.histo.nnz; ++k) {
-      dict.RecordSymbol(config_next.histo.mapping[k],
-                        config_next.histo.counts[k]);
-    }
-    WP2_CHECK_STATUS(dict.ToCodingTable());
-
-    uint32_t nnz_left = config.histo.nnz;
-    const uint32_t* const k_end =
-        config.histogram_to_write + config.size_to_write;
-    for (const uint32_t* k = config.histogram_to_write;
-         nnz_left > 0 && k < k_end; ++k) {
-      if (!param.is_sparse && k + nnz_left == k_end) {
-        // If we only have non-zeros left, we can store counts - 1.
-        assert(*k > 0);
-        enc->PutSymbol(*k - 1, dict, "counts");
-        --nnz_left;
-      } else {
-        enc->PutSymbol(*k, dict, "counts");
-        if (*k != 0) --nnz_left;
-      }
-    }
+  assert(param.max_freq_bits >= 1);
+  if (param.type == Quantizer::Huffman) {
+    enc->PutRange(param.max_freq_bits, 1, 1 + WP2Log2Floor(max_count_bits),
+                  "max_freq_bits");
   } else {
-    assert(param.max_freq_bits >= 1);
-    if (param.type == Quantizer::Huffman) {
-      enc->PutRange(param.max_freq_bits, 1, 1 + WP2Log2Floor(max_count_bits),
-                    "max_freq_bits");
-    } else {
-      enc->PutRange(param.max_freq_bits, 1, max_count_bits, "max_freq_bits");
-    }
-    assert(config.size_to_write <= stats_buffer_.size());
-    if (param.is_sparse) {
-      StoreVector(config.histogram_to_write, config.size_to_write,
-                  (1 << param.max_freq_bits) - 1, stats_buffer_.data(), enc);
-    } else {
-      StoreVectorNnz(config.histogram_to_write, config.size_to_write,
-                     config.histo.nnz, (1 << param.max_freq_bits) - 1,
-                     stats_buffer_.data(), enc);
-    }
+    enc->PutRange(param.max_freq_bits, 1, max_count_bits, "max_freq_bits");
+  }
+  assert(config.size_to_write <= stats_buffer_.size());
+  if (param.is_sparse) {
+    StoreVector(config.histogram_to_write, config.size_to_write,
+                (1 << param.max_freq_bits) - 1, stats_buffer_.data(), enc);
+  } else {
+    StoreVectorNnz(config.histogram_to_write, config.size_to_write,
+                   config.histo.nnz, (1 << param.max_freq_bits) - 1,
+                   stats_buffer_.data(), enc);
   }
   return WP2_STATUS_OK;
 }
@@ -607,7 +574,8 @@ void SymbolWriter::AddRange(uint32_t sym, uint32_t cluster,
       stat->mappings[mapping[i]] = i;
     }
   } else {
-    stat->range = max_range - size;
+    assert(size == 0);
+    stat->range = max_range;
   }
 }
 
@@ -693,17 +661,15 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
                                       int32_t value_in, bool use_max_value,
                                       uint32_t max_value, WP2_OPT_LABEL,
                                       ANSEncBase* const enc,
-                                      double* const cost) {
+                                      float* const cost) {
   if (use_max_value) assert(value_in <= (int32_t)max_value);
   const Stat& stat = *GetStats(sym, cluster);
-  // Only write a symbol if it is not trivial.
-  if (stat.type == Stat::Type::kTrivial) {
-    assert(value_in == stat.param.trivial_value);
-    return value_in;
-  }
   ANSDebugPrefix debug_prefix(enc, label);
   const uint32_t value = (value_in < 0) ? -value_in : value_in;
   switch (stat.type) {
+    case Stat::Type::kTrivial:
+      assert(value == stat.param.trivial_value);
+      break;
     case Stat::Type::kRange: {
       uint32_t range;
       if (!use_max_value) {
@@ -718,9 +684,7 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
       }
       enc->PutRValue(stat.use_mapping ? stat.mappings[value] : value, range,
                      "range");
-      if (cost != nullptr) {
-        *cost += std::log2(range);
-      }
+      if (cost != nullptr) *cost += std::log2(range);
       break;
     }
     case Stat::Type::kDict: {
@@ -834,7 +798,9 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
       break;
   }
   // Store the sign.
-  if (value_in != 0 && symbols_info().Min(sym, cluster) < 0) {
+  const bool changes_sign = symbols_info().Min(sym, cluster) < 0 &&
+                            symbols_info().Max(sym, cluster) > 0;
+  if (value_in != 0 && changes_sign) {
     enc->PutBool(value_in < 0, "is_negative");
     if (cost != nullptr) *cost += 1.;
   }
@@ -844,39 +810,40 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
 void SymbolWriter::ComputeGolombCost(uint32_t range, uint32_t max_nnz,
                                      uint32_t size, uint32_t prefix_size,
                                      float* cost,
-                                     Quantizer::Config** const config_golomb,
-                                     uint32_t* const size_golomb) {
+                                     Quantizer::Config** const config_golomb) {
   // Analyze whether a Golomb encoding would work.
   const Golomb golomb(range - 1, prefix_size);
   const uint32_t range_golomb = golomb.prefix + 1;
   assert(range_golomb <= histogram_golomb_.size());
   std::fill(&histogram_golomb_[0], &histogram_golomb_[0] + range_golomb, 0);
   *cost = 0.f;
-  *size_golomb = 0;
+  uint32_t size_golomb = 0;
   for (uint32_t i = 0; i < size; ++i) {
     const Golomb golomb_i(mapping_[i], prefix_size);
-    if (*size_golomb == 0 ||
-        golomb_i.prefix != mapping_golomb_[*size_golomb - 1]) {
-      mapping_golomb_[(*size_golomb)++] = golomb_i.prefix;
-      assert(*size_golomb - 1 < mapping_golomb_.size());
+    if (size_golomb == 0 ||
+        golomb_i.prefix != mapping_golomb_[size_golomb - 1]) {
+      mapping_golomb_[size_golomb++] = golomb_i.prefix;
+      assert(size_golomb - 1 < mapping_golomb_.size());
     }
-    histogram_golomb_[*size_golomb - 1] += histogram_[i];
+    histogram_golomb_[size_golomb - 1] += histogram_[i];
     // Add the bit cost.
     *cost += golomb_i.extra_bits_num * histogram_[i];
   }
-  if (*size_golomb == 1) {
+  if (size_golomb == 1) {
     // TODO(vrabaud) Allow for a unique value (probably requires recursion).
     *cost = std::numeric_limits<float>::max();
     return;
   }
   // Quantize the histogram to get the cost of using a dictionary.
   quantizer_golomb_.Quantize(histogram_golomb_.data(), mapping_golomb_.data(),
-                             *size_golomb, range_golomb, max_nnz,
+                             size_golomb, range_golomb, max_nnz,
                              /*effort=*/9, config_golomb);
+  (*config_golomb)->param.golomb_size = size_golomb;
+  (*config_golomb)->param.golomb_prefix_size = prefix_size;
   *cost += (*config_golomb)->cost;
   // Do not use Golomb if there is only one value for now.
   const uint32_t nnz_range_golomb = std::min(max_nnz, range_golomb);
-  // Add the prefix_size_m1 and size_m2 cost.
+  // Add the prefix_size and size cost.
   *cost += 1.f + WP2Log2(nnz_range_golomb - 1);
 }
 
@@ -962,6 +929,47 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t max_nnz,
   return WP2_STATUS_OK;
 }
 
+// If use_symmetric_negative is set to true, the counts for v and -v are added
+// as counts for abs(v).
+void SymbolWriter::ConvertCountsToHistogram(const uint32_t* const counts,
+                                            int min, int max,
+                                            bool use_symmetric_negative,
+                                            uint32_t* size,
+                                            uint32_t* counts_total) {
+  *size = 0;
+  if (use_symmetric_negative) {
+    assert(min < 0);
+    *counts_total = 0;
+    for (int i = 0; i <= std::max(-min, max); ++i) {
+      // If the values can be negative, we clump together the statistics for x
+      // and -x.
+      uint32_t count;
+      if (i == 0) {
+        count = counts[-min];
+      } else {
+        count = 0;
+        if (-i >= min) count += counts[-min - i];
+        if (i <= max) count += counts[-min + i];
+      }
+      if (count == 0) continue;
+      histogram_[*size] = count;
+      *counts_total += count;
+      mapping_[*size] = i;
+      ++*size;
+    }
+  } else {
+    const int range = max - min + 1;
+    for (int i = 0; i < range; ++i) {
+      const uint32_t count = counts[i];
+      if (count == 0) continue;
+      histogram_[*size] = count;
+      *counts_total += count;
+      mapping_[*size] = i;
+      ++*size;
+    }
+  }
+}
+
 WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
                                     uint32_t max_nnz,
                                     const uint32_t* const counts, WP2_OPT_LABEL,
@@ -969,45 +977,20 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
                                     ANSDictionaries* const dicts) {
   // Figure out how many symbols are used and the sizes in bits of the
   // probabilities and difference of consecutive symbols.
-  uint32_t size = 0;
+  uint32_t size;
   const uint32_t range = symbols_info_.Range(sym, cluster);
   uint32_t counts_total = 0;
-  const int32_t min = symbols_info_.Min(sym, cluster);
-  const int32_t max = symbols_info_.Max(sym, cluster);
-  const bool can_be_negative = (min < 0);
-  assert(min == 0 || min == -max);
-  int32_t trivial_value = std::numeric_limits<int32_t>::max();
-  uint32_t num_nnz_count = 0;
-  for (uint32_t k = 0; k < (can_be_negative ? max + 1 : range); ++k) {
-    // If the values can be negative, we clump to gether the statistics for x
-    // and -x (the symbols we use for now do have symmetric distributions).
-    const uint32_t count =
-        can_be_negative
-            ? (k == 0) ? counts[max] : counts[max + k] + counts[max - k]
-            : counts[k];
-    if (count == 0) continue;
-    if (can_be_negative && k != 0) {
-      for (uint32_t c : {-k, k}) {
-        if (counts[max + c] != 0) {
-          ++num_nnz_count;
-          trivial_value = c;
-        }
-      }
-    } else {
-      ++num_nnz_count;
-      trivial_value = k;
-    }
-    histogram_[size] = count;
-    counts_total += count;
-    mapping_[size] = k;
-    ++size;
-  }
+  const int32_t min_symbol = symbols_info_.Min(sym, cluster);
+  const int32_t max_symbol = symbols_info_.Max(sym, cluster);
+  const bool changes_sign = (min_symbol < 0) && (max_symbol > 0);
+  ConvertCountsToHistogram(counts, min_symbol, max_symbol, changes_sign, &size,
+                           &counts_total);
 
   // Deal with the trivial cases.
   ANSDebugPrefix prefix(enc, label);
   const uint32_t nnz_range = std::min(max_nnz, range);
   assert(size <= nnz_range);
-  if (num_nnz_count <= 1) {
+  if (size <= 1) {
     if (size == 0) {
       enc->PutRValue(kSymbolCountZero,
                      nnz_range == 1 ? kSymbolCountLast - 1 : kSymbolCountLast,
@@ -1017,15 +1000,23 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
       enc->PutRValue(kSymbolCountOne,
                      nnz_range == 1 ? kSymbolCountLast - 1 : kSymbolCountLast,
                      "scount");
-      enc->PutRange(trivial_value, min, max, "symbol");
-      AddTrivial(sym, cluster, trivial_value);
+      if (changes_sign) {
+        enc->PutRange(mapping_[0], 0, std::max(-min_symbol, max_symbol),
+                      "symbol");
+      } else {
+        enc->PutRange(mapping_[0], min_symbol, max_symbol, "symbol");
+      }
+      AddTrivial(sym, cluster, mapping_[0]);
     }
     return WP2_STATUS_OK;
   }
   enc->PutRValue(kSymbolCountMoreThanOne, kSymbolCountLast, "scount");
 
+  float cost_best = std::numeric_limits<float>::max();
+  Stat::Type type_best;
+  Quantizer::Config* config_best = nullptr;
   // Figure out the cost of using ranges.
-  // Cost of mapping + cost of storing each symbol as a range + cost of size_m2.
+  // Cost of mapping + cost of storing each symbol as a range + cost of size.
   const float cost_range = StoreMapping(mapping_.data(), size, range,
                                         stats_buffer_.data(), nullptr) +
                            counts_total * WP2Log2(size) +
@@ -1034,24 +1025,14 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
   // Compute the best cost of Golomb encoding.
   float cost_golomb, cost_golomb1, cost_golomb2;
   Quantizer::Config* config_golomb = nullptr;
-  uint32_t size_golomb1, size_golomb2;
-  ComputeGolombCost(range, max_nnz, size, 1, &cost_golomb1, &config_golomb,
-                    &size_golomb1);
-  ComputeGolombCost(range, max_nnz, size, 2, &cost_golomb2, &config_golomb,
-                    &size_golomb2);
-  uint32_t golomb_prefix_size;
-  uint32_t size_golomb;
+  ComputeGolombCost(range, max_nnz, size, 1, &cost_golomb1, &config_golomb);
+  ComputeGolombCost(range, max_nnz, size, 2, &cost_golomb2, &config_golomb);
   if (cost_golomb1 < cost_golomb2) {
     // Re-initialize the different Golomb parameters.
-    ComputeGolombCost(range, max_nnz, size, 1, &cost_golomb1, &config_golomb,
-                      &size_golomb1);
+    ComputeGolombCost(range, max_nnz, size, 1, &cost_golomb1, &config_golomb);
     cost_golomb = cost_golomb1;
-    size_golomb = size_golomb1;
-    golomb_prefix_size = 1;
   } else {
     cost_golomb = cost_golomb2;
-    size_golomb = size_golomb2;
-    golomb_prefix_size = 2;
   }
 
   // If we have too many symbols for dictionaries, go with ranges.
@@ -1062,53 +1043,61 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
     quantizer_.Quantize(histogram_.data(), mapping_.data(), size, range,
                         max_nnz, /*effort=*/9, &config);
     cost_dict = config->cost;
-    cost_dict += WP2Log2(nnz_range);  // Add the size_m1 cost.
+    cost_dict += WP2Log2(nnz_range);  // Add the size cost.
   } else {
     cost_dict = std::numeric_limits<float>::max();
   }
 
   // Find the best storage method.
-  Stat::Type type;
-  if (cost_golomb < cost_dict && cost_golomb < cost_range) {
-    type = Stat::Type::kGolomb;
-  } else if (cost_range < cost_dict) {
-    type = Stat::Type::kRange;
-  } else {
-    type = Stat::Type::kDict;
+  if (cost_dict < cost_best) {
+    cost_best = cost_dict;
+    type_best = Stat::Type::kDict;
+    config_best = config;
+  }
+  if (cost_range < cost_best) {
+    cost_best = cost_range;
+    type_best = Stat::Type::kRange;
+    config_best = nullptr;
+  }
+  if (cost_golomb < cost_best) {
+    cost_best = cost_golomb;
+    type_best = Stat::Type::kGolomb;
+    config_best = config_golomb;
   }
 
   // TODO(vrabaud) For very small images, always choose range to save bits on
   // this symbol.
-  enc->PutRValue(type == Stat::Type::kRange ? 0 :
-                 type == Stat::Type::kDict ? 1 : 2,
+  enc->PutRValue(type_best == Stat::Type::kRange ? 0 :
+                 type_best == Stat::Type::kDict ? 1 : 2,
                  3, "type");
-  if (type == Stat::Type::kGolomb) {
+  if (type_best == Stat::Type::kGolomb) {
+    const uint32_t golomb_prefix_size = config_best->param.golomb_prefix_size;
+    const uint32_t golomb_size = config_best->param.golomb_size;
     const Golomb golomb(range - 1, golomb_prefix_size);
     const uint32_t range_golomb = golomb.prefix + 1;
     const uint32_t nnz_range_golomb = std::min(max_nnz, range_golomb);
-    enc->PutRange(golomb_prefix_size, 1, 2, "prefix_size_m1");
-    enc->PutRange(size_golomb, 2, nnz_range_golomb, "size_m2");
+    enc->PutRange(golomb_prefix_size, 1, 2, "prefix_size");
+    enc->PutRange(golomb_size, 2, nnz_range_golomb, "size");
     // Store the dictionary.
-    WP2_CHECK_STATUS(WriteHistogram(*config_golomb, range_golomb,
-                                    max_nnz, enc));
+    WP2_CHECK_STATUS(WriteHistogram(*config_best, range_golomb, max_nnz, enc));
     // Create needed dictionaries.
     WP2_CHECK_STATUS(AddGolomb(
-        sym, cluster, histogram_golomb_.data(), config_golomb->histo.counts,
-        mapping_golomb_.data(), size_golomb, golomb_prefix_size, dicts));
-  } else if (type == Stat::Type::kDict) {
+        sym, cluster, histogram_golomb_.data(), config_best->histo.counts,
+        mapping_golomb_.data(), golomb_size, golomb_prefix_size, dicts));
+  } else if (type_best == Stat::Type::kDict) {
     // The number of symbols is bounded by the number of possible symbols
     // and the size of the image.
     const uint32_t dict_range = std::min(nnz_range, (uint32_t)ANS_MAX_SYMBOLS);
     assert(size <= dict_range);
-    enc->PutRange(size, 2, dict_range, "size_m2");
+    enc->PutRange(size, 2, dict_range, "size");
     // Store the dictionary.
-    WP2_CHECK_STATUS(WriteHistogram(*config, range, max_nnz, enc));
+    WP2_CHECK_STATUS(WriteHistogram(*config_best, range, max_nnz, enc));
     // Create needed dictionaries.
     WP2_CHECK_STATUS(AddDict(sym, cluster, histogram_.data(),
-                             config->histo.counts, mapping_.data(), size,
+                             config_best->histo.counts, mapping_.data(), size,
                              dicts));
   } else {  // kRange
-    enc->PutRange(size, 1, nnz_range, "size_m1");
+    enc->PutRange(size, 1, nnz_range, "size");
     // Store the mapping.
     StoreMapping(mapping_.data(), size, range, stats_buffer_.data(), enc);
     // Initialize the SymbolWriter.

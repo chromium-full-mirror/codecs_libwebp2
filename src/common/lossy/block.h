@@ -546,7 +546,8 @@ class CodedBlock {
   int16_t yuv_min_;
   int16_t yuv_max_;
 
-  // Chroma from luma parameters for U, V, A.
+  // Chroma from luma parameters for U, V, A when using CflSignalingPredictor.
+  // Fractional precision is kIOFracBits (total number of bits is kIOBits).
   int16_t cfl_[3] = {0};
 
   // Per-block lambda modulation. Larger multiplier will favor rate over

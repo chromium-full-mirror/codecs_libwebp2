@@ -155,8 +155,7 @@ enum {
   kCoeffBaseContexts = 42,
   kCoeffBaseSymbolCount = 4,
   kCoeffBaseRangeContexts = 21,
-  kCoeffBaseRangeSymbolCount = 4,
-  kDcSignContexts = 1,
+  kCoeffBaseRangeSymbolCount = 4
 };  // anonymous enum
 
 /* clang-format off */
@@ -1997,14 +1996,6 @@ constexpr uint16_t kDefaultCoeffBaseRangeCdf
            {24576, 16384, 8192, 0, 0}, {24576, 16384, 8192, 0, 0},
            {24576, 16384, 8192, 0, 0}}}}};
 
-/* clang-format off */
-constexpr uint16_t kDefaultDcSignCdf[kCoefficientQuantizerContexts]
-                     [kNumPlaneTypes][kBooleanFieldCdfSize] = {
-  {{16768, 0, 0}, {17536, 0, 0}},
-  {{16768, 0, 0}, {17536, 0, 0}},
-  {{16768, 0, 0}, {17536, 0, 0}},
-  {{16768, 0, 0}, {17536, 0, 0}}
-};
 /* clang-format on */
 
 }  // namespace libgav1
@@ -2129,9 +2120,6 @@ int main() {
                "kNumSquareTransformSizes][kNumPlaneTypes]["
                "kCoeffBaseRangeContexts][kCoeffBaseRangeSymbolCount] =";
   WP2::PrintNormalized(WP2::libgav1::kDefaultCoeffBaseRangeCdf);
-  std::cout << "constexpr uint16_t kDefaultDcSignCdf["
-               "kNumPlaneTypes][kBooleanFieldCdfSize - 1] =";
-  WP2::PrintNormalized(WP2::libgav1::kDefaultDcSignCdf);
   return 0;
 }
 
@@ -2697,10 +2685,6 @@ constexpr uint16_t kDefaultCoeffBaseRangeCdf
           {0, 4096, 8192, 12288}, {0, 4096, 8192, 12288},
           {0, 4096, 8192, 12288}, {0, 4096, 8192, 12288},
           {0, 4096, 8192, 12288}}}};
-
-constexpr uint16_t kDefaultDcSignCdf[kNumPlaneTypes][kBooleanFieldCdfSize - 1] =
-    {{0, 8384}, {0, 8768}};
-
 
 #endif
 

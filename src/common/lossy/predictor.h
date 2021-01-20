@@ -98,8 +98,11 @@ class Predictor : public WP2Allocable {
 
   // Computes parameters needed for this transform and stores them in the block.
   // This should be called on the encoder side before using the predictor.
-  virtual void ComputeParams(CodedBlock* const cb, Channel channel) const {
+  // Returns false if the predictor seems too costly or useless, and should be
+  // avoided.
+  virtual bool ComputeParams(CodedBlock* const cb, Channel channel) const {
     (void)cb, (void)channel;
+    return true;
   }
   virtual void WriteParams(const CodedBlock& cb, Channel channel,
                            SymbolManager* const sm,
@@ -299,21 +302,32 @@ class CflPredictor : public Predictor {
             ArgbBuffer* const debug_output) const override {}
 
   // Does a simple linear regression based on the context for chroma and luma,
-  // assuming chroma = a * luma + b
+  // assuming chroma = a * luma + b. Returns values in kCfLBits precision.
   void ContextLinearRegression(Channel channel, const CodedBlock& cb,
-                               int16_t* a, int16_t* b) const;
+                               int32_t* a, int32_t* b) const;
   // Does a simple linear regression based on the reconstructed luma and input
-  // chroma, assuming chroma = a * luma + b
-  void BlockLinearRegression(Channel channel, const CodedBlock& cb, int16_t* a,
-                             int16_t* b) const;
-
-  static constexpr uint32_t kAPrecShift = 8;  // In bits.
-  static constexpr uint32_t kBPrecShift = 2;
+  // chroma, assuming chroma = a * luma + b.
+  // a and b are returned in kCfLBits precision.
+  void BlockLinearRegression(Channel channel, const CodedBlock& cb,
+                             int32_t* a, int32_t* b) const;
 
  protected:
+  void LinearRegression(const int16_t* const luma, const int16_t* const chroma,
+                        uint32_t size,
+                        int32_t* const a, int32_t* const b) const;
+
   virtual void DoPredict(const CodedBlock& cb, Channel channel,
                          uint32_t x_start, uint32_t y_start, uint32_t w,
                          uint32_t h, int16_t* output, uint32_t step) const;
+  // for debug:
+  void DisplaySamples(const CodedBlock& cb, Channel channel,
+                      std::string* const str) const;
+
+ protected:
+  // number of bits for represent the 'a' and 'b' parameters, with sign.
+  // 'a' is in range [-4,4), 'b' is in range [-1024, 1023]
+  static constexpr uint32_t kCflABits = kCflFracBits + 2 + 1;
+  static constexpr uint32_t kCflBBits = kCflFracBits + kMaxYuvBits + 2;
 
   const int16_t min_value_;
   const int16_t max_value_;
@@ -329,7 +343,7 @@ class SignalingCflPredictor : public CflPredictor {
   std::string GetName() const override;
   std::string GetPredStr(const CodedBlock& cb, Channel channel) const override;
 
-  void ComputeParams(CodedBlock* const cb, Channel channel) const override;
+  bool ComputeParams(CodedBlock* const cb, Channel channel) const override;
   void WriteParams(const CodedBlock& cb, Channel channel,
                    SymbolManager* const sm,
                    ANSEncBase* const enc) const override;
@@ -338,19 +352,16 @@ class SignalingCflPredictor : public CflPredictor {
 
   bool DependsOnLuma() const override { return true; }
 
-  constexpr static uint32_t kAResBits = 10;
+  // CodedBlock::cfl_[] params are in 1:2:6 fixed-point precision.
+  constexpr static uint32_t kIOFracBits = 6;
+  constexpr static uint32_t kIOBits = 9;   // including sign
 
  protected:
-  constexpr static uint32_t kAResPrecision = 6;
-
   void DoPredict(const CodedBlock& cb, Channel channel, uint32_t unused_x,
                  uint32_t unused_y, uint32_t w, uint32_t h, int16_t* output,
                  uint32_t step) const override;
   void GetParams(const CodedBlock& cb, Channel channel, uint32_t w, uint32_t h,
                  int32_t* a, int32_t* b) const;
-
- private:
-  int16_t GetParam(const CodedBlock& cb, Channel channel) const;
 };
 
 //------------------------------------------------------------------------------

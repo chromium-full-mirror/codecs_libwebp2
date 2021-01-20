@@ -138,6 +138,9 @@ TEST(AllPredictors, ValueRange) {
   TestPredictionRange<YPredictors>({BLK_8x8, BLK_16x4, BLK_16x32});
 }
 
+//------------------------------------------------------------------------------
+// Cfl
+
 TEST(ImplicitCflPredictor, SimpleLinearRelationship) {
   WP2MathInit();
   WP2::PredictionInit();
@@ -183,9 +186,10 @@ TEST(ImplicitCflPredictor, SimpleLinearRelationship) {
   plane.Y.Fill(4);
   cb.SetContextInput(plane);
   p.Predict(cb, kUChannel, prediction, kPredWidth);
+  printf("Info:\n%s\n", p.GetPredStr(cb, kUChannel).c_str());
   for (uint32_t i = 0; i < kPredSize; ++i) {
-    // 100 * 4 + 50 = 450
-    EXPECT_EQ(450, prediction[i]);
+    // 4 * 4 + 50 = 66    ('a' is saturated)
+    EXPECT_EQ(66, prediction[i]);
   }
 }
 
@@ -244,17 +248,55 @@ TEST(ImplicitCflPredictor, WithErrors) {
 
   YUVPlane plane;
   ASSERT_WP2_OK(plane.Resize(4, 4));
-  plane.Y.Fill(50);
+  plane.Y.Fill(150);
   ContextCache context_cache;
   cb.SetContextInput(plane, &context_cache);
 
   int16_t prediction[kPredSize];
   p.Predict(cb, kUChannel, prediction, kPredWidth);
+  printf("Info:\n%s\n", p.GetPredStr(cb, kUChannel).c_str());
   for (uint32_t i = 0; i < kPredSize; ++i) {
-    // 2 * 50 + 50 = 150, with some error.
-    EXPECT_NEAR(150, prediction[i], 2);
+    // 2 * 150 + 51 = 351, with some error.
+    EXPECT_NEAR(351, prediction[i], 2);
   }
 }
+
+TEST(SignalingCflPredictor, Test) {
+  WP2MathInit();
+  WP2::PredictionInit();
+
+  SignalingCflPredictor p(/*min_value=*/-512, /*max_value=*/511);
+
+  CodedBlockForTest cb;
+  cb.SetDimDefault({/*x=*/0, /*y=*/0, /*dim=*/BLK_4x4});
+  // Set up context so that U is more or less equal to 3 * Y + 50, with some
+  // errors.
+  cb.SetContext(kYChannel, {100, 100, 100, 100, 100,  // Left + top left
+                            200, 200, 200, 200, 200,  // Top + top right
+                            100, 100, 100, 100});     // Right
+  cb.SetContext(kUChannel,
+      {350 + 40, 350 - 25, 350, 350 + 35, 350,       // Left + top left
+      550 + 51, 550 + 35, 550 - 30, 550 - 20, 550,  // Top + top right
+      350, 350 + 35, 350 - 33, 350 + 4});            // Right
+
+  YUVPlane plane;
+  ASSERT_WP2_OK(plane.Resize(4, 4));
+  plane.Y.Fill(150);
+  ContextCache context_cache;
+  cb.SetContextInput(plane, &context_cache);
+  cb.cfl_[0] = -27;
+
+  int16_t prediction[kPredSize];
+  p.Predict(cb, kUChannel, prediction, kPredWidth);
+  printf("Info:\n%s\n", p.GetPredStr(cb, kUChannel).c_str());
+  printf("cfl_[0] = %d\n", cb.cfl_[0]);
+  for (uint32_t i = 0; i < kPredSize; ++i) {
+    // 1.59 * 150 + 219 ~= 457, with some error.
+    EXPECT_NEAR(457, prediction[i], 2);
+  }
+}
+
+//------------------------------------------------------------------------------
 
 // Tests that if the context is constant, the prediction will be constant.
 TEST(LargePredictors, UniformTest) {
@@ -280,20 +322,6 @@ TEST(LargePredictors, UniformTest) {
           for (uint32_t i = 0; i < w; ++i) {
             EXPECT_EQ(prediction[i + j * step], r);
           }
-        }
-      }
-    }
-    for (uint32_t ind = 0u; true; ++ind) {
-      const float angle_deg = round(10.f * (12.5f + 12.5f / 3.f * ind)) / 10.f;
-      if (angle_deg > 220.f) break;
-      const int16_t r = gen.Get(min, max);
-      for (uint32_t i = 0; i < ctx_size; ++i) ctx[i] = r;
-      int16_t prediction[kMaxBlockSizePix * step];
-      BaseAnglePredictor(angle_deg, ctx, w, h, prediction, step, min, max);
-      for (uint32_t j = 0; j < h; ++j) {
-        for (uint32_t i = 0; i < w; ++i) {
-          ASSERT_NEAR(prediction[i + j * step], r, 1)
-              << " at i=" << i << " j=" << j;
         }
       }
     }

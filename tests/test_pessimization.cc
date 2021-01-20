@@ -408,7 +408,7 @@ TEST_P(PessimizationTest, RandomBitstream) {
   EXPECT_GE(percentage_of_valid_bitstreams,
             fixed_tile_size                        ? 0.f
             : (config.quality <= kMaxLossyQuality) ? 50.f
-                                                   : 30.f);
+                                                   : 24.f);
 
   if (print_stats) {
     BitstreamStats::PrintTitleRow();

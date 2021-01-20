@@ -135,7 +135,7 @@ void PopulationAnalyzer::PopulationCost(const uint32_t* const population,
                                         uint32_t range,
                                         uint32_t* const nonzeros,
                                         uint32_t* const trivial_sym,
-                                        double* cost) {
+                                        float* cost) {
   WP2::Quantizer::Config* config;
 
   uint32_t size = 0;
@@ -171,7 +171,7 @@ void PopulationAnalyzer::PopulationCost(const uint32_t* const population,
 void PopulationAnalyzer::GetCombinedEntropy(
     const uint32_t* const X, const uint32_t* const Y, uint32_t X_nonzeros,
     uint32_t Y_nonzeros, uint32_t X_trivial, uint32_t Y_trivial,
-    uint32_t length, double* cost) {
+    uint32_t length, float* cost) {
   // If one of the histograms is basically unused:
   if (X_nonzeros == 0) {
     PopulationCost(Y, length, nullptr, nullptr, cost);
@@ -196,8 +196,8 @@ void PopulationAnalyzer::GetCombinedEntropy(
 
 int PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
                                                     const Histogram& b,
-                                                    double cost_threshold,
-                                                    double* cost) {
+                                                    float cost_threshold,
+                                                    float* cost) {
   assert(a.symbols_info_ == b.symbols_info_);
 
   // Deal with the raw bits of length and distance.
@@ -218,7 +218,7 @@ int PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
       continue;
     }
     if (!WP2L::IsSymbolUsed((Symbol)s, is_used)) continue;
-    double tmp;
+    float tmp;
     GetCombinedEntropy(a.counts_[s], b.counts_[s], a.nonzeros_[s],
                        b.nonzeros_[s], a.trivial_symbols_[s],
                        b.trivial_symbols_[s], a.symbols_info_->GetMaxRange(s),
@@ -235,12 +235,12 @@ int PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
 // Since the previous score passed is 'cost_threshold', we only need to compare
 // the partial cost against 'cost_threshold + C(a) + C(b)' to possibly bail-out
 // early.
-double PopulationAnalyzer::HistogramAddEval(const Histogram& a,
-                                            const Histogram& b,
-                                            Histogram* const out,
-                                            double cost_threshold) {
-  double cost = 0;
-  const double sum_cost = a.bit_cost_ + b.bit_cost_;
+float PopulationAnalyzer::HistogramAddEval(const Histogram& a,
+                                           const Histogram& b,
+                                           Histogram* const out,
+                                           float cost_threshold) {
+  float cost = 0.f;
+  const float sum_cost = a.bit_cost_ + b.bit_cost_;
   cost_threshold += sum_cost;
 
   if (GetCombinedHistogramEntropy(a, b, cost_threshold, &cost)) {
@@ -255,10 +255,10 @@ double PopulationAnalyzer::HistogramAddEval(const Histogram& a,
 // Same as HistogramAddEval(), except that the resulting histogram
 // is not stored. Only the cost C(a+b) - C(a) is evaluated. We omit
 // the term C(b) which is constant over all the evaluations.
-double PopulationAnalyzer::HistogramAddThresh(const Histogram& a,
-                                              const Histogram& b,
-                                              double cost_threshold) {
-  double cost = -a.bit_cost_;
+float PopulationAnalyzer::HistogramAddThresh(const Histogram& a,
+                                             const Histogram& b,
+                                             float cost_threshold) {
+  float cost = -a.bit_cost_;
   GetCombinedHistogramEntropy(a, b, cost_threshold, &cost);
   return cost;
 }
@@ -391,7 +391,7 @@ class BinMerger {
 
     std::fill(max_costs_, max_costs_ + kSymbolNum, 0);
     std::fill(min_costs_, min_costs_ + kSymbolNum,
-              std::numeric_limits<double>::max());
+              std::numeric_limits<float>::max());
 
     // Analyze the entropy cost bounds.
     for (const Histogram* h : image_histo.histograms_) {
@@ -411,7 +411,7 @@ class BinMerger {
       disparities_[i].second = i;
     }
     std::sort(disparities_, disparities_ + kSymbolNum,
-              std::greater<std::pair<double, uint32_t>>());
+              std::greater<std::pair<float, uint32_t>>());
 
     // bin-hash histograms on three of the dominant (literal, red and blue)
     // symbol costs and store the resulting bin_id for each histogram.
@@ -460,9 +460,9 @@ class BinMerger {
                 std::min(histograms[first]->id_, histograms[idx]->id_);
       } else {
         // try to merge #idx into #first (both share the same bin_id)
-        const double bit_cost = histograms[idx]->bit_cost_;
-        const double bit_cost_thresh = -bit_cost * combine_cost_factor_;
-        const double curr_cost_diff = analyzer->HistogramAddEval(
+        const float bit_cost = histograms[idx]->bit_cost_;
+        const float bit_cost_thresh = -bit_cost * combine_cost_factor_;
+        const float curr_cost_diff = analyzer->HistogramAddEval(
             *histograms[first], *histograms[idx], image_histo->tmp_histo_,
             bit_cost_thresh);
         if (curr_cost_diff < bit_cost_thresh) {
@@ -491,7 +491,7 @@ class BinMerger {
     // Carve the space depending on the three widest disparities.
     for (uint32_t i = 0; i < (effort_ > 0 ? 3u : 1u); ++i) {
       const uint32_t s = disparities_[i].second;
-      const double range = disparities_[i].first;
+      const float range = disparities_[i].first;
       if (range == 0.) break;
       // Fix potential rounding issues.
       const uint32_t new_bin_id = std::min(
@@ -509,11 +509,11 @@ class BinMerger {
   static constexpr uint32_t kBinSizeTot =
       (kNumPartitions * kNumPartitions * kNumPartitions);
 
-  double min_costs_[kSymbolNum];
-  double max_costs_[kSymbolNum];
-  std::pair<double, uint32_t> disparities_[kSymbolNum];
+  float min_costs_[kSymbolNum];
+  float max_costs_[kSymbolNum];
+  std::pair<float, uint32_t> disparities_[kSymbolNum];
 
-  double combine_cost_factor_;
+  float combine_cost_factor_;
   const uint32_t effort_;
 };
 
@@ -566,15 +566,15 @@ void HistoQueue::MergeFront(SegmentImgWrapper* const segments) {
   indices_.pop_back();
 }
 
-WP2Status HistoQueue::Push(uint16_t idx1, uint16_t idx2, double threshold,
-                           double* const cost_diff) {
+WP2Status HistoQueue::Push(uint16_t idx1, uint16_t idx2, float threshold,
+                           float* const cost_diff) {
   if (idx1 > idx2) std::swap(idx1, idx2);
   HistogramPair pair;
   pair.idx1 = idx1;
   pair.idx2 = idx2;
   const Histogram* const h1 = (*histograms_)[idx1];
   const Histogram* const h2 = (*histograms_)[idx2];
-  const double sum_cost = h1->bit_cost_ + h2->bit_cost_;
+  const float sum_cost = h1->bit_cost_ + h2->bit_cost_;
   pair.cost_combo = 0.;
   analyzer_->GetCombinedHistogramEntropy(*h1, *h2, sum_cost + threshold,
                                          &pair.cost_combo);
@@ -682,12 +682,12 @@ static WP2Status HistogramCombineStochastic(
   for (; iter < outer_iters && valid_size >= min_cluster_size &&
          ++tries_with_no_success < num_tries_no_success;
        ++iter) {
-    double best_cost = queue.empty() ? 0. : queue.front().cost_diff;
+    float best_cost = queue.empty() ? 0.f : queue.front().cost_diff;
     // valid_size / 2 was chosen empirically. Less means faster but worse
     // compression.
     const uint32_t num_tries = valid_size / 2;
     for (uint32_t j = 0; j < num_tries; ++j) {
-      double curr_cost;
+      float curr_cost;
       // Choose two different histograms at random and try to combine them.
       uint32_t idx1 = random.Get(0u, valid_size - 1);
       uint32_t idx2 = random.Get(0u, valid_size - 2);
@@ -907,7 +907,7 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
       merged_histo->histograms_.size() < kAllHistogramMergingNum &&
       merged_histo->histograms_.size() < (orig_histo.histograms_.size() - 1)) {
     // Cost of all the histograms and the entropy image.
-    double cost_all;
+    float cost_all;
     // Figure out the entropy of the symbols image.
     {
       WP2::ANSEnc enc;

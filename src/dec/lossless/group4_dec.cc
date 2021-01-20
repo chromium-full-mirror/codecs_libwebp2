@@ -90,9 +90,9 @@ WP2Status Decoder::DecodeGroup4(uint32_t width, uint32_t last_row,
     int a0 = -1;
     uint32_t x = 0;
     while (x < width) {
-      double cost = 0.;
+      float cost = 0.f;
       const uint32_t start_x = x;
-      double* cost_ptr = get_cost ? &cost : nullptr;
+      float* cost_ptr = get_cost ? &cost : nullptr;
 
       const int16_t a0_color = current_color;
 

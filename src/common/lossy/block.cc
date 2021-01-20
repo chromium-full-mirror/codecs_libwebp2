@@ -61,7 +61,7 @@ WP2Status Counters::Init(const SymbolRecorder& recorder) {
        kAOMEOBPT4, kAOMEOBPT8,
        kAOMEOBPT16, kAOMEOBPT32, kAOMEOBPT64,
        kAOMEOBPT128, kAOMEOBPT256, kAOMEOBPT512, kAOMEOBPT1024, kAOMEOBExtra,
-       kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange, kAOMDCSign}));
+       kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange}));
 
   predictor_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
   WP2_CHECK_ALLOC_OK(predictor_ != nullptr);
@@ -938,7 +938,9 @@ WP2Status CodedBlock::OptimizeModesLuma(
     const Vector<TransformPair>& transforms_subset, Counters* const counters) {
   assert(preds.size() > 1);
   for (const Predictor* const pred : preds) {
-    pred->ComputeParams(this, kYChannel);
+    if (!pred->ComputeParams(this, kYChannel)) {
+      // TODO(skal): deal with useless preds
+    }
   }
 
   const uint32_t num_channels = (has_alpha ? 4 : 3);
@@ -1008,6 +1010,7 @@ WP2Status CodedBlock::OptimizeModesChroma(
   const uint32_t diffusion =
       DCDiffusionMap::GetDiffusion(config.error_diffusion);
   for (const Predictor* const pred : preds) {
+    // TODO(skal): deal with useless preds
     pred->ComputeParams(this, kUChannel);
     pred->ComputeParams(this, kVChannel);
   }

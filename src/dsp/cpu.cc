@@ -342,6 +342,8 @@ void WP2DspReset() {
   for (auto& f : WP2::SubtractBlock) f = nullptr;
   for (auto& f : WP2::AddBlock) f = nullptr;
 
+  WP2::CflPredict = nullptr;
+
   WP2SSIMGet4x8u = nullptr;
   WP2SSIMGet8u = nullptr;
   WP2SSIMGet16s = nullptr;

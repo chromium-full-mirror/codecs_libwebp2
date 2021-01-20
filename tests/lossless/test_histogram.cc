@@ -61,12 +61,12 @@ TEST(LosslessHistogram, HistoQueue) {
     float best_cost_diff = std::numeric_limits<float>::max();
     for (uint32_t i = 0; i < kNumHistos; ++i) {
       for (uint32_t j = i + 1; j < kNumHistos; ++j) {
-        double cost_combo = 0.;
+        float cost_combo = 0.f;
         analyzer.GetCombinedHistogramEntropy(*histograms[i], *histograms[j],
                                              std::numeric_limits<float>::max(),
                                              &cost_combo);
         best_cost_diff = std::min(
-            (double)best_cost_diff,
+            best_cost_diff,
             cost_combo - (histograms[i]->bit_cost_ + histograms[j]->bit_cost_));
       }
     }

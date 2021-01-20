@@ -55,59 +55,23 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
   WP2_CHECK_ALLOC_OK(counts.resize(histo_size));
 
   // 'type' is 0 for raw probabilities, 1 for Huffman-represented
-  // probabilities and 2 for Huffman-represented probabilities compressed
-  // recursively.
-  const uint8_t type = dec->ReadRValue(3, "coding_type");
+  // probabilities.
+  const uint8_t type = dec->ReadUValue(1, "coding_type");
   const uint32_t max_count_bits =
       std::min(kMaxFreqBits, 1u + (uint32_t)WP2Log2Floor(max_count));
-  if (type == 2) {  // HuffmanANS
-    // Read the probabilities we depend upon.
-    ANSCodes infos_sub;
-    const uint32_t size_sub = dec->ReadRange(1, 1 + kMaxFreqBits, "size");
-    WP2_CHECK_STATUS(
-        ReadHistogram(size_sub, 1 + kMaxFreqBits, histo_size, dec, infos_sub));
-    // Deduce the counts.
-    uint16_t max_symbol = 0;
-    for (const auto& i : infos_sub) {
-      max_symbol = std::max(max_symbol, i.symbol);
-    }
-    // Count the symbols.
-    Vector_u32 counts_sub;
-    WP2_CHECK_ALLOC_OK(counts_sub.resize(max_symbol + 1));
-    std::fill(counts_sub.begin(), counts_sub.end(), 0);
-    for (const auto& i : infos_sub) counts_sub[i.symbol] = i.freq;
-    // Build the spread table.
-    ANSCodes codes;
-    WP2_CHECK_STATUS(ANSCountsToSpreadTable(
-        counts_sub.data(), counts_sub.size(), ANS_TAB_SIZE, codes));
-    // Read the symbols that make up the final stats.
-    uint32_t nnz_left = nnz;
-    for (uint32_t i = 0; i < histo_size; ++i) {
-      if (nnz_left > 0) {
-        counts[i] = dec->ReadSymbol(codes.data(), ANS_LOG_TAB_SIZE, "counts");
-      } else {
-        counts[i] = 0;  // Only zeros left.
-      }
-      // If we only have non-zeros left (or in sparse mode), counts were
-      // stored - 1.
-      if (is_sparse || (i + nnz_left == histo_size)) ++counts[i];
-      if (counts[i] != 0) --nnz_left;
-    }
+  // Read the probabilities.
+  uint32_t max_freq_bits;
+  if (type == 1) {  // Huffman
+    max_freq_bits =
+        dec->ReadRange(1, 1 + WP2Log2Floor(max_count_bits), "max_freq_bits");
+  } else {  // Raw
+    max_freq_bits = dec->ReadRange(1, max_count_bits, "max_freq_bits");
+  }
+  if (is_sparse) {
+    ReadVector(dec, (1 << max_freq_bits) - 1, counts);
+    for (auto& c : counts) c += 1;
   } else {
-    // Read the probabilities.
-    uint32_t max_freq_bits;
-    if (type == 1) {  // Huffman
-      max_freq_bits =
-          dec->ReadRange(1, 1 + WP2Log2Floor(max_count_bits), "max_freq_bits");
-    } else {  // Raw
-      max_freq_bits = dec->ReadRange(1, max_count_bits, "max_freq_bits");
-    }
-    if (is_sparse) {
-      ReadVector(dec, (1 << max_freq_bits) - 1, counts);
-      for (auto& c : counts) c += 1;
-    } else {
-      ReadVectorNnz(dec, nnz, (1 << max_freq_bits) - 1, counts);
-    }
+    ReadVectorNnz(dec, nnz, (1 << max_freq_bits) - 1, counts);
   }
 
   // Store everything in the info.
@@ -151,14 +115,13 @@ void SymbolReader::AddTrivial(uint32_t sym, uint32_t cluster, int32_t value) {
   stat->param.trivial_value = value;
 }
 
-void SymbolReader::AddMapping(uint32_t sym,
-                              uint32_t cluster,
+void SymbolReader::AddMapping(uint32_t sym, uint32_t cluster,
                               const Vector_u16& mapping) {
   Stat* const stat = GetStats(sym, cluster);
   stat->type = Stat::Type::kRange;
   stat->use_mapping = true;
   for (uint32_t k = 0; k < mapping.size(); ++k) stat->mappings[k] = mapping[k];
-  stat->range = mapping_.size();
+  stat->range = mapping.size();
 }
 
 void SymbolReader::AddRange(uint32_t sym, uint32_t cluster, uint16_t range) {
@@ -206,7 +169,7 @@ WP2Status SymbolReader::AddGolomb(uint32_t sym, uint32_t cluster,
 }
 
 int32_t SymbolReader::Read(uint32_t sym, uint32_t cluster, WP2_OPT_LABEL,
-                           double* const cost) {
+                           float* const cost) {
   int32_t value;
   const WP2Status status = ReadInternal(sym, cluster, /*use_max_value=*/false,
       /*max_value=*/0, label, &value, cost);
@@ -219,7 +182,7 @@ int32_t SymbolReader::Read(uint32_t sym, uint32_t cluster, WP2_OPT_LABEL,
 
 WP2Status SymbolReader::TryRead(uint32_t sym, uint32_t cluster,
                                 uint32_t max_value, WP2_OPT_LABEL,
-                                int32_t* const value, double* const cost) {
+                                int32_t* const value, float* const cost) {
   const WP2Status status = ReadInternal(sym, cluster, /*use_max_value=*/true,
                                         max_value, label, value, cost);
   if (dec_->GetStatus() != WP2_STATUS_OK) return dec_->GetStatus();
@@ -270,6 +233,10 @@ uint32_t SymbolReader::FindSymbol(const Stat& stat, uint32_t max_value) {
   return i_inf;
 }
 
+//------------------------------------------------------------------------------
+// Some non-essential code
+
+#if defined(WP2_BITTRACE)
 static ANSSymbolInfo GetInfo(const ANSSymbolInfo* const codes, uint32_t value) {
   uint32_t i = 0;
   while (codes[i].symbol < value &&
@@ -327,13 +294,22 @@ static uint32_t ScaleFreq(const ANSSymbolInfo* codes, uint32_t log2_tab_size,
       (info.offset + info.freq) * tab_size / (info_max.offset + info_max.freq);
   return offset_next - offset;
 }
+#endif  // WP2_BITTRACE
+
+//------------------------------------------------------------------------------
+// Main call.
 
 WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
                                      bool use_max_value, uint32_t max_value,
                                      WP2_OPT_LABEL, int32_t* const value,
-                                     double* const cost) {
+                                     float* const cost) {
   // Consider reading a symbol as a single read occurrence.
   dec_->PushBitTracesCustomPrefix(label, /*merge_until_pop=*/true);
+
+#if !defined(WP2_BITTRACE)
+  (void)cost;
+  assert(cost == nullptr);  // we only need 'cost' for bittrace
+#endif
 
   const Stat& stat = *GetStats(sym, cluster);
   if (use_max_value && stat.use_mapping) {
@@ -370,7 +346,9 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
         range = std::min(stat.range, (uint16_t)(max_value + 1));
       }
       *value = dec_->ReadRValue(range, "range");
+#if defined(WP2_BITTRACE)
       if (cost != nullptr) *cost += std::log2(range);
+#endif
       if (stat.use_mapping) *value = stat.mappings[*value];
       break;
     }
@@ -380,6 +358,7 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
         const uint32_t max_index = FindSymbol(stat, max_value);
         raw_value = dec_->ReadSymbol(stat.extra.codes, stat.extra.log2_tab_size,
                                      max_index, "dict");
+#if defined(WP2_BITTRACE)
         if (cost != nullptr) {
           const uint32_t mapping_size =
               stat.extra.codes[(1 << stat.extra.log2_tab_size) - 1].symbol + 1;
@@ -388,13 +367,16 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
                         Unmap(stat.mappings, mapping_size, max_value));
           *cost -= std::log2(scaled_freq) - stat.extra.log2_tab_size;
         }
+#endif
       } else {
         raw_value = dec_->ReadSymbol(&stat.extra.codes[0],
                                      stat.extra.log2_tab_size, "dict");
+#if defined(WP2_BITTRACE)
         if (cost != nullptr) {
           const uint16_t freq = GetInfo(stat.extra.codes, raw_value).freq;
           *cost -= std::log2(freq) - stat.extra.log2_tab_size;
         }
+#endif
       }
       assert(stat.use_mapping);
       *value = stat.mappings[raw_value];
@@ -424,12 +406,14 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
               Golomb::Merge(max_prefix, prefix_size, 0) +
                   (1 << Golomb::NumExtraBits(max_prefix, prefix_size)));
         }
+#if defined(WP2_BITTRACE)
         if (cost != nullptr) {
           const uint32_t scaled_freq =
               ScaleFreq(stat.extra.codes, stat.extra.log2_tab_size, raw_prefix,
                         golomb_max.prefix);
           *cost -= std::log2(scaled_freq) - stat.extra.log2_tab_size;
         }
+#endif
       } else {
         const uint32_t raw_prefix = dec_->ReadSymbol(
             &stat.extra.codes[0], stat.extra.log2_tab_size, "golomb");
@@ -437,10 +421,12 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
         // Use ranges if we are at the last interval.
         use_range = (prefix + 1 == stat.param.golomb.range);
         if (use_range) range = stat.range;
+#if defined(WP2_BITTRACE)
         if (cost != nullptr) {
           const uint16_t freq = GetInfo(stat.extra.codes, raw_prefix).freq;
           *cost -= std::log2(freq) - stat.extra.log2_tab_size;
         }
+#endif
       }
       const uint32_t extra_bits = Golomb::NumExtraBits(prefix, prefix_size);
       uint32_t extra_bits_value;
@@ -451,14 +437,14 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
           assert(Golomb::Merge(prefix, prefix_size, 0) < range);
           range -= Golomb::Merge(prefix, prefix_size, 0);
           extra_bits_value = dec_->ReadRValue(range, "extra_bits_value");
-          if (cost != nullptr) {
-            *cost += std::log2(range);
-          }
+#if defined(WP2_BITTRACE)
+          if (cost != nullptr) *cost += std::log2(range);
+#endif
         } else {
           extra_bits_value = dec_->ReadUValue(extra_bits, "extra_bits_value");
-          if (cost != nullptr) {
-            *cost += extra_bits;
-          }
+#if defined(WP2_BITTRACE)
+          if (cost != nullptr) *cost += extra_bits;
+#endif
         }
       }
       *value = Golomb::Merge(prefix, prefix_size, extra_bits_value);
@@ -470,9 +456,11 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
       } else {
         *value =
             dec_->ReadBit(a_bits_[stat.param.a_bit_index].Proba(), "a_bit");
+#if defined(WP2_BITTRACE)
         if (cost != nullptr) {
           *cost += a_bits_[stat.param.a_bit_index].GetCost(*value);
         }
+#endif
       }
       a_bits_[stat.param.a_bit_index].Update(*value);
       break;
@@ -481,14 +469,14 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
       ANSAdaptiveSymbol& asym = a_symbols_[stat.param.a_symbol_index];
       if (use_max_value) {
         *value = dec_->ReadSymbol(asym, max_value, "a_symbol");
-        if (cost != nullptr) {
-          *cost += asym.GetCost(*value, max_value);
-        }
+#if defined(WP2_BITTRACE)
+        if (cost != nullptr) *cost += asym.GetCost(*value, max_value);
+#endif
       } else {
         *value = dec_->ReadSymbol(asym, "a_symbol");
-        if (cost != nullptr) {
-          *cost += asym.GetCost(*value);
-        }
+#if defined(WP2_BITTRACE)
+        if (cost != nullptr) *cost += asym.GetCost(*value);
+#endif
       }
       asym.Update(*value);
       break;
@@ -500,11 +488,14 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
       dec_->PopBitTracesCustomPrefix(label);
       return WP2_STATUS_BITSTREAM_ERROR;
   }
-  if (*value != 0 && stat.type != Stat::Type::kTrivial &&
-      symbols_info_.Min(sym, cluster) < 0) {
+  const bool changes_sign = (symbols_info_.Min(sym, cluster) < 0) &&
+                            (symbols_info_.Max(sym, cluster) > 0);
+  if (*value != 0 && changes_sign) {
     // TODO(vrabaud) implement other methods to store negative values.
     if (dec_->ReadBool("is_negative")) *value = -(*value);
+#if defined(WP2_BITTRACE)
     if (cost != nullptr) *cost += 1.;
+#endif
   }
   if (use_max_value) assert((uint32_t)std::abs(*value) <= max_value);
   dec_->PopBitTracesCustomPrefix(label);
@@ -526,9 +517,11 @@ WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t cluster,
     return WP2_STATUS_OK;
   }
   const uint32_t range = symbols_info_.Range(sym, cluster);
+  const int16_t min_symbol = symbols_info_.Min(sym, cluster);
+  const int16_t max_symbol = symbols_info_.Max(sym, cluster);
   if (range < 2) {
-    assert(range > 0);
-    AddTrivial(sym, cluster, 0);
+    assert(range == 1);
+    AddTrivial(sym, cluster, min_symbol);
     return WP2_STATUS_OK;
   }
 
@@ -581,30 +574,35 @@ WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t cluster,
     return dec_->GetStatus();
   }
   if (c == kSymbolCountOne) {
-    const int32_t value =
-        dec_->ReadRange(symbols_info_.Min(sym, cluster),
-                        symbols_info_.Max(sym, cluster), "symbol");
+    const bool changes_sign = (min_symbol < 0) && (max_symbol > 0);
+    int32_t value;
+    if (changes_sign) {
+      value = dec_->ReadRange(0, std::max((int16_t)-min_symbol, max_symbol),
+                              "symbol");
+    } else {
+      value = dec_->ReadRange(min_symbol, max_symbol, "symbol");
+    }
     AddTrivial(sym, cluster, value);
     return dec_->GetStatus();
   }
 
   const uint32_t type = dec_->ReadRValue(3, "type");
   if (type == 2) {  // kGolomb
-    const uint32_t golomb_prefix_size = dec_->ReadRange(1, 2, "prefix_size_m1");
+    const uint32_t golomb_prefix_size = dec_->ReadRange(1, 2, "prefix_size");
     const Golomb golomb(range - 1, golomb_prefix_size);
     const uint32_t range_golomb = golomb.prefix + 1;
     const uint32_t nnz =
-        dec_->ReadRange(2, std::min(max_nnz, range_golomb), "size_m2");
+        dec_->ReadRange(2, std::min(max_nnz, range_golomb), "size");
     WP2_CHECK_STATUS(ReadHistogram(nnz, range_golomb, max_nnz, dec_, infos_));
     WP2_CHECK_STATUS(AddGolomb(sym, cluster, &infos_, golomb_prefix_size));
   } else if (type == 1) {  // kDict
     // a kDict can't use more than ANS_MAX_SYMBOLS
     const uint32_t dict_range = std::min(nnz_range, (uint32_t)ANS_MAX_SYMBOLS);
-    const uint32_t nnz = dec_->ReadRange(2, dict_range, "size_m2");
+    const uint32_t nnz = dec_->ReadRange(2, dict_range, "size");
     WP2_CHECK_STATUS(ReadHistogram(nnz, range, max_nnz, dec_, infos_));
     WP2_CHECK_STATUS(AddDict(sym, cluster, &infos_));
   } else {  // kRange
-    const uint32_t nnz = dec_->ReadRange(1, nnz_range, "size_m1");
+    const uint32_t nnz = dec_->ReadRange(1, nnz_range, "size");
     Stat* const stat = GetStats(sym, cluster);
     stat->type = Stat::Type::kRange;
     stat->use_mapping = true;

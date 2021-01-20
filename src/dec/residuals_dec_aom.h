@@ -32,49 +32,29 @@
 namespace WP2 {
 namespace libgav1 {
 
-using Allocable = WP2Allocable;
-
 //------------------------------------------------------------------------------
 // From libgav1/src/tile/tile.h
 
 // Class specialized in reading transform residuals.
-class AOMResidualReader : public ResidualIO, public AOMResidualIO {
+// This is a pure interface (only static methods to call directly).
+class AOMResidualReader : public AOMResidualIO {
  public:
-  void Init() { ResidualIO::Init(/*use_aom_coeffs=*/true); }
-
-  // Reads residual coefficients.
-  void ReadCoeffs(Channel channel, uint32_t x_pix, uint32_t y_pix,
-                  WP2::BlockSize dim, bool is420, TransformPair tx_type,
-                  bool first_is_dc, int max_num_coeffs, ANSDec* const dec,
-                  SymbolReader* const sr,
-                  int16_t* const coeffs, uint32_t* const num_coeffs);
+  // Reads residual coeffs, returns the number of non-zero coefficients read.
+  static uint32_t ReadCoeffs(
+      Channel channel, TrfSize tdim, TransformPair tx_type, bool first_is_dc,
+      SymbolReader* const sr, ANSDec* const dec, int16_t* const coeffs);
 
  private:
-  // Returns the number of non-zero coefficients read.
-  uint32_t ReadTransformCoefficients(Channel channel, bool is_reduced,
-                                     int start_x, int start_y,
-                                     TransformSize tx_size,
-                                     TransformPair tx_type,
-                                     bool first_is_dc, int max_num_coeffs,
-                                     int16_t* const coeffs);
-
   // Reads End-of-Block element.
-  int ReadEOB(int max_num_coeffs,
-              TransformSize tx_size, PlaneType plane_type, int context);
+  static int ReadEOB(TrfSize tdim, PlaneType plane_type,
+                     int context, SymbolReader* const sr, ANSDec* const dec);
 
-  // This function specializes the parsing of DC coefficient by removing some of
-  // the branches when i == 0 (since scan[0] is always 0 and scan[i] is always
-  // non-zero for all other possible values of i). |coefficient_level| is an
-  // output parameter which accumulates the coefficient level.
-  template <bool is_dc_coefficient>
-  void ReadSignAndApplyDequantization(
-      int adjusted_tx_width_log2, uint16_t dc_sign_cluster,
-      int16_t* const coeffs, int* coefficient_level);  // Part of 5.11.39.
-  int ReadCoeffBaseRange(int clamped_tx_size_context, int cdf_context,
-                         int plane_type);  // Part of 5.11.39.
-
-  ANSDec* dec_;
-  SymbolReader* sr_;
+  // Part of 5.11.39.
+  static void ReadSignAndApplyDequantization(
+      int adjusted_tx_width_log2, int16_t* const coeffs, uint32_t max_value,
+      SymbolReader* const sr, ANSDec* const dec);
+  static int ReadCoeffBaseRange(int tx_size_context, int cdf_context,
+                                int plane_type, SymbolReader* const sr);
 };
 
 }  // namespace libgav1

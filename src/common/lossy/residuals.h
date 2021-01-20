@@ -133,9 +133,6 @@ enum class EncodingMethod {
 };
 
 class SymbolsInfo;
-namespace libgav1 {
-struct SymbolDecoderContext;
-}
 
 class ResidualIO {
  public:

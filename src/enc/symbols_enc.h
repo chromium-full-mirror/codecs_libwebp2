@@ -65,13 +65,13 @@ class SymbolManager {
   // storing this symbol.
   void ProcessWithCost(uint32_t sym, uint32_t cluster, int32_t value,
                        WP2_OPT_LABEL, ANSEncBase* const enc,
-                       double* const cost) {
+                       float* const cost) {
     ProcessInternal(sym, cluster, value, /*use_max_value=*/false,
                     /*max_value=*/0, label, enc, cost);
   }
   void ProcessWithCost(uint32_t sym, uint32_t cluster, int32_t value,
                        uint32_t max_value, WP2_OPT_LABEL, ANSEncBase* const enc,
-                       double* const cost) {
+                       float* const cost) {
     ProcessInternal(sym, cluster, value, /*use_max_value=*/true, max_value,
                     label, enc, cost);
   }
@@ -82,7 +82,7 @@ class SymbolManager {
   virtual int32_t ProcessInternal(uint32_t sym, uint32_t cluster, int32_t value,
                                   bool use_max_value, uint32_t max_value,
                                   WP2_OPT_LABEL, ANSEncBase* const enc,
-                                  double* const cost) = 0;
+                                  float* const cost) = 0;
 };
 
 // Class for counting the usage of symbols.
@@ -123,7 +123,7 @@ class SymbolRecorder : public SymbolManager {
  protected:
   int32_t ProcessInternal(uint32_t sym, uint32_t cluster, int32_t value,
                           bool use_max_value, uint32_t max_value, WP2_OPT_LABEL,
-                          ANSEncBase* const enc, double* const) override;
+                          ANSEncBase* const enc, float* const) override;
 
  private:
   ANSDictionary* GetDict(uint32_t sym, uint32_t cluster);
@@ -173,7 +173,7 @@ class SymbolCounter : public SymbolManager, public WP2Allocable {
  protected:
   int32_t ProcessInternal(uint32_t sym, uint32_t cluster, int32_t value_in,
                           bool use_max_value, uint32_t max_value, WP2_OPT_LABEL,
-                          ANSEncBase* const enc, double* const) override;
+                          ANSEncBase* const enc, float* const) override;
 
  private:
   ANSBinSymbol* GetABit(uint32_t sym, uint32_t cluster);
@@ -254,7 +254,9 @@ class SymbolWriter : public SymbolManager,
  protected:
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
   // a range.
-  // 'mapping' is used in case we don't use the raw values but a mapping.
+  // 'mapping' is used in case we don't use the raw values but a mapping. The
+  // mapping is the original value - min of symbol so that it is always
+  // positive.
   void AddRange(uint32_t sym, uint32_t cluster, const uint16_t* const mapping,
                 uint32_t size, uint16_t max_range);
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
@@ -281,7 +283,7 @@ class SymbolWriter : public SymbolManager,
   // storing 'sym'.
   int32_t ProcessInternal(uint32_t sym, uint32_t cluster, int32_t value_in,
                           bool use_max_value, uint32_t max_value, WP2_OPT_LABEL,
-                          ANSEncBase* const enc, double* const cost) override;
+                          ANSEncBase* const enc, float* const cost) override;
 
   // Writes a histogram as defined by the quantizer.
   WP2Status WriteHistogram(const Quantizer::Config& config,
@@ -290,8 +292,10 @@ class SymbolWriter : public SymbolManager,
   // Computes the cost of storing a histogram as Golomb.
   void ComputeGolombCost(uint32_t range, uint32_t max_nnz, uint32_t size,
                          uint32_t prefix_size, float* cost,
-                         Quantizer::Config** const config_golomb,
-                         uint32_t* const size_golomb);
+                         Quantizer::Config** const config_golomb);
+  void ConvertCountsToHistogram(const uint32_t* const counts, int min, int max,
+                                bool use_symmetric_negative, uint32_t* size,
+                                uint32_t* counts_total);
 
   // Returns the biggest index such that mapping[index] is valid and index <=
   // max_value. If no such value exists, returns the first valid index above
@@ -302,6 +306,7 @@ class SymbolWriter : public SymbolManager,
   Vector_u32 counts_tmp_;
   // Tmp variables for updating the SymbolWriter.
   Vector_u32 histogram_;
+  // Contains the values - min of symbol.
   Vector_u16 mapping_;
   Vector_u32 histogram_golomb_;
   Vector_u16 mapping_golomb_;

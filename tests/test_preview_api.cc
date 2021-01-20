@@ -110,6 +110,9 @@ INSTANTIATE_TEST_SUITE_P(
 //------------------------------------------------------------------------------
 
 TEST(PreviewTest, NoOptim) {
+#if defined(WP2_BITTRACE)
+  WP2MathInit();
+#endif
   const std::string file_name = "alpha_ramp.png";
   const std::string file_path = testing::GetTestDataPath(file_name);
 

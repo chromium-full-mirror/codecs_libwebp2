@@ -33,13 +33,9 @@ namespace libgav1 {
 //------------------------------------------------------------------------------
 // From libgav1/src/dsp/constants.h
 
-enum {
-  kCdfMaxProbability = 32768,
-  kMaxSegments = 8,
-  kQuantizedCoefficientBufferPadding = 4,
-};  // anonymous enum
-
-enum : uint8_t { kMaxPlanesMonochrome = 1, kMaxPlanes = 4 };
+constexpr uint32_t kQuantizedCoefficientBufferPadding = 4;
+constexpr uint32_t kMaxTxBufferDim =
+    (kMaxBlockSizePix + kQuantizedCoefficientBufferPadding);
 
 // The plane types, called luma and chroma in the spec.
 // Matches PlaneType in cdfs.inc
@@ -51,97 +47,13 @@ constexpr PlaneType GetPlaneType(Channel channel) {
                                                         : kPlaneTypeYA;
 }
 
-enum BlockSize : uint8_t {
-  kBlock4x4,
-  kBlock4x8,
-  kBlock4x16,
-  kBlock8x4,
-  kBlock8x8,
-  kBlock8x16,
-  kBlock8x32,
-  kBlock16x4,
-  kBlock16x8,
-  kBlock16x16,
-  kBlock16x32,
-  kBlock16x64,
-  kBlock32x8,
-  kBlock32x16,
-  kBlock32x32,
-  kBlock32x64,
-  kBlock64x16,
-  kBlock64x32,
-  kBlock64x64,
-  kBlock64x128,
-  kBlock128x64,
-  kBlock128x128,
-  kMaxBlockSizes,
-  kBlockInvalid
-};
-
-enum TransformSize : uint8_t {
-  kTransformSize4x4,
-  kTransformSize4x8,
-  kTransformSize4x16,
-  kTransformSize8x4,
-  kTransformSize8x8,
-  kTransformSize8x16,
-  kTransformSize8x32,
-  kTransformSize16x4,
-  kTransformSize16x8,
-  kTransformSize16x16,
-  kTransformSize16x32,
-  kTransformSize16x64,
-  kTransformSize32x8,
-  kTransformSize32x16,
-  kTransformSize32x32,
-  kTransformSize32x64,
-  kTransformSize64x16,
-  kTransformSize64x32,
-  kTransformSize64x64,
-  kNumTransformSizes
-};
-
-extern const uint8_t kBlockWidthPixels[kMaxBlockSizes];
-
-extern const uint8_t kBlockHeightPixels[kMaxBlockSizes];
-
-extern const uint8_t kTransformWidth[kNumTransformSizes];
-
-extern const uint8_t kTransformHeight[kNumTransformSizes];
-
-extern const uint8_t kTransformWidth4x4[kNumTransformSizes];
-
-extern const uint8_t kTransformHeight4x4[kNumTransformSizes];
-
-extern const uint8_t kTransformWidthLog2[kNumTransformSizes];
-
-// Replaces all occurrences of 64x* and *x64 with 32x* and *x32 respectively.
-constexpr TransformSize kAdjustedTransformSize[kNumTransformSizes] = {
-    kTransformSize4x4,   kTransformSize4x8,   kTransformSize4x16,
-    kTransformSize8x4,   kTransformSize8x8,   kTransformSize8x16,
-    kTransformSize8x32,  kTransformSize16x4,  kTransformSize16x8,
-    kTransformSize16x16, kTransformSize16x32, kTransformSize16x32,
-    kTransformSize32x8,  kTransformSize32x16, kTransformSize32x32,
-    kTransformSize32x32, kTransformSize32x16, kTransformSize32x32,
-    kTransformSize32x32};
-
 //------------------------------------------------------------------------------
 // From libgav1/src/utils/common.h
 
 constexpr int DivideBy2(int n) { return n >> 1; }
 constexpr int DivideBy4(int n) { return n >> 2; }
 constexpr int DivideBy8(int n) { return n >> 3; }
-
-// Convert |value| to unsigned before shifting to avoid undefined behavior with
-// negative values.
-inline int LeftShift(int value, int bits) {
-  assert(bits >= 0);
-  assert(value >= -(int64_t{1} << (31 - bits)));
-  assert(value <= (int64_t{1} << (31 - bits)) - ((bits == 0) ? 1 : 0));
-  return static_cast<int>(static_cast<uint32_t>(value) << bits);
-}
-inline int MultiplyBy2(int n) { return LeftShift(n, 1); }
-inline int MultiplyBy4(int n) { return LeftShift(n, 2); }
+constexpr int MultiplyBy4(int n) { return (4 * n); }
 
 // Input: 1d array index |index|, which indexes into a 2d array of width
 //     1 << |tx_width_log2|.
@@ -179,14 +91,8 @@ enum {
   kCoeffBaseRangeSymbolCount = 4
 };  // anonymous enum
 
-// This is computed as:
-// min(transform_width_log2, 5) + min(transform_height_log2, 5) - 4.
-constexpr uint8_t kEobMultiSizeLookup[kNumTransformSizes] = {
-    0, 1, 2, 1, 2, 3, 4, 2, 3, 4, 5, 5, 4, 5, 6, 6, 5, 6, 6};
-
-typedef int (*CoeffBaseContextFunc)(
-    const uint8_t qlevels[], TransformSize tx_size,
-    int adjusted_tx_width_log2, uint16_t pos);
+typedef int (*CoeffBaseContextFunc)(const uint8_t qlevels[], TrfSize tdim,
+                                    int adjusted_tx_width_log2, uint16_t pos);
 typedef int (*CoeffBaseRangeContextFunc)(
     const uint8_t qlevels[], int adjusted_tx_width_log2, int pos);
 
@@ -198,8 +104,7 @@ class AOMResidualIO {
   // for symbols using 1, 2 or 3 arguments.
   template <Symbol sym>
   static uint32_t GetClusterAOM1(uint32_t arg0) {
-    static_assert(sym == kAOMEOBPT512 || sym == kAOMEOBPT1024 ||
-                  sym == kAOMDCSign, "wrong symbol");
+    static_assert(sym == kAOMEOBPT512 || sym == kAOMEOBPT1024, "wrong symbol");
     return arg0;
   }
   template <Symbol sym>
@@ -257,21 +162,7 @@ class AOMResidualIO {
       GetCoeffBaseRangeContextFunc(uint32_t tx_class);
 
  protected:
-  // The residual pointer is used to traverse the |residual_buffer_|. It is
-  // used in two different ways.
-  // If |split_parse_and_decode_| is true:
-  //    The pointer points to the beginning of the |residual_buffer_| when the
-  //    "parse" and "decode" steps begin. It is then moved forward tx_size in
-  //    each iteration of the "parse" and the "decode" steps. In this case, the
-  //    ResidualPtr variable passed into various functions starting from
-  //    ProcessSuperBlock is used as an in/out parameter to keep track of the
-  //    residual pointer.
-  // If |split_parse_and_decode_| is false:
-  //    The pointer is reset to the beginning of the |residual_buffer_| for
-  //    every transform block.
-  using ResidualPtr = uint8_t*;
-
-  static int GetCoeffBaseContextEob(TransformSize tx_size, int index);
+  static int GetCoeffBaseContextEob(TrfSize tdim, int index);
 
   static int GetCoeffBaseRangeContextEob(int adjusted_tx_width_log2, int pos);
 };
@@ -283,8 +174,15 @@ class AOMResidualIO {
 // DivideBy2(TransformSizeToSquareTransformIndex(kTransformSizeSquareMin[i]) +
 //           TransformSizeToSquareTransformIndex(kTransformSizeSquareMax[i]) +
 //           1)
-constexpr uint8_t kTransformSizeContext[kNumTransformSizes] = {
-    0, 1, 1, 1, 1, 2, 2, 1, 2, 2, 3, 3, 2, 3, 3, 4, 3, 4, 4};
+// with special value '0' for 2x? or ?x2 transforms.
+constexpr uint8_t kTrfContext[] = {
+    0, 0, 0,
+    0, 0, 1, 1,
+    0, 1, 1, 2, 2,
+       1, 2, 2, 3,
+          2, 3, 3
+};
+STATIC_ASSERT_ARRAY_SIZE(kTrfContext, TRF_LAST);
 
 // Range above kNumQuantizerBaseLevels which the exponential golomb coding
 // process is activated.
@@ -294,37 +192,7 @@ constexpr int kQuantizerCoefficientBaseRangeContextClamp =
 constexpr int kCoeffBaseRangeMaxIterations =
     kQuantizerCoefficientBaseRange / (kCoeffBaseRangeSymbolCount - 1);
 
-constexpr TransformSize kSizeWP2ToAOM[] = {
-    kTransformSize4x4,   kTransformSize8x4,   kTransformSize16x4,
-    kTransformSize4x8,   kTransformSize8x8,   kTransformSize16x8,
-    kTransformSize32x8,  kTransformSize4x16,  kTransformSize8x16,
-    kTransformSize16x16, kTransformSize32x16, kTransformSize8x32,
-    kTransformSize16x32, kTransformSize32x32};
-STATIC_ASSERT_ARRAY_SIZE(kSizeWP2ToAOM, BLK_LAST);
-constexpr WP2::BlockSize kSizeAOMToWP2[] = {
-    BLK_4x4,   BLK_4x8,  BLK_4x16,  BLK_8x4,   BLK_8x8,  BLK_8x16, BLK_8x32,
-    BLK_16x4,  BLK_16x8, BLK_16x16, BLK_16x32, BLK_LAST, BLK_32x8, BLK_32x16,
-    BLK_32x32, BLK_LAST, BLK_LAST,  BLK_LAST,  BLK_LAST};
-STATIC_ASSERT_ARRAY_SIZE(kSizeAOMToWP2, kNumTransformSizes);
-
-inline TransformSize ConvertSize(WP2::BlockSize size) {
-  const TransformSize res = kSizeWP2ToAOM[(uint32_t)size];
-  assert(res != kNumTransformSizes && kSizeAOMToWP2[res] == size);
-  return res;
-}
-
-inline WP2::BlockSize ConvertSize(TransformSize tx_size) {
-  const WP2::BlockSize res = kSizeAOMToWP2[(uint32_t)tx_size];
-  assert(res != BLK_LAST && kSizeWP2ToAOM[res] == tx_size);
-  return res;
-}
-
-inline const uint16_t* UberZigZag(TransformSize tx_size, bool is420) {
-  return ResidualIterator::GetZigzag(GetTransform(ConvertSize(tx_size), is420));
-}
-
 }  // namespace libgav1
-
 }  // namespace WP2
 
 #endif /* WP2_COMMON_LOSSY_RESIDUALS_AOM_H_ */

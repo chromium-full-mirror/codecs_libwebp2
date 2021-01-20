@@ -67,9 +67,9 @@ typedef void (*BufferAddFunc)(const uint32_t* const a, const uint32_t* const b,
                               uint32_t* const nonzeros);
 extern BufferAddFunc BufferAdd;
 
-typedef double (*CostFunc)(const uint32_t* population, int length);
-typedef double (*CostCombinedFunc)(const uint32_t* X, const uint32_t* Y,
-                                   int length);
+typedef float (*CostFunc)(const uint32_t* population, int length);
+typedef float (*CostCombinedFunc)(const uint32_t* X, const uint32_t* Y,
+                                  int length);
 typedef float (*CombinedShannonEntropyFunc)(const uint32_t* X,
                                             const uint32_t* Y, uint32_t length);
 

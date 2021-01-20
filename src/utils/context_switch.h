@@ -122,13 +122,20 @@ class LocalContext {
 
   void* inter_context_data_ = nullptr;
 
-  // 1MB stack size is suggested in CreateFiber() documentation.
-  // TODO(yguyon): find out the smallest possible safe size.
-  static constexpr uint32_t kCallstackSize = (1 << 20);
+
 #ifdef _WIN32
+  // 1MB stack size is suggested in CreateFiber() documentation.
+  static constexpr uint32_t kCallstackSize = (1u << 20);
   LPVOID local_fiber_ = nullptr;
   LPVOID main_fiber_ = nullptr;  // Doesn't have to be deleted.
 #else
+#ifdef WP2_BITTRACE
+  // Keep a big stack for the ANS symbol debug map.
+  static constexpr uint32_t kCallstackSize = (1u << 20);
+#else
+  // We are required to run with 64k stack (SIGSTKSZ is 8k, not enough).
+  static constexpr uint32_t kCallstackSize = (1u << 16);
+#endif
   ucontext_t local_context_;
   ucontext_t main_context_;
   uint8_t stack_buffer_[kCallstackSize];

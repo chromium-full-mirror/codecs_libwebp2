@@ -448,8 +448,8 @@ void CreatePartition(uint32_t w, uint32_t h, bool snapped,
 
     if (!blocks->push_back(block)) assert(false);
     m.Use(block);
-    if (!m.IsDone(bx, by)) assert(false);
-    if (m.IsDone(bx, by + bh)) assert(false);
+    if (!m.IsUsed(bx, by)) assert(false);
+    if (m.IsUsed(bx, by + bh)) assert(false);
   }
 }
 

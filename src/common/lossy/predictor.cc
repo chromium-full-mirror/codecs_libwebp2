@@ -582,8 +582,8 @@ class AlphaPredictor : public Predictor {
   }
 
   uint32_t mode() const override { return pred_->mode(); }
-  void ComputeParams(CodedBlock* const cb, Channel channel) const override {
-    pred_->ComputeParams(cb, channel);
+  bool ComputeParams(CodedBlock* const cb, Channel channel) const override {
+    return pred_->ComputeParams(cb, channel);
   }
   void WriteParams(const CodedBlock& cb, Channel channel,
                    SymbolManager* const sm,
@@ -1092,13 +1092,16 @@ WP2Status UVPredictors::Fill(int16_t min_value, int16_t max_value) {
 }
 
 //------------------------------------------------------------------------------
+// Chroma-From-Luma
+
+static constexpr float kCflNorm = 1. / (1 << kCflFracBits);
 
 CflPredictor::CflPredictor(int16_t min_value, int16_t max_value)
     : min_value_(min_value), max_value_(max_value) {}
 
-static void LinearRegression(const int16_t* const luma,
-                             const int16_t* const chroma, uint32_t size,
-                             int16_t* const a, int16_t* const b) {
+void CflPredictor::LinearRegression(const int16_t* const luma,
+                                    const int16_t* const chroma, uint32_t size,
+                                    int32_t* const a, int32_t* const b) const {
   int32_t num_values = 0;
   int32_t l_sum = 0;
   int32_t uv_sum = 0;
@@ -1117,27 +1120,36 @@ static void LinearRegression(const int16_t* const luma,
     *a = *b = 0;
     return;
   }
+  int32_t A, B;
   const int64_t num = (int64_t)l_uv_sum * num_values - (int64_t)l_sum * uv_sum;
   const int64_t den = (int64_t)l_l_sum * num_values - (int64_t)l_sum * l_sum;
   if (num == 0 || den == 0) {
-    *a = 0;
-    *b = (int16_t)DivRound(LeftShift(uv_sum, CflPredictor::kBPrecShift),
-                           num_values);    // no need to s-clamp to 16bit
+    A = 0;
+    B = DivRound(LeftShift(uv_sum, kCflFracBits), num_values);
   } else {
-     const int32_t tmp_a = DivRound(LeftShift(num, CflPredictor::kAPrecShift),
-                                    den);
-     *a = (int16_t)ClampToSigned(tmp_a, 16);
-     int64_t tmp_b = den * uv_sum - num * l_sum;
-     tmp_b = DivRound(LeftShift(tmp_b, CflPredictor::kBPrecShift),
-                                num_values * den);
-     *b = (int16_t)ClampToSigned(tmp_b, 16);
+    A = DivRound(LeftShift(num, kCflFracBits), den);
+    const int64_t tmp_b = den * uv_sum - num * l_sum;
+    B = DivRound<int64_t>(LeftShift(tmp_b, kCflFracBits), num_values * den);
   }
+  B += (1 << kCflFracBits >> 1);   // include rounding constant
+
+  // Tighten the scaling/offset value to avoid obvious overflows.
+  // Warning! alpha-from-chroma heavily relies on saturating to [0..255],
+  // and generate large 'B' constants. We must not clip 'B' with min/max_value_
+  // but with the max codable range (kMaxYuvBits = 9b) to retain this property.
+  const int32_t max_range = 2 << (kCflFracBits + kMaxYuvBits);
+  if (std::abs(B) > max_range) {
+    A = 0;
+    B = DivRound(LeftShift(uv_sum, kCflFracBits), num_values);
+  }
+  *a = ClampToSigned(A, kCflABits);
+  *b = ClampToSigned(B, kCflBBits);
 }
 
 void CflPredictor::ContextLinearRegression(Channel channel,
                                            const CodedBlock& cb,
-                                           int16_t* const a,
-                                           int16_t* const b) const {
+                                           int32_t* const a,
+                                           int32_t* const b) const {
   const int16_t* const luma_context =
       cb.GetContext(kYChannel, kContextSmallNoFillIn);
   const int16_t* const chroma_context =
@@ -1148,8 +1160,8 @@ void CflPredictor::ContextLinearRegression(Channel channel,
 }
 
 void CflPredictor::BlockLinearRegression(Channel channel, const CodedBlock& cb,
-                                         int16_t* const a,
-                                         int16_t* const b) const {
+                                         int32_t* const a,
+                                         int32_t* const b) const {
   const Plane16& luma_plane = cb.out_.GetChannel(kYChannel);
   const Plane16& chroma_plane = cb.in_.GetChannel(channel);
   int16_t luma[kMaxBlockSizePix2], chroma[kMaxBlockSizePix2];
@@ -1168,19 +1180,12 @@ void CflPredictor::BlockLinearRegression(Channel channel, const CodedBlock& cb,
 void CflPredictor::DoPredict(const CodedBlock& cb, Channel channel,
                              uint32_t x_start, uint32_t y_start, uint32_t w,
                              uint32_t h, int16_t* output, uint32_t step) const {
-  const Plane16& luma = cb.GetContextPlane(kYChannel);
-  int16_t a, b;
+  int32_t a, b;
   ContextLinearRegression(channel, cb, &a, &b);
-  const int32_t shifted_b =
-      ChangePrecision<int32_t>(b, kBPrecShift, kAPrecShift) +
-      (1 << kAPrecShift >> 1);   // we pre-incorporate the rounding constant
-
+  const Plane16& luma = cb.GetContextPlane(kYChannel);
   for (uint32_t y = 0; y < h; ++y) {
     const int16_t* const src = &luma.At(x_start, y_start + y);
-    for (uint32_t x = 0; x < w; ++x) {
-      const int32_t v = ((int32_t)a * src[x] + shifted_b) >> kAPrecShift;
-      output[x] = (int16_t)Clamp<int32_t>(v, min_value_, max_value_);
-    }
+    CflPredict(src, (int16_t)a, b, output, min_value_, max_value_, w);
     output += step;
   }
 }
@@ -1199,53 +1204,62 @@ std::string CflPredictor::GetFakePredStr() const {
   return "(fake prediction not supported)\n";
 }
 
-std::string CflPredictor::GetPredStr(const CodedBlock& cb,
-                                     Channel channel) const {
-  std::string str;
-  int16_t a, b;
-  ContextLinearRegression(channel, cb, &a, &b);
-  const float fa = (float)a / (1 << kAPrecShift);
-  const float fb = (float)b / (1 << kBPrecShift);
+void CflPredictor::DisplaySamples(const CodedBlock& cb, Channel channel,
+                                  std::string* const str) const {
   const Plane16& luma = cb.GetContextPlane(kYChannel);
-  WP2SAppend(&str, "Chroma = %.2f * Luma + %.2ff\n", fa, fb);
   int16_t output[kMaxBlockSizePix2];
   Predict(cb, channel, output, kMaxBlockSizePix);
+
   // Display subset of values to fit screen.
-  WP2SAppend(&str, "       LUMA          |            chroma\n");
+  WP2SAppend(str, "       LUMA          |            chroma\n");
   for (uint32_t j = 0; j < kPredHeight; ++j) {
     for (uint32_t i = 0; i < kPredWidth; ++i) {
-      WP2SAppend(&str, "%4d ", luma.At(i, j));
+      WP2SAppend(str, "%4d ", luma.At(i, j));
     }
-    WP2SAppend(&str, " | ");
+    WP2SAppend(str, " | ");
     for (uint32_t i = 0; i < kPredWidth; ++i) {
-      WP2SAppend(&str, "% 6.1f ", fa * luma.At(i, j) + fb);
+      WP2SAppend(str, "%4d ", output[i + j * kMaxBlockSizePix]);
     }
-    WP2SAppend(&str, "\n");
+    WP2SAppend(str, "\n");
   }
-  if (cb.w() > 1 || cb.h() > 1) WP2SAppend(&str, "(cropped)\n");
+  if (cb.w() > 1 || cb.h() > 1) WP2SAppend(str, "(cropped)\n");
+}
+
+std::string CflPredictor::GetPredStr(const CodedBlock& cb,
+                                     Channel channel) const {
+  int32_t a, b;
+  ContextLinearRegression(channel, cb, &a, &b);
+  std::string str;
+  WP2SAppend(&str, "Chroma = %.2f * Luma + %.2ff  [(%d * Luma + %2d) >> %d]\n",
+             kCflNorm * a, kCflNorm * b, a, b, kCflFracBits);
+  DisplaySamples(cb, channel, &str);
   return str;
 }
+
+//------------------------------------------------------------------------------
 
 SignalingCflPredictor::SignalingCflPredictor(int16_t min_value,
                                              int16_t max_value)
     : CflPredictor(min_value, max_value) {}
 
 void SignalingCflPredictor::GetParams(const CodedBlock& cb, Channel channel,
-                                      uint32_t w, uint32_t h, int32_t* a,
-                                      int32_t* b) const {
+                                      uint32_t w, uint32_t h,
+                                      int32_t* a, int32_t* b) const {
   const Plane16& luma = cb.GetContextPlane(kYChannel);
-  int16_t predicted_a, predicted_b;
+  int32_t predicted_a, predicted_b;
   ContextLinearRegression(channel, cb, &predicted_a, &predicted_b);
-  *a = predicted_a + GetParam(cb, channel);
+  const int32_t delta_a =
+      ChangePrecision(cb.cfl_[channel - 1], kIOFracBits, kCflFracBits);
 
-  int64_t luma_sum = 0;
+  int32_t luma_sum = 0;
   for (uint32_t y = 0; y < h; ++y) {
     const int16_t* const y_src = luma.Row(y);
     for (uint32_t x = 0; x < w; ++x) luma_sum += y_src[x];
   }
-  const int32_t average_luma = DivRound<int64_t>(luma_sum, w * h);
-  *b = ChangePrecision<int32_t>(predicted_b, kBPrecShift, kAPrecShift) -
-       GetParam(cb, channel) * average_luma;
+  predicted_b -= DivRound<int64_t>((int64_t)delta_a * luma_sum, w * h);
+  predicted_a += delta_a;
+  *a = ClampToSigned(predicted_a, kCflABits);
+  *b = ClampToSigned(predicted_b, kCflBBits);
 }
 
 void SignalingCflPredictor::DoPredict(const CodedBlock& cb, Channel channel,
@@ -1255,52 +1269,33 @@ void SignalingCflPredictor::DoPredict(const CodedBlock& cb, Channel channel,
   const Plane16& luma = cb.GetContextPlane(kYChannel);
   int32_t a, b;
   GetParams(cb, channel, w, h, &a, &b);
-  b += (1 << kAPrecShift >> 1);   // pre-incorporate the rounding constant
-
   for (uint32_t y = 0; y < h; ++y) {
     const int16_t* const y_src = luma.Row(y);
-    for (uint32_t x = 0; x < w; ++x) {
-      const int32_t v = (a * y_src[x] + b) >> kAPrecShift;
-      output[x] = (int16_t)Clamp<int32_t>(v, min_value_, max_value_);
-    }
+    CflPredict(y_src, a, b, output, min_value_, max_value_, w);
     output += step;
   }
 }
 
-void SignalingCflPredictor::ComputeParams(CodedBlock* const cb,
+bool SignalingCflPredictor::ComputeParams(CodedBlock* const cb,
                                           Channel channel) const {
-  int16_t predicted_a, predicted_b;
+  int32_t predicted_a, best_a, predicted_b, best_b;
   ContextLinearRegression(channel, *cb, &predicted_a, &predicted_b);
-
-  int16_t best_a, best_b;
   BlockLinearRegression(channel, *cb, &best_a, &best_b);
-  const int16_t a_res =
-      ChangePrecision(ClampToSigned(best_a - predicted_a, kAResBits),
-                      kAPrecShift, kAResPrecision);
-  cb->cfl_[channel - 1] = a_res;
+  best_a = ChangePrecision(best_a - predicted_a, kCflFracBits, kIOFracBits);
+  cb->cfl_[channel - 1] = ClampToSigned(best_a, kIOBits);
+  return (cb->cfl_[channel - 1] != 0);
 }
 
 void SignalingCflPredictor::WriteParams(const CodedBlock& cb, Channel channel,
                                         SymbolManager* const sm,
                                         ANSEncBase* const enc) const {
-  const int16_t a_res =
-      ChangePrecision(GetParam(cb, channel), kAPrecShift, kAResPrecision);
-  const uint32_t a_unsigned = std::abs(a_res);
-  const uint32_t sign = a_res < 0 ? 1 : 0;
-  sm->Process(kSymbolCflSlope, a_unsigned, "cfl_slope", enc);
-  enc->PutUValue(sign, 1, "cfl_slope_sign");
+  sm->Process(kSymbolCflSlope, cb.cfl_[channel - 1], "cfl_slope", enc);
 }
 
 void SignalingCflPredictor::ReadParams(CodedBlock* const cb, Channel channel,
                                        SymbolReader* const sr,
                                        ANSDec* const dec) const {
-  const uint32_t a_unsigned =
-      sr->Read(kSymbolCflSlope, /*cluster=*/0, "cfl_slope");
-  cb->cfl_[channel - 1] = a_unsigned;
-  const uint32_t sign = dec->ReadUValue(1, "cfl_slope_sign");
-  if (sign) {
-    cb->cfl_[channel - 1] *= -1;
-  }
+  cb->cfl_[channel - 1] = sr->Read(kSymbolCflSlope, "cfl_slope");
 }
 
 std::string SignalingCflPredictor::GetName() const {
@@ -1309,39 +1304,19 @@ std::string SignalingCflPredictor::GetName() const {
 
 std::string SignalingCflPredictor::GetPredStr(const CodedBlock& cb,
                                               Channel channel) const {
-  const Plane16& luma = cb.GetContextPlane(kYChannel);
-  std::string str;
-  int16_t predicted_a, predicted_b;
+  int32_t predicted_a, a, predicted_b, b;
   ContextLinearRegression(channel, cb, &predicted_a, &predicted_b);
-  int32_t a, b;
   GetParams(cb, channel, cb.w(), cb.h_pix(), &a, &b);
 
-  const float fa = (float)a / (1 << kAPrecShift);
-  const float fb = (float)b / (1 << kAPrecShift);
-  WP2SAppend(&str, "Predicted a: %.2f with correction: %.2f\n",
-             (float)predicted_a / (1 << kAPrecShift), fa);
-  WP2SAppend(&str, "Chroma = %.2f * Luma + %.2ff\n", fa, fb);
-  int16_t output[kMaxBlockSizePix2];
-  Predict(cb, channel, output, kMaxBlockSizePix);
-  // Display subset of values to fit screen.
-  WP2SAppend(&str, "       LUMA          |            chroma\n");
-  for (uint32_t j = 0; j < kPredHeight; ++j) {
-    for (uint32_t i = 0; i < kPredWidth; ++i) {
-      WP2SAppend(&str, "%4d ", luma.At(i, j));
-    }
-    WP2SAppend(&str, " | ");
-    for (uint32_t i = 0; i < kPredWidth; ++i) {
-      WP2SAppend(&str, "% 6.1f ", fa * luma.At(i, j) + fb);
-    }
-    WP2SAppend(&str, "\n");
-  }
-  if (cb.w() > 1 || cb.h() > 1) WP2SAppend(&str, "(cropped)\n");
+  std::string str;
+  WP2SAppend(&str, "Predicted a: %.2f, with correction: %.2f (param:%d)\n",
+             kCflNorm * predicted_a, kCflNorm * a, cb.cfl_[channel - 1]);
+  WP2SAppend(&str, "Predicted b: %.2f, with correction: %.2f\n",
+             kCflNorm * predicted_b, kCflNorm * b);
+  WP2SAppend(&str, "Chroma = %.2f * Luma + %.2ff  [(%d * Luma + %2d) >> %d]\n",
+             kCflNorm * a, kCflNorm * b, a, b, kCflFracBits);
+  DisplaySamples(cb, channel, &str);
   return str;
-}
-
-int16_t SignalingCflPredictor::GetParam(const CodedBlock& cb,
-                                        Channel channel) const {
-  return ChangePrecision(cb.cfl_[channel - 1], kAResPrecision, kAPrecShift);
 }
 
 //------------------------------------------------------------------------------

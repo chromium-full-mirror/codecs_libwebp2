@@ -31,36 +31,22 @@ namespace libgav1 {
 
 // Class writing AOM residuals.
 // Each member function matches one in AOMResidualReader.
-class AOMResidualWriter : public ResidualIO, public AOMResidualIO {
+// This is a pure interface (only static methods to call directly).
+class AOMResidualWriter : public AOMResidualIO {
  public:
-  void Init() { ResidualIO::Init(/*use_aom_coeffs=*/true); }
-
-  // Writes coefficients of block of size 'dim' at 'x_pix, y_pix' .
-  // 'tx_type' is written only if 'implicit_tx' is 'kUnknownTf'.
-  // If 'do_update', the 'aom_context' is modified.
-  static WP2Status WriteCoeffs(uint32_t x_pix, uint32_t y_pix,
-                               WP2::BlockSize dim, TransformPair tx_type,
-                               bool first_is_dc, int max_num_coeffs, bool is420,
-                               const int16_t* const coeffs, Channel channel,
-                               SymbolManager* const sm,
-                               ANSEncBase* const enc);
+  static void WriteCoeffs(const int16_t res[], Channel channel, TrfSize tdim,
+                          TransformPair tx_type, bool first_is_dc,
+                          SymbolManager* const sm, ANSEncBase* const enc);
 
  private:
-  static void WriteEOB(int eob, int max_num_coeffs,
-                       TransformSize tx_size, PlaneType plane_type, int context,
+  static void WriteEOB(int eob, TrfSize tdim, PlaneType plane_type, int context,
                        SymbolManager* const sm, ANSEncBase* const enc);
-  static void WriteTransformCoefficients(
-      const int16_t* const res, int max_num_coeffs, bool is_reduced,
-      Channel channel, int start_x, int start_y, TransformSize tx_size,
-      TransformPair tx_type, bool first_is_dc, SymbolManager* const sm,
-      ANSEncBase* const enc, int* const coefficient_level);
 
-  template <bool is_dc_coefficient>
   static void WriteSignAndApplyDequantization(
-      int16_t res, uint32_t dc_sign_cluster, int* coefficient_level,
+      int16_t res, uint32_t max_value,
       SymbolManager* const sm, ANSEncBase* const enc);
   static uint32_t WriteCoeffBaseRange(uint32_t level,
-                                      int clamped_tx_size_context,
+                                      int tx_size_context,
                                       int cdf_context, int plane_type,
                                       SymbolManager* const sm,
                                       ANSEncBase* const enc);

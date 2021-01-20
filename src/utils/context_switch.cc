@@ -150,7 +150,7 @@ bool MainContext::CreateLocalContext(
       sizeof(context_.stack_buffer_) / sizeof(context_.stack_buffer_[0]);
   context_.local_context_.uc_stack.ss_flags = 0;
   makecontext(&context_.local_context_,
-              reinterpret_cast<void (*)()>(suspendable_function), 1, &context_);
+              (void (*)())(suspendable_function), 1, &context_);
 #endif
   return true;
 }

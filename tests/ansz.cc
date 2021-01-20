@@ -28,6 +28,7 @@
 
 #include "imageio/imageio_util.h"
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
 
@@ -194,6 +195,9 @@ static bool Decompress(const std::string& in, std::string* const out) {
 
 int main(int argc, const char* argv[]) {
   WP2::ANSInit();
+#if defined(WP2_BITTRACE)
+  WP2MathInit();
+#endif
   bool decomp = false;
   bool check = false;
   WP2::CompressionMethod method = WP2::ORDER_N;   // default:

@@ -29,7 +29,7 @@ namespace WP2 {
 
 class Quantizer {
  public:
-  enum ConfigType { Raw, Huffman, HuffmanANS };
+  enum ConfigType { Raw, Huffman };
   // Config defining how a histogram is stored.
   // E.g.  [0,1,8,0,4]
   // If 'is_sparse' is true, it is stored as sparse, 'histo' contains [1,8,4]
@@ -47,6 +47,9 @@ class Quantizer {
     ConfigType type;
     bool is_sparse;
     uint8_t max_freq_bits;
+    // Golomb specific parameters.
+    uint32_t golomb_size;
+    uint32_t golomb_prefix_size;
   };
   struct HistogramSparse {
     uint32_t* counts;
@@ -60,7 +63,6 @@ class Quantizer {
     size_t size_to_write;
     HistogramSparse histo;
     float cost;
-    Config* next;
   };
 
   Quantizer() {
@@ -83,11 +85,8 @@ class Quantizer {
  private:
   // Free the config from the buffer to make it re-usable.
   void ResetConfig(const Config* c) {
-    while (c != nullptr) {
-      const size_t c_ind = c - &configs_[0];
-      configs_used_[c_ind] = false;
-      c = c->next;
-    }
+    const size_t c_ind = c - &configs_[0];
+    configs_used_[c_ind] = false;
   }
 
   // Implementation of the quantization that can call itself to compress its own

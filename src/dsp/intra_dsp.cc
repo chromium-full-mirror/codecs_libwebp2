@@ -69,9 +69,9 @@ static constexpr int16_t kSmoothWeights[] = {
   66, 59, 52, 45, 39, 34, 29, 25, 21, 17, 14, 12, 10, 9, 8, 8,  // 32
 };
 STATIC_ASSERT_ARRAY_SIZE(kSmoothWeights, 4 + 4 + 8 + 16 + 32);
-static constexpr int32_t kSmoothShift = 8;
+constexpr int32_t kSmoothShift = 8;
 
-static const int16_t* GetWeights(uint32_t d) { return &kSmoothWeights[d]; }
+const int16_t* GetWeights(uint32_t d) { return &kSmoothWeights[d]; }
 
 void Smooth_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t min_value,
               int16_t max_value, int16_t* dst, size_t step) {
@@ -135,32 +135,12 @@ void TrueMotion_C(const int16_t* ctx, uint32_t bw, uint32_t bh,
   }
 }
 
-//------------------------------------------------------------------------------
-
-static float FilteredProjWeight(float x0, float y0, float c, float s, float x,
-                                float y) {
-  const float w = WP2::ProjWeight(x0, y0, c, s, x, y);
-  constexpr float kMinWeight = 0.01f;  // "too-far" threshold
-  return (w < kMinWeight) ? kMinWeight : w;
-}
-
-static int16_t WeightedSum(float weights[], const int16_t ctx[], uint32_t size,
-                           int16_t min_value, int16_t max_value) {
-  float sum = 0.f, v = 0.f;
-  for (uint32_t m = 0; m < size; ++m) {
-    v += ctx[m] * weights[m];
-    sum += weights[m];
-  }
-  assert(sum > 0.f);
-  return WP2::Clamp((int16_t)(v / sum), min_value, max_value);
-}
-
 }  // namespace
-
-namespace WP2 {
 
 //------------------------------------------------------------------------------
 // Paeth
+
+namespace WP2 {
 
 static inline int16_t PaethPredictOnePixel(int16_t left, int16_t top,
                                            int16_t top_left) {
@@ -190,55 +170,11 @@ void BasePaethPredictor(const int16_t* ctx, uint32_t bw, uint32_t bh,
   }
 }
 
+}  // namespace WP2
+
 //------------------------------------------------------------------------------
 
-float ProjWeight(float x0, float y0, float c, float s, float x, float y) {
-  // The axes we use here are: Y going down, X going right.
-  // But the angle is defined using the VP9/AV1 convention: Y going up, X going
-  // right.
-  // Compute distance from block point to context point, projected onto
-  // the angle axis of vector (-c, s).
-  const float d = -(x - x0) * c + (y - y0) * s;
-  if (d > 0.f) return 0.f;  // not in the correct direction
-  // Compute vector from angle axis to context point.
-  const float rx = (x - x0) + d * c;
-  const float ry = (y - y0) - d * s;
-  const float w =
-      1.f / (1.f + 0.2f * std::pow(rx * rx + ry * ry, 2.f));  // NOLINT
-  return w;
-}
-
-void BaseAnglePredictor(float angle_deg, const int16_t ctx[], uint32_t bw,
-                        uint32_t bh, int16_t* dst, size_t step,
-                        int16_t min_value, int16_t max_value) {
-  const float alpha = M_PI / 180.f * angle_deg;
-  const float c = std::cos(alpha);
-  const float s = std::sin(alpha);
-  for (uint32_t y = 0; y < bh; ++y) {
-    for (uint32_t x = 0; x < bw; ++x) {
-      float weights[kMaxContextSize];
-      uint32_t m = 0;
-      // left
-      for (uint32_t j = 0; j < bh; ++j) {
-        weights[m++] = FilteredProjWeight(x, y, c, s, -1, bh - 1 - j);
-      }
-      // top-left
-      weights[m++] = FilteredProjWeight(x, y, c, s, -1, -1);
-      // top
-      for (uint32_t i = 0; i < bw; ++i) {
-        weights[m++] = FilteredProjWeight(x, y, c, s, i, -1);
-      }
-      // top-right
-      weights[m++] = FilteredProjWeight(x, y, c, s, bw, -1);
-      // right
-      for (uint32_t j = 0; j < bh; ++j) {
-        weights[m++] = FilteredProjWeight(x, y, c, s, bw, j);
-      }
-      dst[x] = WeightedSum(weights, ctx, m, min_value, max_value);
-    }
-    dst += step;
-  }
-}
+namespace {
 
 static inline void AssertInt32_TBounds(int64_t i) {
   assert(i <= std::numeric_limits<int32_t>::max());
@@ -252,7 +188,7 @@ static_assert(kAnglePredPrecision + 1 + 10 + 1 <= 32,
 constexpr int32_t kOne = (1u << kAnglePredPrecision);
 constexpr uint32_t kMask = kOne - 1;
 // (int32_t)(1. / std::tan(alpha) * (1u << kAnglePredPrecision))
-static constexpr int32_t kCoTanTable[] = {
+constexpr int32_t kCoTanTable[] = {
     143565,      113740,  93645,   79108,  68043,  59289,  52149,   46182,
     41089,       36667,   32768,   29283,  26131,  23250,  20589,   18110,
     15780,       13572,   11466,   9440,   7479,   5567,   3692,    1840,
@@ -265,10 +201,10 @@ static constexpr int32_t kCoTanTable[] = {
     583488,      290824,  192858,  143565, 113740, 93645,  79108,   68043,
     59289,       52149,   46182,   41089,  36667,  32767,  29283,   26131,
     23250};
-STATIC_ASSERT_ARRAY_SIZE(kCoTanTable, kNumDirectionalAngles);
+STATIC_ASSERT_ARRAY_SIZE(kCoTanTable, WP2::kNumDirectionalAngles);
 
 // (int32_t)(std::tan(alpha) * (1u << kAnglePredPrecision))
-static constexpr int32_t kTanTable[] = {
+constexpr int32_t kTanTable[] = {
     // (these 'angle < 90' entries are not actually used)
     7479,        9440,    11466,   13572,   15780,   18110,  20589,  23250,
     26131,       29283,   32767,   36667,   41089,   46182,  52149,  59289,
@@ -282,10 +218,10 @@ static constexpr int32_t kTanTable[] = {
     1840,        3692,    5567,    7479,    9440,    11466,  13572,  15780,
     18110,       20589,   23250,   26131,   29283,   32768,  36667,  41089,
     46182};
-STATIC_ASSERT_ARRAY_SIZE(kTanTable, kNumDirectionalAngles);
+STATIC_ASSERT_ARRAY_SIZE(kTanTable, WP2::kNumDirectionalAngles);
 
-static void AnglePredInterpolate_C(const int16_t* src,
-                                   int32_t frac, int16_t* dst, uint32_t len) {
+void AnglePredInterpolate_C(const int16_t* src,
+                            int32_t frac, int16_t* dst, uint32_t len) {
   assert(frac >= 0 && frac <= kOne);
   uint32_t x = 0;
   for (; x < len; ++x) {
@@ -293,6 +229,10 @@ static void AnglePredInterpolate_C(const int16_t* src,
     dst[x] = src[x] + (((src[x + 1] - src[x]) * frac) >> kAnglePredPrecision);
   }
 }
+
+}  // namespace
+
+namespace WP2 {
 
 void SimpleAnglePredictor(uint8_t angle_idx, const int16_t ctx[],
                           uint32_t log2_bw, uint32_t log2_bh,
@@ -409,15 +349,18 @@ void SimpleAnglePredictor(uint8_t angle_idx, const int16_t ctx[],
   }
 }
 
+}  // namespace WP2
+
 //------------------------------------------------------------------------------
+
+namespace {
 
 // Weighted distance between predicted pixel (x0, y0) and context pixel (x, y).
 // The larger 'strength' is, the more faster the weight decreases with distance.
-static constexpr float kMinWeight = 0.01f;     // "too-far" threshold
-static float WDistance(int32_t x0, int32_t y0, int32_t x, int32_t y,
-                       float strength) {
+constexpr float kMinWeight = 0.01f;     // "too-far" threshold
+float WDistance(int32_t x0, int32_t y0, int32_t x, int32_t y, float strength) {
   // Threshold below which strength is considered flat.
-  const float kStrengthThreshold = 0.01f;
+  constexpr float kStrengthThreshold = 0.01f;
   if (strength <= kStrengthThreshold) return 1.f;
   const int32_t d2 = (x - x0) * (x - x0) + (y - y0) * (y - y0);
   if (d2 == 0) return 0.;
@@ -425,21 +368,12 @@ static float WDistance(int32_t x0, int32_t y0, int32_t x, int32_t y,
   return (weight < kMinWeight) ? kMinWeight : weight;
 }
 
-// Table-based version
-void PrecomputeLargeWeightTable(float strength, LargeWeightTable table) {
-  for (uint32_t y = 0; y < LargeWeightTableDim; ++y) {
-    for (uint32_t x = 0; x < LargeWeightTableDim; ++x) {
-      table[x + y * LargeWeightTableDim] = WDistance(0, 0, x, y, strength);
-    }
-  }
-}
-
-static inline float WDistance(int32_t x0, int32_t y0, int32_t x, int32_t y,
-                              int32_t w, const LargeWeightTable table) {
-  static constexpr int32_t limit = LargeWeightTableDim - 1u;
+inline float WDistance(int32_t x0, int32_t y0, int32_t x, int32_t y,
+                       int32_t w, const WP2::LargeWeightTable table) {
+  static constexpr int32_t limit = WP2::LargeWeightTableDim - 1u;
   const int32_t dx = std::min(std::abs(x - x0), limit);
   const int32_t dy = std::min(std::abs(y - y0), limit);
-  const float weight = table[dx + LargeWeightTableDim * dy];
+  const float weight = table[dx + WP2::LargeWeightTableDim * dy];
   if (weight == kMinWeight) {
     const int32_t min_distance = std::min({x0 + 1, w - x0, y0 + 1});
     // If the weight is low but this is the closest we'll ever be anyway,
@@ -448,6 +382,30 @@ static inline float WDistance(int32_t x0, int32_t y0, int32_t x, int32_t y,
     return (dx == min_distance || dy == min_distance) ? 1.f : kMinWeight;
   }
   return weight;
+}
+
+int16_t WeightedSum(float weights[], const int16_t ctx[], uint32_t size,
+                    int16_t min_value, int16_t max_value) {
+  float sum = 0.f, v = 0.f;
+  for (uint32_t m = 0; m < size; ++m) {
+    v += ctx[m] * weights[m];
+    sum += weights[m];
+  }
+  assert(sum > 0.f);
+  return WP2::Clamp((int16_t)(v / sum), min_value, max_value);
+}
+
+}  // namespace
+
+namespace WP2 {
+
+// Table-based version
+void PrecomputeLargeWeightTable(float strength, LargeWeightTable table) {
+  for (uint32_t y = 0; y < LargeWeightTableDim; ++y) {
+    for (uint32_t x = 0; x < LargeWeightTableDim; ++x) {
+      table[x + y * LargeWeightTableDim] = WDistance(0, 0, x, y, strength);
+    }
+  }
 }
 
 uint32_t ComputeFuseWeights(uint32_t w, uint32_t h, int32_t x, int32_t y,
@@ -488,44 +446,50 @@ void BaseFusePredictor(const LargeWeightTable table, const int16_t ctx[],
   }
 }
 
+}  // namespace WP2
+
 //------------------------------------------------------------------------------
 // Add / Sub predictions
 
-static void AddRow_C(const int16_t src[], const int32_t res[],
-                     int32_t min, int32_t max, int16_t dst[], uint32_t len) {
+namespace {
+
+void AddRow_C(const int16_t src[], const int32_t res[],
+              int32_t min, int32_t max, int16_t dst[], uint32_t len) {
   assert((len & 3) == 0);
-  for (uint32_t x = 0; x < len; ++x) dst[x] = Clamp(res[x] + src[x], min, max);
+  for (uint32_t x = 0; x < len; ++x) {
+    dst[x] = WP2::Clamp(res[x] + src[x], min, max);
+  }
 }
 
-static void SubtractRow_C(const int16_t src[], const int16_t pred[],
-                          int32_t dst[], uint32_t len) {
+void SubtractRow_C(const int16_t src[], const int16_t pred[],
+                   int32_t dst[], uint32_t len) {
   assert((len & 3) == 0);
   for (uint32_t x = 0; x < len; ++x) dst[x] = src[x] - pred[x];
 }
 
-#define ADD_SUB_BLOCK_FUNCS_DCL(WIDTH, ADD_FUNC, SUB_FUNC, EXT)                \
-static void AddBlock_## WIDTH ## EXT(const int16_t src[], uint32_t src_step,   \
-                                     const int32_t res[], uint32_t res_step,   \
-                                     int32_t min, int32_t max,                 \
-                                     int16_t dst[], uint32_t dst_step,         \
-                                     uint32_t height) {                        \
-  for (uint32_t y = 0; y < height; ++y) {                                      \
-    ADD_FUNC(src, res, min, max, dst, WIDTH);                                  \
-    src += src_step;                                                           \
-    res += res_step;                                                           \
-    dst += dst_step;                                                           \
-  }                                                                            \
-}                                                                              \
-static void SubBlock_## WIDTH ## EXT(const int16_t src[], uint32_t src_step,   \
-                                     const int16_t pred[], uint32_t pred_step, \
-                                     int32_t dst[], uint32_t dst_step,         \
-                                     uint32_t height) {                        \
-  for (uint32_t y = 0; y < height; ++y) {                                      \
-    SUB_FUNC(src, pred, dst, WIDTH);                                           \
-    src += src_step;                                                           \
-    pred += pred_step;                                                         \
-    dst += dst_step;                                                           \
-  }                                                                            \
+#define ADD_SUB_BLOCK_FUNCS_DCL(WIDTH, ADD_FUNC, SUB_FUNC, EXT)         \
+void AddBlock_## WIDTH ## EXT(const int16_t src[], uint32_t src_step,   \
+                              const int32_t res[], uint32_t res_step,   \
+                              int32_t min, int32_t max,                 \
+                              int16_t dst[], uint32_t dst_step,         \
+                              uint32_t height) {                        \
+  for (uint32_t y = 0; y < height; ++y) {                               \
+    ADD_FUNC(src, res, min, max, dst, WIDTH);                           \
+    src += src_step;                                                    \
+    res += res_step;                                                    \
+    dst += dst_step;                                                    \
+  }                                                                     \
+}                                                                       \
+void SubBlock_## WIDTH ## EXT(const int16_t src[], uint32_t src_step,   \
+                              const int16_t pred[], uint32_t pred_step, \
+                              int32_t dst[], uint32_t dst_step,         \
+                              uint32_t height) {                        \
+  for (uint32_t y = 0; y < height; ++y) {                               \
+    SUB_FUNC(src, pred, dst, WIDTH);                                    \
+    src += src_step;                                                    \
+    pred += pred_step;                                                  \
+    dst += dst_step;                                                    \
+  }                                                                     \
 }
 
 ADD_SUB_BLOCK_FUNCS_DCL( 4, AddRow_C, SubtractRow_C, _C)
@@ -534,12 +498,22 @@ ADD_SUB_BLOCK_FUNCS_DCL(16, AddRow_C, SubtractRow_C, _C)
 ADD_SUB_BLOCK_FUNCS_DCL(32, AddRow_C, SubtractRow_C, _C)
 
 //------------------------------------------------------------------------------
+// Chroma-From-Luma
+
+void CflPredict_C(const int16_t* src, int16_t a, int32_t b,
+                  int16_t* dst, int16_t min, int16_t max, uint32_t len) {
+  for (uint32_t x = 0; x < len; ++x) {
+    dst[x] = WP2::CflScale(src[x], a, b, min, max);
+  }
+}
+
+//------------------------------------------------------------------------------
 // SSE4.1 implementation
 
 #if defined(WP2_USE_SSE)
 
-static void AnglePredInterpolate_SSE(const int16_t* src,
-                                     int32_t frac, int16_t* dst, uint32_t len) {
+void AnglePredInterpolate_SSE(const int16_t* src, int32_t frac,
+                              int16_t* dst, uint32_t len) {
   assert(frac >= 0 && frac <= kOne);
   static_assert(kAnglePredPrecision == 15, "loop is tuned for 15bit!");
   uint32_t x = 0;
@@ -558,8 +532,8 @@ static void AnglePredInterpolate_SSE(const int16_t* src,
   if (x < len) AnglePredInterpolate_C(src + x, frac, dst + x, len - x);
 }
 
-static void AddRow_SSE(const int16_t src[], const int32_t res[],
-                       int32_t min, int32_t max, int16_t dst[], uint32_t len) {
+void AddRow_SSE(const int16_t src[], const int32_t res[],
+                int32_t min, int32_t max, int16_t dst[], uint32_t len) {
   assert((len & 3) == 0);
   const __m128i m_max = _mm_set1_epi16(max);
   const __m128i m_min = _mm_set1_epi16(min);
@@ -584,8 +558,8 @@ static void AddRow_SSE(const int16_t src[], const int32_t res[],
   }
 }
 
-static void SubtractRow_SSE(const int16_t src[], const int16_t pred[],
-                            int32_t dst[], uint32_t len) {
+void SubtractRow_SSE(const int16_t src[], const int16_t pred[],
+                     int32_t dst[], uint32_t len) {
   assert((len & 3) == 0);
   uint32_t x = 0;
   for (; x + 8 <= len; x += 8) {
@@ -611,25 +585,72 @@ ADD_SUB_BLOCK_FUNCS_DCL( 8, AddRow_SSE, SubtractRow_SSE, _SSE)
 ADD_SUB_BLOCK_FUNCS_DCL(16, AddRow_SSE, SubtractRow_SSE, _SSE)
 ADD_SUB_BLOCK_FUNCS_DCL(32, AddRow_SSE, SubtractRow_SSE, _SSE)
 
-static WP2_TSAN_IGNORE_FUNCTION void PredictionInitSSE() {
-  AnglePredInterpolate = AnglePredInterpolate_SSE;
-  SubtractRow = SubtractRow_SSE;
-  AddRow = AddRow_SSE;
+#undef ADD_SUB_BLOCK_FUNCS_DCL
 
-  SubtractBlock[0] = SubBlock_4_SSE;
-  SubtractBlock[1] = SubBlock_8_SSE;
-  SubtractBlock[2] = SubBlock_16_SSE;
-  SubtractBlock[3] = SubBlock_32_SSE;
-  AddBlock[0] = AddBlock_4_SSE;
-  AddBlock[1] = AddBlock_8_SSE;
-  AddBlock[2] = AddBlock_16_SSE;
-  AddBlock[3] = AddBlock_32_SSE;
+//------------------------------------------------------------------------------
+// Chroma-From-Luma
+
+void CflPredict_SSE(const int16_t* src, int16_t a, int32_t b,
+                    int16_t* dst, int16_t min, int16_t max, uint32_t len) {
+  assert((len & 3) == 0);
+  const __m128i A = _mm_set1_epi16(a);
+  const __m128i B = _mm_set1_epi32(b);
+  const __m128i m = _mm_set1_epi16(min);
+  const __m128i M = _mm_set1_epi16(max);
+  uint32_t x = 0;
+  for (; x + 8 <= len; x += 8) {
+    const __m128i v0 = _mm_loadu_si128((const __m128i*)(src + x));
+    const __m128i v1l = _mm_mullo_epi16(v0, A);
+    const __m128i v1h = _mm_mulhi_epi16(v0, A);
+    const __m128i v2l = _mm_unpacklo_epi16(v1l, v1h);
+    const __m128i v2h = _mm_unpackhi_epi16(v1l, v1h);
+    const __m128i v3l = _mm_add_epi32(v2l, B);
+    const __m128i v3h = _mm_add_epi32(v2h, B);
+    const __m128i v4l = _mm_srai_epi32(v3l, WP2::kCflFracBits);
+    const __m128i v4h = _mm_srai_epi32(v3h, WP2::kCflFracBits);
+    const __m128i v5 = _mm_packs_epi32(v4l, v4h);
+    const __m128i v6 = _mm_min_epi16(M, _mm_max_epi16(m, v5));
+    _mm_storeu_si128((__m128i*)(dst + x), v6);
+  }
+  if (x < len) {   // 4px left-over?
+    const __m128i v0 = _mm_loadl_epi64((const __m128i*)(src + x));
+    const __m128i v1l = _mm_mullo_epi16(v0, A);
+    const __m128i v1h = _mm_mulhi_epi16(v0, A);
+    const __m128i v2l = _mm_unpacklo_epi16(v1l, v1h);
+    const __m128i v3l = _mm_add_epi32(v2l, B);
+    const __m128i v4l = _mm_srai_epi32(v3l, WP2::kCflFracBits);
+    const __m128i v5 = _mm_packs_epi32(v4l, v4l);
+    const __m128i v6 = _mm_min_epi16(M, _mm_max_epi16(m, v5));
+    _mm_storel_epi64((__m128i*)(dst + x), v6);
+  }
+}
+
+//------------------------------------------------------------------------------
+
+WP2_TSAN_IGNORE_FUNCTION void PredictionInitSSE() {
+  WP2::AnglePredInterpolate = AnglePredInterpolate_SSE;
+  WP2::SubtractRow = SubtractRow_SSE;
+  WP2::AddRow = AddRow_SSE;
+
+  WP2::SubtractBlock[0] = SubBlock_4_SSE;
+  WP2::SubtractBlock[1] = SubBlock_8_SSE;
+  WP2::SubtractBlock[2] = SubBlock_16_SSE;
+  WP2::SubtractBlock[3] = SubBlock_32_SSE;
+  WP2::AddBlock[0] = AddBlock_4_SSE;
+  WP2::AddBlock[1] = AddBlock_8_SSE;
+  WP2::AddBlock[2] = AddBlock_16_SSE;
+  WP2::AddBlock[3] = AddBlock_32_SSE;
+
+  WP2::CflPredict = CflPredict_SSE;
 }
 
 #endif  // WP2_USE_SSE
 
 //------------------------------------------------------------------------------
-#undef ADD_SUB_BLOCK_FUNCS_DCL
+
+}  // namespace
+
+namespace WP2 {
 
 LPredictF BasePredictors[BPRED_LAST];
 
@@ -645,6 +666,9 @@ void (*AddRow)(const int16_t src[], const int32_t res[],
 
 SubtractBlockFunc SubtractBlock[4] = { nullptr };
 AddBlockFunc AddBlock[4] = { nullptr };
+
+void (*CflPredict)(const int16_t* src, int16_t a, int32_t b, int16_t* dst,
+                   int16_t min, int16_t max, uint32_t len) = nullptr;
 
 static volatile WP2CPUInfo intra_last_cpuinfo_used =
     (WP2CPUInfo)&intra_last_cpuinfo_used;
@@ -673,6 +697,8 @@ WP2_TSAN_IGNORE_FUNCTION void PredictionInit() {
   AddBlock[1] = AddBlock_8_C;
   AddBlock[2] = AddBlock_16_C;
   AddBlock[3] = AddBlock_32_C;
+
+  CflPredict = CflPredict_C;
 
   if (WP2GetCPUInfo != nullptr) {
 #if defined(WP2_USE_SSE)

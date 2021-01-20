@@ -61,7 +61,7 @@ static const uint8_t kCodeToPlane[kCodeToPlaneCodes] = {
 static inline int32_t ReadLZ77Golomb(uint32_t cluster, uint32_t sym,
                                      WP2_OPT_LABEL, WP2::SymbolReader* const sr,
                                      WP2::ANSDec* const dec,
-                                     double* const cost) {
+                                     float* const cost) {
   const uint32_t prefix = sr->Read(sym, cluster, label, cost);
 
   const uint32_t extra_bits =
@@ -305,8 +305,12 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
   const bool get_cost = (bits_per_pixel != nullptr || decoder_info != nullptr);
   uint32_t i_pixel = 0;
   while (src < src_last) {
-    double cost = 0.;
-    double* cost_ptr = get_cost ? &cost : nullptr;
+    float cost = 0.f;
+#if defined(WP2_BITTRACE)
+    float* const cost_ptr = get_cost ? &cost : nullptr;
+#else
+    float* const cost_ptr = nullptr;
+#endif
     uint32_t length;
     const auto type =
         (SymbolType) sr->Read(kSymbolType, cluster, "lossless_mode", cost_ptr);
@@ -369,7 +373,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
                                   last_pixel_ + i_pixel,
                                   length, cost, decoder_info));
       if (bits_per_pixel != nullptr) {
-        const double bits = cost / length;
+        const float bits = cost / length;
         for (uint32_t j = 0; j < length; ++j) {
           const uint32_t pixel = last_pixel_ + i_pixel + j;
           bits_per_pixel->Row(pixel / width)[pixel % width] = bits;
