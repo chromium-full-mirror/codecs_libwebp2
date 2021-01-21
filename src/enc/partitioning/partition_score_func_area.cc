@@ -95,7 +95,7 @@ WP2Status AreaScoreFunc::Init(const EncoderConfig& config,
   WP2_CHECK_STATUS(syntax_writer_.SetInitialSegmentIds());
   WP2_CHECK_STATUS(syntax_writer_.InitPass());
 
-  WP2_CHECK_STATUS(context_.Init(use_aom_coeffs, yuv.Y.w_, yuv.Y.h_));
+  WP2_CHECK_STATUS(context_.Init(use_aom_coeffs));
 
   if (DCDiffusionMap::GetDiffusion(config_->error_diffusion) > 0) {
     WP2_CHECK_STATUS(dc_error_u_.Init(tile_rect_.width));

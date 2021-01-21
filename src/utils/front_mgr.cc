@@ -197,8 +197,6 @@ WP2Status FrontMgrNxNBase::CopyInternal(const FrontMgrNxNBase& other) {
   snapped_ = other.snapped_;
   WP2_CHECK_STATUS(occupancy_size_.CopyInternal(other.occupancy_size_));
   WP2_CHECK_ALLOC_OK(size_stack_.copy_from(other.size_stack_));
-  WP2_CHECK_ALLOC_OK(blocks_.copy_from(other.blocks_));
-  WP2_CHECK_ALLOC_OK(size_indices_.copy_from(other.size_indices_));
   next_ = other.next_;
   return WP2_STATUS_OK;
 }
@@ -216,7 +214,6 @@ void FrontMgrNxNBase::UpdateNextBlock(uint32_t x, uint32_t y) {
       x, y, snapped_ ? GetSnappedBlockSize(x, y, w, h) : GetBlockSize(w, h));
 }
 
-const Vector_u16& FrontMgrNxNBase::SizeIndices() const { return size_indices_; }
 
 //------------------------------------------------------------------------------
 
@@ -262,39 +259,31 @@ void FrontMgrLexico::UndoUseSize(const Block& block) {
          block.w() <= next_.w() && block.h() <= next_.h());
 }
 
-WP2Status FrontMgrLexico::Sort() {
-  std::sort(blocks_.begin(), blocks_.end());
+WP2Status FrontMgrLexico::Sort(VectorNoCtor<Block>& blocks,
+                               Vector_u16& size_order_indices) const {
+  std::sort(blocks.begin(), blocks.end());
   // Block sizes are written to the stream in the same order as the blocks.
-  WP2_CHECK_ALLOC_OK(size_indices_.resize(blocks_.size()));
-  std::iota(size_indices_.begin(), size_indices_.end(), 0);
+  WP2_CHECK_ALLOC_OK(size_order_indices.resize(blocks.size()));
+  std::iota(size_order_indices.begin(), size_order_indices.end(), 0);
 
   // Only CheckBlockList() in debug but don't assert WP2_STATUS_OUT_OF_MEMORY.
   WP2Status status = WP2_STATUS_OK;
-  assert((status = CheckBlockList(), true));  // NOLINT (side effect assert)
+  assert((status = CheckBlockList(blocks), true));  // NOLINT side effect assert
   WP2_CHECK_STATUS(status);
   return WP2_STATUS_OK;
 }
 
-WP2Status FrontMgrLexico::CheckBlockList() const {
+WP2Status FrontMgrLexico::CheckBlockList(
+    const VectorNoCtor<Block>& blocks) const {
   FrontMgrLexico mgr;
   const uint32_t width = bwidth_ * kMinBlockSizePix;
   const uint32_t height = bheight_ * kMinBlockSizePix;
   WP2_CHECK_STATUS(mgr.Init(partition_set_, snapped_, width, height));
-  for (uint32_t i = 0; i < blocks_.size(); ++i) {
-    const Block& v = blocks_[i];
+  for (uint32_t i = 0; i < blocks.size(); ++i) {
+    const Block& v = blocks[i];
     const Block b(mgr.next_.x(), mgr.next_.y(), v.dim());
 
     // Compare to the input block.
-    const uint32_t bw = BlockWidth[v.dim()];
-    const uint32_t bh = BlockHeight[v.dim()];
-    if (!(bw <= b.w() && bh <= b.h()) ||
-        !(bw > 0 && bw <= kMaxBlockSize && bh > 0 && bh <= kMaxBlockSize)) {
-      fprintf(stderr,
-              "Block validation error: size is too large! "
-              "@%d,%d: v=%dx%d (w/h=%d,%d)   b=%dx%d\n",
-              v.x(), v.y(), bw, bh, width, height, b.w(), b.h());
-      assert(false);
-    }
     if (!(b.x() == v.x() && b.y() == v.y())) {
       fprintf(stderr, "Block validation error: wrong x,y position! "
                       "@%d,%d: expected %d,%d\n", v.x(), v.y(), b.x(), b.y());
@@ -394,21 +383,28 @@ bool FrontMgrMax::UseSize(BlockSize dim, uint32_t ind, Block* const block) {
 // Though this algorithm is O(N^2) in the number of blocks, it is actually O(N)
 // in practice as the initial blocks are sorted and when searching for
 // neighboring blocks, they are not far in that list.
-WP2Status FrontMgrMax::Sort() {
-  Clear();
+WP2Status FrontMgrMax::Sort(VectorNoCtor<Block>& blocks,
+                            Vector_u16& size_order_indices) const {
+  // Sort() is const, we don't want to modify this instance's state, so we
+  // use a new instance for sorting purposes.
+  FrontMgrMax mgr_tmp;
+  WP2_CHECK_STATUS(mgr_tmp.Init(partition_set_, snapped_,
+                                bwidth_ * kMinBlockSizePix,
+                                bheight_ * kMinBlockSizePix));
+
   uint32_t ind = 0;
   // blocks_size will contain the blocks in size order while blocks_ contains
   // the blocks sorted in block order.
   VectorNoCtor<WP2::Block> blocks_size;
-  WP2_CHECK_ALLOC_OK(blocks_size.reserve(blocks_.size()));
-  while (ind < blocks_.size()) {
+  WP2_CHECK_ALLOC_OK(blocks_size.reserve(blocks.size()));
+  while (ind < blocks.size()) {
     uint32_t best_ind = ind;
-    if (size_stack_.empty()) {
+    if (mgr_tmp.size_stack_.empty()) {
       // If we have no queue of elements to check, find the leftmost block at
       // lowest heights.
-      Block best = blocks_[ind];
-      for (uint32_t i = ind + 1; i < blocks_.size(); ++i) {
-        const Block& tmp = blocks_[i];
+      Block best = blocks[ind];
+      for (uint32_t i = ind + 1; i < blocks.size(); ++i) {
+        const Block& tmp = blocks[i];
         if (tmp.y() < best.y() || (tmp.y() == best.y() && tmp.x() < best.x())) {
           best = tmp;
           best_ind = i;
@@ -417,52 +413,52 @@ WP2Status FrontMgrMax::Sort() {
     } else {
       // If the left context is not full, find the first block that can fill
       // it.
-      const uint32_t x = size_stack_.back().block.x() - 1;
-      const uint32_t y = occupancy_size_.GetOccupancy(x);
-      best_ind = blocks_.size();
-      for (uint32_t i = ind; i < blocks_.size(); ++i) {
-        const Block& b = blocks_[i];
+      const uint32_t x = mgr_tmp.size_stack_.back().block.x() - 1;
+      const uint32_t y = mgr_tmp.occupancy_size_.GetOccupancy(x);
+      best_ind = blocks.size();
+      for (uint32_t i = ind; i < blocks.size(); ++i) {
+        const Block& b = blocks[i];
         if (b.x() <= x && x < b.x() + b.w() && b.y() <= y &&
             y < b.y() + b.h()) {
           best_ind = i;
           break;
         }
       }
-      assert(best_ind < blocks_.size());
+      assert(best_ind < blocks.size());
     }
     // Add that new block to the list of blocks.
-    const Block& block = blocks_[best_ind];
+    const Block& block = blocks[best_ind];
     WP2_CHECK_ALLOC_OK(blocks_size.push_back(block));
     Block tmp;
-    WP2_CHECK_ALLOC_OK(UseSize(block.dim(), best_ind, &tmp));
+    WP2_CHECK_ALLOC_OK(mgr_tmp.UseSize(block.dim(), best_ind, &tmp));
     assert(block == tmp);
 
     // Empty the queue if needed.
     while (true) {
       Info info;
-      if (!UseFinal(&info)) break;
+      if (!mgr_tmp.UseFinal(&info)) break;
       const Block blk = info.block;
       // Place the block at its right spot.
-      for (uint32_t i = ind; i < blocks_.size(); ++i) {
-        if (blocks_[i] == blk) {
-          std::swap(blocks_[i], blocks_[ind]);
+      for (uint32_t i = ind; i < blocks.size(); ++i) {
+        if (blocks[i] == blk) {
+          std::swap(blocks[i], blocks[ind]);
           ++ind;
           break;
         }
       }
     }
-    UpdateNextBlock();
-    if (ind == blocks_.size()) break;
+    mgr_tmp.UpdateNextBlock();
+    if (ind == blocks.size()) break;
   }
 
   // Convert blocks_size to indices.
-  WP2_CHECK_ALLOC_OK(size_indices_.resize(blocks_.size()));
-  std::iota(size_indices_.begin(), size_indices_.end(), 0);
+  WP2_CHECK_ALLOC_OK(size_order_indices.resize(blocks.size()));
+  std::iota(size_order_indices.begin(), size_order_indices.end(), 0);
   ind = 0;
   for (const Block& b : blocks_size) {
-    for (uint32_t i = ind; i < blocks_.size(); ++i) {
-      if (blocks_[size_indices_[i]] == b) {
-        std::swap(size_indices_[i], size_indices_[ind]);
+    for (uint32_t i = ind; i < blocks.size(); ++i) {
+      if (blocks[size_order_indices[i]] == b) {
+        std::swap(size_order_indices[i], size_order_indices[ind]);
         ++ind;
         break;
       }
@@ -471,17 +467,17 @@ WP2Status FrontMgrMax::Sort() {
 
   // Only CheckBlockList() in debug but don't assert WP2_STATUS_OUT_OF_MEMORY.
   WP2Status status = WP2_STATUS_OK;
-  assert((status = CheckBlockList(), true));  // NOLINT (side effect assert)
+  assert((status = CheckBlockList(blocks), true));  // NOLINT side effect assert
   WP2_CHECK_STATUS(status);
 
   return WP2_STATUS_OK;
 }
 
-WP2Status FrontMgrMax::CheckBlockList() const {
+WP2Status FrontMgrMax::CheckBlockList(const VectorNoCtor<Block>& blocks) const {
   FrontMgrBase occupancy;
   WP2_CHECK_STATUS(occupancy.InitBase(bwidth_ * kMinBlockSizePix,
                                       bheight_ * kMinBlockSizePix));
-  for (const Block& b : blocks_) {
+  for (const Block& b : blocks) {
     // Check we have context above.
     if (b.y() > 0) {
       for (uint32_t x = b.x(); x < b.x() + b.w(); ++x) {
@@ -492,7 +488,7 @@ WP2Status FrontMgrMax::CheckBlockList() const {
       }
     }
     // Check we have context on the left.
-    if (!IsFinal(b)) {
+    if (!DoIsFinal(occupancy, b)) {
       fprintf(stderr, "Context not good at %d %d ", b.x(), b.y());
       assert(false);
     }
@@ -502,7 +498,13 @@ WP2Status FrontMgrMax::CheckBlockList() const {
 }
 
 bool FrontMgrMax::IsFinal(const WP2::Block& block) const {
-  return (block.x() == 0 || occupancy_[block.x() - 1] >= block.y() + block.h());
+  return DoIsFinal(*this, block);
+}
+
+bool FrontMgrMax::DoIsFinal(const FrontMgrBase& occupancy,
+                            const WP2::Block& block) const {
+  return (block.x() == 0 ||
+          occupancy.GetOccupancy(block.x() - 1) >= block.y() + block.h());
 }
 
 bool FrontMgrMax::IsFinalSize(const WP2::Block& block) const {
@@ -555,12 +557,13 @@ bool FrontMgrArea::UseSize(BlockSize dim, uint32_t ind, Block* const block) {
   return true;
 }
 
-WP2Status FrontMgrArea::Sort() {
-  std::sort(blocks_.begin(), blocks_.end(),
+WP2Status FrontMgrArea::Sort(VectorNoCtor<Block>& blocks,
+                             Vector_u16& size_order_indices) const {
+  std::sort(blocks.begin(), blocks.end(),
             Comp(kMaxTileSize / kMinBlockSizePix, area_width_, area_height_));
   // Same block and size order.
-  WP2_CHECK_ALLOC_OK(size_indices_.resize(blocks_.size()));
-  std::iota(size_indices_.begin(), size_indices_.end(), 0);
+  WP2_CHECK_ALLOC_OK(size_order_indices.resize(blocks.size()));
+  std::iota(size_order_indices.begin(), size_order_indices.end(), 0);
   return WP2_STATUS_OK;
 }
 

@@ -137,24 +137,25 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   const CSPTransform& transf = gparams.transf_;
 
   // First, extract partitioning.
-  Vector<CodedBlock> cblocks;
+  VectorNoCtor<Block> blocks;
+  WP2_CHECK_ALLOC_OK(blocks.resize(forced_partition.size()));
+  std::copy(forced_partition.begin(), forced_partition.end(), blocks.begin());
+  WP2_CHECK_STATUS(ExtractBlockPartition(*config_, gparams, yuv_buffer,
+                                         tile_rect, partitioning_progress,
+                                         &blocks));
   FrontMgrDefault mgr;
   WP2_CHECK_STATUS(mgr.Init(config_->partition_set, config_->partition_snapping,
                             padded_rect.width, padded_rect.height));
-  WP2_CHECK_ALLOC_OK(mgr.Blocks().resize(forced_partition.size()));
-  std::copy(forced_partition.begin(), forced_partition.end(),
-            mgr.Blocks().begin());
-  WP2_CHECK_STATUS(ExtractBlockPartition(*config_, gparams, yuv_buffer,
-                                         tile_rect, partitioning_progress,
-                                         &mgr.Blocks()));
-  WP2_CHECK_STATUS(mgr.Sort());
+
+  Vector_u16 size_order_indices;
+  WP2_CHECK_STATUS(mgr.Sort(blocks, size_order_indices));
   // process all blocks
-  WP2_CHECK_ALLOC_OK(cblocks.resize(mgr.Blocks().size()));
 
   // Setup the top-level coding info for each cblock
-  mgr.Clear();
-  for (uint32_t i = 0; i < mgr.Blocks().size(); ++i) {
-    const auto& blk = mgr.Blocks()[i];
+  Vector<CodedBlock> cblocks;
+  WP2_CHECK_ALLOC_OK(cblocks.resize(blocks.size()));
+  for (uint32_t i = 0; i < blocks.size(); ++i) {
+    const auto& blk = blocks[i];
     CodedBlock& cb = cblocks[i];
     cb.SetRange(transf.GetYUVMin(), transf.GetYUVMax());
     cb.SetDim(blk, mgr);
@@ -349,8 +350,8 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
     // Sizes might be written in a different order than the blocks, hence a
     // separate recording: we need to follow the SizeIndices() order.
     mgr.Clear();
-    for (uint16_t ind : mgr.SizeIndices()) {
-      const auto& block = mgr.Blocks()[ind];
+    for (uint16_t ind : size_order_indices) {
+      const auto& block = blocks[ind];
       WP2_CHECK_STATUS(writer.RecordSize(mgr, block.dim()));
       Block block_tmp;
       WP2_CHECK_ALLOC_OK(mgr.UseSize(block.dim(), ind, &block_tmp));
@@ -368,7 +369,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   WP2_CHECK_STATUS(writer.WriteHeader(enc));
 
   // Write coded blocks
-  WP2_CHECK_STATUS(writer.WriteBlocks(cblocks, &mgr, enc));
+  WP2_CHECK_STATUS(writer.WriteBlocks(cblocks, size_order_indices, &mgr, enc));
   WP2_CHECK_STATUS(write_progress.AdvanceBy(1.));
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)

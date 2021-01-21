@@ -320,7 +320,7 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
       sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
   ASSERT_TRUE(sw != nullptr);
 
-  ASSERT_WP2_OK(sw->Init(symbols_info));
+  ASSERT_WP2_OK(sw->Init(symbols_info, /*effort=*/5));
   ASSERT_WP2_OK(sw->Allocate());
 
   const int16_t yuv_min = -512;
@@ -350,7 +350,6 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
     TypeParam mgr;
     ASSERT_WP2_OK(
         mgr.Init(ALL_RECTS, /*snapped=*/false, rect.width, rect.height));
-    EXPECT_TRUE(mgr.Blocks().resize(1));
     cb.SetRange(yuv_min, yuv_max);
     cb.SetDim(/*block=*/{/*x=*/0, /*y=*/0, /*dim=*/block_size}, mgr);
     cb.y_context_is_constant_ = false;
@@ -399,6 +398,7 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
                                       cb.coeffs_[kVChannel][tf_i],
                                       &cb.num_coeffs_[kVChannel][tf_i]);
 
+        mgr.Clear();
         SymbolRecorder recorder;
         ASSERT_WP2_OK(recorder.Allocate(symbols_info, /*num_records=*/0));
         Counters counters;
@@ -426,7 +426,11 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
         ASSERT_WP2_OK(syntax_writer.Record(cb));
         ASSERT_WP2_OK(syntax_writer.RecordSize(mgr, cb.dim()));
         ASSERT_WP2_OK(syntax_writer.WriteHeader(&enc));
-        ASSERT_WP2_OK(syntax_writer.WriteBlocks(cblocks, &mgr, &enc));
+        Vector_u16 size_order_indices;
+        ASSERT_TRUE(size_order_indices.resize(cblocks.size()));
+        std::iota(size_order_indices.begin(), size_order_indices.end(), 0);
+        ASSERT_WP2_OK(
+            syntax_writer.WriteBlocks(cblocks, size_order_indices, &mgr, &enc));
       }
     }
   }

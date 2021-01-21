@@ -227,34 +227,6 @@ class DCPredictor {
 };
 
 //------------------------------------------------------------------------------
-// Mode-predictor predictor (yes ...).
-
-class Predictor;
-class Predictors;
-// Predicts the predictor of a block, based on the predictor modes around that
-// block. The logic is different from AV1 where a CDF is chosen in a 2d table
-// based on the mode above and on the left. Here, if the above and left modes
-// are the same, we choose a CDF based on the mode, otherwise we choose the
-// generic CDF.
-class YModePredictor {
- public:
-  YModePredictor() = default;
-
-  // Will allocate the internal working map_[]. width and height in pixels.
-  WP2Status InitMap(uint32_t width, uint32_t height);
-  WP2Status CopyFrom(const YModePredictor& other);
-  void Reset();
-  void Write(const CodedBlock& cb, const Predictor& pred, bool do_update,
-             ANSEncBase* const enc, SymbolManager* const sw);
-  uint32_t Read(const CodedBlock& cb, const Predictors& preds,
-                SymbolReader* const sr);
-
- private:
-  Vector_s8 map_;
-  ContextImpl<int8_t> predictor_ctxt_;
-};
-
-//------------------------------------------------------------------------------
 // Alpha mode predictor.
 
 class AlphaModePredictor {

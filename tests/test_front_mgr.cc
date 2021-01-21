@@ -100,22 +100,23 @@ TEST_P(TestFrontMgr, LeftContext) {
     FrontMgrMax mgr_max;
     FrontMgrArea mgr_area(kAreaSize, kAreaSize);
 
+    VectorNoCtor<Block> blocks;
+    Vector_u16 size_order_indices;
     FrontMgrNxNBase* const mgr =
         GetMgr(front_mgr_type, &mgr_lex, &mgr_max, &mgr_area);
-    CreateData(w, h, GetSnapped(front_mgr_type), &gen, &mgr->Blocks());
+    CreateData(w, h, GetSnapped(front_mgr_type), &gen, &blocks);
 
     ASSERT_WP2_OK(mgr->Init(ALL_RECTS, GetSnapped(front_mgr_type), w, h));
-    ASSERT_WP2_OK(mgr->Sort());
-    ASSERT_EQ(mgr->Blocks().size(), mgr->SizeIndices().size());
+    ASSERT_WP2_OK(mgr->Sort(blocks, size_order_indices));
+    ASSERT_EQ(blocks.size(), size_order_indices.size());
     // Check all indices are used only once.
-    ASSERT_EQ(
-        mgr->Blocks().size(),
-        std::set<uint16_t>(mgr->SizeIndices().begin(), mgr->SizeIndices().end())
-            .size());
+    ASSERT_EQ(blocks.size(), std::set<uint16_t>(size_order_indices.begin(),
+                                                size_order_indices.end())
+                                 .size());
     // Go over all indices and make sure it works.
     mgr->Clear();
-    for (uint16_t i : mgr->SizeIndices()) {
-      const Block& block = mgr->Blocks()[i];
+    for (uint16_t i : size_order_indices) {
+      const Block& block = blocks[i];
 
       const Block max_block = mgr->GetMaxPossibleBlock();
       ASSERT_GE(block.x(), max_block.x());
@@ -162,14 +163,16 @@ TEST_P(TestFrontMgr, CopyFrom) {
 
     ASSERT_WP2_OK(mgr->Init(ALL_RECTS, GetSnapped(front_mgr_type), w, h));
 
-    CreateData(w, h, GetSnapped(front_mgr_type), &gen, &mgr->Blocks());
-    ASSERT_WP2_OK(mgr->Sort());
+    VectorNoCtor<Block> blocks;
+    Vector_u16 size_order_indices;
+
+    CreateData(w, h, GetSnapped(front_mgr_type), &gen, &blocks);
+    ASSERT_WP2_OK(mgr->Sort(blocks, size_order_indices));
     mgr->Clear();  // Sort() messes up the FrontMgr state so clear it.
 
-    int32_t num_blocks_before_cloning =
-        gen.Get<int32_t>(1, mgr->Blocks().size());
+    int32_t num_blocks_before_cloning = gen.Get<int32_t>(1, blocks.size());
 
-    for (uint16_t i : mgr->SizeIndices()) {
+    for (uint16_t i : size_order_indices) {
       if (num_blocks_before_cloning == 0) {
         ASSERT_WP2_OK((front_mgr_type == kLexico)
                           ? mgr_lex_clone.CopyFrom(mgr_lex)
@@ -178,24 +181,21 @@ TEST_P(TestFrontMgr, CopyFrom) {
                                 : mgr_area_clone.CopyFrom(mgr_area));
       }
 
-      const Block& block = mgr->Blocks()[i];
+      const Block& block = blocks[i];
       Block block_tmp;
       ASSERT_TRUE(mgr->TryGetNextBlock(block.dim(), &block_tmp));
 
       if (num_blocks_before_cloning <= 0) {
         // The clone was copied. Verify that it returns the same values as the
         // original 'map' and apply the same modifications to it from now on.
-        const Block& block_clone = mgr_clone->Blocks()[i];
         Block block_tmp_clone;
-        ASSERT_TRUE(
-            mgr_clone->TryGetNextBlock(block_clone.dim(), &block_tmp_clone));
+        ASSERT_TRUE(mgr_clone->TryGetNextBlock(block.dim(), &block_tmp_clone));
 
-        ASSERT_EQ(block, block_clone);
         ASSERT_EQ(block_tmp, block_tmp_clone);
         ASSERT_EQ(mgr->Done(), mgr_clone->Done());
 
-        ASSERT_TRUE(mgr_clone->UseSize(
-            block_clone.dim(), /*ind=*/0u, &block_tmp_clone));
+        ASSERT_TRUE(
+            mgr_clone->UseSize(block.dim(), /*ind=*/0u, &block_tmp_clone));
         while (mgr_clone->UseFinal()) {
         }
       }

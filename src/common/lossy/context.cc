@@ -297,58 +297,6 @@ void DCPredictor::GetDCPrediction(const CodedBlock& cb,
 }
 
 //------------------------------------------------------------------------------
-// LargeModePredictor
-
-WP2Status YModePredictor::InitMap(uint32_t width, uint32_t) {
-  const uint32_t map_width = SizeBlocks(width);
-  WP2_CHECK_ALLOC_OK(map_.resize(map_width * kMapHeight));
-  predictor_ctxt_.Init(&map_, map_width, kMapHeight);
-  Reset();
-  return WP2_STATUS_OK;
-}
-
-WP2Status YModePredictor::CopyFrom(const YModePredictor& other) {
-  WP2_CHECK_ALLOC_OK(map_.copy_from(other.map_));
-  const uint32_t map_width = (uint32_t)map_.size() / kMapHeight;
-  assert(map_width * kMapHeight == other.map_.size());
-  predictor_ctxt_.Init(&map_, map_width, kMapHeight);
-  // Nothing else to copy in 'predictor_ctxt_' as it only points to 'map_'.
-  return WP2_STATUS_OK;
-}
-
-void YModePredictor::Reset() { std::fill(map_.begin(), map_.end(), -1); }
-
-static uint32_t GetCluster(const ContextImpl<int8_t>& ctxt,
-                           const CodedBlock& cb) {
-  const int above_mode = (cb.y() > 0) ? ctxt.Get(cb.x(), cb.y() - 1) : 0;
-  const int left_mode = (cb.x() > 0) ? ctxt.Get(cb.x() - 1, cb.y()) : 0;
-  return (above_mode == left_mode && above_mode >= 0)
-             ? above_mode
-             : (uint32_t)Predictor::ModeContext::kNum;
-}
-
-void YModePredictor::Write(const CodedBlock& cb, const Predictor& pred,
-                           bool do_update, ANSEncBase* const enc,
-                           SymbolManager* const sw) {
-  const uint32_t cluster = GetCluster(predictor_ctxt_, cb);
-  sw->Process(kSymbolModeY, cluster, pred.mode(), "predictor", enc);
-  if (do_update) {
-    const Predictor::ModeContext ctxt = pred.mode_context();
-    predictor_ctxt_.Set(cb.blk(), (int)ctxt);
-  }
-}
-
-uint32_t YModePredictor::Read(const CodedBlock& cb, const Predictors& preds,
-                              SymbolReader* const sr) {
-  const uint32_t cluster = GetCluster(predictor_ctxt_, cb);
-  const uint32_t mode = sr->Read(kSymbolModeY, cluster, "predictor", nullptr);
-  const Predictor::ModeContext ctxt =
-      preds.GetFirstWithMode(mode)->mode_context();
-  predictor_ctxt_.Set(cb.blk(), (int)ctxt);
-  return mode;
-}
-
-//------------------------------------------------------------------------------
 // AlphaModePredictor
 //------------------------------------------------------------------------------
 

@@ -482,6 +482,7 @@ WP2Status SymbolWriter::CopyFrom(const SymbolWriter& other,
   // No need to copy Quantizer instances. They only contain data members to
   // avoid reallocations. TODO(yguyon): Check if more could be skipped
   WP2_CHECK_ALLOC_OK(stats_buffer_.copy_from(other.stats_buffer_));
+  effort_ = other.effort_;
   return WP2_STATUS_OK;
 }
 
@@ -836,15 +837,15 @@ void SymbolWriter::ComputeGolombCost(uint32_t range, uint32_t max_nnz,
   }
   // Quantize the histogram to get the cost of using a dictionary.
   quantizer_golomb_.Quantize(histogram_golomb_.data(), mapping_golomb_.data(),
-                             size_golomb, range_golomb, max_nnz,
-                             /*effort=*/9, config_golomb);
+                             size_golomb, range_golomb, max_nnz, effort_,
+                             config_golomb);
   (*config_golomb)->param.golomb_size = size_golomb;
   (*config_golomb)->param.golomb_prefix_size = prefix_size;
   *cost += (*config_golomb)->cost;
   // Do not use Golomb if there is only one value for now.
   const uint32_t nnz_range_golomb = std::min(max_nnz, range_golomb);
   // Add the prefix_size and size cost.
-  *cost += 1.f + WP2Log2(nnz_range_golomb - 1);
+  *cost += 1.f + WP2Log2(nnz_range_golomb - 2);
 }
 
 WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
@@ -1041,9 +1042,9 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
   if (size < ANS_MAX_SYMBOLS) {
     // Quantize the histogram to get the cost of using a dictionary.
     quantizer_.Quantize(histogram_.data(), mapping_.data(), size, range,
-                        max_nnz, /*effort=*/9, &config);
+                        max_nnz, effort_, &config);
     cost_dict = config->cost;
-    cost_dict += WP2Log2(nnz_range);  // Add the size cost.
+    cost_dict += WP2Log2(nnz_range - 2);  // Add the size cost.
   } else {
     cost_dict = std::numeric_limits<float>::max();
   }

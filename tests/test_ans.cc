@@ -625,27 +625,29 @@ TEST_F(TestANS, Test5) {
   EXPECT_WP2_OK(quantizer.Allocate(kMaxSymbol));
 
   Quantizer::Config* config = nullptr;
-  quantizer.Quantize(histogram.data(), mapping.data(), size_sparse, kMaxSymbol,
-                     /*max_count=*/16, /*effort=*/5, &config);
+  for (int effort : {0, 5, 9}) {
+    quantizer.Quantize(histogram.data(), mapping.data(), size_sparse,
+                       kMaxSymbol, /*max_count=*/16, effort, &config);
 
-  // Display results.
-  if (kVerbose) {
-    printf("Cost: %f\n", config->cost);
-    if (config->param.is_sparse) {
-      printf("Histogram is sparse:\n(index, count - 1):\n");
-      for (uint32_t i = 0; i < config->size_to_write; ++i) {
-        printf("(%d,%d) ", mapping[i], config->histogram_to_write[i]);
+    // Display results.
+    if (kVerbose) {
+      printf("Cost: %f\n", config->cost);
+      if (config->param.is_sparse) {
+        printf("Histogram is sparse:\n(index, count - 1):\n");
+        for (uint32_t i = 0; i < config->size_to_write; ++i) {
+          printf("(%d,%d) ", mapping[i], config->histogram_to_write[i]);
+        }
+        printf("\n");
+      } else {
+        printf("Histogram is not sparse:\n");
+        for (uint32_t i = 0; i < config->size_to_write; ++i) {
+          printf("%d ", config->histogram_to_write[i]);
+        }
+        printf("\n");
       }
-      printf("\n");
-    } else {
-      printf("Histogram is not sparse:\n");
-      for (uint32_t i = 0; i < config->size_to_write; ++i) {
-        printf("%d ", config->histogram_to_write[i]);
+      if (config->param.type == Quantizer::ConfigType::Huffman) {
+        printf("The counts above should be interpreted as exponents of 2.\n");
       }
-      printf("\n");
-    }
-    if (config->param.type == Quantizer::ConfigType::Huffman) {
-      printf("The counts above should be interpreted as exponents of 2.\n");
     }
   }
 }

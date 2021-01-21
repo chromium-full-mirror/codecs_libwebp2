@@ -62,7 +62,7 @@ TEST_P(ResidualWriterTest, AOM) {
     std::unique_ptr<WP2::SymbolWriter>
       sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
     ASSERT_TRUE(sw != nullptr);
-    ASSERT_WP2_OK(sw->Init(info));
+    ASSERT_WP2_OK(sw->Init(info, /*effort=*/5));
     ASSERT_WP2_OK(sw->Allocate());
     SymbolRecorder recorder;
     ASSERT_WP2_OK(recorder.Allocate(info, /*num_records=*/num_iters));

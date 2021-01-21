@@ -215,6 +215,13 @@ class SymbolWriter : public SymbolManager,
                      public SymbolIO<SymbolWriterStatExtra>,
                      public WP2Allocable {
  public:
+  // Sets basic information about symbols.
+  WP2Status Init(const SymbolsInfo& symbols_info, int effort) {
+    WP2_CHECK_STATUS(SymbolIO<SymbolWriterStatExtra>::Init(symbols_info));
+    effort_ = effort;
+    return WP2_STATUS_OK;
+  }
+
   const SymbolsInfo& symbols_info() const override { return symbols_info_; }
 
   // Allocates memory. Should be called after calling SymbolIO::Init().
@@ -313,6 +320,7 @@ class SymbolWriter : public SymbolManager,
   Quantizer quantizer_;
   Quantizer quantizer_golomb_;
   VectorNoCtor<OptimizeArrayStorageStat> stats_buffer_;
+  int effort_;
 };
 
 }  // namespace WP2

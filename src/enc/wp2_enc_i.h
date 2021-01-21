@@ -322,15 +322,11 @@ class SyntaxWriter : public WP2Allocable {
   // Writes the headers (frozen dictionaries, etc.).
   WP2Status WriteHeader(ANSEncBase* const enc);
   // These write the block header (segment id, preds, etc.).
-  void WriteBlockBeforeCoeffs(const CodedBlock& cb, bool update_ymodes,
-                              SymbolManager* const sm, ANSEncBase* const enc);
+  void WriteBlockBeforeCoeffs(const CodedBlock& cb, SymbolManager* const sm,
+                              ANSEncBase* const enc);
   // Writes the predictors used by the given block for the given channel.
-  static void WriteYAPredictors(const CodedBlock& cb, Channel channel,
-                                const YModePredictor* const ymode_predictor,
-                                bool update_ymodes, SymbolManager* const sm,
-                                ANSEncBase* const enc);
-  static void WriteUVPredictors(const CodedBlock& cb, Channel channel,
-                                SymbolManager* const sm, ANSEncBase* const enc);
+  static void WritePredictors(const CodedBlock& cb, Channel channel,
+                              SymbolManager* const sm, ANSEncBase* const enc);
   // Writes whether the block is split into smaller square transforms.
   static void WriteSplitTransform(const CodedBlock& cb, Channel channel,
                                   SymbolManager* const sm,
@@ -342,7 +338,11 @@ class SyntaxWriter : public WP2Allocable {
   static void WriteTransform(const CodedBlock& cb, Channel channel,
                              SymbolManager* const sm, ANSEncBase* const enc);
 
+  // Writes all blocks to 'enc'. 'size_order_indices' should be the same size
+  // as 'cblocks', and contain the indices of a permutation of 'cblocks' that
+  // puts it in size order (order in which block sizes are written).
   WP2Status WriteBlocks(const Vector<CodedBlock>& cblocks,
+                        const Vector_u16& size_order_indices,
                         FrontMgrNxNBase* const mgr, ANSEnc* const enc);
 
   SymbolWriter* symbol_writer() { return &symbol_writer_; }
@@ -388,7 +388,6 @@ class SyntaxWriter : public WP2Allocable {
   ChromaSubsampling chroma_subsampling_;
 
   const GlobalParams* gparams_;
-  bool use_aom_coeffs_;
 
   SegmentIdPredictor segment_ids_;
   BlockContext context_;

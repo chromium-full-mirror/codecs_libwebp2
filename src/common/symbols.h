@@ -322,11 +322,6 @@ template <class EXTRA>
 class SymbolIO {
  public:
   virtual ~SymbolIO() = default;
-  // Sets basic information about symbols.
-  WP2Status Init(const SymbolsInfo& symbols_info) {
-    WP2_CHECK_STATUS(symbols_info_.CopyFrom(symbols_info));
-    return WP2_STATUS_OK;
-  }
 
   // Allocates data after ranges/cluster sizes have been specified.
   virtual WP2Status Allocate() {
@@ -405,6 +400,12 @@ class SymbolIO {
     Param param;
     EXTRA extra;
   };
+  // Sets basic information about symbols.
+  WP2Status Init(const SymbolsInfo& symbols_info) {
+    WP2_CHECK_STATUS(symbols_info_.CopyFrom(symbols_info));
+    return WP2_STATUS_OK;
+  }
+
   // Gets the statistics for symbol 'sym' in cluster 'cluster'.
   inline Stat* GetStats(uint32_t sym, uint32_t cluster) {
     assert(sym < symbols_info_.Size() &&

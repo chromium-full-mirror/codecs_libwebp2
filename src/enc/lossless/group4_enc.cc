@@ -230,7 +230,7 @@ static WP2Status Impl(const int16_t* const argb, uint32_t width,
 
 WP2Status Group4Encode(const int16_t* const argb, uint32_t width,
                        uint32_t height, uint32_t num_colors,
-                       bool use_move_to_front,
+                       bool use_move_to_front, int effort,
                        const WP2::ProgressRange& progress,
                        WP2::ANSEncBase* const enc,
                        EncodeInfo* const encode_info) {
@@ -253,7 +253,7 @@ WP2Status Group4Encode(const int16_t* const argb, uint32_t width,
 
   // Write the headers.
   WP2::SymbolWriter sw;
-  WP2_CHECK_STATUS(sw.Init(info));
+  WP2_CHECK_STATUS(sw.Init(info, effort));
   WP2_CHECK_STATUS(sw.Allocate());
 
   enc->AddDebugPrefix("GlobalHeader");

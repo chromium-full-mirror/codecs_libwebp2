@@ -739,10 +739,10 @@ static WP2Status CalculateBestCacheConfig(
     // Get the header cost in bits.
     WP2::ANSEncCounter enc_counter;
     WP2::SymbolWriter symbol_writer;
-    WP2_CHECK_STATUS(symbol_writer.Init(info));
+    WP2_CHECK_STATUS(symbol_writer.Init(info, effort));
     WP2_CHECK_STATUS(symbol_writer.Allocate());
     WP2::ANSDictionaries dicts;
-    WP2_CHECK_STATUS(WriteHeaders(symbol_recorder, info, num_pixels,
+    WP2_CHECK_STATUS(WriteHeaders(symbol_recorder, info, num_pixels, effort,
                                   &enc_counter, &dicts, &symbol_writer));
     const float cost_header = enc_counter.GetCost();
 
@@ -816,7 +816,7 @@ static WP2Status GetBackwardReferencesLowEffort(
 // Gets the overall cost of storing the refs: symbol headers and pixels.
 static WP2Status GetStorageCost(uint32_t width, const BackwardRefs& refs,
                                 const LosslessSymbolsInfo& symbols_info,
-                                uint32_t num_pixels,
+                                uint32_t num_pixels, int effort,
                                 float* const cost) {
   // Get the symbols stats.
   WP2::SymbolRecorder recorder;
@@ -828,7 +828,7 @@ static WP2Status GetStorageCost(uint32_t width, const BackwardRefs& refs,
   WP2::ANSEncCounter enc_counter;
   WP2::ANSDictionaries dicts;
   WP2::SymbolWriter symbol_writer;
-  WP2_CHECK_STATUS(WriteHeaders(recorder, symbols_info, num_pixels,
+  WP2_CHECK_STATUS(WriteHeaders(recorder, symbols_info, num_pixels, effort,
                                 &enc_counter, &dicts, &symbol_writer));
   WP2_CHECK_STATUS(StorePixels(width, refs, &enc_counter, &symbol_writer));
   *cost = enc_counter.GetCost();
@@ -910,7 +910,7 @@ static WP2Status GetBackwardReferencesImpl(
 
     float bit_cost;
     WP2_CHECK_STATUS(GetStorageCost(width, *refs_tmp, symbols_info_tmp,
-                                    num_pixels, &bit_cost));
+                                    num_pixels, effort, &bit_cost));
 
     // Improve on simple LZ77 but only for high effort (TraceBackwards is
     // costly).
@@ -927,7 +927,7 @@ static WP2Status GetBackwardReferencesImpl(
         assert(refs_tmp_trace->IsValid(num_pixels));
         float bit_cost_trace;
         WP2_CHECK_STATUS(GetStorageCost(width, *refs_tmp_trace,
-                                        symbols_info_tmp, num_pixels,
+                                        symbols_info_tmp, num_pixels, effort,
                                         &bit_cost_trace));
         if (bit_cost_trace < bit_cost) {
           bit_cost = bit_cost_trace;

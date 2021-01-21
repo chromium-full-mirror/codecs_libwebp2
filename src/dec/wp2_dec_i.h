@@ -269,7 +269,6 @@ class SyntaxReader {
   BlockContext context_;
   uint32_t width_;
   uint32_t height_;
-  bool use_aom_coeffs_;
 
  public:
   // Visual debug: stores bit cost for a block

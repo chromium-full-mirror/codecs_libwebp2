@@ -177,7 +177,7 @@ class DataGenerator {
   void WriteHeader(const SymbolsInfoTest& info, const SymbolRecorder& recorder,
                    uint32_t* max_nnz, ANSDictionaries* const dicts,
                    ANSEnc* const enc, SymbolWriter* const sw) {
-    ASSERT_WP2_OK(sw->Init(info));
+    ASSERT_WP2_OK(sw->Init(info, /*effort=*/5));
     ASSERT_WP2_OK(sw->Allocate());
     // Get the maximum number of non-zero values by aggregating over all
     // clusters.
@@ -644,7 +644,7 @@ TEST(SymbolsTest, StorageMethodAdaptiveWithAutoSpeed) {
   std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
                                             WP2::SymbolWriter);
   ASSERT_TRUE(sw != nullptr);
-  ASSERT_WP2_OK(sw->Init(info));
+  ASSERT_WP2_OK(sw->Init(info, /*effort=*/5));
   ASSERT_WP2_OK(sw->Allocate());
   ANSEnc enc;
   ANSDictionaries dicts;
@@ -990,7 +990,7 @@ TEST_P(SymbolCostTest, TrivialCost) {
                  /*num_clusters=*/1, StorageMethod::kAuto);
 
     SymbolWriterForTest sw;
-    ASSERT_WP2_OK(sw.Init(info));
+    ASSERT_WP2_OK(sw.Init(info, /*effort=*/5));
     ASSERT_WP2_OK(sw.Allocate());
     sw.AddTrivial(kSymbol, kCluster, kValue);
 
@@ -1040,7 +1040,7 @@ TEST_P(SymbolCostTest, RangeCost) {
                StorageMethod::kAuto);
 
   SymbolWriterForTest sw;
-  ASSERT_WP2_OK(sw.Init(info));
+  ASSERT_WP2_OK(sw.Init(info, /*effort=*/5));
   ASSERT_WP2_OK(sw.Allocate());
   sw.AddRange(kSymbol, kCluster, /*mapping=*/nullptr, /*size=*/0,
               kMaxSymbol + 1);
@@ -1096,7 +1096,7 @@ TEST_P(SymbolCostTest, DictCost) {
   }
 
   SymbolWriterForTest sw;
-  ASSERT_WP2_OK(sw.Init(info));
+  ASSERT_WP2_OK(sw.Init(info, /*effort=*/5));
   ASSERT_WP2_OK(sw.Allocate());
 
   ANSDictionaries dicts;
@@ -1160,7 +1160,7 @@ TEST_P(SymbolCostTest, GolombCost) {
   }
 
   SymbolWriterForTest sw;
-  ASSERT_WP2_OK(sw.Init(info));
+  ASSERT_WP2_OK(sw.Init(info, /*effort=*/5));
   ASSERT_WP2_OK(sw.Allocate());
   ANSDictionaries dicts;
   ASSERT_WP2_OK(sw.AddGolomb(kSymbol, kCluster, golomb_histogram.data(),
@@ -1215,7 +1215,7 @@ TEST_P(SymbolCostTest, AdaptiveBitCost) {
   const uint32_t p0 = 3, p1 = 10;
 
   SymbolWriterForTest sw;
-  ASSERT_WP2_OK(sw.Init(info));
+  ASSERT_WP2_OK(sw.Init(info, /*effort=*/5));
   ASSERT_WP2_OK(sw.Allocate());
   ASSERT_WP2_OK(sw.AddAdaptiveBit(kSymbol, kCluster, p0, p1));
 
@@ -1267,7 +1267,7 @@ TEST_P(SymbolCostTest, AdaptiveSymCost) {
                  StorageMethod::kAdaptiveSym);
 
     SymbolWriterForTest sw;
-    ASSERT_WP2_OK(sw.Init(info));
+    ASSERT_WP2_OK(sw.Init(info, /*effort=*/5));
     ASSERT_WP2_OK(sw.Allocate());
     ASSERT_WP2_OK(sw.AddAdaptiveSymbol(
         kSymbol, kCluster, (ANSAdaptiveSymbol::Method)method, speed));
@@ -1330,7 +1330,7 @@ TEST(SymbolsTest, MaxValuePrecision) {
   ASSERT_TRUE(sw != nullptr);
   ANSEnc enc;
   ANSDictionaries dicts;
-  ASSERT_WP2_OK(sw->Init(info));
+  ASSERT_WP2_OK(sw->Init(info, /*effort=*/5));
   ASSERT_WP2_OK(sw->Allocate());
   constexpr uint32_t max_nnz = 10000;
   ASSERT_WP2_OK(sw->WriteHeader(/*sym=*/0, /*cluster=*/0, max_nnz, counts,

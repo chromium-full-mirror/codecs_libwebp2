@@ -41,16 +41,17 @@ WP2Status SyntaxWriter::Init(ANSDictionaries* const dicts,
   tile_rect_ = tile_rect;
   gparams_ = &gparams;
   assert(gparams_->IsOk());
-  use_aom_coeffs_ = use_aom_coeffs;
   chroma_subsampling_ = chroma_subsampling;
 
   num_blocks_ = num_blocks;
   // Number of transforms is unknown yet, use a higher bound.
   num_transforms_ = std::min(
       num_blocks * 4, SizeBlocks(yuv.GetWidth()) * SizeBlocks(yuv.GetHeight()));
+  // Deal with context.
+  WP2_CHECK_STATUS(context_.Init(use_aom_coeffs));
 
-  WP2_CHECK_STATUS(
-      residual_writer_.Init(use_aom_coeffs_, gparams_->maybe_use_lossy_alpha_));
+  WP2_CHECK_STATUS(residual_writer_.Init(context_.use_aom(),
+                                         gparams_->maybe_use_lossy_alpha_));
 
   const uint32_t num_segments =
       std::min((uint32_t)gparams_->segments_.size(),
@@ -60,9 +61,6 @@ WP2Status SyntaxWriter::Init(ANSDictionaries* const dicts,
   // Deal with segment ids.
   WP2_CHECK_STATUS(segment_ids_.InitWrite(
       num_segments, gparams_->explicit_segment_ids_, tile_rect.width));
-  // Deal with context.
-  WP2_CHECK_STATUS(
-      context_.Init(use_aom_coeffs_, tile_rect.width, tile_rect.height));
 
   if (gparams_->has_alpha_) {
     WP2_CHECK_STATUS(alpha_writer_.Init(*config_, gparams, context_, yuv,
@@ -97,7 +95,6 @@ WP2Status SyntaxWriter::CopyFrom(const SyntaxWriter& other,
   tile_rect_ = other.tile_rect_;
   chroma_subsampling_ = other.chroma_subsampling_;
   gparams_ = other.gparams_;
-  use_aom_coeffs_ = other.use_aom_coeffs_;
 
   WP2_CHECK_STATUS(segment_ids_.CopyFrom(other.segment_ids_));
   WP2_CHECK_STATUS(
@@ -115,7 +112,7 @@ WP2Status SyntaxWriter::InitPass() {
   WP2_CHECK_STATUS(symbols_info.InitLossy(
       gparams_->segments_.size(), gparams_->partition_set_,
       gparams_->maybe_use_lossy_alpha_, GetQualityHint(config_->quality),
-      use_aom_coeffs_));
+      context_.use_aom()));
   symbols_info.SetMinMax(kSymbolModeY, /*min=*/0,
                          /*max=*/gparams_->y_preds_.GetMaxMode());
   if (gparams_->maybe_use_lossy_alpha_) {
@@ -133,7 +130,7 @@ WP2Status SyntaxWriter::InitPass() {
   }
   symbols_info.SetClusters(kSymbolDC, symbols_info.NumClusters(kSymbolDC));
 
-  WP2_CHECK_STATUS(symbol_writer_.Init(symbols_info));
+  WP2_CHECK_STATUS(symbol_writer_.Init(symbols_info, config_->effort));
   WP2_CHECK_STATUS(symbol_writer_.Allocate());
   if (pass_number_ == 0) {
     WP2_CHECK_STATUS(symbol_recorder_.Allocate(
@@ -160,7 +157,7 @@ WP2Status SyntaxWriter::WriteHeader(ANSEncBase* const enc) {
 
   // TODO(skal): differential-write of gparams_
 
-  enc->PutBool(use_aom_coeffs_, "use_aom_coeffs");
+  enc->PutBool(context_.use_aom(), "use_aom_coeffs");
 
   // Write dictionaries.
   PutLargeRange(num_blocks_, min_num_blocks, max_num_blocks, enc, "num_blocks");
@@ -246,7 +243,6 @@ WP2Status SyntaxWriter::WriteHeader(ANSEncBase* const enc) {
 }
 
 void SyntaxWriter::WriteBlockBeforeCoeffs(const CodedBlock& cb,
-                                          bool update_ymodes,
                                           SymbolManager* const sm,
                                           ANSEncBase* const enc) {
   segment_ids_.WriteId(cb, sm, enc);
@@ -259,12 +255,7 @@ void SyntaxWriter::WriteBlockBeforeCoeffs(const CodedBlock& cb,
 
   for (Channel channel : {kYChannel, kAChannel, kUChannel, kVChannel}) {
     if (channel == kAChannel && !cb.HasLossyAlpha()) continue;
-    if (channel == kYChannel || channel == kAChannel) {
-      WriteYAPredictors(cb, channel, &context_.ymodes(), update_ymodes, sm,
-                        enc);
-    } else {
-      WriteUVPredictors(cb, channel, sm, enc);
-    }
+    WritePredictors(cb, channel, sm, enc);
   }
 
   if (chroma_subsampling_ == ChromaSubsampling::kSingleBlock ||
@@ -279,7 +270,7 @@ void SyntaxWriter::WriteBlockBeforeCoeffs(const CodedBlock& cb,
     WriteTransform(cb, channel, sm, enc);
   }
 
-  if (!use_aom_coeffs_) {
+  if (!context_.use_aom()) {
     ANSDebugPrefix prefix(enc, "coeff_method");
     gparams_->segments_[cb.id_].StoreEncodingMethods(cb, sm, enc);
   }
@@ -292,32 +283,19 @@ void SyntaxWriter::WriteBlockBeforeCoeffs(const CodedBlock& cb,
   }
 }
 
-void SyntaxWriter::WriteYAPredictors(
-    const CodedBlock& cb, Channel channel,
-    const YModePredictor* const ymode_predictor, bool update_ymodes,
-    SymbolManager* const sm, ANSEncBase* const enc) {
+void SyntaxWriter::WritePredictors(const CodedBlock& cb, Channel channel,
+                                   SymbolManager* const sm,
+                                   ANSEncBase* const enc) {
   ANSDebugPrefix prefix(enc, "pred_modes");
   const CodedBlock::CodingParams& params = cb.GetCodingParams(channel);
-  ANSDebugPrefix prefix2(enc, (channel == kYChannel) ? "y" : "a");
-  if (channel == kYChannel && cb.y_context_is_constant_) return;
   if (channel == kYChannel) {
-    assert(ymode_predictor != nullptr);
-    const_cast<YModePredictor*>(ymode_predictor)
-        ->Write(cb, *params.pred, update_ymodes, enc, sm);
-  } else {
-    assert(channel == kAChannel);
-    sm->Process(kSymbolModeA, params.pred->mode(), "pred", enc);
-  }
-  params.pred->WriteParams(cb, channel, sm, enc);
-}
-
-void SyntaxWriter::WriteUVPredictors(const CodedBlock& cb, Channel channel,
-                                     SymbolManager* const sm,
-                                     ANSEncBase* const enc) {
-  ANSDebugPrefix prefix(enc, "pred_modes");
-  const CodedBlock::CodingParams& params = cb.GetCodingParams(channel);
-  if (channel == kUChannel) {
+    if (cb.y_context_is_constant_) return;
+    sm->Process(kSymbolModeY, params.pred->mode(), "y", enc);
+  } else if (channel == kUChannel) {
     sm->Process(kSymbolModeUV, params.pred->mode(), "uv", enc);
+    // kVChannel is not written as it is the same as kUChannel.
+  } else if (channel == kAChannel) {
+    sm->Process(kSymbolModeA, params.pred->mode(), "a", enc);
   }
   params.pred->WriteParams(cb, channel, sm, enc);
 }
@@ -373,19 +351,21 @@ void SyntaxWriter::WriteTransform(const CodedBlock& cb, Channel channel,
 
 void SyntaxWriter::RecordBlockHeader(const CodedBlock& cb) {
   ANSEncNoop enc;
-  WriteBlockBeforeCoeffs(cb, /*update_ymodes=*/true, &symbol_recorder_, &enc);
+  WriteBlockBeforeCoeffs(cb, &symbol_recorder_, &enc);
 }
 
 WP2Status SyntaxWriter::WriteBlocks(const Vector<CodedBlock>& cblocks,
+                                    const Vector_u16& size_order_indices,
                                     FrontMgrNxNBase* const mgr,
                                     ANSEnc* const enc) {
   assert(cblocks.size() == num_blocks_);
+  assert(size_order_indices.size() == num_blocks_);
   // Note: we could call segment_ids_.InitMap(bw, bh) again here.
   mgr->Clear();
-  WP2_CHECK_STATUS(
-      residual_writer_.Init(use_aom_coeffs_, gparams_->maybe_use_lossy_alpha_));
+  WP2_CHECK_STATUS(residual_writer_.Init(context_.use_aom(),
+                                         gparams_->maybe_use_lossy_alpha_));
   context_.Reset();
-  for (uint16_t ind : mgr->SizeIndices()) {
+  for (uint16_t ind : size_order_indices) {
     {
       ANSDebugPrefix prefix(enc, "BlockHeader");
       const CodedBlock& cb = cblocks[ind];
@@ -411,7 +391,7 @@ WP2Status SyntaxWriter::FindBestEncodingMethods(CodedBlock* const cb) {
   for (auto c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !cb->HasLossyAlpha()) continue;
     for (uint32_t tf_i = 0; tf_i < cb->GetNumTransforms(c); ++tf_i) {
-      if (use_aom_coeffs_) {
+      if (context_.use_aom()) {
         ResidualWriter::SetGeometry(cb->num_coeffs_[c][tf_i],
                                     &cb->method_[c][tf_i]);
       } else {
@@ -499,7 +479,7 @@ WP2Status SyntaxWriter::WriteBlock(const CodedBlock& cb, uint32_t block_index,
                                    ANSEnc* const enc) {
   {
     ANSDebugPrefix prefix(enc, "BlockHeader");
-    WriteBlockBeforeCoeffs(cb, /*update_ymodes=*/true, &symbol_writer_, enc);
+    WriteBlockBeforeCoeffs(cb, &symbol_writer_, enc);
   }
 
   float previous_cost;

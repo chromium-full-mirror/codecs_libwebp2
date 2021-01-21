@@ -70,7 +70,7 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
   }
 
   // Initialize the cache.
-  WP2_CHECK_STATUS(context_.Init(use_aom_coeffs, yuv.Y.w_, yuv.Y.h_));
+  WP2_CHECK_STATUS(context_.Init(use_aom_coeffs));
   WP2_CHECK_STATUS(progress.AdvanceBy(0.5));
   return WP2_STATUS_OK;
 }

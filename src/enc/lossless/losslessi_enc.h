@@ -134,7 +134,8 @@ WP2Status StorePixels(uint32_t width, const BackwardRefs& refs,
 // info.
 WP2Status WriteHeaders(const WP2::SymbolRecorder& recorder,
                        const LosslessSymbolsInfo& symbols_info,
-                       uint32_t num_pixels, WP2::ANSEncBase* const enc,
+                       uint32_t num_pixels, int effort,
+                       WP2::ANSEncBase* const enc,
                        WP2::ANSDictionaries* const dicts,
                        WP2::SymbolWriter* const sw);
 
@@ -180,7 +181,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
 
 WP2Status Group4Encode(const int16_t* const argb, uint32_t width,
                        uint32_t height, uint32_t num_colors,
-                       bool use_move_to_front,
+                       bool use_move_to_front, int effort,
                        const WP2::ProgressRange& progress,
                        WP2::ANSEncBase* const enc,
                        EncodeInfo* const encode_info);

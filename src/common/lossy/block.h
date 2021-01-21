@@ -75,32 +75,25 @@ class Counters : public WP2Allocable {
 
 //------------------------------------------------------------------------------
 // Context passed around and updated once we know the right parameters for each
-// block. Only contains AOM context for now.
+// block. Currently quite empty but can be removed or extended when needed.
 
 class BlockContext {
  public:
-  // 'use_aom' defines the usage of AOM residuals. 'width' and 'height' are in
-  // pixels.
-  WP2Status Init(bool use_aom, uint32_t width, uint32_t height) {
+  // 'use_aom' defines the usage of AOM residuals.
+  WP2Status Init(bool use_aom) {
     use_aom_ = use_aom;
-    WP2_CHECK_STATUS(modes_.InitMap(width, height));
     return WP2_STATUS_OK;
   }
   WP2Status CopyFrom(const BlockContext& other) {
     use_aom_ = other.use_aom_;
-    WP2_CHECK_STATUS(modes_.CopyFrom(other.modes_));
     return WP2_STATUS_OK;
   }
   void Reset() {
-    modes_.Reset();
   }
   bool use_aom() const { return use_aom_; }
-  const YModePredictor& ymodes() const { return modes_; }
-  YModePredictor& ymodes() { return modes_; }
 
  private:
   bool use_aom_ = false;
-  YModePredictor modes_;
 };
 
 //------------------------------------------------------------------------------
@@ -467,8 +460,7 @@ class CodedBlock {
 
   // Returns an estimation of the number of bits necessary to encode the
   // predictor modes.
-  WP2Status PredictorRate(const YModePredictor* const ymode_predictor,
-                          Channel channel, SymbolCounter* const counter,
+  WP2Status PredictorRate(Channel channel, SymbolCounter* const counter,
                           float* const rate) const;
 
   // Returns an estimation of the number of bits necessary to encode the

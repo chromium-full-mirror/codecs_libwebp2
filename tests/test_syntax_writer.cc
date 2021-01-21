@@ -68,6 +68,7 @@ TEST(TestSyntaxWriter, CopyFrom) {
 
   // Instances that will be needed after 'syntax_writer' is deleted.
   Vector<CodedBlock> cblocks;
+  Vector_u16 size_order_indices;
   FrontMgrLexico mgr;
   float cost, cost_dicts;
   uint32_t num_tokens;
@@ -90,6 +91,9 @@ TEST(TestSyntaxWriter, CopyFrom) {
       ASSERT_TRUE(mgr.TryGetNextBlock(kBlocks[i], &block));
 
       ASSERT_TRUE(cblocks.resize(cblocks.size() + 1));
+      ASSERT_TRUE(size_order_indices.resize(cblocks.size()));
+      std::iota(size_order_indices.begin(), size_order_indices.end(), 0);
+
       CodedBlock& cb = cblocks.back();
       cb.is420_ = false;
       cb.id_ = AssignSegmentId(config, gparams, tile_rect, block);
@@ -137,7 +141,8 @@ TEST(TestSyntaxWriter, CopyFrom) {
     ANSEnc enc;
     mgr.Clear();
     ASSERT_WP2_OK(syntax_writer.WriteHeader(&enc));
-    ASSERT_WP2_OK(syntax_writer.WriteBlocks(cblocks, &mgr, &enc));
+    ASSERT_WP2_OK(
+        syntax_writer.WriteBlocks(cblocks, size_order_indices, &mgr, &enc));
 
     cost = enc.GetCost();
     cost_dicts = enc.GetCost(dicts);
@@ -151,7 +156,8 @@ TEST(TestSyntaxWriter, CopyFrom) {
   ANSEnc enc_copy;
   mgr.Clear();
   ASSERT_WP2_OK(syntax_writer_copy.WriteHeader(&enc_copy));
-  ASSERT_WP2_OK(syntax_writer_copy.WriteBlocks(cblocks, &mgr, &enc_copy));
+  ASSERT_WP2_OK(syntax_writer_copy.WriteBlocks(cblocks, size_order_indices,
+                                               &mgr, &enc_copy));
 
   ASSERT_EQ(cost, enc_copy.GetCost());
   ASSERT_EQ(cost_dicts, enc_copy.GetCost(dicts_copy));

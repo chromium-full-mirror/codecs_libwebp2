@@ -63,11 +63,22 @@ class Quantizer {
     size_t size_to_write;
     HistogramSparse histo;
     float cost;
-  };
 
-  Quantizer() {
-    for (auto& c : configs_used_) c = false;
-  }
+    // Filled by QuantizeImpl():
+    void Reset() { used = false; }
+
+   private:
+    bool used = false;
+    // For each recursion level, each set of param can be Raw/Huffman, sparse or
+    // not and have several levels of recursion.
+    uint8_t bits[kMaxFreqBits];
+    Vector_u32 histogram_sub;
+    Vector_u16 mapping_sub;
+
+    uint32_t* histogram_quantized;
+    uint32_t* tmp_histogram_to_write;
+    friend Quantizer;
+  };
 
   // range_max is the maximum range of the used symbols (maximum value + 1).
   WP2Status Allocate(uint32_t range_max);
@@ -83,35 +94,21 @@ class Quantizer {
                 int effort, Config** const config_best);
 
  private:
-  // Free the config from the buffer to make it re-usable.
-  void ResetConfig(const Config* c) {
-    const size_t c_ind = c - &configs_[0];
-    configs_used_[c_ind] = false;
-  }
-
   // Implementation of the quantization that can call itself to compress its own
   // coefficients.
   // 'cost_max' is the value above which we can early exit.
   void QuantizeImpl(const uint32_t* const histogram,
                     const uint16_t* const mapping, size_t size_sparse,
                     uint32_t symbol_range, uint32_t n_pixels_bits, int effort,
-                    size_t config_index,
-                    float cost_max = std::numeric_limits<float>::max());
+                    float cost_max, Config* const config);
 
   // TODO(vrabaud) Investigate to see if it is worth having more levels.
   static constexpr size_t kConfigNbr = 2;
   Config configs_[kConfigNbr];
-  bool configs_used_[kConfigNbr];
-  // For each recursion level, each set of param can be Raw/Huffman, sparse or
-  // not and have several levels of recursion.
-  uint8_t bits_[kConfigNbr][kMaxFreqBits];
-  Vector_u32 histogram_sub_[kConfigNbr];
-  Vector_u16 mapping_sub_[kConfigNbr];
-
   uint32_t histogram_size_max_;
-  uint32_t* histogram_quantized_[kConfigNbr];
-  uint32_t* histogram_to_write_[kConfigNbr];
-  Data buffer_;  // Big memory chunk storing the buffers above.
+
+  Data buffer32_;  // Big memory chunk storing the uint32_t buffers above.
+  Data buffer16_;  // Big memory chunk storing the uint16_t buffers above.
 
   VectorNoCtor<OptimizeArrayStorageStat> stats_buffer_;
 };

@@ -112,7 +112,7 @@ TYPED_TEST(CodedBlockTest, FindBestModes) {
   ASSERT_TRUE(transforms.push_back(kDctDct));
 
   BlockContext context;
-  WP2_ASSERT_STATUS(context.Init(/*use_aom=*/false, width, height));
+  WP2_ASSERT_STATUS(context.Init(/*use_aom=*/false));
   ASSERT_WP2_OK(cb.FindBestPredTf(
       EncoderConfig::kDefault, tile_rect, predictors, segment, context,
       kYChannel, kNumChannels, /*reduced=*/false, transforms, &counters));

@@ -58,18 +58,6 @@ class SymbolReader;
 // heuristics and local context information.
 class Predictor : public WP2Allocable {
  public:
-  // Context of the prediction: each predictor can belong to a context (mainly
-  // horizontal, mainly vertical ...). AV1 defines the mapping between the
-  // predictor and a mode in Intra_Mode_Context.
-  enum class ModeContext {
-    kDC,
-    kVertical,
-    kHorizontal,
-    kTopRight,
-    kLeft,  // for left angle predictors that are not horizontal.
-    kNum
-  };
-
   virtual ~Predictor() = default;
 
   // Predicts values for the given block, on channel 'channel', for the
@@ -118,7 +106,6 @@ class Predictor : public WP2Allocable {
   // predictors.
   void SetMode(uint32_t mode) { mode_ = mode; }
   virtual uint32_t mode() const { return mode_; }
-  virtual ModeContext mode_context() const { return ModeContext::kNum; }
 
   // Debugging methods.
   virtual std::string GetName() const = 0;

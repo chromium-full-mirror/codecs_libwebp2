@@ -195,11 +195,12 @@ WP2Status StorePixels(uint32_t width, const BackwardRefs& refs,
 // in the A,R,B channels.
 WP2Status WriteHeaders(const WP2::SymbolRecorder& recorder,
                        const LosslessSymbolsInfo& symbols_info,
-                       uint32_t num_pixels, WP2::ANSEncBase* const enc,
+                       uint32_t num_pixels, int effort,
+                       WP2::ANSEncBase* const enc,
                        WP2::ANSDictionaries* const dicts,
                        WP2::SymbolWriter* const sw) {
   WP2::ANSDebugPrefix prefix(enc, "symbols");
-  WP2_CHECK_STATUS(sw->Init(symbols_info));
+  WP2_CHECK_STATUS(sw->Init(symbols_info, effort));
   WP2_CHECK_STATUS(sw->Allocate());
 
   // Iterate over all histograms and get the aggregate number of codes used.
@@ -257,8 +258,8 @@ WP2Status EncodeImageNoClusters(WP2::ANSEncBase* const enc,
   WP2_CHECK_STATUS(StorePixels(width, *refs, &noop, &recorder));
 
   // Store headers.
-  WP2_CHECK_STATUS(WriteHeaders(recorder, symbols_info_new, width * height, enc,
-                                dicts, &sw));
+  WP2_CHECK_STATUS(WriteHeaders(recorder, symbols_info_new, width * height,
+                                effort, enc, dicts, &sw));
 
   // Store actual literals.
   WP2_CHECK_STATUS(StorePixels(width, height, /*histo_bits=*/0, *refs, progress,
@@ -386,8 +387,8 @@ static WP2Status EncodeImageInternal(
                                    &enc_noop, &recorder));
 
       // Store symbol headers.
-      WP2_CHECK_STATUS(
-          WriteHeaders(recorder, symbols_info, num_pixels, enc, dicts, &sw));
+      WP2_CHECK_STATUS(WriteHeaders(recorder, symbols_info, num_pixels, effort,
+                                    enc, dicts, &sw));
       WP2_CHECK_STATUS(header_progress.AdvanceBy(1.));
     }
 
@@ -803,8 +804,8 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
     if (use_group4) {
       WP2_CHECK_STATUS(
           Group4Encode(encoder->argb_, width, height, encoder->palette_.Size(),
-                       config->group4_use_move_to_front, encode_progress, &enc,
-                       &current_encode_info));
+                       config->group4_use_move_to_front, effort,
+                       encode_progress, &enc, &current_encode_info));
     } else {
       // If using a color cache, do not have it bigger than the number of
       // colors.

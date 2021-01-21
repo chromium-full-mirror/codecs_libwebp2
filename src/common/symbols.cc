@@ -214,10 +214,8 @@ WP2Status SymbolsInfo::InitLossy(uint32_t num_segments,
                                  uint32_t quality_hint, bool use_aom_coeffs) {
   const uint32_t num_channels = (has_alpha ? 4 : 3);
 
-  // kNum is used as an escape code when the upper/left mode do not match.
   SetInfo(kSymbolModeY, /*min=*/0, /*max=*/kYPredModeNum - 1,
-          (uint32_t)Predictor::ModeContext::kNum + 1,
-          StorageMethod::kAdaptiveSym);
+          /*num_clusters=*/1, StorageMethod::kAdaptiveSym);
   SetInfo(kSymbolModeUV, /*min=*/0, /*max=*/kUVPredModeNum - 1,
           /*num_clusters=*/1, StorageMethod::kAdaptiveWithAutoSpeed);
   SetInfo(kSymbolSegmentId, /*min=*/0, /*max=*/num_segments - 1,

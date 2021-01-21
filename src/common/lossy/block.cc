@@ -799,17 +799,12 @@ void CodedBlock::FindBestPred(const Predictors& preds, Channel channel,
   if (channel == kUChannel) pred_scores_[kVChannel] = pred_scores_[kUChannel];
 }
 
-WP2Status CodedBlock::PredictorRate(
-    const YModePredictor* const ymode_predictor, Channel channel,
-    SymbolCounter* const counter, float* const rate) const {
+WP2Status CodedBlock::PredictorRate(Channel channel,
+                                    SymbolCounter* const counter,
+                                    float* const rate) const {
   counter->Clear();
   ANSEncCounter enc;
-  if (channel == kYChannel || channel == kAChannel) {
-    SyntaxWriter::WriteYAPredictors(*this, channel, ymode_predictor,
-                                    /*update_ymodes=*/false, counter, &enc);
-  } else {
-    SyntaxWriter::WriteUVPredictors(*this, channel, counter, &enc);
-  }
+  SyntaxWriter::WritePredictors(*this, channel, counter, &enc);
   *rate = enc.GetCost();
   return WP2_STATUS_OK;
 }
@@ -840,8 +835,7 @@ WP2Status CodedBlock::GetRates(const Rectangle& tile_rect,
   WP2_CHECK_STATUS(ResidualRate(context, channel, num_channels,
                                 counters->residuals(),
                                 counters->residuals_aom(), res_rate));
-  WP2_CHECK_STATUS(PredictorRate(is_uv ? nullptr : &context.ymodes(), channel,
-                                 counters->predictor(), pred_rate));
+  WP2_CHECK_STATUS(PredictorRate(channel, counters->predictor(), pred_rate));
 
   const float rate = *res_rate + *pred_rate + tf_rate;
   *score =

@@ -128,17 +128,11 @@ class FrontMgrNxNBase : public FrontMgrBase {
 
   void Clear() override;
 
-  // Returns all the underlying blocks of the tile, in arbitrary order(?)
-  // or in block order if Sort() has been called.
-  const VectorNoCtor<Block>& Blocks() const { return blocks_; }
-  VectorNoCtor<Block>& Blocks() { return blocks_; }
-
-  // Returns the indices of the blocks in Blocks() (that are sorted in block
-  // order) so that they are in size order.
-  const Vector_u16& SizeIndices() const;
-
-  // Sorts the Blocks() in block order.
-  virtual WP2Status Sort() = 0;
+  // Sorts the given blocks in block order and fills 'size_order_indices' with
+  // the indices of a permutation of 'blocks' that puts it in size order (order
+  // in which block sizes are written).
+  virtual WP2Status Sort(VectorNoCtor<Block>& blocks,
+                         Vector_u16& size_order_indices) const = 0;
 
   // Block-order related functions.
 
@@ -185,8 +179,6 @@ class FrontMgrNxNBase : public FrontMgrBase {
   // rest of the block is written.
   VectorNoCtor<Info> size_stack_;
   FrontMgrBase occupancy_size_;
-  VectorNoCtor<Block> blocks_;
-  Vector_u16 size_indices_;
   // Next max possible block (for reading/writing block sizes).
   Block next_;
 };
@@ -207,12 +199,13 @@ class FrontMgrLexico : public FrontMgrNxNBase {
   WP2_NO_DISCARD
   bool UseSize(BlockSize dim, uint32_t ind, Block* const block) override;
   virtual void UndoUseSize(const Block& block);
-  WP2Status Sort() override;
+  WP2Status Sort(VectorNoCtor<Block>& blocks,
+                 Vector_u16& size_order_indices) const override;
   bool IsFinal(const WP2::Block& block) const override;
 
  private:
   // Returns whether the 'Blocks()' are in the order they will be written.
-  WP2Status CheckBlockList() const;
+  WP2Status CheckBlockList(const VectorNoCtor<Block>& blocks) const;
 };
 
 //------------------------------------------------------------------------------
@@ -227,16 +220,18 @@ class FrontMgrMax : public FrontMgrNxNBase {
   bool TryGetNextBlock(BlockSize size, Block* const block) const override;
   WP2_NO_DISCARD
   bool UseSize(BlockSize dim, uint32_t ind, Block* const block) override;
-  WP2Status Sort() override;
+  WP2Status Sort(VectorNoCtor<Block>& blocks,
+                 Vector_u16& size_order_indices) const override;
   bool IsFinal(const WP2::Block& block) const override;
 
  private:
+  bool DoIsFinal(const FrontMgrBase& occupancy, const WP2::Block& block) const;
   // Returns true if a block is considered final in the size occupancy.
   bool IsFinalSize(const WP2::Block& block) const;
   // Updates the 'next_' block.
   void UpdateNextBlock();
   // Returns whether the 'Blocks()' are in the order they will be written.
-  WP2Status CheckBlockList() const;
+  WP2Status CheckBlockList(const VectorNoCtor<Block>& blocks) const;
 };
 
 // This is the FrontMgr class that should be used by default.
@@ -283,7 +278,8 @@ class FrontMgrArea : public FrontMgrNxNBase {
   bool TryGetNextBlock(BlockSize size, Block* const block) const override;
   WP2_NO_DISCARD
   bool UseSize(BlockSize dim, uint32_t ind, Block* const block) override;
-  WP2Status Sort() override;
+  WP2Status Sort(VectorNoCtor<Block>& blocks,
+                 Vector_u16& size_order_indices) const override;
   bool IsFinal(const WP2::Block& block) const override;
 
  protected:

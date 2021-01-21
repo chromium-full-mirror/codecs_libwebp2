@@ -47,14 +47,13 @@ WP2Status SyntaxReader::ReadHeader(const BitstreamFeatures& features,
 
   ANSDebugPrefix prefix(dec_, "GlobalHeader");
 
-  use_aom_coeffs_ = dec_->ReadBool("use_aom_coeffs");
-  WP2_CHECK_STATUS(context_.Init(use_aom_coeffs_, width_, height_));
-  residual_reader_.Init(use_aom_coeffs_);
+  WP2_CHECK_STATUS(context_.Init(dec_->ReadBool("use_aom_coeffs")));
+  residual_reader_.Init(context_.use_aom());
 
   WP2_CHECK_STATUS(symbols_info_.InitLossy(
       (uint32_t)gparams_->segments_.size(), gparams.partition_set_,
       gparams_->maybe_use_lossy_alpha_, features.quality_hint,
-      use_aom_coeffs_));
+      context_.use_aom()));
   const uint32_t num_channels = (gparams_->maybe_use_lossy_alpha_ ? 4 : 3);
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !gparams_->maybe_use_lossy_alpha_) continue;
@@ -157,20 +156,15 @@ WP2Status SyntaxReader::ReadPredModes(CodedBlock* const cb) {
   ANSDebugPrefix prefix(dec_, "pred_modes");
   cb->y_context_is_constant_ = cb->ContextIsConstant(kYChannel);
   for (Channel channel : {kYChannel, kAChannel}) {
-    ANSDebugPrefix prefix2(dec_, (channel == kYChannel) ? "y" : "a");
     if (channel == kAChannel && !cb->HasLossyAlpha()) continue;
     if (channel == kYChannel && cb->y_context_is_constant_) {
       cb->SetLumaUniformPredictor(gparams_->y_preds_);
     } else {
       CodedBlock::CodingParams* const params = cb->GetCodingParams(channel);
       const Predictors& preds = gparams_->predictors(channel);
-      uint32_t mode;
-      if (channel == kYChannel) {
-        mode = context_.ymodes().Read(*cb, preds, &sr_);
-      } else {
-        assert(channel == kAChannel);
-        mode = sr_.Read(kSymbolModeA, "pred");
-      }
+      const uint32_t mode = (channel == kYChannel)
+                                ? sr_.Read(kSymbolModeY, "y")
+                                : sr_.Read(kSymbolModeA, "a");
       preds.GetFirstWithMode(mode)->ReadParams(cb, channel, &sr_, dec_);
       params->pred = preds.GetWithMode(mode, params->pred_sub_mode);
     }
@@ -287,7 +281,7 @@ WP2Status SyntaxReader::GetBlock(CodedBlock* const cb, YUVPlane* const out,
   dec_->PopBitTracesCustomPrefix("transforms");
 
   // Signal the method with which coeffs were encoded.
-  if (!use_aom_coeffs_) {
+  if (!context_.use_aom()) {
     ANSDebugPrefix prefix(dec_, "coeff_method");
     const Segment& segment = gparams_->segments_[cb->id_];
     WP2_CHECK_STATUS(segment.ReadEncodingMethods(&sr_, cb));

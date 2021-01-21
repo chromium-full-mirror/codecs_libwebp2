@@ -196,7 +196,6 @@ class LargeDCPredictor : public ContextPredictor {
  public:
   enum Type { kAll, kLeft, kTop };
   explicit LargeDCPredictor(Type type) : type_(type) {}
-  ModeContext mode_context() const override { return ModeContext::kDC; }
 
   std::string GetName() const override {
     const char* const kTypeStr[]{"all", "left", "top"};
@@ -228,10 +227,6 @@ class TMPredictor : public ContextPredictor {
  public:
   TMPredictor(int16_t min_value, int16_t max_value)
       : min_value_(min_value), max_value_(max_value) {}
-  ModeContext mode_context() const override {
-    // Just like 135 degrees.
-    return ModeContext::kLeft;
-  }
 
   std::string GetName() const override { return "TM predictor"; }
   void Draw(const WP2::Rectangle& rect,
@@ -262,15 +257,6 @@ class SmoothPredictor : public ContextPredictor {
     kNumSmoothType
   };
   explicit SmoothPredictor(SmoothType type) : type_(type) {}
-  ModeContext mode_context() const override {
-    if (type_ == SmoothType::k2DSmooth) {
-      return ModeContext::kDC;
-    } else if (type_ == SmoothType::kVerticalSmooth) {
-      return ModeContext::kVertical;
-    } else {
-      return ModeContext::kHorizontal;
-    }
-  }
 
   std::string GetName() const override {
     const char* const kTypeStr[]{"2D", "vertical", "horizontal"};
@@ -334,24 +320,6 @@ class AnglePredictor : public ContextPredictor {
         angle_delta_(angle_delta),
         angle_idx_(AngleIdx(type, channel, angle_delta)) {
     context_type_ = GetContextType(angle_idx_);
-  }
-
-  ModeContext mode_context() const override {
-    if (type_ == Type::D23_PRED || type_ == Type::D45_PRED ||
-        type_ == Type::D67_PRED) {
-      return ModeContext::kTopRight;
-    } else if (type_ == Type::V_PRED) {
-      return ModeContext::kVertical;
-    } else if (type_ == Type::D113_PRED || type_ == Type::D135_PRED ||
-               type_ == Type::D157_PRED || type_ == Type::D203_PRED ||
-               type_ == Type::D225_PRED) {
-      return ModeContext::kLeft;
-    } else if (type_ == Type::H_PRED) {
-      return ModeContext::kHorizontal;
-    } else {
-      assert(false);
-    }
-    return ModeContext::kDC;
   }
 
   // Returns the angle index for precalculated angles.
@@ -452,10 +420,6 @@ class FusePredictor : public ContextPredictor {
       : strength_(strength), min_value_(min_value), max_value_(max_value) {
     PrecomputeLargeWeightTable(strength_, table_);
   }
-  ModeContext mode_context() const override {
-    // TODO(vrabaud) find the right one.
-    return ModeContext::kDC;
-  }
 
   std::string GetName() const override {
     std::string name = "fuse predictor (strength: ";
@@ -489,11 +453,6 @@ class GradientPredictor : public ContextPredictor {
  public:
   GradientPredictor(int16_t min_value, int16_t max_value)
       : min_value_(min_value), max_value_(max_value) {}
-  ModeContext mode_context() const override {
-    // TODO(vrabaud) find the right one.
-    // Just like 135 degrees.
-    return ModeContext::kLeft;
-  }
 
   std::string GetName() const override { return "gradient predictor"; }
   void Draw(const WP2::Rectangle& rect,
