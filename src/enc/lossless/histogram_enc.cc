@@ -149,23 +149,21 @@ void PopulationAnalyzer::PopulationCost(const uint32_t* const population,
   // TODO(vrabaud) replace the cost logic below with a proper call to
   //               SymbolWriter::WriteHeader.
   if (size == 0) {
-    if (cost != nullptr) *cost = WP2Log2(3);
+    *cost = WP2Log2(3);
     return;
   }
   if (size == 1) {
     if (trivial_sym != nullptr) *trivial_sym = mapping_[0];
     // TODO(vrabaud) do in the Quantizer.
-    if (cost != nullptr) *cost = WP2Log2(3) + WP2Log2(range);
+    *cost = WP2Log2(3) + WP2Log2(range);
     return;
   }
 
   // TODO(vrabaud) use the 'effort' parameter instead of imposing 0.
   quantizer_.Quantize(histogram_.data(), mapping_.data(), size, range,
                       image_size_, /*effort=*/0, &config);
-  if (cost != nullptr) {
-    *cost =
-        WP2Log2(3) + WP2Log2(std::min(image_size_, range) - 1) + config->cost;
-  }
+  *cost =
+      WP2Log2(3) + WP2Log2(std::min(image_size_, range) - 1) + config->cost;
 }
 
 void PopulationAnalyzer::GetCombinedEntropy(
@@ -842,7 +840,7 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
   WP2_CHECK_STATUS(BuildHistograms(width, height, histogram_bits, symbols_info,
                                    refs, &orig_histo));
   // Copies the histograms and computes their bit_cost.
-  PopulationAnalyzer analyzer(num_segments);
+  PopulationAnalyzer analyzer(width * height);
   WP2_CHECK_STATUS(analyzer.Allocate(symbols_info));
   for (Histogram* const h : orig_histo.histograms_) {
     analyzer.UpdateHistogramCost(h);

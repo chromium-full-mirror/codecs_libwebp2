@@ -488,56 +488,13 @@ WP2Status SymbolWriter::CopyFrom(const SymbolWriter& other,
 
 //------------------------------------------------------------------------------
 
-// Function writing the histogram to the encoder.
-WP2Status SymbolWriter::WriteHistogram(const Quantizer::Config& config,
-                                       uint32_t symbol_range,
-                                       uint32_t max_count,
-                                       ANSEncBase* const enc) {
-  // Store the mapping first.
-  const auto& param = config.param;
-  if (config.histo.nnz < symbol_range) {
-    enc->PutBool(param.is_sparse, "is_sparse");
-    if (param.is_sparse) {
-      // The diff between two consecutive elements is at most symbol_range-nbr
-      // of symbols.
-      assert(config.histo.nnz <= stats_buffer_.size());
-      StoreMapping(config.histo.mapping, config.histo.nnz, symbol_range,
-                   stats_buffer_.data(), enc);
-    } else {
-      enc->PutRange(config.size_to_write, config.histo.nnz, symbol_range,
-                    "histogram_size");
-    }
-  } else {
-    // We use the full range so no need to do anything.
-    assert(param.is_sparse);
-  }
-  if (param.is_sparse) assert(config.size_to_write == config.histo.nnz);
-  assert(config.size_to_write >= config.histo.nnz);
-
-  enc->PutUValue(param.type, 1, "coding_type");
-  // Save the probabilities.
-  const uint32_t max_count_bits =
-      std::min(kMaxFreqBits, 1u + (uint32_t)WP2Log2Floor(max_count));
-  for (uint32_t i = 0; i < config.histo.nnz; ++i) {
-    assert(config.histo.counts[i] < (1u << (max_count_bits + 1)));
-  }
-  assert(param.max_freq_bits >= 1);
-  if (param.type == Quantizer::Huffman) {
-    enc->PutRange(param.max_freq_bits, 1, 1 + WP2Log2Floor(max_count_bits),
-                  "max_freq_bits");
-  } else {
-    enc->PutRange(param.max_freq_bits, 1, max_count_bits, "max_freq_bits");
-  }
-  assert(config.size_to_write <= stats_buffer_.size());
-  if (param.is_sparse) {
-    StoreVector(config.histogram_to_write, config.size_to_write,
-                (1 << param.max_freq_bits) - 1, stats_buffer_.data(), enc);
-  } else {
-    StoreVectorNnz(config.histogram_to_write, config.size_to_write,
-                   config.histo.nnz, (1 << param.max_freq_bits) - 1,
-                   stats_buffer_.data(), enc);
-  }
-  return WP2_STATUS_OK;
+void SymbolWriter::WriteHistogram(const Quantizer::Config& config,
+                                  uint32_t symbol_range, uint32_t max_count,
+                                  ANSEncBase* const enc) {
+  config.WriteHistogramHeader(symbol_range, stats_buffer_.data(),
+                              stats_buffer_.size(), enc);
+  config.WriteHistogramCounts(symbol_range, max_count, stats_buffer_.data(),
+                              stats_buffer_.size(), enc);
 }
 
 //------------------------------------------------------------------------------
@@ -1080,7 +1037,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
     enc->PutRange(golomb_prefix_size, 1, 2, "prefix_size");
     enc->PutRange(golomb_size, 2, nnz_range_golomb, "size");
     // Store the dictionary.
-    WP2_CHECK_STATUS(WriteHistogram(*config_best, range_golomb, max_nnz, enc));
+    WriteHistogram(*config_best, range_golomb, max_nnz, enc);
     // Create needed dictionaries.
     WP2_CHECK_STATUS(AddGolomb(
         sym, cluster, histogram_golomb_.data(), config_best->histo.counts,
@@ -1092,7 +1049,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
     assert(size <= dict_range);
     enc->PutRange(size, 2, dict_range, "size");
     // Store the dictionary.
-    WP2_CHECK_STATUS(WriteHistogram(*config_best, range, max_nnz, enc));
+    WriteHistogram(*config_best, range, max_nnz, enc);
     // Create needed dictionaries.
     WP2_CHECK_STATUS(AddDict(sym, cluster, histogram_.data(),
                              config_best->histo.counts, mapping_.data(), size,

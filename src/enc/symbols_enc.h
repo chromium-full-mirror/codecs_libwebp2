@@ -293,9 +293,8 @@ class SymbolWriter : public SymbolManager,
                           ANSEncBase* const enc, float* const cost) override;
 
   // Writes a histogram as defined by the quantizer.
-  WP2Status WriteHistogram(const Quantizer::Config& config,
-                           uint32_t symbol_range, uint32_t max_count,
-                           ANSEncBase* const enc);
+  void WriteHistogram(const Quantizer::Config& config, uint32_t symbol_range,
+                      uint32_t max_count, ANSEncBase* const enc);
   // Computes the cost of storing a histogram as Golomb.
   void ComputeGolombCost(uint32_t range, uint32_t max_nnz, uint32_t size,
                          uint32_t prefix_size, float* cost,

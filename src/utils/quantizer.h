@@ -53,31 +53,26 @@ class Quantizer {
   };
   struct HistogramSparse {
     uint32_t* counts;
-    uint16_t* mapping;
-    uint32_t nnz;  // number of non-zero counts
+    const uint16_t* mapping;  // pointer to the original external mapping
+    uint32_t nnz;             // number of non-zero counts
   };
   struct Config {
+    // Writes the header and the count of a histogram.
+    void WriteHistogramHeader(uint32_t symbol_range,
+                              OptimizeArrayStorageStat* stats,
+                              uint32_t stats_size, ANSEncBase* const enc) const;
+    void WriteHistogramCounts(uint32_t symbol_range, uint32_t max_count,
+                              OptimizeArrayStorageStat* stats,
+                              uint32_t stats_size, ANSEncBase* const enc) const;
+
     ConfigParam param;
-    // The following members are the results of the above parameters.
+    // Histogram to write (which might be different from histo.counts: e.g.,
+    // for sparse histograms, we know counts >0, hence we can subtract 1 when
+    // writing).
     uint32_t* histogram_to_write;
     size_t size_to_write;
     HistogramSparse histo;
     float cost;
-
-    // Filled by QuantizeImpl():
-    void Reset() { used = false; }
-
-   private:
-    bool used = false;
-    // For each recursion level, each set of param can be Raw/Huffman, sparse or
-    // not and have several levels of recursion.
-    uint8_t bits[kMaxFreqBits];
-    Vector_u32 histogram_sub;
-    Vector_u16 mapping_sub;
-
-    uint32_t* histogram_quantized;
-    uint32_t* tmp_histogram_to_write;
-    friend Quantizer;
   };
 
   // range_max is the maximum range of the used symbols (maximum value + 1).
@@ -99,16 +94,15 @@ class Quantizer {
   // 'cost_max' is the value above which we can early exit.
   void QuantizeImpl(const uint32_t* const histogram,
                     const uint16_t* const mapping, size_t size_sparse,
-                    uint32_t symbol_range, uint32_t n_pixels_bits, int effort,
-                    float cost_max, Config* const config);
+                    uint32_t symbol_range, uint32_t max_count, int effort);
 
-  // TODO(vrabaud) Investigate to see if it is worth having more levels.
   static constexpr size_t kConfigNbr = 2;
   Config configs_[kConfigNbr];
+  // Pointer to the current best config in configs_.
+  Config* config_best_ = nullptr;
   uint32_t histogram_size_max_;
 
-  Data buffer32_;  // Big memory chunk storing the uint32_t buffers above.
-  Data buffer16_;  // Big memory chunk storing the uint16_t buffers above.
+  Vector_u32 buffer_;  // Big memory chunk storing the Config buffers.
 
   VectorNoCtor<OptimizeArrayStorageStat> stats_buffer_;
 };

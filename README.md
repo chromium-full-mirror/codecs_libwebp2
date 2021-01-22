@@ -2,44 +2,48 @@
 
 WebP 2 is the successor of the WebP image format, currently in development. It
 is not ready for general use, and the format is not finalized so changes to the
-library can break compatibility with images encoded with previous versions.
+library can break compatibility with images encoded with previous versions. \
 USE AT YOU OWN RISK!
 
 This package contains the library that can be used in other programs to encode
 or decode Webp 2 images, as well as command line tools.
 
-See http://developers.google.com/speed/webp for the first version of WebP .
+See http://developers.google.com/speed/webp for the first version of WebP.
 
 [TOC]
 
 ## What to expect?
 
-The WebP 2 experimental codec is mostly pushing the features of WebP further
-in terms of compression efficiency. The new features (like 10b HDR support)
-are kept minimal. The axis of experimentation are:
+The WebP 2 experimental codec is mostly pushing the features of WebP further in
+terms of compression efficiency. The new features (like 10b HDR support) are
+kept minimal. The axis of experimentation are:
 
-* more efficient lossy compression (~30% better than WebP,
-  as close to AVIF as possible)
-* better visual degradation at very low bitrate
-* improved lossless compression
-* improved transparency compression
-* animation support
-* ultra-light previews
-* lightweight incremental decoding
-* small container overhead, tailored specifically for image compression
-* full 10bit architecture (HDR10)
-* strong focus on software implementation, fully multi-threaded
+*   more efficient lossy compression (~30% better than WebP, as close to AVIF as
+    possible)
+*   better visual degradation at very low bitrate
+*   improved lossless compression
+*   improved transparency compression
+*   animation support
+*   ultra-light previews
+*   lightweight incremental decoding
+*   small container overhead, tailored specifically for image compression
+*   full 10bit architecture (HDR10)
+*   strong focus on software implementation, fully multi-threaded
 
-The use cases remain mostly the same as WebP: transfer over
-the wire, faster web, smaller apps, better user experience...
-WebP 2 is primarily tuned for the typical content available on
-the Web and Mobile apps: medium-range dimensions, transparency, short
-animations, thumbnails.
+The use cases remain mostly the same as WebP: transfer over the wire, faster
+web, smaller apps, better user experience... \
+WebP 2 is primarily tuned for the typical content available on the Web and
+Mobile apps: medium-range dimensions, transparency, short animations,
+thumbnails.
 
-WebP2 is currently only partially optimized and, roughly speaking 5x slower
-than WebP for lossy compression. It still compresses 2x faster than AVIF,
-but takes 3x more time to decompress.
-The goal is to reach decompression speed parity.
+WebP2 is currently only partially optimized and, roughly speaking 5x slower than
+WebP for lossy compression. It still compresses 2x faster than AVIF, but takes
+3x more time to decompress. The goal is to reach decompression speed parity.
+
+Side-by-side codec comparisons can be found at:
+
+-   [2021-01-19](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_01_19/index.html#cecret-lake-panorama-albion-basin-alta-utah-july-2009&WEBP2=s&AOM=s&subset1)
+-   [2021-01-11](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_01_11/index.html#mercado-dos-lavradores&WEBP2=s&AOM=s&subset1)
 
 ## Building
 
@@ -85,6 +89,7 @@ Usage:
 ```shell
 $ cwp2 in_file [options] [-o out_file]
 ```
+
 Example for a single image:
 
 ```shell
@@ -200,10 +205,10 @@ $ get_disto [options] compressed_file orig_file
 
 `get_disto` outputs in order:
 
-- compressed file size
-- overall PSNR (or other metric, if specified through flags)
-- PSNR (or other metric) for A, R, G and B channels, in order
-- compressed file bits per pixel
+-   compressed file size
+-   overall PSNR (or other metric, if specified through flags)
+-   PSNR (or other metric) for A, R, G and B channels, in order
+-   compressed file bits per pixel
 
 ## API
 
@@ -332,44 +337,44 @@ Please report all bugs to the issue tracker: https://bugs.chromium.org/p/webp2
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to submit patches.
 
 One of the easiest ways to contribute is to report cases with compression
-artifacts or surprising output size. These 'bad cases' are very useful to
-help improve the compression library!
+artifacts or surprising output size. These 'bad cases' are very useful to help
+improve the compression library!
 
 Please use the [tracker](https://bugs.chromium.org/p/webp2) to report such
 issues, making sure to include:
 
-* the version or revision used (using "`git rev-parse HEAD`" for instance)
+*   the version or revision used (using "`git rev-parse HEAD`" for instance)
 
-* the version of the compiler used (if you compiled your own version)
+*   the version of the compiler used (if you compiled your own version)
 
-* the problematic source image (will only be used for debugging and
-discarded afterward!)
+*   the problematic source image (will only be used for debugging and discarded
+    afterward!)
 
-* the *exact* command line to use to reproduce the issue
+*   the *exact* command line to use to reproduce the issue
 
-* the output file, if applicable.
+*   the output file, if applicable.
 
 ### Coding conventions and style
 
-* Code must follow the
-  [Google C++ style guide](https://google.github.io/styleguide/cppguide.html)
-  unless local style differs.
+*   Code must follow the
+    [Google C++ style guide](https://google.github.io/styleguide/cppguide.html)
+    unless local style differs.
 
-* `const` is used for variables everywhere possible, including for pointers
-  in function declarations. Input parameters use const references.
+*   `const` is used for variables everywhere possible, including for pointers in
+    function declarations. Input parameters use const references.
 
-  ```c++
-  void DoSomething(const Type1& const input, Type2* const out)
-  ```
+    ```c++
+    void DoSomething(const Type1& const input, Type2* const out)
+    ```
 
-* Do not use C++ exceptions.
+*   Do not use C++ exceptions.
 
-* Do not use std containers in the main library, e.g. no std::vector/set/map
-  (but they can be used in tests). For vectors, use WP2::Vector instead.
+*   Do not use std containers in the main library, e.g. no std::vector/set/map
+    (but they can be used in tests). For vectors, use WP2::Vector instead.
 
-* Use uint32_t for sizes, width, height, loop indices, etc.
+*   Use uint32_t for sizes, width, height, loop indices, etc.
 
-* Most functions should return a WP2Status
+*   Most functions should return a WP2Status
 
 ### Google Test Integration
 

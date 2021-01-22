@@ -627,7 +627,7 @@ TEST_F(TestANS, Test5) {
   Quantizer::Config* config = nullptr;
   for (int effort : {0, 5, 9}) {
     quantizer.Quantize(histogram.data(), mapping.data(), size_sparse,
-                       kMaxSymbol, /*max_count=*/16, effort, &config);
+                       kMaxSymbol, kNumSymbols, effort, &config);
 
     // Display results.
     if (kVerbose) {

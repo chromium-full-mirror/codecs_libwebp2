@@ -423,7 +423,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(::testing::Values(42),           // seed
                        ::testing::Values(75.f, 100.f),  // quality
                        ::testing::Values(true, false),  // fixed tile size
-                       ::testing::Values(100),          // num tries
+                       ::testing::Values(10),           // num tries
                        ::testing::Values(false)         // print stats
                        ));
 
