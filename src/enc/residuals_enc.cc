@@ -472,7 +472,6 @@ WP2Status ResidualWriter::GetRate(Channel channel, uint32_t num_channels,
                                   EncodingMethod* const encoding_method) {
   EncodingMethod method;
   float residual_cost;
-  counter->Clear();
   WP2_CHECK_STATUS(FindBestEncodingMethod(tdim, coeffs, num_coeffs, first_is_dc,
                                           channel, num_channels, counter,
                                           &method, &residual_cost));

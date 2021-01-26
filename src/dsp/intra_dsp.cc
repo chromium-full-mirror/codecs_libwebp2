@@ -460,6 +460,13 @@ void AddRow_C(const int16_t src[], const int32_t res[],
     dst[x] = WP2::Clamp(res[x] + src[x], min, max);
   }
 }
+void AddRowEq_C(const int16_t res[], int16_t dst[],
+                int32_t min, int32_t max, uint32_t len) {
+  assert((len & 3) == 0);
+  for (uint32_t x = 0; x < len; ++x) {
+    dst[x] = WP2::Clamp(dst[x] + res[x], min, max);
+  }
+}
 
 void SubtractRow_C(const int16_t src[], const int16_t pred[],
                    int32_t dst[], uint32_t len) {
@@ -467,35 +474,45 @@ void SubtractRow_C(const int16_t src[], const int16_t pred[],
   for (uint32_t x = 0; x < len; ++x) dst[x] = src[x] - pred[x];
 }
 
-#define ADD_SUB_BLOCK_FUNCS_DCL(WIDTH, ADD_FUNC, SUB_FUNC, EXT)         \
-void AddBlock_## WIDTH ## EXT(const int16_t src[], uint32_t src_step,   \
-                              const int32_t res[], uint32_t res_step,   \
-                              int32_t min, int32_t max,                 \
-                              int16_t dst[], uint32_t dst_step,         \
-                              uint32_t height) {                        \
-  for (uint32_t y = 0; y < height; ++y) {                               \
-    ADD_FUNC(src, res, min, max, dst, WIDTH);                           \
-    src += src_step;                                                    \
-    res += res_step;                                                    \
-    dst += dst_step;                                                    \
-  }                                                                     \
-}                                                                       \
-void SubBlock_## WIDTH ## EXT(const int16_t src[], uint32_t src_step,   \
-                              const int16_t pred[], uint32_t pred_step, \
-                              int32_t dst[], uint32_t dst_step,         \
-                              uint32_t height) {                        \
-  for (uint32_t y = 0; y < height; ++y) {                               \
-    SUB_FUNC(src, pred, dst, WIDTH);                                    \
-    src += src_step;                                                    \
-    pred += pred_step;                                                  \
-    dst += dst_step;                                                    \
-  }                                                                     \
+#define ADD_SUB_BLOCK_FUNCS_DCL(WIDTH, ADD_FUNC, ADDEQ_FUNC, SUB_FUNC, EXT) \
+void AddBlock_## WIDTH ## EXT(const int16_t src[], uint32_t src_step,       \
+                              const int32_t res[], uint32_t res_step,       \
+                              int32_t min, int32_t max,                     \
+                              int16_t dst[], uint32_t dst_step,             \
+                              uint32_t height) {                            \
+  for (uint32_t y = 0; y < height; ++y) {                                   \
+    ADD_FUNC(src, res, min, max, dst, WIDTH);                               \
+    src += src_step;                                                        \
+    res += res_step;                                                        \
+    dst += dst_step;                                                        \
+  }                                                                         \
+}                                                                           \
+void AddBlockEq_## WIDTH ## EXT(const int16_t res[], uint32_t res_step,     \
+                                int16_t dst[], uint32_t dst_step,           \
+                                int32_t min, int32_t max,                   \
+                                uint32_t height) {                          \
+  for (uint32_t y = 0; y < height; ++y) {                                   \
+    ADDEQ_FUNC(res, dst, min, max, WIDTH);                                  \
+    res += res_step;                                                        \
+    dst += dst_step;                                                        \
+  }                                                                         \
+}                                                                           \
+void SubBlock_## WIDTH ## EXT(const int16_t src[], uint32_t src_step,       \
+                              const int16_t pred[], uint32_t pred_step,     \
+                              int32_t dst[], uint32_t dst_step,             \
+                              uint32_t height) {                            \
+  for (uint32_t y = 0; y < height; ++y) {                                   \
+    SUB_FUNC(src, pred, dst, WIDTH);                                        \
+    src += src_step;                                                        \
+    pred += pred_step;                                                      \
+    dst += dst_step;                                                        \
+  }                                                                         \
 }
 
-ADD_SUB_BLOCK_FUNCS_DCL( 4, AddRow_C, SubtractRow_C, _C)
-ADD_SUB_BLOCK_FUNCS_DCL( 8, AddRow_C, SubtractRow_C, _C)
-ADD_SUB_BLOCK_FUNCS_DCL(16, AddRow_C, SubtractRow_C, _C)
-ADD_SUB_BLOCK_FUNCS_DCL(32, AddRow_C, SubtractRow_C, _C)
+ADD_SUB_BLOCK_FUNCS_DCL( 4, AddRow_C, AddRowEq_C, SubtractRow_C, _C)
+ADD_SUB_BLOCK_FUNCS_DCL( 8, AddRow_C, AddRowEq_C, SubtractRow_C, _C)
+ADD_SUB_BLOCK_FUNCS_DCL(16, AddRow_C, AddRowEq_C, SubtractRow_C, _C)
+ADD_SUB_BLOCK_FUNCS_DCL(32, AddRow_C, AddRowEq_C, SubtractRow_C, _C)
 
 //------------------------------------------------------------------------------
 // Chroma-From-Luma
@@ -558,6 +575,30 @@ void AddRow_SSE(const int16_t src[], const int32_t res[],
   }
 }
 
+void AddRowEq_SSE(const int16_t res[], int16_t dst[],
+                  int32_t min, int32_t max, uint32_t len) {
+  assert((len & 3) == 0);
+  const __m128i m_max = _mm_set1_epi16(max);
+  const __m128i m_min = _mm_set1_epi16(min);
+  uint32_t x = 0;
+  for (; x + 8 <= len; x += 8) {
+    const __m128i A = _mm_loadu_si128((const __m128i*)(res + x));
+    const __m128i B = _mm_loadu_si128((const __m128i*)(dst + x));
+    const __m128i C = _mm_add_epi16(A, B);
+    const __m128i D = _mm_min_epi16(C, m_max);
+    const __m128i E = _mm_max_epi16(D, m_min);
+    _mm_storeu_si128((__m128i*)(dst + x), E);
+  }
+  if (x < len) {
+    const __m128i A = _mm_loadl_epi64((const __m128i*)(res + x));
+    const __m128i B = _mm_loadl_epi64((const __m128i*)(dst + x));
+    const __m128i C = _mm_add_epi16(A, B);
+    const __m128i D = _mm_min_epi16(C, m_max);
+    const __m128i E = _mm_max_epi16(D, m_min);
+    _mm_storel_epi64((__m128i*)(dst + x), E);
+  }
+}
+
 void SubtractRow_SSE(const int16_t src[], const int16_t pred[],
                      int32_t dst[], uint32_t len) {
   assert((len & 3) == 0);
@@ -580,10 +621,10 @@ void SubtractRow_SSE(const int16_t src[], const int16_t pred[],
   }
 }
 
-ADD_SUB_BLOCK_FUNCS_DCL( 4, AddRow_SSE, SubtractRow_SSE, _SSE)
-ADD_SUB_BLOCK_FUNCS_DCL( 8, AddRow_SSE, SubtractRow_SSE, _SSE)
-ADD_SUB_BLOCK_FUNCS_DCL(16, AddRow_SSE, SubtractRow_SSE, _SSE)
-ADD_SUB_BLOCK_FUNCS_DCL(32, AddRow_SSE, SubtractRow_SSE, _SSE)
+ADD_SUB_BLOCK_FUNCS_DCL( 4, AddRow_SSE, AddRowEq_SSE, SubtractRow_SSE, _SSE)
+ADD_SUB_BLOCK_FUNCS_DCL( 8, AddRow_SSE, AddRowEq_SSE, SubtractRow_SSE, _SSE)
+ADD_SUB_BLOCK_FUNCS_DCL(16, AddRow_SSE, AddRowEq_SSE, SubtractRow_SSE, _SSE)
+ADD_SUB_BLOCK_FUNCS_DCL(32, AddRow_SSE, AddRowEq_SSE, SubtractRow_SSE, _SSE)
 
 #undef ADD_SUB_BLOCK_FUNCS_DCL
 
@@ -640,6 +681,10 @@ WP2_TSAN_IGNORE_FUNCTION void PredictionInitSSE() {
   WP2::AddBlock[1] = AddBlock_8_SSE;
   WP2::AddBlock[2] = AddBlock_16_SSE;
   WP2::AddBlock[3] = AddBlock_32_SSE;
+  WP2::AddBlockEq[0] = AddBlockEq_4_SSE;
+  WP2::AddBlockEq[1] = AddBlockEq_8_SSE;
+  WP2::AddBlockEq[2] = AddBlockEq_16_SSE;
+  WP2::AddBlockEq[3] = AddBlockEq_32_SSE;
 
   WP2::CflPredict = CflPredict_SSE;
 }
@@ -666,6 +711,7 @@ void (*AddRow)(const int16_t src[], const int32_t res[],
 
 SubtractBlockFunc SubtractBlock[4] = { nullptr };
 AddBlockFunc AddBlock[4] = { nullptr };
+AddBlockEqFunc AddBlockEq[4] = { nullptr };
 
 void (*CflPredict)(const int16_t* src, int16_t a, int32_t b, int16_t* dst,
                    int16_t min, int16_t max, uint32_t len) = nullptr;
@@ -697,6 +743,10 @@ WP2_TSAN_IGNORE_FUNCTION void PredictionInit() {
   AddBlock[1] = AddBlock_8_C;
   AddBlock[2] = AddBlock_16_C;
   AddBlock[3] = AddBlock_32_C;
+  AddBlockEq[0] = AddBlockEq_4_C;
+  AddBlockEq[1] = AddBlockEq_8_C;
+  AddBlockEq[2] = AddBlockEq_16_C;
+  AddBlockEq[3] = AddBlockEq_32_C;
 
   CflPredict = CflPredict_C;
 

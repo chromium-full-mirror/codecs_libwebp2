@@ -80,7 +80,8 @@ WP2Status SyntaxReader::ReadHeader(const BitstreamFeatures& features,
 
   WP2_CHECK_STATUS(LoadDictionaries());
 
-  return dec_->GetStatus();
+  WP2_CHECK_STATUS(dec_->GetStatus());
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
@@ -291,13 +292,17 @@ WP2Status SyntaxReader::GetBlock(CodedBlock* const cb, YUVPlane* const out,
   // TODO(skal): check rnd_mtx behavior when no coeff and/or identity transform
   dec_->PushBitTracesCustomPrefix("rnd_mtx");
   if (gparams_->use_rnd_mtx_) {
-    cb->use_mtx_ = (bool)sr_.Read(kSymbolUseRandomMatrix, "use_rnd_mtx");
+#if defined(ENABLE_RND_MTX)
+    const bool can_use =
+        gparams_->mtx_set_.IsOk(cb->mtx_[kYChannel], cb->tdim(kYChannel));
+    cb->use_mtx_ =
+        can_use && (bool)sr_.Read(kSymbolUseRandomMatrix, "use_rnd_mtx");
     if (cb->use_mtx_) {
       cb->mtx_[kYChannel] = (uint8_t)sr_.Read(kSymbolRndMtx0, "rnd_mtx_y");
-      // TODO(skal): remove this bitstream possibility for error.
-      WP2_CHECK_OK(gparams_->mtx_set_.IsOk(cb->mtx_[kYChannel], cb->dim()),
-                   WP2_STATUS_BITSTREAM_ERROR);
     }
+#else
+    cb->use_mtx_ = false;
+#endif
   }
   dec_->PopBitTracesCustomPrefix("rnd_mtx");
 
@@ -307,7 +312,11 @@ WP2Status SyntaxReader::GetBlock(CodedBlock* const cb, YUVPlane* const out,
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !cb->HasLossyAlpha()) continue;
     dec_->PushBitTracesCustomPrefix(kCoeffsStr[c]);
-    WP2_CHECK_STATUS(residual_reader_.ReadCoeffs(c, dec_, &sr_, cb, info));
+    const Segment& segment =
+        gparams_->segments_[(c == kAChannel) ? 0 : cb->id_];
+    const int16_t* const dequant = segment.GetQuant(c).Dequant();
+    WP2_CHECK_STATUS(
+        residual_reader_.ReadCoeffs(c, dequant, dec_, &sr_, cb, info));
     dec_->PopBitTracesCustomPrefix(kCoeffsStr[c]);
   }
 
@@ -318,7 +327,8 @@ WP2Status SyntaxReader::GetBlock(CodedBlock* const cb, YUVPlane* const out,
     dec_->PopBitTracesCustomPrefix("alpha");
   }
 
-  return dec_->GetStatus();
+  WP2_CHECK_STATUS(dec_->GetStatus());
+  return WP2_STATUS_OK;
 }
 
 BlockSize SyntaxReader::GetBlockSize(const FrontMgrNxNBase& mgr) {

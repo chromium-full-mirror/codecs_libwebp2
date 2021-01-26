@@ -33,9 +33,8 @@ namespace libgav1 {
 //------------------------------------------------------------------------------
 // From libgav1/src/dsp/constants.h
 
-constexpr uint32_t kQuantizedCoefficientBufferPadding = 4;
-constexpr uint32_t kMaxTxBufferDim =
-    (kMaxBlockSizePix + kQuantizedCoefficientBufferPadding);
+constexpr uint32_t kLevelBufferPadding = 4;
+constexpr uint32_t kMaxTxBufferDim = kMaxBlockSizePix + kLevelBufferPadding;
 
 // The plane types, called luma and chroma in the spec.
 // Matches PlaneType in cdfs.inc
@@ -63,7 +62,6 @@ inline int PaddedIndex(int index, int tx_width_log2) {
   return index + MultiplyBy4(index >> tx_width_log2);
 }
 
-constexpr int kNumQuantizerBaseLevels = 2;
 
 //------------------------------------------------------------------------------
 // From libgav1/src/symbol_decoder_context.h
@@ -88,13 +86,13 @@ enum {
   kCoeffBaseContexts = 42,
   kCoeffBaseSymbolCount = 4,
   kCoeffBaseRangeContexts = 21,
-  kCoeffBaseRangeSymbolCount = 4
+  kCoeffBaseRangeSymbolCount = 3
 };  // anonymous enum
 
-typedef int (*CoeffBaseContextFunc)(const uint8_t qlevels[], TrfSize tdim,
-                                    int adjusted_tx_width_log2, uint16_t pos);
-typedef int (*CoeffBaseRangeContextFunc)(
-    const uint8_t qlevels[], int adjusted_tx_width_log2, int pos);
+typedef uint32_t (*CoeffBaseContextFunc)(const uint8_t qlevels[], TrfSize tdim,
+                                         uint32_t tx_width_log2, uint32_t pos);
+typedef uint32_t (*CoeffBaseRangeContextFunc)(
+    const uint8_t qlevels[], uint32_t tx_width_log2, uint32_t pos);
 
 // Class specialized in reading transform residuals.
 class AOMResidualIO {
@@ -162,9 +160,9 @@ class AOMResidualIO {
       GetCoeffBaseRangeContextFunc(uint32_t tx_class);
 
  protected:
-  static int GetCoeffBaseContextEob(TrfSize tdim, int index);
-
-  static int GetCoeffBaseRangeContextEob(int adjusted_tx_width_log2, int pos);
+  static uint32_t GetCoeffBaseContextEob(TrfSize tdim, uint32_t index);
+  static uint32_t GetCoeffBaseRangeContextEob(
+      uint32_t tx_width_log2, uint32_t pos);
 };
 
 //------------------------------------------------------------------------------
@@ -184,13 +182,14 @@ constexpr uint8_t kTrfContext[] = {
 };
 STATIC_ASSERT_ARRAY_SIZE(kTrfContext, TRF_LAST);
 
-// Range above kNumQuantizerBaseLevels which the exponential golomb coding
+// Range above kNumQuantizerBaseLevels which the exponential Golomb coding
 // process is activated.
-constexpr int kQuantizerCoefficientBaseRange = 12;
-constexpr int kQuantizerCoefficientBaseRangeContextClamp =
-    kQuantizerCoefficientBaseRange + kNumQuantizerBaseLevels + 1;
-constexpr int kCoeffBaseRangeMaxIterations =
-    kQuantizerCoefficientBaseRange / (kCoeffBaseRangeSymbolCount - 1);
+constexpr uint32_t kNumQuantizerBaseLevels = 3u;  // (inclusive) limit
+constexpr uint32_t kQuantizerCoefficientBaseRange = 12u;
+constexpr uint32_t kQuantizerCoefficientBaseRangeContextClamp =
+    kQuantizerCoefficientBaseRange + kNumQuantizerBaseLevels;
+constexpr uint32_t kCoeffBaseRangeMaxIterations =
+    kQuantizerCoefficientBaseRange / kCoeffBaseRangeSymbolCount;
 
 }  // namespace libgav1
 }  // namespace WP2

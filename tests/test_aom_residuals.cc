@@ -54,6 +54,11 @@ TEST_P(ResidualWriterTest, AOM) {
   const uint32_t num_elem = bw_pix * bh_pix;
   const uint32_t tf_i = 0;  // One single transform per block.
 
+  int16_t dequant[WP2QStride * 32];
+  for (uint32_t i = 0; i < WP2QStride * 32; ++i) {
+    dequant[i] = 1 + (i % 6);
+  }
+
   CodedBlock cb;
   Block block(/*x=*/0, /*y=*/0, dim);
   cb.SetDim(block, mgr);
@@ -146,17 +151,23 @@ TEST_P(ResidualWriterTest, AOM) {
           cb_out.num_coeffs_[channel][tf_i] = (all_zero ? 0 : num_elem);
           std::fill(cb_out.coeffs_[channel][tf_i],
                     cb_out.coeffs_[channel][tf_i] + num_elem, 0);
+          const TrfSize tdim = cb_out.tdim(channel);
+          const uint32_t tw = TrfWidth[tdim];
+          const uint16_t* const scan = ResidualIterator::GetZigzag(tdim);
           if (!all_zero) {
             cb_out.num_coeffs_[channel][tf_i] = reader.ReadCoeffs(
-                channel, cb_out.tdim(channel),
+                channel, dequant, tdim,
                 cb_out.GetCodingParams(channel)->tf,
                 cb_out.IsFirstCoeffDC(channel),
                 &sr, &dec, cb_out.coeffs_[channel][tf_i]);
           }
           for (uint32_t i = 0; i < num_elem; ++i) {
-            EXPECT_EQ(cb.coeffs_[channel][tf_i][i],
-                      cb_out.coeffs_[channel][tf_i][i])
-                << "pos: " << i << "  is_all_zero:" << fill_all_zero;
+            const uint32_t j = scan[i];
+            const uint32_t qpos = (j % tw) + WP2QStride * (j / tw);
+            EXPECT_EQ(dequant[qpos] * cb.coeffs_[channel][tf_i][j],
+                      cb_out.coeffs_[channel][tf_i][j])
+                << "pos: " << i << "  is_all_zero:" << fill_all_zero
+                << "   dequant:" << dequant[qpos] << " scan[]:" << j;
           }
         }
       }

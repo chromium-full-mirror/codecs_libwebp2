@@ -219,7 +219,7 @@ WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
     cb->pred_scores_[kAChannel] = 1.f;
   } else if (config_.effort == 2) {
     // Quickly select the best predictor.
-    cb->FindBestPred(preds, kAChannel, /*reduced=*/false);
+    cb->FindBestPred(preds, kAChannel);
   } else {
     Vector<TransformPair> transforms;
     WP2_CHECK_ALLOC_OK(transforms.push_back(kDctDct));

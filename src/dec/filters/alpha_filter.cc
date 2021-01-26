@@ -23,9 +23,6 @@
 
 namespace WP2 {
 
-static constexpr uint32_t kMaxKernelRadius = 2;
-static constexpr uint32_t kMaxKernelSize2 =
-    (kMaxKernelRadius * 2 + 1) * (kMaxKernelRadius * 2 + 1);
 static constexpr uint32_t kWeightBits = 10;
 // Gaussian blur kernels (in 1 dimension).
 // round(exp(-i*i/(2.*radius)) * (1<<kWeightBits))
@@ -89,13 +86,15 @@ AlphaFilter::AlphaFilter(const DecoderConfig& config,
 
 WP2Status AlphaFilter::Allocate() {
   if (!enabled_) return WP2_STATUS_OK;
-  WP2_CHECK_STATUS(
-      top_taps_.Resize(blocks_.tile_rect_.width, kMaxKernelRadius + 1));
+  WP2_CHECK_STATUS(top_taps_.Resize(blocks_.tile_rect_.width, kTapHeight));
   return WP2_STATUS_OK;
 }
 
 uint32_t AlphaFilter::Smooth(uint32_t num_rows) {
-  assert(num_rows <= blocks_.tile_rect_.height);
+  const uint32_t h = blocks_.tile_rect_.height;
+  const uint32_t w = blocks_.tile_rect_.width;
+
+  assert(num_rows <= h);
   assert(num_filtered_rows_ <= num_rows);
 
   Plane16* const pixels = &blocks_.pixels_->A;
@@ -109,38 +108,37 @@ uint32_t AlphaFilter::Smooth(uint32_t num_rows) {
   if (VDMatch(config_, "alpha-filter")) SavePixelsForVDebug(num_rows);
 #endif  // WP2_REDUCE_BINARY_SIZE
 
-  int32_t num_filterable_rows;
-  if (num_rows == blocks_.tile_rect_.height) {
-    // All pixels are available: filter everything left.
+  uint32_t num_filterable_rows;
+  if (num_rows == h) {
+    // All pixels are available: filter everything that is left.
     num_filterable_rows = num_rows;
   } else {
     // Wait for bottom taps to be available.
     num_filterable_rows = SafeSub(num_rows, (uint32_t)kMaxKernelRadius);
   }
 
-  const int32_t h = blocks_.tile_rect_.height;
-  const int32_t w = blocks_.tile_rect_.width;
-
-  int32_t y = num_filtered_rows_;
-  for (; y < num_filterable_rows; ++y) {
+  for (uint32_t y = num_filtered_rows_; y < num_filterable_rows; ++y) {
     const FilterBlockMap::BlockFeatures* const blocks =
         blocks_.GetRow(y / kMinBlockSizePix);
 
     // Copy the unfiltered version of the current row to 'top_taps_'.
-    Plane16 top_view, pixels_view;
-    WP2_ASSERT_STATUS(top_view.SetView(
-        top_taps_, {0, (uint32_t)y % top_taps_.h_, top_taps_.w_, 1}));
-    WP2_ASSERT_STATUS(pixels_view.SetView(
-        *pixels, {0, (uint32_t)y, blocks_.tile_rect_.width, 1}));
-    WP2_ASSERT_STATUS(top_view.Copy(pixels_view, /*resize_if_needed=*/false));
+    int16_t* const src = pixels->Row(y);
+    std::copy(src, src + w, top_taps_.Row(y % kTapHeight));
 
-    for (int32_t x = 0; x < w; ++x) {
-      if (!blocks[x / kMinBlockSizePix].has_lossy_alpha) continue;
-
-      const int16_t center_pix = Clamp<int16_t>(pixels->At(x, y), 0, kAlphaMax);
+    // Filter the w x h area.
+    const uint32_t y_min = std::max(y, kernel_radius_) - kernel_radius_;
+    const uint32_t y_max = std::min(y + kernel_radius_ + 1u, h);
+    for (uint32_t x = 0; x < w; ++x) {
+      if (!blocks[x / kMinBlockSizePix].has_lossy_alpha) {
+        x += kMinBlockSizePix - 1;
+        continue;
+      }
       uint32_t sum = 0u;
       uint32_t weights = 0u;
 
+      const uint32_t x_min = std::max(x, kernel_radius_) - kernel_radius_;
+      const uint32_t x_max = std::min(x + kernel_radius_ + 1u, w);
+      const int16_t center_pix = Clamp<int16_t>(src[x], 0, kAlphaMax);
       static constexpr uint32_t kMultNumBits = WP2Log2Ceil_k(kMaxKernelSize2);
       static constexpr uint32_t kSumNumBits =
           kAlphaBits + kWeightBits + kMultNumBits;
@@ -149,32 +147,29 @@ uint32_t AlphaFilter::Smooth(uint32_t num_rows) {
       static_assert(kWeightsBits <= sizeof(weights) * 8 - 1,
                     "Possible overflow.");
 
-      for (int32_t j = -kernel_radius_; j <= kernel_radius_; j++) {
-        for (int32_t i = -kernel_radius_; i <= kernel_radius_; i++) {
-          if (x + i < 0 || y + j < 0 || x + i >= w || y + j >= h) continue;
-
-          const int16_t pix = Clamp<int16_t>(
-              (j <= 0) ? top_taps_.At(x + i, (y + j) % top_taps_.h_)
-                       : pixels->At(x + i, y + j),
-              0, kAlphaMax);
+      for (uint32_t Y = y_min; Y < y_max; ++Y) {
+        const uint32_t y_weight = gaussian_[(Y >= y) ? Y - y : y - Y];
+        const int16_t* const tap =
+            (Y <= y) ? top_taps_.Row(Y % kTapHeight) : pixels->Row(Y);
+        for (uint32_t X = x_min; X < x_max; ++X) {
+          const int16_t pix = Clamp<int16_t>(tap[X], 0, kAlphaMax);
           const int32_t diff = std::abs(center_pix - pix);
           const uint32_t value_weight = value_weights_[diff];
-          const uint32_t spatial_weight =
-              gaussian_[std::abs(i)] * gaussian_[std::abs(j)];
-          const uint32_t weight = ChangePrecision(value_weight * spatial_weight,
-                                                  kWeightBits * 3, kWeightBits);
-          static_assert(kWeightBits * 3 <= sizeof(spatial_weight) * 8 - 1,
+          const uint32_t x_weight = gaussian_[(X >= x) ? X - x : x - X];
+          const uint32_t weight =
+              ChangePrecision(value_weight * x_weight * y_weight,
+                              kWeightBits * 3, kWeightBits);
+          static_assert(kWeightBits * 3 <= sizeof(x_weight) * 8 - 1,
                         "Possible overflow.");
-
           weights += weight;
           sum += weight * pix;
         }
       }
-
-      pixels->At(x, y) = DivRound(sum, weights);
+      // TODO(skal): could be sped up if we had a constant 'weights' denominator
+      src[x] = DivRound(sum, weights);
     }
   }
-  num_filtered_rows_ = y;
+  num_filtered_rows_ = num_filterable_rows;
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "alpha-filter")) ApplyVDebug(num_rows);

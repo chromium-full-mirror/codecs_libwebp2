@@ -41,7 +41,8 @@ class AOMResidualReader : public AOMResidualIO {
  public:
   // Reads residual coeffs, returns the number of non-zero coefficients read.
   static uint32_t ReadCoeffs(
-      Channel channel, TrfSize tdim, TransformPair tx_type, bool first_is_dc,
+      Channel channel, const int16_t dequant[],
+      TrfSize tdim, TransformPair tx_type, bool first_is_dc,
       SymbolReader* const sr, ANSDec* const dec, int16_t* const coeffs);
 
  private:
@@ -51,7 +52,7 @@ class AOMResidualReader : public AOMResidualIO {
 
   // Part of 5.11.39.
   static void ReadSignAndApplyDequantization(
-      int adjusted_tx_width_log2, int16_t* const coeffs, uint32_t max_value,
+      int16_t coeffs[], int16_t dequant, uint32_t max_value,
       SymbolReader* const sr, ANSDec* const dec);
   static int ReadCoeffBaseRange(int tx_size_context, int cdf_context,
                                 int plane_type, SymbolReader* const sr);

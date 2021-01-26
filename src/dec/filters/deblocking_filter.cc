@@ -326,9 +326,11 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
     uint32_t sharpness = sharpness_from_quality;
     if (do_deblock) {
       // The sharpness is determined by the block with more details.
-      sharpness = std::max(sharpness,
-                           GetSharpnessFromResidualDensity(std::max(
-                               p_block.res_den[c], q_block.res_den[c])));
+      const uint32_t p_res_den = p_block.res_den[c];
+      const uint32_t q_res_den = q_block.res_den[c];
+      const uint32_t max_res_den = std::max(p_res_den, q_res_den);
+      sharpness =
+          std::max(sharpness, GetSharpnessFromResidualDensity(max_res_den));
     } else {
       // We can't compute sharpness from residual density since we
       // don't have it for lossless alpha blocks.

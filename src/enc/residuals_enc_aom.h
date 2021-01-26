@@ -45,11 +45,9 @@ class AOMResidualWriter : public AOMResidualIO {
   static void WriteSignAndApplyDequantization(
       int16_t res, uint32_t max_value,
       SymbolManager* const sm, ANSEncBase* const enc);
-  static uint32_t WriteCoeffBaseRange(uint32_t level,
-                                      int tx_size_context,
-                                      int cdf_context, int plane_type,
-                                      SymbolManager* const sm,
-                                      ANSEncBase* const enc);
+  static void WriteCoeffBaseRange(
+      uint32_t level, int tx_size_context, int cdf_context, int plane_type,
+      SymbolManager* const sm, ANSEncBase* const enc);
 };
 
 }  // namespace libgav1

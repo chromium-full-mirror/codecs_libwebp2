@@ -125,7 +125,7 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
     constexpr float disto_scale[] = {0.4f, 0.2f, 0.2f, 0.2f};
     for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
       if (c == kAChannel && !with_alpha_) continue;
-      disto[i] += disto_scale[c] * tmp_cb_.GetDisto(c, tile_rect_);
+      disto[i] += disto_scale[c] * tmp_cb_.GetDisto(c);
     }
     disto[i] /= num_pixels;  // Per pixel is not necessary, just nicer debug.
     total_disto += disto[i];

@@ -114,6 +114,19 @@ void AddRandomMatrix(uint32_t size, const int16_t rnd[], int16_t coeffs[]) {
   }
 }
 
+void AddRandomMatrix(uint32_t size, const int16_t rnd[], int32_t coeffs[]) {
+  for (uint32_t i = 0; i < size; ++i) {
+    if (rnd[i]) {
+      if (coeffs[i]) {
+        const int16_t v = std::abs(coeffs[i]) + 1;
+        coeffs[i] = (coeffs[i] < 0) ? -v : v;
+      } else {
+        coeffs[i] = rnd[i];
+      }
+    }
+  }
+}
+
 void SubtractRandomMatrix(uint32_t size, const int16_t rnd[], int16_t coeffs[],
                           uint32_t* const num_coeffs) {
   *num_coeffs = 0;
@@ -234,8 +247,8 @@ WP2Status RndMtxSet::CopyFrom(const RndMtxSet& src) {
 }
 
 template<class T>
-bool CodedBlock::CheckUseMtx(BlockSize dim, const T& mtx) {
-  if (blk_.dim() == dim && !GetCodingParams(kYChannel)->split_tf) {
+bool CodedBlock::CheckUseMtx(TrfSize trf, const T& mtx) {
+  if (tdim(kYChannel) == trf) {
     // TODO(skal): later: mtx_[1] = ...
     mtx_[0] = FindAndSubtractBestMatch(mtx, coeffs_[kYChannel][0],
                                        &num_coeffs_[kYChannel][0]);
@@ -246,43 +259,60 @@ bool CodedBlock::CheckUseMtx(BlockSize dim, const T& mtx) {
 
 void RndMtxSet::DecideUseRndMtx(CodedBlock* const cb) const {
   assert(cb->mtx_set_ == this);
-  cb->use_mtx_ = cb->CheckUseMtx(BLK_4x4, mtx4x4_) ||
-                 cb->CheckUseMtx(BLK_4x8, mtx4x8_) ||
-                 cb->CheckUseMtx(BLK_8x4, mtx8x4_) ||
-                 cb->CheckUseMtx(BLK_8x8, mtx8x8_) ||
-                 cb->CheckUseMtx(BLK_16x8, mtx16x8_) ||
-                 cb->CheckUseMtx(BLK_8x16, mtx8x16_) ||
-                 cb->CheckUseMtx(BLK_16x16, mtx16x16_) ||
-                 cb->CheckUseMtx(BLK_32x16, mtx32x16_) ||
-                 cb->CheckUseMtx(BLK_16x32, mtx16x32_) ||
-                 cb->CheckUseMtx(BLK_32x32, mtx32x32_);
+#if defined(ENABLE_RND_MTX)
+  cb->use_mtx_ = cb->CheckUseMtx(TRF_4x4, mtx4x4_) ||
+                 cb->CheckUseMtx(TRF_4x8, mtx4x8_) ||
+                 cb->CheckUseMtx(TRF_8x4, mtx8x4_) ||
+                 cb->CheckUseMtx(TRF_8x8, mtx8x8_) ||
+                 cb->CheckUseMtx(TRF_16x8, mtx16x8_) ||
+                 cb->CheckUseMtx(TRF_8x16, mtx8x16_) ||
+                 cb->CheckUseMtx(TRF_16x16, mtx16x16_) ||
+                 cb->CheckUseMtx(TRF_32x16, mtx32x16_) ||
+                 cb->CheckUseMtx(TRF_16x32, mtx16x32_) ||
+                 cb->CheckUseMtx(TRF_32x32, mtx32x32_);
+#else
+  cb->use_mtx_ = false;
+#endif
 }
 
-bool RndMtxSet::IsOk(uint32_t id, BlockSize dim) const {
-  if (dim == BLK_4x4 && id < mtx4x4_.size()) return true;
-  if (dim == BLK_4x8 && id < mtx4x8_.size()) return true;
-  if (dim == BLK_8x4 && id < mtx8x4_.size()) return true;
-  if (dim == BLK_8x8 && id < mtx8x8_.size()) return true;
-  if (dim == BLK_16x8 && id < mtx16x8_.size()) return true;
-  if (dim == BLK_8x16 && id < mtx8x16_.size()) return true;
-  if (dim == BLK_16x16 && id < mtx16x16_.size()) return true;
-  if (dim == BLK_32x16 && id < mtx32x16_.size()) return true;
-  if (dim == BLK_16x32 && id < mtx16x32_.size()) return true;
-  if (dim == BLK_32x32 && id < mtx32x32_.size()) return true;
+bool RndMtxSet::IsOk(uint32_t id, TrfSize tdim) const {
+  if (tdim == TRF_4x4 && id < mtx4x4_.size()) return true;
+  if (tdim == TRF_4x8 && id < mtx4x8_.size()) return true;
+  if (tdim == TRF_8x4 && id < mtx8x4_.size()) return true;
+  if (tdim == TRF_8x8 && id < mtx8x8_.size()) return true;
+  if (tdim == TRF_16x8 && id < mtx16x8_.size()) return true;
+  if (tdim == TRF_8x16 && id < mtx8x16_.size()) return true;
+  if (tdim == TRF_16x16 && id < mtx16x16_.size()) return true;
+  if (tdim == TRF_32x16 && id < mtx32x16_.size()) return true;
+  if (tdim == TRF_16x32 && id < mtx16x32_.size()) return true;
+  if (tdim == TRF_32x32 && id < mtx32x32_.size()) return true;
   return false;
 }
 
-void RndMtxSet::AddMatrix(uint32_t id, BlockSize dim, int16_t dst[]) const {
-  if (dim == BLK_4x4) mtx4x4_[id].AddTo(dst);
-  if (dim == BLK_4x8) mtx4x8_[id].AddTo(dst);
-  if (dim == BLK_8x4) mtx8x4_[id].AddTo(dst);
-  if (dim == BLK_8x8) mtx8x8_[id].AddTo(dst);
-  if (dim == BLK_16x8) mtx16x8_[id].AddTo(dst);
-  if (dim == BLK_8x16) mtx8x16_[id].AddTo(dst);
-  if (dim == BLK_16x16) mtx16x16_[id].AddTo(dst);
-  if (dim == BLK_32x16) mtx32x16_[id].AddTo(dst);
-  if (dim == BLK_16x32) mtx16x32_[id].AddTo(dst);
-  if (dim == BLK_32x32) mtx32x32_[id].AddTo(dst);
+void RndMtxSet::AddMatrix(uint32_t id, TrfSize tdim, int16_t dst[]) const {
+  if (tdim == TRF_4x4) mtx4x4_[id].AddTo(dst);
+  if (tdim == TRF_4x8) mtx4x8_[id].AddTo(dst);
+  if (tdim == TRF_8x4) mtx8x4_[id].AddTo(dst);
+  if (tdim == TRF_8x8) mtx8x8_[id].AddTo(dst);
+  if (tdim == TRF_16x8) mtx16x8_[id].AddTo(dst);
+  if (tdim == TRF_8x16) mtx8x16_[id].AddTo(dst);
+  if (tdim == TRF_16x16) mtx16x16_[id].AddTo(dst);
+  if (tdim == TRF_32x16) mtx32x16_[id].AddTo(dst);
+  if (tdim == TRF_16x32) mtx16x32_[id].AddTo(dst);
+  if (tdim == TRF_32x32) mtx32x32_[id].AddTo(dst);
+}
+
+void RndMtxSet::AddMatrix(uint32_t id, TrfSize tdim, int32_t dst[]) const {
+  if (tdim == TRF_4x4) mtx4x4_[id].AddTo(dst);
+  if (tdim == TRF_4x8) mtx4x8_[id].AddTo(dst);
+  if (tdim == TRF_8x4) mtx8x4_[id].AddTo(dst);
+  if (tdim == TRF_8x8) mtx8x8_[id].AddTo(dst);
+  if (tdim == TRF_16x8) mtx16x8_[id].AddTo(dst);
+  if (tdim == TRF_8x16) mtx8x16_[id].AddTo(dst);
+  if (tdim == TRF_16x16) mtx16x16_[id].AddTo(dst);
+  if (tdim == TRF_32x16) mtx32x16_[id].AddTo(dst);
+  if (tdim == TRF_16x32) mtx16x32_[id].AddTo(dst);
+  if (tdim == TRF_32x32) mtx32x32_[id].AddTo(dst);
 }
 
 }    // namespace WP2

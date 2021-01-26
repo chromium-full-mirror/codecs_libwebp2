@@ -72,8 +72,8 @@ EXIF       | Optional | Appended as is       | VarInt chunk size + encoded bytes
 Around 10-byte long, the main header contains the most important information
 about the image, such as the format tag, width, height, orientation, is opaque,
 is animated, tile size etc. \
-It uses bit-packing for easy encoding and decoding on top of providing a
-fixed header size.
+It uses bit-packing for easy encoding and decoding on top of providing a fixed
+header size.
 
 Animations use a slightly longer header to also store the loop mode and the
 background color. ANMF separators also use bit-packing.
@@ -86,7 +86,7 @@ variable-length integer, limiting it to ~500 megabytes.
 
 ## Build and test
 
-```sh
+```shell
 mkdir ../container_build && \
 cd ../container_build && \
 cmake -DCMAKE_BUILD_TYPE=Debug ../container && \

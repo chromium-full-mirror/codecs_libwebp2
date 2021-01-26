@@ -153,31 +153,28 @@ constexpr uint8_t kCoeffBasePositionContextOffset[3] = {26, 31, 36};
 }  // namespace
 
 // Section 8.3.2 in the spec, under coeff_base_eob.
-int AOMResidualIO::GetCoeffBaseContextEob(TrfSize tdim, int index) {
+uint32_t AOMResidualIO::GetCoeffBaseContextEob(TrfSize tdim, uint32_t index) {
   if (index == 0) return 0;
-  const int tx_width_log2 = TrfLog2[TrfWidth[tdim]];
-  const int tx_height = TrfHeight[tdim];
-  if (index <= DivideBy8(tx_height << tx_width_log2)) return 1;
-  if (index <= DivideBy4(tx_height << tx_width_log2)) return 2;
+  const uint32_t num_coeffs = kNumCoeffs[tdim];
+  if (index <= (uint32_t)DivideBy8(num_coeffs)) return 1;
+  if (index <= (uint32_t)DivideBy4(num_coeffs)) return 2;
   return 3;
 }
 
 // Section 8.3.2 in the spec, under coeff_base.
-static int GetCoeffBaseContext2D(const uint8_t qlevels[],
-                                 TrfSize tdim,
-                                 int adjusted_tx_width_log2,
-                                 uint16_t pos) {
+static uint32_t GetCoeffBaseContext2D(const uint8_t qlevels[], TrfSize tdim,
+                                      uint32_t tx_width_log2, uint32_t pos) {
   if (pos == 0) return 0;
-  const int tx_width = 1 << adjusted_tx_width_log2;
-  const int padded_tx_width = tx_width + kQuantizedCoefficientBufferPadding;
+  const uint32_t tx_width = 1 << tx_width_log2;
+  const uint32_t padded_tx_width = tx_width + kLevelBufferPadding;
   const uint8_t* const levels =
-      &qlevels[PaddedIndex(pos, adjusted_tx_width_log2)];
+      &qlevels[PaddedIndex(pos, tx_width_log2)];
   const int context = std::min(
       4, DivideBy2(1 + levels[1] + levels[2] +
                        levels[padded_tx_width] +
                        levels[padded_tx_width + 1] +
                        levels[2 * padded_tx_width]));
-  const int row = pos >> adjusted_tx_width_log2;
+  const int row = pos >> tx_width_log2;
   const int column = pos & (tx_width - 1);
   return context +
          kCoeffBaseContextOffset[tdim][std::min(row, 4)]
@@ -185,13 +182,12 @@ static int GetCoeffBaseContext2D(const uint8_t qlevels[],
 }
 
 // Section 8.3.2 in the spec, under coeff_base.
-static int GetCoeffBaseContextHorizontal(
+static uint32_t GetCoeffBaseContextHorizontal(
     const uint8_t qlevels[], TrfSize /*tdim*/,
-    int adjusted_tx_width_log2, uint16_t pos) {
-  const int tx_width = 1 << adjusted_tx_width_log2;
-  const int padded_tx_width = tx_width + kQuantizedCoefficientBufferPadding;
-  const uint8_t* const levels =
-      &qlevels[PaddedIndex(pos, adjusted_tx_width_log2)];
+    uint32_t tx_width_log2, uint32_t pos) {
+  const uint32_t tx_width = 1 << tx_width_log2;
+  const uint32_t padded_tx_width = tx_width + kLevelBufferPadding;
+  const uint8_t* const levels = &qlevels[PaddedIndex(pos, tx_width_log2)];
   const int context = std::min(
       4, DivideBy2(1 + levels[1] + levels[2] + levels[3] + levels[4] +
                        levels[padded_tx_width]));
@@ -200,20 +196,19 @@ static int GetCoeffBaseContextHorizontal(
 }
 
 // Section 8.3.2 in the spec, under coeff_base.
-static int GetCoeffBaseContextVertical(
+static uint32_t GetCoeffBaseContextVertical(
     const uint8_t qlevels[], TrfSize /*tdim*/,
-    int adjusted_tx_width_log2, uint16_t pos) {
-  const int tx_width = 1 << adjusted_tx_width_log2;
-  const int padded_tx_width = tx_width + kQuantizedCoefficientBufferPadding;
-  const uint8_t* const levels =
-      &qlevels[PaddedIndex(pos, adjusted_tx_width_log2)];
+    uint32_t tx_width_log2, uint32_t pos) {
+  const uint32_t tx_width = 1 << tx_width_log2;
+  const uint32_t padded_tx_width = tx_width + kLevelBufferPadding;
+  const uint8_t* const levels = &qlevels[PaddedIndex(pos, tx_width_log2)];
   const int context = std::min(
       4, DivideBy2(1 + levels[1] +
                        levels[1 * padded_tx_width] +
                        levels[2 * padded_tx_width] +
                        levels[3 * padded_tx_width] +
                        levels[4 * padded_tx_width]));
-  const int index = pos >> adjusted_tx_width_log2;
+  const int index = pos >> tx_width_log2;
   return context + kCoeffBasePositionContextOffset[std::min(index, 2)];
 }
 
@@ -229,30 +224,27 @@ CoeffBaseContextFunc
 }
 
 // Section 8.3.2 in the spec, under coeff_br.
-static int GetCoeffBaseRangeContext2D(
-    const uint8_t qlevels[], int adjusted_tx_width_log2,
-    int pos) {
-  const uint8_t tx_width = 1 << adjusted_tx_width_log2;
-  const int padded_tx_width = tx_width + kQuantizedCoefficientBufferPadding;
-  const uint8_t* const levels =
-      &qlevels[PaddedIndex(pos, adjusted_tx_width_log2)];
+static uint32_t GetCoeffBaseRangeContext2D(
+    const uint8_t qlevels[], uint32_t tx_width_log2, uint32_t pos) {
+  const uint32_t tx_width = 1 << tx_width_log2;
+  const uint32_t padded_tx_width = tx_width + kLevelBufferPadding;
+  const uint8_t* const levels = &qlevels[PaddedIndex(pos, tx_width_log2)];
   const int context = std::min(
       6, DivideBy2(1 + levels[1] +
                        levels[padded_tx_width] +
                        levels[padded_tx_width + 1]));
   if (pos == 0) return context;
-  const int row = pos >> adjusted_tx_width_log2;
+  const int row = pos >> tx_width_log2;
   const int column = pos & (tx_width - 1);
   return context + (((row | column) < 2) ? 7 : 14);
 }
 
 // Section 8.3.2 in the spec, under coeff_br.
-static int GetCoeffBaseRangeContextHorizontal(
-    const uint8_t qlevels[], int adjusted_tx_width_log2, int pos) {
-  const uint8_t tx_width = 1 << adjusted_tx_width_log2;
-  const int padded_tx_width = tx_width + kQuantizedCoefficientBufferPadding;
-  const uint8_t* const levels =
-      &qlevels[PaddedIndex(pos, adjusted_tx_width_log2)];
+static uint32_t GetCoeffBaseRangeContextHorizontal(
+    const uint8_t qlevels[], uint32_t tx_width_log2, uint32_t pos) {
+  const uint32_t tx_width = 1 << tx_width_log2;
+  const uint32_t padded_tx_width = tx_width + kLevelBufferPadding;
+  const uint8_t* const levels = &qlevels[PaddedIndex(pos, tx_width_log2)];
   const int context = std::min(
       6, DivideBy2(1 + levels[1] + levels[2] + levels[padded_tx_width]));
   if (pos == 0) return context;
@@ -261,17 +253,16 @@ static int GetCoeffBaseRangeContextHorizontal(
 }
 
 // Section 8.3.2 in the spec, under coeff_br.
-static int GetCoeffBaseRangeContextVertical(
-    const uint8_t qlevels[], int adjusted_tx_width_log2, int pos) {
-  const uint8_t tx_width = 1 << adjusted_tx_width_log2;
-  const int padded_tx_width = tx_width + kQuantizedCoefficientBufferPadding;
-  const uint8_t* const levels =
-      &qlevels[PaddedIndex(pos, adjusted_tx_width_log2)];
+static uint32_t GetCoeffBaseRangeContextVertical(
+    const uint8_t qlevels[], uint32_t tx_width_log2, uint32_t pos) {
+  const uint32_t tx_width = 1 << tx_width_log2;
+  const uint32_t padded_tx_width = tx_width + kLevelBufferPadding;
+  const uint8_t* const levels = &qlevels[PaddedIndex(pos, tx_width_log2)];
   const int context = std::min(
       6, DivideBy2(1 + levels[1] +
                        levels[padded_tx_width] + levels[2 * padded_tx_width]));
   if (pos == 0) return context;
-  const int row = pos >> adjusted_tx_width_log2;
+  const int row = pos >> tx_width_log2;
   return context + ((row == 0) ? 7 : 14);
 }
 
@@ -286,14 +277,14 @@ CoeffBaseRangeContextFunc
   return kCoeffBaseRangeContextFuncs[tx_class];
 }
 
-// Section 8.3.2 in the spec, under coeff_br. Optimized for end of block based
-// on the fact that {0, 1}, {1, 0}, {1, 1}, {0, 2} and {2, 0} will all be 0 in
-// the end of block case.
-int AOMResidualIO::GetCoeffBaseRangeContextEob(int adjusted_tx_width_log2,
-                                               int pos) {
+// Section 8.3.2 in the spec, under coeff_br.
+// Optimized for end of block based on the fact that {0, 1}, {1, 0}, and {1, 1}
+// will all be 0 in the end of block case.
+uint32_t AOMResidualIO::GetCoeffBaseRangeContextEob(uint32_t tx_width_log2,
+                                                    uint32_t pos) {
   if (pos == 0) return 0;
-  const uint8_t tx_width = 1 << adjusted_tx_width_log2;
-  const int row = pos >> adjusted_tx_width_log2;
+  const uint32_t tx_width = 1 << tx_width_log2;
+  const int row = pos >> tx_width_log2;
   const int column = pos & (tx_width - 1);
   return ((row | column) < 2) ? 7 : 14;
 }

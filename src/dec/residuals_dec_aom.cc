@@ -32,14 +32,15 @@ namespace libgav1 {
 // From libgav1/src/tile/tile.cc
 
 void AOMResidualReader::ReadSignAndApplyDequantization(
-    int adjusted_tx_width_log2, int16_t* const coeffs, uint32_t max_value,
+    int16_t* const coeffs, int16_t dequant, uint32_t max_value,
     SymbolReader* const sr, ANSDec* const dec) {
-  int32_t coeff = *coeffs;
-  if (coeff == 0) return;
+  uint32_t coeff = *coeffs;
+  assert(coeff != 0);
   if (coeff >= kQuantizerCoefficientBaseRangeContextClamp) {
     coeff = ReadGolomb(kQuantizerCoefficientBaseRangeContextClamp, max_value,
                         /*prefix_size=*/1, dec, "golomb");
   }
+  coeff *= dequant;
   *coeffs = dec->ReadBool("is_negative") ? -coeff : coeff;
 }
 
@@ -47,14 +48,14 @@ int AOMResidualReader::ReadCoeffBaseRange(
     int tx_size_context, int cdf_context, int plane_type,
     SymbolReader* const sr) {
   int level = 0;
-  for (int j = 0; j < kCoeffBaseRangeMaxIterations; ++j) {
-    const int coeff_base_range =
+  for (uint32_t j = 0; j < kCoeffBaseRangeMaxIterations; ++j) {
+    const uint32_t coeff_base_range =
         sr->Read(kAOMCoeffBaseRange,
                  GetClusterAOM3<kAOMCoeffBaseRange>(tx_size_context,
                                                     plane_type, cdf_context),
                   "coeff_base_range");
     level += coeff_base_range;
-    if (coeff_base_range < (kCoeffBaseRangeSymbolCount - 1)) break;
+    if (coeff_base_range < kCoeffBaseRangeSymbolCount) break;
   }
   return level;
 }
@@ -133,23 +134,23 @@ int AOMResidualReader::ReadEOB(TrfSize tdim, PlaneType plane_type, int context,
 }
 
 uint32_t AOMResidualReader::ReadCoeffs(
-    Channel channel, TrfSize tdim, TransformPair tx_type, bool first_is_dc,
+    Channel channel, const int16_t dequant[],
+    TrfSize tdim, TransformPair tx_type, bool first_is_dc,
     SymbolReader* const sr, ANSDec* const dec, int16_t* const coeffs) {
-  const int tx_size_context = kTrfContext[tdim];
-  const int tx_width = TrfWidth[tdim];
-  const int tx_height = TrfHeight[tdim];
-  const int padded_tx_width = tx_width + kQuantizedCoefficientBufferPadding;
-  const int padded_tx_height = tx_height + kQuantizedCoefficientBufferPadding;
+  const uint32_t tx_size_context = kTrfContext[tdim];
+  const uint32_t tx_width = TrfWidth[tdim];
+  const uint32_t tx_height = TrfHeight[tdim];
+  const uint32_t padded_tx_width = tx_width + kLevelBufferPadding;
+  const uint32_t padded_tx_height = tx_height + kLevelBufferPadding;
   const PlaneType plane_type = GetPlaneType(channel);
   const uint32_t tx_class = (uint32_t)GetTransformClass(tx_type);
-  int context = (tx_class != (uint32_t)TransformClass::kTwoD) ? 1 : 0;
 
+  // Read EOB
+  const uint32_t context =
+      (tx_class != (uint32_t)TransformClass::kTwoD) ? 1 : 0;
   const int eob = ReadEOB(tdim, plane_type, context, sr, dec);
 
-  // Only the first |padded_tx_width| * |padded_tx_height| values of |quantized|
-  // will be used by this function and the functions to which it is passed into.
-  // So we simply need to zero out those values before it is being used. If
-  // |eob| == 1, then only the first index will be populated and used. So there
+  // If eob == 1, then only the first index will be populated and used. So there
   // is no need to initialize this array in that case.
   assert(padded_tx_width <= (int)kMaxTxBufferDim);
   assert(padded_tx_height <= (int)kMaxTxBufferDim);
@@ -160,23 +161,23 @@ uint32_t AOMResidualReader::ReadCoeffs(
     std::fill(quantized2, quantized2 + padded_tx_width * padded_tx_height, 0u);
   }
   const uint16_t* const scan = ResidualIterator::GetZigzag(tdim);
-  const int adjusted_tx_width_log2 = TrfLog2[tx_width];
+  const uint32_t tx_width_log2 = TrfLog2[tx_width];
   // Read the last coefficient.
   {
-    context = GetCoeffBaseContextEob(tdim, eob - 1);
     const uint16_t pos = scan[eob - 1];
-    const uint16_t adjusted_pos = PaddedIndex(pos, adjusted_tx_width_log2);
-    const uint32_t cluster =
-        GetClusterAOM3<kAOMCoeffBaseEOB>(tx_size_context, plane_type, context);
-    int level = 1 + sr->Read(kAOMCoeffBaseEOB, cluster, "level");
-    if (level > kNumQuantizerBaseLevels) {
+    const uint16_t adjusted_pos = PaddedIndex(pos, tx_width_log2);
+    const uint32_t base_context = GetCoeffBaseContextEob(tdim, eob - 1);
+    const uint32_t cluster = GetClusterAOM3<kAOMCoeffBaseEOB>(
+        tx_size_context, plane_type, base_context);
+    uint32_t level = 1 + sr->Read(kAOMCoeffBaseEOB, cluster, "level");
+    if (level == kNumQuantizerBaseLevels) {
       level += ReadCoeffBaseRange(
           tx_size_context,
-          GetCoeffBaseRangeContextEob(adjusted_tx_width_log2, pos),
+          GetCoeffBaseRangeContextEob(tx_width_log2, pos),
           plane_type, sr);
     }
     coeffs[pos] = level;
-    quantized1[adjusted_pos] = std::min(level, 3);
+    quantized1[adjusted_pos] = std::min(level, 3u);
     quantized2[adjusted_pos] =
         std::min(level, kQuantizerCoefficientBaseRangeContextClamp);
   }
@@ -189,36 +190,38 @@ uint32_t AOMResidualReader::ReadCoeffs(
   // Read all the other coefficients.
   for (int i = eob - 2; i >= 0; --i) {
     const uint16_t pos = scan[i];
-    const uint16_t adjusted_pos = PaddedIndex(pos, adjusted_tx_width_log2);
-    context = get_coeff_base_context_func(quantized1, tdim,
-                                          adjusted_tx_width_log2, pos);
-    const uint32_t cluster =
-        GetClusterAOM3<kAOMCoeffBase>(tx_size_context, plane_type, context);
-    int level = sr->Read(kAOMCoeffBase, cluster, "level");
-    if (level > kNumQuantizerBaseLevels) {
+    const uint16_t adjusted_pos = PaddedIndex(pos, tx_width_log2);
+    const uint32_t base_context =
+        get_coeff_base_context_func(quantized1, tdim, tx_width_log2, pos);
+    const uint32_t cluster = GetClusterAOM3<kAOMCoeffBase>(
+        tx_size_context, plane_type, base_context);
+    uint32_t level = sr->Read(kAOMCoeffBase, cluster, "level");
+    if (level == kNumQuantizerBaseLevels) {
       const uint32_t cdf_context = get_coeff_base_range_context_func(
-          quantized2, adjusted_tx_width_log2, pos);
+          quantized2, tx_width_log2, pos);
       level += ReadCoeffBaseRange(tx_size_context, cdf_context, plane_type, sr);
     }
     coeffs[pos] = level;
-    quantized1[adjusted_pos] = std::min(level, 3);
+    quantized1[adjusted_pos] = std::min(level, 3u);
     quantized2[adjusted_pos] =
         std::min(level, kQuantizerCoefficientBaseRangeContextClamp);
   }
   assert(scan[0] == 0);
-  if (first_is_dc) {
-      ReadSignAndApplyDequantization(
-          adjusted_tx_width_log2, &coeffs[0], kMaxDcValue, sr, dec);
+  uint32_t num_coeffs = (first_is_dc && coeffs[0]) ? 1 : 0;
+  if (num_coeffs == 1) {
+    ReadSignAndApplyDequantization(coeffs, dequant[0], kMaxDcValue, sr, dec);
   }
-  uint32_t last_coeff = (first_is_dc && coeffs[0]) ? 1 : 0;
+
   for (int i = (first_is_dc ? 1 : 0); i < eob; ++i) {
-    if (coeffs[scan[i]]) {
+    const uint32_t pos = scan[i];
+    if (coeffs[pos]) {
+      const uint32_t qpos = (pos % tx_width) + WP2QStride * (pos / tx_width);
       ReadSignAndApplyDequantization(
-          adjusted_tx_width_log2, &coeffs[scan[i]], kMaxCoeffValue, sr, dec);
-      last_coeff = std::max(last_coeff, scan[i] + 1u);
+          &coeffs[pos], dequant[qpos], kMaxCoeffValue, sr, dec);
+      ++num_coeffs;
     }
   }
-  return last_coeff;
+  return num_coeffs;
 }
 
 }  // namespace libgav1

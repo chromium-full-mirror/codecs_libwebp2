@@ -22,27 +22,27 @@ Hard-coded 3 bytes with the value 0x6ffff4.
 
 Using bit-packing, the main image header is 7 to 13-byte long:
 
-| Value                        | Bits |                                        |
-|------------------------------|------|----------------------------------------|
-| Width                        | 14   | In \[1:16384\]                         |
-| Height                       | 14   | In \[1:16384\]                         |
-| Orientation                  | 3    | 0°, 90°, 180°, 270° and/or mirror      |
-| Is opaque                    | 1    | If true: no alpha                      |
-| Is animation                 | 1    | If true: expect ANMF                   |
-| Preview color                | 12   | RGB444                                 |
-| Quality hint                 | 4    | Compression rate estimate              |
-| Has preview                  | 1    | If true: preview chunk                 |
-| Has ICC profile              | 1    | If true: ICC chunk                     |
-| Has XMP and/or EXIF          | 1    | If true: metadata tag                  |
-| Default transfer function    | 1    | If false: read custom                  |
-| Tile shape                   | 2    | 256x256, 512x512 etc.                  |
-| Filler                       | 1    | Value 0x1                              |
-| \[Loop forever\]             | 1    | For animation only                     |
-| \[Custom background color\]  | 1    | For animation only                     |
-| \[\[Background color\]\]     | 38   | For animation and custom bg only       |
-| \[\[Filler\]\]               | 6    | For animation and not custom bg only   |
-| \[Transfer function\]        | 4    | If not default transfer func           |
-| \[Filler\]                   | 4    | Value 0x0                              |
+Value                       | Bits |                                      |
+--------------------------- | ---- | ------------------------------------
+Width                       | 14   | In \[1:16384\]
+Height                      | 14   | In \[1:16384\]
+Orientation                 | 3    | 0°, 90°, 180°, 270° and/or mirror
+Is opaque                   | 1    | If true: no alpha
+Is animation                | 1    | If true: expect ANMF
+Preview color               | 12   | RGB444
+Quality hint                | 4    | Compression rate estimate
+Has preview                 | 1    | If true: preview chunk
+Has ICC profile             | 1    | If true: ICC chunk
+Has XMP and/or EXIF         | 1    | If true: metadata tag
+Default transfer function   | 1    | If false: read custom
+Tile shape                  | 2    | 256x256, 512x512 etc.
+Filler                      | 1    | Value 0x1
+\[Loop forever\]            | 1    | For animation only
+\[Custom background color\] | 1    | For animation only
+\[\[Background color\]\]    | 38   | For animation and custom bg only
+\[\[Filler\]\]              | 6    | For animation and not custom bg only
+\[Transfer function\]       | 4    | If not default transfer func
+\[Filler\]                  | 4    | Value 0x0
 
 ## Preview
 
@@ -63,22 +63,22 @@ image header).
 
 Using bit-packing, the frame header begins by storing 1 byte:
 
-| Value         | Bits |                                                    |
-|---------------|------|----------------------------------------------------|
-| Dispose frame | 6    | Value is 0x33 (replace canvas by bg color) or 0x15 |
-| Blend         | 1    | Merge new pixels into canvas or replace them       |
-| Last frame    | 1    | Expect another frame after this one if true        |
+Value         | Bits |                                                    |
+------------- | ---- | --------------------------------------------------
+Dispose frame | 6    | Value is 0x33 (replace canvas by bg color) or 0x15
+Blend         | 1    | Merge new pixels into canvas or replace them
+Last frame    | 1    | Expect another frame after this one if true
 
 Then using variable-length-integers, the frame header ends by storing 1 to 10
 bytes:
 
-| Value                    | Range                               |
-|--------------------------|-------------------------------------|
-| Duration in milliseconds | \[0:32767\]                         |
-| Frame width              | \[1:image width\]                   |
-| Frame height             | \[1:image height\]                  |
-| Frame position X         | \[0:(image width - frame width)\]   |
-| Frame position Y         | \[0:(image height - frame height)\] |
+Value                    | Range
+------------------------ | -----------------------------------
+Duration in milliseconds | \[0:32767\]
+Frame width              | \[1:image width\]
+Frame height             | \[1:image height\]
+Frame position X         | \[0:(image width - frame width)\]
+Frame position Y         | \[0:(image height - frame height)\]
 
 Thus making each frame header 2 to 11-byte long.
 

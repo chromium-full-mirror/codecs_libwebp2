@@ -343,13 +343,12 @@ TransformPair CodedBlock::GetImplicitTf(Channel channel) const {
 
 //------------------------------------------------------------------------------
 
-uint32_t CodedBlock::GetDisto(Channel channel,
-                              const Rectangle& tile_rect) const {
+uint32_t CodedBlock::GetDisto(Channel channel) const {
   const Plane16& p_in = in_.GetChannel(channel);
   const Plane16& p_out = out_.GetChannel(channel);
+  // TODO(skal): experiment calling WP2SumSquaredErrorHalfBlock for U/V channel
   return WP2SumSquaredErrorBlock(p_in.Row(0), p_in.Step(), p_out.Row(0),
-                                 p_out.Step(), visible_w_pix(tile_rect),
-                                 visible_h_pix(tile_rect));
+                                 p_out.Step(), w_pix(), h_pix());
 }
 
 uint32_t CodedBlock::GetNumTransforms(Channel channel) const {
@@ -372,15 +371,6 @@ bool CodedBlock::HasCoeffs(Channel channel) const {
     if (num_coeffs_[channel][tf_i] != 0) return true;
   }
   return false;
-}
-
-uint32_t CodedBlock::visible_w_pix(const Rectangle& tile_rect) const {
-  assert(x_pix() < tile_rect.width);
-  return std::min(w_pix(), tile_rect.width - x_pix());
-}
-uint32_t CodedBlock::visible_h_pix(const Rectangle& tile_rect) const {
-  assert(y_pix() < tile_rect.height);
-  return std::min(h_pix(), tile_rect.height - y_pix());
 }
 
 //------------------------------------------------------------------------------
@@ -435,12 +425,12 @@ static uint32_t RoundTripDisto(CodedBlock* const cb, const QuantMtx& quant,
   const CodedBlock::CodingParams& params = *cb->GetCodingParams(channel);
   WP2InvTransform2D(dequantized_coeffs, params.tf_x(), params.tf_y(),
                     cb->w_pix(), cb->h_pix(), dequantized_coeffs, reduced);
-  // Copy of dequantized_coeffs as int16 to compute error.
+  // 32b->16b conversion of dequantized_coeffs[]
   int16_t dequantized_coeffs16[kMaxBlockSizePix2];
-  std::copy(dequantized_coeffs, dequantized_coeffs + cb->w_pix() * cb->h_pix(),
-            dequantized_coeffs16);
-  return WP2SumSquaredErrorBlock(res, cb->w_pix(), dequantized_coeffs16,
-                                 cb->w_pix(), cb->w_pix(), cb->h_pix());
+  for (uint32_t n = 0; n < *num_coeffs; ++n) {
+    dequantized_coeffs16[n] = dequantized_coeffs[n];
+  }
+  return WP2SumSquaredError16s(res, dequantized_coeffs16, *num_coeffs);
 }
 
 // Computes the rate-distortion score for the U and V channels.
@@ -670,19 +660,48 @@ void CodedBlock::Quantize(const QuantMtx& quant, Channel channel,
 
 void CodedBlock::Dequantize(const QuantMtx& quant, Channel channel,
                             BlockCoeffs32* const res) {
-  const BlockSize size =
-      GetSplitSize(dim(), GetCodingParams(channel)->split_tf);
+  const TrfSize split_size = tdim(channel);
   for (uint32_t tf_i = 0; tf_i < GetNumTransforms(channel); ++tf_i) {
-    int16_t* src = coeffs_[channel][tf_i];
-    int16_t tmp[kMaxBlockSizePix2];
+    const int16_t* const src = coeffs_[channel][tf_i];
+    int32_t* const dst = (*res)[tf_i];
+    quant.Dequantize(src, num_coeffs_[channel][tf_i], tdim(channel), dst);
     if (use_mtx_ && channel == kYChannel) {
-      assert(mtx_set_->IsOk(mtx_[channel], size));
-      std::copy(src, src + NumCoeffsPerTransform(channel), tmp);
-      mtx_set_->AddMatrix(mtx_[channel], size, tmp);
-      src = tmp;
+      assert(mtx_set_->IsOk(mtx_[channel], split_size));
+      mtx_set_->AddMatrix(mtx_[channel], split_size, dst);
     }
-    quant.Dequantize(src, num_coeffs_[channel][tf_i], tdim(channel),
-                     (*res)[tf_i]);
+  }
+}
+
+//------------------------------------------------------------------------------
+// Simplified all-in-one version for decoder
+
+void CodedBlock::Reconstruct(Channel channel) {
+  const bool reduced_transform =
+      ((channel == kUChannel || channel == kVChannel) && is420_);
+  Plane16& out = out_.GetChannel(channel);
+  PredictBlock(channel, out.Row(0), out.Step());
+
+  const int32_t min = (channel == kAChannel) ? 0 : yuv_min_;
+  const int32_t max = (channel == kAChannel) ? kAlphaMax : yuv_max_;
+  const CodingParams* const params = GetCodingParams(channel);
+  const BlockSize split_size = GetSplitSize(dim(), params->split_tf);
+  const uint32_t split_w = BlockWidthPix(split_size);
+  const uint32_t split_h = BlockHeightPix(split_size);
+  AddBlockEqFunc add_block_eq = WP2::AddBlockEq[TrfLog2[split_w] - 2];
+  for (uint32_t tf_i = 0, split_y = 0; split_y < h_pix(); split_y += split_h) {
+    for (uint32_t split_x = 0; split_x < w_pix(); split_x += split_w, ++tf_i) {
+      // TODO(skal): if AllZero, we shouldn't be here (+special case for DCOnly)
+      if (use_mtx_ && channel == kYChannel) {
+        const TrfSize tsize = tdim(channel);
+        assert(mtx_set_->IsOk(mtx_[channel], tsize));
+        mtx_set_->AddMatrix(mtx_[channel], tsize, coeffs_[channel][tf_i]);
+      }
+      WP2InvTransform2D16b(
+          params->tf_x(), params->tf_y(), split_w, split_h,
+          coeffs_[channel][tf_i], reduced_transform);
+      add_block_eq(coeffs_[channel][tf_i], split_w,
+                   &out.At(split_x, split_y), out.Step(), min, max, split_h);
+    }
   }
 }
 
@@ -740,7 +759,7 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
     params->tf = tf;
     Quantize(quant, channel, reduced);
 
-    const uint32_t distortion = GetDisto(channel, tile_rect);
+    const uint32_t distortion = GetDisto(channel);
     float tf_rate, res_rate;
     WP2_CHECK_STATUS(TransformRate(channel, transforms.size(),
                                    counters->transform(), &tf_rate));
@@ -766,12 +785,10 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
   return WP2_STATUS_OK;
 }
 
-void CodedBlock::FindBestPred(const Predictors& preds, Channel channel,
-                              bool reduced) {
+void CodedBlock::FindBestPred(const Predictors& preds, Channel channel) {
   assert(preds.size() > 1);  // Otherwise this function should be skipped.
   // kVChannel is tested along kUChannel.
   assert(channel == kYChannel || channel == kUChannel || channel == kAChannel);
-  const Plane16& in = in_.GetChannel(channel);
   Plane16& out = out_.GetChannel(channel);
   CodingParams* const params = GetCodingParams(channel);
 
@@ -780,14 +797,10 @@ void CodedBlock::FindBestPred(const Predictors& preds, Channel channel,
   for (const Predictor* const p : preds) {
     params->pred = p;
     p->Predict(*this, channel, out.Row(0), out.Step());
-    uint64_t score =
-        WP2SumSquaredErrorBlock(in.Row(0), in.Step(), out.Row(0), out.Step(),
-                                blk_.w_pix(), blk_.h_pix());
+    uint64_t score = GetDisto(channel);
     if (channel == kUChannel) {
       p->Predict(*this, kVChannel, out_.V.Row(0), out_.V.Step());
-      score +=
-          WP2SumSquaredErrorBlock(in_.V.Row(0), in_.V.Step(), out_.V.Row(0),
-                                  out_.V.Step(), blk_.w_pix(), blk_.h_pix());
+      score += GetDisto(kVChannel);
     }
     if (best_pred == nullptr || score < best_score) {
       best_score = score;
@@ -822,14 +835,13 @@ WP2Status CodedBlock::TransformRate(Channel channel, uint32_t num_transforms,
 }
 
 // Get residual and predictor rates.
-WP2Status CodedBlock::GetRates(const Rectangle& tile_rect,
-                               const BlockContext& context,
+WP2Status CodedBlock::GetRates(const BlockContext& context,
                                const QuantMtx& quant, Channel channel,
                                uint32_t num_channels, float tf_rate,
                                Counters* const counters, uint32_t* const dist,
                                float* const res_rate, float* const pred_rate,
                                float* const score) const {
-  *dist = GetDisto(channel, tile_rect);
+  *dist = GetDisto(channel);
 
   const bool is_uv = (channel == kUChannel || channel == kVChannel);
   WP2_CHECK_STATUS(ResidualRate(context, channel, num_channels,
@@ -899,7 +911,7 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
       continue;  // Split-tf with no coeff is forbidden.
     }
 
-    const uint32_t distortion = GetDisto(channel, tile_rect);
+    const uint32_t distortion = GetDisto(channel);
     float tf_rate;
     float res_rate;
     WP2_CHECK_STATUS(TransformRate(channel, /*num_transforms=*/1,
@@ -958,7 +970,7 @@ WP2Status CodedBlock::OptimizeModesLuma(
     pred_scores_[kYChannel] = 1.f;
   } else if (config.effort == 1) {
     // Quickly select the best predictor and then choose the best transform.
-    FindBestPred(preds, kYChannel, /*reduced=*/false);
+    FindBestPred(preds, kYChannel);
   } else {
     const TransformPair forced_tf =
         GetForcedTransform(config, tile_rect.x, tile_rect.y, this);
@@ -1024,7 +1036,7 @@ WP2Status CodedBlock::OptimizeModesChroma(
     pred_scores_[kUChannel] = pred_scores_[kVChannel] = 1.f;
   } else if (config.effort == 1) {
     // Quickly select the best predictor.
-    FindBestPred(preds, kUChannel, /*reduced=*/false);
+    FindBestPred(preds, kUChannel);
   } else {
     const uint32_t num_channels = (has_alpha ? 4 : 3);
     // Empty because UV transforms are defined by predictors.

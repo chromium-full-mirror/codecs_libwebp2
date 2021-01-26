@@ -94,6 +94,15 @@ class RandomTransform2DTest : public ::testing::TestWithParam<size_t> {
   }
 };
 
+template<typename U, typename V>
+void CopyArray(const U src[32 * 32], V dst[32 * 32], uint32_t num_coeffs) {
+  for (uint32_t i = 0; i < 32 * 32; ++i) dst[i] = (V)src[i];
+  for (uint32_t i = 0; i < num_coeffs; ++i) {
+    ASSERT_GE(src[i], -32768);
+    ASSERT_LT(src[i],  32768);
+  }
+}
+
 TEST_P(RandomTransform2DTest, All) {
   const int N = 50;
   const double tolerance = 0.60;
@@ -114,11 +123,13 @@ TEST_P(RandomTransform2DTest, All) {
               const uint32_t num_coeffs = size_x * size_y;
               uint32_t max_err = 0;
               SCOPED_TRACE(SPrintf(
-                  "tf_x: %s size_x: %d tf_y: %s size_y: %d r:%d",
+                  "tf_x: %s (size_x: %d), tf_y: %s (size_y: %d), "
+                  "reduced:%d inplace:%d",
                   WP2TransformNames[tf_x], size_x,
-                  WP2TransformNames[tf_y], size_y, reduced));
+                  WP2TransformNames[tf_y], size_y, reduced, inplace));
               for (int n = 0; n < N; ++n) {
                 int32_t dst[32 * 32], ref[32 * 32] = {0};
+                int16_t dst_16b[32 * 32];
                 if (!reduced) {
                   for (auto& v : ref) {
                     v = random.Get<int32_t>(-1024, 1023);
@@ -141,6 +152,7 @@ TEST_P(RandomTransform2DTest, All) {
                 if (inplace) {
                   std::memcpy(dst, ref, sizeof(ref));
                   WP2Transform2D(dst, tf_x, tf_y, size_x, size_y, dst, reduced);
+                  CopyArray(dst, dst_16b, size_x * size_y / (reduced ? 4 : 1));
                   WP2InvTransform2D(dst, tf_x, tf_y, size_x, size_y, dst,
                                     reduced);
                 } else {
@@ -149,7 +161,11 @@ TEST_P(RandomTransform2DTest, All) {
                   std::memset(dst, 0, sizeof(dst));
                   WP2InvTransform2D(tmp, tf_x, tf_y, size_x, size_y, dst,
                                     reduced);
+                  CopyArray(tmp, dst_16b, size_x * size_y / (reduced ? 4 : 1));
                 }
+                WP2InvTransform2D16b(tf_x, tf_y, size_x, size_y, dst_16b,
+                                     reduced);
+
 
                 // no spill
                 for (size_t i = num_coeffs; i < 32 * 32; ++i) {
@@ -160,6 +176,7 @@ TEST_P(RandomTransform2DTest, All) {
                 uint32_t err = 0.;
                 for (size_t i = 0; i < num_coeffs; ++i) {
                   err += std::abs(dst[i] - ref[i]);
+                  EXPECT_EQ(dst[i], (int32_t)dst_16b[i]) << " position: " << i;
                 }
                 double threshold =
                     tolerance * num_coeffs * (log2(size_x) + log2(size_y));

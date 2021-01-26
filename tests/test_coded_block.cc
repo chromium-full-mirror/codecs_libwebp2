@@ -662,12 +662,12 @@ TEST(GetDistoTest, BlockSizeDoesNotMatter) {
             Block(x * sub_w, y * sub_h, GetBlockSize(sub_w, sub_h)));
         sub_cb.SetSrcInput(original);  // Must be called after SetDimDefault().
         sub_cb.SetReconstructedOutput(&decoded);
-        total_sub_disto += sub_cb.GetDisto(channel, cb.blk().rect_pix());
+        total_sub_disto += sub_cb.GetDisto(channel);
       }
     }
     cb.SetSrcInput(original);
     cb.SetReconstructedOutput(&decoded);
-    EXPECT_EQ(total_sub_disto, cb.GetDisto(channel, cb.blk().rect_pix()));
+    EXPECT_EQ(total_sub_disto, cb.GetDisto(channel));
   }
 }
 

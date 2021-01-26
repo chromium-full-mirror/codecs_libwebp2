@@ -76,21 +76,25 @@ class SymbolReader : public SymbolIO<StatExtra> {
  protected:
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to trivial value
   // with value 'value'.
-  void AddTrivial(uint32_t sym, uint32_t cluster, int32_t value);
+  void AddTrivial(uint32_t sym, uint32_t cluster, bool is_symmetric,
+                  int32_t value);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to range value,
   // in [0:'range').
-  void AddRange(uint32_t sym, uint32_t cluster, uint16_t range);
+  void AddRange(uint32_t sym, uint32_t cluster, bool is_symmetric,
+                uint16_t range);
   // For the 'cluster'th cluster of symbol 'sym', set the mapping_[] to
   // the content of 'mapping'.
-  void AddMapping(uint32_t sym, uint32_t cluster, const Vector_u16& mapping);
+  void AddMapping(uint32_t sym, uint32_t cluster, bool is_symmetric,
+                  const Vector_u16& mapping);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to dictionary
   // value, using info from 'infos'. 'infos' is modified in this call.
-  WP2Status AddDict(uint32_t sym, uint32_t cluster, ANSCodes* const infos);
+  WP2Status AddDict(uint32_t sym, uint32_t cluster, bool is_symmetric,
+                    ANSCodes* const infos);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to Golomb
   // value, using info from 'infos'. 'infos' is modified in this call.
   // 'prefix_size' is the number of bits in the Golomb prefix.
-  WP2Status AddGolomb(uint32_t sym, uint32_t cluster, ANSCodes* const infos,
-                      uint32_t prefix_size);
+  WP2Status AddGolomb(uint32_t sym, uint32_t cluster, bool is_symmetric,
+                      ANSCodes* const infos, uint32_t prefix_size);
 
  private:
   // Generic implementation called by the different Read specializations above.

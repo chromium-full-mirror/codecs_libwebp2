@@ -61,8 +61,8 @@ option(
   "Specifies AOM was built with -DCONFIG_ACCOUNTING=1 -DCONFIG_INSPECTION=1."
   OFF)
 option(WP2_ENABLE_ANS_CHECK "Enable enc/dec ANS comparison." OFF)
-option(WP2_ENABLE_ANS_DEEP_CHECK "Enable more verbose ANS and pixel comparison."
-       OFF)
+option(WP2_ENABLE_ANS_DEEP_CHECK
+       "Enable more verbose ANS and pixel comparison." OFF)
 option(WP2_REDUCED "Remove non-essential code to save binary size." OFF)
 option(WP2_ENABLE_BITTRACE "Enable tracing." OFF)
 option(WP2_ENABLE_TRACE "Enable tracing." OFF)
@@ -148,6 +148,12 @@ if(NOT MSVC AND
    NOT APPLE AND
    CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -s")
+endif()
+
+# windows.h defines min/max macros (std collision) unless NOMINMAX is defined.
+# M_PI from math.h needs _USE_MATH_DEFINES with MSVC.
+if(MSVC)
+  list(APPEND WP2_DEFINITIONS NOMINMAX _USE_MATH_DEFINES)
 endif()
 
 # ##############################################################################
@@ -424,10 +430,10 @@ set_target_properties(wp2_dsp wp2_ans wp2_preview wp2_utils wp2_enc_dec webp2
 
 # Set the version numbers.
 set_target_properties(webp2 PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION
-                                     ${PROJECT_VERSION})
+                                       ${PROJECT_VERSION})
 target_include_directories(
   webp2 INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-                $<INSTALL_INTERFACE:include>)
+                  $<INSTALL_INTERFACE:include>)
 
 # Install the different headers and libraries.
 install(
@@ -671,40 +677,43 @@ if(WP2_BUILD_EXAMPLES)
   target_link_libraries(get_disto webp2 imageio example_utils)
   allownonliteral(get_disto)
 
-  # rd_curve
-  add_executable(rd_curve ${CMAKE_CURRENT_SOURCE_DIR}/examples/rd_curve.cc)
-  target_link_libraries(rd_curve webp2 imageio example_utils extras)
-  if(WP2_HAVE_WEBP)
-    target_compile_definitions(rd_curve PRIVATE WP2_HAVE_WEBP)
-  endif()
-  if(SJPEG_INSTALL_PATH)
-    target_link_libraries(rd_curve ${SJPEG_INSTALL_PATH}/lib/libsjpeg.a)
-    target_include_directories(rd_curve PRIVATE ${SJPEG_INSTALL_PATH}/include/)
-    target_compile_definitions(rd_curve PRIVATE WP2_HAVE_SJPEG)
-  endif()
-  allownonliteral(rd_curve)
-
   install(TARGETS cwp2 dwp2 RUNTIME DESTINATION bin)
 
   # ############################################################################
   # Tools (that could be moved/removed later)
 
-  # libaom needs to be compiled with CONFIG_INSPECTION now:
-  # ~~~
-  #   cd aom/build
-  #   cmake ../ -DCONFIG_ACCOUNTING=1 -DCONFIG_INSPECTION=1
-  # ~~~
+  if(WP2_BUILD_EXTRAS)
+    # rd_curve
+    add_executable(rd_curve ${CMAKE_CURRENT_SOURCE_DIR}/examples/rd_curve.cc)
+    target_link_libraries(rd_curve webp2 imageio example_utils extras)
+    if(WP2_HAVE_WEBP)
+      target_compile_definitions(rd_curve PRIVATE WP2_HAVE_WEBP)
+    endif()
+    if(SJPEG_INSTALL_PATH)
+      target_link_libraries(rd_curve ${SJPEG_INSTALL_PATH}/lib/libsjpeg.a)
+      target_include_directories(rd_curve
+                                 PRIVATE ${SJPEG_INSTALL_PATH}/include/)
+      target_compile_definitions(rd_curve PRIVATE WP2_HAVE_SJPEG)
+    endif()
+    allownonliteral(rd_curve)
 
-  if((AOM_SRC_PATH AND AOM_BUILD_PATH) OR AVIF_BUILD_PATH)
-    add_executable(av1enc extras/av1enc.cc)
-    target_link_libraries(av1enc webp2 extras example_utils imageio)
+    # libaom needs to be compiled with CONFIG_INSPECTION now:
+    # ~~~
+    #   cd aom/build
+    #   cmake ../ -DCONFIG_ACCOUNTING=1 -DCONFIG_INSPECTION=1
+    # ~~~
+
+    if((AOM_SRC_PATH AND AOM_BUILD_PATH) OR AVIF_BUILD_PATH)
+      add_executable(av1enc extras/av1enc.cc)
+      target_link_libraries(av1enc webp2 extras example_utils imageio)
+    endif()
+
+    add_executable(mk_preview extras/mk_preview.cc)
+    target_link_libraries(mk_preview webp2 extras example_utils imageio)
+
+    add_executable(ewp2 extras/ewp2.cc)
+    target_link_libraries(ewp2 webp2 extras example_utils imageio)
   endif()
-
-  add_executable(mk_preview extras/mk_preview.cc)
-  target_link_libraries(mk_preview webp2 extras example_utils imageio)
-
-  add_executable(ewp2 extras/ewp2.cc)
-  target_link_libraries(ewp2 webp2 extras example_utils imageio)
 endif()
 
 # ##############################################################################
@@ -755,7 +764,7 @@ if(WP2_BUILD_EXTRAS)
     endif()
   endif()
   # Deal with AVIF.
-  if (AVIF_BUILD_PATH)
+  if(AVIF_BUILD_PATH)
     target_include_directories(extras SYSTEM PRIVATE ${AVIF_SRC_PATH}/include)
     target_link_directories(extras PUBLIC ${AVIF_BUILD_PATH})
     target_link_libraries(extras avif m Threads::Threads)

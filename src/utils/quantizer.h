@@ -84,9 +84,23 @@ class Quantizer {
   // minimizing their overall size. 'size_sparse' is an upper bound of the
   // number of non-zero counts. 'effort' is between 0 (fastest) and 9 (slowest).
   // 'max_count' is the maximum value a count can take.
-  void Quantize(const uint32_t* const histogram, const uint16_t* const mapping,
+  // The function is re-entrant: if ResetConfigs() is not called, the best
+  // configuration is kept in memory as a starting configuration. It will be
+  // updated if a strictly better score is found.
+  // 'cost_offset' is the cost that will be added to the Config cost.
+  // 'cost_max' is the cost above which we can give up if
+  // cost_offset + Config cost >= cost_max.
+  bool Quantize(const uint32_t* const histogram, const uint16_t* const mapping,
                 size_t size_sparse, uint32_t symbol_range, uint32_t max_count,
-                int effort, Config** const config_best);
+                float cost_max, float cost_offset, int effort);
+
+  // Returns the current best configuration. The best configuration is updated
+  // between Quantize calls.
+  Config* GetBest() { return config_best_; }
+  // Resets what is considered as the best config.
+  void ResetBest() {
+    config_best_ = nullptr;
+  }
 
  private:
   // Implementation of the quantization that can call itself to compress its own

@@ -58,10 +58,12 @@ endif()
 
 # prevents the warning: "warning: format string is not a string literal".
 function(AllowNonLiteral varName)
-  get_property(
-    FLAGS
-    TARGET ${varName}
-    PROPERTY COMPILE_FLAGS)
-  set(FLAGS "${FLAGS} -Wno-format-nonliteral")
-  set_property(TARGET ${varName} PROPERTY COMPILE_FLAGS ${FLAGS})
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    get_property(
+      FLAGS
+      TARGET ${varName}
+      PROPERTY COMPILE_FLAGS)
+    set(FLAGS "${FLAGS} -Wno-format-nonliteral")
+    set_property(TARGET ${varName} PROPERTY COMPILE_FLAGS ${FLAGS})
+  endif()
 endfunction()

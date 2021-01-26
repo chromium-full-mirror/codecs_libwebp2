@@ -341,6 +341,7 @@ void WP2DspReset() {
   WP2::AddRow = nullptr;
   for (auto& f : WP2::SubtractBlock) f = nullptr;
   for (auto& f : WP2::AddBlock) f = nullptr;
+  for (auto& f : WP2::AddBlockEq) f = nullptr;
 
   WP2::CflPredict = nullptr;
 
@@ -355,6 +356,9 @@ void WP2DspReset() {
   WP2SumSquaredError8u = nullptr;
   WP2SumSquaredError16s = nullptr;
   WP2SumSquaredError4x8u = nullptr;
+
+  WP2SumSquaredErrorBlock = nullptr;
+  WP2SumSquaredErrorHalfBlock = nullptr;
 
   WP2HasValue8b = nullptr;
   WP2HasValue16b = nullptr;

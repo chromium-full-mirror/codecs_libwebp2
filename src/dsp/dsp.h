@@ -303,6 +303,12 @@ void WP2Transform2D(const int32_t src[], WP2TransformType tf_x,
 void WP2InvTransform2D(const int32_t src[], WP2TransformType tf_x,
                        WP2TransformType tf_y, uint32_t size_x, uint32_t size_y,
                        int32_t dst[], bool reduced = false);
+
+// Decoder-only: in-place 16bit-to-16bit inverse transform
+void WP2InvTransform2D16b(WP2TransformType tf_x, WP2TransformType tf_y,
+                          uint32_t size_x, uint32_t size_y,
+                          int16_t coeffs[], bool reduced = false);
+
 // Converts full transform coefficients array to half-transform ones.
 // coeffs[] is replaced by its top-left quadrant values divided by 4.
 void WP2ReduceCoeffs(const int32_t src[], uint32_t size_x, uint32_t size_y,
@@ -577,10 +583,15 @@ typedef void (*AddBlockFunc)(const int16_t src[], uint32_t src_step,
                              int32_t min, int32_t max,
                              int16_t dst[], uint32_t dst_step,
                              uint32_t height);
+// in-place 16b version that performs dst[...] += res[...]
+typedef void (*AddBlockEqFunc)(const int16_t res[], uint32_t res_step,
+                               int16_t dst[], uint32_t dst_step,
+                               int32_t min, int32_t max, uint32_t height);
 
 // the array is indexed by log2(width / 4): 0=4, 1=8, 2=16, 3=32
 extern SubtractBlockFunc SubtractBlock[4];
 extern AddBlockFunc AddBlock[4];
+extern AddBlockEqFunc AddBlockEq[4];
 
 // Chroma-From-Luma and Alpha-From-Luma
 // precision of the linear a/b constants.
@@ -733,6 +744,10 @@ extern void (*WP2SumSquaredError2x16u)(const uint16_t* src1,
 extern uint64_t (*WP2SumSquaredErrorBlock)(const int16_t* src1, uint32_t step1,
                                            const int16_t* src2, uint32_t step2,
                                            uint32_t w, uint32_t h);
+// Same, but after first downsampling the sources by half (2x2 average filter).
+extern uint64_t (*WP2SumSquaredErrorHalfBlock)(
+    const int16_t* src1, uint32_t step1, const int16_t* src2, uint32_t step2,
+    uint32_t w, uint32_t h);
 
 void WP2PSNRInit();
 

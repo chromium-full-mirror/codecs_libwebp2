@@ -109,7 +109,9 @@ if(EXISTS "${GTEST_SOURCE_DIR}/CMakeLists.txt")
     FLAGS
     TARGET gmock
     PROPERTY COMPILE_FLAGS)
-  set(FLAGS "${FLAGS} -Wno-format-nonliteral -Wno-missing-declarations")
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    set(FLAGS "${FLAGS} -Wno-format-nonliteral -Wno-missing-declarations")
+  endif()
   set_property(TARGET gtest PROPERTY COMPILE_FLAGS ${FLAGS})
   set_property(TARGET gmock PROPERTY COMPILE_FLAGS ${FLAGS})
   set_property(TARGET gmock_main PROPERTY COMPILE_FLAGS ${FLAGS})

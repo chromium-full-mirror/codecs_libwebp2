@@ -49,6 +49,12 @@ static constexpr int32_t kSinPi[5] = { 0, 330, 621, 836, 951 };
 static_assert(kSinPi[1] + kSinPi[2] == kSinPi[4],
               "invalid pre-condition on kSinPi[]");
 
+static inline uint32_t SizeToIdx(uint32_t size) {
+  assert(size == 2 || size == 4 || size == 8 || size == 16 || size == 32);
+  return (size == 2) ? 0 : (size == 4) ? 1 : (size == 8) ? 2 :
+         (size == 16) ? 3 : 4;
+}
+
 //------------------------------------------------------------------------------
 
 static inline int32_t round_shift(int64_t value, uint32_t bit = kPrecision) {
@@ -1395,8 +1401,7 @@ static const uint32_t* const kHadamardReorder[5] = {
   kHadamardR2, kHadamardR4, kHadamardR8, kHadamardR16, kHadamardR32
 };
 
-static void CoreHadamard_C(const int32_t* src, int32_t* dst, uint32_t size,
-                           int8_t divider = 1) {
+static void CoreHadamard_C(const int32_t* src, int32_t* dst, uint32_t size) {
   assert(size == 2 || size == 4 || size == 8 || size == 16 || size == 32);
   int32_t tmp[32];
   for (uint32_t half_size = 1; half_size < size; half_size *= 2) {
@@ -1411,21 +1416,15 @@ static void CoreHadamard_C(const int32_t* src, int32_t* dst, uint32_t size,
     src = tmp;
   }
   // Sequency-reordering
-  const uint32_t* const reorder = kHadamardReorder[WP2Log2Floor(size) - 1];
-  // note we could have a different norm for fwd and bwd transform, as long as
-  // their product is equal to 1/2. Using ">>1" for descale gives an exact
-  // transform. Using 1/sqrt(2) for both is a good compromise of dynamic range
-  // compared to the other transforms (dct, adst, ...).
-  const float norm = 0.70710678118f / divider;
+  const uint32_t* const reorder = kHadamardReorder[SizeToIdx(size)];
+  assert(dst != src);
+  const float norm = std::sqrt(1. / size);  // same norm for bwd/fwd
   for (uint32_t i = 0; i < size; ++i) dst[i] = tmp[reorder[i]] * norm;
 }
 
-#define GENERATE_HADAMARD_FUNC(SIZE)                               \
-static void iHadamard##SIZE##_C(const int32_t* src, int32_t* dst) {   \
-  CoreHadamard_C(src, dst, SIZE, SIZE / 2);                        \
-}                                                                  \
-static void fHadamard##SIZE##_C(const int32_t* src, int32_t* dst) {   \
-  CoreHadamard_C(src, dst, SIZE, 1);                               \
+#define GENERATE_HADAMARD_FUNC(SIZE)                                \
+static void Hadamard##SIZE##_C(const int32_t* src, int32_t* dst) {  \
+  CoreHadamard_C(src, dst, SIZE);                                   \
 }
 
 GENERATE_HADAMARD_FUNC(2)
@@ -2833,16 +2832,16 @@ WP2_TSAN_IGNORE_FUNCTION void WP2TransformInit() {
   WP2FwdAdst[2] = fadst8_C;
   WP2FwdAdst[3] = fadst16_C;
   WP2FwdAdst[4] = fadst32_C;
-  WP2InvHadamard[0] = iHadamard2_C;
-  WP2InvHadamard[1] = iHadamard4_C;
-  WP2InvHadamard[2] = iHadamard8_C;
-  WP2InvHadamard[3] = iHadamard16_C;
-  WP2InvHadamard[4] = iHadamard32_C;
-  WP2FwdHadamard[0] = fHadamard2_C;
-  WP2FwdHadamard[1] = fHadamard4_C;
-  WP2FwdHadamard[2] = fHadamard8_C;
-  WP2FwdHadamard[3] = fHadamard16_C;
-  WP2FwdHadamard[4] = fHadamard32_C;
+  WP2InvHadamard[0] = Hadamard2_C;
+  WP2InvHadamard[1] = Hadamard4_C;
+  WP2InvHadamard[2] = Hadamard8_C;
+  WP2InvHadamard[3] = Hadamard16_C;
+  WP2InvHadamard[4] = Hadamard32_C;
+  WP2FwdHadamard[0] = Hadamard2_C;
+  WP2FwdHadamard[1] = Hadamard4_C;
+  WP2FwdHadamard[2] = Hadamard8_C;
+  WP2FwdHadamard[3] = Hadamard16_C;
+  WP2FwdHadamard[4] = Hadamard32_C;
 
   for (uint32_t th : {0, 1, 2, 3, 4}) {
     for (uint32_t tw : {0, 1, 2, 3, 4}) {
@@ -2864,14 +2863,6 @@ WP2_TSAN_IGNORE_FUNCTION void WP2TransformInit() {
 
 //------------------------------------------------------------------------------
 // Entry points
-
-static inline uint32_t SizeToIdx(uint32_t size) {
-  assert(size == 2 || size == 4 || size == 8 || size == 16 || size == 32);
-  return (size == 2) ? 0 : (size == 4) ? 1 : (size == 8) ? 2 :
-         (size == 16) ? 3 : 4;
-}
-
-//------------------------------------------------------------------------------
 
 void WP2InvTransform(const int32_t src[], WP2TransformType type, uint32_t size,
                   int32_t dst[], uint32_t num_rows) {
@@ -2960,6 +2951,24 @@ static void InvTransform2D(const int32_t src[], WP2TransformType tf_x,
   WP2InvTransform(tmp, tf_x, size_x, dst, th);
 }
 
+// TODO(skal): this is just a basic implementation for now...
+static void InvTransform2D16b(WP2TransformType tf_x, WP2TransformType tf_y,
+                              uint32_t tw, uint32_t th, int16_t coeffs[]) {
+  int32_t tmp1[32 * 32], tmp2[32 * 32];
+  const WP2TransformColF transform = (tf_y == WP2TransformType::kDct) ?
+        WP2InvDctCol[SizeToIdx(th)][SizeToIdx(tw)] : nullptr;
+  for (uint32_t i = 0; i < tw * th; ++i) tmp1[i] = coeffs[i];
+  if (transform != nullptr) {
+    transform(tmp1, tmp2, tw);
+  } else {
+    WP2Transpose(tmp1, tw, th, tmp2);  // tw x th -> th x tw
+    WP2InvTransform(tmp2, tf_y, th, tmp1, tw);
+    WP2Transpose(tmp1, th, tw, tmp2);  // th x tw -> tw x th
+  }
+  WP2InvTransform(tmp2, tf_x, tw, tmp1, th);
+  for (uint32_t i = 0; i < tw * th; ++i) coeffs[i] = (int16_t)tmp1[i];
+}
+
 //------------------------------------------------------------------------------
 
 void WP2Transform2D(const int32_t src[], WP2TransformType tf_x,
@@ -2990,6 +2999,9 @@ void WP2Transform2D(const int32_t src[], WP2TransformType tf_x,
   Transform2D(dst, tf_x, tf_y, tw, th, dst);
 }
 
+//------------------------------------------------------------------------------
+// Upsampling
+
 // Upsampling taps
 static constexpr int32_t kTaps[4][9] = {
   {   64,     9,    -9,     9,    -9,     2,    -1,    -1,     0 },
@@ -2998,43 +3010,55 @@ static constexpr int32_t kTaps[4][9] = {
   {   64,    -9,     9,    -9,     9,     0,    -1,    -1,     2 },
 };
 
-void WP2InvTransform2D(const int32_t src[], WP2TransformType tf_x,
-                       WP2TransformType tf_y, uint32_t size_x, uint32_t size_y,
-                       int32_t dst[], bool reduced) {
-  const uint32_t tw = reduced ? size_x / 2 : size_x;
-  const uint32_t th = reduced ? size_y / 2 : size_y;
-  // Figure out the bounding column.
-  uint32_t x_end = 0;
-  for (uint32_t j = 0; j < th; ++j) {
-    for (uint32_t i = x_end; i < tw; ++i) {
-      if (src[j * tw + i] != 0) x_end = i + 1;
+// Upsample
+// TODO(skal): remove once the {Inv/Fwd}Transforms are converted to 16b
+static void Upsample(const int32_t in[], uint32_t tw, uint32_t th,
+                     int32_t out[]) {
+  for (uint32_t y = 0; y < th; ++y) {
+    for (uint32_t x = 0; x < tw; ++x) {
+      const uint32_t xp = (x + 1 < tw) ? x + 1 : x;
+      const uint32_t yp = (y + 1 < th) ? y + 1 : y;
+      const uint32_t xm = (x > 0) ? x - 1 : 0;
+      const uint32_t ym = (y > 0) ? y - 1 : 0;
+      // Source sample numbering (samples[]):
+      // 5...3...6
+      // .   .   .
+      // .   .   .
+      // .  x.x  .
+      // 1...0...2
+      // .  x.x  .
+      // .   .   .
+      // .   .   .
+      // 7...4...8
+      // (interpolated samples v[] marked with 'x')
+      const int32_t samples[9] = {
+          in[x  + tw * y],                     // #0
+          in[xm + tw * y],  in[xp + tw * y],   // #1 #2
+          in[x  + tw * ym], in[x  + tw * yp],  // #3 #4
+          in[xm + tw * ym], in[xp + tw * ym],  // #5 #6
+          in[xm + tw * yp], in[xp + tw * yp]   // #7 #8
+      };
+      int32_t v[4] = {32, 32, 32, 32};
+      for (uint32_t i = 0; i < 9; ++i) {
+        v[0] += kTaps[0][i] * samples[i];
+        v[1] += kTaps[1][i] * samples[i];
+        v[2] += kTaps[2][i] * samples[i];
+        v[3] += kTaps[3][i] * samples[i];
+      }
+      const size_t offset = 2 * y * 2 * tw + 2 * x;
+      out[offset +          0] = v[0] >> 6;
+      out[offset +          1] = v[1] >> 6;
+      out[offset + 2 * tw + 0] = v[2] >> 6;
+      out[offset + 2 * tw + 1] = v[3] >> 6;
     }
   }
-  // If the residuals are null.
-  if (x_end == 0) {
-    std::fill(dst, dst + size_x * size_y, 0);
-    return;
-  }
+}
 
-  if (!reduced) {
-    return InvTransform2D(src, tf_x, tf_y, size_x, x_end, size_y, dst);
-  }
-  int32_t tmp[16 * 16];
+// in-place 16bit upsample
+static void Upsample(uint32_t tw, uint32_t th, int16_t coeffs[]) {
+  int16_t tmp[16 * 16];
   assert(tw <= 16 && th <= 16);
-  InvTransform2D(src, tf_x, tf_y, tw, x_end, th, tmp);
-
-  // Check if we are DC only.
-  if (x_end == 1 && tf_x == kDct && tf_y == kDct) {
-    uint32_t y_end = th;
-    while (y_end > 0 && src[(y_end - 1) * tw] == 0) --y_end;
-    assert(y_end > 0);  // the all zero case has been dealt with before
-    if (y_end == 1) {
-      std::fill(dst, dst + size_x * size_y, tmp[0]);
-      return;
-    }
-  }
-
-  // Upsample
+  std::copy(coeffs, coeffs + tw * th, tmp);
   for (uint32_t y = 0; y < th; ++y) {
     for (uint32_t x = 0; x < tw; ++x) {
       const uint32_t xp = (x + 1 < tw) ? x + 1 : x;
@@ -3067,12 +3091,85 @@ void WP2InvTransform2D(const int32_t src[], WP2TransformType tf_x,
         v[3] += kTaps[3][i] * samples[i];
       }
       const size_t offset = 2 * y * 2 * tw + 2 * x;
-      dst[offset +          0] = v[0] >> 6;
-      dst[offset +          1] = v[1] >> 6;
-      dst[offset + 2 * tw + 0] = v[2] >> 6;
-      dst[offset + 2 * tw + 1] = v[3] >> 6;
+      coeffs[offset +          0] = v[0] >> 6;
+      coeffs[offset +          1] = v[1] >> 6;
+      coeffs[offset + 2 * tw + 0] = v[2] >> 6;
+      coeffs[offset + 2 * tw + 1] = v[3] >> 6;
     }
   }
+}
+
+void WP2InvTransform2D(const int32_t src[], WP2TransformType tf_x,
+                       WP2TransformType tf_y, uint32_t size_x, uint32_t size_y,
+                       int32_t dst[], bool reduced) {
+  const uint32_t tw = reduced ? size_x / 2 : size_x;
+  const uint32_t th = reduced ? size_y / 2 : size_y;
+  // Figure out the bounding column.
+  uint32_t x_end = 0;
+  for (uint32_t j = 0; j < th; ++j) {
+    for (uint32_t i = x_end; i < tw; ++i) {
+      if (src[j * tw + i] != 0) x_end = i + 1;
+    }
+  }
+  // If the residuals are null.
+  if (x_end == 0) {
+    std::fill(dst, dst + size_x * size_y, 0);
+    return;
+  }
+  if (!reduced) {
+    return InvTransform2D(src, tf_x, tf_y, tw, x_end, th, dst);
+  }
+  int32_t tmp[16 * 16];
+  assert(tw <= 16 && th <= 16);
+  InvTransform2D(src, tf_x, tf_y, tw, x_end, th, tmp);
+
+  // Check if we are DC only.
+  if (x_end == 1 && tf_x == kDct && tf_y == kDct) {
+    uint32_t y_end = th;
+    while (y_end > 0 && src[(y_end - 1) * tw] == 0) --y_end;
+    assert(y_end > 0);  // the all zero case has been dealt with before
+    if (y_end == 1) {
+      std::fill(dst, dst + size_x * size_y, tmp[0]);
+      return;
+    }
+  }
+
+  Upsample(tmp, tw, th, dst);
+}
+
+void WP2InvTransform2D16b(WP2TransformType tf_x, WP2TransformType tf_y,
+                          uint32_t size_x, uint32_t size_y,
+                          int16_t coeffs[], bool reduced) {
+  const uint32_t tw = reduced ? size_x / 2 : size_x;
+  const uint32_t th = reduced ? size_y / 2 : size_y;
+  // Figure out the bounding column.
+  uint32_t x_end = 0;
+  for (uint32_t j = 0; j < th; ++j) {
+    for (uint32_t i = x_end; i < tw; ++i) {
+      if (coeffs[j * tw + i] != 0) x_end = i + 1;
+    }
+  }
+  // If the residuals are null.
+  if (x_end == 0) {
+    std::fill(coeffs, coeffs + size_x * size_y, 0);
+    return;
+  }
+  bool dc_only = false;
+  // Check if we are DC only.
+  if (x_end == 1 && tf_x == kDct && tf_y == kDct) {
+    uint32_t y_end = th;
+    while (y_end > 0 && coeffs[(y_end - 1) * tw] == 0) --y_end;
+    assert(y_end > 0);
+    dc_only = (y_end == 1);
+  }
+
+  InvTransform2D16b(tf_x, tf_y, tw, th, coeffs);
+  if (!reduced) return;
+  if (dc_only) {
+    for (uint32_t i = tw * th; i < size_x * size_y; ++i) coeffs[i] = coeffs[0];
+    return;
+  }
+  Upsample(tw, th, coeffs);
 }
 
 //------------------------------------------------------------------------------

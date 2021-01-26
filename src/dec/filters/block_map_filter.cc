@@ -76,10 +76,9 @@ static uint32_t ComputeResidualDensity(const CodedBlock& cb, Channel channel,
                                        uint32_t multiplier) {
   const uint32_t num_transforms = cb.GetNumTransforms(channel);
   const uint32_t num_coeffs = cb.NumCoeffsPerTransform(channel);
-  uint32_t num_nz_coeffs = num_coeffs * num_transforms;
+  uint32_t num_nz_coeffs = 0;
   for (uint32_t tf_i = 0; tf_i < num_transforms; ++tf_i) {
-    num_nz_coeffs -= std::count(cb.coeffs_[channel][tf_i],
-                                cb.coeffs_[channel][tf_i] + num_coeffs, 0);
+    num_nz_coeffs += cb.num_coeffs_[channel][tf_i];
   }
   return DivRound(num_nz_coeffs * multiplier, num_coeffs * num_transforms);
 }

@@ -86,8 +86,7 @@ WP2Status TileDecoder::BypassTileDec() {
     sim_block.id_ = 0;  // Set segment id as the least quantized one.
     sim_block.is420_ = false;
     for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-      std::fill(&sim_block.coeffs_[c][0][0],  // Maximum residual density.
-                &sim_block.coeffs_[c][0][0] + kMaxBlockSizePix2, 1);
+      sim_block.num_coeffs_[c][0] = 0;   // will prevent filtering
     }
 
     HeaderDec bit_unpacker(tile_->input, "raw_pixels");

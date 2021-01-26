@@ -368,18 +368,18 @@ template<typename T> uint64_t Accumulate(const T* const src1,
   return sum;
 }
 
-uint64_t WP2SumSquaredError8u_C(const uint8_t* src1, const uint8_t* src2,
-                                uint32_t len) {
+uint64_t SumSquaredError8u_C(const uint8_t* src1, const uint8_t* src2,
+                             uint32_t len) {
   return Accumulate(src1, src2, len);
 }
 
-uint64_t WP2SumSquaredError16s_C(const int16_t* src1, const int16_t* src2,
-                                 uint32_t len) {
+uint64_t SumSquaredError16s_C(const int16_t* src1, const int16_t* src2,
+                              uint32_t len) {
   return Accumulate(src1, src2, len);
 }
 
-void WP2SumSquaredError4x8u_C(const uint8_t* src1, const uint8_t* src2,
-                              uint32_t len, uint64_t result[4]) {
+void SumSquaredError4x8u_C(const uint8_t* src1, const uint8_t* src2,
+                           uint32_t len, uint64_t result[4]) {
   for (uint32_t i = 0; i < len; ++i) {
     for (uint32_t c = 0; c < 4; ++c) {
       const int32_t diff = (int32_t)src1[4 * i + c] - src2[4 * i + c];
@@ -388,8 +388,8 @@ void WP2SumSquaredError4x8u_C(const uint8_t* src1, const uint8_t* src2,
   }
 }
 
-void WP2SumSquaredError2x16u_C(const uint16_t* src1, const uint16_t* src2,
-                               uint32_t len, uint64_t result[4]) {
+void SumSquaredError2x16u_C(const uint16_t* src1, const uint16_t* src2,
+                            uint32_t len, uint64_t result[4]) {
   for (uint32_t i = 0; i < len; ++i) {
     for (uint32_t c = 0; c < 4; ++c) {
       const int32_t diff = (int32_t)src1[4 * i + c] - src2[4 * i + c];
@@ -398,14 +398,33 @@ void WP2SumSquaredError2x16u_C(const uint16_t* src1, const uint16_t* src2,
   }
 }
 
-uint64_t WP2SumSquaredErrorBlock_C(const int16_t* src1, uint32_t step1,
-                                   const int16_t* src2, uint32_t step2,
-                                   uint32_t w, uint32_t h) {
+uint64_t SumSquaredErrorBlock_C(const int16_t* src1, uint32_t step1,
+                                const int16_t* src2, uint32_t step2,
+                                uint32_t w, uint32_t h) {
   uint64_t sum = 0;
   for (uint32_t j = 0; j < h; ++j) {
-    sum += WP2SumSquaredError16s_C(src1, src2, w);
+    sum += SumSquaredError16s_C(src1, src2, w);
     src1 += step1;
     src2 += step2;
+  }
+  return sum;
+}
+
+uint64_t SumSquaredErrorHalfBlock_C(const int16_t* src1, uint32_t step1,
+                                    const int16_t* src2, uint32_t step2,
+                                    uint32_t w, uint32_t h) {
+  uint64_t sum = 0;
+  for (uint32_t j = 0; j < h; j += 2) {
+    for (uint32_t i = 0; i < w; i += 2) {
+      const int32_t v1 = src1[i + 0] + src1[i + 1]
+                       + src1[i + 0 + step1] + src1[i + 1 + step1];
+      const int32_t v2 = src2[i + 0] + src2[i + 1]
+                       + src2[i + 0 + step2] + src2[i + 1 + step2];
+      const int32_t diff = (v1 - v2);
+      sum += diff * diff;
+    }
+    src1 += 2 * step1;
+    src2 += 2 * step2;
   }
   return sum;
 }
@@ -592,7 +611,10 @@ void (*WP2SumSquaredError2x16u)(const uint16_t* src1, const uint16_t* src2,
 
 uint64_t (*WP2SumSquaredErrorBlock)(const int16_t* src1, uint32_t step1,
                                     const int16_t* src2, uint32_t step2,
-                                    uint32_t w, uint32_t h);
+                                    uint32_t w, uint32_t h) = nullptr;
+uint64_t (*WP2SumSquaredErrorHalfBlock)(const int16_t* src1, uint32_t step1,
+                                        const int16_t* src2, uint32_t step2,
+                                        uint32_t w, uint32_t h) = nullptr;
 
 static volatile WP2CPUInfo psnr_last_cpuinfo_used =
     (WP2CPUInfo)&psnr_last_cpuinfo_used;
@@ -600,11 +622,13 @@ static volatile WP2CPUInfo psnr_last_cpuinfo_used =
 WP2_TSAN_IGNORE_FUNCTION void WP2PSNRInit() {
   if (psnr_last_cpuinfo_used == WP2GetCPUInfo) return;
 
-  WP2SumSquaredError8u = WP2SumSquaredError8u_C;
-  WP2SumSquaredError16s = WP2SumSquaredError16s_C;
-  WP2SumSquaredError4x8u = WP2SumSquaredError4x8u_C;
-  WP2SumSquaredError2x16u = WP2SumSquaredError2x16u_C;
-  WP2SumSquaredErrorBlock = WP2SumSquaredErrorBlock_C;
+  WP2SumSquaredError8u = SumSquaredError8u_C;
+  WP2SumSquaredError16s = SumSquaredError16s_C;
+  WP2SumSquaredError4x8u = SumSquaredError4x8u_C;
+  WP2SumSquaredError2x16u = SumSquaredError2x16u_C;
+
+  WP2SumSquaredErrorBlock = SumSquaredErrorBlock_C;
+  WP2SumSquaredErrorHalfBlock = SumSquaredErrorHalfBlock_C;
 
   if (WP2GetCPUInfo != nullptr) {
 #if defined(WP2_USE_SSE)

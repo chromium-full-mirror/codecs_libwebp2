@@ -199,8 +199,13 @@ ifeq ($(ENC_DEC_MATCH), 1)
   CXXFLAGS += -DWP2_ENC_DEC_MATCH
 endif
 
-CC = gcc -std=gnu99
-CXX = g++
+ifeq ($(USE_CLANG), 1)
+  CC = clang -std=gnu99
+  CXX = clang++
+else
+  CC = gcc -std=gnu99
+  CXX = g++
+endif
 INSTALL = install
 GROFF = /usr/bin/groff
 COL = /usr/bin/col

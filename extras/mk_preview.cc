@@ -39,7 +39,8 @@ namespace {
 static int verbose = 1;
 static bool check = false;
 }  // namespace
-#define VERBOSE(STR...) if (verbose > 0) printf(STR)  // NOLINT (string literal)
+#define VERBOSE(STR, ...) \
+  if (verbose > 0) printf((STR), __VA_ARGS__)  // NOLINT (string literal)
 
 //------------------------------------------------------------------------------
 

@@ -71,11 +71,7 @@ void AlphaReader::Reconstruct(CodedBlock* const cb) const {
       ReconstructLossless(*cb, &cb->out_.A);
       break;
     case kBlockAlphaLossy:
-      BlockCoeffs32 res;
-      // all alpha blocks use segment #0's quant_a_
-      // TODO(skal): use cb->id_ instead?
-      cb->Dequantize(gparams_->segments_[0].quant_a_, kAChannel, &res);
-      cb->Reconstruct(kAChannel, /*reduced_transform=*/false, &res);
+      cb->Reconstruct(kAChannel);
       break;
     case kBlockAlphaFullTransp:
       cb->out_.A.Fill(0);

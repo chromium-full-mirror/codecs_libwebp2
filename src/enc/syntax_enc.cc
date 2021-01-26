@@ -276,10 +276,18 @@ void SyntaxWriter::WriteBlockBeforeCoeffs(const CodedBlock& cb,
   }
 
   if (cb.mtx_set_ != nullptr) {
-    sm->Process(kSymbolUseRandomMatrix, cb.use_mtx_, "use_rnd_mtx", enc);
-    if (cb.use_mtx_) {
-      sm->Process(kSymbolRndMtx0, cb.mtx_[kYChannel], "rnd_mtx_y", enc);
+#if defined(ENABLE_RND_MTX)
+    const bool can_use =
+        gparams_->mtx_set_.IsOk(cb.mtx_[kYChannel], cb.tdim(kYChannel));
+    if (can_use) {
+      sm->Process(kSymbolUseRandomMatrix, cb.use_mtx_, "use_rnd_mtx", enc);
+      if (cb.use_mtx_) {
+        sm->Process(kSymbolRndMtx0, cb.mtx_[kYChannel], "rnd_mtx_y", enc);
+      }
+    } else {
+      assert(!cb.use_mtx_);
     }
+#endif
   }
 }
 

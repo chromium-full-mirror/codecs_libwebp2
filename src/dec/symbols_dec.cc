@@ -109,34 +109,40 @@ WP2Status SymbolReader::Init(const SymbolsInfo& symbols_info,
   return WP2_STATUS_OK;
 }
 
-void SymbolReader::AddTrivial(uint32_t sym, uint32_t cluster, int32_t value) {
+void SymbolReader::AddTrivial(uint32_t sym, uint32_t cluster, bool is_symmetric,
+                              int32_t value) {
   Stat* const stat = GetStats(sym, cluster);
   stat->type = Stat::Type::kTrivial;
+  stat->is_symmetric = is_symmetric;
   stat->param.trivial_value = value;
 }
 
-void SymbolReader::AddMapping(uint32_t sym, uint32_t cluster,
+void SymbolReader::AddMapping(uint32_t sym, uint32_t cluster, bool is_symmetric,
                               const Vector_u16& mapping) {
   Stat* const stat = GetStats(sym, cluster);
   stat->type = Stat::Type::kRange;
+  stat->is_symmetric = is_symmetric;
   stat->use_mapping = true;
   for (uint32_t k = 0; k < mapping.size(); ++k) stat->mappings[k] = mapping[k];
   stat->range = mapping.size();
 }
 
-void SymbolReader::AddRange(uint32_t sym, uint32_t cluster, uint16_t range) {
+void SymbolReader::AddRange(uint32_t sym, uint32_t cluster, bool is_symmetric,
+                            uint16_t range) {
   Stat* const stat = GetStats(sym, cluster);
   stat->type = Stat::Type::kRange;
+  stat->is_symmetric = is_symmetric;
   stat->use_mapping = false;
   stat->range = range;
 }
 
 WP2Status SymbolReader::AddDict(uint32_t sym, uint32_t cluster,
-                                ANSCodes* const infos) {
+                                bool is_symmetric, ANSCodes* const infos) {
   Stat* const stat = GetStats(sym, cluster);
 
   assert(infos->size() > 1);
   stat->type = Stat::Type::kDict;
+  stat->is_symmetric = is_symmetric;
   stat->use_mapping = true;
   // Make sure the symbols are ordered like in the encoding.
   // TODO(vrabaud): this should be prevented by the bitstream syntax
@@ -161,8 +167,9 @@ WP2Status SymbolReader::AddDict(uint32_t sym, uint32_t cluster,
 }
 
 WP2Status SymbolReader::AddGolomb(uint32_t sym, uint32_t cluster,
-                                  ANSCodes* const infos, uint32_t prefix_size) {
-  WP2_CHECK_STATUS(AddDict(sym, cluster, infos));
+                                  bool is_symmetric, ANSCodes* const infos,
+                                  uint32_t prefix_size) {
+  WP2_CHECK_STATUS(AddDict(sym, cluster, is_symmetric, infos));
   SetGolombStat(sym, cluster, prefix_size);
 
   return WP2_STATUS_OK;
@@ -488,14 +495,15 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
       dec_->PopBitTracesCustomPrefix(label);
       return WP2_STATUS_BITSTREAM_ERROR;
   }
-  const bool changes_sign = (symbols_info_.Min(sym, cluster) < 0) &&
-                            (symbols_info_.Max(sym, cluster) > 0);
-  if (*value != 0 && changes_sign) {
-    // TODO(vrabaud) implement other methods to store negative values.
-    if (dec_->ReadBool("is_negative")) *value = -(*value);
+  if (stat.is_symmetric) {
+    if (*value != 0) {
+      if (dec_->ReadBool("is_negative")) *value = -(*value);
 #if defined(WP2_BITTRACE)
-    if (cost != nullptr) *cost += 1.;
+      if (cost != nullptr) *cost += 1.;
 #endif
+    }
+  } else {
+    *value += symbols_info_.Min(sym, cluster);
   }
   if (use_max_value) assert((uint32_t)std::abs(*value) <= max_value);
   dec_->PopBitTracesCustomPrefix(label);
@@ -521,7 +529,7 @@ WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t cluster,
   const int16_t max_symbol = symbols_info_.Max(sym, cluster);
   if (range < 2) {
     assert(range == 1);
-    AddTrivial(sym, cluster, min_symbol);
+    AddTrivial(sym, cluster, /*is_symmetric=*/false, min_symbol);
     return WP2_STATUS_OK;
   }
 
@@ -570,7 +578,7 @@ WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t cluster,
 
   // Deal with trivial cases.
   if (c == kSymbolCountZero) {
-    AddTrivial(sym, cluster, 0);
+    AddTrivial(sym, cluster, /*is_symmetric=*/false, 0);
     return dec_->GetStatus();
   }
   if (c == kSymbolCountOne) {
@@ -580,13 +588,16 @@ WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t cluster,
       value = dec_->ReadRange(0, std::max((int16_t)-min_symbol, max_symbol),
                               "symbol");
     } else {
-      value = dec_->ReadRange(min_symbol, max_symbol, "symbol");
+      value = dec_->ReadRange(0, max_symbol - min_symbol, "symbol");
     }
-    AddTrivial(sym, cluster, value);
+    AddTrivial(sym, cluster, changes_sign, value);
     return dec_->GetStatus();
   }
 
   const uint32_t type = dec_->ReadRValue(3, "type");
+  const bool is_symmetric = (min_symbol < 0 && max_symbol > 0)
+                                ? dec_->ReadBool("is_symmetric")
+                                : false;
   if (type == 2) {  // kGolomb
     const uint32_t golomb_prefix_size = dec_->ReadRange(1, 2, "prefix_size");
     const Golomb golomb(range - 1, golomb_prefix_size);
@@ -594,17 +605,19 @@ WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t cluster,
     const uint32_t nnz =
         dec_->ReadRange(2, std::min(max_nnz, range_golomb), "size");
     WP2_CHECK_STATUS(ReadHistogram(nnz, range_golomb, max_nnz, dec_, infos_));
-    WP2_CHECK_STATUS(AddGolomb(sym, cluster, &infos_, golomb_prefix_size));
+    WP2_CHECK_STATUS(
+        AddGolomb(sym, cluster, is_symmetric, &infos_, golomb_prefix_size));
   } else if (type == 1) {  // kDict
     // a kDict can't use more than ANS_MAX_SYMBOLS
     const uint32_t dict_range = std::min(nnz_range, (uint32_t)ANS_MAX_SYMBOLS);
     const uint32_t nnz = dec_->ReadRange(2, dict_range, "size");
     WP2_CHECK_STATUS(ReadHistogram(nnz, range, max_nnz, dec_, infos_));
-    WP2_CHECK_STATUS(AddDict(sym, cluster, &infos_));
+    WP2_CHECK_STATUS(AddDict(sym, cluster, is_symmetric, &infos_));
   } else {  // kRange
     const uint32_t nnz = dec_->ReadRange(1, nnz_range, "size");
     Stat* const stat = GetStats(sym, cluster);
     stat->type = Stat::Type::kRange;
+    stat->is_symmetric = is_symmetric;
     stat->use_mapping = true;
     stat->range = nnz;
     WP2_CHECK_STATUS(LoadMapping(dec_, nnz, range, stat->mappings));

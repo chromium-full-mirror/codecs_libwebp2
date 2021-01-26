@@ -103,13 +103,13 @@ WP2Status ResidualReader::ReadHeader(SymbolReader* const sr,
 
 //------------------------------------------------------------------------------
 
-static int16_t ReadDC(Channel channel, uint32_t num_channels, bool can_be_zero,
+static int32_t ReadDC(Channel channel, uint32_t num_channels, bool can_be_zero,
                       SymbolReader* const sr) {
-  int n = sr->Read(kSymbolDC, ResidualIO::GetCluster(channel, num_channels),
-                   "DC");
+  uint32_t n =
+      sr->Read(kSymbolDC, ResidualIO::GetCluster(channel, num_channels), "DC");
   if (!can_be_zero) ++n;
   // Converting the unsigned value to a signed one.
-  return (n % 2 == 0) ? n / 2 : -((n + 1) / 2);
+  return (n & 1) ? -(int32_t)((n + 1) >> 1) : (int32_t)(n >> 1);
 }
 
 inline void ReadBounds(Channel channel, uint32_t num_channels,
@@ -141,7 +141,8 @@ inline void ReadBounds(Channel channel, uint32_t num_channels,
   if (*use_bounds2) *val2 = dec->ReadRange(min2, max2, "bound2");
 }
 
-WP2Status ResidualReader::ReadCoeffs(Channel channel, ANSDec* const dec,
+WP2Status ResidualReader::ReadCoeffs(Channel channel, const int16_t dequant[],
+                                     ANSDec* const dec,
                                      SymbolReader* const sr,
                                      CodedBlock* const cb,
                                      BlockInfo* const info) {
@@ -162,15 +163,15 @@ WP2Status ResidualReader::ReadCoeffs(Channel channel, ANSDec* const dec,
         if (cb->num_coeffs_[channel][tf_i] > 0) {  // need to read coeffs?
           cb->num_coeffs_[channel][tf_i] =
             libgav1::AOMResidualReader::ReadCoeffs(
-              channel, cb->tdim(channel), params->tf,
+              channel, dequant, cb->tdim(channel), params->tf,
               cb->IsFirstCoeffDC(channel), sr, dec, coeffs);
         }
-        SetGeometry(cb->num_coeffs_[channel][tf_i],
-                    &cb->method_[channel][tf_i]);
+        // TODO(skal): properly initialize method_[]
       } else if (cb->method_[channel][tf_i] == EncodingMethod::kAllZero) {
         cb->num_coeffs_[channel][tf_i] = 0;
       } else {
-        WP2_CHECK_STATUS(ReadCoeffsMethod01(channel, tf_i, dec, sr, cb, info));
+        cb->num_coeffs_[channel][tf_i] =
+            ReadCoeffsMethod01(channel, dequant, tf_i, dec, sr, cb, info);
       }
       ++tf_i;
     }
@@ -178,29 +179,26 @@ WP2Status ResidualReader::ReadCoeffs(Channel channel, ANSDec* const dec,
   return WP2_STATUS_OK;
 }
 
-WP2Status ResidualReader::ReadCoeffsMethod01(Channel channel, uint32_t tf_i,
-                                             ANSDec* const dec,
-                                             SymbolReader* const sr,
-                                             CodedBlock* const cb,
-                                             BlockInfo* const info) {
+uint32_t ResidualReader::ReadCoeffsMethod01(
+    Channel channel, const int16_t dequant[], uint32_t tf_i,
+    ANSDec* const dec, SymbolReader* const sr,
+    CodedBlock* const cb, BlockInfo* const info) {
   int16_t* const coeffs = cb->coeffs_[channel][tf_i];
   const EncodingMethod method = cb->method_[channel][tf_i];
   const TrfSize tdim = cb->tdim(channel);
   const bool first_is_dc = cb->IsFirstCoeffDC(channel);
+  uint32_t num_nz_coeffs = 0;
 
   if (first_is_dc) {
     // Read the DC.
     const bool can_be_zero = (method != EncodingMethod::kDCOnly);
-    coeffs[0] = ReadDC(channel, num_channels_, can_be_zero, sr);
+    const int32_t dc = ReadDC(channel, num_channels_, can_be_zero, sr);
     // [-2047:2047] if zero is included, -2048 is possible if it is not.
     // TODO(yguyon): Or is it GlobalParams::GetMaxAbsDC()?
-    assert(coeffs[0] >= -kMaxDcValue - (can_be_zero ? 0 : 1) &&
-           coeffs[0] <= kMaxDcValue);
-
-    if (method == EncodingMethod::kDCOnly) {
-      cb->num_coeffs_[channel][tf_i] = 1;
-      return WP2_STATUS_OK;
-    }
+    assert(dc >= -kMaxDcValue - (can_be_zero ? 0 : 1) && dc <= kMaxDcValue);
+    coeffs[0] = Clamp(dc * dequant[0], -32768, 32767);
+    num_nz_coeffs = (dc != 0) ? 1 : 0;
+    if (method == EncodingMethod::kDCOnly) return num_nz_coeffs;
   } else {
     assert(method != EncodingMethod::kDCOnly);
   }
@@ -330,13 +328,16 @@ WP2Status ResidualReader::ReadCoeffsMethod01(Channel channel, uint32_t tf_i,
               dec->ReadUValue(Golomb::NumExtraBits(prefix, /*prefix_size=*/1),
                               "residual2_extra");
           abs_v += Golomb::Merge(prefix, /*prefix_size=*/1, extra);
+          assert(abs_v <= kMaxCoeffValue);
         } else {
           abs_v = 3 + residual1;
         }
       }
     }
-    coeffs[i] =
-        (int16_t)(dec->ReadBool("is_negative") ? -(int16_t)abs_v : abs_v);
+    coeffs[i] = dec->ReadBool("is_negative") ? -abs_v : abs_v;
+    // TODO(skal): clamp coeffs[i] to signed-16b?
+    coeffs[i] *= dequant[x + y * WP2QStride];
+    ++num_nz_coeffs;
 
     const uint32_t zigzag_ind = iter.ZigZagIndex();
     ++iter;
@@ -353,19 +354,6 @@ WP2Status ResidualReader::ReadCoeffsMethod01(Channel channel, uint32_t tf_i,
                          "has_only_ones_left");
     }
     previous_is_a_one = (abs_v == 1);
-  }
-  cb->num_coeffs_[channel][tf_i] = 0;
-  const uint32_t start_i = (first_is_dc ? 1 : 0);
-  for (uint32_t i = cb->NumCoeffsPerTransform(channel); i-- > start_i;) {
-    if (coeffs[i] != 0) {
-      cb->num_coeffs_[channel][tf_i] = i + 1;
-      break;
-    }
-  }
-  assert(cb->num_coeffs_[channel][tf_i] > start_i);
-  for (uint32_t i = start_i; i < cb->num_coeffs_[channel][tf_i]; ++i) {
-    assert(coeffs[i] >= -kMaxCoeffValue);
-    assert(coeffs[i] <= kMaxCoeffValue);
   }
 
   // Debug.
@@ -416,8 +404,7 @@ WP2Status ResidualReader::ReadCoeffsMethod01(Channel channel, uint32_t tf_i,
                                                    std::to_string(last_k));
     }
   }
-
-  return WP2_STATUS_OK;
+  return num_nz_coeffs;
 }
 
 //------------------------------------------------------------------------------

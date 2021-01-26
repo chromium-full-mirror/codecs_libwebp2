@@ -212,12 +212,8 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
 #endif
 
     // reconstruct
-    const Segment& segment = gparams.segments_[cb.id_];
-    for (Channel c : {kYChannel, kUChannel, kVChannel}) {
-      const QuantMtx& quant = segment.GetQuant(c);
-      BlockCoeffs32 res;
-      cb.Dequantize(quant, c, &res);
-      cb.Reconstruct(c, (c == kYChannel) ? false : cb.is420_, &res);
+    for (Channel channel : {kYChannel, kUChannel, kVChannel}) {
+      cb.Reconstruct(channel);
     }
     if (gparams.has_alpha_) {
       reader.alpha_reader().Reconstruct(&cb);
@@ -273,12 +269,12 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     } else if (VDMatch(config, "residuals")) {
       const Channel c = VDChannel(config);
       if (c != kAChannel) {
+        const Segment& segment = gparams.segments_[cb.id_];
         cb.StoreResiduals(config, tile->rect.x, tile->rect.y,
                           segment.GetQuant(c), c, &vd_plane);
       } else if (cb.HasLossyAlpha()) {
         cb.StoreResiduals(config, tile->rect.x, tile->rect.y,
-                          gparams.segments_[0].quant_a_, kAChannel,
-                          &vd_plane);
+                          gparams.segments_[0].quant_a_, kAChannel, &vd_plane);
       }
     } else if (VDMatch(config, "prediction/modes")) {
       const Channel c = VDChannel(config);

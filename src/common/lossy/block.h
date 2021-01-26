@@ -183,7 +183,7 @@ class CodedBlock {
 
   // Assigns the best of the 'preds' (based on pred score only) to the
   // CodingParams of 'channel'.
-  void FindBestPred(const Predictors& preds, Channel channel, bool reduced);
+  void FindBestPred(const Predictors& preds, Channel channel);
   // Assigns the best pair of 'preds/transforms' (based on full
   // pred+tf+quant+recons score) to the CodingParams of 'channel'.
   WP2Status FindBestPredTf(const EncoderConfig& config,
@@ -259,6 +259,10 @@ class CodedBlock {
   void Reconstruct(Channel channel, bool reduced_transform,
                    BlockCoeffs32* const res,
                    const Plane16& prediction = Plane16()) const;
+
+  // Decoder-only: Predict + Transform + Reconstruct in one minimal step.
+  // Upon return, coeffs_[][] contains the transformed coeffs, for info.
+  void Reconstruct(Channel channel);
 
   // Visual debug: force the transform of a block.
   TransformPair GetForcedTransform(const EncoderConfig& config,
@@ -404,8 +408,8 @@ class CodedBlock {
   TransformPair GetImplicitTf(Channel channel) const;
 
   // Returns the sum of square error between 'p_in_' and 'p_out_' for the pixels
-  // inside 'tile_rect' (px, not padded).
-  uint32_t GetDisto(Channel channel, const Rectangle& tile_rect) const;
+  // inside the block (padded).
+  uint32_t GetDisto(Channel channel) const;
 
   // Returns the number of sub-transforms.
   uint32_t GetNumTransforms(Channel channel) const;
@@ -429,10 +433,6 @@ class CodedBlock {
   uint32_t w_pix() const { return blk_.w_pix(); }
   uint32_t h() const { return blk_.h(); }
   uint32_t h_pix() const { return blk_.h_pix(); }
-
-  // Non-padded dimensions deduced from 'tile_rect' (px, not padded).
-  uint32_t visible_w_pix(const Rectangle& tile_rect) const;
-  uint32_t visible_h_pix(const Rectangle& tile_rect) const;
 
   BlockSize dim() const { return blk_.dim(); }
   // Returns the size of the transform but taking into account the potential
@@ -476,7 +476,7 @@ class CodedBlock {
                          uint32_t num_channels, SymbolCounter* const counter,
                          SymbolCounter* const aom_counter, float* rate) const;
   // Gets the different distortion/rates of a block as well as the final score.
-  WP2Status GetRates(const Rectangle& tile_rect, const BlockContext& context,
+  WP2Status GetRates(const BlockContext& context,
                      const QuantMtx& quant, Channel channel,
                      uint32_t num_channels, float tf_rate,
                      Counters* const counters, uint32_t* const dist,
@@ -507,7 +507,7 @@ class CodedBlock {
   uint8_t mtx_[2];        // index of rnd_mtx to use
   bool use_mtx_ = false;  // true if rnd_mtx should be used
   const RndMtxSet* mtx_set_ = nullptr;
-  template<class T> bool CheckUseMtx(BlockSize dim, const T& mtx);
+  template<class T> bool CheckUseMtx(TrfSize trf, const T& mtx);
 
   // Input and output samples must be views of buffers external to CodedBlock
   // pointing to the rectangle covered by 'blk_'. Except for 'predict_from_',
@@ -515,11 +515,14 @@ class CodedBlock {
   YUVPlane in_;            // source samples (input), within blk_
   mutable YUVPlane out_;   // coded samples (output), within blk_
 
-  // Quantized residuals for Y/U/V/A, aka coefficients.
+  // Encoder: Quantized residuals for Y/U/V/A, aka coefficients.
   BlockCoeffs16 coeffs_[4];
   // Size of the coefficients for Y/U/V/A per split transform.
-  // If size == 0, all coefficients are 0. If size != 0, the coefficient at
-  // size - 1 is the last non-zero one.
+  // Encoder:
+  //   If size == 0, all coefficients are 0. If size != 0, the coefficient at
+  //   size - 1 is the last non-zero one.
+  // Decoder:
+  //   total number of non-zero coefficients
   uint32_t num_coeffs_[4][kMaxNumTransformsPerBlock];
   BlockAlphaMode alpha_mode_ = kBlockAlphaLossless;
   // Approximate number of bytes taken up by lossless alpha in this block.

@@ -234,7 +234,8 @@ class SymbolWriter : public SymbolManager,
 
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
   // trivial.
-  void AddTrivial(uint32_t sym, uint32_t cluster, int32_t value);
+  void AddTrivial(uint32_t sym, uint32_t cluster, bool is_symmetric,
+                  int32_t value);
   // For the 'cluster'th cluster of symbol 'sym', (given a maximum value of
   // non-zero values of 'max_nnz', which can be the number of pixels for
   // examples) of statistics 'counts' (first element being the count for the
@@ -264,12 +265,13 @@ class SymbolWriter : public SymbolManager,
   // 'mapping' is used in case we don't use the raw values but a mapping. The
   // mapping is the original value - min of symbol so that it is always
   // positive.
-  void AddRange(uint32_t sym, uint32_t cluster, const uint16_t* const mapping,
-                uint32_t size, uint16_t max_range);
+  void AddRange(uint32_t sym, uint32_t cluster, bool is_symmetric,
+                const uint16_t* const mapping, uint32_t size,
+                uint16_t max_range);
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
   // a dictionary of statistics represented by 'counts', 'quantized_counts' and
   // 'mapping'.
-  WP2Status AddDict(uint32_t sym, uint32_t cluster,
+  WP2Status AddDict(uint32_t sym, uint32_t cluster, bool is_symmetric,
                     const uint32_t* const counts,
                     const uint32_t* const quantized_counts,
                     const uint16_t* const mapping, uint32_t size,
@@ -277,7 +279,7 @@ class SymbolWriter : public SymbolManager,
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
   // Golomb of prefix size 'prefix_size' using the statistics represented by
   // 'counts', 'quantized_counts' and 'mapping'.
-  WP2Status AddGolomb(uint32_t sym, uint32_t cluster,
+  WP2Status AddGolomb(uint32_t sym, uint32_t cluster, bool is_symmetric,
                       const uint32_t* const counts,
                       const uint32_t* const quantized_counts,
                       const uint16_t* const mapping, uint32_t size,
@@ -295,13 +297,19 @@ class SymbolWriter : public SymbolManager,
   // Writes a histogram as defined by the quantizer.
   void WriteHistogram(const Quantizer::Config& config, uint32_t symbol_range,
                       uint32_t max_count, ANSEncBase* const enc);
-  // Computes the cost of storing a histogram as Golomb.
-  void ComputeGolombCost(uint32_t range, uint32_t max_nnz, uint32_t size,
-                         uint32_t prefix_size, float* cost,
-                         Quantizer::Config** const config_golomb);
-  void ConvertCountsToHistogram(const uint32_t* const counts, int min, int max,
-                                bool use_symmetric_negative, uint32_t* size,
-                                uint32_t* counts_total);
+  // Fills the cached counts+mapping for the elements in [0, 'size'], given a
+  // Golomb prefix size and the possible range of the elements.
+  uint32_t FillCachedGolombHistogram(uint32_t range, uint32_t size,
+                                     uint32_t prefix_size);
+  // Computes the cost of storing a histogram as Golomb. Returns true if we
+  // find a confguration that beats the quantizer_'s best cost and 'cost_max',
+  // false otherwise.
+  bool ComputeCachedGolombHistogramCost(uint32_t range, uint32_t max_nnz,
+                                        uint32_t size, uint32_t prefix_size,
+                                        float cost_max);
+  void ConvertCountsToCachedHistogram(const uint32_t* const counts, int min,
+                                      int max, bool is_symmetric,
+                                      uint32_t* size, uint32_t* counts_total);
 
   // Returns the biggest index such that mapping[index] is valid and index <=
   // max_value. If no such value exists, returns the first valid index above
@@ -316,8 +324,8 @@ class SymbolWriter : public SymbolManager,
   Vector_u16 mapping_;
   Vector_u32 histogram_golomb_;
   Vector_u16 mapping_golomb_;
+  // Quantizer for raw counts and Golomb counts.
   Quantizer quantizer_;
-  Quantizer quantizer_golomb_;
   VectorNoCtor<OptimizeArrayStorageStat> stats_buffer_;
   int effort_;
 };

@@ -156,17 +156,18 @@ class ResidualReader : public ResidualIO {
                        bool has_alpha, bool has_lossy_alpha);
 
   // Reads residual coefficients.
-  WP2Status ReadCoeffs(Channel channel, ANSDec* const dec,
-                       SymbolReader* const sr, CodedBlock* const cb,
-                       BlockInfo* const info);
+  WP2Status ReadCoeffs(Channel channel, const int16_t dequant[],
+                       ANSDec* const dec, SymbolReader* const sr,
+                       CodedBlock* const cb, BlockInfo* const info);
 
  private:
   WP2Status ReadHeaderForResidualSymbols(uint32_t num_coeffs_max,
                                          Channel channel,
                                          SymbolReader* const sr);
-  WP2Status ReadCoeffsMethod01(Channel channel, uint32_t tf_i,
-                               ANSDec* const dec, SymbolReader* const sr,
-                               CodedBlock* const cb, BlockInfo* const info);
+  uint32_t ReadCoeffsMethod01(
+      Channel channel, const int16_t dequant[], uint32_t tf_i,
+      ANSDec* const dec, SymbolReader* const sr,
+      CodedBlock* const cb, BlockInfo* const info);
 
   uint32_t num_channels_;
 };

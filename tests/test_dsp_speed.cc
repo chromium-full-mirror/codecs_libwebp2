@@ -79,31 +79,45 @@ TEST_P(SpeedTestCpuInfo, TestAddSubBlock) {
   constexpr uint32_t kNumTests = 100;
   constexpr uint32_t kNumLoops = 200;
   PseudoRNG rng;
-  for (uint32_t t = 0; t < kNumTests; ++t) {
-    const uint32_t height = 1 + rng.GetUnsigned(32 - 1);
-    const int32_t min = -(1 + rng.GetUnsigned(1023u));
-    const int32_t max =  (1 + rng.GetUnsigned(1023u));
-    testing::PrecalculatedRandom<kMaxLen * 3, int16_t> rnd16(-2048, 2048);
-    for (uint32_t l = 0; l < kNumLoops; ++l) {
-      rnd16.Fill(src, kMaxLen);
-      rnd16.Fill(pred, kMaxLen);
-      for (uint32_t idx : {3, 2, 1, 0}) {   // reverse order, for large to small
-        const uint32_t len = (4 << idx);
-        WP2::SubtractBlock[idx](src, 32, pred, 32, res, len, height);
-        WP2::AddBlock[idx](pred, 32, res, len, min, max, dst, 32, height);
+  for (bool add_eq : {false, true}) {
+    for (uint32_t t = 0; t < kNumTests; ++t) {
+      const uint32_t height = 1 + rng.GetUnsigned(32 - 1);
+      const int32_t min = -(1 + rng.GetUnsigned(1023u));
+      const int32_t max =  (1 + rng.GetUnsigned(1023u));
+      testing::PrecalculatedRandom<kMaxLen * 3, int16_t> rnd16(-2048, 2048);
+      for (uint32_t l = 0; l < kNumLoops; ++l) {
+        rnd16.Fill(src, kMaxLen);
+        rnd16.Fill(pred, kMaxLen);
+        // reverse order, from large to small:
+        for (uint32_t idx : {3, 2, 1, 0}) {
+          const uint32_t len = (4 << idx);
+          WP2::SubtractBlock[idx](src, 32, pred, 32, res, len, height);
+          if (add_eq) {
+            // 32b->16b conversion, with different stride ('len' -> '32')
+            for (uint32_t j = 0; j < height; ++j) {
+              for (uint32_t i = 0; i < len; ++i) {
+                dst[i + j * 32] = (int16_t)res[i + len * j];
+              }
+            }
+            WP2::AddBlockEq[idx](pred, 32, dst, 32, min, max, height);
+          } else {
+            WP2::AddBlock[idx](pred, 32, res, len, min, max, dst, 32, height);
+          }
+        }
       }
-    }
-    uint32_t nb_errors = 0;
-    for (uint32_t i = 0; i < height * 32; ++i) {
-      if (src[i] <= min) {
-        nb_errors += (dst[i] != min);
-      } else if (src[i] >= max) {
-        nb_errors += (dst[i] != max);
-      } else {
-        nb_errors += (src[i] != dst[i]);
+      uint32_t nb_errors = 0;
+      for (uint32_t i = 0; i < height * 32; ++i) {
+        if (src[i] <= min) {
+          nb_errors += (dst[i] != min);
+        } else if (src[i] >= max) {
+          nb_errors += (dst[i] != max);
+        } else {
+          nb_errors += (src[i] != dst[i]);
+        }
       }
+      EXPECT_EQ(nb_errors, 0u)
+          << " rate: " << (100 * nb_errors / kMaxLen) << "%";
     }
-    EXPECT_EQ(nb_errors, 0u) << " rate: " << (100 * nb_errors / kMaxLen) << "%";
   }
 }
 

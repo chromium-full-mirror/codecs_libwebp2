@@ -41,6 +41,10 @@ class AlphaFilter {
   uint32_t Smooth(uint32_t num_rows);
 
  private:
+  static constexpr uint32_t kMaxKernelRadius = 2;
+  static constexpr uint32_t kTapHeight = 2 * kMaxKernelRadius + 1;
+  static constexpr uint32_t kMaxKernelSize2 = kTapHeight * kTapHeight;
+
   bool enabled_ = true;
   const DecoderConfig& config_;
   const FilterBlockMap& blocks_;
@@ -49,7 +53,7 @@ class AlphaFilter {
   // Contains unfiltered pixels from the previous rows and the current row.
   Plane16 top_taps_;
 
-  int32_t kernel_radius_;          // Radius of gaussian kernel.
+  uint32_t kernel_radius_;         // Radius of gaussian kernel.
   const uint32_t* gaussian_;       // Weights for gaussian blur.
   const uint32_t* value_weights_;  // Weights for pixel value differences.
 

@@ -624,10 +624,31 @@ TEST_F(TestANS, Test5) {
   Quantizer quantizer;
   EXPECT_WP2_OK(quantizer.Allocate(kMaxSymbol));
 
-  Quantizer::Config* config = nullptr;
+  // Test the statefullness of the quantizer.
+  EXPECT_TRUE(quantizer.Quantize(histogram.data(), mapping.data(), size_sparse,
+                                 kMaxSymbol, kNumSymbols,
+                                 /*cost_max=*/std::numeric_limits<float>::max(),
+                                 /*cost_offset=*/0.f, /*effort=*/5));
+  const float cost1 = quantizer.GetBest()->cost;
+  EXPECT_FALSE(quantizer.Quantize(
+      histogram.data(), mapping.data(), size_sparse, kMaxSymbol, kNumSymbols,
+      /*cost_max=*/std::numeric_limits<float>::max(),
+      /*cost_offset=*/0.f, /*effort=*/5));
+  // Now, use twice less data which will result in a lower cost.
+  EXPECT_TRUE(quantizer.Quantize(histogram.data(), mapping.data(),
+                                 size_sparse / 2, kMaxSymbol, kNumSymbols,
+                                 /*cost_max=*/std::numeric_limits<float>::max(),
+                                 /*cost_offset=*/0.f, /*effort=*/5));
+  const float cost2 = quantizer.GetBest()->cost;
+  EXPECT_LT(cost2, cost1);
+
   for (int effort : {0, 5, 9}) {
+    quantizer.ResetBest();
     quantizer.Quantize(histogram.data(), mapping.data(), size_sparse,
-                       kMaxSymbol, kNumSymbols, effort, &config);
+                       kMaxSymbol, kNumSymbols,
+                       /*cost_max=*/std::numeric_limits<float>::max(),
+                       /*cost_offset=*/0.f, effort);
+    Quantizer::Config* config = quantizer.GetBest();
 
     // Display results.
     if (kVerbose) {

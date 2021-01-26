@@ -136,8 +136,6 @@ void PopulationAnalyzer::PopulationCost(const uint32_t* const population,
                                         uint32_t* const nonzeros,
                                         uint32_t* const trivial_sym,
                                         float* cost) {
-  WP2::Quantizer::Config* config;
-
   uint32_t size = 0;
   for (uint32_t k = 0; k < range; ++k) {
     if (population[k] == 0) continue;
@@ -160,10 +158,13 @@ void PopulationAnalyzer::PopulationCost(const uint32_t* const population,
   }
 
   // TODO(vrabaud) use the 'effort' parameter instead of imposing 0.
+  quantizer_.ResetBest();
   quantizer_.Quantize(histogram_.data(), mapping_.data(), size, range,
-                      image_size_, /*effort=*/0, &config);
-  *cost =
-      WP2Log2(3) + WP2Log2(std::min(image_size_, range) - 1) + config->cost;
+                      image_size_,
+                      /*cost_max=*/std::numeric_limits<float>::max(),
+                      /*cost_offset=*/0.f, /*effort=*/0);
+  *cost = WP2Log2(3) + WP2Log2(std::min(image_size_, range) - 1) +
+          quantizer_.GetBest()->cost;
 }
 
 void PopulationAnalyzer::GetCombinedEntropy(

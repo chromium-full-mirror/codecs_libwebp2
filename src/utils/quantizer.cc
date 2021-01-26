@@ -46,16 +46,31 @@ WP2Status Quantizer::Allocate(uint32_t range_max) {
   return WP2_STATUS_OK;
 }
 
-void Quantizer::Quantize(const uint32_t* const histogram,
+bool Quantizer::Quantize(const uint32_t* const histogram,
                          const uint16_t* const mapping, size_t size_sparse,
-                         uint32_t symbol_range, uint32_t max_count, int effort,
-                         Config** const config_best) {
+                         uint32_t symbol_range, uint32_t max_count,
+                         float cost_max, float cost_offset, int effort) {
   assert(effort >= 0 && effort <= 9);
-  config_best_ = &configs_[0];
-  config_best_->cost = std::numeric_limits<float>::max();
+  float cost_best_prev;
+  if (config_best_ == nullptr) {
+    config_best_ = &configs_[0];
+    cost_best_prev = std::numeric_limits<float>::max();
+  } else {
+    cost_best_prev = config_best_->cost;
+  }
+  const float cost_to_beat = std::min(cost_best_prev, cost_max) - cost_offset;
+  // Temporarily switch the best configuration cost as the new cost to beat.
+  config_best_->cost = cost_to_beat;
   QuantizeImpl(histogram, mapping, size_sparse, symbol_range, max_count,
                effort);
-  *config_best = config_best_;
+  // Return whether we beat the best cost.
+  if (config_best_->cost < cost_to_beat) {
+    config_best_->cost += cost_offset;
+    return true;
+  } else {
+    config_best_->cost = cost_best_prev;
+    return false;
+  }
 }
 
 void Quantizer::Config::WriteHistogramHeader(uint32_t symbol_range,
@@ -265,10 +280,10 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
         if (histogram_quantized != config_best_->histo.counts) {
           std::swap(config->histo.counts, config_best_->histo.counts);
         }
+        config_best_->histo.mapping = mapping;
       }
     }
   }
-  config_best_->histo.mapping = mapping;
 }
 
 }  // namespace WP2

@@ -316,7 +316,6 @@ class AnglePredictor : public ContextPredictor {
                  int16_t min_value, int16_t max_value)
       : min_value_(min_value),
         max_value_(max_value),
-        type_(type),
         angle_delta_(angle_delta),
         angle_idx_(AngleIdx(type, channel, angle_delta)) {
     context_type_ = GetContextType(angle_idx_);
@@ -406,7 +405,6 @@ class AnglePredictor : public ContextPredictor {
   const int16_t max_value_;
 
  private:
-  Type type_;
   const int16_t angle_delta_;
   uint8_t angle_idx_;
 };
@@ -748,9 +746,9 @@ class PredictorScorer {
       const QuantMtx& quant = segment_.GetQuant(channel);
       cb->Quantize(quant, channel, reduced_);
       WP2_CHECK_STATUS(cb->GetRates(
-          tile_rect_, context_, quant, channel, num_channels_,
-          /*tf_rate=*/0.f, counters_, &dist[channel], &res_rate[channel],
-          &pred_rate[channel], &scores[channel]));
+          context_, quant, channel, num_channels_, /*tf_rate=*/0.f, counters_,
+          &dist[channel], &res_rate[channel], &pred_rate[channel],
+          &scores[channel]));
     }
 
     score_ = (scores[kUChannel] + scores[kVChannel]) / 2.f;
@@ -792,9 +790,9 @@ class PredictorScorer {
 
     WP2_CHECK_STATUS(cb->TransformRate(channel_, num_transforms,
                                        counters_->transform(), &tf_rate));
-    WP2_CHECK_STATUS(cb->GetRates(tile_rect_, context_, quant, channel_,
-                                  num_channels_, tf_rate, counters_, &dist_,
-                                  &res_rate, &pred_rate, &score_));
+    WP2_CHECK_STATUS(cb->GetRates(context_, quant, channel_, num_channels_,
+                                  tf_rate, counters_, &dist_, &res_rate,
+                                  &pred_rate, &score_));
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     // Store score for debug.

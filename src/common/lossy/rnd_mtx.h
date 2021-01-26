@@ -55,6 +55,7 @@ uint32_t DownscaleMatrix(const int16_t* src, int16_t* dst,
 
 // add/subtract operations (TODO(skal): move to dsp/)
 void AddRandomMatrix(uint32_t size, const int16_t rnd[], int16_t coeffs[]);
+void AddRandomMatrix(uint32_t size, const int16_t rnd[], int32_t coeffs[]);
 void SubtractRandomMatrix(uint32_t size, const int16_t rnd[], int16_t coeffs[],
                           uint32_t* const num_coeffs);
 
@@ -76,6 +77,9 @@ template<int SX, int SY> struct RndMtx {
     if (num_ones) SubtractRandomMatrix(SX * SY, rnd, coeffs, num_coeffs);
   }
   void AddTo(int16_t coeffs[]) const {
+    if (num_ones) AddRandomMatrix(SX * SY, rnd, coeffs);
+  }
+  void AddTo(int32_t coeffs[]) const {
     if (num_ones) AddRandomMatrix(SX * SY, rnd, coeffs);
   }
 
@@ -130,9 +134,10 @@ class RndMtxSet {
   void DecideUseRndMtx(CodedBlock* const cb) const;
 
   // Returns true if dimension is compatible.
-  bool IsOk(uint32_t id, BlockSize dim) const;
+  bool IsOk(uint32_t id, TrfSize tdim) const;
   // Add matrix contribution to coeffs.
-  void AddMatrix(uint32_t id, BlockSize dim, int16_t dst[]) const;
+  void AddMatrix(uint32_t id, TrfSize tdim, int16_t dst[]) const;
+  void AddMatrix(uint32_t id, TrfSize tdim, int32_t dst[]) const;
 
   void Reset();  // frees memory
   WP2Status CopyFrom(const RndMtxSet& src);

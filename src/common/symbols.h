@@ -377,6 +377,10 @@ class SymbolIO {
     // Whether to use 'mappings' to map raw stored values to symbol values.
     bool use_mapping;
     uint16_t* mappings;
+    // If set to true, it assumes values are stored as abs(value) + sign with
+    // abs(value) stored as range/dict/Golomb/... Otherwise, value - min is the
+    // one stored as range/dict/Golomb/...
+    bool is_symmetric;
     // For type kRange, the symbol is stored as a value in [0;range[
     uint16_t range;
     union Param {
@@ -434,6 +438,7 @@ class SymbolIO {
                            uint32_t p0 = 1, uint32_t p1 = 1) {
     Stat* const stat = GetStats(sym, cluster);
     stat->type = Stat::Type::kAdaptiveBit;
+    stat->is_symmetric = false;
     stat->use_mapping = false;
     stat->range = 2;
     stat->param.a_bit_index = a_bits_.size();
@@ -447,6 +452,7 @@ class SymbolIO {
                               uint32_t speed) {
     Stat* const stat = GetStats(sym, cluster);
     stat->type = Stat::Type::kAdaptiveSymbol;
+    stat->is_symmetric = false;
     stat->use_mapping = false;
     const uint32_t range = symbols_info_.Range(sym, cluster);
     stat->range = range;

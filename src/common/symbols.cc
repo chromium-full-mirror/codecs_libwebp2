@@ -67,9 +67,6 @@ bool SymbolsInfo::SymbolInfo::MinMaxIsValid(int32_t new_min,
     return true;
   }
   assert(new_min <= new_max);
-  // For now, only support positive and symbols equiprobable with respect to
-  // sign.
-  assert(new_min == 0 || new_min == -new_max);
   const int32_t new_range = new_max - new_min + 1;
   assert(new_range >= 0 && new_range < (1 << kANSMaxRangeBits));
   switch (storage_method) {

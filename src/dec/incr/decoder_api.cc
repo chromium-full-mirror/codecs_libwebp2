@@ -17,6 +17,8 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>
+
 #include "src/dec/incr/decoder_context.h"
 #include "src/dec/incr/decoder_state.h"
 #include "src/dec/wp2_dec_i.h"
