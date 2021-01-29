@@ -143,6 +143,9 @@ class ResidualIO {
   // Initializes values and probas.
   void Init(bool use_aom_coeffs);
 
+  // whether to use AOM residual coding or not
+  bool use_aom() const { return use_aom_coeffs_; }
+
   // Returns the index of a method internally, in [0, kNumMethods[.
   static uint32_t GetMethodIndex(EncodingMethod method);
 

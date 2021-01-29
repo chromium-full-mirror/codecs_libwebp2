@@ -39,14 +39,14 @@ class AOMResidualWriter : public AOMResidualIO {
                           SymbolManager* const sm, ANSEncBase* const enc);
 
  private:
-  static void WriteEOB(int eob, TrfSize tdim, PlaneType plane_type, int context,
-                       SymbolManager* const sm, ANSEncBase* const enc);
-
+  static void WriteEOB(
+      int eob, TrfSize tdim, PlaneType plane_type, uint32_t context,
+      SymbolManager* const sm, ANSEncBase* const enc);
   static void WriteSignAndApplyDequantization(
       int16_t res, uint32_t max_value,
       SymbolManager* const sm, ANSEncBase* const enc);
   static void WriteCoeffBaseRange(
-      uint32_t level, int tx_size_context, int cdf_context, int plane_type,
+      uint32_t level, uint32_t cdf_context, uint32_t plane_type,
       SymbolManager* const sm, ANSEncBase* const enc);
 };
 

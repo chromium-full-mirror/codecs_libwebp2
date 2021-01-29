@@ -79,6 +79,11 @@
 namespace WP2 {
 namespace {
 
+// Scroll wheel events also sends mouse click events as button 3 and 4 (which
+// don't seem to have a GLUT constants).
+constexpr int kScrollWheelUp = 3;
+constexpr int kScrollWheelDown = 4;
+
 //------------------------------------------------------------------------------
 // Visual Debug: set DecoderInfo::visual_debug to get extra visual data into
 // DecoderInfo::debug_output during decoding.
@@ -400,25 +405,30 @@ class Params {
   // Reshapes the window based on current image size and zoom level.
   void ReshapeWindow();
   void ApplyZoomLevel();
+  void UpdateViewZoomLevel(int incr);
 
   // Event handling.
   void HandleKey(unsigned char key, int pos_x, int pos_y);
   void HandleKeyUp(unsigned char key, int pos_x, int pos_y);
   void HandleMouseMove(int x, int y, bool button_pressed);
-  void HandleSegmentClick(int button, int state, uint32_t img_x_down,
+
+  // Functions below return true if the click event was handled, false if
+  // nothing was done.
+  bool HandleSegmentClick(int button, int state, uint32_t img_x_down,
                           uint32_t img_y_down, uint32_t img_x, uint32_t img_y,
                           int incr = 1);
-  void HandlePredictorClick(int button, int state, uint32_t img_x_down,
-                            uint32_t img_y_down, uint32_t img_x,
-                            uint32_t img_y, int incr = 1);
-  void HandleTransformClick(int button, int state, uint32_t img_x_down,
-                            uint32_t img_y_down, uint32_t img_x,
-                            uint32_t img_y, int incr = 1);
-  void HandlePartitionClick(int button, int state, uint32_t img_x_down,
+  bool HandlePredictorClick(int button, int state, uint32_t img_x_down,
+                            uint32_t img_y_down, uint32_t img_x, uint32_t img_y,
+                            int incr);
+  bool HandleTransformClick(int button, int state, uint32_t img_x_down,
+                            uint32_t img_y_down, uint32_t img_x, uint32_t img_y,
+                            int incr);
+  bool HandlePartitionClick(int button, int state, uint32_t img_x_down,
                             uint32_t img_y_down, uint32_t img_x,
                             uint32_t img_y);
-  void HandleMenuClick(int button, int state, uint32_t img_x_down,
+  bool HandleMenuClick(int button, int state, uint32_t img_x_down,
                        uint32_t img_y_down, uint32_t img_x, uint32_t img_y);
+
   void HandleMouseClick(int button, int state, int x, int y);
   void HandleMouseWheel(bool is_up, int x, int y);
   void HandleDisplay();
@@ -476,9 +486,14 @@ class Params {
   uint32_t bit_trace_level_ = 0;
   uint32_t visual_bit_trace_level_ = 3;
 
-  uint32_t width_, height_;
+  uint32_t width_, height_;   // Pixel with/height of the image.
+  Rectangle view_rect_;       // Part of the image being shown.
+  Rectangle view_rect_down_;  // View rect when mouse was clicked. For dragging.
+  int view_zoom_level_ = 0;   // Zoom level used to determine view_rect_.
+  // Display zoom level: 1 image pixel = 2^zoom_level pixels shown.
+  int zoom_level_ = 0;
+  // Size of viewport which is view_rect_.width/height * 2^zoom_level
   uint32_t viewport_width_, viewport_height_;
-  int zoom_level_ = 0;  // Multiply width, height by 2^zoom_level.
 
   bool crop_ = false;
   Rectangle crop_area_;
@@ -523,14 +538,16 @@ void PrintString(float x, float y, const std::string& text,
 }
 
 uint32_t Params::ToImageX(int viewport_x) const {
-  return DivRound(
-      (uint32_t)Clamp<int>(viewport_x, 0, viewport_width_ - 1) * (width_ - 1),
-      viewport_width_ - 1);
+  return view_rect_.x +
+         DivRound((uint32_t)Clamp<int>(viewport_x, 0, viewport_width_ - 1) *
+                      (view_rect_.width - 1),
+                  viewport_width_ - 1);
 }
 uint32_t Params::ToImageY(int viewport_y) const {
-  return DivRound(
-      (uint32_t)Clamp<int>(viewport_y, 0, viewport_height_ - 1) * (height_ - 1),
-      viewport_height_ - 1);
+  return view_rect_.y +
+         DivRound((uint32_t)Clamp<int>(viewport_y, 0, viewport_height_ - 1) *
+                      (view_rect_.height - 1),
+                  viewport_height_ - 1);
 }
 
 // Floors to block-aligned coordinate.
@@ -894,7 +911,7 @@ std::vector<std::string> Params::GetHelp() {
   m.emplace_back("  'o' ............... change background color (for alpha)");
   m.emplace_back("  '\\' ............... show the preview if available");
   m.emplace_back("  '|' ............... show the preview color if available");
-  m.emplace_back("  'z'/'Z' ........... zoom in/out");
+  m.emplace_back("  'z'/'Z' ........... zoom in/out (resize window)");
   m.emplace_back("  'n'/'N' ........... change distortion metric");
 #if defined(WP2_HAVE_WEBP)
   m.emplace_back("  'w'/'W' ........... show WebP equivalent in size / disto");
@@ -1640,13 +1657,44 @@ bool Params::EncodeAV1ToMatch(bool copy_partition, size_t target_file_size) {
 
 //------------------------------------------------------------------------------
 
+void Params::UpdateViewZoomLevel(int incr) {
+  if (view_zoom_level_ + incr <= 0) {
+    zoom_level_ -= view_zoom_level_;
+    view_zoom_level_ = 0;
+  } else if ((width_ >> (view_zoom_level_ + incr) > 1) &&
+             (height_ >> (view_zoom_level_ + incr) > 1)) {
+    view_zoom_level_ += incr;
+    // Also change the zoom level so the window size doesn't change.
+    zoom_level_ += incr;
+  }
+
+  if (view_zoom_level_ == 0) {
+    view_rect_ = {0, 0, width_, height_};
+  } else {
+    const int view_w = std::ceil((float)width_ / (1 << view_zoom_level_));
+    const int view_h = std::ceil((float)height_ / (1 << view_zoom_level_));
+    const int img_x_down = ToImageX(mouse_x_down_);
+    const int img_y_down = ToImageY(mouse_y_down_);
+    // Compute view x/y so that the last point that was clicked stays in the
+    // same place.
+    const int view_x =
+        Clamp<int>(img_x_down - view_w * mouse_x_down_ / viewport_width_, 0,
+                   width_ - view_w);
+    const int view_y =
+        Clamp<int>(img_y_down - view_h * mouse_y_down_ / viewport_height_, 0,
+                   height_ - view_h);
+    view_rect_ = {(uint32_t)view_x, (uint32_t)view_y, (uint32_t)view_w,
+                  (uint32_t)view_h};
+  }
+}
+
 void Params::ApplyZoomLevel() {
   if (zoom_level_ >= 0) {
-    viewport_width_ = width_ << zoom_level_;
-    viewport_height_ = height_ << zoom_level_;
+    viewport_width_ = view_rect_.width << zoom_level_;
+    viewport_height_ = view_rect_.height << zoom_level_;
   } else {
-    viewport_width_ = width_ >> -zoom_level_;
-    viewport_height_ = height_ >> -zoom_level_;
+    viewport_width_ = view_rect_.width >> -zoom_level_;
+    viewport_height_ = view_rect_.height >> -zoom_level_;
   }
 }
 
@@ -1697,6 +1745,8 @@ bool Params::SetCurrentFile(size_t file) {
     }
     width_ = in_.width();
     height_ = in_.height();
+    view_zoom_level_ = 0;
+    view_rect_ = {0, 0, width_, height_};
 
     if (!EncodeAndDecode()) return false;
   }
@@ -1821,12 +1871,14 @@ bool Params::GetCurrentCanvas(ArgbBuffer* const buffer) {
 // Blocks
 
 void Params::glRect(const Rectangle& rect, uint32_t thickness) const {
-  const float x = 2.f * rect.x / width_ - 1.f;
+  if (!view_rect_.Contains(rect.x, rect.y)) return;
+  const float x = 2.f * (rect.x - view_rect_.x) / view_rect_.width - 1.f;
   // Compensate OpenGL bottom-left origin by shifting by one pixel vertically.
   const float y =
-      1.f - 2.f * (rect.y + rect.height) / height_ - 1.f / viewport_height_;
-  const float w = 2.f * rect.width / width_;
-  const float h = 2.f * rect.height / height_;
+      1.f - 2.f * (rect.y - view_rect_.y + rect.height) / view_rect_.height -
+      1.f / viewport_height_;
+  const float w = 2.f * rect.width / view_rect_.width;
+  const float h = 2.f * rect.height / view_rect_.height;
 
   // Thickness
   const float px_w = 2.f / viewport_width_;
@@ -1904,6 +1956,7 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
     assert(b.y_context_is_constant == b_enc.y_context_is_constant);
 
     const int bx = b.rect.x, by = b.rect.y;
+    if (!view_rect_.Contains(bx, by)) continue;
     const int bw = b.rect.width, bh = b.rect.height;
 
     const bool block_selected = (bx <= selection_x && selection_x < bx + bw &&
@@ -2161,7 +2214,10 @@ void Params::DisplayPartition() const {
 
   // Encoded forced blocks.
   glColor4f(1.0f, 0.2f, 1.0f, 1.0f);
-  for (const Rectangle& rect : einfo_.force_partition) glRect(rect, thick);
+  for (const Rectangle& rect : einfo_.force_partition) {
+    if (!view_rect_.Contains(rect.x, rect.y)) continue;
+    glRect(rect, thick);
+  }
 
   glLineStipple(2 * thick, 0xAAAA);
   glEnable(GL_LINE_STIPPLE);
@@ -2189,6 +2245,7 @@ void Params::DisplayForcedSegments() const {
   glLineStipple(2 * thick, 0xAAAA);
 
   for (const auto& segment : force_segment_) {
+    if (!view_rect_.Contains(segment.x, segment.y)) continue;
     const BlockInfo* const b = einfo_.FindBlock(segment.x, segment.y);
     if (b != nullptr) {
       const Rectangle rect{b->rect.x, b->rect.y,
@@ -2214,6 +2271,7 @@ void Params::DisplayForcedPredictors() const {
 
   for (const auto& predictor : force_predictor_) {
     if (predictor.channel != channel) continue;
+    if (!view_rect_.Contains(predictor.x, predictor.y)) continue;
     const BlockInfo* const b = einfo_.FindBlock(predictor.x, predictor.y);
     if (b != nullptr) {
       if (channel == kYChannel && b->y_context_is_constant) {
@@ -2236,10 +2294,9 @@ void Params::DisplayForcedPredictors() const {
 
       const std::string& title = predictors[predictor_id];
       glColor4f(1.f, 0.f, 1.f, 1.f);
-      PrintString((predictor.x) * 2.f / width_ - 1,
-                  1 - (predictor.y) * 2.f / height_, title);
-
-      break;
+      PrintString((predictor.x - view_rect_.x) * 2.f / view_rect_.width - 1,
+                  1 - (predictor.y - view_rect_.y) * 2.f / view_rect_.height,
+                  title);
     }
   }
 #endif
@@ -2255,6 +2312,7 @@ void Params::DisplayForcedTransforms() const {
   glLineStipple(2 * thick, 0xAAAA);
 
   for (const auto& forced : force_transform_) {
+    if (!view_rect_.Contains(forced.x, forced.y)) continue;
     const BlockInfo* const b = einfo_.FindBlock(forced.x, forced.y);
     if (b != nullptr) {
       const Rectangle rect{b->rect.x, b->rect.y,
@@ -2266,10 +2324,9 @@ void Params::DisplayForcedTransforms() const {
           WP2TransformNames[kTfX[forced.transform]],
           WP2TransformNames[kTfY[forced.transform]]);
       glColor4f(1.f, 0.f, 1.f, 1.f);
-      PrintString((forced.x) * 2.f / width_ - 1,
-                  1 - (forced.y) * 2.f / height_, title);
-
-      break;
+      PrintString((forced.x - view_rect_.x) * 2.f / view_rect_.width - 1,
+                  1 - (forced.y - view_rect_.y) * 2.f / view_rect_.height,
+                  title);
     }
   }
 #endif
@@ -2278,8 +2335,8 @@ void Params::DisplayForcedTransforms() const {
 uint32_t Params::getLineThickness() const {
   return (display_block_ != kDisplayNone)
              ? 1u
-             : std::max(1u, std::min(viewport_width_ / width_,
-                                     viewport_height_ / height_));
+             : std::max(1u, std::min(viewport_width_ / view_rect_.width,
+                                     viewport_height_ / view_rect_.height));
 }
 
 bool Params::IsHamburgerMenuVisible() const {
@@ -2698,12 +2755,14 @@ void Params::HandleMouseMove(int x, int y, bool button_pressed) {
   if (x != mouse_x_down_ || y != mouse_y_down_) {
     moved_since_last_down_ = true;
   }
-  const uint32_t img_x = ToImageX(x), img_y = ToImageY(y);
-  const uint32_t img_x_down = ToImageX(mouse_x_down_);
-  const uint32_t img_y_down = ToImageY(mouse_y_down_);
 
   Rectangle* const rect = &forcing_block_;
   if (rect->width > 0 && rect->height > 0) {
+    // Drawing a forced block.
+    const uint32_t img_x = ToImageX(x), img_y = ToImageY(y);
+    const uint32_t img_x_down = ToImageX(mouse_x_down_);
+    const uint32_t img_y_down = ToImageY(mouse_y_down_);
+
     // Maximum block position and size (both relative to top-left).
     const uint32_t max_w = SizeBlocks(width_) * kMinBlockSizePix;
     const uint32_t max_h = SizeBlocks(height_) * kMinBlockSizePix;
@@ -2720,10 +2779,23 @@ void Params::HandleMouseMove(int x, int y, bool button_pressed) {
     const PartitionSet ps = enc_config_.partition_set;
     for (uint32_t i = 0; i < GetNumBlockSizes(ps); ++i) {
       const BlockSize size = GetBlockSizes(ps)[i];
-      if (rect->x + BlockWidthPix(size) <= max_w &&
-          rect->y + BlockHeightPix(size) <= max_h &&
-          rect->x + rect->width >= BlockWidthPix(size) &&
-          rect->y + rect->height >= BlockHeightPix(size) &&
+      const uint32_t block_w = BlockWidthPix(size);
+      const uint32_t block_h = BlockHeightPix(size);
+      uint32_t block_x = rect->x;
+      if (img_x < img_x_down) {
+        block_x = SafeSub(AlignWithBlocks(img_x_down), block_w);
+      }
+      uint32_t block_y = rect->y;
+      if (img_y < img_y_down) {
+        block_y = SafeSub(AlignWithBlocks(img_y_down), block_h);
+      }
+      const bool is_snapped =
+          ((block_x % block_w) == 0 && (block_y % block_h) == 0);
+      if (enc_config_.partition_snapping && !is_snapped) continue;
+
+      if (block_x + block_w <= max_w && block_y + block_h <= max_h &&
+          block_x + rect->width >= block_w &&
+          block_y + rect->height >= block_h &&
           GetDist(*rect, size) < GetDist(*rect, closest_size)) {
         closest_size = size;
       }
@@ -2738,6 +2810,17 @@ void Params::HandleMouseMove(int x, int y, bool button_pressed) {
     if (img_y < img_y_down) {
       rect->y = SafeSub(AlignWithBlocks(img_y_down), rect->height);
     }
+  } else if (view_zoom_level_ != 0 &&
+             !(glutGetModifiers() & GLUT_ACTIVE_SHIFT)) {
+    // Moving the view. (Shift is used for selecting areas).
+    int x_change =
+        (mouse_x_down_ - x) * (int)view_rect_.width / (int)viewport_width_;
+    int y_change =
+        (mouse_y_down_ - y) * (int)view_rect_.height / (int)viewport_height_;
+    view_rect_.x =
+        Clamp<int>(view_rect_down_.x + x_change, 0, width_ - view_rect_.width);
+    view_rect_.y = Clamp<int>(view_rect_down_.y + y_change, 0,
+                              height_ - view_rect_.height);
   }
 }
 
@@ -2749,9 +2832,9 @@ void HandleMouseMoveButtonPressed(int x, int y) {
   global_params->HandleMouseMove(x, y, /*button_pressed=*/true);
 }
 
-void Params::HandleSegmentClick(int button, int state,
-                                uint32_t img_x_down, uint32_t img_y_down,
-                                uint32_t img_x, uint32_t img_y, int incr) {
+bool Params::HandleSegmentClick(int button, int state, uint32_t img_x_down,
+                                uint32_t img_y_down, uint32_t img_x,
+                                uint32_t img_y, int incr) {
   (void)button;
   (void)state;
   (void)img_x_down;
@@ -2761,17 +2844,17 @@ void Params::HandleSegmentClick(int button, int state,
 
 #if defined(WP2_BITTRACE)
   if (!IsSegmentVisible() || button == GLUT_LEFT_BUTTON || state != GLUT_DOWN) {
-    return;
+    return false;
   }
 
   if (!dinfo_.explicit_segment_ids) {
     AddInfo("Cannot force segments at low quality (segment ids are implicit).");
-    return;
+    return true;
   }
 
   uint32_t num_segments = dinfo_.num_segments;
   // No point in forcing the segment if there's only one...
-  if (num_segments == 1) return;
+  if (num_segments == 1) return false;
 
   uint32_t block_x = 0, block_y = 0;
   const BlockInfo* const b = einfo_.FindBlock(img_x_down, img_y_down);
@@ -2780,30 +2863,30 @@ void Params::HandleSegmentClick(int button, int state,
     block_y = b->rect.y;
   }
 
-  bool found = false;
   for (auto& forced_segment : force_segment_) {
     if (forced_segment.x == block_x && forced_segment.y == block_y) {
-      found = true;
       if (button == GLUT_MIDDLE_BUTTON) {   // Remove.
         forced_segment = force_segment_.back();
         force_segment_.pop_back();
       } else {
         ModifyInRange(forced_segment.segment_id, num_segments, incr);
       }
-      break;
+      return true;
     }
   }
-  if (button == GLUT_RIGHT_BUTTON && !found) {
+  if (button == GLUT_RIGHT_BUTTON) {
     EncoderInfo::ForcedSegment forced = {block_x, block_y, 0};
     force_segment_.emplace_back(forced);
+    return true;
   }
 #endif
+
+  return false;
 }
 
-void Params::HandlePredictorClick(int button, int state,
-                                  uint32_t img_x_down, uint32_t img_y_down,
-                                  uint32_t img_x, uint32_t img_y,
-                                  int incr) {
+bool Params::HandlePredictorClick(int button, int state, uint32_t img_x_down,
+                                  uint32_t img_y_down, uint32_t img_x,
+                                  uint32_t img_y, int incr) {
   (void)button;
   (void)state;
   (void)img_x_down;
@@ -2812,21 +2895,20 @@ void Params::HandlePredictorClick(int button, int state,
   (void)img_y;
 
 #if defined(WP2_BITTRACE)
-  if (!IsPredictorVisible() || button == GLUT_LEFT_BUTTON || state != GLUT_DOWN)
-    return;
-
+  if (!IsPredictorVisible() || button == GLUT_LEFT_BUTTON ||
+      state != GLUT_DOWN) {
+    return false;
+  }
   Channel channel = VDChannel(dec_config_);
   if (channel == kVChannel) channel = kUChannel;
 
   const BlockInfo* const b = einfo_.FindBlock(img_x_down, img_y_down);
   assert(b != nullptr);
 
-  bool found = false;
   for (auto& forced_predictor : force_predictor_) {
     if (forced_predictor.x == b->rect.x &&
         forced_predictor.y == b->rect.y &&
         forced_predictor.channel == channel) {
-      found = true;
       if (button == GLUT_MIDDLE_BUTTON) {  // remove forced predictor
         forced_predictor = force_predictor_.back();
         force_predictor_.pop_back();
@@ -2837,19 +2919,22 @@ void Params::HandlePredictorClick(int button, int state,
                                    dinfo_.uv_predictors.size();
         ModifyInRange(forced_predictor.predictor_id, num_predictors, incr);
       }
-      break;
+      return true;
     }
   }
-  if (button == GLUT_RIGHT_BUTTON && !found) {
+  if (button == GLUT_RIGHT_BUTTON) {
     EncoderInfo::ForcedPredictor forced = {channel, b->rect.x, b->rect.y, 0};
     force_predictor_.emplace_back(forced);
+    return true;
   }
 #endif
+
+  return false;
 }
 
-void Params::HandleTransformClick(int button, int state,
-                                  uint32_t img_x_down, uint32_t img_y_down,
-                                  uint32_t img_x, uint32_t img_y, int incr) {
+bool Params::HandleTransformClick(int button, int state, uint32_t img_x_down,
+                                  uint32_t img_y_down, uint32_t img_x,
+                                  uint32_t img_y, int incr) {
   (void)button;
   (void)state;
   (void)img_x_down;
@@ -2860,36 +2945,39 @@ void Params::HandleTransformClick(int button, int state,
 #if defined(WP2_BITTRACE)
   if (!IsTransformVisible() || button == GLUT_LEFT_BUTTON ||
       state != GLUT_DOWN) {
-    return;
+    return false;
   }
 
   const BlockInfo* const b = einfo_.FindBlock(img_x_down, img_y_down);
   assert(b != nullptr);
 
-  bool found = false;
   for (auto& forced : force_transform_) {
     if (forced.x == b->rect.x && forced.y == b->rect.y) {
-      found = true;
       if (button == GLUT_MIDDLE_BUTTON) {  // Remove.
         forced = force_transform_.back();
         force_transform_.pop_back();
       } else {
         ModifyInRange(forced.transform, kNumTransformPairs, incr);
       }
-      break;
+      return true;
     }
   }
-  if (button == GLUT_RIGHT_BUTTON && !found) {
+  if (button == GLUT_RIGHT_BUTTON) {
     EncoderInfo::ForcedTransform forced = {b->rect.x, b->rect.y, 0};
     force_transform_.emplace_back(forced);
+    return true;
   }
 #endif
+
+  return false;
 }
 
-void Params::HandlePartitionClick(int button, int state,
-                                  uint32_t img_x_down, uint32_t img_y_down,
-                                  uint32_t img_x, uint32_t img_y) {
-  if (button != GLUT_RIGHT_BUTTON && button != GLUT_MIDDLE_BUTTON) return;
+bool Params::HandlePartitionClick(int button, int state, uint32_t img_x_down,
+                                  uint32_t img_y_down, uint32_t img_x,
+                                  uint32_t img_y) {
+  if (button != GLUT_RIGHT_BUTTON && button != GLUT_MIDDLE_BUTTON) {
+    return false;
+  }
 
   if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
     if (IsPartitionVisible()) {
@@ -2901,7 +2989,7 @@ void Params::HandlePartitionClick(int button, int state,
     } else {
       forcing_block_ = {0, 0, 0, 0};
     }
-    return;
+    return true;
   }
 
   const bool delete_only = button == GLUT_MIDDLE_BUTTON;
@@ -2934,12 +3022,15 @@ void Params::HandlePartitionClick(int button, int state,
     }
   }
   forcing_block_ = {0, 0, 0, 0};
+  return true;
 }
 
-void Params::HandleMenuClick(int button, int state,
-                             uint32_t img_x_down, uint32_t img_y_down,
-                             uint32_t img_x, uint32_t img_y) {
-  if (button != GLUT_LEFT_BUTTON) return;
+bool Params::HandleMenuClick(int button, int state, uint32_t img_x_down,
+                             uint32_t img_y_down, uint32_t img_x,
+                             uint32_t img_y) {
+  if (button != GLUT_LEFT_BUTTON) {
+    return false;
+  }
 
   if (state == GLUT_DOWN) {
     einfo_.selection = dinfo_.selection = {img_x, img_y, 1, 1};
@@ -2951,25 +3042,28 @@ void Params::HandleMenuClick(int button, int state,
       forcing_block_ = {0, 0, 0, 0};
       if (!menu_selection_.empty()) {
         // Select the first available leaf (DFS) if not already the case.
-        if (!SetMenuSelection(GetLeaf(menu_selection_))) return;
+        if (!SetMenuSelection(GetLeaf(menu_selection_))) return true;
       }
     } else {
-      const uint32_t min_x = std::min(img_x_down, img_x);
-      const uint32_t min_y = std::min(img_y_down, img_y);
-      einfo_.selection = dinfo_.selection = {
-          min_x, min_y,
-          std::max(img_x_down, img_x) - min_x + 1,
-          std::max(img_y_down, img_y) - min_y + 1};
-      forcing_block_ = {0, 0, 0, 0};
+      // Handle area selection (for histogram view).
+      if (glutGetModifiers() & GLUT_ACTIVE_SHIFT) {
+        const uint32_t min_x = std::min(img_x_down, img_x);
+        const uint32_t min_y = std::min(img_y_down, img_y);
+        einfo_.selection = dinfo_.selection = {
+            min_x, min_y, std::max(img_x_down, img_x) - min_x + 1,
+            std::max(img_y_down, img_y) - min_y + 1};
+        forcing_block_ = {0, 0, 0, 0};
+      }
 
       // Refresh vdebugs that might handle mouse 'selection'.
       if (VDMatch(enc_config_, "encoder")) {
-        if (!EncodeAndDecode()) return;
+        if (!EncodeAndDecode()) return true;
       } else if (VDMatch(dec_config_, "")) {
-        if (!DecodeOutput()) return;
+        if (!DecodeOutput()) return true;
       }
     }
   }
+  return true;
 }
 
 void Params::HandleMouseClick(int button, int state, int x, int y) {
@@ -2979,16 +3073,29 @@ void Params::HandleMouseClick(int button, int state, int x, int y) {
     mouse_x_down_ = x;
     mouse_y_down_ = y;
     moved_since_last_down_ = false;
+    view_rect_down_ = view_rect_;
   }
   const uint32_t img_x = ToImageX(x), img_y = ToImageY(y);
   const uint32_t img_x_down = ToImageX(mouse_x_down_);
   const uint32_t img_y_down = ToImageY(mouse_y_down_);
 
-  HandleMenuClick(button, state, img_x_down, img_y_down, img_x, img_y);
-  HandleSegmentClick(button, state, img_x_down, img_y_down, img_x, img_y);
-  HandlePredictorClick(button, state, img_x_down, img_y_down, img_x, img_y);
-  HandleTransformClick(button, state, img_x_down, img_y_down, img_x, img_y);
-  HandlePartitionClick(button, state, img_x_down, img_y_down, img_x, img_y);
+  const int incr = (button == kScrollWheelUp) ? 1 : -1;
+
+  if (HandleMenuClick(button, state, img_x_down, img_y_down, img_x, img_y) ||
+      HandleSegmentClick(button, state, img_x_down, img_y_down, img_x, img_y) ||
+      HandlePredictorClick(button, state, img_x_down, img_y_down, img_x, img_y,
+                           incr) ||
+      HandleTransformClick(button, state, img_x_down, img_y_down, img_x, img_y,
+                           incr) ||
+      HandlePartitionClick(button, state, img_x_down, img_y_down, img_x,
+                           img_y)) {
+    return;  // Event was handled, nothing more to do.
+  }
+
+  if (state == GLUT_DOWN &&
+      (button == kScrollWheelUp || button == kScrollWheelDown)) {
+    UpdateViewZoomLevel(incr);
+  }
 }
 
 void Params::HandleMouseWheel(bool is_up, int x, int y) {
@@ -2999,12 +3106,17 @@ void Params::HandleMouseWheel(bool is_up, int x, int y) {
   const uint32_t img_y_down = ToImageY(mouse_y_down_);
 
   const int incr = is_up ? 1 : -1;
-  HandlePredictorClick(GLUT_RIGHT_BUTTON, GLUT_DOWN,
-                       img_x_down, img_y_down, img_x, img_y, incr);
-  HandleSegmentClick(GLUT_RIGHT_BUTTON, GLUT_DOWN,
-                     img_x_down, img_y_down, img_x, img_y, incr);
-  HandleTransformClick(GLUT_RIGHT_BUTTON, GLUT_DOWN,
-                       img_x_down, img_y_down, img_x, img_y, incr);
+  if (HandlePredictorClick(GLUT_RIGHT_BUTTON, GLUT_DOWN, img_x_down, img_y_down,
+                           img_x, img_y, incr) ||
+      HandleSegmentClick(GLUT_RIGHT_BUTTON, GLUT_DOWN, img_x_down, img_y_down,
+                         img_x, img_y, incr) ||
+      HandleTransformClick(GLUT_RIGHT_BUTTON, GLUT_DOWN, img_x_down, img_y_down,
+                           img_x, img_y, incr)) {
+    return;  // Event was handled, nothing more to do.
+  }
+
+  // Change zoom.
+  UpdateViewZoomLevel(incr);
 }
 
 void HandleMouseClick(int button, int state, int x, int y) {
@@ -3126,16 +3238,21 @@ void DisplayColor(Argb32b color) {
 void Params::HandleDisplay() {
   if (out_.IsEmpty()) return;
   glPushMatrix();
-  glPixelZoom((GLfloat)(+1. / width_ * viewport_width_),
-              (GLfloat)(-1. / height_ * viewport_height_));
+  glPixelZoom((GLfloat)(+1. / view_rect_.width * viewport_width_),
+              (GLfloat)(-1. / view_rect_.height * viewport_height_));
   glRasterPos2f(-1.f, 1.f);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, width_);
+  glPixelStorei(GL_UNPACK_ROW_LENGTH, view_rect_.width);
 
   if (show_ == kPreviewColor) {
     DisplayColor(preview_color_);
   } else {
-    DisplayBuffer(GetBuffer(), background_);
+    const ArgbBuffer& buffer = GetBuffer();
+    ArgbBuffer view(buffer.format());
+    const WP2Status status = view.SetView(buffer, view_rect_);
+    assert(status == WP2_STATUS_OK);
+    (void)status;
+    DisplayBuffer(view, background_);
   }
 
   if (show_interface_) PrintInfo();
@@ -3439,7 +3556,8 @@ int main(int argc, char* argv[]) {
 #if defined(WP2_HAVE_FREEGLUT)
   glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_CONTINUE_EXECUTION);
 #endif
-  WP2::StartDisplay(window_title, params.width_, params.height_);
+  WP2::StartDisplay(window_title, params.view_rect_.width,
+                    params.view_rect_.height);
 
   glutMainLoop();
 

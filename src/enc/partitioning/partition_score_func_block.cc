@@ -132,9 +132,11 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
 
     // Register the blocks in the 'front_mgr_' except the last one.
     if (i + 1 < num_blocks) {
-      if (!front_mgr_.UseSize(block.dim(), /*ind=*/0, &tmp_blk)) assert(false);
+      if (!front_mgr_.UseSize(block.dim(), /*ind=*/0, &tmp_blk,
+                              /*use_block=*/true)) {
+        assert(false);
+      }
       assert(block == tmp_blk);
-      front_mgr_.Use(block);
     }
   }
 
@@ -164,17 +166,15 @@ WP2Status BlockScoreFunc::Use(const Block& block) {
   WP2_CHECK_STATUS(EncodeBlock(front_mgr_, &tmp_cb_, &syntax_writer_,
                                &dc_error_u_, &dc_error_v_, &buffer_));
   WP2_CHECK_ALLOC_OK(front_mgr_.UseSize(tmp_cb_.dim(),
-                                        /*ind=*/0, /*block=*/nullptr));
-  front_mgr_.Use(tmp_cb_.blk());
+                                        /*ind=*/0, /*block=*/nullptr,
+                                        /*use_block=*/true));
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScoreFunc::FindBestBlockParams(const FrontMgrNxNBase& front_mgr,
-                                              const BlockContext& block_context,
-                                              SyntaxWriter* const writer,
-                                              DCDiffusionMap* const dc_error_u,
-                                              DCDiffusionMap* const dc_error_v,
-                                              CodedBlock* const cb) const {
+WP2Status BlockScoreFunc::FindBestBlockParams(
+    const FrontMgrDoubleOrderBase& front_mgr, const BlockContext& block_context,
+    SyntaxWriter* const writer, DCDiffusionMap* const dc_error_u,
+    DCDiffusionMap* const dc_error_v, CodedBlock* const cb) const {
   const Rectangle padded_tile_rect = {tile_rect_.x, tile_rect_.y,
                                       src_->GetWidth(), src_->GetHeight()};
   cb->id_ = AssignSegmentId(*config_, *gparams_, padded_tile_rect, cb->blk());
@@ -207,7 +207,7 @@ WP2Status BlockScoreFunc::FindBestBlockParams(const FrontMgrNxNBase& front_mgr,
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrNxNBase& front_mgr,
+WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrDoubleOrderBase& front_mgr,
                                       CodedBlock* const cb,
                                       SyntaxWriter* const syntax_writer,
                                       DCDiffusionMap* const dc_error_u,
@@ -232,7 +232,7 @@ WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrNxNBase& front_mgr,
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScoreFunc::WriteBlock(const FrontMgrNxNBase& front_mgr,
+WP2Status BlockScoreFunc::WriteBlock(const FrontMgrDoubleOrderBase& front_mgr,
                                      const CodedBlock& cb,
                                      SyntaxWriter* const syntax_writer,
                                      ANSEnc* const enc) const {

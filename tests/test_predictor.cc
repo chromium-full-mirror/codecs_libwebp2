@@ -19,6 +19,7 @@
 #include "include/helpers.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/predictor.h"
+#include "src/enc/block_enc.h"
 #include "src/dsp/math.h"
 #include "src/utils/random.h"
 
@@ -28,19 +29,14 @@ namespace {
 using ::testing::ElementsAre;
 using ::testing::Ge;
 
-class CodedBlockForTest : public CodedBlock {
+class ContextCacheForTest : public ContextCache {
  public:
-  void SetContext(Channel channel, std::vector<int16_t> context) {
-    std::copy(context.begin(), context.begin() + kContextSize,
-              context_[channel]);
+  void SetContext(Channel channel, const std::vector<int16_t> context) {
+    for (uint32_t i = 0; i < kNumContextType; ++i) {
+      std::copy(&context[0], &context[kContextSize], large_[channel][i]);
+      is_computed_[channel][i] = true;
+    }
   }
-
-  const int16_t* GetContext(Channel channel, ContextType) const override {
-    return context_[channel];
-  }
-
- private:
-  int16_t context_[3][kContextSize];
 };
 
 // Test that given a context where all pixels have the same value, all
@@ -147,23 +143,23 @@ TEST(ImplicitCflPredictor, SimpleLinearRelationship) {
 
   CflPredictor p(/*min_value=*/-512, /*max_value=*/511);
 
-  CodedBlockForTest cb;
+  CodedBlockBase cb;
   cb.SetDimDefault({/*x=*/0, /*y=*/0, /*dim=*/BLK_4x4});
-  // Set up context so that U = 2 * Y + 50
-  // Missing values should be ignored.
-  const int16_t missing = CodedBlock::kMissing;
-  cb.SetContext(kYChannel, {100, 100, 100, 100, 100,       // Left + top left
-                            200, 200, 200, 200, 200,       // Top + top right
-                            100, 100, missing, missing});  // Right
-  cb.SetContext(kUChannel, {250, 250, 250, 250, 250,       // Left + top left
-                            450, 450, 450, 450, 450,       // Top + top right
-                            250, 250, missing, missing});  // Right
-
+  ContextCacheForTest cache;
   YUVPlane plane;
   ASSERT_WP2_OK(plane.Resize(4, 4));
   plane.Y.Fill(50);
-  ContextCache context_cache;
-  cb.SetContextInput(plane, &context_cache);
+  cb.SetContextInput(plane, &cache);
+
+  // Set up context so that U = 2 * Y + 50
+  // Missing values should be ignored.
+  const int16_t missing = CodedBlock::kMissing;
+  cache.SetContext(kYChannel, {100, 100, 100, 100, 100,       // Left + top left
+                               200, 200, 200, 200, 200,       // Top + top right
+                               100, 100, missing, missing});  // Right
+  cache.SetContext(kUChannel, {250, 250, 250, 250, 250,       // Left + top left
+                               450, 450, 450, 450, 450,       // Top + top right
+                               250, 250, missing, missing});  // Right
 
   int16_t prediction[kPredSize];
   p.Predict(cb, kUChannel, prediction, kPredWidth);
@@ -176,15 +172,17 @@ TEST(ImplicitCflPredictor, SimpleLinearRelationship) {
   p.Predict(cb, kUChannel, prediction, kPredWidth);
   EXPECT_EQ(511, prediction[0]);  // Value is clipped.
 
-  // Try with more extreme values to test accuracy of the prediction.
-  cb.SetContext(kYChannel, {2, 2, 2, 2, 2,                 // Left + top left
-                            4, 4, 4, 4, 4,                 // Top + top right
-                            2, 2, missing, missing});      // Right
-  cb.SetContext(kUChannel, {250, 250, 250, 250, 250,       // Left + top left
-                            450, 450, 450, 450, 450,       // Top + top right
-                            250, 250, missing, missing});  // Right
   plane.Y.Fill(4);
   cb.SetContextInput(plane);
+
+  // Try with more extreme values to test accuracy of the prediction.
+  cache.SetContext(kYChannel, {2, 2, 2, 2, 2,                 // Left + top left
+                            4, 4, 4, 4, 4,                 // Top + top right
+                            2, 2, missing, missing});      // Right
+  cache.SetContext(kUChannel, {250, 250, 250, 250, 250,       // Left + top left
+                            450, 450, 450, 450, 450,       // Top + top right
+                            250, 250, missing, missing});  // Right
+
   p.Predict(cb, kUChannel, prediction, kPredWidth);
   printf("Info:\n%s\n", p.GetPredStr(cb, kUChannel).c_str());
   for (uint32_t i = 0; i < kPredSize; ++i) {
@@ -199,26 +197,26 @@ TEST(ImplicitCflPredictor, AllMissing) {
 
   CflPredictor p(/*min_value=*/-512, /*max_value=*/511);
 
-  CodedBlockForTest cb;
+  CodedBlockBase cb;
   cb.SetDimDefault({/*x=*/0, /*y=*/0, /*dim=*/BLK_4x4});
+  ContextCacheForTest cache;
+  YUVPlane plane;
+  ASSERT_WP2_OK(plane.Resize(4, 4));
+  plane.Y.Fill(50);
+  cb.SetContextInput(plane, &cache);
+
   // No context available.
   const int16_t missing = CodedBlock::kMissing;
-  cb.SetContext(
+  cache.SetContext(
       kYChannel,
       {missing, missing, missing, missing, missing,  // Left + top left
        missing, missing, missing, missing, missing,  // Top + top right
        missing, missing, missing, missing});         // Right
-  cb.SetContext(
+  cache.SetContext(
       kUChannel,
       {missing, missing, missing, missing, missing,  // Left + top left
        missing, missing, missing, missing, missing,  // Top + top right
        missing, missing, missing, missing});         // Right
-
-  YUVPlane plane;
-  ASSERT_WP2_OK(plane.Resize(4, 4));
-  plane.Y.Fill(50);
-  ContextCache context_cache;
-  cb.SetContextInput(plane, &context_cache);
 
   // Without context, the prediction should be 0.
   int16_t prediction[kPredSize];
@@ -234,23 +232,23 @@ TEST(ImplicitCflPredictor, WithErrors) {
 
   CflPredictor p(/*min_value=*/-512, /*max_value=*/511);
 
-  CodedBlockForTest cb;
+  CodedBlock cb;
   cb.SetDimDefault({/*x=*/0, /*y=*/0, /*dim=*/BLK_4x4});
-  // Set up context so that U is more or less equal to 2 * Y + 50, with some
-  // errors.
-  cb.SetContext(kYChannel, {100, 100, 100, 100, 100,  // Left + top left
-                            200, 200, 200, 200, 200,  // Top + top right
-                            100, 100, 100, 100});     // Right
-  cb.SetContext(kUChannel,
-                {250 + 10, 250 - 5, 250, 250 + 5, 250,        // Left + top left
-                 450 + 11, 450 + 15, 450 - 10, 450 - 2, 450,  // Top + top right
-                 250, 250 + 5, 250 - 3, 250 + 4});            // Right
-
+  ContextCacheForTest cache;
   YUVPlane plane;
   ASSERT_WP2_OK(plane.Resize(4, 4));
   plane.Y.Fill(150);
-  ContextCache context_cache;
-  cb.SetContextInput(plane, &context_cache);
+  cb.SetContextInput(plane, &cache);
+
+  // Set up context so that U is more or less equal to 2 * Y + 50, with some
+  // errors.
+  cache.SetContext(kYChannel, {100, 100, 100, 100, 100,  // Left + top left
+                               200, 200, 200, 200, 200,  // Top + top right
+                               100, 100, 100, 100});     // Right
+  cache.SetContext(kUChannel,
+      {250 + 10, 250 - 5, 250, 250 + 5, 250,        // Left + top left
+       450 + 11, 450 + 15, 450 - 10, 450 - 2, 450,  // Top + top right
+       250, 250 + 5, 250 - 3, 250 + 4});            // Right
 
   int16_t prediction[kPredSize];
   p.Predict(cb, kUChannel, prediction, kPredWidth);
@@ -267,23 +265,24 @@ TEST(SignalingCflPredictor, Test) {
 
   SignalingCflPredictor p(/*min_value=*/-512, /*max_value=*/511);
 
-  CodedBlockForTest cb;
+  CodedBlock cb;
   cb.SetDimDefault({/*x=*/0, /*y=*/0, /*dim=*/BLK_4x4});
-  // Set up context so that U is more or less equal to 3 * Y + 50, with some
-  // errors.
-  cb.SetContext(kYChannel, {100, 100, 100, 100, 100,  // Left + top left
-                            200, 200, 200, 200, 200,  // Top + top right
-                            100, 100, 100, 100});     // Right
-  cb.SetContext(kUChannel,
-      {350 + 40, 350 - 25, 350, 350 + 35, 350,       // Left + top left
-      550 + 51, 550 + 35, 550 - 30, 550 - 20, 550,  // Top + top right
-      350, 350 + 35, 350 - 33, 350 + 4});            // Right
-
+  ContextCacheForTest cache;
   YUVPlane plane;
   ASSERT_WP2_OK(plane.Resize(4, 4));
   plane.Y.Fill(150);
-  ContextCache context_cache;
-  cb.SetContextInput(plane, &context_cache);
+  cb.SetContextInput(plane, &cache);
+
+  // Set up context so that U is more or less equal to 3 * Y + 50, with some
+  // errors.
+  cache.SetContext(kYChannel, {100, 100, 100, 100, 100,  // Left + top left
+                               200, 200, 200, 200, 200,  // Top + top right
+                               100, 100, 100, 100});     // Right
+  cache.SetContext(kUChannel,
+      {350 + 40, 350 - 25, 350, 350 + 35, 350,        // Left + top left
+       550 + 51, 550 + 35, 550 - 30, 550 - 20, 550,   // Top + top right
+       350, 350 + 35, 350 - 33, 350 + 4});            // Right
+
   cb.cfl_[0] = -27;
 
   int16_t prediction[kPredSize];

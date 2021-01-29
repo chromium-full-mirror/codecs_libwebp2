@@ -85,8 +85,8 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
         forced_block_it->y() == max_block.y()) {
       const Block block = *forced_block_it;
       assert(block.dim() != BLK_LAST);
-      WP2_CHECK_ALLOC_OK(front_mgr.UseSize(block.dim(), /*ind=*/0u, nullptr));
-      front_mgr.Use(block);
+      WP2_CHECK_ALLOC_OK(front_mgr.UseSize(block.dim(), /*ind=*/0u, nullptr,
+                                           /*use_block=*/true));
       WP2_CHECK_STATUS(score_func_->Use(block));
       WP2_CHECK_STATUS(
           progress.AdvanceBy(1. * block.rect().GetArea() / max_num_blocks));
@@ -153,8 +153,8 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
             RegisterOrderForVDebug(0, 0, block, blocks->size(),
                                    max_num_blocks));
         WP2_CHECK_ALLOC_OK(blocks->push_back(block));
-        WP2_CHECK_ALLOC_OK(front_mgr.UseSize(block.dim(), /*ind=*/0u, nullptr));
-        front_mgr.Use(block);
+        WP2_CHECK_ALLOC_OK(front_mgr.UseSize(block.dim(), /*ind=*/0u, nullptr,
+                                             /*use_block=*/true));
         WP2_CHECK_STATUS(score_func_->Use(block));
 
         // The following instructions are done only for assertions/debug

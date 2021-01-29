@@ -76,10 +76,11 @@ BlockSize GetUniqueBounds(PartitionSet set, uint32_t index);
 //------------------------------------------------------------------------------
 
 // Writes 'dim'.
-void WriteBlockSize(const FrontMgrNxNBase& mgr, BlockSize dim,
+void WriteBlockSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim,
                     SymbolManager* const sm, ANSEncBase* const enc);
 // Reads, updates and returns 'dim'.
-BlockSize ReadBlockSize(const FrontMgrNxNBase& mgr, SymbolReader* const sr);
+BlockSize ReadBlockSize(const FrontMgrDoubleOrderBase& mgr,
+                        SymbolReader* const sr);
 
 //------------------------------------------------------------------------------
 

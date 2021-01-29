@@ -23,6 +23,7 @@
 #include "src/enc/lossless/histogram_enc.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/symbols_enc.h"
+#include "src/utils/hash.h"
 
 namespace WP2L {
 
@@ -186,22 +187,6 @@ bool HashChain::Allocate(uint32_t size) {
 
 // -----------------------------------------------------------------------------
 
-#define HASH_MULTIPLIER_HI (0xc6a4a793ULL)
-#define HASH_MULTIPLIER_LO (0x5bd1e996ULL)
-
-static inline uint32_t GetPixPairHash64(const int16_t argb[8],
-                                        const uint8_t hash_bits) {
-  const uint32_t a = ((uint16_t)argb[0] << 24) | ((uint16_t)argb[1] << 16) |
-                     ((uint16_t)argb[2] <<  8) | ((uint16_t)argb[3] <<  0);
-  const uint32_t b = ((uint16_t)argb[4] << 24) | ((uint16_t)argb[5] << 16) |
-                     ((uint16_t)argb[6] <<  8) | ((uint16_t)argb[7] <<  0);
-  uint32_t key;
-  key = (b * HASH_MULTIPLIER_HI) & 0xffffffffu;
-  key += (a * HASH_MULTIPLIER_LO) & 0xffffffffu;
-  key = key >> (32 - hash_bits);
-  return key;
-}
-
 // Returns the maximum number of hash chain lookups to do for a
 // given compression effort. Return value in range [45, 126].
 // TODO(vrabaud) re-adjust those values and have a different logic (the number
@@ -277,22 +262,21 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
       // Process the rest of the hash chain.
       while (len) {
         tmp[7] = len--;
-        hash_code = GetPixPairHash64(tmp, kHashBits);
+        hash_code = WP2::HashPixPair(tmp, kHashBits);
         chain[pos] = hash_to_first_index[hash_code];
         hash_to_first_index[hash_code] = pos++;
       }
       argb_comp = false;
     } else {
       // Just move one pixel forward.
-      hash_code = GetPixPairHash64(&argb[4 * pos], kHashBits);
+      hash_code = WP2::HashPixPair(&argb[4 * pos], kHashBits);
       chain[pos] = hash_to_first_index[hash_code];
       hash_to_first_index[hash_code] = pos++;
       argb_comp = argb_comp_next;
     }
   }
   // Process the penultimate pixel.
-  chain[pos] =
-      hash_to_first_index[GetPixPairHash64(&argb[4 * pos], kHashBits)];
+  chain[pos] = hash_to_first_index[WP2::HashPixPair(&argb[4 * pos], kHashBits)];
 
   hash_to_first_index.reset();
 

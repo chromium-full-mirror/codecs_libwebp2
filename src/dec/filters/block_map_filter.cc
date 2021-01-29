@@ -72,8 +72,8 @@ WP2Status FilterBlockMap::Allocate() {
 //------------------------------------------------------------------------------
 
 // Returns the mean number of non-zero residuals per coeff for a given channel.
-static uint32_t ComputeResidualDensity(const CodedBlock& cb, Channel channel,
-                                       uint32_t multiplier) {
+static uint32_t ComputeResidualDensity(const CodedBlockBase& cb,
+                                       Channel channel, uint32_t multiplier) {
   const uint32_t num_transforms = cb.GetNumTransforms(channel);
   const uint32_t num_coeffs = cb.NumCoeffsPerTransform(channel);
   uint32_t num_nz_coeffs = 0;
@@ -103,7 +103,7 @@ void FilterBlockMap::RegisterBlock(uint32_t x, uint32_t y, BlockSize dim,
   ++current_block_index_;
 }
 
-void FilterBlockMap::RegisterBlock(const CodedBlock& cb,
+void FilterBlockMap::RegisterBlock(const CodedBlockBase& cb,
                                    uint32_t min_num_bytes) {
   if (features_.empty()) return;
 

@@ -24,6 +24,7 @@
 
 #include "src/common/lossy/rnd_mtx.h"
 #include "src/common/lossy/block.h"
+#include "src/enc/block_enc.h"
 
 using std::mt19937;
 
@@ -246,8 +247,9 @@ WP2Status RndMtxSet::CopyFrom(const RndMtxSet& src) {
   return WP2_STATUS_OK;
 }
 
+/// For the encoder:
 template<class T>
-bool CodedBlock::CheckUseMtx(TrfSize trf, const T& mtx) {
+bool CodedBlockBase::CheckUseMtx(TrfSize trf, const T& mtx) {
   if (tdim(kYChannel) == trf) {
     // TODO(skal): later: mtx_[1] = ...
     mtx_[0] = FindAndSubtractBestMatch(mtx, coeffs_[kYChannel][0],
@@ -257,7 +259,7 @@ bool CodedBlock::CheckUseMtx(TrfSize trf, const T& mtx) {
   return false;
 }
 
-void RndMtxSet::DecideUseRndMtx(CodedBlock* const cb) const {
+void RndMtxSet::DecideUseRndMtx(CodedBlockBase* const cb) const {
   assert(cb->mtx_set_ == this);
 #if defined(ENABLE_RND_MTX)
   cb->use_mtx_ = cb->CheckUseMtx(TRF_4x4, mtx4x4_) ||

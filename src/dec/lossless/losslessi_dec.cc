@@ -69,13 +69,11 @@ static inline int32_t ReadLZ77Golomb(uint32_t cluster, uint32_t sym,
   int32_t extra_val = 0;
   if (extra_bits > 0) {
     if (extra_bits <= IO_BITS) {
-      std::string label_bits;
-      WP2SPrint(&label_bits, "%s_bits", label);
+      const std::string label_bits = WP2SPrint("%s_bits", label);
       extra_val = dec->ReadUValue(extra_bits, label_bits.c_str());
     } else {
-      std::string label_bits1, label_bits2;
-      WP2SPrint(&label_bits1, "%s_bits1", label);
-      WP2SPrint(&label_bits2, "%s_bits2", label);
+      const std::string label_bits1 = WP2SPrint("%s_bits1", label);
+      const std::string label_bits2 = WP2SPrint("%s_bits2", label);
       extra_val = dec->ReadUValue(IO_BITS, label_bits1.c_str());
       extra_val |= dec->ReadUValue(extra_bits - IO_BITS, label_bits2.c_str())
                    << IO_BITS;

@@ -73,6 +73,9 @@ class FrontMgrBase {
   // Same as above but we know the last block that got added (speed optim).
   void FindNextLexico(const Block& added_last, uint32_t* const bx,
                       uint32_t* const by) const;
+  // Returns the largest possible block that fits at coordinates (x, y),
+  // taking snapping into account.
+  Block LargestPossibleBlockAt(uint32_t x, uint32_t y, bool snapped) const;
 
   WP2Status CopyInternal(const FrontMgrBase& other);
 
@@ -102,15 +105,59 @@ class FrontMgr4x4 : public FrontMgrBase {
 
 //------------------------------------------------------------------------------
 
-// Base class managing the reading/writing of NxN blocks in a given order.
-// There are two things concerning a block: its size and everything else.
-// Those two can be managed independently: the size of a block can depend on
-// other block sizes according to different logics while the content is a given.
-// There is a size order, and a block order.
-// Block order: order of encoding/decoding of block pixels.
-// Size order: order in which block sizes are written to the bitstream.
-// TODO(vrabaud): split this file in enc/dec to get lighter APIs.
-class FrontMgrNxNBase : public FrontMgrBase {
+// Base class managing the reading/writing of blocks in a given order.
+// There are two things concerning a block: its size, and everything else
+// (including block pixels).
+// These two aspects can be processed independently and in different orders.
+// - Size order: order in which block sizes are written/read.
+// - Block order: order of encoding/decoding of block pixels.
+// This class decides both processing orders, and keeps track of which blocks
+// have been processed, for both aspects (size and block pixels).
+//
+// Encoding side:
+// MyFrontMgrSubclass mgr;
+// mgr.Init(...)
+// VectorNoCtor<Block> blocks;
+// (... fill blocks)
+// Vector_u16 size_order_indices;
+// mgr.Sort(blocks, size_order_indices);
+// Vector<CodedBlock> cblocks;
+// (... fill cblocks in same order as 'blocks')
+// // Start writing to the bitsream.
+// for (uint16_t ind : size_order_indices) {
+//   // Write a block size.
+//   {
+//     const CodedBlock& cb = cblocks[ind];
+//     ( ... write cb.dim() to the bistream)
+//     Block block_tmp;
+//     WP2_CHECK_ALLOC_OK(mgr->UseSize(cb.dim(), ind, &block_tmp));
+//     assert(block_tmp == cb.blk());
+//   }
+//   // Process ready blocks (if any).
+//   while (true) {
+//     FrontMgrDoubleOrderBase::Info info;
+//     if (!mgr->UseReady(&info)) break;
+//     const CodedBlock& cb = cblocks[info.ind];
+//     (... process )
+//   }
+// }
+//
+// Decoding side:
+// MyFrontMgrSubclass mgr;
+// mgr.Init(...)
+// while (!mgr.Done()) { // Not all blocks have been processed.
+//    // Read sizes until we get a block ready to be processed.
+//    FrontMgrDoubleOrderBase::Info info;
+//    while (true) {
+//      if (mgr.UseReady(&info)) break; // A block is ready!
+//      // No block is ready, read block size from bitstream.
+//      const BlockSize dim = ...
+//      Block block;
+//      WP2_CHECK_ALLOC_OK(mgr.UseSize(dim, /*ind=*/0u, &block));
+//    }
+//   // ... use 'info.block'
+// }
+class FrontMgrDoubleOrderBase : public FrontMgrBase {
  public:
   // Information of a stacked block. 'ind' is an index in whatever external
   // structure you want to refer to.
@@ -134,49 +181,47 @@ class FrontMgrNxNBase : public FrontMgrBase {
   virtual WP2Status Sort(VectorNoCtor<Block>& blocks,
                          Vector_u16& size_order_indices) const = 0;
 
-  // Block-order related functions.
-
-  // Returns whether an element is considered to be computable, i.e. its context
-  // is considered filled at its maximum.
-  virtual bool IsFinal(const WP2::Block& block) const = 0;
-
-  // Size-order related functions.
-
   // Returns the biggest possible next block to use in size order.
   // This may not be a BlockSize allowed by the partition set.
   Block GetMaxPossibleBlock() const { return next_; }
   // Returns the biggest allowed next block to use in size order.
   Block GetMaxFittingBlock() const;
 
-  // Uses a block in the size-order stack if it is final. Returns whether a
-  // final block was popped.
-  bool UseFinal(Info* const info = nullptr);
+  // Marks a block of a given size 'dim' as processed, size wise. The full
+  // block is returned in 'block' if not nullptr.
+  // 'ind' is some index to an external structure that contains information
+  // about the block. It can be set to whatever if unused and it will belong to
+  // an Info struct when popped in UseReady.
+  // If 'use_block' is true, the block is also marked as used, block pixel
+  // wise. Otherwise, it is added to a stack of blocks to be popped by calling
+  // UseReady(). Returns false in case of error.
+  WP2_NO_DISCARD bool UseSize(BlockSize dim, uint32_t ind, Block* const block,
+                              bool use_block = false);
+
+  // Finds a block whose size was recorded with UseSize(), but that hasn't been
+  // used yet, and is ready to be used. Returns whether a block was found.
+  bool UseReady(Info* const info = nullptr);
 
   // For a valid 'size', returns true and the next block (pos) in size order.
   // Assumes 'size' is part of the 'partition_set_'.
-  virtual WP2_NO_DISCARD
-  bool TryGetNextBlock(BlockSize size, Block* const block) const = 0;
-
-  // Writes a block of a given size 'dim' in size order. The full block is
-  // returned in 'block' if not nullptr.
-  // 'ind' is some index to an external structure that contains information
-  // about the block. It can be set to whatever if unused and it will belong to
-  // an Info struct when popped in useFinal.
-  // Returns false in case of error.
-  virtual WP2_NO_DISCARD
-  bool UseSize(BlockSize dim, uint32_t ind, Block* const block) = 0;
+  virtual WP2_NO_DISCARD bool TryGetNextBlock(BlockSize size,
+                                              Block* const block) const;
 
  protected:
-  WP2Status CopyInternal(const FrontMgrNxNBase& other);
+  // Finds the position (min x/y coordinates and max size) of the next block
+  // in size order.
+  virtual Block FindNextBlock(const Block& last_block) const = 0;
+  // Returns whether an element is ready to be used, i.e. its context
+  // is considered filled at its maximum.
+  virtual bool IsReady(const WP2::Block& block) const = 0;
 
-  // Updates the coordinates of the next block to (x, y), and find the
-  // dimensions that fit.
-  void UpdateNextBlock(uint32_t x, uint32_t y);
+  WP2Status CopyInternal(const FrontMgrDoubleOrderBase& other);
 
   PartitionSet partition_set_ = NUM_PARTITION_SETS;  // Undefined.
   bool snapped_ = false;
-  // Stack keeping track of the written sizes that need to be popped when the
-  // rest of the block is written.
+  // Stack of blocks whose size has been read but that haven't been marked used
+  // yet. Blocks get appended when calling UseSize() and popped when calling
+  // UseReady().
   VectorNoCtor<Info> size_stack_;
   FrontMgrBase occupancy_size_;
   // Next max possible block (for reading/writing block sizes).
@@ -190,18 +235,16 @@ class FrontMgrNxNBase : public FrontMgrBase {
 
 // Lexicographic front manager.
 // Front manager for which the size and block order are the same.
-class FrontMgrLexico : public FrontMgrNxNBase {
+class FrontMgrLexico : public FrontMgrDoubleOrderBase {
  public:
-  void Clear() override;
   WP2Status CopyFrom(const FrontMgrLexico& other);
-  WP2_NO_DISCARD
-  bool TryGetNextBlock(BlockSize size, Block* const block) const override;
-  WP2_NO_DISCARD
-  bool UseSize(BlockSize dim, uint32_t ind, Block* const block) override;
   virtual void UndoUseSize(const Block& block);
   WP2Status Sort(VectorNoCtor<Block>& blocks,
                  Vector_u16& size_order_indices) const override;
-  bool IsFinal(const WP2::Block& block) const override;
+
+ protected:
+  bool IsReady(const WP2::Block& block) const override;
+  Block FindNextBlock(const Block& last_block) const override;
 
  private:
   // Returns whether the 'Blocks()' are in the order they will be written.
@@ -212,24 +255,22 @@ class FrontMgrLexico : public FrontMgrNxNBase {
 
 // Front manager that maximizes the top and left context before writing the next
 // block in size order.
-class FrontMgrMax : public FrontMgrNxNBase {
+class FrontMgrMax : public FrontMgrDoubleOrderBase {
  public:
-  void Clear() override;
   WP2Status CopyFrom(const FrontMgrMax& other);
   WP2_NO_DISCARD
   bool TryGetNextBlock(BlockSize size, Block* const block) const override;
-  WP2_NO_DISCARD
-  bool UseSize(BlockSize dim, uint32_t ind, Block* const block) override;
   WP2Status Sort(VectorNoCtor<Block>& blocks,
                  Vector_u16& size_order_indices) const override;
-  bool IsFinal(const WP2::Block& block) const override;
+
+ protected:
+  bool IsReady(const WP2::Block& block) const override;
+  Block FindNextBlock(const Block& last_block) const override;
 
  private:
-  bool DoIsFinal(const FrontMgrBase& occupancy, const WP2::Block& block) const;
-  // Returns true if a block is considered final in the size occupancy.
-  bool IsFinalSize(const WP2::Block& block) const;
-  // Updates the 'next_' block.
-  void UpdateNextBlock();
+  bool DoIsReady(const FrontMgrBase& occupancy, const WP2::Block& block) const;
+  // Returns true if a block is considered ready in the size occupancy.
+  bool IsReadySize(const WP2::Block& block) const;
   // Returns whether the 'Blocks()' are in the order they will be written.
   WP2Status CheckBlockList(const VectorNoCtor<Block>& blocks) const;
 };
@@ -243,7 +284,7 @@ typedef FrontMgrMax FrontMgrDefault;
 
 // Generates all blocks lexicographically in the first WxH area, then all blocks
 // in the second WxH area etc. (W and H being typically kMaxBlockSizePix).
-class FrontMgrArea : public FrontMgrNxNBase {
+class FrontMgrArea : public FrontMgrDoubleOrderBase {
  public:
   // BinaryPredicate used to sort blocks so that they are grouped by area.
   class Comp {
@@ -272,15 +313,13 @@ class FrontMgrArea : public FrontMgrNxNBase {
   WP2Status Init(PartitionSet partition_set, bool snapped,
                  uint32_t width, uint32_t height) override;
 
-  void Clear() override;
   WP2Status CopyFrom(const FrontMgrArea& other);
-  WP2_NO_DISCARD
-  bool TryGetNextBlock(BlockSize size, Block* const block) const override;
-  WP2_NO_DISCARD
-  bool UseSize(BlockSize dim, uint32_t ind, Block* const block) override;
   WP2Status Sort(VectorNoCtor<Block>& blocks,
                  Vector_u16& size_order_indices) const override;
-  bool IsFinal(const WP2::Block& block) const override;
+
+ protected:
+  bool IsReady(const WP2::Block& block) const override;
+  Block FindNextBlock(const Block& last_block) const override;
 
  protected:
   // Returns the next available block in the current area, or the first block in
@@ -296,26 +335,27 @@ class FrontMgrArea : public FrontMgrNxNBase {
 // FrontMgr for arbitrary block order. Each block must be manually set before
 // any call to TryGetNextBlock(), UseSize() etc. and still has to respect the
 // constraint that any block above it must be already used.
-// Reuses the FrontMgrLexico implementation for Sort(), Use() etc.
-class FrontMgrCustom : public FrontMgrLexico {
+class FrontMgrCustom : public FrontMgrDoubleOrderBase {
  public:
   WP2Status Init(PartitionSet partition_set, bool snapped,
                  uint32_t width, uint32_t height) override;
 
   void Clear() override;
+  WP2Status Sort(VectorNoCtor<Block>& blocks,
+                 Vector_u16& size_order_indices) const override;
   // Sets 'x, y' (in kMinBlockSizePix units) as the next block position.
   // Returns false if not possible.
   WP2_NO_DISCARD
   bool SetNextBlockPosition(uint32_t x, uint32_t y);
   WP2_NO_DISCARD
   bool TryGetNextBlock(BlockSize size, Block* const block) const override;
-  WP2_NO_DISCARD
-  bool UseSize(BlockSize dim, uint32_t ind, Block* const block) override;
-  void UndoUseSize(const Block& block) override;
+  void UndoUseSize(const Block& block);
 
  protected:
+  bool IsReady(const WP2::Block& block) const override;
+  Block FindNextBlock(const Block& last_block) const override;
   // If false, TryGetNextBlock() and UseSize() will return false.
-  bool next_is_set_ = false;
+  bool NextIsSet() const;
 };
 
 //------------------------------------------------------------------------------

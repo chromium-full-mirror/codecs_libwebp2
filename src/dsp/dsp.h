@@ -30,34 +30,26 @@
 //------------------------------------------------------------------------------
 // CPU detection
 
-#if defined(__GNUC__)
-# define LOCAL_GCC_VERSION ((__GNUC__ << 8) | __GNUC_MINOR__)
-# define LOCAL_GCC_PREREQ(maj, min) \
-    (LOCAL_GCC_VERSION >= (((maj) << 8) | (min)))
-#else
-# define LOCAL_GCC_VERSION 0
-# define LOCAL_GCC_PREREQ(maj, min) 0
-#endif
-
 // We are inheriting constructors, so we need the following
 // minimal versions of the compilers.
 #if defined(__clang__)
 // clang 3.3, cf https://clang.llvm.org/cxx_status.html
-static_assert(LOCAL_GCC_PREREQ(3, 3), "clang needs to be at version >= 3.3");
+static_assert(((__clang_major__ << 8) | __clang_minor__) >= ((3 << 8) | 3),
+              "clang needs to be at version >= 3.3");
 #elif defined(__GNUC__)
-// gcc 4.7, cf https://gcc.gnu.org/projects/cxx-status.html
-static_assert(LOCAL_GCC_PREREQ(4, 8), "gcc needs to be at version >= 4.8");
+// gcc 4.8, cf https://gcc.gnu.org/projects/cxx-status.html
+static_assert(((__GNUC__ << 8) | __GNUC_MINOR__) >= ((4 << 8) | 8),
+              "gcc needs to be at version >= 4.8");
 #elif defined(_MSC_VER)
 // MSVC 2015, cf https://msdn.microsoft.com/en-us/library/hh567368.aspx
 static_assert(_MSC_VER >= 1900, "Visual Studio needs to be at version >= 2015");
+#if defined(_M_X64) || defined(_M_IX86)
+#define WP2_MSC_SSE   // Visual C++ SSE4.2 targets
+#endif
 #endif
 
 #ifndef __has_builtin
 # define __has_builtin(x) 0
-#endif
-
-#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
-#define WP2_MSC_SSE   // Visual C++ SSE4.2 targets
 #endif
 
 // WP2_HAVE_* are used to indicate the presence of the instruction set in dsp
@@ -139,6 +131,14 @@ static_assert(_MSC_VER >= 1900, "Visual Studio needs to be at version >= 2015");
 #define WP2_UBSAN_IGNORE_UNSIGNED_OVERFLOW \
   __attribute__((no_sanitize("unsigned-integer-overflow")))
 #endif
+#endif
+
+// endianness code from WebP.
+// some endian fix (e.g.: mips-gcc doesn't define __BIG_ENDIAN__)
+#if !defined(WP2_WORDS_BIGENDIAN) &&               \
+    (defined(__BIG_ENDIAN__) || defined(_M_PPC) || \
+     (defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)))
+#define WP2_WORDS_BIGENDIAN
 #endif
 
 typedef enum {

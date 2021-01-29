@@ -305,7 +305,7 @@ void SyntaxWriter::WritePredictors(const CodedBlock& cb, Channel channel,
   } else if (channel == kAChannel) {
     sm->Process(kSymbolModeA, params.pred->mode(), "a", enc);
   }
-  params.pred->WriteParams(cb, channel, sm, enc);
+  /* sub_mode = */params.pred->WriteParams(cb, channel, sm, enc);
 }
 
 void SyntaxWriter::WriteSplitTransform(const CodedBlock& cb, Channel channel,
@@ -364,7 +364,7 @@ void SyntaxWriter::RecordBlockHeader(const CodedBlock& cb) {
 
 WP2Status SyntaxWriter::WriteBlocks(const Vector<CodedBlock>& cblocks,
                                     const Vector_u16& size_order_indices,
-                                    FrontMgrNxNBase* const mgr,
+                                    FrontMgrDoubleOrderBase* const mgr,
                                     ANSEnc* const enc) {
   assert(cblocks.size() == num_blocks_);
   assert(size_order_indices.size() == num_blocks_);
@@ -383,8 +383,8 @@ WP2Status SyntaxWriter::WriteBlocks(const Vector<CodedBlock>& cblocks,
       assert(block_tmp == cb.blk());
     }
     while (true) {
-      FrontMgrNxNBase::Info info;
-      if (!mgr->UseFinal(&info)) break;
+      FrontMgrDoubleOrderBase::Info info;
+      if (!mgr->UseReady(&info)) break;
       const CodedBlock& cb = cblocks[info.ind];
       WP2_CHECK_STATUS(WriteBlock(cb, info.ind, enc));
     }
@@ -468,7 +468,8 @@ WP2Status SyntaxWriter::Record(const CodedBlock& cb) {
   return WP2_STATUS_OK;
 }
 
-WP2Status SyntaxWriter::RecordSize(const FrontMgrNxNBase& mgr, BlockSize dim) {
+WP2Status SyntaxWriter::RecordSize(const FrontMgrDoubleOrderBase& mgr,
+                                   BlockSize dim) {
   ANSEncNoop enc;
   WriteBlockSize(mgr, dim, &symbol_recorder_, &enc);
   return WP2_STATUS_OK;

@@ -150,12 +150,6 @@ if(NOT MSVC AND
   set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -s")
 endif()
 
-# windows.h defines min/max macros (std collision) unless NOMINMAX is defined.
-# M_PI from math.h needs _USE_MATH_DEFINES with MSVC.
-if(MSVC)
-  list(APPEND WP2_DEFINITIONS NOMINMAX _USE_MATH_DEFINES)
-endif()
-
 # ##############################################################################
 # WP2 various sub-libraries
 
@@ -247,6 +241,7 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/data_source_stream.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/front_mgr.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/front_mgr.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/hash.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/memory.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/orientation.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/orientation.h
@@ -292,8 +287,6 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/incr/decoder_tiles.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/symbols_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/symbols_dec.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.h
   # common encode/decoder
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/filters/rstr_flt_params.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/filters/rstr_flt_params.h
@@ -353,6 +346,8 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/tile_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/tile_dec.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/alpha_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/block_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/block_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/analysis_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_enc.h
@@ -385,6 +380,8 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/screen_content/screen_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/segment_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/syntax_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/writer_enc.cc
   # lossless
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/color_cache.cc

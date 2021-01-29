@@ -357,7 +357,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       WP2_CHECK_ALLOC_OK(mgr.UseSize(block.dim(), ind, &block_tmp));
       assert(block == block_tmp);
       // Empty the size stack if possible.
-      while (mgr.UseFinal()) {
+      while (mgr.UseReady()) {
       }
     }
 

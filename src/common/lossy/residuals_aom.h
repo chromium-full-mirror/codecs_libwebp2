@@ -62,7 +62,6 @@ inline int PaddedIndex(int index, int tx_width_log2) {
   return index + MultiplyBy4(index >> tx_width_log2);
 }
 
-
 //------------------------------------------------------------------------------
 // From libgav1/src/symbol_decoder_context.h
 
@@ -98,8 +97,8 @@ typedef uint32_t (*CoeffBaseRangeContextFunc)(
 class AOMResidualIO {
  public:
   // Returns the cluster for a given symbol, given certain other parameters.
-  // The overload GetClusterAOM1, GetClusterAOM2, GetClusterAOM3 are meant
-  // for symbols using 1, 2 or 3 arguments.
+  // The overload GetClusterAOM1 and GetClusterAOM2 are meant
+  // for symbols using 1 or 2 arguments.
   template <Symbol sym>
   static uint32_t GetClusterAOM1(uint32_t arg0) {
     static_assert(sym == kAOMEOBPT512 || sym == kAOMEOBPT1024, "wrong symbol");
@@ -107,46 +106,25 @@ class AOMResidualIO {
   }
   template <Symbol sym>
   static uint32_t GetClusterAOM2(uint32_t arg0, uint32_t arg1) {
-    static_assert(sym == kAOMAllZero ||
-                      sym == kAOMEOBPT4   || sym == kAOMEOBPT8 ||
-                      sym == kAOMEOBPT16  ||
-                      sym == kAOMEOBPT32  || sym == kAOMEOBPT64 ||
-                      sym == kAOMEOBPT128 || sym == kAOMEOBPT256,
+    static_assert(sym == kAOMEOBPT4   || sym == kAOMEOBPT8 ||
+                  sym == kAOMEOBPT16  ||
+                  sym == kAOMEOBPT32  || sym == kAOMEOBPT64 ||
+                  sym == kAOMEOBPT128 || sym == kAOMEOBPT256 ||
+                  sym == kAOMCoeffBase || sym == kAOMCoeffBaseRange ||
+                  sym == kAOMEOBExtra || sym == kAOMCoeffBaseEOB,
                   "wrong symbol");
     const std::array<uint32_t, 2> extent =
-        (sym == kAOMAllZero)
-            ? std::array<uint32_t, 2>{kNumSquareTransformSizes,
-                                      kAllZeroContexts}
-            : std::array<uint32_t, 2>{kNumPlaneTypes, kEobPtContexts};
+        (sym == kAOMEOBExtra) ?
+            std::array<uint32_t, 2>{kNumPlaneTypes, kEobExtraContexts} :
+        (sym == kAOMCoeffBaseEOB) ?
+            std::array<uint32_t, 2>{kNumPlaneTypes, kCoeffBaseEobContexts} :
+        (sym == kAOMCoeffBase) ?
+           std::array<uint32_t, 2>{kNumPlaneTypes, kCoeffBaseContexts} :
+        (sym == kAOMCoeffBaseRange) ?
+           std::array<uint32_t, 2>{kNumPlaneTypes, kCoeffBaseRangeContexts} :
+           std::array<uint32_t, 2>{kNumPlaneTypes, kEobPtContexts};
     uint32_t cluster = arg1;
     uint32_t stride = extent[1];
-    cluster += arg0 * stride;
-    return cluster;
-  }
-  template <Symbol sym>
-  static uint32_t GetClusterAOM3(uint32_t arg0, uint32_t arg1, uint32_t arg2) {
-    static_assert(sym == kAOMEOBExtra || sym == kAOMCoeffBaseEOB ||
-                      sym == kAOMCoeffBase || sym == kAOMCoeffBaseRange,
-                  "wrong symbol");
-    const std::array<uint32_t, 3> extent =
-        (sym == kAOMEOBExtra)
-            ? std::array<uint32_t, 3>{kNumSquareTransformSizes, kNumPlaneTypes,
-                                      kEobExtraContexts}
-            : (sym == kAOMCoeffBaseEOB)
-                  ? std::array<uint32_t, 3>{kNumSquareTransformSizes,
-                                            kNumPlaneTypes,
-                                            kCoeffBaseEobContexts}
-                  : (sym == kAOMCoeffBase)
-                        ? std::array<uint32_t, 3>{kNumSquareTransformSizes,
-                                                  kNumPlaneTypes,
-                                                  kCoeffBaseContexts}
-                        : std::array<uint32_t, 3>{kNumSquareTransformSizes,
-                                                  kNumPlaneTypes,
-                                                  kCoeffBaseRangeContexts};
-    uint32_t cluster = arg2;
-    uint32_t stride = extent[2];
-    cluster += arg1 * stride;
-    stride *= extent[1];
     cluster += arg0 * stride;
     return cluster;
   }
@@ -167,20 +145,6 @@ class AOMResidualIO {
 
 //------------------------------------------------------------------------------
 // From libgav1/src/tile/tile.cc
-
-// ith entry of this array is computed as:
-// DivideBy2(TransformSizeToSquareTransformIndex(kTransformSizeSquareMin[i]) +
-//           TransformSizeToSquareTransformIndex(kTransformSizeSquareMax[i]) +
-//           1)
-// with special value '0' for 2x? or ?x2 transforms.
-constexpr uint8_t kTrfContext[] = {
-    0, 0, 0,
-    0, 0, 1, 1,
-    0, 1, 1, 2, 2,
-       1, 2, 2, 3,
-          2, 3, 3
-};
-STATIC_ASSERT_ARRAY_SIZE(kTrfContext, TRF_LAST);
 
 // Range above kNumQuantizerBaseLevels which the exponential Golomb coding
 // process is activated.

@@ -116,8 +116,8 @@ class Block {
   Block() = default;
   Block(uint32_t x, uint32_t y, BlockSize dim) {
     SetXY(x, y);
-    w_ = BlockWidth[dim];
-    h_ = BlockHeight[dim];
+    w_ = (dim == BLK_LAST) ? 0 : BlockWidth[dim];
+    h_ = (dim == BLK_LAST) ? 0 : BlockHeight[dim];
     w_pix_ = w_ * kMinBlockSizePix;
     h_pix_ = h_ * kMinBlockSizePix;
     dim_ = dim;

@@ -117,7 +117,7 @@ Vector<Segment> CreateSegments(uint32_t quality_hint,
 void RegisterBlock(uint16_t x, uint16_t y, BlockSize dim, uint32_t segment_id,
                    double res_den, double min_bpp, bool with_lossy_alpha,
                    FilterBlockMap* const blocks) {
-  CodedBlock cb;
+  CodedBlockBase cb;
   cb.SetDimDefault({x, y, dim});
   cb.is420_ = false;
   cb.id_ = (uint8_t)segment_id;

@@ -105,7 +105,7 @@ WP2Status Segment::WriteHeader(ANSEnc* const enc,
   return enc->GetStatus();
 }
 
-void Segment::StoreEncodingMethods(const CodedBlock& cb,
+void Segment::StoreEncodingMethods(const CodedBlockBase& cb,
                                    SymbolManager* const sm,
                                    ANSEncBase* const enc) const {
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
@@ -174,7 +174,7 @@ WP2Status Segment::ReadHeader(uint32_t quality_hint,
 }
 
 WP2Status Segment::ReadEncodingMethods(SymbolReader* const sr,
-                                       CodedBlock* const cb) const {
+                                       CodedBlockBase* const cb) const {
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (channel == kAChannel && !cb->HasLossyAlpha()) continue;
     for (uint32_t tf_i = 0; tf_i < cb->GetNumTransforms(channel); ++tf_i) {

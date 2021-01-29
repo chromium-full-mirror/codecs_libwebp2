@@ -57,14 +57,12 @@ static void WriteLZ77Golomb(uint32_t cluster, uint32_t sym, int32_t value,
   sw->ProcessWithCost(sym, cluster, golomb.prefix, label, enc, cost);
   if (golomb.extra_bits_num == 0) return;
   if (golomb.extra_bits_num <= IO_BITS) {
-    std::string label_bits;
-    WP2SPrint(&label_bits, "%s_bits", label);
+    const std::string label_bits = WP2SPrint("%s_bits", label);
     enc->PutUValue(golomb.extra_bits_value, golomb.extra_bits_num,
                    label_bits.c_str());
   } else {
-    std::string label_bits1, label_bits2;
-    WP2SPrint(&label_bits1, "%s_bits1", label);
-    WP2SPrint(&label_bits2, "%s_bits2", label);
+    const std::string label_bits1 = WP2SPrint("%s_bits1", label);
+    const std::string label_bits2 = WP2SPrint("%s_bits2", label);
     enc->PutUValue(golomb.extra_bits_value & ((1u << IO_BITS) - 1), IO_BITS,
                    label_bits1.c_str());
     enc->PutUValue(golomb.extra_bits_value >> IO_BITS,

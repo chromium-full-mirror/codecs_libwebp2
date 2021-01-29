@@ -53,7 +53,7 @@ class FilterBlockMap {
   WP2Status Allocate();
 
   // Registers the features of a block.
-  void RegisterBlock(const CodedBlock& cb, uint32_t min_num_bytes);
+  void RegisterBlock(const CodedBlockBase& cb, uint32_t min_num_bytes);
 
   void Clear();
 

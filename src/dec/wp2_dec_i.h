@@ -158,7 +158,7 @@ class ResidualReader : public ResidualIO {
   // Reads residual coefficients.
   WP2Status ReadCoeffs(Channel channel, const int16_t dequant[],
                        ANSDec* const dec, SymbolReader* const sr,
-                       CodedBlock* const cb, BlockInfo* const info);
+                       CodedBlockBase* const cb, BlockInfo* const info);
 
  private:
   WP2Status ReadHeaderForResidualSymbols(uint32_t num_coeffs_max,
@@ -167,7 +167,7 @@ class ResidualReader : public ResidualIO {
   uint32_t ReadCoeffsMethod01(
       Channel channel, const int16_t dequant[], uint32_t tf_i,
       ANSDec* const dec, SymbolReader* const sr,
-      CodedBlock* const cb, BlockInfo* const info);
+      CodedBlockBase* const cb, BlockInfo* const info);
 
   uint32_t num_channels_;
 };
@@ -184,18 +184,19 @@ class AlphaReader : public WP2Allocable {
   WP2Status ReadHeader(const GlobalParams& gparams);
 
   // Reads alpha information for the given block from the stream.
-  void GetBlockHeader(SymbolReader* const sr, CodedBlock* const cb);
+  void GetBlockHeader(SymbolReader* const sr, CodedBlockBase* const cb);
   // Reads alpha information for the given block from the stream.
-  WP2Status GetBlock(CodedBlock* const cb);
+  WP2Status GetBlock(CodedBlockBase* const cb);
   // Reconstructs the alpha plane for the given block.
-  void Reconstruct(CodedBlock* const cb) const;
+  void Reconstruct(CodedBlockBase* const cb) const;
   // Copies the lossless alpha data for this block to the given plane (at 0, 0).
-  void ReconstructLossless(const CodedBlock& cb, Plane16* const plane) const;
+  void ReconstructLossless(const CodedBlockBase& cb,
+                           Plane16* const plane) const;
 
   AlphaMode GetAlphaMode() const { return alpha_mode_; }
 
  private:
-  WP2Status ReadLossless(CodedBlock* const cb);
+  WP2Status ReadLossless(CodedBlockBase* const cb);
 
   const GlobalParams* gparams_ = nullptr;
   // ANS reader
@@ -229,9 +230,9 @@ class SyntaxReader {
 
   // Reads 'cb' size, segment id, coeffs etc. and sets 'out' as the
   // reconstructed pixels buffer destination.
-  WP2Status GetBlock(CodedBlock* const cb, YUVPlane* const out,
+  WP2Status GetBlock(CodedBlockBase* const cb, YUVPlane* const out,
                      BlockInfo* const info);
-  BlockSize GetBlockSize(const FrontMgrNxNBase& mgr);
+  BlockSize GetBlockSize(const FrontMgrDoubleOrderBase& mgr);
 
   PartitionSet GetPartitionSet() const { return gparams_->partition_set_; }
   bool GetPartitionSnap() const { return gparams_->partition_snapping_; }
@@ -241,16 +242,16 @@ class SyntaxReader {
   void ApplyDecoderConfig(const DecoderConfig& config);
 
  private:
-  void ReadSplitTransform(Channel channel, CodedBlock* const cb);
-  void ReadHasCoeffs(Channel channel, CodedBlock* const cb);
-  void ReadTransform(Channel channel, CodedBlock* const cb);
+  void ReadSplitTransform(Channel channel, CodedBlockBase* const cb);
+  void ReadHasCoeffs(Channel channel, CodedBlockBase* const cb);
+  void ReadTransform(Channel channel, CodedBlockBase* const cb);
 
-  // Fill the is420_ data in the CodedBlock.
-  void ReadIs420(CodedBlock* const cb);
+  // Fill the is420_ data in the block.
+  void ReadIs420(CodedBlockBase* const cb);
 
   WP2Status LoadDictionaries();
 
-  WP2Status ReadPredModes(CodedBlock* const cb);
+  WP2Status ReadPredModes(CodedBlockBase* const cb);
 
   const GlobalParams* gparams_ = nullptr;
 
@@ -267,7 +268,6 @@ class SyntaxReader {
 
   SymbolsInfo symbols_info_;
   SymbolReader sr_;
-  BlockContext context_;
   uint32_t width_;
   uint32_t height_;
 

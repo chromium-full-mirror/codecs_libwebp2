@@ -808,11 +808,6 @@ static void FillExtents(Symbol sym, uint32_t* const extents,
   uint32_t c[kCoordMaxSize + 1];
   *num_extents = 0;
   switch (sym) {
-    case kAOMAllZero: {
-      CoordinateFiller<kCoordMaxSize>::Do(libgav1::kDefaultAllZeroCdf, c,
-                                          num_extents);
-      break;
-    }
     case kAOMEOBPT4: {
       CoordinateFiller<kCoordMaxSize>::Do(libgav1::kDefaultEobPt4Cdf, c,
                                           num_extents);
@@ -899,8 +894,6 @@ static uint32_t GetNumClusters(Symbol sym) {
 // Returns the CDF for a given symbol 'sym' in a given DecoderContext.
 static const uint16_t* GetCDF(Symbol sym, uint32_t cluster) {
   switch (sym) {
-    case kAOMAllZero:
-      return GetCDF(cluster, libgav1::kDefaultAllZeroCdf);
     case kAOMEOBPT4:
       return GetCDF(cluster, libgav1::kDefaultEobPt4Cdf);
     case kAOMEOBPT8:

@@ -49,7 +49,8 @@ WP2Status AlphaReader::ReadHeader(const GlobalParams& gparams) {
   return WP2_STATUS_OK;
 }
 
-void AlphaReader::GetBlockHeader(SymbolReader* const sr, CodedBlock* const cb) {
+void AlphaReader::GetBlockHeader(SymbolReader* const sr,
+                                 CodedBlockBase* const cb) {
   if (alpha_mode_ == kAlphaModeLossy) {
     cb->alpha_mode_ = (BlockAlphaMode)mode_predictor_.Read(*cb, sr);
   } else {
@@ -57,7 +58,7 @@ void AlphaReader::GetBlockHeader(SymbolReader* const sr, CodedBlock* const cb) {
   }
 }
 
-WP2Status AlphaReader::GetBlock(CodedBlock* const cb) {
+WP2Status AlphaReader::GetBlock(CodedBlockBase* const cb) {
   ANSDebugPrefix prefix(dec_, "Alpha");
   if (alpha_mode_ == kAlphaModeLossless) {
     WP2_CHECK_STATUS(ReadLossless(cb));
@@ -65,7 +66,7 @@ WP2Status AlphaReader::GetBlock(CodedBlock* const cb) {
   return WP2_STATUS_OK;
 }
 
-void AlphaReader::Reconstruct(CodedBlock* const cb) const {
+void AlphaReader::Reconstruct(CodedBlockBase* const cb) const {
   switch (cb->alpha_mode_) {
     case kBlockAlphaLossless:
       ReconstructLossless(*cb, &cb->out_.A);
@@ -82,7 +83,7 @@ void AlphaReader::Reconstruct(CodedBlock* const cb) const {
   }
 }
 
-void AlphaReader::ReconstructLossless(const CodedBlock& cb,
+void AlphaReader::ReconstructLossless(const CodedBlockBase& cb,
                                       Plane16* const plane) const {
   // Copy from buffer to plane, possibly replicating the right/bottom samples.
   const uint32_t block_width = cb.w_pix();
@@ -107,7 +108,7 @@ void AlphaReader::ReconstructLossless(const CodedBlock& cb,
   }
 }
 
-WP2Status AlphaReader::ReadLossless(CodedBlock* const cb) {
+WP2Status AlphaReader::ReadLossless(CodedBlockBase* const cb) {
   const uint32_t max_line =
       std::min(cb->y_pix() + cb->h_pix(), alpha_tile_.rect.height);
 

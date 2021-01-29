@@ -180,7 +180,7 @@ const uint32_t TrfLog2[kMaxBlockSizePix + 1] {
 };
 // clang-format on
 
-STATIC_ASSERT_ARRAY_SIZE(kAllTrfSizes, TRF_LAST)
+STATIC_ASSERT_ARRAY_SIZE(kAllTrfSizes, TRF_LAST);
 STATIC_ASSERT_ARRAY_SIZE(kNumCoeffs, TRF_LAST);
 
 //------------------------------------------------------------------------------

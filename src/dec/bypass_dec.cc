@@ -81,7 +81,7 @@ WP2Status TileDecoder::BypassTileDec() {
     constexpr BlockSize kSimulateBlockSize = BLK_4x4;
     const uint32_t sim_block_height = BlockHeightPix(kSimulateBlockSize);
     const uint32_t sim_block_width = BlockWidthPix(kSimulateBlockSize);
-    CodedBlock sim_block;  // For FilterBlockMap::RegisterBlock().
+    CodedBlockBase sim_block;  // For FilterBlockMap::RegisterBlock().
     sim_block.alpha_mode_ = kBlockAlphaLossless;
     sim_block.id_ = 0;  // Set segment id as the least quantized one.
     sim_block.is420_ = false;

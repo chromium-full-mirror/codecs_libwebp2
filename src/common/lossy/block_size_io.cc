@@ -169,7 +169,7 @@ BlockSize GetUniqueBounds(PartitionSet set, uint32_t index) {
 
 //------------------------------------------------------------------------------
 
-void WriteBlockSize(const FrontMgrNxNBase& mgr, BlockSize dim,
+void WriteBlockSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim,
                     SymbolManager* const sm, ANSEncBase* const enc) {
   const PartitionSetStats& stats = kPartSetsStats[mgr.GetPartitionSet()];
   const BlockSize bounds =
@@ -180,7 +180,8 @@ void WriteBlockSize(const FrontMgrNxNBase& mgr, BlockSize dim,
   sm->Process(kSymbolBlockSize, cluster, i, "block_size", enc);
 }
 
-BlockSize ReadBlockSize(const FrontMgrNxNBase& mgr, SymbolReader* const sr) {
+BlockSize ReadBlockSize(const FrontMgrDoubleOrderBase& mgr,
+                        SymbolReader* const sr) {
   const PartitionSetStats& stats = kPartSetsStats[mgr.GetPartitionSet()];
   const BlockSize bounds =
       stats.smallest_bounds_[mgr.GetMaxPossibleBlock().dim()];

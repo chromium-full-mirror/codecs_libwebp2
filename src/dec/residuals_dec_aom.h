@@ -47,15 +47,15 @@ class AOMResidualReader : public AOMResidualIO {
 
  private:
   // Reads End-of-Block element.
-  static int ReadEOB(TrfSize tdim, PlaneType plane_type,
-                     int context, SymbolReader* const sr, ANSDec* const dec);
+  static int ReadEOB(TrfSize tdim, PlaneType plane_type, uint32_t context,
+                     SymbolReader* const sr, ANSDec* const dec);
 
   // Part of 5.11.39.
   static void ReadSignAndApplyDequantization(
       int16_t coeffs[], int16_t dequant, uint32_t max_value,
       SymbolReader* const sr, ANSDec* const dec);
-  static int ReadCoeffBaseRange(int tx_size_context, int cdf_context,
-                                int plane_type, SymbolReader* const sr);
+  static int ReadCoeffBaseRange(uint32_t cdf_context, uint32_t plane_type,
+                                SymbolReader* const sr);
 };
 
 }  // namespace libgav1

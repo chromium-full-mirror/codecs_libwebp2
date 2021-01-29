@@ -37,7 +37,7 @@
 namespace WP2 {
 
 // Maximum number of symbol types to use.
-static constexpr uint32_t kSymbolNumMax = 42;
+static constexpr uint32_t kSymbolNumMax = 41;
 // Number of residual clusters, not including sectors.
 // Y/UV/A * Method0/Method1 * transform.
 static constexpr uint32_t kResidualClusters = 3 * kNumResidualStats * TRF_LAST;
@@ -556,7 +556,6 @@ enum Symbol {
   // ---------------------
   // AOM residual encoding
   // ---------------------
-  kAOMAllZero,
   kAOMEOBPT4,
   kAOMEOBPT8,
   kAOMEOBPT16,
@@ -582,7 +581,7 @@ constexpr Symbol kSymbolsForCoeffsPerTf[] = {
     kSymbolDC, kSymbolResidualUseBounds, kSymbolResidualBound1IsX,
     kSymbolResidualUseBound2};
 constexpr Symbol kSymbolsForAOMCoeffs[] = {
-    kAOMAllZero,  kAOMEOBPT4,       kAOMEOBPT8,
+    kAOMEOBPT4,   kAOMEOBPT8,
     kAOMEOBPT16,  kAOMEOBPT32,      kAOMEOBPT64,
     kAOMEOBPT128, kAOMEOBPT256,     kAOMEOBPT512,  kAOMEOBPT1024,
     kAOMEOBExtra, kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange

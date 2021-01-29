@@ -59,8 +59,6 @@ WP2Status GlobalAnalysis(const ArgbBuffer& rgb, const YUVPlane& yuv,
 
 //------------------------------------------------------------------------------
 
-class FrontMgr4x4;
-
 // Returns a block layout. 'tile_rect' is in pixels, not padded.
 // Input 'blocks' are considered forced.
 WP2Status ExtractBlockPartition(const EncoderConfig& config,
@@ -112,15 +110,6 @@ void SegmentationBlockVDebug(const EncoderConfig& config, const CodedBlock& cb,
 uint32_t ClusterHistogram(const uint32_t histogram[], uint32_t histogram_size,
                           uint32_t max_clusters, uint32_t clusters[],
                           uint32_t centers[]);
-
-//------------------------------------------------------------------------------
-// Prediction block size: kPredWidth * kPredHeight
-
-// Applies forced predictors from the EncoderConfig (if any). Returns true if
-// this block's predictor was forced.
-bool SetForcedPredictor(const Predictors& preds, const EncoderConfig& config,
-                        uint32_t tile_pos_x, uint32_t tile_pos_y,
-                        Channel channel, CodedBlock* const cb);
 
 //------------------------------------------------------------------------------
 // Near-lossless

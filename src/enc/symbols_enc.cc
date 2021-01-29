@@ -836,8 +836,9 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
   const uint32_t range = symbols_info_.Range(sym, cluster);
   if (range < 2) {
     assert(range > 0);
-    AddTrivial(sym, cluster, /*is_symmetric=*/false,
-               symbols_info_.Min(sym, cluster));
+    // Set the value to 0 as we offset by the symbol minimum when is_symmetric
+    // is false.
+    AddTrivial(sym, cluster, /*is_symmetric=*/false, /*value=*/0);
     return WP2_STATUS_OK;
   }
   // We only allow negative values if we have kAuto.

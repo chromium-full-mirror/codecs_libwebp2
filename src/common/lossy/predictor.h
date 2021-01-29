@@ -50,6 +50,7 @@ std::string GetContextAndBlockPixelsStr(const int16_t context[],
 typedef WienerOptimizer<kContextSize, kPredWidth * kPredHeight> PredOptimizer;
 
 class CodedBlock;
+class CodedBlockBase;
 class SymbolManager;
 class Counters;
 class SymbolReader;
@@ -63,8 +64,8 @@ class Predictor : public WP2Allocable {
   // Predicts values for the given block, on channel 'channel', for the
   // whole block.
   // Stores the result to 'output', incremented by 'step' for each row.
-  virtual void Predict(const CodedBlock& cb, Channel channel, int16_t output[],
-                       uint32_t step) const = 0;
+  virtual void Predict(const CodedBlockBase& cb, Channel channel,
+                       int16_t output[], uint32_t step) const = 0;
 
   // Returns true if it should be processed again everytime luma changes.
   virtual bool DependsOnLuma() const { return false; }
@@ -92,14 +93,21 @@ class Predictor : public WP2Allocable {
     (void)cb, (void)channel;
     return true;
   }
-  virtual void WriteParams(const CodedBlock& cb, Channel channel,
-                           SymbolManager* const sm,
-                           ANSEncBase* const enc) const {
+  // Writes the side-parameter to the bitstream.
+  // Returns the sub-mode used, for info.
+  virtual uint32_t WriteParams(const CodedBlockBase& cb, Channel channel,
+                               SymbolManager* const sm,
+                               ANSEncBase* const enc) const {
     (void)cb, (void)channel, (void)sm, (void)enc;
+    return 0;
   }
-  virtual void ReadParams(CodedBlock* const cb, Channel channel,
-                          SymbolReader* const sm, ANSDec* const dec) const {
+  // Reads the side-parameter for the predictor. Return the index offset to the
+  // actual predictor to use (for instance, when refining the angular
+  // prediction). Returns 0 if the predictor isn't changed.
+  virtual uint32_t ReadParams(CodedBlockBase* const cb, Channel channel,
+                              SymbolReader* const sm, ANSDec* const dec) const {
     (void)cb, (void)channel, (void)sm, (void)dec;
+    return 0;
   }
   // Setter/Getter for the mode of a predictor. For now, each predictor is its
   // own mode, and we set it to the index in the vector containing all
@@ -111,7 +119,7 @@ class Predictor : public WP2Allocable {
   virtual std::string GetName() const = 0;
   virtual std::string GetInfoStr() const { return ""; }
   virtual std::string GetFakePredStr() const = 0;
-  virtual std::string GetPredStr(const CodedBlock& cb,
+  virtual std::string GetPredStr(const CodedBlockBase& cb,
                                  Channel channel) const = 0;
   virtual void Draw(const WP2::Rectangle& rect,
                     ArgbBuffer* const debug_output) const = 0;
@@ -132,17 +140,17 @@ struct PredictorVector : public Vector<Predictor*> {
 };
 
 //------------------------------------------------------------------------------
-// Predictors.
-
 // Class containing the different predictors.
+
 struct EncoderConfig;
 class BlockContext;
 class Segment;
-class SymbolRecorder;
+
 class Predictors {
  public:
   Predictors() = default;
   Predictors(Predictors&&) = default;
+
   void reset() {
     preds_.reset();
     preds_no_angle_.reset();
@@ -152,8 +160,14 @@ class Predictors {
   const Predictor* operator[](uint32_t i) const { return preds_[i]; }
   PredictorVector::const_iterator begin() const { return preds_.begin(); }
   PredictorVector::const_iterator end() const { return preds_.end(); }
-  // Finds the best predictor for a block 'cb'. This predictor has to give a
-  // score better than the current one 'best_score'.
+
+  // Get the predictor for a given mode read from the bitstream.
+  const Predictor* GetPred(uint32_t mode, uint32_t sub_mode = 0) const;
+  // Get the maximum mode (inclusive) contained in a predictor vector.
+  uint32_t GetMaxMode() const;
+
+  // Encoder: Finds the best predictor for a block 'cb'. This predictor has to
+  // give a score better than the current one 'best_score'.
   // This is effort dependent: it looks at all non-angle predictors, and for
   // angle predictors, it looks at the main angles but only refine some of them
   // depending on the effort.
@@ -168,13 +182,10 @@ class Predictors {
                      float* const best_score,
                      const Predictor** const best_predictor,
                      TransformPair* const best_tf) const;
-  // Get the index of the firt predictor with a given mode.
-  const Predictor* GetFirstWithMode(uint32_t mode) const;
-  const Predictor* GetWithMode(uint32_t mode, uint32_t sub_mode) const;
-  // Get the maximum mode contained in a predictor vector.
-  uint32_t GetMaxMode() const;
 
  protected:
+  Channel channel_;
+
   enum class Pred {
     kDcAll,
     kDcLeft,
@@ -205,15 +216,20 @@ class Predictors {
                      int16_t min_value, int16_t max_value,
                      const CSPTransform* const transform);
 
+
+ private:
+  // Takes care of recording a freshly allocated predictor 'pred'.
+  // Warning: pred can be wrapped in an alpha-predictor, so the
+  // returned predictor is not necessarily the input 'pred'.
+  // Returns nullptr in case of problem (and disallocates 'pred').
+  Predictor* RecordPredictor(Predictor* pred, uint32_t mode,
+                             const CSPTransform* const transform);
+
   PredictorVector preds_;
   Vector<const Predictor*> preds_no_angle_;
   std::array<const Predictor*, kAnglePredNum> preds_main_angle_;
-  Channel channel_;
-
- private:
-  // At each index, contains a pointer to the first Predictor with
-  // mode == index.
-  std::array<const Predictor*, kYBasePredNum + kAnglePredNum> first_with_mode_;
+  // Index of the first predictor with mode 'i' in preds_[].
+  uint32_t main_modes_[kYBasePredNum + kAnglePredNum];
 };
 
 class YAPredictors : public Predictors {
@@ -223,7 +239,7 @@ class YAPredictors : public Predictors {
 
 class YPredictors : public YAPredictors {
  public:
-  YPredictors();
+  YPredictors() { channel_ = kYChannel; }
   YPredictors(YPredictors&&) = default;
   // Fills the object with the non-angle and angle predictors.
   WP2Status Fill(int16_t min_value, int16_t max_value);
@@ -231,7 +247,7 @@ class YPredictors : public YAPredictors {
 
 class APredictors : public YAPredictors {
  public:
-  APredictors();
+  APredictors() { channel_ = kAChannel; }
   APredictors(APredictors&&) = default;
   // Fills the object with the non-angle and angle predictors.
   WP2Status Fill(int16_t min_value, int16_t max_value,
@@ -240,7 +256,7 @@ class APredictors : public YAPredictors {
 
 class UVPredictors : public Predictors {
  public:
-  UVPredictors();
+  UVPredictors() { channel_ = kUChannel; }
   UVPredictors(UVPredictors&&) = default;
   // Fills the object with the non-angle and angle predictors.
   WP2Status Fill(int16_t min_value, int16_t max_value);
@@ -251,11 +267,12 @@ class UVPredictors : public Predictors {
 // Context-based predictor base class.
 class ContextPredictor : public Predictor {
  public:
-  void Predict(const CodedBlock& cb, Channel channel, int16_t output[],
+  void Predict(const CodedBlockBase& cb, Channel channel, int16_t output[],
                uint32_t step) const override;
 
   std::string GetFakePredStr() const override;
-  std::string GetPredStr(const CodedBlock& cb, Channel channel) const override;
+  std::string GetPredStr(const CodedBlockBase& cb,
+                         Channel channel) const override;
 
  protected:
   virtual void Predict(const int16_t context[], uint32_t w, uint32_t h,
@@ -277,37 +294,38 @@ class CflPredictor : public Predictor {
  public:
   CflPredictor(int16_t min_value, int16_t max_value);
 
-  void Predict(const CodedBlock& cb, Channel channel, int16_t output[],
+  void Predict(const CodedBlockBase& cb, Channel channel, int16_t output[],
                uint32_t step) const override;
 
   bool DependsOnLuma() const override { return true; }
 
   std::string GetName() const override;
   std::string GetFakePredStr() const override;
-  std::string GetPredStr(const CodedBlock& cb, Channel channel) const override;
+  std::string GetPredStr(const CodedBlockBase& cb,
+                         Channel channel) const override;
   void Draw(const WP2::Rectangle& rect,
             ArgbBuffer* const debug_output) const override {}
 
   // Does a simple linear regression based on the context for chroma and luma,
   // assuming chroma = a * luma + b. Returns values in kCfLBits precision.
-  void ContextLinearRegression(Channel channel, const CodedBlock& cb,
-                               int32_t* a, int32_t* b) const;
+  void ContextLinearRegression(Channel channel, const CodedBlockBase& cb,
+                               int32_t* const a, int32_t* const b) const;
   // Does a simple linear regression based on the reconstructed luma and input
   // chroma, assuming chroma = a * luma + b.
   // a and b are returned in kCfLBits precision.
   void BlockLinearRegression(Channel channel, const CodedBlock& cb,
-                             int32_t* a, int32_t* b) const;
+                             int32_t* const a, int32_t* const b) const;
 
  protected:
   void LinearRegression(const int16_t* const luma, const int16_t* const chroma,
                         uint32_t size,
                         int32_t* const a, int32_t* const b) const;
 
-  virtual void DoPredict(const CodedBlock& cb, Channel channel,
+  virtual void DoPredict(const CodedBlockBase& cb, Channel channel,
                          uint32_t x_start, uint32_t y_start, uint32_t w,
                          uint32_t h, int16_t* output, uint32_t step) const;
   // for debug:
-  void DisplaySamples(const CodedBlock& cb, Channel channel,
+  void DisplaySamples(const CodedBlockBase& cb, Channel channel,
                       std::string* const str) const;
 
  protected:
@@ -315,6 +333,7 @@ class CflPredictor : public Predictor {
   // 'a' is in range [-4,4), 'b' is in range [-1024, 1023]
   static constexpr uint32_t kCflABits = kCflFracBits + 2 + 1;
   static constexpr uint32_t kCflBBits = kCflFracBits + kMaxYuvBits + 2;
+  static constexpr float kCflNorm = 1. / (1 << kCflFracBits);
 
   const int16_t min_value_;
   const int16_t max_value_;
@@ -328,27 +347,28 @@ class SignalingCflPredictor : public CflPredictor {
   SignalingCflPredictor(int16_t min_value, int16_t max_value);
 
   std::string GetName() const override;
-  std::string GetPredStr(const CodedBlock& cb, Channel channel) const override;
+  std::string GetPredStr(const CodedBlockBase& cb,
+                         Channel channel) const override;
 
   bool ComputeParams(CodedBlock* const cb, Channel channel) const override;
-  void WriteParams(const CodedBlock& cb, Channel channel,
-                   SymbolManager* const sm,
-                   ANSEncBase* const enc) const override;
-  void ReadParams(CodedBlock* const cb, Channel channel, SymbolReader* const sr,
-                  ANSDec* const dec) const override;
+  uint32_t WriteParams(const CodedBlockBase& cb, Channel channel,
+                       SymbolManager* const sm,
+                       ANSEncBase* const enc) const override;
+  uint32_t ReadParams(CodedBlockBase* const cb, Channel channel,
+                      SymbolReader* const sr, ANSDec* const dec) const override;
 
   bool DependsOnLuma() const override { return true; }
 
-  // CodedBlock::cfl_[] params are in 1:2:6 fixed-point precision.
+  // CodedBlockBase::cfl_[] params are in 1:2:6 fixed-point precision.
   constexpr static uint32_t kIOFracBits = 6;
   constexpr static uint32_t kIOBits = 9;   // including sign
 
  protected:
-  void DoPredict(const CodedBlock& cb, Channel channel, uint32_t unused_x,
+  void DoPredict(const CodedBlockBase& cb, Channel channel, uint32_t unused_x,
                  uint32_t unused_y, uint32_t w, uint32_t h, int16_t* output,
                  uint32_t step) const override;
-  void GetParams(const CodedBlock& cb, Channel channel, uint32_t w, uint32_t h,
-                 int32_t* a, int32_t* b) const;
+  void GetParams(const CodedBlockBase& cb, Channel channel,
+                 uint32_t w, uint32_t h, int32_t* a, int32_t* b) const;
 };
 
 //------------------------------------------------------------------------------

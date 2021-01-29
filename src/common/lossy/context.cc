@@ -45,7 +45,7 @@ WP2Status BlockContextPredictor::Init(uint8_t symbol, uint32_t symbol_range,
   return WP2_STATUS_OK;
 }
 
-void BlockContextPredictor::SetValue(const CodedBlock& cb, uint8_t value) {
+void BlockContextPredictor::SetValue(const CodedBlockBase& cb, uint8_t value) {
   ctxt_.Set(cb.blk(), value);
 }
 
@@ -60,13 +60,13 @@ WP2Status BlockContextPredictor::CopyFrom(const BlockContextPredictor& other) {
   return WP2_STATUS_OK;
 }
 
-void BlockContextPredictor::WriteValue(const CodedBlock& cb, uint8_t value,
+void BlockContextPredictor::WriteValue(const CodedBlockBase& cb, uint8_t value,
                                        SymbolManager* const sm,
                                        ANSEncBase* const enc, WP2_OPT_LABEL) {
   sm->Process(symbol_, GetSlot(cb, value), label, enc);
 }
 
-uint8_t BlockContextPredictor::ReadValue(const CodedBlock& cb,
+uint8_t BlockContextPredictor::ReadValue(const CodedBlockBase& cb,
                                          SymbolReader* const sr,
                                          WP2_OPT_LABEL) {
   const uint32_t slot = sr->Read(symbol_, label);
@@ -75,7 +75,7 @@ uint8_t BlockContextPredictor::ReadValue(const CodedBlock& cb,
   return context[slot];
 }
 
-void BlockContextPredictor::GetContext(const CodedBlock& cb,
+void BlockContextPredictor::GetContext(const CodedBlockBase& cb,
                                        uint8_t* const context) const {
   uint8_t context_tmp[kMaxContextSize];
   int8_t y_left_occ, y_right_occ;
@@ -92,7 +92,7 @@ void BlockContextPredictor::GetContext(const CodedBlock& cb,
   }
 }
 
-uint32_t BlockContextPredictor::GetSlot(const CodedBlock& cb,
+uint32_t BlockContextPredictor::GetSlot(const CodedBlockBase& cb,
                                         uint8_t id) const {
   uint8_t id_ctxt[kMaxRange];
   GetContext(cb, id_ctxt);
@@ -107,7 +107,7 @@ uint32_t BlockContextPredictor::GetSlot(const CodedBlock& cb,
 // SegmentIdPredictor
 //------------------------------------------------------------------------------
 
-void SegmentIdPredictor::InitInitialSegmentId(const CodedBlock& cb,
+void SegmentIdPredictor::InitInitialSegmentId(const CodedBlockBase& cb,
                                               uint32_t id) {
   predictor_.SetValue(cb, id);
 }
@@ -135,7 +135,8 @@ WP2Status SegmentIdPredictor::WriteHeader(ANSEncBase* const enc) {
   return WP2_STATUS_OK;
 }
 
-void SegmentIdPredictor::WriteId(const CodedBlock& cb, SymbolManager* const sm,
+void SegmentIdPredictor::WriteId(const CodedBlockBase& cb,
+                                 SymbolManager* const sm,
                                  ANSEncBase* const enc) {
   if (explicit_segment_ids_ && !cb.blk().IsSmall()) {
     predictor_.WriteValue(cb, cb.id_, sm, enc, "segment_id");
@@ -162,7 +163,8 @@ WP2Status SegmentIdPredictor::ReadHeader(ANSDec* const dec,
   return WP2_STATUS_OK;
 }
 
-void SegmentIdPredictor::ReadId(SymbolReader* const sr, CodedBlock* const cb) {
+void SegmentIdPredictor::ReadId(SymbolReader* const sr,
+                                CodedBlockBase* const cb) {
   if (explicit_segment_ids_ && !cb->blk().IsSmall()) {
     cb->id_ = predictor_.ReadValue(*cb, sr, "segment_id");
   } else {
@@ -220,13 +222,13 @@ WP2Status DCPredictor::WriteHeader(uint32_t cluster, uint32_t max_count,
   return WP2_STATUS_OK;
 }
 
-void DCPredictor::Record(const CodedBlock& cb, const DCValues& DCs,
+void DCPredictor::Record(const CodedBlockBase& cb, const DCValues& DCs,
                          SymbolRecorder* const recorder) {
   ANSEncNoop enc;
   Write(cb, DCs, &enc, recorder);
 }
 
-void DCPredictor::Write(const CodedBlock& cb, const DCValues& DCs,
+void DCPredictor::Write(const CodedBlockBase& cb, const DCValues& DCs,
                         ANSEncBase* const enc, SymbolManager* const sm) {
   DCValues dc_preds;
   GetDCPrediction(cb, &dc_preds);
@@ -256,7 +258,7 @@ WP2Status DCPredictor::InitRead(uint32_t cluster, SymbolReader* const sr,
 }
 
 void DCPredictor::Read(ANSDec* const dec, SymbolReader* const sr,
-                       const CodedBlock& cb, DCValues* const DCs) {
+                       const CodedBlockBase& cb, DCValues* const DCs) {
   GetDCPrediction(cb, DCs);
   for (uint32_t c = 0; c < 3; ++c) {
     if (!dec->ReadABit(&is_zero_, "C0-dc_zero")) {
@@ -274,7 +276,7 @@ void DCPredictor::Read(ANSDec* const dec, SymbolReader* const sr,
 
 //------------------------------------------------------------------------------
 
-void DCPredictor::GetDCPrediction(const CodedBlock& cb,
+void DCPredictor::GetDCPrediction(const CodedBlockBase& cb,
                                   DCValues* const values) {
   DCValues context[kMaxContextSize];
   int8_t y_left_occ, y_right_occ;
@@ -308,17 +310,17 @@ WP2Status AlphaModePredictor::CopyFrom(const AlphaModePredictor& other) {
   return predictor_.CopyFrom(other.predictor_);
 }
 
-void AlphaModePredictor::Update(const CodedBlock& cb) {
+void AlphaModePredictor::Update(const CodedBlockBase& cb) {
   predictor_.SetValue(cb, (uint8_t)cb.alpha_mode_);
 }
 
-void AlphaModePredictor::Write(const CodedBlock& cb, ANSEncBase* const enc,
+void AlphaModePredictor::Write(const CodedBlockBase& cb, ANSEncBase* const enc,
                                SymbolManager* const sw) {
   predictor_.WriteValue(cb, (uint8_t)cb.alpha_mode_, sw, enc, "alpha_mode");
   Update(cb);
 }
 
-BlockAlphaMode AlphaModePredictor::Read(const CodedBlock& cb,
+BlockAlphaMode AlphaModePredictor::Read(const CodedBlockBase& cb,
                                         SymbolReader* const sr) {
   const uint32_t mode = predictor_.ReadValue(cb, sr, "alpha_mode");
   predictor_.SetValue(cb, (int)mode);

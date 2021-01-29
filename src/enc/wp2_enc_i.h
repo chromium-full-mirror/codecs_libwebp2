@@ -23,7 +23,6 @@
 #include <memory>
 
 #include "src/common/global_params.h"
-#include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size_io.h"
 #include "src/common/lossy/context.h"
 #include "src/common/lossy/predictor.h"
@@ -32,6 +31,7 @@
 #include "src/common/progress_watcher.h"
 #include "src/dsp/dsp.h"
 #include "src/enc/analysis.h"
+#include "src/enc/block_enc.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/residuals_enc_aom.h"
 #include "src/enc/symbols_enc.h"
@@ -318,7 +318,7 @@ class SyntaxWriter : public WP2Allocable {
   // Records the block's content, except for size and alpha.
   WP2Status Record(const CodedBlock& cb);
   // Records the block's size.
-  WP2Status RecordSize(const FrontMgrNxNBase& mgr, BlockSize dim);
+  WP2Status RecordSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim);
   // Writes the headers (frozen dictionaries, etc.).
   WP2Status WriteHeader(ANSEncBase* const enc);
   // These write the block header (segment id, preds, etc.).
@@ -343,7 +343,7 @@ class SyntaxWriter : public WP2Allocable {
   // puts it in size order (order in which block sizes are written).
   WP2Status WriteBlocks(const Vector<CodedBlock>& cblocks,
                         const Vector_u16& size_order_indices,
-                        FrontMgrNxNBase* const mgr, ANSEnc* const enc);
+                        FrontMgrDoubleOrderBase* const mgr, ANSEnc* const enc);
 
   SymbolWriter* symbol_writer() { return &symbol_writer_; }
   const SymbolRecorder& symbol_recorder() const { return symbol_recorder_; }

@@ -69,10 +69,10 @@ void CreateData(uint32_t w, uint32_t h, bool snapped,
 //------------------------------------------------------------------------------
 
 enum FrontMgrType { kLexico, kMax, kArea };
-FrontMgrNxNBase* GetMgr(FrontMgrType front_mgr_type,
-                        FrontMgrLexico* const mgr_lex,
-                        FrontMgrMax* const mgr_max,
-                        FrontMgrArea* const mgr_area) {
+FrontMgrDoubleOrderBase* GetMgr(FrontMgrType front_mgr_type,
+                                FrontMgrLexico* const mgr_lex,
+                                FrontMgrMax* const mgr_max,
+                                FrontMgrArea* const mgr_area) {
   if (front_mgr_type == kLexico) return mgr_lex;
   if (front_mgr_type == kMax) return mgr_max;
   if (front_mgr_type == kArea) return mgr_area;
@@ -102,7 +102,7 @@ TEST_P(TestFrontMgr, LeftContext) {
 
     VectorNoCtor<Block> blocks;
     Vector_u16 size_order_indices;
-    FrontMgrNxNBase* const mgr =
+    FrontMgrDoubleOrderBase* const mgr =
         GetMgr(front_mgr_type, &mgr_lex, &mgr_max, &mgr_area);
     CreateData(w, h, GetSnapped(front_mgr_type), &gen, &blocks);
 
@@ -130,7 +130,7 @@ TEST_P(TestFrontMgr, LeftContext) {
       ASSERT_FALSE(mgr->Done());
       ASSERT_TRUE(mgr->UseSize(block.dim(), /*ind=*/0u, &block_tmp));
       ASSERT_EQ(block, block_tmp);
-      while (mgr->UseFinal()) {
+      while (mgr->UseReady()) {
       }
     }
     ASSERT_TRUE(mgr->Done());
@@ -149,7 +149,7 @@ TEST_P(TestFrontMgr, CopyFrom) {
   FrontMgrLexico mgr_lex_clone;
   FrontMgrMax mgr_max_clone;
   FrontMgrArea mgr_area_clone(kAreaSize, kAreaSize);
-  FrontMgrNxNBase* const mgr_clone =
+  FrontMgrDoubleOrderBase* const mgr_clone =
       GetMgr(front_mgr_type, &mgr_lex_clone, &mgr_max_clone, &mgr_area_clone);
 
   for (size_t n = 0; n < num_iterations; ++n) {
@@ -158,7 +158,7 @@ TEST_P(TestFrontMgr, CopyFrom) {
     FrontMgrLexico mgr_lex;
     FrontMgrMax mgr_max;
     FrontMgrArea mgr_area(kAreaSize, kAreaSize);
-    FrontMgrNxNBase* const mgr =
+    FrontMgrDoubleOrderBase* const mgr =
         GetMgr(front_mgr_type, &mgr_lex, &mgr_max, &mgr_area);
 
     ASSERT_WP2_OK(mgr->Init(ALL_RECTS, GetSnapped(front_mgr_type), w, h));
@@ -196,12 +196,12 @@ TEST_P(TestFrontMgr, CopyFrom) {
 
         ASSERT_TRUE(
             mgr_clone->UseSize(block.dim(), /*ind=*/0u, &block_tmp_clone));
-        while (mgr_clone->UseFinal()) {
+        while (mgr_clone->UseReady()) {
         }
       }
 
       ASSERT_TRUE(mgr->UseSize(block.dim(), /*ind=*/0u, &block_tmp));
-      while (mgr->UseFinal()) {
+      while (mgr->UseReady()) {
       }
       --num_blocks_before_cloning;
     }
@@ -235,9 +235,9 @@ TEST(TestFrontMgr, Area) {
   for (const Block& block : blocks) {
     ASSERT_FALSE(mgr.Done());
     Block next_block;
-    ASSERT_TRUE(mgr.UseSize(block.dim(), /*ind=*/0, &next_block));
+    ASSERT_TRUE(
+        mgr.UseSize(block.dim(), /*ind=*/0, &next_block, /*use_block=*/true));
     ASSERT_EQ(block, next_block);
-    mgr.Use(block);
   }
   ASSERT_TRUE(mgr.Done());
 }

@@ -67,3 +67,15 @@ function(AllowNonLiteral varName)
     set_property(TARGET ${varName} PROPERTY COMPILE_FLAGS ${FLAGS})
   endif()
 endfunction()
+
+if(MSVC)
+  # windows.h defines min/max macros (std collision) unless NOMINMAX is defined.
+  # M_PI from math.h needs _USE_MATH_DEFINES with MSVC.
+  list(APPEND WP2_DEFINITIONS NOMINMAX _USE_MATH_DEFINES)
+
+  # Treat warnings as errors. Enable all level-2 warnings except:
+  #  - C4146: unary minus operator applied to unsigned, result still unsigned
+  #  - C4244: conversion, possible loss of data (e.g. int64_t to int32_t)
+  #  - C4305: 'initializing': truncation from 'double' to 'const float'
+  add_compile_options(/WX /W2 /wd4146 /wd4244 /wd4305)
+endif()

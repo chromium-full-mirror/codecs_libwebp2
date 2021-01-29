@@ -32,6 +32,7 @@ namespace WP2 {
 struct EncoderConfig;
 class CSPTransform;
 class CodedBlock;
+class CodedBlockBase;
 class SymbolManager;
 class SymbolReader;
 class GlobalParams;
@@ -75,9 +76,9 @@ class Segment {
 
   // I/O for Encoding methods.
   WP2Status ReadEncodingMethods(SymbolReader* const sr,
-                                CodedBlock* const cb) const;
+                                CodedBlockBase* const cb) const;
 
-  void StoreEncodingMethods(const CodedBlock& cb, SymbolManager* const sm,
+  void StoreEncodingMethods(const CodedBlockBase& cb, SymbolManager* const sm,
                             ANSEncBase* const enc) const;
 
  public:

@@ -31,6 +31,7 @@
 #include "src/dec/symbols_dec.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/enc/block_enc.h"
 #include "src/enc/symbols_enc.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
@@ -50,25 +51,15 @@ void PredictorVector::reset() {
 //------------------------------------------------------------------------------
 // For debugging only.
 
-// Appends a formatted literal to a std::string.
-#define WP2SAppend(str_ptr, ...)                                         \
-  do {                                                                   \
-    const uint32_t size = std::snprintf(nullptr, 0, __VA_ARGS__) + 1;    \
-    (str_ptr)->resize((str_ptr)->size() + size);                         \
-    std::snprintf((char*)&(str_ptr)->at((str_ptr)->size() - size), size, \
-                  __VA_ARGS__);                                          \
-    (str_ptr)->pop_back(); /* Remove ending '\0' */                      \
-  } while (false)
-
 std::string GetContextAndBlockPixelsStr(const int16_t context[],
                                         const int16_t context_right[],
                                         const int16_t context_left[],
                                         uint32_t w, uint32_t h,
                                         const int16_t block[], uint32_t step) {
   std::string str;
-  WP2SAppend(&str, "     %4d | ", context[h]);
-  for (uint32_t i = 0; i < w; ++i) WP2SAppend(&str, "%4d ", context[h + 1 + i]);
-  WP2SAppend(&str, "| %4d", context[h + 1 + w]);
+  str += WP2SPrint("     %4d | ", context[h]);
+  for (uint32_t i = 0; i < w; ++i) str += WP2SPrint("%4d ", context[h + 1 + i]);
+  str += WP2SPrint("| %4d", context[h + 1 + w]);
   uint32_t num_extra_dashes = 0;
   const uint32_t tr_size = ContextSize(kContextExtendRight, w, h);
   uint32_t tr_i = h + 1 + w + 1;
@@ -77,7 +68,7 @@ std::string GetContextAndBlockPixelsStr(const int16_t context[],
     // Display the first extended right context values.
     for (uint32_t x = 0; x < 7 && tr_i < tr_size;
          ++x, ++tr_i, ++num_extra_dashes) {
-      WP2SAppend(&str, "%4d ", context_right[tr_i]);
+      str += WP2SPrint("%4d ", context_right[tr_i]);
     }
   }
   str += "\n----------+-";
@@ -89,30 +80,30 @@ std::string GetContextAndBlockPixelsStr(const int16_t context[],
        ++y) {
     if (y < h) {
       if (context_left != nullptr) {
-        WP2SAppend(&str, "%4d ", context_left[y]);
+        str += WP2SPrint("%4d ", context_left[y]);
       } else {
-        WP2SAppend(&str, "     ");
+        str += "     ";
       }
-      WP2SAppend(&str, "%4d | ", context[h - 1 - y]);
+      str += WP2SPrint("%4d | ", context[h - 1 - y]);
       for (uint32_t x = 0; x < w; ++x) {
-        WP2SAppend(&str, "%4d ", block[x + y * step]);
+        str += WP2SPrint("%4d ", block[x + y * step]);
       }
-      WP2SAppend(&str, "| %4d", context[h + 1 + w + 1 + y]);
+      str += WP2SPrint("| %4d", context[h + 1 + w + 1 + y]);
     } else if (y == h) {
-      WP2SAppend(&str, "  ^___| %*s", 7 + w * 5 + 6 - 8, " ");
+      str += WP2SPrint("  ^___| %*s", 7 + w * 5 + 6 - 8, " ");
     } else {
-      WP2SAppend(&str, "%*s", 7 + w * 5 + 6, " ");
+      str += WP2SPrint("%*s", 7 + w * 5 + 6, " ");
     }
     // Display remaining extended right context in small batches on the right.
     if (context_right != nullptr) {
       if (tr_i < tr_size) {
-        WP2SAppend(&str, "               ");
+        str += "               ";
         for (uint32_t x = 0; x < 4 && tr_i < tr_size; ++x, ++tr_i) {
-          WP2SAppend(&str, " %4d", context_right[tr_i]);
+          str += WP2SPrint(" %4d", context_right[tr_i]);
         }
       }
     }
-    WP2SAppend(&str, "\n");
+    str += "\n";
   }
   return str;
 }
@@ -130,7 +121,7 @@ const int16_t kFakeContext[kContextSize] = {
 // Dummy predictor that always predicts zero.
 class ZeroPredictor : public Predictor {
  public:
-  void Predict(const CodedBlock& cb, Channel, int16_t output[],
+  void Predict(const CodedBlockBase& cb, Channel, int16_t output[],
                uint32_t step) const override {
     for (uint32_t y = 0; y < cb.h_pix(); ++y) {
       std::fill(output + y * step, output + y * step + cb.w_pix(), 0);
@@ -139,7 +130,8 @@ class ZeroPredictor : public Predictor {
 
   std::string GetName() const override { return "zero predictor"; }
   std::string GetFakePredStr() const override { return "zero predictor"; }
-  std::string GetPredStr(const CodedBlock& cb, Channel channel) const override {
+  std::string GetPredStr(const CodedBlockBase& cb,
+                         Channel channel) const override {
     return "zero predictor";
   }
   void Draw(const WP2::Rectangle& rect,
@@ -148,7 +140,7 @@ class ZeroPredictor : public Predictor {
 
 //------------------------------------------------------------------------------
 
-void ContextPredictor::Predict(const CodedBlock& cb, Channel channel,
+void ContextPredictor::Predict(const CodedBlockBase& cb, Channel channel,
                                int16_t output[], uint32_t step) const {
   const int16_t* const context = cb.GetContext(channel, context_type_);
   Predict(context, cb.w_pix(), cb.h_pix(), output, step);
@@ -159,7 +151,7 @@ std::string ContextPredictor::GetFakePredStr() const {
                     kPredWidth, kPredHeight);
 }
 
-std::string ContextPredictor::GetPredStr(const CodedBlock& cb,
+std::string ContextPredictor::GetPredStr(const CodedBlockBase& cb,
                                          Channel channel) const {
   const int16_t* const context = cb.GetContext(channel, kContextSmall);
   // Always display the top right context.
@@ -319,6 +311,8 @@ class AnglePredictor : public ContextPredictor {
         angle_delta_(angle_delta),
         angle_idx_(AngleIdx(type, channel, angle_delta)) {
     context_type_ = GetContextType(angle_idx_);
+    static_assert((uint32_t)Type::Num == kAnglePredNum,
+                  "Incorrect kAnglePredNum");
   }
 
   // Returns the angle index for precalculated angles.
@@ -340,28 +334,30 @@ class AnglePredictor : public ContextPredictor {
     return 22.5f + 22.5f * ((int)angle_idx_ - 3) / 7.f;
   }
 
-  void WriteParams(const CodedBlock& cb, Channel channel,
-                   SymbolManager* const sm,
-                   ANSEncBase* const enc) const override {
-    if (channel == kVChannel) return;
+  uint32_t WriteParams(const CodedBlockBase& cb, Channel channel,
+                       SymbolManager* const sm,
+                       ANSEncBase* const enc) const override {
+    if (channel == kVChannel) return 0;
     (void)cb;
     (void)sm;
     // By storing the angle step, we are then able, at decoding time, to figure
     // out the sub-mode of an angle predictor.
     const uint32_t max_delta = GetMaxAngleDelta(channel);
-    enc->PutRValue(max_delta + angle_delta_, 2 * max_delta + 1, "angle_step");
+    const uint32_t sub_mode = max_delta + angle_delta_;
+    enc->PutRValue(sub_mode, 2 * max_delta + 1, "angle_step");
+    return sub_mode;
   }
 
-  void ReadParams(CodedBlock* const cb, Channel channel, SymbolReader* const sm,
-                  ANSDec* const dec) const override {
-    if (channel == kVChannel) return;
+  uint32_t ReadParams(CodedBlockBase* const cb, Channel channel,
+                      SymbolReader* const sm,
+                      ANSDec* const dec) const override {
+    if (channel == kVChannel) return 0;
     (void)sm;
-    CodedBlock::CodingParams* const params = cb->GetCodingParams(channel);
     // TODO(vrabaud) explore using a symbol for the step, like in AV1.
     const uint32_t max_delta = GetMaxAngleDelta(channel);
     const uint32_t angle_step =
         dec->ReadRValue(2 * max_delta + 1, "angle_step");
-    params->pred_sub_mode = angle_step;
+    return angle_step;
   }
 
   std::string GetName() const override {
@@ -492,7 +488,7 @@ class GradientPredictor : public ContextPredictor {
 //------------------------------------------------------------------------------
 // Alpha predictor.
 
-void AdjustAlphaPrediction(const CodedBlock& cb, CSPTransform transform,
+void AdjustAlphaPrediction(const CodedBlockBase& cb, CSPTransform transform,
                            int16_t output[], uint32_t step);
 
 // Predictor for the alpha plane, that wraps a normal predictor, and adjusts
@@ -508,7 +504,7 @@ class AlphaPredictor : public Predictor {
 
   ~AlphaPredictor() override { delete pred_; }
 
-  void Predict(const CodedBlock& cb, Channel channel, int16_t output[],
+  void Predict(const CodedBlockBase& cb, Channel channel, int16_t output[],
                uint32_t step) const override {
     assert(channel == kAChannel);  // Should only be used for alpha.
     pred_->Predict(cb, channel, output, step);
@@ -522,7 +518,8 @@ class AlphaPredictor : public Predictor {
     printf("alpha predictor based on:\n");
     return pred_->GetFakePredStr();
   }
-  std::string GetPredStr(const CodedBlock& cb, Channel channel) const override {
+  std::string GetPredStr(const CodedBlockBase& cb,
+                         Channel channel) const override {
     std::string str = pred_->GetPredStr(cb, channel);
     str += "==> adjusted by alpha predictor:\n";
     int16_t output[kMaxBlockSizePix2];
@@ -542,14 +539,15 @@ class AlphaPredictor : public Predictor {
   bool ComputeParams(CodedBlock* const cb, Channel channel) const override {
     return pred_->ComputeParams(cb, channel);
   }
-  void WriteParams(const CodedBlock& cb, Channel channel,
-                   SymbolManager* const sm,
-                   ANSEncBase* const enc) const override {
-    pred_->WriteParams(cb, channel, sm, enc);
+  uint32_t WriteParams(const CodedBlockBase& cb, Channel channel,
+                       SymbolManager* const sm,
+                       ANSEncBase* const enc) const override {
+    return pred_->WriteParams(cb, channel, sm, enc);
   }
-  void ReadParams(CodedBlock* const cb, Channel channel, SymbolReader* const sm,
-                  ANSDec* const dec) const override {
-    pred_->ReadParams(cb, channel, sm, dec);
+  uint32_t ReadParams(
+      CodedBlockBase* const cb, Channel channel,
+      SymbolReader* const sm, ANSDec* const dec) const override {
+    return pred_->ReadParams(cb, channel, sm, dec);
   }
   bool DependsOnLuma() const override { return true; }
 
@@ -560,29 +558,38 @@ class AlphaPredictor : public Predictor {
 
 //------------------------------------------------------------------------------
 
-const Predictor* Predictors::GetFirstWithMode(uint32_t mode) const {
-  return first_with_mode_[mode];
-}
-
-const Predictor* Predictors::GetWithMode(uint32_t mode,
-                                         uint32_t sub_mode) const {
-  uint32_t ind = 0;
-  for (const auto& p : preds_) {
-    assert(p->mode() != Predictor::kInvalidMode);
-    if (p->mode() == mode) break;
-    ++ind;
-  }
-  if (ind < preds_.size()) {
-    return preds_[ind + sub_mode];
-  } else {
-    assert(false);
-    return nullptr;
-  }
-}
-
-// Get the maximum mode contained in a predictor vector.
 uint32_t Predictors::GetMaxMode() const {
   return preds_no_angle_.size() + kAnglePredNum - 1;
+}
+
+const Predictor* Predictors::GetPred(uint32_t mode, uint32_t sub_mode) const {
+  const uint32_t index = main_modes_[mode];
+  assert(index + sub_mode < preds_.size());
+  assert(mode == GetMaxMode() || (index + sub_mode < main_modes_[mode + 1]));
+  assert(preds_[index]->mode() == preds_[index + sub_mode]->mode());
+  return preds_[index + sub_mode];
+}
+
+//------------------------------------------------------------------------------
+
+Predictor* Predictors::RecordPredictor(
+    Predictor* pred, uint32_t mode, const CSPTransform* const transform) {
+  if (pred == nullptr) return nullptr;
+  pred->SetMode(mode);
+  if (channel_ == kAChannel) {
+    AlphaPredictor* const alpha_pred =
+        new (WP2Allocable::nothrow) AlphaPredictor(pred, *transform);
+    if (alpha_pred == nullptr) {
+      delete pred;
+      return nullptr;
+    }
+    pred = alpha_pred;
+  }
+  if (!preds_.push_back(pred)) {
+    delete pred;
+    return nullptr;
+  }
+  return pred;
 }
 
 WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
@@ -590,16 +597,19 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
                                const CSPTransform* const transform) {
   const int max_delta = GetMaxAngleDelta(channel_);
   WP2_CHECK_ALLOC_OK(preds_.reserve(
-      num_modes + 2 * max_delta * (uint32_t)AnglePredictor::Type::Num));
+      num_modes + (2 * max_delta) * (uint32_t)AnglePredictor::Type::Num));
   assert(num_modes >= (uint32_t)AnglePredictor::Type::Num);
   WP2_CHECK_ALLOC_OK(
       preds_no_angle_.reserve(num_modes - (uint32_t)AnglePredictor::Type::Num));
 
-  for (uint8_t i = 0; i < num_modes; ++i) {
+  uint32_t angle_type = 0;
+  uint32_t i = 0;
+  for (; i < num_modes; ++i) {
     Pred p = mapping[i];
     WP2::Predictor* pred = nullptr;
 
-    bool is_angle = false;
+    main_modes_[i] = preds_.size();   // for fast lookup in GetPred()
+
     switch (p) {
       case Pred::kDcAll:
         pred = new (WP2Allocable::nothrow)
@@ -642,34 +652,19 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
       case Pred::kAngle180:
       case Pred::kAngle203:
       case Pred::kAngle225:
-        is_angle = true;
         for (int step = -max_delta; step <= max_delta; ++step) {
-          is_angle = true;
           // We assume they're in the same order in ContextPredictor and in
           // AnglePredictor::Type
-          const auto type =
-              (AnglePredictor::Type)((int)p - (int)Pred::kAngle23);
           pred = new (WP2Allocable::nothrow)
-              AnglePredictor(type, channel_, step, min_value, max_value);
+              AnglePredictor((AnglePredictor::Type)angle_type, channel_,
+                             step, min_value, max_value);
+          pred = RecordPredictor(pred, i, transform);
           WP2_CHECK_ALLOC_OK(pred != nullptr);
-          pred->SetMode(i);
-          if (channel_ == kAChannel) {
-            AlphaPredictor* const alpha_pred =
-                new (WP2Allocable::nothrow) AlphaPredictor(pred, *transform);
-            if (alpha_pred == nullptr) {
-              delete pred;
-              return WP2_STATUS_OUT_OF_MEMORY;
-            }
-            pred = alpha_pred;
-          }
-          if (!preds_.push_back(pred)) {
-            delete pred;
-            return WP2_STATUS_OUT_OF_MEMORY;
-          }
           // Store the main angle.
-          if (step == 0) preds_main_angle_[(uint32_t)type] = pred;
+          if (step == 0) preds_main_angle_[angle_type] = pred;
         }
-        break;
+        ++angle_type;
+        continue;   // done with angle preds
       case Pred::kCfl:
         pred = new (WP2Allocable::nothrow) CflPredictor(min_value, max_value);
         break;
@@ -685,313 +680,20 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
         break;
     }
 
-    if (is_angle) continue;
-
+    // non-angle predictor set-up:
+    pred = RecordPredictor(pred, i, transform);
     WP2_CHECK_ALLOC_OK(pred != nullptr);
-    pred->SetMode(i);
-
-    if (channel_ == kAChannel) {
-      WP2::Predictor* const alpha_pred =
-          new (WP2Allocable::nothrow) AlphaPredictor(pred, *transform);
-      if (alpha_pred == nullptr) {
-        delete pred;
-        return WP2_STATUS_OUT_OF_MEMORY;
-      }
-      pred = alpha_pred;
-    }
-
-    if (!preds_.push_back(pred)) {
-      delete pred;
-      return WP2_STATUS_OUT_OF_MEMORY;
-    }
     WP2_CHECK_ALLOC_OK(preds_no_angle_.push_back(pred));
   }
-  // Pre-compute the first predictors with a given mode.
-  assert(GetMaxMode() < first_with_mode_.size());
-  for (uint32_t mode = 0; mode <= GetMaxMode(); ++mode) {
-    first_with_mode_[mode] = GetWithMode(mode, 0);
-  }
-  return WP2_STATUS_OK;
-}
-
-// Struct computing some predictor scores.
-class PredictorScorer {
- public:
-  PredictorScorer(const EncoderConfig& config, const Rectangle& tile_rect,
-                  const BlockContext& context, const Segment& segment,
-                  Channel channel, uint32_t num_channels, bool reduced,
-                  Counters* const counters, float best_score)
-      : config_(config),
-        tile_rect_(tile_rect),
-        context_(context),
-        segment_(segment),
-        channel_(channel),
-        num_channels_(num_channels),
-        reduced_(reduced),
-        counters_(counters),
-        score_(0.f),
-        dist_(0),
-        best_score_(best_score),  // Needed for VDebug 'is_best'.
-        best_dist_(std::numeric_limits<uint32_t>::max()),
-        best_predictor_(nullptr),
-        best_tf_(kUnknownTf) {
-    (void)config_;  // only used by VDebug
+  assert(i <= GetMaxMode() + 1);
+  for (; i < WP2_ARRAY_SIZE(main_modes_); ++i) {
+    main_modes_[i] = 0;   // safety
   }
 
-  // Computes the score and dist of the given predictor 'p' applied to 'cb'.
-  WP2Status UpdateUVPredScore(const Predictor& p, CodedBlock* const cb) {
-    uint32_t dist[4];
-    float scores[4], res_rate[4], pred_rate[4];
-    for (Channel channel : {kUChannel, kVChannel}) {
-      const QuantMtx& quant = segment_.GetQuant(channel);
-      cb->Quantize(quant, channel, reduced_);
-      WP2_CHECK_STATUS(cb->GetRates(
-          context_, quant, channel, num_channels_, /*tf_rate=*/0.f, counters_,
-          &dist[channel], &res_rate[channel], &pred_rate[channel],
-          &scores[channel]));
-    }
-
-    score_ = (scores[kUChannel] + scores[kVChannel]) / 2.f;
-    dist_ = (dist[kUChannel] + dist[kVChannel]) / 2;
-
-#if !defined(WP2_REDUCE_BINARY_SIZE)
-    // Store scores for debug.
-    for (Channel channel : {kUChannel, kVChannel}) {
-      const QuantMtx& quant = segment_.GetQuant(channel);
-      cb->StorePredictionScore(
-          config_, tile_rect_, channel, p, cb->GetCodingParams(channel)->tf,
-          dist[channel], cb->lambda_mult_ * quant.lambda2, res_rate[channel],
-          pred_rate[channel], /*tf_rate=*/0.f, scores[channel],
-          /*is_best=*/(score_ < best_score_),
-          CodedBlock::SearchType::kPredAndTransform);
-    }
-#endif  // WP2_REDUCE_BINARY_SIZE
-
-    return WP2_STATUS_OK;
-  }
-
-  // Computes the score and dist of the given predictor 'p' and transform 'tf'
-  // applied to 'cb'.
-  WP2Status UpdateYAPredScore(const Predictor& p, const Plane16& prediction,
-                              TransformPair tf, uint32_t num_transforms,
-                              const BlockCoeffs32* const res,
-                              BlockCoeffs32* const tmp, CodedBlock* const cb) {
-    assert(channel_ == kYChannel || channel_ == kAChannel);
-    CodedBlock::CodingParams* const params = cb->GetCodingParams(channel_);
-    params->tf = tf;
-    assert(cb->GetImplicitTf(channel_) == kUnknownTf ||
-           cb->GetImplicitTf(channel_) == tf);
-
-    const QuantMtx& quant = segment_.GetQuant(channel_);
-    float res_rate, pred_rate, tf_rate;
-
-    cb->TransformAndReconstruct(quant, channel_, reduced_, prediction, res,
-                                tmp);
-
-    WP2_CHECK_STATUS(cb->TransformRate(channel_, num_transforms,
-                                       counters_->transform(), &tf_rate));
-    WP2_CHECK_STATUS(cb->GetRates(context_, quant, channel_, num_channels_,
-                                  tf_rate, counters_, &dist_, &res_rate,
-                                  &pred_rate, &score_));
-
-#if !defined(WP2_REDUCE_BINARY_SIZE)
-    // Store score for debug.
-    cb->StorePredictionScore(config_, tile_rect_, channel_, p, params->tf,
-                             dist_, cb->lambda_mult_ * quant.lambda1, res_rate,
-                             pred_rate, tf_rate, score_,
-                             /*is_best=*/(score_ < best_score_),
-                             CodedBlock::SearchType::kPredAndTransform);
-#endif  // WP2_REDUCE_BINARY_SIZE
-
-    return WP2_STATUS_OK;
-  }
-
-  // Computes the score of the predictior 'p' and stores its score, dist etc. if
-  // it is the best.
-  WP2Status UpdatePredScore(const Predictor* const p, const Plane16& prediction,
-                            TransformPair tf, uint32_t num_tf,
-                            const BlockCoeffs32* const res,
-                            BlockCoeffs32* const tmp, CodedBlock* const cb) {
-    if (channel_ == kUChannel) {
-      WP2_CHECK_STATUS(UpdateUVPredScore(*p, cb));
-    } else {
-      WP2_CHECK_STATUS(
-          UpdateYAPredScore(*p, prediction, tf, num_tf, res, tmp, cb));
-    }
-    if (score_ < best_score_) {
-      best_score_ = score_;
-      best_dist_ = dist_;
-      best_predictor_ = p;
-      best_tf_ = tf;
-    }
-    return WP2_STATUS_OK;
-  }
-
-  float GetLastScore() const { return score_; }
-  uint32_t GetLastDist() const { return dist_; }
-  float GetBestScore() const { return best_score_; }
-  uint32_t GetBestDist() const { return best_dist_; }
-  const Predictor* GetBestPredictor() const { return best_predictor_; }
-  TransformPair GetBestTf() const { return best_tf_; }
-
- private:
-  const EncoderConfig& config_;
-  const Rectangle tile_rect_;
-  const BlockContext& context_;
-  const Segment& segment_;
-  const Channel channel_;
-  const uint32_t num_channels_;
-  const bool reduced_;
-  Counters* counters_;
-
-  float score_;
-  uint32_t dist_;
-  float best_score_;
-  uint32_t best_dist_;
-  const Predictor* best_predictor_;
-  TransformPair best_tf_;
-};
-
-//------------------------------------------------------------------------------
-
-WP2Status Predictors::FindBest(
-    const EncoderConfig& config, const Rectangle& tile_rect,
-    uint32_t num_channels, const BlockContext& context, const Segment& segment,
-    bool reduced, const Vector<TransformPair>& transforms,
-    Counters* const counters, CodedBlock* const cb, float* const best_score,
-    const Predictor** const best_predictor,
-    TransformPair* const best_tf) const {
-  *best_predictor = nullptr;
-  // This function should only be called once for both U and V.
-  assert(channel_ != kVChannel);
-  const bool is_uv = (channel_ == kUChannel);
-  const uint32_t num_tf = std::max((uint32_t)transforms.size(), 1u);
-  PredictorScorer scorer(
-      config, tile_rect, context, segment, channel_, num_channels, reduced,
-      counters, is_uv ? std::numeric_limits<float>::max() : *best_score);
-
-  int16_t prediction[kMaxBlockSizePix2];
-  Plane16 pred_view;
-  WP2_CHECK_STATUS(pred_view.SetView(prediction, kMaxBlockSizePix,
-                                     kMaxBlockSizePix, kMaxBlockSizePix));
-  BlockCoeffs32 res, tmp;
-  TransformPair overridden_tf;
-
-  // Test the non-angle predictors.
-  for (const Predictor* const p : preds_no_angle_) {
-    cb->SetPredictor(channel_, p);
-    if (!is_uv) {
-      cb->PredictBlock(channel_, pred_view.Row(0), pred_view.Step());
-      cb->GetResiduals(channel_, pred_view, &res);
-    }
-    if (p->OverridesTransform(channel_, &overridden_tf)) {
-      WP2_CHECK_STATUS(scorer.UpdatePredScore(p, pred_view, overridden_tf,
-                                              /*num_tf=*/1, &res, &tmp, cb));
-    } else {
-      for (TransformPair tf : transforms) {
-        WP2_CHECK_STATUS(
-            scorer.UpdatePredScore(p, pred_view, tf, num_tf, &res, &tmp, cb));
-      }
-    }
-  }
-  const float best_score_no_angle = scorer.GetBestScore();
-  const uint32_t best_dist_no_angle = scorer.GetBestDist();
-
-  // Test the main angle predictors.
-  struct AngleScore {
-    float score;
-    uint32_t dist;
-    const Predictor* p;
-    TransformPair tf;
-    bool operator<(const AngleScore& s) const { return (score < s.score); }
-  };
-  // Store AngleScore in a static array if possible, dynamic otherwise.
-  // Ideally, the static array would be of size
-  // AnglePredictor::Type::Num * kNumTransformPairs but that is 1344 bytes.
-  // So we limit to AnglePredictor::Type::Num.
-  // Those could be moved to Predictors if it were not part of GlobalParams.
-  VectorNoCtor<AngleScore> angle_score_dynamic;
-  std::array<AngleScore, (uint32_t)AnglePredictor::Type::Num>
-      angle_score_static;
-  const uint32_t angle_score_size =
-      (uint32_t)AnglePredictor::Type::Num * num_tf;
-  AngleScore* beg;
-  // Decide whether we use the dynamic array or the static one.
-  if (angle_score_size > angle_score_static.size()) {
-    WP2_CHECK_ALLOC_OK(angle_score_dynamic.resize(angle_score_size));
-    beg = &angle_score_dynamic[0];
-  } else {
-    beg = &angle_score_static[0];
-  }
-  AngleScore* end = beg;
-
-  for (const Predictor* const p : preds_main_angle_) {
-    cb->SetPredictor(channel_, p);
-    if (!is_uv) {
-      cb->PredictBlock(channel_, pred_view.Row(0), pred_view.Step());
-      cb->GetResiduals(channel_, pred_view, &res);
-    }
-    if (p->OverridesTransform(channel_, &overridden_tf)) {
-      WP2_CHECK_STATUS(scorer.UpdatePredScore(p, pred_view, overridden_tf,
-                                              /*num_tf=*/1, &res, &tmp, cb));
-
-      *(end++) = {scorer.GetLastScore(), scorer.GetLastDist(), p,
-                  overridden_tf};
-    } else {
-      for (TransformPair tf : transforms) {
-        WP2_CHECK_STATUS(
-            scorer.UpdatePredScore(p, pred_view, tf, num_tf, &res, &tmp, cb));
-        *(end++) = {scorer.GetLastScore(), scorer.GetLastDist(), p, tf};
-      }
-    }
-  }
-  assert(angle_score_size == end - beg && angle_score_size >= 1);
-
-  std::sort(beg, end);
-
-  // Choose to refine all the ones within a percentage of the lowest score. This
-  // helps refine predictors that give similar scores.
-  const int effort = config.effort;
-  const float min_score = beg->score;
-  const float max_score = end[-1].score;
-  const float fraction = effort / 9.f;
-  const float min_allowed_score =
-      min_score * (1.f - fraction) + max_score * fraction + 1.f;
-  assert(effort != 9 || max_score <= min_allowed_score);
-  for (uint32_t i = 0; i < angle_score_size; ++i) {
-    const AngleScore& s = beg[i];
-    // We refine every predictor with a better score, or distortion and make
-    // sure we refine all the ones within a percentage of the lowest score.
-    if (s.score <= best_score_no_angle || s.dist <= best_dist_no_angle ||
-        s.score <= min_allowed_score) {
-      // Refine the angle predictor.
-      for (const Predictor* const p : preds_) {
-        if (p->mode() == s.p->mode() && p != s.p) {
-          cb->SetPredictor(channel_, p);
-          if (!is_uv) {
-            cb->PredictBlock(channel_, pred_view.Row(0), pred_view.Step());
-            cb->GetResiduals(channel_, pred_view, &res);
-          }
-          const bool ovrd_tf = p->OverridesTransform(channel_, &overridden_tf);
-          WP2_CHECK_STATUS(scorer.UpdatePredScore(
-              p, pred_view, s.tf, ovrd_tf ? 1 : num_tf, &res, &tmp, cb));
-        }
-      }
-    }
-  }
-
-  if (scorer.GetBestScore() < *best_score) {
-    assert(scorer.GetBestPredictor() != nullptr);
-    *best_score = scorer.GetBestScore();
-    *best_predictor = scorer.GetBestPredictor();
-    *best_tf = scorer.GetBestTf();
-  }
   return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
-
-YPredictors::YPredictors() { channel_ = kYChannel; }
 
 WP2Status YPredictors::Fill(int16_t min_value, int16_t max_value) {
   constexpr Pred kYPreds[] = {
@@ -1009,8 +711,6 @@ WP2Status YPredictors::Fill(int16_t min_value, int16_t max_value) {
 }
 
 //------------------------------------------------------------------------------
-
-APredictors::APredictors() { channel_ = kAChannel; }
 
 WP2Status APredictors::Fill(int16_t min_value, int16_t max_value,
                             const CSPTransform* const transform) {
@@ -1033,8 +733,6 @@ WP2Status APredictors::Fill(int16_t min_value, int16_t max_value,
 
 //------------------------------------------------------------------------------
 
-UVPredictors::UVPredictors() { channel_ = kUChannel; }
-
 WP2Status UVPredictors::Fill(int16_t min_value, int16_t max_value) {
   constexpr Pred kUVPreds[] = {
       Pred::kCfl,      Pred::kDcAll,    Pred::kSignalingCfl, Pred::kSmooth2D,
@@ -1050,8 +748,6 @@ WP2Status UVPredictors::Fill(int16_t min_value, int16_t max_value) {
 
 //------------------------------------------------------------------------------
 // Chroma-From-Luma
-
-static constexpr float kCflNorm = 1. / (1 << kCflFracBits);
 
 CflPredictor::CflPredictor(int16_t min_value, int16_t max_value)
     : min_value_(min_value), max_value_(max_value) {}
@@ -1103,10 +799,9 @@ void CflPredictor::LinearRegression(const int16_t* const luma,
   *b = ClampToSigned(B, kCflBBits);
 }
 
-void CflPredictor::ContextLinearRegression(Channel channel,
-                                           const CodedBlock& cb,
-                                           int32_t* const a,
-                                           int32_t* const b) const {
+void CflPredictor::ContextLinearRegression(
+    Channel channel, const CodedBlockBase& cb,
+    int32_t* const a, int32_t* const b) const {
   const int16_t* const luma_context =
       cb.GetContext(kYChannel, kContextSmallNoFillIn);
   const int16_t* const chroma_context =
@@ -1116,9 +811,9 @@ void CflPredictor::ContextLinearRegression(Channel channel,
   LinearRegression(luma_context, chroma_context, context_size, a, b);
 }
 
-void CflPredictor::BlockLinearRegression(Channel channel, const CodedBlock& cb,
-                                         int32_t* const a,
-                                         int32_t* const b) const {
+void CflPredictor::BlockLinearRegression(
+    Channel channel, const CodedBlock& cb,
+    int32_t* const a, int32_t* const b) const {
   const Plane16& luma_plane = cb.out_.GetChannel(kYChannel);
   const Plane16& chroma_plane = cb.in_.GetChannel(channel);
   int16_t luma[kMaxBlockSizePix2], chroma[kMaxBlockSizePix2];
@@ -1134,7 +829,7 @@ void CflPredictor::BlockLinearRegression(Channel channel, const CodedBlock& cb,
   LinearRegression(luma, chroma, cb.h_pix() * cb.w_pix(), a, b);
 }
 
-void CflPredictor::DoPredict(const CodedBlock& cb, Channel channel,
+void CflPredictor::DoPredict(const CodedBlockBase& cb, Channel channel,
                              uint32_t x_start, uint32_t y_start, uint32_t w,
                              uint32_t h, int16_t* output, uint32_t step) const {
   int32_t a, b;
@@ -1147,7 +842,7 @@ void CflPredictor::DoPredict(const CodedBlock& cb, Channel channel,
   }
 }
 
-void CflPredictor::Predict(const CodedBlock& cb, Channel channel,
+void CflPredictor::Predict(const CodedBlockBase& cb, Channel channel,
                            int16_t output[], uint32_t step) const {
   assert(channel != kYChannel);
   DoPredict(cb, channel, 0, 0, cb.w_pix(), cb.h_pix(), output, step);
@@ -1161,34 +856,36 @@ std::string CflPredictor::GetFakePredStr() const {
   return "(fake prediction not supported)\n";
 }
 
-void CflPredictor::DisplaySamples(const CodedBlock& cb, Channel channel,
+void CflPredictor::DisplaySamples(const CodedBlockBase& cb, Channel channel,
                                   std::string* const str) const {
+#if defined(WP2_BITTRACE)
   const Plane16& luma = cb.GetContextPlane(kYChannel);
   int16_t output[kMaxBlockSizePix2];
   Predict(cb, channel, output, kMaxBlockSizePix);
 
   // Display subset of values to fit screen.
-  WP2SAppend(str, "       LUMA          |            chroma\n");
+  *str += WP2SPrint("       LUMA          |            chroma\n");
   for (uint32_t j = 0; j < kPredHeight; ++j) {
     for (uint32_t i = 0; i < kPredWidth; ++i) {
-      WP2SAppend(str, "%4d ", luma.At(i, j));
+      *str += WP2SPrint("%4d ", luma.At(i, j));
     }
-    WP2SAppend(str, " | ");
+    *str += " | ";
     for (uint32_t i = 0; i < kPredWidth; ++i) {
-      WP2SAppend(str, "%4d ", output[i + j * kMaxBlockSizePix]);
+      *str += WP2SPrint("%4d ", output[i + j * kMaxBlockSizePix]);
     }
-    WP2SAppend(str, "\n");
+    *str += "\n";
   }
-  if (cb.w() > 1 || cb.h() > 1) WP2SAppend(str, "(cropped)\n");
+  if (cb.w() > 1 || cb.h() > 1) *str += "(cropped)\n";
+#endif
 }
 
-std::string CflPredictor::GetPredStr(const CodedBlock& cb,
+std::string CflPredictor::GetPredStr(const CodedBlockBase& cb,
                                      Channel channel) const {
   int32_t a, b;
   ContextLinearRegression(channel, cb, &a, &b);
-  std::string str;
-  WP2SAppend(&str, "Chroma = %.2f * Luma + %.2ff  [(%d * Luma + %2d) >> %d]\n",
-             kCflNorm * a, kCflNorm * b, a, b, kCflFracBits);
+  std::string str =
+      WP2SPrint("Chroma = %.2f * Luma + %.2ff  [(%d * Luma + %2d) >> %d]\n",
+                kCflNorm * a, kCflNorm * b, a, b, kCflFracBits);
   DisplaySamples(cb, channel, &str);
   return str;
 }
@@ -1199,7 +896,7 @@ SignalingCflPredictor::SignalingCflPredictor(int16_t min_value,
                                              int16_t max_value)
     : CflPredictor(min_value, max_value) {}
 
-void SignalingCflPredictor::GetParams(const CodedBlock& cb, Channel channel,
+void SignalingCflPredictor::GetParams(const CodedBlockBase& cb, Channel channel,
                                       uint32_t w, uint32_t h,
                                       int32_t* a, int32_t* b) const {
   const Plane16& luma = cb.GetContextPlane(kYChannel);
@@ -1219,7 +916,7 @@ void SignalingCflPredictor::GetParams(const CodedBlock& cb, Channel channel,
   *b = ClampToSigned(predicted_b, kCflBBits);
 }
 
-void SignalingCflPredictor::DoPredict(const CodedBlock& cb, Channel channel,
+void SignalingCflPredictor::DoPredict(const CodedBlockBase& cb, Channel channel,
                                       uint32_t, uint32_t, uint32_t w,
                                       uint32_t h, int16_t* output,
                                       uint32_t step) const {
@@ -1243,42 +940,46 @@ bool SignalingCflPredictor::ComputeParams(CodedBlock* const cb,
   return (cb->cfl_[channel - 1] != 0);
 }
 
-void SignalingCflPredictor::WriteParams(const CodedBlock& cb, Channel channel,
-                                        SymbolManager* const sm,
-                                        ANSEncBase* const enc) const {
+uint32_t SignalingCflPredictor::WriteParams(const CodedBlockBase& cb,
+                                            Channel channel,
+                                            SymbolManager* const sm,
+                                            ANSEncBase* const enc) const {
   sm->Process(kSymbolCflSlope, cb.cfl_[channel - 1], "cfl_slope", enc);
+  return 0;
 }
 
-void SignalingCflPredictor::ReadParams(CodedBlock* const cb, Channel channel,
-                                       SymbolReader* const sr,
-                                       ANSDec* const dec) const {
+uint32_t SignalingCflPredictor::ReadParams(CodedBlockBase* const cb,
+                                           Channel channel,
+                                           SymbolReader* const sr,
+                                           ANSDec* const dec) const {
   cb->cfl_[channel - 1] = sr->Read(kSymbolCflSlope, "cfl_slope");
+  return 0;
 }
 
 std::string SignalingCflPredictor::GetName() const {
   return "signaling chroma-from-luma";
 }
 
-std::string SignalingCflPredictor::GetPredStr(const CodedBlock& cb,
+std::string SignalingCflPredictor::GetPredStr(const CodedBlockBase& cb,
                                               Channel channel) const {
   int32_t predicted_a, a, predicted_b, b;
   ContextLinearRegression(channel, cb, &predicted_a, &predicted_b);
   GetParams(cb, channel, cb.w(), cb.h_pix(), &a, &b);
 
   std::string str;
-  WP2SAppend(&str, "Predicted a: %.2f, with correction: %.2f (param:%d)\n",
-             kCflNorm * predicted_a, kCflNorm * a, cb.cfl_[channel - 1]);
-  WP2SAppend(&str, "Predicted b: %.2f, with correction: %.2f\n",
-             kCflNorm * predicted_b, kCflNorm * b);
-  WP2SAppend(&str, "Chroma = %.2f * Luma + %.2ff  [(%d * Luma + %2d) >> %d]\n",
-             kCflNorm * a, kCflNorm * b, a, b, kCflFracBits);
+  str += WP2SPrint("Predicted a: %.2f, with correction: %.2f (param:%d)\n",
+                   kCflNorm * predicted_a, kCflNorm * a, cb.cfl_[channel - 1]);
+  str += WP2SPrint("Predicted b: %.2f, with correction: %.2f\n",
+                   kCflNorm * predicted_b, kCflNorm * b);
+  str += WP2SPrint("Chroma = %.2f * Luma + %.2ff  [(%d * Luma + %2d) >> %d]\n",
+                   kCflNorm * a, kCflNorm * b, a, b, kCflFracBits);
   DisplaySamples(cb, channel, &str);
   return str;
 }
 
 //------------------------------------------------------------------------------
 
-void AdjustAlphaPrediction(const CodedBlock& cb, CSPTransform transform,
+void AdjustAlphaPrediction(const CodedBlockBase& cb, CSPTransform transform,
                            int16_t output[], uint32_t step) {
   for (uint16_t j = 0; j < cb.h_pix(); ++j) {
     const int16_t* const y_src = cb.GetContextPlane(kYChannel).Row(j);

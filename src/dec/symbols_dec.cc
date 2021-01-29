@@ -315,7 +315,6 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
 
 #if !defined(WP2_BITTRACE)
   (void)cost;
-  assert(cost == nullptr);  // we only need 'cost' for bittrace
 #endif
 
   const Stat& stat = *GetStats(sym, cluster);

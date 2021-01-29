@@ -128,8 +128,8 @@ WP2Status ExhaustivePartitioner::GetNextPartitionScore(
 
         // 'block' is valid.
         WP2_CHECK_ALLOC_OK(front_mgr_.UseSize(next_block_size,
-                                              /*ind=*/0u, &block));
-        front_mgr_.Use(block);
+                                              /*ind=*/0u, &block,
+                                              /*use_block=*/true));
         WP2_CHECK_ALLOC_OK(partition_.push_back(block));
 
         if (front_mgr_.Done()) {

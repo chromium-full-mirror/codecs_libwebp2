@@ -39,12 +39,12 @@ WP2Status ResidualReader::ReadHeaderForResidualSymbols(uint32_t num_coeffs_max,
     // Read the dictionaries for the number of consecutive zeros.
     const uint32_t method_index = GetMethodIndex(method);
     (void)method_index;
-    WP2SPrint(&label, "%s_num_zeros_%d", kChannelStr[channel], method_index);
+    label = WP2SPrint("%s_num_zeros_%d", kChannelStr[channel], method_index);
     WP2_CHECK_STATUS(sr->ReadHeader(kSymbolResNumZeros, cluster, num_coeffs_max,
                                     label.c_str()));
 
     // Read the dictionaries for small residuals.
-    WP2SPrint(&label, "%s_bits0_%d", kChannelStr[channel], method_index);
+    label = WP2SPrint("%s_bits0_%d", kChannelStr[channel], method_index);
     WP2_CHECK_STATUS(
         sr->ReadHeader(kSymbolBits0, cluster, num_coeffs_max, label.c_str()));
     sr->GetPotentialUsage(kSymbolBits0, cluster, is_maybe_used,
@@ -52,7 +52,7 @@ WP2Status ResidualReader::ReadHeaderForResidualSymbols(uint32_t num_coeffs_max,
 
     if (is_maybe_used[kResidual1Max]) {
       // Read the dictionaries for prefixes of big residuals.
-      WP2SPrint(&label, "%s_bits1_%d", kChannelStr[channel], method_index);
+      label = WP2SPrint("%s_bits1_%d", kChannelStr[channel], method_index);
       WP2_CHECK_STATUS(
           sr->ReadHeader(kSymbolBits1, cluster, num_coeffs_max, label.c_str()));
     }
@@ -144,12 +144,12 @@ inline void ReadBounds(Channel channel, uint32_t num_channels,
 WP2Status ResidualReader::ReadCoeffs(Channel channel, const int16_t dequant[],
                                      ANSDec* const dec,
                                      SymbolReader* const sr,
-                                     CodedBlock* const cb,
+                                     CodedBlockBase* const cb,
                                      BlockInfo* const info) {
   const bool is_uv = (channel == kUChannel || channel == kVChannel);
   ANSDebugPrefix prefix(dec, is_uv ? "UV" : (channel == kAChannel) ? "A" : "Y");
 
-  CodedBlock::CodingParams* const params = cb->GetCodingParams(channel);
+  CodedBlockBase::CodingParams* const params = cb->GetCodingParams(channel);
   const BlockSize split_size = GetSplitSize(cb->dim(), params->split_tf);
   const uint32_t split_w = BlockWidthPix(split_size);
   const uint32_t split_h = BlockHeightPix(split_size);
@@ -182,7 +182,7 @@ WP2Status ResidualReader::ReadCoeffs(Channel channel, const int16_t dequant[],
 uint32_t ResidualReader::ReadCoeffsMethod01(
     Channel channel, const int16_t dequant[], uint32_t tf_i,
     ANSDec* const dec, SymbolReader* const sr,
-    CodedBlock* const cb, BlockInfo* const info) {
+    CodedBlockBase* const cb, BlockInfo* const info) {
   int16_t* const coeffs = cb->coeffs_[channel][tf_i];
   const EncodingMethod method = cb->method_[channel][tf_i];
   const TrfSize tdim = cb->tdim(channel);
@@ -203,8 +203,7 @@ uint32_t ResidualReader::ReadCoeffsMethod01(
     assert(method != EncodingMethod::kDCOnly);
   }
 
-  std::string label;
-  WP2SPrint(&label, "C%d", GetMethodIndex(method));
+  const std::string label = WP2SPrint("C%d", GetMethodIndex(method));
   ANSDebugPrefix coeff_prefix(dec, label.c_str());
 
   const uint32_t bw = TrfWidth[tdim];

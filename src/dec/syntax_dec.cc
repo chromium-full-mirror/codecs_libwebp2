@@ -47,13 +47,12 @@ WP2Status SyntaxReader::ReadHeader(const BitstreamFeatures& features,
 
   ANSDebugPrefix prefix(dec_, "GlobalHeader");
 
-  WP2_CHECK_STATUS(context_.Init(dec_->ReadBool("use_aom_coeffs")));
-  residual_reader_.Init(context_.use_aom());
+  const bool use_aom = dec_->ReadBool("use_aom_coeffs");
+  residual_reader_.Init(use_aom);
 
   WP2_CHECK_STATUS(symbols_info_.InitLossy(
       (uint32_t)gparams_->segments_.size(), gparams.partition_set_,
-      gparams_->maybe_use_lossy_alpha_, features.quality_hint,
-      context_.use_aom()));
+      gparams_->maybe_use_lossy_alpha_, features.quality_hint, use_aom));
   const uint32_t num_channels = (gparams_->maybe_use_lossy_alpha_ ? 4 : 3);
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !gparams_->maybe_use_lossy_alpha_) continue;
@@ -153,43 +152,45 @@ WP2Status SyntaxReader::LoadDictionaries() {
 
 //------------------------------------------------------------------------------
 
-WP2Status SyntaxReader::ReadPredModes(CodedBlock* const cb) {
+WP2Status SyntaxReader::ReadPredModes(CodedBlockBase* const cb) {
   ANSDebugPrefix prefix(dec_, "pred_modes");
   cb->y_context_is_constant_ = cb->ContextIsConstant(kYChannel);
-  for (Channel channel : {kYChannel, kAChannel}) {
+  // no ReadParams() for kVChannel (supposed to be the same as kUChannel)
+  for (Channel channel : {kYChannel, kAChannel, kUChannel}) {
     if (channel == kAChannel && !cb->HasLossyAlpha()) continue;
+    const Predictors& preds = gparams_->GetPredictors(channel);
     if (channel == kYChannel && cb->y_context_is_constant_) {
-      cb->SetLumaUniformPredictor(gparams_->y_preds_);
+      cb->SetLumaUniformPredictor(preds);
     } else {
-      CodedBlock::CodingParams* const params = cb->GetCodingParams(channel);
-      const Predictors& preds = gparams_->predictors(channel);
-      const uint32_t mode = (channel == kYChannel)
-                                ? sr_.Read(kSymbolModeY, "y")
-                                : sr_.Read(kSymbolModeA, "a");
-      preds.GetFirstWithMode(mode)->ReadParams(cb, channel, &sr_, dec_);
-      params->pred = preds.GetWithMode(mode, params->pred_sub_mode);
+      const uint32_t mode =
+          (channel == kYChannel) ? sr_.Read(kSymbolModeY, "y") :
+          (channel == kAChannel) ? sr_.Read(kSymbolModeA, "a") :
+                                   sr_.Read(kSymbolModeUV, "uv");
+      const uint32_t sub_mode =
+          preds.GetPred(mode)->ReadParams(cb, channel, &sr_, dec_);
+      if (channel == kUChannel) {
+        // we need to read the 'params' of the v-channel, even if it
+        // doesn't change the predictor. Useful mostly for SignalingCfl, where
+        // U and V channel have a different param in cfl_[].
+        preds.GetPred(mode)->ReadParams(cb, kVChannel, &sr_, dec_);
+      }
+      cb->SetPredictor(channel, preds.GetPred(mode, sub_mode));
     }
   }
-  const UVPredictors& uv_preds = gparams_->uv_preds_;
-  const uint8_t uv_mode = sr_.Read(kSymbolModeUV, "uv");
-  const Predictor* const p = uv_preds.GetFirstWithMode(uv_mode);
-  p->ReadParams(cb, kUChannel, &sr_, dec_);
-  p->ReadParams(cb, kVChannel, &sr_, dec_);
-  const CodedBlock::CodingParams& params = *cb->GetCodingParams(kUChannel);
-  cb->SetUVPredictor(uv_preds.GetWithMode(uv_mode, params.pred_sub_mode));
   return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
 
-void SyntaxReader::ReadSplitTransform(Channel channel, CodedBlock* const cb) {
+void SyntaxReader::ReadSplitTransform(Channel channel,
+                                      CodedBlockBase* const cb) {
   cb->GetCodingParams(channel)->split_tf =
       (channel == kYChannel &&
        GetSplitSize(cb->dim(), /*split=*/true) != cb->dim() &&
        (bool)sr_.Read(kSymbolSplitTransform, "split_tf"));
 }
 
-void SyntaxReader::ReadHasCoeffs(Channel channel, CodedBlock* const cb) {
+void SyntaxReader::ReadHasCoeffs(Channel channel, CodedBlockBase* const cb) {
   bool block_has_coeffs = false;
   for (uint32_t tf_i = 0; tf_i < cb->GetNumTransforms(channel); ++tf_i) {
     // TODO(yguyon): If '!is420_' was signaled, deduce 'has_coeffs'.
@@ -211,8 +212,8 @@ void SyntaxReader::ReadHasCoeffs(Channel channel, CodedBlock* const cb) {
   }
 }
 
-void SyntaxReader::ReadTransform(Channel channel, CodedBlock* const cb) {
-  CodedBlock::CodingParams* params = cb->GetCodingParams(channel);
+void SyntaxReader::ReadTransform(Channel channel, CodedBlockBase* const cb) {
+  CodedBlockBase::CodingParams* params = cb->GetCodingParams(channel);
   const TransformPair implicit_tf = cb->GetImplicitTf(channel);
   if (implicit_tf != kUnknownTf) {
     // The transform is already known, no need to signal it.
@@ -227,7 +228,7 @@ void SyntaxReader::ReadTransform(Channel channel, CodedBlock* const cb) {
   }
 }
 
-void SyntaxReader::ReadIs420(CodedBlock* const cb) {
+void SyntaxReader::ReadIs420(CodedBlockBase* const cb) {
   dec_->PushBitTracesCustomPrefix("is_420");
   if (chroma_subsampling_ == ChromaSubsampling::kSingleBlock ||
       chroma_subsampling_ == ChromaSubsampling::kAdaptive) {
@@ -242,7 +243,7 @@ void SyntaxReader::ReadIs420(CodedBlock* const cb) {
   dec_->PopBitTracesCustomPrefix("is_420");
 }
 
-WP2Status SyntaxReader::GetBlock(CodedBlock* const cb, YUVPlane* const out,
+WP2Status SyntaxReader::GetBlock(CodedBlockBase* const cb, YUVPlane* const out,
                                  BlockInfo* const info) {
   // Read some block data.
   dec_->AddDebugPrefix("BlockHeader");
@@ -282,7 +283,7 @@ WP2Status SyntaxReader::GetBlock(CodedBlock* const cb, YUVPlane* const out,
   dec_->PopBitTracesCustomPrefix("transforms");
 
   // Signal the method with which coeffs were encoded.
-  if (!context_.use_aom()) {
+  if (!residual_reader_.use_aom()) {
     ANSDebugPrefix prefix(dec_, "coeff_method");
     const Segment& segment = gparams_->segments_[cb->id_];
     WP2_CHECK_STATUS(segment.ReadEncodingMethods(&sr_, cb));
@@ -331,7 +332,7 @@ WP2Status SyntaxReader::GetBlock(CodedBlock* const cb, YUVPlane* const out,
   return WP2_STATUS_OK;
 }
 
-BlockSize SyntaxReader::GetBlockSize(const FrontMgrNxNBase& mgr) {
+BlockSize SyntaxReader::GetBlockSize(const FrontMgrDoubleOrderBase& mgr) {
   ANSDebugPrefix prefix(dec_, "BlockHeader");
   return ReadBlockSize(mgr, &sr_);
 }

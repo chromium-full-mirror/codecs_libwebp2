@@ -104,7 +104,7 @@ class GlobalParams {
   // TODO(skal)
 
  public:
-  const Predictors& predictors(Channel channel) const {
+  const Predictors& GetPredictors(Channel channel) const {
     if (channel == kAChannel) return a_preds_;
     if (channel != kYChannel) return uv_preds_;
     return y_preds_;

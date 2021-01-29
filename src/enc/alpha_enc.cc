@@ -204,8 +204,8 @@ WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
   }
 
   constexpr uint32_t kNumChannels = 4;  // Otherwise we would not be here.
-  const bool forced_predictor = SetForcedPredictor(
-      gparams_->a_preds_, config_, tile_rect_.x, tile_rect_.y, kAChannel, cb);
+  const bool forced_predictor = cb->SetForcedPredictor(
+      gparams_->a_preds_, config_, tile_rect_.x, tile_rect_.y, kAChannel);
 
   const APredictors& preds = gparams_->a_preds_;
   const Segment& segment = gparams_->segments_[0];

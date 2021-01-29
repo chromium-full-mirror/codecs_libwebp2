@@ -195,6 +195,26 @@ WP2Status Decoder::BlendFrame(Rectangle window, bool dispose) {
   return WP2_STATUS_OK;
 }
 
+// Used to determine which pixels to copy from the temp buffer to the final one.
+// Unoriented, not padded.
+static Rectangle GetRawAreaToCopy(const Decoder::State& state) {
+  if (state.stage < Decoder::State::Stage::WAITING_FOR_TILE_DATA ||
+      state.current_frame_index >= state.frames.size() ||
+      state.current_frame_index < state.discard_frames_before_index) {
+    return {0, 0, 0, 0};
+  }
+  const AnimationFrame& frame = state.frames[state.current_frame_index].info;
+  // Preframes are not copied immediately but during the regular frame of the
+  // same final frame.
+  if (frame.duration_ms == 0) return {0, 0, 0, 0};
+
+  const uint32_t width = state.raw_output_buffer.width();
+  const uint32_t height = (state.frame_num_final_rows < frame.window.height)
+                              ? frame.window.y + state.frame_num_final_rows
+                              : state.raw_output_buffer.height();
+  return {0, 0, width, height};
+}
+
 //------------------------------------------------------------------------------
 
 void Decoder::DecodeAvailableData() {
@@ -214,7 +234,7 @@ void Decoder::DecodeAvailableData() {
   WP2DecDspInit();
   assert(state_->data_source != nullptr);
 
-  Rectangle previous_decoded_area = GetDecodedArea();
+  Rectangle copied_raw_area = GetRawAreaToCopy(*state_);
 
   bool keep_decoding;
   do {
@@ -226,7 +246,7 @@ void Decoder::DecodeAvailableData() {
       } else {
         state_->stage = State::Stage::WAITING_FOR_ANMF_CHUNK;
         ++state_->current_frame_index;
-        previous_decoded_area = {0, 0, 0, 0};
+        copied_raw_area = {0, 0, 0, 0};
         state_->frame_num_converted_rows = 0;
         state_->frame_num_final_rows = 0;
         state_->intertile_filter.Clear();
@@ -296,6 +316,7 @@ void Decoder::DecodeAvailableData() {
         if (state_->status == WP2_STATUS_OK) {
           if (DiscardTillMetadata(state_)) {
             state_->stage = State::Stage::WAITING_FOR_METADATA_CHUNKS;
+            assert(copied_raw_area == Rectangle(0, 0, 0, 0));
             state_->status = state_->progress.Set(1. - kProgressEnd);
             keep_decoding = true;
             break;  // Go to the WAITING_FOR_METADATA_CHUNKS part.
@@ -303,6 +324,7 @@ void Decoder::DecodeAvailableData() {
           if (FrameIsAlreadyInOutputBuffer(features_.tile_width,
                                            features_.tile_height, state_)) {
             state_->stage = State::Stage::WAITING_FOR_TILE_DATA;
+            copied_raw_area = {0, 0, 0, 0};
             if (state_->frames[state_->current_frame_index].is_last) {
               state_->status = state_->progress.Set(1. - kProgressEnd);
             } else {
@@ -313,6 +335,7 @@ void Decoder::DecodeAvailableData() {
             break;  // Go to the WAITING_FOR_TILE_DATA part.
           }
           if (DiscardWholeFrames(state_)) {
+            copied_raw_area = {0, 0, 0, 0};
             // Maybe the output buffer contains 'current_frame_index' now.
             if (FrameIsAlreadyInOutputBuffer(features_.tile_width,
                                              features_.tile_height, state_)) {
@@ -388,6 +411,7 @@ void Decoder::DecodeAvailableData() {
           if (DiscardTillMetadata(state_)) {
             if (partial_tile_decoder != nullptr) partial_tile_decoder->Clear();
             state_->stage = State::Stage::WAITING_FOR_METADATA_CHUNKS;
+            copied_raw_area = {0, 0, 0, 0};
             state_->status = state_->progress.Set(1. - kProgressEnd);
             keep_decoding = true;
             break;
@@ -395,6 +419,7 @@ void Decoder::DecodeAvailableData() {
           if (DiscardWholeFrames(state_)) {
             if (partial_tile_decoder != nullptr) partial_tile_decoder->Clear();
             state_->stage = State::Stage::WAITING_FOR_ANMF_CHUNK;
+            copied_raw_area = {0, 0, 0, 0};
             state_->status = state_->progress.Set(
                 GetProgressAtFrame(state_->current_frame_index));
             keep_decoding = true;
@@ -468,31 +493,26 @@ void Decoder::DecodeAvailableData() {
 
   // Blend/rotate/copy to output, if needed.
   if (TryGetDecodedFeatures() != nullptr && state_->using_raw_output_buffer &&
+      state_->current_frame_index >= state_->discard_frames_before_index &&
       !output_->IsEmpty()) {
-    const Rectangle previous_raw_decoded_area = OrientateRectangle(
-        GetInverseOrientation(features_.orientation), features_.width,
-        features_.height, previous_decoded_area);
-    const Rectangle raw_decoded_area =
-        OrientateRectangle(GetInverseOrientation(features_.orientation),
-                           features_.width, features_.height, GetDecodedArea());
-    assert(raw_decoded_area.x == 0 && raw_decoded_area.y == 0);
-    assert(raw_decoded_area.height >= previous_raw_decoded_area.height);
-    assert(previous_raw_decoded_area.width == 0 ||
-           (raw_decoded_area.width == previous_raw_decoded_area.width));
+    const Rectangle raw_area_to_copy = GetRawAreaToCopy(*state_);
+    assert(raw_area_to_copy.x == 0 && raw_area_to_copy.y == 0);
+    assert(raw_area_to_copy.height >= copied_raw_area.height);
+    assert(copied_raw_area.width == 0 ||
+           (raw_area_to_copy.width == copied_raw_area.width));
 
-    const Rectangle new_raw_decoded_area =
-        Rectangle(raw_decoded_area.x,
-                  raw_decoded_area.y + previous_raw_decoded_area.height,
-                  raw_decoded_area.width,
-                  raw_decoded_area.height - previous_raw_decoded_area.height);
+    const Rectangle new_raw_area_to_copy = Rectangle(
+        raw_area_to_copy.x, raw_area_to_copy.y + copied_raw_area.height,
+        raw_area_to_copy.width,
+        raw_area_to_copy.height - copied_raw_area.height);
 
-    if (new_raw_decoded_area.GetArea() > 0) {
+    if (new_raw_area_to_copy.GetArea() > 0) {
       WP2Status postprocess_status = WP2_STATUS_OK;
       assert(state_->current_frame_index < state_->frames.size());
       const AnimationFrame& frame =
           state_->frames[state_->current_frame_index].info;
       if (frame.blend) {
-        const Rectangle clipped = new_raw_decoded_area.ClipWith(frame.window);
+        const Rectangle clipped = new_raw_area_to_copy.ClipWith(frame.window);
         if (clipped.GetArea() > 0) {
           postprocess_status = BlendFrame(clipped, frame.dispose);
         }
@@ -505,7 +525,7 @@ void Decoder::DecodeAvailableData() {
                                                 state_->using_blended_buffer
                                                     ? state_->blended_buffer
                                                     : state_->raw_output_buffer,
-                                                new_raw_decoded_area, output_);
+                                                new_raw_area_to_copy, output_);
       }
       if (postprocess_status != WP2_STATUS_OK) {
         state_->status = postprocess_status;

@@ -30,6 +30,7 @@
 #include <tiffio.h>
 
 #include "./imageio_util.h"
+#include "src/dsp/dsp.h"  // for WP2_WORDS_BIGENDIAN
 
 namespace {
 
@@ -263,7 +264,7 @@ class ImageReaderTIFF : public ImageReader::Impl {
     }
 
     // TIFF data is ABGR. It is also always returned pre-multiplied.
-#ifdef WORDS_BIGENDIAN
+#ifdef WP2_WORDS_BIGENDIAN
     TIFFSwabArrayOfLong(raster, width * height);
 #endif
     const bool is_unassociated =

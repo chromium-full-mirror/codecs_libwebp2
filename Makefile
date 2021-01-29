@@ -272,6 +272,7 @@ ENC_OBJS = \
     src/enc/anim/anim_enc.o \
     src/enc/anim/anim_frame.o \
     src/enc/anim/anim_rectangle.o \
+    src/enc/block_enc.o \
     src/enc/bypass_enc.o \
     src/enc/config_enc.o \
     src/enc/distortion_enc.o \
@@ -485,6 +486,7 @@ HDRS = \
     src/dec/wp2_dec_i.h \
     src/enc/analysis.h \
     src/enc/anim/anim_enc.h \
+    src/enc/block_enc.h \
     src/enc/lossless/losslessi_enc.h \
     src/enc/lossless/histogram_enc.h \
     src/enc/partitioning/partition_score_func.h \
@@ -511,6 +513,7 @@ HDRS = \
     src/utils/data_source_context.h \
     src/utils/data_source_stream.h \
     src/utils/front_mgr.h \
+    src/utils/hash.h \
     src/utils/orientation.h \
     src/utils/plane.h \
     src/utils/random.h \
@@ -959,6 +962,8 @@ DIST_FILES= \
             src/enc/anim/anim_enc.cc \
             src/enc/anim/anim_frame.cc \
             src/enc/anim/anim_rectangle.cc \
+            src/enc/block_enc.h \
+            src/enc/block_enc.cc \
             src/enc/bypass_enc.cc \
             src/enc/config_enc.cc \
             src/enc/distortion_enc.cc \
@@ -1026,6 +1031,7 @@ DIST_FILES= \
             src/utils/argb_buffer.cc \
             src/utils/front_mgr.h \
             src/utils/front_mgr.cc \
+            src/utils/hash.h \
             src/utils/memory.cc \
             src/utils/orientation.cc \
             src/utils/orientation.h \

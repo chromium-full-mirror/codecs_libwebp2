@@ -265,7 +265,7 @@ void SSIMGet_SSE_8u(const uint8_t* src1, size_t stride1,
                     WP2DistoStats* const stats) {
   // Constant to shuffle 16b values [A B C D E F G H] into [A G|B F|C E|D 0].
   const __m128i kShuffleCst = _mm_set_epi16(
-      0xffff, 0x0706, 0x0908, 0x0504, 0x0b0a, 0x0302, 0x0d0c, 0x0100);
+      -1 /*0xffff*/, 0x0706, 0x0908, 0x0504, 0x0b0a, 0x0302, 0x0d0c, 0x0100);
   const __m128i zero = _mm_setzero_si128();
   __m128i xm = zero, ym = zero;                 // 32b accums
   __m128i xxm = zero, yym = zero, xym = zero;   // 32b accums
@@ -289,7 +289,7 @@ void SSIMGet_SSE_16s(const int16_t* src1, size_t stride1,
                      WP2DistoStats* const stats) {
   // Constant to shuffle 16b values [A B C D E F G H] into [A G|B F|C E|D 0].
   const __m128i kShuffleCst = _mm_set_epi16(
-      0xffff, 0x0706, 0x0908, 0x0504, 0x0b0a, 0x0302, 0x0d0c, 0x0100);
+      -1 /*0xffff*/, 0x0706, 0x0908, 0x0504, 0x0b0a, 0x0302, 0x0d0c, 0x0100);
   const __m128i zero = _mm_setzero_si128();
   __m128i xm = zero, ym = zero;                 // 32b accums
   __m128i xxm = zero, yym = zero, xym = zero;   // 32b accums

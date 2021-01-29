@@ -32,9 +32,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#if defined(WP2_BITTRACE) || defined(WP2_TRACE) || defined(WP2_ENC_DEC_MATCH)
 #include <string>
-#endif
 
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
@@ -56,9 +54,12 @@ void WP2Print(const char* const fmt, ...);
 // Writes the data to str. Used only for debugging pruposes, hence the
 // replacement with an empty macro otherwise
 #if defined(WP2_BITTRACE) || defined(WP2_TRACE) || defined(WP2_ENC_DEC_MATCH)
-void WP2SPrint(std::string* const str, const char* const fmt, ...);
+std::string WP2SPrint(const char* const fmt, ...);
 #else
-#define WP2SPrint(str, ...) (void)str
+inline std::string WP2SPrint(const char* const fmt, ...) {
+  (void)fmt;
+  return std::string("");
+}
 #endif
 
 // handy error-logging macros
@@ -225,12 +226,12 @@ void SetArray(T* array, const std::initializer_list<T>& values) {
   for (const T& value : values) *(array++) = value;
 }
 
+#define WP2_ARRAY_SIZE(array)  \
+  (sizeof(array) /sizeof(std::remove_all_extents<decltype(array)>::type))
+
 #define STATIC_ASSERT_ARRAY_SIZE(array, size)                           \
-  static_assert(                                                        \
-      sizeof(array) /                                                   \
-              sizeof(std::remove_all_extents<decltype(array)>::type) == \
-          (size),                                                       \
-      "Expected " #array " to contain " #size " elements");
+  static_assert(WP2_ARRAY_SIZE(array) == (size),                        \
+                "Expected " #array " to contain " #size " elements")
 
 // Same as std::strstr() but considers 'str[count]' to be the null-character.
 const char* strnstr(const char* str, size_t count, const char* const target);

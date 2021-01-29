@@ -45,14 +45,12 @@ void AOMResidualReader::ReadSignAndApplyDequantization(
 }
 
 int AOMResidualReader::ReadCoeffBaseRange(
-    int tx_size_context, int cdf_context, int plane_type,
-    SymbolReader* const sr) {
+    uint32_t cdf_context, uint32_t plane_type, SymbolReader* const sr) {
   int level = 0;
   for (uint32_t j = 0; j < kCoeffBaseRangeMaxIterations; ++j) {
     const uint32_t coeff_base_range =
         sr->Read(kAOMCoeffBaseRange,
-                 GetClusterAOM3<kAOMCoeffBaseRange>(tx_size_context,
-                                                    plane_type, cdf_context),
+                 GetClusterAOM2<kAOMCoeffBaseRange>(plane_type, cdf_context),
                   "coeff_base_range");
     level += coeff_base_range;
     if (coeff_base_range < kCoeffBaseRangeSymbolCount) break;
@@ -60,10 +58,10 @@ int AOMResidualReader::ReadCoeffBaseRange(
   return level;
 }
 
-int AOMResidualReader::ReadEOB(TrfSize tdim, PlaneType plane_type, int context,
+int AOMResidualReader::ReadEOB(TrfSize tdim, PlaneType plane_type,
+                               uint32_t context,
                                SymbolReader* const sr, ANSDec* const dec) {
   const int max_num_coeffs = kNumCoeffs[tdim];
-  const int tx_size_context = kTrfContext[tdim];
   const int eob_multi_size = WP2Log2Floor(max_num_coeffs >> 2);
   int eob_pt;
   switch (eob_multi_size) {
@@ -121,8 +119,7 @@ int AOMResidualReader::ReadEOB(TrfSize tdim, PlaneType plane_type, int context,
       eob_pt -= 2;
       const uint32_t bit2 = (1 << eob_pt);  // 2nd-leading bit
       const bool eob_extra = sr->Read(
-          kAOMEOBExtra,
-          GetClusterAOM3<kAOMEOBExtra>(tx_size_context, plane_type, eob_pt),
+          kAOMEOBExtra, GetClusterAOM2<kAOMEOBExtra>(plane_type, eob_pt),
           "eob_extra");
       if (eob_extra) eob += bit2;
       // remaining extra bits
@@ -137,7 +134,6 @@ uint32_t AOMResidualReader::ReadCoeffs(
     Channel channel, const int16_t dequant[],
     TrfSize tdim, TransformPair tx_type, bool first_is_dc,
     SymbolReader* const sr, ANSDec* const dec, int16_t* const coeffs) {
-  const uint32_t tx_size_context = kTrfContext[tdim];
   const uint32_t tx_width = TrfWidth[tdim];
   const uint32_t tx_height = TrfHeight[tdim];
   const uint32_t padded_tx_width = tx_width + kLevelBufferPadding;
@@ -167,14 +163,12 @@ uint32_t AOMResidualReader::ReadCoeffs(
     const uint16_t pos = scan[eob - 1];
     const uint16_t adjusted_pos = PaddedIndex(pos, tx_width_log2);
     const uint32_t base_context = GetCoeffBaseContextEob(tdim, eob - 1);
-    const uint32_t cluster = GetClusterAOM3<kAOMCoeffBaseEOB>(
-        tx_size_context, plane_type, base_context);
+    const uint32_t cluster =
+        GetClusterAOM2<kAOMCoeffBaseEOB>(plane_type, base_context);
     uint32_t level = 1 + sr->Read(kAOMCoeffBaseEOB, cluster, "level");
     if (level == kNumQuantizerBaseLevels) {
       level += ReadCoeffBaseRange(
-          tx_size_context,
-          GetCoeffBaseRangeContextEob(tx_width_log2, pos),
-          plane_type, sr);
+          GetCoeffBaseRangeContextEob(tx_width_log2, pos), plane_type, sr);
     }
     coeffs[pos] = level;
     quantized1[adjusted_pos] = std::min(level, 3u);
@@ -193,13 +187,13 @@ uint32_t AOMResidualReader::ReadCoeffs(
     const uint16_t adjusted_pos = PaddedIndex(pos, tx_width_log2);
     const uint32_t base_context =
         get_coeff_base_context_func(quantized1, tdim, tx_width_log2, pos);
-    const uint32_t cluster = GetClusterAOM3<kAOMCoeffBase>(
-        tx_size_context, plane_type, base_context);
+    const uint32_t cluster =
+        GetClusterAOM2<kAOMCoeffBase>(plane_type, base_context);
     uint32_t level = sr->Read(kAOMCoeffBase, cluster, "level");
     if (level == kNumQuantizerBaseLevels) {
       const uint32_t cdf_context = get_coeff_base_range_context_func(
           quantized2, tx_width_log2, pos);
-      level += ReadCoeffBaseRange(tx_size_context, cdf_context, plane_type, sr);
+      level += ReadCoeffBaseRange(cdf_context, plane_type, sr);
     }
     coeffs[pos] = level;
     quantized1[adjusted_pos] = std::min(level, 3u);

@@ -103,7 +103,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
   // VisualDebug
-  Vector<CodedBlock> all_blocks;
+  Vector<CodedBlockBase> all_blocks;
   ArgbBuffer debug_output;  // Tile view of 'config.info->debug_output'
   Plane16 vd_plane;         // Visual debug plane.
   Plane16 vd_block_view;    // View of vd_plane for the current block.
@@ -146,12 +146,18 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   WP2_CHECK_STATUS(mgr.Init(reader.GetPartitionSet(), reader.GetPartitionSnap(),
                             tile->rect.width, tile->rect.height));
 
+  CodedBlockBase cb;
+  cb.SetRange(gparams.transf_.GetYUVMin(), gparams.transf_.GetYUVMax());
+  cb.mtx_set_ = &gparams.mtx_set_;
+  ContextCache context_cache;
+  cb.SetContextCache(&context_cache);
+
   while ((dec->GetStatus() == WP2_STATUS_OK) && !mgr.Done()) {
     // Read dimensions until we get a full context.
-    FrontMgrNxNBase::Info info;
+    FrontMgrDoubleOrderBase::Info info;
     while (true) {
-      if (mgr.UseFinal(&info)) break;
-      // Read block sizes until a final one can be used.
+      if (mgr.UseReady(&info)) break;
+        // Read block sizes until a final one can be used.
 #if defined(WP2_BITTRACE)
       const double prev_bit_count = dec->GetBitCount();
 #endif
@@ -179,13 +185,8 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
       }
     }
 
-    CodedBlock cb;
-    cb.SetRange(gparams.transf_.GetYUVMin(), gparams.transf_.GetYUVMax());
     cb.SetDim(info.block, mgr);
-    ContextCache context_cache;
-    cb.SetContextCache(&context_cache);
     assert(cb.y_pix() + cb.h_pix() <= tile->yuv_output.Y.h_);
-    cb.mtx_set_ = &gparams.mtx_set_;
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     if (!vd_plane.IsEmpty()) {
@@ -239,16 +240,17 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     if (VDMatch(config, "prediction/raw")) {
       const Channel c = VDChannel(config);
       if (c != kAChannel || cb.HasLossyAlpha()) {
-        cb.StorePredictionModes(config, tile->rect, c, gparams.predictors(c),
+        cb.StorePredictionModes(config, tile->rect, c, gparams.GetPredictors(c),
                                 &vd_plane, nullptr);
       }
     } else if (VDMatch(config, "chroma-from-luma/prediction")) {
       const Channel channel = VDChannel(config);
-      const CodedBlock::CodingParams saved = *cb.GetCodingParams(channel);
+      const CodedBlockBase::CodingParams saved = *cb.GetCodingParams(channel);
       assert(gparams.uv_preds_[0]->DependsOnLuma());
       cb.SetUVPredictor(gparams.uv_preds_[0]);
       cb.StorePredictionModes(config, tile->rect, channel,
-                              gparams.predictors(channel), &vd_plane, nullptr);
+                              gparams.GetPredictors(channel),
+                              &vd_plane, nullptr);
       *cb.GetCodingParams(channel) = saved;
     } else if (VDMatch(config, "chroma-from-luma/slope") ||
                VDMatch(config, "chroma-from-luma/intercept")) {
@@ -279,7 +281,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     } else if (VDMatch(config, "prediction/modes")) {
       const Channel c = VDChannel(config);
       if (c != kAChannel || cb.HasLossyAlpha()) {
-        cb.StorePredictionModes(config, tile->rect, c, gparams.predictors(c),
+        cb.StorePredictionModes(config, tile->rect, c, gparams.GetPredictors(c),
                                 nullptr, &debug_output);
       }
     } else if (VDMatch(config, "original") && !VDMatch(config, "histogram")) {
@@ -376,9 +378,9 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
         tile->yuv_output, {0, 0, tile->rect.width, tile->rect.height}));
     WP2_CHECK_STATUS(non_padded.Export(
         gparams.transf_, /*resize_if_needed=*/false, &debug_output));
-    for (const CodedBlock& cb : all_blocks) {
-      WP2_CHECK_STATUS(
-          cb.Draw(config, tile->rect.x, tile->rect.y, gparams, &debug_output));
+    for (const CodedBlockBase& cblk : all_blocks) {
+      WP2_CHECK_STATUS(cblk.Draw(config, tile->rect.x, tile->rect.y,
+                                 gparams, &debug_output));
     }
   } else if (VDMatch(config, "filter-block-map")) {
     tile->block_map.ApplyVDebug(config, &debug_output);

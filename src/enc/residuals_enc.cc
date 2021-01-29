@@ -40,14 +40,14 @@ WP2Status ResidualWriter::WriteHeaderForResidualSymbols(
     // Write the dictionaries for the number of consecutive zeros.
     const uint32_t method_index = GetMethodIndex(method);
     (void)method_index;
-    WP2SPrint(&label, "%s_num_zeros_%d", kChannelStr[channel], method_index);
+    label = WP2SPrint("%s_num_zeros_%d", kChannelStr[channel], method_index);
     const uint32_t cluster = GetCluster(channel, num_channels_, method);
     WP2_CHECK_STATUS(sw->WriteHeader(
         kSymbolResNumZeros, cluster, num_coeffs_max, recorder,
         label.c_str(), enc, dicts_in));
 
     // Write the dictionaries for small residuals.
-    WP2SPrint(&label, "%s_bits0_%d", kChannelStr[channel], method_index);
+    label = WP2SPrint("%s_bits0_%d", kChannelStr[channel], method_index);
     WP2_CHECK_STATUS(sw->WriteHeader(kSymbolBits0, cluster, num_coeffs_max,
                                      recorder, label.c_str(), enc, dicts_in));
     sw->GetPotentialUsage(kSymbolBits0, cluster, is_maybe_used,
@@ -55,7 +55,7 @@ WP2Status ResidualWriter::WriteHeaderForResidualSymbols(
 
     if (is_maybe_used[kResidual1Max]) {
       // Write the dictionaries for prefixes of big residuals.
-      WP2SPrint(&label, "%s_bits1_%d", kChannelStr[channel], method_index);
+      label = WP2SPrint("%s_bits1_%d", kChannelStr[channel], method_index);
       WP2_CHECK_STATUS(sw->WriteHeader(kSymbolBits1, cluster, num_coeffs_max,
                                        recorder, label.c_str(), enc, dicts_in));
     } else {
@@ -448,8 +448,7 @@ WP2Status ResidualWriter::WriteCoeffs(const CodedBlock& cb, Channel channel,
 
           if (method != EncodingMethod::kDCOnly) {
             // Write the coefficients after DC.
-            std::string label;
-            WP2SPrint(&label, "C%d", GetMethodIndex(method));
+            const std::string label = WP2SPrint("C%d", GetMethodIndex(method));
             const ANSDebugPrefix coeff_prefix(enc, label.c_str());
 
             StoreCoeffs(coeffs, num_coeffs, first_is_dc, cb.tdim(channel),

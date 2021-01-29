@@ -39,18 +39,6 @@ static inline void ColorCopy(const T* const color1, T* const color2) {
   std::memcpy(color2, color1, 4 * sizeof(T));
 }
 
-// Define a n_bits hash value of a color.
-template <typename T>
-static inline uint32_t HashPix(const T* const color, int n_bits) {
-  // TODO(vrabaud) Figure out a common hash for all 16-bit ARGB colors.
-  // Note that masking with 0xffffffffu is for preventing an
-  // 'unsigned int overflow' warning. Doesn't impact the compiled code.
-  const uint64_t kHashMul = 0x1e35a7bdull;
-  const uint32_t color32 =
-      (color[0] << 24) | (color[1] << 16) | (color[2] << 8) | (color[3]);
-  return (uint32_t)(((color32 * kHashMul) & 0xffffffffu) >> (32 - n_bits));
-}
-
 // Color cache that behaves like a map with (key,value), where the key is a
 // color and the value whatever uint32_t the user wants.
 class ColorCacheMap {

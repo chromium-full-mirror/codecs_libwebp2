@@ -20,6 +20,7 @@
 #include "src/common/color_precision.h"
 #include "src/dsp/lossless/dspl.h"
 #include "src/enc/lossless/losslessi_enc.h"
+#include "src/utils/hash.h"
 
 namespace WP2L {
 
@@ -224,7 +225,7 @@ WP2Status AnalyzeEntropyImpl(const T* argb, uint32_t stride, uint32_t width,
         // entropy for unmultiplied palettes.
         if (use_palette && premult == kPremultiplied) {
           // Approximate the palette by the entropy of the multiplicative hash.
-          const uint32_t hash = HashPix(p, WP2Log2Floor(max_channel + 1));
+          const uint32_t hash = WP2::HashPix(p, WP2Log2Floor(max_channel + 1));
           ++histo[premult][kHistoPalette * histo_len + hash];
         }
       }

@@ -33,7 +33,7 @@ extern WP2::Stats<uint32_t> scores;
 
 namespace WP2 {
 
-class CodedBlock;
+class CodedBlockBase;
 struct QuantMtx;
 
 static constexpr uint32_t kMaxNumRndMtx = 32;
@@ -103,6 +103,7 @@ template<int SX, int SY> struct RndMtx {
 static constexpr uint8_t kRndMtxBadIdx = 0xff;
 static_assert(kRndMtxBadIdx > kMaxNumRndMtx, "BadIdx should be larger.");
 
+// For the encoder:
 template <int SX, int SY>
 uint32_t FindAndSubtractBestMatch(const Vector<RndMtx<SX, SY>>& mtx,
                                   int16_t coeffs[],
@@ -131,7 +132,7 @@ uint32_t FindAndSubtractBestMatch(const Vector<RndMtx<SX, SY>>& mtx,
 class RndMtxSet {
  public:
   WP2Status Init(uint32_t num_mtx, const QuantMtx& quant);
-  void DecideUseRndMtx(CodedBlock* const cb) const;
+  void DecideUseRndMtx(CodedBlockBase* const cb) const;
 
   // Returns true if dimension is compatible.
   bool IsOk(uint32_t id, TrfSize tdim) const;

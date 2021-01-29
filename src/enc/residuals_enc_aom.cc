@@ -38,17 +38,14 @@ void AOMResidualWriter::WriteSignAndApplyDequantization(
   enc->PutBool(res < 0, "is_negative");
 }
 
-void AOMResidualWriter::WriteCoeffBaseRange(uint32_t level,
-                                            int tx_size_context,
-                                            int cdf_context, int plane_type,
-                                            SymbolManager* const sm,
-                                            ANSEncBase* const enc) {
+void AOMResidualWriter::WriteCoeffBaseRange(
+    uint32_t level, uint32_t cdf_context, uint32_t plane_type,
+    SymbolManager* const sm, ANSEncBase* const enc) {
   for (uint32_t j = 0; j < kCoeffBaseRangeMaxIterations; ++j) {
     const uint32_t chunk =
         std::min(level, (uint32_t)kCoeffBaseRangeSymbolCount);
     sm->Process(kAOMCoeffBaseRange,
-                GetClusterAOM3<kAOMCoeffBaseRange>(tx_size_context,
-                                                   plane_type, cdf_context),
+                GetClusterAOM2<kAOMCoeffBaseRange>(plane_type, cdf_context),
                 chunk, "coeff_base_range", enc);
     if (chunk < kCoeffBaseRangeSymbolCount) break;
     level -= chunk;
@@ -57,9 +54,8 @@ void AOMResidualWriter::WriteCoeffBaseRange(uint32_t level,
 
 void AOMResidualWriter::WriteEOB(
     int eob, TrfSize tdim, PlaneType plane_type,
-    int context, SymbolManager* const sm, ANSEncBase* const enc) {
-  const int tx_size_context = kTrfContext[tdim];
-  const int eob_multi_size = WP2Log2Floor(kNumCoeffs[tdim] >> 2);
+    uint32_t context, SymbolManager* const sm, ANSEncBase* const enc) {
+  const uint32_t eob_multi_size = WP2Log2Floor(kNumCoeffs[tdim] >> 2);
 
   eob -= 1;  // in [0..max_num_coeffs)
   int16_t eob_pt = 0;
@@ -113,7 +109,7 @@ void AOMResidualWriter::WriteEOB(
     const bool eob_extra = (eob >> eob_pt) & 1;
     sm->Process(
         kAOMEOBExtra,
-        GetClusterAOM3<kAOMEOBExtra>(tx_size_context, plane_type, eob_pt),
+        GetClusterAOM2<kAOMEOBExtra>(plane_type, eob_pt),
         eob_extra, "eob_extra", enc);
     // remaining extra bits
     const uint32_t bit2 = 1 << eob_pt;   // second-leading bit
@@ -124,7 +120,6 @@ void AOMResidualWriter::WriteEOB(
 void AOMResidualWriter::WriteCoeffs(
     const int16_t res[], Channel channel, TrfSize tdim, TransformPair tx_type,
     bool first_is_dc, SymbolManager* const sm, ANSEncBase* const enc) {
-  const int tx_size_context = kTrfContext[tdim];
   const uint16_t* const scan = ResidualIterator::GetZigzag(tdim);
   int eob = kNumCoeffs[tdim];
   while ((eob > 0) && (res[scan[eob - 1]] == 0)) --eob;
@@ -160,14 +155,14 @@ void AOMResidualWriter::WriteCoeffs(
     assert(level != 0);
     const uint32_t base_level = std::min(level, kNumQuantizerBaseLevels);
     const uint32_t base_context = GetCoeffBaseContextEob(tdim, eob - 1);
-    const uint32_t cluster = GetClusterAOM3<kAOMCoeffBaseEOB>(
-        tx_size_context, plane_type, base_context);
+    const uint32_t cluster =
+        GetClusterAOM2<kAOMCoeffBaseEOB>(plane_type, base_context);
     sm->Process(kAOMCoeffBaseEOB, cluster, base_level - 1, "level", enc);
     if (base_level == kNumQuantizerBaseLevels) {
       const uint32_t cdf_context =
           GetCoeffBaseRangeContextEob(tx_width_log2, pos);
-      WriteCoeffBaseRange(level - kNumQuantizerBaseLevels, tx_size_context,
-                          cdf_context, plane_type, sm, enc);
+      WriteCoeffBaseRange(level - kNumQuantizerBaseLevels, cdf_context,
+                          plane_type, sm, enc);
     }
     quantized1[adjusted_pos] = std::min(level, 3u);
     quantized2[adjusted_pos] =
@@ -187,14 +182,14 @@ void AOMResidualWriter::WriteCoeffs(
     const uint32_t base_level = std::min(level, kNumQuantizerBaseLevels);
     const uint32_t base_context =
         get_coeff_base_context_func(quantized1, tdim, tx_width_log2, pos);
-    const uint32_t cluster = GetClusterAOM3<kAOMCoeffBase>(
-        tx_size_context, plane_type, base_context);
+    const uint32_t cluster =
+        GetClusterAOM2<kAOMCoeffBase>(plane_type, base_context);
     sm->Process(kAOMCoeffBase, cluster, base_level, "level", enc);
     if (base_level == kNumQuantizerBaseLevels) {
       const uint32_t cdf_context = get_coeff_base_range_context_func(
           quantized2, tx_width_log2, pos);
-      WriteCoeffBaseRange(level - kNumQuantizerBaseLevels, tx_size_context,
-                          cdf_context, plane_type, sm, enc);
+      WriteCoeffBaseRange(level - kNumQuantizerBaseLevels, cdf_context,
+                          plane_type, sm, enc);
     }
     quantized1[adjusted_pos] = std::min(level, 3u);
     quantized2[adjusted_pos] =

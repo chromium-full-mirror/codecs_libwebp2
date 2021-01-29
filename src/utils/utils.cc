@@ -72,8 +72,8 @@ void WP2Print(const char* const fmt, ...) {
 }
 
 #if defined(WP2_BITTRACE) || defined(WP2_TRACE) || defined(WP2_ENC_DEC_MATCH)
-[[gnu::format(printf, 2, 3)]]
-void WP2SPrint(std::string* const str, const char* const fmt, ...) {
+[[gnu::format(printf, 1, 2)]]
+std::string WP2SPrint(const char* const fmt, ...) {
   va_list list;
   va_start(list, fmt);
 #pragma GCC diagnostic push
@@ -84,7 +84,7 @@ void WP2SPrint(std::string* const str, const char* const fmt, ...) {
   va_start(list, fmt);
   vsprintf(tmp.get(), fmt, list);
   va_end(list);
-  *str = std::string(tmp.get(), tmp.get() + size);
+  return std::string(tmp.get(), tmp.get() + size);
 #pragma GCC diagnostic pop
 }
 #endif
