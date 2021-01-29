@@ -34,7 +34,8 @@ const SymbolsInfo::ClusterInfo SymbolsInfo::kDefaultClusterInfo = {};
 
 WP2Status SymbolsInfo::CopyFrom(const SymbolsInfo& other) {
   num_symbols_ = other.num_symbols_;
-  symbols_info_ = other.symbols_info_;
+  std::copy(other.symbols_info_, other.symbols_info_ + other.Size(),
+            symbols_info_);
   WP2_CHECK_ALLOC_OK(cluster_info_.resize(other.cluster_info_.size()));
   std::copy(other.cluster_info_.begin(), other.cluster_info_.end(),
             cluster_info_.begin());
@@ -126,7 +127,7 @@ uint32_t SymbolsInfo::RangeSum() const {
 
 uint32_t SymbolsInfo::GetMaxRange() const {
   const auto iter =
-      std::max_element(symbols_info_.begin(), symbols_info_.end(),
+      std::max_element(symbols_info_, symbols_info_ + Size(),
                        [](const SymbolInfo& lhs, const SymbolInfo& rhs) {
                          return (lhs.max - lhs.min < rhs.max - rhs.min);
                        });

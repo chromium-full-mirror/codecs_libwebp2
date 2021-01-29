@@ -773,16 +773,13 @@ void CflPredictor::LinearRegression(const int16_t* const luma,
     *a = *b = 0;
     return;
   }
-  int32_t A, B;
   const int64_t num = (int64_t)l_uv_sum * num_values - (int64_t)l_sum * uv_sum;
   const int64_t den = (int64_t)l_l_sum * num_values - (int64_t)l_sum * l_sum;
-  if (num == 0 || den == 0) {
-    A = 0;
-    B = DivRound(LeftShift(uv_sum, kCflFracBits), num_values);
-  } else {
-    A = DivRound(LeftShift(num, kCflFracBits), den);
-    const int64_t tmp_b = den * uv_sum - num * l_sum;
-    B = DivRound<int64_t>(LeftShift(tmp_b, kCflFracBits), num_values * den);
+  int32_t A = 0;
+  int32_t B = DivRound(LeftShift(uv_sum, kCflFracBits), num_values);
+  if (num != 0 && den != 0) {
+    A = DivRound(LeftShift(num, kCflFracBits), den);  // fits in 64b precision
+    B -= DivRound<int64_t>((int64_t)A * l_sum, num_values);
   }
   B += (1 << kCflFracBits >> 1);   // include rounding constant
 

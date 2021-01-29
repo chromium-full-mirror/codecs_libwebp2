@@ -646,7 +646,7 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
   if (params.bittrace > 0) {
     Accounting* acc = NULL;
     if (aom_codec_control(&codec, AV1_GET_ACCOUNTING, &acc) == AOM_CODEC_OK) {
-      std::map<std::string, WP2BitCounts::mapped_type> accum;
+      std::map<std::string, BitCounts::mapped_type> accum;
       const uint32_t num_syms = acc->syms.num_syms;
       for (uint32_t i = 0; i < num_syms; ++i) {
         const AccountingSymbol& sym = acc->syms.syms[i];
@@ -664,7 +664,7 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
         accum[str].bits += bits;
         accum[str].num_occurrences += num_samples;
       }
-      std::vector<WP2TraceType> values;
+      std::vector<TraceType> values;
       values.reserve(accum.size());
       for (const auto& p : accum) values.push_back(p);
       const bool use_bytes = (params.bittrace == 2);

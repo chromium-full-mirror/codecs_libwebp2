@@ -28,11 +28,9 @@
 #include <cstring>
 #include <map>
 #include <memory>
-#if defined(WP2_BITTRACE) || defined(WP2_TRACE) || defined(WP2_ENC_DEC_MATCH)
 #include <string>
 
 #include "src/wp2/debug.h"
-#endif
 
 #ifdef HAVE_CONFIG_H
 #include "src/wp2/config.h"
@@ -46,10 +44,12 @@
 
 #define WP2_OPT_LABEL const char label[]
 
+namespace WP2 {
+
 #if defined(WP2_BITTRACE)
 // For each label, store the amount of bits, and the number of occurrences.
 // (can be useful whether WP2_BITTRACE is defined or not)
-typedef std::map<const std::string, WP2::LabelStats> WP2BitCounts;
+typedef std::map<const std::string, LabelStats> BitCounts;
 #endif
 
 // When uncommenting the following, the 'label' string used when inputting
@@ -58,8 +58,6 @@ typedef std::map<const std::string, WP2::LabelStats> WP2BitCounts;
 // stream, it is asserted that the same string is used to make sure that the
 // same information is read in the same order.
 // #define WP2_ENC_DEC_MATCH
-
-namespace WP2 {
 
 #define ANS_LOG_TAB_SIZE 14
 #define ANS_TAB_SIZE (1u << ANS_LOG_TAB_SIZE)
@@ -312,7 +310,7 @@ class ANSDec {
                       WP2_OPT_LABEL) {
     const uint32_t symbol = ReadSymbolInternal(codes, log2_tab_size);
     Trace("%s: symbol=%u", label, symbol);
-    BitTrace(symbol, "symbol", label);
+    BitTrace(symbol, LabelStats::Type::Symbol, label);
     return symbol;
   }
 
@@ -323,7 +321,7 @@ class ANSDec {
                       uint32_t max_index, WP2_OPT_LABEL) {
     const uint32_t symbol = ReadSymbolInternal(codes, log2_tab_size, max_index);
     Trace("%s: symbol=%u", label, symbol);
-    BitTrace(symbol, "symbol", label);
+    BitTrace(symbol, LabelStats::Type::Symbol, label);
     return symbol;
   }
 
@@ -339,14 +337,14 @@ class ANSDec {
   uint32_t ReadSymbol(const ANSAdaptiveSymbol& asym, WP2_OPT_LABEL) {
     const uint32_t symbol = ReadSymbolInternal(asym);
     Trace("%s: symbol=%u", label, symbol);
-    BitTrace(symbol, "asymbol", label);
+    BitTrace(symbol, LabelStats::Type::ASymbol, label);
     return symbol;
   }
   uint32_t ReadSymbol(const ANSAdaptiveSymbol& asym, uint32_t max_index,
                       WP2_OPT_LABEL) {
     const uint32_t symbol = ReadSymbolInternal(asym, max_index);
     Trace("%s: symbol=%u", label, symbol);
-    BitTrace(symbol, "asymbol", label);
+    BitTrace(symbol, LabelStats::Type::ASymbol, label);
     return symbol;
   }
 
@@ -354,7 +352,7 @@ class ANSDec {
   uint32_t ReadBit(uint32_t proba, WP2_OPT_LABEL) {
     const uint32_t bit = ReadBitInternal(proba);
     Trace("%s: bit=%u proba=%p", label, bit, proba);
-    BitTrace(bit, "bit", label);
+    BitTrace(bit, LabelStats::Type::Bit, label);
     return bit;
   }
 
@@ -363,7 +361,7 @@ class ANSDec {
   uint32_t ReadABit(ANSBinSymbol* const stats, WP2_OPT_LABEL) {
     const uint32_t bit = ReadABitInternal(stats);
     Trace("%s: abit=%u", label, bit);
-    BitTrace(bit, "abit", label);
+    BitTrace(bit, LabelStats::Type::ABit, label);
     return bit;
   }
 
@@ -376,7 +374,7 @@ class ANSDec {
   uint32_t ReadUValue(uint32_t bits, WP2_OPT_LABEL) {
     const uint32_t value = ReadUValueInternal(bits);
     Trace("%s: value=0x%x bits=%u", label, value, bits);
-    BitTrace(value, "uvalue", label);
+    BitTrace(value, LabelStats::Type::UValue, label);
     return value;
   }
 
@@ -390,7 +388,7 @@ class ANSDec {
   uint32_t ReadRValue(uint32_t range, WP2_OPT_LABEL) {
     const uint32_t value = ReadRValueInternal(range);
     Trace("%s: value=0x%x range=0x%x", label, value, range);
-    BitTrace(value, "rvalue", label);
+    BitTrace(value, LabelStats::Type::RValue, label);
     return value;
   }
 
@@ -487,17 +485,17 @@ class ANSDec {
 #if defined(WP2_BITTRACE)
   double last_pos_ = 0.;
   double cur_pos_ = 0.;
-  WP2BitCounts counters_;
+  BitCounts counters_;
   // Next reads will be registered in 'counters_custom_' with this key.
   std::string counters_custom_key_;
   // Custom counter on which the user has write access (e.g. to
   // initialize/clean).
-  WP2BitCounts counters_custom_;
+  BitCounts counters_custom_;
   // If true, merge custom bit traces until next Pop().
   bool merge_custom_until_pop_ = false;
   // Tells whether the padding has been added to counters_ yet.
   bool is_padding_counted_ = false;
-  void BitTrace(uint32_t value, const char* const type, WP2_OPT_LABEL);
+  void BitTrace(uint32_t value, LabelStats::Type type, WP2_OPT_LABEL);
 
  public:
   // Precision of GetBitCount() compared to the actual used bits is at most
@@ -508,8 +506,8 @@ class ANSDec {
   // to keep track of their call number. It should be a string the user
   // will not use in a prefix.
   static constexpr const char* kPrefixStr = "____BITTRACE____";
-  const WP2BitCounts& GetBitTraces() const { return counters_; }
-  WP2BitCounts& GetBitTracesCustom() { return counters_custom_; }
+  const BitCounts& GetBitTraces() const { return counters_; }
+  BitCounts& GetBitTracesCustom() { return counters_custom_; }
   void ClearBitTracesCustom() { counters_custom_.clear(); }
   const std::string& GetBitTracesCustomKey() const {
     return counters_custom_key_;
@@ -519,7 +517,7 @@ class ANSDec {
   void PopBitTracesCustomPrefix(const char* const suffix_of_prefix);
   double GetBitCount() const { return cur_pos_; }
 #else
-  static inline void BitTrace(uint32_t value, const char* const type,
+  static inline void BitTrace(uint32_t value, LabelStats::Type type,
                               WP2_OPT_LABEL) {
     (void)value;
     (void)type;

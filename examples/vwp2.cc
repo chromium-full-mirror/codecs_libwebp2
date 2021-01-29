@@ -2129,7 +2129,7 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
                     line += SPrintf("  %c ", symbol);
                   }
                 } else {
-                  const int32_t v = b.coeffs[channel][tf_i][idx];
+                  const int32_t v = b_enc.coeffs[channel][tf_i][idx];
                   line += v ? SPrintf("%3d ", v) : "  . ";
                 }
               }

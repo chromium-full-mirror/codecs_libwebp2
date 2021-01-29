@@ -128,16 +128,16 @@ void ConvertToGray(ArgbBuffer* const pic);
 
 #if defined(WP2_BITTRACE)
 // Report bit traces
-typedef std::pair<std::string, WP2BitCounts::mapped_type> WP2TraceType;
-static inline void PrintBitTraceCluster(const std::vector<WP2TraceType>& values,
+typedef std::pair<std::string, BitCounts::mapped_type> TraceType;
+static inline void PrintBitTraceCluster(const std::vector<TraceType>& values,
                                         bool sort_values, bool use_bytes,
                                         bool show_histograms,
                                         uint32_t level = 0,
                                         uint32_t level_max = 0) {
   if (level > level_max) return;
   // Cluster the data. Keep track of each cluster and its summary.
-  std::map<std::string, std::vector<WP2TraceType>> clusters;
-  std::vector<WP2TraceType> cluster_totals;
+  std::map<std::string, std::vector<TraceType>> clusters;
+  std::vector<TraceType> cluster_totals;
   double data_size = 0.;
   for (const auto& v : values) {
     const size_t i = v.first.find("/");
@@ -153,7 +153,7 @@ static inline void PrintBitTraceCluster(const std::vector<WP2TraceType>& values,
 
   // Process the biggest clusters first.
   sort(cluster_totals.begin(), cluster_totals.end(),
-       [=](const WP2TraceType& a, const WP2TraceType& b) {
+       [=](const TraceType& a, const TraceType& b) {
          return sort_values ? (a.second.bits > b.second.bits)
                             : (a.first > b.first);
        });
@@ -223,10 +223,10 @@ static inline void PrintBitTraces(const WP2::DecoderInfo& info,
                                   bool short_version = false,
                                   uint32_t bit_trace_level = 0) {
   fprintf(stderr, "bit traces:\n");
-  std::map<std::string, WP2BitCounts::mapped_type> acc;
+  std::map<std::string, BitCounts::mapped_type> acc;
   for (const auto& p : info.bit_traces) {
     int level = bit_trace_level;
-    if (p.first.find(WP2::ANSDec::kPrefixStr) == 0) {
+    if (p.first.find(ANSDec::kPrefixStr) == 0) {
       const std::string str = p.first.substr(strlen(WP2::ANSDec::kPrefixStr));
       // The number of calls for a cluster is roughly the number of times a
       // prefix was added.
@@ -243,7 +243,7 @@ static inline void PrintBitTraces(const WP2::DecoderInfo& info,
     }
   }
   if (!short_version) {
-    std::vector<WP2TraceType> values;
+    std::vector<TraceType> values;
     for (const auto& p : acc) values.push_back(p);
     // Print the first level cluster, each cluster printing the sub-ones
     // recursively.

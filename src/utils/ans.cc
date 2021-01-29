@@ -597,7 +597,8 @@ uint32_t ANSDec::ReadDebugUValue(uint32_t bits) {
 #endif
 
 #if defined(WP2_BITTRACE)
-void ANSDec::BitTrace(uint32_t value, const char* const type,
+
+void ANSDec::BitTrace(uint32_t value, LabelStats::Type type,
                       const char label[]) {
   if (!is_padding_counted_) {
     const double incr = kANSPaddingCost;
@@ -611,21 +612,7 @@ void ANSDec::BitTrace(uint32_t value, const char* const type,
   counters_[key].bits += cur_pos_ - last_pos_;
   ++counters_[key].num_occurrences;
   ++counters_[key].histo[value];
-  if (std::strcmp(type, "bit") == 0) {
-    counters_[key].type = LabelStats::Type::Bit;
-  } else if (std::strcmp(type, "abit") == 0) {
-    counters_[key].type = LabelStats::Type::ABit;
-  } else if (std::strcmp(type, "rvalue") == 0) {
-    counters_[key].type = LabelStats::Type::RValue;
-  } else if (std::strcmp(type, "uvalue") == 0) {
-    counters_[key].type = LabelStats::Type::UValue;
-  } else if (std::strcmp(type, "asymbol") == 0) {
-    counters_[key].type = LabelStats::Type::ASymbol;
-  } else if (std::strcmp(type, "symbol") == 0) {
-    counters_[key].type = LabelStats::Type::Symbol;
-  } else {
-    assert(false);
-  }
+  counters_[key].type = type;
 
   // Add stats for the custom counter (even if no custom key, not to miss any).
   if (merge_custom_until_pop_) {

@@ -236,7 +236,7 @@ class SymbolsInfo {
 
  protected:
   uint32_t num_symbols_ = 0;
-  std::array<SymbolInfo, kSymbolNumMax> symbols_info_;
+  SymbolInfo symbols_info_[kSymbolNumMax];
 
   Vector<ClusterInfo> cluster_info_;
   uint32_t next_cluster_info_index_ = 0;

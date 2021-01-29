@@ -459,20 +459,11 @@ void CodedBlockBase::StoreResiduals(const DecoderConfig& config,
   const BlockSize split_size = GetSplitSize(dim(), params.split_tf);
   const uint32_t split_w = BlockWidthPix(split_size);
   const uint32_t split_h = BlockHeightPix(split_size);
-  const TrfSize tf_size = tdim(channel);
-  const bool reduced_transform =
-      (channel == kUChannel || channel == kVChannel) && is420_;
   uint32_t tf_i = 0;
   std::string& str = config.info->selection_info;
   for (uint32_t split_y = 0; split_y < h_pix(); split_y += split_h) {
     for (uint32_t split_x = 0; split_x < w_pix(); split_x += split_w) {
-      int32_t res[kMaxBlockSizePix2];
-      // TODO(skal): rnd_mtx
-      quant.Dequantize(coeffs_[channel][tf_i], num_coeffs_[channel][tf_i],
-                       tf_size, res);
-      WP2InvTransform2D(res, params.tf_x(), params.tf_y(), split_w, split_h,
-                        res, reduced_transform);
-
+      const int16_t* const res = coeffs_[channel][tf_i];
       const bool selected = VDSelected(
           tile_x, tile_y,
           {x_pix() + split_x, y_pix() + split_y, split_w, split_h}, config);

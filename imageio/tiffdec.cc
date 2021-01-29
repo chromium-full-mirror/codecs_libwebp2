@@ -41,7 +41,7 @@ WP2Status ExtractMetadataFromTIFF(TIFF* const tiff,
                                   WP2::Metadata* const metadata,
                                   WP2::LogLevel log_level) {
   void* tag_data = nullptr;
-  uint32 tag_data_len = 0;
+  uint32_t tag_data_len = 0;
   if (TIFFGetField(tiff, TIFFTAG_ICCPROFILE, &tag_data_len, &tag_data)) {
     WP2_CHECK_STATUS(
         metadata->iccp.CopyFrom((const uint8_t*)tag_data, tag_data_len));
@@ -125,7 +125,7 @@ struct TIFFData {
   ~TIFFData() { Free(); }
   WP2Status Alloc(tsize_t size, WP2::LogLevel log_level) {
     Free();
-    bytes = (uint32*)_TIFFmalloc((tsize_t)size);
+    bytes = (uint32_t*)_TIFFmalloc((tsize_t)size);
     if (bytes == NULL) {
       if (log_level >= WP2::LogLevel::DEFAULT) {
         fprintf(stderr, "Error allocating TIFF memory!\n");
