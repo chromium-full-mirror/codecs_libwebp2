@@ -23,7 +23,30 @@
 #if defined(WP2_USE_SSE)
 
 #include <assert.h>
+#include <stdio.h>
 #include <algorithm>
+
+static inline __m128i Load128b(const void* const in) {
+  return _mm_loadu_si128((const __m128i*)in);
+}
+static inline void Store128b(const __m128i v, void* const out) {
+  _mm_storeu_si128((__m128i*)out, v);
+}
+static inline __m128i Load64b(const void* const in) {
+  return _mm_loadl_epi64((const __m128i*)in);
+}
+static inline void Store64b(const __m128i v, void* const out) {
+  _mm_storel_epi64((__m128i*)out, v);
+}
+
+// sign-extending 16b->32b load
+static inline __m128i Load_s16_s32(const void* const in) {
+  return _mm_cvtepi16_epi32(Load64b(in));
+}
+// saturating 32b->16b store
+static inline void Store_s32_s16(const __m128i v, void* const out) {
+  Store64b(_mm_packs_epi32(v, v), out);
+}
 
 // handy struct for holding N uint32_t words
 template<uint32_t N>
@@ -31,7 +54,7 @@ struct VectorSSE {
  public:
   VectorSSE() = default;
   // some ctor can't be mark 'explicit' or you'll lose some coding flexibility
-  VectorSSE(const void* const in) : v(_mm_loadu_si128((const __m128i*)in)) {}
+  VectorSSE(const void* const in) : v(Load128b(in)) {}  // NOLINT(explicit)
   VectorSSE(const __m128i a) : v(a) {}
   VectorSSE(int32_t a) : v(_mm_set1_epi32(a)) {}
   VectorSSE& operator=(const __m128i a) {
@@ -64,8 +87,15 @@ struct VectorSSE {
   }
 
   // I/O
-  static VectorSSE Load(const void* const in) { return VectorSSE(in); }
-  void Store(void* const out) const { _mm_storeu_si128((__m128i*)out, v); }
+  static WP2_NO_DISCARD VectorSSE Load(const void* const in) {
+    return VectorSSE(in);
+  }
+  void Store(void* const out) const { Store128b(v, out); }
+
+  static WP2_NO_DISCARD VectorSSE Load16(const void* const in) {
+    return VectorSSE(Load_s16_s32(in));
+  }
+  void Store16(void* const out) const { Store_s32_s16(v, out); }
 
   // return size in 'step' units
   static uint32_t Size(uint32_t width) {
@@ -83,7 +113,6 @@ typedef VectorSSE<4> VecI32_SSE;    // four 32bits-words
 //------------------------------------------------------------------------------
 // debugging
 
-#include <stdio.h>
 template<typename T>
 void Print(const __m128i A, const char name[], int how_many = 32) {
   constexpr int size = 16 / sizeof(T);

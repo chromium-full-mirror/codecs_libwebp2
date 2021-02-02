@@ -696,6 +696,7 @@ static WP2Status ApplyAndWriteTransforms(
   if (encoder->has_alpha_) {
     enc->PutBool(decoder_must_premultiply, "premultiply");
   }
+  if (need_copy) WP2_CHECK_STATUS(MakeInputImageCopy(config, encoder));
   if (config.num_transforms == 0) {
     ProgressRange progress_local(progress, 1.);
     WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
@@ -704,8 +705,55 @@ static WP2Status ApplyAndWriteTransforms(
     symbols_info->SetAsLabelImage();
     const uint32_t palette_size = encoder->palette_.Size();
     symbols_info->SetMinMax(kSymbolG, /*min=*/0, /*max=*/palette_size - 1);
+  } else {
+    // Find the ranges of the ARGB values in the image.
+    int16_t minima[4], maxima[4];
+    for (uint32_t i = 0; i < 4; ++i) minima[i] = maxima[i] = encoder->argb_[i];
+    for (uint32_t i = 0; i < 4 * width * height; i += 4) {
+      for (uint32_t c = 0; c < 4; ++c) {
+        const int16_t val = encoder->argb_[i + c];
+        if (val < minima[c]) {
+          minima[c] = val;
+        } else if (val > maxima[c]) {
+          maxima[c] = val;
+        }
+      }
+    }
+    // Find the ranges in which they should belong according to the transforms.
+    int16_t minima_range[4], maxima_range[4];
+    GetARGBRanges(config.transforms, config.num_transforms,
+                  symbols_info->SampleFormat(), encoder->palette_.Size(),
+                  minima_range, maxima_range);
+    for (uint32_t c = 0; c < 4; ++c) {
+      assert(minima_range[c] <= minima[c]);
+      assert(minima[c] <= maxima[c]);
+      assert(minima[c] <= maxima_range[c]);
+    }
+    // Write the ARGB ranges.
+    constexpr uint32_t kPrefixSize = 2;
+    for (Symbol sym : {kSymbolA, kSymbolR, kSymbolG, kSymbolB}) {
+      if (symbols_info->IsUnused(sym)) continue;
+      const uint32_t channel = (int)sym - (int)kSymbolA;
+      if (minima_range[channel] < 0 &&
+          enc->PutBool(minima[channel] < 0, "min_is_negative")) {
+        WriteGolomb(minima[channel], minima_range[channel], -1, kPrefixSize,
+                    enc, "minimum");
+        if (enc->PutBool(maxima[channel] < 0, "max_is_negative")) {
+          WriteGolomb(maxima[channel], minima[channel], -1, kPrefixSize, enc,
+                      "maximum");
+        } else {
+          WriteGolomb(maxima[channel], 0, maxima_range[channel], kPrefixSize,
+                      enc, "maximum");
+        }
+      } else {
+        WriteGolomb(minima[channel], 0, maxima_range[channel], kPrefixSize, enc,
+                    "minimum");
+        WriteGolomb(maxima[channel], minima[channel], maxima_range[channel],
+                    kPrefixSize, enc, "maximum");
+      }
+      symbols_info->SetMinMax(sym, minima[channel], maxima[channel]);
+    }
   }
-  if (need_copy) WP2_CHECK_STATUS(MakeInputImageCopy(config, encoder));
 
   return WP2_STATUS_OK;
 }

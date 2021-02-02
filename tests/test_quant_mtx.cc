@@ -103,7 +103,7 @@ TEST_F(QuantMtxTest, DCErrorRoundTrip) {
         uint32_t num_coeffs_unused;
         mtx.Quantize(residuals, trf, first_coeff_is_dc, quantized,
                      &num_coeffs_unused);
-        int32_t dequantized[kMaxBlockSizePix2];
+        int16_t dequantized[kMaxBlockSizePix2];
         mtx.Dequantize(quantized, num_coeffs, trf, dequantized);
         const int16_t dc_error = residuals[0] - dequantized[0];
         EXPECT_EQ(dc_error, mtx.DCError(residuals[0], trf));
@@ -134,14 +134,15 @@ TEST_P(QuantMtxTestCpuInfo, VerifyDcScaling) {
         for (auto& trf_y : kTrfs) {
           const float ratio0 = (trf_x == kAdst && trf_y == kAdst) ? 1.2f : 1.f;
           for (int32_t dc = 50; dc < 1024; ++dc) {
-            int32_t tmp[kMaxBlockSizePix2];
-              for (auto& res : tmp) res = dc;
-              WP2Transform2D(tmp, trf_x, trf_y, W, H, tmp, reduced);
-              const float observed_scale = 1.f * tmp[0] / dc;
-              EXPECT_NEAR(expected_scale / observed_scale, ratio0, 0.6)
-                   << kDimNames[block_size] << "  DC=" << dc
-                   << " transf=" << WP2TransformNames[trf_x]
-                   << " x " << WP2TransformNames[trf_y];
+            int16_t tmp[kMaxBlockSizePix2];
+            int32_t out[kMaxBlockSizePix2];
+            for (auto& res : tmp) res = dc;
+            WP2Transform2D(tmp, trf_x, trf_y, W, H, out, reduced);
+            const float observed_scale = 1.f * out[0] / dc;
+            EXPECT_NEAR(expected_scale / observed_scale, ratio0, 0.6)
+                << kDimNames[block_size] << "  DC=" << dc
+                << " transf=" << WP2TransformNames[trf_x]
+                << " x " << WP2TransformNames[trf_y];
           }
         }
       }
@@ -151,7 +152,8 @@ TEST_P(QuantMtxTestCpuInfo, VerifyDcScaling) {
 
 TEST_P(QuantMtxTestCpuInfo, DcQuantizedDynamicRange) {
   constexpr uint32_t kMaxCoeffs = kMaxBlockSizePix2;
-  int32_t residuals[kMaxCoeffs];
+  int16_t residuals[kMaxCoeffs];
+  int32_t out[kMaxCoeffs];
 
   constexpr uint32_t kMaxResidual = 130;
   QuantMtx mtx;
@@ -164,10 +166,9 @@ TEST_P(QuantMtxTestCpuInfo, DcQuantizedDynamicRange) {
     constexpr WP2TransformType kTrfs[] = { kDct, kAdst };
     for (auto& trf_x : kTrfs) {
       for (auto& trf_y : kTrfs) {
-        WP2Transform2D(residuals, trf_x, trf_y, W, H,
-                       residuals, /*reduced=*/false);
+        WP2Transform2D(residuals, trf_x, trf_y, W, H, out, /*reduced=*/false);
         SCOPED_TRACE(SPrintf("block size: %s  DC: %d  ratio=%.1f",
-                             kDimNames[block_size], residuals[0], sqrt(W * H)));
+                             kDimNames[block_size], out[0], sqrt(W * H)));
         for (uint16_t quant : {0u, 29u, 36u, 123u, 177u,
                                203u, (uint32_t)kQFactorMax}) {
           SCOPED_TRACE(SPrintf("quant: %d", quant));
@@ -176,7 +177,7 @@ TEST_P(QuantMtxTestCpuInfo, DcQuantizedDynamicRange) {
           int16_t coeffs[kMaxCoeffs];
           const TrfSize tdim = GetTransform(block_size);
           uint32_t num_coeffs;
-          mtx.Quantize(residuals, tdim, /*first_is_dc=*/true, coeffs,
+          mtx.Quantize(out, tdim, /*first_is_dc=*/true, coeffs,
                        &num_coeffs);
           EXPECT_LE(num_coeffs, kNumCoeffs[tdim]);
 
@@ -212,7 +213,7 @@ TEST_P(QuantMtxTestCpuInfo, DequantizedDynamicRange) {
       const uint16_t quants[kNumQuantZones] = { quant, quant, quant, quant };
       mtx.Init(/*max_residual=*/(1 << kMaxYuvBits), /*q_scale=*/1, quants);
 
-      int32_t residuals[kMaxCoeffs];
+      int16_t residuals[kMaxCoeffs];
       mtx.Dequantize(coeffs, kNumCoeffs[tdim], tdim, residuals);
 
       const int32_t kMax = (1 << 19) * num_coeffs;
@@ -248,8 +249,7 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
 
   for (const BlockSize block_size : kAllBlockSizes) {
     int32_t out0[kMaxCoeffs];
-    int16_t out1[kMaxCoeffs];
-    int32_t out2[kMaxCoeffs];
+    int16_t out1[kMaxCoeffs], out2[kMaxCoeffs];
     for (uint32_t num = 1; num <= kNumTest; num += kLoop) {
       const TrfSize tdim = GetTransform(block_size);
       const uint32_t bsize = kNumCoeffs[tdim];

@@ -2101,7 +2101,8 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
           const bool show_original = (show_ == kOriginal);
           if (show_original || b.encoding_method[channel][tf_i] !=
                                    (int8_t)EncodingMethod::kAllZero) {
-            int32_t res[kMaxBlockSizePix2];
+            int16_t res[kMaxBlockSizePix2];
+            int32_t coeffs[kMaxBlockSizePix2];
             const uint32_t num_coeffs = w * h;
             std::copy(&b_enc.original_res[channel][tf_i][0],
                       &b_enc.original_res[channel][tf_i][0] + num_coeffs,
@@ -2110,8 +2111,8 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
             const bool reduced_transform =
                 (channel == kUChannel || channel == kVChannel) && b_enc.is420;
             WP2Transform2D(res, (WP2TransformType)b_enc.tf_x,
-                           (WP2TransformType)b_enc.tf_y, w, h, res,
-                           reduced_transform);
+                           (WP2TransformType)b_enc.tf_y, w, h,
+                           coeffs, reduced_transform);
 
             const float norm = 2. * (int32_t)std::sqrt(num_coeffs);
             for (uint32_t j = 0; j < h; ++j) {
@@ -2119,7 +2120,7 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
               for (uint32_t i = 0; i < w; ++i) {
                 const uint32_t idx = i + w * j;
                 if (show_original) {
-                  const int32_t v = res[idx];
+                  const int32_t v = coeffs[idx];
                   if (std::abs(v) >= (norm * 1.00)) {
                     line += SPrintf("%3d ", (int)(v / norm));
                   } else {

@@ -161,14 +161,6 @@ void AddGreenToBlueAndRed_C(const uint16_t* src, uint32_t num_pixels,
   }
 }
 
-static inline int32_t ColorTransformDelta(int16_t color_pred,
-                                          uint16_t max_value_half,
-                                          uint16_t color) {
-  const int color_int =
-      (color >= max_value_half) ? (int)color - 2 * max_value_half : (int)color;
-  return (((int32_t)color_pred * color_int) >> 5);
-}
-
 static inline void ColorCodeToMultipliers(const int16_t* const color_code,
                                           Multipliers* const m) {
   m->green_to_red = color_code[3];
@@ -177,33 +169,28 @@ static inline void ColorCodeToMultipliers(const int16_t* const color_code,
 }
 
 static void TransformColorInverse_C(const Multipliers* const m,
-                                    const uint16_t* src, uint32_t num_pixels,
-                                    uint32_t num_bits, uint16_t* dst) {
-  const uint16_t max_value = (1u << num_bits) - 1;
-  const uint16_t max_value_half = (max_value + 1) / 2;
-  for (const uint16_t* src_end = src + 4 * num_pixels; src < src_end;
+                                    const int16_t* src, uint32_t num_pixels,
+                                    int16_t* dst) {
+  for (const int16_t* src_end = src + 4 * num_pixels; src < src_end;
        src += 4, dst += 4) {
-    const uint16_t red = src[1];
-    const uint16_t green = src[2];
+    const int16_t red = src[1];
+    const int16_t green = src[2];
     int new_red = red;
     int new_blue = src[3];
-    new_red += ColorTransformDelta(m->green_to_red, max_value_half, green);
-    new_red &= max_value;
-    new_blue += ColorTransformDelta(m->green_to_blue, max_value_half, green);
-    new_blue += ColorTransformDelta(m->red_to_blue, max_value_half, new_red);
-    new_blue &= max_value;
+    new_red += ColorTransformDelta(m->green_to_red, green);
+    new_blue += ColorTransformDelta(m->green_to_blue, green);
+    new_blue += ColorTransformDelta(m->red_to_blue, new_red);
     dst[0] = src[0];
-    dst[1] = (uint16_t)new_red;
+    dst[1] = new_red;
     dst[2] = src[2];
-    dst[3] = (uint16_t)new_blue;
+    dst[3] = new_blue;
   }
 }
 
 // Color space inverse transform.
 static void ColorSpaceInverseTransform_C(const Transform* const transform,
                                          int y_start, int y_end,
-                                         uint32_t num_bits, const uint16_t* src,
-                                         uint16_t* dst) {
+                                         const int16_t* src, int16_t* dst) {
   const uint32_t width = transform->width_;
   const int tile_width = 1 << transform->bits_;
   const int mask = tile_width - 1;
@@ -217,18 +204,18 @@ static void ColorSpaceInverseTransform_C(const Transform* const transform,
   while (y < y_end) {
     const int16_t* pred = pred_row;
     Multipliers m = { 0, 0, 0 };
-    const uint16_t* const src_safe_end = src + 4 * safe_width;
-    const uint16_t* const src_end = src + 4 * width;
+    const int16_t* const src_safe_end = src + 4 * safe_width;
+    const int16_t* const src_end = src + 4 * width;
     while (src < src_safe_end) {
       ColorCodeToMultipliers(pred, &m);
-      TransformColorInverse(&m, src, tile_width, num_bits, dst);
+      TransformColorInverse(&m, src, tile_width, dst);
       src += 4 * tile_width;
       dst += 4 * tile_width;
       pred += 4;
     }
     if (src < src_end) {  // Left-overs using C-version.
       ColorCodeToMultipliers(pred, &m);
-      TransformColorInverse(&m, src, remaining_width, num_bits, dst);
+      TransformColorInverse(&m, src, remaining_width, dst);
       src += 4 * remaining_width;
       dst += 4 * remaining_width;
       pred += 4;
@@ -287,8 +274,7 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
       break;
     }
     case TransformType::kCrossColor:
-      ColorSpaceInverseTransform_C(transform, row_start, row_end, channel_bits,
-                                   (uint16_t*)in, (uint16_t*)out);
+      ColorSpaceInverseTransform_C(transform, row_start, row_end, in, out);
       break;
     case TransformType::kGroup4:
     case TransformType::kColorIndexing:

@@ -168,20 +168,21 @@ WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
       // Noise estimation.
       const uint32_t x_pix = x * kMinBlockSizePix;
       const uint32_t max_i = std::min(x_pix + kMinBlockSizePix, yuv.Y.w_);
-      int32_t res[kMinBlockSizePix * kMinBlockSizePix] = {0};
+      int16_t res[kMinBlockSizePix * kMinBlockSizePix] = {0};
+      int32_t out[kMinBlockSizePix * kMinBlockSizePix] = {0};
       for (const auto channel : {kYChannel, kUChannel, kVChannel}) {
         const Plane16& p = yuv.GetChannel(channel);
         for (uint32_t k = 0, j = y_pix; j < max_j; ++j) {
           for (uint32_t i = x_pix; i < max_i; ++i) res[k++] = p.At(i, j);
         }
         WP2Transform2D(res, WP2TransformType::kDct, WP2TransformType::kDct,
-                       kMinBlockSizePix, kMinBlockSizePix, res,
+                       kMinBlockSizePix, kMinBlockSizePix, out,
                        /*reduced=*/false);
         uint32_t cnt = 0;
         int16_t last = 0;
         for (uint32_t k = 1; k < kMinBlockSizePix * kMinBlockSizePix; ++k) {
           const uint32_t l = zigzag[k];
-          const uint32_t v = std::abs(res[l]);
+          const uint32_t v = std::abs(out[l]);
           if (v > cut_off[channel != kYChannel]) {
             last = l;
             cnt = 0;  // restart counter

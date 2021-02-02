@@ -62,11 +62,11 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
       WP2_CHECK_STATUS(cb->GetRates(
           context_, quant, channel, num_channels_, /*tf_rate=*/0.f, counters_,
           &dist[channel], &res_rate[channel], &pred_rate[channel],
-          &scores[channel]));
+          &scores[channel], best_score_));
     }
 
-    score_ = (scores[kUChannel] + scores[kVChannel]) / 2.f;
-    dist_ = (dist[kUChannel] + dist[kVChannel]) / 2;
+    score_ = scores[kUChannel] + scores[kVChannel];
+    dist_ = dist[kUChannel] + dist[kVChannel];
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     // Store scores for debug.
@@ -88,8 +88,8 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
   // applied to 'cb'.
   WP2Status UpdateYAPredScore(const Predictor& p, const Plane16& prediction,
                               TransformPair tf, uint32_t num_transforms,
-                              const BlockCoeffs32* const res,
-                              BlockCoeffs32* const tmp, CodedBlock* const cb) {
+                              const BlockCoeffs16* const res,
+                              BlockCoeffs16* const tmp, CodedBlock* const cb) {
     assert(channel_ == kYChannel || channel_ == kAChannel);
     CodedBlock::CodingParams* const params = cb->GetCodingParams(channel_);
     params->tf = tf;
@@ -106,7 +106,7 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
                                        counters_->transform(), &tf_rate));
     WP2_CHECK_STATUS(cb->GetRates(context_, quant, channel_, num_channels_,
                                   tf_rate, counters_, &dist_, &res_rate,
-                                  &pred_rate, &score_));
+                                  &pred_rate, &score_, best_score_));
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     // Store score for debug.
@@ -124,8 +124,8 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
   // it is the best.
   WP2Status UpdatePredScore(const Predictor* const p, const Plane16& prediction,
                             TransformPair tf, uint32_t num_tf,
-                            const BlockCoeffs32* const res,
-                            BlockCoeffs32* const tmp, CodedBlock* const cb) {
+                            const BlockCoeffs16* const res,
+                            BlockCoeffs16* const tmp, CodedBlock* const cb) {
     if (channel_ == kUChannel) {
       WP2_CHECK_STATUS(UpdateUVPredScore(*p, cb));
     } else {
@@ -176,19 +176,20 @@ WP2Status Predictors::FindBest(
     const Predictor** const best_predictor,
     TransformPair* const best_tf) const {
   *best_predictor = nullptr;
+  *best_score = std::numeric_limits<float>::max();
   // This function should only be called once for both U and V.
   assert(channel_ != kVChannel);
   const bool is_uv = (channel_ == kUChannel);
   const uint32_t num_tf = std::max((uint32_t)transforms.size(), 1u);
   PredictorScorer scorer(
       config, tile_rect, context, segment, channel_, num_channels, reduced,
-      counters, is_uv ? std::numeric_limits<float>::max() : *best_score);
+      counters, *best_score);
 
   int16_t prediction[kMaxBlockSizePix2];
   Plane16 pred_view;
   WP2_CHECK_STATUS(pred_view.SetView(prediction, kMaxBlockSizePix,
                                      kMaxBlockSizePix, kMaxBlockSizePix));
-  BlockCoeffs32 res, tmp;
+  BlockCoeffs16 res, tmp;
   TransformPair overridden_tf;
 
   // Test the non-angle predictors.

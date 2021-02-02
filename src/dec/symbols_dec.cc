@@ -528,7 +528,7 @@ WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t cluster,
   const int16_t max_symbol = symbols_info_.Max(sym, cluster);
   if (range < 2) {
     assert(range == 1);
-    AddTrivial(sym, cluster, /*is_symmetric=*/false, min_symbol);
+    AddTrivial(sym, cluster, /*is_symmetric=*/false, 0);
     return WP2_STATUS_OK;
   }
 

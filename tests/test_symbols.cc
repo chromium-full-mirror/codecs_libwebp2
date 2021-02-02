@@ -924,8 +924,8 @@ TEST(SymbolsTest, SimpleGolomb) {
   ANSDec dec(&data_source);
 
   for (GolombSymbol& s : symbols) {
-    ASSERT_EQ(s.value, ReadGolomb(/*min=*/0, /*max=*/s.range - 1, s.prefix_size,
-                                  &dec, "test"));
+    ASSERT_EQ(s.value, (uint32_t)ReadGolomb(/*min=*/0, /*max=*/s.range - 1,
+                                            s.prefix_size, &dec, "test"));
   }
 }
 

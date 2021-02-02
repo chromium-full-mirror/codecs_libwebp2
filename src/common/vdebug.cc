@@ -482,7 +482,7 @@ void CodedBlockBase::StoreResiduals(const DecoderConfig& config,
 
 void CodedBlock::StoreOriginalResiduals(
     const EncoderConfig& config, uint32_t tile_pos_x, uint32_t tile_pos_y,
-    int32_t original_res[kMaxNumTransformsPerBlock][kMaxBlockSizePix2],
+    int16_t original_res[kMaxNumTransformsPerBlock][kMaxBlockSizePix2],
     Plane16* const dst_plane) const {
   const BlockSize split_size =
       GetSplitSize(dim(), GetCodingParams(VDChannel(config)).split_tf);
@@ -497,7 +497,7 @@ void CodedBlock::StoreOriginalResiduals(
           {x_pix() + split_x, y_pix() + split_y, split_w, split_h}, config);
       for (uint32_t k = 0, y = 0; y < split_h; ++y) {
         for (uint32_t x = 0; x < split_w; ++x, ++k) {
-          const int32_t value = original_res[tf_i][k];
+          const int16_t value = original_res[tf_i][k];
           dst_plane->At(x_pix() + split_x + x, y_pix() + split_y + y) = value;
           if (selected) str += WP2SPrint("%4d ", value);
         }
@@ -2080,7 +2080,7 @@ WP2Status MultiScoreFunc::DrawLossyLuma(const Block& block,
                                         ArgbBuffer* const debug_output) const {
   Plane16 p;
   WP2_CHECK_STATUS(p.Resize(block.w_pix(), block.h_pix()));
-  int32_t coeffs[kMaxBlockSizePix2];
+  int16_t coeffs[kMaxBlockSizePix2];
   QuantizeCoeffs(kYChannel, block, coeffs);
   std::copy(coeffs, coeffs + block.w_pix() * block.h_pix(), p.Row(0));
   ArgbBuffer block_debug_output;

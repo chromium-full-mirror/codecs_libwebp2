@@ -185,10 +185,12 @@ static_assert(WP2QStride >= WP2::kMaxBlockSizePix, "WP2QMaxW stride too short");
 extern void (*WP2Quantize)(const uint32_t iq[], const uint32_t bias[],
                            const int32_t res[], int16_t coeffs[],
                            uint32_t W, uint32_t H);
-// Performs unclamped out[] = in[] * dequant[] for i in [0..len), and pad the
+// Performs unclamped out[] = in[] * dequants[] for i in [0..len), and pad the
 // rest of out[] with 0s. It's assumed that in[] is padded with 0s for i >= len.
+// It is the caller's responsability to ensure the in[] * dequants[] will not
+// overflow 16b storage. No clamping is expected.
 extern void (*WP2Dequantize)(const int16_t in[], const int16_t dequants[],
-                             int32_t out[],
+                             int16_t out[],
                              uint32_t W, uint32_t H, uint32_t len);
 
 void WP2QuantizeInit();
@@ -271,43 +273,42 @@ void ANSInit();
 enum WP2TransformType { kDct = 0, kAdst, kHadamard, kIdentity, kNumTransforms };
 const char* const WP2TransformNames[] = {"DCT", "ADST", "Hadamard", "Identity"};
 
-typedef void (*WP2TransposeF)(const int32_t* in, uint32_t w, uint32_t h,
-                              int32_t* out);
+typedef void (*WP2FwdTransposeF)(const int32_t* in, uint32_t w, uint32_t h,
+                                 int32_t* out);
+typedef void (*WP2InvTransposeF)(const int16_t* in, uint32_t w, uint32_t h,
+                                 int16_t* out);
 
-typedef void (*WP2TransformF)(const int32_t* input, int32_t* output);
+typedef void (*WP2InvTransformF)(int16_t* coeffs);
+typedef void (*WP2FwdTransformF)(int32_t* coeffs);
 
-typedef void (*WP2TransformColF)(const int32_t* input,
-                                 int32_t* output, uint32_t w);
+typedef void (*WP2InvTransformColF)(int16_t* coeffs, uint32_t w);
+typedef void (*WP2FwdTransformColF)(int32_t* coeffs, uint32_t w);
 
 // indexed on size=2,4,8,16,32
-extern WP2TransformF WP2FwdDct[5], WP2FwdAdst[5], WP2FwdHadamard[5];
-extern WP2TransformF WP2InvDct[5], WP2InvAdst[5], WP2InvHadamard[5];
+extern WP2FwdTransformF WP2FwdDct[5], WP2FwdAdst[5], WP2FwdHadamard[5];
+extern WP2InvTransformF WP2InvDct[5], WP2InvAdst[5], WP2InvHadamard[5];
 // Column-wise 2D transforms, indexed on log2(size) vertically / horizontally
-extern WP2TransformColF WP2InvDctCol[5][5];
-extern WP2TransformColF WP2FwdDctCol[5][5];
+extern WP2InvTransformColF WP2InvDctCol[5][5];
+extern WP2FwdTransformColF WP2FwdDctCol[5][5];
 
-extern WP2TransposeF WP2Transpose;
+extern WP2InvTransposeF WP2Transpose16b;
+extern WP2FwdTransposeF WP2Transpose32b;
 
 void WP2TransformInit();
 
-// These functions work inplace when 'src' and 'dst' point to the same address.
 // Entry point for 1D transforms. Repeats for 'num_rows' consecutive rows.
-void WP2InvTransform(const int32_t src[], WP2TransformType type, uint32_t size,
-                     int32_t dst[], uint32_t num_rows = 1);
-void WP2Transform(const int32_t src[], WP2TransformType type, uint32_t size,
-                  int32_t dst[], uint32_t num_rows = 1);
+void WP2InvTransform(int16_t coeffs[], WP2TransformType type, uint32_t size,
+                     uint32_t num_rows = 1);
+void WP2Transform(int32_t coeffs[], WP2TransformType type, uint32_t size,
+                  uint32_t num_rows = 1);
+
 // If 'reduced' is true, transforms at half the resolution.
-void WP2Transform2D(const int32_t src[], WP2TransformType tf_x,
+void WP2InvTransform2D(int16_t coeffs[], WP2TransformType tf_x,
+                       WP2TransformType tf_y, uint32_t size_x, uint32_t size_y,
+                       bool reduced = false);
+void WP2Transform2D(const int16_t src[], WP2TransformType tf_x,
                     WP2TransformType tf_y, uint32_t size_x, uint32_t size_y,
                     int32_t dst[], bool reduced = false);
-void WP2InvTransform2D(const int32_t src[], WP2TransformType tf_x,
-                       WP2TransformType tf_y, uint32_t size_x, uint32_t size_y,
-                       int32_t dst[], bool reduced = false);
-
-// Decoder-only: in-place 16bit-to-16bit inverse transform
-void WP2InvTransform2D16b(WP2TransformType tf_x, WP2TransformType tf_y,
-                          uint32_t size_x, uint32_t size_y,
-                          int16_t coeffs[], bool reduced = false);
 
 // Converts full transform coefficients array to half-transform ones.
 // coeffs[] is replaced by its top-left quadrant values divided by 4.
@@ -320,6 +321,9 @@ void WP2ReduceCoeffs(const int32_t src[], uint32_t size_x, uint32_t size_y,
 // is different (off-by-one) from the C-version in ~1% of cases, e.g.
 extern int32_t (*WP2SlowDct8x8)(const int32_t in[64],
                                 const float cos_x[8], const float cos_y[8]);
+
+// Convenience function for 1D in-place fwd-transform. Only for testing!
+void WP2Transform(int16_t coeffs[], WP2TransformType type, uint32_t size);
 
 //------------------------------------------------------------------------------
 // Deblocking filter
@@ -488,7 +492,7 @@ class PseudoRNG;
 typedef void (*AddGrainF)(int16_t* samples, size_t step, PseudoRNG* const rng,
                           uint32_t amp, uint32_t cut_off);
 typedef void (*GenerateGrainF)(PseudoRNG* const rng,
-                               uint32_t amp, uint32_t cut_off, int32_t dst[]);
+                               uint32_t amp, uint32_t cut_off, int16_t dst[]);
 
 extern AddGrainF AddGrain4x4;
 extern GenerateGrainF GenerateGrain4x4;
@@ -565,21 +569,21 @@ extern void BasePaethPredictor(const int16_t* ctx, uint32_t bw, uint32_t bh,
 // Subtract prediction 'pred' from 'src'. 'len' is assumed to be multiple of 4.
 // The 'src - pred' difference value is assumed to fit in int16_t.
 extern void (*SubtractRow)(const int16_t src[], const int16_t pred[],
-                           int32_t dst[], uint32_t len);
+                           int16_t dst[], uint32_t len);
 
 // Add prediction 'res' to 'src', clamp and store in 'dst'.
 // 'len' is assumed to be multiple of 4.
 // 'res[]' and 'res[] + src[]' is assumed to fit in int16_t.
-extern void (*AddRow)(const int16_t src[], const int32_t res[],
+extern void (*AddRow)(const int16_t src[], const int16_t res[],
                       int32_t min, int32_t max, int16_t dst[], uint32_t len);
 
 // Equivalent version for blocks instead of row (same restrictions)
 typedef void (*SubtractBlockFunc)(const int16_t src[], uint32_t src_step,
                                   const int16_t pred[], uint32_t pred_step,
-                                  int32_t dst[], uint32_t dst_step,
+                                  int16_t dst[], uint32_t dst_step,
                                   uint32_t height);
 typedef void (*AddBlockFunc)(const int16_t src[], uint32_t src_step,
-                             const int32_t res[], uint32_t res_step,
+                             const int16_t res[], uint32_t res_step,
                              int32_t min, int32_t max,
                              int16_t dst[], uint32_t dst_step,
                              uint32_t height);

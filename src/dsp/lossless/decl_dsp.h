@@ -36,9 +36,8 @@ typedef void (*ProcessDecBlueAndRedFunc)(const uint16_t* src,
 extern ProcessDecBlueAndRedFunc AddGreenToBlueAndRed;
 
 typedef void (*TransformColorInverseFunc)(const Multipliers* const m,
-                                          const uint16_t* src,
-                                          uint32_t num_pixels,
-                                          uint32_t channel_bits, uint16_t* dst);
+                                          const int16_t* src,
+                                          uint32_t num_pixels, int16_t* dst);
 extern TransformColorInverseFunc TransformColorInverse;
 
 class Transform;  // Defined in dec/lossless/losslessi_dec.h.

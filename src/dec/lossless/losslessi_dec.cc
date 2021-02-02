@@ -819,13 +819,43 @@ WP2Status Decoder::DecodeHeader() {
     }
   }
   premultiply_ = (gparams_->has_alpha_ ? dec_->ReadBool("premultiply") : false);
-  dec_->PopDebugPrefix();
 
   // Modify the main image ranges if we only use the palette.
   if (num_transforms == 1 && transforms[0] == TransformType::kColorIndexing) {
     hdr_.symbols_info_.SetAsLabelImage();
     hdr_.symbols_info_.SetMinMax(kSymbolG, /*min=*/0, /*max=*/num_colors_ - 1);
+  } else if (num_transforms != 0) {
+    int16_t minima_range[4], maxima_range[4];
+    // Find the ranges in which the ARGB values are.
+    GetARGBRanges(transforms, num_transforms, hdr_.symbols_info_.SampleFormat(),
+                  num_colors_, minima_range, maxima_range);
+    // Read the ARGB ranges. As the encoder tries to reduce the ranges of ARGB
+    // values around zero, they are more efficiently stored as Golomb.
+    constexpr uint32_t kPrefixSize = 2;
+    for (Symbol sym : {kSymbolA, kSymbolR, kSymbolG, kSymbolB}) {
+      if (hdr_.symbols_info_.IsUnused(sym)) continue;
+      const uint32_t channel = (int)sym - (int)kSymbolA;
+      int16_t minimum, maximum;
+      if (minima_range[channel] < 0 && dec_->ReadBool("min_is_negative")) {
+        minimum =
+            ReadGolomb(minima_range[channel], -1, kPrefixSize, dec_, "minimum");
+        if (dec_->ReadBool("max_is_negative")) {
+          maximum = ReadGolomb(minimum, -1, kPrefixSize, dec_, "maximum");
+        } else {
+          maximum = ReadGolomb(0, maxima_range[channel], kPrefixSize, dec_,
+                            "maximum");
+        }
+      } else {
+        minimum =
+            ReadGolomb(0, maxima_range[channel], kPrefixSize, dec_, "minimum");
+        maximum = ReadGolomb(minimum, maxima_range[channel], kPrefixSize, dec_,
+                          "maximum");
+      }
+      hdr_.symbols_info_.SetMinMax(sym, minimum, maximum);
+    }
   }
+
+  dec_->PopDebugPrefix();
 
   // Color cache
   hdr_.cache_config_.type = CacheType::kNone;

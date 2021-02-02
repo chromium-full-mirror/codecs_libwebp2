@@ -32,8 +32,14 @@ static const int kPredLowEffort = 11;
 //------------------------------------------------------------------------------
 // Methods to calculate Entropy (Shannon).
 
-static float PredictionCostSpatial(const Vector_u32& counts, int weight_0,
-                                   float exp_val) {
+namespace WP2L {
+namespace {
+
+// Computes the cost of a histogram for values in [-128;127] where the index of
+// a int8_t v is v & 0xff.
+// TODO(vrabaud) remove once predictors drop uint8_t wrap around.
+static float PredictionCostSpatialUnsigned(const Vector_u32& counts,
+                                           int weight_0, float exp_val) {
   // TODO(vrabaud) make this constant be dependent on counts.size().
   //               This will matter for 10-bit.
   const uint32_t counts_size = 256;
@@ -48,6 +54,21 @@ static float PredictionCostSpatial(const Vector_u32& counts, int weight_0,
   }
   return -0.1f * bits;
 }
+// Computes the cost of a histogram for values in [-128;127] where the index of
+// a value v is defined by MakeIndex(v).
+static float PredictionCostSpatial(const Vector_u32& counts, int weight_0,
+                                   float exp_val) {
+  // TODO(vrabaud) make this constant be dependent on counts.size().
+  //               This will matter for 10-bit.
+  constexpr int kSignificantSymbols = 16;
+  const float kExpDecayFactor = 0.6f;
+  double bits = weight_0 * counts[MakeIndex(0)];
+  for (int i = 1; i < kSignificantSymbols; ++i) {
+    bits += exp_val * (counts[MakeIndex(i)] + counts[MakeIndex(-i)]);
+    exp_val *= kExpDecayFactor;
+  }
+  return -0.1f * bits;
+}
 
 static float PredictionCostSpatialHistogram(const Vector_u32 accumulated[4],
                                             const Vector_u32 tile[4]) {
@@ -55,9 +76,9 @@ static float PredictionCostSpatialHistogram(const Vector_u32 accumulated[4],
   float retval = 0.f;
   for (i = 0; i < 4; ++i) {
     const float kExpValue = 0.94f;
-    retval += PredictionCostSpatial(tile[i], 1, kExpValue);
-    retval += WP2L::CombinedShannonEntropy(
-        tile[i].data(), accumulated[i].data(), tile[i].size());
+    retval += PredictionCostSpatialUnsigned(tile[i], 1, kExpValue);
+    retval += CombinedShannonEntropy(tile[i].data(), accumulated[i].data(),
+                                     tile[i].size());
   }
   return retval;
 }
@@ -70,11 +91,10 @@ static inline void UpdateHisto(Vector_u32 histo_argb[4],
     ++histo_argb[i][argb[i]];
   }
 }
+}  // namespace
 
 //------------------------------------------------------------------------------
 // Spatial transform functions.
-
-namespace WP2L {
 
 static inline void PredictBatch(int mode, int x_start, int y,
                                 uint32_t num_pixels, int16_t min_value,
@@ -578,6 +598,13 @@ static void CopyTileWithColorTransform(uint32_t width, uint32_t height,
 WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
                               WP2SampleFormat format, uint32_t effort,
                               int16_t* const argb, int16_t* image) {
+  // TODO(vrabaud) remove.
+  // Assume the predictor transform returns signed residuals.
+  for (uint32_t i = 0; i < 4 * width * height; i += 4) {
+    for (uint32_t j : {1, 2, 3}) {
+      if (argb[i + j] >= 128) argb[i + j] -= 256;
+    }
+  }
   const int max_tile_size = 1 << bits;
   const int tile_xsize = SubSampleSize(width, bits);
   const int tile_ysize = SubSampleSize(height, bits);
@@ -636,11 +663,6 @@ WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
         }
       }
     }
-  }
-  // Wrap around.
-  for (uint32_t i = 0; i < 4 * width * height; i += 4) {
-    argb[i + 1] &= 0xff;
-    argb[i + 3] &= 0xff;
   }
 
   return WP2_STATUS_OK;

@@ -23,7 +23,7 @@
 namespace {
 
 void GenerateGrain4x4_C(WP2::PseudoRNG* const rng,
-                        uint32_t amp, uint32_t cut_off, int32_t dst[]) {
+                        uint32_t amp, uint32_t cut_off, int16_t dst[]) {
   for (uint32_t j = 0; j < 4; ++j) {
     for (uint32_t i = 0; i < 4; ++i) {
       if (i + j > cut_off && i + j < 3 * cut_off) {
@@ -33,13 +33,13 @@ void GenerateGrain4x4_C(WP2::PseudoRNG* const rng,
       }
     }
   }
-  WP2InvTransform2D(dst, kDct, kDct, 4, 4, dst);
+  WP2InvTransform2D(dst, kDct, kDct, 4, 4);
 }
 
 void AddGrain4x4_C(int16_t* samples, size_t step, WP2::PseudoRNG* const rng,
                    uint32_t amp, uint32_t cut_off) {
   if (amp == 0) return;
-  int32_t tmp[4 * 4];
+  int16_t tmp[4 * 4];
   GenerateGrain4x4_C(rng, amp, cut_off, tmp);
   const int32_t max_value = (1 << WP2::kMaxYuvBits) - 1;
   for (uint32_t j = 0; j < 4; ++j) {

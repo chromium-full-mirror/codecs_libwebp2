@@ -453,7 +453,7 @@ void BaseFusePredictor(const LargeWeightTable table, const int16_t ctx[],
 
 namespace {
 
-void AddRow_C(const int16_t src[], const int32_t res[],
+void AddRow_C(const int16_t src[], const int16_t res[],
               int32_t min, int32_t max, int16_t dst[], uint32_t len) {
   assert((len & 3) == 0);
   for (uint32_t x = 0; x < len; ++x) {
@@ -469,14 +469,14 @@ void AddRowEq_C(const int16_t res[], int16_t dst[],
 }
 
 void SubtractRow_C(const int16_t src[], const int16_t pred[],
-                   int32_t dst[], uint32_t len) {
+                   int16_t dst[], uint32_t len) {
   assert((len & 3) == 0);
   for (uint32_t x = 0; x < len; ++x) dst[x] = src[x] - pred[x];
 }
 
 #define ADD_SUB_BLOCK_FUNCS_DCL(WIDTH, ADD_FUNC, ADDEQ_FUNC, SUB_FUNC, EXT) \
 void AddBlock_## WIDTH ## EXT(const int16_t src[], uint32_t src_step,       \
-                              const int32_t res[], uint32_t res_step,       \
+                              const int16_t res[], uint32_t res_step,       \
                               int32_t min, int32_t max,                     \
                               int16_t dst[], uint32_t dst_step,             \
                               uint32_t height) {                            \
@@ -499,7 +499,7 @@ void AddBlockEq_## WIDTH ## EXT(const int16_t res[], uint32_t res_step,     \
 }                                                                           \
 void SubBlock_## WIDTH ## EXT(const int16_t src[], uint32_t src_step,       \
                               const int16_t pred[], uint32_t pred_step,     \
-                              int32_t dst[], uint32_t dst_step,             \
+                              int16_t dst[], uint32_t dst_step,             \
                               uint32_t height) {                            \
   for (uint32_t y = 0; y < height; ++y) {                                   \
     SUB_FUNC(src, pred, dst, WIDTH);                                        \
@@ -549,26 +549,24 @@ void AnglePredInterpolate_SSE(const int16_t* src, int32_t frac,
   if (x < len) AnglePredInterpolate_C(src + x, frac, dst + x, len - x);
 }
 
-void AddRow_SSE(const int16_t src[], const int32_t res[],
+void AddRow_SSE(const int16_t src[], const int16_t res[],
                 int32_t min, int32_t max, int16_t dst[], uint32_t len) {
   assert((len & 3) == 0);
   const __m128i m_max = _mm_set1_epi16(max);
   const __m128i m_min = _mm_set1_epi16(min);
   uint32_t x = 0;
   for (; x + 8 <= len; x += 8) {
-    const __m128i A0 = _mm_loadu_si128((const __m128i*)(res + x + 0));
-    const __m128i A1 = _mm_loadu_si128((const __m128i*)(res + x + 4));
+    const __m128i A = _mm_loadu_si128((const __m128i*)(res + x));
     const __m128i B = _mm_loadu_si128((const __m128i*)(src + x));
-    const __m128i C = _mm_packs_epi32(A0, A1);
-    const __m128i D = _mm_add_epi16(C, B);
-    const __m128i E = _mm_min_epi16(D, m_max);
-    const __m128i F = _mm_max_epi16(E, m_min);
-    _mm_storeu_si128((__m128i*)(dst + x), F);
+    const __m128i C = _mm_adds_epi16(A, B);
+    const __m128i D = _mm_min_epi16(C, m_max);
+    const __m128i E = _mm_max_epi16(D, m_min);
+    _mm_storeu_si128((__m128i*)(dst + x), E);
   }
   if (x < len) {
-    const __m128i A = _mm_loadu_si128((const __m128i*)(res + x));
+    const __m128i A = _mm_loadl_epi64((const __m128i*)(res + x));
     const __m128i B = _mm_loadl_epi64((const __m128i*)(src + x));
-    const __m128i C = _mm_add_epi16(_mm_packs_epi32(A, A), B);
+    const __m128i C = _mm_adds_epi16(A, B);
     const __m128i D = _mm_min_epi16(C, m_max);
     const __m128i E = _mm_max_epi16(D, m_min);
     _mm_storel_epi64((__m128i*)(dst + x), E);
@@ -600,24 +598,20 @@ void AddRowEq_SSE(const int16_t res[], int16_t dst[],
 }
 
 void SubtractRow_SSE(const int16_t src[], const int16_t pred[],
-                     int32_t dst[], uint32_t len) {
+                     int16_t dst[], uint32_t len) {
   assert((len & 3) == 0);
   uint32_t x = 0;
   for (; x + 8 <= len; x += 8) {
     const __m128i A = _mm_loadu_si128((const __m128i*)(src + x));
     const __m128i B = _mm_loadu_si128((const __m128i*)(pred + x));
     const __m128i C = _mm_sub_epi16(A, B);
-    const __m128i D0 = _mm_cvtepi16_epi32(C);
-    const __m128i D1 = _mm_cvtepi16_epi32(_mm_srli_si128(C, 8));
-    _mm_storeu_si128((__m128i*)(dst + x + 0), D0);
-    _mm_storeu_si128((__m128i*)(dst + x + 4), D1);
+    _mm_storeu_si128((__m128i*)(dst + x), C);
   }
   if (x < len) {   // left over 4 pixels
     const __m128i A = _mm_loadl_epi64((const __m128i*)(src + x));
     const __m128i B = _mm_loadl_epi64((const __m128i*)(pred + x));
     const __m128i C = _mm_sub_epi16(A, B);
-    const __m128i D = _mm_cvtepi16_epi32(C);
-    _mm_storeu_si128((__m128i*)(dst + x), D);
+    _mm_storel_epi64((__m128i*)(dst + x), C);
   }
 }
 
@@ -703,9 +697,9 @@ void (*AnglePredInterpolate)(const int16_t* src, int32_t frac,
                              int16_t* dst, uint32_t len) = nullptr;
 
 void (*SubtractRow)(const int16_t src[], const int16_t pred[],
-                    int32_t dst[], uint32_t len) = nullptr;
+                    int16_t dst[], uint32_t len) = nullptr;
 
-void (*AddRow)(const int16_t src[], const int32_t res[],
+void (*AddRow)(const int16_t src[], const int16_t res[],
                int32_t min, int32_t max,
                int16_t dst[], uint32_t len) = nullptr;
 

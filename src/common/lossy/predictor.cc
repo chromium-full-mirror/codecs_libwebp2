@@ -304,11 +304,11 @@ class AnglePredictor : public ContextPredictor {
     D225_PRED,
     Num
   };
-  AnglePredictor(Type type, Channel channel, int16_t angle_delta,
-                 int16_t min_value, int16_t max_value)
+  AnglePredictor(Type type, Channel channel, uint32_t sub_mode,
+                 int16_t angle_delta, int16_t min_value, int16_t max_value)
       : min_value_(min_value),
         max_value_(max_value),
-        angle_delta_(angle_delta),
+        sub_mode_(sub_mode),
         angle_idx_(AngleIdx(type, channel, angle_delta)) {
     context_type_ = GetContextType(angle_idx_);
     static_assert((uint32_t)Type::Num == kAnglePredNum,
@@ -317,15 +317,15 @@ class AnglePredictor : public ContextPredictor {
 
   // Returns the angle index for precalculated angles.
   // Index goes from 0 (12.86 degrees) to 69 (234.64 degrees).
-  static uint8_t AngleIdx(Type type, Channel channel, int16_t angle_step) {
+  static uint8_t AngleIdx(Type type, Channel channel, int16_t angle_delta) {
     constexpr int16_t max_delta = kDirectionalMaxAngleDeltaYA;
     if (channel == kUChannel || channel == kVChannel) {
       // Note that the U/V prediction angles are not exactly even spaced.
       // But they map to already existing angles for Y/A.
       // TODO(skal): should the YA / UV angles be made independent?
-      angle_step *= 2;
+      angle_delta *= 2;
     }
-    const int idx = (int)type * (2 * max_delta + 1) + max_delta + angle_step;
+    const int idx = (int)type * (2 * max_delta + 1) + max_delta + angle_delta;
     assert(idx >= 0 && idx < (int)kNumDirectionalAngles);
     return (uint8_t)idx;
   }
@@ -343,9 +343,8 @@ class AnglePredictor : public ContextPredictor {
     // By storing the angle step, we are then able, at decoding time, to figure
     // out the sub-mode of an angle predictor.
     const uint32_t max_delta = GetMaxAngleDelta(channel);
-    const uint32_t sub_mode = max_delta + angle_delta_;
-    enc->PutRValue(sub_mode, 2 * max_delta + 1, "angle_step");
-    return sub_mode;
+    enc->PutRange(sub_mode_, 0, 2 * max_delta, "sub_mode");
+    return sub_mode_;
   }
 
   uint32_t ReadParams(CodedBlockBase* const cb, Channel channel,
@@ -355,9 +354,7 @@ class AnglePredictor : public ContextPredictor {
     (void)sm;
     // TODO(vrabaud) explore using a symbol for the step, like in AV1.
     const uint32_t max_delta = GetMaxAngleDelta(channel);
-    const uint32_t angle_step =
-        dec->ReadRValue(2 * max_delta + 1, "angle_step");
-    return angle_step;
+    return dec->ReadRange(0, 2 * max_delta, "sub_mode");
   }
 
   std::string GetName() const override {
@@ -401,8 +398,8 @@ class AnglePredictor : public ContextPredictor {
   const int16_t max_value_;
 
  private:
-  const int16_t angle_delta_;
-  uint8_t angle_idx_;
+  const uint32_t sub_mode_;   // used by encoder during WriteParams()
+  uint32_t angle_idx_;        // global angle index, as calculated by AngleIdx()
 };
 
 //------------------------------------------------------------------------------
@@ -652,16 +649,21 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
       case Pred::kAngle180:
       case Pred::kAngle203:
       case Pred::kAngle225:
-        for (int step = -max_delta; step <= max_delta; ++step) {
+        for (int32_t sub_mode = 0; sub_mode <= 2 * max_delta; ++sub_mode) {
+          // we map the sub-mode to a delta-angle around the main angle.
+          // It mostly affects the RD-opt search order, since the coding
+          // will be the same in the bitstream (we're using a Range).
+          const int32_t angle_step =
+              (sub_mode & 1) ? -((sub_mode + 1) >> 1) : (sub_mode >> 1);
           // We assume they're in the same order in ContextPredictor and in
           // AnglePredictor::Type
           pred = new (WP2Allocable::nothrow)
               AnglePredictor((AnglePredictor::Type)angle_type, channel_,
-                             step, min_value, max_value);
+                             sub_mode, angle_step, min_value, max_value);
           pred = RecordPredictor(pred, i, transform);
           WP2_CHECK_ALLOC_OK(pred != nullptr);
           // Store the main angle.
-          if (step == 0) preds_main_angle_[angle_type] = pred;
+          if (angle_step == 0) preds_main_angle_[angle_type] = pred;
         }
         ++angle_type;
         continue;   // done with angle preds

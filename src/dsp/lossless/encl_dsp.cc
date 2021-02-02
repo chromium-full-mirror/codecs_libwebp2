@@ -66,10 +66,6 @@ void SubtractGreenFromBlueAndRed_C(uint16_t* argb_data, uint32_t channel_bits,
   }
 }
 
-inline int32_t ColorTransformDelta(int16_t color_pred, int16_t color) {
-  return (((int32_t)color_pred * (int8_t)color) >> 5);
-}
-
 void TransformColor_C(const WP2L::Multipliers* const m, int num_pixels,
                       int16_t* const data) {
   int i;
@@ -78,9 +74,9 @@ void TransformColor_C(const WP2L::Multipliers* const m, int num_pixels,
     const int16_t red = data[4 * i + 1];
     int new_red = red;
     int new_blue = data[4 * i + 3];
-    new_red -= ColorTransformDelta(m->green_to_red, green);
-    new_blue -= ColorTransformDelta(m->green_to_blue, green);
-    new_blue -= ColorTransformDelta(m->red_to_blue, red);
+    new_red -= WP2L::ColorTransformDelta(m->green_to_red, green);
+    new_blue -= WP2L::ColorTransformDelta(m->green_to_blue, green);
+    new_blue -= WP2L::ColorTransformDelta(m->red_to_blue, red);
     data[4 * i + 1] = new_red;
     data[4 * i + 3] = new_blue;
   }
@@ -90,7 +86,7 @@ inline int16_t TransformColorRed(int16_t green_to_red,
                                  const int16_t* const argb) {
   const int16_t green = argb[2];
   int16_t new_red = argb[1];
-  new_red -= ColorTransformDelta(green_to_red, green);
+  new_red -= WP2L::ColorTransformDelta(green_to_red, green);
   return new_red;
 }
 
@@ -100,8 +96,8 @@ inline int16_t TransformColorBlue(int16_t green_to_blue,
   const int16_t green = argb[2];
   const int16_t red = argb[1];
   int16_t new_blue = argb[3];
-  new_blue -= ColorTransformDelta(green_to_blue, green);
-  new_blue -= ColorTransformDelta(red_to_blue, red);
+  new_blue -= WP2L::ColorTransformDelta(green_to_blue, green);
+  new_blue -= WP2L::ColorTransformDelta(red_to_blue, red);
   return new_blue;
 }
 

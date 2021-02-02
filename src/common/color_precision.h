@@ -125,15 +125,15 @@ constexpr Argb32b ToArgb32b(Argb38b color) {
 constexpr RGB12b ToRGB12b(Argb32b color) {
   return (color.a == 0) ? RGB12b{0xFu, 0xFu, 0xFu}
                         : RGB12b{Internal::Quantize<uint32_t, 8, uint8_t, 4>(
-                                     color.r * 255u / color.a),
+                                     color.r * WP2::kAlphaMax / color.a),
                                  Internal::Quantize<uint32_t, 8, uint8_t, 4>(
-                                     color.g * 255u / color.a),
+                                     color.g * WP2::kAlphaMax / color.a),
                                  Internal::Quantize<uint32_t, 8, uint8_t, 4>(
-                                     color.b * 255u / color.a)};
+                                     color.b * WP2::kAlphaMax / color.a)};
 }
 
 constexpr Argb32b ToArgb32b(RGB12b color) {
-  return {255u,
+  return {WP2::kAlphaMax,
           Internal::Dequantize<uint8_t, 4, uint8_t, 8>(color.r),
           Internal::Dequantize<uint8_t, 4, uint8_t, 8>(color.g),
           Internal::Dequantize<uint8_t, 4, uint8_t, 8>(color.b)};
@@ -151,11 +151,13 @@ constexpr AYCoCg19b ToAYCoCg19b(Argb32b color) {
 }
 
 constexpr Argb32b ToArgb32b(AYCoCg19b color) {
-  return {(uint8_t)((color.a) ? 255u : 0u),
-          (uint8_t)Clamp(((int32_t)color.y - color.cg + color.co) * 4, 0, 255),
-          (uint8_t)Clamp(((int32_t)color.y + color.cg) * 4 - 128, 0, 255),
+  return {(uint8_t)((color.a) ? WP2::kAlphaMax : 0u),
+          (uint8_t)Clamp(((int32_t)color.y - color.cg + color.co) * 4, 0,
+                         (int32_t)WP2::kAlphaMax),
+          (uint8_t)Clamp(((int32_t)color.y + color.cg) * 4 - 128, 0,
+                         (int32_t)WP2::kAlphaMax),
           (uint8_t)Clamp(((int32_t)color.y - color.cg - color.co) * 4 + 256, 0,
-                         255)};
+                         (int32_t)WP2::kAlphaMax)};
 }
 
 //------------------------------------------------------------------------------
@@ -175,10 +177,12 @@ inline bool CheckPremultiplied(Argb38b color) {
 // Returns the maximum value for a given channel.
 // 'channel' is the index of the channel in order ARGB.
 static inline uint64_t FormatMax(WP2SampleFormat format, uint32_t channel) {
-  if (format == WP2_Argb_32 || format == WP2_ARGB_32) {
+  if (format == WP2_Argb_32 || channel == 0) {
+    return WP2::kAlphaMax;
+  } else if (format == WP2_ARGB_32) {
     return 255;
   } else if (format == WP2_Argb_38) {
-    return (channel == 0) ? 255 : 1023;
+    return (channel == 0) ? WP2::kAlphaMax : 1023;
   }
   assert(false);
   return 0;

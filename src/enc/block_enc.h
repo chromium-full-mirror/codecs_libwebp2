@@ -102,8 +102,10 @@ class CodedBlock : public CodedBlockBase {
                        Counters* const counters);
 
   // Assigns the best of the 'preds' (based on pred score only) to the
-  // CodingParams of 'channel'.
-  void FindBestPred(const Predictors& preds, Channel channel);
+  // CodingParams of 'channel'. 'improvement' controls how much the best
+  // score so far must be bestened during the search, on the range [0..256].
+  void FindBestPred(const Predictors& preds, Channel channel,
+                    uint32_t improvement = 256);
   // Assigns the best pair of 'preds/transforms' (based on full
   // pred+tf+quant+recons score) to the CodingParams of 'channel'.
   WP2Status FindBestPredTf(const EncoderConfig& config,
@@ -146,7 +148,7 @@ class CodedBlock : public CodedBlockBase {
 
   // Subtracts the 'prediction' from 'in_' and stores the residuals in 'res'.
   void GetResiduals(Channel channel, const Plane16& prediction,
-                    BlockCoeffs32* const res) const;
+                    BlockCoeffs16* const res) const;
 
   // Applies the TransformPair to 'res', quantizes the 'coeffs_' and
   // reconstructs the pixels to 'out_' using the 'prediction'.
@@ -155,8 +157,8 @@ class CodedBlock : public CodedBlockBase {
   void TransformAndReconstruct(const QuantMtx& quant, Channel channel,
                                bool reduced_transform,
                                const Plane16& prediction,
-                               const BlockCoeffs32* const res,
-                               BlockCoeffs32* const tmp);
+                               const BlockCoeffs16* const res,
+                               BlockCoeffs16* const tmp);
 
   // Quantizes and reconstructs channel 'channel'. If 'reduced_transform' is
   // true, 2x downsampling of residuals is performed.
@@ -164,13 +166,13 @@ class CodedBlock : public CodedBlockBase {
 
   // Dequantizes coeffs_[] into res[]. dim_, use_mtx_ and is420_ must be set.
   void Dequantize(const QuantMtx& quant, Channel channel,
-                  BlockCoeffs32* const res);
+                  BlockCoeffs16* const res);
 
   // Reconstructs 'channel' from dequantized residuals 'res' and 'prediction'
   // to 'out_'. 'prediction' can also point to 'out_' or be empty.
   // Upon return, res[] contains the inverse-transformed coeffs.
   void Reconstruct(Channel channel, bool reduced_transform,
-                   BlockCoeffs32* const res,
+                   BlockCoeffs16* const res,
                    const Plane16& prediction = Plane16()) const;
 
   // Calls the base method and store some extra info
@@ -209,7 +211,7 @@ class CodedBlock : public CodedBlockBase {
                      uint32_t num_channels, float tf_rate,
                      Counters* const counters, uint32_t* const dist,
                      float* const res_rate, float* const pred_rate,
-                     float* const score) const;
+                     float* const score, float best_score) const;
 
   // Pseudo-Visual debug: force the transform of the block.
   TransformPair GetForcedTransform(const EncoderConfig& config,
@@ -228,7 +230,7 @@ class CodedBlock : public CodedBlockBase {
   // position.
   void StoreOriginalResiduals(
       const EncoderConfig& config, uint32_t tile_pos_x, uint32_t tile_pos_y,
-      int32_t original_res[kMaxNumTransformsPerBlock][kMaxBlockSizePix2],
+      int16_t original_res[kMaxNumTransformsPerBlock][kMaxBlockSizePix2],
       Plane16* const dst_plane) const;
   // Visual debug: stores prediction scores
   enum class SearchType {

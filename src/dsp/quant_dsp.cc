@@ -40,10 +40,10 @@ void Quantize_C(const uint32_t iq[], const uint32_t bias[],
   }
 }
 
-void Dequantize_C(const int16_t in[], const int16_t dequants[], int32_t out[],
+void Dequantize_C(const int16_t in[], const int16_t dequants[], int16_t out[],
                   uint32_t W, uint32_t H, uint32_t len) {
   assert(len <= W * H);
-  int32_t* const end = out + W * H;
+  int16_t* const end = out + W * H;
   for (uint32_t y = 0; y < len; y += W) {
     for (uint32_t x = 0; x < W; ++x) out[x] = in[x] * dequants[x];
     dequants += WP2QStride;
@@ -108,29 +108,23 @@ void Quantize_SSE(const uint32_t iq[], const uint32_t bias[],
   }
 }
 
-void Dequantize_SSE(const int16_t in[], const int16_t dequants[], int32_t out[],
+void Dequantize_SSE(const int16_t in[], const int16_t dequants[], int16_t out[],
                     uint32_t W, uint32_t H, uint32_t len) {
   assert(len <= W * H);
-  int32_t* const end = out + W * H;
+  int16_t* const end = out + W * H;
   for (uint32_t y = 0; y < len; y += W) {
     if (W > 4) {
       for (uint32_t x = 0; x < W; x += 8) {
-        const __m128i A0 = _mm_loadu_si128((const __m128i*)&in[x]);
-        const __m128i B0 = _mm_loadu_si128((const __m128i*)&dequants[x]);
-        const __m128i C0 = _mm_mullo_epi16(A0, B0);
-        const __m128i C1 = _mm_mulhi_epi16(A0, B0);
-        const __m128i D0 = _mm_unpacklo_epi16(C0, C1);
-        const __m128i D1 = _mm_unpackhi_epi16(C0, C1);
-        _mm_storeu_si128((__m128i*)&out[x + 0], D0);
-        _mm_storeu_si128((__m128i*)&out[x + 4], D1);
+        const __m128i A = _mm_loadu_si128((const __m128i*)&in[x]);
+        const __m128i B = _mm_loadu_si128((const __m128i*)&dequants[x]);
+        const __m128i C = _mm_mullo_epi16(A, B);  // non-saturated!
+        _mm_storeu_si128((__m128i*)&out[x], C);
       }
     } else {
-      const __m128i A0 = _mm_loadl_epi64((const __m128i*)in);
-      const __m128i B0 = _mm_loadl_epi64((const __m128i*)dequants);
-      const __m128i C0 = _mm_mullo_epi16(A0, B0);
-      const __m128i C1 = _mm_mulhi_epi16(A0, B0);
-      const __m128i D0 = _mm_unpacklo_epi16(C0, C1);
-      _mm_storeu_si128((__m128i*)out, D0);
+      const __m128i A = _mm_loadl_epi64((const __m128i*)in);
+      const __m128i B = _mm_loadl_epi64((const __m128i*)dequants);
+      const __m128i C = _mm_mullo_epi16(A, B);
+      _mm_storeu_si128((__m128i*)out, C);
     }
     dequants += WP2QStride;
     out += W;
@@ -155,7 +149,7 @@ void (*WP2Quantize)(const uint32_t iq[], const uint32_t bias[],
                     const int32_t res[], int16_t coeffs[],
                     uint32_t W, uint32_t H) = nullptr;
 void (*WP2Dequantize)(const int16_t in[], const int16_t dequants[],
-                      int32_t out[],
+                      int16_t out[],
                       uint32_t W, uint32_t H, uint32_t len) = nullptr;
 
 static volatile WP2CPUInfo quantize_last_cpuinfo_used =

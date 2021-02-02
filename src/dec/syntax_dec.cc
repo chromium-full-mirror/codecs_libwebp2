@@ -58,7 +58,7 @@ WP2Status SyntaxReader::ReadHeader(const BitstreamFeatures& features,
     if (c == kAChannel && !gparams_->maybe_use_lossy_alpha_) continue;
     WP2_CHECK_STATUS(symbols_info_.SetMinMax(
         kSymbolDC, ResidualIO::GetCluster(c, num_channels), /*min=*/0,
-        /*max=*/gparams_->GetMaxDCRange(c) - 1));
+        /*max=*/gparams_->GetMaxDCRange(c)));
   }
   symbols_info_.SetClusters(kSymbolDC, symbols_info_.NumClusters(kSymbolDC));
   WP2_CHECK_STATUS(sr_.Init(symbols_info_, dec_));

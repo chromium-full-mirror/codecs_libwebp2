@@ -142,9 +142,9 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
   for (const TrfSize tdim : kAllTrfSizes) {
     const uint32_t W = TrfWidth[tdim], H = TrfHeight[tdim];
     const uint32_t max_residual_value =
-          (uint32_t)(max_residual * std::sqrt(W * H));
+        std::min((uint32_t)(max_residual * std::sqrt(W * H)), (1 << 16) - 1u);
     const int32_t max_res =
-          WP2Quantize16b(max_residual_value, IQ0, (1 << WP2QBits) - 1);
+          WP2Quantize16b(max_residual_value, IQ0, /*bias=*/0);
     max_abs_res_dc[tdim] = std::min(kMaxDcValue, max_res);
   }
 }
@@ -185,7 +185,9 @@ void QuantMtx::Quantize(const int32_t residuals[], TrfSize dim,
   }
 #endif
   if (first_is_dc) {
-    coeffs[0] = Clamp<int16_t>(coeffs[0], -kMaxDcValue, kMaxDcValue);
+    // prevents overflow in Dequantize()
+    const uint32_t max_dc = max_abs_res_dc[dim];
+    coeffs[0] = Clamp<int16_t>(coeffs[0], -max_dc, max_dc);
   }
   for (uint32_t i = (first_is_dc ? 1 : 0); i < last_nz; ++i) {
     coeffs[i] = Clamp<int16_t>(coeffs[i], -kMaxCoeffValue, kMaxCoeffValue);
@@ -201,7 +203,7 @@ int16_t QuantMtx::DCError(int32_t DC, TrfSize dim) const {
 }
 
 void QuantMtx::Dequantize(const int16_t coeffs[], uint32_t num_coeffs,
-                          TrfSize dim, int32_t residuals[]) const {
+                          TrfSize dim, int16_t residuals[]) const {
   WP2Dequantize(coeffs, dequants, residuals,
                 TrfWidth[dim], TrfHeight[dim], num_coeffs);
 }
@@ -209,7 +211,7 @@ void QuantMtx::Dequantize(const int16_t coeffs[], uint32_t num_coeffs,
 uint32_t QuantMtx::RoundTrip(const int32_t residuals[], TrfSize dim,
                              bool first_is_dc, int16_t coeffs[],
                              uint32_t* const num_coeffs) const {
-  int32_t tmp[kMaxBlockSizePix2];
+  int16_t tmp[kMaxBlockSizePix2];
   Quantize(residuals, dim, first_is_dc, coeffs, num_coeffs);
   // TODO(skal): rnd_mtx ?
   WP2Dequantize(coeffs, dequants, tmp,

@@ -126,7 +126,7 @@ WP2Status SyntaxWriter::InitPass() {
     if (c == kAChannel && !gparams_->maybe_use_lossy_alpha_) continue;
     WP2_CHECK_STATUS(symbols_info.SetMinMax(
         kSymbolDC, ResidualIO::GetCluster(c, num_channels), /*min=*/0,
-        /*max=*/gparams_->GetMaxDCRange(c) - 1));
+        /*max=*/gparams_->GetMaxDCRange(c)));
   }
   symbols_info.SetClusters(kSymbolDC, symbols_info.NumClusters(kSymbolDC));
 

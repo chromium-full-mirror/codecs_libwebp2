@@ -217,10 +217,10 @@ WP2Status MultiScoreFunc::ComputeScore(const Block& block,
 //------------------------------------------------------------------------------
 
 void MultiScoreFunc::GetCoeffs(Channel channel, const Block& block,
-                               int32_t coeffs[kMaxBlockSizePix2]) const {
+                               int16_t coeffs[kMaxBlockSizePix2]) const {
   const Plane16& plane = src_->GetChannel(channel);
   // Copy luma pixels.
-  int32_t* dst_row = coeffs;
+  int16_t* dst_row = coeffs;
   const int16_t* src_row = &plane.At(block.x_pix(), block.y_pix());
   for (uint32_t y = 0; y < block.h_pix(); ++y) {
     for (uint32_t x = 0; x < block.w_pix(); ++x) {
@@ -232,11 +232,12 @@ void MultiScoreFunc::GetCoeffs(Channel channel, const Block& block,
 }
 
 void MultiScoreFunc::QuantizeCoeffs(Channel channel, const Block& block,
-                                    int32_t coeffs[kMaxBlockSizePix2]) const {
+                                    int16_t coeffs[kMaxBlockSizePix2]) const {
   GetCoeffs(channel, block, coeffs);
 
   // Transform them.
-  WP2Transform2D(coeffs, kDct, kDct, block.w_pix(), block.h_pix(), coeffs,
+  int32_t out[kMaxBlockSizePix2];
+  WP2Transform2D(coeffs, kDct, kDct, block.w_pix(), block.h_pix(), out,
                  /*reduced=*/false);
 
   // Find the segment of the block.
@@ -248,33 +249,31 @@ void MultiScoreFunc::QuantizeCoeffs(Channel channel, const Block& block,
       gparams_->segments_[segment_id].GetQuant(channel);
 
   // Quantize and dequantize coefficients.
-  int16_t quantized_coeffs[kMaxBlockSizePix2];
   const TrfSize tdim = GetTransform(block.dim());
   uint32_t num_coeffs;
-  quant_mtx.Quantize(coeffs, tdim, /*first_is_dc=*/true, quantized_coeffs,
-                     &num_coeffs);
-  quant_mtx.Dequantize(quantized_coeffs, num_coeffs, tdim, coeffs);
+  quant_mtx.Quantize(out, tdim, /*first_is_dc=*/true, coeffs, &num_coeffs);
+  quant_mtx.Dequantize(coeffs, num_coeffs, tdim, coeffs);
 
   // Inverse transform them back and compare the result.
-  WP2InvTransform2D(coeffs, kDct, kDct, block.w_pix(), block.h_pix(), coeffs,
+  WP2InvTransform2D(coeffs, kDct, kDct, block.w_pix(), block.h_pix(),
                     /*reduced=*/false);
 }
 
 void MultiScoreFunc::QuantizeCoeffs(Channel channel, const Block& block,
                                     BlockSize sub_block_size,
-                                    int32_t coeffs[kMaxBlockSizePix2],
+                                    int16_t coeffs[kMaxBlockSizePix2],
                                     int32_t* const max_range) const {
   if (max_range != nullptr) *max_range = 0;
   Block sub_block(block.x(), block.y(), sub_block_size);
   while (sub_block.y() + sub_block.h() <= block.y() + block.h()) {
-    int32_t sub_coeffs[kMaxBlockSizePix2];
+    int16_t sub_coeffs[kMaxBlockSizePix2];
     QuantizeCoeffs(channel, sub_block, sub_coeffs);
-    int32_t min = sub_coeffs[0], max = sub_coeffs[0];
+    int16_t min = sub_coeffs[0], max = sub_coeffs[0];
     const uint32_t y = sub_block.y_pix() - block.y_pix();
     const uint32_t x = sub_block.x_pix() - block.x_pix();
     for (uint32_t sub_y = 0; sub_y < sub_block.h_pix(); ++sub_y) {
       for (uint32_t sub_x = 0; sub_x < sub_block.w_pix(); ++sub_x) {
-        const int32_t sub_coeff = sub_coeffs[sub_y * sub_block.w_pix() + sub_x];
+        const int16_t sub_coeff = sub_coeffs[sub_y * sub_block.w_pix() + sub_x];
         min = std::min(min, sub_coeff);
         max = std::max(max, sub_coeff);
         coeffs[(y + sub_y) * block.w_pix() + (x + sub_x)] = sub_coeff;
@@ -404,11 +403,11 @@ float MultiScoreFunc::GetStdDevRangeThreshold(const Block& block) const {
 // quantized ones, weighted per pixel by the 'spread_' in order to give more
 // importance to flat areas (penalize distant ripples more than noise on edges).
 float MultiScoreFunc::GetQuantDCT(const Block& block, Channel channel) const {
-  int32_t coeffs[kMaxBlockSizePix2];
+  int16_t coeffs[kMaxBlockSizePix2];
   QuantizeCoeffs(channel, block, coeffs);
 
   float avg_diff = 0.f;
-  int32_t* dst_row = coeffs;
+  int16_t* dst_row = coeffs;
   const int16_t* src_row =
       &src_->GetChannel(channel).At(block.x_pix(), block.y_pix());
   const int16_t* spread_row =

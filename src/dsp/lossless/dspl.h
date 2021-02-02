@@ -27,19 +27,25 @@ namespace WP2L {
 
 static constexpr uint32_t kNumPredictors = 15;
 
+//------------------------------------------------------------------------------
+// Color transforms.
+
 typedef struct {
   int16_t green_to_red;
   int16_t green_to_blue;
   int16_t red_to_blue;
 } Multipliers;
 
+static inline int32_t ColorTransformDelta(int16_t color_pred, int16_t color) {
+  return (((int32_t)color_pred * color) >> 5);
+}
+
 //------------------------------------------------------------------------------
 // Misc methods.
 
 // Transforms a signed value into an unsigned index.
 static inline uint16_t MakeIndex(int16_t val) {
-  // TODO(vrabaud) remove this wrap around.
-  return (val & 0xff);
+  return (val >= 0) ? 2 * val : -2 * val - 1;
 }
 
 // Computes sampled size of 'size' when sampling using 'sampling bits'.

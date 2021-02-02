@@ -309,10 +309,10 @@ struct Golomb {
 
 // Read/write a value in [min, max] using Golomb coding.
 // 'prefix_size' must be 1 or 2 (number of leading bits coded separately).
-void WriteGolomb(uint32_t value, uint32_t min, uint32_t max,
-                 uint32_t prefix_size, ANSEncBase* const enc, WP2_OPT_LABEL);
-uint32_t ReadGolomb(uint32_t min, uint32_t max, uint32_t prefix_size,
-                    ANSDec* const dec, WP2_OPT_LABEL);
+void WriteGolomb(int32_t value, int32_t min, int32_t max, uint32_t prefix_size,
+                 ANSEncBase* const enc, WP2_OPT_LABEL);
+int32_t ReadGolomb(int32_t min, int32_t max, uint32_t prefix_size,
+                   ANSDec* const dec, WP2_OPT_LABEL);
 
 //------------------------------------------------------------------------------
 
@@ -701,6 +701,13 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
  private:
   WP2SampleFormat sample_format_;
 };
+
+// Fills ranges of ARGB symbols according to the transforms applied to the
+// image. 'num_colors' is the number of colors used in the palette if any (it is
+// unused if no color indexing transform is present).
+void GetARGBRanges(const TransformType* transforms, uint32_t num_transforms,
+                   WP2SampleFormat format, uint32_t num_colors,
+                   int16_t minima_range[4], int16_t maxima_range[4]);
 
 }  // namespace WP2L
 

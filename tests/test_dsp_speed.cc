@@ -42,8 +42,7 @@ class SpeedTestCpuInfo : public ::testing::TestWithParam<WP2CPUInfo> {
 
 TEST_P(SpeedTestCpuInfo, TestAddSub) {
   constexpr uint32_t kMaxLen = 32 * 32;
-  int16_t src[kMaxLen], pred[kMaxLen], dst[kMaxLen];
-  int32_t res[kMaxLen];
+  int16_t src[kMaxLen], pred[kMaxLen], dst[kMaxLen], res[kMaxLen];
   constexpr uint32_t kNumTests = 10;
   constexpr uint32_t kNumLoops = 10000;
   PseudoRNG rng;
@@ -74,8 +73,7 @@ TEST_P(SpeedTestCpuInfo, TestAddSub) {
 
 TEST_P(SpeedTestCpuInfo, TestAddSubBlock) {
   constexpr uint32_t kMaxLen = 32 * 32;
-  int16_t src[kMaxLen], pred[kMaxLen], dst[kMaxLen];
-  int32_t res[kMaxLen];
+  int16_t src[kMaxLen], pred[kMaxLen], dst[kMaxLen], res[kMaxLen];
   constexpr uint32_t kNumTests = 100;
   constexpr uint32_t kNumLoops = 200;
   PseudoRNG rng;

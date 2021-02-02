@@ -206,9 +206,8 @@ void CodedBlockBase::Reconstruct(Channel channel) {
         assert(mtx_set_->IsOk(mtx_[channel], tsize));
         mtx_set_->AddMatrix(mtx_[channel], tsize, coeffs_[channel][tf_i]);
       }
-      WP2InvTransform2D16b(
-          params->tf_x(), params->tf_y(), split_w, split_h,
-          coeffs_[channel][tf_i], reduced_transform);
+      WP2InvTransform2D(coeffs_[channel][tf_i],  params->tf_x(), params->tf_y(),
+                        split_w, split_h, reduced_transform);
       add_block_eq(coeffs_[channel][tf_i], split_w,
                    &out.At(split_x, split_y), out.Step(), min, max, split_h);
     }

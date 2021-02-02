@@ -67,12 +67,12 @@ class MultiScoreFunc : public PartitionScoreFunc {
  protected:
   // Helper functions.
   void GetCoeffs(Channel channel, const Block& block,
-                 int32_t coeffs[kMaxBlockSizePix2]) const;
+                 int16_t coeffs[kMaxBlockSizePix2]) const;
   void QuantizeCoeffs(Channel channel, const Block& block,
-                      int32_t coeffs[kMaxBlockSizePix2]) const;
+                      int16_t coeffs[kMaxBlockSizePix2]) const;
   void QuantizeCoeffs(Channel channel, const Block& block,
                       BlockSize sub_block_size,
-                      int32_t coeffs[kMaxBlockSizePix2],
+                      int16_t coeffs[kMaxBlockSizePix2],
                       int32_t* const max_range = nullptr) const;
   float GetQuantDCT(const Block& block, Channel channel) const;
 

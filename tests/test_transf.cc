@@ -45,12 +45,30 @@ class TransposeTest : public ::testing::TestWithParam<WP2CPUInfo> {
   void SetUp() override {
     WP2DspReset();
     WP2GetCPUInfo = GetParam();
+    WP2TransformInit();
   }
 };
 
-TEST_P(TransposeTest, Transpose) {
-  WP2TransformInit();
+TEST_P(TransposeTest, Transpose16) {
+  for (uint32_t size_x : kTransformSizes) {
+    for (uint32_t size_y : kTransformSizes) {
+      SCOPED_TRACE(SPrintf("size_x: %d size_y: %d", size_x, size_y));
+      const uint32_t num_coeffs = size_x * size_y;
+      int16_t in[32 * 32], tmp[32 * 32], ref[32 * 32];
+      for (uint32_t i = 0; i < num_coeffs; ++i) ref[i] = i;
+      for (uint32_t i = num_coeffs; i < 32 * 32; ++i) ref[i] = -1;
+      memcpy(in, ref, sizeof(ref));
 
+      // Verify transposing.
+      WP2Transpose16b(in, size_x, size_y, tmp);
+      WP2Transpose16b(tmp, size_y, size_x, in);
+      ASSERT_EQ(memcmp(in, ref, sizeof(ref[0]) * num_coeffs), 0);
+      for (uint32_t i = num_coeffs; i < 32 * 32; ++i) ASSERT_EQ(in[i], -1);
+    }
+  }
+}
+
+TEST_P(TransposeTest, Transpose32) {
   for (uint32_t size_x : kTransformSizes) {
     for (uint32_t size_y : kTransformSizes) {
       SCOPED_TRACE(SPrintf("size_x: %d size_y: %d", size_x, size_y));
@@ -61,8 +79,8 @@ TEST_P(TransposeTest, Transpose) {
       memcpy(in, ref, sizeof(ref));
 
       // Verify transposing.
-      WP2Transpose(in, size_x, size_y, tmp);
-      WP2Transpose(tmp, size_y, size_x, in);
+      WP2Transpose32b(in, size_x, size_y, tmp);
+      WP2Transpose32b(tmp, size_y, size_x, in);
       ASSERT_EQ(memcmp(in, ref, sizeof(ref[0]) * num_coeffs), 0);
       for (uint32_t i = num_coeffs; i < 32 * 32; ++i) ASSERT_EQ(in[i], -1);
     }
@@ -76,7 +94,7 @@ INSTANTIATE_TEST_SUITE_P(TransposeTestInstantiation, TransposeTest,
 
 class RandomTransform2DTest : public ::testing::TestWithParam<size_t> {
  public:
-  void BuildAutoRegression(int32_t dst[], uint32_t size_x, uint32_t size_y,
+  void BuildAutoRegression(int16_t dst[], uint32_t size_x, uint32_t size_y,
                            UniformIntDistribution* const random) {
     int32_t first = 0;
     const int32_t hx = size_x / 2, hy = size_y / 2;   // noise amplitude
@@ -103,6 +121,13 @@ void CopyArray(const U src[32 * 32], V dst[32 * 32], uint32_t num_coeffs) {
   }
 }
 
+void Clamp16b(int32_t src[32 * 32], int16_t dst[32 * 32], uint32_t num_coeffs) {
+  for (uint32_t i = 0; i < num_coeffs; ++i) {
+    dst[i] = ClampToSigned(src[i], 16);
+  }
+  for (uint32_t i = num_coeffs; i < 32 * 32; ++i) dst[i] = 0;
+}
+
 TEST_P(RandomTransform2DTest, All) {
   const int N = 50;
   const double tolerance = 0.60;
@@ -119,91 +144,75 @@ TEST_P(RandomTransform2DTest, All) {
         for (uint32_t size_y : kTransformSizes) {
           for (bool reduced : {false, true}) {
             if (reduced && (size_x == 2 || size_y == 2)) continue;
-            for (bool inplace : {false, true}) {
-              const uint32_t num_coeffs = size_x * size_y;
-              uint32_t max_err = 0;
-              SCOPED_TRACE(SPrintf(
-                  "tf_x: %s (size_x: %d), tf_y: %s (size_y: %d), "
-                  "reduced:%d inplace:%d",
-                  WP2TransformNames[tf_x], size_x,
-                  WP2TransformNames[tf_y], size_y, reduced, inplace));
-              for (int n = 0; n < N; ++n) {
-                int32_t dst[32 * 32], ref[32 * 32] = {0};
-                int16_t dst_16b[32 * 32];
-                if (!reduced) {
-                  for (auto& v : ref) {
-                    v = random.Get<int32_t>(-1024, 1023);
-                    stats.Add(v / 128);
-                  }
-                  // A pathological case.
-                  if (size_x == 2 && size_y == 2 && n == 0) {
-                    ref[0] = -966;
-                    ref[1] = 978;
-                    ref[2] = -394;
-                    ref[3] = -370;
-                  }
-                } else {
-                  // for reduced transform, the input needs to be quite smooth
-                  // so we use a controlled auto-regression to fill the input
-                  BuildAutoRegression(ref, size_x, size_y, &random);
+            const uint32_t num_coeffs = size_x * size_y;
+            const uint32_t num_reduced_coeffs = num_coeffs / (reduced ? 4 : 1);
+            uint32_t max_err = 0;
+            SCOPED_TRACE(SPrintf(
+                "tf_x: %s (size_x: %d), tf_y: %s (size_y: %d), reduced:%d",
+                WP2TransformNames[tf_x], size_x,
+                WP2TransformNames[tf_y], size_y, reduced));
+            for (int n = 0; n < N; ++n) {
+              int16_t dst[32 * 32], ref[32 * 32] = {0};
+              int32_t tmp[32 * 32];   // intermediate result
+              if (!reduced) {
+                for (auto& v : ref) {
+                  v = random.Get<int32_t>(-1024, 1023);
+                  stats.Add(v / 128);
                 }
-
-                // Verify transforms round-trip.
-                if (inplace) {
-                  std::memcpy(dst, ref, sizeof(ref));
-                  WP2Transform2D(dst, tf_x, tf_y, size_x, size_y, dst, reduced);
-                  CopyArray(dst, dst_16b, size_x * size_y / (reduced ? 4 : 1));
-                  WP2InvTransform2D(dst, tf_x, tf_y, size_x, size_y, dst,
-                                    reduced);
-                } else {
-                  int32_t tmp[32 * 32];
-                  WP2Transform2D(ref, tf_x, tf_y, size_x, size_y, tmp, reduced);
-                  std::memset(dst, 0, sizeof(dst));
-                  WP2InvTransform2D(tmp, tf_x, tf_y, size_x, size_y, dst,
-                                    reduced);
-                  CopyArray(tmp, dst_16b, size_x * size_y / (reduced ? 4 : 1));
+                // A pathological case.
+                if (size_x == 2 && size_y == 2 && n == 0) {
+                  ref[0] = -966;
+                  ref[1] = 978;
+                  ref[2] = -394;
+                  ref[3] = -370;
                 }
-                WP2InvTransform2D16b(tf_x, tf_y, size_x, size_y, dst_16b,
-                                     reduced);
-
-
-                // no spill
-                for (size_t i = num_coeffs; i < 32 * 32; ++i) {
-                  ASSERT_EQ(dst[i], inplace ? ref[i] : 0);
-                }
-
-                // Check error tolerance.
-                uint32_t err = 0.;
-                for (size_t i = 0; i < num_coeffs; ++i) {
-                  err += std::abs(dst[i] - ref[i]);
-                  EXPECT_EQ(dst[i], (int32_t)dst_16b[i]) << " position: " << i;
-                }
-                double threshold =
-                    tolerance * num_coeffs * (log2(size_x) + log2(size_y));
-                // the dct-2 is less precise overall, so we need some headroom
-                if (size_x == 2 || size_y == 2) {
-                  threshold *= 2.1;
-                }
-                // reduced transform is less precise
-                if (reduced) {
-                  threshold *= 7.0;
-                }
-                // identity is a special case
-                if (!reduced && tf_x == kIdentity && tf_y == kIdentity) {
-                  threshold = 0;
-                }
-                if (err > threshold) {
-                  printf("actual:   ");
-                  for (size_t i = 0; i < num_coeffs; ++i) printf("%d ", dst[i]);
-                  printf("\n");
-                  printf("expected: ");
-                  for (size_t i = 0; i < num_coeffs; ++i) printf("%d ", ref[i]);
-                  printf("\n");
-                }
-                ASSERT_LE(err, threshold)
-                    << "Precision error: " << size_x << ", " << size_y;
-                max_err = std::max(err, max_err);
+              } else {
+                // for reduced transform, the input needs to be quite smooth
+                // so we use a controlled auto-regression to fill the input
+                BuildAutoRegression(ref, size_x, size_y, &random);
               }
+
+              // Verify transforms round-trip.
+              std::memcpy(dst, ref, sizeof(ref));
+              WP2Transform2D(dst, tf_x, tf_y, size_x, size_y, tmp, reduced);
+              Clamp16b(tmp, dst, num_reduced_coeffs);
+              WP2InvTransform2D(dst, tf_x, tf_y, size_x, size_y, reduced);
+
+              // no spill
+              for (size_t i = num_coeffs; i < 32 * 32; ++i) {
+                ASSERT_EQ(dst[i], 0);
+              }
+
+              // Check error tolerance.
+              uint32_t err = 0.;
+              for (size_t i = 0; i < num_coeffs; ++i) {
+                err += std::abs(dst[i] - ref[i]);
+              }
+              double threshold =
+                  tolerance * num_coeffs * (log2(size_x) + log2(size_y));
+              // the dct-2 is less precise overall, so we need some headroom
+              if (size_x == 2 || size_y == 2) {
+                threshold *= 2.1;
+              }
+              // reduced transform is less precise
+              if (reduced) {
+                threshold *= 7.0;
+              }
+              // identity is a special case
+              if (!reduced && tf_x == kIdentity && tf_y == kIdentity) {
+                threshold = 0;
+              }
+              if (err > threshold) {
+                printf("actual:   ");
+                for (size_t i = 0; i < num_coeffs; ++i) printf("%d ", dst[i]);
+                printf("\n");
+                printf("expected: ");
+                for (size_t i = 0; i < num_coeffs; ++i) printf("%d ", ref[i]);
+                printf("\n");
+              }
+              ASSERT_LE(err, threshold)
+                  << "Precision error: " << size_x << ", " << size_y;
+              max_err = std::max(err, max_err);
             }
           }
         }
@@ -229,27 +238,23 @@ TEST_P(RandomTransform2DTest, Compare) {
           const uint32_t thresh = tolerance * tx * ty * (log2(tx) + log2(ty));
           uint32_t max_err = 0;
           for (int n = 0; n < kNumIterations; ++n) {
-            int32_t in1[32 * 32], in2[32 * 32], out1[32 * 32], out2[32 * 32];
+            int16_t in1[32 * 32], in2[32 * 32];
+            int32_t out1[32 * 32], out2[32 * 32], out3[32 * 32];
             BuildAutoRegression(in1, size_x, size_y, &random);
             memcpy(in2, in1, sizeof(in1));
             // transform with both methods
             WP2Transform2D(in1, tf_x, tf_y, size_x, size_y, out1, true);
             WP2Transform2D(in2, tf_x, tf_y, size_x, size_y, out2, false);
+            WP2ReduceCoeffs(out2, size_x, size_y, out3);
             WP2ReduceCoeffs(out2, size_x, size_y, out2);
-            // compare with inplace result
-            WP2Transform2D(in1, tf_x, tf_y, size_x, size_y, in1, true);
-            WP2Transform2D(in2, tf_x, tf_y, size_x, size_y, in2, false);
-            WP2ReduceCoeffs(in2, size_x, size_y, in2);
+            // compare the inplace result
             for (uint32_t i = 0; i < tx * ty / 4; ++i) {
-              ASSERT_EQ(in1[i], out1[i]);
-            }
-            for (uint32_t i = 0; i < tx * ty; ++i) {
-              ASSERT_EQ(in2[i], out2[i]);
+              ASSERT_EQ(out2[i], out3[i]);
             }
             // check error tolerance
             uint32_t err = 0.;
             for (uint32_t i = 0; i < tx * ty; ++i) {
-              err += std::abs(in1[i] - in2[i]);
+              err += std::abs(out1[i] - out2[i]);
             }
             if (err > thresh) {
               printf("normal | crop:\n");
@@ -268,53 +273,6 @@ TEST_P(RandomTransform2DTest, Compare) {
             EXPECT_LE(err, thresh)
               << "Precision error: " << size_x << ", " << size_y;
             max_err = std::max(err, max_err);
-          }
-        }
-      }
-    }
-  }
-}
-
-// Verifies that inplace and src/dst WP2Transform2D() versions give the same
-// results.
-TEST_P(RandomTransform2DTest, Inplace) {
-  const int N = 50;
-
-  UniformIntDistribution random(/*seed=*/GetParam() + 123);
-
-  WP2TransformInit();
-
-  for (WP2TransformType tf_x : kTransformTypes) {
-    for (WP2TransformType tf_y : kTransformTypes) {
-      for (uint32_t size_x : kTransformSizes) {
-        for (uint32_t size_y : kTransformSizes) {
-          for (bool reduced : {false, true}) {
-            if (reduced && (size_x == 2 || size_y == 2)) continue;
-            const uint32_t num_coeffs = size_x * size_y;
-            const uint32_t num_tf_coeffs = num_coeffs / (reduced ? 4 : 1);
-            for (int n = 0; n < N; ++n) {
-              int32_t src[32 * 32] = {0};
-              for (int32_t& v : src) v = random.Get<int32_t>(-1024, 1023);
-
-              int32_t inplace_tf[32 * 32] = {0}, dst_tf[32 * 32] = {0};
-              std::memcpy(inplace_tf, src, sizeof(src));
-              WP2Transform2D(inplace_tf, tf_x, tf_y, size_x, size_y, inplace_tf,
-                             reduced);
-              WP2Transform2D(src, tf_x, tf_y, size_x, size_y, dst_tf, reduced);
-              for (size_t i = 0; i < num_tf_coeffs; ++i) {
-                ASSERT_EQ(inplace_tf[i], dst_tf[i]) << i;
-              }
-
-              int32_t inplace_invtf[32 * 32] = {0}, dst_invtf[32 * 32] = {0};
-              std::memcpy(inplace_invtf, src, sizeof(src));
-              WP2InvTransform2D(inplace_invtf, tf_x, tf_y, size_x, size_y,
-                                inplace_invtf, reduced);
-              WP2InvTransform2D(src, tf_x, tf_y, size_x, size_y, dst_invtf,
-                                reduced);
-              for (size_t i = 0; i < num_coeffs; ++i) {
-                ASSERT_EQ(inplace_invtf[i], dst_invtf[i]) << i;
-              }
-            }
           }
         }
       }
@@ -342,11 +300,13 @@ TEST(Transform2DTest, Zero) {
                                  WP2TransformNames[tf_y], size_y, reduced));
             // Check that if all coeffs are zero then the transformed coeffs are
             // also zero, and we still get back zero after inverse transform.
-            int32_t in[32 * 32] = {0};
-            WP2Transform2D(in, tf_x, tf_y, size_x, size_y, in, reduced);
+            int16_t in[32 * 32] = {0};
+            int32_t out[32 * 32] = {0};
+            WP2Transform2D(in, tf_x, tf_y, size_x, size_y, out, reduced);
             for (auto& i : in) ASSERT_EQ(i, 0);
+            for (auto& i : out) ASSERT_EQ(i, 0);
 
-            WP2InvTransform2D(in, tf_x, tf_y, size_x, size_y, in, reduced);
+            WP2InvTransform2D(in, tf_x, tf_y, size_x, size_y, reduced);
             for (auto& i : in) ASSERT_EQ(i, 0);
           }
         }
@@ -375,17 +335,18 @@ TEST_P(RandomTransformTest, TestTransformPrecision) {
 
   WP2TransformInit();
 
-  int32_t in[32] = {0}, out[32] = {0}, check[32] = {0};
+  int16_t in[32] = {0};
+  int32_t out[32] = {0}, check[32] = {0};
   const uint32_t S = size;
   double err[32] = {0.};
   for (int n = 0; n < N; ++n) {
     for (size_t i = 0; i < S; ++i) {
       in[i] = random.Get<int32_t>(-1024, 1023);
       out[i] = random.Get<int32_t>(0, 2147483647);
-      check[i] = random.Get<int32_t>(0, 2147483647);
+      check[i] = in[i];
     }
-    WP2Transform(in, type, size, out);
-    WP2InvTransform(out, type, size, check);
+    WP2Transform(in, type, size);
+    WP2InvTransform(in, type, size);
 
     for (size_t i = 0; i < S; ++i) err[i] += abs(in[i] - check[i]);
     for (size_t i = S; i < 32; ++i) {  // Check there's no spill.
@@ -441,9 +402,9 @@ TEST_P(PrintTransformTest, Simple) {
   const uint32_t bpp = WP2FormatBpp(image.format());
   for (uint32_t y = 0; y < size; ++y) {
     for (uint32_t x = 0; x < size; ++x) {
-      int32_t coeffs[32 * 32] = {0};
+      int16_t coeffs[32 * 32] = {0};
       coeffs[y * size + x] = 125;
-      WP2InvTransform2D(coeffs, tf_x, tf_y, size, size, coeffs);
+      WP2InvTransform2D(coeffs, tf_x, tf_y, size, size);
 
       uint8_t* row = image.GetRow8(y * size) + (x * size) * bpp;
       for (uint32_t sub_y = 0; sub_y < size; ++sub_y) {
@@ -489,16 +450,21 @@ INSTANTIATE_TEST_SUITE_P(
 TEST(TransformProperty, DCOnlyImpliesConstant) {
   WP2TransformInit();
 
-  int32_t coeffs[kMaxBlockSizePix2];
+  int16_t coeffs[kMaxBlockSizePix2];
   for (int32_t i = -10; i < 10; ++i) {
     for (uint32_t size_x : kTransformSizes) {
       for (uint32_t size_y : kTransformSizes) {
         for (uint32_t tf_x = 0; tf_x < (uint32_t)kNumTransforms; ++tf_x) {
           for (uint32_t tf_y = 0; tf_y < (uint32_t)kNumTransforms; ++tf_y) {
+            SCOPED_TRACE(SPrintf(
+                "tf_x: %s (size_x: %d), tf_y: %s (size_y: %d)  DC=%d",
+                WP2TransformNames[tf_x], size_x,
+                WP2TransformNames[tf_y], size_y, i));
+
             std::fill(coeffs, coeffs + size_x * size_y, 0);
             coeffs[0] = i;
             WP2InvTransform2D(coeffs, (WP2TransformType)tf_x,
-                              (WP2TransformType)tf_y, size_x, size_y, coeffs,
+                              (WP2TransformType)tf_y, size_x, size_y,
                               /*reduced=*/false);
             const bool is_constant =
                 std::all_of(coeffs, coeffs + size_x * size_y,
@@ -507,8 +473,10 @@ TEST(TransformProperty, DCOnlyImpliesConstant) {
               EXPECT_TRUE(coeffs[0] == 0 && is_constant);
               continue;
             }
-            EXPECT_TRUE(tf_x != kDct || tf_y != kDct || is_constant)
-                << "DC = " << i << " w=" << size_x << " h=" << size_y;
+            if (tf_x == kIdentity && tf_y == kIdentity) {
+              EXPECT_EQ(coeffs[0], i);
+            }
+            EXPECT_TRUE(tf_x != kDct || tf_y != kDct || is_constant);
           }
         }
       }

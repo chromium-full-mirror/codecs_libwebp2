@@ -57,14 +57,14 @@ constexpr int32_t kCos32Cos16p = 1337;   // 2 * cos(pi/4) * cos(pi / 8)
 template <class V>
 class ColTransformGen {
  public:
-  static void idct2(const int32_t* input, int32_t* out, uint32_t w);
-  static void idct4(const int32_t* input, int32_t* out, uint32_t w);
-  static void idct8(const int32_t* input, int32_t* out, uint32_t w);
+  static void idct2(int16_t* coeffs, uint32_t w);
+  static void idct4(int16_t* coeffs, uint32_t w);
+  static void idct8(int16_t* coeffs, uint32_t w);
 
-  static void fdct2(const int32_t* input, int32_t* out, uint32_t w);
-  static void fdct4(const int32_t* input, int32_t* out, uint32_t w);
-  static void fdct8(const int32_t* input, int32_t* out, uint32_t w);
-  static void fdct16(const int32_t* input, int32_t* out, uint32_t w);
+  static void fdct2(int32_t* coeffs, uint32_t w);
+  static void fdct4(int32_t* coeffs, uint32_t w);
+  static void fdct8(int32_t* coeffs, uint32_t w);
+  static void fdct16(int32_t* coeffs, uint32_t w);
 
  private:
   static constexpr uint32_t kStep = V::Step();
@@ -76,29 +76,29 @@ class ColTransformGen {
 // column-wise idct
 
 template <class V>
-void ColTransformGen<V>::idct2(const int32_t* in, int32_t* out, uint32_t w) {
+void ColTransformGen<V>::idct2(int16_t* coeffs, uint32_t w) {
   const V c_32 = kCosPi[32];
   const V kRnd0 = Rounding(kPrecision);
-  for (uint32_t n = V::Size(w); n--;  in += kStep, out += kStep) {
-    const V a0(in + w * 0);
-    const V a1(in + w * 1);
+  for (uint32_t n = V::Size(w); n--; coeffs += kStep) {
+    const V a0 = Load_s16_s32(coeffs + w * 0);
+    const V a1 = Load_s16_s32(coeffs + w * 1);
     const V b0 = ((a0 + a1) * c_32 + kRnd0) >> kPrecision;
     const V b1 = ((a0 - a1) * c_32 + kRnd0) >> kPrecision;
-    b0.Store(out + w * 0);
-    b1.Store(out + w * 1);
+    b0.Store16(coeffs + w * 0);
+    b1.Store16(coeffs + w * 1);
   }
 }
 
 template <class V>
-void ColTransformGen<V>::idct4(const int32_t* in, int32_t* out, uint32_t w) {
+void ColTransformGen<V>::idct4(int16_t* coeffs, uint32_t w) {
   const V kRnd0 = Rounding(kPrecision);
   const V c_32_48 = kCos32Cos48p;
   const V c_32_16 = kCos32Cos16p;
-  for (uint32_t n = V::Size(w); n--;  in += kStep, out += kStep) {
-    V a0(in + w * 0);
-    V a1(in + w * 2);
-    V a2(in + w * 1);
-    V a3(in + w * 3);
+  for (uint32_t n = V::Size(w); n--; coeffs += kStep) {
+    V a0 = Load_s16_s32(coeffs + w * 0);
+    V a1 = Load_s16_s32(coeffs + w * 2);
+    V a2 = Load_s16_s32(coeffs + w * 1);
+    V a3 = Load_s16_s32(coeffs + w * 3);
 
     const V b0 = a0 + a1;
     const V b1 = a0 - a1;
@@ -110,15 +110,15 @@ void ColTransformGen<V>::idct4(const int32_t* in, int32_t* out, uint32_t w) {
     a2 = (b1 - b2) >> 1;
     a3 = (b0 - b3) >> 1;
 
-    a0.Store(out + w * 0);
-    a1.Store(out + w * 1);
-    a2.Store(out + w * 2);
-    a3.Store(out + w * 3);
+    a0.Store16(coeffs + w * 0);
+    a1.Store16(coeffs + w * 1);
+    a2.Store16(coeffs + w * 2);
+    a3.Store16(coeffs + w * 3);
   }
 }
 
 template <class V>
-void ColTransformGen<V>::idct8(const int32_t* in, int32_t* out, uint32_t w) {
+void ColTransformGen<V>::idct8(int16_t* coeffs, uint32_t w) {
   const V c_08 = kCosPi[ 8];
   const V c_16 = kCosPi[16];
   const V c_24 = kCosPi[24];
@@ -129,11 +129,11 @@ void ColTransformGen<V>::idct8(const int32_t* in, int32_t* out, uint32_t w) {
   constexpr uint32_t shift = 1;
   const V kRnd0 = Rounding(kPrecision);
   const V kRnd1 = 1;  // rounder
-  for (uint32_t n = V::Size(w); n--;  in += kStep, out += kStep) {
-    V b0(in + w * 0);
-    V b1(in + w * 4);
-    V b2(in + w * 2);
-    V b3(in + w * 6);
+  for (uint32_t n = V::Size(w); n--; coeffs += kStep) {
+    V b0 = Load_s16_s32(coeffs + w * 0);
+    V b1 = Load_s16_s32(coeffs + w * 4);
+    V b2 = Load_s16_s32(coeffs + w * 2);
+    V b3 = Load_s16_s32(coeffs + w * 6);
 
     V a0 = (((b0 + b1) * c_32 + kRnd0) >> kPrecision) + kRnd1;
     V a1 = (((b0 - b1) * c_32 + kRnd0) >> kPrecision) + kRnd1;
@@ -145,10 +145,10 @@ void ColTransformGen<V>::idct8(const int32_t* in, int32_t* out, uint32_t w) {
     b2 = a1 - a2;
     b3 = a0 - a3;
 
-    V a4(in + w * 1);
-    V a5(in + w * 5);
-    V a6(in + w * 3);
-    V a7(in + w * 7);
+    V a4 = Load_s16_s32(coeffs + w * 1);
+    V a5 = Load_s16_s32(coeffs + w * 5);
+    V a6 = Load_s16_s32(coeffs + w * 3);
+    V a7 = Load_s16_s32(coeffs + w * 7);
 
     V b4 = (c_56 * a4 - c_08 * a7 + kRnd0) >> kPrecision;
     V b7 = (c_08 * a4 + c_56 * a7 + kRnd0) >> kPrecision;
@@ -170,20 +170,20 @@ void ColTransformGen<V>::idct8(const int32_t* in, int32_t* out, uint32_t w) {
     a6 = (b1 - b6) >> shift;
     a7 = (b0 - b7) >> shift;
 
-    a0.Store(out + w * 0);
-    a1.Store(out + w * 1);
-    a6.Store(out + w * 6);
-    a7.Store(out + w * 7);
+    a0.Store16(coeffs + w * 0);
+    a1.Store16(coeffs + w * 1);
+    a6.Store16(coeffs + w * 6);
+    a7.Store16(coeffs + w * 7);
 
     a2 = (b2 + b5) >> shift;
     a3 = (b3 + b4) >> shift;
     a4 = (b3 - b4) >> shift;
     a5 = (b2 - b5) >> shift;
 
-    a2.Store(out + w * 2);
-    a3.Store(out + w * 3);
-    a4.Store(out + w * 4);
-    a5.Store(out + w * 5);
+    a2.Store16(coeffs + w * 2);
+    a3.Store16(coeffs + w * 3);
+    a4.Store16(coeffs + w * 4);
+    a5.Store16(coeffs + w * 5);
   }
 }
 
@@ -191,30 +191,30 @@ void ColTransformGen<V>::idct8(const int32_t* in, int32_t* out, uint32_t w) {
 // column-wise fdct
 
 template <class V>
-void ColTransformGen<V>::fdct2(const int32_t* in, int32_t* out, uint32_t w) {
+void ColTransformGen<V>::fdct2(int32_t* coeffs, uint32_t w) {
   const V c_32 = kCosPi[32];
   const V kRnd0 = Rounding(kPrecision);
-  for (uint32_t n = V::Size(w); n--;  in += kStep, out += kStep) {
-    const V a0(in + w * 0);
-    const V a1(in + w * 1);
+  for (uint32_t n = V::Size(w); n--; coeffs += kStep) {
+    const V a0(coeffs + w * 0);
+    const V a1(coeffs + w * 1);
     const V b0 = ((a0 + a1) * c_32 + kRnd0) >> kPrecision;
     const V b1 = ((a0 - a1) * c_32 + kRnd0) >> kPrecision;
-    b0.Store(out + w * 0);
-    b1.Store(out + w * 1);
+    b0.Store(coeffs + w * 0);
+    b1.Store(coeffs + w * 1);
   }
 }
 
 template <class V>
-void ColTransformGen<V>::fdct4(const int32_t* in, int32_t* out, uint32_t w) {
+void ColTransformGen<V>::fdct4(int32_t* coeffs, uint32_t w) {
   const V kRnd1 = 1;  // rounder for shift=1
   const V kRnd0 = Rounding(kPrecision);
   const V c_32_48 = kCos32Cos48;
   const V c_32_16 = kCos32Cos16;
-  for (uint32_t n = V::Size(w); n--;  in += kStep, out += kStep) {
-    V b0(in + w * 0);
-    V b1(in + w * 1);
-    V b2(in + w * 2);
-    V b3(in + w * 3);
+  for (uint32_t n = V::Size(w); n--; coeffs += kStep) {
+    V b0(coeffs + w * 0);
+    V b1(coeffs + w * 1);
+    V b2(coeffs + w * 2);
+    V b3(coeffs + w * 3);
 
     const V a0 = b3 + b0;
     const V a1 = b2 + b1;
@@ -226,15 +226,15 @@ void ColTransformGen<V>::fdct4(const int32_t* in, int32_t* out, uint32_t w) {
     b2 = (c_32_48 * a2 + c_32_16 * a3 + kRnd0) >> kPrecision;
     b3 = (c_32_48 * a3 - c_32_16 * a2 + kRnd0) >> kPrecision;
 
-    b0.Store(out + w * 0);
-    b2.Store(out + w * 1);
-    b1.Store(out + w * 2);
-    b3.Store(out + w * 3);
+    b0.Store(coeffs + w * 0);
+    b2.Store(coeffs + w * 1);
+    b1.Store(coeffs + w * 2);
+    b3.Store(coeffs + w * 3);
   }
 }
 
 template <class V>
-void ColTransformGen<V>::fdct8(const int32_t* in, int32_t* out, uint32_t w) {
+void ColTransformGen<V>::fdct8(int32_t* coeffs, uint32_t w) {
   constexpr uint32_t shift = kPrecision + 1;
   const V kRnd0 = Rounding(kPrecision);
   const V kRnd1 = Rounding(shift);
@@ -245,16 +245,26 @@ void ColTransformGen<V>::fdct8(const int32_t* in, int32_t* out, uint32_t w) {
   const V c_40 = kCosPi[40];
   const V c_48 = kCosPi[48];
   const V c_56 = kCosPi[56];
-  for (uint32_t n = V::Size(w); n--;  in += kStep, out += kStep) {
-    V a0(in + w * 0);
-    V a1(in + w * 1);
-    V a2(in + w * 2);
-    V a3(in + w * 3);
+  for (uint32_t n = V::Size(w); n--; coeffs += kStep) {
+    V a0(coeffs + w * 0);
+    V a1(coeffs + w * 1);
+    V a2(coeffs + w * 2);
+    V a3(coeffs + w * 3);
 
-    V b3(in + w * 4);
-    V b2(in + w * 5);
-    V b1(in + w * 6);
-    V b0(in + w * 7);
+    V b3(coeffs + w * 4);
+    V b2(coeffs + w * 5);
+    V b1(coeffs + w * 6);
+    V b0(coeffs + w * 7);
+
+    // Save for later
+    V a7 = a0;
+    V a6 = a1;
+    V a5 = a2;
+    V a4 = a3;
+    V b4 = b3;
+    V b5 = b2;
+    V b6 = b1;
+    V b7 = b0;
 
     a2 = a2 + b2;
     a3 = a3 + b3;
@@ -271,21 +281,10 @@ void ColTransformGen<V>::fdct8(const int32_t* in, int32_t* out, uint32_t w) {
     a2 = (c_48 * b2 + c_16 * b3 + kRnd1) >> shift;
     a3 = (c_48 * b3 - c_16 * b2 + kRnd1) >> shift;
 
-    a0.Store(out + w * 0);
-    a2.Store(out + w * 2);
-    a1.Store(out + w * 4);
-    a3.Store(out + w * 6);
-
-    // TODO(skal): the in is pseudo-loaded twice. Merge with a0-a3/b0-b3.
-    V a7(in + w * 0);
-    V a6(in + w * 1);
-    V a5(in + w * 2);
-    V a4(in + w * 3);
-
-    V b4(in + w * 4);
-    V b5(in + w * 5);
-    V b6(in + w * 6);
-    V b7(in + w * 7);
+    a0.Store(coeffs + w * 0);
+    a2.Store(coeffs + w * 2);
+    a1.Store(coeffs + w * 4);
+    a3.Store(coeffs + w * 6);
 
     a4 = a4 - b4;
     a5 = a5 - b5;
@@ -305,30 +304,31 @@ void ColTransformGen<V>::fdct8(const int32_t* in, int32_t* out, uint32_t w) {
     b5 = (c_24 * a5 + c_40 * a6 + kRnd1) >> shift;
     b6 = (c_24 * a6 - c_40 * a5 + kRnd1) >> shift;
 
-    b4.Store(out + w * 1);
-    b6.Store(out + w * 3);
-    b5.Store(out + w * 5);
-    b7.Store(out + w * 7);
+    b4.Store(coeffs + w * 1);
+    b6.Store(coeffs + w * 3);
+    b5.Store(coeffs + w * 5);
+    b7.Store(coeffs + w * 7);
   }
 }
 
 template <class V>
-void ColTransformGen<V>::fdct16(const int32_t* in, int32_t* out, uint32_t w) {
+void ColTransformGen<V>::fdct16(int32_t* coeffs, uint32_t w) {
   constexpr uint32_t shift = kPrecision + 1;
   const V kRnd0 = Rounding(kPrecision);
   const V kRnd1 = Rounding(shift);
-  for (uint32_t n = V::Size(w); n--;  in += kStep, out += kStep) {
+  for (uint32_t n = V::Size(w); n--; coeffs += kStep) {
+    int32_t temp[8 * kStep];
     V c0, c1;
 
     // low
-    V a0 = Load(in + w * 0) + Load(in + w * 15);
-    V a1 = Load(in + w * 1) + Load(in + w * 14);
-    V a2 = Load(in + w * 2) + Load(in + w * 13);
-    V a3 = Load(in + w * 3) + Load(in + w * 12);
-    V a4 = Load(in + w * 4) + Load(in + w * 11);
-    V a5 = Load(in + w * 5) + Load(in + w * 10);
-    V a6 = Load(in + w * 6) + Load(in + w *  9);
-    V a7 = Load(in + w * 7) + Load(in + w *  8);
+    V a0 = Load(coeffs + w * 0) + Load(coeffs + w * 15);
+    V a1 = Load(coeffs + w * 1) + Load(coeffs + w * 14);
+    V a2 = Load(coeffs + w * 2) + Load(coeffs + w * 13);
+    V a3 = Load(coeffs + w * 3) + Load(coeffs + w * 12);
+    V a4 = Load(coeffs + w * 4) + Load(coeffs + w * 11);
+    V a5 = Load(coeffs + w * 5) + Load(coeffs + w * 10);
+    V a6 = Load(coeffs + w * 6) + Load(coeffs + w *  9);
+    V a7 = Load(coeffs + w * 7) + Load(coeffs + w *  8);
 
     V b0 = a7 + a0;
     V b1 = a6 + a1;
@@ -356,10 +356,11 @@ void ColTransformGen<V>::fdct16(const int32_t* in, int32_t* out, uint32_t w) {
     b1 = (b1 * c0 + kRnd1) >> shift;
     b2 = (b2 * c0 + kRnd1) >> shift;
     b3 = (b3 * c0 + kRnd1) >> shift;
-    b0.Store(out + w * 0);
-    b2.Store(out + w * 4);
-    b1.Store(out + w * 8);
-    b3.Store(out + w * 12);
+
+    b0.Store(temp +  0);  // 0
+    b2.Store(temp +  4);  // 4
+    b1.Store(temp +  8);  // 8
+    b3.Store(temp + 12);  // 12
 
     // part 2
     c0 = kCosPi[32];
@@ -382,30 +383,31 @@ void ColTransformGen<V>::fdct16(const int32_t* in, int32_t* out, uint32_t w) {
     a5 = (a5 * c0 + kRnd1) >> shift;
     a6 = (a6 * c0 + kRnd1) >> shift;
     a7 = (a7 * c0 + kRnd1) >> shift;
-    a4.Store(out + w * 2);
-    a6.Store(out + w * 6);
-    a5.Store(out + w * 10);
-    a7.Store(out + w * 14);
+
+    a4.Store(temp +  16);  // 2
+    a6.Store(temp +  20);  // 6
+    a5.Store(temp +  24);  // 10
+    a7.Store(temp +  28);  // 14
 
     // high
-    a3 = Load(in + w * 4) - Load(in + w * 11);
-    a4 = Load(in + w * 3) - Load(in + w * 12);
+    a3 = Load(coeffs + w * 4) - Load(coeffs + w * 11);
+    a4 = Load(coeffs + w * 3) - Load(coeffs + w * 12);
     c0 = kCosPi[32];
     b3 = ((a4 - a3) * c0 + kRnd0) >> kPrecision;
     b4 = ((a4 + a3) * c0 + kRnd0) >> kPrecision;
-    a0 = Load(in + w * 7) - Load(in + w * 8);
-    a7 = Load(in + w * 0) - Load(in + w * 15);
+    a0 = Load(coeffs + w * 7) - Load(coeffs + w * 8);
+    a7 = Load(coeffs + w * 0) - Load(coeffs + w * 15);
     b0 = a0 + b3;
     b7 = a7 + b4;
     b3 = a0 - b3;
     b4 = a7 - b4;
 
-    a2 = Load(in + w * 5) - Load(in + w * 10);
-    a5 = Load(in + w * 2) - Load(in + w * 13);
+    a2 = Load(coeffs + w * 5) - Load(coeffs + w * 10);
+    a5 = Load(coeffs + w * 2) - Load(coeffs + w * 13);
     b2 = ((a5 - a2) * c0 + kRnd0) >> kPrecision;
     b5 = ((a5 + a2) * c0 + kRnd0) >> kPrecision;
-    b1 = Load(in + w * 6) - Load(in + w * 9);
-    b6 = Load(in + w * 1) - Load(in + w * 14);
+    b1 = Load(coeffs + w * 6) - Load(coeffs + w * 9);
+    b6 = Load(coeffs + w * 1) - Load(coeffs + w * 14);
     a1 = b2 + b1;
     a2 = b2 - b1;
     a5 = b6 - b5;
@@ -435,10 +437,10 @@ void ColTransformGen<V>::fdct16(const int32_t* in, int32_t* out, uint32_t w) {
     b6 = (b6 * c0 + kRnd1) >> shift;
     b7 = (b7 * c0 + kRnd1) >> shift;
 
-    b0.Store(out + w * 1);
-    b6.Store(out + w * 7);
-    b1.Store(out + w * 9);
-    b7.Store(out + w * 15);
+    b0.Store(coeffs + w * 1);
+    b6.Store(coeffs + w * 7);
+    b1.Store(coeffs + w * 9);
+    b7.Store(coeffs + w * 15);
 
     a2 = b3 - b2;
     a3 = b3 + b2;
@@ -458,28 +460,44 @@ void ColTransformGen<V>::fdct16(const int32_t* in, int32_t* out, uint32_t w) {
     b4 = (b4 * c0 + kRnd1) >> shift;
     b5 = (b5 * c0 + kRnd1) >> shift;
 
-    b4.Store(out + w * 3);
-    b2.Store(out + w * 5);
-    b5.Store(out + w * 11);
-    b3.Store(out + w * 13);
+    b4.Store(coeffs + w * 3);
+    b2.Store(coeffs + w * 5);
+    b5.Store(coeffs + w * 11);
+    b3.Store(coeffs + w * 13);
+
+    a0 = Load(temp +  0);
+    a1 = Load(temp +  4);
+    a2 = Load(temp +  8);
+    a3 = Load(temp + 12);
+    a4 = Load(temp + 16);
+    a5 = Load(temp + 20);
+    a6 = Load(temp + 24);
+    a7 = Load(temp + 28);
+
+    a0.Store(coeffs + w *  0);
+    a1.Store(coeffs + w *  4);
+    a2.Store(coeffs + w *  8);
+    a3.Store(coeffs + w * 12);
+    a4.Store(coeffs + w *  2);
+    a5.Store(coeffs + w *  6);
+    a6.Store(coeffs + w * 10);
+    a7.Store(coeffs + w * 14);
   }
 }
 
 //------------------------------------------------------------------------------
 // row-wise idct
 
-static void idct4_SSE(const int32_t* in, int32_t* out) {
+static void idct4_SSE(int16_t* coeffs) {
   constexpr uint32_t one = 1 << kPrecision;
   const __m128i kRnd0 = _mm_set1_epi32((1 << kPrecision) >> 1);
   __m128i v0, v1, c0, c1;
 
   // stage 1
-  v0 = _mm_loadu_si128((const __m128i*)in);
+  v0 = Load_s16_s32(coeffs);
   v0 = _mm_shuffle_epi32(v0, 0xd8);
-  _mm_storeu_si128((__m128i*)&out[0], v0);
 
   // stage 2
-
   c0 = _mm_setr_epi32(one, -one, kCos32Cos48p, kCos32Cos48p);
   c1 = _mm_setr_epi32(one, one, -kCos32Cos16p, kCos32Cos16p);
   v1 = _mm_shuffle_epi32(v0, 0xb1);
@@ -496,20 +514,19 @@ static void idct4_SSE(const int32_t* in, int32_t* out) {
   v0 = _mm_sub_epi32(v0, v1);
   v0 = _mm_srai_epi32(v0, 1);
 
-  _mm_storeu_si128((__m128i*)&out[0], v0);
+  Store_s32_s16(v0, coeffs);
 }
 
-static void idct8_SSE(const int32_t* in, int32_t* out) {
+static void idct8_SSE(int16_t* coeffs) {
   constexpr uint32_t shift = 1;
   const __m128i kRnd0 = _mm_set1_epi32((1 << kPrecision) >> 1);
-  const __m128i* const p0 = (const __m128i*)in;
-  __m128i v0, v1, v2, v3, v4, v5, c0, c1;
+  __m128i v4, v5, c0, c1;
 
   // stage 1
-  v0 = _mm_loadu_si128(p0 + 0);
-  v1 = _mm_loadu_si128(p0 + 1);
-  v3 = _mm_shuffle_epi32(v0, 0xb1);
-  v2 = _mm_shuffle_epi32(v1, 0xb1);
+  __m128i v0 = Load_s16_s32(coeffs + 0);
+  __m128i v1 = Load_s16_s32(coeffs + 4);
+  __m128i v3 = _mm_shuffle_epi32(v0, 0xb1);
+  __m128i v2 = _mm_shuffle_epi32(v1, 0xb1);
   v0 = _mm_blend_epi16(v0, v2, 0xcc);
   v1 = _mm_blend_epi16(v1, v3, 0x33);
 
@@ -564,22 +581,21 @@ static void idct8_SSE(const int32_t* in, int32_t* out) {
   v3 = _mm_srai_epi32(v3, shift);
   v2 = _mm_srai_epi32(v2, shift);
 
-  _mm_storeu_si128((__m128i*)&out[0], v3);
-  _mm_storeu_si128((__m128i*)&out[4], v2);
+  Store_s32_s16(v3, coeffs + 0);
+  Store_s32_s16(v2, coeffs + 4);
 }
 
-static void idct16_SSE(const int32_t* in, int32_t* out) {
+static void idct16_SSE(int16_t* coeffs) {
   constexpr uint32_t shift = kPrecision + 1;
-  const __m128i* const p0 = (const __m128i*)in;
   const __m128i kRnd0 = _mm_set1_epi32((1 << kPrecision) >> 1);
   const __m128i kRnd1 = _mm_set1_epi32((1 << shift) >> 1);
   __m128i v0, v1, v2, v3, v4, v5, v6, v7, c0, c1;
 
   // stage 1
-  v0 = _mm_loadu_si128(p0 + 0);
-  v1 = _mm_loadu_si128(p0 + 1);
-  v2 = _mm_loadu_si128(p0 + 2);
-  v3 = _mm_loadu_si128(p0 + 3);
+  v0 = Load_s16_s32(coeffs +  0);
+  v1 = Load_s16_s32(coeffs +  4);
+  v2 = Load_s16_s32(coeffs +  8);
+  v3 = Load_s16_s32(coeffs + 12);
   v4 = _mm_unpacklo_epi64(v0, v2);   // 0189
   v5 = _mm_unpackhi_epi64(v0, v2);   // 23ab
   v6 = _mm_unpacklo_epi64(v1, v3);   // 45cd
@@ -712,22 +728,22 @@ static void idct16_SSE(const int32_t* in, int32_t* out) {
   v6 = _mm_srai_epi32(v6, shift);
   v7 = _mm_srai_epi32(v7, shift);
 
-  _mm_storeu_si128((__m128i*)&out[ 0], v4);
-  _mm_storeu_si128((__m128i*)&out[ 4], v5);
-  _mm_storeu_si128((__m128i*)&out[ 8], v6);
-  _mm_storeu_si128((__m128i*)&out[12], v7);
+  Store_s32_s16(v4, coeffs +  0);
+  Store_s32_s16(v5, coeffs +  4);
+  Store_s32_s16(v6, coeffs +  8);
+  Store_s32_s16(v7, coeffs + 12);
 }
 
 //------------------------------------------------------------------------------
 // row-wise fdct
 
-static void fdct4_SSE(const int32_t* in, int32_t* out) {
+static void fdct4_SSE(int32_t* coeffs) {
   constexpr uint32_t rounding = (1 << kPrecision) >> 1;
   const __m128i kRnd0 = _mm_set1_epi32(rounding);
   __m128i v0, v1, c0, c1;
 
   // stage 1
-  v0 = _mm_loadu_si128((const __m128i*)in);
+  v0 = Load128b(coeffs);
   c0 = _mm_setr_epi32(-1, -1, 1, 1);
   v1 = _mm_sign_epi32(v0, c0);
   v0 = _mm_shuffle_epi32(v0, 0x1b);
@@ -745,19 +761,18 @@ static void fdct4_SSE(const int32_t* in, int32_t* out) {
 
   // stage 3
   v0 = _mm_shuffle_epi32(v0, 0xd8);
-  _mm_storeu_si128((__m128i*)&out[0], v0);
+  Store128b(v0, coeffs);
 }
 
-static void fdct8_SSE(const int32_t* in, int32_t* out) {
+static void fdct8_SSE(int32_t* coeffs) {
   constexpr uint32_t shift = kPrecision + 1;
   const __m128i kRnd0 = _mm_set1_epi32((1 << kPrecision) >> 1);
   const __m128i kRnd1 = _mm_set1_epi32((1 << shift) >> 1);
-  const __m128i* const p0 = (const __m128i*)in;
   __m128i v0, v1, v2, v3, v4, v5, c0, c1;
 
   // stage 1
-  v0 = _mm_loadu_si128(p0 + 0);
-  v1 = _mm_loadu_si128(p0 + 1);
+  v0 = Load128b(coeffs + 0);
+  v1 = Load128b(coeffs + 4);
   v3 = _mm_shuffle_epi32(v0, 0x1b);
   v2 = _mm_shuffle_epi32(v1, 0x1b);
   v3 = _mm_sub_epi32(v3, v1);
@@ -809,22 +824,21 @@ static void fdct8_SSE(const int32_t* in, int32_t* out) {
   v1 = _mm_blend_epi16(v1, v3, 0xcc);
   v0 = _mm_blend_epi16(v0, v2, 0x33);
 
-  _mm_storeu_si128((__m128i*)&out[0], v0);
-  _mm_storeu_si128((__m128i*)&out[4], v1);
+  Store128b(v0, coeffs + 0);
+  Store128b(v1, coeffs + 4);
 }
 
-static void fdct16_SSE(const int32_t* in, int32_t* out) {
+static void fdct16_SSE(int32_t* coeffs) {
   constexpr uint32_t shift = kPrecision + 1;
   const __m128i kRnd0 = _mm_set1_epi32((1 << kPrecision) >> 1);
   const __m128i kRnd1 = _mm_set1_epi32((1 << shift) >> 1);
-  const __m128i* const p0 = (const __m128i*)in;
   __m128i v0, v1, v2, v3, v4, v5, v6, v7, c0, c1;
 
   // stage 1
-  v0 = _mm_loadu_si128(p0 + 0);
-  v1 = _mm_loadu_si128(p0 + 1);
-  v2 = _mm_loadu_si128(p0 + 2);
-  v3 = _mm_loadu_si128(p0 + 3);
+  v0 = Load128b(coeffs +  0);
+  v1 = Load128b(coeffs +  4);
+  v2 = Load128b(coeffs +  8);
+  v3 = Load128b(coeffs + 12);
   v4 = _mm_shuffle_epi32(v0, 0x1b);
   v5 = _mm_shuffle_epi32(v1, 0x1b);
   v6 = _mm_shuffle_epi32(v2, 0x1b);
@@ -953,29 +967,28 @@ static void fdct16_SSE(const int32_t* in, int32_t* out) {
   v5 = _mm_unpacklo_epi32(v5, v0);   // 2a6e
   v4 = _mm_unpackhi_epi32(v4, v1);   // 195d
 
-  _mm_storeu_si128((__m128i*)&out[ 0], v6);
-  _mm_storeu_si128((__m128i*)&out[ 4], v5);
-  _mm_storeu_si128((__m128i*)&out[ 8], v4);
-  _mm_storeu_si128((__m128i*)&out[12], v7);
+  Store128b(v6, coeffs +  0);
+  Store128b(v5, coeffs +  4);
+  Store128b(v4, coeffs +  8);
+  Store128b(v7, coeffs + 12);
 }
 
-void fdct32_SSE(const int32_t* in, int32_t* out) {
+void fdct32_SSE(int32_t* coeffs) {
   constexpr uint32_t shift = kPrecision + 2;
   const __m128i kRnd0 = _mm_set1_epi32((1 << kPrecision) >> 1);
   const __m128i kRnd1 = _mm_set1_epi32((1 << shift) >> 1);
-  const __m128i* const p0 = (const __m128i*)in;
   __m128i v0, v1, v2, v3, v4, v5, v6, v7, c0, c1;
   int32_t temp[16];
 
   // stage 1
-  v0 = _mm_loadu_si128(p0 + 0);
-  v1 = _mm_loadu_si128(p0 + 1);
-  v2 = _mm_loadu_si128(p0 + 2);
-  v3 = _mm_loadu_si128(p0 + 3);
-  v4 = _mm_loadu_si128(p0 + 4);
-  v5 = _mm_loadu_si128(p0 + 5);
-  v6 = _mm_loadu_si128(p0 + 6);
-  v7 = _mm_loadu_si128(p0 + 7);
+  v0 = Load128b(coeffs +  0);
+  v1 = Load128b(coeffs +  4);
+  v2 = Load128b(coeffs +  8);
+  v3 = Load128b(coeffs + 12);
+  v4 = Load128b(coeffs + 16);
+  v5 = Load128b(coeffs + 20);
+  v6 = Load128b(coeffs + 24);
+  v7 = Load128b(coeffs + 28);
   v6 = _mm_shuffle_epi32(v6, 0x1b);
   v7 = _mm_shuffle_epi32(v7, 0x1b);
   v4 = _mm_shuffle_epi32(v4, 0x1b);
@@ -1104,20 +1117,20 @@ void fdct32_SSE(const int32_t* in, int32_t* out) {
   v5 = _mm_unpacklo_epi32(v5, v2);   // 2a6e
   v4 = _mm_unpackhi_epi32(v4, v3);   // 195d
 
-  _mm_storeu_si128((__m128i*)&temp[ 0], v6);
-  _mm_storeu_si128((__m128i*)&temp[ 4], v5);
-  _mm_storeu_si128((__m128i*)&temp[ 8], v4);
-  _mm_storeu_si128((__m128i*)&temp[12], v7);
+  Store128b(v6, temp +  0);
+  Store128b(v5, temp +  4);
+  Store128b(v4, temp +  8);
+  Store128b(v7, temp + 12);
 
   // stage 1
-  v3 = _mm_loadu_si128(p0 + 0);
-  v2 = _mm_loadu_si128(p0 + 1);
-  v1 = _mm_loadu_si128(p0 + 2);
-  v0 = _mm_loadu_si128(p0 + 3);
-  v4 = _mm_loadu_si128(p0 + 4);
-  v5 = _mm_loadu_si128(p0 + 5);
-  v6 = _mm_loadu_si128(p0 + 6);
-  v7 = _mm_loadu_si128(p0 + 7);
+  v3 = Load128b(coeffs +  0);
+  v2 = Load128b(coeffs +  4);
+  v1 = Load128b(coeffs +  8);
+  v0 = Load128b(coeffs + 12);
+  v4 = Load128b(coeffs + 16);
+  v5 = Load128b(coeffs + 20);
+  v6 = Load128b(coeffs + 24);
+  v7 = Load128b(coeffs + 28);
   v0 = _mm_shuffle_epi32(v0, 0x1b);
   v1 = _mm_shuffle_epi32(v1, 0x1b);
   v2 = _mm_shuffle_epi32(v2, 0x1b);
@@ -1238,42 +1251,41 @@ void fdct32_SSE(const int32_t* in, int32_t* out) {
   v2 = _mm_shuffle_epi32(v2, 0x1b);
 
   // stage 9
-  v6 = _mm_loadu_si128((__m128i*)&temp[0]);
-  v7 = _mm_loadu_si128((__m128i*)&temp[4]);
+  v6 = Load128b(temp + 0);
+  v7 = Load128b(temp + 4);
   v4 = _mm_unpacklo_epi32(v6, v0);
   v5 = _mm_unpackhi_epi32(v6, v0);
   v6 = _mm_unpacklo_epi32(v7, v2);
   v7 = _mm_unpackhi_epi32(v7, v2);
-  v0 = _mm_loadu_si128((__m128i*)&temp[ 8]);
-  v2 = _mm_loadu_si128((__m128i*)&temp[12]);
+  v0 = Load128b(temp +  8);
+  v2 = Load128b(temp + 12);
 
-  _mm_storeu_si128((__m128i*)&out[ 0], v4);
-  _mm_storeu_si128((__m128i*)&out[ 4], v5);
-  _mm_storeu_si128((__m128i*)&out[ 8], v6);
-  _mm_storeu_si128((__m128i*)&out[12], v7);
+  Store128b(v4, coeffs +  0);
+  Store128b(v5, coeffs +  4);
+  Store128b(v6, coeffs +  8);
+  Store128b(v7, coeffs + 12);
 
   v4 = _mm_unpacklo_epi32(v0, v1);
   v5 = _mm_unpackhi_epi32(v0, v1);
   v6 = _mm_unpacklo_epi32(v2, v3);
   v7 = _mm_unpackhi_epi32(v2, v3);
 
-  _mm_storeu_si128((__m128i*)&out[16], v4);
-  _mm_storeu_si128((__m128i*)&out[20], v5);
-  _mm_storeu_si128((__m128i*)&out[24], v6);
-  _mm_storeu_si128((__m128i*)&out[28], v7);
+  Store128b(v4, coeffs + 16);
+  Store128b(v5, coeffs + 20);
+  Store128b(v6, coeffs + 24);
+  Store128b(v7, coeffs + 28);
 }
 
-static void fadst8_SSE(const int32_t* in, int32_t* out) {
+static void fadst8_SSE(int32_t* coeffs) {
   constexpr uint32_t shift = kPrecision + 1;
   const __m128i kRnd0 = _mm_set1_epi32((1 << kPrecision) >> 1);
   const __m128i kRnd1 = _mm_set1_epi32((1 << shift) >> 1);
-  const __m128i* const p0 = (const __m128i*)in;
   __m128i v0, v1, v2, v3, v4, v5, c0, c1;
 
   // stage 1
   c0 = _mm_setr_epi32(1, -1, 1, -1);
-  v0 = _mm_loadu_si128(p0 + 0);
-  v1 = _mm_loadu_si128(p0 + 1);
+  v0 = Load128b(coeffs + 0);
+  v1 = Load128b(coeffs + 4);
   v0 = _mm_sign_epi32(v0, c0);
   v1 = _mm_sign_epi32(v1, c0);
   v0 = _mm_shuffle_epi32(v0, 0xb4);
@@ -1338,8 +1350,8 @@ static void fadst8_SSE(const int32_t* in, int32_t* out) {
   v0 = _mm_unpacklo_epi32(v3, v2);
   v1 = _mm_unpackhi_epi32(v3, v2);
 
-  _mm_storeu_si128((__m128i*)&out[0], v0);
-  _mm_storeu_si128((__m128i*)&out[4], v1);
+  Store128b(v0, coeffs + 0);
+  Store128b(v1, coeffs + 4);
 }
 
 //------------------------------------------------------------------------------
@@ -1357,19 +1369,18 @@ static void fadst8_SSE(const int32_t* in, int32_t* out) {
     v0 = _mm_srai_epi32(v0, kPrecision);     \
     v1 = _mm_srai_epi32(v1, kPrecision)
 
-static void fadst16_SSE(const int32_t* in, int32_t* out) {
+static void fadst16_SSE(int32_t* coeffs) {
   constexpr uint32_t shift = kPrecision + 1;
   const __m128i kRnd0 = _mm_set1_epi32((1 << kPrecision) >> 1);
   const __m128i kRnd1 = _mm_set1_epi32((1 << shift) >> 1);
-  const __m128i* const p0 = (const __m128i*)in;
   __m128i v0, v1, v2, v3, v4, v5, v6, v7, c0, c1;
 
   // stage 1
   c0 = _mm_setr_epi32(1, -1, 1, -1);
-  v0 = _mm_loadu_si128(p0 + 0);
-  v2 = _mm_loadu_si128(p0 + 1);
-  v3 = _mm_loadu_si128(p0 + 2);
-  v1 = _mm_loadu_si128(p0 + 3);
+  v0 = Load128b(coeffs +  0);
+  v2 = Load128b(coeffs +  4);
+  v3 = Load128b(coeffs +  8);
+  v1 = Load128b(coeffs + 12);
   v0 = _mm_sign_epi32(v0, c0);
   v1 = _mm_sign_epi32(v1, c0);
   v2 = _mm_sign_epi32(v2, c0);
@@ -1463,19 +1474,19 @@ static void fadst16_SSE(const int32_t* in, int32_t* out) {
   v2 = _mm_unpacklo_epi32(v7, v4);
   v3 = _mm_unpackhi_epi32(v7, v4);
 
-  _mm_storeu_si128((__m128i*)&out[ 0], v0);
-  _mm_storeu_si128((__m128i*)&out[ 4], v1);
-  _mm_storeu_si128((__m128i*)&out[ 8], v2);
-  _mm_storeu_si128((__m128i*)&out[12], v3);
+  Store128b(v0, coeffs +  0);
+  Store128b(v1, coeffs +  4);
+  Store128b(v2, coeffs +  8);
+  Store128b(v3, coeffs + 12);
 }
 #undef HALF_BTF_VEC
 
 //------------------------------------------------------------------------------
 
-inline void Transpose_4x4(const __m128i* const in0, const __m128i* const in1,
-                          const __m128i* const in2, const __m128i* const in3,
-                          __m128i* const out0, __m128i* const out1,
-                          __m128i* const out2, __m128i* const out3) {
+inline void Transpose_4x4_32(const __m128i* const in0, const __m128i* const in1,
+                             const __m128i* const in2, const __m128i* const in3,
+                             __m128i* const out0, __m128i* const out1,
+                             __m128i* const out2, __m128i* const out3) {
   const __m128i t_0 = _mm_unpacklo_epi32(*in0, *in1);
   const __m128i t_1 = _mm_unpacklo_epi32(*in2, *in3);
   const __m128i t_2 = _mm_unpackhi_epi32(*in0, *in1);
@@ -1486,7 +1497,7 @@ inline void Transpose_4x4(const __m128i* const in0, const __m128i* const in1,
   *out3 = _mm_unpackhi_epi64(t_2, t_3);
 }
 
-void Transpose_SSE(const int32_t* in, uint32_t w, uint32_t h, int32_t* out) {
+void Transpose32_SSE(const int32_t* in, uint32_t w, uint32_t h, int32_t* out) {
   assert(in != out);
   if (w == 2 || h == 2) {
     // fallback to C-impl for these cases
@@ -1499,21 +1510,62 @@ void Transpose_SSE(const int32_t* in, uint32_t w, uint32_t h, int32_t* out) {
     return;
   }
   for (size_t j = 0; j < h; j += 4) {
-    const __m128i* ptr0 = (const __m128i*)&in[w * (j + 0)];
-    const __m128i* ptr1 = (const __m128i*)&in[w * (j + 1)];
-    const __m128i* ptr2 = (const __m128i*)&in[w * (j + 2)];
-    const __m128i* ptr3 = (const __m128i*)&in[w * (j + 3)];
+    const int32_t* const ptr0 = &in[w * (j + 0)];
+    const int32_t* const ptr1 = &in[w * (j + 1)];
+    const int32_t* const ptr2 = &in[w * (j + 2)];
+    const int32_t* const ptr3 = &in[w * (j + 3)];
     for (size_t i = 0; i < w; i += 4) {
       __m128i out0, out1, out2, out3;
-      const __m128i in0 = _mm_loadu_si128(ptr0++);
-      const __m128i in1 = _mm_loadu_si128(ptr1++);
-      const __m128i in2 = _mm_loadu_si128(ptr2++);
-      const __m128i in3 = _mm_loadu_si128(ptr3++);
-      Transpose_4x4(&in0, &in1, &in2, &in3, &out0, &out1, &out2, &out3);
-      _mm_storeu_si128((__m128i*)&out[j + h * (i + 0)], out0);
-      _mm_storeu_si128((__m128i*)&out[j + h * (i + 1)], out1);
-      _mm_storeu_si128((__m128i*)&out[j + h * (i + 2)], out2);
-      _mm_storeu_si128((__m128i*)&out[j + h * (i + 3)], out3);
+      const __m128i in0 = Load128b(ptr0 + i);
+      const __m128i in1 = Load128b(ptr1 + i);
+      const __m128i in2 = Load128b(ptr2 + i);
+      const __m128i in3 = Load128b(ptr3 + i);
+      Transpose_4x4_32(&in0, &in1, &in2, &in3, &out0, &out1, &out2, &out3);
+      Store128b(out0, &out[j + h * (i + 0)]);
+      Store128b(out1, &out[j + h * (i + 1)]);
+      Store128b(out2, &out[j + h * (i + 2)]);
+      Store128b(out3, &out[j + h * (i + 3)]);
+    }
+  }
+}
+
+inline void Transpose_4x4_16(const __m128i* const in0, const __m128i* const in1,
+                             const __m128i* const in2, const __m128i* const in3,
+                             __m128i* const out0, __m128i* const out1) {
+  const __m128i t_0 = _mm_unpacklo_epi16(*in0, *in1);
+  const __m128i t_1 = _mm_unpacklo_epi16(*in2, *in3);
+  *out0 = _mm_unpacklo_epi32(t_0, t_1);
+  *out1 = _mm_unpackhi_epi32(t_0, t_1);
+}
+
+void Transpose16_SSE(const int16_t* in, uint32_t w, uint32_t h, int16_t* out) {
+  assert(in != out);
+  if (w == 2 || h == 2) {
+    // fallback to C-impl for these cases
+    // TODO(skal): remove need for 2x2 transforms
+    for (size_t j = 0; j < h; ++j) {
+      for (size_t i = 0; i < w; ++i) {
+        out[j + h * i] = in[i + w * j];
+      }
+    }
+    return;
+  }
+  for (size_t j = 0; j < h; j += 4) {
+    const int16_t* const ptr0 = &in[w * (j + 0)];
+    const int16_t* const ptr1 = &in[w * (j + 1)];
+    const int16_t* const ptr2 = &in[w * (j + 2)];
+    const int16_t* const ptr3 = &in[w * (j + 3)];
+    for (size_t i = 0; i < w; i += 4) {
+      __m128i out0, out1;
+      const __m128i in0 = Load64b(ptr0 + i);
+      const __m128i in1 = Load64b(ptr1 + i);
+      const __m128i in2 = Load64b(ptr2 + i);
+      const __m128i in3 = Load64b(ptr3 + i);
+      Transpose_4x4_16(&in0, &in1, &in2, &in3, &out0, &out1);
+      Store64b(out0, &out[j + h * (i + 0)]);
+      Store64b(_mm_srli_si128(out0, 8), &out[j + h * (i + 1)]);
+      Store64b(out1, &out[j + h * (i + 2)]);
+      Store64b(_mm_srli_si128(out1, 8), &out[j + h * (i + 3)]);
     }
   }
 }
@@ -1552,7 +1604,8 @@ int32_t SlowDct8x8_SSE(const int32_t in[64],
 extern void WP2TransformInitSSE();
 
 WP2_TSAN_IGNORE_FUNCTION void WP2TransformInitSSE() {
-  WP2Transpose = Transpose_SSE;
+  WP2Transpose16b = Transpose16_SSE;
+  WP2Transpose32b = Transpose32_SSE;
 
   WP2InvDct[1] = idct4_SSE;
   WP2InvDct[2] = idct8_SSE;

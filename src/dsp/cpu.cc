@@ -303,18 +303,19 @@ void WP2DspReset() {
   WP2YUVToArgb = nullptr;
   WP2YUVToARGB = nullptr;
 
-  WP2Transpose = nullptr;
+  WP2Transpose16b = nullptr;
+  WP2Transpose32b = nullptr;
   for (uint32_t i = 0; i < 5; ++i) {
     WP2InvDct[i] = WP2InvAdst[i] = WP2InvHadamard[i] = nullptr;
     WP2FwdDct[i] = WP2FwdAdst[i] = WP2FwdHadamard[i] = nullptr;
   }
-  WP2SlowDct8x8 = nullptr;
   for (uint32_t th : {0, 1, 2, 3, 4}) {
     for (uint32_t tw : {0, 1, 2, 3, 4}) {
       WP2InvDctCol[th][tw] = nullptr;
       WP2FwdDctCol[th][tw] = nullptr;
     }
   }
+  WP2SlowDct8x8 = nullptr;
 
   WP2::GetBlockMinMax = nullptr;
   WP2::GetBlockMinMax_5x5 = nullptr;

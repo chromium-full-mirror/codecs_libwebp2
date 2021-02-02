@@ -54,7 +54,7 @@ struct QuantMtx {
   void Quantize(const int32_t residuals[], TrfSize dim, bool first_is_dc,
                 int16_t coeffs[], uint32_t* const num_coeffs) const;
   void Dequantize(const int16_t coeffs[], uint32_t num_coeffs, TrfSize dim,
-                  int32_t residuals[]) const;
+                  int16_t residuals[]) const;
   const int16_t* Dequant() const { return dequants; }  // decoder only
   // Performs quantization and dequantization and returns sum of squared errors.
   // 'coeffs' is set to the quantized values.

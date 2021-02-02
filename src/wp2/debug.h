@@ -73,7 +73,7 @@ struct BlockInfo {
   // residuals, in natural order per channel per split transform
   int16_t coeffs[4][4][kMaxBlockSizePix2];
   // original spatial residuals
-  int32_t original_res[4][4][kMaxBlockSizePix2];
+  int16_t original_res[4][4][kMaxBlockSizePix2];
   // how are encoded the 'coeffs' per channel per split transform
   int8_t encoding_method[4][4];
 

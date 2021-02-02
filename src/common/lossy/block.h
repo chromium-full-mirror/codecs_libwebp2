@@ -310,7 +310,7 @@ class CodedBlockBase {
 
 #if defined(WP2_BITTRACE)  // extra store for debugging
   // Original uncompressed residuals in spatial domain.
-  int32_t (*original_res_)[4][kMaxNumTransformsPerBlock][kMaxBlockSizePix2] =
+  int16_t (*original_res_)[4][kMaxNumTransformsPerBlock][kMaxBlockSizePix2] =
       nullptr;
 #endif
 

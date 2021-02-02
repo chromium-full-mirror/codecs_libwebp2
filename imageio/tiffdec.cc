@@ -162,7 +162,8 @@ class ImageReaderTIFF : public ImageReader::Impl {
 
     MyData my_data = {data_, (toff_t)data_size_, 0};
     TIFF* const tiff =
-        TIFFClientOpen("Memory", "r", &my_data, MyRead, MyRead, MySeek, MyClose,
+        TIFFClientOpen("Memory", "r", (thandle_t*)&my_data,
+                       MyRead, MyRead, MySeek, MyClose,
                        MySize, MyMapFile, MyUnmapFile);
     if (tiff == NULL) {
       if (log_level_ >= LogLevel::DEFAULT) {

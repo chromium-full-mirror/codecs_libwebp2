@@ -316,7 +316,11 @@ WP2Status BuildHistograms(uint32_t width, uint32_t height, uint32_t histo_bits,
   Histogram** const histograms = histogram_set->histograms_.data();
   for (uint32_t i = 0; i < num_histos; ++i) {
     for (uint32_t s = 0; s < kSymbolNum; ++s) {
-      if (symbols_info_counter.Range(s, i) == 0) continue;
+      if (symbols_info_counter.Method(s) ==
+              WP2::SymbolsInfo::StorageMethod::kUnused ||
+          symbols_info_counter.Range(s, i) == 0) {
+        continue;
+      }
       const WP2::Vector_u32& counts = recorder.GetRecordedDict(s, i).Counts();
       std::copy(counts.begin(), counts.end(), histograms[i]->counts_[s]);
     }
