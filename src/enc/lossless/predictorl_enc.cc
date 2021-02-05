@@ -35,60 +35,47 @@ static const int kPredLowEffort = 11;
 namespace WP2L {
 namespace {
 
-// Computes the cost of a histogram for values in [-128;127] where the index of
-// a int8_t v is v & 0xff.
-// TODO(vrabaud) remove once predictors drop uint8_t wrap around.
-static float PredictionCostSpatialUnsigned(const Vector_u32& counts,
-                                           int weight_0, float exp_val) {
-  // TODO(vrabaud) make this constant be dependent on counts.size().
-  //               This will matter for 10-bit.
-  const uint32_t counts_size = 256;
-  const uint32_t significant_symbols = counts_size >> 4;
-  const float exp_decay_factor = 0.6f;
-  float bits = weight_0 * counts[0];
-  for (uint32_t i = 1; i < significant_symbols; ++i) {
-    // TODO(vrabaud) once subsequent usage of argb is signed, use MakeIndex
-    //               to compute the cost.
-    bits += exp_val * (counts[i] + counts[counts_size - i]);
-    exp_val *= exp_decay_factor;
-  }
-  return -0.1f * bits;
-}
-// Computes the cost of a histogram for values in [-128;127] where the index of
-// a value v is defined by MakeIndex(v).
-static float PredictionCostSpatial(const Vector_u32& counts, int weight_0,
-                                   float exp_val) {
+// Computes the cost of a histogram for signed values where the index of a value
+// v is defined by MakeIndex(v).
+float PredictionCostSpatial(const Vector_u32& counts, int weight_0,
+                            float exp_val) {
   // TODO(vrabaud) make this constant be dependent on counts.size().
   //               This will matter for 10-bit.
   constexpr int kSignificantSymbols = 16;
   const float kExpDecayFactor = 0.6f;
-  double bits = weight_0 * counts[MakeIndex(0)];
+  float bits = weight_0 * counts[MakeIndex(0)];
   for (int i = 1; i < kSignificantSymbols; ++i) {
-    bits += exp_val * (counts[MakeIndex(i)] + counts[MakeIndex(-i)]);
+    const uint32_t ind1 = MakeIndex(i);
+    const uint32_t ind2 = MakeIndex(-i);
+    uint32_t count = (ind1 < counts.size()) ? counts[ind1] : 0u;
+    count += (ind2 < counts.size()) ? counts[ind2] : 0u;
+    bits += exp_val * count;
     exp_val *= kExpDecayFactor;
   }
   return -0.1f * bits;
 }
 
-static float PredictionCostSpatialHistogram(const Vector_u32 accumulated[4],
-                                            const Vector_u32 tile[4]) {
+float PredictionCostSpatialHistogram(const Vector_u32 accumulated[4],
+                                     const Vector_u32 tile[4]) {
   int i;
   float retval = 0.f;
   for (i = 0; i < 4; ++i) {
     const float kExpValue = 0.94f;
-    retval += PredictionCostSpatialUnsigned(tile[i], 1, kExpValue);
+    retval += PredictionCostSpatial(tile[i], 1, kExpValue);
     retval += CombinedShannonEntropy(tile[i].data(), accumulated[i].data(),
                                      tile[i].size());
   }
   return retval;
 }
 
-static inline void UpdateHisto(Vector_u32 histo_argb[4],
-                               const int16_t* const argb) {
-  for (uint32_t i = 0; i < 4; ++i) {
-    // TODO(vrabaud) fix using the new upcoming MakeIndex.
-    assert(argb[i] >= 0);
-    ++histo_argb[i][argb[i]];
+inline void UpdateHisto(Vector_u32 histo_argb[4], const int16_t* const argb,
+                        uint32_t max_x) {
+  for (uint32_t x = 0; x < max_x; ++x) {
+    for (uint32_t i = 0; i < 4; ++i) {
+      const uint32_t index =
+          MakeIndex(argb[4 * x + i], histo_argb[i].size() - 1);
+      ++histo_argb[i][index];
+    }
   }
 }
 }  // namespace
@@ -97,19 +84,18 @@ static inline void UpdateHisto(Vector_u32 histo_argb[4],
 // Spatial transform functions.
 
 static inline void PredictBatch(int mode, int x_start, int y,
-                                uint32_t num_pixels, int16_t min_value,
-                                int16_t max_value, int16_t mask,
+                                uint32_t num_pixels,
+                                const int16_t min_values[4],
+                                const int16_t max_values[4],
                                 const int16_t* const current, bool has_alpha,
                                 const int16_t* const upper, int16_t* out) {
   if (x_start == 0) {
     if (y == 0) {
       // ARGB_BLACK.
-      PredictorsSub[0](current, has_alpha, nullptr, 1, min_value, max_value,
-                       mask, out);
+      PredictorsNonClampedSub[0](current, has_alpha, nullptr, 1, out);
     } else {
       // Top one.
-      PredictorsSub[2](current, has_alpha, upper, 1, min_value, max_value, mask,
-                       out);
+      PredictorsNonClampedSub[2](current, has_alpha, upper, 1, out);
     }
     ++x_start;
     out += 4;
@@ -117,11 +103,23 @@ static inline void PredictBatch(int mode, int x_start, int y,
   }
   if (y == 0) {
     // Left one.
-    PredictorsSub[1](&current[4 * x_start], has_alpha, nullptr, num_pixels,
-                     min_value, max_value, mask, out);
+    PredictorsNonClampedSub[1](&current[4 * x_start], has_alpha, nullptr,
+                               num_pixels, out);
   } else {
-    PredictorsSub[mode](&current[4 * x_start], has_alpha, &upper[4 * x_start],
-                        num_pixels, min_value, max_value, mask, out);
+    switch (kPredictorType[mode]) {
+      case PredictorType::NonClamped:
+        PredictorsNonClampedSub[kPredictorIndex[mode]](
+            &current[4 * x_start], has_alpha, &upper[4 * x_start], num_pixels,
+            out);
+        break;
+      case PredictorType::Clamped:
+        PredictorsClampedSub[kPredictorIndex[mode]](
+            &current[4 * x_start], has_alpha, &upper[4 * x_start], num_pixels,
+            min_values, max_values, out);
+        break;
+      default:
+        assert(false);
+    }
   }
 }
 
@@ -129,18 +127,30 @@ static inline void PredictBatch(int mode, int x_start, int y,
 // In case of a lossy encoding, updates the source image to avoid propagating
 // the deviation further to pixels which depend on the current pixel for their
 // predictions.
-static inline void GetResidual(int width, int16_t min_value, int16_t max_value,
-                               int16_t mask, int16_t* const upper_row,
+static inline void GetResidual(int width, const int16_t min_values[4],
+                               const int16_t max_values[4],
+                               int16_t* const upper_row,
                                int16_t* const current_row, bool has_alpha,
                                int mode, int x_start, int x_end, int y,
                                int16_t* const out) {
-  const PredictorFunc pred_func = Predictors[mode];
+  PredictorNonClampedFunc pred_non_clamped;
+  PredictorClampedFunc pred_clamped;
+  switch (kPredictorType[mode]) {
+    case PredictorType::NonClamped:
+      pred_non_clamped = PredictorsNonClamped[kPredictorIndex[mode]];
+      break;
+    case PredictorType::Clamped:
+      pred_clamped = PredictorsClamped[kPredictorIndex[mode]];
+      break;
+    default:
+      assert(false);
+  }
   int x;
   for (x = x_start; x < x_end; ++x) {
     int16_t predict[4], residual[4];
     if (y == 0) {
       if (x == 0) {
-        predict[0] = mask;
+        predict[0] = WP2::kAlphaMax;
         predict[1] = 0;
         predict[2] = 0;
         predict[3] = 0;
@@ -150,10 +160,20 @@ static inline void GetResidual(int width, int16_t min_value, int16_t max_value,
     } else if (x == 0) {
       ColorCopy(&upper_row[4 * x], predict);  // Top.
     } else {
-      pred_func(&current_row[4 * (x - 1)], &upper_row[4 * x], min_value,
-                max_value, predict);
+      switch (kPredictorType[mode]) {
+        case PredictorType::NonClamped:
+          pred_non_clamped(&current_row[4 * (x - 1)], &upper_row[4 * x],
+                           predict);
+          break;
+        case PredictorType::Clamped:
+          pred_clamped(&current_row[4 * (x - 1)], &upper_row[4 * x], min_values,
+                       max_values, predict);
+          break;
+        default:
+          assert(false);
+      }
     }
-    SubPixels(&current_row[4 * x], has_alpha, predict, mask, residual);
+    SubPixels(&current_row[4 * x], has_alpha, predict, residual);
     if (current_row[4 * x] == 0) {
       // If alpha is 0, cleanup RGB. We can choose the RGB values of the
       // residual for best compression. The prediction of alpha itself can be
@@ -181,13 +201,12 @@ static inline void GetResidual(int width, int16_t min_value, int16_t max_value,
 }
 
 // Returns best predictor and updates the accumulated histogram.
-static int GetBestPredictorForTile(int width, int height, int tile_x,
-                                   int tile_y, uint32_t bits,
-                                   int16_t* const argb_scratch,
-                                   const int16_t* const argb, bool has_alpha,
-                                   const int16_t* const modes,
-                                   Vector_u32 accumulated[4],
-                                   Vector_u32 tmp_histo[][4]) {
+static int GetBestPredictorForTile(
+    int width, int height, int tile_x, int tile_y, uint32_t bits,
+    const int16_t min_values[4], const int16_t max_values[4],
+    int16_t* const argb_scratch, const int16_t* const argb, bool has_alpha,
+    const int16_t* const modes, Vector_u32 accumulated[4],
+    Vector_u32 tmp_histo[][4]) {
   const int start_x = tile_x << bits;
   const int start_y = tile_y << bits;
   const int tile_size = 1 << bits;
@@ -221,11 +240,6 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
   assert(bits >= kTransformBitsMin && bits <= kTransformBitsMax);
   assert(max_x <= (1 << kTransformBitsMax));
 
-  // TODO(vrabaud) fix channel_bits.
-  constexpr uint32_t channel_bits = 8;
-  constexpr int16_t min_value = 0;
-  constexpr int16_t max_value = (1 << channel_bits) - 1;
-  constexpr int16_t mask = (1 << channel_bits) - 1;
   for (mode = 0; mode < kNumPredictors; ++mode) {
     float cur_diff;
     int relative_y;
@@ -244,7 +258,6 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
     }
     for (relative_y = 0; relative_y < max_y; ++relative_y) {
       const int y = start_y + relative_y;
-      int relative_x;
       std::swap(upper_row, current_row);
       // Read current_row. Include a pixel to the left if it exists; include a
       // pixel to the right in all cases except at the bottom right corner of
@@ -255,11 +268,9 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
                     4 * (max_x + have_left + (y + 1 < height))],
                 &current_row[4 * context_start_x]);
 
-      GetResidual(width, min_value, max_value, mask, upper_row, current_row,
+      GetResidual(width, min_values, max_values, upper_row, current_row,
                   has_alpha, mode, start_x, start_x + max_x, y, residuals);
-      for (relative_x = 0; relative_x < max_x; ++relative_x) {
-        UpdateHisto(histo_argb, &residuals[4 * relative_x]);
-      }
+      UpdateHisto(histo_argb, residuals, max_x);
     }
     cur_diff = PredictionCostSpatialHistogram(accumulated, histo_argb);
     // Favor keeping the areas locally similar.
@@ -283,12 +294,10 @@ static int GetBestPredictorForTile(int width, int height, int tile_x,
 }
 
 // Converts pixels of the image to residuals with respect to predictions.
-// If max_quantization > 1, applies near lossless processing, quantizing
-// residuals to multiples of quantization levels up to max_quantization
-// (the actual quantization level depends on smoothness near the given pixel).
 static void CopyImageWithPrediction(int width, int height, int bits,
-                                    int16_t min_value, int16_t max_value,
-                                    int16_t mask, const int16_t* const modes,
+                                    const int16_t min_values[4],
+                                    const int16_t max_values[4],
+                                    const int16_t* const modes,
                                     int16_t* const argb_scratch,
                                     int16_t* const argb, bool has_alpha,
                                     int effort) {
@@ -308,7 +317,7 @@ static void CopyImageWithPrediction(int width, int height, int bits,
               current_row);
 
     if (effort == 0) {
-      PredictBatch(kPredLowEffort, 0, y, width, min_value, max_value, mask,
+      PredictBatch(kPredLowEffort, 0, y, width, min_values, max_values,
                    current_row, has_alpha, upper_row, &argb[4 * y * width]);
     } else {
       for (x = 0; x < width;) {
@@ -316,7 +325,7 @@ static void CopyImageWithPrediction(int width, int height, int bits,
             modes[4 * ((y >> bits) * tiles_per_row + (x >> bits)) + 2];
         int x_end = x + (1 << bits);
         if (x_end > width) x_end = width;
-        GetResidual(width, min_value, max_value, mask, upper_row, current_row,
+        GetResidual(width, min_values, max_values, upper_row, current_row,
                     has_alpha, mode, x, x_end, y, &argb[4 * (y * width + x)]);
         x = x_end;
       }
@@ -325,13 +334,13 @@ static void CopyImageWithPrediction(int width, int height, int bits,
 }
 
 // Finds the best predictor for each tile, and converts the image to residuals
-// with respect to predictions. If near_lossless_quality < 100, applies
-// near lossless processing, shaving off more bits of residuals for lower
-// qualities.
-WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
-                        uint32_t channel_bits, int effort, int16_t* const argb,
-                        bool has_alpha, int16_t* const argb_scratch,
-                        int16_t* const image) {
+// with respect to predictions.
+WP2Status CreateResidualImage(uint32_t width, uint32_t height, uint32_t bits,
+                              const int16_t min_values[4],
+                              const int16_t max_values[4], int effort,
+                              int16_t* const argb, bool has_alpha,
+                              int16_t* const argb_scratch,
+                              int16_t* const image) {
   const uint32_t tiles_per_row = SubSampleSize(width, bits);
   const uint32_t tiles_per_col = SubSampleSize(height, bits);
   if (effort == 0) {
@@ -342,21 +351,25 @@ WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
       image[4 * i + 3] = 0;
     }
   } else {
-    const uint32_t histo_size = (1 << channel_bits);
     Vector_u32 histo[4];
     Vector_u32 tmp_histo[2][4];
-    for (uint32_t i = 0; i < 4; ++i) {
-      WP2_CHECK_ALLOC_OK(histo[i].resize(histo_size));
-      std::fill(histo[i].begin(), histo[i].end(), 0);
+    for (uint32_t c = 0; c < 4; ++c) {
+      uint32_t histo_size = 0;
+      for (int16_t i : {(int16_t)-min_values[c], min_values[c],
+                        (int16_t)-max_values[c], max_values[c]}) {
+        histo_size = std::max(histo_size, 1u + MakeIndex(i));
+      }
+      WP2_CHECK_ALLOC_OK(histo[c].resize(histo_size));
+      std::fill(histo[c].begin(), histo[c].end(), 0);
       for (uint32_t j = 0; j < 2; ++j) {
-        WP2_CHECK_ALLOC_OK(tmp_histo[j][i].resize(histo_size));
+        WP2_CHECK_ALLOC_OK(tmp_histo[j][c].resize(histo_size));
       }
     }
     for (uint32_t tile_y = 0; tile_y < tiles_per_col; ++tile_y) {
       for (uint32_t tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
         const int pred = GetBestPredictorForTile(
-            width, height, tile_x, tile_y, bits, argb_scratch, argb, has_alpha,
-            image, histo, tmp_histo);
+            width, height, tile_x, tile_y, bits, min_values, max_values,
+            argb_scratch, argb, has_alpha, image, histo, tmp_histo);
         image[4 * (tile_y * tiles_per_row + tile_x) + 0] = 0;
         image[4 * (tile_y * tiles_per_row + tile_x) + 1] = 0;
         image[4 * (tile_y * tiles_per_row + tile_x) + 2] = pred;
@@ -365,11 +378,8 @@ WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
     }
   }
 
-  const int16_t min_value = 0;
-  const int16_t max_value = (1 << channel_bits) - 1;
-  const int16_t mask = (1 << channel_bits) - 1;
-  CopyImageWithPrediction(width, height, bits, min_value, max_value, mask,
-                          image, argb_scratch, argb, has_alpha, effort);
+  CopyImageWithPrediction(width, height, bits, min_values, max_values, image,
+                          argb_scratch, argb, has_alpha, effort);
   return WP2_STATUS_OK;
 }
 
@@ -416,7 +426,7 @@ static float GetPredictionCostCrossColorRed(
   float cur_diff;
 
   CollectColorRedTransforms(argb, width, tile_width, tile_height, green_to_red,
-                            tmp_histo->data());
+                            tmp_histo->size(), tmp_histo->data());
 
   cur_diff =
       PredictionCostCrossColor(accumulated_red_histo, *tmp_histo);
@@ -477,7 +487,8 @@ static float GetPredictionCostCrossColorBlue(
   float cur_diff;
 
   CollectColorBlueTransforms(argb, stride, tile_width, tile_height,
-                             green_to_blue, red_to_blue, tmp_histo->data());
+                             green_to_blue, red_to_blue, tmp_histo->size(),
+                             tmp_histo->data());
 
   cur_diff = PredictionCostCrossColor(accumulated_blue_histo, *tmp_histo);
   // cur_diff -= 3 favors keeping the areas locally similar
@@ -598,13 +609,6 @@ static void CopyTileWithColorTransform(uint32_t width, uint32_t height,
 WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
                               WP2SampleFormat format, uint32_t effort,
                               int16_t* const argb, int16_t* image) {
-  // TODO(vrabaud) remove.
-  // Assume the predictor transform returns signed residuals.
-  for (uint32_t i = 0; i < 4 * width * height; i += 4) {
-    for (uint32_t j : {1, 2, 3}) {
-      if (argb[i + j] >= 128) argb[i + j] -= 256;
-    }
-  }
   const int max_tile_size = 1 << bits;
   const int tile_xsize = SubSampleSize(width, bits);
   const int tile_ysize = SubSampleSize(height, bits);
@@ -613,14 +617,16 @@ WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
   MultipliersClear(&prev_y);
   MultipliersClear(&prev_x);
   Vector_u32 tmp_histo, accumulated_red_histo, accumulated_blue_histo;
-  // At most, we have a delta of twice a color.
-  const uint32_t max_index_red = 3 * 2 * WP2::FormatMax(format, /*channel=*/1);
-  const uint32_t max_index_blue = 3 * 2 * WP2::FormatMax(format, /*channel=*/3);
-  WP2_CHECK_ALLOC_OK(
-      tmp_histo.resize(std::max(max_index_red, max_index_blue) + 1));
-  WP2_CHECK_ALLOC_OK(accumulated_red_histo.resize(max_index_red + 1));
+  // We have deltas up to several times a color. In order to limit the size of
+  // the histograms, we restrict to +1/-1 the color.
+  const int32_t max_index = std::max(WP2::FormatMax(format, /*channel=*/1),
+                                     WP2::FormatMax(format, /*channel=*/3));
+  const uint32_t histo_size =
+      1 + std::max(MakeIndex(max_index), MakeIndex(-max_index));
+  WP2_CHECK_ALLOC_OK(tmp_histo.resize(histo_size));
+  WP2_CHECK_ALLOC_OK(accumulated_red_histo.resize(histo_size));
   std::fill(accumulated_red_histo.begin(), accumulated_red_histo.end(), 0);
-  WP2_CHECK_ALLOC_OK(accumulated_blue_histo.resize(max_index_blue + 1));
+  WP2_CHECK_ALLOC_OK(accumulated_blue_histo.resize(histo_size));
   std::fill(accumulated_blue_histo.begin(), accumulated_blue_histo.end(), 0);
   for (tile_y = 0; tile_y < tile_ysize; ++tile_y) {
     for (tile_x = 0; tile_x < tile_xsize; ++tile_x) {
@@ -656,10 +662,8 @@ WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
               ColorEq(&argb[4 * ix], &argb[4 * (ix - width)])) {
             continue;  // repeated pixels are handled by backward references
           }
-          assert(MakeIndex(argb[4 * ix + 1]) < accumulated_red_histo.size());
-          assert(MakeIndex(argb[4 * ix + 3]) < accumulated_blue_histo.size());
-          ++accumulated_red_histo[MakeIndex(argb[4 * ix + 1])];
-          ++accumulated_blue_histo[MakeIndex(argb[4 * ix + 3])];
+          ++accumulated_red_histo[MakeIndex(argb[4 * ix + 1], histo_size - 1)];
+          ++accumulated_blue_histo[MakeIndex(argb[4 * ix + 3], histo_size - 1)];
         }
       }
     }

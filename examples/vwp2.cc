@@ -1048,6 +1048,10 @@ void Params::PrintInfo() {
              kSegmentModes[(int)enc_config_.segment_id_mode][0],
              kOnOff[enc_config_.partition_snapping]);
     msg.emplace_back(tmp);
+#if defined(WP2_BITTRACE)
+    snprintf(tmp, sizeof(tmp), " %lu blocks", einfo_.blocks.size());
+    msg.back() += tmp;
+#endif
 
     if (in_.HasTransparency()) {
       snprintf(tmp, sizeof(tmp), "Alpha quality: %.1f (%s=%.2f)",
@@ -2090,7 +2094,7 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
           if (b.encoding_method[channel][tf_i] == -1) continue;
           msg->push_back(
               SPrintf("Enc %u. Mthd: %s", tf_i,
-                      kEncNames[b.encoding_method[channel][tf_i]] + 1));
+                      kEncNames[b.encoding_method[channel][tf_i] + 1]));
           const uint32_t scale =
               (b.is420 && (channel == 1 || channel == 2)) ? 2 : 1;
           const BlockSize split_size = GetSplitSize(

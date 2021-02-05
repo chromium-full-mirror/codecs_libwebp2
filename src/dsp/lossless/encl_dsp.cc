@@ -56,13 +56,11 @@ float CombinedShannonEntropy_C(const uint32_t* X, const uint32_t* Y,
 //------------------------------------------------------------------------------
 // Color transforms.
 
-void SubtractGreenFromBlueAndRed_C(uint16_t* argb_data, uint32_t channel_bits,
-                                   uint32_t num_pixels) {
-  uint16_t mask = (1u << channel_bits) - 1;
+void SubtractGreenFromBlueAndRed_C(int16_t* argb_data, uint32_t num_pixels) {
   for (uint32_t i = 0; i < num_pixels; ++i) {
-    const int green = argb_data[4 * i + 2];
-    argb_data[4 * i + 1] = (argb_data[4 * i + 1] - green) & mask;
-    argb_data[4 * i + 3] = (argb_data[4 * i + 3] - green) & mask;
+    const int16_t green = argb_data[4 * i + 2];
+    argb_data[4 * i + 1] -= green;
+    argb_data[4 * i + 3] -= green;
   }
 }
 
@@ -103,10 +101,12 @@ inline int16_t TransformColorBlue(int16_t green_to_blue,
 
 void CollectColorRedTransforms_C(const int16_t* argb, uint32_t width,
                                  uint32_t tile_width, uint32_t tile_height,
-                                 int16_t green_to_red, uint32_t* const histo) {
+                                 int16_t green_to_red, uint32_t histo_size,
+                                 uint32_t* const histo) {
   while (tile_height-- > 0) {
     for (uint32_t x = 0; x < tile_width; ++x) {
-      ++histo[WP2L::MakeIndex(TransformColorRed(green_to_red, &argb[4 * x]))];
+      ++histo[WP2L::MakeIndex(TransformColorRed(green_to_red, &argb[4 * x]),
+                              histo_size - 1)];
     }
     argb += 4 * width;
   }
@@ -115,11 +115,12 @@ void CollectColorRedTransforms_C(const int16_t* argb, uint32_t width,
 void CollectColorBlueTransforms_C(const int16_t* argb, uint32_t width,
                                   uint32_t tile_width, uint32_t tile_height,
                                   int16_t green_to_blue, int16_t red_to_blue,
-                                  uint32_t* const histo) {
+                                  uint32_t histo_size, uint32_t* const histo) {
   while (tile_height-- > 0) {
     for (uint32_t x = 0; x < tile_width; ++x) {
       ++histo[WP2L::MakeIndex(
-          TransformColorBlue(green_to_blue, red_to_blue, &argb[4 * x]))];
+          TransformColorBlue(green_to_blue, red_to_blue, &argb[4 * x]),
+          histo_size - 1)];
     }
     argb += 4 * width;
   }
@@ -167,24 +168,24 @@ void BufferAdd_C(const uint32_t* const a, const uint32_t* const b,
 //------------------------------------------------------------------------------
 // Predictors
 
-void PredictorSub0_C(const int16_t* in, bool has_alpha, const int16_t*,
-                     uint32_t num_pixels, int16_t, int16_t, int16_t mask,
-                     int16_t* out) {
+void PredictorNonClampedSub0_C(const int16_t* in, bool has_alpha,
+                               const int16_t*, uint32_t num_pixels,
+                               int16_t* out) {
   for (const int16_t* const in_end = in + 4 * num_pixels; in < in_end;
        in += 4, out += 4) {
-    out[0] = has_alpha ? ((in[0] - WP2::kAlphaMax) & mask) : WP2::kAlphaMax;
+    out[0] = has_alpha ? in[0] - WP2::kAlphaMax : WP2::kAlphaMax;
     out[1] = in[1];
     out[2] = in[2];
     out[3] = in[3];
   }
 }
 
-void PredictorSub1_C(const int16_t* in, bool has_alpha, const int16_t*,
-                     uint32_t num_pixels, int16_t, int16_t, int16_t mask,
-                     int16_t* out) {
+void PredictorNonClampedSub1_C(const int16_t* in, bool has_alpha,
+                               const int16_t*, uint32_t num_pixels,
+                               int16_t* out) {
   for (const int16_t* const in_end = in + 4 * num_pixels; in < in_end;
        in += 4, out += 4) {
-    WP2L::SubPixels(in, has_alpha, &in[-4], mask, out);
+    WP2L::SubPixels(in, has_alpha, &in[-4], out);
   }
 }
 
@@ -193,33 +194,48 @@ void PredictorSub1_C(const int16_t* in, bool has_alpha, const int16_t*,
 
 // It subtracts the prediction from the input pixel and stores the residual
 // in the output pixel.
-#define GENERATE_PREDICTOR_SUB(PREDICTOR, PREDICTOR_SUB)                     \
-  void PREDICTOR_SUB(const int16_t* in, bool has_alpha,                      \
-                     const int16_t* upper, uint32_t num_pixels,              \
-                     int16_t min_value, int16_t max_value,                   \
-                     int16_t mask, int16_t* out) {                           \
+#define GENERATE_PREDICTOR_NON_CLAMPED_SUB(I)                                \
+  void PredictorNonClampedSub##I##_C(const int16_t* in, bool has_alpha,      \
+                                     const int16_t* upper,                   \
+                                     uint32_t num_pixels, int16_t* out) {    \
     int16_t pred[4];                                                         \
     assert(upper != nullptr);                                                \
     for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
          out += 4, in += 4, upper += 4) {                                    \
-      (WP2L::PREDICTOR)(in - 4, upper, min_value, max_value, pred);          \
-      WP2L::SubPixels(in, has_alpha, pred, mask, out);                       \
+      WP2L::PredictorsNonClamped_C[I](in - 4, upper, pred);                  \
+      WP2L::SubPixels(in, has_alpha, pred, out);                             \
     }                                                                        \
   }
 
-GENERATE_PREDICTOR_SUB(Predictors_C[2], PredictorSub2_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[3], PredictorSub3_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[4], PredictorSub4_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[5], PredictorSub5_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[6], PredictorSub6_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[7], PredictorSub7_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[8], PredictorSub8_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[9], PredictorSub9_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[10], PredictorSub10_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[11], PredictorSub11_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[12], PredictorSub12_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[13], PredictorSub13_C)
-GENERATE_PREDICTOR_SUB(Predictors_C[14], PredictorSub14_C)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(2)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(3)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(4)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(5)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(6)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(7)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(8)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(9)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(10)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(11)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(12)
+
+#define GENERATE_PREDICTOR_CLAMPED_SUB(I)                                      \
+  void PredictorClampedSub##I##_C(const int16_t* in, bool has_alpha,           \
+                                  const int16_t* upper, uint32_t num_pixels,   \
+                                  const int16_t min_values[4],                 \
+                                  const int16_t max_values[4], int16_t* out) { \
+    int16_t pred[4];                                                           \
+    assert(upper != nullptr);                                                  \
+    for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end;   \
+         out += 4, in += 4, upper += 4) {                                      \
+      WP2L::PredictorsClamped_C[I](in - 4, upper, min_values, max_values,      \
+                                   pred);                                      \
+      WP2L::SubPixels(in, has_alpha, pred, out);                               \
+    }                                                                          \
+  }
+
+GENERATE_PREDICTOR_CLAMPED_SUB(0)
+GENERATE_PREDICTOR_CLAMPED_SUB(1)
 
 //------------------------------------------------------------------------------
 // SSE version
@@ -274,8 +290,11 @@ CombinedShannonEntropyFunc CombinedShannonEntropy;
 
 BufferAddFunc BufferAdd;
 
-PredictorAddSubFunc PredictorsSub[kNumPredictors];
-PredictorAddSubFunc PredictorsSub_C[kNumPredictors];
+PredictorNonClampedAddSubFunc PredictorsNonClampedSub[kNumPredictorsNonClamped];
+PredictorNonClampedAddSubFunc
+    PredictorsNonClampedSub_C[kNumPredictorsNonClamped];
+PredictorClampedAddSubFunc PredictorsClampedSub[kNumPredictorsClamped];
+PredictorClampedAddSubFunc PredictorsClampedSub_C[kNumPredictorsClamped];
 
 static volatile WP2CPUInfo lossless_enc_last_cpuinfo_used =
     (WP2CPUInfo)&lossless_enc_last_cpuinfo_used;
@@ -298,8 +317,10 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInit() {
 
   BufferAdd = BufferAdd_C;
 
-  COPY_PREDICTOR_ARRAY(PredictorSub, PredictorsSub);
-  COPY_PREDICTOR_ARRAY(PredictorSub, PredictorsSub_C);
+  COPY_PREDICTOR_NON_CLAMPED_ARRAY(Sub, Sub);
+  COPY_PREDICTOR_NON_CLAMPED_ARRAY(Sub, Sub_C);
+  COPY_PREDICTOR_CLAMPED_ARRAY(Sub, Sub);
+  COPY_PREDICTOR_CLAMPED_ARRAY(Sub, Sub_C);
 
   // If defined, use CPUInfo() to overwrite some pointers with faster versions.
   if (WP2GetCPUInfo != NULL) {

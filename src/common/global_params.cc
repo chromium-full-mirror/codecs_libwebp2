@@ -199,19 +199,15 @@ bool GlobalParams::IsOk() const {
   return true;
 }
 
-uint16_t GlobalParams::GetMaxAbsDC(Channel channel) const {
-  uint16_t max_abs_dc = 0;
+uint32_t GlobalParams::GetMaxDCRange(Channel channel) const {
+  uint32_t max_abs_dc = 0;
   for (const Segment& s : segments_) {
     // Figure out the maximum range.
     max_abs_dc = std::max(max_abs_dc, s.GetMaxAbsDC(channel));
   }
-  max_abs_dc = std::min(max_abs_dc, (uint16_t)kMaxDcValue);
-  return max_abs_dc;
-}
-
-uint32_t GlobalParams::GetMaxDCRange(Channel channel) const {
+  assert(max_abs_dc <= kMaxDcValue);
   // 2 * max_abs_dc + 1 as DC is in [-max_abs_dc, max_abs_dc], zero included.
-  return 2u * GetMaxAbsDC(channel) + 1u;
+  return 2u * max_abs_dc + 1u;
 }
 
 void GlobalParams::Reset() {

@@ -51,15 +51,12 @@ struct QuantMtx {
 
   // Quantizes or dequantizes.
   // If 'first_is_dc', 'coeffs[0]' will be treated differently.
+  // The dequantized result is returned in 'dequantized_coeffs'.
   void Quantize(const int32_t residuals[], TrfSize dim, bool first_is_dc,
-                int16_t coeffs[], uint32_t* const num_coeffs) const;
-  void Dequantize(const int16_t coeffs[], uint32_t num_coeffs, TrfSize dim,
-                  int16_t residuals[]) const;
-  const int16_t* Dequant() const { return dequants; }  // decoder only
-  // Performs quantization and dequantization and returns sum of squared errors.
-  // 'coeffs' is set to the quantized values.
-  uint32_t RoundTrip(const int32_t residuals[], TrfSize dim, bool first_is_dc,
-                     int16_t coeffs[], uint32_t* const num_coeffs) const;
+                int16_t coeffs[], uint32_t* const num_coeffs,
+                int16_t dequantized_coeffs[]) const;
+  // Returns the dequantization matrix (used by decoder only).
+  const int16_t* Dequant() const { return dequants; }
 
   // Computes the quantization error on DC.
   // Note that DC, and hence the DC error, is scaled by sqrt(dim/2) by
@@ -67,7 +64,7 @@ struct QuantMtx {
   // the value should be normalized.
   int16_t DCError(int32_t DC, TrfSize dim) const;
 
-  uint16_t GetMaxAbsResDC(TrfSize tdim) const { return max_abs_res_dc[tdim]; }
+  uint32_t GetMaxAbsResDC(TrfSize tdim) const { return max_abs_res_dc[tdim]; }
 
   void Print() const;  // debug
 

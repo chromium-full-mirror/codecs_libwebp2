@@ -29,18 +29,15 @@ namespace WP2L {
 
 // Difference of each component, mod 256.
 static inline void SubPixels(const int16_t* const a, bool has_alpha,
-                             const int16_t* const b, uint16_t mask,
-                             int16_t* const out) {
-  // TODO(vrabaud) remove 0xff alpha wrap around.
-  out[0] = has_alpha ? ((a[0] - b[0]) & 0xff) : WP2::kAlphaMax;
-  for (uint32_t i = 1; i < 4; ++i) out[i] = (a[i] - b[i]) & mask;
+                             const int16_t* const b, int16_t* const out) {
+  out[0] = has_alpha ? a[0] - b[0] : WP2::kAlphaMax;
+  for (uint32_t i = 1; i < 4; ++i) out[i] = a[i] - b[i];
 }
 
 //------------------------------------------------------------------------------
 // Encoding
 
-typedef void (*ProcessEncBlueAndRedFunc)(uint16_t* dst, uint32_t channel_bits,
-                                         uint32_t num_pixels);
+typedef void (*ProcessEncBlueAndRedFunc)(int16_t* dst, uint32_t num_pixels);
 extern ProcessEncBlueAndRedFunc SubtractGreenFromBlueAndRed;
 typedef void (*TransformColorFunc)(const Multipliers* const m, int num_pixels,
                                    int16_t* const data);
@@ -48,16 +45,21 @@ extern TransformColorFunc TransformColor;
 typedef void (*CollectColorBlueTransformsFunc)(
     const int16_t* argb, uint32_t width, uint32_t tile_width,
     uint32_t tile_height, int16_t green_to_blue, int16_t red_to_blue,
-    uint32_t* const histo);
+    uint32_t histo_size, uint32_t* const histo);
 extern CollectColorBlueTransformsFunc CollectColorBlueTransforms;
 
 typedef void (*CollectColorRedTransformsFunc)(
     const int16_t* argb, uint32_t width, uint32_t tile_width,
-    uint32_t tile_height, int16_t green_to_red, uint32_t* const histo);
+    uint32_t tile_height, int16_t green_to_red, uint32_t histo_size,
+    uint32_t* const histo);
 extern CollectColorRedTransformsFunc CollectColorRedTransforms;
 
-extern PredictorAddSubFunc PredictorsSub[kNumPredictors];
-extern PredictorAddSubFunc PredictorsSub_C[kNumPredictors];
+extern PredictorNonClampedAddSubFunc
+    PredictorsNonClampedSub[kNumPredictorsNonClamped];
+extern PredictorNonClampedAddSubFunc
+    PredictorsNonClampedSub_C[kNumPredictorsNonClamped];
+extern PredictorClampedAddSubFunc PredictorsClampedSub[kNumPredictorsClamped];
+extern PredictorClampedAddSubFunc PredictorsClampedSub_C[kNumPredictorsClamped];
 
 //------------------------------------------------------------------------------
 // Entropy-cost related functions.

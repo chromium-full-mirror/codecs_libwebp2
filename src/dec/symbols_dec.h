@@ -39,6 +39,7 @@ class SymbolReader : public SymbolIO<StatExtra> {
   WP2Status Init(const SymbolsInfo& symbols_info, ANSDec* const dec);
 
   const SymbolsInfo& symbols_info() const { return symbols_info_; }
+  ANSDec* dec() const { return dec_; }
 
   // Sets the range for a particular symbol.
   inline void SetRange(uint32_t sym, int32_t min, int32_t max) {

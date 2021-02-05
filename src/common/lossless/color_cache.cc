@@ -78,7 +78,7 @@ void ColorCacheMap::Reset() {
 }
 
 bool ColorCacheMap::Insert(const int16_t color[4], uint32_t value) {
-  uint32_t tag = WP2::HashPix(color, hash_bits_);
+  uint32_t tag = WP2::decoding::HashPix(color, hash_bits_);
   const uint32_t start_tag = tag;
   const uint32_t size = colors_.size();
   while (true) {
@@ -115,7 +115,7 @@ void ColorCacheMap::GetPalette(int16_t* const palette) const {
 
 bool ColorCacheMap::Contains(const int16_t color[4],
                              uint32_t* const value) const {
-  uint32_t tag = WP2::HashPix(color, hash_bits_);
+  uint32_t tag = WP2::decoding::HashPix(color, hash_bits_);
   const uint32_t start_tag = tag;
   const uint32_t size = colors_.size();
   while (true) {
@@ -143,7 +143,7 @@ void HashColorCache::Lookup(uint32_t index, int16_t* const dest) const {
 }
 
 bool HashColorCache::Insert(const int16_t color[4], uint32_t* const index_ptr) {
-  const uint32_t tag = WP2::HashPix(color, hash_bits_);
+  const uint32_t tag = WP2::decoding::HashPix(color, hash_bits_);
   if (index_ptr != nullptr) *index_ptr = tag;
   if (ColorEq(&colors_[4 * tag], color)) {
     return false;
@@ -155,7 +155,7 @@ bool HashColorCache::Insert(const int16_t color[4], uint32_t* const index_ptr) {
 
 bool HashColorCache::Contains(const int16_t color[4],
                               uint32_t* const index_ptr) const {
-  const uint32_t index = WP2::HashPix(color, hash_bits_);
+  const uint32_t index = WP2::decoding::HashPix(color, hash_bits_);
   if (ColorEq(color, &colors_[4 * index])) {
     *index_ptr = index;
     return true;

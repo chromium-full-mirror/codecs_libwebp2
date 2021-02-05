@@ -75,10 +75,10 @@ static constexpr uint32_t kResidual1Max = 12;
 // Maximum value of consecutive 0s we store for residuals.
 static constexpr uint32_t kResidualCons0Max = 6;
 // Maximum quantized DC value that can be coded.
-static constexpr int32_t kMaxDcValue = (1 << 12) - 1;
+static constexpr uint32_t kMaxDcValue = (1u << 12) - 1u;
 // Maximum quantized value that can be coded for AC coeffs.
-static constexpr int32_t kMaxCoeffValue =
-    ((1 << kMaxCoeffBits) - 1) + 3 + kResidual1Max;
+static constexpr uint32_t kMaxCoeffValue =
+    ((1u << kMaxCoeffBits) - 1u) + 3 + kResidual1Max;
 
 static constexpr Argb38b kDefaultBackgroundColor{kAlphaMax, 0x0000u, 0x0000u,
                                                  0x0000u};

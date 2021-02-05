@@ -146,10 +146,13 @@ uint32_t DistanceToPlaneCode(uint32_t width, uint32_t dist);
 //------------------------------------------------------------------------------
 // Image transforms in predictor_enc.cc
 
-WP2Status ResidualImage(uint32_t width, uint32_t height, uint32_t bits,
-                        uint32_t channel_bits, int effort, int16_t* const argb,
-                        bool has_alpha, int16_t* const argb_scratch,
-                        int16_t* const image);
+// Computes the signed residuals after applying the predictors.
+WP2Status CreateResidualImage(uint32_t width, uint32_t height, uint32_t bits,
+                              const int16_t min_values[4],
+                              const int16_t max_values[4], int effort,
+                              int16_t* const argb, bool has_alpha,
+                              int16_t* const argb_scratch,
+                              int16_t* const image);
 
 WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
                               WP2SampleFormat format, uint32_t effort,

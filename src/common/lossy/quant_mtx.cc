@@ -141,11 +141,12 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
   }
   for (const TrfSize tdim : kAllTrfSizes) {
     const uint32_t W = TrfWidth[tdim], H = TrfHeight[tdim];
-    const uint32_t max_residual_value =
-        std::min((uint32_t)(max_residual * std::sqrt(W * H)), (1 << 16) - 1u);
-    const int32_t max_res =
-          WP2Quantize16b(max_residual_value, IQ0, /*bias=*/0);
-    max_abs_res_dc[tdim] = std::min(kMaxDcValue, max_res);
+    const uint32_t max_dc_res =
+        WP2Quantize16b((uint32_t)(max_residual * std::sqrt(W * H) + .5), IQ0,
+                                  (1u << WP2QBits) - 1u);
+    // Use 'floor' rounding, since (1<<16)-1 must strictly not be overflowed.
+    const uint32_t max_dc_16b = WP2Quantize16b((1 << 16) - 1, IQ0, /*bias=*/0);
+    max_abs_res_dc[tdim] = std::min({kMaxDcValue, max_dc_res, max_dc_16b});
   }
 }
 
@@ -162,7 +163,8 @@ void QuantMtx::SetLambda(float lambda) {
 
 void QuantMtx::Quantize(const int32_t residuals[], TrfSize dim,
                         bool first_is_dc, int16_t coeffs[],
-                        uint32_t* const num_coeffs) const {
+                        uint32_t* const num_coeffs,
+                        int16_t dequantized_coeffs[]) const {
   WP2Quantize(iquants.data(), bias.data(),
               residuals, coeffs, TrfWidth[dim], TrfHeight[dim]);
   uint32_t last_nz = kNumCoeffs[dim];
@@ -172,57 +174,38 @@ void QuantMtx::Quantize(const int32_t residuals[], TrfSize dim,
 #if defined(WP2_ERROR_TRACE) || defined(WP2_TRACE)
   for (uint32_t i = 0; i < kNumCoeffs[dim]; ++i) {
     const uint32_t v = std::abs(coeffs[i]);
-    if (i == 0 && v > kMaxDcValue) {
+    const uint32_t max_v = (i == 0) ? max_abs_res_dc[dim] : kMaxCoeffValue;
+    if (v > max_v) {
       // TODO(maryla): make sure clipping never occurs? Clipping is bad, it's
       // a form of unexpected quantization that happens at high quality (but
       // skal disagrees).
-      fprintf(stderr, "WARNING!! Clipping occured. Clipped DC %d to %d\n", v,
-              kMaxDcValue);
-    } else if (i > 0 && v > kMaxCoeffValue) {
-      fprintf(stderr, "WARNING!! Clipping occured. Clipped value %d to %d\n", v,
-              kMaxCoeffValue);
+      fprintf(stderr,
+              "WARNING!! Clipping occured. Clipped #%d value %d to %d\n",
+              i, v, max_v);
     }
   }
 #endif
+
   if (first_is_dc) {
-    // prevents overflow in Dequantize()
     const uint32_t max_dc = max_abs_res_dc[dim];
     coeffs[0] = Clamp<int16_t>(coeffs[0], -max_dc, max_dc);
   }
   for (uint32_t i = (first_is_dc ? 1 : 0); i < last_nz; ++i) {
-    coeffs[i] = Clamp<int16_t>(coeffs[i], -kMaxCoeffValue, kMaxCoeffValue);
+    coeffs[i] =
+        Clamp<int16_t>(coeffs[i], -(int16_t)kMaxCoeffValue, kMaxCoeffValue);
   }
+  // TODO(skal): merge the clamping to kMaxCoeffValue into WP2Dequantize()
+  WP2Dequantize(coeffs, dequants, dequantized_coeffs,
+                TrfWidth[dim], TrfHeight[dim], *num_coeffs);
 }
 
 int16_t QuantMtx::DCError(int32_t DC, TrfSize dim) const {
   const uint32_t iq = iquants[0];
   const uint32_t b = bias[0];
   int16_t v = WP2Quantize16b(std::abs(DC), iq, b);
-  v = std::min(v, (int16_t)kMaxDcValue) * dequants[0] * (DC < 0 ? -1 : 1);
+  v = std::min(v, (int16_t)max_abs_res_dc[dim]) * dequants[0];
+  if (DC < 0) v = -v;
   return DC - v;
-}
-
-void QuantMtx::Dequantize(const int16_t coeffs[], uint32_t num_coeffs,
-                          TrfSize dim, int16_t residuals[]) const {
-  WP2Dequantize(coeffs, dequants, residuals,
-                TrfWidth[dim], TrfHeight[dim], num_coeffs);
-}
-
-uint32_t QuantMtx::RoundTrip(const int32_t residuals[], TrfSize dim,
-                             bool first_is_dc, int16_t coeffs[],
-                             uint32_t* const num_coeffs) const {
-  int16_t tmp[kMaxBlockSizePix2];
-  Quantize(residuals, dim, first_is_dc, coeffs, num_coeffs);
-  // TODO(skal): rnd_mtx ?
-  WP2Dequantize(coeffs, dequants, tmp,
-                TrfWidth[dim], TrfHeight[dim], *num_coeffs);
-
-  uint32_t error = 0;
-  for (uint32_t i = 0; i < kNumCoeffs[dim]; ++i) {
-    const int32_t diff = (int32_t)residuals[i] - tmp[i];
-    error += diff * diff;
-  }
-  return error / kNumCoeffs[dim];
 }
 
 void QuantMtx::Print() const {

@@ -115,9 +115,10 @@ class GlobalParams {
 
   WP2Status InitRndMtxSet();
 
+  // verifies that internal parameters are within valid ranges
   bool IsOk() const;
 
-  uint16_t GetMaxAbsDC(Channel channel) const;
+  // Returns the DC symbols' coding range.
   uint32_t GetMaxDCRange(Channel channel) const;
 
   // These functions are responsible for mapping the segment's risk_ factor

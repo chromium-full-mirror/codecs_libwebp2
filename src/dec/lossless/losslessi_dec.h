@@ -131,8 +131,8 @@ class Decoder {
 
   WP2::Tile* tile_ = nullptr;
 
-  WP2::Vector_s16 pixels_;          // Internal data
-  uint16_t* argb_cache_ = nullptr;  // Scratch buffer for temporary BGRA
+  WP2::Vector_s16 pixels_;         // Internal data
+  int16_t* argb_cache_ = nullptr;  // Scratch buffer for temporary BGRA
 
   WP2::ANSDec* dec_ = nullptr;
 

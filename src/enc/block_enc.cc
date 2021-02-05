@@ -97,7 +97,6 @@ void CodedBlock::ExtractFrom(const YUVPlane& yuv, Channel channel) const {
   WP2_ASSERT_STATUS(dst.Copy(src, /*resize_if_needed=*/false));
 }
 
-
 uint32_t CodedBlock::GetDisto(Channel channel) const {
   const Plane16& p_in = in_.GetChannel(channel);
   const Plane16& p_out = out_.GetChannel(channel);
@@ -161,13 +160,13 @@ void CodedBlock::TransformAndReconstruct(const QuantMtx& quant, Channel channel,
       dc_error_next_[channel] = quant.DCError(tf_res[0], tdim(channel));
     }
     quant.Quantize(tf_res, tdim(channel), IsFirstCoeffDC(channel),
-                   coeffs_[channel][tf_i], &num_coeffs_[channel][tf_i]);
+                   coeffs_[channel][tf_i], &num_coeffs_[channel][tf_i],
+                   (*tmp)[tf_i]);
 
     if (channel == kYChannel && mtx_set_ != nullptr) {
       mtx_set_->DecideUseRndMtx(this);  // TODO(skal): later: U/V channel?
     }
   }
-  Dequantize(quant, channel, tmp);
   Reconstruct(channel, reduced_transform, tmp, prediction);
 }
 
@@ -213,21 +212,6 @@ void CodedBlock::Quantize(const QuantMtx& quant, Channel channel,
   TransformAndReconstruct(quant, channel, reduced_transform,
                           /*prediction=*/*out, &res, &tmp);
 }
-
-void CodedBlock::Dequantize(const QuantMtx& quant, Channel channel,
-                            BlockCoeffs16* const res) {
-  const TrfSize split_size = tdim(channel);
-  for (uint32_t tf_i = 0; tf_i < GetNumTransforms(channel); ++tf_i) {
-    const int16_t* const src = coeffs_[channel][tf_i];
-    int16_t* const dst = (*res)[tf_i];
-    quant.Dequantize(src, num_coeffs_[channel][tf_i], tdim(channel), dst);
-    if (use_mtx_ && channel == kYChannel) {
-      assert(mtx_set_->IsOk(mtx_[channel], split_size));
-      mtx_set_->AddMatrix(mtx_[channel], split_size, dst);
-    }
-  }
-}
-
 
 //------------------------------------------------------------------------------
 
@@ -276,17 +260,11 @@ static uint32_t RoundTripDisto(CodedBlock* const cb, const QuantMtx& quant,
                                uint32_t* const num_coeffs) {
   int16_t dequantized_coeffs[kMaxBlockSizePix2];
   quant.Quantize(coeffs, tdim, cb->IsFirstCoeffDC(channel), quantized_coeffs,
-                 num_coeffs);
-  quant.Dequantize(quantized_coeffs, *num_coeffs, tdim, dequantized_coeffs);
+                 num_coeffs, dequantized_coeffs);
   const CodedBlock::CodingParams& params = *cb->GetCodingParams(channel);
   WP2InvTransform2D(dequantized_coeffs, params.tf_x(), params.tf_y(),
                     cb->w_pix(), cb->h_pix(), reduced);
-  // 32b->16b conversion of dequantized_coeffs[]
-  int16_t dequantized_coeffs16[kMaxBlockSizePix2];
-  for (uint32_t n = 0; n < *num_coeffs; ++n) {
-    dequantized_coeffs16[n] = dequantized_coeffs[n];
-  }
-  return WP2SumSquaredError16s(res, dequantized_coeffs16, *num_coeffs);
+  return WP2SumSquaredError16s(res, dequantized_coeffs, *num_coeffs);
 }
 
 // Computes the rate-distortion score for the U and V channels.

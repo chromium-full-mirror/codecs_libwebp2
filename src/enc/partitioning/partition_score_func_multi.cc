@@ -251,9 +251,8 @@ void MultiScoreFunc::QuantizeCoeffs(Channel channel, const Block& block,
   // Quantize and dequantize coefficients.
   const TrfSize tdim = GetTransform(block.dim());
   uint32_t num_coeffs;
-  quant_mtx.Quantize(out, tdim, /*first_is_dc=*/true, coeffs, &num_coeffs);
-  quant_mtx.Dequantize(coeffs, num_coeffs, tdim, coeffs);
-
+  quant_mtx.Quantize(out, tdim, /*first_is_dc=*/true, coeffs,
+                     &num_coeffs, coeffs);
   // Inverse transform them back and compare the result.
   WP2InvTransform2D(coeffs, kDct, kDct, block.w_pix(), block.h_pix(),
                     /*reduced=*/false);

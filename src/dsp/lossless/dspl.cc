@@ -64,11 +64,12 @@ inline int ClampedAddSubtractComponentFull(int a, int b, int c) {
 }
 
 inline void AddSubtractFull(const int16_t* const c0, const int16_t* const c1,
-                            const int16_t* const c2, int16_t min_value,
-                            int16_t max_value, int16_t* const out) {
-  for (uint32_t i = 0; i < 4; ++i) {
-    out[i] =
-        AddSubtractComponentFull(c0[i], c1[i], c2[i], min_value, max_value);
+                            const int16_t* const c2,
+                            const int16_t min_values[4],
+                            const int16_t max_values[4], int16_t* const out) {
+  for (uint32_t c = 0; c < 4; ++c) {
+    out[c] = AddSubtractComponentFull(c0[c], c1[c], c2[c], min_values[c],
+                                      max_values[c]);
   }
 }
 
@@ -87,11 +88,13 @@ inline int AddSubtractComponentHalf(int a, int b, int min_value,
 }
 
 inline void AddSubtractHalf(const int16_t* const c0, const int16_t* const c1,
-                            const int16_t* const c2, int16_t min_value,
-                            int16_t max_value, int16_t* const out) {
+                            const int16_t* const c2,
+                            const int16_t min_values[4],
+                            const int16_t max_values[4], int16_t* const out) {
   Average2(c0, c1, out);
-  for (uint32_t i = 0; i < 4; ++i) {
-    out[i] = AddSubtractComponentHalf(out[i], c2[i], min_value, max_value);
+  for (uint32_t c = 0; c < 4; ++c) {
+    out[c] =
+        AddSubtractComponentHalf(out[c], c2[c], min_values[c], max_values[c]);
   }
 }
 
@@ -108,80 +111,77 @@ inline void Select(const int16_t* const a, const int16_t* const b,
   }
 }
 
-void Predictor0_C(const int16_t*, const int16_t*, int16_t, int16_t,
-                  int16_t* out) {
+// Predictors of type NonClamped.
+void PredictorNonClamped0_C(const int16_t*, const int16_t*, int16_t* out) {
   out[0] = WP2::kAlphaMax;
   out[1] = 0;
   out[2] = 0;
   out[3] = 0;
 }
-void Predictor1_C(const int16_t* left, const int16_t*, int16_t, int16_t,
-                  int16_t* out) {
+void PredictorNonClamped1_C(const int16_t* left, const int16_t*, int16_t* out) {
   out[0] = left[0];
   out[1] = left[1];
   out[2] = left[2];
   out[3] = left[3];
 }
-void Predictor2_C(const int16_t*, const int16_t* top, int16_t, int16_t,
-                  int16_t* out) {
+void PredictorNonClamped2_C(const int16_t*, const int16_t* top, int16_t* out) {
   out[0] = top[0];
   out[1] = top[1];
   out[2] = top[2];
   out[3] = top[3];
 }
-void Predictor3_C(const int16_t*, const int16_t* top, int16_t, int16_t,
-                  int16_t* out) {
+void PredictorNonClamped3_C(const int16_t*, const int16_t* top, int16_t* out) {
   out[0] = top[4];
   out[1] = top[5];
   out[2] = top[6];
   out[3] = top[7];
 }
-void Predictor4_C(const int16_t*, const int16_t* top, int16_t, int16_t,
-                  int16_t* out) {
+void PredictorNonClamped4_C(const int16_t*, const int16_t* top, int16_t* out) {
   out[0] = top[-4];
   out[1] = top[-3];
   out[2] = top[-2];
   out[3] = top[-1];
 }
-void Predictor5_C(const int16_t* left, const int16_t* top, int16_t, int16_t,
-                  int16_t* out) {
+void PredictorNonClamped5_C(const int16_t* left, const int16_t* top,
+                            int16_t* out) {
   Average3(left, top, top + 4, out);
 }
-void Predictor6_C(const int16_t* left, const int16_t* top, int16_t, int16_t,
-                  int16_t* out) {
+void PredictorNonClamped6_C(const int16_t* left, const int16_t* top,
+                            int16_t* out) {
   Average2(left, top - 4, out);
 }
-void Predictor7_C(const int16_t* left, const int16_t* top, int16_t, int16_t,
-                  int16_t* out) {
+void PredictorNonClamped7_C(const int16_t* left, const int16_t* top,
+                            int16_t* out) {
   Average2(left, top, out);
 }
-void Predictor8_C(const int16_t*, const int16_t* top, int16_t, int16_t,
-                  int16_t* out) {
+void PredictorNonClamped8_C(const int16_t*, const int16_t* top, int16_t* out) {
   Average2(top - 4, top, out);
 }
-void Predictor9_C(const int16_t*, const int16_t* top, int16_t, int16_t,
-                  int16_t* out) {
+void PredictorNonClamped9_C(const int16_t*, const int16_t* top, int16_t* out) {
   Average2(top, top + 4, out);
 }
-void Predictor10_C(const int16_t* left, const int16_t* top, int16_t, int16_t,
-                   int16_t* out) {
+void PredictorNonClamped10_C(const int16_t* left, const int16_t* top,
+                             int16_t* out) {
   Average4(left, top - 4, top, top + 4, out);
 }
-void Predictor11_C(const int16_t* left, const int16_t* top, int16_t, int16_t,
-                   int16_t* out) {
+void PredictorNonClamped11_C(const int16_t* left, const int16_t* top,
+                             int16_t* out) {
   Select(top, left, top - 4, out);
 }
-void Predictor12_C(const int16_t* left, const int16_t* top, int16_t min_value,
-                   int16_t max_value, int16_t* out) {
-  AddSubtractFull(left, top, top - 4, min_value, max_value, out);
-}
-void Predictor13_C(const int16_t* left, const int16_t* top, int16_t min_value,
-                   int16_t max_value, int16_t* out) {
-  AddSubtractHalf(left, top, top - 4, min_value, max_value, out);
-}
-void Predictor14_C(const int16_t* left, const int16_t* top, int16_t, int16_t,
-                   int16_t* out) {
+void PredictorNonClamped12_C(const int16_t* left, const int16_t* top,
+                             int16_t* out) {
   ClampedAddSubtractFull(left, top, top - 4, out);
+}
+// Predictors of type Clamped.
+void PredictorClamped0_C(const int16_t* left, const int16_t* top,
+                         const int16_t min_values[4],
+                         const int16_t max_values[4], int16_t* out) {
+  AddSubtractFull(left, top, top - 4, min_values, max_values, out);
+}
+void PredictorClamped1_C(const int16_t* left, const int16_t* top,
+                         const int16_t min_values[4],
+                         const int16_t max_values[4], int16_t* out) {
+  AddSubtractHalf(left, top, top - 4, min_values, max_values, out);
 }
 
 }  // namespace
@@ -190,10 +190,12 @@ void Predictor14_C(const int16_t* left, const int16_t* top, int16_t, int16_t,
 
 namespace WP2L {
 
-PredictorFunc Predictors[kNumPredictors];
+PredictorNonClampedFunc PredictorsNonClamped[kNumPredictorsNonClamped];
+PredictorClampedFunc PredictorsClamped[kNumPredictorsClamped];
 
 // exposed plain-C implementations
-PredictorFunc Predictors_C[kNumPredictors];
+PredictorNonClampedFunc PredictorsNonClamped_C[kNumPredictorsNonClamped];
+PredictorClampedFunc PredictorsClamped_C[kNumPredictorsClamped];
 
 static volatile WP2CPUInfo lossless_last_cpuinfo_used =
     (WP2CPUInfo)&lossless_last_cpuinfo_used;
@@ -203,8 +205,10 @@ WP2_TSAN_IGNORE_FUNCTION void DspInit() {
 
   WP2MathInit();
 
-  COPY_PREDICTOR_ARRAY(Predictor, Predictors)
-  COPY_PREDICTOR_ARRAY(Predictor, Predictors_C)
+  COPY_PREDICTOR_NON_CLAMPED_ARRAY(, )
+  COPY_PREDICTOR_NON_CLAMPED_ARRAY(, _C)
+  COPY_PREDICTOR_CLAMPED_ARRAY(, )
+  COPY_PREDICTOR_CLAMPED_ARRAY(, _C)
 
   // If defined, use CPUInfo() to overwrite some pointers with faster versions.
   if (WP2GetCPUInfo != NULL) {

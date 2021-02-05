@@ -532,20 +532,8 @@ void GetARGBRanges(const TransformType* transforms, uint32_t num_transforms,
           UpdateMinMax(/*channel1=*/c, /*channel2=*/c, /*coeff=*/1,
                        minima_range, maxima_range);
         }
-        // TODO(vrabaud) remove once the predictor wrap-around is removed.
-        // Actually force everything in [0,255]
-        for (uint32_t c = 0; c < 4; ++c) {
-          minima_range[c] = 0;
-          maxima_range[c] = (1 << num_bits[c]) - 1;
-        }
         break;
       case TransformType::kCrossColor:
-        // TODO(vrabaud) remove once the predictor wrap-around is removed.
-        // Assume the predictors actually return everything in [-128,127].
-        for (uint32_t c = 1; c < 4; ++c) {
-          minima_range[c] = -(1 << num_bits[c]) / 2;
-          maxima_range[c] = (1 << num_bits[c]) / 2 - 1;
-        }
         // First, red is modified by green.
         UpdateMinMax(/*channel1=*/1, /*channel2=*/2, /*coeff=*/2, minima_range,
                      maxima_range);
@@ -562,12 +550,6 @@ void GetARGBRanges(const TransformType* transforms, uint32_t num_transforms,
                      maxima_range);
         UpdateMinMax(/*channel1=*/3, /*channel2=*/2, /*coeff=*/1, minima_range,
                      maxima_range);
-        // TODO(vrabaud) remove once the subtract green-wrap around is removed.
-        // Actually force R and B in [0,255].
-        for (uint32_t c : {1, 3}) {
-          minima_range[c] = 0;
-          maxima_range[c] = (1 << num_bits[c]) - 1;
-        }
         break;
       case TransformType::kColorIndexing:
         // A is set to its maximum value.

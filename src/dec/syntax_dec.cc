@@ -317,7 +317,7 @@ WP2Status SyntaxReader::GetBlock(CodedBlockBase* const cb, YUVPlane* const out,
         gparams_->segments_[(c == kAChannel) ? 0 : cb->id_];
     const int16_t* const dequant = segment.GetQuant(c).Dequant();
     WP2_CHECK_STATUS(
-        residual_reader_.ReadCoeffs(c, dequant, dec_, &sr_, cb, info));
+        residual_reader_.ReadCoeffs(c, dequant, &sr_, cb, info));
     dec_->PopBitTracesCustomPrefix(kCoeffsStr[c]);
   }
 

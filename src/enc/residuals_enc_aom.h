@@ -42,9 +42,8 @@ class AOMResidualWriter : public AOMResidualIO {
   static void WriteEOB(
       int eob, TrfSize tdim, PlaneType plane_type, uint32_t context,
       SymbolManager* const sm, ANSEncBase* const enc);
-  static void WriteSignAndApplyDequantization(
-      int16_t res, uint32_t max_value,
-      SymbolManager* const sm, ANSEncBase* const enc);
+  static void WriteSign(int16_t res, uint32_t max_value,
+                        SymbolManager* const sm, ANSEncBase* const enc);
   static void WriteCoeffBaseRange(
       uint32_t level, uint32_t cdf_context, uint32_t plane_type,
       SymbolManager* const sm, ANSEncBase* const enc);

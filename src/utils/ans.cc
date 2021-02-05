@@ -32,7 +32,7 @@
 #include "src/utils/utils.h"
 
 // some derived constants:
-#define IO_BYTES 2    // IO_BITS = 8 << IO_BYTES
+#define IO_BYTES (IO_BITS / 8)
 #define IO_LIMIT (1ull << IO_LIMIT_BITS)
 
 namespace WP2 {
@@ -431,11 +431,7 @@ uint32_t ANSDec::ReadNextWord(uint32_t s) {
   s <<= IO_BITS;
   const uint8_t* data;
   if (data_source_->TryReadNext(IO_BYTES, &data)) {
-#if IO_BITS == 8
-    s |= data[0];
-#else
-    s |= (data[0] << 8) | data[1];
-#endif
+    s |= (data[1] << 8) | data[0];   // written as endian-neutral code
   } else {
     status_ = WP2_STATUS_BITSTREAM_ERROR;
   }
@@ -578,9 +574,6 @@ void ANSDec::Init(DataSource* const data_source) {
   } else {
     state_ = ReadNextWord(state_);
     state_ = ReadNextWord(state_);
-#if IO_BITS == 8
-    state_ = ReadNextWord(state_);
-#endif
   }
   if (status_ == WP2_STATUS_OK && state_ < IO_LIMIT) {
     status_ = WP2_STATUS_BITSTREAM_ERROR;
@@ -987,10 +980,11 @@ uint32_t ANSEnc::EmitWord(uint32_t s) {
   if (buffer_pos_ < IO_BYTES) {
     if (!ReallocBuffer()) return (s >> IO_BITS);   // error
   }
-  buffer_[--buffer_pos_] = (s >> 0) & 0xff;
-#if IO_BITS == 16
-  buffer_[--buffer_pos_] = (s >> 8) & 0xff;
-#endif
+  buffer_pos_ -= IO_BYTES;
+  // written in endian-neutral way. Compiler will optimize with a memcpy()
+  // on little-endian platform.
+  buffer_[buffer_pos_ + 0] = (s >> 0) & 0xff;
+  buffer_[buffer_pos_ + 1] = (s >> 8) & 0xff;
   return (s >> IO_BITS);
 }
 
@@ -1099,9 +1093,6 @@ WP2Status ANSEnc::Assemble() {
   }
   state_ = EmitWord(state_);
   state_ = EmitWord(state_);
-#if IO_BITS == 8
-  state_ = EmitWord(state_);
-#endif
   return status_;
 }
 

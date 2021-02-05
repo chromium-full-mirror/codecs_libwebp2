@@ -78,7 +78,7 @@ TEST(PreviewTest, TestBase64) {
   PreviewData p;
   std::string s;
   EXPECT_EQ(PreviewFromBase64("dasdascacas", &p), WP2_STATUS_BITSTREAM_ERROR);
-  char b64[] = "G1XE1MCBS+nBgDcL1mnWis3SkHw=";
+  char b64[] = "Iz6YBskuNxwo2w==";
   EXPECT_WP2_OK(PreviewFromBase64(b64, &p));
   b64[4] = '\0';
   EXPECT_EQ(PreviewFromBase64(b64, &p), WP2_STATUS_BITSTREAM_ERROR);

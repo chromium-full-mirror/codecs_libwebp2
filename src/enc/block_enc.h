@@ -164,10 +164,6 @@ class CodedBlock : public CodedBlockBase {
   // true, 2x downsampling of residuals is performed.
   void Quantize(const QuantMtx& quant, Channel channel, bool reduced_transform);
 
-  // Dequantizes coeffs_[] into res[]. dim_, use_mtx_ and is420_ must be set.
-  void Dequantize(const QuantMtx& quant, Channel channel,
-                  BlockCoeffs16* const res);
-
   // Reconstructs 'channel' from dequantized residuals 'res' and 'prediction'
   // to 'out_'. 'prediction' can also point to 'out_' or be empty.
   // Upon return, res[] contains the inverse-transformed coeffs.

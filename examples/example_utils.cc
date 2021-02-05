@@ -319,7 +319,6 @@ struct PartitionParams {
   void AddBox(const WP2::Rectangle& r) {
     uint32_t w = std::min(r.width,  max_width - r.x);
     uint32_t h = std::min(r.height, max_height - r.y);
-    if (w < 4u || h < 4u) return;
     w = (w + 3u) & ~3u;
     h = (h + 3u) & ~3u;
 
@@ -378,7 +377,9 @@ void ConvertPartition(uint32_t pic_width, uint32_t pic_height,
                        /*partition=*/{}};
   for (WP2::Rectangle r : *partition) p.AddBox(r);
   if (p.split_count > 0) {
-    fprintf(stderr, "Number of splits: %u\n", p.split_count);
+    fprintf(stderr, "Number of splits: %u (from %d to %d blocks)\n",
+            p.split_count, (uint32_t)partition->size(),
+            (uint32_t)p.partition.size());
   }
   std::swap(*partition, p.partition);
 }

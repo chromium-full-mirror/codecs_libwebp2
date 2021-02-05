@@ -56,8 +56,9 @@ typedef enum {
   JPEG_STATS,
   NEURAL_STATS
 } StatType;
+// Must be unique.
 static const char* const kFileExtensions[] = {"wp2",  "webp", "av1",
-                                              "avif", "jpg",  "wp2"};
+                                              "avif", "jpg",  "neural.wp2"};
 
 StatType kAllTypes[] = {WP2_STATS,  WEBP_STATS, AV1_STATS,
                         AVIF_STATS, JPEG_STATS, NEURAL_STATS};
@@ -82,6 +83,7 @@ struct TestParams {
   bool quiet = false;
   EncoderConfig config;
   std::vector<Rectangle> force_partition;
+  bool store_partition = false;      // Only for AV1.
   float q = 0;                       // in [0..100]
   float alpha_q = -1.f;              // < 0: same as 'q', otherwise [0..100]
   bool use_mt = true;
@@ -132,6 +134,8 @@ void PrintHelpAndExit(int return_code) {
   opt.Add("-avif", "compute AVIF rd-curve (if compiled)");
   opt.Add("-jpeg", "compute JPEG rd-curve (if compiled)");
   opt.Add("-nowp2", "skip WP2 rd-curve");
+  opt.Add("-copy_av1_partition",
+          "run wp2 with av1 partitioning (implies -av1) (if compiled)");
   opt.Add("-csp <int>", "color space (0=YCoCg, 1=YCbCr 2=Custom 3=YIQ)");
   opt.Add("-sharp_yuv", "use slower / sharper YUV conversion");
   opt.Add("-pm <int>",
@@ -191,8 +195,10 @@ class Task : public Worker {
   // Main task: encode, measure distortion, decode.
   WP2_NO_DISCARD WP2Status Execute() override {
     ArgbBuffer decoded;
-    const std::string out_file = prefix_.empty() ? "" :
-        SPrintf("%s%d.%s", prefix_.c_str(), type_, kFileExtensions[type_]);
+    const std::string out_file =
+        prefix_.empty()
+            ? ""
+            : SPrintf("%s%s", prefix_.c_str(), kFileExtensions[type_]);
     switch (type_) {
       default:
       case WP2_STATS:
@@ -230,7 +236,8 @@ class Task : public Worker {
       disto_ = values[4];
     }
     if (!prefix_.empty()) {
-      const std::string file = prefix_ + SPrintf("%d.png", type_);
+      const std::string file =
+          prefix_ + SPrintf("%s.png", kFileExtensions[type_]);
       CHECK_STATUS(SaveImage(decoded, file.c_str(), /*overwrite=*/true),
                    "Cannot save output [%s]", file.c_str());
     }
@@ -425,8 +432,11 @@ WP2Status Task::DoEncodeAV1(const std::string& out_file, bool use_avif,
     CHECK_TRUE(CompressAVIF(*ref_, p, decoded, &out, timing) == WP2_STATUS_OK,
                "CompressAVIF() failed!");
   } else {
-    CHECK_TRUE(CompressAV1(*ref_, p, decoded, &out, timing) == WP2_STATUS_OK,
-               "CompressAV1() failed!");
+    CHECK_TRUE(
+        CompressAV1(*ref_, p, decoded, &out, timing, /*blocks=*/nullptr,
+                    (params_.store_partition ? &params_.force_partition
+                                             : nullptr)) == WP2_STATUS_OK,
+        "CompressAV1() failed!");
   }
   enc_time_ = timing[0];
   dec_time_ = timing[1];
@@ -589,7 +599,7 @@ class HtmlOutputWriter : public OutputWriter {
     report_ += "var types = [";
     for (auto type : kAllTypes) {
       if (DoType(type)) {
-        report_ += SPrintf(" %d, ", type);
+        report_ += SPrintf(" '%s', ", kFileExtensions[type]);
       }
     }
     report_ += " ];\n";
@@ -648,8 +658,8 @@ class HtmlOutputWriter : public OutputWriter {
       if (DoType(type)) {
         report_ += SPrintf(
             "<td colspan='6'>"
-            "<div id='img-%.3d-%d'></div></td>\n",
-            step, type);
+            "<div id='img-%.3d-%s'></div></td>\n",
+            step, kFileExtensions[type]);
       }
     }
     report_ += "</tr>\n";
@@ -765,8 +775,8 @@ class LumascopeOutputWriter : public OutputWriter {
           if (!urls.empty()) {
             urls += ",\n";
           }
-          urls += SPrintf("\"%s/out.%.3d.%d.png\"", lumascope_path_.c_str(),
-                          step, type);
+          urls += SPrintf("\"%s/out.%.3d.%s.png\"", lumascope_path_.c_str(),
+                          step, kFileExtensions[type]);
         }
       }
       report_ += urls;
@@ -823,6 +833,7 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
 
   TestParams params;
   OutputFormat output_format = OutputFormat::kText;
+  bool copy_av1_partition = false;
   bool do_webp = false;
   bool do_jpeg = false;
   bool do_wp2 = true;
@@ -949,6 +960,13 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       do_avif = true;
     } else if (!strcmp(argv[c], "-nowp2")) {
       do_wp2 = false;
+    } else if (!strcmp(argv[c], "-copy_av1_partition")) {
+#ifndef WP2_HAVE_AOM_DBG
+      fprintf(stderr, "Warning: -copy_av1_partition needs WP2_HAVE_AOM_DBG");
+#endif
+      copy_av1_partition = true;
+      do_wp2 = true;
+      do_av1 = true;
     } else if (!strcmp(argv[c], "-save")) {
       save_output = true;
     } else if (!strcmp(argv[c], "-quiet")) {
@@ -1039,9 +1057,10 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   // set up multi-threading
   const auto& itf = GetWorkerInterface();
 
+  const uint32_t num_qualities = params.qsteps + 1;
   const uint32_t num_tasks =
       (do_wp2 + do_webp + do_jpeg + do_av1 + do_avif + do_neural) *
-      (params.qsteps + 1);
+      num_qualities;
   Vector<Task> tasks;
   CHECK_TRUE(tasks.resize(num_tasks), "Task allocation failed.");
 
@@ -1068,6 +1087,9 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       CHECK_TRUE(itf.Reset(task, params.use_mt,
                            std::max(params.stack_size, 524288u)),
                  "Bad AV1 thread initialization!.");
+      if (copy_av1_partition) {
+        task->params_.store_partition = true;
+      }
       ++task;
     }
     if (do_avif) {
@@ -1092,10 +1114,46 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
   }
 
   // Main loop.
-  for (auto& t : tasks) itf.Launch(&t);   // launch (or execute) all tasks
   for (auto& t : tasks) {
-    CHECK_STATUS(itf.Sync(&t), "Bad thread state!");
+    if (t.type_ == WP2_STATS && copy_av1_partition) continue;
+    itf.Launch(&t);  // launch (or execute) all tasks
+  }
+  for (auto& t : tasks) {
+    if (t.type_ == WP2_STATS && copy_av1_partition) continue;
+    CHECK_STATUS(itf.Sync(&t), "Bad thread state! type %s quality %f",
+                 kFileExtensions[t.type_], t.params_.q);
     itf.End(&t);
+  }
+
+  if (copy_av1_partition) {
+    // Run wp2 after the rest, with the partitioning copied from AV1.
+    task = &tasks[0];
+    // Assumes task types are interleaved, with WP2 coming before AV1.
+    Task* wp2_task = nullptr;
+    for (auto& t : tasks) {
+      if (t.type_ == WP2_STATS) wp2_task = &t;
+      if (t.type_ == AV1_STATS) {
+        assert(wp2_task != nullptr);
+        wp2_task->Init(t.params_, ref, t.prefix_, WP2_STATS, include, exclude);
+        ConvertPartition(ref.width(), ref.height(), params.config.partition_set,
+                         /*ignore_invalid=*/false,
+                         &wp2_task->params_.force_partition);
+        CHECK_TRUE(itf.Reset(task, params.use_mt, params.stack_size),
+                   "Bad WP2 thread initialization!.");
+        ++task;
+      }
+    }
+    // Launch new tasks
+    for (auto& t : tasks) {
+      if (t.type_ == WP2_STATS) itf.Launch(&t);
+    }
+    for (auto& t : tasks) {
+      if (t.type_ == WP2_STATS) {
+        CHECK_STATUS(itf.Sync(&t), "Bad thread state! type %s quality %f",
+                     kFileExtensions[t.type_], t.params_.q);
+        itf.End(&t);
+      }
+    }
   }
 
   // Collect results.

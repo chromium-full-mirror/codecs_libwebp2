@@ -116,8 +116,10 @@ TEST_P(PaletteTest, RoundTrip) {
   // Reconstruct original buffer.
   Vector_s16 reconstructed;
   ASSERT_TRUE(reconstructed.resize(kWidth * kHeight * 4));
+  const int16_t minima_range[4] = {0, 0, 0, 0};
+  const int16_t maxima_range[4] = {255, 255, 255, 255};
   InverseTransform(&transform, /*row_start=*/0, /*row_end=*/kHeight,
-                   /*channel_bits=*/8, paletted_buffer.data(),
+                   minima_range, maxima_range, paletted_buffer.data(),
                    /*has_alpha=*/true, reconstructed.data());
 
   for (uint32_t y = 0; y < kHeight; ++y) {

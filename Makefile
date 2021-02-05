@@ -439,6 +439,7 @@ HDRS_INSTALLED = \
     src/wp2/format_constants.h \
 
 HDRS = \
+    src/common/constants.h \
     src/common/color_precision.h \
     src/common/filters/rstr_flt_params.h \
     src/common/lossless/color_cache.h \
@@ -522,7 +523,6 @@ HDRS = \
     src/utils/utils.h \
     src/utils/vector.h \
     src/utils/wiener.h \
-    src/wp2/format_constants.h \
     $(HDRS_INSTALLED) \
 
 OUT_LIBS =

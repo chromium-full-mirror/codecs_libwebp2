@@ -188,7 +188,7 @@ extern void (*WP2Quantize)(const uint32_t iq[], const uint32_t bias[],
 // Performs unclamped out[] = in[] * dequants[] for i in [0..len), and pad the
 // rest of out[] with 0s. It's assumed that in[] is padded with 0s for i >= len.
 // It is the caller's responsability to ensure the in[] * dequants[] will not
-// overflow 16b storage. No clamping is expected.
+// overflow 16b storage. No clamping is to be expected.
 extern void (*WP2Dequantize)(const int16_t in[], const int16_t dequants[],
                              int16_t out[],
                              uint32_t W, uint32_t H, uint32_t len);

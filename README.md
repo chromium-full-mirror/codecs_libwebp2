@@ -42,6 +42,7 @@ WebP for lossy compression. It still compresses 2x faster than AVIF, but takes
 
 Side-by-side codec comparisons can be found at:
 
+-   [2021-02-02](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_02_02/index.html#endeavour-with-columbia-ferry-flyby-gpn-2000-001996&WEBP2=t&AVIF-AOM=t&subset1)
 -   [2021-01-19](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_01_19/index.html#cecret-lake-panorama-albion-basin-alta-utah-july-2009&WEBP2=s&AOM=s&subset1)
 -   [2021-01-11](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_01_11/index.html#mercado-dos-lavradores&WEBP2=s&AOM=s&subset1)
 
@@ -399,4 +400,4 @@ $ ctest
 
 Email: webp-discuss@googlegroups.com
 
-Web: https://groups.google.com/forum/#!forum/webp-discuss
+Web: https://groups.google.com/a/webmproject.org/g/webp-discuss

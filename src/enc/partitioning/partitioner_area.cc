@@ -41,7 +41,12 @@ WP2Status AreaRDOptPartitioner::GetBestPartition(
   std::fill(occupancy_.begin(), occupancy_.end(), false);
   uint32_t max_num_blocks_left = num_block_cols_ * num_block_rows_;
 
+  // Forced blocks are not supported unless they cover the whole buffer.
   // TODO(yguyon): Handle forced blocks
+  WP2_CHECK_STATUS(RegisterForcedBlocks(*blocks, &max_num_blocks_left));
+  if (max_num_blocks_left == 0) {
+    return WP2_STATUS_OK;
+  }
   WP2_CHECK_OK(blocks->empty(), WP2_STATUS_UNSUPPORTED_FEATURE);
 
   const uint32_t width = src_->GetWidth(), height = src_->GetHeight();

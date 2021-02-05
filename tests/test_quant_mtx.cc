@@ -32,52 +32,24 @@ class QuantMtxTest : public ::testing::Test {
   }
 };
 
-TEST_F(QuantMtxTest, RoundTrip) {
-  const uint32_t kMaxResidual = 150;
+TEST_F(QuantMtxTest, DCError) {
   QuantMtx mtx;
-  ASSERT_WP2_OK(mtx.Allocate());
   for (TrfSize trf : kAllTrfSizes) {
-    const uint32_t num_coeffs = kNumCoeffs[trf];
-    const uint32_t scale = num_coeffs >> 2;
+    const float scale = std::sqrt(kNumCoeffs[trf]);
     SCOPED_TRACE(SPrintf("trf: %s (scale %d)", kTDimNames[trf], scale));
-    for (const uint16_t quant : {12, 49, 89, 150, 199, 220}) {
-      SCOPED_TRACE(SPrintf("quant: %d", quant));
+    for (uint16_t quant : {128, 200, 50, 10, 1}) {
+      SCOPED_TRACE(SPrintf("quant step: %d", quant));
+      ASSERT_WP2_OK(mtx.Allocate());
       const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
-      mtx.Init(kMaxResidual, /*q_scale=*/1, quants);
-      int32_t residuals[kMaxBlockSizePix2];
-      for (uint32_t i = 0; i < num_coeffs; ++i) {
-        residuals[i] = i * (kMaxResidual / num_coeffs) * scale;
-        if (i % 2 == 0) residuals[i] *= -1;
-      }
-      for (bool first_coeff_is_dc : {true, false}) {
-        int16_t coeffs[kMaxBlockSizePix2];
-        uint32_t num_coeffs_unused;
-        const uint32_t error = mtx.RoundTrip(residuals, trf, first_coeff_is_dc,
-                                             coeffs, &num_coeffs_unused);
-        const float root_mean_square = std::sqrt(error / (float)num_coeffs);
-        EXPECT_LT(root_mean_square, (1 + 2 * quant) * scale * 0.25f);
+      mtx.Init(/*max_residual=*/1000, /*q_scale=*/1, quants);
+      for (int32_t dc : {1000, 0, -1000}) {
+        const int32_t dc_error = mtx.DCError(dc, trf);
+        EXPECT_LT(std::abs(dc_error), quant * scale);
+        if (dc == 0) { EXPECT_EQ(dc_error, 0); }
       }
     }
   }
   mtx.Print();   // just for coverage!
-}
-
-TEST_F(QuantMtxTest, DCError) {
-  for (TrfSize trf : kAllTrfSizes) {
-    const uint32_t scale = kNumCoeffs[trf] << 2;
-    SCOPED_TRACE(SPrintf("trf: %s (scale %d)", kTDimNames[trf], scale));
-    for (uint16_t quant : {128, 200, 50, 10, 1}) {
-      SCOPED_TRACE(SPrintf("quant step: %d", quant));
-      QuantMtx mtx;
-      ASSERT_WP2_OK(mtx.Allocate());
-      const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
-      mtx.Init(/*max_residual=*/150, /*q_scale=*/1, quants);
-      for (int32_t dc : {1000 / quant, -1000 / quant}) {
-        const int32_t dc_error = mtx.DCError(dc, trf);
-        EXPECT_LT(std::abs(dc_error), (1 + 2 * quant) * scale * 0.04f);
-      }
-    }
-  }
 }
 
 TEST_F(QuantMtxTest, DCErrorRoundTrip) {
@@ -100,11 +72,10 @@ TEST_F(QuantMtxTest, DCErrorRoundTrip) {
 
       for (bool first_coeff_is_dc : {true, false}) {
         int16_t quantized[kMaxBlockSizePix2];
+        int16_t dequantized[kMaxBlockSizePix2];
         uint32_t num_coeffs_unused;
         mtx.Quantize(residuals, trf, first_coeff_is_dc, quantized,
-                     &num_coeffs_unused);
-        int16_t dequantized[kMaxBlockSizePix2];
-        mtx.Dequantize(quantized, num_coeffs, trf, dequantized);
+                     &num_coeffs_unused, dequantized);
         const int16_t dc_error = residuals[0] - dequantized[0];
         EXPECT_EQ(dc_error, mtx.DCError(residuals[0], trf));
       }
@@ -175,10 +146,11 @@ TEST_P(QuantMtxTestCpuInfo, DcQuantizedDynamicRange) {
           const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
           mtx.Init(kMaxResidual, /*q_scale=*/1, quants);
           int16_t coeffs[kMaxCoeffs];
+          int16_t dequantized[kMaxCoeffs];
           const TrfSize tdim = GetTransform(block_size);
           uint32_t num_coeffs;
           mtx.Quantize(out, tdim, /*first_is_dc=*/true, coeffs,
-                       &num_coeffs);
+                       &num_coeffs, dequantized);
           EXPECT_LE(num_coeffs, kNumCoeffs[tdim]);
 
           // Check DC is equal or near equal (because of rounding errors)
@@ -186,40 +158,8 @@ TEST_P(QuantMtxTestCpuInfo, DcQuantizedDynamicRange) {
           if (trf_x == kDct && trf_y == kDct) {
             EXPECT_NEAR(std::abs(coeffs[0]), mtx.GetMaxAbsResDC(tdim), 2);
           }
-          EXPECT_LE(std::abs(coeffs[0]), mtx.GetMaxAbsResDC(tdim));
+          EXPECT_LE(std::abs(coeffs[0]), (uint16_t)mtx.GetMaxAbsResDC(tdim));
         }
-      }
-    }
-  }
-}
-
-TEST_P(QuantMtxTestCpuInfo, DequantizedDynamicRange) {
-  constexpr uint32_t kMaxCoeffs = kMaxBlockSizePix2;
-  int16_t coeffs[kMaxCoeffs];
-  for (auto& v : coeffs) {
-    v = kMaxCoeffValue;
-    if (v % 2 == 0) {
-      v *= -1;
-    }
-  }
-
-  for (const TrfSize tdim : kAllTrfSizes) {
-    const uint32_t num_coeffs = kNumCoeffs[tdim];
-    SCOPED_TRACE(SPrintf("transform size: %d", tdim));
-
-    for (uint16_t quant : {50u, 100u, 190u, (uint32_t)kQFactorMax}) {
-      SCOPED_TRACE(SPrintf("quant: %d", quant));
-      QuantMtx mtx;
-      const uint16_t quants[kNumQuantZones] = { quant, quant, quant, quant };
-      mtx.Init(/*max_residual=*/(1 << kMaxYuvBits), /*q_scale=*/1, quants);
-
-      int16_t residuals[kMaxCoeffs];
-      mtx.Dequantize(coeffs, kNumCoeffs[tdim], tdim, residuals);
-
-      const int32_t kMax = (1 << 19) * num_coeffs;
-      for (uint32_t i = 0; i < num_coeffs; ++i) {
-        EXPECT_LE(residuals[i], kMax);
-        EXPECT_GE(residuals[i], -kMax);
       }
     }
   }
@@ -387,16 +327,20 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
       segments[0].quant_v_.Init(/*max_residual=*/(1 << kMaxYuvBits),
                                 /*q_scale=*/1, quants);
 
+      int16_t dequantized[kMaxCoeffs];  // unused
       for (bool first_coeff_is_dc : {true, false}) {
         segments[0].quant_y_.Quantize(residuals, tdim, first_coeff_is_dc,
                                       cb.coeffs_[kYChannel][tf_i],
-                                      &cb.num_coeffs_[kYChannel][tf_i]);
+                                      &cb.num_coeffs_[kYChannel][tf_i],
+                                      dequantized);
         segments[0].quant_u_.Quantize(residuals, tdim, first_coeff_is_dc,
                                       cb.coeffs_[kUChannel][tf_i],
-                                      &cb.num_coeffs_[kUChannel][tf_i]);
+                                      &cb.num_coeffs_[kUChannel][tf_i],
+                                      dequantized);
         segments[0].quant_v_.Quantize(residuals, tdim, first_coeff_is_dc,
                                       cb.coeffs_[kVChannel][tf_i],
-                                      &cb.num_coeffs_[kVChannel][tf_i]);
+                                      &cb.num_coeffs_[kVChannel][tf_i],
+                                      dequantized);
 
         mgr.Clear();
         SymbolRecorder recorder;

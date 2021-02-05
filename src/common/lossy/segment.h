@@ -104,7 +104,7 @@ class Segment {
 
   // Returns the maximum absolute value of the DC coefficient over all possible
   // block dimensions.
-  uint16_t GetMaxAbsDC(Channel channel) const;
+  uint32_t GetMaxAbsDC(Channel channel) const;
 
   uint16_t quant_steps_[4][kNumQuantZones] = {{0}, {0}, {0}, {0}};  // Y/U/V/A
   bool use_quality_factor_ = true;

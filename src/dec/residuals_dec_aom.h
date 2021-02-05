@@ -43,17 +43,16 @@ class AOMResidualReader : public AOMResidualIO {
   static uint32_t ReadCoeffs(
       Channel channel, const int16_t dequant[],
       TrfSize tdim, TransformPair tx_type, bool first_is_dc,
-      SymbolReader* const sr, ANSDec* const dec, int16_t* const coeffs);
+      SymbolReader* const sr, int16_t* const coeffs);
 
  private:
   // Reads End-of-Block element.
   static int ReadEOB(TrfSize tdim, PlaneType plane_type, uint32_t context,
-                     SymbolReader* const sr, ANSDec* const dec);
+                     SymbolReader* const sr);
 
   // Part of 5.11.39.
-  static void ReadSignAndApplyDequantization(
-      int16_t coeffs[], int16_t dequant, uint32_t max_value,
-      SymbolReader* const sr, ANSDec* const dec);
+  static int16_t ReadSign(int16_t coeff, uint32_t max_value,
+                          SymbolReader* const sr);
   static int ReadCoeffBaseRange(uint32_t cdf_context, uint32_t plane_type,
                                 SymbolReader* const sr);
 };

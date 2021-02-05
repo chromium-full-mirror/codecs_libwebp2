@@ -44,9 +44,18 @@ TEST(Lossless10, Simple) {
   for (uint32_t y = 0; y < src_32.height(); ++y) {
     const uint8_t* const row_in = src_32.GetRow8(y);
     uint16_t* const row_out = src.GetRow16(y);
-    for (uint32_t x = 0; x < 4 * src_32.width(); ++x) {
-      // TODO(vrabaud) convert to 10 bit and add noise.
-      row_out[x] = (row_in[x] << 0) + 0 * random.Get(0, 3);
+    for (uint32_t x = 0; x < 4 * src_32.width(); x += 4) {
+      // Keep alpha on 8 bits.
+      row_out[x] = row_in[x];
+      if (row_out[x] == 0) {
+        // Respect alpha == 0 implies RGB == 0.
+        for (uint32_t c = 1; c < 4; ++c) row_out[x + c] = 0;
+      } else {
+        // Convert RGB to 10 bit and add noise.
+        for (uint32_t c = 1; c < 4; ++c) {
+          row_out[x + c] = (row_in[x + c] << 2) + random.Get(0, 3);
+        }
+      }
     }
   }
 

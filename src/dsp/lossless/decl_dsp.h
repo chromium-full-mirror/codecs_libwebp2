@@ -27,12 +27,15 @@ namespace WP2L {
 //------------------------------------------------------------------------------
 // Decoding
 
-extern PredictorAddSubFunc PredictorsAdd[kNumPredictors];
-extern PredictorAddSubFunc PredictorsAdd_C[kNumPredictors];
+extern PredictorNonClampedAddSubFunc
+    PredictorsNonClampedAdd[kNumPredictorsNonClamped];
+extern PredictorNonClampedAddSubFunc
+    PredictorsNonClampedAdd_C[kNumPredictorsNonClamped];
+extern PredictorClampedAddSubFunc PredictorsClampedAdd[kNumPredictorsClamped];
+extern PredictorClampedAddSubFunc PredictorsClampedAdd_C[kNumPredictorsClamped];
 
-typedef void (*ProcessDecBlueAndRedFunc)(const uint16_t* src,
-                                         uint32_t num_pixels, uint32_t n_bits,
-                                         uint16_t* dst);
+typedef void (*ProcessDecBlueAndRedFunc)(const int16_t* src,
+                                         uint32_t num_pixels, int16_t* dst);
 extern ProcessDecBlueAndRedFunc AddGreenToBlueAndRed;
 
 typedef void (*TransformColorInverseFunc)(const Multipliers* const m,
@@ -47,15 +50,15 @@ class Transform;  // Defined in dec/lossless/losslessi_dec.h.
 // The *in and *out pointers refer to source and destination data respectively
 // corresponding to the intermediate row (row_start).
 void InverseTransform(const Transform* const transform, uint32_t row_start,
-                      uint32_t row_end, uint32_t channel_bits,
-                      const int16_t* const in, bool has_alpha,
-                      int16_t* const out);
+                      uint32_t row_end, const int16_t min_values[4],
+                      const int16_t max_values[4], const int16_t* const in,
+                      bool has_alpha, int16_t* const out);
 
 // Fills 'dst' with the samples from the 'color_map' at the indices specified by
 // the green channel of the pixels in 'src'.
-typedef void (*MapARGBFunc)(const uint16_t* src, const int16_t* const color_map,
+typedef void (*MapARGBFunc)(const int16_t* src, const int16_t* const color_map,
                             uint32_t color_map_size, uint32_t y_start,
-                            uint32_t y_end, uint32_t width, uint16_t* dst);
+                            uint32_t y_end, uint32_t width, int16_t* dst);
 
 extern MapARGBFunc MapColor;
 
@@ -63,8 +66,8 @@ extern MapARGBFunc MapColor;
 void TransformColorInverse_C(const Multipliers* const m, const uint32_t* src,
                              int num_pixels, uint32_t* dst);
 
-void AddGreenToBlueAndRed_C(const uint16_t* src, uint32_t num_pixels,
-                            uint32_t channel_bits, uint16_t* dst);
+void AddGreenToBlueAndRed_C(const int16_t* src, uint32_t num_pixels,
+                            int16_t* dst);
 
 //------------------------------------------------------------------------------
 

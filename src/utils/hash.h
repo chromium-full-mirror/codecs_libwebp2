@@ -30,80 +30,29 @@
 namespace WP2 {
 
 namespace internal {
-static inline uint32_t Fetch32(const uint8_t* const p) {
-#ifdef WP2_WORDS_BIGENDIAN
-  return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | (p[3] << 0);
-#else
-  return (p[3] << 24) | (p[2] << 16) | (p[1] << 8) | (p[0] << 0);
-#endif
+
+// Combines two hashes.
+// Inspired by Boost's hash_combine with a uint64_t constant that represents the
+// floating part of the golden ratio.
+static inline uint64_t HashCombine(uint64_t h, uint64_t k) {
+  return k ^ (h + 0x9e3779b97f4a7c15ull + (k << 6) + (k >> 2));
 }
 
-// Magic numbers for 32-bit hashing.  Copied from Murmur3.
-static constexpr uint32_t c1 = 0xcc9e2d51;
-static constexpr uint32_t c2 = 0x1b873593;
-
-static inline uint32_t Rotate32(uint32_t val, int shift) {
-  // Avoid shifting by 32: doing so yields an undefined result.
-  return (shift == 0) ? val : ((val >> shift) | (val << (32 - shift)));
+// Computes the hash of a buffer: taken from WebP.
+static inline uint64_t HashPixImpl(const uint8_t* const color) {
+  // Fast hash taken from WebP V1.
+  const uint64_t kHashMul = 0x1e35a7bdull;
+  const uint64_t color32 =
+      (color[0] << 24) | (color[1] << 16) | (color[2] << 8) | (color[3]);
+  return (color32 * kHashMul);
 }
 
-// A 32-bit to 32-bit integer hash copied from Murmur3.
-static inline uint32_t fmix(uint32_t h) {
-  h ^= h >> 16;
-  h *= 0x85ebca6b;
-  h ^= h >> 13;
-  h *= 0xc2b2ae35;
-  h ^= h >> 16;
-  return h;
+static inline uint32_t FinalizeHash(uint64_t hash, uint32_t hash_bits) {
+  // Note that masking with 0xffffffffu is for preventing an
+  // 'unsigned int overflow' warning. Doesn't impact the compiled code.
+  return (uint32_t)(hash & 0xffffffffu) >> (32 - hash_bits);
 }
 
-static inline uint32_t Mur(uint32_t a, uint32_t h) {
-  // Helper from Murmur3 for combining two 32-bit values.
-  a *= c1;
-  a = Rotate32(a, 17);
-  a *= c2;
-  h ^= a;
-  h = Rotate32(h, 19);
-  return h * 5 + 0xe6546b64;
-}
-
-static inline uint32_t Hash32Len13to24(const uint8_t* const s, uint32_t len,
-                                       uint32_t seed = 0) {
-  uint32_t a = Fetch32(s - 4 + (len >> 1));
-  uint32_t b = Fetch32(s + 4);
-  uint32_t c = Fetch32(s + len - 8);
-  uint32_t d = Fetch32(s + (len >> 1));
-  uint32_t e = Fetch32(s);
-  uint32_t f = Fetch32(s + len - 4);
-  uint32_t h = d * c1 + len + seed;
-  a = Rotate32(a, 12) + f;
-  h = Mur(c, h) + a;
-  a = Rotate32(a, 3) + c;
-  h = Mur(e, h) + a;
-  a = Rotate32(a + f, 12) + d;
-  h = Mur(b ^ seed, h) + a;
-  return fmix(h);
-}
-
-static inline uint32_t Hash32Len0to4(const uint8_t* const s, uint32_t len) {
-  uint32_t b = 0;
-  uint32_t c = 9;
-  for (uint32_t i = 0; i < len; i++) {
-    int8_t v = s[i];
-    b = b * c1 + v;
-    c ^= b;
-  }
-  return fmix(Mur(b, Mur(len, c)));
-}
-
-static inline uint32_t Hash32Len5to12(const uint8_t* const s, uint32_t len,
-                                      uint32_t seed = 0) {
-  uint32_t a = len, b = len * 5, c = 9, d = b + seed;
-  a += Fetch32(s);
-  b += Fetch32(s + len - 4);
-  c += Fetch32(s + ((len >> 1) & 4));
-  return fmix(seed ^ Mur(c, Mur(b, Mur(a, d))));
-}
 }  // namespace internal
 
 #ifdef WP2_WORDS_BIGENDIAN
@@ -112,25 +61,42 @@ static inline uint32_t Hash32Len5to12(const uint8_t* const s, uint32_t len,
 #define SPLIT(X) (uint8_t)(argb[X] & 0xff), (uint8_t)((uint16_t)argb[X] >> 8)
 #endif
 
+namespace encoding {
 // Defines a 'hash_bits'-bit hash value of a pixel.
-// TODO(vrabaud) try CPU-lighter hashes.
 static inline uint32_t HashPix(const uint8_t* const argb, uint32_t hash_bits) {
-  return internal::Hash32Len0to4(argb, 4) & ((1u << hash_bits) - 1);
-}
-static inline uint32_t HashPix(const int16_t* const argb, uint32_t hash_bits) {
-  const uint8_t s[8] = {SPLIT(0), SPLIT(1), SPLIT(2), SPLIT(3)};
-  return internal::Hash32Len5to12(s, 8) & ((1u << hash_bits) - 1);
+  return internal::FinalizeHash(internal::HashPixImpl(argb), hash_bits);
 }
 static inline uint32_t HashPix(const uint16_t* const argb, uint32_t hash_bits) {
   const uint8_t s[8] = {SPLIT(0), SPLIT(1), SPLIT(2), SPLIT(3)};
-  return internal::Hash32Len5to12(s, 8) & ((1u << hash_bits) - 1);
+  const uint64_t h1 = internal::HashPixImpl(s);
+  const uint64_t h2 = internal::HashPixImpl(s + 4);
+  const uint64_t h3 = internal::HashCombine(h1, h2);
+  return internal::FinalizeHash(h3, hash_bits);
 }
-// Defines a 'hash_bits'-bit hash value of a pai of pixels.
+// Defines a 'hash_bits'-bit hash value of a pair of pixels.
 static inline uint32_t HashPixPair(const int16_t argb[8], uint32_t hash_bits) {
   const uint8_t s[16] = {SPLIT(0), SPLIT(1), SPLIT(2), SPLIT(3),
                          SPLIT(4), SPLIT(5), SPLIT(6), SPLIT(7)};
-  return internal::Hash32Len13to24(s, 16) & ((1u << hash_bits) - 1);
+  const uint64_t h1 = internal::HashPixImpl(s);
+  const uint64_t h2 = internal::HashPixImpl(s + 4);
+  const uint64_t h3 = internal::HashCombine(h1, h2);
+  const uint64_t h4 = internal::HashPixImpl(s + 8);
+  const uint64_t h5 = internal::HashPixImpl(s + 12);
+  const uint64_t h6 = internal::HashCombine(h4, h5);
+  const uint64_t h7 = internal::HashCombine(h3, h6);
+  return internal::FinalizeHash(h7, hash_bits);
 }
+}  // namespace encoding
+
+namespace decoding {
+static inline uint32_t HashPix(const int16_t* const argb, uint32_t hash_bits) {
+  const uint8_t s[8] = {SPLIT(0), SPLIT(1), SPLIT(2), SPLIT(3)};
+  const uint64_t h1 = internal::HashPixImpl(s);
+  const uint64_t h2 = internal::HashPixImpl(s + 4);
+  const uint64_t h3 = internal::HashCombine(h1, h2);
+  return internal::FinalizeHash(h3, hash_bits);
+}
+}  // namespace decoding
 
 #undef SPLIT
 

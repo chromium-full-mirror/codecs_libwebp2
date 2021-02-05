@@ -159,7 +159,7 @@ TEST_P(ResidualWriterTest, AOM) {
                 channel, dequant, tdim,
                 cb_out.GetCodingParams(channel)->tf,
                 cb_out.IsFirstCoeffDC(channel),
-                &sr, &dec, cb_out.coeffs_[channel][tf_i]);
+                &sr, cb_out.coeffs_[channel][tf_i]);
           }
           for (uint32_t i = 0; i < num_elem; ++i) {
             const uint32_t j = scan[i];

@@ -27,7 +27,7 @@ namespace {
 
 TEST(HashColorCache, Simple) {
   HashColorCache cache;
-  ASSERT_TRUE(cache.Allocate(/*hash_bits=*/2));
+  ASSERT_TRUE(cache.Allocate(/*hash_bits=*/5));
 
   const int16_t kBlack[] = {255, 0, 0, 0};
   const int16_t kGreen[] = {255, 0, 225, 0};

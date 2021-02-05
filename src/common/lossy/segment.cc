@@ -205,10 +205,9 @@ WP2Status Segment::ReadEncodingMethods(SymbolReader* const sr,
 
 //------------------------------------------------------------------------------
 
-uint16_t Segment::GetMaxAbsDC(Channel channel) const {
+uint32_t Segment::GetMaxAbsDC(Channel channel) const {
   const QuantMtx& mtx = GetQuant(channel);
-  uint16_t max_abs_dc = 0;
-  // TODO(vrabaud) only use the TrfSizes defined by -ps.
+  uint32_t max_abs_dc = 0;
   for (const TrfSize tdim : kAllTrfSizes) {
     max_abs_dc = std::max(max_abs_dc, mtx.GetMaxAbsResDC(tdim));
   }

@@ -430,16 +430,16 @@ static WP2Status EncodeImageInternal(
 
 static void ApplySubtractGreen(Encoder* const encoder, uint32_t width,
                                uint32_t height, WP2::ANSEnc* const enc) {
-  SubtractGreenFromBlueAndRed((uint16_t*)encoder->argb_,
-                              encoder->symbols_info_.ChannelBits(),
-                              width * height);
+  SubtractGreenFromBlueAndRed(encoder->argb_, width * height);
 }
 
 // Finds the best spatial predictor for each prediction block (of size
 // 2^(enc->transform_bits_)), saves the residuals in enc->argb_ and writes the
 // transform for each block in the form of an image.
 static WP2Status ApplyPredictFilter(const Encoder* const encoder,
-                                    uint32_t width, uint32_t height, int effort,
+                                    uint32_t width, uint32_t height,
+                                    const int16_t min_values[4],
+                                    const int16_t max_values[4], int effort,
                                     const ProgressRange& progress,
                                     WP2::ANSEnc* const enc,
                                     WP2::ANSDictionaries* const dicts) {
@@ -447,10 +447,10 @@ static WP2Status ApplyPredictFilter(const Encoder* const encoder,
   const int transform_width = SubSampleSize(width, pred_bits);
   const int transform_height = SubSampleSize(height, pred_bits);
 
-  WP2_CHECK_STATUS(ResidualImage(
-      width, height, pred_bits, encoder->symbols_info_.ChannelBits(), effort,
-      encoder->argb_, encoder->has_alpha_, encoder->argb_scratch_,
-      encoder->transform_data_));
+  WP2_CHECK_STATUS(CreateResidualImage(
+      width, height, pred_bits, min_values, max_values, effort, encoder->argb_,
+      encoder->has_alpha_, encoder->argb_scratch_, encoder->transform_data_));
+
   const WP2::ANSDebugPrefix prefix(enc, "predictor");
   enc->PutRange(pred_bits, kTransformBitsMin, kTransformBitsMax,
                 "transform_bits");
@@ -681,8 +681,14 @@ static WP2Status ApplyAndWriteTransforms(
           ApplySubtractGreen(encoder, width, height, enc);
           WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
         } else if (type == TransformType::kPredictor) {
-          WP2_CHECK_STATUS(ApplyPredictFilter(encoder, width, height, effort,
-                                              progress_local, enc, dicts));
+          // Define the minimum/maximum values before applying the predictors.
+          int16_t minima_range[4], maxima_range[4];
+          GetARGBRanges(config.transforms, /*num_transforms=*/i,
+                        encoder->symbols_info_.SampleFormat(),
+                        encoder->palette_.Size(), minima_range, maxima_range);
+          WP2_CHECK_STATUS(ApplyPredictFilter(
+              encoder, width, height, minima_range, maxima_range, effort,
+              progress_local, enc, dicts));
         } else {
           WP2_CHECK_STATUS(ApplyCrossColorFilter(encoder, width, height, effort,
                                                  progress_local, enc, dicts));

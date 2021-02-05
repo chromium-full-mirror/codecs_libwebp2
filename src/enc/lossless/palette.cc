@@ -162,7 +162,7 @@ uint32_t CountColors(const WP2::ArgbBuffer& pic, const T* src,
         }
       }
     }
-    src += pic.stride();
+    src = (const T*)((const uint8_t*)src + pic.stride());
   }
   return num_colors;
 }

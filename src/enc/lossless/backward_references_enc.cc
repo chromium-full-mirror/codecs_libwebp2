@@ -262,21 +262,22 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
       // Process the rest of the hash chain.
       while (len) {
         tmp[7] = len--;
-        hash_code = WP2::HashPixPair(tmp, kHashBits);
+        hash_code = WP2::encoding::HashPixPair(tmp, kHashBits);
         chain[pos] = hash_to_first_index[hash_code];
         hash_to_first_index[hash_code] = pos++;
       }
       argb_comp = false;
     } else {
       // Just move one pixel forward.
-      hash_code = WP2::HashPixPair(&argb[4 * pos], kHashBits);
+      hash_code = WP2::encoding::HashPixPair(&argb[4 * pos], kHashBits);
       chain[pos] = hash_to_first_index[hash_code];
       hash_to_first_index[hash_code] = pos++;
       argb_comp = argb_comp_next;
     }
   }
   // Process the penultimate pixel.
-  chain[pos] = hash_to_first_index[WP2::HashPixPair(&argb[4 * pos], kHashBits)];
+  chain[pos] = hash_to_first_index[WP2::encoding::HashPixPair(&argb[4 * pos],
+                                                              kHashBits)];
 
   hash_to_first_index.reset();
 

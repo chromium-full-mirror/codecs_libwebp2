@@ -129,7 +129,7 @@ WP2Status Decoder::ReadANSStats(uint32_t width, uint32_t height,
 
 // Emit rows without any scaling.
 template <typename T>
-uint32_t EmitRows(const uint16_t* row_in, uint32_t mb_w, uint32_t mb_h,
+uint32_t EmitRows(const int16_t* row_in, uint32_t mb_w, uint32_t mb_h,
                   bool has_alpha, bool premultiply, T* const out,
                   uint32_t out_stride) {
   int lines = mb_h;
@@ -198,8 +198,19 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows, uint32_t num_bits,
                      WP2_STATUS_BITSTREAM_ERROR);
       }
     }
-    InverseTransform(&transform, start_row, end_row, num_bits, rows,
-                     gparams_->has_alpha_, rows_out);
+    int16_t minima_range[4], maxima_range[4];
+    if (transform.type_ == TransformType::kPredictor) {
+      // Define the minimum/maximum values before applying the predictors.
+      TransformType transforms_type[(uint32_t)TransformType::kNum];
+      for (uint32_t i = 0; i < n; ++i) {
+        transforms_type[i] = transforms_[i].type_;
+      }
+      GetARGBRanges(transforms_type, /*num_transforms=*/n,
+                    hdr_.symbols_info_.SampleFormat(), num_colors_,
+                    minima_range, maxima_range);
+    }
+    InverseTransform(&transform, start_row, end_row, minima_range, maxima_range,
+                     rows, gparams_->has_alpha_, rows_out);
     rows = rows_out;
   }
   return WP2_STATUS_OK;
@@ -221,7 +232,7 @@ WP2Status Decoder::ProcessRows(uint32_t row,
     assert(num_rows <= kNumARGBCacheRows);
     WP2::ArgbBuffer* const buf = &tile_->rgb_output;
     assert(!buf->IsEmpty());
-    uint16_t* const rows_data = argb_cache_;
+    int16_t* const rows_data = argb_cache_;
 
     WP2_CHECK_STATUS(ApplyInverseTransforms(num_rows, num_bits_, rows));
 
@@ -768,9 +779,7 @@ WP2Status Decoder::AllocateInternalBuffers(uint32_t final_width) {
   assert(tile_->rect.width <= final_width);
   argb_cache_ = nullptr;  // for sanity check
   WP2_CHECK_ALLOC_OK(pixels_.resize(4 * total_num_pixels));
-  // TODO(vrabaud) Remove the cast once switched to int16_t.
-  argb_cache_ = reinterpret_cast<uint16_t*>(pixels_.data()) +
-                4 * (num_pixels + cache_top_pixels);
+  argb_cache_ = pixels_.data() + 4 * (num_pixels + cache_top_pixels);
 
   if (config_.info != nullptr && config_.info->bits_per_pixel != nullptr) {
     WP2_CHECK_STATUS(

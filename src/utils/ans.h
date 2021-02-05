@@ -70,10 +70,12 @@ typedef std::map<const std::string, LabelStats> BitCounts;
 #define PROBA_MAX (1u << PROBA_BITS)
 
 // how many bits used during I/O between state_ and bitstream
-#define IO_BITS 16    // 8 or 16 only
-
+#define IO_BITS 16
 #define IO_LIMIT_BITS 16
 #define ANS_SIGNATURE (0xf3 * IO_LIMIT)    // Initial state, used as CRC.
+
+static_assert(IO_BITS == 16, "IO_BITS should be == 16");
+static constexpr uint32_t kANSPaddingCost = (IO_LIMIT_BITS + IO_BITS);
 
 // Max number (inclusive) of bits for the range used during range-value coding.
 static constexpr uint32_t kANSMaxRangeBits = 14;
@@ -91,13 +93,6 @@ static constexpr uint32_t kANSMaxUniformBits = IO_BITS;
 #define APROBA_MAX (1 << APROBA_BITS)
 #define APROBA_ADAPT_SPEED 4096   // must be strictly less than 32768
 static constexpr uint32_t kANSAProbaInvalidSpeed = (1 << PROBA_BITS);
-
-#if IO_BITS == 8
-static constexpr uint32_t kANSPaddingCost = 3 * 8;
-#else
-static_assert(IO_BITS == 16, "IO_BITS should be == 16");
-static constexpr uint32_t kANSPaddingCost = 4 * 8;
-#endif
 
 // TODO(vrabaud): make sure the ANS read/write functions are optimized/inlined.
 //                A solution could be to get Dec and Enc to be friends and have
