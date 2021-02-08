@@ -42,18 +42,19 @@ constexpr bool kVerbose = false;      // Additional debug info to stdout.
 
 //------------------------------------------------------------------------------
 
-// Draws a random bit and have its probability be 0 or PROBA_MAX N% of the time.
+// Draws a random bit and have its probability be 0 or kProbaMax N% of the time.
+constexpr uint32_t kProbaMax = PROBA_MAX / 2;
 inline void DrawRandomBit(uint32_t N, UniformIntDistribution* const random,
                           uint32_t* const p, uint32_t* const b) {
   if ((N > 0) && (random->Get(0u, 100u) <= N)) {
     // Force to reach the bounds of probabilities.
-    *p = PROBA_MAX * random->Get(0u, 1u);
+    *p = kProbaMax * random->Get(0u, 1u);
   } else {
-    *p = random->Get(0u, PROBA_MAX);
+    *p = random->Get(0u, kProbaMax);
   }
   if (*p == 0) {
     *b = 1;
-  } else if (*p == PROBA_MAX) {
+  } else if (*p == kProbaMax) {
     *b = 0;
   } else {
     *b = random->Get(0u, 1u);
@@ -168,7 +169,7 @@ void GenerateRandomEnc(uint32_t n_elements,
     const Token& tok = (*tokens)[i];
     switch (tok.type) {
       case Token::Bit: {
-        enc->PutBit(tok.first, tok.second, "bit");
+        enc->PutBit(tok.first, tok.second, kProbaMax, "bit");
         break;
       }
       case Token::ABit: {
@@ -223,7 +224,7 @@ bool VerifyBuffer(const uint8_t* const buf, uint32_t size,
   for (const Token& tok : tokens) {
     switch (tok.type) {
       case Token::Bit:
-        if (dec.ReadBit(tok.second, "bit") != (uint32_t)tok.first) {
+        if (dec.ReadBit(tok.second, kProbaMax, "bit") != (uint32_t)tok.first) {
           printf("Bit value mismatch.");
           return false;
         }
@@ -590,7 +591,7 @@ INSTANTIATE_TEST_SUITE_P(
                            {"MinMax ", Token::MinMax, 0.06f},
                            {"Uniform", Token::Uniform, 0.01f},
                            {"Signed ", Token::Signed, 0.01f},
-                           {"ABit   ", Token::ABit, 0.5f}})));
+                           {"ABit   ", Token::ABit, 3.2f}})));
 
 //------------------------------------------------------------------------------
 
@@ -879,7 +880,7 @@ TEST_P(TestANSBitCounts, Simple) {
   ANSDec dec(&data_source);
   for (const Token& tok : tokens) {
     if (tok.type == Token::Bit) {
-      (void)dec.ReadBit(tok.second, "bit");
+      (void)dec.ReadBit(tok.second, kProbaMax, "bit");
     } else if (tok.type == Token::Bool) {
       (void)dec.ReadBool("bool");
     } else if (tok.type == Token::Symbol) {

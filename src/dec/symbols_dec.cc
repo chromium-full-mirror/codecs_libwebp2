@@ -461,7 +461,8 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
         *value = 0;
       } else {
         *value =
-            dec_->ReadBit(a_bits_[stat.param.a_bit_index].Proba(), "a_bit");
+            dec_->ReadBit(a_bits_[stat.param.a_bit_index].NumZeros(),
+                          a_bits_[stat.param.a_bit_index].NumTotal(), "a_bit");
 #if defined(WP2_BITTRACE)
         if (cost != nullptr) {
           *cost += a_bits_[stat.param.a_bit_index].GetCost(*value);

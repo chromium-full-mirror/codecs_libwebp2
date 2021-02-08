@@ -35,21 +35,17 @@ namespace {
 float CombinedShannonEntropy_C(const uint32_t* X, const uint32_t* Y,
                                uint32_t length) {
   float retval = 0.f;
-  uint32_t sumX = 0, sumXY = 0;
+  // This critical function is extremely memory-bond! Any change in code should
+  // be tested on various compilers.
   for (uint32_t i = 0; i < length; ++i) {
     const uint32_t x = X[i];
     if (x != 0) {
-      const uint32_t xy = x + Y[i];
-      sumX += x;
-      retval -= WP2SLog2(x);
-      sumXY += xy;
-      retval -= WP2SLog2(xy);
+      retval += WP2SLog2m1(x + Y[i]);
+      retval += WP2SLog2m1(x);
     } else if (Y[i] != 0) {
-      sumXY += Y[i];
-      retval -= WP2SLog2(Y[i]);
+      retval += WP2SLog2m1(Y[i]);
     }
   }
-  retval += WP2SLog2(sumX) + WP2SLog2(sumXY);
   return (float)retval;
 }
 

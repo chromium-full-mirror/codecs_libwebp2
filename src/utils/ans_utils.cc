@@ -235,14 +235,17 @@ float ANSEncCounter::GetCost(const ANSDictionaries&dicts) const {
   return cost;
 }
 
-uint32_t ANSEncCounter::PutBit(uint32_t bit, uint32_t proba, WP2_OPT_LABEL) {
-  cost_ += PROBA_BITS - WP2Log2(bit ? PROBA_MAX - proba : proba);
+uint32_t ANSEncCounter::PutBit(uint32_t bit, uint32_t num_zeros,
+                               uint32_t num_total, WP2_OPT_LABEL) {
+  cost_ +=
+      WP2Log2(num_total) - WP2Log2(bit ? num_total - num_zeros : num_zeros);
   return bit;
 }
 
 uint32_t ANSEncCounter::PutABit(uint32_t bit, ANSBinSymbol* const stats,
                                 WP2_OPT_LABEL) {
-  ANSEncCounter::PutBit(bit, stats->Proba(), label);   // will update cost_
+  ANSEncCounter::PutBit(bit, stats->NumZeros(), stats->NumTotal(),
+                        label);  // will update cost_
   stats->Update(bit);
   return bit;
 }
@@ -348,8 +351,7 @@ WP2Status LoadMapping(ANSDec* const dec, uint32_t size, uint32_t range,
       uint32_t num_zeros = range - size;
       for (uint32_t i = 0, j = 0; i < size; ++j) {
         const uint32_t num_left = range - j;
-        if (num_zeros == 0 ||
-            dec->ReadBit(num_zeros * PROBA_MAX / num_left, "is_used")) {
+        if (num_zeros == 0 || dec->ReadBit(num_zeros, num_left, "is_used")) {
           mapping[i] = j;
           ++i;
         } else {
@@ -591,8 +593,7 @@ static void StoreMappingHelper(const uint16_t* const mapping, size_t size,
       // Once there are no more zeros, it will cost nothing to store the bit.
       for (uint32_t i = 0, j = 0; i < size; ++j) {
         const uint32_t num_left = range - j;
-        if (enc->PutBit(j == mapping[i],
-                        num_zeros * PROBA_MAX / num_left, "is_used")) {
+        if (enc->PutBit(j == mapping[i], num_zeros, num_left, "is_used")) {
           ++i;
         } else {
           // early out to avoid calling PutBit() with proba 0
@@ -719,8 +720,7 @@ uint32_t PutLargeRange(uint32_t v, uint32_t min, uint32_t max,
     enc->PutRValue(v / kANSMaxRange, num_intervals, label);
   } else {
     const bool is_last_interval = (interval == (num_intervals - 1));
-    enc->PutBit(is_last_interval,
-                PROBA_MAX - (range % kANSMaxRange) * PROBA_MAX / range, label);
+    enc->PutBit(is_last_interval, range - (range % kANSMaxRange), range, label);
     if (is_last_interval) {
       enc->PutRValue(v % kANSMaxRange, range % kANSMaxRange, label);
     } else {
@@ -742,8 +742,8 @@ uint32_t ReadLargeRange(uint32_t min, uint32_t max, ANSDec* const dec,
     v += kANSMaxRange * dec->ReadRValue(num_intervals, label);
     return min + v;
   } else {
-    const bool is_last_interval = dec->ReadBit(
-        PROBA_MAX - (range % kANSMaxRange) * PROBA_MAX / range, label);
+    const bool is_last_interval =
+        dec->ReadBit(range - (range % kANSMaxRange), range, label);
     if (is_last_interval) {
       return min + dec->ReadRValue(range % kANSMaxRange, label) +
              kANSMaxRange * (num_intervals - 1);

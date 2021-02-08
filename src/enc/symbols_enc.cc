@@ -730,7 +730,8 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
     }
     case Stat::Type::kAdaptiveBit: {
       if (!use_max_value || max_value > 0) {
-        enc->PutBit(value, a_bits_[stat.param.a_bit_index].Proba(), "a_bit");
+        enc->PutBit(value, a_bits_[stat.param.a_bit_index].NumZeros(),
+                    a_bits_[stat.param.a_bit_index].NumTotal(), "a_bit");
         if (cost != nullptr) {
           *cost += a_bits_[stat.param.a_bit_index].GetCost(value);
         }

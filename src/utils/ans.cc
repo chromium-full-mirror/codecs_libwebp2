@@ -54,16 +54,14 @@ ANSSymbolInfo ANSSymbolInfo::Rescale(const ANSSymbolInfo& max,
 // ANSBinSymbol
 
 ANSBinSymbol::ANSBinSymbol(uint32_t p0, uint32_t p1) {
-  p0_ = p0;
-  sum_ = p0 + p1;
-  p_ = (sum_ > 0) ? (p0_ << PROBA_BITS) / sum_ : PROBA_MAX / 2;
+  num_zeros_ = p0;
+  num_total_ = p0 + p1;
 }
 
 void ANSBinSymbol::UpdateCount(uint32_t bit) {
-  assert(sum_ < kMaxSum);
-  p0_ += !bit;
-  ++sum_;
-  p_ = (p0_ << PROBA_BITS) / sum_;   // cache the current proba
+  assert(num_total_ < kMaxSum);
+  num_zeros_ += !bit;
+  ++num_total_;
 }
 
 //------------------------------------------------------------------------------
@@ -278,8 +276,8 @@ void ANSAdaptiveSymbol::FindBestAdaptationSpeed(
   if (header_bits != nullptr) {
     uint32_t counts[APROBA_MAX_SYMBOL] = { 0 };
     for (uint32_t s : syms) ++counts[s];
-    float cost = WP2SLog2(syms.size());
-    for (uint32_t c : counts) cost -= WP2SLog2(c);
+    float cost = 0.;
+    for (uint32_t c : counts) cost += WP2SLog2m1(c);
     // fixed probabilities seems better
     if (cost + 2.f < best_cost) {    // +2.f = headroom for inaccuracy
       *header_bits = (uint32_t)(best_cost - cost);
@@ -438,13 +436,14 @@ uint32_t ANSDec::ReadNextWord(uint32_t s) {
   return s;
 }
 
-uint32_t ANSDec::ReadBitInternal(uint32_t p0) {
-  const int q0 = PROBA_MAX - p0;
-  if (p0 == 0) {
+uint32_t ANSDec::ReadBitInternal(uint32_t num_zeros, uint32_t num_total) {
+  if (num_zeros == 0) {
     return 1;
-  } else if (q0 == 0) {
+  } else if (num_zeros == num_total) {
     return 0;
   } else {
+    const uint32_t p0 = (num_zeros << PROBA_BITS) / num_total;
+    const int q0 = PROBA_MAX - p0;
     const uint32_t xfrac = state_ & (PROBA_MAX - 1);
     const uint32_t bit = (xfrac >= p0);
     if (!bit) {
@@ -461,7 +460,7 @@ uint32_t ANSDec::ReadBitInternal(uint32_t p0) {
 }
 
 uint32_t ANSDec::ReadABitInternal(ANSBinSymbol* const stats) {
-  const uint32_t bit = ReadBitInternal(stats->Proba());
+  const uint32_t bit = ReadBitInternal(stats->NumZeros(), stats->NumTotal());
   return stats->Update(bit);
 }
 
@@ -1346,7 +1345,8 @@ uint32_t ANSEnc::PutBitInternal(uint32_t bit, uint32_t proba) {
 
 // Append an adaptive binary symbol 'bit', updating 'stats' afterward.
 uint32_t ANSEnc::PutABitInternal(uint32_t bit, ANSBinSymbol* const stats) {
-  PutBitInternal(bit, stats->Proba());
+  const uint32_t proba = (stats->NumZeros() << PROBA_BITS) / stats->NumTotal();
+  PutBitInternal(bit, proba);
   return stats->Update(bit);
 }
 

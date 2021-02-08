@@ -142,15 +142,15 @@ TEST(Math, Log2) {
   EXPECT_LT(err, 9.5e-14);
 }
 
-TEST(Math, SLog2) {
+TEST(Math, SLog2m1) {
   WP2MathInit();
   const uint32_t kMax = 1u << 17;  // kApproxLogWithCorrectionMax is 1 << 16
   const uint32_t kIter = 100;
   double err = 0., sum = 0.;
   for (uint32_t iter = 0; iter < kIter; ++iter) {
     for (uint32_t v = 0; v < kMax; ++v) {
-      const float slog2_v = WP2SLog2(v);
-      err += std::abs(slog2_v - (v > 0 ? v * std::log2(v) : 0));
+      const float slog2_v = WP2SLog2m1(v);
+      err += std::abs(slog2_v - (v > 0 ? v * (1. - std::log2(v)) : 0));
       sum += slog2_v;
     }
   }

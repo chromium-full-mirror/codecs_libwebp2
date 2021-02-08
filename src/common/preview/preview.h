@@ -40,8 +40,10 @@ static constexpr uint32_t kPreviewMaxNumColors = 32;
 static constexpr uint32_t kPreviewMinGridSize = 2;
 static constexpr uint32_t kPreviewMaxGridSize = 256;
 
-static constexpr uint32_t kPreviewOpaqueProba = PROBA_MAX * 3 / 4;
-static constexpr uint32_t kPreviewNoiseProba = PROBA_MAX / 2;
+// Probas out of kPreviewTotalProba.
+static constexpr uint32_t kPreviewOpaqueProba = 3;
+static constexpr uint32_t kPreviewNoiseProba = 2;
+static constexpr uint32_t kPreviewTotalProba = 4;
 
 // 'cg' must be 0 because the palette is sorted by 'cg' before encoding.
 static constexpr AYCoCg19b kPreviewStartingColorPrediction =

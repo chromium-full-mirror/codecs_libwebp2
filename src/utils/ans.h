@@ -120,25 +120,26 @@ class ANSBinSymbol {
   ANSBinSymbol& operator=(const ANSBinSymbol&) = default;
   // update observation and return 'bit'
   inline uint32_t Update(uint32_t bit) {
-    if (sum_ < kMaxSum) UpdateCount(bit);
+    if (num_total_ < kMaxSum) UpdateCount(bit);
     return bit;
   }
-  // get the cached probability for symbol '1' out of the current state
-  uint32_t Proba() const { return p_; }
+  // Returns the number of occurences 0 happened.
+  uint32_t NumZeros() const { return num_zeros_; }
+  // Returns the number of occurences of the bit.
+  uint32_t NumTotal() const { return num_total_; }
 
   // cost of storing the given 'bit'.
   float GetCost(uint32_t bit) const {
-    const uint32_t p = Proba();
-    if (p == 0 || p == PROBA_MAX) return 0;
-    return -WP2Log2(bit ? PROBA_MAX - p : p) + PROBA_BITS;
+    if (num_zeros_ == 0 || num_zeros_ == num_total_) return 0;
+    return WP2Log2(num_total_) -
+           WP2Log2(bit ? num_total_ - num_zeros_ : num_zeros_);
   }
 
  private:
   // we are dealing with quite stationary sources, so updating the proba
   // past kMaxSum events is usually irrelevant.
   static constexpr uint32_t kMaxSum = 256u;
-  uint16_t p0_, sum_;
-  uint32_t p_;
+  uint16_t num_zeros_, num_total_;
 
   void UpdateCount(uint32_t bit);
 };
@@ -343,10 +344,11 @@ class ANSDec {
     return symbol;
   }
 
-  // Decodes a binary symbol with probability 'proba' in range [0, PROBA_MAX].
-  uint32_t ReadBit(uint32_t proba, WP2_OPT_LABEL) {
-    const uint32_t bit = ReadBitInternal(proba);
-    Trace("%s: bit=%u proba=%p", label, bit, proba);
+  // Decodes a binary symbol with probability defined by the number of 0's and
+  // total occurrences.
+  uint32_t ReadBit(uint32_t num_zeros, uint32_t num_total, WP2_OPT_LABEL) {
+    const uint32_t bit = ReadBitInternal(num_zeros, num_total);
+    Trace("%s: bit=%u proba=%p", label, bit, num_zeros, num_total);
     BitTrace(bit, LabelStats::Type::Bit, label);
     return bit;
   }
@@ -452,7 +454,7 @@ class ANSDec {
   uint32_t ReadRValueInternal(uint32_t range);
   uint32_t ReadUValueInternal(uint32_t bits);
   uint32_t ReadABitInternal(ANSBinSymbol* const stats);
-  uint32_t ReadBitInternal(uint32_t p0);
+  uint32_t ReadBitInternal(uint32_t num_zeros, uint32_t num_total);
 
   // Shift 'state' and read-in the lower bits. Return the new value.
   // Typically called as: 'state_ = ReadNextWord(state_);'
@@ -659,10 +661,10 @@ class ANSEncBase {
  public:
   virtual ~ANSEncBase() = default;
 
-  // Appends a binary symbol 'bit' with probability 'proba' (of 'bit' being
-  // zero) to the message. The probability is in range [0, PROBA_MAX].
-  // Returns the value of 'bit'.
-  virtual uint32_t PutBit(uint32_t bit, uint32_t proba, WP2_OPT_LABEL) = 0;
+  // Appends a binary symbol 'bit' with probability defined by the number of 0's
+  // and total occurrences. Returns the value of 'bit'.
+  virtual uint32_t PutBit(uint32_t bit, uint32_t num_zeros, uint32_t num_total,
+                          WP2_OPT_LABEL) = 0;
 
   // Appends an adaptive binary symbol 'bit', updating 'stats' afterward.
   virtual uint32_t PutABit(uint32_t bit, ANSBinSymbol* const stats,
@@ -825,7 +827,9 @@ class ANSEnc : public ANSEncBase {
   uint32_t BufferSize() const { return (buffer_.size() - buffer_pos_); }
 
  public:   // overridden methods
-  uint32_t PutBit(uint32_t bit, uint32_t proba, WP2_OPT_LABEL) override {
+  uint32_t PutBit(uint32_t bit, uint32_t num_zeros, uint32_t num_total,
+                  WP2_OPT_LABEL) override {
+    const uint32_t proba = (num_zeros << PROBA_BITS) / num_total;
     const uint32_t res = PutBitInternal(bit, proba);
     Trace("%s: bit=%d proba=%p", label, bit, proba);
     return res;

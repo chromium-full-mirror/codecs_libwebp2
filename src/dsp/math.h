@@ -34,19 +34,19 @@
 const uint32_t kLogLookupIdxMax = 256;
 
 extern const float kWP2Log2Table[kLogLookupIdxMax];
-extern const float kWP2SLog2Table[kLogLookupIdxMax];
+extern const float kWP2SLog2m1Table[kLogLookupIdxMax];
 
 typedef float (*WP2Log2SlowFunc)(uint32_t v);
 extern WP2Log2SlowFunc WP2Log2Slow;
-extern WP2Log2SlowFunc WP2SLog2Slow;
+extern WP2Log2SlowFunc WP2SLog2m1Slow;
 
 // Fast calculation of log2(v) for integer input.
 static inline float WP2Log2(uint32_t v) {
   return (v < kLogLookupIdxMax) ? kWP2Log2Table[v] : WP2Log2Slow(v);
 }
-// Fast calculation of v * log2(v) for integer input.
-static inline float WP2SLog2(uint32_t v) {
-  return (v < kLogLookupIdxMax) ? kWP2SLog2Table[v] : WP2SLog2Slow(v);
+// Fast calculation of v * (1 - log2(v)) for integer input.
+static inline float WP2SLog2m1(uint32_t v) {
+  return (v < kLogLookupIdxMax) ? kWP2SLog2m1Table[v] : WP2SLog2m1Slow(v);
 }
 
 // fast look-up version for small values

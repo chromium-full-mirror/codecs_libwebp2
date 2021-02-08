@@ -20,6 +20,7 @@
 #include <initializer_list>
 
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 
 #if defined(WP2_HAVE_NEON_RTCD)
 #include <cstdio>
@@ -291,6 +292,7 @@ void WP2DspReset() {
   WP2AlphaInit();
   WP2QuantizeInit();
   WP2::ANSInit();
+  WP2MathInit();
 
   // then, we reset the pointer-to-functions for good
   WP2GetCPUInfo = saved_cpu_info;
@@ -375,4 +377,8 @@ void WP2DspReset() {
 
   WP2Quantize = nullptr;
   WP2Dequantize = nullptr;
+
+  WP2Log2Slow  = nullptr;
+  WP2SLog2m1Slow = nullptr;
+  WP2InnerProduct = nullptr;
 }

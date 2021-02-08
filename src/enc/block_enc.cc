@@ -454,9 +454,17 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
   const float lambda =
       lambda_mult_ * ((channel == kYChannel) ? quant.lambda1 : quant.lambda2);
   bool is_first = true;
+
+  // Predict from mode once and for all.
+  int16_t prediction[kMaxBlockSizePix2];
+  const Plane16 prediction_p = PredictInto(channel, prediction);
+
   for (const TransformPair tf : transforms) {
     params->tf = tf;
-    Quantize(quant, channel, reduced);
+
+    BlockCoeffs16 tmp;
+    GetResiduals(channel, prediction_p, &tmp);  // <- depends on 'params->tf'
+    TransformAndReconstruct(quant, channel, reduced, prediction_p, &tmp, &tmp);
 
     const uint32_t distortion = GetDisto(channel);
     float current_score = distortion;
@@ -631,9 +639,17 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
   const float lambda =
       lambda_mult_ * ((channel == kYChannel) ? quant.lambda1 : quant.lambda2);
   bool is_first = true;
+
+  // Predict from mode once and for all.
+  int16_t prediction[kMaxBlockSizePix2];
+  const Plane16 prediction_p = PredictInto(channel, prediction);
+
   for (bool split_tf : {false, true}) {
     params->split_tf = split_tf;
-    Quantize(quant, channel, reduced);
+
+    BlockCoeffs16 tmp;
+    GetResiduals(channel, prediction_p, &tmp);  // <- depends on 'split_tf'
+    TransformAndReconstruct(quant, channel, reduced, prediction_p, &tmp, &tmp);
 
     if (params->split_tf && !HasCoeffs(channel)) {
       continue;  // Split-tf with no coeff is forbidden.

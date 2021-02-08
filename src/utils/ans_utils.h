@@ -412,7 +412,8 @@ void ReadVectorImpl(ANSDec* dec, size_t nnz, uint32_t val_upper, T& v) {
 class ANSEncCounter : public ANSEncBase {
  public:
   ANSEncCounter() : cost_(0.), symbol_cost_(0.) {}
-  uint32_t PutBit(uint32_t bit, uint32_t proba, WP2_OPT_LABEL) override;
+  uint32_t PutBit(uint32_t bit, uint32_t num_zeros, uint32_t num_total,
+                  WP2_OPT_LABEL) override;
   uint32_t PutABit(uint32_t bit, ANSBinSymbol* const stats,
                    WP2_OPT_LABEL) override;
   uint32_t PutSymbol(uint32_t symbol, const ANSDictionary& dict,
@@ -451,7 +452,8 @@ class ANSEncCounter : public ANSEncBase {
 class ANSEncNoop : public ANSEncBase {
  public:
   ANSEncNoop() = default;
-  uint32_t PutBit(uint32_t bit, uint32_t proba, WP2_OPT_LABEL) override {
+  uint32_t PutBit(uint32_t bit, uint32_t num_zeros, uint32_t num_total,
+                  WP2_OPT_LABEL) override {
     return bit;
   }
   uint32_t PutABit(uint32_t bit, ANSBinSymbol* const stats,

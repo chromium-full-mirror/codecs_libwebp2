@@ -172,7 +172,8 @@ WP2Status PreviewData::EncodePalette(ANSEnc* const enc) const {
   for (uint32_t i = 0; i < palette_.size() && !has_alpha; ++i) {
     if (!palette_[i].a) has_alpha = true;
   }
-  enc->PutBit((uint32_t)has_alpha, kPreviewOpaqueProba, "has_alpha");
+  enc->PutBit((uint32_t)has_alpha, kPreviewOpaqueProba, kPreviewTotalProba,
+              "has_alpha");
 
   AYCoCg19b pred = kPreviewStartingColorPrediction;
   ANSBinSymbol alpha(2, 2);  // TODO(yguyon): why 2, 2
@@ -229,10 +230,9 @@ WP2Status PreviewData::EncodeVertices(ANSEnc* const enc) const {
       const VertexIndexedColor& vertex = vertices_[vertex_index];
       const bool position_match = (vertex.y == y && vertex.x == x);
       const uint32_t num_vertices_left = vertices_.size() - vertex_index;
-      const uint32_t proba_different_position =
-          PROBA_MAX - (PROBA_MAX * num_vertices_left / num_grid_points_left);
-      if (enc->PutBit((uint32_t)position_match, proba_different_position,
-                      "position_match")) {
+      if (enc->PutBit((uint32_t)position_match,
+                      num_grid_points_left - num_vertices_left,
+                      num_grid_points_left, "position_match")) {
         EncodeColorIndex(vertex.color_index, enc, &stat_idx, &predictor);
         if (++vertex_index == vertices_.size()) return WP2_STATUS_OK;
       }
@@ -374,11 +374,12 @@ WP2Status PreviewData::Encode(ANSEnc* const enc) const {
     assert(grid_height_ >= kPreviewMinGridSize);
         enc->PutRange(grid_width_, kPreviewMinGridSize, kPreviewMaxGridSize,
                   "grid_dim");
-    enc->PutRange(grid_height_, kPreviewMinGridSize, kPreviewMaxGridSize,
-                  "grid_dim");
-    enc->PutBit((uint32_t)use_noise_, kPreviewNoiseProba, "use_noise");
-    WP2_CHECK_STATUS(EncodePalette(enc));
-    WP2_CHECK_STATUS(EncodeVertices(enc));
+        enc->PutRange(grid_height_, kPreviewMinGridSize, kPreviewMaxGridSize,
+                      "grid_dim");
+        enc->PutBit((uint32_t)use_noise_, kPreviewNoiseProba,
+                    kPreviewTotalProba, "use_noise");
+        WP2_CHECK_STATUS(EncodePalette(enc));
+        WP2_CHECK_STATUS(EncodeVertices(enc));
   }
   WP2_CHECK_STATUS(enc->GetStatus());
   WP2_CHECK_STATUS(enc->Assemble());

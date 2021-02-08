@@ -146,6 +146,16 @@ class CodedBlock : public CodedBlockBase {
     DCDiffusionMap* const dc_error_u, DCDiffusionMap* const dc_error_v,
     Counters* const counters);
 
+  // Calls PredictBlock() into a temporary buffer and returns
+  // the result as a plane (which can be thrown away).
+  Plane16 PredictInto(Channel channel, int16_t dst[]) const {
+    Plane16 prediction;
+    // we *know* this SetView() can't fail ;)
+    (void)prediction.SetView(dst, w_pix(), h_pix(), /*step=*/kMaxBlockSizePix);
+    PredictBlock(channel, dst, /*step=*/kMaxBlockSizePix);
+    return prediction;
+  }
+
   // Subtracts the 'prediction' from 'in_' and stores the residuals in 'res'.
   void GetResiduals(Channel channel, const Plane16& prediction,
                     BlockCoeffs16* const res) const;

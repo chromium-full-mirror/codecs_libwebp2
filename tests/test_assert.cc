@@ -48,8 +48,8 @@ int main(int argc, const char* argv[]) {
     }
     case -2:
       // Proba should be in [0,PROBA_MAX].
-      enc.PutBit(0, PROBA_MAX, "bit");
-      enc.PutBit(1, 0, "bit");
+      enc.PutBit(0, 1, 1, "bit");
+      enc.PutBit(1, 0, 1, "bit");
       break;
     case -1:
       // Range has to fit in [1..(1 << WP2::kANSMaxRangeBits)]
@@ -79,8 +79,8 @@ int main(int argc, const char* argv[]) {
       enc.PutASymbol(0, (WP2::ANSAdaptiveSymbol*)nullptr, "id");
       break;
     case 6:
-      // Proba should fit in [0,PROBA_MAX].
-      enc.PutBit(1, PROBA_MAX + 1, "bit");
+      // Proba should not be bigger than 1.
+      enc.PutBit(1, 2, 1, "bit");
       break;
     case 7:
       enc.PutUValue(1, 0, "zero");

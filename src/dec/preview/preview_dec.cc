@@ -45,7 +45,8 @@ WP2Status PreviewData::DecodePalette(ANSDec* const dec) {
   const uint32_t num_colors =
       dec->ReadRange(kPreviewMinNumColors, kPreviewMaxNumColors, "num_colors");
 
-  const bool has_alpha = (bool)dec->ReadBit(kPreviewOpaqueProba, "has_alpha");
+  const bool has_alpha =
+      (bool)dec->ReadBit(kPreviewOpaqueProba, kPreviewTotalProba, "has_alpha");
 
   WP2_CHECK_ALLOC_OK(palette_.resize(num_colors));
   AYCoCg19b pred = kPreviewStartingColorPrediction;
@@ -105,10 +106,9 @@ WP2Status PreviewData::DecodeVertices(ANSDec* const dec) {
     for (uint16_t x = 0; x < grid_width_; ++x) {
       if (IsCorner(x, y)) continue;
       const uint32_t num_vertices_left = vertices_.size() - vertex_index;
-      const uint32_t proba_different_position =
-          PROBA_MAX - (PROBA_MAX * num_vertices_left / num_grid_points_left);
 
-      if (dec->ReadBit(proba_different_position, "position_match")) {
+      if (dec->ReadBit(num_grid_points_left - num_vertices_left,
+                       num_grid_points_left, "position_match")) {
         VertexIndexedColor& vertex = vertices_[vertex_index];
         vertex.x = x;
         vertex.y = y;
@@ -140,7 +140,8 @@ WP2Status PreviewData::Decode(ANSDec* const dec) {
                                "grid_dim");
   grid_height_ = dec->ReadRange(kPreviewMinGridSize, kPreviewMaxGridSize,
                                "grid_dim");
-  use_noise_ = (bool)dec->ReadBit(kPreviewNoiseProba, "use_noise");
+  use_noise_ =
+      (bool)dec->ReadBit(kPreviewNoiseProba, kPreviewTotalProba, "use_noise");
   WP2_CHECK_STATUS(DecodePalette(dec));
   WP2_CHECK_STATUS(DecodeVertices(dec));
   return dec->GetStatus();
