@@ -58,12 +58,12 @@ void Help() {
   opt.Add(
       "Options valid if 'out_file' has the .y4m extension "
       "(4:4:4 8b by default):");
-  opt.Add("-depth <int>",
+  opt.Add("-y4m_depth <int>",
           SPrintf("output bit depth per plane per sample (%u..%u)",
                   WP2::CCSPImageReader::kMinBitDepth,
                   WP2::CCSPImageReader::kMaxBitDepth));
-  opt.Add("-444", "4:4:4 output samples (full chroma resolution)");
-  opt.Add("-420", "4:2:0 output samples (half chroma resolution)");
+  opt.Add("-y4m_444", "4:4:4 output samples (full chroma resolution)");
+  opt.Add("-y4m_420", "4:2:0 output samples (half chroma resolution)");
   opt.Add("");
   opt.Add("Options valid if 'in_file' and/or 'out_file' are 4:2:0:");
   opt.Add("-sampling <filter>",
@@ -110,17 +110,19 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
+  bool parsed_flag_q = false;
+  bool parsed_flag_effort = false;
+  bool parsed_flag_csp = false;
+  bool parsed_flag_y4m_depth = false;
+  bool parsed_flag_y4m_420 = false;
+
   std::string in_path;
   std::string out_path;
   bool keep_metadata = true;
-
-  bool expecting_lossy_enc = false;
-  bool expecting_wp2_enc = false;
   WP2::EncoderConfig wp2_enc_config;
 
-  bool expecting_ccsp_enc = false;
-  uint32_t ccsp_enc_bit_depth = 8;  // 4:4:4 8b by default
-  uint32_t ccsp_enc_420 = false;
+  uint32_t y4m_enc_bit_depth = 8;  // 4:4:4 8b by default
+  uint32_t y4m_enc_420 = false;
   const WP2::SamplingTaps* downsampling_filter = &WP2::SamplingTaps::kDownSharp;
   const WP2::SamplingTaps* upsampling_filter = &WP2::SamplingTaps::kUpSmooth;
 
@@ -140,25 +142,23 @@ int main(int argc, char* argv[]) {
       CHECK_TRUE(out_path.empty(), "Error! Output was already specified.");
       out_path = argv[++c];
     } else if (!strcmp(argv[c], "-q") && c + 1 < argc) {
-      expecting_lossy_enc = true;
+      parsed_flag_q = true;
       wp2_enc_config.quality = ExUtilGetFloat(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-effort") && c + 1 < argc) {
-      expecting_lossy_enc = true;
+      parsed_flag_effort = true;
       wp2_enc_config.effort = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-csp") && c + 1 < argc) {
-      expecting_lossy_enc = true;
-      expecting_wp2_enc = true;
+      parsed_flag_csp = true;
       wp2_enc_config.csp_type = (WP2::Csp)ExUtilGetInt(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-depth") && c + 1 < argc) {
-      expecting_ccsp_enc = true;
-      ccsp_enc_bit_depth = ExUtilGetInt(argv[++c], &parse_error);
-      CHECK_TRUE(
-          ccsp_enc_bit_depth >= WP2::CCSPImageReader::kMinBitDepth &&
-          ccsp_enc_bit_depth <= WP2::CCSPImageReader::kMaxBitDepth,
-          "Error! Bit depth is outside range.");
-    } else if (!strcmp(argv[c], "-444") || !strcmp(argv[c], "-420")) {
-      expecting_ccsp_enc = true;
-      ccsp_enc_420 = !strcmp(argv[c], "-420");
+    } else if (!strcmp(argv[c], "-y4m_depth") && c + 1 < argc) {
+      parsed_flag_y4m_depth = true;
+      y4m_enc_bit_depth = ExUtilGetInt(argv[++c], &parse_error);
+      CHECK_TRUE(y4m_enc_bit_depth >= WP2::CCSPImageReader::kMinBitDepth &&
+                 y4m_enc_bit_depth <= WP2::CCSPImageReader::kMaxBitDepth,
+                 "Error! Bit depth is outside allowed range.");
+    } else if (!strcmp(argv[c], "-y4m_444") || !strcmp(argv[c], "-y4m_420")) {
+      parsed_flag_y4m_420 = true;
+      y4m_enc_420 = !strcmp(argv[c], "-y4m_420");
     } else if (!strcmp(argv[c], "-sampling") && c + 1 < argc) {
       ++c;
       if (!strcmp(argv[c], "smooth")) {
@@ -209,11 +209,6 @@ int main(int argc, char* argv[]) {
   const bool print_disto = !ref_path.empty();
 
   CHECK_TRUE(!in_path.empty(), "Error! No input specified.");
-  CHECK_TRUE(!expecting_lossy_enc || !expecting_ccsp_enc,
-             "Error! Output format mixup.");
-  CHECK_TRUE(
-      (!expecting_lossy_enc && !expecting_ccsp_enc) || !out_path.empty(),
-      "Error! No output specified.");
   CHECK_TRUE(wp2_enc_config.IsValid(), "Error! Invalid configuration.");
 
   WP2::YUVPlane ccsp_buffer;
@@ -228,11 +223,35 @@ int main(int argc, char* argv[]) {
 
   FileFormat out_format = WP2::GetFormatFromExtension(out_path.c_str());
   if (out_format == FileFormat::Y4M_420 || out_format == FileFormat::Y4M_444) {
-    out_format = (ccsp_enc_420 ? FileFormat::Y4M_420 : FileFormat::Y4M_444);
-  } else {
-    CHECK_TRUE(!ccsp_enc_420,
-               "Error! Output format %s does not support 4:2:0.",
-                WP2::GetFileFormatStr(out_format));
+    out_format = (y4m_enc_420 ? FileFormat::Y4M_420 : FileFormat::Y4M_444);
+  }
+
+  if (parsed_flag_q &&
+      (out_format != FileFormat::WEBP && out_format != FileFormat::WP2)) {
+    printf("Warning: ignoring flag -q unsupported by output format %s\n",
+           WP2::GetFileFormatStr(out_format));
+  }
+  if (parsed_flag_effort &&
+      (out_format != FileFormat::WEBP && out_format != FileFormat::WP2)) {
+    printf("Warning: ignoring flag -effort unsupported by output format %s\n",
+           WP2::GetFileFormatStr(out_format));
+  }
+  if (parsed_flag_csp && out_format != FileFormat::WP2) {
+    printf("Warning: ignoring flag -csp unsupported by output format %s\n",
+           WP2::GetFileFormatStr(out_format));
+  }
+  if (parsed_flag_y4m_depth && (out_format != FileFormat::Y4M_420 &&
+                                out_format != FileFormat::Y4M_444)) {
+    printf(
+        "Warning: ignoring flag -y4m_depth unsupported by output format %s\n",
+        WP2::GetFileFormatStr(out_format));
+  }
+  if (parsed_flag_y4m_420 && (out_format != FileFormat::Y4M_420 &&
+                              out_format != FileFormat::Y4M_444)) {
+    printf(
+        "Warning: ignoring flag -y4m_444 or -y4m_420 unsupported by output "
+        "format %s\n",
+        WP2::GetFileFormatStr(out_format));
   }
 
   if (print_size) {
@@ -250,7 +269,7 @@ int main(int argc, char* argv[]) {
     CHECK_STATUS(features.Read(in_data.bytes, in_data.size),
                  "Error! Failed to decode the wp2 image header.");
     const uint32_t rgb_to_ycbcr_shift =
-        WP2::kRGBToYCbCrShift - (ccsp_enc_bit_depth - 8);
+        WP2::kRGBToYCbCrShift - (y4m_enc_bit_depth - 8);
 
     // Allocate a padded buffer to avoid doing it internally.
     // TODO(yguyon): Check if 'has_alpha' is needed beforehand (decode GParams).
@@ -294,7 +313,7 @@ int main(int argc, char* argv[]) {
       CHECK_TRUE(fout != nullptr, "Error! Failed to write file '%s'.",
                  out_path.c_str());
       const WP2Status status =
-          WP2::WriteY4M(ccsp_buffer, ccsp_enc_bit_depth, fout);
+          WP2::WriteY4M(ccsp_buffer, y4m_enc_bit_depth, fout);
       if (file_size_ptr != nullptr) *file_size_ptr = std::ftell(fout);
       if (fout != stdout) fclose(fout);  // Close file even if error.
       CHECK_STATUS(status, "Error! Failed to write image '%s'.",
@@ -323,20 +342,6 @@ int main(int argc, char* argv[]) {
       if (!WP2::IsChromaSubsampled(out_format) && ccsp_buffer.IsDownsampled()) {
         CHECK_STATUS(ccsp_buffer.Upsample(*upsampling_filter),
                      "Error! Failed to upsample to 4:4:4.");
-      }
-
-      if (expecting_ccsp_enc) {
-        CHECK_TRUE(
-            WP2::IsCustomColorSpace(out_format),
-            "Error! Expected custom color space output instead of %s format.",
-            WP2::GetFileFormatStr(out_format));
-      } else if (expecting_lossy_enc) {
-        CHECK_TRUE(
-            out_format == FileFormat::WP2 ||
-                (!expecting_wp2_enc && out_format == FileFormat::WEBP),
-            "Error! Expected wp2%s output instead of %s format.",
-            expecting_wp2_enc ? "" : " or WebP",
-            WP2::GetFileFormatStr(out_format));
       }
 
       if (verbose) printf("Saving to '%s'\n", out_path.c_str());
@@ -373,8 +378,12 @@ int main(int argc, char* argv[]) {
                                  /*overwrite=*/true, file_size_ptr),
             "Error! Failed to write image '%s'.", out_path.c_str());
       } else {
+        const uint32_t file_num_bits = (out_format == FileFormat::Y4M_444 ||
+                                        out_format == FileFormat::Y4M_420)
+                                           ? y4m_enc_bit_depth
+                                           : 8u;
         CHECK_STATUS(
-            WP2::SaveImage(ccsp_buffer, ccsp_to_rgb, ccsp_enc_bit_depth,
+            WP2::SaveImage(ccsp_buffer, ccsp_to_rgb, file_num_bits,
                            out_path.c_str(), /*overwrite=*/true, out_format,
                            metadata, *downsampling_filter, file_size_ptr),
             "Error! Failed to save image '%s'.", out_path.c_str());

@@ -189,10 +189,8 @@ void Decoder::SkipNumNextFrames(uint32_t num_frames_to_skip) {
   if (state_ != nullptr) {
     // Unlikely but make sure there is no overflow.
     num_frames_to_skip = std::min(kMaxNumFrames, num_frames_to_skip);
-    num_frames_to_skip =
-        std::min(kMaxNumFrames - state_->skip_final_frames_before_index,
-                 num_frames_to_skip);
-    state_->skip_final_frames_before_index += num_frames_to_skip;
+    state_->skip_final_frames_before_index =
+        std::min(kMaxNumFrames, GetCurrentFrameIndex() + num_frames_to_skip);
   }
 }
 

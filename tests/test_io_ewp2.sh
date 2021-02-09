@@ -38,11 +38,11 @@ TMP_WEBP=/tmp/test_io_ewp2.webp
 
 # Convert y4m to y4m losslessly
 ${EWP2} "${TESTDATA_DIR}/ccsp/source3_C444p8.y4m" \
-        -o "${TMP_Y4M}" -depth 8 -444 \
+        -o "${TMP_Y4M}" -y4m_depth 8 -y4m_444 \
         -psnr "${TESTDATA_DIR}/ccsp/source3_C444p8.y4m" 99.0
 
 ${EWP2} "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" \
-        -o "${TMP_Y4M}" -depth 12 -420 -sampling nearest \
+        -o "${TMP_Y4M}" -y4m_depth 12 -y4m_420 -sampling nearest \
         -psnr "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" 99.0
 
 # No output
@@ -52,7 +52,7 @@ ${EWP2} "${TMP_Y4M}" -psnr "${TMP_Y4M}" 99.0 -size -v -rm A
 
 # Some loss during up/downsampling
 ${EWP2} "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" \
-        -o "${TMP_Y4M}" -depth 12 -420 -sampling smooth \
+        -o "${TMP_Y4M}" -y4m_depth 12 -y4m_420 -sampling smooth \
         -psnr "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" 50.0
 
 # Encode/decode WebP from JPG

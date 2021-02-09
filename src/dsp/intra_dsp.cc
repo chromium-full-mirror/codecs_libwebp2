@@ -244,52 +244,61 @@ void SimpleAnglePredictor(uint8_t angle_idx, const int16_t ctx[],
 
   if (angle_idx == kAngle_45) {
     for (uint32_t y = 0; y < bh; ++y, dst += step) {
-      for (uint32_t x = 0; x < bw; ++x) dst[x] = ctx[bh + 1 + y + 1 + x];
+      std::copy(ctx + (bh + 1 + y + 1), ctx + (bh + 1 + y + 1) + bw, dst);
     }
   } else if (angle_idx == kAngle_90) {
     for (uint32_t y = 0; y < bh; ++y, dst += step) {
-      for (uint32_t x = 0; x < bw; ++x) dst[x] = ctx[bh + 1 + x];
+      std::copy(&ctx[bh + 1], &ctx[bh + 1 + bw], dst);
     }
   } else if (angle_idx == kAngle_135) {
     for (uint32_t y = 0; y < bh; ++y, dst += step) {
-      for (uint32_t x = 0; x < bw; ++x) dst[x] = ctx[bh - y + x];
+      std::copy(&ctx[bh - y], &ctx[bh - y + bw], dst);
     }
   } else if (angle_idx == kAngle_180) {
     for (uint32_t y = 0; y < bh; ++y, dst += step) {
-      for (uint32_t x = 0; x < bw; ++x) dst[x] = ctx[bh - 1 - y];
+      std::fill(dst, dst + bw, ctx[bh - 1 - y]);
     }
   } else {
+    const int16_t* dst_end = dst + step * bh;
     const int32_t cot = kCoTanTable[angle_idx];
     // Line equation in X and Y of slope 'angle' going through pixel (x, y):
-    // X*sin(-angle)-Y*cos(-angle)=x*sin(-angle)-y*cos(-angle) x axis going
+    // (X-x)*sin(-angle) - (Y-y)*cos(-angle) = 0, with x axis going
     // right, y axis going down (hence the angle opposition).
-    // Let's simplify it to:
-    // X*sin(angle)+Y*cos(angle)=x*sin(angle)+y*cos(angle)
+    // Can be simplified to: (X-x)*sin(angle) + (Y-y)*cos(angle) = 0
     if (angle_idx < kAngle_90) {
-      for (uint32_t y = 0; y < bh; ++y, dst += step) {
-        // Hit the top context. The first index X at Y = -1, for x = 0 is:
-        assert((uint64_t)(y + 1) * cot <= std::numeric_limits<uint32_t>::max());
-        const uint32_t X = (y + 1) * (uint32_t)cot;
-        // Round down to get the first index.
-        uint32_t ind = bh + 1 + (X >> kAnglePredPrecision);
-        if (ind >= context_size) {
+      // Intersection index (in fixed-point precision) for the first context
+      // sample at Y=-1 (hence the '+ cot').
+      uint32_t ind_cur = ((bh + 1) << kAnglePredPrecision) + cot;
+      const uint32_t ind_end =
+          std::min((context_size - 1) << kAnglePredPrecision,
+                   ind_cur + bh * cot);
+      for (; ind_cur < ind_end; ind_cur += cot, dst += step) {
+        assert(dst < dst_end);
+        const uint32_t ind = ind_cur >> kAnglePredPrecision;
+        const uint32_t frac = ind_cur & kMask;
+        assert(ind < context_size);
+        const uint32_t interpolength = std::min(bw, context_size - (ind + 1));
+        // Copy pixels from 'ctx' to 'dst' then spatially-left-shift them by
+        // 'frac' (which is in [0:1[).
+        AnglePredInterpolate(ctx + ind, frac, dst, interpolength);
+        // For the remaining pixels that have no source within 'context_size',
+        // copy the last 'ctx' value.
+        if (interpolength < bw) {
+          std::fill(dst + interpolength, dst + bw, ctx[context_size - 1]);
+        }
+      }
+      // last lines
+      if (dst < dst_end) {
+        if (ind_cur < ind_end + cot) {
           // If we reach outside the context, repeat the last element of the
           // line above.
-          assert(y > 0);
           std::fill(dst, dst + bw, dst[-(int)step + (int)bw - 1]);
-        } else if (ind + 1 >= context_size) {
+          dst += step;
+        }
+        for (; dst < dst_end; dst += step) {
           // If we cannot interpolate with the next element because it is out
           // of context, repeat the last context element.
-          std::fill(dst, dst + bw, ctx[ind]);
-        } else {
-          const uint32_t interpolength = std::min(bw, context_size - (ind + 1));
-          const int32_t decimal = (X & kMask);
-          // Copy pixels from 'ctx' to 'dst' then spatially-left-shift them by
-          // 'decimal' (which is in [0:1[).
-          AnglePredInterpolate(ctx + ind, decimal, dst, interpolength);
-          // For the remaining pixels that have no source within 'context_size',
-          // copy the last 'ctx' value.
-          std::fill(dst + interpolength, dst + bw, ctx[context_size - 1]);
+          std::fill(dst, dst + bw, ctx[context_size - 1]);
         }
       }
     } else {        // angle >= 90.f
@@ -298,51 +307,39 @@ void SimpleAnglePredictor(uint8_t angle_idx, const int16_t ctx[],
           ((context_type == kContextExtendLeft) ? 2 * bh : bh);
       const int32_t ctx_height_minus_1 =
           ChangePrecision((int32_t)ctx_height - 1, 0, kAnglePredPrecision);
-      AssertInt32_TBounds(t);
-      for (int32_t y = 0; y < (int32_t)bh; ++y, dst += step) {
+      int32_t ind_base = ctx_height_minus_1;
+      for (int32_t y = 0; y < (int32_t)bh; ++y, dst += step, ind_base -= kOne) {
         int32_t x_max;
-        // Figure out the x that hits a boundary of the left context.
+        // Figure out where the span predicted with the left-context samples
+        // ends. For angle < 180, we intersect the top-left sample with the
+        // row 'y'. For angle > 180, we intersect the bottom-left one.
         if (angle_idx > kAngle_180) {
-          // Hits the left context for X = -1 and Y = ctx_height - 1;
-          x_max = -kOne + (ctx_height - 1) * cot - y * cot;
+          x_max = (ctx_height - 1 - y) * cot;
         } else {
-          // Hits the left context for X = -1 and Y = -1;
-          x_max = -kOne + (-1) * cot - y * cot;
+          x_max = (-1 - y) * cot;
         }
-        assert(x_max >= -kOne);
-        // Round down.
-        x_max = (x_max < 0) ? -1 : (x_max >> kAnglePredPrecision);
-        if (x_max >= (int32_t)bw) x_max = bw - 1;
-
-        int32_t x = 0;
+        // we now save the fractional part for later, to avoid re-doing the calc
+        const int32_t frac0 = kOne - (x_max & kMask);
+        assert(x_max >= 0);
+        x_max = std::min(x_max >> kAnglePredPrecision, (int32_t)bw);
         // Hit the left context. X = -1.
-        for (; x <= x_max; ++x) {
-          AssertInt32_TBounds((int64_t)t + (x * t + y * kOne));
-          const int32_t Y = t + (x * t + y * kOne);
-          assert(Y >= -kOne && Y <= ctx_height_minus_1);
-          uint32_t ind = ctx_height_minus_1 - Y;
-          const int32_t decimal = (ind & kMask);
-          ind >>= kAnglePredPrecision;
-          assert(ind < context_size);
-          // Compute ctx[ind] * (kOne - decimal) + ctx[ind + 1] * decimal.
+        for (int32_t x = 0, ind = ind_base; x < x_max; ++x) {
+          ind -= t;
+          const int32_t frac = (ind & kMask);
+          const int32_t pos = (ind >> kAnglePredPrecision);
+          assert(pos <= ctx_height - 1 && pos >= 0);
+          // Compute ctx[pos] * (kOne - frac) + ctx[pos + 1] * frac.
           dst[x] =
-              ctx[ind] + ChangePrecision((ctx[ind + 1] - ctx[ind]) * decimal,
+              ctx[pos] + ChangePrecision((ctx[pos + 1] - ctx[pos]) * frac,
                                          kAnglePredPrecision, 0u);
         }
-        if (x == (int32_t)bw) continue;
+        if (x_max == (int32_t)bw) continue;
         if (angle_idx > kAngle_180) {
           // Repeat the bottom of the left context.
-          std::fill(dst + x, dst + bw, ctx[0]);
+          std::fill(dst + x_max, dst + bw, ctx[0]);
         } else {
           // Hit the top context. Y = -1.
-          AssertInt32_TBounds(((int64_t)x * kOne + y * cot) - (-1) * cot);
-          const int32_t X = (x * kOne + y * cot) - (-1) * cot;
-          assert(X >= -kOne && X <= 0);
-          // Add kOne to have a positive value.
-          const uint32_t X_plus_1 = X + kOne;
-          const int32_t decimal = (X_plus_1 & kMask);
-          const uint32_t ind = bh + (X_plus_1 >> kAnglePredPrecision);
-          AnglePredInterpolate(ctx + ind, decimal, dst + x, bw - x);
+          AnglePredInterpolate(ctx + bh, frac0, dst + x_max, bw - x_max);
         }
       }
     }

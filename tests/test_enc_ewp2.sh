@@ -38,15 +38,15 @@ TMP_WP2=/tmp/test_enc_ewp2.wp2
 # Encode/decode wp2 from/to 4:4:4 with 12 bits
 ${EWP2} "${TESTDATA_DIR}/ccsp/source3_64x48_C444p12.y4m" \
         -o "${TMP_WP2}" -q 80 -effort 5
-${EWP2} "${TMP_WP2}" -o "${TMP_Y4M}" -depth 12 \
+${EWP2} "${TMP_WP2}" -o "${TMP_Y4M}" -y4m_depth 12 \
         -psnr "${TESTDATA_DIR}/ccsp/source3_64x48_C444p12.y4m" 34.7
 
 # Encode/decode wp2 from/to 4:2:0 with 8 bits
 ${EWP2} "${TESTDATA_DIR}/ccsp/source3_64x48_C420p8.y4m" \
         -o "${TMP_WP2}" -q 100 -effort 4 -sampling nearest
-${EWP2} "${TMP_WP2}" -o "${TMP_Y4M}" -depth 8 -420 -sampling nearest \
+${EWP2} "${TMP_WP2}" -o "${TMP_Y4M}" -y4m_depth 8 -y4m_420 -sampling nearest \
         -psnr "${TESTDATA_DIR}/ccsp/source3_64x48_C420p8.y4m" 55.0
-${EWP2} "${TMP_WP2}" -o "${TMP_Y4M}" -depth 8 -420 -sampling nearest \
+${EWP2} "${TMP_WP2}" -o "${TMP_Y4M}" -y4m_depth 8 -y4m_420 -sampling nearest \
         -ssim "${TESTDATA_DIR}/ccsp/source3_64x48_C420p8.y4m" 35.0
 
 echo "TEST OK"

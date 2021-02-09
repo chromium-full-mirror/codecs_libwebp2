@@ -22,6 +22,7 @@
 
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
+#include "include/helpers_filter.h"
 #include "src/utils/random.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
@@ -228,23 +229,6 @@ TEST(AnimTest, Metadata) {
 
 //------------------------------------------------------------------------------
 
-void FillWithNoise(const Rectangle& window, size_t seed,
-                   ArgbBuffer* const buffer) {
-  assert(buffer->format() == WP2_Argb_32);
-  const uint32_t bpp = WP2FormatBpp(buffer->format());
-  UniformIntDistribution random(seed);  // Deterministic.
-  for (uint32_t y = 0; y < window.height; ++y) {
-    uint8_t* const row = buffer->GetRow8(window.y + y);
-    for (uint32_t x = 0; x < window.width; ++x) {
-      row[(window.x + x) * bpp] = random.Get<uint8_t>(0, 255);  // Alpha
-      for (uint32_t c = 1; c < bpp; ++c) {
-        row[(window.x + x) * bpp + c] =
-            random.Get<uint8_t>(0, row[(window.x + x) * bpp]);  // Premultiplied
-      }
-    }
-  }
-}
-
 // Test preframes.
 TEST(AnimTest, Preframes) {
   std::vector<ArgbBuffer> frames(2);
@@ -255,17 +239,20 @@ TEST(AnimTest, Preframes) {
   // This way preframes should be way smaller than entire frames and should be
   // selected as the best option.
   ASSERT_WP2_OK(first_frame.Resize(512, 512));
-  FillWithNoise({0, 0, first_frame.width(), first_frame.height()}, /*seed=*/42,
-                &first_frame);
+  first_frame.Fill({128, 128, 128, 128});
+  testing::Noise(/*seed=*/42, /*strength=*/128, &first_frame);
 
   // Copy of first frame except for two areas that are far from each other
   // (top-left and bottom-right), to force the generation of one preframe.
   ASSERT_WP2_OK(second_frame.CopyFrom(first_frame));
   const uint32_t area_size = 8;
-  FillWithNoise({0, 0, area_size, area_size}, /*seed=*/12, &second_frame);
-  FillWithNoise({first_frame.width() - area_size,
-                 first_frame.height() - area_size, area_size, area_size},
-                /*seed=*/0, &second_frame);
+  ArgbBuffer top_left, bottom_right;
+  ASSERT_WP2_OK(top_left.SetView(first_frame, {0, 0, area_size, area_size}));
+  ASSERT_WP2_OK(bottom_right.SetView(
+      first_frame, {first_frame.width() - area_size,
+                    first_frame.height() - area_size, area_size, area_size}));
+  testing::Noise(/*seed=*/12, /*strength=*/255, &top_left);
+  testing::Noise(/*seed=*/0, /*strength=*/255, &bottom_right);
 
   // Encode losslessly.
   EncoderConfig config;

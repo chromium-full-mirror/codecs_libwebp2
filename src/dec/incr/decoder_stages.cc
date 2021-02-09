@@ -466,7 +466,9 @@ void Decoder::DecodeAvailableData() {
             }
             // Merge all consecutive preframes with the next regular frame,
             // forming a final frame. Don't notify for preframe readiness.
-            keep_decoding = is_preframe;
+            keep_decoding =
+                (is_preframe || current_frame_features.final_frame_index <
+                                    state_->skip_final_frames_before_index);
           }
           if (state_->status == WP2_STATUS_OK) {
             state_->current_frame_is_ready = true;

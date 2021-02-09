@@ -24,6 +24,7 @@
 
 #include "examples/example_utils.h"
 #include "include/helpers.h"
+#include "include/helpers_filter.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -326,32 +327,18 @@ TEST(BufferTest, CompositeOnBuffer) {
   EXPECT_EQ(row[4 * 3 + 3], 0);
 }
 
-void FillWithNoise(size_t seed, ArgbBuffer* const buffer) {
-  assert(buffer->format() == WP2_Argb_32);
-  const uint32_t bpp = WP2FormatBpp(buffer->format());
-  UniformIntDistribution random(seed);  // Deterministic.
-  for (uint32_t y = 0; y < buffer->height(); ++y) {
-    uint8_t* const row = buffer->GetRow8(y);
-    for (uint32_t x = 0; x < buffer->width(); ++x) {
-      row[x * bpp] = random.Get<uint8_t>(0, 255);  // Alpha
-      for (uint32_t c = 1; c < bpp; ++c) {
-        // Premultiplied
-        row[x * bpp + c] = random.Get<uint8_t>(0, row[x * bpp]);
-      }
-    }
-  }
-}
-
 TEST(BufferTest, CompositeYuv) {
   ArgbBuffer foreground(WP2_Argb_32);
   const uint32_t width = 100;
   const uint32_t height = 50;
   ASSERT_WP2_OK(foreground.Resize(width, height));
-  FillWithNoise(/*seed=*/1, &foreground);
+  foreground.Fill({128, 128, 128, 128});
+  testing::Noise(/*seed=*/1, /*strength=*/128, &foreground);
 
   ArgbBuffer background(WP2_Argb_32);
   ASSERT_WP2_OK(background.Resize(width, height));
-  FillWithNoise(/*seed=*/2, &background);
+  background.Fill({128, 128, 128, 128});
+  testing::Noise(/*seed=*/2, /*strength=*/128, &background);
 
   CSPTransform csp;
   static constexpr int16_t kYuvToRgb[] = {

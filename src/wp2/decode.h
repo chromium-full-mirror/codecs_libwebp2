@@ -290,11 +290,10 @@ class Decoder {
   // Returns the buffer (or the view to the buffer) containing the pixels.
   const ArgbBuffer& GetPixels() const { return *output_; }
 
-  // Disables pixel decoding for the next 'num_frames_to_skip'
-  // (GetCurrentFrameIndex() included), but still reads frame features.
-  // Useful for going directly to a timestamp (it will decode the previous
-  // frames if required but ReadFrame() will return false for these) or
-  // getting frames info without decoding ('kMaxNumFrames' to skip everything).
+  // Disables pixel decoding for the next 'num_frames_to_skip' (starting at
+  // GetCurrentFrameIndex(), included), but still reads frame features.
+  // Useful for going directly to a timestamp or getting frames info without
+  // decoding everything ('kMaxNumFrames' to skip all remaining frames).
   void SkipNumNextFrames(uint32_t num_frames_to_skip);
 
   // Resets the anim decoder to the first frame but keeps known frame features.
