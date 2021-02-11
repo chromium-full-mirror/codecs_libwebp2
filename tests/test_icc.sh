@@ -44,10 +44,21 @@ SRC_FILE=${TESTDATA_DIR}/large.png
 
 TMP_WP2_1=/tmp/test_icc_1.wp2
 TMP_WP2_2=/tmp/test_icc_2.wp2
+TMP_WP2_A1=/tmp/test_icc_anim_1.wp2
+TMP_WP2_A2=/tmp/test_icc_anim_2.wp2
 
 ${CWP2} ${SRC_FILE} -o ${TMP_WP2_1}
-${CWP2} ${SRC_FILE} -nometadata -o ${TMP_WP2_2}
+${CWP2} ${SRC_FILE} -o ${TMP_WP2_2} -nometadata
 diff ${TMP_WP2_1} ${TMP_WP2_2} && die  # file *should* differ
+
+# Same but as an animation:
+${CWP2} -f ${SRC_FILE} 1 ${TMP_WP2_1} 1 -o ${TMP_WP2_A1} -effort 0
+${CWP2} -f ${SRC_FILE} 1 ${TMP_WP2_1} 1 -o ${TMP_WP2_A2} -effort 0 -nometadata
+diff ${TMP_WP2_A1} ${TMP_WP2_A2} && die  # file *should* differ
+# -f flag and animated input have different pipelines:
+${CWP2} ${TMP_WP2_A1} -o ${TMP_WP2_A2}
+${CWP2} ${TMP_WP2_A1} -o ${TMP_WP2_A1} -nometadata
+diff ${TMP_WP2_A1} ${TMP_WP2_A2} && die  # file *should* differ
 
 echo "*** test replace metadata"
 for type in iccp xmp exif; do

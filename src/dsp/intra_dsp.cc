@@ -176,11 +176,6 @@ void BasePaethPredictor(const int16_t* ctx, uint32_t bw, uint32_t bh,
 
 namespace {
 
-static inline void AssertInt32_TBounds(int64_t i) {
-  assert(i <= std::numeric_limits<int32_t>::max());
-  assert(i >= std::numeric_limits<int32_t>::min());
-}
-
 // Fixed-point precision in bits, maximized to have all asserts pass.
 constexpr uint32_t kAnglePredPrecision = 15;
 static_assert(kAnglePredPrecision + 1 + 10 + 1 <= 32,

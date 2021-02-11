@@ -688,10 +688,6 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
   // Set the symbol A as useless and R,G,B as ranging with the cross color image
   // bounds kRedToBlueMax, kGreenToBlueMax, kGreenToRedMax
   void SetAsCrossColorImage();
-  // TODO(vrabaud) ChannelBits is now used for wrap-around only but there are
-  //               hard coded values that need to be removed for a full
-  //               clean-up.
-  uint32_t ChannelBits() const { return 8; }
   WP2SampleFormat SampleFormat() const { return sample_format_; }
 
   // Returns whether alpha is used and whether it is a label image (ARB unused).
@@ -705,9 +701,12 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
 // Fills ranges of ARGB symbols according to the transforms applied to the
 // image. 'num_colors' is the number of colors used in the palette if any (it is
 // unused if no color indexing transform is present).
-void GetARGBRanges(const TransformType* transforms, uint32_t num_transforms,
-                   WP2SampleFormat format, uint32_t num_colors,
-                   int16_t minima_range[4], int16_t maxima_range[4]);
+// If 'transforms' is not one of the official sets of transforms you can specify
+// its length with 'num_transforms'.
+void GetARGBRanges(const TransformType* transforms, WP2SampleFormat format,
+                   uint32_t num_colors, int16_t minima_range[4],
+                   int16_t maxima_range[4],
+                   uint32_t num_transforms = kPossibleTransformCombinationSize);
 
 }  // namespace WP2L
 

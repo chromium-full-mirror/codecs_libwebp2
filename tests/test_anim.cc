@@ -173,24 +173,24 @@ TEST(AnimTest, Fail) {
 
 //------------------------------------------------------------------------------
 
-Metadata CreateMetadata(const char* const exif, const char* const xmp) {
+Metadata CreateMetadata(const char* const xmp, const char* const exif) {
   Metadata metadata;
-  if (exif != nullptr) {
-    WP2_ASSERT_STATUS(
-        metadata.exif.CopyFrom((const uint8_t*)exif, std::strlen(exif)));
-  }
   if (xmp != nullptr) {
     WP2_ASSERT_STATUS(
         metadata.xmp.CopyFrom((const uint8_t*)xmp, std::strlen(xmp)));
+  }
+  if (exif != nullptr) {
+    WP2_ASSERT_STATUS(
+        metadata.exif.CopyFrom((const uint8_t*)exif, std::strlen(exif)));
   }
   return metadata;
 }
 
 TEST(AnimTest, Metadata) {
-  const Metadata metadata_good(CreateMetadata("exif", nullptr));
+  const Metadata metadata_good(CreateMetadata(nullptr, "exif"));
   const Metadata metadata_bad1(CreateMetadata("bAd", "BaD"));
   const Metadata metadata_bad2(CreateMetadata("spamely", "spam spam"));
-  const Metadata metadata_bad3(CreateMetadata(nullptr, "xmp"));
+  const Metadata metadata_bad3(CreateMetadata("xmp", nullptr));
   ArgbBuffer decoded_image;
   ASSERT_WP2_OK(decoded_image.metadata_.CopyFrom(metadata_bad3));
 

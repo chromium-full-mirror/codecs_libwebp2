@@ -32,11 +32,11 @@ TEST(MetadataTest, MinChunkSize) {
 
   Metadata& a = original.metadata_;
   ASSERT_WP2_OK(a.iccp.Resize(1, /*keep_bytes=*/false));
-  ASSERT_WP2_OK(a.exif.Resize(1, /*keep_bytes=*/false));
   ASSERT_WP2_OK(a.xmp.Resize(1, /*keep_bytes=*/false));
+  ASSERT_WP2_OK(a.exif.Resize(1, /*keep_bytes=*/false));
   std::fill(a.iccp.bytes, a.iccp.bytes + a.iccp.size, 42);
-  std::fill(a.exif.bytes, a.exif.bytes + a.exif.size, 43);
   std::fill(a.xmp.bytes, a.xmp.bytes + a.xmp.size, 44);
+  std::fill(a.exif.bytes, a.exif.bytes + a.exif.size, 43);
 
   MemoryWriter memory_writer;
   ASSERT_WP2_OK(Encode(original, &memory_writer));
@@ -44,8 +44,8 @@ TEST(MetadataTest, MinChunkSize) {
   const Metadata& b = decoded.metadata_;
 
   EXPECT_TRUE(testing::HasSameData(a.iccp, b.iccp));
-  EXPECT_TRUE(testing::HasSameData(a.exif, b.exif));
   EXPECT_TRUE(testing::HasSameData(a.xmp, b.xmp));
+  EXPECT_TRUE(testing::HasSameData(a.exif, b.exif));
 }
 
 //------------------------------------------------------------------------------
@@ -59,11 +59,11 @@ TEST(MetadataTest, MaxChunkSize) {
   Metadata& a = original.metadata_;
   // ICC needs to reserve 1 byte for the ICC type. Hence the '-1':
   ASSERT_WP2_OK(a.iccp.Resize(kMaxChunkSize - 1, /*keep_bytes=*/false));
-  ASSERT_WP2_OK(a.exif.Resize(kMaxChunkSize, /*keep_bytes=*/false));
   ASSERT_WP2_OK(a.xmp.Resize(kMaxChunkSize, /*keep_bytes=*/false));
+  ASSERT_WP2_OK(a.exif.Resize(kMaxChunkSize, /*keep_bytes=*/false));
   std::fill(a.iccp.bytes, a.iccp.bytes + a.iccp.size, 42);
-  std::fill(a.exif.bytes, a.exif.bytes + a.exif.size, 43);
   std::fill(a.xmp.bytes, a.xmp.bytes + a.xmp.size, 44);
+  std::fill(a.exif.bytes, a.exif.bytes + a.exif.size, 43);
 
   MemoryWriter memory_writer;
   ASSERT_WP2_OK(Encode(original, &memory_writer));
@@ -71,8 +71,8 @@ TEST(MetadataTest, MaxChunkSize) {
   const Metadata& b = decoded.metadata_;
 
   EXPECT_TRUE(testing::HasSameData(a.iccp, b.iccp));
-  EXPECT_TRUE(testing::HasSameData(a.exif, b.exif));
   EXPECT_TRUE(testing::HasSameData(a.xmp, b.xmp));
+  EXPECT_TRUE(testing::HasSameData(a.exif, b.exif));
 }
 
 //------------------------------------------------------------------------------
@@ -89,10 +89,10 @@ TEST(MetadataTest, MaxChunkSizePlusOne) {
   MemoryWriter memory_writer;
   ASSERT_EQ(Encode(original, &memory_writer), WP2_STATUS_INVALID_PARAMETER);
 
-  swap(original.metadata_.iccp, original.metadata_.exif);
+  swap(original.metadata_.iccp, original.metadata_.xmp);
   ASSERT_EQ(Encode(original, &memory_writer), WP2_STATUS_INVALID_PARAMETER);
 
-  swap(original.metadata_.exif, original.metadata_.xmp);
+  swap(original.metadata_.xmp, original.metadata_.exif);
   ASSERT_EQ(Encode(original, &memory_writer), WP2_STATUS_INVALID_PARAMETER);
 }
 

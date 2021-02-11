@@ -103,7 +103,6 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
   // VisualDebug
-  Vector<CodedBlockBase> all_blocks;
   ArgbBuffer debug_output;  // Tile view of 'config.info->debug_output'
   Plane16 vd_plane;         // Visual debug plane.
   Plane16 vd_block_view;    // View of vd_plane for the current block.
@@ -337,7 +336,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     if (VDMatch(config, "blocks")) {
-      WP2_CHECK_ALLOC_OK(all_blocks.push_back(std::move(cb)));
+      WP2_CHECK_STATUS(cb.Draw(config, *tile, gparams, &debug_output));
     }
 #endif  // WP2_REDUCE_BINARY_SIZE
   }
@@ -372,16 +371,6 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   // VisualDebug
   if (VDMatch(config, "original") || VDMatch(config, "compressed")) {
     ApplyVDebugBeforeAfter(config, gparams.transf_, *tile, &debug_output);
-  } else if (VDMatch(config, "blocks")) {
-    YUVPlane non_padded;
-    WP2_CHECK_STATUS(non_padded.SetView(
-        tile->yuv_output, {0, 0, tile->rect.width, tile->rect.height}));
-    WP2_CHECK_STATUS(non_padded.Export(
-        gparams.transf_, /*resize_if_needed=*/false, &debug_output));
-    for (const CodedBlockBase& cblk : all_blocks) {
-      WP2_CHECK_STATUS(cblk.Draw(config, tile->rect.x, tile->rect.y,
-                                 gparams, &debug_output));
-    }
   } else if (VDMatch(config, "filter-block-map")) {
     tile->block_map.ApplyVDebug(config, &debug_output);
   } else if (!vd_plane.IsEmpty()) {

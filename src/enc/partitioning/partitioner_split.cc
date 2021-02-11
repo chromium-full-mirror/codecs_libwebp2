@@ -36,22 +36,42 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
-constexpr SplitRecursePartitioner::SplitInfo
-    SplitRecursePartitioner::kNoSplitInfo;
-
 WP2Status SplitRecursePartitioner::Init(const EncoderConfig& config,
                                         const YUVPlane& yuv,
                                         const Rectangle& tile_rect,
                                         PartitionScoreFunc* const score_func) {
   WP2_CHECK_STATUS(Partitioner::Init(config, yuv, tile_rect, score_func));
-  WP2_CHECK_STATUS(split_info_.Resize(num_block_cols_, num_block_rows_));
   return WP2_STATUS_OK;
+}
+
+// Returns true if the given split pattern (given as the whole block + sub
+// blocks) is compatible with the given forced blocks.
+static bool IsCompatibleWithForcedBlocks(
+    const Block& block, Block* sub_blocks, uint32_t num_sub_blocks,
+    const VectorNoCtor<Block>& forced_blocks) {
+  auto forced_block_it =
+      std::lower_bound(forced_blocks.begin(), forced_blocks.end(), block);
+  while (forced_block_it != forced_blocks.end() &&
+         (forced_block_it->y() < block.y() + block.h())) {
+    if (block.rect().Contains(forced_block_it->rect())) {
+      if (num_sub_blocks == 1 && block.dim() != forced_block_it->dim()) {
+        return false;
+      }
+      for (uint32_t i = 0; i < num_sub_blocks; ++i) {
+        if (sub_blocks[i].rect().Intersects(forced_block_it->rect()) &&
+            !sub_blocks[i].rect().Contains(forced_block_it->rect())) {
+          return false;
+        }
+      }
+    }
+    ++forced_block_it;
+  }
+  return true;
 }
 
 WP2Status SplitRecursePartitioner::GetBestPartition(
     const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
   std::fill(occupancy_.begin(), occupancy_.end(), false);
-  split_info_.Fill(kNoSplitInfo);
   const uint32_t max_num_blocks = num_block_cols_ * num_block_rows_;
   uint32_t max_num_blocks_left = max_num_blocks;
 
@@ -63,135 +83,77 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
   WP2_CHECK_ALLOC_OK(forced_blocks.resize(blocks->size()));
   std::copy(blocks->begin(), blocks->end(), forced_blocks.begin());
   std::sort(forced_blocks.begin(), forced_blocks.end());
+  blocks->clear();
 
-  // Use a front manager to easily browse the blocks.
-  FrontMgrLexico front_mgr;
-  WP2_CHECK_STATUS(front_mgr.Init(config_->partition_set,
-                                  config_->partition_snapping, src_->Y.w_,
-                                  src_->Y.h_));
-  Vector<SplitPattern> patterns;
-  WP2_CHECK_ALLOC_OK(patterns.reserve(10));  // maximum 10 ways to split a block
+  SplitIteratorLexico it;
+  WP2_CHECK_STATUS(it.Init(config_->partition_set, config_->partition_snapping,
+                           src_->Y.w_, src_->Y.h_));
   BlockScoreFunc* const score_func = (BlockScoreFunc*)score_func_;
 
-  while (!front_mgr.Done()) {
-    const Block max_block = front_mgr.GetMaxPossibleBlock();
+  while (!it.Done()) {
+    assert(max_num_blocks_left > 0);
+    const SplitIteratorRecurse::SplitInfo split_info = it.CurrentBlock();
 
-    // Binary search to find if 'max_block' is already one of the forced blocks.
-    const auto forced_block_it =
-        std::lower_bound(forced_blocks.begin(), forced_blocks.end(), max_block);
+    if (split_info.splittable) {
+      // Get all split patterns and keep the one with the best score.
+      int32_t best_pattern_idx = -1;
+      float best_score = 0.f;
 
-    if (forced_block_it != forced_blocks.end() &&
-        forced_block_it->x() == max_block.x() &&
-        forced_block_it->y() == max_block.y()) {
-      const Block block = *forced_block_it;
-      assert(block.dim() != BLK_LAST);
-      WP2_CHECK_ALLOC_OK(front_mgr.UseSize(block.dim(), /*ind=*/0u, nullptr,
-                                           /*use_block=*/true));
+      const uint32_t num_patterns = it.NumSplitPatterns();
+      for (uint32_t split_idx = 0; split_idx < num_patterns; ++split_idx) {
+        Block sub_blocks[4];
+        const uint32_t num_sub_blocks =
+            it.GetSplitPatternBlocks(split_idx, sub_blocks);
+
+        // Handle forced blocks. Skip configurations which don't match the
+        // forced blocks.
+        const Block& block = it.CurrentBlock().block;
+        if (!forced_blocks.empty() &&
+            !IsCompatibleWithForcedBlocks(block, sub_blocks, num_sub_blocks,
+                                          forced_blocks)) {
+          continue;
+        }
+
+        float score;
+        WP2_CHECK_STATUS(
+            score_func->ComputeScore(sub_blocks, num_sub_blocks, &score));
+        if (best_pattern_idx == -1 || score > best_score) {
+          best_pattern_idx = split_idx;
+          best_score = score;
+        }
+      }
+      assert(best_pattern_idx != -1);
+
+      // Remember the decision.
+      it.SplitCurrentBlock(best_pattern_idx);
+      WP2_CHECK_STATUS(progress.AdvanceBy(0.));  // Nothing decided.
+    } else {
+      const Block& block = split_info.block;
+      // This 'block' was decided as is with no possibility of recursion.
+      assert(IsBlockValid(block, block, forced_blocks.size()));
+      WP2_CHECK_REDUCED_STATUS(
+          RegisterOrderForVDebug(0, 0, block, blocks->size(), max_num_blocks));
+      WP2_CHECK_ALLOC_OK(blocks->push_back(block));
       WP2_CHECK_STATUS(score_func_->Use(block));
+
+      // The following instructions are done only for assertions/debug
+      // because the front manager should handle everything, except for
+      // the forced blocks but these are checked above.
+      assert((Occupy(block), true));
+      assert(max_num_blocks_left >= block.w() * block.h());
+      max_num_blocks_left -= block.w() * block.h();
+      assert(block.dim() != BLK_LAST);
+
       WP2_CHECK_STATUS(
           progress.AdvanceBy(1. * block.rect().GetArea() / max_num_blocks));
-    } else {
-      assert(max_num_blocks_left > 0);
-
-      // Retrieve the previous decision to split this block, if any.
-      const SplitInfo& split_info = GetSplitInfo(max_block.x(), max_block.y());
-      if (split_info == kNoSplitInfo || split_info.recursive) {
-        // Nothing decided or recursive allowed: try more split patterns.
-        Block block;
-        if (split_info == kNoSplitInfo) {
-          block =
-              Block(max_block.x(), max_block.y(),
-                    GetMaxFittingBlockSize(max_block, forced_blocks.size()));
-        } else {
-          block = Block(max_block.x(), max_block.y(), split_info.size);
-        }
-        assert(IsBlockValid(block, max_block, forced_blocks.size()));
-        assert(IsSplitInfo(block, split_info));
-
-        // Get all split patterns and keep the one with the best score.
-        patterns.clear();
-        GetSplitPatterns(config_->partition_set, block.dim(), &patterns);
-        SplitPattern best_pattern;
-        if (patterns.size() == 1) {
-          best_pattern = patterns.front();
-        } else {
-          best_pattern = {/*num_blocks=*/0, {BLK_LAST}};
-          float best_score = 0.f;
-          for (const SplitPattern& pattern : patterns) {
-            Block pattern_blocks[4];
-            GetSplitPatternBlocks(block, pattern, pattern_blocks);
-
-            float score;
-            WP2_CHECK_STATUS(score_func->ComputeScore(
-                pattern_blocks, pattern.num_blocks, &score));
-            if (best_pattern.num_blocks == 0 || score > best_score) {
-              best_pattern = pattern;
-              best_score = score;
-            }
-          }
-          assert(best_pattern.num_blocks > 0);
-        }
-
-        // Remember the decision.
-        Block best_pattern_blocks[4];
-        GetSplitPatternBlocks(block, best_pattern, best_pattern_blocks);
-        for (uint32_t i = 0; i < best_pattern.num_blocks; ++i) {
-          const bool recursive = (best_pattern.num_blocks > 1 &&
-                                  best_pattern_blocks[i].dim() != BLK_4x4);
-          SetSplitInfo(best_pattern_blocks[i], recursive);
-          // TODO(yguyon): Recurse in fewer situations to save CPU.
-        }
-
-        WP2_CHECK_STATUS(progress.AdvanceBy(0.));  // Nothing decided.
-      } else {
-        // This 'block' was decided as is with no possibility of recursion.
-        const Block block =
-            Block(max_block.x(), max_block.y(), split_info.size);
-        assert(IsBlockValid(block, max_block, forced_blocks.size()));
-        assert(IsSplitInfo(block, split_info));
-        WP2_CHECK_REDUCED_STATUS(
-            RegisterOrderForVDebug(0, 0, block, blocks->size(),
-                                   max_num_blocks));
-        WP2_CHECK_ALLOC_OK(blocks->push_back(block));
-        WP2_CHECK_ALLOC_OK(front_mgr.UseSize(block.dim(), /*ind=*/0u, nullptr,
-                                             /*use_block=*/true));
-        WP2_CHECK_STATUS(score_func_->Use(block));
-
-        // The following instructions are done only for assertions/debug
-        // because the front manager should handle everything, except for
-        // the forced blocks but these are checked above.
-        assert((Occupy(block), true));
-        assert(max_num_blocks_left >= block.w() * block.h());
-        max_num_blocks_left -= block.w() * block.h();
-        assert(block.dim() != BLK_LAST);
-
-        WP2_CHECK_STATUS(
-            progress.AdvanceBy(1. * block.rect().GetArea() / max_num_blocks));
-      }
+      it.NextBlock();
     }
   }
   assert(max_num_blocks_left == 0);
   return WP2_STATUS_OK;
 }
 
-BlockSize SplitRecursePartitioner::GetMaxFittingBlockSize(
-    const Block& max_block, uint32_t num_forced_blocks) const {
-  BlockSize best_size = BLK_LAST;
-  const BlockSize* const sizes = GetBlockSizes(config_->partition_set);
-  for (const BlockSize* size = sizes; *size != BLK_LAST; ++size) {
-    const Block block = Block(max_block.x(), max_block.y(), *size);
-
-    if ((best_size == BLK_LAST ||
-         BlockWidth[*size] * BlockHeight[*size] >
-             BlockWidth[best_size] * BlockHeight[best_size]) &&
-        IsBlockValid(block, max_block, num_forced_blocks) &&
-        IsSplitInfo(block, kNoSplitInfo)) {
-      best_size = block.dim();
-    }
-  }
-  assert(best_size != BLK_LAST);
-  return best_size;
-}
+//------------------------------------------------------------------------------
 
 static BlockSize GetExactBlockSize(PartitionSet set, uint32_t w, uint32_t h) {
   const BlockSize s = GetBlockSize(std::max(1u, w), std::max(1u, h));
@@ -201,8 +163,8 @@ static BlockSize GetExactBlockSize(PartitionSet set, uint32_t w, uint32_t h) {
   return BLK_LAST;
 }
 
-void SplitRecursePartitioner::GetSplitPatterns(PartitionSet set, BlockSize size,
-                                               Vector<SplitPattern>* const p) {
+void SplitIteratorBase::GetSplitPatterns(PartitionSet set, BlockSize size,
+                                         Vector<SplitPattern>* const p) {
   assert(p->empty() && p->capacity() >= 10);
   if (IsBlockSizeInSet(set, size)) p->push_back_no_resize({1, {size}});
 
@@ -230,47 +192,185 @@ void SplitRecursePartitioner::GetSplitPatterns(PartitionSet set, BlockSize size,
   assert(!p->empty());
 }
 
-void SplitRecursePartitioner::GetSplitPatternBlocks(const Block& block,
-                                                    const SplitPattern& pattern,
-                                                    Block blocks[4]) {
-  assert(pattern.num_blocks >= 1 && pattern.num_blocks <= 4);
+void SplitIteratorBase::GetSplitPatternBlocks(const Block& block,
+                                              const SplitPattern& split_pattern,
+                                              Block* sub_blocks) {
+  assert(split_pattern.num_blocks >= 1 && split_pattern.num_blocks <= 4);
   // Treat this special case differently. Others can be done row by row.
   const bool is_2x4_2x2_2x2 =
-      (pattern.num_blocks == 3 &&
-       BlockHeight[pattern.block_sizes[0]] == block.h());
+      (split_pattern.num_blocks == 3 &&
+       BlockHeight[split_pattern.block_sizes[0]] == block.h());
   uint32_t num_blocks = 0, x = block.x(), y = block.y();
-  while (num_blocks < pattern.num_blocks) {
+  while (num_blocks < split_pattern.num_blocks) {
     if (x == block.x() + block.w()) {  // End of a row.
       // Start a new row aligned under the first block, unless 'is_2x4_2x2_2x2'.
-      x = blocks[is_2x4_2x2_2x2 ? 1 : 0].x();
-      y += blocks[is_2x4_2x2_2x2 ? 1 : 0].h();
+      x = sub_blocks[is_2x4_2x2_2x2 ? 1 : 0].x();
+      y += sub_blocks[is_2x4_2x2_2x2 ? 1 : 0].h();
     }
     assert(x < block.x() + block.w() && y < block.y() + block.h());
-    blocks[num_blocks] = Block(x, y, pattern.block_sizes[num_blocks]);
-    x += blocks[num_blocks].w();
+    sub_blocks[num_blocks] = Block(x, y, split_pattern.block_sizes[num_blocks]);
+    x += sub_blocks[num_blocks].w();
     ++num_blocks;
   }
 }
 
-const SplitRecursePartitioner::SplitInfo& SplitRecursePartitioner::GetSplitInfo(
+WP2Status SplitIteratorBase::Init(PartitionSet partition_set, bool snapped,
+                                  uint32_t width, uint32_t height) {
+  partition_set_ = partition_set;
+  snapped_ = snapped;
+  WP2_CHECK_STATUS(front_mgr_.InitBase(width, height));
+
+  const BlockSize* const sizes = GetBlockSizes(partition_set_);
+  for (const BlockSize* size = sizes; *size != BLK_LAST; ++size) {
+    WP2_CHECK_ALLOC_OK(split_patterns_[(uint32_t)*size].reserve(10));
+    GetSplitPatterns(partition_set_, *size, &split_patterns_[(uint32_t)*size]);
+  }
+
+  return WP2_STATUS_OK;
+}
+
+uint32_t SplitIteratorBase::NumSplitPatterns() const {
+  const SplitInfo& current_block = CurrentBlock();
+  if (!current_block.splittable) return 1;
+  return split_patterns_[current_block.block.dim()].size();
+}
+
+uint32_t SplitIteratorBase::GetSplitPatternBlocks(uint32_t split_idx,
+                                                  Block sub_blocks[4]) const {
+  assert(CurrentBlock().splittable);
+  const Block& current_block = CurrentBlock().block;
+  assert(split_idx < SplitPatterns(current_block.dim()).size());
+  const SplitPattern& split_pattern =
+      SplitPatterns(current_block.dim())[split_idx];
+  GetSplitPatternBlocks(current_block, split_pattern, sub_blocks);
+  return split_pattern.num_blocks;
+}
+
+bool SplitIteratorBase::Done() const { return front_mgr_.Done(); }
+
+//------------------------------------------------------------------------------
+
+constexpr SplitIteratorLexico::LightSplitInfo SplitIteratorLexico::kNoSplitInfo;
+
+WP2Status SplitIteratorLexico::Init(PartitionSet partition_set, bool snapped,
+                                    uint32_t width, uint32_t height) {
+  WP2_CHECK_STATUS(
+      SplitIteratorBase::Init(partition_set, snapped, width, height));
+  WP2_CHECK_STATUS(split_info_.Resize(SizeBlocks(width), SizeBlocks(height)));
+  split_info_.Fill(kNoSplitInfo);
+  SetCurrentBlock(/*bx=*/0, /*by=*/0);
+  return WP2_STATUS_OK;
+}
+
+void SplitIteratorLexico::SplitCurrentBlock(uint32_t idx) {
+  assert(CurrentBlock().splittable);
+  const Block current_block = CurrentBlock().block;
+  assert(idx < SplitPatterns(current_block.dim()).size());
+  const SplitPattern& split_pattern = SplitPatterns(current_block.dim())[idx];
+
+  Block blocks[4];
+  GetSplitPatternBlocks(current_block, split_pattern, blocks);
+
+  for (uint32_t i = 0; i < split_pattern.num_blocks; ++i) {
+    // TODO(yguyon): Recurse in fewer situations to save CPU.
+    const bool recursive =
+        (split_pattern.num_blocks > 1 && blocks[i].dim() != BLK_4x4);
+    SetSplitInfo(blocks[i], recursive);
+    if (i == 0) current_block_ = {blocks[i], recursive};
+  }
+}
+
+void SplitIteratorLexico::NextBlock() {
+  assert(!CurrentBlock().splittable);
+  front_mgr_.Use(CurrentBlock().block);
+  if (!Done()) {
+    uint32_t bx, by;
+    front_mgr_.FindNextLexico(/*added_last=*/CurrentBlock().block, &bx, &by);
+    SetCurrentBlock(bx, by);
+  }
+}
+
+const SplitIteratorBase::SplitInfo& SplitIteratorLexico::CurrentBlock() const {
+  return current_block_;
+}
+
+void SplitIteratorLexico::SetCurrentBlock(uint32_t bx, uint32_t by) {
+  // Retrieve the previous decision to split this block, if any.
+  const LightSplitInfo& split_info = GetSplitInfo(bx, by);
+  if (split_info == kNoSplitInfo) {
+    const Block bounds = front_mgr_.LargestPossibleBlockAt(bx, by, snapped_);
+    const BlockSize size = GetFittingBlockSize(partition_set_, bounds.dim());
+    const bool splittable = (SplitPatterns(size).size() > 1);
+    current_block_ = {{bx, by, size}, splittable};
+  } else {
+    current_block_ = {{bx, by, split_info.size}, split_info.splittable};
+  }
+}
+
+const SplitIteratorLexico::LightSplitInfo& SplitIteratorLexico::GetSplitInfo(
     uint32_t x, uint32_t y) const {
   return split_info_.At(x, y);
 }
-bool SplitRecursePartitioner::IsSplitInfo(const Block& block,
-                                          const SplitInfo& split_info) const {
-  const SplitInfo* row = &split_info_.At(block.x(), block.y());
-  for (uint32_t y = 0; y < block.h(); ++y, row += split_info_.Step()) {
-    for (uint32_t x = 0; x < block.w(); ++x) {
-      if (row[x] != split_info) return false;
-    }
-  }
-  return true;
-}
-void SplitRecursePartitioner::SetSplitInfo(const Block& block, bool recursive) {
-  SplitInfo* row = &split_info_.At(block.x(), block.y());
+
+void SplitIteratorLexico::SetSplitInfo(const Block& block, bool recursive) {
+  LightSplitInfo* row = &split_info_.At(block.x(), block.y());
   for (uint32_t y = 0; y < block.h(); ++y, row += split_info_.Step()) {
     for (uint32_t x = 0; x < block.w(); ++x) row[x] = {block.dim(), recursive};
   }
+}
+
+//------------------------------------------------------------------------------
+
+WP2Status SplitIteratorRecurse::Init(PartitionSet partition_set, bool snapped,
+                                     uint32_t width, uint32_t height) {
+  WP2_CHECK_STATUS(
+      SplitIteratorBase::Init(partition_set, snapped, width, height));
+  WP2_CHECK_ALLOC_OK(block_queue_.reserve(kMaxBlockSize2));
+  SetCurrentBlockLexico();
+  return WP2_STATUS_OK;
+}
+
+void SplitIteratorRecurse::SplitCurrentBlock(uint32_t idx) {
+  assert(block_queue_.back().splittable);
+  const Block current_block = block_queue_.back().block;
+  assert(idx < SplitPatterns(current_block.dim()).size());
+  block_queue_.pop_back();
+
+  const SplitPattern& split_pattern = SplitPatterns(current_block.dim())[idx];
+
+  Block blocks[4];
+  GetSplitPatternBlocks(current_block, split_pattern, blocks);
+
+  for (int32_t i = split_pattern.num_blocks - 1; i >= 0; --i) {
+    const Block& block = blocks[i];
+    const bool splittable =
+        (split_pattern.num_blocks > 1 && SplitPatterns(block.dim()).size() > 1);
+    block_queue_.push_back_no_resize({block, splittable});
+  }
+}
+
+void SplitIteratorRecurse::NextBlock() {
+  assert(!block_queue_.back().splittable);
+  front_mgr_.Use(block_queue_.back().block);
+  block_queue_.pop_back();
+
+  if (block_queue_.empty()) {
+    SetCurrentBlockLexico();
+  }
+}
+
+const SplitIteratorRecurse::SplitInfo& SplitIteratorRecurse::CurrentBlock()
+    const {
+  return block_queue_.back();
+}
+
+void SplitIteratorRecurse::SetCurrentBlockLexico() {
+  uint32_t bx, by;
+  front_mgr_.FindNextLexico(&bx, &by);
+  const Block bounds = front_mgr_.LargestPossibleBlockAt(bx, by, snapped_);
+  const BlockSize size = GetFittingBlockSize(partition_set_, bounds.dim());
+  const bool splittable = (SplitPatterns(size).size() > 1);
+  block_queue_.push_back_no_resize({{bx, by, size}, splittable});
 }
 
 //------------------------------------------------------------------------------

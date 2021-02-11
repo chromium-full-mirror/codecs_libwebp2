@@ -20,8 +20,8 @@
 #ifndef WP2_WP2_FORMAT_CONSTANTS_H_
 #define WP2_WP2_FORMAT_CONSTANTS_H_
 
-#include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 namespace WP2 {
 
@@ -323,6 +323,10 @@ static constexpr uint32_t kHistogramBitsMax = 9;
 // but most images require at the very most 200 histograms. It also impacts the
 // amount of RAM used for decoding.
 static constexpr uint32_t kMaxHistogramImageSize = 1500;
+// Maximum abslute values of the residuals. Those values should be chosen so
+// that values in this range can fit in the ANS range (it's statically checked).
+static constexpr int16_t kMaxAbsResidual8 = 3 * (1 << 8);
+static constexpr int16_t kMaxAbsResidual10 = 3 * (1 << 10);
 
 // Minimum and maximum value of transform bits (to downscale the image).
 static constexpr uint32_t kTransformBitsMin = 2;
@@ -347,29 +351,36 @@ enum class TransformType {
   kNum
 };
 // Possible image transform combinations that can be applied.
-static constexpr TransformType kPossibleTransformCombinations[][3] = {
-    // No transform.
-    {TransformType::kNum, TransformType::kNum, TransformType::kNum},
-    // Only one.
-    {TransformType::kGroup4, TransformType::kNum, TransformType::kNum},
-    {TransformType::kSubtractGreen, TransformType::kNum, TransformType::kNum},
-    {TransformType::kColorIndexing, TransformType::kNum, TransformType::kNum},
-    {TransformType::kPredictor, TransformType::kNum, TransformType::kNum},
-    {TransformType::kCrossColor, TransformType::kNum, TransformType::kNum},
-    // Allowed pairs.
-    {TransformType::kSubtractGreen, TransformType::kPredictor,
-     TransformType::kNum},
-    {TransformType::kSubtractGreen, TransformType::kCrossColor,
-     TransformType::kNum},
-    {TransformType::kColorIndexing, TransformType::kPredictor,
-     TransformType::kNum},
-    {TransformType::kPredictor, TransformType::kCrossColor,
-     TransformType::kNum},
-    // Triplets.
-    {TransformType::kSubtractGreen, TransformType::kPredictor,
-     TransformType::kCrossColor},
-    {TransformType::kColorIndexing, TransformType::kPredictor,
-     TransformType::kCrossColor}};
+// Must be filled with TransformType::kNum after the last transform.
+static constexpr uint32_t kPossibleTransformCombinationSize = 3;
+static constexpr TransformType
+    kPossibleTransformCombinations[][kPossibleTransformCombinationSize] = {
+        // No transform.
+        {TransformType::kNum, TransformType::kNum, TransformType::kNum},
+        // Only one.
+        {TransformType::kGroup4, TransformType::kNum, TransformType::kNum},
+        {TransformType::kSubtractGreen, TransformType::kNum,
+         TransformType::kNum},
+        {TransformType::kColorIndexing, TransformType::kNum,
+         TransformType::kNum},
+        {TransformType::kPredictor, TransformType::kNum, TransformType::kNum},
+        {TransformType::kCrossColor, TransformType::kNum, TransformType::kNum},
+        // Allowed pairs.
+        {TransformType::kSubtractGreen, TransformType::kPredictor,
+         TransformType::kNum},
+        {TransformType::kSubtractGreen, TransformType::kCrossColor,
+         TransformType::kNum},
+        {TransformType::kColorIndexing, TransformType::kPredictor,
+         TransformType::kNum},
+        {TransformType::kPredictor, TransformType::kCrossColor,
+         TransformType::kNum},
+        // Triplets.
+        {TransformType::kSubtractGreen, TransformType::kPredictor,
+         TransformType::kCrossColor},
+        {TransformType::kColorIndexing, TransformType::kPredictor,
+         TransformType::kCrossColor}};
+static constexpr uint32_t kPossibleTransformCombinationsNum =
+    std::extent<decltype(kPossibleTransformCombinations), 0>::value;
 
 }  // namespace WP2L
 

@@ -228,13 +228,13 @@ static WP2Status Impl(const int16_t* const argb, uint32_t width,
   return WP2_STATUS_OK;
 }
 
-WP2Status Group4Encode(const int16_t* const argb, uint32_t width,
-                       uint32_t height, uint32_t num_colors,
+WP2Status Group4Encode(const Buffer_s16& buffer, uint32_t num_colors,
                        bool use_move_to_front, int effort,
                        const WP2::ProgressRange& progress,
                        WP2::ANSEncBase* const enc,
                        EncodeInfo* const encode_info) {
   WP2::SymbolsInfo info;
+  const uint32_t width = buffer.width, height = buffer.height;
   InitGroup4(width, num_colors, &info);
 
   MoveToFrontCache mtf;
@@ -248,6 +248,7 @@ WP2Status Group4Encode(const int16_t* const argb, uint32_t width,
   WP2::SymbolRecorder sr;
   WP2_CHECK_STATUS(sr.Allocate(info, /*num_records=*/0));
   WP2::ANSEncNoop noop;
+  const int16_t* const argb = buffer.data;
   WP2_CHECK_STATUS(Impl(argb, width, height, first_impl_progress, &mtf, &noop,
                         &sr, /*encode_info=*/nullptr));
 

@@ -92,7 +92,7 @@ check_roundtrip "${TESTDATA_DIR}/source3_222x167.jpg" 31.0 22.0 "-pass 3"
 
 check_roundtrip "${TESTDATA_DIR}/source1_64x48.png" 32.0 22.0 "-alpha_q 80"
 
-${DWP2} -i "${TMP_WP2}"
+${DWP2} -info "${TMP_WP2}"
 
 # MSAN check on specific crash vectors found by the fuzzer.
 ${CWP2} ${TESTDATA_DIR}/specific/testcase-6544524677218304 || echo "OK"

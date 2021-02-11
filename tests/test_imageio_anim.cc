@@ -73,12 +73,12 @@ TEST(ReadImageTest, AnimationMetadata) {
   ASSERT_WP2_OK(input.Resize(128 + 1, 128 * 2 + 1));
   input.Fill(Argb32b{0xFFu, 0xFFu, 0xFFu, 0xFFu});
 
-  const Data good_exif = CreateData("good exif");
   const Data good_iccp = CreateData("good iccp");
   const Data good_xmp = CreateData("good xmp");
-  ASSERT_WP2_OK(input.metadata_.exif.CopyFrom(good_exif.bytes, good_exif.size));
+  const Data good_exif = CreateData("good exif");
   ASSERT_WP2_OK(input.metadata_.iccp.CopyFrom(good_iccp.bytes, good_iccp.size));
   ASSERT_WP2_OK(input.metadata_.xmp.CopyFrom(good_xmp.bytes, good_xmp.size));
+  ASSERT_WP2_OK(input.metadata_.exif.CopyFrom(good_exif.bytes, good_exif.size));
 
   // Encode.
   AnimationEncoder encoder;
@@ -93,9 +93,9 @@ TEST(ReadImageTest, AnimationMetadata) {
   {
     ArgbBuffer decoded;
     ASSERT_WP2_OK(ReadImage(output.mem_, output.size_, &decoded));
-    EXPECT_TRUE(testing::HasSameData(decoded.metadata_.exif, good_exif));
     EXPECT_TRUE(testing::HasSameData(decoded.metadata_.iccp, good_iccp));
     EXPECT_TRUE(testing::HasSameData(decoded.metadata_.xmp, good_xmp));
+    EXPECT_TRUE(testing::HasSameData(decoded.metadata_.exif, good_exif));
   }
 
   // Decode and check metadata for all frames.
@@ -105,9 +105,9 @@ TEST(ReadImageTest, AnimationMetadata) {
     bool is_last_frame = true;
     do {
       ASSERT_WP2_OK(image_reader.ReadFrame(&is_last_frame));
-      EXPECT_TRUE(testing::HasSameData(decoded.metadata_.exif, good_exif));
       EXPECT_TRUE(testing::HasSameData(decoded.metadata_.iccp, good_iccp));
       EXPECT_TRUE(testing::HasSameData(decoded.metadata_.xmp, good_xmp));
+      EXPECT_TRUE(testing::HasSameData(decoded.metadata_.exif, good_exif));
     } while (!is_last_frame);
   }
 }

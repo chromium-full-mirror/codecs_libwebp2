@@ -133,8 +133,8 @@ WP2Status DecodeTileChunkSize(const GlobalParams& params,
                               uint32_t* const tile_chunk_size);
 
 WP2Status DecodeMetadata(DataSource* const data_source,
-                         const BitstreamFeatures& features, Data* const exif,
-                         Data* const xmp);
+                         const BitstreamFeatures& features,
+                         Data* const xmp, Data* const exif);
 
 // These two Skip() functions do not attempt to read anything past the chunk
 // size; if data length check through reading is necessary but data copy should

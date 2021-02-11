@@ -1075,19 +1075,19 @@ void Params::PrintInfo() {
       const Metadata& mi = in_.metadata_;
       const Metadata& mo = out_.metadata_;
       snprintf(tmp, sizeof(tmp),  // 6 spaces to align with "Size: ".
-               "      %s %u B of metadata (ICCP %u, EXIF %u, XMP %u)",
+               "      %s %u B of metadata (ICCP %u, XMP %u, EXIF %u)",
                keep_metadata_ ? "included" : "ignored",
-               (uint32_t)(mi.iccp.size + mi.exif.size + mi.xmp.size),
-               (uint32_t)mi.iccp.size, (uint32_t)mi.exif.size,
-               (uint32_t)mi.xmp.size);
+               (uint32_t)(mi.iccp.size + mi.xmp.size + mi.exif.size),
+               (uint32_t)mi.iccp.size, (uint32_t)mi.xmp.size,
+               (uint32_t)mi.exif.size);
       msg.emplace_back(tmp);
       if (!keep_metadata_) {
         assert(out_.metadata_.IsEmpty());
-      } else if (mi.iccp.size != mo.iccp.size || mi.exif.size != mo.exif.size ||
-                 mi.xmp.size != mo.xmp.size) {
-        snprintf(tmp, sizeof(tmp), " decoded as ICCP %u, EXIF %u, XMP %u",
-                 (uint32_t)mo.iccp.size, (uint32_t)mo.exif.size,
-                 (uint32_t)mo.xmp.size);
+      } else if (mi.iccp.size != mo.iccp.size || mi.xmp.size != mo.xmp.size ||
+                 mi.exif.size != mo.exif.size) {
+        snprintf(tmp, sizeof(tmp), " decoded as ICCP %u, XMP %u, EXIF %u",
+                 (uint32_t)mo.iccp.size, (uint32_t)mo.xmp.size,
+                 (uint32_t)mo.exif.size);
         msg.back() += tmp;
       }
     }

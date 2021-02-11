@@ -286,7 +286,7 @@ static WP2Status HasMetadata(DataSource* const data_source,
 
 WP2Status DecodeMetadata(DataSource* const data_source,
                          const BitstreamFeatures& features,
-                         Data* const exif, Data* const xmp) {
+                         Data* const xmp, Data* const exif) {
   bool has_xmp, has_exif;
   WP2_CHECK_STATUS(HasMetadata(data_source, features, &has_xmp, &has_exif));
   if (has_xmp) {

@@ -225,9 +225,9 @@ struct Metadata {
   Metadata(const Metadata&) = delete;
   Metadata(Metadata&&) = default;
 
-  Data exif;
   Data iccp;
   Data xmp;
+  Data exif;
 
   // Returns true is there is no metadata stored.
   bool IsEmpty() const;

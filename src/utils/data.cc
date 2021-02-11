@@ -82,29 +82,29 @@ void swap(Data& a, Data& b) {
 //------------------------------------------------------------------------------
 
 bool Metadata::IsEmpty() const {
-  if (iccp.size > 0 || exif.size > 0 || xmp.size > 0) {
+  if (iccp.size > 0 || xmp.size > 0 || exif.size > 0) {
     return false;
   }
   return true;
 }
 
 void Metadata::Clear() {
-  exif.Clear();
   iccp.Clear();
   xmp.Clear();
+  exif.Clear();
 }
 
 WP2Status Metadata::CopyFrom(const Metadata& src) {
-  WP2_CHECK_STATUS(exif.CopyFrom(src.exif.bytes, src.exif.size));
   WP2_CHECK_STATUS(iccp.CopyFrom(src.iccp.bytes, src.iccp.size));
   WP2_CHECK_STATUS(xmp.CopyFrom(src.xmp.bytes, src.xmp.size));
+  WP2_CHECK_STATUS(exif.CopyFrom(src.exif.bytes, src.exif.size));
   return WP2_STATUS_OK;
 }
 
 void swap(Metadata& a, Metadata& b) {
-  swap(a.exif, b.exif);
   swap(a.iccp, b.iccp);
   swap(a.xmp, b.xmp);
+  swap(a.exif, b.exif);
 }
 
 //------------------------------------------------------------------------------

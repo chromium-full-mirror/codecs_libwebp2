@@ -197,8 +197,8 @@ WP2_EXTERN WP2_NO_DISCARD WP2Status ExtractPreview(const uint8_t* data,
 // Clears any previous data. Returns WP2_STATUS_OK or an error.
 WP2_EXTERN WP2_NO_DISCARD WP2Status ExtractMetadata(const uint8_t* data,
                                                     size_t data_size,
-                                                    Data* exif, Data* iccp,
-                                                    Data* xmp);
+                                                    Data* iccp, Data* xmp,
+                                                    Data* exif);
 
 //------------------------------------------------------------------------------
 // Animation and incremental decoding

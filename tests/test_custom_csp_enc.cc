@@ -147,9 +147,9 @@ TEST_P(EncodeCustomCspTest, Comparison) {
       (matrix == Matrix::kRGB8 || matrix == Matrix::kRGB10) ? 99.f : 50.f));
 
   if (encode_metadata) {
-    EXPECT_TRUE(testing::HasSameData(dst.metadata_.exif, ref.metadata_.exif));
-    EXPECT_TRUE(testing::HasSameData(dst.metadata_.xmp, ref.metadata_.xmp));
     EXPECT_TRUE(testing::HasSameData(dst.metadata_.iccp, ref.metadata_.iccp));
+    EXPECT_TRUE(testing::HasSameData(dst.metadata_.xmp, ref.metadata_.xmp));
+    EXPECT_TRUE(testing::HasSameData(dst.metadata_.exif, ref.metadata_.exif));
   }
 }
 

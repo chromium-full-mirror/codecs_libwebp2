@@ -483,7 +483,7 @@ void Decoder::DecodeAvailableData() {
       case State::Stage::WAITING_FOR_METADATA_CHUNKS: {
         state_->status =
             DecodeMetadata(state_->data_source, features_,
-                           &output_->metadata_.exif, &output_->metadata_.xmp);
+                           &output_->metadata_.xmp, &output_->metadata_.exif);
         if (!state_->NextStage()) break;
         WP2_FALLTHROUGH;
       }

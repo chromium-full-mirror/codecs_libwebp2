@@ -930,15 +930,27 @@ void Block::Draw(YUVPlane* const yuv) const {
 
 //------------------------------------------------------------------------------
 
-WP2Status CodedBlockBase::Draw(const DecoderConfig& config, uint32_t tile_x,
-                               uint32_t tile_y, const GlobalParams& gparams,
+WP2Status CodedBlockBase::Draw(const DecoderConfig& config, const Tile& tile,
+                               const GlobalParams& gparams,
                                ArgbBuffer* const debug_output) const {
+  assert(VDMatch(config, "blocks"));
+  const uint32_t tile_x = tile.rect.x;
+  const uint32_t tile_y = tile.rect.y;
   const uint32_t x = x_pix(), bw = w_pix();
   const uint32_t y = y_pix(), bh = h_pix();
   const uint32_t w = std::min(bw, debug_output->width() - x);  // Border
   const uint32_t h = std::min(bh, debug_output->height() - y);
   const uint32_t mid_w = std::min(bw - 2, debug_output->width() - (x + 1));
   const uint32_t mid_h = std::min(bh - 2, debug_output->height() - (y + 1));
+
+  {    // Copy the decoded content in the block's sub-area.
+    YUVPlane tmp_yuv;
+    WP2_CHECK_STATUS(tmp_yuv.SetView(tile.yuv_output, {x, y, w, h}));
+    ArgbBuffer tmp_argb;
+    WP2_CHECK_STATUS(tmp_argb.SetView(*debug_output, {x, y, w, h}));
+    WP2_CHECK_STATUS(tmp_yuv.Export(gparams.transf_, /*resize_if_needed=*/false,
+                                    &tmp_argb));
+  }
 
   if (VDMatch(config, "partition")) {
     if (VDMatch(config, "split-tf")) {

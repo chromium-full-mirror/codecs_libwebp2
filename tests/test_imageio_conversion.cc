@@ -57,8 +57,8 @@ TEST_P(ComparisonTest, RGBAndYUV) {
                                expected_distortion));
   if (rgb_file_name == ccsp_file_name) {
     EXPECT_TRUE(testing::HasSameData(rgb.metadata_.iccp, metadata.iccp));
-    EXPECT_TRUE(testing::HasSameData(rgb.metadata_.exif, metadata.exif));
     EXPECT_TRUE(testing::HasSameData(rgb.metadata_.xmp, metadata.xmp));
+    EXPECT_TRUE(testing::HasSameData(rgb.metadata_.exif, metadata.exif));
   }
 }
 

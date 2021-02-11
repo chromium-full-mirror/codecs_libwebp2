@@ -60,7 +60,7 @@ struct Params {
   WP2::LogLevel log_level = WP2::LogLevel::DEFAULT;
   bool short_output = false;
   int print_distortion = -1;  // -1=off, >=0 -> (int)MetricType
-  bool print_summary = false;
+  bool print_info = false;
   bool no_metadata = false;
   WP2::Metadata forced_metadata;
   int bit_trace = 0;  // 0=none, 1=trace in bits, 2=trace in bytes
@@ -155,7 +155,7 @@ void HelpLong() {
           "overwrite destination if it exists "
           "(default=off unless out_file is explicit)");
   opt.Add("-short", "condense printed message");
-  opt.Add("-summary", "print summary and statistics");
+  opt.Add("-info", "print summary and statistics");
   opt.Add("-progress", "display encoding progression");
   opt.Add("-quiet", "don't print anything");
 #ifdef WP2_BITTRACE
@@ -265,27 +265,29 @@ WP2_NO_DISCARD WP2Status GetFilesToEncode(
 
 //------------------------------------------------------------------------------
 
-// Crops the canvas and resets the metadata of 'buffer' depending on 'params'.
+// Erases or replaces parts of 'metadata' depending on 'params'.
+WP2_NO_DISCARD
+WP2Status ForceMetadata(const Params& params, WP2::Metadata* const metadata) {
+  if (params.no_metadata) metadata->Clear();
+  if (!params.forced_metadata.iccp.IsEmpty()) {
+    WP2_CHECK_STATUS(metadata->iccp.CopyFrom(params.forced_metadata.iccp.bytes,
+                                             params.forced_metadata.iccp.size));
+  }
+  if (!params.forced_metadata.xmp.IsEmpty()) {
+    WP2_CHECK_STATUS(metadata->xmp.CopyFrom(params.forced_metadata.xmp.bytes,
+                                            params.forced_metadata.xmp.size));
+  }
+  if (!params.forced_metadata.exif.IsEmpty()) {
+    WP2_CHECK_STATUS(metadata->exif.CopyFrom(params.forced_metadata.exif.bytes,
+                                             params.forced_metadata.exif.size));
+  }
+  return WP2_STATUS_OK;
+}
+
+// Crops the 'buffer' depending on 'params'.
 WP2_NO_DISCARD
 WP2Status ApplyModifications(const char* const file, const Params& params,
-                             WP2::ArgbBuffer* const buffer,
-                             bool is_first_frame) {
-  if (params.no_metadata || !is_first_frame) buffer->metadata_.Clear();
-  const auto& metadata = params.forced_metadata;
-  if (is_first_frame && !metadata.IsEmpty()) {
-    if (!metadata.iccp.IsEmpty()) {
-      WP2_CHECK_STATUS(buffer->metadata_.iccp.CopyFrom(
-          metadata.iccp.bytes, metadata.iccp.size));
-    }
-    if (!metadata.xmp.IsEmpty()) {
-      WP2_CHECK_STATUS(buffer->metadata_.xmp.CopyFrom(
-          metadata.xmp.bytes, metadata.xmp.size));
-    }
-    if (!metadata.exif.IsEmpty()) {
-      WP2_CHECK_STATUS(buffer->metadata_.exif.CopyFrom(
-          metadata.exif.bytes, metadata.exif.size));
-    }
-  }
+                             WP2::ArgbBuffer* const buffer) {
   if (params.crop) {
     CHECK_STATUS(buffer->SetView(*buffer, params.crop_area),
                  "Error! Cropping operation of '%s' failed.", file);
@@ -315,12 +317,13 @@ WP2Status CompressAnimation(const WP2::FileList& frames,
     CHECK_STATUS(WP2::ReadImage(data.bytes, data.size, rgb_buffer,
                                 WP2::FileFormat::AUTO, params.log_level),
                  "Error! Cannot read input file '%s'", file_path);
-    if (i > 0 && !rgb_buffer->metadata_.IsEmpty()) {
+    if (i == 0) {
+      swap(metadata, rgb_buffer->metadata_);  // save for later call
+    } else if (!rgb_buffer->metadata_.IsEmpty()) {
       fprintf(stderr, "Warning: metadata from frame #%u will be ignored!\n",
               (uint32_t)(i + 1));
     }
-    WP2_CHECK_STATUS(ApplyModifications(file_path, params, rgb_buffer, i == 0));
-    if (i == 0) swap(metadata, rgb_buffer->metadata_);  // save for later call
+    WP2_CHECK_STATUS(ApplyModifications(file_path, params, rgb_buffer));
 
     if (refs != nullptr) {
       refs->emplace_back(rgb_buffer->format());
@@ -336,6 +339,7 @@ WP2Status CompressAnimation(const WP2::FileList& frames,
     const double elapsed = GetStopwatchTime() - start;
     fprintf(stderr, "Time to read all input frames: %.3fs\n", elapsed);
   }
+  WP2_CHECK_STATUS(ForceMetadata(params, &metadata));
 
   // Encode animation.
   start = GetStopwatchTime();
@@ -364,6 +368,7 @@ WP2Status CompressImage(const char* const file_path,
   // 'buffer' must not be modified between calls to ReadFrame(), so we use a
   // proxy.
   WP2::ArgbBuffer frame(buffer->format());
+  WP2::Metadata metadata;
   bool is_last_frame = false;
   uint32_t duration_ms = 0;
   WP2::AnimationEncoder animation_encoder;
@@ -375,16 +380,12 @@ WP2Status CompressImage(const char* const file_path,
                  "Error! Cannot read input '%s'", file_path);
     CHECK_STATUS(frame.SetView(*buffer), "Error! Cannot set view.");
     if (i == 0) {
-      swap(frame.metadata_, buffer->metadata_);
-      buffer->metadata_.Clear();
-    } else {
-      if (!buffer->metadata_.IsEmpty()) {
-        fprintf(stderr, "Warning: metadata from frame #%u will be ignored!\n",
-                i + 1);
-        buffer->metadata_.Clear();
-      }
+      swap(metadata, buffer->metadata_);  // save for later call
+    } else if (!buffer->metadata_.IsEmpty()) {
+      fprintf(stderr, "Warning: metadata from frame #%u will be ignored!\n",
+              i + 1);
     }
-    WP2_CHECK_STATUS(ApplyModifications(file_path, params, &frame, i == 0));
+    WP2_CHECK_STATUS(ApplyModifications(file_path, params, &frame));
 
     if (refs != nullptr) {
       refs->emplace_back(frame.format());
@@ -406,19 +407,21 @@ WP2Status CompressImage(const char* const file_path,
     const double elapsed = GetStopwatchTime() - start;
     fprintf(stderr, "Time to read input image: %.3fs\n", elapsed);
   }
+  WP2_CHECK_STATUS(ForceMetadata(params, &metadata));
 
   // Encode image.
   start = GetStopwatchTime();
   if (duration_ms == WP2::ImageReader::kInfiniteDuration) {
+    swap(metadata, frame.metadata_);
     CHECK_STATUS(WP2::Encode(frame, writer, params.config, params.pic_hint),
                  "Error! Cannot encode '%s' as WP2", file_path);
   } else {
     const bool loop_forever = params.loop_forever_was_specified
                                   ? params.loop_forever
                                   : (image_reader.GetLoopCount() != 1);
-    CHECK_STATUS(animation_encoder.Encode(writer, params.config, loop_forever,
-                                          buffer->metadata_),
-                 "Error! Cannot encode '%s' as WP2", file_path);
+    CHECK_STATUS(
+        animation_encoder.Encode(writer, params.config, loop_forever, metadata),
+        "Error! Cannot encode '%s' as WP2", file_path);
   }
   if (params.log_level >= WP2::LogLevel::VERBOSE) {
     const double encode_time = GetStopwatchTime() - start;
@@ -469,7 +472,7 @@ WP2Status SaveImage(const WP2::MemoryWriter& memory_writer,
                               params.short_output, params.show_histograms));
   }
 
-  if (params.log_level >= WP2::LogLevel::DEFAULT && params.print_summary) {
+  if (params.log_level >= WP2::LogLevel::DEFAULT && params.print_info) {
     WP2::BitstreamFeatures bitstream;
     CHECK_STATUS(bitstream.Read(memory_writer.mem_, memory_writer.size_),
                  "FATAL: Roundtrip error!");
@@ -697,8 +700,8 @@ int main(int argc, char* argv[]) {
       report_progress = true;
     } else if (!strcmp(argv[c], "-quiet")) {
       params.log_level = WP2::LogLevel::QUIET;
-    } else if (!strcmp(argv[c], "-summary")) {
-      params.print_summary = true;
+    } else if (!strcmp(argv[c], "-info")) {
+      params.print_info = true;
     } else if (!strcmp(argv[c], "-hint")) {
       NEED_ARGS(1);
       ++c;
@@ -841,7 +844,7 @@ int main(int argc, char* argv[]) {
     const std::string& out_file = out_path;
     const bool write_to_memory =
         (!out_file.empty() || params.print_distortion >= 0 ||
-         params.print_summary || params.bit_trace > 0);
+         params.print_info || params.bit_trace > 0);
 
     WP2::MultiProgressPrinter progress_printer;
     if (report_progress) {
@@ -921,7 +924,7 @@ int main(int argc, char* argv[]) {
 
       const bool write_to_memory =
           (!out_file.empty() || params.print_distortion >= 0 ||
-           params.print_summary || params.bit_trace > 0 ||
+           params.print_info || params.bit_trace > 0 ||
            !decoded_file.empty());
 
       size_t out_size;

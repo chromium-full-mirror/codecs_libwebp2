@@ -343,20 +343,20 @@ WP2Status AnalyzeEntropyImpl(const T* argb, uint32_t stride, uint32_t width,
   return WP2_STATUS_OK;
 }
 
-WP2Status AnalyzeEntropy(const WP2::ArgbBuffer& pic, uint32_t width,
-                         uint32_t height, bool has_alpha, bool use_palette,
-                         Encoder* const encoder, EntropyMode* const best_mode,
+WP2Status AnalyzeEntropy(const WP2::ArgbBuffer& pic, bool has_alpha,
+                         bool use_palette, Encoder* const encoder,
+                         EntropyMode* const best_mode,
                          bool* const red_and_blue_always_zero,
                          bool* const use_premultiplied) {
   if (WP2FormatBpc(pic.format()) == 1) {
     WP2_CHECK_STATUS(AnalyzeEntropyImpl(
-        pic.GetRow8(0), pic.stride(), width, height, pic.format(), has_alpha,
-        use_palette, encoder, best_mode, red_and_blue_always_zero,
+        pic.GetRow8(0), pic.stride(), pic.width(), pic.height(), pic.format(),
+        has_alpha, use_palette, encoder, best_mode, red_and_blue_always_zero,
         use_premultiplied));
   } else {
     WP2_CHECK_STATUS(AnalyzeEntropyImpl(
-        pic.GetRow16(0), pic.stride(), width, height, pic.format(), has_alpha,
-        use_palette, encoder, best_mode, red_and_blue_always_zero,
+        pic.GetRow16(0), pic.stride(), pic.width(), pic.height(), pic.format(),
+        has_alpha, use_palette, encoder, best_mode, red_and_blue_always_zero,
         use_premultiplied));
   }
 
@@ -386,30 +386,52 @@ uint32_t GetTransformBits(uint32_t effort, uint32_t histo_bits) {
   return res;
 }
 
+// Find the corresponding combination of transforms in the reference table.
+const TransformType* FindTransformationCombination(
+    const TransformType* const transforms, uint32_t size) {
+  assert(size <= kPossibleTransformCombinationSize);
+  for (uint32_t i = 0; i < kPossibleTransformCombinationsNum; ++i) {
+    if (std::equal(transforms, transforms + size,
+                   kPossibleTransformCombinations[i]) &&
+        (size == kPossibleTransformCombinationSize ||
+         kPossibleTransformCombinations[i][size] == TransformType::kNum)) {
+      return kPossibleTransformCombinations[i];
+    }
+  }
+  assert(false);
+  return nullptr;
+}
+
 // Translates an entropy mode to a CrunchConfig.
-// TODO(vrabaud) The order of transforms could be toyed with: the format allows
-//               it like in V1.
-void TranslateEntropyMode(EntropyMode entropy_idx, uint32_t effort,
-                          bool red_and_blue_always_zero,
-                          CrunchConfig* const config) {
-  uint32_t num = 0;
+const TransformType* TranslateEntropyMode(EntropyMode entropy_idx,
+                                          uint32_t effort,
+                                          bool red_and_blue_always_zero) {
+  TransformType transforms[kPossibleTransformCombinationSize];
+  uint32_t size = 0;
   if (entropy_idx == EntropyMode::kPalette) {
-    config->transforms[num++] = TransformType::kColorIndexing;
+    transforms[size++] = TransformType::kColorIndexing;
   }
   if (entropy_idx == EntropyMode::kSubGreen ||
       entropy_idx == EntropyMode::kSpatialSubGreen) {
-    config->transforms[num++] = TransformType::kSubtractGreen;
+    transforms[size++] = TransformType::kSubtractGreen;
   }
   if (entropy_idx == EntropyMode::kSpatial ||
       entropy_idx == EntropyMode::kSpatialSubGreen) {
-    config->transforms[num++] = TransformType::kPredictor;
+    transforms[size++] = TransformType::kPredictor;
     if (effort != 0 && !red_and_blue_always_zero) {
-      config->transforms[num++] = TransformType::kCrossColor;
+      transforms[size++] = TransformType::kCrossColor;
     }
   }
-  config->num_transforms = num;
+  return FindTransformationCombination(transforms, size);
 }
 
+// Find a set of TransformType's into the official list and returns a pointer to
+// it.
+template <typename... Ts>
+const TransformType* FindTransformTypes(Ts... args) {
+  const TransformType transforms[] = {args...};
+  return FindTransformationCombination(transforms, sizeof...(args));
+}
 }  // namespace
 
 // Fills in 'crunch_configs' with a set of transforms and LZ77 variants to try
@@ -420,11 +442,8 @@ void TranslateEntropyMode(EntropyMode entropy_idx, uint32_t effort,
 // valid if there's only one transform (effort != 9)
 WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
                          Encoder* const encoder,
-                         CrunchConfig crunch_configs[kCrunchNumMax],
-                         uint32_t* const crunch_configs_size) {
+                         WP2::Vector<CrunchConfig>* const configs) {
   const WP2::ArgbBuffer& pic = encoder->pic_;
-  const uint32_t width = pic.width();
-  const uint32_t height = pic.height();
   const int effort = encoder->config_.effort;
   uint32_t n_lz77s;
   assert(!pic.IsEmpty());
@@ -446,34 +465,30 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
       GetHistoBits(effort, use_palette, pic.width(), pic.height());
   encoder->transform_bits_ = GetTransformBits(effort, encoder->histo_bits_);
 
-  *crunch_configs_size = 0;
+  WP2_CHECK_ALLOC_OK(configs->reserve(kPossibleTransformCombinationsNum));
   if (encoder->palette_.Size() >= 2) {
     // Try group4 for images with a palette.
-    CrunchConfig* config;
-    config = &crunch_configs[*crunch_configs_size];
-    config->num_transforms = 1;
-    config->transforms[0] = TransformType::kGroup4;
-    config->group4_use_move_to_front = false;
-    ++(*crunch_configs_size);
+    configs->resize_no_check(configs->size() + 1);
+    configs->back().transforms = FindTransformTypes(TransformType::kGroup4);
+    configs->back().group4_use_move_to_front = false;
 
     if (encoder->palette_.Size() > 3 && effort > 0) {
-      config = &crunch_configs[*crunch_configs_size];
+      configs->resize_no_check(configs->size() + 1);
       // Copy the previous config.
-      *config = crunch_configs[*crunch_configs_size - 1];
+      configs->back() = configs->at(configs->size() - 2);
       // Try using a MoveToFrontCache for images with more than 3 colors.
-      config->group4_use_move_to_front = true;
-      ++(*crunch_configs_size);
+      configs->back().group4_use_move_to_front = true;
     }
   }
   if (effort == 0) {
     encoder->use_premultiplied_ = true;
-    if (*crunch_configs_size != 1) {
+    if (configs->size() != 1) {
       // AnalyzeEntropy is somewhat slow. 'red_and_blue_always_zero' is unused
       // for effort == 0.
-      TranslateEntropyMode(
+      configs->resize_no_check(1);
+      configs->front().transforms = TranslateEntropyMode(
           use_palette ? EntropyMode::kPalette : EntropyMode::kSpatialSubGreen,
-          effort, /*red_and_blue_always_zero=*/false, &crunch_configs[0]);
-      *crunch_configs_size = 1;
+          effort, /*red_and_blue_always_zero=*/false);
     }
     n_lz77s = 1;
     WP2_CHECK_STATUS(entropy_progress.AdvanceBy(1.));
@@ -486,45 +501,41 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
     n_lz77s = (use_palette && encoder->palette_.Size() <= 16) ? 2 : 1;
     bool red_and_blue_always_zero = false;
     WP2_CHECK_STATUS(AnalyzeEntropy(
-        pic, width, height, encoder->has_alpha_, use_palette, encoder,
-        &best_mode, &red_and_blue_always_zero, &encoder->use_premultiplied_));
+        pic, encoder->has_alpha_, use_palette, encoder, &best_mode,
+        &red_and_blue_always_zero, &encoder->use_premultiplied_));
     WP2_CHECK_STATUS(analysis_progress.AdvanceBy(1.));
     if (effort == 9) {
       // Go brute force on all transforms.
       constexpr uint32_t kNum = (uint32_t)EntropyMode::kNum;
-      static_assert(1 + kNum <= kCrunchNumMax, "Too many entropy types");
       for (uint32_t i = 0; i < kNum; ++i) {
         if (i != (uint32_t)EntropyMode::kPalette || use_palette) {
-          assert(*crunch_configs_size < kCrunchNumMax);
-          TranslateEntropyMode((EntropyMode)i, effort, red_and_blue_always_zero,
-                               &crunch_configs[(*crunch_configs_size)++]);
+          configs->resize_no_check(configs->size() + 1);
+          configs->back().transforms = TranslateEntropyMode(
+              (EntropyMode)i, effort, red_and_blue_always_zero);
         }
         WP2_CHECK_STATUS(translate_progress.AdvanceBy(1. / kNum));
       }
     } else {
       // Only choose the guessed best transform.
-      TranslateEntropyMode(best_mode, effort, red_and_blue_always_zero,
-                           &crunch_configs[(*crunch_configs_size)++]);
+      configs->resize_no_check(configs->size() + 1);
+      configs->back().transforms =
+          TranslateEntropyMode(best_mode, effort, red_and_blue_always_zero);
       WP2_CHECK_STATUS(translate_progress.AdvanceBy(1.));
     }
     // If we have a palette, also check in combination with spatial.
     if ((effort == 9 && use_palette) || best_mode == EntropyMode::kPalette) {
-      crunch_configs[*crunch_configs_size].num_transforms = 2;
-      crunch_configs[*crunch_configs_size].transforms[0] =
-          TransformType::kColorIndexing;
-      crunch_configs[*crunch_configs_size].transforms[1] =
-          TransformType::kPredictor;
-      ++(*crunch_configs_size);
+      configs->resize_no_check(configs->size() + 1);
+      configs->back().transforms = FindTransformTypes(
+          TransformType::kColorIndexing, TransformType::kPredictor);
     }
   }
   // Fill in the different LZ77s.
   assert(n_lz77s <= kCrunchLZ77Max);
-  for (uint32_t i = 0; i < *crunch_configs_size; ++i) {
-    for (uint32_t j = 0; j < n_lz77s; ++j) {
-      crunch_configs[i].lz77s_types_to_try[j] =
-          (j == 0) ? kLZ77Standard | kLZ77RLE : kLZ77Box;
+  for (CrunchConfig& c : *configs) {
+    for (uint32_t i = 0; i < n_lz77s; ++i) {
+      c.lz77s_types_to_try[i] = (i == 0) ? kLZ77Standard | kLZ77RLE : kLZ77Box;
     }
-    crunch_configs[i].lz77s_types_to_try_size = n_lz77s;
+    c.lz77s_types_to_try_size = n_lz77s;
   }
   return WP2_STATUS_OK;
 }

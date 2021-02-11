@@ -205,9 +205,9 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows, uint32_t num_bits,
       for (uint32_t i = 0; i < n; ++i) {
         transforms_type[i] = transforms_[i].type_;
       }
-      GetARGBRanges(transforms_type, /*num_transforms=*/n,
-                    hdr_.symbols_info_.SampleFormat(), num_colors_,
-                    minima_range, maxima_range);
+      GetARGBRanges(transforms_type, hdr_.symbols_info_.SampleFormat(),
+                    num_colors_, minima_range, maxima_range,
+                    /*num_transforms=*/n);
     }
     InverseTransform(&transform, start_row, end_row, minima_range, maxima_range,
                      rows, gparams_->has_alpha_, rows_out);
@@ -800,15 +800,11 @@ WP2Status Decoder::DecodeHeader() {
   // Read the transforms.
   use_group4_ = false;
   dec_->AddDebugPrefix("transforms");
-  constexpr uint32_t kNumCombinations =
-      std::extent<decltype(kPossibleTransformCombinations), 0>::value;
-  constexpr uint32_t kNumTransformsMax =
-      std::extent<decltype(kPossibleTransformCombinations), 1>::value;
   const uint32_t index =
-      dec_->ReadRValue(kNumCombinations, "index");
+      dec_->ReadRValue(kPossibleTransformCombinationsNum, "index");
   const TransformType* transforms = kPossibleTransformCombinations[index];
   uint32_t num_transforms = 0;
-  for (; num_transforms < kNumTransformsMax; ++num_transforms) {
+  for (; num_transforms < kPossibleTransformCombinationSize; ++num_transforms) {
     if (kPossibleTransformCombinations[index][num_transforms] ==
         TransformType::kNum) {
       break;
@@ -836,8 +832,8 @@ WP2Status Decoder::DecodeHeader() {
   } else if (num_transforms != 0) {
     int16_t minima_range[4], maxima_range[4];
     // Find the ranges in which the ARGB values are.
-    GetARGBRanges(transforms, num_transforms, hdr_.symbols_info_.SampleFormat(),
-                  num_colors_, minima_range, maxima_range);
+    GetARGBRanges(transforms, hdr_.symbols_info_.SampleFormat(), num_colors_,
+                  minima_range, maxima_range);
     // Read the ARGB ranges. As the encoder tries to reduce the ranges of ARGB
     // values around zero, they are more efficiently stored as Golomb.
     constexpr uint32_t kPrefixSize = 2;

@@ -66,27 +66,31 @@ WP2Status TileDecoder::BypassTileDec() {
     tile_->output_is_yuv = true;
     assert(!tile_->yuv_output.IsEmpty());
     const uint32_t num_bits = gparams_->transf_.GetYUVPrecisionBits() + 1u;
-    const uint32_t min_num_bytes_per_px =
-        ((gparams_->has_alpha_ ? kAlphaBits : 0) + num_bits * 3) / 8;
 
     tile_->block_map.Init(tile_->rect, num_bits, gparams_->transf_.GetYUVMin(),
                           gparams_->transf_.GetYUVMax(), &tile_->yuv_output);
     if (IsFilterBlockMapNeeded(*config_, *features_, *gparams_,
                                *tiles_layout_)) {
       WP2_CHECK_STATUS(tile_->block_map.Allocate());
-    }
-    // Simulate a grid of blocks for the IntertileFilter settings.
-    // Even though this is lossless it is likely to border a lossy tile which
-    // might benefit from slight deblocking.
-    constexpr BlockSize kSimulateBlockSize = BLK_4x4;
-    const uint32_t sim_block_height = BlockHeightPix(kSimulateBlockSize);
-    const uint32_t sim_block_width = BlockWidthPix(kSimulateBlockSize);
-    CodedBlockBase sim_block;  // For FilterBlockMap::RegisterBlock().
-    sim_block.alpha_mode_ = kBlockAlphaLossless;
-    sim_block.id_ = 0;  // Set segment id as the least quantized one.
-    sim_block.is420_ = false;
-    for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-      sim_block.num_coeffs_[c][0] = 0;   // will prevent filtering
+      // Simulate a grid of 4x4 blocks for the IntertileFilter settings.
+      // Even though this is lossless it is likely to border a lossy tile which
+      // might benefit from slight deblocking.
+      // This must be done before 'tile_->num_decoded_rows' is increased because
+      // the 'tile_->block_map' data may be accessed for each available line.
+      constexpr BlockSize kSize = BLK_4x4;
+      const uint32_t block_height = BlockHeightPix(kSize);
+      const uint32_t block_width = BlockWidthPix(kSize);
+      constexpr uint32_t kSegmentId = 0;  // Least quantized one.
+      constexpr uint8_t kMinBpp = 255;  // Max accepted ~2bpp.
+      constexpr uint32_t kResDen[4] = {255, 255, 255, 255};  // Full residuals.
+      for (uint32_t y = 0; y < tile_->rect.height; y += block_height) {
+        for (uint32_t x = 0; x < tile_->rect.width; x += block_width) {
+          // Set segment id as the least quantized one.
+          tile_->block_map.RegisterBlock(
+              x / kMinBlockSizePix, y / kMinBlockSizePix, kSize, kSegmentId,
+              kMinBpp, /*has_lossy_alpha=*/false, kResDen);
+        }
+      }
     }
 
     HeaderDec bit_unpacker(tile_->input, "raw_pixels");
@@ -111,15 +115,6 @@ WP2Status TileDecoder::BypassTileDec() {
         }
       }
       ++tile_->num_decoded_rows;
-      if (tile_->num_decoded_rows % sim_block_height == 0 ||
-          tile_->num_decoded_rows == tile_->rect.height) {
-        // Register simulated blocks for intertile filtering when complete.
-        for (uint32_t x = 0; x < tile_->rect.width; x += sim_block_width) {
-          sim_block.SetDimDefault(
-              {x / kMinBlockSizePix, y / kMinBlockSizePix, kSimulateBlockSize});
-          tile_->block_map.RegisterBlock(sim_block, min_num_bytes_per_px);
-        }
-      }
       WP2_CHECK_STATUS(tile_->row_progress.AdvanceBy(1.));
     }
 

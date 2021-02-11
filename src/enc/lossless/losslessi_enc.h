@@ -40,34 +40,60 @@ class SymbolWriter;
 
 namespace WP2L {
 
-typedef enum {
-  kEncoderNone = 0,
-  kEncoderARGB,
-  kEncoderNearLossless,  // Not implemented yet.
-  kEncoderPalette
-} EncoderARGBContent;
-
+// Struct containing signed 4-channel data. The stride is 4 * width.
+// It is meant to store the original color image, as well as its transformed
+// versions. The number of channel bits represents the depth of the original
+// data, before the transforms.
+struct Buffer_s16 {
+  int16_t* GetRow(uint32_t y) { return &data[4 * y * width]; }
+  const int16_t* GetRow(uint32_t y) const { return &data[4 * y * width]; }
+  int16_t* GetPosition(uint32_t x, uint32_t y) {
+    return &data[4 * (y * width + x)];
+  }
+  const int16_t* GetPosition(uint32_t x, uint32_t y) const {
+    return &data[4 * (y * width + x)];
+  }
+  uint32_t width;
+  uint32_t height;
+  int16_t* data = nullptr;
+  bool has_alpha;         // true if alpha matters
+  uint32_t channel_bits;  // number of bits per non-alpha channel
+};
+struct EncodeInfo;
 struct CrunchConfig;
+
 class Encoder {
  public:
   Encoder(const WP2::EncoderConfig& config, const WP2::ArgbBuffer& picture,
           bool has_alpha);
   WP2Status Allocate();
-  WP2Status AllocateTransformBuffer(const CrunchConfig& config, uint32_t width,
-                                    uint32_t height);
+  WP2Status AllocateTransformBuffer(const WP2::Vector<CrunchConfig>& configs);
+  // Applies and writes the transforms as well as some more info about the
+  // transforms (number, range ...).
+  // If 'config_prev' is not nullptr, its transforms are supposed to be the
+  // first transforms of 'config' and are skipped: they are not applied and they
+  // are stored in  'enc' by copying them from cached data (that was cached from
+  // a previous call with 'cache_data' set to true).
+  WP2Status ApplyAndWriteTransforms(const CrunchConfig& config,
+                                    const CrunchConfig* const config_prev,
+                                    bool cache_data,
+                                    const WP2::ProgressRange progress,
+                                    LosslessSymbolsInfo* const symbols_info,
+                                    WP2::ANSEnc* const enc,
+                                    WP2::ANSDictionaries* const dicts);
+  // Encodes the image for a given configuration.
+  WP2Status EncodeImageInternal(const CrunchConfig& config,
+                                const WP2::ProgressRange& progress,
+                                const LosslessSymbolsInfo& symbols_info_init,
+                                WP2::ANSEnc* const enc,
+                                WP2::ANSDictionaries* const dicts,
+                                EncodeInfo* const encode_info);
 
   const WP2::EncoderConfig& config_;  // user configuration and parameters
   const WP2::ArgbBuffer& pic_;        // input picture (tile view)
   bool has_alpha_;  // false if the whole image is opaque (not only this tile)
   // whether pixels should be encoded premultiplied with the alpha value
   bool use_premultiplied_ = true;
-
-  int16_t* argb_;                        // Transformed argb image data.
-  EncoderARGBContent argb_content_;      // Content type of the argb buffer.
-  int16_t* argb_scratch_;                // Scratch memory for argb rows
-                                         // (used for prediction).
-  int16_t* transform_data_;              // Scratch memory for transform data.
-  WP2::Vector_s16 transform_mem_;        // Currently allocated memory.
 
   // Encoding parameters derived from quality parameter.
   uint32_t histo_bits_;
@@ -80,6 +106,43 @@ class Encoder {
   BackwardRefsPool ref_pool_;   // Backward Refs array for temporaries.
   HashChain hash_chain_;        // HashChain data for constructing
                                 // backward references.
+ private:
+  // Applies and writes the transforms one by one and nothing else.
+  // If 'config_prev' is not nullptr, its transforms are supposed to be the
+  // first transforms of 'config' and are skipped.
+  WP2Status DoApplyAndWriteTransforms(const CrunchConfig& config,
+                                      const CrunchConfig* const config_prev,
+                                      const WP2::ProgressRange progress,
+                                      LosslessSymbolsInfo* const symbols_info,
+                                      WP2::ANSEnc* const enc,
+                                      WP2::ANSDictionaries* const dicts,
+                                      bool* const is_group4);
+  // Implementations of the different transforms.
+  void ApplySubtractGreen();
+  WP2Status ApplyPredictFilter(const int16_t min_values[4],
+                               const int16_t max_values[4],
+                               const WP2::ProgressRange& progress,
+                               WP2::ANSEnc* const enc,
+                               WP2::ANSDictionaries* const dicts);
+  WP2Status ApplyCrossColorFilter(const WP2::ProgressRange& progress,
+                                  WP2::ANSEnc* const enc,
+                                  WP2::ANSDictionaries* const dicts);
+  WP2Status MapImageFromPalette(const CrunchConfig& config);
+  // Copy the original pic_ when need.
+  WP2Status MakeInputImageCopy(const CrunchConfig& config);
+
+  int16_t* argb_scratch_;          // Scratch memory for argb rows
+                                   // (used for prediction).
+  int16_t* transform_data_;        // Scratch memory for transform data.
+  WP2::Vector_s16 transform_mem_;  // Currently allocated memory.
+
+  // When testing different sets of transforms, the results (argb_buffer_,
+  // stream, dictionaries) can be re-used from this cached variables.
+  WP2::ANSEnc cached_transforms_enc_;
+  WP2::ANSDictionaries cached_transforms_dict_;
+  // Image data that is initialized and updated between crunch configurations if
+  // possible.
+  Buffer_s16 argb_buffer_;
 };
 
 //------------------------------------------------------------------------------
@@ -147,16 +210,14 @@ uint32_t DistanceToPlaneCode(uint32_t width, uint32_t dist);
 // Image transforms in predictor_enc.cc
 
 // Computes the signed residuals after applying the predictors.
-WP2Status CreateResidualImage(uint32_t width, uint32_t height, uint32_t bits,
-                              const int16_t min_values[4],
+WP2Status CreateResidualImage(uint32_t bits, const int16_t min_values[4],
                               const int16_t max_values[4], int effort,
-                              int16_t* const argb, bool has_alpha,
+                              Buffer_s16* const buffer,
                               int16_t* const argb_scratch,
                               int16_t* const image);
 
-WP2Status ColorSpaceTransform(uint32_t width, uint32_t height, uint32_t bits,
-                              WP2SampleFormat format, uint32_t effort,
-                              int16_t* const argb, int16_t* image);
+WP2Status ColorSpaceTransform(uint32_t bits, int effort,
+                              Buffer_s16* const buffer, int16_t* image);
 
 //------------------------------------------------------------------------------
 
@@ -166,24 +227,21 @@ struct CrunchConfig {
   uint32_t lz77s_types_to_try[kCrunchLZ77Max];
   uint32_t lz77s_types_to_try_size;
   // Image transforms to apply in order. Each transform is only used once.
-  TransformType transforms[(uint32_t)TransformType::kNum];
-  uint32_t num_transforms;
+  // It is a pointer into the reference list of transform combinations.
+  const TransformType* transforms;
+  uint32_t GetNumTransforms() const;
   // Use a MoveToFrontCache in group4 to signal new colors.
   bool group4_use_move_to_front;
 };
 
-static constexpr uint32_t kCrunchNumMax = 8;
-
 WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
                          Encoder* const encoder,
-                         CrunchConfig crunch_configs[kCrunchNumMax],
-                         uint32_t* const crunch_configs_size);
+                         WP2::Vector<CrunchConfig>* const configs);
 
 //------------------------------------------------------------------------------
 // Group 4.
 
-WP2Status Group4Encode(const int16_t* const argb, uint32_t width,
-                       uint32_t height, uint32_t num_colors,
+WP2Status Group4Encode(const Buffer_s16& buffer, uint32_t num_colors,
                        bool use_move_to_front, int effort,
                        const WP2::ProgressRange& progress,
                        WP2::ANSEncBase* const enc,

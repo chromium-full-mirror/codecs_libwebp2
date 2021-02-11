@@ -39,6 +39,7 @@ namespace WP2 {
 class FrontMgrBase;
 class Segment;
 class RndMtxSet;
+struct Tile;
 
 //------------------------------------------------------------------------------
 // Class for accessing cached contexts around a block
@@ -190,6 +191,7 @@ class CodedBlockBase {
   uint32_t w_pix() const { return blk_.w_pix(); }
   uint32_t h() const { return blk_.h(); }
   uint32_t h_pix() const { return blk_.h_pix(); }
+  Rectangle AsRect() const { return { x_pix(), y_pix(), w_pix(), h_pix() }; }
 
   BlockSize dim() const { return blk_.dim(); }
   // Returns the size of the transform but taking into account the potential
@@ -258,8 +260,8 @@ class CodedBlockBase {
                          Plane16* const dst_plane,
                          std::string* const debug_str) const;
 
-  // VisualDebug
-  WP2Status Draw(const DecoderConfig& config, uint32_t tile_x, uint32_t tile_y,
+  // VisualDebug (for config 'blocks')
+  WP2Status Draw(const DecoderConfig& config, const Tile& tile,
                  const GlobalParams& gparams,
                  ArgbBuffer* const debug_output) const;
 

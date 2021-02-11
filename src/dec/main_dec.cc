@@ -401,7 +401,7 @@ WP2Status InternalDecode(const DecoderConfig& config,
   // Decode or skip trailing metadata if any (EXIF, XMP).
   if (metadata != nullptr) {
     WP2_CHECK_STATUS(
-        DecodeMetadata(data_source, features, &metadata->exif, &metadata->xmp));
+        DecodeMetadata(data_source, features, &metadata->xmp, &metadata->exif));
   } else {
     WP2_CHECK_STATUS(SkipMetadata(data_source, features));
   }
@@ -634,10 +634,10 @@ WP2Status ExtractPreview(const uint8_t* const data, size_t data_size,
 //------------------------------------------------------------------------------
 
 WP2Status ExtractMetadata(const uint8_t* data, size_t data_size,
-                          Data* const exif, Data* const iccp, Data* const xmp) {
-  if (exif != nullptr) exif->Clear();
+                          Data* const iccp, Data* const xmp, Data* const exif) {
   if (iccp != nullptr) iccp->Clear();
   if (xmp != nullptr) xmp->Clear();
+  if (exif != nullptr) exif->Clear();
   ExternalDataSource data_source(data, data_size);
   BitstreamFeatures features;
 
@@ -645,7 +645,7 @@ WP2Status ExtractMetadata(const uint8_t* data, size_t data_size,
   WP2_CHECK_STATUS(SkipPreview(&data_source, features));
   WP2_CHECK_STATUS(DecodeICC(&data_source, features, iccp));
 
-  if (features.has_trailing_data && (exif != nullptr || xmp != nullptr)) {
+  if (features.has_trailing_data && (xmp != nullptr || exif != nullptr)) {
     // Skip all frames because there is trailing data.
     AnimationFrame frame;
     uint32_t frame_index = 0;
@@ -656,7 +656,7 @@ WP2Status ExtractMetadata(const uint8_t* data, size_t data_size,
       ++frame_index;
     } while (!frame.is_last);
 
-    WP2_CHECK_STATUS(DecodeMetadata(&data_source, features, exif, xmp));
+    WP2_CHECK_STATUS(DecodeMetadata(&data_source, features, xmp, exif));
   }
   return WP2_STATUS_OK;
 }

@@ -95,31 +95,36 @@ inline int16_t TransformColorBlue(int16_t green_to_blue,
   return new_blue;
 }
 
-void CollectColorRedTransforms_C(const int16_t* argb, uint32_t width,
+bool CollectColorRedTransforms_C(const int16_t* argb, uint32_t width,
                                  uint32_t tile_width, uint32_t tile_height,
-                                 int16_t green_to_red, uint32_t histo_size,
-                                 uint32_t* const histo) {
+                                 int16_t green_to_red, uint16_t abs_value_max,
+                                 uint32_t histo_size, uint32_t* const histo) {
   while (tile_height-- > 0) {
     for (uint32_t x = 0; x < tile_width; ++x) {
-      ++histo[WP2L::MakeIndex(TransformColorRed(green_to_red, &argb[4 * x]),
-                              histo_size - 1)];
+      const int16_t value = TransformColorRed(green_to_red, &argb[4 * x]);
+      if (std::abs(value) > abs_value_max) return false;
+      ++histo[WP2L::MakeIndex(value, histo_size - 1)];
     }
     argb += 4 * width;
   }
+  return true;
 }
 
-void CollectColorBlueTransforms_C(const int16_t* argb, uint32_t width,
+bool CollectColorBlueTransforms_C(const int16_t* argb, uint32_t width,
                                   uint32_t tile_width, uint32_t tile_height,
                                   int16_t green_to_blue, int16_t red_to_blue,
-                                  uint32_t histo_size, uint32_t* const histo) {
+                                  uint16_t abs_value_max, uint32_t histo_size,
+                                  uint32_t* const histo) {
   while (tile_height-- > 0) {
     for (uint32_t x = 0; x < tile_width; ++x) {
-      ++histo[WP2L::MakeIndex(
-          TransformColorBlue(green_to_blue, red_to_blue, &argb[4 * x]),
-          histo_size - 1)];
+      const int16_t value =
+          TransformColorBlue(green_to_blue, red_to_blue, &argb[4 * x]);
+      if (std::abs(value) > abs_value_max) return false;
+      ++histo[WP2L::MakeIndex(value, histo_size - 1)];
     }
     argb += 4 * width;
   }
+  return true;
 }
 
 //------------------------------------------------------------------------------

@@ -85,7 +85,8 @@ static uint32_t ComputeResidualDensity(const CodedBlockBase& cb,
 
 void FilterBlockMap::RegisterBlock(uint32_t x, uint32_t y, BlockSize dim,
                                    uint32_t segment_id, uint8_t min_bpp,
-                                   bool has_lossy_alpha, uint32_t res_den[4]) {
+                                   bool has_lossy_alpha,
+                                   const uint32_t res_den[4]) {
   const uint32_t stride = max_num_blocks_x_;
   for (uint32_t j = 0; j < BlockHeight[dim]; ++j) {
     BlockFeatures* const row = &features_[(y + j) * stride + x];

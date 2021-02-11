@@ -43,16 +43,17 @@ using WP2::ProgressRange;
 
 // -----------------------------------------------------------------------------
 
-static void swap(EncodeInfo& a, EncodeInfo& b) {
+namespace {
+void swap(EncodeInfo& a, EncodeInfo& b) {
   swap(a.line_tokens, b.line_tokens);
   swap(a.bits_per_pixel, b.bits_per_pixel);
 }
 
 // Writes a 'value' as Golomb where the prefix is stored as symbol 'sym' in
 // cluster 'cluster'.
-static void WriteLZ77Golomb(uint32_t cluster, uint32_t sym, int32_t value,
-                            WP2_OPT_LABEL, WP2::SymbolManager* const sw,
-                            WP2::ANSEncBase* const enc, float* const cost) {
+void WriteLZ77Golomb(uint32_t cluster, uint32_t sym, int32_t value,
+                     WP2_OPT_LABEL, WP2::SymbolManager* const sw,
+                     WP2::ANSEncBase* const enc, float* const cost) {
   WP2::Golomb golomb(value, kLZZGolombPrefixSize);
   sw->ProcessWithCost(sym, cluster, golomb.prefix, label, enc, cost);
   if (golomb.extra_bits_num == 0) return;
@@ -70,6 +71,20 @@ static void WriteLZ77Golomb(uint32_t cluster, uint32_t sym, int32_t value,
   }
   if (cost != nullptr) *cost += golomb.extra_bits_num;
 }
+}  // namespace
+
+// Counts the number of transforms for a combination of transforms from the
+// official table.
+uint32_t CrunchConfig::GetNumTransforms() const {
+  uint32_t num_transforms = 0;
+  while (num_transforms < kPossibleTransformCombinationSize &&
+         transforms[num_transforms] != TransformType::kNum) {
+    ++num_transforms;
+  }
+  return num_transforms;
+}
+
+// -----------------------------------------------------------------------------
 
 WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
                       const BackwardRefs& refs, const ProgressRange& progress,
@@ -265,13 +280,31 @@ WP2Status EncodeImageNoClusters(WP2::ANSEncBase* const enc,
   return WP2_STATUS_OK;
 }
 
-static WP2Status EncodeImageInternal(
-    const int16_t* const argb, const CrunchConfig& config, uint32_t width,
-    uint32_t height, uint32_t histogram_bits, uint32_t cache_bits_max,
-    uint32_t effort, const ProgressRange& progress, WP2::ANSEnc* const enc,
-    WP2::ANSDictionaries* const dicts, HashChain* const hash_chain,
-    BackwardRefsPool* ref_pool, LosslessSymbolsInfo* const symbols_info_best,
-    EncodeInfo* const encode_info) {
+WP2Status Encoder::EncodeImageInternal(
+    const CrunchConfig& config, const ProgressRange& progress,
+    const LosslessSymbolsInfo& symbols_info_init, WP2::ANSEnc* const enc,
+    WP2::ANSDictionaries* const dicts, EncodeInfo* const encode_info) {
+  // First, check whether we use Group4 or anything else.
+  const TransformType* const end =
+      config.transforms + kPossibleTransformCombinationSize;
+  if (std::find(config.transforms, end, TransformType::kGroup4) != end) {
+    WP2_CHECK_STATUS(Group4Encode(argb_buffer_, palette_.Size(),
+                                  config.group4_use_move_to_front,
+                                  config_.effort, progress, enc, encode_info));
+    return WP2_STATUS_OK;
+  }
+
+  // If using a color cache, do not have it bigger than the number of
+  // colors.
+  const bool use_palette =
+      (std::find(config.transforms, end, TransformType::kColorIndexing) != end);
+  const uint32_t cache_bits_max =
+      use_palette ? (1u + (uint32_t)WP2Log2Floor(palette_.Size()))
+                  : kMaxCacheBits;
+
+  const int16_t* const argb = argb_buffer_.data;
+  const uint32_t width = argb_buffer_.width, height = argb_buffer_.height;
+  const uint32_t histogram_bits = histo_bits_;
   const uint32_t histogram_width = SubSampleSize(width, histogram_bits);
   const uint32_t histogram_height = SubSampleSize(height, histogram_bits);
   const uint32_t num_segments_max = histogram_width * histogram_height;
@@ -287,11 +320,6 @@ static WP2Status EncodeImageInternal(
   assert(histogram_bits >= kHistogramBitsMin);
   assert(histogram_bits <= kHistogramBitsMax);
 
-  // If the value is different from zero, it has been set during the
-  // palette analysis.
-  LosslessSymbolsInfo symbols_info_init;
-  WP2_CHECK_STATUS(symbols_info_init.CopyFrom(*symbols_info_best));
-
   // Calculate backward references from ARGB image.
   WP2_CHECK_STATUS(enc_init.Clone(*enc));
   WP2_CHECK_STATUS(dicts_init.CopyFrom(*dicts));
@@ -301,7 +329,7 @@ static WP2Status EncodeImageInternal(
   WP2::Vector_s16 segments;
   WP2_CHECK_ALLOC_OK(segments.resize(4 * num_segments_max));
   std::fill(segments.begin(), segments.end(), 0);
-  WP2_CHECK_STATUS(hash_chain->Fill(effort, argb, width, height));
+  WP2_CHECK_STATUS(hash_chain_.Fill(config_.effort, argb, width, height));
   for (uint32_t lz77s_idx = 0; lz77s_idx < config.lz77s_types_to_try_size;
        ++lz77s_idx) {
     const ProgressRange idx_progress(progress,
@@ -318,77 +346,78 @@ static WP2Status EncodeImageInternal(
         BackwardRefsPool::GetEmptyBackwardRefs();
     CacheConfig cache_config;
     WP2_CHECK_STATUS(GetBackwardReferences(
-        width, height, argb, effort, config.lz77s_types_to_try[lz77s_idx],
-        cache_bits_max, *hash_chain, symbols_info, &cache_config, ref_pool,
-        &refs_best));
+        width, height, argb, config_.effort,
+        config.lz77s_types_to_try[lz77s_idx], cache_bits_max, hash_chain_,
+        symbols_info, &cache_config, &ref_pool_, &refs_best));
     symbols_info.SetCacheRange(GetColorCacheRange(cache_config));
     WP2_CHECK_ALLOC_OK(
         histogram_image.Allocate(num_segments_max, symbols_info));
 
     // Build histogram image and symbols from backward references.
     WP2_CHECK_STATUS(GetHistoImageSymbols(
-        width, height, *refs_best, effort, histo_symbols_progress,
+        width, height, *refs_best, config_.effort, histo_symbols_progress,
         histogram_bits, symbols_info, &histogram_image, segments.data()));
 
-    {
-      WP2::ANSDebugPrefix prefix_gh(enc, "GlobalHeader");
-      // Color Cache parameters.
-      if (enc->PutBool(cache_config.type != CacheType::kNone, "color_cache")) {
-        assert(cache_config.cache_bits > 0);
-        enc->PutRange(cache_config.cache_bits, 1, kMaxCacheBits,
-                      "color_cache_bits");
-      }
-
-      // Find the maximum subsampling that would result in >= 2 histograms.
-      uint32_t max_sampling;
-      bool more_than_one_hist = false;
-      for (max_sampling = kHistogramBitsMax + 1;
-           !more_than_one_hist && max_sampling-- > kHistogramBitsMin;) {
-        more_than_one_hist = (SubSampleSize(width, max_sampling) > 1 ||
-                              SubSampleSize(height, max_sampling) > 1);
-      }
-
-      // Histogram image.
-      const uint32_t num_segments = histogram_image.histograms_.size();
-      if (num_segments > 1) assert(more_than_one_hist);
-      const bool write_histogram_image =
-          (more_than_one_hist &&
-           enc->PutBool(num_segments > 1, "write_histogram_image"));
-      if (write_histogram_image) {
-        WP2::ANSDebugPrefix prefix_histogram_image(enc, "histogram_image");
-        enc->PutRange(histogram_bits, kHistogramBitsMin, max_sampling,
-                      "histogram_bits");
-        enc->PutRange(num_segments, 2,
-                      std::min(kMaxHistogramImageSize, num_segments_max),
-                      "num_histograms_m2");
-        LosslessSymbolsInfo symbols_info_tmp;
-        WP2_CHECK_STATUS(symbols_info_tmp.CopyFrom(symbols_info));
-        symbols_info_tmp.SetCacheRange(0);
-        symbols_info_tmp.SetAsLabelImage();
-        symbols_info_tmp.SetMinMax(kSymbolG, /*min=*/0,
-                                   /*max=*/num_segments - 1);
-        WP2_CHECK_STATUS(EncodeImageNoClusters(
-            enc, dicts, segments.data(), hash_chain, ref_pool, histogram_width,
-            histogram_height, symbols_info_tmp, effort, histo_image_progress));
-      } else {
-        WP2_CHECK_STATUS(histo_image_progress.AdvanceBy(1.));
-      }
-
-      // Get the symbols stats.
-      const uint32_t num_pixels = width * height;
-      WP2::ANSEncNoop enc_noop;
-      WP2::SymbolRecorder recorder;
-      symbols_info.SetNumClusters(num_segments);
-      WP2_CHECK_STATUS(recorder.Allocate(symbols_info, /*num_records=*/0));
-      WP2_CHECK_STATUS(StorePixels(width, height, histogram_bits, *refs_best,
-                                   symbol_stats_progress, segments.data(),
-                                   &enc_noop, &recorder));
-
-      // Store symbol headers.
-      WP2_CHECK_STATUS(WriteHeaders(recorder, symbols_info, num_pixels, effort,
-                                    enc, dicts, &sw));
-      WP2_CHECK_STATUS(header_progress.AdvanceBy(1.));
+    // Write the global header
+    enc->AddDebugPrefix("GlobalHeader");
+    // Color Cache parameters.
+    if (enc->PutBool(cache_config.type != CacheType::kNone, "color_cache")) {
+      assert(cache_config.cache_bits > 0);
+      enc->PutRange(cache_config.cache_bits, 1, kMaxCacheBits,
+                    "color_cache_bits");
     }
+
+    // Find the maximum subsampling that would result in >= 2 histograms.
+    uint32_t max_sampling;
+    bool more_than_one_hist = false;
+    for (max_sampling = kHistogramBitsMax + 1;
+         !more_than_one_hist && max_sampling-- > kHistogramBitsMin;) {
+      more_than_one_hist = (SubSampleSize(width, max_sampling) > 1 ||
+                            SubSampleSize(height, max_sampling) > 1);
+    }
+
+    // Histogram image.
+    const uint32_t num_segments = histogram_image.histograms_.size();
+    if (num_segments > 1) assert(more_than_one_hist);
+    const bool write_histogram_image =
+        (more_than_one_hist &&
+         enc->PutBool(num_segments > 1, "write_histogram_image"));
+    if (write_histogram_image) {
+      WP2::ANSDebugPrefix prefix_histogram_image(enc, "histogram_image");
+      enc->PutRange(histogram_bits, kHistogramBitsMin, max_sampling,
+                    "histogram_bits");
+      enc->PutRange(num_segments, 2,
+                    std::min(kMaxHistogramImageSize, num_segments_max),
+                    "num_histograms_m2");
+      LosslessSymbolsInfo symbols_info_tmp;
+      WP2_CHECK_STATUS(symbols_info_tmp.CopyFrom(symbols_info));
+      symbols_info_tmp.SetCacheRange(0);
+      symbols_info_tmp.SetAsLabelImage();
+      symbols_info_tmp.SetMinMax(kSymbolG, /*min=*/0,
+                                 /*max=*/num_segments - 1);
+      WP2_CHECK_STATUS(EncodeImageNoClusters(
+          enc, dicts, segments.data(), &hash_chain_, &ref_pool_,
+          histogram_width, histogram_height, symbols_info_tmp, config_.effort,
+          histo_image_progress));
+    } else {
+      WP2_CHECK_STATUS(histo_image_progress.AdvanceBy(1.));
+    }
+
+    // Get the symbols stats.
+    const uint32_t num_pixels = width * height;
+    WP2::ANSEncNoop enc_noop;
+    WP2::SymbolRecorder recorder;
+    symbols_info.SetNumClusters(num_segments);
+    WP2_CHECK_STATUS(recorder.Allocate(symbols_info, /*num_records=*/0));
+    WP2_CHECK_STATUS(StorePixels(width, height, histogram_bits, *refs_best,
+                                 symbol_stats_progress, segments.data(),
+                                 &enc_noop, &recorder));
+
+    // Store symbol headers.
+    WP2_CHECK_STATUS(WriteHeaders(recorder, symbols_info, num_pixels,
+                                  config_.effort, enc, dicts, &sw));
+    WP2_CHECK_STATUS(header_progress.AdvanceBy(1.));
+    enc->PopDebugPrefix();
 
     // Store actual literals.
     EncodeInfo current_encode_info;
@@ -404,7 +433,6 @@ static WP2Status EncodeImageInternal(
 
     // Keep track of the smallest image so far.
     if (enc->GetCost(*dicts) < best_cost) {
-      WP2_CHECK_STATUS(symbols_info_best->CopyFrom(symbols_info));
       best_cost = enc->GetCost(*dicts);
       WP2::swap(*enc, enc_best);
       WP2::swap(*dicts, dicts_best);
@@ -428,28 +456,24 @@ static WP2Status EncodeImageInternal(
 // -----------------------------------------------------------------------------
 // Transforms
 
-static void ApplySubtractGreen(Encoder* const encoder, uint32_t width,
-                               uint32_t height, WP2::ANSEnc* const enc) {
-  SubtractGreenFromBlueAndRed(encoder->argb_, width * height);
+void Encoder::ApplySubtractGreen() {
+  SubtractGreenFromBlueAndRed(argb_buffer_.data,
+                              argb_buffer_.width * argb_buffer_.height);
 }
 
 // Finds the best spatial predictor for each prediction block (of size
 // 2^(enc->transform_bits_)), saves the residuals in enc->argb_ and writes the
 // transform for each block in the form of an image.
-static WP2Status ApplyPredictFilter(const Encoder* const encoder,
-                                    uint32_t width, uint32_t height,
-                                    const int16_t min_values[4],
-                                    const int16_t max_values[4], int effort,
-                                    const ProgressRange& progress,
-                                    WP2::ANSEnc* const enc,
-                                    WP2::ANSDictionaries* const dicts) {
-  const int pred_bits = encoder->transform_bits_;
-  const int transform_width = SubSampleSize(width, pred_bits);
-  const int transform_height = SubSampleSize(height, pred_bits);
+WP2Status Encoder::ApplyPredictFilter(const int16_t min_values[4],
+                                      const int16_t max_values[4],
+                                      const ProgressRange& progress,
+                                      WP2::ANSEnc* const enc,
+                                      WP2::ANSDictionaries* const dicts) {
+  const int pred_bits = transform_bits_;
 
-  WP2_CHECK_STATUS(CreateResidualImage(
-      width, height, pred_bits, min_values, max_values, effort, encoder->argb_,
-      encoder->has_alpha_, encoder->argb_scratch_, encoder->transform_data_));
+  WP2_CHECK_STATUS(CreateResidualImage(pred_bits, min_values, max_values,
+                                       config_.effort, &argb_buffer_,
+                                       argb_scratch_, transform_data_));
 
   const WP2::ANSDebugPrefix prefix(enc, "predictor");
   enc->PutRange(pred_bits, kTransformBitsMin, kTransformBitsMax,
@@ -458,40 +482,40 @@ static WP2Status ApplyPredictFilter(const Encoder* const encoder,
   symbols_info.Init();
   symbols_info.SetMinMax(kSymbolG, /*min=*/0, /*max=*/kNumPredictors - 1);
   symbols_info.SetAsLabelImage();
+  const uint32_t transform_width = SubSampleSize(argb_buffer_.width, pred_bits);
+  const uint32_t transform_height =
+      SubSampleSize(argb_buffer_.height, pred_bits);
   const WP2Status status = EncodeImageNoClusters(
-      enc, dicts, encoder->transform_data_, (HashChain*)&encoder->hash_chain_,
-      (BackwardRefsPool*)&encoder->ref_pool_, transform_width, transform_height,
-      symbols_info, effort, progress);
+      enc, dicts, transform_data_, (HashChain*)&hash_chain_,
+      (BackwardRefsPool*)&ref_pool_, transform_width, transform_height,
+      symbols_info, config_.effort, progress);
   return status;
 }
 
 // Finds the best cross channel transform for each prediction block (of size
 // 2^(enc->transform_bits_)), saves the residuals in enc->argb_ and writes the
 // transform for each block in the form of an image.
-static WP2Status ApplyCrossColorFilter(const Encoder* const encoder,
-                                       uint32_t width, uint32_t height,
-                                       int effort,
-                                       const ProgressRange& progress,
-                                       WP2::ANSEnc* const enc,
-                                       WP2::ANSDictionaries* const dicts) {
-  const int ccolor_transform_bits = encoder->transform_bits_;
-  const int transform_width = SubSampleSize(width, ccolor_transform_bits);
-  const int transform_height = SubSampleSize(height, ccolor_transform_bits);
+WP2Status Encoder::ApplyCrossColorFilter(const ProgressRange& progress,
+                                         WP2::ANSEnc* const enc,
+                                         WP2::ANSDictionaries* const dicts) {
+  const int ccolor_transform_bits = transform_bits_;
 
-  WP2_CHECK_STATUS(ColorSpaceTransform(width, height, ccolor_transform_bits,
-                                       encoder->symbols_info_.SampleFormat(),
-                                       effort, encoder->argb_,
-                                       encoder->transform_data_));
+  WP2_CHECK_STATUS(ColorSpaceTransform(ccolor_transform_bits, config_.effort,
+                                       &argb_buffer_, transform_data_));
   const WP2::ANSDebugPrefix prefix(enc, "cross_color");
   enc->PutRange(ccolor_transform_bits, kTransformBitsMin, kTransformBitsMax,
                 "transform_bits");
   LosslessSymbolsInfo symbols_info;
   symbols_info.Init();
   symbols_info.SetAsCrossColorImage();
+  const uint32_t transform_width =
+      SubSampleSize(argb_buffer_.width, ccolor_transform_bits);
+  const uint32_t transform_height =
+      SubSampleSize(argb_buffer_.height, ccolor_transform_bits);
   WP2_CHECK_STATUS(EncodeImageNoClusters(
-      enc, dicts, encoder->transform_data_, (HashChain*)&encoder->hash_chain_,
-      (BackwardRefsPool*)&encoder->ref_pool_, transform_width, transform_height,
-      symbols_info, effort, progress));
+      enc, dicts, transform_data_, (HashChain*)&hash_chain_,
+      (BackwardRefsPool*)&ref_pool_, transform_width, transform_height,
+      symbols_info, config_.effort, progress));
   return WP2_STATUS_OK;
 }
 
@@ -502,17 +526,25 @@ static WP2Status ApplyCrossColorFilter(const Encoder* const encoder,
 // Flags influencing the memory allocated:
 //  transform_bits_
 //  use_predict_, use_cross_color_
-WP2Status Encoder::AllocateTransformBuffer(const CrunchConfig& config,
-                                           uint32_t width, uint32_t height) {
+WP2Status Encoder::AllocateTransformBuffer(
+    const WP2::Vector<CrunchConfig>& configs) {
+  const uint32_t width = pic_.width();
+  const uint32_t height = pic_.height();
   const uint64_t image_size = width * height;
+  // Figure out whether we use predict or cross color at least once over all the
+  // crunch configurations.
+  bool use_predict = false, use_cross_color = false;
+  for (const CrunchConfig& config : configs) {
+    const TransformType* end =
+        config.transforms + kPossibleTransformCombinationSize;
+    use_predict |=
+        (std::find(config.transforms, end, TransformType::kPredictor) != end);
+    use_cross_color |=
+        (std::find(config.transforms, end, TransformType::kCrossColor) != end);
+  }
+
   // ResidualImage needs room for 2 scanlines of uint32 pixels with an extra
   // pixel in each, plus 2 regular scanlines of bytes.
-  const TransformType* end = config.transforms + config.num_transforms;
-  const bool use_predict =
-      std::find(config.transforms, end, TransformType::kPredictor) != end;
-  const bool use_cross_color =
-      std::find(config.transforms, end, TransformType::kCrossColor) != end;
-
   const uint64_t argb_scratch_size =
       use_predict ? (width + 1) * 2 +
                         (width * 2 + sizeof(uint32_t) - 1) / sizeof(uint32_t)
@@ -528,11 +560,12 @@ WP2Status Encoder::AllocateTransformBuffer(const CrunchConfig& config,
   if (4 * mem_size > transform_mem_.size()) {
     WP2_CHECK_ALLOC_OK(transform_mem_.resize(4 * mem_size));
     mem = transform_mem_.data();
-    argb_content_ = kEncoderNone;
   } else {
     mem = transform_mem_.data();
   }
-  argb_ = mem;
+  argb_buffer_.width = width;
+  argb_buffer_.height = height;
+  argb_buffer_.data = mem;
   mem += 4 * image_size;
   argb_scratch_ = mem;
   mem += 4 * argb_scratch_size;
@@ -541,21 +574,19 @@ WP2Status Encoder::AllocateTransformBuffer(const CrunchConfig& config,
   return WP2_STATUS_OK;
 }
 
-static WP2Status MakeInputImageCopy(const CrunchConfig& config,
-                                    Encoder* const encoder) {
-  const WP2::ArgbBuffer& pic = encoder->pic_;
-  const uint32_t width = pic.width();
-  const uint32_t height = pic.height();
-  const bool premultiply = encoder->has_alpha_ && encoder->use_premultiplied_ &&
-                           !WP2IsPremultiplied(pic.format());
-  WP2_CHECK_STATUS(encoder->AllocateTransformBuffer(config, width, height));
-  if (encoder->argb_content_ == kEncoderARGB) return WP2_STATUS_OK;
-  assert(WP2FormatBpc(pic.format()) == 1 || WP2FormatBpc(pic.format()) == 2);
+WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
+  const uint32_t width = pic_.width();
+  const uint32_t height = pic_.height();
+  const bool premultiply =
+      has_alpha_ && use_premultiplied_ && !WP2IsPremultiplied(pic_.format());
+  assert(WP2FormatBpc(pic_.format()) == 1 || WP2FormatBpc(pic_.format()) == 2);
+  argb_buffer_.has_alpha = has_alpha_;
+  argb_buffer_.channel_bits = (WP2FormatBpc(pic_.format()) == 1) ? 8 : 10;
   for (uint32_t y = 0; y < height; ++y) {
-    int16_t* const dst_row = &encoder->argb_[4 * y * width];
-    if (WP2FormatBpc(pic.format()) == 1) {
-      const uint8_t* const src_row = pic.GetRow8(y);
-      if (WP2IsPremultiplied(pic.format()) || !encoder->has_alpha_) {
+    int16_t* const dst_row = argb_buffer_.GetRow(y);
+    if (WP2FormatBpc(pic_.format()) == 1) {
+      const uint8_t* const src_row = pic_.GetRow8(y);
+      if (WP2IsPremultiplied(pic_.format()) || !has_alpha_) {
         // Simply copy pixels over.
         std::copy(src_row, src_row + 4 * width, dst_row);
       } else {
@@ -575,90 +606,65 @@ static WP2Status MakeInputImageCopy(const CrunchConfig& config,
         }
       }
     } else {
-      std::copy(pic.GetRow16(y), pic.GetRow16(y) + 4 * width, dst_row);
+      std::copy(pic_.GetRow16(y), pic_.GetRow16(y) + 4 * width, dst_row);
     }
   }
-  encoder->argb_content_ = kEncoderARGB;
   return WP2_STATUS_OK;
 }
 
 // -----------------------------------------------------------------------------
 
 // Note: Expects "enc->palette_" to be set properly.
-static WP2Status MapImageFromPalette(const CrunchConfig& config,
-                                     Encoder* const encoder) {
-  const WP2::ArgbBuffer& pic = encoder->pic_;
-  const uint32_t width = pic.width();
-  const uint32_t height = pic.height();
-
-  WP2_CHECK_STATUS(encoder->AllocateTransformBuffer(config, width, height));
-
-  encoder->argb_content_ = kEncoderPalette;
-  WP2Status status = encoder->palette_.Apply(encoder->pic_, encoder->argb_);
+WP2Status Encoder::MapImageFromPalette(const CrunchConfig& config) {
+  const WP2Status status = palette_.Apply(pic_, argb_buffer_.data);
+  argb_buffer_.has_alpha = has_alpha_;
+  argb_buffer_.channel_bits = (WP2FormatBpc(pic_.format()) == 1) ? 8 : 10;
   return status;
 }
 
-// Applies the different transforms decided by the cruncher and writes them to
-// the header.
-static WP2Status ApplyAndWriteTransforms(
-    uint32_t width, uint32_t height, uint32_t effort,
-    const CrunchConfig& config, const ProgressRange progress,
-    Encoder* const encoder, LosslessSymbolsInfo* const symbols_info,
-    WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts) {
-  WP2_CHECK_STATUS(symbols_info->CopyFrom(encoder->symbols_info_));
-  symbols_info->SetCacheRange(0);
+WP2Status Encoder::DoApplyAndWriteTransforms(
+    const CrunchConfig& config, const CrunchConfig* const config_prev,
+    const ProgressRange progress, LosslessSymbolsInfo* const symbols_info,
+    WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts,
+    bool* const is_group4) {
+  // We only need to copy the original image if we are not building upon a
+  // previous transformed image.
+  bool need_copy = (config_prev == nullptr);
+  *is_group4 = false;
 
-  encoder->argb_content_ = kEncoderNone;
-
-  const WP2::ANSDebugPrefix prefix1(enc, "GlobalHeader");
-  const WP2::ANSDebugPrefix prefix2(enc, "transforms");
-  const bool decoder_must_premultiply =
-      encoder->has_alpha_ && !encoder->use_premultiplied_;
-
-  uint32_t index = 0;
-  constexpr uint32_t kNumCombinations =
-      std::extent<decltype(kPossibleTransformCombinations), 0>::value;
-  constexpr uint32_t kNumTransformsMax =
-      std::extent<decltype(kPossibleTransformCombinations), 1>::value;
-  for (; index < kNumCombinations; ++index) {
-    if (std::equal(config.transforms, config.transforms + config.num_transforms,
-                   kPossibleTransformCombinations[index]) &&
-        (config.num_transforms == kNumTransformsMax ||
-         kPossibleTransformCombinations[index][config.num_transforms] ==
-             TransformType::kNum)) {
-      break;
+  // Get the number of transforms and previous transforms.
+  const uint32_t num_transforms = config.GetNumTransforms();
+  const uint32_t num_transforms_prev =
+      (config_prev == nullptr) ? 0 : config_prev->GetNumTransforms();
+  assert(config_prev == nullptr || num_transforms_prev < num_transforms);
+  for (uint32_t i = 0; i < num_transforms; ++i) {
+    if (config_prev != nullptr && i < num_transforms_prev) {
+      // Skip transforms that are the same in the previous configuration.
+      assert(config_prev->transforms[i] == config.transforms[i]);
+      continue;
     }
-  }
-
-  enc->PutRValue(index, kNumCombinations, "index");
-
-  bool need_copy = (encoder->argb_content_ != kEncoderNearLossless &&
-                    encoder->argb_content_ != kEncoderPalette);
-
-  for (uint32_t i = 0; i < config.num_transforms; ++i) {
     const TransformType type = config.transforms[i];
-    ProgressRange progress_local(progress, 1. / config.num_transforms);
+    ProgressRange progress_local(progress,
+                                 1. / (num_transforms - num_transforms_prev));
     switch (type) {
       case TransformType::kColorIndexing: {
-        // Encode palette
-        WP2_CHECK_STATUS(
-            encoder->palette_.Write(progress_local, enc, dicts, encoder));
-        WP2_CHECK_STATUS(MapImageFromPalette(config, encoder));
+        // Encode palette.
+        WP2_CHECK_STATUS(palette_.Write(progress_local, enc, dicts, this));
+        WP2_CHECK_STATUS(MapImageFromPalette(config));
         need_copy = false;
         break;
       }
       case TransformType::kGroup4: {
         // Group4 cannot be used with other transforms.
-        assert(config.num_transforms == 1);
-        assert(encoder->palette_.Size() >= 2);
-        WP2_CHECK_STATUS(
-            encoder->palette_.Write(progress_local, enc, dicts, encoder));
-        WP2_CHECK_STATUS(MapImageFromPalette(config, encoder));
+        assert(num_transforms == 1);
+        assert(palette_.Size() >= 2);
+        WP2_CHECK_STATUS(palette_.Write(progress_local, enc, dicts, this));
+        WP2_CHECK_STATUS(MapImageFromPalette(config));
         // Green channel of first pixel.
-        const int16_t first_color = encoder->argb_[2];
+        const int16_t first_color = argb_buffer_.data[2];
         assert(first_color >= 0);
-        enc->PutRValue(first_color, encoder->palette_.Size(), "first_color");
-        if (encoder->palette_.Size() > 3) {
+        enc->PutRValue(first_color, palette_.Size(), "first_color");
+        if (palette_.Size() > 3) {
           // MoveToFront is only relevant when there are more than 3 colors.
           // With 2 colors, any color change is necessarily the other color
           // (different from the current one). With 3 colors, we use a boolean
@@ -668,56 +674,108 @@ static WP2Status ApplyAndWriteTransforms(
         } else {
           assert(!config.group4_use_move_to_front);
         }
+        *is_group4 = true;
         return WP2_STATUS_OK;
       }
       case TransformType::kSubtractGreen:
       case TransformType::kPredictor:
       case TransformType::kCrossColor:
         if (need_copy) {
-          WP2_CHECK_STATUS(MakeInputImageCopy(config, encoder));
+          WP2_CHECK_STATUS(MakeInputImageCopy(config));
           need_copy = false;
         }
         if (type == TransformType::kSubtractGreen) {
-          ApplySubtractGreen(encoder, width, height, enc);
+          ApplySubtractGreen();
           WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
         } else if (type == TransformType::kPredictor) {
           // Define the minimum/maximum values before applying the predictors.
           int16_t minima_range[4], maxima_range[4];
-          GetARGBRanges(config.transforms, /*num_transforms=*/i,
-                        encoder->symbols_info_.SampleFormat(),
-                        encoder->palette_.Size(), minima_range, maxima_range);
-          WP2_CHECK_STATUS(ApplyPredictFilter(
-              encoder, width, height, minima_range, maxima_range, effort,
-              progress_local, enc, dicts));
+          GetARGBRanges(config.transforms, symbols_info_.SampleFormat(),
+                        palette_.Size(), minima_range, maxima_range,
+                        /*num_transforms=*/i);
+          WP2_CHECK_STATUS(ApplyPredictFilter(minima_range, maxima_range,
+                                              progress_local, enc, dicts));
         } else {
-          WP2_CHECK_STATUS(ApplyCrossColorFilter(encoder, width, height, effort,
-                                                 progress_local, enc, dicts));
+          WP2_CHECK_STATUS(ApplyCrossColorFilter(progress_local, enc, dicts));
         }
         break;
       case TransformType::kNum:
         assert(false);
     }
   }
+  if (need_copy) WP2_CHECK_STATUS(MakeInputImageCopy(config));
+  return WP2_STATUS_OK;
+}
 
-  if (encoder->has_alpha_) {
+// Applies the different transforms decided by the cruncher and writes them to
+// the header.
+WP2Status Encoder::ApplyAndWriteTransforms(
+    const CrunchConfig& config, const CrunchConfig* const config_prev,
+    bool cache_data, const WP2::ProgressRange progress,
+    LosslessSymbolsInfo* const symbols_info, WP2::ANSEnc* const enc,
+    WP2::ANSDictionaries* const dicts) {
+  WP2_CHECK_STATUS(symbols_info->CopyFrom(symbols_info_));
+  symbols_info->SetCacheRange(0);
+
+  const WP2::ANSDebugPrefix prefix1(enc, "GlobalHeader");
+  const WP2::ANSDebugPrefix prefix2(enc, "transforms");
+  const bool decoder_must_premultiply = (has_alpha_ && !use_premultiplied_);
+
+  // Find the transform combination in the official set and store its index.
+  uint32_t index = 0;
+  for (; index < kPossibleTransformCombinationsNum; ++index) {
+    if (std::equal(config.transforms,
+                   config.transforms + kPossibleTransformCombinationSize,
+                   kPossibleTransformCombinations[index])) {
+      break;
+    }
+  }
+
+  enc->PutRValue(index, kPossibleTransformCombinationsNum, "index");
+
+  if (config_prev != nullptr) {
+    // If we have already computed transforms before, re-use cached data.
+    WP2_CHECK_STATUS(enc->AppendTokens(cached_transforms_enc_, 0,
+                                       std::numeric_limits<uint32_t>::max()));
+    WP2::swap(cached_transforms_dict_, *dicts);
+  }
+  bool is_group4;
+  if (cache_data) {
+    // First store to cached_transforms_core_ for future use.
+    cached_transforms_enc_.Clear();
+    WP2_CHECK_STATUS(
+        DoApplyAndWriteTransforms(config, config_prev, progress, symbols_info,
+                                  &cached_transforms_enc_, dicts, &is_group4));
+    WP2_CHECK_STATUS(cached_transforms_dict_.CopyFrom(*dicts));
+    // Then append cached_transforms_core_ to the output encoder.
+    WP2_CHECK_STATUS(enc->AppendTokens(cached_transforms_enc_, 0,
+                                       std::numeric_limits<uint32_t>::max()));
+  } else {
+    WP2_CHECK_STATUS(DoApplyAndWriteTransforms(
+        config, config_prev, progress, symbols_info, enc, dicts, &is_group4));
+  }
+  if (is_group4) return WP2_STATUS_OK;
+
+  if (has_alpha_) {
     enc->PutBool(decoder_must_premultiply, "premultiply");
   }
-  if (need_copy) WP2_CHECK_STATUS(MakeInputImageCopy(config, encoder));
-  if (config.num_transforms == 0) {
+  if (config.transforms[0] == TransformType::kNum) {
     ProgressRange progress_local(progress, 1.);
     WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
-  } else if (config.num_transforms == 1 &&
-             config.transforms[0] == TransformType::kColorIndexing) {
+  } else if (config.transforms[0] == TransformType::kColorIndexing &&
+             config.transforms[1] == TransformType::kNum) {
     symbols_info->SetAsLabelImage();
-    const uint32_t palette_size = encoder->palette_.Size();
+    const uint32_t palette_size = palette_.Size();
     symbols_info->SetMinMax(kSymbolG, /*min=*/0, /*max=*/palette_size - 1);
   } else {
     // Find the ranges of the ARGB values in the image.
     int16_t minima[4], maxima[4];
-    for (uint32_t i = 0; i < 4; ++i) minima[i] = maxima[i] = encoder->argb_[i];
-    for (uint32_t i = 0; i < 4 * width * height; i += 4) {
+    for (uint32_t i = 0; i < 4; ++i) {
+      minima[i] = maxima[i] = argb_buffer_.data[i];
+    }
+    for (uint32_t i = 0; i < 4 * pic_.width() * pic_.height(); i += 4) {
       for (uint32_t c = 0; c < 4; ++c) {
-        const int16_t val = encoder->argb_[i + c];
+        const int16_t val = argb_buffer_.data[i + c];
         if (val < minima[c]) {
           minima[c] = val;
         } else if (val > maxima[c]) {
@@ -727,9 +785,8 @@ static WP2Status ApplyAndWriteTransforms(
     }
     // Find the ranges in which they should belong according to the transforms.
     int16_t minima_range[4], maxima_range[4];
-    GetARGBRanges(config.transforms, config.num_transforms,
-                  symbols_info->SampleFormat(), encoder->palette_.Size(),
-                  minima_range, maxima_range);
+    GetARGBRanges(config.transforms, symbols_info->SampleFormat(),
+                  palette_.Size(), minima_range, maxima_range);
     for (uint32_t c = 0; c < 4; ++c) {
       assert(minima_range[c] <= minima[c]);
       assert(minima[c] <= maxima[c]);
@@ -770,17 +827,13 @@ static WP2Status ApplyAndWriteTransforms(
 Encoder::Encoder(const WP2::EncoderConfig& config,
                  const WP2::ArgbBuffer& picture, bool has_alpha)
     : config_(config), pic_(picture), has_alpha_(has_alpha) {
-  argb_ = nullptr;
-  argb_content_ = kEncoderNone;
   argb_scratch_ = nullptr;
   transform_data_ = nullptr;
 
   histo_bits_ = 0;
   transform_bits_ = 0;
-  // TODO(vrabaud) Deal with channel_bits
   symbols_info_.Init(has_alpha_, pic_.format());
 
-  argb_content_ = kEncoderNone;
   EncLDspInit();
 }
 
@@ -796,33 +849,35 @@ WP2Status Encoder::Allocate() {
 // -----------------------------------------------------------------------------
 // Main call
 
-typedef struct {
-  const WP2::EncoderConfig* config;
-  WP2::ANSEnc* enc;
-  Encoder* encoder;
-  CrunchConfig crunch_configs[kCrunchNumMax];
-  int num_crunch_configs;
-} StreamEncodeContext;
+WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
+                      const WP2::ArgbBuffer& picture, bool has_alpha,
+                      const ProgressRange& progress,
+                      WP2::ANSEnc* const enc_init,
+                      EncodeInfo* const encode_info) {
+  assert(!picture.IsEmpty());
+  assert(enc_init != nullptr);
 
-static WP2Status EncodeStreamHook(void* input, void* data2,
-                                  const ProgressRange& progress,
-                                  EncodeInfo* const encode_info) {
-  auto* const params = (StreamEncodeContext*)input;
-  WP2::ANSEnc* const enc_init = params->enc;
-  Encoder* const encoder = params->encoder;
-  const CrunchConfig* const crunch_configs = params->crunch_configs;
-  const uint32_t num_crunch_configs = params->num_crunch_configs;
-  const uint32_t effort = params->config->effort;
-  const uint32_t width = encoder->pic_.width();
-  const uint32_t height = encoder->pic_.height();
+  const ProgressRange analysis_progress(progress, 0.5);
+  const ProgressRange full_encode_progress(progress, 0.5);
+
+  WP2::Vector<CrunchConfig> crunch_configs;
+
+  // Analyze image (entropy, num_palettes etc)
+  Encoder encoder(encoder_config, picture, has_alpha);
+  WP2_CHECK_STATUS(encoder.Allocate());
+  WP2_CHECK_STATUS(
+      EncoderAnalyze(analysis_progress, &encoder, &crunch_configs));
+  WP2_CHECK_STATUS(encoder.AllocateTransformBuffer(crunch_configs));
+  const uint32_t width = encoder.pic_.width();
+  const uint32_t height = encoder.pic_.height();
   uint32_t best_size = std::numeric_limits<uint32_t>::max();
-  WP2::ANSEnc enc;
-  WP2::ANSEnc enc_best;
-  (void)data2;
+  WP2::ANSEnc enc, enc_best;
+  bool use_previous_transforms = false;
 
-  for (const CrunchConfig* config = &crunch_configs[0];
-       config < &crunch_configs[0] + num_crunch_configs; ++config) {
-    const ProgressRange config_progress(progress, 1. / num_crunch_configs);
+  for (uint32_t i_config = 0; i_config < crunch_configs.size(); ++i_config) {
+    const CrunchConfig& config = crunch_configs[i_config];
+    const ProgressRange config_progress(full_encode_progress,
+                                        1. / crunch_configs.size());
     const ProgressRange transforms_progress(config_progress, 0.5);
     const ProgressRange encode_progress(config_progress, 0.5);
 
@@ -832,11 +887,22 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
 
     // Reset any parameter in the encoder that is set in the previous iteration.
     LosslessSymbolsInfo symbols_info;
-    encoder->ref_pool_.Reset();
+    encoder.ref_pool_.Reset();
 
-    WP2_CHECK_STATUS(ApplyAndWriteTransforms(width, height, effort, *config,
-                                             transforms_progress, encoder,
-                                             &symbols_info, &enc, &dicts));
+    // Check whether we need to cache data by checking whether the next
+    // configuration has the same first transforms.
+    bool cache_transforms = false;
+    if (i_config + 1 < crunch_configs.size() &&
+        config.transforms[0] != TransformType::kGroup4) {
+      cache_transforms = std::equal(
+          config.transforms, config.transforms + config.GetNumTransforms(),
+          crunch_configs[i_config + 1].transforms);
+    }
+    WP2_CHECK_STATUS(encoder.ApplyAndWriteTransforms(
+        config,
+        use_previous_transforms ? &crunch_configs[i_config - 1] : nullptr,
+        cache_transforms, transforms_progress, &symbols_info, &enc, &dicts));
+    use_previous_transforms = cache_transforms;
 
     // -------------------------------------------------------------------------
     // Encode and write the transformed image.
@@ -847,29 +913,9 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
           current_encode_info.bits_per_pixel.resize(width * height));
     }
 
-    const TransformType* end = config->transforms + config->num_transforms;
-    const bool use_group4 =
-        std::find(config->transforms, end, TransformType::kGroup4) != end;
-    const bool use_palette = std::find(config->transforms, end,
-                                       TransformType::kColorIndexing) != end;
-
-    if (use_group4) {
-      WP2_CHECK_STATUS(
-          Group4Encode(encoder->argb_, width, height, encoder->palette_.Size(),
-                       config->group4_use_move_to_front, effort,
-                       encode_progress, &enc, &current_encode_info));
-    } else {
-      // If using a color cache, do not have it bigger than the number of
-      // colors.
-      const uint32_t cache_bits_max =
-          use_palette ? (1u + (uint32_t)WP2Log2Floor(encoder->palette_.Size()))
-                      : kMaxCacheBits;
-      WP2_CHECK_STATUS(EncodeImageInternal(
-          encoder->argb_, *config, width, height, encoder->histo_bits_,
-          cache_bits_max, effort, encode_progress, &enc, &dicts,
-          &encoder->hash_chain_, &encoder->ref_pool_, &symbols_info,
-          &current_encode_info));
-    }
+    WP2_CHECK_STATUS(encoder.EncodeImageInternal(config, encode_progress,
+                                                 symbols_info, &enc, &dicts,
+                                                 &current_encode_info));
 
     // If we are better than what we already have.
     WP2_CHECK_STATUS(enc.Assemble());
@@ -884,40 +930,6 @@ static WP2Status EncodeStreamHook(void* input, void* data2,
   }
   WP2::swap(*enc_init, enc_best);
 
-  return WP2_STATUS_OK;
-}
-
-WP2Status EncodeImage(const WP2::EncoderConfig& config,
-                      const WP2::ArgbBuffer& picture, bool has_alpha,
-                      const ProgressRange& progress, WP2::ANSEnc* const enc,
-                      EncodeInfo* const encode_info) {
-  assert(!picture.IsEmpty());
-  assert(enc != nullptr);
-
-  const ProgressRange analysis_progress(progress, 0.5);
-  const ProgressRange encode_progress(progress, 0.5);
-
-  Encoder encoder(config, picture, has_alpha);
-  CrunchConfig crunch_configs[kCrunchNumMax];
-  uint32_t num_crunch_configs = 0;
-
-  // Analyze image (entropy, num_palettes etc)
-  WP2_CHECK_STATUS(encoder.Allocate());
-  WP2_CHECK_STATUS(EncoderAnalyze(analysis_progress, &encoder, crunch_configs,
-                                  &num_crunch_configs));
-
-  StreamEncodeContext params;
-  for (uint32_t idx = 0; idx < num_crunch_configs; ++idx) {
-    params.crunch_configs[idx] = crunch_configs[idx];
-  }
-  params.num_crunch_configs = num_crunch_configs;
-
-  // Fill in the parameters for the thread workers.
-  params.config = &config;
-  params.enc = enc;
-  params.encoder = &encoder;
-  WP2_CHECK_STATUS(EncodeStreamHook(&params, /*data2=*/nullptr, encode_progress,
-                                    encode_info));
   return WP2_STATUS_OK;
 }
 

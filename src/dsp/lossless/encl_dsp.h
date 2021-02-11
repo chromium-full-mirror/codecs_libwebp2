@@ -42,16 +42,20 @@ extern ProcessEncBlueAndRedFunc SubtractGreenFromBlueAndRed;
 typedef void (*TransformColorFunc)(const Multipliers* const m, int num_pixels,
                                    int16_t* const data);
 extern TransformColorFunc TransformColor;
-typedef void (*CollectColorBlueTransformsFunc)(
+
+// Functions collecting stats about blue and red transforms. If the transform
+// produces a value bigger (in abs()) than abs_value_max, returns false (meaning
+// the transform is not valid), true otherwise.
+typedef bool (*CollectColorBlueTransformsFunc)(
     const int16_t* argb, uint32_t width, uint32_t tile_width,
     uint32_t tile_height, int16_t green_to_blue, int16_t red_to_blue,
-    uint32_t histo_size, uint32_t* const histo);
+    uint16_t abs_value_max, uint32_t histo_size, uint32_t* const histo);
 extern CollectColorBlueTransformsFunc CollectColorBlueTransforms;
 
-typedef void (*CollectColorRedTransformsFunc)(
+typedef bool (*CollectColorRedTransformsFunc)(
     const int16_t* argb, uint32_t width, uint32_t tile_width,
-    uint32_t tile_height, int16_t green_to_red, uint32_t histo_size,
-    uint32_t* const histo);
+    uint32_t tile_height, int16_t green_to_red, uint16_t abs_value_max,
+    uint32_t histo_size, uint32_t* const histo);
 extern CollectColorRedTransformsFunc CollectColorRedTransforms;
 
 extern PredictorNonClampedAddSubFunc

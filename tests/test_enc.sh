@@ -39,7 +39,7 @@ TMP_WP2=/tmp/test_enc.wp2
 TMP_PNG=/tmp/test_enc.png
 
 echo "lossy test"
-${CWP2} -o ${TMP_WP2} "${TESTDATA_DIR}/source1.png" -q 75 -effort 2 -summary \
+${CWP2} -o ${TMP_WP2} "${TESTDATA_DIR}/source1.png" -q 75 -effort 2 -info \
         -mt 2147483647 -orientation 2 -crop 7 8 497 304 -segment_mode implicit
 ${DWP2} -mt 2147483647 ${TMP_WP2} -o ${TMP_PNG}
 ${GET_DISTO} ${TMP_PNG} "${TESTDATA_DIR}/source1.png" -lsim \
@@ -47,7 +47,7 @@ ${GET_DISTO} ${TMP_PNG} "${TESTDATA_DIR}/source1.png" -lsim \
 
 echo "EXIF + XMP test"
 ${CWP2} -o ${TMP_WP2} "${TESTDATA_DIR}/test_exif_xmp.webp" -psnrhvs -q 10 \
-        -summary -z 4 -mt -crop 0 0 128 128 -segment_mode explicit
+        -info -z 4 -mt -crop 0 0 128 128 -segment_mode explicit
 ${DWP2} ${TMP_WP2} -o ${TMP_PNG}
 ${GET_DISTO} ${TMP_WP2} "${TESTDATA_DIR}/test_exif_xmp.webp" \
              -ssim -crop_source 0 0 0 0 -crop 0 0 128 128

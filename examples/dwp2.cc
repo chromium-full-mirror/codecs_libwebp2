@@ -89,7 +89,7 @@ void Help() {
   opt.Add("-force",
           "overwrite destination if it exists (default=off unless out_file is "
           "explicit)");
-  opt.Add("-i", "just print bitstream info and exit");
+  opt.Add("-info", "just print bitstream info and exit");
   opt.Add("-v", "verbose (e.g. print encoding/decoding times)");
   opt.Add("-progress", "display decoding progression");
   opt.Add("-quiet", "quiet mode, don't print anything");
@@ -474,7 +474,7 @@ int main(int argc, char* argv[]) {
       settings.output_frames_to_directory = true;
     } else if (!strcmp(argv[c], "-force")) {
       settings.allow_overwrite = true;
-    } else if (!strcmp(argv[c], "-i")) {
+    } else if (!strcmp(argv[c], "-info")) {
       settings.print_info = true;
     } else if (!strcmp(argv[c], "-vdebug") && c + 1 < argc) {
       settings.visual_debug = argv[++c];

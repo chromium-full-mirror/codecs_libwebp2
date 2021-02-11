@@ -71,8 +71,8 @@ class ImageReaderWP2 : public ImageReader::Impl {
         // Metadata must be extracted during the first ReadFrame() call.
         // ICCP was already decoded after header.
         const WP2Status metadata_status =
-            ExtractMetadata(data_, data_size_, &buffer_->metadata_.exif,
-                            /*iccp=*/nullptr, &buffer_->metadata_.xmp);
+            ExtractMetadata(data_, data_size_, /*iccp=*/nullptr,
+                            &buffer_->metadata_.xmp, &buffer_->metadata_.exif);
         if (metadata_status != WP2_STATUS_OK) status = metadata_status;
       }
     } else if (decoder_.GetStatus() == WP2_STATUS_OK) {

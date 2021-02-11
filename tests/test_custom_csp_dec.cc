@@ -107,9 +107,9 @@ TEST_P(DecodeCustomCspTest, Comparison) {
       get_metadata ? &metadata : nullptr));
 
   if (get_metadata) {
-    EXPECT_TRUE(testing::HasSameData(metadata.exif, ref.metadata_.exif));
-    EXPECT_TRUE(testing::HasSameData(metadata.xmp, ref.metadata_.xmp));
     EXPECT_TRUE(testing::HasSameData(metadata.iccp, ref.metadata_.iccp));
+    EXPECT_TRUE(testing::HasSameData(metadata.xmp, ref.metadata_.xmp));
+    EXPECT_TRUE(testing::HasSameData(metadata.exif, ref.metadata_.exif));
   }
 
   switch (matrix) {

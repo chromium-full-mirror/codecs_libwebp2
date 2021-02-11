@@ -492,37 +492,39 @@ bool LosslessSymbolsInfo::IsLabelImage(const SymbolsInfo& info) {
 // addition/subtraction with channel 'channel2' up to a multiplicative
 // coefficient 'coeff'.
 static inline void UpdateMinMax(uint32_t channel1, uint32_t channel2,
-                                int32_t coeff, int16_t* const minima,
-                                int16_t* const maxima) {
+                                int32_t coeff, int32_t num_bits,
+                                int16_t* const minima, int16_t* const maxima) {
   const int16_t delta =
       std::max(std::abs(minima[channel2]), std::abs(maxima[channel2]));
-  // TODO(vrabaud) deal with out of bounds transforms by imposing clamps or
-  // smaller cross-color ranges.
-  minima[channel1] = std::max(minima[channel1] - coeff * delta,
-                              (int32_t)std::numeric_limits<int16_t>::min());
-  maxima[channel1] = std::min(maxima[channel1] + coeff * delta,
-                              (int32_t)std::numeric_limits<int16_t>::max());
+  const int32_t abs_value_max =
+      (num_bits == 8) ? kMaxAbsResidual8 : kMaxAbsResidual10;
+  static_assert(2 * kMaxAbsResidual8 + 1 <= WP2::kANSMaxRange,
+                "invalid kMaxAbsResidual8 value");
+  static_assert(2 * kMaxAbsResidual10 + 1 <= WP2::kANSMaxRange,
+                "invalid kMaxAbsResidual10 value");
+  minima[channel1] = std::max(minima[channel1] - coeff * delta, -abs_value_max);
+  maxima[channel1] = std::min(maxima[channel1] + coeff * delta, abs_value_max);
 }
 
 // The written logic is good but it is overriden by setting bounds to [0,255]
 // for kPredictor, kCrossColor and kSubtractGreen because they still use wrap
 // arounds.
-void GetARGBRanges(const TransformType* transforms, uint32_t num_transforms,
-                   WP2SampleFormat format, uint32_t num_colors,
-                   int16_t minima_range[4], int16_t maxima_range[4]) {
+void GetARGBRanges(const TransformType* transforms, WP2SampleFormat format,
+                   uint32_t num_colors, int16_t minima_range[4],
+                   int16_t maxima_range[4], uint32_t num_transforms) {
   // Define the original range according to the pixel format.
-  int32_t num_bits[4];
   // Deal with alpha.
   minima_range[0] = 0;
   maxima_range[0] = WP2::kAlphaMax;
-  num_bits[0] = WP2::kAlphaBits;
+  const int32_t num_bits_alpha = WP2::kAlphaBits;
   // Deal with other channels.
+  const int32_t num_bits_non_alpha = (format == WP2_Argb_38) ? 10 : 8;
   for (uint32_t c = 1; c < 4; ++c) {
     minima_range[c] = 0;
-    num_bits[c] = (format == WP2_Argb_38) ? 10 : 8;
-    maxima_range[c] = (1 << num_bits[c]) - 1;
+    maxima_range[c] = (1 << num_bits_non_alpha) - 1;
   }
   for (uint32_t i = 0; i < num_transforms; ++i) {
+    if (transforms[i] == TransformType::kNum) break;
     switch (transforms[i]) {
       case TransformType::kPredictor:
         // The predictors are convex or clamped in the current bounds. Only the
@@ -530,26 +532,27 @@ void GetARGBRanges(const TransformType* transforms, uint32_t num_transforms,
         // The ranges are updated to be the ranges of the residuals.
         for (uint32_t c = 0; c < 4; ++c) {
           UpdateMinMax(/*channel1=*/c, /*channel2=*/c, /*coeff=*/1,
+                       (c == 0) ? num_bits_alpha : num_bits_non_alpha,
                        minima_range, maxima_range);
         }
         break;
       case TransformType::kCrossColor:
         // First, red is modified by green.
-        UpdateMinMax(/*channel1=*/1, /*channel2=*/2, /*coeff=*/2, minima_range,
-                     maxima_range);
+        UpdateMinMax(/*channel1=*/1, /*channel2=*/2, /*coeff=*/2,
+                     num_bits_non_alpha, minima_range, maxima_range);
         // Then blue by green and red. 4 is because we multiply by a value at
         // most kGreenToBlueMax or kGreenToRedMax (128 for now) and shift by 5.
-        UpdateMinMax(/*channel1=*/3, /*channel2=*/2, /*coeff=*/4, minima_range,
-                     maxima_range);
-        UpdateMinMax(/*channel1=*/3, /*channel2=*/1, /*coeff=*/4, minima_range,
-                     maxima_range);
+        UpdateMinMax(/*channel1=*/3, /*channel2=*/2, /*coeff=*/4,
+                     num_bits_non_alpha, minima_range, maxima_range);
+        UpdateMinMax(/*channel1=*/3, /*channel2=*/1, /*coeff=*/4,
+                     num_bits_non_alpha, minima_range, maxima_range);
         break;
       case TransformType::kSubtractGreen:
         // green is subtracted from red and blue
-        UpdateMinMax(/*channel1=*/1, /*channel2=*/2, /*coeff=*/1, minima_range,
-                     maxima_range);
-        UpdateMinMax(/*channel1=*/3, /*channel2=*/2, /*coeff=*/1, minima_range,
-                     maxima_range);
+        UpdateMinMax(/*channel1=*/1, /*channel2=*/2, /*coeff=*/1,
+                     num_bits_non_alpha, minima_range, maxima_range);
+        UpdateMinMax(/*channel1=*/3, /*channel2=*/2, /*coeff=*/1,
+                     num_bits_non_alpha, minima_range, maxima_range);
         break;
       case TransformType::kColorIndexing:
         // A is set to its maximum value.
