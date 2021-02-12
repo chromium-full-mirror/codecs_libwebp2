@@ -123,7 +123,7 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass, BlockSize block_size,
 
   // Make sure the 'block_size' is valid and there is at least one remaining.
   if (block.w() > num_block_cols_ || block.h() > num_block_rows_ ||
-      block.rect().GetArea() > *max_num_blocks_left) {
+      block.area() > *max_num_blocks_left) {
     WP2_CHECK_REDUCED_STATUS(RegisterPassForVDebug(pass, block_size, 0));
     ++pass_index_;
     WP2_CHECK_STATUS(progress.AdvanceBy(1.));

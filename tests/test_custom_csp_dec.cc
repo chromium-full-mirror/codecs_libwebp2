@@ -179,7 +179,7 @@ TEST_P(DecodeCustomCspTest, Comparison) {
                                    /*resize_if_needed=*/true));
       // SetView() plane by plane to avoid IsSubsampled() checks.
       YUVPlane non_padded_yuv;
-      const Rectangle rect = {0, 0, ref.width(), ref.height()};
+      const Rectangle rect = ref.AsRect();
       ASSERT_WP2_OK(non_padded_yuv.Y.SetView(custom_output.Y, rect));
       ASSERT_WP2_OK(non_padded_yuv.U.SetView(custom_output.U, rect));
       ASSERT_WP2_OK(non_padded_yuv.V.SetView(custom_output.V, rect));

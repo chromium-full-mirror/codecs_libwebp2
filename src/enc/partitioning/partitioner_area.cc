@@ -107,7 +107,7 @@ WP2Status AreaRDOptPartitioner::GetAreaBestPartition(
   // Mark each block of the best partition as final.
   for (const Block& block : area_best_blocks) {
     assert(*max_num_blocks_left > 0);
-    *max_num_blocks_left -= block.rect().GetArea();
+    *max_num_blocks_left -= block.area();
     WP2_CHECK_ALLOC_OK(blocks->push_back(block));
     WP2_CHECK_STATUS(score_func_->Use(block));
   }

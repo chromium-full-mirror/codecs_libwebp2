@@ -128,7 +128,7 @@ WP2Status OrientateBuffer(Orientation orientation, ArgbBuffer* const buffer) {
     ArgbBuffer tmp(buffer->format());
     WP2_CHECK_STATUS(tmp.Resize(buffer->height(), buffer->width()));
     WP2_CHECK_STATUS(OrientateSubBuffer(
-        orientation, *buffer, {0, 0, buffer->width(), buffer->height()}, &tmp));
+        orientation, *buffer, buffer->AsRect(), &tmp));
 
     if (buffer->IsView()) {
       WP2_CHECK_STATUS(buffer->CopyFrom(tmp));
@@ -190,8 +190,7 @@ WP2Status OrientateBuffer(Orientation orientation, const ArgbBuffer& src,
   WP2_CHECK_STATUS(
       dst->Resize(OrientateWidth(orientation, src.width(), src.height()),
                   OrientateHeight(orientation, src.width(), src.height())));
-  WP2_CHECK_STATUS(OrientateSubBuffer(
-      orientation, src, Rectangle(0, 0, src.width(), src.height()), dst));
+  WP2_CHECK_STATUS(OrientateSubBuffer(orientation, src, src.AsRect(), dst));
   return WP2_STATUS_OK;
 }
 
@@ -303,7 +302,7 @@ WP2Status OrientateBuffer(Orientation orientation, Plane16* const buffer) {
     Plane16 tmp;
     WP2_CHECK_STATUS(tmp.Resize(buffer->h_, buffer->w_));
     WP2_CHECK_STATUS(OrientateSubBuffer(orientation, *buffer,
-                                        {0, 0, buffer->w_, buffer->h_}, &tmp));
+                                        buffer->AsRect(), &tmp));
     if (buffer->IsView()) {
       WP2_CHECK_STATUS(buffer->Copy(tmp, /*resize_if_needed=*/false));
     } else {
@@ -351,8 +350,7 @@ WP2Status OrientateBuffer(Orientation orientation, const Plane16& src,
   const uint32_t dst_width = OrientateWidth(orientation, src.w_, src.h_);
   const uint32_t dst_height = OrientateHeight(orientation, src.w_, src.h_);
   if (!dst->IsView()) WP2_CHECK_STATUS(dst->Resize(dst_width, dst_height));
-  WP2_CHECK_STATUS(OrientateSubBuffer(orientation, src,
-                                      Rectangle(0, 0, src.w_, src.h_), dst));
+  WP2_CHECK_STATUS(OrientateSubBuffer(orientation, src, src.AsRect(), dst));
   return WP2_STATUS_OK;
 }
 

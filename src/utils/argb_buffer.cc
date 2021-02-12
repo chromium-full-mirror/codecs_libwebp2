@@ -204,7 +204,7 @@ WP2Status ArgbBuffer::Resize(uint32_t new_width, uint32_t new_height) {
 
   if (width_ == new_height && height_ == new_width) {
     // Changing layout is enough.
-    width_ = new_width;
+    width_  = new_width;
     height_ = new_height;
     stride_ = new_stride;
     metadata_.Clear();
@@ -215,7 +215,7 @@ WP2Status ArgbBuffer::Resize(uint32_t new_width, uint32_t new_height) {
   void* const new_pixels = WP2Malloc(new_height, new_stride);
   WP2_CHECK_ALLOC_OK(new_pixels != nullptr);
   pixels_ = new_pixels;
-  width_ = new_width;
+  width_  = new_width;
   height_ = new_height;
   stride_ = new_stride;
   is_external_memory_ = false;
@@ -308,8 +308,22 @@ void ArgbBuffer::Fill(const Rectangle& window, Argb38b color) {
   Fill(window, color16);
 }
 
+void ArgbBuffer::Fill(const Rectangle& window, const uint8_t color[]) {
+  assert(WP2FormatBpc(format_) == 1);
+  FillImpl(window, color);
+}
+
+void ArgbBuffer::Fill(const Rectangle& window, const uint16_t color[]) {
+  assert(WP2FormatBpc(format_) == 2);
+  FillImpl(window, color);
+}
+
+void ArgbBuffer::Fill(const Argb32b color) {
+  Fill(AsRect(), color);
+}
+
 void ArgbBuffer::FillImpl(const Rectangle& window, const void* color) {
-  const Rectangle r = window.ClipWith({0, 0, width_, height_});
+  const Rectangle r = window.ClipWith(AsRect());
   const uint32_t pixel_depth = WP2FormatBpp(format_);
   if (r.width == 0 || r.height == 0) return;
   // Even if channels are uint16_t, uint8_t is used as the stride and
@@ -325,26 +339,25 @@ void ArgbBuffer::FillImpl(const Rectangle& window, const void* color) {
   }
 }
 
-void ArgbBuffer::Fill(const Rectangle& window, const uint8_t color[]) {
-  assert(WP2FormatBpc(format_) == 1);
-  FillImpl(window, color);
-}
-
-void ArgbBuffer::Fill(const Rectangle& window, const uint16_t color[]) {
-  assert(WP2FormatBpc(format_) == 2);
-  FillImpl(window, color);
-}
-
-void ArgbBuffer::Fill(const Argb32b color) {
-  Fill({0, 0, width_, height_}, color);
-}
-
-void ArgbBuffer::DrawRect(const Rectangle& window, Argb32b color) {
+void ArgbBuffer::DrawRect(const Rectangle& window, Argb32b color,
+                          uint32_t edges_to_draw) {
   assert(CheckPremultiplied(color));
-  Fill({window.x, window.y, 1, window.height}, color);
-  Fill({window.x, window.y, window.width, 1}, color);
-  Fill({window.x + window.width - 1, window.y, 1, window.height}, color);
-  Fill({window.x, window.y + window.height - 1, window.width, 1}, color);
+  // top
+  if (edges_to_draw & 1) Fill({window.x, window.y, window.width, 1}, color);
+  // left
+  if (edges_to_draw & 2) Fill({window.x, window.y, 1, window.height}, color);
+  // bottom
+  if (edges_to_draw & 4) Fill({window.x, window.y + window.height - 1,
+                               window.width, 1}, color);
+  // right
+  if (edges_to_draw & 8) Fill({window.x + window.width - 1, window.y,
+                              1, window.height}, color);
+  // mid horizontal
+  if (edges_to_draw & 16) Fill({window.x, window.y + window.height / 2,
+                                window.width, 1}, color);
+  // mid vertical
+  if (edges_to_draw & 32) Fill({window.x + window.width / 2, window.y,
+                                1, window.height}, color);
 }
 
 WP2Status ArgbBuffer::CompositeOver(Argb32b background) {
@@ -376,9 +389,7 @@ static WP2Status CompositeBuffers(const ArgbBuffer& background,
   WP2_CHECK_OK(foreground.height() == background.height(),
                WP2_STATUS_INVALID_PARAMETER);
   const Rectangle w =
-      (window.GetArea() > 0)
-          ? window
-          : Rectangle{0, 0, background.width(), background.height()};
+      (window.GetArea() > 0) ? window : background.AsRect();
   WP2_CHECK_OK(window.x + window.width <= background.width(),
                WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(window.y + window.height <= background.height(),
@@ -411,7 +422,7 @@ WP2Status ArgbBuffer::CompositeUnder(const ArgbBuffer& foreground,
 }
 
 WP2Status ArgbBuffer::SetView(const ArgbBuffer& src) {
-  return SetView(src, {0, 0, src.width_, src.height_});
+  return SetView(src, src.AsRect());
 }
 
 WP2Status ArgbBuffer::SetView(const ArgbBuffer& src, const Rectangle& window) {

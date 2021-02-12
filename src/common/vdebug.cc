@@ -125,7 +125,7 @@ WP2Status RegisterBitTrace(const DecoderConfig& config, uint32_t num_bytes,
 void CodedBlockBase::ToBlockInfo(BlockInfo* const blk) const {
   const CodingParams& y_params = GetCodingParams(kYChannel);
 
-  blk->rect = {x_pix(), y_pix(), w_pix(), h_pix()};
+  blk->rect = AsRect();
   blk->segment_id = id_;
   blk->is420 = is420_;
   blk->tf_x = (uint8_t)y_params.tf_x();
@@ -193,23 +193,21 @@ static void MarkPixelForVDebug(int32_t x, int32_t y, Argb32b color,
 }
 
 // Sets pixels with 'color' (or respectively 'bg_color' if not fully
-// transparent), in the rectangle (w, h) starting at (x, y), for non-space
-// characters in 'mask' (or respectively spaces).
-static void DrawPixelArray(uint32_t x, uint32_t y, uint32_t w, uint32_t h,
+// transparent), in the rectangle 'rect', for non-space characters in
+// 'mask' (or respectively spaces).
+static void DrawPixelArray(const Rectangle& rect,
                            Argb32b color, Argb32b bg_color,
                            const std::vector<std::string>& mask, uint32_t scale,
                            ArgbBuffer* const debug_output) {
-  w += x;
-  h += y;
   for (uint32_t l = 0; l < mask.size(); ++l) {
     for (uint32_t ls = 0; ls < scale; ++ls) {
-      const uint32_t final_y = y + l * scale + ls;
-      if (final_y >= h) break;
+      const uint32_t final_y = rect.y + l * scale + ls;
+      if (final_y >= rect.y + rect.height) break;
 
       for (uint32_t c = 0; mask[l][c] != '\0'; ++c) {
         for (uint32_t cs = 0; cs < scale; ++cs) {
-          const uint32_t final_x = x + c * scale + cs;
-          if (final_x >= w) break;
+          const uint32_t final_x = rect.x + c * scale + cs;
+          if (final_x >= rect.x + rect.width) break;
 
           uint8_t* const pixel = debug_output->GetRow8(final_y) + final_x * 4;
           if (mask[l][c] != ' ') {
@@ -236,9 +234,10 @@ void VDDrawUndefinedPattern(ArgbBuffer* const debug_output) {
   }
 
   // Display "undefined" if the 'debug_output' content is not overwritten.
-  DrawPixelArray(debug_output->width() / 3, debug_output->height() / 3,
-                 debug_output->width() - debug_output->width() / 3,
-                 debug_output->height() - debug_output->height() / 3,
+  DrawPixelArray({debug_output->width() / 3,
+                  debug_output->height() / 3,
+                  debug_output->width() - debug_output->width() / 3,
+                  debug_output->height() - debug_output->height() / 3},
                  Argb32b{0xff, 0x55, 0x55, 0x55}, Argb32b{0, 0, 0, 0},
                  {
                      "            #        # #             #",
@@ -392,9 +391,10 @@ void CodedBlockBase::StoreTransform(const DecoderConfig& config,
   const Argb32b x_color = ColorMult(kColors[tf_x], all_zero ? 0.3f : 1.f);
   const Argb32b y_color = ColorMult(kColors[tf_y], all_zero ? 0.3f : 1.f);
 
-  const uint32_t w = std::min(w_pix(), debug_output->width() - x_pix());
-  const uint32_t h = std::min(h_pix(), debug_output->height() - y_pix());
-  const Rectangle r_px{x_pix(), y_pix(), w, h};
+  const Rectangle r_px = AsRect().ClipWith(debug_output->AsRect());
+
+  const uint32_t w = r_px.width;
+  const uint32_t h = r_px.height;
   if (VDMatch(config, "x") || (tf_x == tf_y)) {
     debug_output->Fill(r_px, x_color);
   } else if (VDMatch(config, "y")) {
@@ -432,7 +432,7 @@ static void OutputPixelValuesWithContext(const DecoderConfig& config,
                                          uint32_t tile_x, uint32_t tile_y,
                                          const CodedBlockBase& cb,
                                          const Plane16& pixels) {
-  if (VDSelected(tile_x, tile_y, cb.blk().rect_pix(), config)) {
+  if (VDSelected(cb.AsRect(tile_x, tile_y), config)) {
     // Print pixels with the same formatting as "prediction/modes".
     std::string& str = config.info->selection_info;
     str += WP2SPrint("Block at %u, %u px (w %u, h %u)\n",
@@ -518,8 +518,7 @@ static void DisplayPredContext(const CodedBlockBase& cb, Channel channel,
                                bool draw_red_border,
                                ArgbBuffer* const debug_output) {
   const uint32_t x = cb.x_pix(), y = cb.y_pix(), w = cb.w_pix(), h = cb.h_pix();
-  const Rectangle rect = {x, y, std::min(w, debug_output->width() - x),
-                          std::min(h, debug_output->height() - y)};
+  const Rectangle rect = cb.AsRect().ClipWith(debug_output->AsRect());
 
   if (draw_red_border) {  // Encircle the left, top, right context lines.
     const uint32_t bx = SafeSub(x, 2u), by = SafeSub(y, 2u);
@@ -586,10 +585,7 @@ void CodedBlock::StorePredictionScore(
   ArgbBuffer debug_output;  // Tile view.
   WP2_ASSERT_STATUS(debug_output.SetView(config.info->debug_output, tile_rect));
 
-  const Rectangle rect = {
-      // Block rect.
-      x_pix(), y_pix(), std::min(w_pix(), debug_output.width() - x_pix()),
-      std::min(h_pix(), debug_output.height() - y_pix())};
+  const Rectangle rect = AsRect().ClipWith(debug_output.AsRect());
   const bool selected = VDSelected(tile_rect.x, tile_rect.y, rect, config);
 
   debug_output.Fill(rect, Argb32b{0xff, 0x00, 0x22, 0x00});
@@ -637,7 +633,7 @@ static void DisplayPredictionMode(const DecoderConfig& config,
                                   ArgbBuffer* const debug_output) {
   if (raw_prediction != nullptr) {
     Plane16 dst_view;
-    WP2_ASSERT_STATUS(dst_view.SetView(*raw_prediction, cb.blk().rect_pix()));
+    WP2_ASSERT_STATUS(dst_view.SetView(*raw_prediction, cb.AsRect()));
     const Predictor& pred = *cb.GetCodingParams(channel).pred;
     pred.Predict(cb, channel, dst_view.Row(0), dst_view.Step());
   } else {
@@ -669,9 +665,7 @@ void CodedBlockBase::StorePredictionModes(
     const DecoderConfig& config, const Rectangle& tile_rect, Channel channel,
     const Predictors& preds, Plane16* const raw_prediction,
     ArgbBuffer* const debug_output) const {
-  const Rectangle r_px{x_pix(), y_pix(),
-                       std::min(w_pix(), tile_rect.width - x_pix()),
-                       std::min(h_pix(), tile_rect.height - y_pix())};
+  const Rectangle r_px = AsRect().ClipWith(tile_rect);
 
   // Whole block
   const bool selected = VDSelected(tile_rect.x, tile_rect.y, r_px, config);
@@ -689,8 +683,7 @@ void CodedBlockBase::StorePredictionModes(
 void CodedBlockBase::AppendOriginalPixels(
     const DecoderConfig& config, uint32_t tile_x, uint32_t tile_y,
     const CSPTransform& csp_tranform, ArgbBuffer* const debug_output) const {
-  if (VDSelected(tile_x, tile_y, {x_pix(), y_pix(), w_pix(), h_pix()},
-                 config)) {
+  if (VDSelected(AsRect(tile_x, tile_y), config)) {
     const Channel channel = VDChannel(config);
     YUVPlane original_yuv;  // 'debug_output' should be the original RGB pixels.
     WP2_ASSERT_STATUS(
@@ -706,7 +699,7 @@ void CodedBlockBase::AppendOriginalPixels(
     cb.SetContextInput(original_yuv, &context_cache);
 
     YUVPlane view;
-    WP2_ASSERT_STATUS(view.SetView(original_yuv, blk().rect_pix()));
+    WP2_ASSERT_STATUS(view.SetView(original_yuv, AsRect()));
     OutputPixelValuesWithContext(config, tile_x, tile_y, cb,
                                  view.GetChannel(channel));
   }
@@ -718,7 +711,7 @@ void CodedBlockBase::AppendCompressedPixels(
   if (VDMatch(config, "r") || VDMatch(config, "g") || VDMatch(config, "b")) {
     return;
   }
-  if (VDSelected(tile_x, tile_y, blk().rect_pix(), config)) {
+  if (VDSelected(AsRect(tile_x, tile_y), config)) {
     OutputPixelValuesWithContext(config, tile_x, tile_y, *this,
                                  out_.GetChannel(VDChannel(config)));
     config.info->selection_info +=
@@ -732,7 +725,7 @@ void SyntaxReader::StoreBitCost(const DecoderConfig& config,
                                 Plane16* const dst_plane) const {
   (void)config, (void)tile_x, (void)tile_y, (void)block, (void)dst_plane;
 #if defined(WP2_BITTRACE)
-  const Rectangle& rect = block.rect_pix();
+  const Rectangle& rect = block.AsRect();
   const std::string prefix =
       VDMatch(config, "overall") ? "" : kCoeffsStr[VDChannel(config)];
 
@@ -790,8 +783,7 @@ void CodedBlockBase::StoreCflSlope(Channel channel, int16_t yuv_min,
   int32_t a, b;
   CflPredictor cfl_predictor(yuv_min, yuv_max);
   cfl_predictor.ContextLinearRegression(channel, *this, &a, &b);
-  dst_plane->Fill(
-      blk_.rect_pix(), (int16_t)std::lround(a * 100.f * CflNorm));
+  dst_plane->Fill(blk_.AsRect(), (int16_t)std::lround(a * 100.f * CflNorm));
 
   if (debug_str != nullptr) {
     *debug_str += WP2SPrint("Chroma = %.2f * luma + %.2f\n",
@@ -806,9 +798,7 @@ void CodedBlockBase::StoreCflIntercept(Channel channel, int16_t yuv_min,
   int32_t a, b;
   CflPredictor cfl_predictor(yuv_min, yuv_max);
   cfl_predictor.ContextLinearRegression(channel, *this, &a, &b);
-  dst_plane->Fill(
-      blk_.rect_pix(),
-      (int16_t)std::lround(0.5f * CflNorm * b));
+  dst_plane->Fill(blk_.AsRect(), (int16_t)std::lround(0.5f * CflNorm * b));
 
   if (debug_str != nullptr) {
     *debug_str = WP2SPrint("Chroma = %.2f * luma + %.2f\n",
@@ -840,7 +830,7 @@ void CodedBlock::StoreBestCflSlope(Channel channel, int16_t yuv_min,
                                    std::string* const debug_str) const {
   float a, b;
   CflLinearRegression(channel, yuv_min, yuv_max, &a, &b, debug_str);
-  dst_plane->Fill(blk_.rect_pix(), (int16_t)std::lround(a * 100.f));
+  dst_plane->Fill(AsRect(), (int16_t)std::lround(a * 100.f));
 }
 
 
@@ -850,7 +840,7 @@ void CodedBlock::StoreBestCflIntercept(Channel channel, int16_t yuv_min,
                                        std::string* const debug_str) const {
   float a, b;
   CflLinearRegression(channel, yuv_min, yuv_max, &a, &b, debug_str);
-  dst_plane->Fill(blk_.rect_pix(), (int16_t)std::lround(b / 2.f));
+  dst_plane->Fill(AsRect(), (int16_t)std::lround(b / 2.f));
 }
 
 void CodedBlock::StoreBestCflPrediction(Channel channel, int16_t yuv_min,
@@ -896,7 +886,7 @@ void CodedBlock::StoreErrorDiffusion(const EncoderConfig& config,
   if (!VDMatch(config, "error-diffusion")) return;
   const Channel channel = VDChannel(config);
 
-  if (VDSelected(tile_x, tile_y, blk().rect_pix(), config)) {
+  if (VDSelected(AsRect(tile_x, tile_y), config)) {
     config.info->selection_info += WP2SPrint(
                "Block at %4u, %4u (%2u x %2u px)\n", tile_x + x_pix(),
                tile_y + y_pix(), w_pix(), h_pix());
@@ -908,7 +898,7 @@ void CodedBlock::StoreErrorDiffusion(const EncoderConfig& config,
   const int16_t error = VDMatch(config, "propagated-error")
                             ? dc_error_[channel]
                             : dc_error_next_[channel];
-  dst_plane->Fill(blk_.rect_pix(), error / 2);
+  dst_plane->Fill(AsRect(), error / 2);
 }
 
 //------------------------------------------------------------------------------
@@ -930,24 +920,46 @@ void Block::Draw(YUVPlane* const yuv) const {
 
 //------------------------------------------------------------------------------
 
+static std::string PrintQuantSteps(const uint16_t steps[4], const char name[]) {
+  return WP2SPrint(" %s quant_steps:   %d %d %d %d\n",
+                   name, steps[0], steps[1], steps[2], steps[3]);
+}
+
+static std::string PrintSegmentInfo(const Segment& segment, bool is_alpha) {
+  std::string str;
+  if (segment.use_quality_factor_) {
+    const float q = 1.f * segment.quality_factor_ / kQFactorMax;
+    str += WP2SPrint(" quality_factor_: %d  (q ~= %.1f)\n",
+                     segment.quality_factor_, kMaxLossyQuality * (1.f - q));
+  }
+  if (is_alpha) {
+    str += PrintQuantSteps(segment.quant_steps_[kAChannel], "A");
+  } else {
+    str += PrintQuantSteps(segment.quant_steps_[kYChannel], "Y");
+    str += PrintQuantSteps(segment.quant_steps_[kUChannel], "U");
+    str += PrintQuantSteps(segment.quant_steps_[kVChannel], "V");
+  }
+  return str;
+}
+
 WP2Status CodedBlockBase::Draw(const DecoderConfig& config, const Tile& tile,
                                const GlobalParams& gparams,
                                ArgbBuffer* const debug_output) const {
   assert(VDMatch(config, "blocks"));
-  const uint32_t tile_x = tile.rect.x;
-  const uint32_t tile_y = tile.rect.y;
-  const uint32_t x = x_pix(), bw = w_pix();
-  const uint32_t y = y_pix(), bh = h_pix();
-  const uint32_t w = std::min(bw, debug_output->width() - x);  // Border
-  const uint32_t h = std::min(bh, debug_output->height() - y);
-  const uint32_t mid_w = std::min(bw - 2, debug_output->width() - (x + 1));
-  const uint32_t mid_h = std::min(bh - 2, debug_output->height() - (y + 1));
+  const Rectangle rect = AsRect().ClipWith(debug_output->AsRect());
+  const uint32_t x = rect.x;
+  const uint32_t y = rect.y;
+  const uint32_t w = rect.width;  // Border
+  const uint32_t h = rect.height;
+  const uint32_t mid_w = std::min(w - 2, debug_output->width() - (x + 1));
+  const uint32_t mid_h = std::min(h - 2, debug_output->height() - (y + 1));
+  const Rectangle sub_rect = {x + 1, y + 1, mid_w, mid_h};
 
   {    // Copy the decoded content in the block's sub-area.
     YUVPlane tmp_yuv;
-    WP2_CHECK_STATUS(tmp_yuv.SetView(tile.yuv_output, {x, y, w, h}));
+    WP2_CHECK_STATUS(tmp_yuv.SetView(tile.yuv_output, rect));
     ArgbBuffer tmp_argb;
-    WP2_CHECK_STATUS(tmp_argb.SetView(*debug_output, {x, y, w, h}));
+    WP2_CHECK_STATUS(tmp_argb.SetView(*debug_output, rect));
     WP2_CHECK_STATUS(tmp_yuv.Export(gparams.transf_, /*resize_if_needed=*/false,
                                     &tmp_argb));
   }
@@ -967,14 +979,13 @@ WP2Status CodedBlockBase::Draw(const DecoderConfig& config, const Tile& tile,
         }
       }
     }
-    debug_output->Fill({x, y, 1, h}, Argb32b{0xff, 0xff, 0xff, 0x30});
-    debug_output->Fill({x, y, w, 1}, Argb32b{0xff, 0xff, 0xff, 0x40});
+    debug_output->DrawRect(rect, Argb32b{0xff, 0xff, 0xff, 0x30}, 0x03);
   } else if (VDMatch(config, "segment-ids") ||
              VDMatch(config, "quantization")) {
     const bool is_alpha =
         VDMatch(config, "quantization") && (VDChannel(config) == kAChannel);
     if (is_alpha && !HasLossyAlpha()) {
-      debug_output->Fill({x, y, w, h}, Argb32b{255, 0, 0, 0});
+      debug_output->Fill(rect, Argb32b{255, 0, 0, 0});
       return WP2_STATUS_OK;
     }
     const Segment& segment = gparams.segments_[is_alpha ? 0 : id_];
@@ -982,9 +993,7 @@ WP2Status CodedBlockBase::Draw(const DecoderConfig& config, const Tile& tile,
     Argb32b color;
     if (VDMatch(config, "segment-ids")) {
       color = kSegmentColors[id_];
-      if (mid_w > 0 && mid_h > 0) {
-        debug_output->Fill({x + 1, y + 1, mid_w, mid_h}, color);
-      }
+      debug_output->Fill(sub_rect, color);
     } else {
       // showing quantization
       uint16_t quant[kNumQuantZones];
@@ -999,54 +1008,26 @@ WP2Status CodedBlockBase::Draw(const DecoderConfig& config, const Tile& tile,
       // Max out saturation.
       const float mult = std::min(1.f / red, 1.f / green) * 255.f;
 
-      color = Argb32b{255, (uint8_t)std::min((uint32_t)(red * mult), 255u),
-                      (uint8_t)std::min((uint32_t)(green * mult), 255u), 0};
-      debug_output->Fill({x, y, w, h}, color);
+      color = Argb32b{255u,
+                      (uint8_t)std::min((uint32_t)(red * mult), 255u),
+                      (uint8_t)std::min((uint32_t)(green * mult), 255u),
+                      0u};
+      debug_output->Fill(rect, color);
     }
 
-    if (VDSelected(tile_x, tile_y, {x, y, bw, bh}, config)) {
+    if (VDSelected(tile.rect.x, tile.rect.y, rect, config)) {
       std::string& str = config.info->selection_info;
       str += WP2SPrint("\nSegment id: %u\n", id_);
-      if (segment.use_quality_factor_) {
-        const float q = 1.f * segment.quality_factor_ / kQFactorMax;
-        str += WP2SPrint(" quality_factor_: %d  (q ~= %.1f)\n",
-                         segment.quality_factor_, kMaxLossyQuality * (1.f - q));
-      }
-      if (is_alpha) {
-        str += WP2SPrint(" A quant_steps:   %d %d %d %d\n",
-                         segment.quant_steps_[kAChannel][0],
-                         segment.quant_steps_[kAChannel][1],
-                         segment.quant_steps_[kAChannel][2],
-                         segment.quant_steps_[kAChannel][3]);
-      } else {
-        str += WP2SPrint(" Y quant_steps:   %d %d %d %d\n",
-                         segment.quant_steps_[kYChannel][0],
-                         segment.quant_steps_[kYChannel][1],
-                         segment.quant_steps_[kYChannel][2],
-                         segment.quant_steps_[kYChannel][3]);
-        str += WP2SPrint(" U quant_steps: %d %d %d %d\n",
-                         segment.quant_steps_[kUChannel][0],
-                         segment.quant_steps_[kUChannel][1],
-                         segment.quant_steps_[kUChannel][2],
-                         segment.quant_steps_[kUChannel][3]);
-        str += WP2SPrint(" V quant_steps: %d %d %d %d\n",
-                         segment.quant_steps_[kVChannel][0],
-                         segment.quant_steps_[kVChannel][1],
-                         segment.quant_steps_[kVChannel][2],
-                         segment.quant_steps_[kVChannel][3]);
-      }
+      str += PrintSegmentInfo(segment, is_alpha);
 
-      debug_output->Fill({x, y, w, h}, Argb32b{255, 0, 0, 0});
-      if (mid_w > 0 && mid_h > 0) {
-        debug_output->Fill({x + 1, y + 1, mid_w, mid_h}, color);
-      }
+      debug_output->Fill(rect, Argb32b{255, 0, 0, 0});
+      debug_output->Fill(sub_rect, color);
     }
   } else if (VDMatch(config, "is420")) {
-    debug_output->DrawRect(
-        {x, y, w, h}, is420_ ? Argb32b{0xff, 0x11, 0xff, 0x11}
-                             : Argb32b{0xff, 0xdd, 0xdd, 0xdd});
-    if (is420_ && mid_w > 0 && mid_h > 0) {
-      DrawPixelArray(x + 1, y + 1, mid_w, mid_h,
+    debug_output->DrawRect(rect, is420_ ? Argb32b{0xff, 0x11, 0xff, 0x11}
+                                        : Argb32b{0xff, 0xdd, 0xdd, 0xdd});
+    if (is420_) {
+      DrawPixelArray(sub_rect,
                      Argb32b{0xff, 0xaa, 0xff, 0xaa},
                      Argb32b{0xff, 0x00, 0x00, 0x00},
                      {
@@ -1072,7 +1053,7 @@ WP2Status CodedBlock::Store420Scores(const EncoderConfig& config,
                                      bool reduced, uint32_t disto,
                                      float rate_u, float rate_v) {
   if (!VDMatch(config, "is420-scores")) return WP2_STATUS_OK;
-  if (VDSelected(pos_x, pos_y, blk().rect_pix(), config)) {
+  if (VDSelected(AsRect(pos_x, pos_y), config)) {
     config.info->selection_info += WP2SPrint(
         "%s score: %f = disto %d + lambda_u %f * rate_u %f + lambda_v "
         "%f * rate_v %f\n",
@@ -1088,7 +1069,7 @@ WP2Status CodedBlock::Store420Decision(const EncoderConfig& config,
                                        Debug420Decision decision) const {
   if (!VDMatch(config, "is420-scores")) return WP2_STATUS_OK;
 
-  if (VDSelected(pos_x, pos_y, blk().rect_pix(), config)) {
+  if (VDSelected(AsRect(pos_x, pos_y), config)) {
     config.info->selection_info +=
         (decision == Debug420Decision::k444EarlyExit) ?
                   "Decision: 444 early exit (DC only)\n" :
@@ -1097,32 +1078,26 @@ WP2Status CodedBlock::Store420Decision(const EncoderConfig& config,
   }
 
   ArgbBuffer& debug_output = config.info->debug_output;
-  Argb32b colors[3] = {Argb32b{0xff, 0xff, 0x11, 0xff},
-                       Argb32b{0xff, 0xff, 0x11, 0x11},
-                       Argb32b{0xff, 0x11, 0xff, 0x11}};
-  const Rectangle rect = {x_pix(), y_pix(),
-                          std::min(w_pix(), debug_output.width() - x_pix()),
-                          std::min(h_pix(), debug_output.height() - y_pix())};
-  debug_output.Fill(rect, colors[(int)decision]);
-  debug_output.DrawRect(rect, Argb32b{0xff, 0x00, 0x00, 0x00});
+  const Argb32b kColors[3] = {Argb32b{0xff, 0xff, 0x11, 0xff},
+                              Argb32b{0xff, 0xff, 0x11, 0x11},
+                              Argb32b{0xff, 0x11, 0xff, 0x11}};
+  const Rectangle rect = AsRect().ClipWith(debug_output.AsRect());
+  debug_output.Fill(rect, kColors[(int)decision]);
+  debug_output.DrawRect(rect, Argb32b{0xff, 0x00, 0x00, 0x00}, 0x03);
   return WP2_STATUS_OK;
 }
 
 WP2Status CodedBlock::StoreLambdaMult(const EncoderConfig& config,
                                       uint32_t pos_x, uint32_t pos_y) const {
   if (!VDMatch(config, "lambda-mult")) return WP2_STATUS_OK;
-  const bool selected = VDSelected(pos_x, pos_y, blk().rect_pix(), config);
+  const bool selected = VDSelected(AsRect(pos_x, pos_y), config);
 
   if (selected) {
     config.info->selection_info += WP2SPrint("lambda-mult: %.3f", lambda_mult_);
   }
 
   ArgbBuffer& debug_output = config.info->debug_output;
-  pos_x += x_pix();
-  pos_y += y_pix();
-  const Rectangle rect = {pos_x, pos_y,
-                          std::min(w_pix(), debug_output.width() - pos_x),
-                          std::min(h_pix(), debug_output.height() - pos_y)};
+  const Rectangle rect = AsRect(pos_x, pos_y).ClipWith(debug_output.AsRect());
   const uint8_t gray = (uint8_t)Clamp((lambda_mult_ - 1.0f) * 500.f + 128.f,
                                       0.f, 255.f);
   debug_output.Fill(rect, Argb32b{0xff, gray, gray, gray});
@@ -1285,22 +1260,22 @@ void FilterBlockMap::ApplyVDebug(const DecoderConfig& config,
           features_[by * max_num_blocks_x_ + bx];
       if (!done.insert(block_features.index).second) continue;
 
-      const uint32_t x = bx * kMinBlockSizePix, y = by * kMinBlockSizePix;
-      const uint32_t w =
-          std::min(BlockWidthPix(block_features.size), tile_rect_.width - x);
-      const uint32_t h =
-          std::min(BlockHeightPix(block_features.size), tile_rect_.height - y);
+      const Rectangle rect =
+          Rectangle(bx * kMinBlockSizePix, by * kMinBlockSizePix,
+                    BlockWidthPix(block_features.size),
+                    BlockHeightPix(block_features.size))
+          .ClipWith(debug_output->AsRect());
 
       const uint8_t color =
           (vd == -1) ? block_features.min_bpp : block_features.res_den[vd];
-      debug_output->Fill({x, y, w, h}, Argb32b{255, color, 0, 0});
-      debug_output->DrawRect({x, y, w, h}, Argb32b{255, 128, 128, 128});
+      debug_output->Fill(rect, Argb32b{255, color, 0, 0});
+      debug_output->DrawRect(rect, Argb32b{255, 128, 128, 128}, 0x03);
 
-      if (VDSelected(tile_rect_.x, tile_rect_.y, {x, y, w, h}, config)) {
-        debug_output->DrawRect({x, y, w, h}, Argb32b{255, 255, 255, 255});
+      if (VDSelected(tile_rect_.x, tile_rect_.y, rect, config)) {
+        debug_output->DrawRect(rect, Argb32b{255, 255, 255, 255});
 
         std::string& str = config.info->selection_info;
-        str += WP2SPrint("\nBlock at %u, %u px\n\n", x, y);
+        str += WP2SPrint("\nBlock at %u, %u px\n\n", rect.x, rect.y);
 
         str += WP2SPrint("Min bits-per-pixel: %f\n",
                          block_features.min_bpp / 128.);
@@ -1825,10 +1800,11 @@ WP2Status PartitionScoreFunc::ClearVDebug() const {
         WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kMaxYuvBits));
       }
       debug_output.DrawRect(
-          {0, 0, debug_output.width(), debug_output.height()},
-          Argb32b{255, (uint8_t)(pm * 255 / NUM_PARTITION_METHODS),
+          debug_output.AsRect(),
+          Argb32b{255,
+                  (uint8_t)(      pm * 255 / NUM_PARTITION_METHODS),
                   (uint8_t)(100 + pm * 100 / NUM_PARTITION_METHODS),
-                  (uint8_t)(50 + pm * 50 / NUM_PARTITION_METHODS)});
+                  (uint8_t)( 50 + pm *  50 / NUM_PARTITION_METHODS)}, 0x03);
     } else if (VDMatch(*config_, "score")) {
       WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kMaxYuvBits));
     }
@@ -1846,15 +1822,15 @@ WP2Status PartitionScoreFunc::RegisterScoreForVDebug(
           *config_)) {
     return WP2_STATUS_OK;
   }
-  // Highlight the block with a color dependent on its size.
-  const uint8_t color_w = (uint8_t)(191 + block.w() * 64 / kMaxBlockSize);
-  const uint8_t color_h = (uint8_t)(191 + block.h() * 64 / kMaxBlockSize);
-  config_->info->debug_output.Fill(
-      {tile_rect_.x + block.x_pix() + 1, tile_rect_.y + block.y_pix() + 1,
-       block.w_pix() - 2, block.h_pix() - 2},
-      Argb32b{255, color_w, color_h, 0});
-
   if (config_->info != nullptr) {
+    // Highlight the block with a color dependent on its size.
+    const uint8_t color_w = (uint8_t)(191 + block.w() * 64 / kMaxBlockSize);
+    const uint8_t color_h = (uint8_t)(191 + block.h() * 64 / kMaxBlockSize);
+    config_->info->debug_output.Fill(
+        {tile_rect_.x + block.x_pix() + 1, tile_rect_.y + block.y_pix() + 1,
+         block.w_pix() - 2, block.h_pix() - 2},
+        Argb32b{255, color_w, color_h, 0});
+
     std::string& str = config_->info->selection_info;
     str += WP2SPrint("Block at %4u, %4u (%2u x %2u px), score: %9.3f",
                      tile_rect_.x + block.x_pix(),
@@ -1871,11 +1847,8 @@ WP2Status Partitioner::RegisterOrderForVDebug(
     const Block& block, uint32_t block_index, uint32_t max_num_blocks) const {
   if (VDMatch(*config_, "encoder/partition")) {
     ArgbBuffer* const debug_output = &config_->info->debug_output;
-    Rectangle rect;
-    rect.x = tile_rect_.x + block.x_pix();
-    rect.y = tile_rect_.y + block.y_pix();
-    rect.width = std::min(block.w_pix(), debug_output->width() - rect.x);
-    rect.height = std::min(block.h_pix(), debug_output->height() - rect.y);
+    const Rectangle rect =
+      block.AsRect(tile_rect_.x, tile_rect_.y).ClipWith(debug_output->AsRect());
 
     if (VDMatch(*config_, "pass") || VDMatch(*config_, "order")) {
       Argb32b color;
@@ -1893,7 +1866,7 @@ WP2Status Partitioner::RegisterOrderForVDebug(
       if (VDMatch(*config_, "pass")) {
         if (VDIndex(config_->info->visual_debug, &selected_pass_index) &&
             pass_index == selected_pass_index) {
-          debug_output->DrawRect(rect, Argb32b{255, 0, 0, 255});
+          debug_output->DrawRect(rect, Argb32b{255, 0, 0, 255}, 0x03);
         } else if (VDMatch(*config_, "all")) {
           const Argb32b kPassColor[] = {{255, 141, 202, 175},
                                         {255, 140, 73, 192},
@@ -1902,7 +1875,7 @@ WP2Status Partitioner::RegisterOrderForVDebug(
                                         {255, 133, 148, 196}};
           STATIC_ASSERT_ARRAY_SIZE(kPassColor,
                                    (int)MultiScoreFunc::Pass::Any + 1);
-          debug_output->DrawRect(rect, kPassColor[pass]);
+          debug_output->DrawRect(rect, kPassColor[pass], 0x03);
         }
       }
 
@@ -1968,6 +1941,7 @@ WP2Status AreaScoreFunc::RegisterScoreForVDebug(
     str += WP2SPrint("\nscore: %9.3f = disto %7.3f + rate %7.3f\n",
                      score, disto, rate);
     str += "  (default)\n";
+
     ArgbBuffer debug_output;
     WP2_ASSERT_STATUS(
         debug_output.SetView(config_->info->debug_output, tile_rect_));
@@ -1975,7 +1949,7 @@ WP2Status AreaScoreFunc::RegisterScoreForVDebug(
         gparams_->transf_, /*resize_if_needed=*/false, &debug_output));
     debug_output.DrawRect(area_, Argb32b{255, 255, 0, 0});
     for (const CodedBlock& cb : area_blocks) {
-      debug_output.DrawRect(cb.blk().rect_pix(), Argb32b{255, 128, 255, 0});
+      debug_output.DrawRect(cb.AsRect(), Argb32b{255, 128, 255, 0}, 0x03);
     }
   } else {  // Grid partitioning (happens for each of several block sizes).
     str += WP2SPrint("\nscore: %9.3f = disto %7.3f + rate %7.3f\n",
@@ -2262,14 +2236,11 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
     for (uint32_t x = 0; x + block.w_pix() <= debug_output.width();
          x += cell_width) {
       block.SetXY(x / kMinBlockSizePix, y / kMinBlockSizePix);
-      const uint32_t max_width = debug_output.width() - block.x_pix();
-      const uint32_t max_height = debug_output.height() - block.y_pix();
-      const Rectangle cell_rect = {block.x_pix(), block.y_pix(),
-                                   std::min(cell_width, max_width),
-                                   std::min(cell_height, max_height)};
-      const Rectangle block_rect = {block.x_pix(), block.y_pix(),
-                                    std::min(block.w_pix(), max_width),
-                                    std::min(block.h_pix(), max_height)};
+      const Rectangle cell_rect =
+        Rectangle(block.x_pix(), block.y_pix(),
+                  cell_width, cell_height).ClipWith(debug_output.AsRect());
+      const Rectangle block_rect =
+          block.AsRect().ClipWith(debug_output.AsRect());
       if (VDMatch(*config_, "raw-quant-dct")) {
         WP2_CHECK_STATUS(DrawLossyLuma(block, block_rect, /*draw_side=*/false,
                                        &debug_output));
@@ -2287,12 +2258,8 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
 
   // Display selected block on top.
   if (selected_block.dim() != BLK_LAST) {
-    const uint32_t max_width = debug_output.width() - selected_block.x_pix();
-    const uint32_t max_height = debug_output.height() - selected_block.y_pix();
-    const Rectangle block_rect = {selected_block.x_pix(),
-                                  selected_block.y_pix(),
-                                  std::min(selected_block.w_pix(), max_width),
-                                  std::min(selected_block.h_pix(), max_height)};
+    const Rectangle block_rect =
+        selected_block.AsRect().ClipWith(debug_output.AsRect());
 
     if (VDMatch(*config_, "quant-dct") || VDMatch(*config_, "merge-flat")) {
       WP2_CHECK_STATUS(DrawLossyLuma(selected_block, block_rect,
@@ -2310,39 +2277,33 @@ void SegmentationGridVDebug(const EncoderConfig& config, const Rectangle& rect,
                             float value) {
   const uint8_t gray = (uint8_t)std::lround(value * 10);
   ArgbBuffer* const debug_output = &config.info->debug_output;
-  config.info->debug_output.Fill(
-      {tile_pos_x + rect.x, tile_pos_y + rect.y,
-       std::min(rect.width, debug_output->width() - tile_pos_x - rect.x),
-       std::min(rect.height, debug_output->height() - tile_pos_y - rect.y)},
-      Argb32b{255, gray, gray, gray});
-
-  if (VDSelected(tile_pos_x, tile_pos_y, rect, config)) {
-    config.info->debug_output.Fill(
-        {tile_pos_x + rect.x, tile_pos_y + rect.y, rect.width, rect.height},
-        Argb32b{255, 128, 128, 0});
+  const Rectangle rect2 = { tile_pos_x + rect.x, tile_pos_y + rect.y,
+                            rect.width, rect.height };
+  if (VDSelected(rect2, config)) {
+    config.info->debug_output.Fill(rect2, Argb32b{255, 128, 128, 0});
 
     std::string& str = config.info->selection_info;
     str += WP2SPrint("\nRect at %4u, %4u (%2u x %2u px), value: %9.3f\n",
                      tile_pos_x + rect.x, tile_pos_y + rect.y, rect.width,
                      rect.height, value);
+  } else {
+    config.info->debug_output.Fill(
+      rect2.ClipWith(debug_output->AsRect()),
+      Argb32b{255, gray, gray, gray});
   }
 }
 
 void SegmentationBlockVDebug(const EncoderConfig& config, const CodedBlock& cb,
                              uint32_t tile_pos_x, uint32_t tile_pos_y,
                              float score, const Segment& segment) {
-  SegmentationGridVDebug(config,
-                         {cb.x_pix(), cb.y_pix(), cb.w_pix(), cb.h_pix()},
-                         tile_pos_x, tile_pos_y, score);
+  SegmentationGridVDebug(config, cb.AsRect(), tile_pos_x, tile_pos_y, score);
 
   config.info->debug_output.Fill(
       {tile_pos_x + cb.x_pix() + cb.w_pix() - 1,
        tile_pos_y + cb.y_pix() + cb.h_pix() - 1, 1, 1},
       kSegmentColors[cb.id_]);
 
-  const Rectangle rect{cb.x_pix(), cb.y_pix(), cb.w_pix(), cb.h_pix()};
-
-  if (VDSelected(tile_pos_x, tile_pos_y, rect, config)) {
+  if (VDSelected(cb.AsRect(tile_pos_x, tile_pos_y), config)) {
     std::string& str = config.info->selection_info;
     str += WP2SPrint("Segment %d risk %f\n", cb.id_, segment.risk_);
   }
@@ -2371,6 +2332,7 @@ static bool VDSelectedLossless(uint32_t pos, uint32_t length,
   return (selected_pos >= pos && selected_pos < pos + length);
 }
 
+// Fills a copy-segment starting at 'pos' with length 'length' with 'color'.
 static void Fill(uint32_t pos, uint32_t length, const WP2::Rectangle& tile_rect,
                  WP2::Argb32b color, WP2::ArgbBuffer* out) {
   const uint32_t tile_width = tile_rect.width;
@@ -2410,7 +2372,7 @@ WP2Status Decoder::RegisterSymbolForVDebug(
 
   if (WP2::VDMatch(decoder_info->visual_debug, "lossless/symbols")) {
     // Only show once per tile.
-    if (pos == 0 && VDSelected(0, 0, tile_->rect, config_)) {
+    if (pos == 0 && VDSelected(tile_->rect, config_)) {
       std::string& str = decoder_info->selection_info;
       str += WP2SPrint("Tile at (%d, %d)\n", tile_->rect.x, tile_->rect.y);
       if (use_group4_) {
@@ -2431,12 +2393,12 @@ WP2Status Decoder::RegisterSymbolForVDebug(
          &decoder_info->debug_output);
   }
 
-  const uint32_t tile_width = tile_->rect.width;
   if (VDSelectedLossless(pos, length, *decoder_info, tile_->rect)) {
     if (WP2::VDMatch(decoder_info->visual_debug, "lossless/symbols")) {
       Fill(pos, length, tile_->rect, {255, 255, 255, 255},
            &decoder_info->debug_output);
     }
+    const uint32_t tile_width = tile_->rect.width;
     std::string& str = decoder_info->selection_info;
     str += WP2SPrint("Pixel (%d, %d) Symbol at (%u, %u)\n",
                      decoder_info->selection.x, decoder_info->selection.y,
@@ -2463,7 +2425,7 @@ WP2Status Decoder::RegisterUnprocessedRowForVDebug(
   }
 
   // Only show once per tile.
-  if (last_row_ == 0 && VDSelected(0, 0, tile_->rect, config_)) {
+  if (last_row_ == 0 && VDSelected(tile_->rect, config_)) {
     std::string& str = decoder_info->selection_info;
     str += WP2SPrint("Tile at (%d, %d): %d transform(s)\n",
                      tile_->rect.x, tile_->rect.y, next_transform_);
@@ -2504,7 +2466,7 @@ WP2Status Decoder::RegisterUnprocessedRowForVDebug(
     }
   }
 
-  if (VDSelected(0, 0, tile_->rect, config_)) {
+  if (VDSelected(tile_->rect, config_)) {
     decoder_info->debug_output.DrawRect(tile_->rect,
                                         WP2::Argb32b{255, 255, 0, 0});
   }
@@ -2523,7 +2485,7 @@ WP2Status Decoder::HeaderVDebug() {
   std::string& str = decoder_info->selection_info;
   const uint32_t num_clusters = hdr_.sr_.symbols_info().NumClusters(0);
   const WP2::Rectangle& tile_rect = tile_->rect;
-  if (VDSelected(0, 0, tile_rect, config_)) {
+  if (VDSelected(tile_rect, config_)) {
     str += WP2SPrint("Tile at (%d, %d): %d cluster(s) %d histo_bits\n",
                      tile_rect.x, tile_rect.y, num_clusters, bits);
   }
@@ -2544,7 +2506,7 @@ WP2Status Decoder::HeaderVDebug() {
             hdr_.histogram_image_[4 * (num_blocks_x * y + x) + 2];
         const uint8_t gray = WP2::ToPixel8(cluster, num_clusters);
         debug_output->Fill(rect, WP2::Argb32b{255, gray, gray, gray});
-        if (VDSelected(0, 0, rect, config_)) {
+        if (VDSelected(rect, config_)) {
           str += WP2SPrint("Rect (%d, %d) %d x %d : cluster %d\n",
                            rect.x, rect.y, rect.width, rect.height, cluster);
           debug_output->DrawRect(rect, WP2::Argb32b{255, 255, 0, 0});
@@ -2553,7 +2515,7 @@ WP2Status Decoder::HeaderVDebug() {
     }
   }
 
-  if (VDSelected(0, 0, tile_rect, config_)) {
+  if (VDSelected(tile_rect, config_)) {
     debug_output->DrawRect(tile_rect, WP2::Argb32b{255, 0, 255, 0});
   }
   return WP2_STATUS_OK;

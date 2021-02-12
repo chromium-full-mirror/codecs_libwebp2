@@ -182,7 +182,7 @@ WP2Status AreaScoreFunc::GetAreaGridScore(BlockSize block_size,
     WP2_CHECK_ALLOC_OK(partition.resize(partition.size() + 1));
     partition.back().SetDimDefault(block);
     WP2_CHECK_ALLOC_OK(blocks->push_back(block));
-    num_block_units += block.rect().GetArea();
+    num_block_units += block.area();
   }
   assert(num_block_units == SizeBlocks(area_.width) * SizeBlocks(area_.height));
 
@@ -332,7 +332,7 @@ WP2Status AreaScoreFunc::GetAreaDefaultPartition(
     if (!area_.Contains(block_it->x_pix(), block_it->y_pix())) break;
     WP2_CHECK_ALLOC_OK(area_blocks->resize(area_blocks->size() + 1));
     area_blocks->back().SetDimDefault(*block_it);
-    num_block_units += block_it->rect().GetArea();
+    num_block_units += block_it->area();
   }
   // If snapping is not enabled or if the 'area_' dimensions do not match it,
   // the default partition cannot be used as is.

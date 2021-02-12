@@ -347,6 +347,13 @@ class Params {
     kDisplayNum
   } display_block_ = kDisplayNone;
   void DisplayBlockInfo(std::vector<std::string>* const msg);
+  // side-func to help DisplayBlockInfo()
+  void PrintBlockHeader(const BlockInfo& b,
+                        std::vector<std::string>* const msg) const;
+  void PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
+                        std::vector<std::string>* const msg) const;
+  void PrintPredModes(const BlockInfo& b,
+                      std::vector<std::string>* const msg) const;
 
   const char* partition_file_path_ = "/tmp/partition.txt";
   const char* dump_wp2_path_ = "/tmp/dump.wp2";
@@ -372,8 +379,7 @@ class Params {
   // Displays a sort of bar graph at the bottom of the screen showing the
   // relative size of different syntax elements.
   // 'traces' contains the size in bits taken by each (group of) symbols.
-  void DisplayBitTraces(const std::map<std::string, float>& traces,
-                        double total_size);
+  void DisplayBitTraces() const;
 #endif
   uint32_t getLineThickness() const;
   bool ReadAndConvertPartition(bool read_only = true);
@@ -612,8 +618,8 @@ bool Params::DisplaySubMenu(int32_t x, int32_t y, const VDToken& prefix,
   const float kMenuAlpha = .8;
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   glColor4f(0.f, 0.f, 0.f, kMenuAlpha);
-  glRectf(ToAbsoluteX(x), ToAbsoluteY(y), ToAbsoluteX(x + submenu_width),
-          ToAbsoluteY(y + submenu_height));
+  glRectf(ToAbsoluteX(x), ToAbsoluteY(y),
+          ToAbsoluteX(x + submenu_width), ToAbsoluteY(y + submenu_height));
 
   // For each branch in the current VisualDebug tree node.
   int32_t top = y;
@@ -773,8 +779,21 @@ void Params::PrintMessages(const std::vector<std::string>& msg,
 #if defined(WP2_BITTRACE)
 constexpr uint32_t kBitTraceMaxLevels = 10;
 
-void Params::DisplayBitTraces(const std::map<std::string, float>& traces,
-                              double total_size) {
+void Params::DisplayBitTraces() const {
+  double total_size = 0;
+  for (const auto& p : dinfo_.bit_traces) total_size += p.second.bits;
+
+  std::map<std::string, float> traces;
+  for (const auto& p : dinfo_.bit_traces) {
+    uint32_t level = 0;
+    size_t i = 0;
+    while (level < visual_bit_trace_level_ && i != std::string::npos) {
+      i = p.first.find("/", (i == 0) ? 0 : i + 1);
+      traces[p.first.substr(0, i)] += p.second.bits;
+      ++level;
+    }
+  }
+
   const float line_height = ToRelativeY(35);
 
   const float mouse_x = ToRelativeX(mouse_x_) - 1;
@@ -1021,8 +1040,6 @@ void Params::PrintInfo() {
     msg.emplace_back(SPrintf("[ref WP2: size=%u %s=%.2f]", output_.size(),
                              kMetricNames[distortion_metric_], distortion_[4]));
   } else if (show_ == kInfo) {
-    char tmp[80];
-
     bg_color[0] = .8f;
     bg_color[1] = .9f;
     bg_color[2] = .9f;
@@ -1031,120 +1048,95 @@ void Params::PrintInfo() {
 
     msg.emplace_back(files_[current_file_]);
 
-    snprintf(tmp, sizeof(tmp), "Dimension: %d x %d", width_, height_);
-    msg.emplace_back(tmp);
+    msg.emplace_back(SPrintf("Dimension: %d x %d", width_, height_));
     if (viewport_width_ != width_ || viewport_height_ != height_) {
-      snprintf(tmp, sizeof(tmp), " (displayed as %d x %d)", viewport_width_,
-               viewport_height_);
-      msg.back() += tmp;
+      msg.emplace_back(SPrintf(" (displayed as %d x %d)",
+                               viewport_width_, viewport_height_));
     }
 
-    snprintf(tmp, sizeof(tmp),
-             "Quality: %3.1f [effort=%d     sns=%5.1f diffusion=%d", quality_,
-             enc_config_.effort, enc_config_.sns, enc_config_.error_diffusion);
-    msg.emplace_back(tmp);
-    snprintf(tmp, sizeof(tmp), "              segments=%u/%d(%c) snap=%s]",
-             dinfo_.num_segments, enc_config_.segments,
-             kSegmentModes[(int)enc_config_.segment_id_mode][0],
-             kOnOff[enc_config_.partition_snapping]);
-    msg.emplace_back(tmp);
+    if (!view_only_) {
+      msg.emplace_back(SPrintf(
+                       "Quality: %3.1f [effort=%d     sns=%5.1f diffusion=%d",
+                       quality_, enc_config_.effort, enc_config_.sns,
+                       enc_config_.error_diffusion));
+      msg.emplace_back(
+          SPrintf("              segments=%u/%d(%c) snap=%s]",
+                  dinfo_.num_segments, enc_config_.segments,
+                  kSegmentModes[(int)enc_config_.segment_id_mode][0],
+                  kOnOff[enc_config_.partition_snapping]));
 #if defined(WP2_BITTRACE)
-    snprintf(tmp, sizeof(tmp), " %lu blocks", einfo_.blocks.size());
-    msg.back() += tmp;
+      msg.emplace_back(SPrintf(" %lu blocks", einfo_.blocks.size()));
 #endif
 
-    if (in_.HasTransparency()) {
-      snprintf(tmp, sizeof(tmp), "Alpha quality: %.1f (%s=%.2f)",
-               alpha_quality_, kMetricNames[distortion_metric_],
-               distortion_[0]);
-      msg.emplace_back(tmp);
+      if (in_.HasTransparency()) {
+        msg.emplace_back(SPrintf("Alpha quality: %.1f (%s=%.2f)",
+            alpha_quality_, kMetricNames[distortion_metric_],
+            distortion_[0]));
+      }
+    } else {
+      msg.emplace_back(" -- WARNING: Showing original WP2 image --");
     }
 
-    snprintf(tmp, sizeof(tmp), "Size: %u [%.2f bpp] (enc %u ms + dec %u ms)",
-             (uint32_t)output_.size(),
-             8.f * output_.size() / (width_ * height_), enc_duration_ms_,
-             dec_duration_ms_);
-    msg.emplace_back(tmp);
-    snprintf(tmp, sizeof(tmp), " (%.1f%% of original)",
-             100. * output_.size() / input_.size());
-    msg.back() += tmp;
+    msg.emplace_back(SPrintf("Size: %u [%.2f bpp] (enc %u ms + dec %u ms)",
+        (uint32_t)output_.size(), 8.f * output_.size() / (width_ * height_),
+        enc_duration_ms_, dec_duration_ms_));
+    msg.emplace_back(SPrintf(" (%.1f%% of original)",
+                             100.f * output_.size() / input_.size()));
 
     if (in_.metadata_.IsEmpty()) {
       assert(out_.metadata_.IsEmpty());
     } else {
       const Metadata& mi = in_.metadata_;
       const Metadata& mo = out_.metadata_;
-      snprintf(tmp, sizeof(tmp),  // 6 spaces to align with "Size: ".
-               "      %s %u B of metadata (ICCP %u, XMP %u, EXIF %u)",
-               keep_metadata_ ? "included" : "ignored",
-               (uint32_t)(mi.iccp.size + mi.xmp.size + mi.exif.size),
-               (uint32_t)mi.iccp.size, (uint32_t)mi.xmp.size,
-               (uint32_t)mi.exif.size);
-      msg.emplace_back(tmp);
+      msg.emplace_back(SPrintf(   // 6 spaces to align with "Size: ".
+          "      %s %u B of metadata (ICCP %u, XMP %u, EXIF %u)",
+          keep_metadata_ ? "included" : "ignored",
+          (uint32_t)(mi.iccp.size + mi.xmp.size + mi.exif.size),
+          (uint32_t)mi.iccp.size, (uint32_t)mi.xmp.size,
+          (uint32_t)mi.exif.size));
       if (!keep_metadata_) {
         assert(out_.metadata_.IsEmpty());
       } else if (mi.iccp.size != mo.iccp.size || mi.xmp.size != mo.xmp.size ||
                  mi.exif.size != mo.exif.size) {
-        snprintf(tmp, sizeof(tmp), " decoded as ICCP %u, XMP %u, EXIF %u",
-                 (uint32_t)mo.iccp.size, (uint32_t)mo.xmp.size,
-                 (uint32_t)mo.exif.size);
-        msg.back() += tmp;
+        msg.emplace_back(SPrintf(
+            " decoded as ICCP %u, XMP %u, EXIF %u",
+            (uint32_t)mo.iccp.size, (uint32_t)mo.xmp.size,
+            (uint32_t)mo.exif.size));
       }
     }
 
 #if defined(WP2_ENC_DEC_MATCH)
-    snprintf(tmp, sizeof(tmp),  // 6 spaces to align with "Size: ".
+    msg.emplace_back(SPrintf(   // 6 spaces to align with "Size: ".
              "      Warning: size is inflated by WP2_ENC_DEC_MATCH");
-    msg.emplace_back(tmp);
 #endif
+    msg.emplace_back(SPrintf("Filters: dblk=%s, drct=%s, rstr=%s, alpha=%s",
+        kOnOff[dec_config_.enable_deblocking_filter],
+        kOnOff[dec_config_.enable_directional_filter],
+        kOnOff[dec_config_.enable_restoration_filter],
+        kOnOff[enc_config_.enable_alpha_filter]));
 
-    snprintf(tmp, sizeof(tmp), "Filters: dblk=%s, drct=%s, rstr=%s, alpha=%s",
-             kOnOff[dec_config_.enable_deblocking_filter],
-             kOnOff[dec_config_.enable_directional_filter],
-             kOnOff[dec_config_.enable_restoration_filter],
-             kOnOff[enc_config_.enable_alpha_filter]);
-    msg.emplace_back(tmp);
-
-    snprintf(tmp, sizeof(tmp), "%s=%.2f  (a %.1f, r %.1f, g %.1f, b %.1f)",
-             kMetricNames[distortion_metric_], distortion_[4], distortion_[0],
-             distortion_[1], distortion_[2], distortion_[3]);
-    msg.emplace_back(tmp);
-    if (yuv_distortion_[0] > 0.f) {  // Maybe it is unavailable.
-      snprintf(tmp, sizeof(tmp), "  (y %.1f, u %.1f, v %.1f)",
-               yuv_distortion_[0], yuv_distortion_[1], yuv_distortion_[2]);
-      msg.back() += tmp;
-    }
-
-    snprintf(tmp, sizeof(tmp), "CSP: %s   UV: %s  Partition: %s, %s  Tile: %s",
-             kCSPString[(int)enc_config_.csp_type],
-             kUVModeString[(int)enc_config_.uv_mode],
-             kPartitionMethodString[enc_config_.partition_method],
-             kPartitionSetString[enc_config_.partition_set],
-             kTileShapeString[enc_config_.tile_shape]);
-    msg.emplace_back(tmp);
-    snprintf(tmp, sizeof(tmp), "Perceptual:%s  RndMtx: %s  Grain: %s Amp: %d",
-             kOnOff[enc_config_.tune_perceptual],
-             kOnOff[enc_config_.use_random_matrix],
-             kOnOff[enc_config_.store_grain], dec_config_.grain_amplitude);
-    msg.emplace_back(tmp);
-
-#if defined(WP2_BITTRACE)
-    double total_size = 0;
-    for (const auto& p : dinfo_.bit_traces) {
-      total_size += p.second.bits;
-    }
-
-    std::map<std::string, float> traces;
-    for (const auto& p : dinfo_.bit_traces) {
-      uint32_t level = 0;
-      size_t i = 0;
-      while (level < visual_bit_trace_level_ && i != std::string::npos) {
-        i = p.first.find("/", (i == 0) ? 0 : i + 1);
-        traces[p.first.substr(0, i)] += p.second.bits;
-        ++level;
+    if (!view_only_) {
+      msg.emplace_back(SPrintf("%s=%.2f  (a %.1f, r %.1f, g %.1f, b %.1f)",
+          kMetricNames[distortion_metric_], distortion_[4], distortion_[0],
+          distortion_[1], distortion_[2], distortion_[3]));
+      if (yuv_distortion_[0] > 0.f) {  // Maybe it is unavailable.
+        msg.emplace_back(SPrintf("  (y %.1f, u %.1f, v %.1f)",
+            yuv_distortion_[0], yuv_distortion_[1], yuv_distortion_[2]));
       }
-    }
-    DisplayBitTraces(traces, total_size);
+
+      msg.emplace_back(SPrintf("CSP: %s   UV: %s  Partition: %s, %s  Tile: %s",
+          kCSPString[(int)enc_config_.csp_type],
+          kUVModeString[(int)enc_config_.uv_mode],
+          kPartitionMethodString[enc_config_.partition_method],
+          kPartitionSetString[enc_config_.partition_set],
+          kTileShapeString[enc_config_.tile_shape]));
+      msg.emplace_back(SPrintf("Perceptual:%s  RndMtx: %s  Grain: %s Amp: %d",
+          kOnOff[enc_config_.tune_perceptual],
+          kOnOff[enc_config_.use_random_matrix],
+          kOnOff[enc_config_.store_grain], dec_config_.grain_amplitude));
+     }
+#if defined(WP2_BITTRACE)
+    DisplayBitTraces();
 #endif  // WP2_BITTRACE
   } else if (show_ == kAlt1) {
     msg.emplace_back(alt1_msg_);
@@ -1894,6 +1886,11 @@ void Params::glRect(const Rectangle& rect, uint32_t thickness) const {
   }
 }
 
+//------------------------------------------------------------------------------
+// DisplayBlockInfo()
+
+#if defined(WP2_BITTRACE)
+
 // Helper class for the creation of a nice looking paragraph.
 class ParagraphMaker {
  public:
@@ -1934,6 +1931,207 @@ class ParagraphMaker {
   std::string indentation_;
 };
 
+
+constexpr uint32_t kLastChannel = 4;
+constexpr const char* const kEncNames[] = {
+  "X", "Mtd0", "Mtd1", "DC  ", "Zero"
+};
+
+// Isolate the bit costs about residuals (Y, U, V, A, remaining stuff).
+static void IsolateBitTraces(const BlockInfo& b,
+    std::map<const std::string, LabelStats> bit_traces[],
+    double bit_sums[]) {
+  for (const auto& bt : b.bit_traces) {
+    std::string label = bt.first;
+    uint32_t channel;
+    for (channel = 0; channel < kLastChannel; ++channel) {
+      const std::string prefix = kCoeffsStr[channel];
+
+      if (label.size() >= prefix.size() &&
+          std::strncmp(label.c_str(), prefix.c_str(), prefix.size()) == 0) {
+        // 'label' starts with 'prefix', remove 'prefix' from it.
+        assert(label.size() > prefix.size() + 1 &&
+               label[prefix.size()] == '/');
+        label = label.substr(prefix.size() + 1);
+        break;
+      }
+    }
+
+    // Merge by first token.
+    const size_t slash_pos = label.find('/');
+    if (slash_pos != std::string::npos) label = label.substr(0, slash_pos);
+
+    bit_traces[channel][label].bits += bt.second.bits;
+    bit_traces[channel][label].num_occurrences += bt.second.num_occurrences;
+    bit_sums[channel] += bt.second.bits;
+  }
+}
+
+void Params::PrintBlockHeader(const BlockInfo& b,
+                              std::vector<std::string>* const msg) const {
+  std::map<const std::string, LabelStats> bit_traces[kLastChannel + 1];
+  double bit_sums[kLastChannel + 1] = {0};
+  IsolateBitTraces(b, bit_traces, bit_sums);
+
+  ParagraphMaker pm;
+  pm.Init("Costs: ");
+  for (uint32_t c = 0; c < (b.has_lossy_alpha ? kLastChannel : 3); ++c) {
+    pm.AppendToList(SPrintf("%s: %.1f", kCoeffsStr[c], bit_sums[c]));
+  }
+  for (const auto& p : bit_traces[kLastChannel]) {
+    pm.AppendToList(SPrintf("%s: %.1f", p.first.c_str(), p.second.bits));
+  }
+  pm.PushBackTo(msg);
+  msg->push_back(SPrintf("segment id: %d (%s %s)", b.segment_id,
+                          b.is420 ? "is420" : "",
+                          b.has_lossy_alpha ? "has_alpha_res" : ""));
+  msg->push_back(SPrintf("transform: %s %s",
+                          WP2TransformNames[b.tf_x],
+                          WP2TransformNames[b.tf_y]));
+  for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
+    if (b.encoding_method[kYChannel][tf_i] == -1) continue;
+    msg->push_back(
+      SPrintf("Transform %u. Mthd: Y=%s U=%s V=%s (A=%s)", tf_i,
+              kEncNames[b.encoding_method[kYChannel][tf_i] + 1],
+              kEncNames[b.encoding_method[kUChannel][tf_i] + 1],
+              kEncNames[b.encoding_method[kVChannel][tf_i] + 1],
+              kEncNames[b.encoding_method[kAChannel][tf_i] + 1]));
+  }
+}
+
+void Params::PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
+                            std::vector<std::string>* const msg) const {
+  std::map<const std::string, LabelStats> bit_traces[kLastChannel + 1];
+  double bit_sums[kLastChannel + 1] = {0};
+  IsolateBitTraces(b, bit_traces, bit_sums);
+
+  ParagraphMaker pm;
+  const uint32_t channel =
+      (display_block_ == kDisplayYCoeffs) ? kYChannel :
+      (display_block_ == kDisplayUCoeffs) ? kUChannel :
+      (display_block_ == kDisplayVCoeffs) ? kVChannel : kAChannel;
+
+  msg->push_back(SPrintf("%s channel.", kChannelStr[channel]));
+  for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
+    if (!b.residual_info[channel][tf_i].empty()) {
+      pm.Init();
+      // Display info about the residuals (index of last element ...).
+      pm.Append(SPrintf("Transform %u. Residuals: ", tf_i));
+      for (const std::string& str : b.residual_info[channel][tf_i]) {
+        pm.AppendToList(str);
+      }
+      pm.PushBackTo(msg);
+    }
+  }
+  // Display stats about residuals.
+  {
+    typedef decltype(b.bit_traces)::value_type StatType;
+    std::vector<StatType> stats(bit_traces[channel].begin(),
+                                bit_traces[channel].end());
+    // Sort those stats from lowest to highest usage.
+    std::vector<uint32_t> indices(stats.size());
+    std::iota(indices.begin(), indices.end(), 0);
+    std::sort(indices.begin(), indices.end(),
+              [stats](uint32_t i1, uint32_t i2) {
+                return (stats[i1].second.bits < stats[i2].second.bits);
+              });
+    pm.Init("Costs: ");
+    pm.Append(SPrintf("all: %.1f, ", bit_sums[channel]));
+    // Display stats as bit cost (/num of occurences = individual bit cost).
+    for (uint32_t i : indices) {
+      const auto& p = stats[i];
+      pm.AppendToList(
+          SPrintf("%s: %.1f (/%d=%.1f)", p.first.c_str(), p.second.bits,
+                  p.second.num_occurrences,
+                  p.second.bits / p.second.num_occurrences));
+    }
+    pm.PushBackTo(msg);
+  }
+  const int bw = b.rect.width, bh = b.rect.height;
+  for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
+    if (b.encoding_method[channel][tf_i] == -1) continue;
+    msg->push_back(SPrintf("Enc %u. Mthd: %s", tf_i,
+                           kEncNames[b.encoding_method[channel][tf_i] + 1]));
+    const uint32_t scale =
+        (b.is420 && (channel == 1 || channel == 2)) ? 2 : 1;
+    const BlockSize split_size = GetSplitSize(
+        GetBlockSize(bw / kMinBlockSizePix, bh / kMinBlockSizePix),
+        b.split_tf[channel]);
+    const uint32_t w = BlockWidthPix(split_size) / scale;
+    const uint32_t h = BlockHeightPix(split_size) / scale;
+    const bool show_original = (show_ == kOriginal);
+    if (show_original || b.encoding_method[channel][tf_i] !=
+        (int8_t)EncodingMethod::kAllZero) {
+      int16_t res[kMaxBlockSizePix2];
+      int32_t coeffs[kMaxBlockSizePix2];
+      const uint32_t num_coeffs = w * h;
+      std::copy(&b_enc.original_res[channel][tf_i][0],
+                &b_enc.original_res[channel][tf_i][0] + num_coeffs,
+                &res[0]);
+      const bool reduced_transform =
+          (channel == kUChannel || channel == kVChannel) && b_enc.is420;
+      WP2Transform2D(res,
+                     (WP2TransformType)b_enc.tf_x,
+                     (WP2TransformType)b_enc.tf_y,
+                     w, h, coeffs, reduced_transform);
+
+      const float norm = 2. * (int32_t)std::sqrt(num_coeffs);
+      for (uint32_t j = 0; j < h; ++j) {
+        std::string line;
+        for (uint32_t i = 0; i < w; ++i) {
+          const uint32_t idx = i + w * j;
+          if (show_original) {
+            const int32_t v = coeffs[idx];
+            if (std::abs(v) >= (norm * 1.00)) {
+              line += SPrintf("%3d ", (int)(v / norm));
+            } else {
+              const char symbol = (std::abs(v) >= (norm * 0.50)) ? 'X'
+                                : (std::abs(v) >= (norm * 0.25)) ? 'x'
+                                                                 : '.';
+              line += SPrintf("  %c ", symbol);
+            }
+          } else {
+            const int32_t v = b_enc.coeffs[channel][tf_i][idx];
+            line += v ? SPrintf("%3d ", v) : "  . ";
+          }
+        }
+        msg->push_back(line);
+      }
+      if (show_original) {
+        msg->push_back(SPrintf("original coeffs in units of %.1f", norm));
+      }
+    } else {
+      msg->push_back(" - no coeffs -");
+    }
+  }
+}
+
+void Params::PrintPredModes(const BlockInfo& b,
+                            std::vector<std::string>* const msg) const {
+  msg->push_back(SPrintf("Chroma prediction mode: %d", b.uv_pred));
+  msg->push_back(SPrintf("Luma prediction: %d", b.y_pred));
+  if (b.has_lossy_alpha) {
+    msg->push_back(SPrintf("Alpha prediction: %d", b.a_pred));
+  } else {
+    msg->push_back("-no alpha-");
+  }
+
+  msg->push_back(b.y_context_is_constant ? "Y context is constant"
+                                         : "Y context is not constant");
+  const int optimize_modes =
+      (b.y_context_is_constant || enc_config_.effort == 0) ? 0 :
+      (enc_config_.effort == 1)                            ? 1 : 2;
+  msg->push_back(
+      SPrintf("OptimizeModes%d() Y score: %.1f (%.1f per pixel)",
+              optimize_modes, b.pred_scores[kYChannel],
+              b.pred_scores[kYChannel] / b.rect.GetArea()));
+  msg->push_back(SPrintf("FindBestUVModes() score: %.1f (%.1f per pixel)",
+                         b.pred_scores[kUChannel],
+                         b.pred_scores[kUChannel] / b.rect.GetArea()));
+}
+
+#endif  // WP2_BITTRACE
+
 void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
   if (display_block_ == kDisplayNone) return;
 #if defined(WP2_BITTRACE)
@@ -1948,35 +2146,30 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
               });
   }
 
-  const char* const kEncNames[] = {"X", "Mtd0", "Mtd1", "DC  ", "Zero"};
   const int selection_x = (int)dinfo_.selection.x;
   const int selection_y = (int)dinfo_.selection.y;
   for (uint32_t index = 0; index < dinfo_.blocks.size(); ++index) {
     const BlockInfo& b = dinfo_.blocks[index];
     const BlockInfo& b_enc = einfo_.blocks[index];
-    assert(b.rect.x == b_enc.rect.x && b.rect.width == b_enc.rect.width &&
-           b.rect.y == b_enc.rect.y && b.rect.height == b_enc.rect.height);
+    assert(b.rect == b_enc.rect);
     assert(b.segment_id == b_enc.segment_id);
     assert(b.y_context_is_constant == b_enc.y_context_is_constant);
 
     const int bx = b.rect.x, by = b.rect.y;
-    if (!view_rect_.Contains(bx, by)) continue;
     const int bw = b.rect.width, bh = b.rect.height;
+    if (!view_rect_.Contains(bx, by)) continue;
 
-    const bool block_selected = (bx <= selection_x && selection_x < bx + bw &&
-                                 by <= selection_y && selection_y < by + bh);
+    const bool block_selected = b.rect.Contains(selection_x, selection_y);
     if (display_block_ == kDisplayGrid || !block_selected) {
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
       glColor4f(0.0f, 0.2f, 0.1f, 0.2f);
-      // +1 width and height for a thinner border betweens blocks.
-      glRect({b.rect.x, b.rect.y, b.rect.width, b.rect.height});
+      glRect(b.rect);
       continue;
     }
 
     bool forced = false;
     for (const Rectangle& rect : einfo_.force_partition) {
-      if (rect.x == b.rect.x && rect.y == b.rect.y) {
-        assert(rect.width == b.rect.width && rect.height == b.rect.height);
+      if (rect == b.rect) {
         forced = true;
         break;
       }
@@ -1984,193 +2177,23 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
     msg->push_back(SPrintf("size: %2d x %2d  pos: %3d x %3d  %s",
                            bw, bh, bx, by, forced ? "(forced)" : ""));
     float disto[5];
-    const Rectangle rect{(uint32_t)bx, (uint32_t)by,
-                         std::min<uint32_t>(bw, width_ - bx),
-                         std::min<uint32_t>(bh, height_ - by)};
+    const Rectangle rect = b.rect.ClipWith({0, 0, width_, height_});
     WP2_ASSERT_STATUS(out_.GetDistortionBlackOrWhiteBackground(
         in_, rect, distortion_metric_, disto));
     msg->push_back(SPrintf("bits:%5.1f (%.2f bpp) %s:%5.1f", b.bits,
-                           b.bits / (bw * bh), kMetricNames[distortion_metric_],
-                           disto[4]));
+                           b.bits / b.rect.GetArea(),
+                           kMetricNames[distortion_metric_], disto[4]));
 
-    // Isolate the bit costs about residuals (Y, U, V, A, remaining stuff).
-    static constexpr uint32_t kAll = 4;
-    std::map<const std::string, LabelStats> bit_traces[5];
-    double bit_sums[5] = {0};
-
-    for (const auto& bt : b.bit_traces) {
-      std::string label = bt.first;
-      uint32_t channel;
-      for (channel = 0; channel < kAll; ++channel) {
-        const std::string prefix = kCoeffsStr[channel];
-
-        if (label.size() >= prefix.size() &&
-            std::strncmp(label.c_str(), prefix.c_str(), prefix.size()) == 0) {
-          // 'label' starts with 'prefix', remove 'prefix' from it.
-          assert(label.size() > prefix.size() + 1 &&
-                 label[prefix.size()] == '/');
-          label = label.substr(prefix.size() + 1);
-          break;
-        }
-      }
-
-      // Merge by first token.
-      const size_t slash_pos = label.find('/');
-      if (slash_pos != std::string::npos) label = label.substr(0, slash_pos);
-
-      bit_traces[channel][label].bits += bt.second.bits;
-      bit_traces[channel][label].num_occurrences += bt.second.num_occurrences;
-      bit_sums[channel] += bt.second.bits;
-    }
-
-    ParagraphMaker pm;
     if (display_block_ == kDisplayHeader) {
-      pm.Init("Costs: ");
-      for (uint32_t c = 0; c < (b.has_lossy_alpha ? kAll : 3); ++c) {
-        pm.AppendToList(SPrintf("%s: %.1f", kCoeffsStr[c], bit_sums[c]));
-      }
-      for (const auto& p : bit_traces[kAll]) {
-        pm.AppendToList(SPrintf("%s: %.1f", p.first.c_str(), p.second.bits));
-      }
-      pm.PushBackTo(msg);
-      msg->push_back(SPrintf("segment id: %d (%s %s)", b.segment_id,
-                             b.is420 ? "is420" : "",
-                             b.has_lossy_alpha ? "has_alpha_res" : ""));
-      msg->push_back(SPrintf("transform: %s %s",
-                             WP2TransformNames[b.tf_x],
-                             WP2TransformNames[b.tf_y]));
-      for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
-        if (b.encoding_method[kYChannel][tf_i] == -1) continue;
-        msg->push_back(
-            SPrintf("Transform %u. Mthd: Y=%s U=%s V=%s (A=%s)", tf_i,
-                    kEncNames[b.encoding_method[kYChannel][tf_i] + 1],
-                    kEncNames[b.encoding_method[kUChannel][tf_i] + 1],
-                    kEncNames[b.encoding_method[kVChannel][tf_i] + 1],
-                    kEncNames[b.encoding_method[kAChannel][tf_i] + 1]));
-      }
+      PrintBlockHeader(b, msg);
     } else if (display_block_ <= kDisplayACoeffs) {
       if (display_block_ == kDisplayACoeffs && !b.has_lossy_alpha) {
         msg->push_back("- no alpha -");
       } else {
-        const uint32_t channel = (uint32_t)(display_block_ - kDisplayYCoeffs);
-        msg->push_back(SPrintf("%s channel.", kChannelStr[channel]));
-        for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
-          if (!b.residual_info[channel][tf_i].empty()) {
-            pm.Init();
-            // Display info about the residuals (index of last element ...).
-            pm.Append(SPrintf("Transform %u. Residuals: ", tf_i));
-            for (const std::string& str : b.residual_info[channel][tf_i]) {
-              pm.AppendToList(str);
-            }
-            pm.PushBackTo(msg);
-          }
-        }
-        // Display stats about residuals.
-        {
-          typedef decltype(b.bit_traces)::value_type StatType;
-          std::vector<StatType> stats(bit_traces[channel].begin(),
-                                      bit_traces[channel].end());
-          // Sort those stats from lowest to highest usage.
-          std::vector<uint32_t> indices(stats.size());
-          std::iota(indices.begin(), indices.end(), 0);
-          std::sort(indices.begin(), indices.end(),
-                    [stats](uint32_t i1, uint32_t i2) {
-                      return stats[i1].second.bits < stats[i2].second.bits;
-                    });
-          pm.Init("Costs: ");
-          pm.Append(SPrintf("all: %.1f, ", bit_sums[channel]));
-          // Display stats as bit cost (/num of occurences = individual bit
-          // cost).
-          for (uint32_t i : indices) {
-            const auto& p = stats[i];
-            pm.AppendToList(
-                SPrintf("%s: %.1f (/%d=%.1f)", p.first.c_str(), p.second.bits,
-                        p.second.num_occurrences,
-                        p.second.bits / p.second.num_occurrences));
-          }
-          pm.PushBackTo(msg);
-        }
-        for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
-          if (b.encoding_method[channel][tf_i] == -1) continue;
-          msg->push_back(
-              SPrintf("Enc %u. Mthd: %s", tf_i,
-                      kEncNames[b.encoding_method[channel][tf_i] + 1]));
-          const uint32_t scale =
-              (b.is420 && (channel == 1 || channel == 2)) ? 2 : 1;
-          const BlockSize split_size = GetSplitSize(
-              GetBlockSize(bw / kMinBlockSizePix, bh / kMinBlockSizePix),
-              b.split_tf[channel]);
-          const uint32_t w = BlockWidthPix(split_size) / scale;
-          const uint32_t h = BlockHeightPix(split_size) / scale;
-          const bool show_original = (show_ == kOriginal);
-          if (show_original || b.encoding_method[channel][tf_i] !=
-                                   (int8_t)EncodingMethod::kAllZero) {
-            int16_t res[kMaxBlockSizePix2];
-            int32_t coeffs[kMaxBlockSizePix2];
-            const uint32_t num_coeffs = w * h;
-            std::copy(&b_enc.original_res[channel][tf_i][0],
-                      &b_enc.original_res[channel][tf_i][0] + num_coeffs,
-                      &res[0]);
-
-            const bool reduced_transform =
-                (channel == kUChannel || channel == kVChannel) && b_enc.is420;
-            WP2Transform2D(res, (WP2TransformType)b_enc.tf_x,
-                           (WP2TransformType)b_enc.tf_y, w, h,
-                           coeffs, reduced_transform);
-
-            const float norm = 2. * (int32_t)std::sqrt(num_coeffs);
-            for (uint32_t j = 0; j < h; ++j) {
-              std::string line;
-              for (uint32_t i = 0; i < w; ++i) {
-                const uint32_t idx = i + w * j;
-                if (show_original) {
-                  const int32_t v = coeffs[idx];
-                  if (std::abs(v) >= (norm * 1.00)) {
-                    line += SPrintf("%3d ", (int)(v / norm));
-                  } else {
-                    const char symbol = (std::abs(v) >= (norm * 0.50)) ? 'X'
-                                      : (std::abs(v) >= (norm * 0.25)) ? 'x'
-                                                                       : '.';
-                    line += SPrintf("  %c ", symbol);
-                  }
-                } else {
-                  const int32_t v = b_enc.coeffs[channel][tf_i][idx];
-                  line += v ? SPrintf("%3d ", v) : "  . ";
-                }
-              }
-              msg->push_back(line);
-            }
-            if (show_original) {
-              msg->push_back(SPrintf("original coeffs in units of %.1f", norm));
-            }
-          } else {
-            msg->push_back(" - no coeffs -");
-          }
-        }
+        PrintResiduals(b, b_enc, msg);
       }
     } else if (display_block_ == kDisplayPredModes) {
-      msg->push_back(SPrintf("Chroma prediction mode: %d", b.uv_pred));
-      msg->push_back(SPrintf("Luma prediction: %d", b.y_pred));
-      if (b.has_lossy_alpha) {
-        msg->push_back(SPrintf("Alpha prediction: %d", b.a_pred));
-      } else {
-        msg->push_back("-no alpha-");
-      }
-
-      msg->push_back(b.y_context_is_constant ? "Y context is constant"
-                                             : "Y context is not constant");
-      const int optimize_modes =
-          (b.y_context_is_constant || enc_config_.effort == 0) ? 0
-          : (enc_config_.effort == 1)                          ? 1
-                                                               : 2;
-      msg->push_back(
-          SPrintf("OptimizeModes%d() Y "
-                  "score: %.1f (%.1f per pixel)",
-                  optimize_modes, b_enc.pred_scores[kYChannel],
-                  b_enc.pred_scores[kYChannel] / (bw * bh)));
-      msg->push_back(SPrintf("FindBestUVModes() score: %.1f (%.1f per pixel)",
-                             b_enc.pred_scores[kUChannel],
-                             b_enc.pred_scores[kUChannel] / (bw * bh)));
+      PrintPredModes(b_enc, msg);
     }
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glColor4f(1.f, 0.f, 0.f, 0.5f);  // red
@@ -2178,6 +2201,8 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
   }
 #endif  // WP2_BITTRACE
 }
+
+//------------------------------------------------------------------------------
 
 void Params::ClearForcedElements() {
   force_partition_.clear();

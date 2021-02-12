@@ -47,7 +47,7 @@ TEST(PartitionScoreFuncTest, BlockScoreFunc) {
   ASSERT_WP2_OK(gparams.InitRndMtxSet());
   ASSERT_WP2_OK(gparams.Init());
 
-  const Rectangle tile_rect = {0, 0, yuv.GetWidth(), yuv.GetHeight()};
+  const Rectangle tile_rect = yuv.AsRect();
   const Block kBlocks[] = {{0, 0, BLK_4x4}, {1, 0, BLK_4x8}, {0, 1, BLK_4x4}};
   float score;
 

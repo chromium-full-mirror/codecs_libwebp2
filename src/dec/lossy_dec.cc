@@ -189,7 +189,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     if (!vd_plane.IsEmpty()) {
-      WP2_CHECK_STATUS(vd_block_view.SetView(vd_plane, cb.blk().rect_pix()));
+      WP2_CHECK_STATUS(vd_block_view.SetView(vd_plane, cb.AsRect()));
     }
 #endif  // WP2_REDUCE_BINARY_SIZE
 
@@ -254,7 +254,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     } else if (VDMatch(config, "chroma-from-luma/slope") ||
                VDMatch(config, "chroma-from-luma/intercept")) {
       const bool selected =
-          VDSelected(tile->rect.x, tile->rect.y, cb.blk().rect_pix(), config);
+          VDSelected(tile->rect.x, tile->rect.y, cb.AsRect(), config);
       std::string* const debug_str =
           selected ? &config.info->selection_info : nullptr;
 
@@ -318,9 +318,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
       tiles_layout->assignment_lock.Release();
     }
     if (config.info != nullptr && config.info->bits_per_pixel != nullptr) {
-      config.info->bits_per_pixel->Fill(
-          {tile->rect.x + cb.x_pix(), tile->rect.y + cb.y_pix(), cb.w_pix(),
-           cb.h_pix()},
+      config.info->bits_per_pixel->Fill(cb.AsRect(tile->rect.x, tile->rect.y),
           num_bits / (cb.w_pix() * cb.h_pix()));
     }
 #endif

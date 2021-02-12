@@ -115,7 +115,7 @@ void IntertileFilter::Deblock(uint32_t num_rows) {
 
 // Deblocks vertical edges (A | B, C | D) horizontally.
 void IntertileFilter::DeblockHorizontally(uint32_t num_rows) {
-  const Rectangle frame_rect = {0, 0, canvas_.GetWidth(), canvas_.GetHeight()};
+  const Rectangle frame_rect = canvas_.AsRect();
   const uint32_t num_bits = gparams_->transf_.GetYUVPrecisionBits() + 1;
   const uint32_t yuv_min = gparams_->transf_.GetYUVMin();
   const uint32_t yuv_max = gparams_->transf_.GetYUVMax();
@@ -173,7 +173,7 @@ void IntertileFilter::DeblockVertically(uint32_t num_rows) {
   const uint32_t max_half_n = kMaxBlockSizePix / 2;
   const uint32_t tile_width = tiles_layout_->tile_width;
   const uint32_t tile_height = tiles_layout_->tile_height;
-  const Rectangle frame_rect = {0, 0, canvas_.GetWidth(), canvas_.GetHeight()};
+  const Rectangle frame_rect = canvas_.AsRect();
   const uint32_t num_bits = gparams_->transf_.GetYUVPrecisionBits() + 1;
   const uint32_t yuv_min = gparams_->transf_.GetYUVMin();
   const uint32_t yuv_max = gparams_->transf_.GetYUVMax();

@@ -191,7 +191,9 @@ class CodedBlockBase {
   uint32_t w_pix() const { return blk_.w_pix(); }
   uint32_t h() const { return blk_.h(); }
   uint32_t h_pix() const { return blk_.h_pix(); }
-  Rectangle AsRect() const { return { x_pix(), y_pix(), w_pix(), h_pix() }; }
+  Rectangle AsRect(uint32_t offset_x = 0, uint32_t offset_y = 0) const {
+    return blk_.AsRect(offset_x, offset_y);
+  }
 
   BlockSize dim() const { return blk_.dim(); }
   // Returns the size of the transform but taking into account the potential

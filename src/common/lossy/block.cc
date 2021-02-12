@@ -86,13 +86,13 @@ void CodedBlockBase::SetXY(const FrontMgrBase& mgr, uint32_t x, uint32_t y) {
 
 void CodedBlockBase::SetContextInput(const YUVPlane& in,
                                      ContextCache* const context_cache) {
-  WP2_ASSERT_STATUS(predict_from_.SetView(in, blk_.rect_pix()));
+  WP2_ASSERT_STATUS(predict_from_.SetView(in, AsRect()));
   if (context_cache != nullptr) context_cache_ = context_cache;
   ResetContextCache();
 }
 
 void CodedBlockBase::SetReconstructedOutput(YUVPlane* const out) {
-  WP2_ASSERT_STATUS(out_.SetView(*out, blk_.rect_pix()));
+  WP2_ASSERT_STATUS(out_.SetView(*out, AsRect()));
 }
 
 //------------------------------------------------------------------------------

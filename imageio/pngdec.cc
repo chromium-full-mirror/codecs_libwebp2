@@ -313,6 +313,8 @@ class ImageReaderPNG : public ImageReader::Impl {
                                : WP2_STATUS_BITSTREAM_ERROR;
     }
 
+#if LOCAL_PNG_PREREQ(1,5) || \
+    (LOCAL_PNG_PREREQ(1,4) && PNG_LIBPNG_VER_RELEASE >= 1)
     // If it looks like the bitstream is going to need more memory than libpng's
     // internal limit (default: 8M), try to (reasonably) raise it.
     // The WP2_MAX_ALLOCABLE_MEMORY limit is probably too high, use lower limit.
@@ -324,6 +326,7 @@ class ImageReaderPNG : public ImageReader::Impl {
       }
       png_set_chunk_malloc_max(png, data_size_);
     }
+#endif
 
     if ((head_info = png_create_info_struct(png)) == NULL ||
         (end_info = png_create_info_struct(png)) == NULL) {

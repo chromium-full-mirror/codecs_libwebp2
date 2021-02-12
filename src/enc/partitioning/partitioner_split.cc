@@ -144,8 +144,7 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
       max_num_blocks_left -= block.w() * block.h();
       assert(block.dim() != BLK_LAST);
 
-      WP2_CHECK_STATUS(
-          progress.AdvanceBy(1. * block.rect().GetArea() / max_num_blocks));
+      WP2_CHECK_STATUS(progress.AdvanceBy(1. * block.area() / max_num_blocks));
       it.NextBlock();
     }
   }

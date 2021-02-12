@@ -40,7 +40,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
   # Disable RTTI (useful for Skia).
   set(EXTRA_FLAGS "${EXTRA_FLAGS} -Werror -Wsign-compare -fno-rtti")
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "5.3")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "6.0")
       set(EXTRA_FLAGS "${EXTRA_FLAGS} -Wsubobject-linkage")
     endif()
   endif()

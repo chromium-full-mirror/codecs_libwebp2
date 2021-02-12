@@ -114,7 +114,7 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
     const float header_rate = enc.GetCost(tmp_dicts_);
     WP2_CHECK_STATUS(
         WriteBlock(front_mgr_, tmp_cb_, &tmp_syntax_writer_, &enc));
-    const uint32_t num_pixels = block.rect_pix().GetArea();
+    const uint32_t num_pixels = block.AsRect().GetArea();
     // Exclude the header to prevent early decision from impacting later blocks.
     rate[i] = (enc.GetCost(tmp_dicts_) - header_rate) / num_pixels;
     assert(rate[i] >= 0.f);

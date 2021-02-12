@@ -364,7 +364,11 @@ class ArgbBuffer {
   void Fill(const Rectangle& window, Argb32b color);
   void Fill(const Rectangle& window, Argb38b color);
   void Fill(Argb32b color);  // fills the whole buffer
-  void DrawRect(const Rectangle& window, Argb32b color);
+  // Draw edges in the rectangle. 'edges_to_draw' is an OR combination of:
+  //  1: top-edge,    2: left-edge  4: bottom-edge  8: right edge
+  // 16: horizontal middle edge   32: vertical middle edge
+  void DrawRect(const Rectangle& window, Argb32b color,
+                uint32_t edges_to_draw = 0x0f);
   // 'color' must contain WP2FormatBpp(format) bytes.
   void Fill(const Rectangle& window, const uint8_t color[]);
   void Fill(const Rectangle& window, const uint16_t color[]);
@@ -448,6 +452,8 @@ class ArgbBuffer {
   WP2_NO_DISCARD uint32_t height() const { return height_; }
   // Difference in bytes from a scanline to the next one.
   WP2_NO_DISCARD uint32_t stride() const { return stride_; }
+  // Returns the rectangle representing the buffer.
+  Rectangle AsRect() const { return { 0, 0, width_, height_ }; }
 
  public:
   Metadata metadata_;  // ICC / XMP / EXIF metadata.

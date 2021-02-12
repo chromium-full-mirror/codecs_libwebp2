@@ -217,12 +217,10 @@ class SymbolsInfo {
   };
 
   inline SymbolInfo* GetSymbolInfo(uint32_t sym) {
-    assert(sym < kSymbolNumMax);
     return &symbols_info_[sym];
   }
 
   inline const SymbolInfo& GetSymbolInfo(uint32_t sym) const {
-    assert(sym < num_symbols_);
     return symbols_info_[sym];
   }
 

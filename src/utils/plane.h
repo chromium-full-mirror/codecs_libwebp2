@@ -79,6 +79,7 @@ class PlaneBase {
   bool IsEmpty() const { return w_ == 0 || h_ == 0; }
   bool IsView() const { return !is_private_; }
 
+  Rectangle AsRect() const { return {0, 0, w_, h_};}
   uint32_t w_ = 0, h_ = 0;
   size_t step_ = 0;
 
@@ -472,6 +473,7 @@ class YUVPlane {
   // consistent with the others.
   uint32_t GetWidth() const;
   uint32_t GetHeight() const;
+  Rectangle AsRect() const { return {0, 0, Y.w_, Y.h_}; }
 
   // Resizes the planes to zero and clears (private) memory. If there are views,
   // they become empty views, but the external memory is not affected.

@@ -84,16 +84,15 @@ WP2Status Counters::CopyFrom(const Counters& other,
 // CodedBlock  (encoder)
 
 void CodedBlock::SetSrcInput(const YUVPlane& in) {
-  WP2_ASSERT_STATUS(in_.SetView(in, blk_.rect_pix()));
+  WP2_ASSERT_STATUS(in_.SetView(in, AsRect()));
 }
 
 //------------------------------------------------------------------------------
 
 void CodedBlock::ExtractFrom(const YUVPlane& yuv, Channel channel) const {
   Plane16 src, dst;
-  WP2_ASSERT_STATUS(src.SetView(yuv.GetChannel(channel), blk_.rect_pix()));
-  WP2_ASSERT_STATUS(dst.SetView(out_.GetChannel(channel),
-                                {0, 0, blk_.w_pix(), blk_.h_pix()}));
+  WP2_ASSERT_STATUS(src.SetView(yuv.GetChannel(channel), AsRect()));
+  WP2_ASSERT_STATUS(dst.SetView(out_.GetChannel(channel), AsRect()));
   WP2_ASSERT_STATUS(dst.Copy(src, /*resize_if_needed=*/false));
 }
 

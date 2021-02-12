@@ -139,13 +139,17 @@ class Block {
   inline uint32_t y_pix() const { return y_pix_; }
   inline uint32_t w_pix() const { return w_pix_; }
   inline uint32_t h_pix() const { return h_pix_; }
-  inline Rectangle rect_pix() const { return {x_pix_, y_pix_, w_pix_, h_pix_}; }
+  // (translated) bounding rectangle
+  inline Rectangle AsRect(uint32_t offset_x = 0, uint32_t offset_y = 0) const {
+    return {offset_x + x_pix_, offset_y + y_pix_, w_pix_, h_pix_};
+  }
 
   inline uint32_t x() const { return x_; }
   inline uint32_t y() const { return y_; }
   inline uint32_t w() const { return w_; }
   inline uint32_t h() const { return h_; }
-  inline Rectangle rect() const { return {x_, y_, w_, h_}; }
+  inline uint32_t area() const { return (w_ * h_); }
+  inline Rectangle const rect() const { return {x_, y_, w_, h_}; }
 
   inline BlockSize dim() const { return dim_; }
 

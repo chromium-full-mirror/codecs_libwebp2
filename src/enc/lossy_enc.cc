@@ -286,8 +286,8 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       if (VDMatch(*config_, "chroma-from-luma")) {
         const Channel channel = VDChannel(*config_);
         if (channel != kAChannel || cb.HasLossyAlpha()) {
-          const bool selected = VDSelected(tile_rect.x, tile_rect.y,
-                                           cb.blk().rect_pix(), *config_);
+          const bool selected =
+              VDSelected(tile_rect.x, tile_rect.y, cb.AsRect(), *config_);
           std::string* const debug_str =
               selected ? &config_->info->selection_info : nullptr;
 
@@ -340,9 +340,9 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       if (cb.blk().x_pix() + cb.blk().w_pix() >= tile_rect.width) {
         // Progress is advanced by the height of each block on the right,
         // the total being the number of rows in the tile (not padded).
-        const Rectangle cb_rect = cb.blk().rect_pix().ClipWith(
-            {0, 0, tile_rect.width, tile_rect.height});
-        WP2_CHECK_STATUS(row_progress.AdvanceBy(cb_rect.height));
+        const uint32_t block_height =
+            std::min(cb.blk().h_pix(), tile_rect.height - cb.y_pix());
+        WP2_CHECK_STATUS(row_progress.AdvanceBy(block_height));
       }
     }
 
