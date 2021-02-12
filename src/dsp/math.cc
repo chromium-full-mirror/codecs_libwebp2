@@ -285,22 +285,16 @@ const uint8_t WP2LogTable8bit[256 + 1] = {   // 31 ^ clz(i)
 static float SLog2m1Slow_C(uint32_t v) {
   assert(v >= kLogLookupIdxMax);
   if (v < kApproxLogWithCorrectionMax) {
-    int32_t log_v = -1;
-    uint32_t y = 1;
     const float v_f = (float)v;
-    const uint32_t orig_v = v;
-    do {
-      ++log_v;
-      v = v >> 1;
-      y = y << 1;
-    } while (v >= kLogLookupIdxMax);
+    const int32_t log_v = WP2Log2Floor(v) - 7;
+
     // vf = (2^log_v) * Xf; where y = 2^log_v and Xf < 256
     // Xf = floor(Xf) * (1 + (v % y) / v)
     // log2(Xf) = log2(floor(Xf)) + log2(1 + (v % y) / v)
     // The correction factor: log(1 + d) ~ d; for very small d values, so
     // log2(1 + (v % y) / v) ~ (1/log(2)) * (v % y)/v
-    const float correction = 1.44269504089f * (orig_v & (y - 1));
-    return -v_f * (kWP2Log2Table[v] + log_v) - correction;
+    const float correction = 1.44269504089f * (v & ((1 << log_v) - 1));
+    return -v_f * (kWP2Log2Table[v >> log_v] + (log_v - 1)) - correction;
   } else {
     return v - v * std::log2(v);
   }
@@ -310,20 +304,14 @@ static float Log2Slow_C(uint32_t v) {
   assert(v >= kLogLookupIdxMax);
   if (v < kApproxLogWithCorrectionMax) {
     // this version is 30% faster than calling log2(v), but a bit less precise
-    uint32_t log_v = 0;
-    uint32_t y = 1;
-    const uint32_t orig_v = v;
-    do {
-      log_v += 1;
-      v = v >> 1;
-      y = y << 1;
-    } while (v >= kLogLookupIdxMax);
-    float log_2 = kWP2Log2Table[v] + log_v;
+    const uint32_t log_v = WP2Log2Floor(v) - 7;
+
+    float log_2 = kWP2Log2Table[v >> log_v] + log_v;
     if (log_v >= kApproxLogMax) {
       // Since the division is still expensive, add this correction factor only
       // for large values of 'v'.
-      const float correction = 1.442695041f * (orig_v & (y - 1));
-      log_2 += correction / orig_v;
+      const float correction = 1.442695041f * (v & ((1 << log_v) - 1));
+      log_2 += correction / v;
     }
     return log_2;
   } else {

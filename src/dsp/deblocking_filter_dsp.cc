@@ -342,11 +342,89 @@ void DeblockLine_SSE(uint32_t filter_strength, int32_t threshold,
   }
 }
 
+void MeasureFlatLengths_SSE(uint32_t filter_sharpness, uint32_t half,
+                          const int16_t* q0, uint32_t step,
+                          uint8_t out[], uint32_t size) {
+  assert(half > 0 && half <= kDblkMaxHalf);
+  if (size <= 0) return;
+  if (half <= 2) {
+    if (half < 2) {
+      for (uint32_t j = 0; j < size; ++j) out[j] = 1;
+    } else {
+      const int32_t t = kFlatnessThreshold[filter_sharpness][1];
+      for (uint32_t j = 0; j < size; ++j, q0 += step) {
+        const int32_t diff_p = q0[-1] - q0[-2];
+        const int32_t diff0  = q0[ 0] - q0[-1];
+        const int32_t diff_q = q0[ 1] - q0[ 0];
+        out[j] = (std::abs(diff_q - diff0) > t ||
+                  std::abs(diff_p - diff0) > t) ? 1 : 2;
+      }
+    }
+    return;
+  }
+
+  static const uint8_t kThresh_SSE[kDblkMaxSharpness + 1][2 * kDblkMaxHalf] = {
+    {82, 15, 7, 4, 3, 2, 2, 0x7f, 0x7f, 2, 2, 3, 4, 7, 15, 82},
+    {80, 10, 6, 4, 3, 2, 2, 0x7f, 0x7f, 2, 2, 3, 4, 6, 10, 80},
+    {78,  7, 5, 4, 3, 2, 2, 0x7f, 0x7f, 2, 2, 3, 4, 5,  7, 78},
+    {66,  6, 4, 4, 3, 2, 1, 0x7f, 0x7f, 1, 2, 3, 4, 4,  6, 66},
+    {54,  6, 4, 3, 2, 1, 1, 0x7f, 0x7f, 1, 1, 2, 3, 4,  6, 54},
+    {40,  6, 4, 3, 2, 1, 1, 0x7f, 0x7f, 1, 1, 2, 3, 4,  6, 40},
+    {37,  4, 3, 2, 2, 1, 1, 0x7f, 0x7f, 1, 1, 2, 2, 3,  4, 37},
+    {25,  3, 2, 2, 1, 1, 1, 0x7f, 0x7f, 1, 1, 1, 2, 2,  3, 25}
+  };
+  static const uint16_t limit[8] = {
+    0xffff, 0x7ffe, 0x3ffc, 0x1ff8, 0x0ff0, 0x07e0, 0x03c0, 0x0180
+  };
+  const __m128i thresh =
+      _mm_loadu_si128((const __m128i*)(kThresh_SSE[filter_sharpness]));
+  const uint32_t or_mask = limit[half - 1];
+
+  if (half <= 4) {
+    for (uint32_t j = 0; j < size; ++j, q0 += step) {
+      const __m128i Q = _mm_loadu_si128((const __m128i*)(q0 - 4));
+      const __m128i diff1 = _mm_subs_epi16(Q, _mm_srli_si128(Q, 2));
+      const __m128i diff2 = _mm_slli_si128(diff1, 2);
+      const __m128i abs16 = _mm_abs_epi16(_mm_subs_epi16(diff1, diff2));
+      const __m128i abs8 = _mm_packs_epi16(abs16, abs16);
+      const __m128i abs_dPQ = _mm_shuffle_epi32(abs8, 0x05);
+      const __m128i bits_PQ = _mm_cmpgt_epi8(abs_dPQ, thresh);
+      const uint32_t bits = _mm_movemask_epi8(bits_PQ) | or_mask;
+#if defined(__GNUC__)
+      if (!bits) __builtin_unreachable();
+#endif
+      out[j] = std::min(15 - WP2Log2Floor(bits), WP2Ctz(bits)) + 1;
+    }
+  } else {
+    for (uint32_t j = 0; j < size; ++j, q0 += step) {
+      const __m128i P0 = _mm_loadu_si128((const __m128i*)(q0 - 8));
+      const __m128i Q0 = _mm_loadu_si128((const __m128i*)(q0 + 0));
+      const __m128i P1 = _mm_alignr_epi8(Q0, P0, 2);
+      const __m128i Q1 = _mm_alignr_epi8(Q0, P0, 14);
+      const __m128i diff_dP = _mm_subs_epi16(P1, P0);
+      const __m128i diff_dQ = _mm_subs_epi16(Q1, Q0);
+      const __m128i diff_dP1 = _mm_slli_si128(diff_dP, 2);
+      const __m128i diff_dQ1 = _mm_srli_si128(diff_dQ, 2);
+      const __m128i abs_dP = _mm_abs_epi16(_mm_subs_epi16(diff_dP, diff_dP1));
+      const __m128i abs_dQ = _mm_abs_epi16(_mm_subs_epi16(diff_dQ, diff_dQ1));
+      const __m128i abs_dPQ = _mm_packs_epi16(abs_dQ, abs_dP);
+      const __m128i bits_PQ = _mm_cmpgt_epi8(abs_dPQ, thresh);
+      const uint32_t bits = _mm_movemask_epi8(bits_PQ) | or_mask;
+#if defined(__GNUC__)
+      if (!bits) __builtin_unreachable();
+#endif
+      out[j] = std::min(15 - WP2Log2Floor(bits), WP2Ctz(bits)) + 1;
+    }
+  }
+}
+
 WP2_TSAN_IGNORE_FUNCTION void DblkFilterInitSSE() {
   DeblockLine = DeblockLine_SSE;
 
   FilterCopyIn = CopyIn_SSE;
   FilterCopyOut = CopyOut_SSE;
+
+  MeasureFlatLengths = MeasureFlatLengths_SSE;
 }
 
 #if defined(WP2_USE_AVX2)
