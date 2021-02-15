@@ -278,29 +278,25 @@ void TransformColorInverse_SSE(const WP2L::Multipliers& m,
   const int32_t red_to_blue = m.red_to_blue;
   const int16_t* const src_end = src + 4 * num_pixels;
   const __m128i kMask_ag = _mm_set1_epi32(0xffff);  // A0G0 mask
-  const __m128i kRound_r = _mm_setr_epi32(0x8000, 0, 0x8000, 0);
-  const __m128i kRound_b = _mm_setr_epi32(0, 0x8000, 0, 0x8000);
+  const __m128i kRound = _mm_set1_epi32(0x8000);
+  const __m128i perm =
+      _mm_setr_epi8(2, 3, 4, 5, 6, 7, 4, 5, 10, 11, 12, 13, 14, 15, 12, 13);
 
-  __m128i mult_r = _mm_cvtsi32_si128((uint32_t)green_to_red << 16);
-  __m128i mult_b = _mm_insert_epi32(_mm_setzero_si128(),
-                       (uint32_t)(red_to_blue & 0xffff) |
-                       ((uint32_t)green_to_blue << 16), 1);
-  mult_r = _mm_unpacklo_epi64(mult_r, mult_r);
-  mult_b = _mm_unpacklo_epi64(mult_b, mult_b);
+  __m128i mult1 = _mm_cvtsi32_si128((uint32_t)green_to_red << 16 | 32);
+  __m128i mult2 = _mm_cvtsi32_si128((uint32_t)red_to_blue << 16);
+  mult1 = _mm_insert_epi32(mult1, (uint32_t)green_to_blue << 16 | 32u, 1);
+  mult1 = _mm_unpacklo_epi64(mult1, mult1);
+  mult2 = _mm_unpacklo_epi64(mult2, mult2);
 
   for (; src + 8 <= src_end; src += 8, dst += 8) {
-    const __m128i in = _mm_loadu_si128((const __m128i*)src);
-    const __m128i R1 = _mm_bsrli_si128(in, 2);   // ARGB -> RGBx
-    const __m128i R2 = _mm_madd_epi16(R1, mult_r);
-    // xR00
-    const __m128i R3 = _mm_add_epi32(_mm_slli_epi32(R2, 16 - 5), kRound_r);
-    const __m128i R4 = _mm_add_epi16(R3, in);
-    const __m128i B1 = _mm_bslli_si128(R4, 2);   // xRGB -> xxRG
-    const __m128i B2 = _mm_madd_epi16(B1, mult_b);
-    // 00xB
-    const __m128i B3 = _mm_add_epi32(_mm_slli_epi32(B2, 16 - 5), kRound_b);
-    const __m128i B4 = _mm_add_epi16(B3, R4);
-    const __m128i out = _mm_blendv_epi8(B4, in, kMask_ag);
+    const __m128i A = _mm_loadu_si128((const __m128i*)src);
+    const __m128i B = _mm_shuffle_epi8(A, perm);  // ARGB -> RGBG
+    const __m128i C = _mm_madd_epi16(B, mult1);
+    const __m128i D = _mm_add_epi32(_mm_slli_epi32(C, 16 - 5), kRound);
+    const __m128i E = _mm_madd_epi16(D, mult2);
+    const __m128i F = _mm_slli_epi64(E, 48 - 5);
+    const __m128i G = _mm_add_epi32(F, D);
+    const __m128i out = _mm_blendv_epi8(G, A, kMask_ag);
     _mm_storeu_si128((__m128i*)dst, out);
   }
   for (; src < src_end; src += 4, dst += 4) {
