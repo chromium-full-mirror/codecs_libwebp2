@@ -48,12 +48,14 @@ class PartialTileDecoder : public WP2Allocable {
                          Tile* const partial_tile) = 0;
   // Starts work. Returns WP2_STATUS_OK or an error.
   virtual WP2Status Start() = 0;
-  // Continues work. Returns WP2_STATUS_OK, WP2_STATUS_NOT_ENOUGH_DATA or error.
+  // Continues work. Returns WP2_STATUS_OK or an error.
   virtual WP2Status Continue() = 0;
   // Abandons the decoding process, if any.
   virtual void Clear() = 0;
   // Returns nullptr if there is no assigned partial tile.
   virtual Tile* GetPartialTile() const = 0;
+  // Returns true if the tile is complete.
+  virtual bool IsComplete() const = 0;
 };
 
 //------------------------------------------------------------------------------

@@ -19,11 +19,12 @@
 
 #include <algorithm>
 
+#include "src/common/global_params.h"
 #include "src/dec/incr/decoder_state.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/utils/data_source.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
-#include "src/common/global_params.h"
 
 namespace WP2 {
 
@@ -96,6 +97,53 @@ bool TrySkipTile(DataSource* const data_source, const DecoderConfig& config,
   return true;
 }
 
+//------------------------------------------------------------------------------
+
+// Deblocks then converts available rows in each tile from YUV to RGB if needed.
+// Updates 'state->frame_num_converted_rows' and 'frame_num_final_rows'.
+WP2Status ConvertRows(Decoder::State* const state) {
+  state->intertile_filter.Deblock(state->GetFrameNumDecodedRows());
+
+  const uint32_t num_converted_rows = state->frame_num_converted_rows;
+  const uint32_t num_convertible_rows =
+      state->intertile_filter.GetNumFilteredRows();
+
+  if (num_converted_rows < num_convertible_rows) {
+    // Per-tile YUV to RGB conversion, if any.
+    for (Tile& tile : state->tiles_layout.tiles) {
+      // This Decoder does not support YUV output, final buffer is always RGB.
+      assert(!tile.rgb_output.IsEmpty());
+      if (!tile.output_is_yuv) continue;
+
+      if (tile.rect.y + tile.rect.height <= num_converted_rows) continue;
+      if (tile.rect.y >= num_convertible_rows) break;
+      const uint32_t num_converted_rows_in_tile =
+          SafeSub(num_converted_rows, tile.rect.y);
+      const uint32_t num_convertible_rows_in_tile =
+          std::min(tile.rect.height, num_convertible_rows - tile.rect.y);
+      assert(num_converted_rows_in_tile < num_convertible_rows_in_tile);
+      assert(num_convertible_rows_in_tile <= tile.num_decoded_rows);
+
+      // Lines to convert within the current 'tile'.
+      const Rectangle new_rows_rect = {
+          0, num_converted_rows_in_tile, tile.rect.width,
+          num_convertible_rows_in_tile - num_converted_rows_in_tile};
+
+      ArgbBuffer rgb_output_rows(tile.rgb_output.format());
+      WP2_CHECK_STATUS(rgb_output_rows.SetView(tile.rgb_output, new_rows_rect));
+      YUVPlane yuv_output_rows;
+      WP2_CHECK_STATUS(yuv_output_rows.SetView(tile.yuv_output, new_rows_rect));
+      WP2_CHECK_STATUS(
+          yuv_output_rows.Export(state->tiles_layout.gparams->transf_,
+                                 /*resize_if_needed=*/false, &rgb_output_rows));
+    }
+  }
+
+  state->frame_num_converted_rows = num_convertible_rows;
+  state->frame_num_final_rows = state->frame_num_converted_rows;
+  return WP2_STATUS_OK;
+}
+
 }  // namespace
 
 //------------------------------------------------------------------------------
@@ -117,14 +165,18 @@ WP2Status Decoder::DecodeAvailableTiles() {
                    WP2_STATUS_BITSTREAM_OUT_OF_MEMORY);
     }
 
-    // If the partial tile is not fully decoded (WP2_STATUS_OK), don't look
-    // further.
     WP2_CHECK_STATUS(partial_tile_decoder->Continue());
 
-    state_->data_source->MarkNumBytesAsRead(partial_tile->chunk_size);
-    state_->data_source->Discard(state_->data_source->GetNumReadBytes());
-    partial_tile_decoder->Clear();
-    ++tiles_layout->num_decoded_tiles;
+    if (partial_tile_decoder->IsComplete()) {
+      state_->data_source->MarkNumBytesAsRead(partial_tile->chunk_size);
+      state_->data_source->Discard(state_->data_source->GetNumReadBytes());
+      partial_tile_decoder->Clear();
+      ++tiles_layout->num_decoded_tiles;
+    } else {
+      // If the partial tile is not fully decoded, do not look further.
+      WP2_CHECK_STATUS(ConvertRows(state_));
+      return WP2_STATUS_NOT_ENOUGH_DATA;
+    }
   }
 
   while (tiles_layout->num_assignable_tiles < tiles_layout->tiles.size()) {
@@ -213,44 +265,7 @@ WP2Status Decoder::DecodeAvailableTiles() {
   // which tile failed.
   tiles_layout->num_decoded_tiles += num_full_tiles;
 
-  state_->intertile_filter.Deblock(state_->GetFrameNumDecodedRows());
-
-  const uint32_t num_converted_rows = state_->frame_num_converted_rows;
-  const uint32_t num_convertible_rows =
-      state_->intertile_filter.GetNumFilteredRows();
-
-  if (num_converted_rows < num_convertible_rows) {
-    // Per-tile YUV to RGB conversion, if any.
-    for (Tile& tile : tiles_layout->tiles) {
-      // This Decoder does not support YUV output, final buffer is always RGB.
-      assert(!tile.rgb_output.IsEmpty());
-      if (!tile.output_is_yuv) continue;
-
-      if (tile.rect.y + tile.rect.height <= num_converted_rows) continue;
-      if (tile.rect.y >= num_convertible_rows) break;
-      const uint32_t num_converted_rows_in_tile =
-          std::max(tile.rect.y, num_converted_rows) - tile.rect.y;
-      const uint32_t num_convertible_rows_in_tile =
-          std::min(tile.rect.height, num_convertible_rows - tile.rect.y);
-      assert(num_converted_rows_in_tile < num_convertible_rows_in_tile);
-      assert(num_convertible_rows_in_tile <= tile.num_decoded_rows);
-
-      const Rectangle new_rows_rect = {
-          0, num_converted_rows_in_tile, tile.rect.width,
-          num_convertible_rows_in_tile - num_converted_rows_in_tile};
-
-      ArgbBuffer rgb_output_rows(tile.rgb_output.format());
-      WP2_CHECK_STATUS(rgb_output_rows.SetView(tile.rgb_output, new_rows_rect));
-      YUVPlane yuv_output_rows;
-      WP2_CHECK_STATUS(yuv_output_rows.SetView(tile.yuv_output, new_rows_rect));
-      WP2_CHECK_STATUS(yuv_output_rows.Export(tiles_layout->gparams->transf_,
-                                              /*resize_if_needed=*/false,
-                                              &rgb_output_rows));
-    }
-  }
-
-  state_->frame_num_converted_rows = num_convertible_rows;
-  state_->frame_num_final_rows = state_->frame_num_converted_rows;
+  WP2_CHECK_STATUS(ConvertRows(state_));
 
   if (tiles_layout->num_decoded_tiles < tiles_layout->tiles.size()) {
     return WP2_STATUS_NOT_ENOUGH_DATA;

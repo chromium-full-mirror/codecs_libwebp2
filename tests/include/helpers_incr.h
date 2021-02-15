@@ -41,11 +41,18 @@ struct DecoderAction {
 struct IncrementalDecodingTestSetup {
   size_t incr_size_step = 1;
   DecoderType decoder_type = DecoderType::kArray;
+  WP2SampleFormat output_format = WP2_Argb_32;
+  bool compare_with_single_chunk = false;
   std::vector<DecoderAction> actions;
 
-  IncrementalDecodingTestSetup(size_t s, DecoderType t,
-                               std::vector<DecoderAction>&& a)
-      : incr_size_step(s), decoder_type(t), actions(a) {}
+  IncrementalDecodingTestSetup(size_t step, DecoderType type,
+                               WP2SampleFormat format, bool cmp,
+                               std::vector<DecoderAction>&& act)
+      : incr_size_step(step),
+        decoder_type(type),
+        output_format(format),
+        compare_with_single_chunk(cmp),
+        actions(act) {}
 };
 
 WP2Status DecodeIncremental(

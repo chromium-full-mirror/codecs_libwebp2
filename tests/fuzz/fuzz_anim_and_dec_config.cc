@@ -39,6 +39,9 @@ class FuzzedParametersSetup : public FuzzedParameters {
         ExtractUInt32(1, std::max((size_t)kHeaderMinSize, max_bitstream_size));
     const DecoderType decoder_type =
         (DecoderType)ExtractUInt32((uint32_t)DecoderType::kSwappingCustom);
+    const WP2SampleFormat output_format =
+        (WP2SampleFormat)ExtractUInt32((uint32_t)WP2_FORMAT_NUM - 1);
+    const bool compare_with_single_chunk = ExtractBool();
 
     std::vector<DecoderAction> actions;
     actions.reserve(ExtractUInt32(0, 15));
@@ -62,8 +65,9 @@ class FuzzedParametersSetup : public FuzzedParameters {
         }
       }
     }
-    return IncrementalDecodingTestSetup(incr_size_step, decoder_type,
-                                        std::move(actions));
+    return IncrementalDecodingTestSetup(
+        incr_size_step, decoder_type, output_format, compare_with_single_chunk,
+        std::move(actions));
   }
 };
 

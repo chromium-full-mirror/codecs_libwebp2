@@ -343,8 +343,8 @@ void DeblockLine_SSE(uint32_t filter_strength, int32_t threshold,
 }
 
 void MeasureFlatLengths_SSE(uint32_t filter_sharpness, uint32_t half,
-                          const int16_t* q0, uint32_t step,
-                          uint8_t out[], uint32_t size) {
+                            const int16_t* q0, uint32_t step,
+                            uint8_t out[], uint32_t size) {
   assert(half > 0 && half <= kDblkMaxHalf);
   if (size <= 0) return;
   if (half <= 2) {

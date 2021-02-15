@@ -38,6 +38,7 @@ class ContextTileDecoder : public PartialTileDecoder {
   WP2Status Continue() override;
   void Clear() override;
   Tile* GetPartialTile() const override;
+  bool IsComplete() const override;
 
  protected:
   // To be called only through MainContext::CreateLocalContext().

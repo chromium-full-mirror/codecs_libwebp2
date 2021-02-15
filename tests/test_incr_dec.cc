@@ -56,9 +56,9 @@ TEST_P(IncrementalDecoderTest, Simple) {
   // Try incremental decoding with different steps.
   for (const size_t step : {(size_t)1, writer.size_ / 20, writer.size_}) {
     std::vector<ArgbBuffer> decoded_frames;
-    ASSERT_WP2_OK(
-        testing::DecodeIncremental(config, {writer.mem_, writer.size_},
-                                   {step, decoder_type, {}}, &decoded_frames));
+    ASSERT_WP2_OK(testing::DecodeIncremental(
+        config, {writer.mem_, writer.size_},
+        {step, decoder_type, WP2_Argb_32, /*cmp=*/false, {}}, &decoded_frames));
     ASSERT_EQ(decoded_frames.size(), 1u);
     EXPECT_TRUE(testing::Compare(src, decoded_frames.front(), src_file_name,
                                  testing::GetExpectedDistortion(quality)));
@@ -91,10 +91,25 @@ TEST(IncrementalDecoderTest, RewindAfterMetadata) {
   MemoryWriter writer;
   ASSERT_WP2_OK(testing::CompressImage("source1_64x48.png", &writer));
 
-  testing::IncrementalDecodingTestSetup setup(
-      writer.size_, testing::DecoderType::kArray,
+  const testing::IncrementalDecodingTestSetup setup(
+      writer.size_, testing::DecoderType::kArray, WP2_ARGB_32, /*cmp=*/false,
       {{testing::DecoderAction::Type::kRewindKeepBytes, writer.size_ + 1,
         /*output_buffer_changed*/ 0}});
+  ASSERT_WP2_OK(testing::DecodeIncremental(DecoderConfig::kDefault,
+                                           {writer.mem_, writer.size_}, setup));
+}
+
+//------------------------------------------------------------------------------
+
+// Tests that decoding one byte at a time generates the same result as all bytes
+// in one shot.
+TEST(IncrementalDecoderTest, Compare) {
+  MemoryWriter writer;
+  ASSERT_WP2_OK(testing::CompressImage("source1_64x48.png", &writer));
+
+  const testing::IncrementalDecodingTestSetup setup(
+      writer.size_, testing::DecoderType::kArray, WP2_RGBA_32, /*cmp=*/true,
+      {});
   ASSERT_WP2_OK(testing::DecodeIncremental(DecoderConfig::kDefault,
                                            {writer.mem_, writer.size_}, setup));
 }

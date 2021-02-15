@@ -158,10 +158,7 @@ WP2Status ImportRect(const ArgbBuffer& from, const Rectangle& rect,
   ArgbBuffer from_view(from.format()), to_view(to->format());
   WP2_CHECK_STATUS(from_view.SetView(from, rect));
   WP2_CHECK_STATUS(to_view.SetView(*to, rect));
-  for (uint32_t y = 0; y < rect.height; ++y) {
-    WP2_CHECK_STATUS(
-        to_view.ImportRow(from_view.format(), y, from_view.GetRow8(y)));
-  }
+  WP2_CHECK_STATUS(to_view.CopyFrom(from_view));
   return WP2_STATUS_OK;
 }
 
@@ -178,7 +175,7 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
   const size_t incr_size_step = std::max((size_t)1, setup.incr_size_step);
 
   // Setup the chosen Decoder instance.
-  ArgbBuffer output;
+  ArgbBuffer output(setup.output_format);
   ArrayDecoder array_idec(config, &output);
   StreamDecoder stream_idec(config, &output);
   UnstableCustomDecoder unstable_custom_idec(config, &output);
@@ -195,10 +192,10 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
   }
 
   // State of the decoding.
-  uint32_t frame_index = 0;
+  uint32_t frame_index = 0, previous_frame_index = kMaxNumFrames;
   Rectangle decoded_area;
   Rectangle previous_decoded_area(0, 0, 0, 0);
-  ArgbBuffer incremental_output;
+  ArgbBuffer incremental_output(setup.output_format);
   bool rewinded = false;
   uint32_t num_skipped_frames = 0;
   uint32_t expected_total_num_frames = 0;
@@ -230,6 +227,7 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
           available_input_size = 0;
         }
         frame_index = 0;
+        previous_frame_index = kMaxNumFrames;
         previous_decoded_area = Rectangle(0, 0, 0, 0);
         incremental_output.Deallocate();
         if (decoded_frames != nullptr) decoded_frames->clear();
@@ -241,6 +239,7 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
         idec->SkipNumNextFrames(num_frames_to_skip);
         if (num_frames_to_skip > 0) {
           frame_index = std::min(frame_index + action.value, kMaxNumFrames);
+          previous_frame_index = kMaxNumFrames;
           previous_decoded_area = Rectangle(0, 0, 0, 0);
           incremental_output.Deallocate();
           num_skipped_frames += num_frames_to_skip;
@@ -349,6 +348,26 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
     CHECK_OR_DIE(decoded_area.width <= output.width());
     CHECK_OR_DIE(decoded_area.height >= previous_decoded_area.height);
     CHECK_OR_DIE(decoded_area.height <= output.height());
+    if (frame_index == previous_frame_index &&
+        available_input_size >= previous_input_size &&
+        available_input_size - previous_input_size <= 2 &&
+        config.incremental_mode ==
+            DecoderConfig::IncrementalMode::PARTIAL_TILE_CONTEXT &&
+        features != nullptr) {
+      const uint32_t num_lines =
+          (features->raw_width != features->width)
+              ? decoded_area.width - previous_decoded_area.width
+              : decoded_area.height - previous_decoded_area.height;
+      // Incremental decoding should not be able to finish more than two rows of
+      // blocks in 2 bytes or fewer for lossy and a tile for lossless.
+      if (features->quality_hint == kLosslessQualityHint) {
+        CHECK_OR_DIE(num_lines <=
+                     std::min(features->raw_height, features->tile_height));
+      } else {
+        CHECK_OR_DIE(num_lines <=
+                     std::min(features->raw_height, kMaxBlockSizePix * 2));
+      }
+    }
 
     // Save incremental output to make sure data doesn't change later.
     if (decoded_area.GetArea() > 0) {
@@ -373,6 +392,29 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
       WP2_CHECK_STATUS(ImportRect(output, rgt, &incremental_output));
       previous_decoded_area = decoded_area;
     }
+    previous_frame_index = frame_index;
+
+    if (setup.compare_with_single_chunk) {
+      ArgbBuffer cmp_output(output.format());
+      ArrayDecoder cmp_idec(config, &cmp_output);
+      cmp_idec.SetInput(input.bytes, available_input_size);
+      cmp_idec.SkipNumNextFrames(frame_index);
+      uint32_t cmp_duration_ms = 0;
+      const bool cmp_decoded_a_full_frame =
+          cmp_idec.ReadFrame(&cmp_duration_ms);
+      CHECK_OR_DIE(!cmp_idec.Failed());
+      CHECK_OR_DIE(cmp_decoded_a_full_frame == decoded_a_full_frame);
+      if (cmp_decoded_a_full_frame) {
+        CHECK_OR_DIE(cmp_duration_ms == duration_ms);
+      }
+      CHECK_OR_DIE(cmp_idec.GetDecodedArea() == decoded_area);
+      if (decoded_area.GetArea() > 0) {
+        ArgbBuffer cmp_view(cmp_output.format()), view(output.format());
+        WP2_CHECK_STATUS(cmp_view.SetView(cmp_output, decoded_area));
+        WP2_CHECK_STATUS(view.SetView(output, decoded_area));
+        CHECK_OR_DIE(Compare(cmp_view, view, "single_chunk_compare"));
+      }
+    }
 
     if (idec->TryGetDecodedFeatures() != nullptr) {
       if (decoded_a_full_frame) {
@@ -383,7 +425,7 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
                                       "incrementally decoded"));
         if (decoded_frames != nullptr) {
           decoded_frames->push_back(ArgbBuffer());
-          WP2_CHECK_STATUS(decoded_frames->back().CopyFrom(output));
+          WP2_CHECK_STATUS(decoded_frames->back().ConvertFrom(output));
         }
         if (idec->TryGetDecodedFeatures()->is_animation) {
           if (decoded_durations_ms != nullptr) {
@@ -395,8 +437,9 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
         }
         if (!idec->TryGetFrameDecodedFeatures(frame_index)->is_last) {
           ++frame_index;
+          previous_frame_index = kMaxNumFrames;
+          previous_decoded_area = Rectangle(0, 0, 0, 0);
         }
-        previous_decoded_area = Rectangle(0, 0, 0, 0);
       } else if (!idec->TryGetDecodedFeatures()->has_trailing_data &&
                  !rewinded && frame_index == 0 &&
                  available_input_size < input.size) {

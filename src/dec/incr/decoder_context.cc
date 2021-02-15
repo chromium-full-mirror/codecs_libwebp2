@@ -86,11 +86,6 @@ WP2Status ContextTileDecoder::Start() {
 
 WP2Status ContextTileDecoder::Continue() {
   DecodePartialTile();
-
-  if ((inter_context_data_.status == WP2_STATUS_OK) &&
-      (!main_context_.IsLocalContextClosed())) {
-    return WP2_STATUS_NOT_ENOUGH_DATA;  // Tile is incomplete.
-  }
   return inter_context_data_.status;
 }
 
@@ -106,6 +101,11 @@ void ContextTileDecoder::Clear() {
 
 Tile* ContextTileDecoder::GetPartialTile() const {
   return partial_tile_;
+}
+
+bool ContextTileDecoder::IsComplete() const {
+  return (inter_context_data_.status == WP2_STATUS_OK) &&
+         (main_context_.IsLocalContextClosed());
 }
 
 }  // namespace WP2

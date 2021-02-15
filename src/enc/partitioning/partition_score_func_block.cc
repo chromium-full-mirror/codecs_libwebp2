@@ -96,6 +96,7 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
 
   float total_rate = 0.f, total_disto = 0.f, rate[4], disto[4];
   assert(num_blocks >= 1 && num_blocks <= 4);
+  uint32_t total_pixels = 0;
   for (uint32_t i = 0; i < num_blocks; ++i) {
     const Block& block = blocks[i];
 
@@ -115,20 +116,24 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
     WP2_CHECK_STATUS(
         WriteBlock(front_mgr_, tmp_cb_, &tmp_syntax_writer_, &enc));
     const uint32_t num_pixels = block.AsRect().GetArea();
+    total_pixels += num_pixels;
     // Exclude the header to prevent early decision from impacting later blocks.
-    rate[i] = (enc.GetCost(tmp_dicts_) - header_rate) / num_pixels;
-    assert(rate[i] >= 0.f);
-    total_rate += rate[i];
+    const float block_rate = (enc.GetCost(tmp_dicts_) - header_rate);
+    assert(block_rate >= 0.f);
+    total_rate += block_rate;
 
     // Compute the distortion per pixel.
-    disto[i] = 0.f;
+    float block_disto = 0.f;
     constexpr float disto_scale[] = {0.4f, 0.2f, 0.2f, 0.2f};
     for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
       if (c == kAChannel && !with_alpha_) continue;
-      disto[i] += disto_scale[c] * tmp_cb_.GetDisto(c);
+      block_disto += disto_scale[c] * tmp_cb_.GetDisto(c);
     }
-    disto[i] /= num_pixels;  // Per pixel is not necessary, just nicer debug.
-    total_disto += disto[i];
+    total_disto += block_disto;
+
+    // Per pixel is not necessary, just nicer debug.
+    rate[i] = block_rate / num_pixels;
+    disto[i] = block_disto / num_pixels;
 
     // Register the blocks in the 'front_mgr_' except the last one.
     if (i + 1 < num_blocks) {
@@ -146,11 +151,11 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
     front_mgr_.UndoUseSize(blocks[i]);
   }
 
-  total_rate /= num_blocks;  // Average per pixel values.
-  total_disto /= num_blocks;
+  total_rate /= total_pixels;  // Average per pixel values.
+  total_disto /= total_pixels;
 
   // Estimate a score from the written bits and the distortion.
-  const float lambda = MapQuality(*config_, 10.f, -9.f);  // Empirical.
+  const float lambda = MapQuality(*config_, 200.f, -199.f);  // Empirical.
   constexpr float kNiceScale = 0.01f;  // Has no impact on the result.
   *score = 1.0f / (1.0f + kNiceScale * (lambda * total_rate + total_disto));
   WP2_CHECK_REDUCED_STATUS(

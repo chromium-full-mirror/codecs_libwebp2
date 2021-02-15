@@ -33,7 +33,7 @@ namespace {
 TEST(PartitionScoreFuncTest, BlockScoreFunc) {
   ArgbBuffer rgb;
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath("source1_32x32.png").c_str(), &rgb));
+      ReadImage(testing::GetTestDataPath("background.png").c_str(), &rgb));
 
   const EncoderConfig& config = EncoderConfig::kDefault;
   CSPTransform transf;
@@ -49,6 +49,7 @@ TEST(PartitionScoreFuncTest, BlockScoreFunc) {
 
   const Rectangle tile_rect = yuv.AsRect();
   const Block kBlocks[] = {{0, 0, BLK_4x4}, {1, 0, BLK_4x8}, {0, 1, BLK_4x4}};
+  constexpr uint32_t kNumBlocks = WP2_ARRAY_SIZE(kBlocks);
   float score;
 
   BlockScoreFunc score_func;
@@ -56,16 +57,48 @@ TEST(PartitionScoreFuncTest, BlockScoreFunc) {
       score_func.Init(config, tile_rect, yuv, gparams, ProgressRange()));
 
   // Test block by block.
-  for (const Block& block : kBlocks) {
-    if (block.y() != 0) continue;  // Blocks above must be used.
-    ASSERT_WP2_OK(score_func.ComputeScore(block, ProgressRange(), &score));
-    EXPECT_GT(score, 0);
+  // Check that we can run ComputeScore multiple times and get the same result.
+  float block_scores[kNumBlocks];
+  for (uint32_t pass = 0; pass < 2; ++pass) {
+    for (uint32_t i = 0; i < kNumBlocks; ++i) {
+      const Block& block = kBlocks[i];
+      if (block.y() != 0) continue;  // Blocks above must be used.
+      ASSERT_WP2_OK(score_func.ComputeScore(block, ProgressRange(), &score));
+      EXPECT_GT(score, 0);
+      if (pass > 0) {
+        EXPECT_EQ(score, block_scores[i]);
+      }
+      block_scores[i] = score;
+    }
   }
 
-  // Test a group of blocks.
-  ASSERT_WP2_OK(score_func.ComputeScore(
+  // Compute score again, this time marking each block as Use'd as we go.
+  float inverted_scores[kNumBlocks];
+  for (uint32_t i = 0; i < kNumBlocks; ++i) {
+    const Block& block = kBlocks[i];
+    ASSERT_WP2_OK(score_func.ComputeScore(block, ProgressRange(), &score));
+    EXPECT_GT(score, 0);
+    ASSERT_WP2_OK(score_func.Use(block));
+    inverted_scores[i] = 1.f / score - 1.f;
+  }
+
+  // Fresh clean score func.
+  BlockScoreFunc score_func2;
+  ASSERT_WP2_OK(
+      score_func2.Init(config, tile_rect, yuv, gparams, ProgressRange()));
+
+  // Test all block at once.
+  ASSERT_WP2_OK(score_func2.ComputeScore(
       kBlocks, sizeof(kBlocks) / sizeof(kBlocks[0]), &score));
   EXPECT_GT(score, 0);
+  const float inverted_score = 1.f / score - 1.f;
+  // Check the result is a weighted average of the scores of individual blocks.
+  // Currently fails for images with alpha (e.g. source1_32x32.png).
+  // TODO(maryla): debug and fix for images with alpha.
+  const float expected_score =
+      (inverted_scores[0] + 2.f * inverted_scores[1] + inverted_scores[2]) /
+      4.f;
+  EXPECT_NEAR(inverted_score, expected_score, 0.001f);
 }
 
 //------------------------------------------------------------------------------

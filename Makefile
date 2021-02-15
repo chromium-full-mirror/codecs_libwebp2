@@ -1257,6 +1257,9 @@ DIST_FILES= \
             wp2_js/test_wp2_js.wp2 \
             wp2_js/test_wp2_wasm.wp2 \
             wp2_js/preview.html \
+            Android.mk \
+            Application.mk \
+            examples/Android.mk \
 
 pak: clean
 ifeq ($(strip $(shell uname)), Darwin)

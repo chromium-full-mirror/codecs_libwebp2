@@ -1812,14 +1812,19 @@ WP2Status PartitionScoreFunc::ClearVDebug() const {
   return WP2_STATUS_OK;
 }
 
+bool PartitionScoreFunc::VDebugBlockSelected(const Block& block) const {
+  // Top left corner of the block must be selected.
+  return VDSelected(
+      tile_rect_.x, tile_rect_.y,
+      {block.x_pix(), block.y_pix(), kMinBlockSizePix, kMinBlockSizePix},
+      *config_);
+}
+
 // Should be called after ClearVDebug() and for each block score computed.
 WP2Status PartitionScoreFunc::RegisterScoreForVDebug(
     const Block& block, float score, bool ending_new_line) const {
   if (!VDMatch(*config_, "encoder/partition/score") ||
-      !VDSelected(
-          tile_rect_.x, tile_rect_.y,
-          {block.x_pix(), block.y_pix(), kMinBlockSizePix, kMinBlockSizePix},
-          *config_)) {
+      !VDebugBlockSelected(block)) {
     return WP2_STATUS_OK;
   }
   if (config_->info != nullptr) {
@@ -1904,13 +1909,19 @@ WP2Status BlockScoreFunc::RegisterScoreForVDebug(
   for (uint32_t i = 1; i < num_blocks; ++i) {
     hull = hull.MergeWith(blocks[i].rect());
   }
+
   const Block hull_block(hull.x, hull.y, GetBlockSize(hull.width, hull.height));
+  if (!VDMatch(*config_, "encoder/partition/score") ||
+      !VDebugBlockSelected(hull_block)) {
+    return WP2_STATUS_OK;
+  }
+
   WP2_CHECK_STATUS(PartitionScoreFunc::RegisterScoreForVDebug(
       hull_block, score, /*ending_new_line=*/false));
 
   if (config_->info != nullptr) {
     std::string& str = config_->info->selection_info;
-    str += WP2SPrint("  rate %8.2f disto %8.2f", total_rate, total_disto);
+    str += WP2SPrint("  rate %3.2f disto %6.2f", total_rate, total_disto);
     if (num_blocks > 1) {  // Print sub-blocks stats.
      str += WP2SPrint("  %u blks: ", num_blocks);
      for (uint32_t i = 0; i < num_blocks; ++i) {
