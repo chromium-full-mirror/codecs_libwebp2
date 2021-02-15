@@ -25,20 +25,23 @@
 #include "src/dec/lossless/losslessi_dec.h"
 #include "src/dsp/dsp.h"
 
+namespace WP2L {
+namespace {
+
 //------------------------------------------------------------------------------
 // Predictors
 
 // Sum of each component, mod 256.
-static WP2_UBSAN_IGNORE_UNSIGNED_OVERFLOW inline void AddPixels(
+WP2_UBSAN_IGNORE_UNSIGNED_OVERFLOW inline void AddPixels(
     const int16_t* const a, bool has_alpha, const int16_t* const b,
     int16_t* const out) {
   out[0] = has_alpha ? a[0] + b[0] : WP2::kAlphaMax;
   for (uint32_t i = 1; i < 4; ++i) out[i] = a[i] + b[i];
 }
 
-static void PredictorNonClampedAdd0_C(const int16_t* in, bool has_alpha,
-                                      const int16_t*, uint32_t num_pixels,
-                                      int16_t* out) {
+void PredictorNonClampedAdd0_C(
+    const int16_t* in, bool has_alpha, const int16_t*, uint32_t num_pixels,
+    int16_t* out) {
   int16_t pred[4];
   WP2L::PredictorsNonClamped_C[0](/*left=*/nullptr, /*top=*/nullptr, pred);
   for (const int16_t* in_end = in + 4 * num_pixels; in < in_end;
@@ -46,9 +49,9 @@ static void PredictorNonClampedAdd0_C(const int16_t* in, bool has_alpha,
     AddPixels(in, has_alpha, pred, out);
   }
 }
-static void PredictorNonClampedAdd1_C(const int16_t* in, bool has_alpha,
-                                      const int16_t*, uint32_t num_pixels,
-                                      int16_t* out) {
+void PredictorNonClampedAdd1_C(
+    const int16_t* in, bool has_alpha, const int16_t*, uint32_t num_pixels,
+    int16_t* out) {
   for (const int16_t* in_end = in + 4 * num_pixels; in < in_end;
        in += 4, out += 4) {
     AddPixels(in, has_alpha, &out[-4], out);
@@ -60,20 +63,18 @@ static void PredictorNonClampedAdd1_C(const int16_t* in, bool has_alpha,
 
 // The predictor is added to the output pixel (which
 // is therefore considered as a residual) to get the final prediction.
-#define GENERATE_PREDICTOR_NON_CLAMPED_ADD(I)                                \
-  static void PredictorNonClampedAdd##I##_C(                                 \
-      const int16_t* in, bool has_alpha, const int16_t* upper,               \
-      uint32_t num_pixels, int16_t* out) {                                   \
-    int16_t pred[4];                                                         \
-    assert(upper != nullptr);                                                \
-    for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
-         out += 4, in += 4, upper += 4) {                                    \
-      PredictorsNonClamped_C[I](out - 4, upper, pred);                       \
-      AddPixels(in, has_alpha, pred, out);                                   \
-    }                                                                        \
-  }
-
-namespace WP2L {
+#define GENERATE_PREDICTOR_NON_CLAMPED_ADD(I)                              \
+void PredictorNonClampedAdd##I##_C(                                        \
+    const int16_t* in, bool has_alpha, const int16_t* upper,               \
+    uint32_t num_pixels, int16_t* out) {                                   \
+  int16_t pred[4];                                                         \
+  assert(upper != nullptr);                                                \
+  for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
+       out += 4, in += 4, upper += 4) {                                    \
+    PredictorsNonClamped_C[I](out - 4, upper, pred);                       \
+    AddPixels(in, has_alpha, pred, out);                                   \
+  }                                                                        \
+}
 
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(2)
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(3)
@@ -87,19 +88,19 @@ GENERATE_PREDICTOR_NON_CLAMPED_ADD(10)
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(11)
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(12)
 
-#define GENERATE_PREDICTOR_CLAMPED_ADD(I)                                    \
-  static void PredictorClampedAdd##I##_C(                                    \
-      const int16_t* in, bool has_alpha, const int16_t* upper,               \
-      uint32_t num_pixels, const int16_t min_values[4],                      \
-      const int16_t max_values[4], int16_t* out) {                           \
-    int16_t pred[4];                                                         \
-    assert(upper != nullptr);                                                \
-    for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
-         out += 4, in += 4, upper += 4) {                                    \
-      PredictorsClamped_C[I](out - 4, upper, min_values, max_values, pred);  \
-      AddPixels(in, has_alpha, pred, out);                                   \
-    }                                                                        \
-  }
+#define GENERATE_PREDICTOR_CLAMPED_ADD(I)                                  \
+void PredictorClampedAdd##I##_C(                                           \
+    const int16_t* in, bool has_alpha, const int16_t* upper,               \
+    uint32_t num_pixels, const int16_t min_values[4],                      \
+    const int16_t max_values[4], int16_t* out) {                           \
+  int16_t pred[4];                                                         \
+  assert(upper != nullptr);                                                \
+  for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
+       out += 4, in += 4, upper += 4) {                                    \
+    PredictorsClamped_C[I](out - 4, upper, min_values, max_values, pred);  \
+    AddPixels(in, has_alpha, pred, out);                                   \
+  }                                                                        \
+}
 
 GENERATE_PREDICTOR_CLAMPED_ADD(0)
 GENERATE_PREDICTOR_CLAMPED_ADD(1)
@@ -108,12 +109,12 @@ GENERATE_PREDICTOR_CLAMPED_ADD(1)
 // Inverse transforms.
 
 // Inverse prediction.
-static void PredictorInverseTransform_C(const Transform* const transform,
-                                        int y_start, int y_end,
-                                        const int16_t min_values[4],
-                                        const int16_t max_values[4],
-                                        const int16_t* in, bool has_alpha,
-                                        int16_t* out) {
+void PredictorInverseTransform_C(const Transform* const transform,
+                                 int y_start, int y_end,
+                                 const int16_t min_values[4],
+                                 const int16_t max_values[4],
+                                 const int16_t* in, bool has_alpha,
+                                 int16_t* out) {
   const int width = transform->width_;
   if (y_start == 0) {  // First Row follows the L (mode=1) mode.
     PredictorNonClampedAdd0_C(in, has_alpha, nullptr, 1, out);
@@ -182,25 +183,24 @@ void AddGreenToBlueAndRed_C(const int16_t* src, uint32_t num_pixels,
   }
 }
 
-static inline void ColorCodeToMultipliers(const int16_t* const color_code,
-                                          Multipliers* const m) {
+inline void ColorCodeToMultipliers(const int16_t* const color_code,
+                                   Multipliers* const m) {
   m->green_to_red = color_code[3];
   m->green_to_blue = color_code[2];
   m->red_to_blue = color_code[1];
 }
 
-static void TransformColorInverse_C(const Multipliers* const m,
-                                    const int16_t* src, uint32_t num_pixels,
-                                    int16_t* dst) {
+void TransformColorInverse_C(const Multipliers& m,
+                             const int16_t* src, uint32_t num_pixels,
+                             int16_t* dst) {
   for (const int16_t* src_end = src + 4 * num_pixels; src < src_end;
        src += 4, dst += 4) {
     const int16_t red = src[1];
     const int16_t green = src[2];
     int new_red = red;
     int new_blue = src[3];
-    new_red += ColorTransformDelta(m->green_to_red, green);
-    new_blue += ColorTransformDelta(m->green_to_blue, green);
-    new_blue += ColorTransformDelta(m->red_to_blue, new_red);
+    new_red += ColorTransformDelta(m.green_to_red, green);
+    new_blue += (m.green_to_blue * green + m.red_to_blue * new_red + 16) >> 5;
     dst[0] = src[0];
     dst[1] = new_red;
     dst[2] = src[2];
@@ -209,9 +209,9 @@ static void TransformColorInverse_C(const Multipliers* const m,
 }
 
 // Color space inverse transform.
-static void ColorSpaceInverseTransform_C(const Transform* const transform,
-                                         int y_start, int y_end,
-                                         const int16_t* src, int16_t* dst) {
+void ColorSpaceInverseTransform_C(const Transform* const transform,
+                                  int y_start, int y_end,
+                                  const int16_t* src, int16_t* dst) {
   const uint32_t width = transform->width_;
   const int tile_width = 1 << transform->bits_;
   const int mask = tile_width - 1;
@@ -229,14 +229,14 @@ static void ColorSpaceInverseTransform_C(const Transform* const transform,
     const int16_t* const src_end = src + 4 * width;
     while (src < src_safe_end) {
       ColorCodeToMultipliers(pred, &m);
-      TransformColorInverse(&m, src, tile_width, dst);
+      TransformColorInverse(m, src, tile_width, dst);
       src += 4 * tile_width;
       dst += 4 * tile_width;
       pred += 4;
     }
     if (src < src_end) {  // Left-overs using C-version.
       ColorCodeToMultipliers(pred, &m);
-      TransformColorInverse(&m, src, remaining_width, dst);
+      TransformColorInverse(m, src, remaining_width, dst);
       src += 4 * remaining_width;
       dst += 4 * remaining_width;
       pred += 4;
@@ -246,24 +246,86 @@ static void ColorSpaceInverseTransform_C(const Transform* const transform,
   }
 }
 
-static void MapARGB_C(const int16_t* src, const int16_t* const color_map,
-                      uint32_t color_map_size, uint32_t y_start, uint32_t y_end,
-                      uint32_t width, int16_t* dst) {
+void MapARGB_C(const int16_t* src, const int16_t* const color_map,
+               uint32_t color_map_size, uint32_t y_start, uint32_t y_end,
+               uint32_t width, int16_t* dst) {
   for (const int16_t* const src_end = src + 4 * (y_end - y_start) * width;
        src < src_end; src += 4, dst += 4) {
     if (src[2] >= (int16_t)color_map_size) assert(false);
     ColorCopy(&color_map[4 * src[2]], dst);
   }
 }
-static void ColorIndexInverseTransform_C(const Transform* const transform,
-                                         uint32_t y_start, uint32_t y_end,
-                                         const int16_t* const src,
-                                         int16_t* const dst) {
+void ColorIndexInverseTransform_C(const Transform* const transform,
+                                  uint32_t y_start, uint32_t y_end,
+                                  const int16_t* const src,
+                                  int16_t* const dst) {
   const uint32_t width = transform->width_;
   MapColor(src, /*color_map=*/transform->data_.data(),
            /*color_map_size=*/transform->data_.size() / 4, y_start, y_end,
            width, dst);
 }
+
+//------------------------------------------------------------------------------
+// SSE version
+
+#if defined(WP2_USE_SSE)
+
+void TransformColorInverse_SSE(const WP2L::Multipliers& m,
+                               const int16_t* src, uint32_t num_pixels,
+                               int16_t* dst) {
+  const int32_t green_to_red = m.green_to_red;
+  const int32_t green_to_blue = m.green_to_blue;
+  const int32_t red_to_blue = m.red_to_blue;
+  const int16_t* const src_end = src + 4 * num_pixels;
+  const __m128i kMask_ag = _mm_set1_epi32(0xffff);  // A0G0 mask
+  const __m128i kRound_r = _mm_setr_epi32(0x8000, 0, 0x8000, 0);
+  const __m128i kRound_b = _mm_setr_epi32(0, 0x8000, 0, 0x8000);
+
+  __m128i mult_r = _mm_cvtsi32_si128((uint32_t)green_to_red << 16);
+  __m128i mult_b = _mm_insert_epi32(_mm_setzero_si128(),
+                       (uint32_t)(red_to_blue & 0xffff) |
+                       ((uint32_t)green_to_blue << 16), 1);
+  mult_r = _mm_unpacklo_epi64(mult_r, mult_r);
+  mult_b = _mm_unpacklo_epi64(mult_b, mult_b);
+
+  for (; src + 8 <= src_end; src += 8, dst += 8) {
+    const __m128i in = _mm_loadu_si128((const __m128i*)src);
+    const __m128i R1 = _mm_bsrli_si128(in, 2);   // ARGB -> RGBx
+    const __m128i R2 = _mm_madd_epi16(R1, mult_r);
+    // xR00
+    const __m128i R3 = _mm_add_epi32(_mm_slli_epi32(R2, 16 - 5), kRound_r);
+    const __m128i R4 = _mm_add_epi16(R3, in);
+    const __m128i B1 = _mm_bslli_si128(R4, 2);   // xRGB -> xxRG
+    const __m128i B2 = _mm_madd_epi16(B1, mult_b);
+    // 00xB
+    const __m128i B3 = _mm_add_epi32(_mm_slli_epi32(B2, 16 - 5), kRound_b);
+    const __m128i B4 = _mm_add_epi16(B3, R4);
+    const __m128i out = _mm_blendv_epi8(B4, in, kMask_ag);
+    _mm_storeu_si128((__m128i*)dst, out);
+  }
+  for (; src < src_end; src += 4, dst += 4) {
+    const int16_t red = src[1];
+    const int16_t green = src[2];
+    int32_t new_red = red;
+    int32_t new_blue = src[3];
+    new_red += (green_to_red * green + 16) >> 5;
+    new_blue += (green_to_blue * green + red_to_blue * new_red + 16) >> 5;
+    dst[0] = src[0];
+    dst[1] = new_red;
+    dst[2] = src[2];
+    dst[3] = new_blue;
+  }
+}
+
+WP2_TSAN_IGNORE_FUNCTION void DecLDspInitSSE() {
+  WP2L::TransformColorInverse = TransformColorInverse_SSE;
+}
+
+#endif  // WP2_USE_SSE
+
+}    // namespace
+
+//------------------------------------------------------------------------------
 
 void InverseTransform(const Transform* const transform, uint32_t row_start,
                       uint32_t row_end, const int16_t min_values[4],
@@ -334,9 +396,10 @@ WP2_TSAN_IGNORE_FUNCTION void DecLDspInit() {
 
   MapColor = MapARGB_C;
 
-  // If defined, use CPUInfo() to overwrite some pointers with faster versions.
   if (WP2GetCPUInfo != NULL) {
-  // TODO(skal): SSE2, etc.
+#if defined(WP2_USE_SSE)
+    if (WP2GetCPUInfo(kSSE)) DecLDspInitSSE();
+#endif
   }
   lossless_last_cpuinfo_used = WP2GetCPUInfo;
 }

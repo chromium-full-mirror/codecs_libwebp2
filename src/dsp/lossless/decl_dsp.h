@@ -38,7 +38,7 @@ typedef void (*ProcessDecBlueAndRedFunc)(const int16_t* src,
                                          uint32_t num_pixels, int16_t* dst);
 extern ProcessDecBlueAndRedFunc AddGreenToBlueAndRed;
 
-typedef void (*TransformColorInverseFunc)(const Multipliers* const m,
+typedef void (*TransformColorInverseFunc)(const Multipliers& m,
                                           const int16_t* src,
                                           uint32_t num_pixels, int16_t* dst);
 extern TransformColorInverseFunc TransformColorInverse;
@@ -61,13 +61,6 @@ typedef void (*MapARGBFunc)(const int16_t* src, const int16_t* const color_map,
                             uint32_t y_end, uint32_t width, int16_t* dst);
 
 extern MapARGBFunc MapColor;
-
-// Expose some C-only fallback functions
-void TransformColorInverse_C(const Multipliers* const m, const uint32_t* src,
-                             int num_pixels, uint32_t* dst);
-
-void AddGreenToBlueAndRed_C(const int16_t* src, uint32_t num_pixels,
-                            int16_t* dst);
 
 //------------------------------------------------------------------------------
 

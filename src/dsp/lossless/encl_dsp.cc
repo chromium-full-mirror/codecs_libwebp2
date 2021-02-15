@@ -69,8 +69,7 @@ void TransformColor_C(const WP2L::Multipliers* const m, int num_pixels,
     int new_red = red;
     int new_blue = data[4 * i + 3];
     new_red -= WP2L::ColorTransformDelta(m->green_to_red, green);
-    new_blue -= WP2L::ColorTransformDelta(m->green_to_blue, green);
-    new_blue -= WP2L::ColorTransformDelta(m->red_to_blue, red);
+    new_blue -= (m->green_to_blue * green + m->red_to_blue * red + 16) >> 5;
     data[4 * i + 1] = new_red;
     data[4 * i + 3] = new_blue;
   }
@@ -90,8 +89,7 @@ inline int16_t TransformColorBlue(int16_t green_to_blue,
   const int16_t green = argb[2];
   const int16_t red = argb[1];
   int16_t new_blue = argb[3];
-  new_blue -= WP2L::ColorTransformDelta(green_to_blue, green);
-  new_blue -= WP2L::ColorTransformDelta(red_to_blue, red);
+  new_blue -= (green_to_blue * green + red_to_blue * red + 16) >> 5;
   return new_blue;
 }
 
@@ -302,6 +300,49 @@ float CombinedShannonEntropy_SSE(const uint32_t* X, const uint32_t* Y,
 }
 #undef CSE_CHECK_ZERO
 
+bool CollectColorBlueTransforms_SSE(const int16_t* argb, uint32_t width,
+                                    uint32_t tile_width, uint32_t tile_height,
+                                    int16_t green_to_blue, int16_t red_to_blue,
+                                    uint16_t abs_value_max, uint32_t histo_size,
+                                    uint32_t* const histo) {
+  __m128i mult = _mm_cvtsi32_si128((uint32_t)(-red_to_blue) << 16);
+  mult = _mm_insert_epi32(mult, (uint16_t)(-green_to_blue) | (32 << 16), 1);
+  mult = _mm_unpacklo_epi64(mult, mult);
+  const __m128i vmaxval = _mm_set1_epi32(abs_value_max);
+  const __m128i vmaxidx = _mm_set1_epi32(histo_size - 1);
+  const __m128i kRound = _mm_set1_epi32(15);
+
+  for (uint32_t i = 0; i < tile_height; ++i, argb += 4 * width) {
+    uint32_t x = 0;
+    for (; x + 4 <= tile_width; x += 4) {
+      const __m128i argb0 = _mm_loadu_si128((const __m128i*)(argb + 4 * x + 0));
+      const __m128i argb1 = _mm_loadu_si128((const __m128i*)(argb + 4 * x + 8));
+      const __m128i t0 = _mm_madd_epi16(argb0, mult);
+      const __m128i t1 = _mm_madd_epi16(argb1, mult);
+      const __m128i t2 = _mm_add_epi32(_mm_hadd_epi32(t0, t1), kRound);
+      const __m128i value = _mm_srai_epi32(t2, 5);
+      const __m128i absvalue = _mm_abs_epi32(value);
+
+      if (_mm_movemask_epi8(_mm_cmpgt_epi32(absvalue, vmaxval))) return false;
+
+      const __m128i sign = _mm_srai_epi32(value, 31);
+      const __m128i index1 = _mm_xor_si128(_mm_add_epi32(value, value), sign);
+      const __m128i index = _mm_min_epi32(index1, vmaxidx);
+      ++histo[_mm_extract_epi32(index, 0)];
+      ++histo[_mm_extract_epi32(index, 1)];
+      ++histo[_mm_extract_epi32(index, 2)];
+      ++histo[_mm_extract_epi32(index, 3)];
+    }
+    for (; x < tile_width; ++x) {
+      const int32_t value = TransformColorBlue(
+          green_to_blue, red_to_blue, &argb[4 * x]);
+      if (std::abs(value) > abs_value_max) return false;
+      ++histo[WP2L::MakeIndex(value, histo_size - 1)];
+    }
+  }
+  return true;
+}
+
 void BufferAdd_SSE(const uint32_t* const a, const uint32_t* const b,
                    uint32_t size, uint32_t* const out,
                    uint32_t* const nonzeros) {
@@ -327,6 +368,7 @@ void BufferAdd_SSE(const uint32_t* const a, const uint32_t* const b,
 
 WP2_TSAN_IGNORE_FUNCTION void EncLDspInitSSE() {
   WP2L::CombinedShannonEntropy = CombinedShannonEntropy_SSE;
+  WP2L::CollectColorBlueTransforms = CollectColorBlueTransforms_SSE;
   WP2L::BufferAdd = BufferAdd_SSE;
 }
 
