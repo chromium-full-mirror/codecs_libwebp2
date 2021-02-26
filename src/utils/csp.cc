@@ -280,10 +280,9 @@ bool CSPTransform::ComputeRGBToYUVMatrix() {
 
 //------------------------------------------------------------------------------
 
-template <typename Trgb>
 static inline void RGBToYUV(const int16_t avg[3], const int16_t m[9],
                             int16_t min_yuv_value, int16_t max_yuv_value,
-                            Trgb r, Trgb g, Trgb b, int16_t* const y,
+                            int32_t r, int32_t g, int32_t b, int16_t* const y,
                             int16_t* const u, int16_t* const v) {
   // kRgbBits to (kRgbBits+1)
   const int32_t tmp_r = (int32_t)r - avg[0];
@@ -321,7 +320,7 @@ static inline void YUVToRGB(const int16_t avg[3], const int16_t im[9],
   // Don't assert that rgb fits in kRgbBits, just clamp it (lossy conversion).
 }
 
-void CSPTransform::ToYUV(int16_t r, int16_t g, int16_t b, int16_t* const y,
+void CSPTransform::ToYUV(int32_t r, int32_t g, int32_t b, int16_t* const y,
                          int16_t* const u, int16_t* const v) const {
   RGBToYUV(avg_, m_, min_yuv_value_, max_yuv_value_, r, g, b, y, u, v);
 }
@@ -329,11 +328,6 @@ void CSPTransform::ToYUV(int16_t r, int16_t g, int16_t b, int16_t* const y,
 void CSPTransform::ToRGB(int16_t y, int16_t u, int16_t v, int16_t* const r,
                          int16_t* const g, int16_t* const b) const {
   YUVToRGB(avg_, im_, y, u, v, r, g, b);
-}
-
-void CSPTransform::ToYUV(uint8_t r, uint8_t g, uint8_t b, int16_t* const y,
-                         int16_t* const u, int16_t* const v) const {
-  RGBToYUV(avg_, m_, min_yuv_value_, max_yuv_value_, r, g, b, y, u, v);
 }
 
 void CSPTransform::ToRGB(int16_t y, int16_t u, int16_t v, uint8_t* const r,

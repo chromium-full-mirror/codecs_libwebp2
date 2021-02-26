@@ -78,13 +78,10 @@ class CSPTransform {
   Csp GetType() const { return type_; }
 
   // YUV <-> RGB conversion with several type overloads.
-  void ToYUV(int16_t r, int16_t g, int16_t b,
+  void ToYUV(int32_t r, int32_t g, int32_t b,
              int16_t* const y, int16_t* const u, int16_t* const v) const;
   void ToRGB(int16_t y, int16_t u, int16_t v,
              int16_t* const r, int16_t* const g, int16_t* const b) const;
-
-  void ToYUV(uint8_t r, uint8_t g, uint8_t b,
-             int16_t* const y, int16_t* const u, int16_t* const v) const;
   void ToRGB(int16_t y, int16_t u, int16_t v,
              uint8_t* const r, uint8_t* const g, uint8_t* const b) const;
 

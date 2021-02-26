@@ -37,8 +37,9 @@ static inline void SubPixels(const int16_t* const a, bool has_alpha,
 //------------------------------------------------------------------------------
 // Encoding
 
-typedef void (*ProcessEncBlueAndRedFunc)(int16_t* dst, uint32_t num_pixels);
-extern ProcessEncBlueAndRedFunc SubtractGreenFromBlueAndRed;
+typedef void (*SimpleColorSpaceFunc)(int16_t* dst, uint32_t num_pixels);
+extern SimpleColorSpaceFunc SubtractGreenFromBlueAndRed;
+extern SimpleColorSpaceFunc RGB2YCoCgR;
 typedef void (*TransformColorFunc)(const Multipliers* const m, int num_pixels,
                                    int16_t* const data);
 extern TransformColorFunc TransformColor;

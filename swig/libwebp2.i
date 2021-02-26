@@ -229,9 +229,10 @@ class Decoder {
   bool Failed() const;
   const BitstreamFeatures* TryGetDecodedFeatures() const;
   const FrameFeatures* TryGetFrameDecodedFeatures(uint32_t frame_index) const;
+  bool TryGetFrameLocation(uint32_t frame_index, size_t* offset,
+                           size_t* length = nullptr) const;
   uint32_t GetCurrentFrameIndex() const;
   uint32_t GetNumFrameDecodedFeatures() const;
-  uint32_t GetNumAvailableFrames() const;
   Rectangle GetDecodedArea() const;
   const ArgbBuffer& GetPixels() const;
  protected:

@@ -168,7 +168,7 @@ WP2Status SubAreaRDOptPartitioner::GetAreaBestPartition(
     *max_num_blocks_left -= best_block.rect().GetArea();
     WP2_CHECK_ALLOC_OK(blocks->push_back(best_block));
     WP2_CHECK_ALLOC_OK(
-        front_mgr_.UseSize(best_block.dim(), 0u, nullptr, /*use_block=*/true));
+        front_mgr_.UseSize(best_block.dim(), nullptr, /*use_block=*/true));
     WP2_CHECK_STATUS(score_func_->Use(best_block));
 
     // Cover the whole block area.

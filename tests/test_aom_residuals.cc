@@ -47,7 +47,7 @@ TEST_P(ResidualWriterTest, AOM) {
   SymbolsInfo info;
   ASSERT_WP2_OK(info.InitLossy(/*num_segments=*/1, ALL_RECTS,
                                /*has_alpha=*/false, quality_hint,
-                               /*use_aom_coeffs=*/true));
+                               /*use_aom_coeffs=*/true, /*use_splits=*/false));
   // Create some data.
   const uint32_t bw_pix = BlockWidthPix(dim);
   const uint32_t bh_pix = BlockHeightPix(dim);

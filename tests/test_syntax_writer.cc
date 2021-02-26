@@ -80,7 +80,8 @@ TEST(TestSyntaxWriter, CopyFrom) {
 
     ASSERT_WP2_OK(syntax_writer.Init(
         &dicts, config, gparams, yuv, ChromaSubsampling::k420, tile_rect,
-        (uint32_t)kBlocks.size(), /*use_aom_coeffs=*/true, ProgressRange()));
+        (uint32_t)kBlocks.size(), /*use_aom_coeffs=*/true, /*use_splits=*/false,
+        ProgressRange()));
     ASSERT_WP2_OK(syntax_writer.InitPass());
 
     // Encode a bunch of blocks.
@@ -133,8 +134,7 @@ TEST(TestSyntaxWriter, CopyFrom) {
         ASSERT_WP2_OK(syntax_writer_copy.RecordSize(mgr, cb.dim()));
       }
 
-      ASSERT_TRUE(mgr.UseSize(block.dim(),
-                              (uint32_t)cblocks.size() - 1, &block));
+      ASSERT_TRUE(mgr.UseSize(block.dim(), &block));
       mgr.Use(block);
     }
 

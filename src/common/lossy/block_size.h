@@ -74,6 +74,13 @@ extern const char* const kDimNames[BLK_LAST + 1];
 BlockSize GetSplitSize(BlockSize size, bool split);
 uint32_t GetNumTransformsInBlock(BlockSize size, bool split);
 
+// Pattern for splitting a block into at most 4 smaller blocks.
+struct SplitPattern {
+  uint32_t num_blocks;       // Number of blocks in this split.
+  BlockSize block_sizes[4];  // Top-left,top-right,bottom-left,bottom-right
+                             // (or subset in same order if less than 4).
+};
+
 //------------------------------------------------------------------------------
 // Trf (=transform blocks) characteristics
 

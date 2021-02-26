@@ -252,7 +252,8 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
   SymbolsInfo symbols_info;
   ASSERT_WP2_OK(symbols_info.InitLossy(
       /*num_segments=*/1, ALL_RECTS, /*has_alpha=*/false,
-      /*quality_hint=*/GetQualityHint(/*quality=*/75.f), kUseAOMCoeffs));
+      /*quality_hint=*/GetQualityHint(/*quality=*/75.f), kUseAOMCoeffs,
+      /*use_splits=*/false));
   ResidualWriter residual_writer;
   ASSERT_WP2_OK(residual_writer.Init(kUseAOMCoeffs, kHasAlpha));
   ANSEnc enc;
@@ -352,7 +353,8 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
         SyntaxWriter syntax_writer;
         ASSERT_WP2_OK(syntax_writer.Init(
             &dicts, config, params, yuv, ChromaSubsampling::k420, rect,
-            (uint32_t)cblocks.size(), kUseAOMCoeffs, ProgressRange()));
+            (uint32_t)cblocks.size(), kUseAOMCoeffs, /*use_splits=*/false,
+            ProgressRange()));
         ASSERT_WP2_OK(syntax_writer.InitPass());
 
         // Just check that we can get the pseudo rate without crashing.

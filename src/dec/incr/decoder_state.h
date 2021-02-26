@@ -115,8 +115,6 @@ struct Decoder::State : public WP2Allocable {
   Vector<InternalFrameFeatures> frames;
   // Maps to the regular frame belonging to the final frame.
   Vector<uint32_t> final_to_regular_index;
-  // Number of frames that were (at least once) fully available in the stream.
-  uint32_t num_available_final_frames = 0;
 
   GlobalParams gparams;
   TilesLayout tiles_layout;  // Known once features are decoded.
@@ -128,7 +126,7 @@ struct Decoder::State : public WP2Allocable {
                                       // current frame window, processed by the
                                       // IntertileFilter.
 
-  Vector<TileDecoder> workers;      // Max one per tile.
+  Vector<TileDecoder> workers;        // Max one per tile.
   DataSource* data_source = nullptr;  // Main input, buffer can change.
 
   // Temp buffer to store the non-oriented Argb32 output.

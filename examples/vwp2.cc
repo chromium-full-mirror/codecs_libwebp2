@@ -980,15 +980,11 @@ std::vector<std::string> Params::GetHelp() {
 const char* const kCSPString[] = {"YCoCg", "YCbCr", "Custom", "YIQ"};
 const char* const kUVModeString[] = {"UVAdapt", "UV420", "UV444", "UVAuto"};
 const char* const kTileShapeString[] = {"128", "256", "512", "Wide", "Auto"};
-const char* const kPartitionSetString[] = {
-    "Small squares",  "Small rects", "All rects", "Thick rects",
-    "Medium squares", "All squares", "Some rects"};
 const char* const kOnOff[] = {"Off", "On"};
 const char* const kSegmentModes[] = {"Auto", "Explicit", "Implicit"};
 
 STATIC_ASSERT_ARRAY_SIZE(kCSPString, kNumCspTypes);
 STATIC_ASSERT_ARRAY_SIZE(kUVModeString, EncoderConfig::NumUVMode);
-STATIC_ASSERT_ARRAY_SIZE(kPartitionSetString, NUM_PARTITION_SETS);
 
 void Params::PrintInfo() {
   DisplaySparks();

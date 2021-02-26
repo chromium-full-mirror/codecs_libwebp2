@@ -207,8 +207,7 @@ void WP2DecDspInit();
 //------------------------------------------------------------------------------
 // Common utils
 
-typedef void (*WP2ArgbConverterF)(const uint8_t* src,
-                                  uint32_t width, uint8_t* dst);
+typedef void (*WP2ArgbConverterF)(const void* src, uint32_t width, void* dst);
 // functions to convert from...
 // any format -> Argb
 extern WP2ArgbConverterF WP2ArgbConvertFrom[WP2_FORMAT_NUM];
@@ -225,21 +224,26 @@ WP2ArgbConverterF WP2ConversionFunction(WP2SampleFormat from,
 
 void WP2ArgbConverterInit();
 
-
-// Applies the matrix mtx[] to (y,u,v)[] + offset[]. Alias-safe.
+// Applies the matrix mtx[] to (y,u,v)[] + offset[].
+// mtx[] is assumed to be 12-bit fixed-point precision matrix.
 extern void (*WP2YUVToCustom)(
   const int16_t* y, const int16_t* u, const int16_t* v,
   const int16_t offset[3], const int16_t mtx[9],
   int16_t* dst0, int16_t* dst1, int16_t* dst2, uint32_t width);
 
-typedef void (*WP2YUVToArgbFunc)(
+// Same but outputs to ARGB (alternated 8b channels).
+typedef void (*WP2YUVAToArgb32Func)(
   const int16_t* y, const int16_t* u, const int16_t* v, const int16_t* a,
   const int16_t avg[3], const int16_t mtx[9], uint8_t* argb, uint32_t width);
-// converts to RGB + 0xff-alpha.
-// mtx[] is assumed to be 12-bit fixed-point precision matrix.
-extern WP2YUVToArgbFunc WP2YUVToXRGB;  // the 'a' pointer is ignored here
-extern WP2YUVToArgbFunc WP2YUVToArgb;  // Convert to pre-multiplied Argb
-extern WP2YUVToArgbFunc WP2YUVToARGB;  // Convert to un-multiplied ARGB
+
+extern WP2YUVAToArgb32Func WP2YUVAToArgb32;  // Convert to pre-multiplied Argb32
+extern WP2YUVAToArgb32Func WP2YUVAToARGB32;  // Convert to  un-multiplied ARGB32
+extern WP2YUVAToArgb32Func WP2YUVAToXRGB32;  // Convert to  un-multiplied XRGB32
+
+// Same but there is no alpha input.
+extern void (*WP2YUVToArgb32)(
+  const int16_t* y, const int16_t* u, const int16_t* v,
+  const int16_t avg[3], const int16_t mtx[9], uint8_t* argb, uint32_t width);
 
 void WP2CSPConverterInit();
 

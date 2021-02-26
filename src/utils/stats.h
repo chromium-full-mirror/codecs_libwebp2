@@ -35,7 +35,8 @@
 
 namespace WP2 {
 
-template<typename K = uint32_t> struct Stats {
+template<typename K = uint32_t> class Stats {
+ public:
   explicit Stats(const char* const name = nullptr,
                  const char* const format = "%u",  // how to print type "K"
                  bool sort_by_count = false)  // just sort and print the counts
@@ -43,11 +44,11 @@ template<typename K = uint32_t> struct Stats {
   void Add(K key, uint64_t value = 1) {  // TODO(skal): mutex?
     const auto i = stats_.find(key);
     if (i == stats_.end()) {
-      stats_[key].total_ = value;
-      stats_[key].counts_ = 1;
+      stats_[key].total = value;
+      stats_[key].counts = 1;
     } else {
-      i->second.total_ += value;
-      i->second.counts_ += 1;
+      i->second.total += value;
+      i->second.counts += 1;
     }
     ++total_;
   }
@@ -61,20 +62,20 @@ template<typename K = uint32_t> struct Stats {
       for (const auto& i : stats) {
         printf("# ");
         WP2Print(format_, i.first);
-        const uint64_t count = i.second.counts_;
-        printf(" : average: %.1f", count ? 1.f * i.second.total_ / count : 0);
+        const uint64_t count = i.second.counts;
+        printf(" : average: %.1f", count ? 1.f * i.second.total / count : 0);
         printf(" \tcount: %u \t(%.2f%%)\n", (uint32_t)count, count * norm);
       }
     }
   }
 
  protected:
-  const char* const name_;
-  const char* const format_;
-  bool sort_by_count_;
-  uint64_t total_ = 0;
+  const char* const name_ = nullptr;
+  const char* const format_ = "%u";
+  bool sort_by_count_ = false;
+  uint64_t total_ = 0llu;
 
-  struct Record { uint64_t total_ = 0, counts_ = 0; };
+  struct Record { uint64_t total = 0, counts = 0; };
   typedef std::pair<K, Record> Entry;
   std::unordered_map<K, Record> stats_;
 
@@ -85,7 +86,7 @@ template<typename K = uint32_t> struct Stats {
   }
 
   static bool cmp(const Entry&a, const Entry&b) {
-    return (a.second.counts_ > b.second.counts_);
+    return (a.second.counts > b.second.counts);
   }
   static bool cmp_first(const Entry&a, const Entry&b) {
     return std::less<K>()(a.first, b.first);

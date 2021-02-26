@@ -100,7 +100,7 @@ TYPED_TEST(CodedBlockTest, FindBestModes) {
   ASSERT_WP2_OK(
       symbols_info.InitLossy(/*num_segments=*/1, ALL_RECTS, kHasAlpha,
                              GetQualityHint(EncoderConfig::kDefault.quality),
-                             /*use_aom_coeffs=*/false));
+                             /*use_aom_coeffs=*/false, /*use_splits=*/false));
   SymbolRecorder recorder;
   symbols_info.SetInfo(kSymbolModeY, /*min=*/0, /*max=*/kAPredModeNum - 1,
                        /*num_clusters=*/1, SymbolsInfo::StorageMethod::kAuto);
@@ -130,7 +130,7 @@ static void SetCoords4x4(uint32_t num_blocks, uint32_t x, uint32_t y,
                          CodedBlock* const cb) {
   for (uint32_t i = 0; i < num_blocks; ++i) {
     Block blk;
-    ASSERT_TRUE(mgr->UseSize(BLK_4x4, /*ind=*/1u, &blk));
+    ASSERT_TRUE(mgr->UseSize(BLK_4x4, &blk));
     mgr->Use(blk);
   }
   cb->SetDim(/*block=*/{x, y, /*dim=*/BLK_4x4}, *mgr);
@@ -288,7 +288,7 @@ TYPED_TEST(CodedBlockTest, GetContext_HasRight) {
   EXPECT_WP2_OK(mgr.Init(ALL_RECTS, /*snapped=*/false, kSize, kSize));
   Block blk;
   // Mark block 1 as seen.
-  ASSERT_TRUE(mgr.UseSize(BLK_4x8, /*ind=*/0u, &blk));
+  ASSERT_TRUE(mgr.UseSize(BLK_4x8, &blk));
   mgr.Use(blk);
 
   // Test extended left context on block 2.
@@ -312,7 +312,7 @@ TYPED_TEST(CodedBlockTest, GetContext_HasRight) {
                                  Pix(3, 3), Pix(3, 2), Pix(3, 1), Pix(3, 0));
 
   // Mark block 2 as seen.
-  ASSERT_TRUE(mgr.UseSize(BLK_8x4, /*ind=*/1u, &blk));
+  ASSERT_TRUE(mgr.UseSize(BLK_8x4, &blk));
   mgr.Use(blk);
 
   // Test an imaginary 4x4 block at (0, 1).
@@ -327,7 +327,7 @@ TYPED_TEST(CodedBlockTest, GetContext_HasRight) {
   EXPECT_EQ(top_context_extent, 2);
 
   // Mark block 3 as seen.
-  ASSERT_TRUE(mgr.UseSize(BLK_4x8, /*ind=*/2u, &blk));
+  ASSERT_TRUE(mgr.UseSize(BLK_4x8, &blk));
   mgr.Use(blk);
 
   // Block number 4.
@@ -499,7 +499,7 @@ TYPED_TEST(CodedBlockTest, GetContext_Large) {
   typename TypeParam::Type mgr;
   EXPECT_WP2_OK(mgr.Init(ALL_RECTS, /*snapped=*/false, kSize, kSize));
   // Add block 0.
-  ASSERT_TRUE(mgr.UseSize(BLK_8x8, /*ind=*/0u, /*block=*/nullptr));
+  ASSERT_TRUE(mgr.UseSize(BLK_8x8, /*block=*/nullptr));
 
   // Create block 2.
   CodedBlock cb;
@@ -552,7 +552,7 @@ TYPED_TEST(CodedBlockTest, GetContext_Large) {
 
   // Add block 1 and redefine block 2.
   Block blk;
-  ASSERT_TRUE(mgr.UseSize(BLK_8x8, /*ind=*/1u, &blk));
+  ASSERT_TRUE(mgr.UseSize(BLK_8x8, &blk));
   mgr.Use(blk);
   cb.SetDim({/*x=*/0, /*y=*/2, /*dim=*/BLK_8x8}, mgr);
   cb.ResetContextCache();
@@ -606,9 +606,9 @@ TYPED_TEST(CodedBlockTest, ContextIsConstant) {
   typename TypeParam::Type mgr;
   EXPECT_WP2_OK(mgr.Init(ALL_RECTS, /*snapped=*/false, kSize, kSize));
   Block blk;
-  ASSERT_TRUE(mgr.UseSize(BLK_32x8, /*ind=*/0u, &blk));
+  ASSERT_TRUE(mgr.UseSize(BLK_32x8, &blk));
   mgr.Use(blk);
-  ASSERT_TRUE(mgr.UseSize(BLK_4x4, /*ind=*/1u, &blk));
+  ASSERT_TRUE(mgr.UseSize(BLK_4x4, &blk));
   mgr.Use(blk);
 
   CodedBlock cb;

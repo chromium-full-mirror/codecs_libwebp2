@@ -233,11 +233,14 @@ class SyntaxReader {
   WP2Status GetBlock(CodedBlockBase* const cb, YUVPlane* const out,
                      BlockInfo* const info);
   BlockSize GetBlockSize(const FrontMgrDoubleOrderBase& mgr);
+  WP2Status GetBlockSplit(const SplitIteratorBase& it,
+                          uint32_t* const split_idx);
 
-  PartitionSet GetPartitionSet() const { return gparams_->partition_set_; }
-  bool GetPartitionSnap() const { return gparams_->partition_snapping_; }
+  PartitionSet partition_set() const { return gparams_->partition_set_; }
+  bool partition_snapping() const { return gparams_->partition_snapping_; }
 
   const AlphaReader& alpha_reader() const { return *alpha_reader_; }
+  bool use_splits() const { return use_splits_; }
 
   void ApplyDecoderConfig(const DecoderConfig& config);
 
@@ -259,6 +262,7 @@ class SyntaxReader {
 
   uint32_t num_blocks_, num_transforms_;
   ChromaSubsampling chroma_subsampling_;
+  bool use_splits_;
 
   SegmentIdPredictor segment_ids_;
 

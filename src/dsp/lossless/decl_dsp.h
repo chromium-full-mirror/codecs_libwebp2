@@ -34,9 +34,10 @@ extern PredictorNonClampedAddSubFunc
 extern PredictorClampedAddSubFunc PredictorsClampedAdd[kNumPredictorsClamped];
 extern PredictorClampedAddSubFunc PredictorsClampedAdd_C[kNumPredictorsClamped];
 
-typedef void (*ProcessDecBlueAndRedFunc)(const int16_t* src,
-                                         uint32_t num_pixels, int16_t* dst);
-extern ProcessDecBlueAndRedFunc AddGreenToBlueAndRed;
+typedef void (*SimpleColorSpaceInverseFunc)(const int16_t* src,
+                                            uint32_t num_pixels, int16_t* dst);
+extern SimpleColorSpaceInverseFunc AddGreenToBlueAndRed;
+extern SimpleColorSpaceInverseFunc YCoCgRToRGB;
 
 typedef void (*TransformColorInverseFunc)(const Multipliers& m,
                                           const int16_t* src,

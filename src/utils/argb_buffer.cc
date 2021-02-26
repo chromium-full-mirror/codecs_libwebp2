@@ -29,29 +29,31 @@
 uint32_t WP2FormatBpp(WP2SampleFormat format) {
   if (format <= WP2_BGRX_32) return 4;
   if (format <= WP2_BGR_24) return 3;
-  if (format <= WP2_Argb_38) return 8;  // actually 38 bits, stored as uint16
-  assert(false);
-  return 2;
+  assert(format == WP2_Argb_38);
+  return 8;  // actually 38 bits, stored as uint16
 }
 
 uint32_t WP2FormatBpc(WP2SampleFormat format) {
-  if (format == WP2_Argb_38) return 2;
-  return 1;
+  if (format < WP2_Argb_38) return 1;
+  assert(format == WP2_Argb_38);
+  return 2;
 }
 
-uint32_t WP2AlphaChannelIndex(WP2SampleFormat format) {
+bool WP2FormatHasAlpha(WP2SampleFormat format, uint32_t* alpha_channel_index) {
   switch (format) {
     case WP2_Argb_32:
     case WP2_ARGB_32:
     case WP2_Argb_38:
-      return 0;
+      if (alpha_channel_index != nullptr) *alpha_channel_index = 0;
+      return true;
     case WP2_rgbA_32:
     case WP2_RGBA_32:
     case WP2_bgrA_32:
     case WP2_BGRA_32:
-      return 3;
+      if (alpha_channel_index != nullptr) *alpha_channel_index = 3;
+      return true;
     default:
-      return WP2FormatBpp(format);
+      return false;
   }
 }
 
@@ -119,7 +121,7 @@ Rectangle Rectangle::MergeWith(const Rectangle& r) const {
 
 void Rectangle::Exclude(const Rectangle& r, Rectangle* const top,
                         Rectangle* const bot, Rectangle* const lft,
-                        Rectangle* const rgt) {
+                        Rectangle* const rgt) const {
   const Rectangle excluded = r.ClipWith(*this);
   *top = {x, y, width, excluded.y - y};
   *bot = {x, excluded.y + excluded.height, width,
@@ -248,15 +250,15 @@ WP2Status ArgbBuffer::ConvertFrom(const ArgbBuffer& src) {
   WP2_CHECK_OK(src.format() == WP2_Argb_32 || src.format() == WP2_ARGB_32 ||
                    format_ == WP2_Argb_32 || format_ == WP2_ARGB_32,
                WP2_STATUS_INVALID_COLORSPACE);
-  WP2_CHECK_OK(WP2FormatBpc(format_) == 1, WP2_STATUS_INVALID_COLORSPACE);
-  WP2_CHECK_OK(WP2FormatBpc(src.format()) == 1, WP2_STATUS_INVALID_COLORSPACE);
-  WP2_CHECK_STATUS(Resize(src.width_, src.height_));
   WP2ArgbConverterInit();
   const WP2ArgbConverterF convert =
       WP2ConversionFunction(src.format(), format_);
+  WP2_CHECK_OK(convert != nullptr, WP2_STATUS_INVALID_COLORSPACE);
+
+  WP2_CHECK_STATUS(Resize(src.width_, src.height_));
   for (uint32_t y = 0; y < height_; ++y) {
-    uint8_t* dst_ptr = GetRow8(y);
-    const uint8_t* src_ptr = src.GetRow8(y);
+    uint8_t* dst_ptr = (uint8_t*)GetRow(y);
+    const uint8_t* src_ptr = (const uint8_t*)src.GetRow(y);
     convert(src_ptr, width_, dst_ptr);
   }
   return WP2_STATUS_OK;
@@ -268,12 +270,14 @@ WP2Status ArgbBuffer::Import(WP2SampleFormat input_format,
   WP2_CHECK_OK(input_format == WP2_Argb_32 || input_format == WP2_ARGB_32 ||
                    format_ == WP2_Argb_32 || format_ == WP2_ARGB_32,
                WP2_STATUS_INVALID_COLORSPACE);
-  WP2_CHECK_STATUS(Resize(new_width, new_height));
   WP2ArgbConverterInit();
   const WP2ArgbConverterF convert =
       WP2ConversionFunction(input_format, format_);
+  WP2_CHECK_OK(convert != nullptr, WP2_STATUS_INVALID_COLORSPACE);
+
+  WP2_CHECK_STATUS(Resize(new_width, new_height));
   for (uint32_t y = 0; y < new_height; ++y) {
-    convert(samples, new_width, GetRow8(y));
+    convert(samples, new_width, (uint8_t*)GetRow(y));
     samples += samples_stride;
   }
   return WP2_STATUS_OK;
@@ -289,7 +293,9 @@ WP2Status ArgbBuffer::ImportRow(WP2SampleFormat input_format,
   WP2ArgbConverterInit();
   const WP2ArgbConverterF convert =
       WP2ConversionFunction(input_format, format_);
-  convert(samples, width_, GetRow8(row_index));
+  WP2_CHECK_OK(convert != nullptr, WP2_STATUS_INVALID_COLORSPACE);
+
+  convert(samples, width_, (uint8_t*)GetRow(row_index));
   return WP2_STATUS_OK;
 }
 
@@ -488,16 +494,17 @@ WP2Status ArgbBuffer::SetExternal(uint32_t new_width, uint32_t new_height,
 
 bool ArgbBuffer::HasTransparency() const {
   if (IsEmpty()) return false;
-  if (WP2FormatBpp(format_) == 3) return false;  // TODO(skal): refine
+  uint32_t alpha_channel_index;
+  if (!WP2FormatHasAlpha(format_, &alpha_channel_index)) return false;
   if (WP2FormatBpc(format_) == 1) {
     WP2AlphaInit();
     for (uint32_t y = 0; y < height_; ++y) {
-      const uint8_t* const row = GetRow8(y);
+      const uint8_t* const row = GetRow8(y) + alpha_channel_index;
       if (WP2HasOtherValue8b32b(row, width_, 0xff)) return true;
     }
   } else {
     for (uint32_t y = 0; y < height_; ++y) {
-      const uint16_t* const row = GetRow16(y);
+      const uint16_t* const row = GetRow16(y) + alpha_channel_index;
       for (uint32_t x = 0; x < width_; ++x) {
         if (row[4 * x + 0] != WP2::kAlphaMax) return true;
       }

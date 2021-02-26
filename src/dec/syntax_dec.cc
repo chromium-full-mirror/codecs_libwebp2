@@ -49,10 +49,13 @@ WP2Status SyntaxReader::ReadHeader(const BitstreamFeatures& features,
 
   const bool use_aom = dec_->ReadBool("use_aom_coeffs");
   residual_reader_.Init(use_aom);
+  use_splits_ =
+      (gparams.partition_snapping_ ? dec_->ReadBool("use_splits") : false);
 
   WP2_CHECK_STATUS(symbols_info_.InitLossy(
       (uint32_t)gparams_->segments_.size(), gparams.partition_set_,
-      gparams_->maybe_use_lossy_alpha_, features.quality_hint, use_aom));
+      gparams_->maybe_use_lossy_alpha_, features.quality_hint, use_aom,
+      use_splits_));
   const uint32_t num_channels = (gparams_->maybe_use_lossy_alpha_ ? 4 : 3);
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !gparams_->maybe_use_lossy_alpha_) continue;
@@ -112,10 +115,7 @@ WP2Status SyntaxReader::LoadDictionaries() {
 
   WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolCflSlope, 2 * num_blocks_, "cfl"));
 
-  for (uint32_t i = 0; i < GetNumUniqueBounds(gparams_->partition_set_); ++i) {
-    WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolBlockSize, /*cluster=*/i,
-                                    num_blocks_, "block_size"));
-  }
+  WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolBlockSize, num_blocks_, "block_size"));
 
   const uint32_t num_coeffs_max =
       max_num_blocks * kMinBlockSizePix * kMinBlockSizePix;
@@ -333,8 +333,16 @@ WP2Status SyntaxReader::GetBlock(CodedBlockBase* const cb, YUVPlane* const out,
 }
 
 BlockSize SyntaxReader::GetBlockSize(const FrontMgrDoubleOrderBase& mgr) {
+  assert(!use_splits_);
   ANSDebugPrefix prefix(dec_, "BlockHeader");
   return ReadBlockSize(mgr, &sr_);
+}
+
+WP2Status SyntaxReader::GetBlockSplit(const SplitIteratorBase& it,
+                                      uint32_t* const split_idx) {
+  assert(use_splits_);
+  ANSDebugPrefix prefix(dec_, "BlockHeader");
+  return ReadBlockSplit(it, &sr_, split_idx);
 }
 
 //------------------------------------------------------------------------------

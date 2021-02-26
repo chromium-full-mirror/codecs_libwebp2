@@ -139,14 +139,15 @@ INSTANTIATE_TEST_SUITE_P(CspTestInstantiation, CspTest,
 
 //------------------------------------------------------------------------------
 
-class CspImageTest
-    : public ::testing::TestWithParam<std::tuple<std::string, Csp>> {};
+class CspImageTest : public ::testing::TestWithParam<
+                         std::tuple<std::string, Csp, WP2SampleFormat>> {};
 
 TEST_P(CspImageTest, Simple) {
   const std::string& src_file_name = std::get<0>(GetParam());
   const Csp csp_type = std::get<1>(GetParam());
+  const WP2SampleFormat format = std::get<2>(GetParam());
 
-  ArgbBuffer src;
+  ArgbBuffer src(format);
   ASSERT_WP2_OK(
       ReadImage(testing::GetTestDataPath(src_file_name).c_str(), &src));
 
@@ -158,7 +159,7 @@ TEST_P(CspImageTest, Simple) {
   ASSERT_WP2_OK(yuv.Import(src, src.HasTransparency(), transf,
                            /*resize_if_needed=*/true, /*pad=*/kPredWidth));
 
-  ArgbBuffer dst;
+  ArgbBuffer dst(format);
   ASSERT_WP2_OK(yuv.Export(transf, /*resize_if_needed=*/true, &dst));
 
   const float min_expected_disto = (csp_type == Csp::kYCoCg) ? 99.f : 45.f;
@@ -169,7 +170,9 @@ INSTANTIATE_TEST_SUITE_P(
     CspImageTestInstantiation, CspImageTest,
     ::testing::Combine(::testing::Values("source1_64x48.png"),
                        ::testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kCustom,
-                                         Csp::kYIQ)));
+                                         Csp::kYIQ),
+                       // TODO(yguyon): Include WP2_Argb_38 when ready
+                       ::testing::Values(WP2_Argb_32, WP2_ARGB_32)));
 
 // This one takes a while to run so it is disabled.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
@@ -178,7 +181,9 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(::testing::Values("source0.pgm", "source0.ppm",
                                          "source4.webp", "test_exif_xmp.webp"),
                        ::testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kCustom,
-                                         Csp::kYIQ)));
+                                         Csp::kYIQ),
+                       // TODO(yguyon): Include WP2_Argb_38 when ready
+                       ::testing::Values(WP2_Argb_32, WP2_ARGB_32)));
 
 //------------------------------------------------------------------------------
 // This test exercizes a value underflow/overflow in ToYUV().

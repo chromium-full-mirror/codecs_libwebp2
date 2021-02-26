@@ -700,6 +700,7 @@ CC_TESTS += test_partition_score_func test_tile_shapes test_version
 CC_TESTS += test_syntax_writer test_anim_frame test_diffusion test_analysis
 CC_TESTS += test_decoder_api test_restoration_filter test_color_precision
 CC_TESTS += test_dsp_speed test_metadata test_bypass test_screen test_anim_skip
+CC_TESTS += test_split_iterator
 # lossless tests:
 CC_TESTS += lossless/test_color_cache lossless/test_palette
 CC_TESTS += lossless/test_group4 lossless/test_histogram
@@ -788,6 +789,7 @@ DIST_FILES= \
             README.wp2_js \
             LICENSE \
             CMakeLists.txt \
+            cmake/android.cmake \
             cmake/compiler.cmake \
             cmake/cpu.cmake \
             cmake/thread.cmake \
@@ -1040,6 +1042,8 @@ DIST_FILES= \
             src/utils/quantizer.cc \
             src/utils/quantizer.h \
             src/utils/random.h \
+            src/utils/split_iterator.h \
+            src/utils/split_iterator.cc \
             src/utils/stats.h \
             src/utils/status.cc \
             src/utils/thread_utils.cc \
@@ -1098,6 +1102,7 @@ DIST_FILES= \
             tests/fuzz/fuzz_imageio_image_enc.cc \
             tests/fuzz/fuzz_utils.cc \
             tests/fuzz/fuzz_utils.h \
+            tests/fuzz/fuzz_utils_temp_file.h \
             tests/fuzz/repro_fuzz.cc \
             tests/include/helpers.h \
             tests/include/helpers.cc \
@@ -1190,6 +1195,7 @@ DIST_FILES= \
             tests/test_simple_enc_dec.cc \
             tests/test_simple_encode.cc \
             tests/test_slow_enc.cc \
+            tests/test_split_iterator.cc \
             tests/test_stuttering_server.sh \
             tests/test_efforts.cc \
             tests/test_symbols.cc \

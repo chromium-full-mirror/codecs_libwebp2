@@ -24,10 +24,13 @@
 #include "src/enc/symbols_enc.h"
 #include "src/utils/ans.h"
 #include "src/utils/front_mgr.h"
+#include "src/utils/split_iterator.h"
 
 namespace WP2 {
 
 //------------------------------------------------------------------------------
+
+constexpr uint32_t kMaxSplitPatterns = 10;
 
 class PartitionSetStats {
  public:
@@ -37,6 +40,7 @@ class PartitionSetStats {
  public:
   const PartitionSet partition_set_;
   uint8_t num_blocks_[BLK_LAST];              // Per bounding size.
+  uint32_t block_index_[BLK_LAST];            // Index of given size in the set.
   BlockSize blocks_[BLK_LAST][BLK_LAST + 1];  // Per bounding size, size array.
   uint8_t slots_[BLK_LAST][BLK_LAST];         // Per bounding size, index array.
   BlockSize smallest_bounds_[BLK_LAST];       // Per bounding size.
@@ -44,6 +48,10 @@ class PartitionSetStats {
   BlockSize unique_bounds_[BLK_LAST];         // At most 'BLK_LAST' elements.
   uint32_t unique_bounds_index_[BLK_LAST];    // Each is < 'num_unique_bounds_'.
   uint32_t used_trfs_;                        // Bitset for used transforms.
+  // Number of split patterns per block size (max kMaxSplitPatterns).
+  uint32_t num_split_patterns_[BLK_LAST];
+  // Split patterns per block size.
+  SplitPattern split_patterns_[BLK_LAST][kMaxSplitPatterns];
 };
 static_assert(TRF_LAST < 32u, "can't use 32b bitset for transforms used.");
 
@@ -73,6 +81,13 @@ uint32_t GetNumUniqueBounds(PartitionSet set);
 // Returns the 'index'th among all unique smallest bounds.
 BlockSize GetUniqueBounds(PartitionSet set, uint32_t index);
 
+// Returns the number of ways that the block 'size' can be split, when using
+// the partition set 'set'.
+uint32_t GetNumSplitPatterns(PartitionSet set, BlockSize size);
+// Returns an array of split patterns for the given partition set and block
+// size. The array has length GetNumSplitPatterns(set, size).
+const SplitPattern* GetSplitPatterns(PartitionSet set, BlockSize size);
+
 //------------------------------------------------------------------------------
 
 // Writes 'dim'.
@@ -81,6 +96,16 @@ void WriteBlockSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim,
 // Reads, updates and returns 'dim'.
 BlockSize ReadBlockSize(const FrontMgrDoubleOrderBase& mgr,
                         SymbolReader* const sr);
+
+//------------------------------------------------------------------------------
+
+// Writes the split 'split_idx'. Asserts that it.CurrentBlock().splittable
+void WriteBlockSplit(const SplitIteratorBase& it, uint32_t split_idx,
+                     SymbolManager* const sm, ANSEncBase* const enc);
+
+// Reads and returns 'split_idx'. Asserts that it.CurrentBlock().splittable
+WP2Status ReadBlockSplit(const SplitIteratorBase& it, SymbolReader* const sr,
+                         uint32_t* const split_idx);
 
 //------------------------------------------------------------------------------
 

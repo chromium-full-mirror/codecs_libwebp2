@@ -127,8 +127,7 @@ WP2Status ExhaustivePartitioner::GetNextPartitionScore(
         if (forced_blocks_.empty()) assert(!IsOccupied(block));
 
         // 'block' is valid.
-        WP2_CHECK_ALLOC_OK(front_mgr_.UseSize(next_block_size,
-                                              /*ind=*/0u, &block,
+        WP2_CHECK_ALLOC_OK(front_mgr_.UseSize(next_block_size, &block,
                                               /*use_block=*/true));
         WP2_CHECK_ALLOC_OK(partition_.push_back(block));
 

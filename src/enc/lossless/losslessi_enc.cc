@@ -299,12 +299,13 @@ WP2Status Encoder::EncodeImageInternal(
   const bool use_palette =
       (std::find(config.transforms, end, TransformType::kColorIndexing) != end);
   const uint32_t cache_bits_max =
-      use_palette ? (1u + (uint32_t)WP2Log2Floor(palette_.Size()))
+      use_palette ? std::min(1u + (uint32_t)WP2Log2Floor(palette_.Size()),
+                             kMaxCacheBits)
                   : kMaxCacheBits;
 
   const int16_t* const argb = argb_buffer_.data;
   const uint32_t width = argb_buffer_.width, height = argb_buffer_.height;
-  const uint32_t histogram_bits = histo_bits_;
+  const uint32_t histogram_bits = config.histo_bits;
   const uint32_t histogram_width = SubSampleSize(width, histogram_bits);
   const uint32_t histogram_height = SubSampleSize(height, histogram_bits);
   const uint32_t num_segments_max = histogram_width * histogram_height;
@@ -456,6 +457,10 @@ WP2Status Encoder::EncodeImageInternal(
 // -----------------------------------------------------------------------------
 // Transforms
 
+void Encoder::ApplyYCoCgR() {
+  RGB2YCoCgR(argb_buffer_.data, argb_buffer_.width * argb_buffer_.height);
+}
+
 void Encoder::ApplySubtractGreen() {
   SubtractGreenFromBlueAndRed(argb_buffer_.data,
                               argb_buffer_.width * argb_buffer_.height);
@@ -467,10 +472,9 @@ void Encoder::ApplySubtractGreen() {
 WP2Status Encoder::ApplyPredictFilter(const int16_t min_values[4],
                                       const int16_t max_values[4],
                                       const ProgressRange& progress,
+                                      uint32_t pred_bits,
                                       WP2::ANSEnc* const enc,
                                       WP2::ANSDictionaries* const dicts) {
-  const int pred_bits = transform_bits_;
-
   WP2_CHECK_STATUS(CreateResidualImage(pred_bits, min_values, max_values,
                                        config_.effort, &argb_buffer_,
                                        argb_scratch_, transform_data_));
@@ -496,10 +500,9 @@ WP2Status Encoder::ApplyPredictFilter(const int16_t min_values[4],
 // 2^(enc->transform_bits_)), saves the residuals in enc->argb_ and writes the
 // transform for each block in the form of an image.
 WP2Status Encoder::ApplyCrossColorFilter(const ProgressRange& progress,
+                                         uint32_t ccolor_transform_bits,
                                          WP2::ANSEnc* const enc,
                                          WP2::ANSDictionaries* const dicts) {
-  const int ccolor_transform_bits = transform_bits_;
-
   WP2_CHECK_STATUS(ColorSpaceTransform(ccolor_transform_bits, config_.effort,
                                        &argb_buffer_, transform_data_));
   const WP2::ANSDebugPrefix prefix(enc, "cross_color");
@@ -549,11 +552,16 @@ WP2Status Encoder::AllocateTransformBuffer(
       use_predict ? (width + 1) * 2 +
                         (width * 2 + sizeof(uint32_t) - 1) / sizeof(uint32_t)
                   : 0;
-  const uint64_t transform_data_size =
-      (use_predict || use_cross_color)
-          ? SubSampleSize(width, transform_bits_) *
-                SubSampleSize(height, transform_bits_)
-          : 0;
+  uint64_t transform_data_size = 0u;
+  if (use_predict || use_cross_color) {
+    // Find the maximal transform size needed.
+    for (const CrunchConfig& c : configs) {
+      transform_data_size =
+          std::max(transform_data_size,
+                   (uint64_t)SubSampleSize(width, c.transform_bits) *
+                       SubSampleSize(height, c.transform_bits));
+    }
+  }
   const uint64_t mem_size =
       image_size + argb_scratch_size + transform_data_size;
   int16_t* mem;
@@ -577,8 +585,9 @@ WP2Status Encoder::AllocateTransformBuffer(
 WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
   const uint32_t width = pic_.width();
   const uint32_t height = pic_.height();
-  const bool premultiply =
-      has_alpha_ && use_premultiplied_ && !WP2IsPremultiplied(pic_.format());
+  const bool can_premultiply =
+      (has_alpha_ && !WP2IsPremultiplied(pic_.format()));
+  if (!can_premultiply) assert(!config.use_premultiplied);
   assert(WP2FormatBpc(pic_.format()) == 1 || WP2FormatBpc(pic_.format()) == 2);
   argb_buffer_.has_alpha = has_alpha_;
   argb_buffer_.channel_bits = (WP2FormatBpc(pic_.format()) == 1) ? 8 : 10;
@@ -586,16 +595,13 @@ WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
     int16_t* const dst_row = argb_buffer_.GetRow(y);
     if (WP2FormatBpc(pic_.format()) == 1) {
       const uint8_t* const src_row = pic_.GetRow8(y);
-      if (WP2IsPremultiplied(pic_.format()) || !has_alpha_) {
-        // Simply copy pixels over.
-        std::copy(src_row, src_row + 4 * width, dst_row);
-      } else {
+      if (can_premultiply) {
         for (uint32_t x = 0; x < width; ++x) {
           const uint8_t a = src_row[4 * x + 0];
           if (a == 0) {
             // Zero out fully transparent pixels.
             std::fill(dst_row + 4 * x, dst_row + 4 * (x + 1), 0u);
-          } else if (premultiply) {
+          } else if (config.use_premultiplied) {
             dst_row[4 * x + 0] = a;
             for (uint32_t c = 1; c < 4; ++c) {
               dst_row[4 * x + c] = WP2::DivBy255(src_row[4 * x + c] * a);
@@ -604,6 +610,9 @@ WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
             std::copy(src_row + 4 * x, src_row + 4 * (x + 1), dst_row + 4 * x);
           }
         }
+      } else {
+        // Simply copy pixels over.
+        std::copy(src_row, src_row + 4 * width, dst_row);
       }
     } else {
       std::copy(pic_.GetRow16(y), pic_.GetRow16(y) + 4 * width, dst_row);
@@ -677,6 +686,7 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
         *is_group4 = true;
         return WP2_STATUS_OK;
       }
+      case TransformType::kYCoCgR:
       case TransformType::kSubtractGreen:
       case TransformType::kPredictor:
       case TransformType::kCrossColor:
@@ -684,7 +694,10 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
           WP2_CHECK_STATUS(MakeInputImageCopy(config));
           need_copy = false;
         }
-        if (type == TransformType::kSubtractGreen) {
+        if (type == TransformType::kYCoCgR) {
+          ApplyYCoCgR();
+          WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
+        } else if (type == TransformType::kSubtractGreen) {
           ApplySubtractGreen();
           WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
         } else if (type == TransformType::kPredictor) {
@@ -693,10 +706,12 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
           GetARGBRanges(config.transforms, symbols_info_.SampleFormat(),
                         palette_.Size(), minima_range, maxima_range,
                         /*num_transforms=*/i);
-          WP2_CHECK_STATUS(ApplyPredictFilter(minima_range, maxima_range,
-                                              progress_local, enc, dicts));
+          WP2_CHECK_STATUS(
+              ApplyPredictFilter(minima_range, maxima_range, progress_local,
+                                 config.transform_bits, enc, dicts));
         } else {
-          WP2_CHECK_STATUS(ApplyCrossColorFilter(progress_local, enc, dicts));
+          WP2_CHECK_STATUS(ApplyCrossColorFilter(
+              progress_local, config.transform_bits, enc, dicts));
         }
         break;
       case TransformType::kNum:
@@ -719,7 +734,6 @@ WP2Status Encoder::ApplyAndWriteTransforms(
 
   const WP2::ANSDebugPrefix prefix1(enc, "GlobalHeader");
   const WP2::ANSDebugPrefix prefix2(enc, "transforms");
-  const bool decoder_must_premultiply = (has_alpha_ && !use_premultiplied_);
 
   // Find the transform combination in the official set and store its index.
   uint32_t index = 0;
@@ -743,6 +757,7 @@ WP2Status Encoder::ApplyAndWriteTransforms(
   if (cache_data) {
     // First store to cached_transforms_core_ for future use.
     cached_transforms_enc_.Clear();
+    cached_transforms_enc_.CopyDebugPrefix(*enc);
     WP2_CHECK_STATUS(
         DoApplyAndWriteTransforms(config, config_prev, progress, symbols_info,
                                   &cached_transforms_enc_, dicts, &is_group4));
@@ -757,8 +772,17 @@ WP2Status Encoder::ApplyAndWriteTransforms(
   if (is_group4) return WP2_STATUS_OK;
 
   if (has_alpha_) {
-    enc->PutBool(decoder_must_premultiply, "premultiply");
+    if (WP2IsPremultiplied(pic_.format())) {
+      // If the format is already pre-multiplied, the decoder will not have to
+      // do it.
+      enc->PutBool(false, "premultiply");
+    } else {
+      // The decoder will have to pre-multiply if the transforms do not
+      // pre-multiply, and conversely.
+      enc->PutBool(!config.use_premultiplied, "premultiply");
+    }
   }
+
   if (config.transforms[0] == TransformType::kNum) {
     ProgressRange progress_local(progress, 1.);
     WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
@@ -830,8 +854,6 @@ Encoder::Encoder(const WP2::EncoderConfig& config,
   argb_scratch_ = nullptr;
   transform_data_ = nullptr;
 
-  histo_bits_ = 0;
-  transform_bits_ = 0;
   symbols_info_.Init(has_alpha_, pic_.format());
 
   EncLDspInit();

@@ -42,6 +42,7 @@ WebP for lossy compression. It still compresses 2x faster than AVIF, but takes
 
 Side-by-side codec comparisons can be found at:
 
+-   [2021-02-15](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_02_15/index.html#steinway-vienna-panoramic&AVIF-AOM=s&WEBP2=s&subset1)
 -   [2021-02-02](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_02_02/index.html#endeavour-with-columbia-ferry-flyby-gpn-2000-001996&WEBP2=t&AVIF-AOM=t&subset1)
 -   [2021-01-19](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_01_19/index.html#cecret-lake-panorama-albion-basin-alta-utah-july-2009&WEBP2=s&AOM=s&subset1)
 -   [2021-01-11](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_01_11/index.html#mercado-dos-lavradores&WEBP2=s&AOM=s&subset1)
@@ -78,6 +79,24 @@ For additional options see:
 ```shell
 $ cmake .. -LH
 ```
+
+### Compiling with Android NDK
+
+The latest NDK for Android can be retrieved from the
+Android [download page](https://developer.android.com/ndk/downloads).
+
+Assuming the variable NDK_ROOT is positioned correctly to point
+to the NDK's directory, the Android binaries can be built with:
+
+```shell
+$ mkdir build && cd build
+$ cmake .. -DWP2_ANDROID_NDK_PATH=${NDK_ROOT}
+$ make -j
+```
+
+Extra configuration option:
+
+*   `ANDROID_ABI`: one of armeabi-v7a,armeabi-v7a with NEON,arm64-v8a,x86,x86_64... (default is arm64-v8a)
 
 ## Binaries
 

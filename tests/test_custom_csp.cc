@@ -238,7 +238,8 @@ class SpeedTest : public ::testing::TestWithParam<WP2CPUInfo> {
     for (auto& i : mtx_) i = random->Get(-kMaxMtx, kMaxMtx);
   }
 
-  uint32_t DoTest(WP2YUVToArgbFunc func, UniformIntDistribution* const random) {
+  uint32_t DoTest(WP2YUVAToArgb32Func func,
+                  UniformIntDistribution* const random) {
     Init(random);
     uint32_t crc = 0;
     std::vector<uint8_t> out(4 * kMaxLen, 0);
@@ -279,19 +280,40 @@ TEST_P(SpeedTest, YUVToCustom) {
   EXPECT_EQ(crc, 1929850794u);
 }
 
-TEST_P(SpeedTest, YUVToXRGB) {
+TEST_P(SpeedTest, YUVAToXRGB) {
   UniformIntDistribution random(1532);
-  EXPECT_EQ(DoTest(WP2YUVToXRGB, &random), 806577452u);
+  EXPECT_EQ(DoTest(WP2YUVAToXRGB32, &random), 952933099u);
 }
 
-TEST_P(SpeedTest, YUVToARGB) {
+TEST_P(SpeedTest, YUVAToARGB) {
   UniformIntDistribution random(8724);
-  EXPECT_EQ(DoTest(WP2YUVToARGB, &random), 3144549024u);
+  EXPECT_EQ(DoTest(WP2YUVAToARGB32, &random), 3144549024u);
+}
+
+TEST_P(SpeedTest, YUVAToArgb) {
+  UniformIntDistribution random(48623);
+  EXPECT_EQ(DoTest(WP2YUVAToArgb32, &random), 3017869648u);
 }
 
 TEST_P(SpeedTest, YUVToArgb) {
-  UniformIntDistribution random(48623);
-  EXPECT_EQ(DoTest(WP2YUVToArgb, &random), 3017869648u);
+  UniformIntDistribution random(5894);
+  Init(&random);
+  uint32_t crc = 0;
+  std::vector<uint8_t> out(4 * kMaxLen, 0);
+  for (uint32_t test = 0; test < kNumTest; ++test) {
+    const uint32_t len = (test == 0) ? kMaxLen : random.Get(1u, kMaxLen);
+    const int16_t* const y = &yuv_[random.Get(0u, kMaxLen - len)];
+    const int16_t* const u = &yuv_[random.Get(0u, kMaxLen - len)];
+    const int16_t* const v = &yuv_[random.Get(0u, kMaxLen - len)];
+    FillMtx(&random);
+    for (uint32_t iter = 0; iter < kIter; ++iter) {
+      WP2YUVToArgb32(y, u, v, avg_, mtx_, &out[0], len);
+    }
+    for (auto i : out) {
+      crc = testing::SillyCRC(crc, i);
+    }
+  }
+  EXPECT_EQ(crc, 1776911081u);
 }
 
 INSTANTIATE_TEST_SUITE_P(SpeedTestInstantiation, SpeedTest,

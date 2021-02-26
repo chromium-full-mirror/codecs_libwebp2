@@ -23,6 +23,7 @@
 #include <cmath>
 
 #include "src/dsp/math.h"
+#include "src/utils/ans.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
@@ -147,6 +148,10 @@ static inline uint32_t MaxPaletteSize(uint32_t num_pixels) {
   // The palette cannot be bigger than the number of pixels.
   return std::min(kMaxPaletteSize, num_pixels);
 }
+// Make sure that the palette + predictors can be encoded in ANS: this is
+// definitely not a perfect static_assert but it is better than nothing.
+static_assert(2 * kMaxPaletteSize < WP2::kANSMaxRange,
+              "Max palette size is too big.");
 
 }  // namespace WP2L
 

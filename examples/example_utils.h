@@ -102,8 +102,9 @@ extern bool WP2MemoryFailNow(size_t size);
 //------------------------------------------------------------------------------
 // Distortion
 
-static const char* const kMetricNames[] = {
-    "PSNR", "PSNRHVS", "PSNR_YUV", "SSIM", "SSIM_YUV", "MSSSIM", "LSIM"};
+static const char* const kMetricNames[] = {"PSNR",   "PSNRHVS",  "PSNR_YUV",
+                                           "SSIM",   "SSIM_YUV", "MSSSSIM_orig",
+                                           "MSSSIM", "LSIM"};
 STATIC_ASSERT_ARRAY_SIZE(kMetricNames, WP2::NUM_METRIC_TYPES);
 
 // Computes and prints the distortion of the compressed image stored in 'data'
@@ -358,6 +359,11 @@ void ConvertPartition(uint32_t pic_width, uint32_t pic_height,
 // Writes the 'partition' to the file located at 'file_path'.
 bool WritePartition(const std::vector<WP2::Rectangle>& partition,
                     const char file_path[]);
+
+static const char* const kPartitionSetString[] = {
+    "Small squares",  "Small rects", "All rects", "Thick rects",
+    "Medium squares", "All squares", "Some rects"};
+STATIC_ASSERT_ARRAY_SIZE(kPartitionSetString, NUM_PARTITION_SETS);
 
 //------------------------------------------------------------------------------
 // Program options.

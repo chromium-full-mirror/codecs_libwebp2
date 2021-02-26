@@ -141,6 +141,7 @@ utils_srcs := \
   src/utils/orientation.cc \
   src/utils/plane.cc \
   src/utils/quantizer.cc \
+  src/utils/split_iterator.cc \
   src/utils/status.cc \
   src/utils/thread_utils.cc \
   src/utils/utils.cc \

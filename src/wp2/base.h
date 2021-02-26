@@ -141,8 +141,10 @@ WP2_EXTERN uint32_t WP2FormatBpp(WP2SampleFormat format);
 // Returns the number of bytes used per channel internally.
 WP2_EXTERN uint32_t WP2FormatBpc(WP2SampleFormat format);
 
-// Returns the index of the alpha channel, or the number of channels if none.
-WP2_EXTERN uint32_t WP2AlphaChannelIndex(WP2SampleFormat format);
+// Returns true if the 'format' has an alpha channel.
+// Also returns its index if 'alpha_channel_index' is not null and there is one.
+WP2_EXTERN bool WP2FormatHasAlpha(WP2SampleFormat format,
+                                  uint32_t* alpha_channel_index = nullptr);
 
 // Returns true if the format has premultiplied rgb values (rgb = a * RGB).
 WP2_EXTERN bool WP2IsPremultiplied(WP2SampleFormat format);
@@ -158,7 +160,8 @@ typedef enum {
   PSNR_YUV,  // PSNR_YUV is PSNR in YCbCr space for now (could be any other YUV)
   SSIM,
   SSIM_YUV,
-  MSSSIM,
+  MSSSIM_ORIGINAL,  // Original MSSSIM metric from Simoncelli & al paper.
+  MSSSIM,           // MSSIM metric with a larger weight for the 1:1 scale.
   LSIM,
   NUM_METRIC_TYPES
 } MetricType;
@@ -276,7 +279,7 @@ struct Rectangle {
   Rectangle MergeWith(const Rectangle& r) const;
   // Returns the areas covered by this but not covered by 'r'.
   void Exclude(const Rectangle& r, Rectangle* const top, Rectangle* const bot,
-               Rectangle* const lft, Rectangle* const rgt);
+               Rectangle* const lft, Rectangle* const rgt) const;
 };
 
 enum class Orientation {

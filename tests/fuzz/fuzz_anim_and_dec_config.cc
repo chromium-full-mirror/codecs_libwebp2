@@ -39,8 +39,9 @@ class FuzzedParametersSetup : public FuzzedParameters {
         ExtractUInt32(1, std::max((size_t)kHeaderMinSize, max_bitstream_size));
     const DecoderType decoder_type =
         (DecoderType)ExtractUInt32((uint32_t)DecoderType::kSwappingCustom);
+    // TODO(yguyon): Also test WP2_Argb_38 when it is ready
     const WP2SampleFormat output_format =
-        (WP2SampleFormat)ExtractUInt32((uint32_t)WP2_FORMAT_NUM - 1);
+        (WP2SampleFormat)ExtractUInt32((uint32_t)WP2_BGR_24);
     const bool compare_with_single_chunk = ExtractBool();
 
     std::vector<DecoderAction> actions;
@@ -71,6 +72,18 @@ class FuzzedParametersSetup : public FuzzedParameters {
   }
 };
 
+void LimitSetupForBigImages(const Data& bitstream,
+                             IncrementalDecodingTestSetup* const setup) {
+  WP2::BitstreamFeatures features;
+  if (features.Read(bitstream.bytes, bitstream.size) == WP2_STATUS_OK) {
+    if (features.width * features.height <= (1u << 20)) {
+      // Small image, leave as is.
+    } else {
+      setup->compare_with_single_chunk = false;
+    }
+  }
+}
+
 }  // namespace
 }  // namespace testing
 }  // namespace WP2
@@ -82,8 +95,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   WP2::testing::FuzzedParametersSetup params(data, size);
 
   // Extract a random decoding pattern (when to rewind, which frames to skip).
-  const WP2::testing::IncrementalDecodingTestSetup setup =
-      params.ExtractSetup(size);
+  WP2::testing::IncrementalDecodingTestSetup setup = params.ExtractSetup(size);
 
   // Extract a random config.
   WP2::DecoderConfig config;
@@ -94,6 +106,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // remaining bytes.
   WP2::Data encoded_data;
   if (!params.TryExtractWP2Bitstream(&encoded_data)) return 0;  // malloc fail.
+  WP2::testing::LimitSetupForBigImages(encoded_data, &setup);
   WP2::testing::LimitConfigForBigImages(encoded_data, &config);
 
   // Success is not expected but it should not crash or return a weird error.

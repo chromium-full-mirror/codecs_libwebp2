@@ -596,7 +596,7 @@ INSTANTIATE_TEST_SUITE_P(
 //------------------------------------------------------------------------------
 
 // Test the Quantizer.
-TEST_F(TestANS, Test5) {
+TEST_F(TestANS, Test5a) {
   UniformIntDistribution random(/*seed=*/kBaseSeed);
   const uint32_t kMaxSymbol = 256;
   const uint32_t kNumSymbols = 7000 * kTestFactor;
@@ -672,6 +672,33 @@ TEST_F(TestANS, Test5) {
       }
     }
   }
+}
+
+TEST_F(TestANS, Test5b) {
+  constexpr uint32_t kSize = 1000;
+  constexpr uint32_t kIndex = 501;
+  constexpr uint32_t kMaxCount = 10000;
+  constexpr uint32_t kMaxCountQuantized = 100;
+  std::vector<uint32_t> counts(kSize, 0);
+  counts[kIndex] = kMaxCount;
+
+  // Test that the cost of non-quantized histogram is 0.
+  const float cost1 =
+      ANSCountsQuantizedCost(&counts[0], &counts[0], counts.size());
+  EXPECT_EQ(cost1, 0.f);
+
+  // Test that the cost of quantized histogram is 0.
+  std::vector<uint32_t> distribution = counts;
+  float cost2;
+  ANSCountsQuantize(/*do_expand=*/false, kMaxCountQuantized, counts.size(),
+                    &counts[0], &distribution[0], &cost2);
+  EXPECT_EQ(distribution[kIndex], kMaxCountQuantized);
+  EXPECT_EQ(cost2, 0.f);
+
+  // Test that the cost of quantized histogram is 0.
+  const float cost3 =
+      ANSCountsQuantizedCost(&counts[0], &distribution[0], counts.size());
+  EXPECT_EQ(cost3, 0.f);
 }
 
 //------------------------------------------------------------------------------

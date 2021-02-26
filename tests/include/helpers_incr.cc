@@ -21,9 +21,13 @@
 
 #include "./helpers.h"
 #include "src/utils/orientation.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
+namespace testing {
+namespace {
 
 // Like assert() but is not silent if NDEBUG is defined (-c opt).
 #define CHECK_OR_DIE(cond)     \
@@ -32,8 +36,6 @@ namespace WP2 {
   } while (0)
 
 //------------------------------------------------------------------------------
-
-namespace {
 
 class ExternalCustomDecoder : public CustomDecoder {
  public:
@@ -126,217 +128,242 @@ class SwappingCustomDecoder : public ExternalCustomDecoder {
   Data previous_input_;
 };
 
-void VerifyFrameFeatures(const FrameFeatures* const frame_features,
-                         uint32_t frame_index, const ArgbBuffer& output) {
-  CHECK_OR_DIE(frame_features != nullptr);
-  CHECK_OR_DIE(frame_features->last_dispose_frame_index <= frame_index);
-  if (frame_index == 0 ||
-      frame_features->last_dispose_frame_index == frame_index) {
-    // Disposed frame or not an animation.
-    CHECK_OR_DIE(frame_features->window.x == 0u);
-    CHECK_OR_DIE(frame_features->window.y == 0u);
-    if (!output.IsEmpty()) {
-      CHECK_OR_DIE(frame_features->window.width == output.width());
-      CHECK_OR_DIE(frame_features->window.height == output.height());
-    }
-  } else {
-    CHECK_OR_DIE(frame_features->window.GetArea() > 0u);
-    if (!output.IsEmpty()) {
-      CHECK_OR_DIE(frame_features->window.x + frame_features->window.width <=
-                   output.width());
-      CHECK_OR_DIE(frame_features->window.y + frame_features->window.height <=
-                   output.height());
-    }
-  }
-}
+//------------------------------------------------------------------------------
 
 // Copies pixels 'from' 'rect' 'to' 'rect'.
-WP2Status ImportRect(const ArgbBuffer& from, const Rectangle& rect,
-                     ArgbBuffer* const to) {
-  WP2_CHECK_OK(to != nullptr, WP2_STATUS_NULL_PARAMETER);
-  if (rect.GetArea() == 0) return WP2_STATUS_OK;
+void ImportRect(const ArgbBuffer& from, const Rectangle& rect,
+                ArgbBuffer* const to) {
+  if (rect.GetArea() == 0) return;
   ArgbBuffer from_view(from.format()), to_view(to->format());
-  WP2_CHECK_STATUS(from_view.SetView(from, rect));
-  WP2_CHECK_STATUS(to_view.SetView(*to, rect));
-  WP2_CHECK_STATUS(to_view.CopyFrom(from_view));
-  return WP2_STATUS_OK;
+  CHECK_OR_DIE(from_view.SetView(from, rect) == WP2_STATUS_OK);
+  CHECK_OR_DIE(to_view.SetView(*to, rect) == WP2_STATUS_OK);
+  CHECK_OR_DIE(to_view.CopyFrom(from_view) == WP2_STATUS_OK);
 }
-
-}  // namespace
 
 //------------------------------------------------------------------------------
 
-namespace testing {
+class IncrementalDecodingTester {
+ public:
+  IncrementalDecodingTester(const DecoderConfig& config, DataView input,
+                            const IncrementalDecodingTestSetup& setup)
+      : config_(config),
+        input_(input),
+        incr_size_step_(std::max((size_t)1, setup.incr_size_step)),
+        setup_(setup),
+        output_(setup.output_format),
+        incremental_output_(output_.format()),
+        array_idec_(config, &output_),
+        stream_idec_(config, &output_),
+        unstable_custom_idec_(config, &output_),
+        swapping_custom_idec_(config, &output_) {}
 
-WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
-                            const IncrementalDecodingTestSetup& setup,
-                            std::vector<ArgbBuffer>* const decoded_frames,
-                            std::vector<uint32_t>* const decoded_durations_ms) {
-  const size_t incr_size_step = std::max((size_t)1, setup.incr_size_step);
+  WP2Status Decode(std::vector<ArgbBuffer>* const decoded_frames,
+                   std::vector<uint32_t>* const decoded_durations_ms) {
+    Decoder& idec = GetDecoder();
+    size_t available_input_size = 0;
+    uint32_t current_action_index = 0;
 
-  // Setup the chosen Decoder instance.
-  ArgbBuffer output(setup.output_format);
-  ArrayDecoder array_idec(config, &output);
-  StreamDecoder stream_idec(config, &output);
-  UnstableCustomDecoder unstable_custom_idec(config, &output);
-  SwappingCustomDecoder swapping_custom_idec(config, &output);
-  Decoder* idec;
-  if (setup.decoder_type == DecoderType::kArray) {
-    idec = (Decoder*)&array_idec;
-  } else if (setup.decoder_type == DecoderType::kStream) {
-    idec = (Decoder*)&stream_idec;
-  } else if (setup.decoder_type == DecoderType::kUnstableCustom) {
-    idec = (Decoder*)&unstable_custom_idec;
-  } else {
-    idec = (Decoder*)&swapping_custom_idec;
+    // Start, continue, rewind decoding as long as there is something to do.
+    while (available_input_size < input_.size ||
+           idec.GetStatus() == WP2_STATUS_NOT_ENOUGH_DATA ||
+           current_action_index < setup_.actions.size()) {
+      WP2_CHECK_OK(!idec.Failed(), idec.GetStatus());
+      size_t previous_input_size = available_input_size;
+      available_input_size =
+          std::min(available_input_size + incr_size_step_, input_.size);
+
+      // Rewind or skip frames as planned.
+      ApplyActions(&available_input_size, &previous_input_size,
+                   &current_action_index, decoded_frames, decoded_durations_ms);
+
+      // Update the input.
+      if (setup_.decoder_type == DecoderType::kArray) {
+        array_idec_.SetInput(input_.bytes, available_input_size);
+      } else if (setup_.decoder_type == DecoderType::kStream) {
+        stream_idec_.AppendInput(input_.bytes + previous_input_size,
+                                 available_input_size - previous_input_size,
+                                 /*data_is_persistent=*/true);
+      } else if (setup_.decoder_type == DecoderType::kUnstableCustom) {
+        unstable_custom_idec_.SetData(input_.bytes, available_input_size);
+      } else {
+        swapping_custom_idec_.SetData(input_.bytes, available_input_size);
+      }
+
+      // Decode all available bytes until a non-skipped frame is ready.
+      uint32_t duration_ms = 0;
+      const bool decoded_a_full_frame = idec.ReadFrame(&duration_ms);
+      WP2_CHECK_OK(!idec.Failed(), idec.GetStatus());
+
+      if (setup_.decoder_type == DecoderType::kUnstableCustom) {
+        // Exercise with an invalid buffer until Fetch() is called (during the
+        // next ReadFrame() call).
+        unstable_custom_idec_.MakePreviousDataDisappear();
+      }
+
+      // Check the state of the decoder and the output.
+      if (idec.TryGetDecodedFeatures() != nullptr) {
+        WP2_CHECK_STATUS(
+            CheckAnimation(available_input_size, decoded_a_full_frame));
+        if (!idec.TryGetDecodedFeatures()->is_animation && !rewinded_) {
+          CHECK_OR_DIE(idec.GetNumFrameDecodedFeatures() <= 1u);
+        }
+      }
+      CheckDecodedArea(available_input_size, previous_input_size,
+                       decoded_a_full_frame);
+      if (idec.GetDecodedArea().GetArea() > 0) {
+        CheckIncrementalOutput();
+        SaveIncrementalOutput();
+      }
+      previous_frame_index_ = frame_index_;
+      if (setup_.compare_with_single_chunk) {
+        CheckSameOutputAsSingleChunk(available_input_size, decoded_a_full_frame,
+                                     duration_ms);
+      }
+      if (decoded_a_full_frame) {
+        WP2_CHECK_STATUS(CheckFullFrame(available_input_size, duration_ms));
+        SaveFullFrame(duration_ms, decoded_frames, decoded_durations_ms);
+        if (!idec.TryGetFrameDecodedFeatures(frame_index_)->is_last) {
+          ++frame_index_;
+          previous_frame_index_ = kMaxNumFrames;
+          previous_decoded_area_ = Rectangle(0, 0, 0, 0);
+        }
+      }
+
+      if (current_action_index >= setup_.actions.size() &&
+          previous_input_size >= input_.size && !decoded_a_full_frame) {
+        // Nothing will happen further so avoid an infinite loop.
+        WP2_CHECK_STATUS(idec.GetStatus());
+      }
+    }
+    return WP2_STATUS_OK;
   }
 
-  // State of the decoding.
-  uint32_t frame_index = 0, previous_frame_index = kMaxNumFrames;
-  Rectangle decoded_area;
-  Rectangle previous_decoded_area(0, 0, 0, 0);
-  ArgbBuffer incremental_output(setup.output_format);
-  bool rewinded = false;
-  uint32_t num_skipped_frames = 0;
-  uint32_t expected_total_num_frames = 0;
-
-  // Start, continue, rewind decoding as long as there is something left to do.
-  size_t available_input_size = 0;
-  uint32_t current_action_index = 0;
-  while (available_input_size < input.size ||
-         idec->GetStatus() == WP2_STATUS_NOT_ENOUGH_DATA ||
-         current_action_index < setup.actions.size()) {
-    WP2_CHECK_OK(!idec->Failed(), idec->GetStatus());
-    size_t previous_input_size = available_input_size;
-    available_input_size += incr_size_step;
-    if (available_input_size > input.size) available_input_size = input.size;
-
-    // Rewind or skip frames as planned.
-    while (current_action_index < setup.actions.size() &&
-           (setup.actions[current_action_index].bistream_position <=
-                available_input_size ||
-            previous_input_size >= input.size)) {
-      const DecoderAction& action = setup.actions[current_action_index];
+ private:
+  void ApplyActions(size_t* const available_input_size,
+                    size_t* const previous_input_size,
+                    uint32_t* const current_action_index,
+                    std::vector<ArgbBuffer>* const decoded_frames,
+                    std::vector<uint32_t>* const decoded_durations_ms) {
+    while (*current_action_index < setup_.actions.size() &&
+           (setup_.actions[*current_action_index].bistream_position <=
+                *available_input_size ||
+            *previous_input_size >= input_.size)) {
+      const DecoderAction& action = setup_.actions[*current_action_index];
       if (action.type == DecoderAction::Type::kRewind ||
           action.type == DecoderAction::Type::kRewindKeepBytes) {
         const bool output_buffer_changed = (action.value > 0);
-        if (output_buffer_changed) output.Deallocate();
-        idec->Rewind(output_buffer_changed);
-        previous_input_size = 0;
+        if (output_buffer_changed) output_.Deallocate();
+        GetDecoder().Rewind(output_buffer_changed);
+        *previous_input_size = 0;
         if (action.type != DecoderAction::Type::kRewindKeepBytes) {
-          available_input_size = 0;
+          *available_input_size = 0;
         }
-        frame_index = 0;
-        previous_frame_index = kMaxNumFrames;
-        previous_decoded_area = Rectangle(0, 0, 0, 0);
-        incremental_output.Deallocate();
+        frame_index_ = 0;
+        previous_frame_index_ = kMaxNumFrames;
+        previous_decoded_area_ = Rectangle(0, 0, 0, 0);
+        incremental_output_.Deallocate();
         if (decoded_frames != nullptr) decoded_frames->clear();
         if (decoded_durations_ms != nullptr) decoded_durations_ms->clear();
-        rewinded = true;
-        num_skipped_frames = 0;
+        rewinded_ = true;
+        num_skipped_frames_ = 0;
       } else if (action.type == DecoderAction::Type::kSkip) {
         const uint32_t num_frames_to_skip = action.value;
-        idec->SkipNumNextFrames(num_frames_to_skip);
+        GetDecoder().SkipNumNextFrames(num_frames_to_skip);
         if (num_frames_to_skip > 0) {
-          frame_index = std::min(frame_index + action.value, kMaxNumFrames);
-          previous_frame_index = kMaxNumFrames;
-          previous_decoded_area = Rectangle(0, 0, 0, 0);
-          incremental_output.Deallocate();
-          num_skipped_frames += num_frames_to_skip;
+          frame_index_ = std::min(frame_index_ + action.value, kMaxNumFrames);
+          previous_frame_index_ = kMaxNumFrames;
+          previous_decoded_area_ = Rectangle(0, 0, 0, 0);
+          incremental_output_.Deallocate();
+          num_skipped_frames_ += num_frames_to_skip;
         }
       }
-      ++current_action_index;
+      ++*current_action_index;
     }
+  }
 
-    // Update the input.
-    if (setup.decoder_type == DecoderType::kArray) {
-      array_idec.SetInput(input.bytes, available_input_size);
-    } else if (setup.decoder_type == DecoderType::kStream) {
-      stream_idec.AppendInput(input.bytes + previous_input_size,
-                              available_input_size - previous_input_size,
-                              /*data_is_persistent=*/true);
-    } else if (setup.decoder_type == DecoderType::kUnstableCustom) {
-      unstable_custom_idec.SetData(input.bytes, available_input_size);
-    } else {
-      swapping_custom_idec.SetData(input.bytes, available_input_size);
-    }
-
-    // Decode all available bytes until a non-skipped frame is ready.
-    uint32_t duration_ms = 0;
-    const bool decoded_a_full_frame = idec->ReadFrame(&duration_ms);
-    WP2_CHECK_OK(!idec->Failed(), idec->GetStatus());
-
-    if (setup.decoder_type == DecoderType::kUnstableCustom) {
-      // Exercise with an invalid buffer until Fetch() is called (during the
-      // next ReadFrame() call).
-      unstable_custom_idec.MakePreviousDataDisappear();
-    }
-
-    // Verify basic values.
-    if (idec->TryGetDecodedFeatures() != nullptr &&
-        idec->TryGetDecodedFeatures()->is_animation) {
-      const uint32_t num_known_frames = idec->GetNumFrameDecodedFeatures();
-      if (num_skipped_frames == 0 || decoded_a_full_frame) {
-        CHECK_OR_DIE(idec->GetCurrentFrameIndex() == frame_index);
-        if (!rewinded) {
-          CHECK_OR_DIE(frame_index <= num_known_frames);
-          if (decoded_a_full_frame) {
-            CHECK_OR_DIE(frame_index < num_known_frames);
-          }
-        }
-      }
-      for (uint32_t i = 0; i < num_known_frames; ++i) {
-        VerifyFrameFeatures(idec->TryGetFrameDecodedFeatures(i), i, output);
-      }
-      if (idec->GetStatus() == WP2_STATUS_OK) {
-        for (uint32_t i = 0; i < num_known_frames; ++i) {
-          CHECK_OR_DIE(idec->TryGetFrameDecodedFeatures(i)->is_last ==
-                       (i == num_known_frames - 1u));
-        }
-        const bool num_available_frames_is_ok =
-            idec->GetNumAvailableFrames() ==
-                idec->GetNumFrameDecodedFeatures() &&
-            (expected_total_num_frames == 0 ||
-             idec->GetNumAvailableFrames() == expected_total_num_frames);
-        if (num_skipped_frames >= num_known_frames &&
-            !idec->TryGetDecodedFeatures()->has_trailing_data) {
-          // No guarantee that the last frame was truly available because the
-          // bitstream end was skipped, even if truncated.
-          if (available_input_size >= input.size) {
-            WP2_CHECK_OK(num_available_frames_is_ok,
-                         WP2_STATUS_NOT_ENOUGH_DATA);
-          }
-        } else {
-          CHECK_OR_DIE(num_available_frames_is_ok);
-        }
-      } else {
-        CHECK_OR_DIE(idec->GetNumFrameDecodedFeatures() >=
-                     idec->GetNumAvailableFrames());
-        if (!rewinded && available_input_size < input.size &&
-            available_input_size + kANMFMaxHeaderSize >= input.size &&
-            !idec->TryGetDecodedFeatures()->has_trailing_data) {
-          // Close to the end, no metadata afterwards, expecting one more frame.
-          if (expected_total_num_frames == 0u) {
-            expected_total_num_frames = idec->GetNumAvailableFrames() + 1u;
-          } else {
-            WP2_CHECK_OK(
-                expected_total_num_frames == idec->GetNumAvailableFrames() + 1u,
-                WP2_STATUS_BITSTREAM_ERROR);
-          }
-        }
-      }
-    } else {
-      CHECK_OR_DIE(idec->GetCurrentFrameIndex() == frame_index);
-      if (!rewinded) {
-        CHECK_OR_DIE(idec->GetNumFrameDecodedFeatures() <= 1u);
-      }
-    }
-    decoded_area = idec->GetDecodedArea();
-    const BitstreamFeatures* const features = idec->TryGetDecodedFeatures();
-    if (features != nullptr) {
+  static void CheckFrameFeatures(const FrameFeatures* const frame_features,
+                                 uint32_t frame_index,
+                                 const ArgbBuffer& output) {
+    CHECK_OR_DIE(frame_features != nullptr);
+    CHECK_OR_DIE(frame_features->last_dispose_frame_index <= frame_index);
+    if (frame_index == 0 ||
+        frame_features->last_dispose_frame_index == frame_index) {
+      // Disposed frame or not an animation.
+      CHECK_OR_DIE(frame_features->window.x == 0u);
+      CHECK_OR_DIE(frame_features->window.y == 0u);
       if (!output.IsEmpty()) {
-        CHECK_OR_DIE(features->width == output.width());
-        CHECK_OR_DIE(features->height == output.height());
+        CHECK_OR_DIE(frame_features->window.width == output.width());
+        CHECK_OR_DIE(frame_features->window.height == output.height());
+      }
+    } else {
+      CHECK_OR_DIE(frame_features->window.GetArea() > 0u);
+      if (!output.IsEmpty()) {
+        CHECK_OR_DIE(frame_features->window.x + frame_features->window.width <=
+                     output.width());
+        CHECK_OR_DIE(frame_features->window.y + frame_features->window.height <=
+                     output.height());
+      }
+    }
+  }
+
+  WP2Status CheckAnimation(size_t available_input_size,
+                           bool decoded_a_full_frame) const {
+    const Decoder& idec = GetDecoder();
+    const uint32_t num_known_frames = idec.GetNumFrameDecodedFeatures();
+    if (num_skipped_frames_ == 0 || decoded_a_full_frame) {
+      CHECK_OR_DIE(idec.GetCurrentFrameIndex() == frame_index_);
+      if (!rewinded_) {
+        CHECK_OR_DIE(frame_index_ <= num_known_frames);
+        if (decoded_a_full_frame) {
+          CHECK_OR_DIE(frame_index_ < num_known_frames);
+        }
+      }
+    }
+    for (uint32_t i = 0; i < num_known_frames; ++i) {
+      CheckFrameFeatures(idec.TryGetFrameDecodedFeatures(i), i, output_);
+
+      size_t offset;  // Offset should be known if features are.
+      CHECK_OR_DIE(idec.TryGetFrameLocation(i, &offset));
+      if (i < num_known_frames - 1) {
+        size_t length;  // Length should be known for previous frames.
+        CHECK_OR_DIE(idec.TryGetFrameLocation(i, nullptr, &length));
+      }
+
+      if (i > 0) {
+        size_t previous_offset, previous_length;
+        CHECK_OR_DIE(idec.TryGetFrameLocation(i - 1, &previous_offset,
+                                                  &previous_length));
+        CHECK_OR_DIE(offset == previous_offset + previous_length);
+      }
+    }
+
+    if (idec.GetStatus() == WP2_STATUS_OK) {
+      // Everything is decoded without error.
+      for (uint32_t i = 0; i < num_known_frames; ++i) {
+        const bool is_last = idec.TryGetFrameDecodedFeatures(i)->is_last;
+        CHECK_OR_DIE(is_last == (i == num_known_frames - 1u));
+
+        size_t offset, length;
+        CHECK_OR_DIE(idec.TryGetFrameLocation(i, &offset, &length));
+        WP2_CHECK_OK(
+            (idec.TryGetDecodedFeatures()->has_trailing_data || !is_last)
+                ? (offset + length < input_.size)
+                : (offset + length == input_.size),
+            WP2_STATUS_BITSTREAM_ERROR);
+      }
+    }
+    return WP2_STATUS_OK;
+  }
+
+  void CheckDecodedArea(size_t available_input_size, size_t previous_input_size,
+                        bool decoded_a_full_frame) const {
+    const Rectangle decoded_area = GetDecoder().GetDecodedArea();
+    const BitstreamFeatures* const features =
+        GetDecoder().TryGetDecodedFeatures();
+    if (features != nullptr) {
+      if (!output_.IsEmpty()) {
+        CHECK_OR_DIE(features->width == output_.width());
+        CHECK_OR_DIE(features->height == output_.height());
       }
       const Rectangle unoriented =
           OrientateRectangle(GetInverseOrientation(features->orientation),
@@ -344,20 +371,20 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
       CHECK_OR_DIE(unoriented.x == 0u);
       CHECK_OR_DIE(unoriented.y == 0u);
     }
-    CHECK_OR_DIE(decoded_area.width >= previous_decoded_area.width);
-    CHECK_OR_DIE(decoded_area.width <= output.width());
-    CHECK_OR_DIE(decoded_area.height >= previous_decoded_area.height);
-    CHECK_OR_DIE(decoded_area.height <= output.height());
-    if (frame_index == previous_frame_index &&
+    CHECK_OR_DIE(decoded_area.width >= previous_decoded_area_.width);
+    CHECK_OR_DIE(decoded_area.width <= output_.width());
+    CHECK_OR_DIE(decoded_area.height >= previous_decoded_area_.height);
+    CHECK_OR_DIE(decoded_area.height <= output_.height());
+    if (frame_index_ == previous_frame_index_ &&
         available_input_size >= previous_input_size &&
         available_input_size - previous_input_size <= 2 &&
-        config.incremental_mode ==
+        config_.incremental_mode ==
             DecoderConfig::IncrementalMode::PARTIAL_TILE_CONTEXT &&
         features != nullptr) {
       const uint32_t num_lines =
           (features->raw_width != features->width)
-              ? decoded_area.width - previous_decoded_area.width
-              : decoded_area.height - previous_decoded_area.height;
+              ? decoded_area.width - previous_decoded_area_.width
+              : decoded_area.height - previous_decoded_area_.height;
       // Incremental decoding should not be able to finish more than two rows of
       // blocks in 2 bytes or fewer for lossy and a tile for lossless.
       if (features->quality_hint == kLosslessQualityHint) {
@@ -368,101 +395,159 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
                      std::min(features->raw_height, kMaxBlockSizePix * 2));
       }
     }
+  }
 
-    // Save incremental output to make sure data doesn't change later.
-    if (decoded_area.GetArea() > 0) {
-      CHECK_OR_DIE(features != nullptr);
-      if (features->is_opaque) {
-        ArgbBuffer view(output.format());
-        WP2_CHECK_STATUS(view.SetView(output, decoded_area));
-        CHECK_OR_DIE(!view.HasTransparency());
-      }
-
-      if (incremental_output.IsEmpty()) {
-        WP2_CHECK_STATUS(
-            incremental_output.Resize(features->width, features->height));
-      }
-
-      // Copy newly decoded pixels.
-      Rectangle top, bot, lft, rgt;
-      decoded_area.Exclude(previous_decoded_area, &top, &bot, &lft, &rgt);
-      WP2_CHECK_STATUS(ImportRect(output, top, &incremental_output));
-      WP2_CHECK_STATUS(ImportRect(output, bot, &incremental_output));
-      WP2_CHECK_STATUS(ImportRect(output, lft, &incremental_output));
-      WP2_CHECK_STATUS(ImportRect(output, rgt, &incremental_output));
-      previous_decoded_area = decoded_area;
-    }
-    previous_frame_index = frame_index;
-
-    if (setup.compare_with_single_chunk) {
-      ArgbBuffer cmp_output(output.format());
-      ArrayDecoder cmp_idec(config, &cmp_output);
-      cmp_idec.SetInput(input.bytes, available_input_size);
-      cmp_idec.SkipNumNextFrames(frame_index);
-      uint32_t cmp_duration_ms = 0;
-      const bool cmp_decoded_a_full_frame =
-          cmp_idec.ReadFrame(&cmp_duration_ms);
-      CHECK_OR_DIE(!cmp_idec.Failed());
-      CHECK_OR_DIE(cmp_decoded_a_full_frame == decoded_a_full_frame);
-      if (cmp_decoded_a_full_frame) {
-        CHECK_OR_DIE(cmp_duration_ms == duration_ms);
-      }
-      CHECK_OR_DIE(cmp_idec.GetDecodedArea() == decoded_area);
-      if (decoded_area.GetArea() > 0) {
-        ArgbBuffer cmp_view(cmp_output.format()), view(output.format());
-        WP2_CHECK_STATUS(cmp_view.SetView(cmp_output, decoded_area));
-        WP2_CHECK_STATUS(view.SetView(output, decoded_area));
-        CHECK_OR_DIE(Compare(cmp_view, view, "single_chunk_compare"));
-      }
-    }
-
-    if (idec->TryGetDecodedFeatures() != nullptr) {
-      if (decoded_a_full_frame) {
-        CHECK_OR_DIE(decoded_area.width == output.width());
-        CHECK_OR_DIE(decoded_area.height == output.height());
-        // Compare incremental data and the current canvas.
-        CHECK_OR_DIE(testing::Compare(incremental_output, output,
-                                      "incrementally decoded"));
-        if (decoded_frames != nullptr) {
-          decoded_frames->push_back(ArgbBuffer());
-          WP2_CHECK_STATUS(decoded_frames->back().ConvertFrom(output));
-        }
-        if (idec->TryGetDecodedFeatures()->is_animation) {
-          if (decoded_durations_ms != nullptr) {
-            decoded_durations_ms->push_back(duration_ms);
-          }
-          CHECK_OR_DIE(
-              idec->TryGetFrameDecodedFeatures(frame_index)->duration_ms ==
-              duration_ms);
-        }
-        if (!idec->TryGetFrameDecodedFeatures(frame_index)->is_last) {
-          ++frame_index;
-          previous_frame_index = kMaxNumFrames;
-          previous_decoded_area = Rectangle(0, 0, 0, 0);
-        }
-      } else if (!idec->TryGetDecodedFeatures()->has_trailing_data &&
-                 !rewinded && frame_index == 0 &&
-                 available_input_size < input.size) {
-        // If a frame was decoded, it means that there are more bytes in
-        // 'input' than a complete valid bitstream.
-        WP2_CHECK_OK(idec->GetNumAvailableFrames() == 0u,
-                     WP2_STATUS_BITSTREAM_ERROR);
-      }
-    }
-
-    if (current_action_index >= setup.actions.size() &&
-        previous_input_size >= input.size && !decoded_a_full_frame) {
-      // Nothing will happen further so avoid an infinite loop.
-      WP2_CHECK_STATUS(idec->GetStatus());
+  void CheckIncrementalOutput() const {
+    CHECK_OR_DIE(GetDecoder().TryGetDecodedFeatures() != nullptr);
+    if (GetDecoder().TryGetDecodedFeatures()->is_opaque) {
+      ArgbBuffer view(output_.format());
+      CHECK_OR_DIE(view.SetView(output_, GetDecoder().GetDecodedArea()) ==
+                   WP2_STATUS_OK);
+      CHECK_OR_DIE(!view.HasTransparency());
     }
   }
-  return WP2_STATUS_OK;
-}
 
-}  // namespace testing
+  void SaveIncrementalOutput() {
+    if (incremental_output_.IsEmpty()) {
+      CHECK_OR_DIE(incremental_output_.Resize(
+                       GetDecoder().TryGetDecodedFeatures()->width,
+                       GetDecoder().TryGetDecodedFeatures()->height) ==
+                   WP2_STATUS_OK);
+    }
+
+    // Copy newly decoded pixels.
+    Rectangle top, bot, lft, rgt;
+    GetDecoder().GetDecodedArea().Exclude(previous_decoded_area_, &top, &bot,
+                                          &lft, &rgt);
+    ImportRect(output_, top, &incremental_output_);
+    ImportRect(output_, bot, &incremental_output_);
+    ImportRect(output_, lft, &incremental_output_);
+    ImportRect(output_, rgt, &incremental_output_);
+    previous_decoded_area_ = GetDecoder().GetDecodedArea();
+  }
+
+  void CheckSameOutputAsSingleChunk(size_t available_input_size,
+                                    bool decoded_a_full_frame,
+                                    uint32_t duration_ms) const {
+    ArgbBuffer cmp_output(output_.format());
+    ArrayDecoder cmp_idec(config_, &cmp_output);
+    cmp_idec.SetInput(input_.bytes, available_input_size);
+    cmp_idec.SkipNumNextFrames(frame_index_);
+    uint32_t cmp_duration_ms = 0;
+    const bool cmp_decoded_a_full_frame = cmp_idec.ReadFrame(&cmp_duration_ms);
+    CHECK_OR_DIE(!cmp_idec.Failed());
+    CHECK_OR_DIE(cmp_decoded_a_full_frame == decoded_a_full_frame);
+    if (cmp_decoded_a_full_frame) {
+      CHECK_OR_DIE(cmp_duration_ms == duration_ms);
+    }
+    const Rectangle decoded_area = GetDecoder().GetDecodedArea();
+    CHECK_OR_DIE(cmp_idec.GetDecodedArea() == decoded_area);
+    if (decoded_area.GetArea() > 0) {
+      ArgbBuffer cmp_view(cmp_output.format()), view(output_.format());
+      CHECK_OR_DIE(cmp_view.SetView(cmp_output, decoded_area) == WP2_STATUS_OK);
+      CHECK_OR_DIE(view.SetView(output_, decoded_area) == WP2_STATUS_OK);
+      CHECK_OR_DIE(Compare(cmp_view, view, "single_chunk_compare"));
+    }
+  }
+
+  WP2Status CheckFullFrame(size_t available_input_size,
+                           uint32_t duration_ms) const {
+    const Rectangle decoded_area = GetDecoder().GetDecodedArea();
+    CHECK_OR_DIE(decoded_area.width == output_.width());
+    CHECK_OR_DIE(decoded_area.height == output_.height());
+    // Compare incremental data and the current canvas.
+    CHECK_OR_DIE(testing::Compare(incremental_output_, output_,
+                                  "incrementally decoded"));
+
+    if (GetDecoder().TryGetDecodedFeatures()->is_animation) {
+      CHECK_OR_DIE(
+          GetDecoder().TryGetFrameDecodedFeatures(frame_index_)->duration_ms ==
+          duration_ms);
+    } else if (!GetDecoder().TryGetDecodedFeatures()->has_trailing_data &&
+               !rewinded_) {
+      // If a still image without trailing metadata is decoded without
+      // rewinding, the remaining bytes imply an invalid bitstream.
+      WP2_CHECK_OK(available_input_size == input_.size,
+                   WP2_STATUS_BITSTREAM_ERROR);
+    }
+
+    size_t offset, length;
+    CHECK_OR_DIE(
+        GetDecoder().TryGetFrameLocation(frame_index_, &offset, &length));
+    if (incr_size_step_ == 1) {
+      // A frame was just decoded during a byte-by-byte incremental decoding.
+      CHECK_OR_DIE(available_input_size == offset + length);
+    } else {
+      CHECK_OR_DIE(available_input_size >= offset + length);
+    }
+    return WP2_STATUS_OK;
+  }
+
+  void SaveFullFrame(uint32_t duration_ms,
+                     std::vector<ArgbBuffer>* const decoded_frames,
+                     std::vector<uint32_t>* const decoded_durations_ms) const {
+    if (decoded_frames != nullptr) {
+      decoded_frames->push_back(ArgbBuffer());
+      CHECK_OR_DIE(decoded_frames->back().ConvertFrom(output_) ==
+                   WP2_STATUS_OK);
+    }
+    if (GetDecoder().TryGetDecodedFeatures()->is_animation &&
+        decoded_durations_ms != nullptr) {
+      decoded_durations_ms->push_back(duration_ms);
+    }
+  }
+
+  // Convenient accessors
+  const Decoder& GetDecoder() const {
+    if (setup_.decoder_type == DecoderType::kArray) return array_idec_;
+    if (setup_.decoder_type == DecoderType::kStream) return stream_idec_;
+    if (setup_.decoder_type == DecoderType::kUnstableCustom) {
+      return unstable_custom_idec_;
+    }
+    return swapping_custom_idec_;
+  }
+  Decoder& GetDecoder() {
+    if (setup_.decoder_type == DecoderType::kArray) return array_idec_;
+    if (setup_.decoder_type == DecoderType::kStream) return stream_idec_;
+    if (setup_.decoder_type == DecoderType::kUnstableCustom) {
+      return unstable_custom_idec_;
+    }
+    return swapping_custom_idec_;
+  }
+
+  const DecoderConfig& config_;
+  const DataView input_;
+  const size_t incr_size_step_;
+  const IncrementalDecodingTestSetup& setup_;
+
+  ArgbBuffer output_, incremental_output_;
+  ArrayDecoder array_idec_;
+  StreamDecoder stream_idec_;
+  UnstableCustomDecoder unstable_custom_idec_;
+  SwappingCustomDecoder swapping_custom_idec_;
+
+  uint32_t frame_index_ = 0;
+  uint32_t previous_frame_index_ = kMaxNumFrames;
+  Rectangle previous_decoded_area_ = {0, 0, 0, 0};
+  bool rewinded_ = false;
+  uint32_t num_skipped_frames_ = 0;
+};
+
+}  // namespace
+
+//------------------------------------------------------------------------------
+
+WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
+                            const IncrementalDecodingTestSetup& setup,
+                            std::vector<ArgbBuffer>* const decoded_frames,
+                            std::vector<uint32_t>* const decoded_durations_ms) {
+  IncrementalDecodingTester tester(config, input, setup);
+  return tester.Decode(decoded_frames, decoded_durations_ms);
+}
 
 //------------------------------------------------------------------------------
 
 #undef CHECK_OR_DIE
 
+}  // namespace testing
 }  // namespace WP2

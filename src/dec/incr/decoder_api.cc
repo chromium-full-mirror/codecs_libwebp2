@@ -20,11 +20,13 @@
 #include <algorithm>
 
 #include "src/dec/incr/decoder_context.h"
+#include "src/dec/incr/decoder_skip.h"
 #include "src/dec/incr/decoder_state.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/utils/data_source.h"
 #include "src/utils/orientation.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -91,6 +93,7 @@ bool Decoder::Failed() const {
 const BitstreamFeatures* Decoder::TryGetDecodedFeatures() const {
   if ((state_ != nullptr) &&
       (state_->stage > State::Stage::WAITING_FOR_HEADER_CHUNK)) {
+    // TODO(yguyon): Return &features_ even just after Rewind()
     return &features_;
   }
   return nullptr;
@@ -98,15 +101,52 @@ const BitstreamFeatures* Decoder::TryGetDecodedFeatures() const {
 
 const FrameFeatures* Decoder::TryGetFrameDecodedFeatures(
     uint32_t frame_index) const {
+  // 'frame_index' is actually a final frame index.
   if (TryGetDecodedFeatures() != nullptr && state_ != nullptr &&
       frame_index < state_->final_to_regular_index.size()) {
-    // 'frame_index' is actually a final frame index.
     const uint32_t regular_frame_index =
         state_->final_to_regular_index[frame_index];
     assert(regular_frame_index < state_->frames.size());
     return &state_->frames[regular_frame_index];
   }
   return nullptr;
+}
+
+bool Decoder::TryGetFrameLocation(uint32_t frame_index, size_t* offset,
+                                  size_t* length) const {
+  // 'frame_index' is actually a final frame index.
+  // 'length' will be the sum of all pre- and regular frames belonging to it.
+  if (TryGetDecodedFeatures() == nullptr) return false;  // Early exit.
+
+  // Find the first pre- or regular frame belonging to the final 'frame_index'.
+  uint32_t first_pre_or_regular_frame_index;
+  if (frame_index == 0) {
+    first_pre_or_regular_frame_index = 0;
+  } else {
+    const uint32_t previous_final_frame_index = frame_index - 1;
+    if (previous_final_frame_index >= state_->final_to_regular_index.size()) {
+      return false;
+    }
+    first_pre_or_regular_frame_index =
+        (state_->final_to_regular_index[previous_final_frame_index] + 1);
+  }
+  if (first_pre_or_regular_frame_index >= state_->frames.size()) return false;
+  const size_t first_pre_or_regular_frame_offset =
+      state_->frames[first_pre_or_regular_frame_index].bitstream_position;
+  if (offset != nullptr) *offset = first_pre_or_regular_frame_offset;
+
+  // Find the ending regular frame belonging to the final 'frame_index'.
+  if (length != nullptr) {
+    const uint32_t regular_frame_index =
+        state_->final_to_regular_index[frame_index];
+    if (regular_frame_index >= state_->frames.size()) return false;
+    const size_t pos = state_->frames[regular_frame_index].bitstream_position;
+    const size_t size = state_->frames[regular_frame_index].num_bytes;
+    if (size == Decoder::State::kUnknown) return false;  // Not yet decoded.
+    assert(pos + size > first_pre_or_regular_frame_offset);
+    *length = pos + size - first_pre_or_regular_frame_offset;
+  }
+  return true;
 }
 
 //------------------------------------------------------------------------------
@@ -120,15 +160,9 @@ uint32_t Decoder::GetCurrentFrameIndex() const {
 }
 
 uint32_t Decoder::GetNumFrameDecodedFeatures() const {
+  if (state_ == nullptr) return 0;
   // Return the number of known final frames.
-  if (state_ != nullptr) return (uint32_t)state_->final_to_regular_index.size();
-  return 0;
-}
-
-uint32_t Decoder::GetNumAvailableFrames() const {
-  // Return the number of final frames that are entirely in the bitstream.
-  if (state_ != nullptr) return state_->num_available_final_frames;
-  return 0;
+  return (uint32_t)state_->final_to_regular_index.size();
 }
 
 //------------------------------------------------------------------------------

@@ -130,14 +130,15 @@ class FrontMgr4x4 : public FrontMgrBase {
 //     const CodedBlock& cb = cblocks[ind];
 //     ( ... write cb.dim() to the bistream)
 //     Block block_tmp;
-//     WP2_CHECK_ALLOC_OK(mgr->UseSize(cb.dim(), ind, &block_tmp));
+//     WP2_CHECK_ALLOC_OK(mgr->UseSize(cb.dim(), &block_tmp));
 //     assert(block_tmp == cb.blk());
 //   }
 //   // Process ready blocks (if any).
+//   uint32_t block_idx = 0;
 //   while (true) {
-//     FrontMgrDoubleOrderBase::Info info;
-//     if (!mgr->UseReady(&info)) break;
-//     const CodedBlock& cb = cblocks[info.ind];
+//     Block block;
+//     if (!mgr->UseReady(&block)) break;
+//     const CodedBlock& cb = cblocks[block_idx++];
 //     (... process )
 //   }
 // }
@@ -147,25 +148,17 @@ class FrontMgr4x4 : public FrontMgrBase {
 // mgr.Init(...)
 // while (!mgr.Done()) { // Not all blocks have been processed.
 //    // Read sizes until we get a block ready to be processed.
-//    FrontMgrDoubleOrderBase::Info info;
+//    Block block;
 //    while (true) {
-//      if (mgr.UseReady(&info)) break; // A block is ready!
+//      if (mgr.UseReady(&block)) break; // A block is ready!
 //      // No block is ready, read block size from bitstream.
 //      const BlockSize dim = ...
-//      Block block;
-//      WP2_CHECK_ALLOC_OK(mgr.UseSize(dim, /*ind=*/0u, &block));
+//      WP2_CHECK_ALLOC_OK(mgr.UseSize(dim, &block));
 //    }
 //   // ... use 'info.block'
 // }
 class FrontMgrDoubleOrderBase : public FrontMgrBase {
  public:
-  // Information of a stacked block. 'ind' is an index in whatever external
-  // structure you want to refer to.
-  struct Info {
-    Block block;
-    uint32_t ind;
-  };
-
   // Allocates storage. Returns false in case of memory error.
   // Must be called first (once) before using the other methods.
   virtual WP2Status Init(PartitionSet partition_set, bool snapped,
@@ -189,18 +182,15 @@ class FrontMgrDoubleOrderBase : public FrontMgrBase {
 
   // Marks a block of a given size 'dim' as processed, size wise. The full
   // block is returned in 'block' if not nullptr.
-  // 'ind' is some index to an external structure that contains information
-  // about the block. It can be set to whatever if unused and it will belong to
-  // an Info struct when popped in UseReady.
   // If 'use_block' is true, the block is also marked as used, block pixel
   // wise. Otherwise, it is added to a stack of blocks to be popped by calling
   // UseReady(). Returns false in case of error.
-  WP2_NO_DISCARD bool UseSize(BlockSize dim, uint32_t ind, Block* const block,
+  WP2_NO_DISCARD bool UseSize(BlockSize dim, Block* const block,
                               bool use_block = false);
 
   // Finds a block whose size was recorded with UseSize(), but that hasn't been
   // used yet, and is ready to be used. Returns whether a block was found.
-  bool UseReady(Info* const info = nullptr);
+  bool UseReady(Block* const block = nullptr);
 
   // For a valid 'size', returns true and the next block (pos) in size order.
   // Assumes 'size' is part of the 'partition_set_'.
@@ -222,7 +212,7 @@ class FrontMgrDoubleOrderBase : public FrontMgrBase {
   // Stack of blocks whose size has been read but that haven't been marked used
   // yet. Blocks get appended when calling UseSize() and popped when calling
   // UseReady().
-  VectorNoCtor<Info> size_stack_;
+  VectorNoCtor<Block> size_stack_;
   FrontMgrBase occupancy_size_;
   // Next max possible block (for reading/writing block sizes).
   Block next_;

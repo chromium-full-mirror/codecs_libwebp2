@@ -28,9 +28,9 @@
 #include "imageio/image_enc.h"
 #include "src/wp2/format_constants.h"
 
-#include "examples/example_utils.h"
-#include "imageio/imageio_util.h"
-#include "tests/include/helpers.h"
+#include "examples/example_utils.h"  // For WP2::GetFilesIn()
+#include "imageio/imageio_util.h"    // For WP2::IoUtilReadFile()
+#include "tests/include/helpers.h"   // For WP2::GetTestDataPath()
 
 namespace WP2 {
 namespace testing {
@@ -78,17 +78,15 @@ bool FuzzedParameters::ExtractSource(const char** const file_name,
                                      const uint8_t** const file_data,
                                      size_t* const file_size) {
   std::vector<std::string> files;
+  constexpr bool kRecursive = false;
+  if (!GetFilesIn(GetTestDataPath(""), &files, kRecursive)) return false;
+  if (files.size() == 0) return false;
+  *file_name = files[ExtractUInt32((uint32_t)files.size() - 1)].c_str();
   Data data;
-  if (WP2GetFilesIn(GetTestDataPath(""), &files, /*recursive=*/false) &&
-      files.size() > 0) {
-    *file_name = files[ExtractUInt32((uint32_t)files.size() - 1)].c_str();
-    if (IoUtilReadFile(*file_name, &data) == WP2_STATUS_OK) {
-      *file_data = data.bytes;
-      *file_size = data.size;
-      return true;
-    }
-  }
-  return false;
+  if (IoUtilReadFile(*file_name, &data) != WP2_STATUS_OK) return false;
+  *file_data = data.bytes;
+  *file_size = data.size;
+  return true;
 }
 
 FileFormat FuzzedParameters::ExtractOutputFormat() {
@@ -221,7 +219,8 @@ void FuzzedParameters::ExtractConfig(EncoderConfig* const config) {
   config->partition_set = (PartitionSet)ExtractUInt32(NUM_PARTITION_SETS - 1);
   config->partition_snapping =
       (config->partition_method == AREA_ENCODE_PARTITIONING ||
-       config->partition_method == SUB_AREA_ENCODE_PARTITIONING)
+       config->partition_method == SUB_AREA_ENCODE_PARTITIONING ||
+       config->partition_method == SPLIT_RECURSE_PARTITIONING)
           ? true
           : ExtractBool();
 

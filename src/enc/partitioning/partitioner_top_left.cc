@@ -89,8 +89,7 @@ WP2Status TopLeftBestPartitioner::GetBestPartition(
       max_num_blocks_left -= best_block.w() * best_block.h();
     }
     assert(best_block.dim() != BLK_LAST);
-    WP2_CHECK_ALLOC_OK(front_mgr.UseSize(best_block.dim(),
-                                         /*ind=*/0u, nullptr,
+    WP2_CHECK_ALLOC_OK(front_mgr.UseSize(best_block.dim(), nullptr,
                                          /*use_block=*/true));
     WP2_CHECK_STATUS(score_func_->Use(best_block));
     // Cover the whole block.

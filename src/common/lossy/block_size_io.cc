@@ -74,6 +74,43 @@ STATIC_ASSERT_ARRAY_SIZE(kPartSetsStats, NUM_PARTITION_SETS);
 
 constexpr uint8_t PartitionSetStats::kInvalidSlot;
 
+static BlockSize GetExactBlockSize(PartitionSet set, uint32_t w, uint32_t h) {
+  const BlockSize s = GetBlockSize(std::max(1u, w), std::max(1u, h));
+  if (IsBlockSizeInSet(set, s) && BlockWidth[s] == w && BlockHeight[s] == h) {
+    return s;
+  }
+  return BLK_LAST;
+}
+
+static void GetSplitPatterns(PartitionSet set, BlockSize size,
+                             SplitPattern p[kMaxSplitPatterns],
+                             uint32_t* num_patterns) {
+  *num_patterns = 0;
+  if (IsBlockSizeInSet(set, size)) p[(*num_patterns)++] = {1, {size}};
+
+  const uint32_t width = BlockWidth[size], height = BlockHeight[size];
+  // The BlockSize variable names below are based on a 4x4 block reference.
+  const BlockSize b2x2 = GetExactBlockSize(set, width / 2, height / 2);
+  const BlockSize b4x1 = GetExactBlockSize(set, width, height / 4);
+  const BlockSize b1x4 = GetExactBlockSize(set, width / 4, height);
+  const BlockSize b4x2 = GetExactBlockSize(set, width, height / 2);
+  const BlockSize b2x4 = GetExactBlockSize(set, width / 2, height);
+
+  if (b2x2 != BLK_LAST) p[(*num_patterns)++] = {4, {b2x2, b2x2, b2x2, b2x2}};
+  if (b4x1 != BLK_LAST) p[(*num_patterns)++] = {4, {b4x1, b4x1, b4x1, b4x1}};
+  if (b1x4 != BLK_LAST) p[(*num_patterns)++] = {4, {b1x4, b1x4, b1x4, b1x4}};
+  if (b4x2 != BLK_LAST) {
+    p[(*num_patterns)++] = {2, {b4x2, b4x2}};
+    if (b2x2 != BLK_LAST) p[(*num_patterns)++] = {3, {b4x2, b2x2, b2x2}};
+    if (b2x2 != BLK_LAST) p[(*num_patterns)++] = {3, {b2x2, b2x2, b4x2}};
+  }
+  if (b2x4 != BLK_LAST) {
+    p[(*num_patterns)++] = {2, {b2x4, b2x4}};
+    if (b2x2 != BLK_LAST) p[(*num_patterns)++] = {3, {b2x4, b2x2, b2x2}};
+    if (b2x2 != BLK_LAST) p[(*num_patterns)++] = {3, {b2x2, b2x4, b2x2}};
+  }
+}
+
 PartitionSetStats::PartitionSetStats(PartitionSet partition_set,
                                      const BlockSize blocks[])
     : partition_set_(partition_set), num_unique_bounds_(0) {
@@ -91,6 +128,8 @@ PartitionSetStats::PartitionSetStats(PartitionSet partition_set,
         max_width = std::max(max_width, BlockWidth[blocks[i]]);
         max_height = std::max(max_height, BlockHeight[blocks[i]]);
       }
+      GetSplitPatterns(partition_set, bounds, split_patterns_[bounds],
+                       &num_split_patterns_[bounds]);
     }
     // For a given bounding BlockSize, 'smallest_bounds_' contains the smallest
     // BlockSize at least as wide and tall as each BlockSize belonging to the
@@ -115,7 +154,10 @@ PartitionSetStats::PartitionSetStats(PartitionSet partition_set,
   std::fill(unique_bounds_ + num_unique_bounds_, unique_bounds_ + BLK_LAST,
             BLK_LAST);
   used_trfs_ = 0u;
+  std::fill(block_index_, block_index_ + BLK_LAST, BLK_LAST);
   for (uint32_t i = 0; blocks[i] != BLK_LAST; ++i) {
+    block_index_[blocks[i]] = i;
+
     const uint32_t trf = (uint32_t)blocks[i];
     const uint32_t trf1 = kFullDim[trf];
     const uint32_t trf2 = kHalfDim[trf];
@@ -167,6 +209,15 @@ BlockSize GetUniqueBounds(PartitionSet set, uint32_t index) {
   return kPartSetsStats[set].unique_bounds_[index];
 }
 
+uint32_t GetNumSplitPatterns(PartitionSet set, BlockSize size) {
+  assert(set < NUM_PARTITION_SETS);
+  return kPartSetsStats[set].num_split_patterns_[size];
+}
+
+const SplitPattern* GetSplitPatterns(PartitionSet set, BlockSize size) {
+  return kPartSetsStats[set].split_patterns_[size];
+}
+
 //------------------------------------------------------------------------------
 
 void WriteBlockSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim,
@@ -186,10 +237,35 @@ BlockSize ReadBlockSize(const FrontMgrDoubleOrderBase& mgr,
   const BlockSize bounds =
       stats.smallest_bounds_[mgr.GetMaxPossibleBlock().dim()];
   const uint32_t cluster = stats.unique_bounds_index_[bounds];
-  const uint32_t i = sr->Read(kSymbolBlockSize, cluster, "block_size", nullptr);
+  const uint32_t i = sr->Read(kSymbolBlockSize, cluster, "block_size");
   const BlockSize dim = stats.blocks_[bounds][i];
   assert(dim != BLK_LAST);
   return dim;
+}
+
+//------------------------------------------------------------------------------
+
+void WriteBlockSplit(const SplitIteratorBase& it, uint32_t split_idx,
+                     SymbolManager* const sm, ANSEncBase* const enc) {
+  assert(it.CurrentBlock().splittable);
+  const PartitionSetStats& stats = kPartSetsStats[it.partition_set()];
+  const uint32_t cluster = stats.block_index_[it.CurrentBlock().block.dim()];
+  const uint32_t max = it.NumSplitPatterns() - 1;
+  assert(split_idx <= max);
+  sm->Process(kSymbolBlockSize, cluster, split_idx, max, "block_split", enc);
+}
+
+WP2Status ReadBlockSplit(const SplitIteratorBase& it, SymbolReader* const sr,
+                         uint32_t* const split_idx) {
+  assert(it.CurrentBlock().splittable);
+  const PartitionSetStats& stats = kPartSetsStats[it.partition_set()];
+  const uint32_t cluster = stats.block_index_[it.CurrentBlock().block.dim()];
+  const uint32_t max = it.NumSplitPatterns() - 1;
+  int32_t read_value;
+  WP2_CHECK_STATUS(
+      sr->TryRead(kSymbolBlockSize, cluster, max, "block_split", &read_value));
+  *split_idx = read_value;
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------

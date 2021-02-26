@@ -94,7 +94,15 @@ bool ANSCountsQuantize(bool do_expand, uint32_t max_freq, uint32_t size,
       out[c] = 0;
     }
   }
-  if (cost != nullptr) *cost += sum * log2(sum_q);
+  if (cost != nullptr) {
+    const float cost_sum = 0.f - sum * log2(sum_q);
+    if (*cost == cost_sum) {
+      // Remove rounding errors when only one count is non-zero.
+      *cost = 0.f;
+    } else {
+      *cost -= cost_sum;
+    }
+  }
   return true;
 }
 
@@ -110,9 +118,15 @@ float ANSCountsQuantizedCost(const uint32_t* counts,
     sum += counts[i];
     sum_q += distribution[i];
   }
-  if (sum_q > 0) cost += sum * log2(sum_q);
-  // Remove rounding errors when only one count is non-zero.
-  if (cost < 0.f) cost = 0.f;
+  if (sum_q > 0) {
+    const float cost_sum = 0.f - sum * log2(sum_q);
+    if (cost == cost_sum) {
+      // Remove rounding errors when only one count is non-zero.
+      cost = 0.f;
+    } else {
+      cost -= cost_sum;
+    }
+  }
   return cost;
 }
 

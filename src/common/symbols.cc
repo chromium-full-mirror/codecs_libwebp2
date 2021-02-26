@@ -209,7 +209,8 @@ const SymbolsInfo::ClusterInfo& SymbolsInfo::GetClusterInfo(
 
 WP2Status SymbolsInfo::InitLossy(uint32_t num_segments,
                                  PartitionSet partition_set, bool has_alpha,
-                                 uint32_t quality_hint, bool use_aom_coeffs) {
+                                 uint32_t quality_hint, bool use_aom_coeffs,
+                                 bool use_splits) {
   const uint32_t num_channels = (has_alpha ? 4 : 3);
 
   SetInfo(kSymbolModeY, /*min=*/0, /*max=*/kYPredModeNum - 1,
@@ -272,17 +273,30 @@ WP2Status SymbolsInfo::InitLossy(uint32_t num_segments,
           /*num_clusters=*/3 * num_segments,
           StorageMethod::kAdaptiveWithAutoSpeed);
 
-  const uint32_t max_num_sizes = GetNumBlockSizes(partition_set, BLK_32x32);
-  SetInfo(kSymbolBlockSize, /*min=*/0, /*max=*/max_num_sizes-1,
-          /*num_clusters=*/GetNumUniqueBounds(partition_set),
-          (max_num_sizes > APROBA_MAX_SYMBOL) ? StorageMethod::kAuto
-                                              : StorageMethod::kAdaptiveSym);
-  for (uint32_t i = 0; i < GetNumUniqueBounds(partition_set); ++i) {
-    const BlockSize bounds = GetUniqueBounds(partition_set, i);
-    const uint32_t num_sizes = GetNumBlockSizes(partition_set, bounds);
-    assert(num_sizes <= max_num_sizes);
-    WP2_CHECK_STATUS(SetMinMax(kSymbolBlockSize, /*cluster=*/i,
-                               /*min=*/0, /*max=*/num_sizes - 1));
+  if (use_splits) {
+    SetInfo(kSymbolBlockSize, /*min=*/0, /*max=*/kMaxSplitPatterns - 1,
+            /*num_clusters=*/GetNumBlockSizes(partition_set),
+            StorageMethod::kAdaptiveSym);
+    const BlockSize* const sizes = GetBlockSizes(partition_set);
+    uint32_t i = 0;
+    for (const BlockSize* size = sizes; *size != BLK_LAST; ++size, ++i) {
+      WP2_CHECK_STATUS(SetMinMax(
+          kSymbolBlockSize, /*cluster=*/i,
+          /*min=*/0, /*max=*/GetNumSplitPatterns(partition_set, *size) - 1));
+    }
+  } else {
+    const uint32_t max_num_sizes = GetNumBlockSizes(partition_set, BLK_32x32);
+    SetInfo(kSymbolBlockSize, /*min=*/0, /*max=*/max_num_sizes - 1,
+            /*num_clusters=*/GetNumUniqueBounds(partition_set),
+            (max_num_sizes > APROBA_MAX_SYMBOL) ? StorageMethod::kAuto
+                                                : StorageMethod::kAdaptiveSym);
+    for (uint32_t i = 0; i < GetNumUniqueBounds(partition_set); ++i) {
+      const BlockSize bounds = GetUniqueBounds(partition_set, i);
+      const uint32_t num_sizes = GetNumBlockSizes(partition_set, bounds);
+      assert(num_sizes <= max_num_sizes);
+      WP2_CHECK_STATUS(SetMinMax(kSymbolBlockSize, /*cluster=*/i,
+                                 /*min=*/0, /*max=*/num_sizes - 1));
+    }
   }
 
   SetInfo(kSymbolResidualUseBounds, /*min=*/0, /*max=*/1,
@@ -490,20 +504,25 @@ bool LosslessSymbolsInfo::IsLabelImage(const SymbolsInfo& info) {
 
 // Updates the range of channel 'channel1' by taking the maximum
 // addition/subtraction with channel 'channel2' up to a multiplicative
-// coefficient 'coeff'.
+// coefficient 'coeff' with kColorTransformBits bits of fixed precision (like
+// color transforms).
 static inline void UpdateMinMax(uint32_t channel1, uint32_t channel2,
-                                int32_t coeff, int32_t num_bits,
+                                int16_t coeff, int32_t num_bits, bool do_clamp,
                                 int16_t* const minima, int16_t* const maxima) {
-  const int16_t delta =
-      std::max(std::abs(minima[channel2]), std::abs(maxima[channel2]));
-  const int32_t abs_value_max =
+  const int16_t delta = WP2::RightShiftRound(
+      coeff * std::max(std::abs(minima[channel2]), std::abs(maxima[channel2])),
+      kColorTransformBits);
+  minima[channel1] -= delta;
+  maxima[channel1] += delta;
+  if (!do_clamp) return;
+  const int16_t abs_value_max =
       (num_bits == 8) ? kMaxAbsResidual8 : kMaxAbsResidual10;
   static_assert(2 * kMaxAbsResidual8 + 1 <= WP2::kANSMaxRange,
                 "invalid kMaxAbsResidual8 value");
   static_assert(2 * kMaxAbsResidual10 + 1 <= WP2::kANSMaxRange,
                 "invalid kMaxAbsResidual10 value");
-  minima[channel1] = std::max(minima[channel1] - coeff * delta, -abs_value_max);
-  maxima[channel1] = std::min(maxima[channel1] + coeff * delta, abs_value_max);
+  minima[channel1] = std::max(minima[channel1], (int16_t)-abs_value_max);
+  maxima[channel1] = std::min(maxima[channel1], abs_value_max);
 }
 
 // The written logic is good but it is overriden by setting bounds to [0,255]
@@ -523,6 +542,8 @@ void GetARGBRanges(const TransformType* transforms, WP2SampleFormat format,
     minima_range[c] = 0;
     maxima_range[c] = (1 << num_bits_non_alpha) - 1;
   }
+  constexpr int16_t kCoeffOne = (1 << kColorTransformBits);
+  bool do_clamp = true;
   for (uint32_t i = 0; i < num_transforms; ++i) {
     if (transforms[i] == TransformType::kNum) break;
     switch (transforms[i]) {
@@ -531,30 +552,48 @@ void GetARGBRanges(const TransformType* transforms, WP2SampleFormat format,
         // black predictor can give results out of those bounds.
         // The ranges are updated to be the ranges of the residuals.
         for (uint32_t c = 0; c < 4; ++c) {
-          UpdateMinMax(/*channel1=*/c, /*channel2=*/c, /*coeff=*/1,
-                       (c == 0) ? num_bits_alpha : num_bits_non_alpha,
+          UpdateMinMax(/*channel1=*/c, /*channel2=*/c, /*coeff=*/kCoeffOne,
+                       (c == 0) ? num_bits_alpha : num_bits_non_alpha, do_clamp,
                        minima_range, maxima_range);
         }
         break;
       case TransformType::kCrossColor:
-        // First, red is modified by green.
-        UpdateMinMax(/*channel1=*/1, /*channel2=*/2, /*coeff=*/2,
-                     num_bits_non_alpha, minima_range, maxima_range);
-        // Then blue by green and red. 4 is because we multiply by a value at
-        // most kGreenToBlueMax or kGreenToRedMax (128 for now) and shift by 5.
-        UpdateMinMax(/*channel1=*/3, /*channel2=*/2, /*coeff=*/4,
-                     num_bits_non_alpha, minima_range, maxima_range);
-        UpdateMinMax(/*channel1=*/3, /*channel2=*/1, /*coeff=*/4,
-                     num_bits_non_alpha, minima_range, maxima_range);
+        // The color transforms add another rounded(channel * coeff >>
+        // kColorTransformBits). First, red is modified by green.
+        UpdateMinMax(/*channel1=*/1, /*channel2=*/2,
+                     /*coeff=*/kGreenToRedMax, num_bits_non_alpha, do_clamp,
+                     minima_range, maxima_range);
+        // Then blue by green and red.
+        UpdateMinMax(/*channel1=*/3, /*channel2=*/2,
+                     /*coeff=*/kGreenToBlueMax, num_bits_non_alpha, do_clamp,
+                     minima_range, maxima_range);
+        UpdateMinMax(/*channel1=*/3, /*channel2=*/1,
+                     /*coeff=*/kRedToBlueMax, num_bits_non_alpha, do_clamp,
+                     minima_range, maxima_range);
+        break;
+      case TransformType::kYCoCgR:
+        assert(i == 0);
+        // Y range is the same as the original RGB.
+        minima_range[1] = 0;
+        maxima_range[1] = (1 << num_bits_non_alpha) - 1;
+        // Switching to YCoCgR adds one bit to chroma.
+        for (uint32_t c = 2; c < 4; ++c) {
+          maxima_range[c] = (1 << num_bits_non_alpha) - 1;
+          minima_range[c] = -maxima_range[c];
+        }
         break;
       case TransformType::kSubtractGreen:
         // green is subtracted from red and blue
-        UpdateMinMax(/*channel1=*/1, /*channel2=*/2, /*coeff=*/1,
-                     num_bits_non_alpha, minima_range, maxima_range);
-        UpdateMinMax(/*channel1=*/3, /*channel2=*/2, /*coeff=*/1,
-                     num_bits_non_alpha, minima_range, maxima_range);
+        UpdateMinMax(/*channel1=*/1, /*channel2=*/2, /*coeff=*/kCoeffOne,
+                     num_bits_non_alpha, do_clamp, minima_range, maxima_range);
+        UpdateMinMax(/*channel1=*/3, /*channel2=*/2, /*coeff=*/kCoeffOne,
+                     num_bits_non_alpha, do_clamp, minima_range, maxima_range);
         break;
       case TransformType::kColorIndexing:
+        assert(i == 0);
+        // With color indexing, values can go up to the number of colors so do
+        // not clamp anymore after that.
+        do_clamp = false;
         // A is set to its maximum value.
         minima_range[0] = maxima_range[0] = WP2::kAlphaMax;
         // R and B are set to 0.

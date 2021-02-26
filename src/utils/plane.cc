@@ -24,6 +24,7 @@
 
 #include "src/dsp/dsp.h"
 #include "src/utils/csp.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -335,7 +336,7 @@ WP2Status YUVPlane::Import(const ArgbBuffer& rgb, bool import_alpha,
     for (size_t x = 0; x < rgb.width(); ++x, rgb_row += x_stride) {
       // If import_alpha is false, alpha should always be kAlphaMax.
       assert(import_alpha || rgb_row[0] == kAlphaMax);
-      uint8_t r = rgb_row[1], g = rgb_row[2], b = rgb_row[3];
+      int32_t r = rgb_row[1], g = rgb_row[2], b = rgb_row[3];
       const uint8_t a = rgb_row[0];
       if (premultiply && a != kAlphaMax) {
         r = WP2::DivBy255(r * a);
@@ -424,20 +425,22 @@ WP2Status YUVPlane::Export(const CSPTransform& transform, bool resize_if_needed,
   }
   // we only handle XRGB32 or ARGB32 for now
   WP2_CHECK_OK(WP2FormatBpp(dst->format()) == 4, WP2_STATUS_INVALID_COLORSPACE);
-  const bool has_alpha = HasAlpha();
   static_assert(kRgbBits == 8, "YUVPlane::Export() handles only 8b RGB");
   WP2CSPConverterInit();
-  WP2YUVToArgbFunc cvrt_func =
-      has_alpha ? (dst->format() == WP2_Argb_32 ? WP2YUVToArgb : WP2YUVToARGB)
-                : WP2YUVToXRGB;
-  for (size_t y = 0; y < dst->height(); ++y) {
-    const int16_t* const y_row = Y.Row(y);
-    const int16_t* const u_row = U.Row(y);
-    const int16_t* const v_row = V.Row(y);
-    const int16_t* const a_row = has_alpha ? A.Row(y) : nullptr;
-    uint8_t* const argb = dst->GetRow8(y);
-    cvrt_func(y_row, u_row, v_row, a_row, transform.GetRgbAverage(),
-              transform.GetYuvToRgbMatrix(), argb, dst->width());
+  if (HasAlpha()) {
+    WP2YUVAToArgb32Func cvrt_func =
+        (WP2IsPremultiplied(dst->format())) ? WP2YUVAToArgb32 : WP2YUVAToARGB32;
+    for (size_t y = 0; y < dst->height(); ++y) {
+      cvrt_func(Y.Row(y), U.Row(y), V.Row(y), A.Row(y),
+                transform.GetRgbAverage(), transform.GetYuvToRgbMatrix(),
+                dst->GetRow8(y), dst->width());
+    }
+  } else {
+    for (size_t y = 0; y < dst->height(); ++y) {
+      WP2YUVToArgb32(Y.Row(y), U.Row(y), V.Row(y), transform.GetRgbAverage(),
+                     transform.GetYuvToRgbMatrix(), dst->GetRow8(y),
+                     dst->width());
+    }
   }
   return WP2_STATUS_OK;
 }

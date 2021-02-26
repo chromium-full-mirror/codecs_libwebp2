@@ -14,6 +14,9 @@
 
 // BlockSize tests.
 
+#include <set>
+
+#include "examples/example_utils.h"
 #include "include/helpers.h"
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
@@ -70,6 +73,34 @@ TEST(BlockSizeTest, PartitionSetStats) {
       ASSERT_LT(stats.unique_bounds_index_[bounds], stats.num_unique_bounds_);
     }
     ASSERT_EQ(num_unique_bounds, stats.num_unique_bounds_);
+  }
+}
+
+//------------------------------------------------------------------------------
+
+TEST(BlockSizeTest, GetSplitPatterns) {
+  for (uint32_t i_set = 0; i_set < NUM_PARTITION_SETS; ++i_set) {
+    SCOPED_TRACE(SPrintf("PartitionSet %s", kPartitionSetString[i_set]));
+    const PartitionSet partition_set = (PartitionSet)i_set;
+    std::set<BlockSize> size_set;
+    for (const BlockSize* size = GetBlockSizes(partition_set);
+         *size != BLK_LAST; ++size) {
+      size_set.insert(*size);
+    }
+
+    for (BlockSize size : kAllBlockSizes) {
+      const uint32_t num_patterns = GetNumSplitPatterns(partition_set, size);
+      if (size_set.find(size) != size_set.end()) {
+        EXPECT_GT(num_patterns, 0u);
+      }
+      for (uint32_t i = 0; i < num_patterns; ++i) {
+        const SplitPattern& pattern = GetSplitPatterns(partition_set, size)[i];
+        ASSERT_GT(pattern.num_blocks, 0u);
+        for (uint32_t j = 0; j < pattern.num_blocks; ++j) {
+          EXPECT_TRUE(size_set.find(pattern.block_sizes[j]) != size_set.end());
+        }
+      }
+    }
   }
 }
 

@@ -309,7 +309,8 @@ class SyntaxWriter : public WP2Allocable {
                  const GlobalParams& gparams, const YUVPlane& yuv,
                  ChromaSubsampling chroma_subsampling,
                  const Rectangle& tile_rect, uint32_t num_blocks,
-                 bool use_aom_coeffs, const ProgressRange& alpha_progress);
+                 bool use_aom_coeffs, bool use_splits,
+                 const ProgressRange& alpha_progress);
   // Deep copy. 'dicts' must be copied beforehand.
   WP2Status CopyFrom(const SyntaxWriter& other, ANSDictionaries* const dicts);
   // Initializes some data based on results from the previous pass. To be called
@@ -344,6 +345,8 @@ class SyntaxWriter : public WP2Allocable {
   WP2Status WriteBlocks(const Vector<CodedBlock>& cblocks,
                         const Vector_u16& size_order_indices,
                         FrontMgrDoubleOrderBase* const mgr, ANSEnc* const enc);
+  WP2Status WriteBlocksUseSplits(const Vector<CodedBlock>& cblocks,
+                                 const Vector_u32& splits, ANSEnc* const enc);
 
   SymbolWriter* symbol_writer() { return &symbol_writer_; }
   const SymbolRecorder& symbol_recorder() const { return symbol_recorder_; }
@@ -386,6 +389,7 @@ class SyntaxWriter : public WP2Allocable {
   Rectangle tile_rect_;  // In pixels, not padded.
 
   ChromaSubsampling chroma_subsampling_;
+  bool use_splits_;
 
   const GlobalParams* gparams_;
 

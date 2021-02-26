@@ -75,9 +75,11 @@ class SymbolsInfo {
   //               actually need a copy.
   WP2Status CopyFrom(const SymbolsInfo& other);
 
+  // 'use_splits' is true if block geometry is encoded through splits, false if
+  // encoded through block sizes.
   WP2Status InitLossy(uint32_t num_segments, PartitionSet partition_set,
                       bool has_alpha, uint32_t quality_hint,
-                      bool use_aom_coeffs);
+                      bool use_aom_coeffs, bool use_splits);
 
   // Whether a symbol is used at all.
   inline bool IsUnused(uint32_t sym) const {
@@ -517,7 +519,7 @@ enum Symbol {
   kSymbolEncodingMethodA,
   // Slope ('a' in 'chroma = a * luma + b') for chroma-from-luma prediction.
   kSymbolCflSlope,
-  // Block size. One cluster per bounding BlockSize.
+  // Block size or block split. One cluster per bounding BlockSize.
   kSymbolBlockSize,
 
   // ------------------

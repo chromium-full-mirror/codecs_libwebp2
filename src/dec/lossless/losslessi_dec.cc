@@ -728,6 +728,7 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       break;
     }
     case TransformType::kSubtractGreen:
+    case TransformType::kYCoCgR:
       break;
     default:
       assert(false);    // can't happen

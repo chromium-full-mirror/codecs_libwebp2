@@ -141,9 +141,22 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   VectorNoCtor<double> size_bits;
 #endif
 
-  FrontMgrDefault mgr;
-  WP2_CHECK_STATUS(mgr.Init(reader.GetPartitionSet(), reader.GetPartitionSnap(),
-                            tile->rect.width, tile->rect.height));
+  FrontMgrBase* mgr;
+  FrontMgrBase mgr_simple;           // Simple FrontMgr when use_splits is true.
+  FrontMgrDefault mgr_double_order;  // Full FrontMgr when use_splits is false.
+
+  SplitIteratorDefault it;
+  if (reader.use_splits()) {
+    WP2_CHECK_STATUS(
+        it.Init(reader.partition_set(), tile->rect.width, tile->rect.height));
+    WP2_CHECK_STATUS(mgr_simple.InitBase(tile->rect.width, tile->rect.height));
+    mgr = &mgr_simple;
+  } else {
+    WP2_CHECK_STATUS(mgr_double_order.Init(
+        reader.partition_set(), reader.partition_snapping(), tile->rect.width,
+        tile->rect.height));
+    mgr = &mgr_double_order;
+  }
 
   CodedBlockBase cb;
   cb.SetRange(gparams.transf_.GetYUVMin(), gparams.transf_.GetYUVMax());
@@ -151,31 +164,51 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   ContextCache context_cache;
   cb.SetContextCache(&context_cache);
 
-  while ((dec->GetStatus() == WP2_STATUS_OK) && !mgr.Done()) {
-    // Read dimensions until we get a full context.
-    FrontMgrDoubleOrderBase::Info info;
-    while (true) {
-      if (mgr.UseReady(&info)) break;
-        // Read block sizes until a final one can be used.
+  uint32_t block_idx = 0;
+  while ((dec->GetStatus() == WP2_STATUS_OK) && !mgr->Done()) {
+    Block block;
+    if (reader.use_splits()) {
+      // Read splits until we get an unsplit block.
+      while (true) {
+        if (!it.CurrentBlock().splittable) {
+          block = it.CurrentBlock().block;
+          mgr->Use(block);
+          it.NextBlock();
+          break;
+        }
 #if defined(WP2_BITTRACE)
-      const double prev_bit_count = dec->GetBitCount();
+        const double prev_bit_count = dec->GetBitCount();
 #endif
-      const BlockSize dim = reader.GetBlockSize(mgr);
-      Block block;
+        uint32_t split_idx;
+        WP2_CHECK_STATUS(reader.GetBlockSplit(it, &split_idx));
+        it.SplitCurrentBlock(split_idx);
 #if defined(WP2_BITTRACE)
-      const uint32_t block_ind = size_bits.size();
-      WP2_CHECK_ALLOC_OK(mgr.UseSize(dim, block_ind, &block));
-      const double num_bits = dec->GetBitCount() - prev_bit_count;
-      WP2_CHECK_ALLOC_OK(size_bits.push_back(num_bits));
-#else
-      WP2_CHECK_ALLOC_OK(mgr.UseSize(dim, /*ind=*/0u, &block));
+        const double num_bits = dec->GetBitCount() - prev_bit_count;
+        WP2_CHECK_ALLOC_OK(size_bits.resize(block_idx + 1));
+        size_bits[block_idx] += num_bits;
 #endif
+      }
+    } else {
+      // Read dimensions until we get a full context.
+      while (true) {
+        if (mgr_double_order.UseReady(&block)) break;
+          // Read block sizes until a final one can be used.
+#if defined(WP2_BITTRACE)
+        const double prev_bit_count = dec->GetBitCount();
+#endif
+        const BlockSize dim = reader.GetBlockSize(mgr_double_order);
+        WP2_CHECK_ALLOC_OK(mgr_double_order.UseSize(dim, &block));
+#if defined(WP2_BITTRACE)
+        const double num_bits = dec->GetBitCount() - prev_bit_count;
+        WP2_CHECK_ALLOC_OK(size_bits.push_back(num_bits));
+#endif
+      }
     }
 
     // When reaching the end of a line, it is certain that all rows above
     // current block are decoded.
-    if (info.block.x_pix() + info.block.w_pix() == tile->yuv_output.Y.w_) {
-      const uint32_t num_decoded_yuv_rows = info.block.y_pix();
+    if (block.x_pix() + block.w_pix() == tile->yuv_output.Y.w_) {
+      const uint32_t num_decoded_yuv_rows = block.y_pix();
       const uint32_t num_decoded_rows = filter.Apply(num_decoded_yuv_rows);
       if (num_decoded_rows > tile->num_decoded_rows) {
         WP2_CHECK_STATUS(tile->row_progress.AdvanceBy(num_decoded_rows -
@@ -184,7 +217,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
       }
     }
 
-    cb.SetDim(info.block, mgr);
+    cb.SetDim(block, *mgr);
     assert(cb.y_pix() + cb.h_pix() <= tile->yuv_output.Y.h_);
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
@@ -201,7 +234,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     dec->ClearBitTracesCustom();
     // Register the "block_size" bit trace during the decoding of the associated
     // block.
-    dec->GetBitTracesCustom()["block_size"].bits = size_bits[info.ind];
+    dec->GetBitTracesCustom()["block_size"].bits = size_bits[block_idx];
     dec->GetBitTracesCustom()["block_size"].num_occurrences = 1;
 
     BlockInfo block_info;
@@ -299,7 +332,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
 
 #if defined(WP2_BITTRACE)
     const double num_bits =
-        dec->GetBitCount() - last_bit_pos + size_bits[info.ind];
+        dec->GetBitCount() - last_bit_pos + size_bits[block_idx];
     double bt_sum = 0;
     for (const auto& bt : dec->GetBitTracesCustom()) bt_sum += bt.second.bits;
     // Check that all reads were registered as custom bit traces.
@@ -337,6 +370,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
       WP2_CHECK_STATUS(cb.Draw(config, *tile, gparams, &debug_output));
     }
 #endif  // WP2_REDUCE_BINARY_SIZE
+    ++block_idx;
   }
 
   WP2_CHECK_STATUS(dec->GetStatus());
@@ -389,7 +423,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
 //------------------------------------------------------------------------------
 // Empty neural decoding
 
-#if !defined(WP2_EXPERIMENTAL)
+#if !defined(WP2_NEURAL)
 WP2Status NeuralDecode(ArgbBuffer* const picture, ANSDec* const dec,
                        const BitstreamFeatures& features) {
   (void)picture;
@@ -397,6 +431,6 @@ WP2Status NeuralDecode(ArgbBuffer* const picture, ANSDec* const dec,
   (void)features;
   return WP2_STATUS_UNSUPPORTED_FEATURE;
 }
-#endif  // !WP2_EXPERIMENTAL
+#endif  // !WP2_NEURAL
 
 }  // namespace WP2

@@ -91,7 +91,8 @@ WP2Status AreaScoreFunc::Init(const EncoderConfig& config,
   // Initialize the instances recording only final blocks.
   WP2_CHECK_STATUS(syntax_writer_.Init(
       &dicts_, *config_, *gparams_, yuv, chroma_subsampling, tile_rect,
-      num_block_cols_ * num_block_rows_, use_aom_coeffs, ProgressRange()));
+      num_block_cols_ * num_block_rows_, use_aom_coeffs, /*use_splits=*/false,
+      ProgressRange()));
   WP2_CHECK_STATUS(syntax_writer_.SetInitialSegmentIds());
   WP2_CHECK_STATUS(syntax_writer_.InitPass());
 
@@ -177,7 +178,7 @@ WP2Status AreaScoreFunc::GetAreaGridScore(BlockSize block_size,
     }
     if (!area_.Contains(block.x_pix(), block.y_pix())) break;
     WP2_CHECK_ALLOC_OK(
-        front_mgr.UseSize(block.dim(), 0, nullptr, /*use_block=*/true));
+        front_mgr.UseSize(block.dim(), nullptr, /*use_block=*/true));
 
     WP2_CHECK_ALLOC_OK(partition.resize(partition.size() + 1));
     partition.back().SetDimDefault(block);
@@ -226,9 +227,8 @@ WP2Status AreaScoreFunc::GetDistoRate(Vector<CodedBlock>* const area_blocks,
       cb.SetDim(cb.blk(), front_mgr);
       WP2_CHECK_STATUS(EncodeBlock(front_mgr, &cb, &syntax_writer, &dc_error_u,
                                    &dc_error_v, &buffer_));
-      WP2_CHECK_ALLOC_OK(front_mgr.UseSize(cb.dim(), /*ind=*/0,
-                                           /*block=*/nullptr,
-                                           /*use_block=*/true));
+      WP2_CHECK_ALLOC_OK(
+          front_mgr.UseSize(cb.dim(), /*block=*/nullptr, /*use_block=*/true));
     }
   }
 
@@ -243,9 +243,8 @@ WP2Status AreaScoreFunc::GetDistoRate(Vector<CodedBlock>* const area_blocks,
 
     for (const CodedBlock& cb : *area_blocks) {
       WP2_CHECK_STATUS(WriteBlock(front_mgr, cb, &syntax_writer, &enc));
-      WP2_CHECK_ALLOC_OK(front_mgr.UseSize(cb.dim(), /*ind=*/0,
-                                           /*block=*/nullptr,
-                                           /*use_block=*/true));
+      WP2_CHECK_ALLOC_OK(
+          front_mgr.UseSize(cb.dim(), /*block=*/nullptr, /*use_block=*/true));
     }
     // Exclude the header to prevent early decisions from impacting later areas.
     *rate = (enc.GetCost(dicts) - header_rate) / area_.GetArea();
@@ -295,9 +294,8 @@ WP2Status AreaScoreFunc::Use(const Block& block) {
   // Write the final pixels for future context and rate computation.
   WP2_CHECK_STATUS(EncodeBlock(area_front_mgr_, &cb, &syntax_writer_,
                                &dc_error_u_, &dc_error_v_, &buffer_));
-  WP2_CHECK_ALLOC_OK(area_front_mgr_.UseSize(cb.dim(), /*ind=*/0,
-                                             /*block=*/nullptr,
-                                             /*use_block=*/true));
+  WP2_CHECK_ALLOC_OK(
+      area_front_mgr_.UseSize(cb.dim(), /*block=*/nullptr, /*use_block=*/true));
   if (area_front_mgr_.Done()) {
     // All areas are complete.
     area_ = {};
@@ -453,7 +451,7 @@ WP2Status SubAreaScoreFunc::GetAreaRemainingDefaultPartition(
     while (!front_mgr.Done()) {
       const Block max_block = front_mgr.GetMaxFittingBlock();
       WP2_CHECK_ALLOC_OK(
-          front_mgr.UseSize(max_block.dim(), 0, nullptr, /*use_block=*/true));
+          front_mgr.UseSize(max_block.dim(), nullptr, /*use_block=*/true));
       if (!area_.Contains(max_block.x_pix(), max_block.y_pix())) {
         WP2_CHECK_ALLOC_OK(blocks.push_back(max_block));
       } else {

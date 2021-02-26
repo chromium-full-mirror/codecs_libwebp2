@@ -1604,7 +1604,10 @@ static void ApplyVDebugDiff(const ArgbBuffer& unfiltered_pixels,
   assert(unfiltered_pixels.width() == debug_output->width());
   assert(unfiltered_pixels.height() == debug_output->height());
   const uint32_t num_channels = WP2FormatBpp(debug_output->format());
-  const uint32_t alpha_channel = WP2AlphaChannelIndex(debug_output->format());
+  uint32_t alpha_channel;
+  if (!WP2FormatHasAlpha(debug_output->format(), &alpha_channel)) {
+    alpha_channel = num_channels;
+  }
 
   for (uint32_t y = 0; y < unfiltered_pixels.height(); ++y) {
     for (uint32_t x = 0; x < unfiltered_pixels.width(); ++x) {
@@ -2423,8 +2426,9 @@ WP2Status Decoder::RegisterSymbolForVDebug(
   return WP2_STATUS_OK;
 }
 
-static const char* const kTransformNames[] = {
-    "Predictor", "CrossColor", "SubstractGreen", "ColorIndexing", "Group4"};
+static const char* const kTransformNames[] = {"Predictor",     "CrossColor",
+                                              "YCoCgR",        "SubstractGreen",
+                                              "ColorIndexing", "Group4"};
 STATIC_ASSERT_ARRAY_SIZE(kTransformNames, (uint32_t)TransformType::kNum);
 
 WP2Status Decoder::RegisterUnprocessedRowForVDebug(

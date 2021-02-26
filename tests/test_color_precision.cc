@@ -20,6 +20,8 @@
 
 #include "include/helpers.h"
 #include "src/common/color_precision.h"
+#include "src/dsp/lossless/decl_dsp.h"
+#include "src/dsp/lossless/encl_dsp.h"
 
 namespace WP2 {
 namespace {
@@ -96,6 +98,30 @@ TEST(ColorPrecisionTest, Argb32b_AYCoCg19b) {
     }
   }
   printf("Total error: %.3f\n", total / (256 * 256 * 256.f));
+}
+
+//------------------------------------------------------------------------------
+
+TEST(ColorPrecisionTest, TestYCoCgRRoundTrip) {
+  WP2L::DecLDspInit();
+  WP2L::EncLDspInit();
+  for (uint32_t r = 0; r < (1u << 8); ++r) {
+    for (uint32_t g = 0; g < (1u << 8); ++g) {
+      for (uint32_t b = 0; b < (1u << 8); ++b) {
+        int16_t in[4], tmp[4], out[4];
+        in[0] = tmp[0] = 0;
+        in[1] = tmp[1] = r;
+        in[2] = tmp[2] = g;
+        in[3] = tmp[3] = b;
+        WP2L::RGB2YCoCgR(tmp, 1);
+        WP2L::YCoCgRToRGB(tmp, 1, out);
+        EXPECT_EQ(in[0], out[0]);
+        EXPECT_EQ(in[1], out[1]);
+        EXPECT_EQ(in[2], out[2]);
+        EXPECT_EQ(in[3], out[3]);
+      }
+    }
+  }
 }
 
 //------------------------------------------------------------------------------

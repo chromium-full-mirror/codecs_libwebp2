@@ -57,7 +57,9 @@ if(MSVC)
   set(SIMD_DISABLE_FLAGS)
 else()
   set(SIMD_ENABLE_FLAGS "-msse4.2;-mfpu=neon")
-  set(SIMD_DISABLE_FLAGS "-mno-sse4;")
+  if(NOT ${ANDROID})
+    set(SIMD_DISABLE_FLAGS "-mno-sse4;")  # flag not available on Android
+  endif()
 endif()
 
 if(${ANDROID})

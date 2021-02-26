@@ -19,18 +19,18 @@
 #ifndef WP2_TESTS_INCLUDE_HELPERS_H_
 #define WP2_TESTS_INCLUDE_HELPERS_H_
 
+#include <chrono>  // NOLINT
 #include <cmath>
 #include <iostream>
 #include <random>
 #include <string>
 #include <vector>
-#include <chrono>  // NOLINT
 
 #include "src/common/lossy/block_size.h"
+#include "src/dsp/dsp.h"
+#include "src/utils/plane.h"
 #include "src/utils/random.h"
 #include "src/utils/vector.h"
-#include "src/utils/plane.h"
-#include "src/dsp/dsp.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 

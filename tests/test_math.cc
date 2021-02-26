@@ -222,5 +222,29 @@ TEST(Math, SqrtFloor) {
   }
 }
 
+// Test that DivBy255() is a good enough approximation of DivRound(v, 255).
+TEST(Math, DivBy255) {
+  for (int32_t v = -1024 * 256; v <= 1024 * 256; ++v) {
+    const int32_t error_margin = (std::abs(v) <= 255) ? 0 : 1;
+    ASSERT_NEAR(DivBy255(v), DivRound(v, 255), error_margin) << "v = " << v;
+  }
+  for (uint32_t v = 0; v <= 1024 * 256; ++v) {
+    const int32_t error_margin = (v <= 255) ? 0 : 1;
+    ASSERT_NEAR(DivBy255(v), DivRound(v, 255u), error_margin) << "v = " << v;
+  }
+}
+
+// Test that DivByAlphaDiv() is equal to DivRound(v * 255, a).
+TEST(Math, DivByAlphaDiv) {
+  for (uint32_t a = 1; a <= kAlphaMax; ++a) {
+    for (uint32_t v = 0; v <= 255; ++v) {
+      const uint32_t result =
+          std::min(WP2::DivByAlphaDiv(v, WP2::kAlphaDiv[a]), 255u);
+      const uint32_t expected = std::min(DivRound(v * 255, a), 255u);
+      ASSERT_EQ(result, expected) << "alpha = " << a << ", value = " << v;
+    }
+  }
+}
+
 }  // namespace
 }  // namespace WP2

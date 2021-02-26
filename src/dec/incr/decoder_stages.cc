@@ -437,21 +437,9 @@ void Decoder::DecodeAvailableData() {
         }
 
         if (state_->status == WP2_STATUS_OK) {
-          state_->status =
-              SaveFrameNumBytes(state_->data_source->GetNumDiscardedBytes() +
-                                    state_->data_source->GetNumReadBytes(),
-                                &state_->frames[state_->current_frame_index]);
-        }
-
-        if (state_->status == WP2_STATUS_OK) {
           const uint32_t current_frame_index = state_->current_frame_index;
           const State::InternalFrameFeatures& current_frame_features =
               state_->frames[current_frame_index];
-          if (current_frame_features.info.duration_ms > 0) {  // Regular frame.
-            state_->num_available_final_frames =
-                std::max(state_->num_available_final_frames,
-                         current_frame_features.final_frame_index + 1u);
-          }
 
           if (current_frame_index < state_->discard_frames_before_index) {
             keep_decoding = true;

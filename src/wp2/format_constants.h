@@ -296,7 +296,9 @@ namespace WP2L {
 
 // Maximum number of colors in the palette.
 // TODO(vrabaud) replace with something related to the image size (ratio?).
-static constexpr uint32_t kMaxPaletteSize = 256;
+// We cannot use too big a value because of ANS limitations and this value gives
+// good enough results.
+static constexpr uint32_t kMaxPaletteSize = (1u << 12);
 static constexpr uint32_t kMaxCacheBits = 10;
 // Small palettes are stored verbatim.
 static constexpr uint32_t kSmallPaletteLimit = 3;
@@ -336,15 +338,18 @@ static constexpr uint32_t kTransformBitsMax = 6;
 // Window size to consider the vertical mode in Group4 compression.
 static constexpr uint32_t kGroup4Window = 3;
 
+// Precision of the cross color transform.
+static constexpr uint32_t kColorTransformBits = 5;
 // TODO(vrabaud) Play with those values. kRedToBlueMax could be 128, it is just
 // that the code is computing as far as this value.
 static constexpr uint32_t kRedToBlueMax = 63;
-static constexpr uint32_t kGreenToBlueMax = 128;
-static constexpr uint32_t kGreenToRedMax = 128;
+static constexpr uint32_t kGreenToBlueMax = 127;
+static constexpr uint32_t kGreenToRedMax = 127;
 
 enum class TransformType {
   kPredictor,
   kCrossColor,
+  kYCoCgR,
   kSubtractGreen,
   kColorIndexing,
   kGroup4,

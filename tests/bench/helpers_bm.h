@@ -21,7 +21,6 @@
 #include <cstddef>
 
 #include "benchmark/benchmark.h"
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
 namespace WP2 {

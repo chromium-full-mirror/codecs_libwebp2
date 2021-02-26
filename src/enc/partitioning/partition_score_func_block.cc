@@ -60,7 +60,8 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
   // Initialize the instances recording only final blocks.
   WP2_CHECK_STATUS(syntax_writer_.Init(
       &dicts_, *config_, *gparams_, yuv, chroma_subsampling, tile_rect,
-      num_block_cols_ * num_block_rows_, use_aom_coeffs, ProgressRange()));
+      num_block_cols_ * num_block_rows_, use_aom_coeffs, /*use_splits=*/false,
+      ProgressRange()));
   WP2_CHECK_STATUS(syntax_writer_.SetInitialSegmentIds());
   WP2_CHECK_STATUS(syntax_writer_.InitPass());
 
@@ -137,8 +138,7 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
 
     // Register the blocks in the 'front_mgr_' except the last one.
     if (i + 1 < num_blocks) {
-      if (!front_mgr_.UseSize(block.dim(), /*ind=*/0, &tmp_blk,
-                              /*use_block=*/true)) {
+      if (!front_mgr_.UseSize(block.dim(), &tmp_blk, /*use_block=*/true)) {
         assert(false);
       }
       assert(block == tmp_blk);
@@ -170,9 +170,8 @@ WP2Status BlockScoreFunc::Use(const Block& block) {
   // Write the final pixels for future context and rate computation.
   WP2_CHECK_STATUS(EncodeBlock(front_mgr_, &tmp_cb_, &syntax_writer_,
                                &dc_error_u_, &dc_error_v_, &buffer_));
-  WP2_CHECK_ALLOC_OK(front_mgr_.UseSize(tmp_cb_.dim(),
-                                        /*ind=*/0, /*block=*/nullptr,
-                                        /*use_block=*/true));
+  WP2_CHECK_ALLOC_OK(
+      front_mgr_.UseSize(tmp_cb_.dim(), /*block=*/nullptr, /*use_block=*/true));
   return WP2_STATUS_OK;
 }
 

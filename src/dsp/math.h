@@ -194,10 +194,6 @@ static constexpr uint32_t Pad(uint32_t dim, uint32_t pad) {
   return (dim + pad - 1) & ~(pad - 1);
 }
 
-static constexpr int32_t DivBy255(int32_t x) {
-  return ((x + (x >> 8) + 128) >> 8);  // ~ (x + 127) / 255
-}
-
 // 3x3 matrix multiplication such as 'a * b = c'.
 // Make sure there is no overflow by keeping a margin of 3 bits in 'a' or 'b').
 template <typename TypeA, typename TypeB, typename TypeC>
@@ -252,12 +248,10 @@ static inline uint32_t DivByAlphaDiv(uint32_t x, uint32_t mult) {
   return (x * mult + (1u << 15)) >> 16;
 }
 
-static inline uint32_t AlphaUnMult8b(uint8_t x, uint8_t a) {
-  return DivByAlphaDiv(std::min(x, a), kAlphaDiv[a]);
-}
-
-static inline uint8_t DivBy255(uint32_t v) {
-  return (v + (v >> 8) + 128) >> 8;   // same as (v + 127) / 255
+// Same as (v+127)/255 for v up to 255 and error margin of +-1 up to 1024*256.
+static inline int32_t DivBy255(int32_t v) { return (v + (v >> 8) + 128) >> 8; }
+static inline uint32_t DivBy255(uint32_t v) {
+  return (v + (v >> 8) + 128) >> 8;
 }
 
 // Returns the square root of integer 'v' such as 'r^2 <= v' and '(r+1)^2 > v'.

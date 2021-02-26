@@ -24,6 +24,7 @@
 #include <algorithm>
 
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/utils/utils.h"
 
 namespace WP2L {
@@ -61,7 +62,7 @@ typedef struct {
 } Multipliers;
 
 static inline int32_t ColorTransformDelta(int16_t color_pred, int16_t color) {
-  return (((int32_t)color_pred * color + 16) >> 5);
+  return WP2::RightShiftRound((int32_t)color_pred * color, kColorTransformBits);
 }
 
 //------------------------------------------------------------------------------

@@ -28,6 +28,7 @@
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 #include "tests/fuzz/fuzz_utils.h"
+#include "tests/fuzz/fuzz_utils_temp_file.h"
 #include "tests/include/helpers.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {

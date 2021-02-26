@@ -382,8 +382,6 @@ WP2Status InternalParams::WriteVerbatim(WP2::ANSEncBase* const enc) const {
 //  - a list of values in range [0:value] or [value:channel_max] depending on
 //    is_stored_as_above_
 WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
-  const uint16_t alpha_max = WP2::FormatMax(format_, /*channel=*/0);
-
   // Store the channels one by one.
   for (uint32_t c = has_alpha_ ? 0 : 1; c < num_channels_; ++c) {
     const uint16_t channel_max = WP2::FormatMax(format_, c);
@@ -404,9 +402,7 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
       }
       if (is_stored_as_above_[c][i]) {
         const uint32_t max =
-            (c == 0) ? channel_max
-                     : WP2::DivRound((uint16_t)(channel_max * alpha_value),
-                                     alpha_max);
+            (c == 0) ? channel_max : WP2::DivBy255(channel_max * alpha_value);
         cost_range += WP2Log2(max + 1 - prev_channel);
         assert(prev_channel <= max);
         assert((int)prev_channel + (int)diffs[i] <= (int)channel_max);
@@ -442,9 +438,7 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
         }
         if (is_stored_as_above_[c][i]) {
           const uint32_t max =
-              (c == 0) ? channel_max
-                       : WP2::DivRound((uint16_t)(channel_max * alpha_value),
-                                       alpha_max);
+              (c == 0) ? channel_max : WP2::DivBy255(channel_max * alpha_value);
           enc->PutRValue(diffs[i], (uint32_t)(max + 1 - prev_channel),
                          "store_diff");
           prev_channel += diffs[i];

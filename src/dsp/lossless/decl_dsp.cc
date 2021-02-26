@@ -169,6 +169,23 @@ void PredictorInverseTransform_C(const Transform* const transform,
   }
 }
 
+void YCoCgR2RGB_C(const int16_t* src, uint32_t num_pixels, int16_t* dst) {
+  for (const int16_t* const src_end = src + 4 * num_pixels; src < src_end;
+       src += 4, dst += 4) {
+    const int16_t y = src[1];
+    const int16_t co = src[2];
+    const int16_t cg = src[3];
+    const int16_t tmp = y - (cg / 2);
+    const int16_t tmp_g = cg + tmp;
+    const int16_t tmp_b = tmp - (co / 2);
+    const int16_t tmp_r = tmp_b + co;
+    dst[0] = src[0];
+    dst[1] = tmp_r;
+    dst[2] = tmp_g;
+    dst[3] = tmp_b;
+  }
+}
+
 // Add green to blue and red channels (i.e. perform the inverse transform of
 // 'subtract green').
 void AddGreenToBlueAndRed_C(const int16_t* src, uint32_t num_pixels,
@@ -332,6 +349,9 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
   assert(row_end <= transform->height_);
 
   switch (transform->type_) {
+    case TransformType::kYCoCgR:
+      YCoCgRToRGB(in, (row_end - row_start) * width, out);
+      break;
     case TransformType::kSubtractGreen:
       AddGreenToBlueAndRed(in, (row_end - row_start) * width, out);
       break;
@@ -360,7 +380,8 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
 
 //------------------------------------------------------------------------------
 
-ProcessDecBlueAndRedFunc AddGreenToBlueAndRed;
+SimpleColorSpaceInverseFunc AddGreenToBlueAndRed;
+SimpleColorSpaceInverseFunc YCoCgRToRGB;
 PredictorNonClampedAddSubFunc PredictorsNonClampedAdd[kNumPredictorsNonClamped];
 PredictorClampedAddSubFunc PredictorsClampedAdd[kNumPredictorsClamped];
 
@@ -387,6 +408,7 @@ WP2_TSAN_IGNORE_FUNCTION void DecLDspInit() {
   COPY_PREDICTOR_CLAMPED_ARRAY(Add, Add_C)
 
   AddGreenToBlueAndRed = AddGreenToBlueAndRed_C;
+  YCoCgRToRGB = YCoCgR2RGB_C;
 
   TransformColorInverse = TransformColorInverse_C;
 

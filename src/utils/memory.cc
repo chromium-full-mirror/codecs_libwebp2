@@ -45,32 +45,33 @@ constexpr WP2Allocable::NoThrow WP2Allocable::nothrow;
 //------------------------------------------------------------------------------
 // default WP2MemoryHook implementation
 
-bool WP2MemoryHook::CheckSizeArgumentsOverflow(uint64_t nmemb, size_t size) {
-  const uint64_t total_size = nmemb * size;
-  if (nmemb == 0) return true;
-  if ((uint64_t)size > WP2_MAX_ALLOCABLE_MEMORY / nmemb) return false;
+bool WP2MemoryHook::CheckSizeArgumentsOverflow(uint64_t count, size_t size) {
+  const uint64_t total_size = count * size;
+  if (count == 0) return true;
+  if ((uint64_t)size > WP2_MAX_ALLOCABLE_MEMORY / count) return false;
   if (total_size != (size_t)total_size) return false;
   return true;
 }
 
-void* WP2Malloc(uint64_t nmemb, size_t size) {
-  if (!kMemoryPtr->CheckSizeArgumentsOverflow(nmemb, size)) return nullptr;
-  assert(nmemb * size > 0);
-  void* const ptr = kMemoryPtr->Malloc((size_t)(nmemb * size));
+void* WP2Malloc(uint64_t count, size_t size) {
+  if (!kMemoryPtr->CheckSizeArgumentsOverflow(count, size)) return nullptr;
+  assert(count * size > 0);
+  void* const ptr = kMemoryPtr->Malloc((size_t)(count * size));
   if (ptr == nullptr) return nullptr;
-  if (!kMemoryPtr->Register(ptr, (size_t)(nmemb * size))) {
+  if (!kMemoryPtr->Register(ptr, (size_t)(count * size))) {
     kMemoryPtr->Free(ptr);
     return nullptr;
   }
   return ptr;
 }
 
-void* WP2Calloc(uint64_t nmemb, size_t size) {
-  if (!kMemoryPtr->CheckSizeArgumentsOverflow(nmemb, size)) return nullptr;
-  assert(nmemb * size > 0);
-  void* const ptr = kMemoryPtr->Calloc((size_t)nmemb, size);
+void* WP2Calloc(uint64_t count, size_t size) {
+  if (!kMemoryPtr->CheckSizeArgumentsOverflow(count, size)) return nullptr;
+  assert(count * size > 0);
+  void* const ptr = kMemoryPtr->Calloc((size_t)count, size);
   if (ptr == nullptr) return nullptr;
-  if (!kMemoryPtr->Register(ptr, (size_t)(nmemb * size))) {   // fake fail?
+  if (!kMemoryPtr->Register(ptr, (size_t)(count * size))) {
+    // fake fail?
     kMemoryPtr->Free(ptr);
     return nullptr;
   }

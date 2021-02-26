@@ -92,12 +92,7 @@ class Encoder {
   const WP2::EncoderConfig& config_;  // user configuration and parameters
   const WP2::ArgbBuffer& pic_;        // input picture (tile view)
   bool has_alpha_;  // false if the whole image is opaque (not only this tile)
-  // whether pixels should be encoded premultiplied with the alpha value
-  bool use_premultiplied_ = true;
 
-  // Encoding parameters derived from quality parameter.
-  uint32_t histo_bits_;
-  uint32_t transform_bits_;
   LosslessSymbolsInfo symbols_info_;
 
   Palette palette_;
@@ -118,13 +113,15 @@ class Encoder {
                                       WP2::ANSDictionaries* const dicts,
                                       bool* const is_group4);
   // Implementations of the different transforms.
+  void ApplyYCoCgR();
   void ApplySubtractGreen();
   WP2Status ApplyPredictFilter(const int16_t min_values[4],
                                const int16_t max_values[4],
                                const WP2::ProgressRange& progress,
-                               WP2::ANSEnc* const enc,
+                               uint32_t pred_bits, WP2::ANSEnc* const enc,
                                WP2::ANSDictionaries* const dicts);
   WP2Status ApplyCrossColorFilter(const WP2::ProgressRange& progress,
+                                  uint32_t ccolor_transform_bits,
                                   WP2::ANSEnc* const enc,
                                   WP2::ANSDictionaries* const dicts);
   WP2Status MapImageFromPalette(const CrunchConfig& config);
@@ -228,8 +225,14 @@ struct CrunchConfig {
   uint32_t lz77s_types_to_try_size;
   // Image transforms to apply in order. Each transform is only used once.
   // It is a pointer into the reference list of transform combinations.
-  const TransformType* transforms;
+  const TransformType* transforms = nullptr;
   uint32_t GetNumTransforms() const;
+  // whether pixels should be encoded premultiplied with the alpha value
+  bool use_premultiplied;
+  // Number of bits to subsample the original image dimensions by to get the
+  // histogram and transform image dimensions.
+  uint32_t histo_bits;
+  uint32_t transform_bits;
   // Use a MoveToFrontCache in group4 to signal new colors.
   bool group4_use_move_to_front;
 };

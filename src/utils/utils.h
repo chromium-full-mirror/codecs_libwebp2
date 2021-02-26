@@ -149,10 +149,10 @@ struct WP2MemoryHook {
   virtual void* Calloc(size_t count, size_t size);
   virtual void Free(void *ptr);
 
-  virtual ~WP2MemoryHook() {}
+  virtual ~WP2MemoryHook() = default;
 
-  // returns false in case of size_t overflow of 'nmemb * size' evaluation
-  static bool CheckSizeArgumentsOverflow(uint64_t nmemb, size_t size);
+  // returns false in case of size_t overflow of 'count * size' evaluation
+  static bool CheckSizeArgumentsOverflow(uint64_t count, size_t size);
 };
 
 // Change the global memory hook used by the whole library.
@@ -166,12 +166,12 @@ WP2MemoryHook* WP2SetMemoryHook(WP2MemoryHook* hook);
 //------------------------------------------------------------------------------
 // Memory functions
 
-// Size-checking safe malloc/calloc: verify that the requested size is not too
-// large, or return nullptr.
-// Note that these expect the second argument type to be 'size_t'
-// in order to favor the "calloc(num_foo, sizeof(foo))" pattern.
-WP2_EXTERN void* WP2Malloc(uint64_t num_elements, size_t element_size);
-WP2_EXTERN void* WP2Calloc(uint64_t num_elements, size_t element_size);
+// Size-checking safe malloc/calloc: verify that the requested 'count * size' is
+// not too large, or return nullptr.
+// Note that these expect the second argument type to be 'size_t' in order to
+// favor the "calloc(num_foo, sizeof(foo))" pattern.
+WP2_EXTERN void* WP2Malloc(uint64_t count, size_t size);
+WP2_EXTERN void* WP2Calloc(uint64_t count, size_t size);
 // Releases memory allocated by the functions above or by WP2Decode*().
 WP2_EXTERN void WP2Free(void* ptr);
 

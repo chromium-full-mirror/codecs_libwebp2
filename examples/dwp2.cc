@@ -412,12 +412,12 @@ class ImageDecoder : public WP2::WorkerBase {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+  CHECK_TRUE(WP2CheckVersion(), "Error! Library version mismatch!");
+
   WP2::FileList in_paths;
   bool recursive_input = false;
   DecodingSettings settings = {};
   uint32_t thread_level = 0;
-
-  CHECK_TRUE(WP2CheckVersion(), "Error! Library version mismatch!");
 
   for (int c = 1; c < argc; ++c) {
     bool parse_error = false;

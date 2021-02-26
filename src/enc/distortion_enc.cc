@@ -45,7 +45,7 @@ double GetPSNR(double v, double size, double max) {
   assert(size > 0.);
   v /= size * max * max;
   if (v <= 0.) return kMinDistortion_dB;  // For very small distortion.
-  return std::min(-4.3429448 * std::log(v), kMinDistortion_dB);
+  return std::min(-10 * log10(v), kMinDistortion_dB);
 }
 
 // 'v' is closer to 0 for a higher distortion. 'size' is the number of pixels.
@@ -56,7 +56,7 @@ double GetLogSSIM(double v, double size) {
   assert(size > 0.);
   v = 1. - v / size;
   if (v <= 0.) return kMinDistortion_dB;  // For very small distortion.
-  return std::min(-10.0 * log10(v), kMinDistortion_dB);
+  return std::min(-10 * log10(v), kMinDistortion_dB);
 }
 
 // -----------------------------------------------------------------------------
@@ -206,12 +206,13 @@ double AccumulateCsSSIM(const WP2::ArgbBuffer& a, const WP2::ArgbBuffer& b,
 // MSSSIM tools
 
 static constexpr uint32_t kNumMSSSIMPasses = 5;
-static constexpr float kMSSSIMExponents[kNumMSSSIMPasses] = {
-  // Simoncelli & al: https://ece.uwaterloo.ca/~z70wang/publications/msssim.pdf
-  //    original: 0.0448f, 0.2856f, 0.3001f, 0.2363f, 0.13333f
-  // Modified exponents that weight more the 1rst layer, and are more regular:
-  0.35f, 0.23f, 0.19f, 0.15f, 0.08f
-};
+static constexpr float kMSSSIMExponentsOriginal[kNumMSSSIMPasses] = {
+    // Simoncelli & al:
+    // https://ece.uwaterloo.ca/~z70wang/publications/msssim.pdf
+    0.0448f, 0.2856f, 0.3001f, 0.2363f, 0.13333f};
+static constexpr float kMSSSIMExponentsCustom[kNumMSSSIMPasses] = {
+    // Modified exponents that weight more the 1rst layer, and are more regular:
+    0.35f, 0.23f, 0.19f, 0.15f, 0.08f};
 
 //------------------------------------------------------------------------------
 // local-min distortion
@@ -491,7 +492,7 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
       result[c] = (float)GetLogSSIM(disto, pix_size);
     }
     result[4] = (float)GetLogSSIM(total_distortion, pix_channel_size);
-  } else if (metric_type == MSSSIM) {
+  } else if (metric_type == MSSSIM || metric_type == MSSSIM_ORIGINAL) {
     assert(WP2FormatBpc(ref.format()) == 1);  // not supported yet
     WP2SSIMInit();
     // working copies, to be down-scaled
@@ -499,11 +500,13 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     WP2_CHECK_STATUS(buf1.CopyFrom(ref));
     WP2_CHECK_STATUS(buf2.CopyFrom(*this));
     double acc[4] = {1., 1., 1., 1.};
+    const float* exponents = (metric_type == MSSSIM) ? kMSSSIMExponentsCustom
+                                                     : kMSSSIMExponentsOriginal;
     for (uint32_t pass = 0; pass < kNumMSSSIMPasses - 1; ++pass) {
       const double norm = 1. / (buf1.width() * buf1.height());
       for (uint32_t c = 0; c < 4; ++c) {
         const double sum = norm * AccumulateCsSSIM(buf1, buf2, c);
-        acc[c] *= pow(sum, kMSSSIMExponents[pass]);
+        acc[c] *= pow(sum, exponents[pass]);
       }
       buf1.SimpleHalfDownsample();
       buf2.SimpleHalfDownsample();
@@ -512,7 +515,7 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     for (uint32_t c = 0; c < 4; ++c) {
       const double norm = 1. / (buf1.width() * buf1.height());
       const double sum = norm * AccumulateSSIM(buf1, buf2, c);
-      acc[c] *= pow(sum, kMSSSIMExponents[kNumMSSSIMPasses - 1]);
+      acc[c] *= pow(sum, exponents[kNumMSSSIMPasses - 1]);
       if (c > 0 || include_alpha) total += acc[c];
       result[c] = GetLogSSIM(acc[c], 1.);
     }

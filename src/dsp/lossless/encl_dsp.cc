@@ -52,6 +52,21 @@ float CombinedShannonEntropy_C(const uint32_t* X, const uint32_t* Y,
 //------------------------------------------------------------------------------
 // Color transforms.
 
+void RGB2YCoCgR_C(int16_t* argb_data, uint32_t num_pixels) {
+  for (uint32_t i = 0; i < num_pixels; ++i) {
+    const int16_t r = argb_data[4 * i + 1];
+    const int16_t g = argb_data[4 * i + 2];
+    const int16_t b = argb_data[4 * i + 3];
+    const int16_t tmp_co = r - b;
+    const int16_t tmp = (b + (tmp_co / 2));
+    const int16_t tmp_cg = g - tmp;
+    const int16_t tmp_y = tmp + (tmp_cg / 2);
+    argb_data[4 * i + 1] = tmp_y;
+    argb_data[4 * i + 2] = tmp_co;
+    argb_data[4 * i + 3] = tmp_cg;
+  }
+}
+
 void SubtractGreenFromBlueAndRed_C(int16_t* argb_data, uint32_t num_pixels) {
   for (uint32_t i = 0; i < num_pixels; ++i) {
     const int16_t green = argb_data[4 * i + 2];
@@ -414,7 +429,8 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInitSSE() {
 
 namespace WP2L {
 
-ProcessEncBlueAndRedFunc SubtractGreenFromBlueAndRed;
+SimpleColorSpaceFunc SubtractGreenFromBlueAndRed;
+SimpleColorSpaceFunc RGB2YCoCgR;
 
 TransformColorFunc TransformColor;
 
@@ -442,6 +458,7 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInit() {
   DspInit();
 
   SubtractGreenFromBlueAndRed = SubtractGreenFromBlueAndRed_C;
+  RGB2YCoCgR = RGB2YCoCgR_C;
 
   TransformColor = TransformColor_C;
 

@@ -128,7 +128,7 @@ TEST_P(TestFrontMgr, LeftContext) {
       ASSERT_TRUE(mgr->TryGetNextBlock(block.dim(), &block_tmp));
       ASSERT_EQ(block, block_tmp);
       ASSERT_FALSE(mgr->Done());
-      ASSERT_TRUE(mgr->UseSize(block.dim(), /*ind=*/0u, &block_tmp));
+      ASSERT_TRUE(mgr->UseSize(block.dim(), &block_tmp));
       ASSERT_EQ(block, block_tmp);
       while (mgr->UseReady()) {
       }
@@ -194,13 +194,12 @@ TEST_P(TestFrontMgr, CopyFrom) {
         ASSERT_EQ(block_tmp, block_tmp_clone);
         ASSERT_EQ(mgr->Done(), mgr_clone->Done());
 
-        ASSERT_TRUE(
-            mgr_clone->UseSize(block.dim(), /*ind=*/0u, &block_tmp_clone));
+        ASSERT_TRUE(mgr_clone->UseSize(block.dim(), &block_tmp_clone));
         while (mgr_clone->UseReady()) {
         }
       }
 
-      ASSERT_TRUE(mgr->UseSize(block.dim(), /*ind=*/0u, &block_tmp));
+      ASSERT_TRUE(mgr->UseSize(block.dim(), &block_tmp));
       while (mgr->UseReady()) {
       }
       --num_blocks_before_cloning;
@@ -235,8 +234,7 @@ TEST(TestFrontMgr, Area) {
   for (const Block& block : blocks) {
     ASSERT_FALSE(mgr.Done());
     Block next_block;
-    ASSERT_TRUE(
-        mgr.UseSize(block.dim(), /*ind=*/0, &next_block, /*use_block=*/true));
+    ASSERT_TRUE(mgr.UseSize(block.dim(), &next_block, /*use_block=*/true));
     ASSERT_EQ(block, next_block);
   }
   ASSERT_TRUE(mgr.Done());

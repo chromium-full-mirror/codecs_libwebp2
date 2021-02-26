@@ -140,15 +140,21 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   VectorNoCtor<Block> blocks;
   WP2_CHECK_ALLOC_OK(blocks.resize(forced_partition.size()));
   std::copy(forced_partition.begin(), forced_partition.end(), blocks.begin());
+  Vector_u32 splits;
   WP2_CHECK_STATUS(ExtractBlockPartition(*config_, gparams, yuv_buffer,
                                          tile_rect, partitioning_progress,
-                                         &blocks));
+                                         &blocks, &splits));
+  const bool use_splits = !splits.empty();
+  if (use_splits) assert(gparams.partition_snapping_);
+
   FrontMgrDefault mgr;
   WP2_CHECK_STATUS(mgr.Init(config_->partition_set, config_->partition_snapping,
                             padded_rect.width, padded_rect.height));
 
   Vector_u16 size_order_indices;
-  WP2_CHECK_STATUS(mgr.Sort(blocks, size_order_indices));
+  if (!use_splits) {
+    WP2_CHECK_STATUS(mgr.Sort(blocks, size_order_indices));
+  }
   // process all blocks
 
   // Setup the top-level coding info for each cblock
@@ -181,7 +187,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   SyntaxWriter writer;
   WP2_CHECK_STATUS(writer.Init(
       &dicts, *config_, gparams, yuv_buffer, chroma_subsampling, tile_rect,
-      (uint32_t)cblocks.size(), use_aom_coeffs, alpha_progress));
+      (uint32_t)cblocks.size(), use_aom_coeffs, use_splits, alpha_progress));
 
   const uint32_t diffusion =
       DCDiffusionMap::GetDiffusion(config_->error_diffusion);
@@ -354,7 +360,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       const auto& block = blocks[ind];
       WP2_CHECK_STATUS(writer.RecordSize(mgr, block.dim()));
       Block block_tmp;
-      WP2_CHECK_ALLOC_OK(mgr.UseSize(block.dim(), ind, &block_tmp));
+      WP2_CHECK_ALLOC_OK(mgr.UseSize(block.dim(), &block_tmp));
       assert(block == block_tmp);
       // Empty the size stack if possible.
       while (mgr.UseReady()) {
@@ -369,7 +375,12 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   WP2_CHECK_STATUS(writer.WriteHeader(enc));
 
   // Write coded blocks
-  WP2_CHECK_STATUS(writer.WriteBlocks(cblocks, size_order_indices, &mgr, enc));
+  if (use_splits) {
+    WP2_CHECK_STATUS(writer.WriteBlocksUseSplits(cblocks, splits, enc));
+  } else {
+    WP2_CHECK_STATUS(
+        writer.WriteBlocks(cblocks, size_order_indices, &mgr, enc));
+  }
   WP2_CHECK_STATUS(write_progress.AdvanceBy(1.));
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
@@ -390,7 +401,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
 // -----------------------------------------------------------------------------
 // Empty neural encoding
 
-#if !defined(WP2_EXPERIMENTAL)
+#if !defined(WP2_NEURAL)
 WP2Status NeuralEncode(const ArgbBuffer& buffer, const EncoderConfig& config,
                        ANSEnc* const enc) {
   (void)buffer;
@@ -400,6 +411,6 @@ WP2Status NeuralEncode(const ArgbBuffer& buffer, const EncoderConfig& config,
                   "non-experimental build.\n");
   return WP2_STATUS_UNSUPPORTED_FEATURE;
 }
-#endif  // !WP2_EXPERIMENTAL
+#endif  // !WP2_NEURAL
 
 }    // namespace WP2

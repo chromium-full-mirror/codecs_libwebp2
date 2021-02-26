@@ -31,9 +31,6 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 
-// This header can be found in some GitHub oss-fuzz repositories.
-#include "fuzzer_temp_file.h"
-
 namespace WP2 {
 namespace testing {
 

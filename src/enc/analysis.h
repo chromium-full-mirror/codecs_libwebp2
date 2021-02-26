@@ -65,7 +65,8 @@ WP2Status ExtractBlockPartition(const EncoderConfig& config,
                                 const GlobalParams& gparams,
                                 const YUVPlane& yuv, const Rectangle& tile_rect,
                                 const ProgressRange& progress,
-                                VectorNoCtor<Block>* const blocks);
+                                VectorNoCtor<Block>* const blocks,
+                                Vector_u32* const splits);
 
 // Finds a segmentation of the source in clusters with similar-features.
 // gparam's 'segments_' vector is created but only their susceptibility

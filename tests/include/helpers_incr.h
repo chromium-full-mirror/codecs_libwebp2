@@ -55,6 +55,10 @@ struct IncrementalDecodingTestSetup {
         actions(act) {}
 };
 
+// Returns WP2_STATUS_OK if everything went fine.
+// Returns WP2_STATUS_BITSTREAM_ERROR or NOT_ENOUGH_DATA for an invalid 'input'.
+// It will abort() instead of returning if an API error is found.
+// The 'decoded_frames' and 'decoded_durations_ms' are filled if not null.
 WP2Status DecodeIncremental(
     const DecoderConfig& config, DataView input,
     const IncrementalDecodingTestSetup& setup,

@@ -185,22 +185,21 @@ void FrontMgrDoubleOrderBase::Clear() {
   if (left_ > 0) next_ = occupancy_size_.LargestPossibleBlockAt(0, 0, snapped_);
 }
 
-bool FrontMgrDoubleOrderBase::UseReady(Info* const info) {
+bool FrontMgrDoubleOrderBase::UseReady(Block* const block_out) {
   if (size_stack_.empty()) return false;
-  const Block& block = size_stack_.back().block;
+  const Block& block = size_stack_.back();
   if (IsReady(block)) {
-    const Info res = size_stack_.back();
     size_stack_.pop_back();
-    Use(res.block);
-    if (info != nullptr) *info = res;
+    Use(block);
+    if (block_out != nullptr) *block_out = block;
     return true;
   } else {
     return false;
   }
 }
 
-bool FrontMgrDoubleOrderBase::UseSize(BlockSize dim, uint32_t ind,
-                                      Block* const block, bool use_block) {
+bool FrontMgrDoubleOrderBase::UseSize(BlockSize dim, Block* const block,
+                                      bool use_block) {
   Block block_tmp;
   if (!TryGetNextBlock(dim, &block_tmp)) {
     assert(false);
@@ -212,7 +211,7 @@ bool FrontMgrDoubleOrderBase::UseSize(BlockSize dim, uint32_t ind,
     assert(IsReady(block_tmp));
     Use(block_tmp);
   } else {
-    size_stack_.push_back_no_resize({block_tmp, ind});
+    size_stack_.push_back_no_resize(block_tmp);
   }
   if (!occupancy_size_.Done()) {
     next_ = FindNextBlock(/*last_block=*/block_tmp);
@@ -305,7 +304,7 @@ WP2Status FrontMgrLexico::CheckBlockList(
       return WP2_STATUS_INVALID_PARAMETER;
     }
     Block blk_tmp;
-    WP2_CHECK_ALLOC_OK(mgr.UseSize(v.dim(), i, &blk_tmp));
+    WP2_CHECK_ALLOC_OK(mgr.UseSize(v.dim(), &blk_tmp));
     assert(b == blk_tmp);
     while (mgr.UseReady()) {
     }
@@ -326,7 +325,7 @@ WP2Status FrontMgrMax::CopyFrom(const FrontMgrMax& other) {
 Block FrontMgrMax::FindNextBlock(const Block& last_block) const {
   // Find an element in the queue that is not final.
   for (int32_t i = (int32_t)size_stack_.size() - 1; i >= 0; --i) {
-    const Block& block = size_stack_[i].block;
+    const Block& block = size_stack_[i];
     if (IsReadySize(block)) continue;
     uint32_t w, x, y;
     assert(block.x() > 0);
@@ -363,14 +362,14 @@ bool FrontMgrMax::TryGetNextBlock(BlockSize size, Block* const block) const {
   // Find an element in the queue that is not final.
   int32_t i;
   for (i = (int32_t)size_stack_.size() - 1; i >= 0; --i) {
-    if (!IsReadySize(size_stack_[i].block)) break;
+    if (!IsReadySize(size_stack_[i])) break;
   }
   uint32_t bx, by;
   if (i < 0) {
     occupancy_size_.FindNextLexico(&bx, &by);
   } else {
-    assert(size_stack_[i].block.x() >= BlockWidth[size]);
-    bx = size_stack_[i].block.x() - BlockWidth[size];
+    assert(size_stack_[i].x() >= BlockWidth[size]);
+    bx = size_stack_[i].x() - BlockWidth[size];
     by = occupancy_size_.GetOccupancy(bx);
   }
   *block = Block(bx, by, size);
@@ -414,7 +413,7 @@ WP2Status FrontMgrMax::Sort(VectorNoCtor<Block>& blocks,
     } else {
       // If the left context is not full, find the first block that can fill
       // it.
-      const uint32_t x = mgr_tmp.size_stack_.back().block.x() - 1;
+      const uint32_t x = mgr_tmp.size_stack_.back().x() - 1;
       const uint32_t y = mgr_tmp.occupancy_size_.GetOccupancy(x);
       best_ind = blocks.size();
       for (uint32_t i = ind; i < blocks.size(); ++i) {
@@ -431,14 +430,13 @@ WP2Status FrontMgrMax::Sort(VectorNoCtor<Block>& blocks,
     const Block& block = blocks[best_ind];
     WP2_CHECK_ALLOC_OK(blocks_size.push_back(block));
     Block tmp;
-    WP2_CHECK_ALLOC_OK(mgr_tmp.UseSize(block.dim(), best_ind, &tmp));
+    WP2_CHECK_ALLOC_OK(mgr_tmp.UseSize(block.dim(), &tmp));
     assert(block == tmp);
 
     // Empty the queue if needed.
     while (true) {
-      Info info;
-      if (!mgr_tmp.UseReady(&info)) break;
-      const Block blk = info.block;
+      Block blk;
+      if (!mgr_tmp.UseReady(&blk)) break;
       // Place the block at its right spot.
       for (uint32_t i = ind; i < blocks.size(); ++i) {
         if (blocks[i] == blk) {

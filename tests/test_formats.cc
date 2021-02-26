@@ -26,6 +26,7 @@
 #include "src/dsp/dsp.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {
@@ -74,12 +75,11 @@ WP2Status ConvertOutputBackToOriginalFormat(
                WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_STATUS(output_in_original_format->ConvertFrom(output));
   const bool orig_premultiplied = WP2IsPremultiplied(original.format());
-  if (output.format() == WP2_RGB_24 || output.format() == WP2_BGR_24) {
+  if (output.format() == WP2_RGB_24 || output.format() == WP2_BGR_24 ||
+      output.format() == WP2_XRGB_32 || output.format() == WP2_RGBX_32 ||
+      output.format() == WP2_BGRX_32) {
     WP2_CHECK_STATUS(
         CopyAlpha(original, output_in_original_format, orig_premultiplied));
-  } else if (output.format() == WP2_XRGB_32 || output.format() == WP2_RGBX_32 ||
-             output.format() == WP2_BGRX_32) {
-    WP2_CHECK_STATUS(CopyAlpha(original, output_in_original_format, false));
   }
   return WP2_STATUS_OK;
 }
@@ -91,7 +91,6 @@ TEST(FormatTest, ConvertSimple) {
   WP2ArgbConverterInit();
 
   for (WP2SampleFormat orig_format : {WP2_Argb_32, WP2_ARGB_32}) {
-    const std::string& file_name = "1x1";
     ArgbBuffer original(orig_format);
     ASSERT_WP2_OK(original.Resize(1, 1));
     uint8_t* const a = original.GetRow8(0) + 0;
@@ -105,6 +104,7 @@ TEST(FormatTest, ConvertSimple) {
 
     for (WP2SampleFormat format = WP2_Argb_32; format < WP2_FORMAT_NUM;
          format = (WP2SampleFormat)(format + 1)) {
+      // TODO(yguyon): Include WP2_Argb_38 when ready
       if (WP2FormatBpc(format) != WP2FormatBpc(WP2_Argb_32)) continue;
       ArgbBuffer converted(format);
       ASSERT_WP2_OK(converted.ConvertFrom(original));
@@ -113,7 +113,7 @@ TEST(FormatTest, ConvertSimple) {
       ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(original, converted,
                                                       false, &reconverted));
 
-      ASSERT_TRUE(testing::Compare(original, reconverted, file_name))
+      ASSERT_TRUE(testing::Compare(original, reconverted, "1x1"))
           << "format: " << orig_format << " to: " << format;
     }
   }
@@ -130,6 +130,7 @@ TEST(FormatTest, ConvertImage) {
 
     for (WP2SampleFormat format = WP2_Argb_32; format < WP2_FORMAT_NUM;
          format = (WP2SampleFormat)(format + 1)) {
+      // TODO(yguyon): Include WP2_Argb_38 when ready
       if (WP2FormatBpc(format) != WP2FormatBpc(WP2_Argb_32)) continue;
       ArgbBuffer converted(format);
       ASSERT_WP2_OK(converted.ConvertFrom(original));
@@ -169,7 +170,8 @@ TEST_P(FormatTest, EncodeDecodeImage) {
   ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(src, output, true,
                                                   &output_original_format));
   ASSERT_TRUE(testing::Compare(src, output_original_format, src_file_name,
-                               testing::GetExpectedDistortion(quality)));
+                               testing::GetExpectedDistortion(quality)))
+      << output_format;
 }
 
 //------------------------------------------------------------------------------
@@ -254,6 +256,7 @@ INSTANTIATE_TEST_SUITE_P(
     ExhaustiveFormatTestInstantiation, FormatTest,
     ::testing::Combine(::testing::Values(std::vector<const char*>{
                            "source1_1x1.png"}),
+                       // TODO(yguyon): Include WP2_Argb_38 when ready
                        ::testing::Range(WP2_Argb_32, WP2_Argb_38),
                        /*quality=*/::testing::Values(10.f, 100.f)));
 
@@ -268,10 +271,99 @@ INSTANTIATE_TEST_SUITE_P(
                                      "alpha_ramp.webp"},
             std::vector<const char*>{"source0.pgm", "source1.png",
                                      "source2.tiff", "source3.jpg"}),
+        // TODO(yguyon): Include WP2_Argb_38 when ready
         ::testing::Range(WP2_Argb_32, WP2_Argb_38),
         ::testing::Values(0.f, 70.f, 96.f)));
 
 //------------------------------------------------------------------------------
+// Exhaustive test (convert all combinations of alpha, red, green, blue values)
+
+// Demultiply color 'v' by alpha 'a'.
+uint32_t Unmult(uint32_t a, uint32_t v) {
+  return (a == 0) ? 0 : DivRound(v * 255, a);
+}
+
+class ExhaustiveTest
+    : public ::testing::TestWithParam<
+          std::tuple<testing::WP2CPUInfoStruct, bool, WP2SampleFormat>> {
+  void SetUp() override {
+    WP2DspReset();
+    WP2GetCPUInfo = std::get<0>(GetParam()).cpu_info;
+    WP2ArgbConverterInit();
+
+    const WP2SampleFormat tmp_format = std::get<2>(GetParam());
+    src_is_premul_ = std::get<1>(GetParam());
+    tmp_is_premul_ = WP2IsPremultiplied(tmp_format);
+    tmp_has_alpha_ = WP2FormatHasAlpha(tmp_format);
+    tmp_is_38b_ = (WP2FormatBpc(tmp_format) == 2);
+    convert_to_tmp_ = src_is_premul_ ? WP2ArgbConvertTo[tmp_format]
+                                     : WP2ARGBConvertTo[tmp_format];
+    convert_from_tmp_ = src_is_premul_ ? WP2ArgbConvertFrom[tmp_format]
+                                       : WP2ARGBConvertFrom[tmp_format];
+  }
+
+ protected:
+  // Returns the expected output of 'v' given alpha 'a' and input/temp formats.
+  uint32_t GetExpectedValue(uint32_t a, uint32_t v) const {
+    if (src_is_premul_) {
+      return (tmp_has_alpha_ ? v : Unmult(a, v));
+    }
+    if (tmp_is_premul_) {
+      // Temp is premultiplied but not src so there is some loss.
+      if (tmp_is_38b_) {
+        return RightShiftRound(Unmult(a, DivBy255(a * LeftShift(v, 2))), 2);
+      }
+      return Unmult(a, DivBy255(a * v));
+    }
+    return v;
+  }
+
+  bool src_is_premul_, tmp_is_premul_, tmp_has_alpha_, tmp_is_38b_;
+  WP2ArgbConverterF convert_to_tmp_, convert_from_tmp_;
+};
+
+TEST_P(ExhaustiveTest, TestArgbConvertToFrom) {
+  for (uint32_t a = 0; a <= kAlphaMax; ++a) {
+    // Red, green and blue channels are not correlated so a single loop is used
+    // instead of the kAlphaMax * kRgbMax * kRgbMax * kRgbMax possibilities.
+    // They have distinct values to test channel permutations (BGR etc.).
+    const uint32_t max = src_is_premul_ ? a : 255u;
+    for (uint32_t r = 0, g = max / 3, b = max * 2 / 3; r <= max;
+         ++r, g = (g + 1) % (max + 1), b = (b + 1) % (max + 1)) {
+      const uint32_t exp_a = tmp_has_alpha_ ? a : kAlphaMax;
+      const uint32_t exp_r = GetExpectedValue(a, r);
+      const uint32_t exp_g = GetExpectedValue(a, g);
+      const uint32_t exp_b = GetExpectedValue(a, b);
+
+      uint8_t src[4] = {(uint8_t)a, (uint8_t)r, (uint8_t)g, (uint8_t)b};
+      uint8_t tmp[8], dst[4];
+      uint16_t* const tmp16 = (uint16_t*)tmp;  // For 38-bit Argb
+      convert_to_tmp_(src, /*width=*/1, tmp);
+      convert_from_tmp_(tmp, /*width=*/1, dst);
+      ASSERT_EQ(dst[0], exp_a) << a;
+      ASSERT_TRUE(dst[1] == exp_r && dst[2] == exp_g && dst[3] == exp_b)
+          << "in:    " << a << "," << r << "," << g << "," << b << "\n"
+          << "tmp:   " << (uint32_t)tmp[0] << "," << (uint32_t)tmp[1] << ","
+          << (uint32_t)tmp[2] << "," << (uint32_t)tmp[3] << "\n"
+          << "tmp16: " << (uint32_t)tmp16[0] << "," << (uint32_t)tmp16[1] << ","
+          << (uint32_t)tmp16[2] << "," << (uint32_t)tmp16[3] << "\n"
+          << "out:   " << (uint32_t)dst[0] << "," << (uint32_t)dst[1] << ","
+          << (uint32_t)dst[2] << "," << (uint32_t)dst[3] << "\n"
+          << "exp:   " << exp_a << "," << exp_r << "," << exp_g << "," << exp_b;
+    }
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ExhaustiveTestInstantiation, ExhaustiveTest,
+    ::testing::Combine(::testing::ValuesIn(testing::kWP2CpuInfoStructs),
+                       ::testing::Values(false, true),  // src_is_premul_
+                       // TODO(yguyon): Include WP2_Argb_38 when ready
+                       ::testing::Range(WP2_Argb_32, WP2_Argb_38)  // tmp_format
+                       ));
+
+//------------------------------------------------------------------------------
+// Speed test
 
 static struct FmtTestCase {
   WP2SampleFormat fmt;
@@ -290,12 +382,12 @@ static struct FmtTestCase {
   { WP2_BGRX_32, "WP2_BGRX_32", 414125, false },
 };
 
-typedef std::tuple<FmtTestCase, testing::WP2CPUInfoStruct> TestParam;
-static void PrintTo(const TestParam& p, std::ostream* os) {
+typedef std::tuple<FmtTestCase, testing::WP2CPUInfoStruct> SpeedTestParam;
+static void PrintTo(const SpeedTestParam& p, std::ostream* os) {
   *os << "{" << std::get<0>(p).name << ", " << std::get<1>(p).name << "}";
 }
 
-class SpeedTest : public ::testing::TestWithParam<TestParam> {
+class SpeedTest : public ::testing::TestWithParam<SpeedTestParam> {
   void SetUp() override {
     WP2DspReset();
     WP2GetCPUInfo = std::get<1>(GetParam()).cpu_info;

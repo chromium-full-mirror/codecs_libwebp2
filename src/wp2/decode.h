@@ -248,8 +248,9 @@ class Decoder {
   // unless the 'output_buffer' was specified by the user.
   virtual ~Decoder();
 
+  // Decodes the given bitstream until a frame is ready, then halts.
   // Returns true if the current frame is completely decoded without any error.
-  // If so, 'duration_ms' can be retrieved if not null (0 for a still image).
+  // If so, 'duration_ms' can be retrieved if not null (0 ms for a still image).
   // Does not halt decoding nor return true for skipped frames.
   bool ReadFrame(uint32_t* duration_ms = nullptr);
 
@@ -262,9 +263,17 @@ class Decoder {
   // Returns true if an error happened.
   bool Failed() const;
 
-  // These functions return the image features or nullptr if not yet available.
+  // Returns the image features or nullptr if not yet available.
   const BitstreamFeatures* TryGetDecodedFeatures() const;
+
+  // Returns the frame features at 'frame_index' (0-based) or nullptr if not yet
+  // available.
   const FrameFeatures* TryGetFrameDecodedFeatures(uint32_t frame_index) const;
+
+  // Returns true and the 'offset' and/or 'length' in bytes in the bitstream of
+  // the frame at 'frame_index' or false if not yet available.
+  bool TryGetFrameLocation(uint32_t frame_index, size_t* offset,
+                           size_t* length = nullptr) const;
 
   // Returns the 0-based index of the current frame, which is totally decoded if
   // the last call to ReadFrame() returned true, or partially decoded otherwise.
@@ -274,13 +283,6 @@ class Decoder {
 
   // Returns the number of decoded FrameFeatures. Never decreases (even rewind).
   uint32_t GetNumFrameDecodedFeatures() const;
-
-  // Returns a lower bound of the number of frames that were fully decodable
-  // with the given bitstream so far. Never decreases (even rewind).
-  // Does not decode anything; use SkipNumNextFrames(kMaxNumFrames) then
-  // ReadFrame() prior to calling this to get the final count without
-  // decompressing pixels.
-  uint32_t GetNumAvailableFrames() const;
 
   // Returns the available rectangular area of the current frame so far.
   // Pixels included in this area will not change until next frame.
@@ -365,7 +367,7 @@ class CustomDecoder : public Decoder {
  private:
   // This will get called during ReadFrame() to fetch more data.
   // Override to set 'available_bytes' and 'num_available_bytes', which should
-  // be at most 'num_requested_bytes' if possible.
+  // be at least 'num_requested_bytes' if possible.
   // No data will be copied and 'num_available_bytes' must not decrease between
   // calls (meaning Fetch() must return at least the same bytes, possibly more)
   // until Discard() is called. The buffer can change as long as the values

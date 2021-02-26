@@ -26,6 +26,7 @@
 #include "src/dec/wp2_dec_i.h"
 #include "src/utils/orientation.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -87,11 +88,6 @@ WP2Status GlimpseTillNextANMFChunk(const DecoderConfig& config,
         SaveFrameNumBytes(state->data_source->GetNumDiscardedBytes() +
                               state->data_source->GetNumReadBytes(),
                           &state->frames[state->glimpsed_frame_index]));
-    if (glimpsed_frame_features.duration_ms > 0) {  // Regular frame.
-      state->num_available_final_frames =
-          std::max(state->num_available_final_frames,
-                   glimpsed_frame_features.final_frame_index + 1u);
-    }
     if (!glimpsed_frame_features.info.is_last) {
       ++state->glimpsed_frame_index;
       state->glimpsed_frame_anmf = false;

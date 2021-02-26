@@ -33,7 +33,7 @@ WP2Status SyntaxWriter::Init(ANSDictionaries* const dicts,
                              const GlobalParams& gparams, const YUVPlane& yuv,
                              ChromaSubsampling chroma_subsampling,
                              const Rectangle& tile_rect, uint32_t num_blocks,
-                             bool use_aom_coeffs,
+                             bool use_aom_coeffs, bool use_splits,
                              const ProgressRange& alpha_progress) {
   config_ = &config;
   dicts_ = dicts;
@@ -42,6 +42,7 @@ WP2Status SyntaxWriter::Init(ANSDictionaries* const dicts,
   gparams_ = &gparams;
   assert(gparams_->IsOk());
   chroma_subsampling_ = chroma_subsampling;
+  use_splits_ = use_splits;
 
   num_blocks_ = num_blocks;
   // Number of transforms is unknown yet, use a higher bound.
@@ -95,6 +96,7 @@ WP2Status SyntaxWriter::CopyFrom(const SyntaxWriter& other,
   tile_rect_ = other.tile_rect_;
   chroma_subsampling_ = other.chroma_subsampling_;
   gparams_ = other.gparams_;
+  use_splits_ = other.use_splits_;
 
   WP2_CHECK_STATUS(segment_ids_.CopyFrom(other.segment_ids_));
   WP2_CHECK_STATUS(
@@ -112,7 +114,7 @@ WP2Status SyntaxWriter::InitPass() {
   WP2_CHECK_STATUS(symbols_info.InitLossy(
       gparams_->segments_.size(), gparams_->partition_set_,
       gparams_->maybe_use_lossy_alpha_, GetQualityHint(config_->quality),
-      context_.use_aom()));
+      context_.use_aom(), use_splits_));
   symbols_info.SetMinMax(kSymbolModeY, /*min=*/0,
                          /*max=*/gparams_->y_preds_.GetMaxMode());
   if (gparams_->maybe_use_lossy_alpha_) {
@@ -158,6 +160,11 @@ WP2Status SyntaxWriter::WriteHeader(ANSEncBase* const enc) {
   // TODO(skal): differential-write of gparams_
 
   enc->PutBool(context_.use_aom(), "use_aom_coeffs");
+  if (gparams_->partition_snapping_) {
+    enc->PutBool(use_splits_, "use_splits");
+  } else {
+    assert(!use_splits_);
+  }
 
   // Write dictionaries.
   PutLargeRange(num_blocks_, min_num_blocks, max_num_blocks, enc, "num_blocks");
@@ -203,11 +210,9 @@ WP2Status SyntaxWriter::WriteHeader(ANSEncBase* const enc) {
   WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
       kSymbolCflSlope, 2 * num_blocks_, symbol_recorder_, "cfl", enc, dicts_));
 
-  for (uint32_t i = 0; i < GetNumUniqueBounds(gparams_->partition_set_); ++i) {
-    WP2_CHECK_STATUS(symbol_writer_.WriteHeader(kSymbolBlockSize, /*cluster=*/i,
-                                                num_blocks_, symbol_recorder_,
-                                                "block_size", enc, dicts_));
-  }
+  WP2_CHECK_STATUS(symbol_writer_.WriteHeader(kSymbolBlockSize, num_blocks_,
+                                              symbol_recorder_, "block_size",
+                                              enc, dicts_));
 
   const uint32_t num_coeffs_max =
       max_num_blocks * kMinBlockSizePix * kMinBlockSizePix;
@@ -367,26 +372,63 @@ WP2Status SyntaxWriter::WriteBlocks(const Vector<CodedBlock>& cblocks,
                                     FrontMgrDoubleOrderBase* const mgr,
                                     ANSEnc* const enc) {
   assert(cblocks.size() == num_blocks_);
-  assert(size_order_indices.size() == num_blocks_);
+  assert(cblocks.size() == size_order_indices.size());
   // Note: we could call segment_ids_.InitMap(bw, bh) again here.
-  mgr->Clear();
   WP2_CHECK_STATUS(residual_writer_.Init(context_.use_aom(),
                                          gparams_->maybe_use_lossy_alpha_));
   context_.Reset();
+  assert(size_order_indices.size() == num_blocks_);
+  mgr->Clear();
+  uint32_t block_idx = 0;
   for (uint16_t ind : size_order_indices) {
     {
       ANSDebugPrefix prefix(enc, "BlockHeader");
       const CodedBlock& cb = cblocks[ind];
       WriteBlockSize(*mgr, cb.dim(), &symbol_writer_, enc);
       Block block_tmp;
-      WP2_CHECK_ALLOC_OK(mgr->UseSize(cb.dim(), ind, &block_tmp));
+      WP2_CHECK_ALLOC_OK(mgr->UseSize(cb.dim(), &block_tmp));
       assert(block_tmp == cb.blk());
     }
     while (true) {
-      FrontMgrDoubleOrderBase::Info info;
-      if (!mgr->UseReady(&info)) break;
-      const CodedBlock& cb = cblocks[info.ind];
-      WP2_CHECK_STATUS(WriteBlock(cb, info.ind, enc));
+      Block block;
+      if (!mgr->UseReady(&block)) break;
+      const CodedBlock& cb = cblocks[block_idx];
+      assert(cb.blk() == block);
+      WP2_CHECK_STATUS(WriteBlock(cb, block_idx, enc));
+      ++block_idx;
+    }
+  }
+  return enc->GetStatus();
+}
+
+WP2Status SyntaxWriter::WriteBlocksUseSplits(const Vector<CodedBlock>& cblocks,
+                                             const Vector_u32& splits,
+                                             ANSEnc* const enc) {
+  assert(cblocks.size() == num_blocks_);
+  // Note: we could call segment_ids_.InitMap(bw, bh) again here.
+  WP2_CHECK_STATUS(residual_writer_.Init(context_.use_aom(),
+                                         gparams_->maybe_use_lossy_alpha_));
+  context_.Reset();
+
+  SplitIteratorDefault it;
+  WP2_CHECK_STATUS(
+      it.Init(gparams_->partition_set_, tile_rect_.width, tile_rect_.height));
+
+  uint32_t block_idx = 0;
+  uint32_t split_idx = 0;
+  while (!it.Done()) {
+    if (it.CurrentBlock().splittable) {
+      ANSDebugPrefix prefix(enc, "BlockHeader");
+      const uint32_t split = splits[split_idx];
+      WriteBlockSplit(it, split, &symbol_writer_, enc);
+      it.SplitCurrentBlock(split);
+      ++split_idx;
+    } else {
+      const CodedBlock& cb = cblocks[block_idx];
+      assert(cb.blk() == it.CurrentBlock().block);
+      WP2_CHECK_STATUS(WriteBlock(cb, block_idx, enc));
+      it.NextBlock();
+      ++block_idx;
     }
   }
   return enc->GetStatus();

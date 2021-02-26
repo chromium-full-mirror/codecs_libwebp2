@@ -50,9 +50,9 @@ typedef struct {
 typedef CONDITION_VARIABLE pthread_cond_t;
 #else
 typedef struct {
-  HANDLE waiting_sem_;
-  HANDLE received_sem_;
-  HANDLE signal_event_;
+  HANDLE waiting_sem;
+  HANDLE received_sem;
+  HANDLE signal_event;
 } pthread_cond_t;
 #endif  // _WIN32_WINNT >= 0x600
 
@@ -68,9 +68,9 @@ typedef struct {
 #endif  // _WIN32
 
 typedef struct {
-  pthread_mutex_t mutex_;
-  pthread_cond_t  condition_;
-  pthread_t       thread_;
+  pthread_mutex_t mutex;
+  pthread_cond_t  condition;
+  pthread_t       thread;
 } WorkerImpl;
 
 #if defined(_WIN32)
@@ -158,9 +158,9 @@ static int pthread_cond_destroy(pthread_cond_t* const condition) {
 #ifdef USE_WINDOWS_CONDITION_VARIABLE
   (void)condition;
 #else
-  ok &= (CloseHandle(condition->waiting_sem_) != 0);
-  ok &= (CloseHandle(condition->received_sem_) != 0);
-  ok &= (CloseHandle(condition->signal_event_) != 0);
+  ok &= (CloseHandle(condition->waiting_sem) != 0);
+  ok &= (CloseHandle(condition->received_sem) != 0);
+  ok &= (CloseHandle(condition->signal_event) != 0);
 #endif
   return !ok;
 }
@@ -170,12 +170,12 @@ static int pthread_cond_init(pthread_cond_t* const condition, void* cond_attr) {
 #ifdef USE_WINDOWS_CONDITION_VARIABLE
   InitializeConditionVariable(condition);
 #else
-  condition->waiting_sem_ = CreateSemaphore(NULL, 0, 1, NULL);
-  condition->received_sem_ = CreateSemaphore(NULL, 0, 1, NULL);
-  condition->signal_event_ = CreateEvent(NULL, FALSE, FALSE, NULL);
-  if (condition->waiting_sem_ == NULL ||
-      condition->received_sem_ == NULL ||
-      condition->signal_event_ == NULL) {
+  condition->waiting_sem = CreateSemaphore(NULL, 0, 1, NULL);
+  condition->received_sem = CreateSemaphore(NULL, 0, 1, NULL);
+  condition->signal_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+  if (condition->waiting_sem == NULL ||
+      condition->received_sem == NULL ||
+      condition->signal_event == NULL) {
     pthread_cond_destroy(condition);
     return 1;
   }
@@ -188,12 +188,12 @@ static int pthread_cond_signal(pthread_cond_t* const condition) {
 #ifdef USE_WINDOWS_CONDITION_VARIABLE
   WakeConditionVariable(condition);
 #else
-  if (WaitForSingleObject(condition->waiting_sem_, 0) == WAIT_OBJECT_0) {
+  if (WaitForSingleObject(condition->waiting_sem, 0) == WAIT_OBJECT_0) {
     // a thread is waiting in pthread_cond_wait: allow it to be notified
-    ok = SetEvent(condition->signal_event_);
+    ok = SetEvent(condition->signal_event);
     // wait until the event is consumed so the signaler cannot consume
     // the event via its own pthread_cond_wait.
-    ok &= (WaitForSingleObject(condition->received_sem_, INFINITE) !=
+    ok &= (WaitForSingleObject(condition->received_sem, INFINITE) !=
            WAIT_OBJECT_0);
   }
 #endif
@@ -208,12 +208,12 @@ static int pthread_cond_wait(pthread_cond_t* const condition,
 #else
   // note that there is a consumer available so the signal isn't dropped in
   // pthread_cond_signal
-  if (!ReleaseSemaphore(condition->waiting_sem_, 1, NULL)) return 1;
+  if (!ReleaseSemaphore(condition->waiting_sem, 1, NULL)) return 1;
   // now unlock the mutex so pthread_cond_signal may be issued
   pthread_mutex_unlock(mutex);
-  ok = (WaitForSingleObject(condition->signal_event_, INFINITE) ==
+  ok = (WaitForSingleObject(condition->signal_event, INFINITE) ==
         WAIT_OBJECT_0);
-  ok &= ReleaseSemaphore(condition->received_sem_, 1, NULL);
+  ok &= ReleaseSemaphore(condition->received_sem, 1, NULL);
   pthread_mutex_lock(mutex);
 #endif
   return !ok;
@@ -233,9 +233,9 @@ static THREADFN ThreadLoop(void* ptr) {
   assert(impl != nullptr);
   bool done = false;
   while (!done) {
-    pthread_mutex_lock(&impl->mutex_);
+    pthread_mutex_lock(&impl->mutex);
     while (worker->state_ == Worker::OK) {   // wait in idling mode
-      pthread_cond_wait(&impl->condition_, &impl->mutex_);
+      pthread_cond_wait(&impl->condition, &impl->mutex);
     }
     if (worker->state_ == Worker::WORK) {
       worker->status_ = worker->Execute();
@@ -244,8 +244,8 @@ static THREADFN ThreadLoop(void* ptr) {
       done = true;
     }
     // signal to the main thread that we're done (for Sync())
-    pthread_mutex_unlock(&impl->mutex_);
-    pthread_cond_signal(&impl->condition_);
+    pthread_mutex_unlock(&impl->mutex);
+    pthread_cond_signal(&impl->condition);
   }
   return THREAD_RETURN(NULL);    // Thread is finished
 }
@@ -260,11 +260,11 @@ static void ChangeState(WorkerBase* const worker,
   WorkerImpl* const impl = (WorkerImpl*)worker->GetImpl();
   if (impl == nullptr) return;
 
-  pthread_mutex_lock(&impl->mutex_);
+  pthread_mutex_lock(&impl->mutex);
   if (worker->state_ >= Worker::OK) {
     // wait for the worker to finish
     while (worker->state_ != Worker::OK) {
-      pthread_cond_wait(&impl->condition_, &impl->mutex_);
+      pthread_cond_wait(&impl->condition, &impl->mutex);
     }
     // assign new status and release the working thread if needed
     if (new_state != Worker::OK) {
@@ -273,12 +273,12 @@ static void ChangeState(WorkerBase* const worker,
       // condition. Unlocking the mutex first may improve performance in some
       // implementations, avoiding the case where the waiting thread can't
       // reacquire the mutex when woken.
-      pthread_mutex_unlock(&impl->mutex_);
-      pthread_cond_signal(&impl->condition_);
+      pthread_mutex_unlock(&impl->mutex);
+      pthread_cond_signal(&impl->condition);
       return;
     }
   }
-  pthread_mutex_unlock(&impl->mutex_);
+  pthread_mutex_unlock(&impl->mutex);
 }
 
 #endif  // WP2_USE_THREAD
@@ -369,9 +369,9 @@ static class : public WorkerInterface {
         WorkerImpl* const impl = (WorkerImpl*)WP2Calloc(1, sizeof(WorkerImpl));
         worker->SetImpl(impl);
         if (impl == nullptr) return false;
-        if (pthread_mutex_init(&impl->mutex_, NULL)) goto Error;
-        if (pthread_cond_init(&impl->condition_, NULL)) {
-          pthread_mutex_destroy(&impl->mutex_);
+        if (pthread_mutex_init(&impl->mutex, NULL)) goto Error;
+        if (pthread_cond_init(&impl->condition, NULL)) {
+          pthread_mutex_destroy(&impl->mutex);
           goto Error;
         }
         pthread_attr_t attr;
@@ -380,15 +380,15 @@ static class : public WorkerInterface {
           ok = (pthread_attr_setstacksize(&attr, stack_size) == 0);
         }
         if (ok) {
-          pthread_mutex_lock(&impl->mutex_);
-          ok = (pthread_create(&impl->thread_, &attr, ThreadLoop, worker) == 0);
+          pthread_mutex_lock(&impl->mutex);
+          ok = (pthread_create(&impl->thread, &attr, ThreadLoop, worker) == 0);
           if (ok) worker->state_ = Worker::OK;
-          pthread_mutex_unlock(&impl->mutex_);
+          pthread_mutex_unlock(&impl->mutex);
         }
         if (pthread_attr_destroy(&attr) != 0) ok = false;
         if (!ok) {
-          pthread_mutex_destroy(&impl->mutex_);
-          pthread_cond_destroy(&impl->condition_);
+          pthread_mutex_destroy(&impl->mutex);
+          pthread_cond_destroy(&impl->condition);
    Error:
           WP2Free(impl);
           worker->SetImpl(nullptr);
@@ -424,9 +424,9 @@ static class : public WorkerInterface {
     WorkerImpl* const impl = (WorkerImpl*)worker->GetImpl();
     if (impl != nullptr) {
       ChangeState(worker, Worker::NOT_OK);
-      pthread_join(impl->thread_, NULL);
-      pthread_mutex_destroy(&impl->mutex_);
-      pthread_cond_destroy(&impl->condition_);
+      pthread_join(impl->thread, NULL);
+      pthread_mutex_destroy(&impl->mutex);
+      pthread_cond_destroy(&impl->condition);
       WP2Free(impl);
       worker->SetImpl(nullptr);
       assert(worker->state_ == Worker::NOT_OK);

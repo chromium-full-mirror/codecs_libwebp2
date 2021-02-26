@@ -220,5 +220,56 @@ INSTANTIATE_TEST_SUITE_P(
 
 //------------------------------------------------------------------------------
 
+// Tests that skipping frames returns the same frame features as decoding all
+// pixels.
+TEST(AnimTestIncr, SkipAndCompareFeatures) {
+  MemoryWriter writer;
+  ASSERT_WP2_OK(testing::CompressAnimation(
+      {"source0.pgm", "source1.png", "source3.jpg", "source4.webp"},
+      {50, 50, 50, 50}, &writer, nullptr, EncoderConfig::kDefault.quality,
+      EncoderConfig::kDefault.effort, EncoderConfig::kDefault.thread_level,
+      /*num_downsamplings=*/2));
+
+  ArrayDecoder feature_decoder, frame_decoder;
+  feature_decoder.SkipNumNextFrames(kMaxNumFrames);
+
+  for (size_t size = 1; size <= writer.size_; ++size) {
+    feature_decoder.SetInput(writer.mem_, size);
+    frame_decoder.SetInput(writer.mem_, size);
+    ASSERT_FALSE(feature_decoder.ReadFrame());
+    frame_decoder.ReadFrame();
+    ASSERT_FALSE(feature_decoder.Failed());
+    ASSERT_FALSE(frame_decoder.Failed());
+
+    // Byte-by-byte incremental decoding should give the same values.
+    // Otherwise the 'frame_decoder' might halt after finishing a frame.
+    ASSERT_EQ(feature_decoder.GetNumFrameDecodedFeatures(),
+              frame_decoder.GetNumFrameDecodedFeatures());
+    for (uint32_t i = 0; i < frame_decoder.GetNumFrameDecodedFeatures(); ++i) {
+      const FrameFeatures* const frame_a =
+          feature_decoder.TryGetFrameDecodedFeatures(i);
+      const FrameFeatures* const frame_b =
+          frame_decoder.TryGetFrameDecodedFeatures(i);
+      ASSERT_NE(frame_a, nullptr);
+      ASSERT_NE(frame_b, nullptr);
+      ASSERT_EQ(frame_a->duration_ms, frame_b->duration_ms);
+      ASSERT_EQ(frame_a->window, frame_b->window);
+      ASSERT_EQ(frame_a->is_last, frame_b->is_last);
+      ASSERT_EQ(frame_a->last_dispose_frame_index,
+                frame_b->last_dispose_frame_index);
+
+      size_t offset_a = 0, offset_b = 0, length_a = 0, length_b = 0;
+      ASSERT_EQ(feature_decoder.TryGetFrameLocation(i, &offset_a),
+                frame_decoder.TryGetFrameLocation(i, &offset_b));
+      ASSERT_EQ(offset_a, offset_b);
+      ASSERT_EQ(feature_decoder.TryGetFrameLocation(i, nullptr, &length_a),
+                frame_decoder.TryGetFrameLocation(i, nullptr, &length_b));
+      ASSERT_EQ(length_a, length_b);
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
+
 }  // namespace
 }  // namespace WP2

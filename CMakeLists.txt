@@ -119,6 +119,12 @@ endif()
 
 # ##############################################################################
 # Android only.
+
+# If an Android path is defined, switch to NDK build
+if(WP2_ANDROID_NDK_PATH)
+  include(${CMAKE_CURRENT_LIST_DIR}/cmake/android.cmake)
+endif()
+
 if(ANDROID)
   include_directories(${ANDROID_NDK}/sources/android/cpufeatures)
   add_library(cpufeatures STATIC
@@ -250,6 +256,8 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/quantizer.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/quantizer.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/random.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/split_iterator.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/split_iterator.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/stats.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/status.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/thread_utils.cc
