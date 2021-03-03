@@ -473,7 +473,7 @@ class ArgbBuffer {
                                          bool include_alpha_in_all,
                                          float result[5]) const;
 
-  const WP2SampleFormat format_;
+  WP2SampleFormat format_;
   uint32_t width_ = 0;
   uint32_t height_ = 0;
   uint32_t stride_ = 0;

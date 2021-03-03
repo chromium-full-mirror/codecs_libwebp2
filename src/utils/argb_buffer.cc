@@ -189,7 +189,7 @@ uint8_t* ArgbBuffer::GetPosition(uint32_t x, uint32_t y) {
 
 WP2Status ArgbBuffer::SetFormat(WP2SampleFormat format_in) {
   WP2_CHECK_OK(IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
-  const_cast<WP2SampleFormat&>(format_) = format_in;
+  format_ = format_in;
   return WP2_STATUS_OK;
 }
 
@@ -516,9 +516,8 @@ bool ArgbBuffer::HasTransparency() const {
 //------------------------------------------------------------------------------
 
 WP2Status ArgbBuffer::Swap(ArgbBuffer* const other) {
-  WP2_CHECK_OK(format_ == other->format(), WP2_STATUS_INVALID_PARAMETER);
-
   using std::swap;
+  swap(format_, other->format_);
   swap(width_, other->width_);
   swap(height_, other->height_);
   swap(stride_, other->stride_);
