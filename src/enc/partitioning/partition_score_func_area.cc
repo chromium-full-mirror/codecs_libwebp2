@@ -40,7 +40,8 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 AreaScoreFunc::AreaScoreFunc(uint32_t area_width, uint32_t area_height)
-    : area_width_(area_width),
+    : BlockScoreFunc(/*use_splits=*/false),
+      area_width_(area_width),
       area_height_(area_height),
       area_front_mgr_(area_width, area_height),
       comp_(kMaxTileSize / kMinBlockSizePix, area_width / kMinBlockSizePix,

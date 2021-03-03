@@ -48,6 +48,7 @@ TEST_P(BypassTest, MaxChunkSize) {
   EncTile enc_tile;
   MemoryWriter writer;
   {  // Encode
+    // TODO(yguyon): Also encode/decode WP2_Argb_38 samples
     ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(),
                             &enc_tile.rgb_input));
     if (force_alpha) enc_tile.rgb_input.GetRow8(0)[0] = 42;
@@ -82,6 +83,7 @@ TEST_P(BypassTest, MaxChunkSize) {
   {  // Decode
     BitstreamFeatures features;
     features.quality_hint = GetQualityHint(quality);
+    features.rgb_bit_depth = 8;
     TilesLayout tiles;
     tiles.num_tiles_x = tiles.num_tiles_y = 1;
     tiles.tile_width = tiles.tile_height = width;

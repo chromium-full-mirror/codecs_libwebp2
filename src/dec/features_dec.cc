@@ -70,11 +70,13 @@ static WP2Status CopyChunk(DataSource* const data_source,
   return WP2_STATUS_OK;
 }
 
-WP2Status DecodeTileChunkSize(const GlobalParams& params,
+WP2Status DecodeTileChunkSize(uint32_t rgb_bit_depth,
+                              const GlobalParams& params,
                               const Rectangle& tile_rect,
                               DataSource* const data_source,
                               uint32_t* const tile_chunk_size) {
-  const uint32_t max_num_bytes = GetTileMaxNumBytes(params, tile_rect);
+  const uint32_t max_num_bytes =
+      GetTileMaxNumBytes(rgb_bit_depth, params, tile_rect);
   WP2_CHECK_STATUS(
       TryReadVarInt(data_source, 1, max_num_bytes, tile_chunk_size));
   return WP2_STATUS_OK;
@@ -120,7 +122,7 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
   const auto tile_shape = (TileShape)dec.ReadBits(kTileShapeBits, "tile_shape");
   tile_width = TileWidth(tile_shape, raw_width);
   tile_height = TileHeight(tile_shape, /*image_width=*/raw_width);
-  WP2_CHECK_OK(dec.ReadBits(1, "filler") == 0x1u, WP2_STATUS_BITSTREAM_ERROR);
+  rgb_bit_depth = (dec.ReadBits(1, "rgb_bit_depth") == 1) ? 10 : 8;
 
   if (is_animation) {
     loop_forever = !!dec.ReadBits(1, "loop");

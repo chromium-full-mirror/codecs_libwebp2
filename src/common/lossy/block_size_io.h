@@ -31,6 +31,8 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 constexpr uint32_t kMaxSplitPatterns = 10;
+// Index of the "split pattern" that keeps the block whole.
+static constexpr uint32_t kNoSplitIndex = 0;
 
 class PartitionSetStats {
  public:

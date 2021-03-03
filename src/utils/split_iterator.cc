@@ -56,6 +56,12 @@ void SplitIteratorBase::GetSplitPatternBlocks(const Block& block,
     x += sub_blocks[num_blocks].w();
     ++num_blocks;
   }
+  // Change the order of the blocks for -| shape so that left context is
+  // available.
+  const bool is_2x2_2x4_2x2 =
+      (split_pattern.num_blocks == 3 &&
+       BlockHeight[split_pattern.block_sizes[1]] == block.h());
+  if (is_2x2_2x4_2x2) std::swap(sub_blocks[1], sub_blocks[2]);
 }
 
 WP2Status SplitIteratorBase::Init(PartitionSet partition_set, uint32_t width,
@@ -83,6 +89,12 @@ uint32_t SplitIteratorBase::GetSplitPatternBlocks(uint32_t split_idx,
 }
 
 bool SplitIteratorBase::Done() const { return front_mgr_.Done(); }
+
+WP2Status SplitIteratorBase::CopyInternal(const SplitIteratorBase& other) {
+  WP2_CHECK_STATUS(front_mgr_.CopyInternal(other.front_mgr_));
+  partition_set_ = other.partition_set_;
+  return WP2_STATUS_OK;
+}
 
 //------------------------------------------------------------------------------
 
@@ -156,6 +168,14 @@ void SplitIteratorLexico::SetSplitInfo(const Block& block, bool recursive) {
   }
 }
 
+WP2Status SplitIteratorLexico::CopyFrom(const SplitIteratorLexico& other) {
+  WP2_CHECK_STATUS(SplitIteratorBase::CopyInternal(other));
+  current_block_ = other.current_block_;
+  WP2_CHECK_STATUS(
+      split_info_.Copy(other.split_info_, /*resize_if_needed=*/true));
+  return WP2_STATUS_OK;
+}
+
 //------------------------------------------------------------------------------
 
 WP2Status SplitIteratorRecurse::Init(PartitionSet partition_set, uint32_t width,
@@ -210,6 +230,12 @@ void SplitIteratorRecurse::SetCurrentBlockLexico() {
   const BlockSize size = GetFittingBlockSize(partition_set_, bounds.dim());
   const bool splittable = (GetNumSplitPatterns(partition_set_, size) > 1);
   block_queue_.push_back_no_resize({{bx, by, size}, splittable});
+}
+
+WP2Status SplitIteratorRecurse::CopyFrom(const SplitIteratorRecurse& other) {
+  WP2_CHECK_STATUS(SplitIteratorBase::CopyInternal(other));
+  WP2_CHECK_ALLOC_OK(block_queue_.copy_from(other.block_queue_));
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------

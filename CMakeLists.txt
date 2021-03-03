@@ -120,11 +120,6 @@ endif()
 # ##############################################################################
 # Android only.
 
-# If an Android path is defined, switch to NDK build
-if(WP2_ANDROID_NDK_PATH)
-  include(${CMAKE_CURRENT_LIST_DIR}/cmake/android.cmake)
-endif()
-
 if(ANDROID)
   include_directories(${ANDROID_NDK}/sources/android/cpufeatures)
   add_library(cpufeatures STATIC

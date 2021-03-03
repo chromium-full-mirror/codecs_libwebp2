@@ -380,6 +380,7 @@ UTILS_DEC_OBJS = \
     src/utils/orientation.o \
     src/utils/plane.o \
     src/utils/quantizer.o \
+    src/utils/split_iterator.o \
     src/utils/status.o \
     src/utils/thread_utils.o \
     src/utils/utils.o \
@@ -518,6 +519,8 @@ HDRS = \
     src/utils/orientation.h \
     src/utils/plane.h \
     src/utils/random.h \
+    src/utils/split_iterator.h \
+    src/utils/split_iterator.cc \
     src/utils/stats.h \
     src/utils/thread_utils.h \
     src/utils/utils.h \
@@ -1210,10 +1213,9 @@ DIST_FILES= \
             tests/test_vector.cc \
             tests/test_version.cc \
             tests/testdata \
-            tests/testdata/ICC_524_type1.bin \
-            tests/testdata/ICC_3144_type2.bin \
-            tests/testdata/ICC_3144_type3.bin \
-            alpha_ramp.lossy.webp \
+            tests/testdata/metadata/ICC_524_type1.bin \
+            tests/testdata/metadata/ICC_3144_type2.bin \
+            tests/testdata/metadata/ICC_3144_type3.bin \
             tests/testdata/alpha_ramp.lossy.webp \
             tests/testdata/alpha_ramp.pam \
             tests/testdata/alpha_ramp.png \

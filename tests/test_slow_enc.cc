@@ -24,6 +24,35 @@ namespace WP2 {
 namespace {
 
 //------------------------------------------------------------------------------
+// Test a random image with alpha to make sure all configs are dealt with
+// properly.
+
+TEST(EncodeDecodeLosslessTest, Lossless) {
+  EncoderConfig encoder_config = EncoderConfig::kDefault;
+  encoder_config.quality = 100.f;
+  encoder_config.effort = 9;
+  const DecoderConfig decoder_config = DecoderConfig::kDefault;
+
+  ArgbBuffer original(WP2_ARGB_32);
+  EXPECT_EQ(original.Resize(256, 16), WP2_STATUS_OK);
+  testing::PrecalculatedRandom<65536u, uint8_t> rnd(0, 255);
+
+  rnd.Fill(original.GetRow8(0), original.stride(), original.height(),
+           original.stride());
+
+  MemoryWriter memory_writer;
+  WP2Status status = Encode(original, &memory_writer, encoder_config);
+  EXPECT_EQ(status, WP2_STATUS_OK);
+
+  ArgbBuffer decompressed;
+  status = Decode(memory_writer.mem_, memory_writer.size_, &decompressed,
+                  decoder_config);
+  EXPECT_EQ(status, WP2_STATUS_OK);
+
+  ASSERT_TRUE(testing::Compare(original, decompressed, "internal"));
+}
+
+//------------------------------------------------------------------------------
 
 class EncodeDecodeTest : public ::testing::TestWithParam<
                              std::tuple<std::string, float, int, float>> {};

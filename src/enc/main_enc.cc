@@ -193,8 +193,10 @@ WP2Status CodeTiles(EncTilesLayout* const tiles_layout,
   }
   WP2_CHECK_STATUS(status);
   for (EncTile& tile : tiles_layout->tiles) {
+    const uint32_t rgb_bit_depth =
+        (tile.rgb_input.format() == WP2_Argb_38) ? 10 : 8;
     const uint32_t max_num_bytes =
-        GetTileMaxNumBytes(*tiles_layout->gparams, tile.rect);
+        GetTileMaxNumBytes(rgb_bit_depth, *tiles_layout->gparams, tile.rect);
     {
       uint8_t buffer[kMaxVarIntLength];
       const uint32_t size =
@@ -250,7 +252,7 @@ WP2Status SetupEncoderInfo(uint32_t width, uint32_t height,
 
 // Encode header to 'output'.
 WP2Status EncodeHeader(const EncoderConfig& config,
-                       uint32_t width, uint32_t height,
+                       uint32_t width, uint32_t height, uint32_t rgb_bit_depth,
                        bool has_alpha, bool is_anim, bool loop_forever,
                        Argb38b background_color, RGB12b preview_color,
                        bool has_icc, bool has_trailing_data,
@@ -258,6 +260,8 @@ WP2Status EncodeHeader(const EncoderConfig& config,
   if (!has_alpha) {
     WP2_CHECK_OK(background_color.a == kAlphaMax, WP2_STATUS_INVALID_PARAMETER);
   }
+  WP2_CHECK_OK(rgb_bit_depth == 8 || rgb_bit_depth == 10,
+               WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(CheckPremultiplied(background_color),
                WP2_STATUS_INVALID_PARAMETER);
   const bool use_bt2020 =
@@ -288,7 +292,7 @@ WP2Status EncodeHeader(const EncoderConfig& config,
     static_assert(TileShape::TILE_SHAPE_AUTO <= (1 << kTileShapeBits),
                   "invalid TILE_SHAPE_AUTO value");
     henc.PutBits(FinalTileShape(config), kTileShapeBits, "tile_shape");
-    henc.PutBits(0x1u, 1, "filler");  // reserved
+    henc.PutBits((rgb_bit_depth == 10) ? 1 : 0, 1, "rgb_bit_depth");
 
     if (is_anim) {
       henc.PutBits(loop_forever ? 1 : 0, 1, "loop");
@@ -505,15 +509,16 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
 
   WP2_CHECK_STATUS(SetupEncoderInfo(input.width(), input.height(), config));
 
+  const uint32_t rgb_bit_depth = (input.format() == WP2_Argb_38) ? 10 : 8;
   const RGB12b preview_color = GetPreviewColor(input);
   const bool has_alpha = input.HasTransparency();
   const bool has_icc = (input.metadata_.iccp.size > 0);
   const bool has_trailing_data =
       (input.metadata_.xmp.size > 0) || (input.metadata_.exif.size > 0);
   WP2_CHECK_STATUS(EncodeHeader(
-      config, input.width(), input.height(), has_alpha, /*is_anim=*/false,
-      /*loop_forever=*/true, kDefaultBackgroundColor, preview_color, has_icc,
-      has_trailing_data, output));
+      config, input.width(), input.height(), rgb_bit_depth, has_alpha,
+      /*is_anim=*/false, /*loop_forever=*/true, kDefaultBackgroundColor,
+      preview_color, has_icc, has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   WP2_CHECK_STATUS(EncodePreview(input, config, output));
@@ -635,13 +640,14 @@ WP2Status Encode(uint32_t width, uint32_t height,
     WP2_CHECK_STATUS(yuv_input.FillPad(width, height));
   }
 
+  const uint32_t rgb_bit_depth = (rgb_input.format() == WP2_Argb_38) ? 10 : 8;
   const RGB12b preview_color =
       yuv_input.IsEmpty() ? GetPreviewColor(rgb_input)
                           : GetPreviewColor(yuv_input, csp_transform);
   const bool has_icc = (metadata.iccp.size > 0);
   const bool has_trailing_data =
       (metadata.xmp.size > 0 || metadata.exif.size > 0);
-  WP2_CHECK_STATUS(EncodeHeader(config, width, height, has_alpha,
+  WP2_CHECK_STATUS(EncodeHeader(config, width, height, rgb_bit_depth, has_alpha,
                                 /*is_anim=*/false, /*loop_forever=*/true,
                                 kDefaultBackgroundColor, preview_color, has_icc,
                                 has_trailing_data, output));

@@ -33,7 +33,7 @@ namespace WP2 {
 
 namespace {
 
-bool TryReadTileChunkSize(const GlobalParams& gparams,
+bool TryReadTileChunkSize(uint32_t rgb_bit_depth, const GlobalParams& gparams,
                           DataSource* const data_source,
                           const DecoderConfig& config, Tile* const tile) {
   assert(tile->rect.GetArea() > 0);
@@ -41,7 +41,7 @@ bool TryReadTileChunkSize(const GlobalParams& gparams,
     const size_t size_before = data_source->GetNumReadBytes();
     (void)size_before;
     const WP2Status chunk_size_status = DecodeTileChunkSize(
-        gparams, tile->rect, data_source, &tile->chunk_size);
+        rgb_bit_depth, gparams, tile->rect, data_source, &tile->chunk_size);
     if (chunk_size_status != WP2_STATUS_OK) {
       // Tile chunk size is unknown, don't decode this tile for now.
       // No byte is marked as read by DecodeTileChunkSize() if not STATUS_OK,
@@ -64,8 +64,8 @@ bool TryReadTile(DataSource* const data_source,
                  PartialTileDecoder* const partial_tile_decoder,
                  size_t* const bitstream_position_at_end_of_tile) {
   *bitstream_position_at_end_of_tile = Decoder::State::kUnknown;
-  if (!TryReadTileChunkSize(*tiles_layout->gparams, data_source, config,
-                            tile)) {
+  if (!TryReadTileChunkSize(features.rgb_bit_depth, *tiles_layout->gparams,
+                            data_source, config, tile)) {
     return false;
   }
   *bitstream_position_at_end_of_tile = data_source->GetNumDiscardedBytes() +
@@ -93,10 +93,11 @@ bool TryReadTile(DataSource* const data_source,
   }
 }
 
-bool TrySkipTile(DataSource* const data_source, const DecoderConfig& config,
+bool TrySkipTile(DataSource* const data_source,
+                 const BitstreamFeatures& features, const DecoderConfig& config,
                  TilesLayout* const tiles_layout, Tile* const tile) {
-  if (!TryReadTileChunkSize(*tiles_layout->gparams, data_source, config,
-                            tile)) {
+  if (!TryReadTileChunkSize(features.rgb_bit_depth, *tiles_layout->gparams,
+                            data_source, config, tile)) {
     return false;
   }
   data_source->MarkNumBytesAsRead(tile->chunk_size);
@@ -304,8 +305,8 @@ WP2Status Decoder::DiscardAvailableTiles() {
 
   while (tiles_layout.num_assignable_tiles < tiles_layout.tiles.size()) {
     Tile& tile = tiles_layout.tiles[tiles_layout.num_assignable_tiles];
-    const bool skipped_tile =
-        TrySkipTile(state_->data_source, config_, &state_->tiles_layout, &tile);
+    const bool skipped_tile = TrySkipTile(
+        state_->data_source, features_, config_, &state_->tiles_layout, &tile);
     state_->data_source->Discard(state_->data_source->GetNumReadBytes());
     if (!skipped_tile) break;
     WP2_CHECK_STATUS(tile.row_progress.AdvanceBy(tile.rect.height));

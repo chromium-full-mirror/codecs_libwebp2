@@ -76,6 +76,29 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
   return GetBestPartition(progress, blocks, /*splits=*/nullptr);
 }
 
+static float GetSplitCost(const SplitIteratorDefault& it, uint32_t split_idx,
+                          uint32_t num_sub_blocks,
+                          SymbolCounter* const symbol_counter,
+                          ANSEncCounter* const counter) {
+  counter->Reset();
+  WriteBlockSplit(it, split_idx, symbol_counter, counter);
+  if (num_sub_blocks > 1) {
+    // Add the cost of encoding the splits of the subblocks.
+    SplitIteratorDefault it_copy;
+    WP2_CHECK_STATUS(it_copy.CopyFrom(it));
+    it_copy.SplitCurrentBlock(split_idx);
+    for (uint32_t i = 0; i < num_sub_blocks; ++i) {
+      if (it_copy.CurrentBlock().splittable) {
+        WriteBlockSplit(it_copy, kNoSplitIndex, symbol_counter, counter);
+        it_copy.SplitCurrentBlock(kNoSplitIndex);
+      } else {
+        it_copy.NextBlock();
+      }
+    }
+  }
+  return counter->GetCost();
+}
+
 WP2Status SplitRecursePartitioner::GetBestPartition(
     const ProgressRange& progress, VectorNoCtor<Block>* const blocks,
     Vector_u32* const splits) {
@@ -96,6 +119,21 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
   SplitIteratorDefault it;
   WP2_CHECK_STATUS(it.Init(config_->partition_set, src_->Y.w_, src_->Y.h_));
   BlockScoreFunc* const score_func = (BlockScoreFunc*)score_func_;
+
+  // Used for computing cost of encoding the splits.
+  SymbolsInfo symbols_info;
+  const bool use_aom_coeffs = DecideAOMCoeffs(*config_, tile_rect_);
+  const GlobalParams& gparams = score_func->gparams();
+  WP2_CHECK_STATUS(symbols_info.InitLossy(
+      gparams.segments_.size(), gparams.partition_set_,
+      gparams.maybe_use_lossy_alpha_, GetQualityHint(config_->quality),
+      use_aom_coeffs, /*use_splits=*/true));
+  SymbolRecorder symbol_recorder;
+  WP2_CHECK_STATUS(symbol_recorder.Allocate(symbols_info, max_num_blocks));
+  SymbolCounter symbol_counter(&symbol_recorder);
+  WP2_CHECK_STATUS(symbol_counter.Allocate({kSymbolBlockSize}));
+  ANSEncNoop enc_noop;
+  ANSEncCounter counter;
 
   while (!it.Done()) {
     assert(max_num_blocks_left > 0);
@@ -121,9 +159,13 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
           continue;
         }
 
+        // Cost of writing this split.
+        const float split_cost = GetSplitCost(it, split_idx, num_sub_blocks,
+                                              &symbol_counter, &counter);
+
         float score;
-        WP2_CHECK_STATUS(
-            score_func->ComputeScore(sub_blocks, num_sub_blocks, &score));
+        WP2_CHECK_STATUS(score_func->ComputeScore(
+            sub_blocks, num_sub_blocks, split_cost, best_score, &score));
         if (best_pattern_idx == -1 || score > best_score) {
           best_pattern_idx = split_idx;
           best_score = score;
@@ -132,6 +174,7 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
       assert(best_pattern_idx != -1);
 
       // Remember the decision.
+      WriteBlockSplit(it, best_pattern_idx, &symbol_recorder, &enc_noop);
       it.SplitCurrentBlock(best_pattern_idx);
       if (splits != nullptr) {
         WP2_CHECK_ALLOC_OK(splits->push_back(best_pattern_idx));

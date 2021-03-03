@@ -68,7 +68,9 @@ WP2Status ExtractBlockPartition(const EncoderConfig& config,
       break;
     case BLOCK_ENCODE_PARTITIONING:
     case SPLIT_RECURSE_PARTITIONING:
-      score_func.reset(new (WP2Allocable::nothrow) BlockScoreFunc());
+      score_func.reset(
+          new (WP2Allocable::nothrow) BlockScoreFunc(/*use_splits=*/(
+              final_partition_method == SPLIT_RECURSE_PARTITIONING)));
       break;
     case AREA_ENCODE_PARTITIONING:
       score_func.reset(new (WP2Allocable::nothrow)

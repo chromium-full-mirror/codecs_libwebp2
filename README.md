@@ -36,9 +36,10 @@ WebP 2 is primarily tuned for the typical content available on the Web and
 Mobile apps: medium-range dimensions, transparency, short animations,
 thumbnails.
 
-WebP2 is currently only partially optimized and, roughly speaking 5x slower than
-WebP for lossy compression. It still compresses 2x faster than AVIF, but takes
-3x more time to decompress. The goal is to reach decompression speed parity.
+As of Nov. 2020, WebP 2 is only partially optimized and, roughly speaking 5x
+slower than WebP for lossy compression. It still compresses 2x faster than AVIF,
+but takes 3x more time to decompress. The goal is to reach decompression speed
+parity.
 
 Side-by-side codec comparisons can be found at:
 
@@ -90,7 +91,8 @@ to the NDK's directory, the Android binaries can be built with:
 
 ```shell
 $ mkdir build && cd build
-$ cmake .. -DWP2_ANDROID_NDK_PATH=${NDK_ROOT}
+$ cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/android.cmake \
+           -DWP2_ANDROID_NDK_PATH=${NDK_ROOT}
 $ make -j
 ```
 

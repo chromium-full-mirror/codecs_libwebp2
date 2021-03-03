@@ -379,10 +379,8 @@ static constexpr TransformType
          TransformType::kNum},
         {TransformType::kPredictor, TransformType::kCrossColor,
          TransformType::kNum},
-        // Triplets.
+        // Triplet.
         {TransformType::kSubtractGreen, TransformType::kPredictor,
-         TransformType::kCrossColor},
-        {TransformType::kColorIndexing, TransformType::kPredictor,
          TransformType::kCrossColor}};
 static constexpr uint32_t kPossibleTransformCombinationsNum =
     std::extent<decltype(kPossibleTransformCombinations), 0>::value;

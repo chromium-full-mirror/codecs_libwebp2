@@ -58,6 +58,8 @@ class PartitionScoreFunc : public WP2Allocable {
   // Called every time a block is definitively chosen.
   virtual WP2Status Use(const Block& block);
 
+  const GlobalParams& gparams() const { return *gparams_; }
+
  protected:
   const EncoderConfig* config_ = nullptr;
   const GlobalParams* gparams_ = nullptr;

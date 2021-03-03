@@ -14,6 +14,10 @@
 # limitations under the License.
 #
 
+if(WP2_CMAKE_TOOLCHAINS_ANDROID_CMAKE_)
+  return()
+endif() # WP2_CMAKE_TOOLCHAINS_ANDROID_CMAKE_
+
 if(NOT ANDROID_PLATFORM)
   set(ANDROID_PLATFORM android-22)
 endif()

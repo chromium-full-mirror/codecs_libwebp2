@@ -1907,7 +1907,8 @@ WP2Status Partitioner::RegisterOrderForVDebug(
 
 WP2Status BlockScoreFunc::RegisterScoreForVDebug(
     const Block blocks[], uint32_t num_blocks, const float rate[4],
-    const float disto[4], float total_rate, float total_disto, float score) {
+    const float disto[4], float extra_rate, float total_rate, float total_disto,
+    float score, bool is_best) {
   Rectangle hull = blocks[0].rect();  // Print surrounding block if possible.
   for (uint32_t i = 1; i < num_blocks; ++i) {
     hull = hull.MergeWith(blocks[i].rect());
@@ -1924,7 +1925,8 @@ WP2Status BlockScoreFunc::RegisterScoreForVDebug(
 
   if (config_->info != nullptr) {
     std::string& str = config_->info->selection_info;
-    str += WP2SPrint("  rate %3.2f disto %6.2f", total_rate, total_disto);
+    str += WP2SPrint(" %s rate %3.2f disto %6.2f", is_best ? "best" : "    ",
+                     total_rate, total_disto);
     if (num_blocks > 1) {  // Print sub-blocks stats.
      str += WP2SPrint("  %u blks: ", num_blocks);
      for (uint32_t i = 0; i < num_blocks; ++i) {
@@ -1933,6 +1935,7 @@ WP2Status BlockScoreFunc::RegisterScoreForVDebug(
                          rate[i], disto[i]);
      }
     }
+    str += WP2SPrint(" +r%.3f", extra_rate);
     str += "\n";
   }
   return WP2_STATUS_OK;

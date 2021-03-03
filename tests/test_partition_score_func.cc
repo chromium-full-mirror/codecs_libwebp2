@@ -52,7 +52,7 @@ TEST(PartitionScoreFuncTest, BlockScoreFunc) {
   constexpr uint32_t kNumBlocks = WP2_ARRAY_SIZE(kBlocks);
   float score;
 
-  BlockScoreFunc score_func;
+  BlockScoreFunc score_func(/*use_splits=*/false);
   ASSERT_WP2_OK(
       score_func.Init(config, tile_rect, yuv, gparams, ProgressRange()));
 
@@ -83,13 +83,14 @@ TEST(PartitionScoreFuncTest, BlockScoreFunc) {
   }
 
   // Fresh clean score func.
-  BlockScoreFunc score_func2;
+  BlockScoreFunc score_func2(/*use_splits=*/false);
   ASSERT_WP2_OK(
       score_func2.Init(config, tile_rect, yuv, gparams, ProgressRange()));
 
   // Test all block at once.
-  ASSERT_WP2_OK(score_func2.ComputeScore(
-      kBlocks, sizeof(kBlocks) / sizeof(kBlocks[0]), &score));
+  ASSERT_WP2_OK(
+      score_func2.ComputeScore(kBlocks, sizeof(kBlocks) / sizeof(kBlocks[0]),
+                               /*extra_rate=*/0, /*best_score=*/0, &score));
   EXPECT_GT(score, 0);
   const float inverted_score = 1.f / score - 1.f;
   // Check the result is a weighted average of the scores of individual blocks.

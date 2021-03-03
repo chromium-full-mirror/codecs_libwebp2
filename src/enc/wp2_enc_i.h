@@ -50,7 +50,7 @@ WP2Status SetupEncoderInfo(uint32_t width, uint32_t height,
 
 // Writes WP2 header to 'output' based on 'config' and other arugments.
 WP2Status EncodeHeader(const EncoderConfig& config,
-                       uint32_t width, uint32_t height,
+                       uint32_t width, uint32_t height, uint32_t rgb_bit_depth,
                        bool has_alpha, bool is_anim, bool loop_forever,
                        Argb38b background_color, RGB12b preview_color,
                        bool has_icc, bool has_trailing_data,
@@ -320,6 +320,8 @@ class SyntaxWriter : public WP2Allocable {
   WP2Status Record(const CodedBlock& cb);
   // Records the block's size.
   WP2Status RecordSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim);
+  // Records the block's split.
+  WP2Status RecordSplit(const SplitIteratorBase& mgr, uint32_t split_idx);
   // Writes the headers (frozen dictionaries, etc.).
   WP2Status WriteHeader(ANSEncBase* const enc);
   // These write the block header (segment id, preds, etc.).

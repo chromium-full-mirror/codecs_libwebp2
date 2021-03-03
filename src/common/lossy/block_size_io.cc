@@ -86,6 +86,7 @@ static void GetSplitPatterns(PartitionSet set, BlockSize size,
                              SplitPattern p[kMaxSplitPatterns],
                              uint32_t* num_patterns) {
   *num_patterns = 0;
+  // This should always be first so the index matches kNoSplitIndex.
   if (IsBlockSizeInSet(set, size)) p[(*num_patterns)++] = {1, {size}};
 
   const uint32_t width = BlockWidth[size], height = BlockHeight[size];

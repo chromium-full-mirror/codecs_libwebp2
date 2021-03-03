@@ -112,13 +112,15 @@ bool IsBufferLengthValid(uint32_t width, uint32_t height,
 }
 
 // Read input data into each Tile::private_input.
-WP2Status ReadTiles(const DecoderConfig& config, DataSource* const data_source,
+WP2Status ReadTiles(uint32_t rgb_bit_depth, const DecoderConfig& config,
+                    DataSource* const data_source,
                     TilesLayout* const tiles_layout) {
   for (Tile& tile : tiles_layout->tiles) {
     const size_t size_before = data_source->GetNumReadBytes();
     (void)size_before;
-    WP2_CHECK_STATUS(DecodeTileChunkSize(*tiles_layout->gparams, tile.rect,
-                                         data_source, &tile.chunk_size));
+    WP2_CHECK_STATUS(DecodeTileChunkSize(rgb_bit_depth, *tiles_layout->gparams,
+                                         tile.rect, data_source,
+                                         &tile.chunk_size));
     tile.chunk_size_is_known = true;
     WP2_CHECK_REDUCED_STATUS(
         RegisterBitTrace(config, data_source->GetNumReadBytes() - size_before,
@@ -137,11 +139,11 @@ WP2Status ReadTiles(const DecoderConfig& config, DataSource* const data_source,
 }
 
 // Decode the data in each Tile::input.
-WP2Status DecodeTiles(const DecoderConfig& config,
+WP2Status DecodeTiles(uint32_t rgb_bit_depth, const DecoderConfig& config,
                       DataSource* const data_source,
                       TilesLayout* const tiles_layout,
                       Vector<TileDecoder>* const workers) {
-  WP2_CHECK_STATUS(ReadTiles(config, data_source, tiles_layout));
+  WP2_CHECK_STATUS(ReadTiles(rgb_bit_depth, config, data_source, tiles_layout));
   WP2Status status = WP2_STATUS_OK;
 
   // Decode tiles in parallel or sequentially.
@@ -321,8 +323,8 @@ WP2Status InternalDecode(const DecoderConfig& config,
       }
       Vector<TileDecoder> workers;
       WP2_CHECK_STATUS(SetupWorkers(features, config, &tiles_layout, &workers));
-      WP2_CHECK_STATUS(
-          DecodeTiles(config, data_source, &tiles_layout, &workers));
+      WP2_CHECK_STATUS(DecodeTiles(features.rgb_bit_depth, config, data_source,
+                                   &tiles_layout, &workers));
     }
 
     // In case of the YUV decoding stepping on the background borders because

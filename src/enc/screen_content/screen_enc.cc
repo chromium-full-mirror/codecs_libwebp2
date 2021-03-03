@@ -276,10 +276,10 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
       const uint32_t w = std::min(input.width() - x * block_size, block_size);
       for (uint32_t j = 0; j < block_size; ++j) {
         if (y * block_size + j >= input.height()) break;
-        uint8_t* lossless_row =
-            (uint8_t*)(lossless_subframe.rgb_pixels.GetRow(y * block_size + j));
-        uint8_t* lossy_row =
-            (uint8_t*)(lossy_subframe.rgb_pixels.GetRow(y * block_size + j));
+        uint8_t* const lossless_row =
+            lossless_subframe.rgb_pixels.GetRow8(y * block_size + j);
+        uint8_t* const lossy_row =
+            lossy_subframe.rgb_pixels.GetRow8(y * block_size + j);
         if (lossy) {
           std::fill(&lossless_row[(x * block_size) * 4],
                     &lossless_row[(x * block_size + w) * 4], 0);
@@ -291,14 +291,16 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
     }
   }
 
+  const uint32_t rgb_bit_depth =
+      (lossless_subframe.rgb_pixels.format() == WP2_Argb_38) ? 10 : 8;
   const bool has_alpha = true;
   const bool has_icc = (input.metadata_.iccp.size > 0);
   const bool has_trailing_data =
       (input.metadata_.xmp.size > 0) || (input.metadata_.exif.size > 0);
   WP2_CHECK_STATUS(EncodeHeader(
-      config, input.width(), input.height(), has_alpha, /*is_anim=*/true,
-      /*loop_forever=*/false, kDefaultBackgroundColor, GetPreviewColor(input),
-      has_icc, has_trailing_data, output));
+      config, input.width(), input.height(), rgb_bit_depth, has_alpha,
+      /*is_anim=*/true, /*loop_forever=*/false, kDefaultBackgroundColor,
+      GetPreviewColor(input), has_icc, has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   WP2_CHECK_STATUS(EncodePreview(input, config, output));

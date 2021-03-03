@@ -352,18 +352,29 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       }
     }
 
-    // Record info about the block sizes.
-    // Sizes might be written in a different order than the blocks, hence a
-    // separate recording: we need to follow the SizeIndices() order.
-    mgr.Clear();
-    for (uint16_t ind : size_order_indices) {
-      const auto& block = blocks[ind];
-      WP2_CHECK_STATUS(writer.RecordSize(mgr, block.dim()));
-      Block block_tmp;
-      WP2_CHECK_ALLOC_OK(mgr.UseSize(block.dim(), &block_tmp));
-      assert(block == block_tmp);
-      // Empty the size stack if possible.
-      while (mgr.UseReady()) {
+    if (use_splits) {
+      SplitIteratorDefault it;
+      WP2_CHECK_STATUS(
+          it.Init(gparams.partition_set_, tile_rect.width, tile_rect.height));
+      for (uint32_t split_idx : splits) {
+        while (!it.CurrentBlock().splittable) it.NextBlock();
+        WP2_CHECK_STATUS(writer.RecordSplit(it, split_idx));
+        it.SplitCurrentBlock(split_idx);
+      }
+    } else {
+      // Record info about the block sizes.
+      // Sizes might be written in a different order than the blocks, hence a
+      // separate recording: we need to follow the SizeIndices() order.
+      mgr.Clear();
+      for (uint16_t ind : size_order_indices) {
+        const auto& block = blocks[ind];
+        WP2_CHECK_STATUS(writer.RecordSize(mgr, block.dim()));
+        Block block_tmp;
+        WP2_CHECK_ALLOC_OK(mgr.UseSize(block.dim(), &block_tmp));
+        assert(block == block_tmp);
+        // Empty the size stack if possible.
+        while (mgr.UseReady()) {
+        }
       }
     }
 

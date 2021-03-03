@@ -170,21 +170,26 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     if (reader.use_splits()) {
       // Read splits until we get an unsplit block.
       while (true) {
+#if defined(WP2_BITTRACE)
+        const double prev_bit_count = dec->GetBitCount();
+        if (size_bits.size() <= block_idx) {
+          WP2_CHECK_ALLOC_OK(size_bits.resize(block_idx + 1));
+          // Initialize bit cost to 0. The cost of the splits read before the
+          // next unsplittable block will be added to this cost.
+          size_bits[block_idx] = 0;
+        }
+#endif
         if (!it.CurrentBlock().splittable) {
           block = it.CurrentBlock().block;
           mgr->Use(block);
           it.NextBlock();
           break;
         }
-#if defined(WP2_BITTRACE)
-        const double prev_bit_count = dec->GetBitCount();
-#endif
         uint32_t split_idx;
         WP2_CHECK_STATUS(reader.GetBlockSplit(it, &split_idx));
         it.SplitCurrentBlock(split_idx);
 #if defined(WP2_BITTRACE)
         const double num_bits = dec->GetBitCount() - prev_bit_count;
-        WP2_CHECK_ALLOC_OK(size_bits.resize(block_idx + 1));
         size_bits[block_idx] += num_bits;
 #endif
       }

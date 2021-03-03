@@ -28,14 +28,12 @@ namespace {
 //------------------------------------------------------------------------------
 // Test 10 bit lossless.
 
-TEST(Lossless10, Simple) {
-  const std::string src_file_name = "source1_64x48.png";
+class Lossless10Test : public ::testing::TestWithParam<const char*> {};
 
+TEST_P(Lossless10Test, Simple) {
   ArgbBuffer src_32;
-  MemoryWriter mem;
-
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath(src_file_name).c_str(), &src_32));
+      ReadImage(testing::GetTestDataPath(GetParam()).c_str(), &src_32));
 
   // Convert the src to 10 bit.
   ArgbBuffer src(WP2_Argb_38);
@@ -61,14 +59,19 @@ TEST(Lossless10, Simple) {
 
   EncoderConfig config_enc;
   config_enc.quality = 100;
+  MemoryWriter mem;
   ASSERT_WP2_OK(Encode(src, &mem, config_enc));
 
   ArgbBuffer output(WP2_Argb_38);
   ASSERT_WP2_OK(Decode(mem.mem_, mem.size_, &output));
 
-  ASSERT_TRUE(testing::Compare(src, output, src_file_name,
+  ASSERT_TRUE(testing::Compare(src, output, GetParam(),
                                testing::GetExpectedDistortion(config_enc)));
 }
+
+INSTANTIATE_TEST_SUITE_P(Lossless10TestInstantiation, Lossless10Test,
+                         ::testing::Values("source1_1x1.png",
+                                           "source1_64x48.png"));
 
 //------------------------------------------------------------------------------
 

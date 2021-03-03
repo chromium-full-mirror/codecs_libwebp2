@@ -113,11 +113,11 @@ WP2Status TileScoreFunc::InitForEncode() {
 
   // A BitstreamFeatures instance is needed by LossyDecode(). Make up one.
   MemoryWriter writer;
-  WP2_CHECK_STATUS(
-      EncodeHeader(tmp_config_, tile_rect_.width, tile_rect_.height,
-                   with_alpha_, /*is_anim=*/false, /*loop_forever=*/true,
-                   kDefaultBackgroundColor, /*preview_color=*/{},
-                   /*has_icc=*/false, /*has_trailing_data=*/false, &writer));
+  WP2_CHECK_STATUS(EncodeHeader(
+      tmp_config_, tile_rect_.width, tile_rect_.height, /*rgb_bit_depth=*/8,
+      with_alpha_, /*is_anim=*/false, /*loop_forever=*/true,
+      kDefaultBackgroundColor, /*preview_color=*/{}, /*has_icc=*/false,
+      /*has_trailing_data=*/false, &writer));
   WP2_CHECK_STATUS(features_.Read(writer.mem_, writer.size_));
   return WP2_STATUS_OK;
 }

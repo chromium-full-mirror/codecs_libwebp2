@@ -36,20 +36,23 @@ namespace {
 // These five modes are evaluated and their respective entropy is computed.
 enum class EntropyMode {
   // No transform, colors are stored as is.
-  kDirect = 0,
+  kDirect,
   // Spatial prediction. We predict the next pixel (using one of many prediction
   // modes) and store the difference between the prediction and the actual value
   // (= "the residual").
-  kSpatial = 1,
+  kSpatial,
   // Instead of storing red, green, and blue, we store red minus green, green,
   // and blue minus green (takes advantage of correlation between the three
   // channels).
-  kSubGreen = 2,
+  kSubGreen,
   // We use both kSpatial and kSubGreen a the same time.
-  kSpatialSubGreen = 3,
+  kSpatialSubGreen,
   // We create a palette of colors and store one palette index per pixel.
-  kPalette = 4,
-  kNum = 5
+  kPalette,
+  // Same as kPalette except that we then apply predictors on the indices
+  // themselves.
+  kPaletteSpatial,
+  kNum
 };
 
 // Histogram types.
@@ -124,20 +127,69 @@ void Premultiply(const T* const src, T* const dst) {
   }
 }
 
+// Local struct containing the final config and local info for sorting.
 struct EntropyConfig {
+  CrunchConfig config;
   EntropyMode mode;
-  bool use_premultiplied;
-  // true if both red and blue channels are always zero when applying this
-  // transform.
-  bool red_and_blue_always_zero;
   float entropy;
 };
+
+// Find the corresponding combination of transforms in the reference table.
+const TransformType* FindTransformationCombination(
+    const TransformType* const transforms, uint32_t size) {
+  assert(size <= kPossibleTransformCombinationSize);
+  for (uint32_t i = 0; i < kPossibleTransformCombinationsNum; ++i) {
+    if (std::equal(transforms, transforms + size,
+                   kPossibleTransformCombinations[i]) &&
+        (size == kPossibleTransformCombinationSize ||
+         kPossibleTransformCombinations[i][size] == TransformType::kNum)) {
+      return kPossibleTransformCombinations[i];
+    }
+  }
+  assert(false);
+  return nullptr;
+}
+
+// Find a set of TransformType's into the official list and returns a pointer to
+// it.
+template <typename... Ts>
+const TransformType* FindTransformTypes(Ts... args) {
+  const TransformType transforms[] = {args...};
+  return FindTransformationCombination(transforms, sizeof...(args));
+}
+
+void AddConfig(EntropyMode mode, bool use_premultiplied,
+               bool red_and_blue_always_zero, float entropy, int effort,
+               WP2::Vector<EntropyConfig>* configs) {
+  EntropyConfig c;
+  c.mode = mode;
+  c.entropy = entropy;
+  c.config.use_premultiplied = use_premultiplied;
+
+  TransformType transforms[kPossibleTransformCombinationSize];
+  uint32_t size = 0;
+  if (mode == EntropyMode::kPalette || mode == EntropyMode::kPaletteSpatial) {
+    transforms[size++] = TransformType::kColorIndexing;
+  }
+  if (mode == EntropyMode::kSubGreen || mode == EntropyMode::kSpatialSubGreen) {
+    transforms[size++] = TransformType::kSubtractGreen;
+  }
+  if (mode == EntropyMode::kSpatial || mode == EntropyMode::kSpatialSubGreen ||
+      mode == EntropyMode::kPaletteSpatial) {
+    transforms[size++] = TransformType::kPredictor;
+    if (effort != 0 && !red_and_blue_always_zero) {
+      transforms[size++] = TransformType::kCrossColor;
+    }
+  }
+  c.config.transforms = FindTransformationCombination(transforms, size);
+  configs->push_back_no_resize(c);
+}
 
 // Analyzes the distribution of colors on the image to estimate the best
 // transform configurations.
 // Returns at most 'num_configs_max' sorted from best to worst in 'configs'.
 template <typename T>
-WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette,
+WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
                              uint32_t transform_bits, const Encoder& encoder,
                              uint32_t num_configs_max,
                              WP2::Vector<EntropyConfig>* configs) {
@@ -150,10 +202,12 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette,
   if (can_use_palette && encoder.palette_.Size() <= 16) {
     // In practice, small palettes are better than any other transform.
     WP2_CHECK_ALLOC_OK(configs->reserve(1));
-    configs->push_back_no_resize({/*mode=*/EntropyMode::kPalette,
-                                  /*use_premultiplied=*/true,
-                                  /*red_and_blue_always_zero=*/true,
-                                  /*entropy=*/0.f});
+    for (EntropyMode mode :
+         {EntropyMode::kPalette, EntropyMode::kPaletteSpatial}) {
+      AddConfig(mode, /*use_premultiplied=*/true,
+                /*red_and_blue_always_zero=*/true, /*entropy=*/0.f, effort,
+                configs);
+    }
     return WP2_STATUS_OK;
   }
 
@@ -298,54 +352,62 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette,
     }
 
     // Compute the entropy of the different entropy modes.
-    configs->push_back_no_resize(
-        {EntropyMode::kDirect, premult,
-         entropy[kHistoRed] + entropy[kHistoBlue] == 0.f,
-         entropy[kHistoAlpha] + entropy[kHistoRed] + entropy[kHistoGreen] +
-             entropy[kHistoBlue]});
-    // When including transforms, there is an overhead in bits from
-    // storing them. This overhead is small but matters for small images.
-    // For spatial, there are 14 transformations.
-    const uint32_t transform_image_size = SubSampleSize(width, transform_bits) *
-                                          SubSampleSize(height, transform_bits);
-    configs->push_back_no_resize(
-        {EntropyMode::kSpatial, premult,
-         entropy[kHistoRedPred] + entropy[kHistoBluePred] == 0.f,
-         entropy[kHistoAlphaPred] + entropy[kHistoRedPred] +
-             entropy[kHistoGreenPred] + entropy[kHistoBluePred] +
-             transform_image_size * WP2Log2(14)});
-    configs->push_back_no_resize(
-        {EntropyMode::kSubGreen, premult,
-         entropy[kHistoRedSubGreen] + entropy[kHistoBlueSubGreen] == 0.f,
-         entropy[kHistoAlpha] + entropy[kHistoRedSubGreen] +
-             entropy[kHistoGreen] + entropy[kHistoBlueSubGreen]});
-    // For color transforms: 24 as only 3 channels are considered in a
-    // ColorTransformElement.
-    configs->push_back_no_resize(
-        {EntropyMode::kSpatialSubGreen, premult,
-         entropy[kHistoRedPredSubGreen] + entropy[kHistoBluePredSubGreen] ==
-             0.f,
-         entropy[kHistoAlphaPred] + entropy[kHistoRedPredSubGreen] +
-             entropy[kHistoGreenPred] + entropy[kHistoBluePredSubGreen] +
-             transform_image_size * WP2Log2(24)});
+    AddConfig(EntropyMode::kDirect, premult,
+              entropy[kHistoRed] + entropy[kHistoBlue] == 0.f,
+              entropy[kHistoAlpha] + entropy[kHistoRed] + entropy[kHistoGreen] +
+                  entropy[kHistoBlue],
+              effort, configs);
+    AddConfig(EntropyMode::kSpatial, premult,
+              entropy[kHistoRedPred] + entropy[kHistoBluePred] == 0.f,
+              entropy[kHistoAlphaPred] + entropy[kHistoRedPred] +
+                  entropy[kHistoGreenPred] + entropy[kHistoBluePred],
+              effort, configs);
+    AddConfig(EntropyMode::kSubGreen, premult,
+              entropy[kHistoRedSubGreen] + entropy[kHistoBlueSubGreen] == 0.f,
+              entropy[kHistoAlpha] + entropy[kHistoRedSubGreen] +
+                  entropy[kHistoGreen] + entropy[kHistoBlueSubGreen],
+              effort, configs);
+    AddConfig(
+        EntropyMode::kSpatialSubGreen, premult,
+        entropy[kHistoRedPredSubGreen] + entropy[kHistoBluePredSubGreen] == 0.f,
+        entropy[kHistoAlphaPred] + entropy[kHistoRedPredSubGreen] +
+            entropy[kHistoGreenPred] + entropy[kHistoBluePredSubGreen],
+        effort, configs);
 
     // Palettes are always premultiplied. It doesn't make sense to look at
     // entropy for unmultiplied palettes, except if the format does not allow
     // it.
     if (analyze_palette) {
-      // For palettes, add the cost of storing the palette.
-      configs->push_back_no_resize({
-          EntropyMode::kPalette,
-          premult,
-          /*red_and_blue_always_zero=*/true,
-          entropy[kHistoPalette] + encoder.palette_.GetCost(),
-      });
+      AddConfig(EntropyMode::kPalette, premult,
+                /*red_and_blue_always_zero=*/true, entropy[kHistoPalette],
+                effort, configs);
     }
   }
   for (const EntropyConfig& c : *configs) {
     (void)c;
     if (!can_use_palette) assert(c.mode != EntropyMode::kPalette);
-    if (!can_premultiply) assert(!c.use_premultiplied);
+    if (!can_premultiply) assert(!c.config.use_premultiplied);
+  }
+  // Add extra bit costs.
+  const uint32_t transform_image_size = SubSampleSize(width, transform_bits) *
+                                        SubSampleSize(height, transform_bits);
+  for (EntropyConfig& c : *configs) {
+    for (uint32_t i = 0; i < c.config.GetNumTransforms(); ++i) {
+      if (c.config.transforms[i] == TransformType::kPredictor) {
+        // When including transforms, there is an overhead in bits from
+        // storing them. This overhead is small but matters for small images.
+        // For spatial, there are 14 transformations.
+        c.entropy += transform_image_size * WP2Log2(14);
+      } else if (c.config.transforms[i] == TransformType::kCrossColor) {
+        // For color transforms, estimating the cross color transform entropy is
+        // hard and easy to overshoot. Adding the cost of the transform image is
+        // actually worsening results so we are not artificially adding it like
+        // we do for kPredictor.
+      } else if (c.config.transforms[i] == TransformType::kColorIndexing) {
+        // For palettes, add the cost of storing the palette.
+        c.entropy += encoder.palette_.GetCost();
+      }
+    }
   }
   // Sort the configs.
   std::stable_sort(configs->begin(), configs->end(),
@@ -355,20 +417,31 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette,
   // Only keep the top num_configs_max ones.
   configs->resize_no_check(
       std::min((uint32_t)configs->size(), num_configs_max));
+  // In case we have a kColorIndexing transform, also add kColorIndexing +
+  // kPredictor.
+  for (const EntropyConfig& c : *configs) {
+    if (c.config.transforms[0] == TransformType::kColorIndexing &&
+        c.config.GetNumTransforms() == 1) {
+      AddConfig(EntropyMode::kPaletteSpatial, c.config.use_premultiplied,
+                /*red_and_blue_always_zero=*/true, c.entropy, effort, configs);
+      break;
+    }
+  }
 
   return WP2_STATUS_OK;
 }
 
-WP2Status AnalyzeEntropy(bool can_use_palette, uint32_t transform_bits,
-                         const Encoder& encoder, uint32_t num_configs_max,
+WP2Status AnalyzeEntropy(bool can_use_palette, int effort,
+                         uint32_t transform_bits, const Encoder& encoder,
+                         uint32_t num_configs_max,
                          WP2::Vector<EntropyConfig>* configs) {
   if (WP2FormatBpc(encoder.pic_.format()) == 1) {
     WP2_CHECK_STATUS(AnalyzeEntropyImpl(encoder.pic_.GetRow8(0),
-                                        can_use_palette, transform_bits,
+                                        can_use_palette, effort, transform_bits,
                                         encoder, num_configs_max, configs));
   } else {
     WP2_CHECK_STATUS(AnalyzeEntropyImpl(encoder.pic_.GetRow16(0),
-                                        can_use_palette, transform_bits,
+                                        can_use_palette, effort, transform_bits,
                                         encoder, num_configs_max, configs));
   }
 
@@ -395,62 +468,6 @@ uint32_t GetTransformBits(uint32_t effort, uint32_t histo_bits) {
       (histo_bits > max_transform_bits) ? max_transform_bits : histo_bits;
   assert(res <= kTransformBitsMax);
   return res;
-}
-
-// Find the corresponding combination of transforms in the reference table.
-const TransformType* FindTransformationCombination(
-    const TransformType* const transforms, uint32_t size) {
-  assert(size <= kPossibleTransformCombinationSize);
-  for (uint32_t i = 0; i < kPossibleTransformCombinationsNum; ++i) {
-    if (std::equal(transforms, transforms + size,
-                   kPossibleTransformCombinations[i]) &&
-        (size == kPossibleTransformCombinationSize ||
-         kPossibleTransformCombinations[i][size] == TransformType::kNum)) {
-      return kPossibleTransformCombinations[i];
-    }
-  }
-  assert(false);
-  return nullptr;
-}
-
-// Find a set of TransformType's into the official list and returns a pointer to
-// it.
-template <typename... Ts>
-const TransformType* FindTransformTypes(Ts... args) {
-  const TransformType transforms[] = {args...};
-  return FindTransformationCombination(transforms, sizeof...(args));
-}
-
-// Translates an entropy mode to a CrunchConfig.
-void TranslateEntropyConfig(const EntropyConfig& c, int effort,
-                            WP2::Vector<CrunchConfig>* configs) {
-  TransformType transforms[kPossibleTransformCombinationSize];
-  uint32_t size = 0;
-  if (c.mode == EntropyMode::kPalette) {
-    transforms[size++] = TransformType::kColorIndexing;
-  }
-  if (c.mode == EntropyMode::kSubGreen ||
-      c.mode == EntropyMode::kSpatialSubGreen) {
-    transforms[size++] = TransformType::kSubtractGreen;
-  }
-  if (c.mode == EntropyMode::kSpatial ||
-      c.mode == EntropyMode::kSpatialSubGreen) {
-    transforms[size++] = TransformType::kPredictor;
-    if (effort != 0 && !c.red_and_blue_always_zero) {
-      transforms[size++] = TransformType::kCrossColor;
-    }
-  }
-  configs->resize_no_check(configs->size() + 1);
-  configs->back().transforms = FindTransformationCombination(transforms, size);
-  configs->back().use_premultiplied = c.use_premultiplied;
-
-  // If we have a palette, also check in combination with spatial.
-  if (effort >= 5 && c.mode == EntropyMode::kPalette) {
-    configs->resize_no_check(configs->size() + 1);
-    configs->back().transforms = FindTransformTypes(
-        TransformType::kColorIndexing, TransformType::kPredictor);
-    configs->back().use_premultiplied = c.use_premultiplied;
-  }
 }
 
 }  // namespace
@@ -480,18 +497,17 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   // anyway.
   const bool can_use_palette = (encoder->palette_.Size() > 1);
 
-  WP2_CHECK_ALLOC_OK(configs->reserve(kPossibleTransformCombinationsNum));
   // Do not use Group4 for big palettes for CPU reasons and also because it is
   // less likely that Group4 will work.
   if (encoder->palette_.Size() >= 2 && encoder->palette_.Size() < 256) {
     // Try group4 for images with a palette.
-    configs->resize_no_check(configs->size() + 1);
+    WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
     configs->back().transforms = FindTransformTypes(TransformType::kGroup4);
     configs->back().group4_use_move_to_front = false;
     configs->back().use_premultiplied = false;
 
     if (encoder->palette_.Size() > 3 && effort > 0) {
-      configs->resize_no_check(configs->size() + 1);
+      WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
       // Copy the previous config.
       configs->back() = configs->at(configs->size() - 2);
       // Try using a MoveToFrontCache for images with more than 3 colors.
@@ -499,6 +515,9 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
       configs->back().use_premultiplied = false;
     }
   }
+  WP2::Vector<EntropyConfig> entropy_configs;
+  WP2_CHECK_ALLOC_OK(
+      entropy_configs.reserve(kPossibleTransformCombinationsNum));
   if (effort == 0) {
     if (configs->size() != 1) {
       // AnalyzeEntropy is somewhat slow. 'red_and_blue_always_zero' is unused
@@ -506,19 +525,15 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
       configs->clear();
       const bool can_premultiply =
           (encoder->has_alpha_ && !WP2IsPremultiplied(encoder->pic_.format()));
-      const EntropyConfig config = {
-          can_use_palette ? EntropyMode::kPalette
-                          : EntropyMode::kSpatialSubGreen,
-          can_premultiply, /*red_and_blue_always_zero=*/false,
-          /*entropy=*/0.f};
-      TranslateEntropyConfig(config, effort, configs);
+      AddConfig(can_use_palette ? EntropyMode::kPalette
+                                : EntropyMode::kSpatialSubGreen,
+                can_premultiply, /*red_and_blue_always_zero=*/false,
+                /*entropy=*/0.f, effort, &entropy_configs);
     }
     n_lz77s = 1;
-    WP2_CHECK_STATUS(entropy_progress.AdvanceBy(1.));
   } else {
     // Try out multiple LZ77 on images with few colors.
     n_lz77s = (can_use_palette && encoder->palette_.Size() <= 16) ? 2 : 1;
-    WP2::Vector<EntropyConfig> entropy_configs;
     // For effort 5, we ask for 2 so that in case the best one is Palette, we
     // still try a normal configuration because color cache can sometimes be
     // better than palette.
@@ -534,19 +549,20 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
     const uint32_t histo_bits =
         GetHistoBits(effort, can_use_palette, pic.width(), pic.height());
     const uint32_t transform_bits = GetTransformBits(effort, histo_bits);
-    WP2_CHECK_STATUS(AnalyzeEntropy(can_use_palette, transform_bits, *encoder,
-                                    num_configs_max, &entropy_configs));
+    WP2_CHECK_STATUS(AnalyzeEntropy(can_use_palette, effort, transform_bits,
+                                    *encoder, num_configs_max,
+                                    &entropy_configs));
     if (effort == 5 && entropy_configs[0].mode != EntropyMode::kPalette) {
       // When we have palette as first transform, we also check the second one
       // as it can be better. If the first one is not palette, only focus on the
       // first one.
       entropy_configs.resize_no_check(1);
     }
-    WP2_CHECK_STATUS(entropy_progress.AdvanceBy(0.5));
-    for (const EntropyConfig& c : entropy_configs) {
-      TranslateEntropyConfig(c, effort, configs);
-    }
-    WP2_CHECK_STATUS(entropy_progress.AdvanceBy(0.5));
+  }
+  WP2_CHECK_STATUS(entropy_progress.AdvanceBy(1.));
+  // Remove the internal info.
+  for (const EntropyConfig& c : entropy_configs) {
+    WP2_CHECK_ALLOC_OK(configs->push_back(c.config));
   }
   // Configs are ordered with the smallest entropies first to favor early exits
   // later. Still, we slightly change the order so that increasingly including
@@ -567,11 +583,8 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
       // Look at the following configurations.
       for (auto iter_next = iter; iter_next != configs->end(); ++iter_next) {
         if (iter_next->GetNumTransforms() == i &&
-            config.use_premultiplied == iter_next->use_premultiplied &&
-            std::equal(
-                config.transforms,
-                config.transforms + std::min(i, config.GetNumTransforms()),
-                iter_next->transforms)) {
+            (config.ShouldBeCachedFor(*iter_next) ||
+             iter_next->ShouldBeCachedFor(config))) {
           // If the set of transforms contains the currently studied one, have
           // it be the new studied one.
           if (i > config.GetNumTransforms()) config = *iter;

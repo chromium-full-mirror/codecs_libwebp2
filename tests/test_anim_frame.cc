@@ -58,6 +58,8 @@ TEST(AnimFrameTest, ForceLossless) {
   second_frame.duration_ms = 20;
   ASSERT_WP2_OK(second_frame.rgb_pixels.SetView(buffers[1]));
 
+  const uint32_t rgb_bit_depth =
+      (first_frame.rgb_pixels.format() == WP2_Argb_38) ? 10 : 8;
   const bool has_alpha = !AllFramesAreOpaque(frames);
 
   EncoderConfig config;
@@ -66,8 +68,8 @@ TEST(AnimFrameTest, ForceLossless) {
   MemoryWriter encoded_data;
 
   ASSERT_WP2_OK(EncodeHeader(
-      config, first_frame.GetWidth(), first_frame.GetHeight(), has_alpha,
-      /*is_anim=*/(frames.size() > 1), /*loop_forever=*/false,
+      config, first_frame.GetWidth(), first_frame.GetHeight(), rgb_bit_depth,
+      has_alpha, /*is_anim=*/(frames.size() > 1), /*loop_forever=*/false,
       kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
@@ -152,6 +154,9 @@ TEST_P(ParameterizedAnimFrameTest, Blend) {
   second_frame.window = window;
   ASSERT_WP2_OK(second_frame.rgb_pixels.SetView(buffers[1]));
 
+  const uint32_t rgb_bit_depth =
+      (first_frame.rgb_pixels.format() == WP2_Argb_38) ? 10 : 8;
+
   bool has_alpha = false;
   for (const Subframe& subframe : subframes) {
     has_alpha |= subframe.rgb_pixels.HasTransparency();
@@ -166,9 +171,9 @@ TEST_P(ParameterizedAnimFrameTest, Blend) {
 
   ASSERT_WP2_OK(EncodeHeader(
       config, first_frame.rgb_pixels.width(), first_frame.rgb_pixels.height(),
-      has_alpha, /*is_anim=*/(subframes.size() > 1), /*loop_forever=*/false,
-      kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
-      /*has_trailing_data=*/false, &encoded_data));
+      rgb_bit_depth, has_alpha, /*is_anim=*/(subframes.size() > 1),
+      /*loop_forever=*/false, kDefaultBackgroundColor, RGB12b{10, 0, 30},
+      /*has_icc=*/false, /*has_trailing_data=*/false, &encoded_data));
 
   SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha,
                                    config.tile_shape);
@@ -230,6 +235,9 @@ TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
   second_frame.window = window;
   ASSERT_WP2_OK(second_frame.rgb_pixels.SetView(buffers[1]));
 
+  const uint32_t rgb_bit_depth =
+      (first_frame.rgb_pixels.format() == WP2_Argb_38) ? 10 : 8;
+
   bool has_alpha = false;
   for (const Subframe& subframe : subframes) {
     has_alpha |= subframe.rgb_pixels.HasTransparency();
@@ -244,9 +252,9 @@ TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
 
   ASSERT_WP2_OK(EncodeHeader(
       config, first_frame.rgb_pixels.width(), first_frame.rgb_pixels.height(),
-      has_alpha, /*is_anim=*/(subframes.size() > 1), /*loop_forever=*/false,
-      kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
-      /*has_trailing_data=*/false, &encoded_data));
+      rgb_bit_depth, has_alpha, /*is_anim=*/(subframes.size() > 1),
+      /*loop_forever=*/false, kDefaultBackgroundColor, RGB12b{10, 0, 30},
+      /*has_icc=*/false, /*has_trailing_data=*/false, &encoded_data));
 
   SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha,
                                    config.tile_shape);
@@ -386,6 +394,9 @@ TEST_P(ParameterizedAnimFrameTest, RandomFrames) {
     printf("frame %d duration %d force_dispose %d\n", i, frame.duration_ms,
            frame.force_dispose);
   }
+
+  const uint32_t rgb_bit_depth =
+      (frames.front().rgb_pixels.format() == WP2_Argb_38) ? 10 : 8;
   const bool has_alpha = !AllFramesAreOpaque(frames);
 
   EncoderConfig config;
@@ -398,10 +409,10 @@ TEST_P(ParameterizedAnimFrameTest, RandomFrames) {
   printf("Background_color: Argb32(%d, %d, %d, %d)\n", background_color.a,
          background_color.r, background_color.g, background_color.b);
   ASSERT_WP2_OK(EncodeHeader(
-      config, width, height, has_alpha, /*is_anim=*/(frames.size() > 1),
-      /*loop_forever=*/false, ToArgb38b(background_color),
-      /*preview_color=*/RGB12b{10, 0, 30}, /*has_icc=*/false,
-      /*has_trailing_data=*/false, &encoded_data));
+      config, width, height, rgb_bit_depth, has_alpha,
+      /*is_anim=*/(frames.size() > 1), /*loop_forever=*/false,
+      ToArgb38b(background_color), /*preview_color=*/RGB12b{10, 0, 30},
+      /*has_icc=*/false, /*has_trailing_data=*/false, &encoded_data));
 
   FrameEncoder frame_encode(config, ToArgb38b(background_color), frames,
                             kProgress);
@@ -485,15 +496,17 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
     num_consecutive_preframes = is_preframe ? num_consecutive_preframes + 1 : 0;
   }
 
+  const uint32_t rgb_bit_depth =
+      (subframes.front().rgb_pixels.format() == WP2_Argb_38) ? 10 : 8;
   const Argb32b background_color = RandomColor(has_alpha, &random);
   printf("Background_color: Argb32(%d, %d, %d, %d)\n", background_color.a,
          background_color.r, background_color.g, background_color.b);
 
   ASSERT_WP2_OK(EncodeHeader(
-      config, width, height, has_alpha, /*is_anim=*/(subframes.size() > 1),
-      /*loop_forever=*/false, ToArgb38b(background_color),
-      /*preview_color=*/RGB12b{10, 0, 30}, /*has_icc=*/false,
-      /*has_trailing_data=*/false, &encoded_data));
+      config, width, height, rgb_bit_depth, has_alpha,
+      /*is_anim=*/(subframes.size() > 1), /*loop_forever=*/false,
+      ToArgb38b(background_color), /*preview_color=*/RGB12b{10, 0, 30},
+      /*has_icc=*/false, /*has_trailing_data=*/false, &encoded_data));
 
   SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha,
                                    config.tile_shape);

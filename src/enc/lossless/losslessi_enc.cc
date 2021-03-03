@@ -84,6 +84,12 @@ uint32_t CrunchConfig::GetNumTransforms() const {
   return num_transforms;
 }
 
+bool CrunchConfig::ShouldBeCachedFor(const CrunchConfig& config) const {
+  return (use_premultiplied == config.use_premultiplied) &&
+         std::equal(transforms, transforms + GetNumTransforms(),
+                    config.transforms);
+}
+
 // -----------------------------------------------------------------------------
 
 WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
@@ -916,9 +922,7 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
     bool cache_transforms = false;
     if (i_config + 1 < crunch_configs.size() &&
         config.transforms[0] != TransformType::kGroup4) {
-      cache_transforms = std::equal(
-          config.transforms, config.transforms + config.GetNumTransforms(),
-          crunch_configs[i_config + 1].transforms);
+      cache_transforms = config.ShouldBeCachedFor(crunch_configs[i_config + 1]);
     }
     WP2_CHECK_STATUS(encoder.ApplyAndWriteTransforms(
         config,

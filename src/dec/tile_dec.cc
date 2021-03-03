@@ -80,7 +80,8 @@ WP2Status TileDecoder::TryAssignNextTile() {
 
 WP2Status TileDecoder::Execute() {
   while (tile_ != nullptr) {
-    const uint32_t max_num_bytes = GetTileMaxNumBytes(*gparams_, tile_->rect);
+    const uint32_t max_num_bytes =
+        GetTileMaxNumBytes(features_->rgb_bit_depth, *gparams_, tile_->rect);
 
     if (tile_->chunk_size == max_num_bytes) {
       // Raw samples are expected instead of the regular ANS decoding.
@@ -227,16 +228,16 @@ WP2Status GetTilesLayout(uint32_t frame_width, uint32_t frame_height,
   return WP2_STATUS_OK;
 }
 
-uint32_t GetTileMaxNumBytes(const GlobalParams& gparams,
+uint32_t GetTileMaxNumBytes(uint32_t rgb_bit_depth, const GlobalParams& gparams,
                             const Rectangle& tile_rect) {
 #if defined(WP2_ENC_DEC_MATCH)
-  (void)gparams, (void)tile_rect;
+  (void)rgb_bit_depth, (void)gparams, (void)tile_rect;
   // Make sure it does not fall back to raw pixel coding in CodeTiles().
   return kMaxChunkSize;
 #else
   const bool lossless = (gparams.type_ == GlobalParams::GP_LOSSLESS);
   const uint32_t channel_bits =
-      lossless ? 8 : (gparams.transf_.GetYUVPrecisionBits() + 1u);
+      lossless ? rgb_bit_depth : (gparams.transf_.GetYUVPrecisionBits() + 1u);
   const uint32_t num_pixels = tile_rect.width * tile_rect.height;
   const uint32_t alpha_bits = gparams.has_alpha_ ? kAlphaBits : 0;
   const uint32_t max_num_bits = (alpha_bits + 3 * channel_bits) * num_pixels;
@@ -260,8 +261,9 @@ WP2Status SkipTiles(DataSource* const data_source,
         GetTileRect(window.width, window.height, features.tile_width,
                     features.tile_height, tile_index);
     uint32_t tile_chunk_size;
-    WP2_CHECK_STATUS(
-        DecodeTileChunkSize(gparams, tile_rect, data_source, &tile_chunk_size));
+    WP2_CHECK_STATUS(DecodeTileChunkSize(features.rgb_bit_depth, gparams,
+                                         tile_rect, data_source,
+                                         &tile_chunk_size));
     data_source->MarkNumBytesAsRead(tile_chunk_size);
   }
   return WP2_STATUS_OK;

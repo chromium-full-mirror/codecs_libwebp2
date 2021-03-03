@@ -32,25 +32,53 @@ namespace WP2 {
 
 WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
                         Writer* const output) {
-  const uint32_t max_num_bytes = GetTileMaxNumBytes(gparams, tile->rect);
+  const uint32_t rgb_bit_depth =
+      (tile->rgb_input.format() == WP2_Argb_38) ? 10 : 8;
+  const uint32_t max_num_bytes =
+      GetTileMaxNumBytes(rgb_bit_depth, gparams, tile->rect);
 
   if (gparams.type_ == GlobalParams::GP_LOSSLESS) {
     // RGB input is expected.
     assert(!tile->rgb_input.IsEmpty());
-    const uint8_t* row = (const uint8_t*)tile->rgb_input.GetRow(0);
-    for (uint32_t y = 0; y < tile->rect.height; ++y) {
-      if (gparams.has_alpha_) {
-        // Write rows of Argb samples.
-        WP2_CHECK_ALLOC_OK(output->Append((void*)row, tile->rect.width * 4));
-      } else {
-        // Write only rgb.
-        for (uint32_t x = 0; x < tile->rect.width; ++x) {
-          WP2_CHECK_ALLOC_OK(output->Append((void*)&row[x * 4 + 1], 3));
+    if (WP2FormatBpc(tile->rgb_input.format()) == 1) {
+      for (uint32_t y = 0; y < tile->rect.height; ++y) {
+        const uint8_t* const row = tile->rgb_input.GetRow8(y);
+        if (gparams.has_alpha_) {
+          // Write rows of Argb samples.
+          WP2_CHECK_ALLOC_OK(output->Append((void*)row, tile->rect.width * 4));
+        } else {
+          // Write only rgb.
+          for (uint32_t x = 0; x < tile->rect.width; ++x) {
+            WP2_CHECK_ALLOC_OK(output->Append((void*)&row[x * 4 + 1], 3));
+          }
         }
       }
-      row += tile->rgb_input.stride();
+      // TODO(yguyon): Simulate ANSDebugPrefix to count these raw bytes?
+    } else {
+      assert(tile->rgb_input.format() == WP2_Argb_38);
+      // Allocate, fill and write the 'data' to 'output'.
+      // TODO(yguyon): Use less memory by outputting 8 lines by 8 lines?
+      Data data;
+      WP2_CHECK_STATUS(data.Resize(max_num_bytes, /*keep_bytes=*/false));
+      // Use a HeaderEnc instance to easily pack sample bits (e.g. 10 by 10).
+      HeaderEnc bit_packer(data.bytes, data.size, "raw_pixels");
+
+      for (uint32_t y = 0; y < tile->rect.height; ++y) {
+        const uint16_t* const row = tile->rgb_input.GetRow16(y);
+        for (uint32_t x = 0; x < tile->rect.width; ++x) {
+          if (gparams.has_alpha_) {
+            bit_packer.PutBits(row[x * 4 + 0], kAlphaBits, "alpha");
+          }
+          bit_packer.PutBits(row[x * 4 + 1], 10, "red");
+          bit_packer.PutBits(row[x * 4 + 2], 10, "green");
+          bit_packer.PutBits(row[x * 4 + 3], 10, "blue");
+        }
+      }
+
+      WP2_CHECK_OK(bit_packer.Ok(), WP2_STATUS_BAD_WRITE);
+      assert(bit_packer.Used() == max_num_bytes);
+      WP2_CHECK_ALLOC_OK(output->Append(data.bytes, data.size));
     }
-    // TODO(yguyon): Simulate ANSDebugPrefix to count these raw bytes?
   } else {
     // YUV input is expected even though RGB may also be available.
     assert(!tile->yuv_input.IsEmpty());

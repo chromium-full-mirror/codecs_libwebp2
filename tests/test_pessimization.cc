@@ -153,12 +153,13 @@ WP2Status RandomEncodeBeforeTile(uint32_t width, uint32_t height,
   WP2_CHECK_OK(final_config.IsValid(), WP2_STATUS_INVALID_CONFIGURATION);
   WP2_CHECK_OK(!final_config.create_preview, WP2_STATUS_INVALID_CONFIGURATION);
 
+  const uint32_t rgb_bit_depth = random->FlipACoin() ? 10 : 8;
   const bool has_alpha = random->FlipACoin();
 
   // Append proxy header data, only config and dimensions are relevant.
-  WP2_CHECK_STATUS(EncodeHeader(final_config, width, height, has_alpha,
-                                /*is_anim=*/false, /*loop_forever=*/true,
-                                kDefaultBackgroundColor,
+  WP2_CHECK_STATUS(EncodeHeader(final_config, width, height, rgb_bit_depth,
+                                has_alpha, /*is_anim=*/false,
+                                /*loop_forever=*/true, kDefaultBackgroundColor,
                                 /*preview_color=*/RGB12b(), /*has_icc=*/false,
                                 /*has_trailing_data=*/false, output));
 

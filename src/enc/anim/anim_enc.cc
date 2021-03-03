@@ -77,7 +77,8 @@ WP2Status AnimationEncoder::AddFrame(const ArgbBuffer& pixels,
   }
 
   WP2_CHECK_ALLOC_OK(frames.resize(frames.size() + 1));
-  WP2Status status = frames.back().rgb_pixels.ConvertFrom(pixels);
+  // TODO(yguyon): Handle Argb38 without precision loss
+  const WP2Status status = frames.back().rgb_pixels.ConvertFrom(pixels);
   if (status != WP2_STATUS_OK) frames.pop_back();  // No-op if problem.
   WP2_CHECK_STATUS(status);
   frames.back().duration_ms = duration_ms;
@@ -176,11 +177,19 @@ WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
   const bool has_trailing_data =
       (metadata.xmp.size > 0) || (metadata.exif.size > 0);
 
+  const uint32_t rgb_bit_depth =
+      (first_frame.rgb_pixels.format() == WP2_Argb_38) ? 10 : 8;
+  for (const Frame& frame : frames) {
+    if (frame.rgb_pixels.format() != first_frame.rgb_pixels.format()) {
+      assert(false);
+    }
+  }
+
   // TODO(yguyon): Actually encode frames and compute background color etc.
   WP2_CHECK_STATUS(EncodeHeader(
-      config, first_frame.GetWidth(), first_frame.GetHeight(), has_alpha,
-      /*is_anim=*/true, loop_forever, kDefaultBackgroundColor, preview_color,
-      has_icc, has_trailing_data, output));
+      config, first_frame.GetWidth(), first_frame.GetHeight(), rgb_bit_depth,
+      has_alpha, /*is_anim=*/true, loop_forever, kDefaultBackgroundColor,
+      preview_color, has_icc, has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   if (config.create_preview && first_frame.rgb_pixels.IsEmpty()) {

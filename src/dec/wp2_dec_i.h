@@ -127,7 +127,8 @@ WP2Status FillBorders(const BitstreamFeatures& features,
                       const CSPTransform& csp_transform,
                       YUVPlane* const output);
 
-WP2Status DecodeTileChunkSize(const GlobalParams& params,
+WP2Status DecodeTileChunkSize(uint32_t rgb_bit_depth,
+                              const GlobalParams& params,
                               const Rectangle& tile_rect,
                               DataSource* const data_source,
                               uint32_t* const tile_chunk_size);

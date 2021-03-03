@@ -78,9 +78,9 @@ WP2Status GlimpseTillNextANMFChunk(const DecoderConfig& config,
           GetTileRect(window.width, window.height, features.tile_width,
                       features.tile_height, state->num_glimpsed_tiles);
       uint32_t tile_chunk_size = 0;
-      WP2_CHECK_STATUS(DecodeTileChunkSize(state->glimpsed_frame_gparams,
-                                           tile_rect, state->data_source,
-                                           &tile_chunk_size));
+      WP2_CHECK_STATUS(DecodeTileChunkSize(
+          features.rgb_bit_depth, state->glimpsed_frame_gparams, tile_rect,
+          state->data_source, &tile_chunk_size));
       state->data_source->MarkNumBytesAsRead(tile_chunk_size);
       ++state->num_glimpsed_tiles;
     }

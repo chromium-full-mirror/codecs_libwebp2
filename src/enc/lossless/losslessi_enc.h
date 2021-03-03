@@ -235,6 +235,9 @@ struct CrunchConfig {
   uint32_t transform_bits;
   // Use a MoveToFrontCache in group4 to signal new colors.
   bool group4_use_move_to_front;
+
+  // Return true if caching the current CrunchConfig results will help 'config'.
+  bool ShouldBeCachedFor(const CrunchConfig& config) const;
 };
 
 WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,

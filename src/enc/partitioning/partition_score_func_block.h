@@ -42,6 +42,9 @@ namespace WP2 {
 // Based on block encoding. Can only be used with a TopLeftBestPartitioner.
 class BlockScoreFunc : public PartitionScoreFunc {
  public:
+  // use_splits: whether block geometry is encoded with splits or block sizes.
+  explicit BlockScoreFunc(bool use_splits);
+
   WP2Status Init(const EncoderConfig& config, const Rectangle& tile_rect,
                  const YUVPlane& yuv, const GlobalParams& gparams,
                  const ProgressRange& progress) override;
@@ -51,7 +54,10 @@ class BlockScoreFunc : public PartitionScoreFunc {
 
   // Returns the score for encoding several 'blocks' (at most 4).
   // Can be used for evaluating a block against its sub-blocks, for example.
+  // 'extra_rate' is an extra bit cost added to rd-opt score computation.
+  // 'best_score' is the previous best score (if any), for debugging.
   WP2Status ComputeScore(const Block blocks[4], uint32_t num_blocks,
+                         float extra_rate, float best_score,
                          float* const score);
 
   WP2Status Use(const Block& block) override;
@@ -79,8 +85,11 @@ class BlockScoreFunc : public PartitionScoreFunc {
   // Defined by 'config_' and not modified outside Init().
   Vector<TransformPair> transforms_, transforms_subset_;
 
+  bool use_splits_;
+
   // Instances for recording and estimating the bit-rate/disto per block.
   mutable YUVPlane buffer_;  // Reconstructed blocks (final + under test).
+
   FrontMgrCustom front_mgr_;
   ANSDictionaries dicts_;
   SyntaxWriter syntax_writer_;
@@ -96,8 +105,9 @@ class BlockScoreFunc : public PartitionScoreFunc {
  private:
   WP2Status RegisterScoreForVDebug(const Block blocks[], uint32_t num_blocks,
                                    const float rate[4], const float disto[4],
-                                   float total_rate, float total_disto,
-                                   float score);
+                                   float extra_rate, float total_rate,
+                                   float total_disto, float score,
+                                   bool is_best);
 };
 
 //------------------------------------------------------------------------------

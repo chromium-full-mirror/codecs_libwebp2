@@ -512,8 +512,17 @@ WP2Status SyntaxWriter::Record(const CodedBlock& cb) {
 
 WP2Status SyntaxWriter::RecordSize(const FrontMgrDoubleOrderBase& mgr,
                                    BlockSize dim) {
+  assert(!use_splits_);
   ANSEncNoop enc;
   WriteBlockSize(mgr, dim, &symbol_recorder_, &enc);
+  return WP2_STATUS_OK;
+}
+
+WP2Status SyntaxWriter::RecordSplit(const SplitIteratorBase& mgr,
+                                    uint32_t split_idx) {
+  assert(use_splits_);
+  ANSEncNoop enc;
+  WriteBlockSplit(mgr, split_idx, &symbol_recorder_, &enc);
   return WP2_STATUS_OK;
 }
 

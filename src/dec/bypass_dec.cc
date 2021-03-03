@@ -37,30 +37,53 @@ WP2Status TileDecoder::BypassTileDec() {
   if (gparams_->type_ == GlobalParams::GP_LOSSLESS) {
     tile_->output_is_yuv = false;
     assert(!tile_->rgb_output.IsEmpty());
-    const uint32_t bytes_per_row =
-        tile_->rect.width * (gparams_->has_alpha_ ? 4 : 3);
-    assert(bytes_per_row * tile_->rect.height ==
-           GetTileMaxNumBytes(*gparams_, tile_->rect));
 
-    uint8_t* row = (uint8_t*)tile_->rgb_output.GetRow(0);
-    tile_->num_decoded_rows = 0;
-    while (tile_->num_decoded_rows < tile_->rect.height) {
-      DataSource::DataHandle handle;
-      WP2_CHECK_OK(tile_->input->TryReadNext(bytes_per_row, &handle),
-                   WP2_STATUS_NOT_ENOUGH_DATA);  // TODO(yguyon): Or OOM?
-      if (gparams_->has_alpha_) {
-        std::memcpy(row, handle.GetBytes(), handle.GetSize());
-      } else {
-        for (uint32_t x = 0; x < tile_->rect.width; ++x) {
-          row[x * 4 + 0] = kAlphaMax;
-          row[x * 4 + 1] = handle.GetBytes()[x * 3 + 0];
-          row[x * 4 + 2] = handle.GetBytes()[x * 3 + 1];
-          row[x * 4 + 3] = handle.GetBytes()[x * 3 + 2];
+    if (features_->rgb_bit_depth == 8) {
+      const uint32_t bytes_per_row =
+          tile_->rect.width * (gparams_->has_alpha_ ? 4 : 3);
+      assert(
+          bytes_per_row * tile_->rect.height ==
+          GetTileMaxNumBytes(features_->rgb_bit_depth, *gparams_, tile_->rect));
+
+      for (tile_->num_decoded_rows = 0;
+           tile_->num_decoded_rows < tile_->rect.height;
+           ++tile_->num_decoded_rows) {
+        DataSource::DataHandle handle;
+        WP2_CHECK_OK(tile_->input->TryReadNext(bytes_per_row, &handle),
+                     WP2_STATUS_NOT_ENOUGH_DATA);
+        // TODO(yguyon): Also accept WP2_Argb_38 as output format
+        uint8_t* const row = tile_->rgb_output.GetRow8(tile_->num_decoded_rows);
+        if (gparams_->has_alpha_) {
+          std::memcpy(row, handle.GetBytes(), handle.GetSize());
+        } else {
+          for (uint32_t x = 0; x < tile_->rect.width; ++x) {
+            row[x * 4 + 0] = kAlphaMax;
+            std::memcpy(row + x * 4 + 1, handle.GetBytes() + x * 3, 3);
+          }
         }
+        WP2_CHECK_STATUS(tile_->row_progress.AdvanceBy(1.));
       }
-      row += tile_->rgb_output.stride();
-      ++tile_->num_decoded_rows;
-      WP2_CHECK_STATUS(tile_->row_progress.AdvanceBy(1.));
+    } else {
+      assert(features_->rgb_bit_depth == 10);
+      HeaderDec bit_unpacker(tile_->input, "raw_pixels");
+      for (tile_->num_decoded_rows = 0;
+           tile_->num_decoded_rows < tile_->rect.height;
+           ++tile_->num_decoded_rows) {
+        // TODO(yguyon): Also accept WP2_Argb_32 as output format
+        uint16_t* const row =
+            tile_->rgb_output.GetRow16(tile_->num_decoded_rows);
+        for (uint32_t x = 0; x < tile_->rect.width; ++x) {
+          row[x * 4 + 0] = gparams_->has_alpha_
+                               ? bit_unpacker.ReadBits(kAlphaBits, "alpha")
+                               : kAlphaMax;
+          row[x * 4 + 1] = bit_unpacker.ReadBits(10, "red");
+          row[x * 4 + 2] = bit_unpacker.ReadBits(10, "green");
+          row[x * 4 + 3] = bit_unpacker.ReadBits(10, "blue");
+        }
+        WP2_CHECK_STATUS(tile_->row_progress.AdvanceBy(1.));
+      }
+
+      WP2_CHECK_STATUS(bit_unpacker.GetStatus());
     }
   } else {  // !GP_LOSSLESS
     tile_->output_is_yuv = true;
@@ -98,8 +121,9 @@ WP2Status TileDecoder::BypassTileDec() {
       tile_->yuv_output.A.Fill(kAlphaMax);
     }
 
-    tile_->num_decoded_rows = 0;
-    while (tile_->num_decoded_rows < tile_->rect.height) {
+    for (tile_->num_decoded_rows = 0;
+         tile_->num_decoded_rows < tile_->rect.height;
+         ++tile_->num_decoded_rows) {
       const uint32_t y = tile_->num_decoded_rows;
       // Read interleaved channels to output samples line by line.
       for (Channel channel : {kYChannel, kUChannel, kVChannel}) {
@@ -114,7 +138,6 @@ WP2Status TileDecoder::BypassTileDec() {
           row[x] = (int16_t)bit_unpacker.ReadBits(kAlphaBits, "alpha");
         }
       }
-      ++tile_->num_decoded_rows;
       WP2_CHECK_STATUS(tile_->row_progress.AdvanceBy(1.));
     }
 
@@ -123,7 +146,8 @@ WP2Status TileDecoder::BypassTileDec() {
   const uint32_t num_read_bytes = tile_->input->GetNumDiscardedBytes() +
                                   tile_->input->GetNumReadBytes() -
                                   num_read_bytes_before;
-  if (num_read_bytes != GetTileMaxNumBytes(*gparams_, tile_->rect)) {
+  if (num_read_bytes !=
+      GetTileMaxNumBytes(features_->rgb_bit_depth, *gparams_, tile_->rect)) {
     assert(false);
   }
 

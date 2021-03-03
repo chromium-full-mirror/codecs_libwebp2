@@ -29,7 +29,6 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
-
 // Class for iterating over blocks by splitting them using various split
 // patterns. Usage:
 // while (!it.Done()) {
@@ -84,6 +83,8 @@ class SplitIteratorBase {
   virtual void NextBlock() = 0;
 
  protected:
+  WP2Status CopyInternal(const SplitIteratorBase& other);
+
   // Returns the 'sub_blocks' given a 'block' (size and position) and a
   // 'split_pattern'.
   static void GetSplitPatternBlocks(const Block& block,
@@ -99,6 +100,7 @@ class SplitIteratorLexico : public SplitIteratorBase {
  public:
   WP2Status Init(PartitionSet partition_set, uint32_t width,
                  uint32_t height) override;
+  WP2Status CopyFrom(const SplitIteratorLexico& other);
 
   const SplitInfo& CurrentBlock() const override;
   void SplitCurrentBlock(uint32_t split_idx) override;
@@ -137,6 +139,7 @@ class SplitIteratorRecurse : public SplitIteratorBase {
  public:
   WP2Status Init(PartitionSet partition_set, uint32_t width,
                  uint32_t height) override;
+  WP2Status CopyFrom(const SplitIteratorRecurse& other);
 
   void SplitCurrentBlock(uint32_t split_idx) override;
   void NextBlock() override;
@@ -148,7 +151,7 @@ class SplitIteratorRecurse : public SplitIteratorBase {
 };
 
 // This is the SplitIterator class that should be used by default.
-typedef SplitIteratorLexico SplitIteratorDefault;
+typedef SplitIteratorRecurse SplitIteratorDefault;
 
 //------------------------------------------------------------------------------
 

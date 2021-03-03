@@ -100,7 +100,7 @@ WP2Status GetTilesLayout(uint32_t frame_width, uint32_t frame_height,
 
 // Returns the maximum number of bytes that the chunk of a tile can occupy
 // (without the chunk size header). 'tile_rect' in pixels, not padded.
-uint32_t GetTileMaxNumBytes(const GlobalParams& gparams,
+uint32_t GetTileMaxNumBytes(uint32_t rgb_bit_depth, const GlobalParams& gparams,
                             const Rectangle& tile_rect);
 
 //------------------------------------------------------------------------------

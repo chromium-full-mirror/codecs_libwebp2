@@ -37,6 +37,8 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
+BlockScoreFunc::BlockScoreFunc(bool use_splits) : use_splits_(use_splits) {}
+
 WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
                                const Rectangle& tile_rect, const YUVPlane& yuv,
                                const GlobalParams& gparams,
@@ -58,10 +60,10 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
                                    tile_rect_.width, tile_rect_.height));
 
   // Initialize the instances recording only final blocks.
-  WP2_CHECK_STATUS(syntax_writer_.Init(
-      &dicts_, *config_, *gparams_, yuv, chroma_subsampling, tile_rect,
-      num_block_cols_ * num_block_rows_, use_aom_coeffs, /*use_splits=*/false,
-      ProgressRange()));
+  WP2_CHECK_STATUS(
+      syntax_writer_.Init(&dicts_, *config_, *gparams_, yuv, chroma_subsampling,
+                          tile_rect, num_block_cols_ * num_block_rows_,
+                          use_aom_coeffs, use_splits_, ProgressRange()));
   WP2_CHECK_STATUS(syntax_writer_.SetInitialSegmentIds());
   WP2_CHECK_STATUS(syntax_writer_.InitPass());
 
@@ -79,14 +81,15 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
 WP2Status BlockScoreFunc::ComputeScore(const Block& block,
                                        const ProgressRange& progress,
                                        float* const score) {
-  WP2_CHECK_STATUS(ComputeScore(&block, /*num_blocks=*/1, score));
+  WP2_CHECK_STATUS(ComputeScore(&block, /*num_blocks=*/1, /*extra_rate=*/0,
+                                /*best_score=*/0, score));
   WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;
 }
 
 WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
-                                       uint32_t num_blocks,
-                                       float* const score) {
+                                       uint32_t num_blocks, float extra_rate,
+                                       float best_score, float* const score) {
   // Copy the final state into the temporary scratch one.
   WP2_CHECK_STATUS(tmp_dicts_.CopyFrom(dicts_));
   WP2_CHECK_STATUS(tmp_syntax_writer_.CopyFrom(syntax_writer_, &tmp_dicts_));
@@ -95,7 +98,7 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
     WP2_CHECK_STATUS(tmp_dc_error_v_.CopyFrom(dc_error_v_));
   }
 
-  float total_rate = 0.f, total_disto = 0.f, rate[4], disto[4];
+  float total_rate = extra_rate, total_disto = 0.f, rate[4], disto[4];
   assert(num_blocks >= 1 && num_blocks <= 4);
   uint32_t total_pixels = 0;
   for (uint32_t i = 0; i < num_blocks; ++i) {
@@ -158,9 +161,10 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
   const float lambda = MapQuality(*config_, 200.f, -199.f);  // Empirical.
   constexpr float kNiceScale = 0.01f;  // Has no impact on the result.
   *score = 1.0f / (1.0f + kNiceScale * (lambda * total_rate + total_disto));
-  WP2_CHECK_REDUCED_STATUS(
-    RegisterScoreForVDebug(blocks, num_blocks, rate, disto, total_rate,
-                           total_disto, *score));
+  const bool is_best = (*score > best_score);
+  WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug(
+      blocks, num_blocks, rate, disto, extra_rate / total_pixels, total_rate,
+      total_disto, *score, is_best));
   return WP2_STATUS_OK;
 }
 
@@ -228,7 +232,9 @@ WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrDoubleOrderBase& front_mgr,
                                        dc_error_u, dc_error_v, cb));
   // CodedBlock::Quantize() should be called already.
   WP2_CHECK_STATUS(syntax_writer->FindBestEncodingMethods(cb));
-  WP2_CHECK_STATUS(syntax_writer->RecordSize(front_mgr, cb->dim()));
+  if (!use_splits_) {
+    WP2_CHECK_STATUS(syntax_writer->RecordSize(front_mgr, cb->dim()));
+  }
   WP2_CHECK_STATUS(syntax_writer->Record(*cb));
   if (with_alpha_) {
     WP2_CHECK_STATUS(syntax_writer->RecordAlpha(*cb));
@@ -243,7 +249,7 @@ WP2Status BlockScoreFunc::WriteBlock(const FrontMgrDoubleOrderBase& front_mgr,
   assert(front_mgr.GetMaxFittingBlock().x() == cb.x() &&
          front_mgr.GetMaxFittingBlock().y() == cb.y());
   assert(front_mgr.GetMaxPossibleBlock().rect().Contains(cb.blk().rect()));
-  {
+  if (!use_splits_) {
     ANSDebugPrefix prefix(enc, "BlockHeader");
     WriteBlockSize(front_mgr, cb.dim(), syntax_writer->symbol_writer(), enc);
   }
