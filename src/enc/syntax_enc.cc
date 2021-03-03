@@ -512,9 +512,16 @@ WP2Status SyntaxWriter::Record(const CodedBlock& cb) {
 
 WP2Status SyntaxWriter::RecordSize(const FrontMgrDoubleOrderBase& mgr,
                                    BlockSize dim) {
+  return RecordSize(dim, mgr.GetMaxPossibleBlock().dim(),
+                    mgr.GetPartitionSet());
+}
+
+WP2Status SyntaxWriter::RecordSize(BlockSize dim, BlockSize max_possible_size,
+                                   PartitionSet partition_set) {
   assert(!use_splits_);
   ANSEncNoop enc;
-  WriteBlockSize(mgr, dim, &symbol_recorder_, &enc);
+  WriteBlockSize(dim, max_possible_size, partition_set, &symbol_recorder_,
+                 &enc);
   return WP2_STATUS_OK;
 }
 

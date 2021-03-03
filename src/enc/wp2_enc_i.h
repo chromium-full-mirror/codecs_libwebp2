@@ -320,6 +320,8 @@ class SyntaxWriter : public WP2Allocable {
   WP2Status Record(const CodedBlock& cb);
   // Records the block's size.
   WP2Status RecordSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim);
+  WP2Status RecordSize(BlockSize dim, BlockSize max_possible_size,
+                       PartitionSet partition_set);
   // Records the block's split.
   WP2Status RecordSplit(const SplitIteratorBase& mgr, uint32_t split_idx);
   // Writes the headers (frozen dictionaries, etc.).

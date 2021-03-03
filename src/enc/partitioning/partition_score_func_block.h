@@ -64,7 +64,7 @@ class BlockScoreFunc : public PartitionScoreFunc {
 
  protected:
   // Tries some or all transform/predictor pairs and keeps the best one in 'cb'.
-  WP2Status FindBestBlockParams(const FrontMgrDoubleOrderBase& front_mgr,
+  WP2Status FindBestBlockParams(const FrontMgrBase& front_mgr,
                                 const BlockContext& block_context,
                                 SyntaxWriter* const syntax_writer,
                                 DCDiffusionMap* const dc_error_u,
@@ -72,14 +72,14 @@ class BlockScoreFunc : public PartitionScoreFunc {
                                 CodedBlock* const cb) const;
   // Finds the best encoding parameters then encodes and records 'cb'.
   // Advances the 'front_mgr'.
-  WP2Status EncodeBlock(const FrontMgrDoubleOrderBase& front_mgr,
-                        CodedBlock* const cb, SyntaxWriter* const syntax_writer,
+  WP2Status EncodeBlock(const FrontMgrBase& front_mgr, CodedBlock* const cb,
+                        SyntaxWriter* const syntax_writer,
                         DCDiffusionMap* const dc_error_u,
                         DCDiffusionMap* const dc_error_v,
                         YUVPlane* const buffer) const;
   // Writes 'cb' to 'enc'. Advances the 'front_mgr'.
-  WP2Status WriteBlock(const FrontMgrDoubleOrderBase& front_mgr,
-                       const CodedBlock& cb, SyntaxWriter* const syntax_writer,
+  WP2Status WriteBlock(const FrontMgrBase& front_mgr, const CodedBlock& cb,
+                       SyntaxWriter* const syntax_writer,
                        ANSEnc* const enc) const;
 
   // Defined by 'config_' and not modified outside Init().
@@ -90,7 +90,7 @@ class BlockScoreFunc : public PartitionScoreFunc {
   // Instances for recording and estimating the bit-rate/disto per block.
   mutable YUVPlane buffer_;  // Reconstructed blocks (final + under test).
 
-  FrontMgrCustom front_mgr_;
+  FrontMgrBase front_mgr_;
   ANSDictionaries dicts_;
   SyntaxWriter syntax_writer_;
   DCDiffusionMap dc_error_u_, dc_error_v_;

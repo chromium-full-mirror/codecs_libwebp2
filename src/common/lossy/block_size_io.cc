@@ -223,9 +223,15 @@ const SplitPattern* GetSplitPatterns(PartitionSet set, BlockSize size) {
 
 void WriteBlockSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim,
                     SymbolManager* const sm, ANSEncBase* const enc) {
-  const PartitionSetStats& stats = kPartSetsStats[mgr.GetPartitionSet()];
-  const BlockSize bounds =
-      stats.smallest_bounds_[mgr.GetMaxPossibleBlock().dim()];
+  WriteBlockSize(dim, mgr.GetMaxPossibleBlock().dim(), mgr.GetPartitionSet(),
+                 sm, enc);
+}
+
+void WriteBlockSize(BlockSize dim, BlockSize max_possible_size,
+                    PartitionSet partition_set, SymbolManager* const sm,
+                    ANSEncBase* const enc) {
+  const PartitionSetStats& stats = kPartSetsStats[partition_set];
+  const BlockSize bounds = stats.smallest_bounds_[max_possible_size];
   const uint32_t i = stats.slots_[bounds][dim];
   assert(i != PartitionSetStats::kInvalidSlot);
   const uint32_t cluster = stats.unique_bounds_index_[bounds];
@@ -234,9 +240,14 @@ void WriteBlockSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim,
 
 BlockSize ReadBlockSize(const FrontMgrDoubleOrderBase& mgr,
                         SymbolReader* const sr) {
-  const PartitionSetStats& stats = kPartSetsStats[mgr.GetPartitionSet()];
-  const BlockSize bounds =
-      stats.smallest_bounds_[mgr.GetMaxPossibleBlock().dim()];
+  return ReadBlockSize(mgr.GetMaxPossibleBlock().dim(), mgr.GetPartitionSet(),
+                       sr);
+}
+
+BlockSize ReadBlockSize(BlockSize max_possible_size, PartitionSet partition_set,
+                        SymbolReader* const sr) {
+  const PartitionSetStats& stats = kPartSetsStats[partition_set];
+  const BlockSize bounds = stats.smallest_bounds_[max_possible_size];
   const uint32_t cluster = stats.unique_bounds_index_[bounds];
   const uint32_t i = sr->Read(kSymbolBlockSize, cluster, "block_size");
   const BlockSize dim = stats.blocks_[bounds][i];

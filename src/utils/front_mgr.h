@@ -322,34 +322,6 @@ class FrontMgrArea : public FrontMgrDoubleOrderBase {
 
 //------------------------------------------------------------------------------
 
-// FrontMgr for arbitrary block order. Each block must be manually set before
-// any call to TryGetNextBlock(), UseSize() etc. and still has to respect the
-// constraint that any block above it must be already used.
-class FrontMgrCustom : public FrontMgrDoubleOrderBase {
- public:
-  WP2Status Init(PartitionSet partition_set, bool snapped,
-                 uint32_t width, uint32_t height) override;
-
-  void Clear() override;
-  WP2Status Sort(VectorNoCtor<Block>& blocks,
-                 Vector_u16& size_order_indices) const override;
-  // Sets 'x, y' (in kMinBlockSizePix units) as the next block position.
-  // Returns false if not possible.
-  WP2_NO_DISCARD
-  bool SetNextBlockPosition(uint32_t x, uint32_t y);
-  WP2_NO_DISCARD
-  bool TryGetNextBlock(BlockSize size, Block* const block) const override;
-  void UndoUseSize(const Block& block);
-
- protected:
-  bool IsReady(const WP2::Block& block) const override;
-  Block FindNextBlock(const Block& last_block) const override;
-  // If false, TryGetNextBlock() and UseSize() will return false.
-  bool NextIsSet() const;
-};
-
-//------------------------------------------------------------------------------
-
 }  // namespace WP2
 
 #endif  // WP2_UTILS_FRONT_MGR_H_

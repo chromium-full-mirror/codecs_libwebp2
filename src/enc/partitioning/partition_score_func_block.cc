@@ -55,9 +55,7 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
   // Store the reconstructed pixels of the temporary and final blocks.
   WP2_CHECK_STATUS(
       buffer_.Resize(src_->Y.w_, src_->Y.h_, /*pad=*/1, with_alpha_));
-  WP2_CHECK_STATUS(front_mgr_.Init(config_->partition_set,
-                                   config_->partition_snapping,
-                                   tile_rect_.width, tile_rect_.height));
+  WP2_CHECK_STATUS(front_mgr_.InitBase(tile_rect_.width, tile_rect_.height));
 
   // Initialize the instances recording only final blocks.
   WP2_CHECK_STATUS(
@@ -105,10 +103,6 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
     const Block& block = blocks[i];
 
     // Encode the block.
-    Block tmp_blk;
-    if (!front_mgr_.SetNextBlockPosition(block.x(), block.y())) assert(false);
-    assert(front_mgr_.TryGetNextBlock(block.dim(), &tmp_blk));
-    assert(block == tmp_blk);
     tmp_cb_.SetDim(block, front_mgr_);
     WP2_CHECK_STATUS(EncodeBlock(front_mgr_, &tmp_cb_, &tmp_syntax_writer_,
                                  &tmp_dc_error_u_, &tmp_dc_error_v_, &buffer_));
@@ -141,17 +135,13 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
 
     // Register the blocks in the 'front_mgr_' except the last one.
     if (i + 1 < num_blocks) {
-      if (!front_mgr_.UseSize(block.dim(), &tmp_blk, /*use_block=*/true)) {
-        assert(false);
-      }
-      assert(block == tmp_blk);
+      front_mgr_.Use(block);
     }
   }
 
   // Unregister the blocks in the 'front_mgr_' except the last one.
   for (uint32_t i = num_blocks - 1; i-- > 0;) {
     front_mgr_.UndoUse(blocks[i]);
-    front_mgr_.UndoUseSize(blocks[i]);
   }
 
   total_rate /= total_pixels;  // Average per pixel values.
@@ -169,20 +159,21 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
 }
 
 WP2Status BlockScoreFunc::Use(const Block& block) {
-  if (!front_mgr_.SetNextBlockPosition(block.x(), block.y())) assert(false);
+  assert(front_mgr_.GetOccupancy(block.x()) == block.y());
   tmp_cb_.SetDim(block, front_mgr_);
   // Write the final pixels for future context and rate computation.
   WP2_CHECK_STATUS(EncodeBlock(front_mgr_, &tmp_cb_, &syntax_writer_,
                                &dc_error_u_, &dc_error_v_, &buffer_));
-  WP2_CHECK_ALLOC_OK(
-      front_mgr_.UseSize(tmp_cb_.dim(), /*block=*/nullptr, /*use_block=*/true));
+  front_mgr_.Use(tmp_cb_.blk());
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScoreFunc::FindBestBlockParams(
-    const FrontMgrDoubleOrderBase& front_mgr, const BlockContext& block_context,
-    SyntaxWriter* const writer, DCDiffusionMap* const dc_error_u,
-    DCDiffusionMap* const dc_error_v, CodedBlock* const cb) const {
+WP2Status BlockScoreFunc::FindBestBlockParams(const FrontMgrBase& front_mgr,
+                                              const BlockContext& block_context,
+                                              SyntaxWriter* const writer,
+                                              DCDiffusionMap* const dc_error_u,
+                                              DCDiffusionMap* const dc_error_v,
+                                              CodedBlock* const cb) const {
   const Rectangle padded_tile_rect = {tile_rect_.x, tile_rect_.y,
                                       src_->GetWidth(), src_->GetHeight()};
   cb->id_ = AssignSegmentId(*config_, *gparams_, padded_tile_rect, cb->blk());
@@ -215,12 +206,14 @@ WP2Status BlockScoreFunc::FindBestBlockParams(
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrDoubleOrderBase& front_mgr,
+WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrBase& front_mgr,
                                       CodedBlock* const cb,
                                       SyntaxWriter* const syntax_writer,
                                       DCDiffusionMap* const dc_error_u,
                                       DCDiffusionMap* const dc_error_v,
                                       YUVPlane* const buffer) const {
+  assert(front_mgr.GetOccupancy(cb->x()) == cb->y());
+
   cb->SetRange(gparams_->transf_.GetYUVMin(), gparams_->transf_.GetYUVMax());
   cb->SetSrcInput(*src_);
   ContextCache pred_context;
@@ -233,7 +226,10 @@ WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrDoubleOrderBase& front_mgr,
   // CodedBlock::Quantize() should be called already.
   WP2_CHECK_STATUS(syntax_writer->FindBestEncodingMethods(cb));
   if (!use_splits_) {
-    WP2_CHECK_STATUS(syntax_writer->RecordSize(front_mgr, cb->dim()));
+    const Block max_possible_block = front_mgr.LargestPossibleBlockAt(
+        cb->x(), cb->y(), config_->partition_snapping);
+    WP2_CHECK_STATUS(syntax_writer->RecordSize(
+        cb->dim(), max_possible_block.dim(), config_->partition_set));
   }
   WP2_CHECK_STATUS(syntax_writer->Record(*cb));
   if (with_alpha_) {
@@ -242,16 +238,18 @@ WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrDoubleOrderBase& front_mgr,
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScoreFunc::WriteBlock(const FrontMgrDoubleOrderBase& front_mgr,
+WP2Status BlockScoreFunc::WriteBlock(const FrontMgrBase& front_mgr,
                                      const CodedBlock& cb,
                                      SyntaxWriter* const syntax_writer,
                                      ANSEnc* const enc) const {
-  assert(front_mgr.GetMaxFittingBlock().x() == cb.x() &&
-         front_mgr.GetMaxFittingBlock().y() == cb.y());
-  assert(front_mgr.GetMaxPossibleBlock().rect().Contains(cb.blk().rect()));
+  assert(front_mgr.GetOccupancy(cb.x()) == cb.y());
   if (!use_splits_) {
+    const Block max_possible_block = front_mgr.LargestPossibleBlockAt(
+        cb.x(), cb.y(), config_->partition_snapping);
+    assert(max_possible_block.rect().Contains(cb.blk().rect()));
     ANSDebugPrefix prefix(enc, "BlockHeader");
-    WriteBlockSize(front_mgr, cb.dim(), syntax_writer->symbol_writer(), enc);
+    WriteBlockSize(cb.dim(), max_possible_block.dim(), config_->partition_set,
+                   syntax_writer->symbol_writer(), enc);
   }
   WP2_CHECK_STATUS(syntax_writer->WriteBlock(cb, /*block_index=*/0, enc));
   return WP2_STATUS_OK;

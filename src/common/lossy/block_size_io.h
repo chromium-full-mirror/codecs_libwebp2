@@ -95,8 +95,13 @@ const SplitPattern* GetSplitPatterns(PartitionSet set, BlockSize size);
 // Writes 'dim'.
 void WriteBlockSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim,
                     SymbolManager* const sm, ANSEncBase* const enc);
+void WriteBlockSize(BlockSize dim, BlockSize max_possible_size,
+                    PartitionSet partition_set, SymbolManager* const sm,
+                    ANSEncBase* const enc);
 // Reads, updates and returns 'dim'.
 BlockSize ReadBlockSize(const FrontMgrDoubleOrderBase& mgr,
+                        SymbolReader* const sr);
+BlockSize ReadBlockSize(BlockSize max_possible_size, PartitionSet partition_set,
                         SymbolReader* const sr);
 
 //------------------------------------------------------------------------------
