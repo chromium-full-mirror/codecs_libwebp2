@@ -151,7 +151,8 @@ WP2Status PreviewFromBase64(const std::string& in, PreviewData* preview) {
       nb_bits -= 8;
     }
   }
-  return preview->Decode(out.data(), size);
+  WP2_CHECK_STATUS(preview->Decode(out.data(), size));
+  return WP2_STATUS_OK;
 }
 
 std::string PreviewToText(const PreviewData& data) {

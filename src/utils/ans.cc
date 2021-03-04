@@ -431,7 +431,7 @@ uint32_t ANSDec::ReadNextWord(uint32_t s) {
   if (data_source_->TryReadNext(IO_BYTES, &data)) {
     s |= (data[1] << 8) | data[0];   // written as endian-neutral code
   } else {
-    status_ = WP2_STATUS_BITSTREAM_ERROR;
+    status_ = WP2_STATUS_NOT_ENOUGH_DATA;
   }
   return s;
 }

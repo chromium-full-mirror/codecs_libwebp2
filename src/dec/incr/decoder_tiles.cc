@@ -163,6 +163,7 @@ WP2Status Decoder::DecodeAvailableTiles() {
   if ((partial_tile_decoder != nullptr) &&
       (partial_tile_decoder->GetPartialTile() != nullptr)) {
     Tile* const partial_tile = partial_tile_decoder->GetPartialTile();
+    assert(partial_tile->chunk_size_is_known);
     // DataSource::GetNumNextBytes() gets updated on TryGetNext() so try to get
     // the whole tile chunk first.
     if (!state_->data_source->TryGetNext(partial_tile->chunk_size,
@@ -174,12 +175,18 @@ WP2Status Decoder::DecodeAvailableTiles() {
     }
 
     WP2_CHECK_STATUS(partial_tile_decoder->Continue());
+    assert(partial_tile->input->GetNumDiscardedBytes() == 0);
 
     if (partial_tile_decoder->IsComplete()) {
       state_->data_source->MarkNumBytesAsRead(partial_tile->chunk_size);
       state_->data_source->Discard(state_->data_source->GetNumReadBytes());
       partial_tile_decoder->Clear();
       ++tiles_layout->num_decoded_tiles;
+    } else if ((partial_tile->input->GetNumReadBytes() +
+                partial_tile->input->GetNumNextBytes()) >=
+               partial_tile->chunk_size) {
+      // The whole tile chunk is available: missing data is an error.
+      return WP2_STATUS_BITSTREAM_ERROR;
     } else {
       // If the partial tile is not fully decoded, do not look further.
       WP2_CHECK_STATUS(ConvertRows(state_));
@@ -253,8 +260,10 @@ WP2Status Decoder::DecodeAvailableTiles() {
     TileDecoder* const worker = &state_->workers[i];
     WP2Status worker_status = worker->End();
     worker->tile_ = nullptr;
-    // Only the 'partial_tile_decoder' is allowed to return missing data.
-    assert(worker_status != WP2_STATUS_NOT_ENOUGH_DATA);
+    // The whole tile chunk is received. Missing data implies a bitstream error.
+    if (worker_status == WP2_STATUS_NOT_ENOUGH_DATA) {
+      worker_status = WP2_STATUS_BITSTREAM_ERROR;
+    }
 
     if ((worker_status != WP2_STATUS_OK) && (status == WP2_STATUS_OK)) {
       // The first encountered error is returned (by tile order, not time).

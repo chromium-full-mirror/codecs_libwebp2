@@ -144,13 +144,19 @@ WP2Status PreviewData::Decode(ANSDec* const dec) {
       (bool)dec->ReadBit(kPreviewNoiseProba, kPreviewTotalProba, "use_noise");
   WP2_CHECK_STATUS(DecodePalette(dec));
   WP2_CHECK_STATUS(DecodeVertices(dec));
-  return dec->GetStatus();
+  WP2_CHECK_STATUS(dec->GetStatus());
+  return WP2_STATUS_OK;
 }
 
 WP2Status PreviewData::Decode(const uint8_t data[], uint32_t data_size) {
   ExternalDataSource source(data, data_size);
   ANSDec dec(&source);
-  WP2_CHECK_STATUS(Decode(&dec));
+  WP2Status status = Decode(&dec);
+  if (status == WP2_STATUS_NOT_ENOUGH_DATA ||
+      dec.GetNumUsedBytes() != data_size) {
+    status = WP2_STATUS_BITSTREAM_ERROR;
+  }
+  WP2_CHECK_STATUS(status);
   return WP2_STATUS_OK;
 }
 

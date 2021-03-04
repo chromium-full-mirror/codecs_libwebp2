@@ -41,7 +41,7 @@ WP2Status LosslessDecode(const BitstreamFeatures& features,
   WP2_CHECK_STATUS(dec_lossless.DecodeImage());
 
   WP2_CHECK_STATUS(dec->GetStatus());
-  // Not using whole chunk is an issue.
+  // Not using the exact whole chunk is an issue.
   WP2_CHECK_OK(dec->GetNumUsedBytes() == tile->chunk_size,
                WP2_STATUS_BITSTREAM_ERROR);
 

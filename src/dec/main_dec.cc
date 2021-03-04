@@ -156,7 +156,12 @@ WP2Status DecodeTiles(uint32_t rgb_bit_depth, const DecoderConfig& config,
 
   // Loop over all threads and close them properly. No early return.
   for (TileDecoder& worker : *workers) {
-    const WP2Status worker_status = worker.End();
+    WP2Status worker_status = worker.End();
+    if (worker_status == WP2_STATUS_NOT_ENOUGH_DATA) {
+      // Tile chunk availability was checked in ReadTiles(). Missing data within
+      // a tile is a bitstream error.
+      worker_status = WP2_STATUS_BITSTREAM_ERROR;
+    }
     if (status == WP2_STATUS_OK) status = worker_status;
   }
   return status;

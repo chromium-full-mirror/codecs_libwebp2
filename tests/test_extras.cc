@@ -76,12 +76,12 @@ TEST(PreviewTest, TestBase64) {
   WP2MathInit();
 #endif
   PreviewData p;
-  std::string s;
+  // Bad.
   EXPECT_EQ(PreviewFromBase64("dasdascacas", &p), WP2_STATUS_BITSTREAM_ERROR);
-  char b64[] = "Iz6YBskuNxwo2w==";
-  EXPECT_WP2_OK(PreviewFromBase64(b64, &p));
-  b64[4] = '\0';
-  EXPECT_EQ(PreviewFromBase64(b64, &p), WP2_STATUS_BITSTREAM_ERROR);
+  // Correct.
+  EXPECT_WP2_OK(PreviewFromBase64("Iz6YBskuNxwo2w", &p));
+  // Too short.
+  EXPECT_EQ(PreviewFromBase64("Iz6YBskuNxwo2", &p), WP2_STATUS_BITSTREAM_ERROR);
 }
 
 TEST(PreviewTest, TestText) {
