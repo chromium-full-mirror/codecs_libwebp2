@@ -190,7 +190,7 @@ static inline int GetMetaIndex(const WP2::Vector_s16& image, uint32_t width,
 //------------------------------------------------------------------------------
 // Main loop, with custom row-processing function
 
-WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows, uint32_t num_bits,
+WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
                                           const int16_t* rows) {
   uint32_t n = next_transform_;
   const uint32_t cache_pixs = tile_->rect.width * num_rows;
@@ -237,25 +237,22 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows, uint32_t num_bits,
   return WP2_STATUS_OK;
 }
 
-WP2Status Decoder::ProcessRows(uint32_t row,
-                               WP2::DecoderInfo* const decoder_info) {
+WP2Status Decoder::ProcessRows(uint32_t row) {
   const int16_t* const rows =
       pixels_.data() + 4 * tile_->rect.width * last_row_;
 
   if (row > last_row_) {    // Emit output.
+    WP2::ArgbBuffer* const buf = &tile_->rgb_output;
     const uint32_t num_rows = row - last_row_;
-    (void)num_rows;
-    WP2_CHECK_REDUCED_STATUS(
-        RegisterUnprocessedRowForVDebug(num_rows, num_bits_,
-                                        rows, decoder_info));
+    WP2_CHECK_REDUCED_STATUS(RegisterUnprocessedRowForVDebug(
+        num_rows, WP2Formatbpc(buf->format()), rows, config_.info));
     // We can't process more than kNumARGBCacheRows at a time (that's the size
     // of argb_cache_), but we currently don't need more than that.
     assert(num_rows <= kNumARGBCacheRows);
-    WP2::ArgbBuffer* const buf = &tile_->rgb_output;
     assert(!buf->IsEmpty());
     int16_t* const rows_data = argb_cache_;
 
-    WP2_CHECK_STATUS(ApplyInverseTransforms(num_rows, num_bits_, rows));
+    WP2_CHECK_STATUS(ApplyInverseTransforms(num_rows, rows));
 
     uint32_t num_rows_out;
     if (WP2Formatbpc(buf->format()) <= 8) {
@@ -298,8 +295,6 @@ static inline void CopyBlock(int16_t* dst, uint32_t dist, uint32_t length) {
 }
 
 //------------------------------------------------------------------------------
-
-typedef void (*ProcessRowsFunc)(Decoder* const dec, uint32_t row);
 
 WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
                                     bool do_process,
@@ -424,7 +419,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
       ++row;
       if (do_process) {
         if (row <= last_row && (row % kNumARGBCacheRows == 0)) {
-          WP2_CHECK_STATUS(ProcessRows(row, config_.info));
+          WP2_CHECK_STATUS(ProcessRows(row));
         }
       }
     }
@@ -478,7 +473,7 @@ WP2Status Decoder::DecodeImageData(uint32_t width, uint32_t height,
 
   // Process the remaining rows corresponding to last row-block.
   const uint32_t row = (src - pixels_.data()) / 4 / width;
-  WP2_CHECK_STATUS(ProcessRows(row > last_row ? last_row : row, config_.info));
+  WP2_CHECK_STATUS(ProcessRows(row > last_row ? last_row : row));
 
   WP2_CHECK_STATUS(dec_->GetStatus());
 

@@ -85,11 +85,11 @@ class Decoder {
   // Reads the stats useful for the symbols for later ANS decoding.
   WP2Status ReadANSStats(uint32_t width, uint32_t height,
                          const LosslessSymbolsInfo& symbols_info);
-  WP2Status ApplyInverseTransforms(uint32_t num_rows, uint32_t num_bits,
+  WP2Status ApplyInverseTransforms(uint32_t num_rows,
                                    const int16_t* const rows);
   // Processes (transforms, scales & color-converts) the rows decoded after the
-  // last call. 'decoder_info' can be nullptr.
-  WP2Status ProcessRows(uint32_t row, WP2::DecoderInfo* const decoder_info);
+  // last call until row number 'row'.
+  WP2Status ProcessRows(uint32_t row);
   // Decodes an image and post-processes the rows.
   WP2Status DecodeAndProcess(uint32_t width, uint32_t last_row, bool do_process,
                              WP2::Vector_s16* const data_vec,
@@ -136,7 +136,6 @@ class Decoder {
 
   WP2::ANSDec* dec_ = nullptr;
 
-  uint32_t num_bits_ = 8;
   uint32_t last_row_ = 0;    // last input row decoded so far.
   uint32_t last_pixel_ = 0;  // last pixel decoded so far. However,
                              // it may not be transformed, scaled and
