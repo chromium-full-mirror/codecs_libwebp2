@@ -2289,6 +2289,80 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
 
 //------------------------------------------------------------------------------
 
+void GrainVDebug(const EncoderConfig& config, uint32_t x_pix, uint32_t y_pix,
+                 Channel channel, FeatureMap::NoiseStr& noise_info,
+                 int32_t* const coeffs) {
+  if (!VDMatch(config, "encoder/grain") || VDMatch(config, "segment_y") ||
+      VDMatch(config, "segment_uv")) {
+    return;
+  }
+  if (channel != VDChannel(config)) return;
+  const bool is_strength = VDMatch(config, "strength");
+  ArgbBuffer* const debug_output = &config.info->debug_output;
+  const Rectangle rect =
+      Rectangle(x_pix, y_pix, kMinBlockSizePix, kMinBlockSizePix)
+          .ClipWith(debug_output->AsRect());
+  const uint16_t v = is_strength ? noise_info.strength[(int)channel]
+                                 : noise_info.freq[(int)channel];
+  const uint16_t num_values = is_strength ? 101 : 7;  // [0-100] or [0-6]
+  const uint8_t gray = ToPixel8(v, num_values);
+  debug_output->Fill(rect, Argb32b{255, gray, gray, gray});
+
+  if (VDSelected(rect, config)) {
+    std::string& str = config.info->selection_info;
+
+    str += WP2SPrint("%u, %u px strength: %d freq: %d\n", x_pix, y_pix,
+                     noise_info.strength[(int)channel],
+                     noise_info.freq[(int)channel]);
+
+    uint32_t k = 0;
+    for (uint32_t j = 0; j < kMinBlockSizePix; ++j) {
+      for (uint32_t i = 0; i < kMinBlockSizePix; ++i, ++k) {
+        if (i == 0 && j == 0) {
+          str += WP2SPrint("  X ");
+        } else {
+          str += WP2SPrint("%3d ", coeffs[k]);
+        }
+      }
+      str += WP2SPrint("\n");
+    }
+    debug_output->DrawRect(rect, Argb32b{255, 255, 0, 0});
+  }
+}
+
+void SegmentGrainVDebug(const EncoderConfig& config, const CodedBlock& cb,
+                        uint32_t tile_pos_x, uint32_t tile_pos_y,
+                        const Segment& segment) {
+  if (!VDMatch(config, "encoder/grain/segments_y") &&
+      !VDMatch(config, "encoder/grain/segments_uv")) {
+    return;
+  }
+
+  ArgbBuffer* const debug_output = &config.info->debug_output;
+  const bool is_strength = VDMatch(config, "strength");
+  const bool is_y = VDMatch(config, "segments_y");
+  const GrainParams& grain = segment.grain_;
+  const uint16_t v = is_strength ? (is_y ? grain.y_ : grain.uv_)
+                                 : (is_y ? grain.freq_y_ : grain.freq_uv_);
+  const uint16_t num_values = is_strength ? 16 : 7;  // [0-15] or [0-6]
+  const uint8_t gray = ToPixel8(v, num_values);
+  const Rectangle& rect =
+      cb.AsRect(tile_pos_x, tile_pos_y).ClipWith(debug_output->AsRect());
+  debug_output->Fill(rect, Argb32b{255, gray, gray, gray});
+  debug_output->Fill({tile_pos_x + cb.x_pix() + cb.w_pix() - 1,
+                      tile_pos_y + cb.y_pix() + cb.h_pix() - 1, 1, 1},
+                     kSegmentColors[cb.id_]);
+
+  if (VDSelected(cb.AsRect(tile_pos_x, tile_pos_y), config)) {
+    std::string& str = config.info->selection_info;
+    str +=
+        WP2SPrint("Segment %d Y strength %d feq %d | UV strength %d feq %d\n",
+                  cb.id_, grain.y_, grain.freq_y_, grain.uv_, grain.freq_uv_);
+  }
+}
+
+//------------------------------------------------------------------------------
+
 void SegmentationGridVDebug(const EncoderConfig& config, const Rectangle& rect,
                             uint32_t tile_pos_x, uint32_t tile_pos_y,
                             float value) {

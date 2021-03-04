@@ -68,6 +68,14 @@ uint32_t GrainFilter::Apply(uint32_t num_rows) {
   uint32_t y = last_row_;
   assert(y % kMinBlockSizePix == 0);
 
+  // Scale grain strength according to grain_amplitude, and add an empirical
+  // scaling factor.
+  static constexpr uint32_t kMaxGrainAmplitude = 100;
+  const uint32_t kScale = 2;  // Empirical multiplier.
+  const uint32_t mult =
+      std::min<uint32_t>(config_.grain_amplitude, kMaxGrainAmplitude) * kScale;
+  const uint32_t div = kMaxGrainAmplitude;
+
   const uint32_t num_padded_rows =
       (num_rows == blocks_.tile_rect_.height) ? pixels->GetHeight() : num_rows;
   for (; y + kMinBlockSizePix <= num_padded_rows; y += kMinBlockSizePix) {
@@ -80,11 +88,11 @@ uint32_t GrainFilter::Apply(uint32_t num_rows) {
       const GrainParams& grain = seg.grain_;
       const uint32_t x_pix = block_x * kMinBlockSizePix;
       AddGrain4x4(&pixels->Y.At(x_pix, y), pixels->Y.Step(), &rng_,
-                  grain.y_, grain.cut_y_);
+                  grain.y_ * mult / div, grain.freq_y_);
       AddGrain4x4(&pixels->U.At(x_pix, y), pixels->U.Step(), &rng_,
-                  grain.uv_, grain.cut_uv_);
+                  grain.uv_ * mult / div, grain.freq_uv_);
       AddGrain4x4(&pixels->V.At(x_pix, y), pixels->V.Step(), &rng_,
-                  grain.uv_, grain.cut_uv_);
+                  grain.uv_ * mult / div, grain.freq_uv_);
     }
   }
   last_row_ = y;

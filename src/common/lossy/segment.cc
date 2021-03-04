@@ -49,34 +49,52 @@ uint32_t GetMaxNumSegments(bool explicit_segment_ids, uint32_t quality_hint,
 //------------------------------------------------------------------------------
 // Grain read/write
 
+static constexpr uint32_t kMaxNoiseStrength = 100;
+static constexpr uint32_t kMaxNoiseStrengthIO = 15;
+
 bool GrainParams::operator==(const GrainParams& other) const {
-  return (y_ == other.y_) &&
-         (uv_ == other.uv_) &&
-         (cut_y_ == other.cut_y_) &&
-         (cut_uv_ == other.cut_uv_);
+  return (y_ == other.y_) && (uv_ == other.uv_) && (freq_y_ == other.freq_y_) &&
+         (freq_uv_ == other.freq_uv_);
 }
 
 void GrainParams::Write(ANSEnc* const enc) const {
-  enc->PutUValue(y_,  4, "grain");
-  enc->PutUValue(uv_, 4, "grain");
-  enc->PutUValue(cut_y_,  3, "grain");
-  enc->PutUValue(cut_uv_, 3, "grain");
+  assert(y_ <= kMaxNoiseStrength);
+  assert(uv_ <= kMaxNoiseStrength);
+  // Scale down for i/o.
+  const uint32_t scaled_y =
+      DivRound(y_ * kMaxNoiseStrengthIO, kMaxNoiseStrength);
+  enc->PutRange(scaled_y, 0, kMaxNoiseStrengthIO, "grain");
+  if (scaled_y > 0) {
+    enc->PutRange(freq_y_, 1, 6, "grain");
+  }
+  const uint32_t scaled_uv =
+      DivRound(uv_ * kMaxNoiseStrengthIO, kMaxNoiseStrength);
+  enc->PutRange(scaled_uv, 0, kMaxNoiseStrengthIO, "grain");
+  if (scaled_uv > 0) {
+    enc->PutRange(freq_uv_, 1, 6, "grain");
+  }
 }
 
 void GrainParams::Read(ANSDec* const dec) {
-  y_ = dec->ReadUValue(4,  "grain");
-  uv_ = dec->ReadUValue(4, "grain");
-  cut_y_ = dec->ReadUValue(3,  "grain");
-  cut_uv_ = dec->ReadUValue(3, "grain");
+  y_ = dec->ReadRange(0, kMaxNoiseStrengthIO, "grain") * kMaxNoiseStrength /
+       kMaxNoiseStrengthIO;
+  if (y_ > 0) {
+    freq_y_ = dec->ReadRange(1, 6, "grain");
+  }
+  uv_ = dec->ReadRange(0, kMaxNoiseStrengthIO, "grain") * kMaxNoiseStrength /
+        kMaxNoiseStrengthIO;
+  if (uv_ > 0) {
+    freq_uv_ = dec->ReadRange(1, 6, "grain");
+  }
 }
 
 void GrainParams::Reset() {
   y_ = uv_ = 0;
-  cut_y_ = cut_uv_ = 0;
+  freq_y_ = freq_uv_ = 0;
 }
 
 void GrainParams::Print() const {
-  printf("[y=%d uv=%d, cut y=%d uv=%d]\n", y_, uv_, cut_y_, cut_uv_);
+  printf("[y=%d uv=%d, cut y=%d uv=%d]\n", y_, uv_, freq_y_, freq_uv_);
 }
 
 //------------------------------------------------------------------------------

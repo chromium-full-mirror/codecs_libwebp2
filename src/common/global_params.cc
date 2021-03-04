@@ -240,13 +240,4 @@ WP2Status GlobalParams::Init() {
   return WP2_STATUS_OK;
 }
 
-WP2Status GlobalParams::ApplyDecoderConfig(const DecoderConfig& config) {
-  const uint32_t grain_amp = 2000u * config.grain_amplitude / 100u;
-  for (Segment& s : segments_) {
-    s.grain_.y_ = (s.grain_.y_ * grain_amp) >> 8;
-    s.grain_.uv_ = (s.grain_.uv_ * grain_amp) >> 8;
-  }
-  return Init();  // Finish initialization
-}
-
 }    // namespace WP2

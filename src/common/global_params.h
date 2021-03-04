@@ -56,10 +56,6 @@ class GlobalParams {
 
   void Reset();
 
-  // Permanently modify the params according to the decoder config. Call Init()
-  // afterward. Only used by the decoder.
-  WP2Status ApplyDecoderConfig(const DecoderConfig& config);
-
   // finish initializing the satellite data
   WP2Status Init();
 

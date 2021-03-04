@@ -186,6 +186,12 @@ const VDToken kVisualDebug  // NOLINT - non-trivially destructible global var
             {"direction", {"32x32", "16x16", "8x8", "4x4"}},
             {"analysis", {"spread-5x5", "direction-4x4"}}}}}},
         {"segmentation", {"variance", "score", "id", "blocks"}},
+        {"grain",
+         {{"y", {"strength", "freq"}},
+          {"segments_y", {"strength", "freq"}},
+          {"u", {"strength", "freq"}},
+          {"v", {"strength", "freq"}},
+          {"segments_uv", {"strength", "freq"}}}},
         {"error-diffusion",
          {{"u", {"propagated-error", "new-error"}},
           {"v", {"propagated-error", "new-error"}}}},
@@ -1102,8 +1108,8 @@ void Params::PrintInfo() {
     }
 
 #if defined(WP2_ENC_DEC_MATCH)
-    msg.emplace_back(SPrintf(   // 6 spaces to align with "Size: ".
-             "      Warning: size is inflated by WP2_ENC_DEC_MATCH");
+    msg.emplace_back(SPrintf(  // 6 spaces to align with "Size: ".
+        "      Warning: size is inflated by WP2_ENC_DEC_MATCH"));
 #endif
     msg.emplace_back(SPrintf("Filters: dblk=%s, drct=%s, rstr=%s, alpha=%s",
         kOnOff[dec_config_.enable_deblocking_filter],
@@ -2583,13 +2589,20 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
                        kOnOff[enc_config_.enable_alpha_filter]));
   } else if (key == 'g' || key == 'G') {
     if (key == 'G') {
-      dec_config_.grain_amplitude = 0;
+      enc_config_.store_grain = false;
+    } else if (!enc_config_.store_grain) {
+      enc_config_.store_grain = true;
+      if (dec_config_.grain_amplitude == 0) dec_config_.grain_amplitude = 100;
     } else {
       ModifyR(dec_config_.grain_amplitude, (uint8_t)101, false, 20);
+      enc_config_.store_grain = (dec_config_.grain_amplitude > 0);
     }
-    enc_config_.store_grain = (dec_config_.grain_amplitude > 0);
     if (!EncodeAndDecode()) return;
-    SetMessage(SPrintf("Grain amplitude: %d", dec_config_.grain_amplitude));
+    if (enc_config_.store_grain) {
+      SetMessage(SPrintf("Grain amplitude: %d", dec_config_.grain_amplitude));
+    } else {
+      SetMessage("Grain: off");
+    }
   } else if (key == 'c' || key == 'C') {
     if (!EncodeAndDecode()) return;
     AddInfo(SPrintf("Forcing %u blocks %u segments %u predictors %u transforms",

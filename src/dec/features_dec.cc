@@ -239,7 +239,7 @@ WP2Status DecodeGLBL(DataSource* const data_source, const DecoderConfig& config,
     }
   }
 #endif
-  return gparams->ApplyDecoderConfig(config);
+  return gparams->Init();
 }
 
 //------------------------------------------------------------------------------

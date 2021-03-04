@@ -22,12 +22,21 @@
 
 namespace {
 
-void GenerateGrain4x4_C(WP2::PseudoRNG* const rng,
-                        uint32_t amp, uint32_t cut_off, int16_t dst[]) {
+void GenerateGrain4x4_C(WP2::PseudoRNG* const rng, uint32_t amp, uint32_t freq,
+                        int16_t dst[]) {
+  // Generate random coefficients then run inverse DCT transform to create
+  // noise.
   for (uint32_t j = 0; j < 4; ++j) {
     for (uint32_t i = 0; i < 4; ++i) {
-      if (i + j > cut_off && i + j < 3 * cut_off) {
-        dst[i + j * 4] = rng->GetSigned(amp) / (int)(i + j - cut_off);
+      // Approximation of the frequency of this coefficient.
+      // It would be more accurate to use the norm (i^2+j^2). (Maybe later).
+      const uint32_t level = i + j;
+      // Fill in random coefficients for locations where i+j is within +/-1 of
+      // 'freq'.
+      if (level > 0 && level >= (freq - 1) && level < (freq + 1)) {
+        // Larger coeffs at freq, smaller coeffs at feq +/-1.
+        const int div = (int)(level == freq ? 1 : 2);
+        dst[i + j * 4] = rng->GetSigned(amp) / div;
       } else {
         dst[i + j * 4] = 0;
       }
@@ -37,10 +46,10 @@ void GenerateGrain4x4_C(WP2::PseudoRNG* const rng,
 }
 
 void AddGrain4x4_C(int16_t* samples, size_t step, WP2::PseudoRNG* const rng,
-                   uint32_t amp, uint32_t cut_off) {
+                   uint32_t amp, uint32_t freq) {
   if (amp == 0) return;
   int16_t tmp[4 * 4];
-  GenerateGrain4x4_C(rng, amp, cut_off, tmp);
+  GenerateGrain4x4_C(rng, amp, freq, tmp);
   const int32_t max_value = (1 << WP2::kMaxYuvBits) - 1;
   for (uint32_t j = 0; j < 4; ++j) {
     for (uint32_t i = 0; i < 4; ++i) {

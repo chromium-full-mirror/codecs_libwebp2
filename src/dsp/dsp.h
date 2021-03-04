@@ -494,9 +494,9 @@ void GrainFilterInit();
 
 class PseudoRNG;
 typedef void (*AddGrainF)(int16_t* samples, size_t step, PseudoRNG* const rng,
-                          uint32_t amp, uint32_t cut_off);
-typedef void (*GenerateGrainF)(PseudoRNG* const rng,
-                               uint32_t amp, uint32_t cut_off, int16_t dst[]);
+                          uint32_t amp, uint32_t freq);
+typedef void (*GenerateGrainF)(PseudoRNG* const rng, uint32_t amp,
+                               uint32_t freq, int16_t dst[]);
 
 extern AddGrainF AddGrain4x4;
 extern GenerateGrainF GenerateGrain4x4;

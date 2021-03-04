@@ -38,8 +38,8 @@ class FeatureMap {
   Vector_u8 smap_;    // score map or segment-id map
   Vector_u8 cplx_;    // map of block's complexity (0 = easy, 255 = hard)
   struct NoiseStr {
-    uint16_t level[3];
-    uint16_t cut[3];
+    uint16_t strength[3];  // noise strength [0;100]
+    uint16_t freq[3];      // noise frequency [0;6]
   };
   VectorNoCtor<NoiseStr> noise_map_;
   uint32_t step_;    // step for smap_ and noise_map_
@@ -80,6 +80,13 @@ WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
 // Using gparams.features_, assign noise/grain level to gparams->segments_
 WP2Status AssignGrainParams(const YUVPlane& yuv, const EncoderConfig& config,
                             GlobalParams* const gparams);
+// Visual debug for grain.
+void GrainVDebug(const EncoderConfig& config, uint32_t x_pix, uint32_t y_pix,
+                 Channel channel, FeatureMap::NoiseStr& noise_info,
+                 int32_t* const coeffs);
+void SegmentGrainVDebug(const EncoderConfig& config, const CodedBlock& cb,
+                        uint32_t tile_pos_x, uint32_t tile_pos_y,
+                        const Segment& segment);
 
 // Returns the segment id of the 'block' based on the 'gparams'.
 // The 'segment_score' can also be retrieved if not null.

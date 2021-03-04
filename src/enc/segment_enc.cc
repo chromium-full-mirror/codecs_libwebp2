@@ -106,6 +106,53 @@ uint32_t ClusterHistogram(const uint32_t histogram[], uint32_t histogram_size,
   return num_clusters;
 }
 
+static void EstimateNoise(const YUVPlane& yuv, const EncoderConfig& config,
+                          uint32_t x, uint32_t y, FeatureMap* const map) {
+  static const uint16_t* const zigzag = ResidualIterator::GetZigzag(TRF_4x4);
+  const float factor = (kMaxLossyQuality - config.quality) / kMaxLossyQuality;
+  // TODO(maryla): this should depend on yuv range.
+  const uint32_t cut_off[2 /* 0=Y, 1=U/V */] = {(uint32_t)(factor * 100.),
+                                                (uint32_t)(factor * 100.)};
+
+  const uint32_t y_pix = y * kMinBlockSizePix;
+  const uint32_t max_j = std::min(y_pix + kMinBlockSizePix, yuv.Y.h_);
+  const uint32_t x_pix = x * kMinBlockSizePix;
+  const uint32_t max_i = std::min(x_pix + kMinBlockSizePix, yuv.Y.w_);
+
+  const uint32_t idx = x + y * SizeBlocks(yuv.Y.w_);
+
+  int16_t res[kMinBlockSizePix * kMinBlockSizePix] = {0};
+  int32_t out[kMinBlockSizePix * kMinBlockSizePix] = {0};
+  for (const auto channel : {kYChannel, kUChannel, kVChannel}) {
+    const Plane16& p = yuv.GetChannel(channel);
+    for (uint32_t k = 0, j = y_pix; j < max_j; ++j) {
+      for (uint32_t i = x_pix; i < max_i; ++i) res[k++] = p.At(i, j);
+    }
+    WP2Transform2D(res, WP2TransformType::kDct, WP2TransformType::kDct,
+                   kMinBlockSizePix, kMinBlockSizePix, out,
+                   /*reduced=*/false);
+    uint32_t max_after_cutoff = 0;
+    uint32_t max_idx = 0;
+    for (uint32_t k = 1; k < kMinBlockSizePix * kMinBlockSizePix; ++k) {
+      const uint32_t l = zigzag[k];
+      const uint32_t v = std::abs(out[l]);
+      if (v > cut_off[channel != kYChannel]) {
+        max_after_cutoff = 0;
+      } else {
+        if (v > max_after_cutoff) {
+          max_after_cutoff = v;
+          max_idx = l;
+        }
+      }
+    }
+    map->noise_map_[idx].strength[channel] = max_after_cutoff;
+    const uint32_t X = max_idx % kMinBlockSizePix;
+    const uint32_t Y = max_idx / kMinBlockSizePix;
+    map->noise_map_[idx].freq[channel] = X + Y;
+    GrainVDebug(config, x_pix, y_pix, channel, map->noise_map_[idx], out);
+  }
+}
+
 WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
                        GlobalParams* const gparams) {
   assert(gparams != nullptr && gparams->features_ != nullptr);
@@ -127,14 +174,8 @@ WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
   integral.AddValues(yuv);
 
   WP2TransformInit();
-  const float factor = (kMaxLossyQuality - config.quality) / kMaxLossyQuality;
-  const uint32_t cut_off[2 /* 0=Y, 1=U/V */] = {1u + (uint32_t)(factor * 100.),
-                                                1u + (uint32_t)(factor * 100.)};
-  const uint16_t* const zigzag = ResidualIterator::GetZigzag(TRF_4x4);
-  for (uint32_t y = 0; y < bh; ++y) {
-    const uint32_t y_pix = y * kMinBlockSizePix;
-    const uint32_t max_j = std::min(y_pix + kMinBlockSizePix, yuv.Y.h_);
 
+  for (uint32_t y = 0; y < bh; ++y) {
     for (uint32_t x = 0; x < bw; ++x) {
       const uint32_t idx = x + y * bw;
       float variance = integral.StdDev(x, y, x + 1, y + 1);
@@ -165,35 +206,8 @@ WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
       map->smap_[idx] = (uint8_t)score;
       ++histogram[score];
 
-      // Noise estimation.
-      const uint32_t x_pix = x * kMinBlockSizePix;
-      const uint32_t max_i = std::min(x_pix + kMinBlockSizePix, yuv.Y.w_);
-      int16_t res[kMinBlockSizePix * kMinBlockSizePix] = {0};
-      int32_t out[kMinBlockSizePix * kMinBlockSizePix] = {0};
-      for (const auto channel : {kYChannel, kUChannel, kVChannel}) {
-        const Plane16& p = yuv.GetChannel(channel);
-        for (uint32_t k = 0, j = y_pix; j < max_j; ++j) {
-          for (uint32_t i = x_pix; i < max_i; ++i) res[k++] = p.At(i, j);
-        }
-        WP2Transform2D(res, WP2TransformType::kDct, WP2TransformType::kDct,
-                       kMinBlockSizePix, kMinBlockSizePix, out,
-                       /*reduced=*/false);
-        uint32_t cnt = 0;
-        int16_t last = 0;
-        for (uint32_t k = 1; k < kMinBlockSizePix * kMinBlockSizePix; ++k) {
-          const uint32_t l = zigzag[k];
-          const uint32_t v = std::abs(out[l]);
-          if (v > cut_off[channel != kYChannel]) {
-            last = l;
-            cnt = 0;  // restart counter
-          } else {
-            ++cnt;
-          }
-        }
-        map->noise_map_[idx].level[channel] = cnt;
-        const uint32_t X = last % kMinBlockSizePix;
-        const uint32_t Y = last / kMinBlockSizePix;
-        map->noise_map_[idx].cut[channel] = X + Y;
+      if (config.store_grain) {
+        EstimateNoise(yuv, config, x, y, map);
       }
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
@@ -263,24 +277,23 @@ WP2Status AssignGrainParams(const YUVPlane& yuv, const EncoderConfig& config,
   }
 
   // Noise/Grain level records
-  uint64_t noise[3][kMaxNumSegments] = {{0}, {0}};
-  uint64_t cut[3][kMaxNumSegments] = {{0}, {0}};
-  uint64_t noise_cnt[kMaxNumSegments] = {0};
+  uint64_t strength[3][kMaxNumSegments] = {{0}, {0}, {0}};
+  uint64_t freq[3][kMaxNumSegments] = {{0}, {0}, {0}};
+  uint64_t count[kMaxNumSegments] = {0};
   for (uint32_t idx = 0; idx < map->smap_.size(); ++idx) {
     const uint32_t id = map->cluster_map_[map->smap_[idx]];
     for (const auto channel : {kYChannel, kUChannel, kVChannel}) {
-      noise[channel][id] += map->noise_map_[idx].level[channel];
-      cut[channel][id] += map->noise_map_[idx].cut[channel];
+      strength[channel][id] += map->noise_map_[idx].strength[channel];
+      freq[channel][id] += map->noise_map_[idx].freq[channel];
     }
-    noise_cnt[id] += 1;
+    count[id] += 1;
   }
 
   const uint32_t num_segments = segments->size();
 #if defined(LOG_NOISE)
   for (auto c : {kYChannel, kUChannel, kVChannel}) {
     for (uint32_t i = 0; i < num_segments; ++i) {
-      printf("Noise #%d: %.2f %%\n",
-             i, 100.f * noise[c][i] / noise_cnt[i] / 16.);
+      printf("Noise #%d: %.2f %%\n", i, 1.f * noise[c][i] / count[i]);
     }
     printf("--- [channel:%d] --- \n", c);
   }
@@ -289,17 +302,20 @@ WP2Status AssignGrainParams(const YUVPlane& yuv, const EncoderConfig& config,
   for (uint32_t s = 0; s < num_segments; ++s) {
     Segment* const seg = &(*segments)[s];
     uint32_t level = 0;
-    if (noise_cnt[s] > 0) {
+    if (count[s] > 0) {
       for (auto c : {kYChannel, kUChannel, kVChannel}) {
-        level += noise[c][s];
+        level += strength[c][s];
       }
-      level /= noise_cnt[s];
-      seg->grain_.y_ = 15 * noise[0][s] / noise_cnt[s] / 16;
-      seg->grain_.uv_ = 15 * (noise[1][s] + noise[2][s]) / noise_cnt[s] / 32;
-      const uint32_t cut_y = cut[0][s] / noise_cnt[s];
-      const uint32_t cut_uv = (cut[1][s] + cut[2][s]) / noise_cnt[s] / 2;
-      seg->grain_.cut_y_ = std::min(cut_y, 7u);
-      seg->grain_.cut_uv_ = std::min(cut_uv, 7u);
+      level /= count[s];
+      const uint8_t y_strength = DivRound(strength[0][s], count[s]);
+      const uint8_t uv_strength =
+          DivRound((strength[1][s] + strength[2][s]), count[s] * 2u);
+      seg->grain_.y_ = y_strength;
+      seg->grain_.uv_ = uv_strength;
+      const uint32_t freq_y = DivRound(freq[0][s], count[s]);
+      const uint32_t freq_uv = DivRound(freq[1][s] + freq[2][s], count[s] * 2u);
+      seg->grain_.freq_y_ = (y_strength > 0) ? std::max(1u, freq_y) : 0;
+      seg->grain_.freq_uv_ = (uv_strength > 0) ? std::max(1u, freq_uv) : 0;
     }
     seg->use_grain_ = (level > 0);
   }
@@ -458,6 +474,8 @@ WP2Status AssignSegmentIds(const EncoderConfig& config,
       SegmentationBlockVDebug(config, cb, padded_tile.x, padded_tile.y, score,
                               gparams.segments_[cb.id_]);
     }
+    SegmentGrainVDebug(config, cb, padded_tile.x, padded_tile.y,
+                       gparams.segments_[cb.id_]);
 #endif  // WP2_REDUCE_BINARY_SIZE
   }
   return WP2_STATUS_OK;

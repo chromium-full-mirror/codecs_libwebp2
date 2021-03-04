@@ -58,8 +58,8 @@ class GrainParams {
   void Print() const;  // debug
 
  public:
-  uint8_t y_ = 0, uv_ = 0;          // grain level [0=off, 15=full]
-  uint8_t cut_y_ = 0, cut_uv_ = 0;  // grain cut-off [0..7]
+  uint8_t y_ = 0, uv_ = 0;            // grain level [0=off, 100=full]
+  uint8_t freq_y_ = 0, freq_uv_ = 0;  // grain frequency [0..6]
 };
 
 //------------------------------------------------------------------------------

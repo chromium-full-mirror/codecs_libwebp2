@@ -95,6 +95,7 @@ struct TestParams {
   const char* neural_path = nullptr;
   // label for the gnuplot curve
   const char* label = kTypeNames[WP2_STATS];
+  int grain = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -138,6 +139,7 @@ void PrintHelpAndExit(int return_code) {
           "run wp2 with av1 partitioning (implies -av1) (if compiled)");
   opt.Add("-csp <int>", "color space (0=YCoCg, 1=YCbCr 2=Custom 3=YIQ)");
   opt.Add("-sharp_yuv", "use slower / sharper YUV conversion");
+  opt.Add("-grain <int>", "add grain (wp2)");
   opt.Add("-pm <int>",
           SPrintf("partition method (0..%d, default = %d)",
                   NUM_PARTITION_METHODS - 1, kDefaultConfig.partition_method));
@@ -280,6 +282,7 @@ WP2Status Task::DoEncodeWP2(const std::string& out_file,
                             ArgbBuffer* const decoded) {
   // Create working copy
   params_.config.thread_level = (int)params_.use_mt;
+  params_.config.store_grain = (params_.grain > 0);
   EncoderInfo einfo;
   einfo.force_partition = params_.force_partition;
   einfo.disable_transforms = params_.disable_transforms;
@@ -306,6 +309,7 @@ WP2Status Task::DoEncodeWP2(const std::string& out_file,
   // decode back
   DecoderConfig dec_config;
   dec_config.thread_level = params_.use_mt ? 1 : 0;
+  dec_config.grain_amplitude = params_.grain;
   if (params_.disable_filters) {
     dec_config.enable_deblocking_filter = false;
     dec_config.enable_directional_filter = false;
@@ -922,6 +926,8 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       params.disable_filters = true;
     } else if (!strcmp(argv[c], "-notransforms")) {
       params.disable_transforms = true;
+    } else if (!strcmp(argv[c], "-grain") && c + 1 < argc) {
+      params.grain = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-pass") && c + 1 < argc) {
       params.config.pass = ExUtilGetUInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-qmin") && c + 1 < argc) {
