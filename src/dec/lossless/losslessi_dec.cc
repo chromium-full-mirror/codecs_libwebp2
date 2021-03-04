@@ -56,33 +56,54 @@ static const uint8_t kCodeToPlane[kCodeToPlaneCodes] = {
 
 //------------------------------------------------------------------------------
 
-// Returns a Golomb coded number where the prefix is stored as symbol 'sym' in
+// Reads a Golomb coded number where the prefix is stored as symbol 'sym' in
 // cluster 'cluster'.
-static inline int32_t ReadLZ77Golomb(uint32_t cluster, uint32_t sym,
-                                     WP2_OPT_LABEL, WP2::SymbolReader* const sr,
-                                     WP2::ANSDec* const dec,
-                                     float* const cost) {
-  const uint32_t prefix = sr->Read(sym, cluster, label, cost);
+static inline WP2Status ReadLZ77Golomb(
+    uint32_t sym, uint32_t cluster, uint32_t min, uint32_t max, WP2_OPT_LABEL,
+    WP2::SymbolReader* const sr, WP2::ANSDec* const dec, uint32_t* const result,
+    float* const cost) {
+  const WP2::Golomb golomb_max(max - min, kLZZGolombPrefixSize);
 
-  const uint32_t extra_bits =
+  // Read information about the Golomb representation.
+  int32_t prefix;
+  WP2_CHECK_STATUS(
+      sr->TryRead(sym, cluster, golomb_max.prefix, label, &prefix, cost));
+  const uint32_t extra_bits_num =
       WP2::Golomb::NumExtraBits(prefix, kLZZGolombPrefixSize);
-  int32_t extra_val = 0;
-  if (extra_bits > 0) {
-    if (extra_bits <= IO_BITS) {
-      const std::string label_bits = WP2SPrint("%s_bits", label);
-      extra_val = dec->ReadUValue(extra_bits, label_bits.c_str());
+
+  // Figure out the rest of the Golomb representation.
+  uint32_t extra_bits_value;
+  const std::string label_bits = WP2SPrint("%s_bits", label);
+  if (extra_bits_num == 0) {
+    extra_bits_value = 0;
+  } else if (prefix == (int32_t)golomb_max.prefix) {
+    // In case we are in the upper part of the Golomb representation.
+    const uint32_t new_range =
+        max - min + 1 - WP2::Golomb::Merge(prefix, kLZZGolombPrefixSize, 0);
+    if (new_range <= WP2::kANSMaxRange) {
+      extra_bits_value = dec->ReadRValue(new_range, label_bits.c_str());
+      if (cost != nullptr) *cost += WP2Log2(new_range);
     } else {
-      const std::string label_bits1 = WP2SPrint("%s_bits1", label);
-      const std::string label_bits2 = WP2SPrint("%s_bits2", label);
-      extra_val = dec->ReadUValue(IO_BITS, label_bits1.c_str());
-      extra_val |= dec->ReadUValue(extra_bits - IO_BITS, label_bits2.c_str())
-                   << IO_BITS;
+      // Go recursively.
+      WP2_CHECK_STATUS(ReadLZ77Golomb(sym, cluster, /*min=*/0,
+                                      /*max=*/new_range - 1, label, sr, dec,
+                                      &extra_bits_value, cost));
     }
-    if (cost != nullptr) {
-      *cost += extra_bits;
+  } else {
+    if (extra_bits_num <= WP2::kANSMaxUniformBits) {
+      extra_bits_value = dec->ReadUValue(extra_bits_num, label_bits.c_str());
+    } else {
+      extra_bits_value =
+          dec->ReadUValue(WP2::kANSMaxUniformBits, label_bits.c_str());
+      extra_bits_value |=
+          dec->ReadUValue(extra_bits_num - WP2::kANSMaxUniformBits,
+                          label_bits.c_str())
+          << WP2::kANSMaxUniformBits;
     }
+    if (cost != nullptr) *cost += extra_bits_num;
   }
-  return WP2::Golomb::Merge(prefix, /*prefix_size=*/2, extra_val);
+  *result = WP2::Golomb::Merge(prefix, kLZZGolombPrefixSize, extra_bits_value);
+  return WP2_STATUS_OK;
 }
 
 static inline int PlaneCodeToDistance(int xsize, int plane_code) {
@@ -346,14 +367,20 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
     } else if (type == kSymbolTypeCopy) {
       WP2::ANSDebugPrefix prefix(dec_, "copy");
 
-      const int dist_code =
-          ReadLZ77Golomb(cluster, kSymbolDist, "dist", sr, dec_, cost_ptr);
+      uint32_t dist_code;
+      WP2_CHECK_STATUS(ReadLZ77Golomb(kSymbolDist, cluster, /*min=*/0,
+                                      /*max=*/kMaxLZ77Distance, "dist", sr,
+                                      dec_, &dist_code, cost_ptr));
       const int dist = PlaneCodeToDistance(width, dist_code);
       WP2_CHECK_OK(src - data >= (ptrdiff_t)(4 * dist),
                    WP2_STATUS_BITSTREAM_ERROR);
 
-      length = kMinLZ77Length +
-               ReadLZ77Golomb(cluster, kSymbolLen, "len", sr, dec_, cost_ptr);
+      const uint32_t max_length =
+          std::min((uint32_t)((src_end - src) / 4), kMaxLZ77Length);
+      WP2_CHECK_STATUS(ReadLZ77Golomb(kSymbolLen, cluster,
+                                      /*min=*/kMinLZ77Length, max_length, "len",
+                                      sr, dec_, &length, cost_ptr));
+      length += kMinLZ77Length;
       WP2_CHECK_OK(src_end - src >= (ptrdiff_t)(4 * length),
                    WP2_STATUS_BITSTREAM_ERROR);
 

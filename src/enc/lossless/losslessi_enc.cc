@@ -51,25 +51,46 @@ void swap(EncodeInfo& a, EncodeInfo& b) {
 
 // Writes a 'value' as Golomb where the prefix is stored as symbol 'sym' in
 // cluster 'cluster'.
-void WriteLZ77Golomb(uint32_t cluster, uint32_t sym, int32_t value,
-                     WP2_OPT_LABEL, WP2::SymbolManager* const sw,
-                     WP2::ANSEncBase* const enc, float* const cost) {
-  WP2::Golomb golomb(value, kLZZGolombPrefixSize);
-  sw->ProcessWithCost(sym, cluster, golomb.prefix, label, enc, cost);
+void WriteLZ77Golomb(uint32_t sym, uint32_t cluster, int32_t value,
+                     uint32_t min, uint32_t max, WP2_OPT_LABEL,
+                     WP2::SymbolManager* const sw, WP2::ANSEncBase* const enc,
+                     float* const cost) {
+  // Write information about the Golomb representation.
+  const WP2::Golomb golomb(value - min, kLZZGolombPrefixSize);
+  const WP2::Golomb golomb_max(max - min, kLZZGolombPrefixSize);
+  sw->ProcessWithCost(sym, cluster, golomb.prefix, golomb_max.prefix, label,
+                      enc, cost);
+
   if (golomb.extra_bits_num == 0) return;
-  if (golomb.extra_bits_num <= IO_BITS) {
-    const std::string label_bits = WP2SPrint("%s_bits", label);
-    enc->PutUValue(golomb.extra_bits_value, golomb.extra_bits_num,
-                   label_bits.c_str());
+
+  // Write the rest of the representation.
+  const std::string label_bits = WP2SPrint("%s_bits", label);
+  if (golomb.prefix == golomb_max.prefix) {
+    const uint32_t new_range =
+        max - min + 1 -
+        WP2::Golomb::Merge(golomb.prefix, kLZZGolombPrefixSize, 0);
+    if (new_range <= WP2::kANSMaxRange) {
+      enc->PutRValue(golomb.extra_bits_value, new_range, label_bits.c_str());
+      if (cost != nullptr) *cost += WP2Log2(new_range);
+    } else {
+      // Go recursively.
+      WriteLZ77Golomb(sym, cluster, golomb.extra_bits_value,
+                      /*min=*/0, /*max=*/new_range - 1, label, sw, enc, cost);
+    }
   } else {
-    const std::string label_bits1 = WP2SPrint("%s_bits1", label);
-    const std::string label_bits2 = WP2SPrint("%s_bits2", label);
-    enc->PutUValue(golomb.extra_bits_value & ((1u << IO_BITS) - 1), IO_BITS,
-                   label_bits1.c_str());
-    enc->PutUValue(golomb.extra_bits_value >> IO_BITS,
-                   golomb.extra_bits_num - IO_BITS, label_bits2.c_str());
+    if (golomb.extra_bits_num <= WP2::kANSMaxUniformBits) {
+      enc->PutUValue(golomb.extra_bits_value, golomb.extra_bits_num,
+                     label_bits.c_str());
+    } else {
+      enc->PutUValue(
+          golomb.extra_bits_value & ((1u << WP2::kANSMaxUniformBits) - 1),
+          WP2::kANSMaxUniformBits, label_bits.c_str());
+      enc->PutUValue(golomb.extra_bits_value >> WP2::kANSMaxUniformBits,
+                     golomb.extra_bits_num - WP2::kANSMaxUniformBits,
+                     label_bits.c_str());
+    }
+    if (cost != nullptr) *cost += golomb.extra_bits_num;
   }
-  if (cost != nullptr) *cost += golomb.extra_bits_num;
 }
 }  // namespace
 
@@ -166,10 +187,13 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
       case kSymbolTypeCopy: {
         WP2::ANSDebugPrefix prefix(enc, "copy");
         const uint32_t distance = DistanceToPlaneCode(width, v.GetDistance());
-        WriteLZ77Golomb(histogram_ix, kSymbolDist, distance, "dist", sw, enc,
+        WriteLZ77Golomb(kSymbolDist, histogram_ix, distance,
+                        /*min=*/0, /*max=*/kMaxLZ77Distance, "dist", sw, enc,
                         &cost);
-        WriteLZ77Golomb(histogram_ix, kSymbolLen,
-                        v.GetLength() - kMinLZ77Length, "len", sw, enc, &cost);
+        const uint32_t max_length =
+            std::min(width * height - (x + y * width), kMaxLZ77Length);
+        WriteLZ77Golomb(kSymbolLen, histogram_ix, v.GetLength(), kMinLZ77Length,
+                        max_length, "len", sw, enc, &cost);
         break;
       }
       default:
@@ -181,28 +205,24 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
         encode_info->bits_per_pixel[y * width + x + i] = bits_per_pixel;
       }
     }
-    if (histo_bits != 0u) {
-      x += v.GetLength();
-      while (x >= width) {
-        x -= width;
-        if (encode_info != nullptr && !encode_info->line_tokens.empty()) {
-          encode_info->line_tokens[y] = enc->NumTokens();
-        }
-        ++y;
-        WP2_CHECK_STATUS(row_progress.AdvanceBy(1.));
+    x += v.GetLength();
+    while (x >= width) {
+      x -= width;
+      if (encode_info != nullptr && !encode_info->line_tokens.empty()) {
+        encode_info->line_tokens[y] = enc->NumTokens();
       }
+      ++y;
+      WP2_CHECK_STATUS(row_progress.AdvanceBy(1.));
     }
   }
   WP2_CHECK_STATUS(enc->GetStatus());
-  assert(y <= height);
-  WP2_CHECK_STATUS(row_progress.AdvanceBy(height - y));
   return WP2_STATUS_OK;
 }
 
-WP2Status StorePixels(uint32_t width, const BackwardRefs& refs,
+WP2Status StorePixels(uint32_t width, uint32_t height, const BackwardRefs& refs,
                       WP2::ANSEncBase* const enc,
                       WP2::SymbolManager* const sw) {
-  WP2_CHECK_STATUS(StorePixels(width, /*height=*/0, /*histo_bits=*/0, refs,
+  WP2_CHECK_STATUS(StorePixels(width, height, /*histo_bits=*/0, refs,
                                ProgressRange(), /*segments=*/nullptr, enc, sw));
   return WP2_STATUS_OK;
 }
@@ -274,7 +294,7 @@ WP2Status EncodeImageNoClusters(WP2::ANSEncBase* const enc,
   WP2::SymbolRecorder recorder;
   WP2::ANSEncNoop noop;
   WP2_CHECK_STATUS(recorder.Allocate(symbols_info_new, /*num_records=*/0));
-  WP2_CHECK_STATUS(StorePixels(width, *refs, &noop, &recorder));
+  WP2_CHECK_STATUS(StorePixels(width, height, *refs, &noop, &recorder));
 
   // Store headers.
   WP2_CHECK_STATUS(WriteHeaders(recorder, symbols_info_new, width * height,

@@ -188,7 +188,7 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
                       WP2::SymbolManager* const sw,
                       EncodeInfo* const encode_info = nullptr);
 // Same as above except for an image where there are no entropy segments.
-WP2Status StorePixels(uint32_t width, const BackwardRefs& refs,
+WP2Status StorePixels(uint32_t width, uint32_t height, const BackwardRefs& refs,
                       WP2::ANSEncBase* const enc, WP2::SymbolManager* const sw);
 // Stores the different symbol headers and sets up 'sw' with the right symbol
 // info.
