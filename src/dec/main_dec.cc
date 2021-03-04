@@ -434,7 +434,7 @@ WP2Status Decode(const uint8_t* data, size_t data_size, ArgbBuffer* output,
                  const DecoderConfig& config) {
   WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
   const WP2SampleFormat format_default =
-      (WP2FormatBpc(output->format()) == 1) ? WP2_Argb_32 : WP2_Argb_38;
+      (WP2Formatbpc(output->format()) <= 8) ? WP2_Argb_32 : WP2_Argb_38;
   ArgbBuffer tmp_output(format_default);
   ArgbBuffer* real_output = nullptr;
 

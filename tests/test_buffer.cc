@@ -48,7 +48,7 @@ TEST(BufferTest, Metadata) {
         buffer.metadata_.exif.CopyFrom(metadata.data(), metadata.size()));
     ASSERT_FALSE(buffer.metadata_.IsEmpty());
     // SetExternal() should clear the metadata.
-    if (WP2FormatBpc(format) == 1) {
+    if (WP2Formatbpc(format) <= 8) {
       ASSERT_WP2_OK(buffer.SetExternal(8, 8, pixels8.data(), 8 * 4));
     } else {
       ASSERT_WP2_OK(
@@ -94,7 +94,7 @@ TEST(BufferTest, Metadata) {
     ASSERT_WP2_OK(buffer.Resize(16, 16));
     ASSERT_TRUE(buffer.metadata_.IsEmpty());
 
-    if (WP2FormatBpc(format) == 1) {
+    if (WP2Formatbpc(format) <= 8) {
       other_buffer.Fill({0, 0, 2, 2}, color8);
     } else {
       other_buffer.Fill({0, 0, 2, 2}, color16);
@@ -115,7 +115,7 @@ TEST(BufferTest, Metadata) {
         buffer.metadata_.iccp.CopyFrom(metadata.data(), metadata.size()));
     ASSERT_FALSE(other_format.metadata_.IsEmpty());
     if (buffer.format() == WP2_Argb_32 &&
-        WP2FormatBpc(other_format.format()) == 1) {
+        WP2Formatbpc(other_format.format()) <= 8) {
       ASSERT_WP2_OK(other_format.ConvertFrom(buffer));
       ASSERT_TRUE(other_format.metadata_.IsEmpty());  // Doesn't copy metadata
     }
@@ -408,7 +408,7 @@ TEST(BufferTest, GetDistortion_BlackSquare) {
     ArgbBuffer orig(format);
     ASSERT_WP2_OK(orig.Resize(100, 100));
     // Opaque black square on a transparent background.
-    if (WP2FormatBpc(format) == 1) {
+    if (WP2Formatbpc(format) <= 8) {
       orig.Fill(/*window=*/{0, 0, 100, 100}, transparent_8);
       orig.Fill(/*window=*/{25, 25, 50, 50}, black_8);
     } else {
@@ -419,7 +419,7 @@ TEST(BufferTest, GetDistortion_BlackSquare) {
     ArgbBuffer compressed(format);
     ASSERT_WP2_OK(compressed.Resize(100, 100));
     // Slightly transparent black square on a transparent background.
-    if (WP2FormatBpc(format) == 1) {
+    if (WP2Formatbpc(format) <= 8) {
       compressed.Fill(/*window=*/{0, 0, 100, 100}, transparent_8);
       compressed.Fill(/*window=*/{25, 25, 50, 50}, black_transp_8);
     } else {

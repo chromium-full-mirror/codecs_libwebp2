@@ -180,11 +180,10 @@ WP2Status Palette::AnalyzeAndCreate(const WP2::ArgbBuffer& pic) {
   ColorCacheMap color_cache;
   WP2_CHECK_STATUS(color_cache.Allocate(max_palette_size_));
 
-  if (WP2FormatBpc(pic.format()) == 1) {
+  if (WP2Formatbpc(pic.format()) <= 8) {
     num_colors_ =
         CountColors(pic, pic.GetRow8(0), &color_cache, max_palette_size_);
   } else {
-    assert(WP2FormatBpc(pic.format()) == 2);
     num_colors_ =
         CountColors(pic, pic.GetRow16(0), &color_cache, max_palette_size_);
   }
@@ -250,11 +249,10 @@ WP2Status Palette::Apply(const WP2::ArgbBuffer& pic, int16_t* dst) const {
   const bool premultiply = !WP2IsPremultiplied(pic.format());
 
   const uint32_t max_alpha = WP2::FormatMax(pic.format(), /*channel=*/0);
-  if (WP2FormatBpc(pic.format()) == 1) {
+  if (WP2Formatbpc(pic.format()) <= 8) {
     ApplyT(pic.GetRow8(0), pic.stride(), pic.width(), pic.height(), color_cache,
            max_alpha, premultiply, dst);
   } else {
-    assert(WP2FormatBpc(pic.format()) == 2);
     ApplyT(pic.GetRow16(0), pic.stride(), pic.width(), pic.height(),
            color_cache, max_alpha, premultiply, dst);
   }

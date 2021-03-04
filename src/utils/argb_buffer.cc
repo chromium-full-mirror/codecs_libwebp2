@@ -33,10 +33,10 @@ uint32_t WP2FormatBpp(WP2SampleFormat format) {
   return 8;  // actually 38 bits, stored as uint16
 }
 
-uint32_t WP2FormatBpc(WP2SampleFormat format) {
-  if (format < WP2_Argb_38) return 1;
+uint32_t WP2Formatbpc(WP2SampleFormat format) {
+  if (format < WP2_Argb_38) return 8;
   assert(format == WP2_Argb_38);
-  return 2;
+  return 10;
 }
 
 bool WP2FormatHasAlpha(WP2SampleFormat format, uint32_t* alpha_channel_index) {
@@ -156,26 +156,26 @@ void ArgbBuffer::Deallocate() {
 }
 
 const void* ArgbBuffer::GetRow(uint32_t y) const {
-  return (WP2FormatBpc(format_) == 1) ? (const void*)GetRow8(y)
+  return (WP2Formatbpc(format_) <= 8) ? (const void*)GetRow8(y)
                                       : (const void*)GetRow16(y);
 }
 void* ArgbBuffer::GetRow(uint32_t y) {
-  return (WP2FormatBpc(format_) == 1) ? (void*)GetRow8(y) : (void*)GetRow16(y);
+  return (WP2Formatbpc(format_) <= 8) ? (void*)GetRow8(y) : (void*)GetRow16(y);
 }
 const uint8_t* ArgbBuffer::GetRow8(uint32_t y) const {
-  assert(y < height_ && WP2FormatBpc(format_) == 1);
+  assert(y < height_ && WP2Formatbpc(format_) <= 8);
   return (const uint8_t*)pixels_ + y * stride_;
 }
 uint8_t* ArgbBuffer::GetRow8(uint32_t y) {
-  assert(y < height_ && WP2FormatBpc(format_) == 1);
+  assert(y < height_ && WP2Formatbpc(format_) <= 8);
   return (uint8_t*)pixels_ + y * stride_;
 }
 const uint16_t* ArgbBuffer::GetRow16(uint32_t y) const {
-  assert(y < height_ && WP2FormatBpc(format_) == 2);
+  assert(y < height_ && WP2Formatbpc(format_) > 8);
   return (uint16_t*)((const uint8_t*)pixels_ + y * stride_);
 }
 uint16_t* ArgbBuffer::GetRow16(uint32_t y) {
-  assert(y < height_ && WP2FormatBpc(format_) == 2);
+  assert(y < height_ && WP2Formatbpc(format_) > 8);
   return (uint16_t*)((uint8_t*)pixels_ + y * stride_);
 }
 const uint8_t* ArgbBuffer::GetPosition(uint32_t x, uint32_t y) const {
@@ -315,12 +315,12 @@ void ArgbBuffer::Fill(const Rectangle& window, Argb38b color) {
 }
 
 void ArgbBuffer::Fill(const Rectangle& window, const uint8_t color[]) {
-  assert(WP2FormatBpc(format_) == 1);
+  assert(WP2Formatbpc(format_) <= 8);
   FillImpl(window, color);
 }
 
 void ArgbBuffer::Fill(const Rectangle& window, const uint16_t color[]) {
-  assert(WP2FormatBpc(format_) == 2);
+  assert(WP2Formatbpc(format_) > 8);
   FillImpl(window, color);
 }
 
@@ -475,7 +475,7 @@ WP2Status ArgbBuffer::SetExternalImpl(uint32_t new_width, uint32_t new_height,
 WP2Status ArgbBuffer::SetExternal(uint32_t new_width, uint32_t new_height,
                                   uint8_t* samples, uint32_t new_stride,
                                   bool is_slow) {
-  WP2_CHECK_OK(WP2FormatBpc(format_) == 1, WP2_STATUS_INVALID_COLORSPACE);
+  WP2_CHECK_OK(WP2Formatbpc(format_) <= 8, WP2_STATUS_INVALID_COLORSPACE);
   WP2_CHECK_STATUS(
       SetExternalImpl(new_width, new_height, samples, new_stride, is_slow));
   return WP2_STATUS_OK;
@@ -484,7 +484,7 @@ WP2Status ArgbBuffer::SetExternal(uint32_t new_width, uint32_t new_height,
 WP2Status ArgbBuffer::SetExternal(uint32_t new_width, uint32_t new_height,
                                   uint16_t* samples, uint32_t new_stride,
                                   bool is_slow) {
-  WP2_CHECK_OK(WP2FormatBpc(format_) == 2, WP2_STATUS_INVALID_COLORSPACE);
+  WP2_CHECK_OK(WP2Formatbpc(format_) > 8, WP2_STATUS_INVALID_COLORSPACE);
   WP2_CHECK_STATUS(
       SetExternalImpl(new_width, new_height, samples, new_stride, is_slow));
   return WP2_STATUS_OK;
@@ -496,7 +496,7 @@ bool ArgbBuffer::HasTransparency() const {
   if (IsEmpty()) return false;
   uint32_t alpha_channel_index;
   if (!WP2FormatHasAlpha(format_, &alpha_channel_index)) return false;
-  if (WP2FormatBpc(format_) == 1) {
+  if (WP2Formatbpc(format_) <= 8) {
     WP2AlphaInit();
     for (uint32_t y = 0; y < height_; ++y) {
       const uint8_t* const row = GetRow8(y) + alpha_channel_index;
@@ -534,7 +534,7 @@ WP2Status ArgbBuffer::Swap(ArgbBuffer* const other) {
 //------------------------------------------------------------------------------
 
 void ArgbBuffer::SimpleHalfDownsample() {
-  assert(WP2FormatBpc(format_) == 1);  // not supported yet
+  assert(WP2Formatbpc(format_) <= 8);  // not supported yet
   const uint32_t half_w = (width_ + 1) >> 1;
   const uint32_t half_w_low = width_ >> 1;
   const uint32_t half_h = (height_ + 1) >> 1;

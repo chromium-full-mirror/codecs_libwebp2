@@ -467,12 +467,11 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     WP2PSNRInit();
     uint64_t result_64b[4] = {0, 0, 0, 0};
     for (uint32_t y = 0; y < height(); ++y) {
-      if (WP2FormatBpc(ref.format()) == 1) {
+      if (WP2Formatbpc(ref.format()) <= 8) {
         const uint8_t* const ptr1 = GetRow8(y);
         const uint8_t* const ptr2 = ref.GetRow8(y);
         WP2SumSquaredError4x8u(ptr1, ptr2, width(), result_64b);
       } else {
-        assert(WP2FormatBpc(ref.format()) == 2);
         const uint16_t* const ptr1 = GetRow16(y);
         const uint16_t* const ptr2 = ref.GetRow16(y);
         WP2SumSquaredError2x16u(ptr1, ptr2, width(), result_64b);
@@ -484,7 +483,7 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     }
     result[4] = (float)GetPSNR(total_distortion, pix_channel_size, max);
   } else if (metric_type == SSIM) {
-    assert(WP2FormatBpc(ref.format()) == 1);  // not supported yet
+    assert(WP2Formatbpc(ref.format()) <= 8);  // not supported yet
     WP2SSIMInit();
     for (uint32_t c = 0; c < 4; ++c) {
       const double disto = AccumulateSSIM(*this, ref, c);
@@ -493,7 +492,7 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     }
     result[4] = (float)GetLogSSIM(total_distortion, pix_channel_size);
   } else if (metric_type == MSSSIM || metric_type == MSSSIM_ORIGINAL) {
-    assert(WP2FormatBpc(ref.format()) == 1);  // not supported yet
+    assert(WP2Formatbpc(ref.format()) <= 8);  // not supported yet
     WP2SSIMInit();
     // working copies, to be down-scaled
     ArgbBuffer buf1(ref.format()), buf2(format());

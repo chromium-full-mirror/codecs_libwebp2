@@ -104,7 +104,7 @@ static WP2Status FillBorders(const BitstreamFeatures& features,
   Rectangle(0, 0, width, height).Exclude(window, &top, &bot, &lft, &rgt);
 
   if (rgb_output != nullptr) {
-    if (WP2FormatBpc(rgb_output->format()) == 1) {
+    if (WP2Formatbpc(rgb_output->format()) <= 8) {
       const Argb32b color = ToArgb32b(features.background_color);
 
       rgb_output->Fill(top, color);

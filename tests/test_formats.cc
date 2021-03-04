@@ -105,7 +105,7 @@ TEST(FormatTest, ConvertSimple) {
     for (WP2SampleFormat format = WP2_Argb_32; format < WP2_FORMAT_NUM;
          format = (WP2SampleFormat)(format + 1)) {
       // TODO(yguyon): Include WP2_Argb_38 when ready
-      if (WP2FormatBpc(format) != WP2FormatBpc(WP2_Argb_32)) continue;
+      if (WP2Formatbpc(format) != WP2Formatbpc(WP2_Argb_32)) continue;
       ArgbBuffer converted(format);
       ASSERT_WP2_OK(converted.ConvertFrom(original));
 
@@ -131,7 +131,7 @@ TEST(FormatTest, ConvertImage) {
     for (WP2SampleFormat format = WP2_Argb_32; format < WP2_FORMAT_NUM;
          format = (WP2SampleFormat)(format + 1)) {
       // TODO(yguyon): Include WP2_Argb_38 when ready
-      if (WP2FormatBpc(format) != WP2FormatBpc(WP2_Argb_32)) continue;
+      if (WP2Formatbpc(format) != WP2Formatbpc(WP2_Argb_32)) continue;
       ArgbBuffer converted(format);
       ASSERT_WP2_OK(converted.ConvertFrom(original));
 
@@ -295,7 +295,7 @@ class ExhaustiveTest
     src_is_premul_ = std::get<1>(GetParam());
     tmp_is_premul_ = WP2IsPremultiplied(tmp_format);
     tmp_has_alpha_ = WP2FormatHasAlpha(tmp_format);
-    tmp_is_38b_ = (WP2FormatBpc(tmp_format) == 2);
+    tmp_is_38b_ = (WP2Formatbpc(tmp_format) > 8);
     convert_to_tmp_ = src_is_premul_ ? WP2ArgbConvertTo[tmp_format]
                                      : WP2ARGBConvertTo[tmp_format];
     convert_from_tmp_ = src_is_premul_ ? WP2ArgbConvertFrom[tmp_format]

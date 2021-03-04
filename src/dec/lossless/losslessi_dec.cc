@@ -258,7 +258,7 @@ WP2Status Decoder::ProcessRows(uint32_t row,
     WP2_CHECK_STATUS(ApplyInverseTransforms(num_rows, num_bits_, rows));
 
     uint32_t num_rows_out;
-    if (WP2FormatBpc(buf->format()) == 1) {
+    if (WP2Formatbpc(buf->format()) <= 8) {
       num_rows_out =
           EmitRows(rows_data, buf->width(), num_rows, gparams_->has_alpha_,
                    premultiply_, buf->GetRow8(last_out_row_), buf->stride());

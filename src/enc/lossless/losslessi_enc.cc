@@ -614,12 +614,11 @@ WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
   const bool can_premultiply =
       (has_alpha_ && !WP2IsPremultiplied(pic_.format()));
   if (!can_premultiply) assert(!config.use_premultiplied);
-  assert(WP2FormatBpc(pic_.format()) == 1 || WP2FormatBpc(pic_.format()) == 2);
   argb_buffer_.has_alpha = has_alpha_;
-  argb_buffer_.channel_bits = (WP2FormatBpc(pic_.format()) == 1) ? 8 : 10;
+  argb_buffer_.channel_bits = WP2Formatbpc(pic_.format());
   for (uint32_t y = 0; y < height; ++y) {
     int16_t* const dst_row = argb_buffer_.GetRow(y);
-    if (WP2FormatBpc(pic_.format()) == 1) {
+    if (WP2Formatbpc(pic_.format()) <= 8) {
       const uint8_t* const src_row = pic_.GetRow8(y);
       if (can_premultiply) {
         for (uint32_t x = 0; x < width; ++x) {
@@ -653,7 +652,7 @@ WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
 WP2Status Encoder::MapImageFromPalette(const CrunchConfig& config) {
   const WP2Status status = palette_.Apply(pic_, argb_buffer_.data);
   argb_buffer_.has_alpha = has_alpha_;
-  argb_buffer_.channel_bits = (WP2FormatBpc(pic_.format()) == 1) ? 8 : 10;
+  argb_buffer_.channel_bits = WP2Formatbpc(pic_.format());
   return status;
 }
 

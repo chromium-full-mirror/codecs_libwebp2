@@ -435,7 +435,7 @@ WP2Status AnalyzeEntropy(bool can_use_palette, int effort,
                          uint32_t transform_bits, const Encoder& encoder,
                          uint32_t num_configs_max,
                          WP2::Vector<EntropyConfig>* configs) {
-  if (WP2FormatBpc(encoder.pic_.format()) == 1) {
+  if (WP2Formatbpc(encoder.pic_.format()) <= 8) {
     WP2_CHECK_STATUS(AnalyzeEntropyImpl(encoder.pic_.GetRow8(0),
                                         can_use_palette, effort, transform_bits,
                                         encoder, num_configs_max, configs));

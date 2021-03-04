@@ -127,9 +127,7 @@ Argb32b GetAverageColor(const ArgbBuffer& canvas, uint32_t radius,
   assert(canvas.format() == WP2_Argb_32 || canvas.format() == WP2_ARGB_32 ||
          canvas.format() == WP2_Argb_38);
   ColorAccumulator accumulator;
-  const uint32_t channel_depth = WP2FormatBpc(canvas.format());
-  assert(channel_depth == 1 || channel_depth == 2);
-  if (channel_depth == 1) {
+  if (WP2Formatbpc(canvas.format()) <= 8) {
     for (uint32_t y = min_y; y <= max_y; ++y) {
       const uint8_t* const row = canvas.GetRow8(y);
       for (uint32_t x = min_x; x <= max_x; ++x) {

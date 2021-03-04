@@ -110,6 +110,8 @@ WP2_EXTERN const char* WP2GetStatusText(WP2Status status);
 // to 0xff everywhere (the image has no transparency). This assumption is not
 // checked nor enforced.
 // Non-capital names (e.g.:MODE_Argb) relates to pre-multiplied RGB channels.
+// If all samples are 8 bits or less, they are stored in uint8_t. If one is > 8,
+// they are all stored in uint16_t.
 typedef enum {
   // 32b/pixel formats
   WP2_Argb_32 = 0,
@@ -128,7 +130,7 @@ typedef enum {
   WP2_RGB_24,
   WP2_BGR_24,
 
-  // HDR format: 8 bits for A, 10 per RGB. Internally each is stored as uint16.
+  // HDR format: 8 bits for A, 10 per RGB.
   WP2_Argb_38,
 
   // TODO(skal): RGB565_16? rgbA4444_16? RGBA4444_16?
@@ -138,8 +140,8 @@ typedef enum {
 // Returns the number of bytes per sample for the given format.
 WP2_EXTERN uint32_t WP2FormatBpp(WP2SampleFormat format);
 
-// Returns the number of bytes used per channel internally.
-WP2_EXTERN uint32_t WP2FormatBpc(WP2SampleFormat format);
+// Returns the number of bits used per RGB channels internally.
+WP2_EXTERN uint32_t WP2Formatbpc(WP2SampleFormat format);
 
 // Returns true if the 'format' has an alpha channel.
 // Also returns its index if 'alpha_channel_index' is not null and there is one.
