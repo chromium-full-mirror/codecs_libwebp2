@@ -60,8 +60,8 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
       // TODO(yguyon): Use less memory by outputting 8 lines by 8 lines?
       Data data;
       WP2_CHECK_STATUS(data.Resize(max_num_bytes, /*keep_bytes=*/false));
-      // Use a HeaderEnc instance to easily pack sample bits (e.g. 10 by 10).
-      HeaderEnc bit_packer(data.bytes, data.size, "raw_pixels");
+      // Use a BitPacker instance to easily pack sample bits (e.g. 10 by 10).
+      BitPacker bit_packer(data.bytes, data.size, "raw_pixels");
 
       for (uint32_t y = 0; y < tile->rect.height; ++y) {
         const uint16_t* const row = tile->rgb_input.GetRow16(y);
@@ -88,8 +88,8 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
     // TODO(yguyon): Use less memory by outputting 8 lines by 8 lines?
     Data data;
     WP2_CHECK_STATUS(data.Resize(max_num_bytes, /*keep_bytes=*/false));
-    // Use a HeaderEnc instance to easily pack sample bits (e.g. 10 by 10).
-    HeaderEnc bit_packer(data.bytes, data.size, "raw_pixels");
+    // Use a BitPacker instance to easily pack sample bits (e.g. 10 by 10).
+    BitPacker bit_packer(data.bytes, data.size, "raw_pixels");
 
     for (uint32_t y = 0; y < tile->rect.height; ++y) {
       // Interleave channels to output samples line by line.

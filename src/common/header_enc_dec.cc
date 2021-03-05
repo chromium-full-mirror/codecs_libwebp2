@@ -72,13 +72,13 @@ uint32_t WriteVarInt(uint32_t value, uint32_t min_value, uint32_t max_value,
 
 //------------------------------------------------------------------------------
 
-uint32_t HeaderDec::ReadBits(uint32_t num_bits, WP2_OPT_LABEL) {
+uint32_t BitUnpacker::ReadBits(uint32_t num_bits, WP2_OPT_LABEL) {
   const uint32_t value = ReadBitsInternal(num_bits);
   WP2Trace("%s: value=%u num_bits=%d", debug_prefix_, label, value, num_bits);
   return value;
 }
 
-int32_t HeaderDec::ReadSBits(uint32_t num_bits, WP2_OPT_LABEL) {
+int32_t BitUnpacker::ReadSBits(uint32_t num_bits, WP2_OPT_LABEL) {
   const int32_t value =
       (int32_t)ReadBitsInternal(num_bits) - (1 << (num_bits - 1));
   WP2Trace("%s: value=%d num_bits=%d (signed)",
@@ -86,7 +86,7 @@ int32_t HeaderDec::ReadSBits(uint32_t num_bits, WP2_OPT_LABEL) {
   return value;
 }
 
-uint32_t HeaderDec::ReadVarUInt(uint32_t min_value, uint32_t max_value,
+uint32_t BitUnpacker::ReadVarUInt(uint32_t min_value, uint32_t max_value,
                                 WP2_OPT_LABEL) {
   assert(min_value <= max_value);
   if (status_ != WP2_STATUS_OK) return 0;
@@ -104,7 +104,7 @@ uint32_t HeaderDec::ReadVarUInt(uint32_t min_value, uint32_t max_value,
   return (status_ == WP2_STATUS_OK) ? value : 0;
 }
 
-Rectangle HeaderDec::ReadRect(uint32_t canvas_width, uint32_t canvas_height,
+Rectangle BitUnpacker::ReadRect(uint32_t canvas_width, uint32_t canvas_height,
                               WP2_OPT_LABEL) {
   assert(canvas_width > 0 && canvas_height > 0);
   // Read reversed width and height first, as these tend to be near 'canvas_*'.
@@ -116,7 +116,7 @@ Rectangle HeaderDec::ReadRect(uint32_t canvas_width, uint32_t canvas_height,
   return rect;
 }
 
-uint32_t HeaderDec::ReadBitsInternal(uint32_t num_bits) {
+uint32_t BitUnpacker::ReadBitsInternal(uint32_t num_bits) {
   assert(num_bits <= 24);
   if (status_ != WP2_STATUS_OK || num_bits == 0) return 0;
 
@@ -146,12 +146,12 @@ uint32_t HeaderDec::ReadBitsInternal(uint32_t num_bits) {
 
 //------------------------------------------------------------------------------
 
-void HeaderEnc::PutBits(uint32_t value, uint32_t num_bits, WP2_OPT_LABEL) {
+void BitPacker::PutBits(uint32_t value, uint32_t num_bits, WP2_OPT_LABEL) {
   WP2Trace("%s: value=%u num_bits=%u", debug_prefix_, label, value, num_bits);
   PutBitsInternal(value, num_bits);
 }
 
-void HeaderEnc::PutSBits(int32_t value, uint32_t num_bits, WP2_OPT_LABEL) {
+void BitPacker::PutSBits(int32_t value, uint32_t num_bits, WP2_OPT_LABEL) {
   const int32_t max_abs_value = (1 << (num_bits - 1));
   assert(value >= -max_abs_value && value < max_abs_value);
   WP2Trace("%s: value=%d num_bits=%u (signed)",
@@ -159,7 +159,7 @@ void HeaderEnc::PutSBits(int32_t value, uint32_t num_bits, WP2_OPT_LABEL) {
   PutBitsInternal((uint32_t)(value + max_abs_value), num_bits);
 }
 
-void HeaderEnc::PutVarUInt(uint32_t value, uint32_t min_value,
+void BitPacker::PutVarUInt(uint32_t value, uint32_t min_value,
                            uint32_t max_value, WP2_OPT_LABEL) {
   assert(min_value <= value && value <= max_value);
   // Make sure any 'value' would fit in 'buf_'.
@@ -176,7 +176,7 @@ void HeaderEnc::PutVarUInt(uint32_t value, uint32_t min_value,
   }
 }
 
-void HeaderEnc::PutRect(const Rectangle& rect, uint32_t canvas_width,
+void BitPacker::PutRect(const Rectangle& rect, uint32_t canvas_width,
                         uint32_t canvas_height, WP2_OPT_LABEL) {
   assert(rect.width > 0 && rect.height > 0);
   assert(rect.x + rect.width <= canvas_width);
@@ -188,12 +188,12 @@ void HeaderEnc::PutRect(const Rectangle& rect, uint32_t canvas_width,
   PutVarUInt(rect.y, 0, canvas_height - rect.height, label);
 }
 
-uint8_t* HeaderEnc::Align() {
+uint8_t* BitPacker::Align() {
   bit_pos_ = (bit_pos_ + 7) & ~7;
   return buf_ + (bit_pos_ >> 3);
 }
 
-void HeaderEnc::PutBitsInternal(uint32_t value, uint32_t num_bits) {
+void BitPacker::PutBitsInternal(uint32_t value, uint32_t num_bits) {
   assert(num_bits <= 24);
   assert(value < (1u << num_bits));
 

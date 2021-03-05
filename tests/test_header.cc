@@ -102,12 +102,12 @@ TEST(HeaderTest, VarInt) {
 
 //------------------------------------------------------------------------------
 
-TEST(HeaderTest, HeaderEncDec) {
+TEST(HeaderTest, BitPackerUnpacker) {
   const uint32_t kSize = 500;
   uint8_t buf[kSize];
-  HeaderEnc enc(buf, kSize, "test");
+  BitPacker enc(buf, kSize, "test");
   ExternalDataSource data_source(buf, sizeof(buf));
-  HeaderDec dec(&data_source, "test");
+  BitUnpacker dec(&data_source, "test");
 
   for (bool encoding : {true, false}) {
     UniformIntDistribution random(/*seed=*/1664);

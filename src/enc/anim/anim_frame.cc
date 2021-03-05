@@ -53,7 +53,7 @@ WP2Status WriteANMF(uint32_t image_width, uint32_t image_height,
   if (is_last) assert(duration > 0);
 
   uint8_t header[kANMFMaxHeaderSize];
-  HeaderEnc enc(header, sizeof(header), "anmf_chunk");
+  BitPacker enc(header, sizeof(header), "anmf_chunk");
   const uint32_t tag = dispose ? kANMFTagDispose : kANMFTagFrame;
   enc.PutBits(tag, kANMFTagNumBits, "anmf_tag");
   enc.PutBits(blend ? 1 : 0, 1, "blend");

@@ -65,7 +65,7 @@ WP2Status TileDecoder::BypassTileDec() {
       }
     } else {
       assert(features_->rgb_bit_depth == 10);
-      HeaderDec bit_unpacker(tile_->input, "raw_pixels");
+      BitUnpacker bit_unpacker(tile_->input, "raw_pixels");
       for (tile_->num_decoded_rows = 0;
            tile_->num_decoded_rows < tile_->rect.height;
            ++tile_->num_decoded_rows) {
@@ -116,7 +116,7 @@ WP2Status TileDecoder::BypassTileDec() {
       }
     }
 
-    HeaderDec bit_unpacker(tile_->input, "raw_pixels");
+    BitUnpacker bit_unpacker(tile_->input, "raw_pixels");
     if (!gparams_->has_alpha_ && !tile_->yuv_output.A.IsEmpty()) {
       tile_->yuv_output.A.Fill(kAlphaMax);
     }

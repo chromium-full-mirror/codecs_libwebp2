@@ -37,7 +37,7 @@ WP2Status DecodeANMF(const DecoderConfig& config, DataSource* const data_source,
                      AnimationFrame* const frame) {
   if (features.is_animation) {
     const size_t num_read_bytes_before = data_source->GetNumReadBytes();
-    HeaderDec dec(data_source, "anmf_chunk");
+    BitUnpacker dec(data_source, "anmf_chunk");
     const uint32_t tag = dec.ReadBits(kANMFTagNumBits, "anmf_tag");
     frame->dispose = (tag == kANMFTagDispose);
     frame->blend = (dec.ReadBits(1, "blend") == 1);

@@ -269,7 +269,7 @@ WP2Status EncodeHeader(const EncoderConfig& config,
 
   {
     uint8_t header[kHeaderMaxSize];
-    HeaderEnc henc(header, sizeof(header), "image_features/");
+    BitPacker henc(header, sizeof(header), "image_features/");
 
     // signature
     henc.PutBits(kSignature, 24, "signature");

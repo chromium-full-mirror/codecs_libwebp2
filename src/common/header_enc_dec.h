@@ -54,10 +54,10 @@ constexpr uint32_t GetMaxVarIntLength(uint32_t min_value, uint32_t max_value) {
 
 //------------------------------------------------------------------------------
 
-// Class for reading small headers.
-class HeaderDec {
+// Class for reading small headers or raw bits.
+class BitUnpacker {
  public:
-  HeaderDec(DataSource* const data_source, const char debug_prefix[])
+  BitUnpacker(DataSource* const data_source, const char debug_prefix[])
       : data_source_(data_source),
         byte_(0),
         bit_pos_(8),
@@ -97,10 +97,10 @@ class HeaderDec {
 
 //------------------------------------------------------------------------------
 
-// Class for writing small headers.
-class HeaderEnc {
+// Class for writing small headers or raw bits.
+class BitPacker {
  public:
-  HeaderEnc(uint8_t* buf, uint32_t size, const char debug_prefix[])
+  BitPacker(uint8_t* buf, uint32_t size, const char debug_prefix[])
       : buf_(buf),
         max_pos_(size * 8),
         bit_pos_(0),
