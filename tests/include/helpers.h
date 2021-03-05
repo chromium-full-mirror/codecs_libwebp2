@@ -50,9 +50,8 @@
 #define ASSERT_WP2_OK(expression) ASSERT_EQ(expression, WP2_STATUS_OK)
 #define EXPECT_WP2_OK(expression) EXPECT_EQ(expression, WP2_STATUS_OK)
 
-// Undocumented, just for testing.
-// WARNING WARNING! This function is NOT thread safe, and should be used
-// in a single-thread testing environment!
+// Just for testing. Warning, this function is NOT thread safe, and
+// should be used in a single-thread testing environment!
 extern void WP2DspReset();
 
 namespace WP2 {
