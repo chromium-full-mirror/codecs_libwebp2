@@ -307,7 +307,7 @@ static constexpr uint32_t kSmallPaletteLimit = 3;
 // neighboring window.
 // TODO(vrabaud) get rid of it by defining the most common distances/length as
 // part of a dictionary.
-static constexpr int kCodeToPlaneCodes = 120;
+static constexpr uint32_t kCodeToPlaneCodes = 120u;
 
 // Maximum length and distance (included) used in LZ77.
 // WebP had (1<<12)-1 for length and (1<<20)-120 for distance.

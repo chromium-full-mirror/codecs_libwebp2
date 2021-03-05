@@ -106,15 +106,16 @@ static inline WP2Status ReadLZ77Golomb(
   return WP2_STATUS_OK;
 }
 
-static inline int PlaneCodeToDistance(int xsize, int plane_code) {
+static inline uint32_t PlaneCodeToDistance(uint32_t width,
+                                           uint32_t plane_code) {
   if (plane_code >= kCodeToPlaneCodes) {
     return plane_code + 1 - kCodeToPlaneCodes;
   } else {
     const int dist_code = kCodeToPlane[plane_code];
     const int yoffset = dist_code >> 4;
     const int xoffset = 8 - (dist_code & 0xf);
-    const int dist = yoffset * xsize + xoffset;
-    return (dist >= 1) ? dist : 1;  // dist<1 can happen if xsize is very small
+    const uint32_t dist = yoffset * width + xoffset;
+    return (dist >= 1) ? dist : 1;  // dist<1 can happen if width is very small
   }
 }
 
@@ -362,13 +363,15 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
     } else if (type == kSymbolTypeCopy) {
       WP2::ANSDebugPrefix prefix(dec_, "copy");
 
+      const uint32_t pixel_ind = (src - data) / 4;
+      const uint32_t max_plane_code =
+          std::min(pixel_ind, kMaxLZ77Distance) + kCodeToPlaneCodes - 1;
       uint32_t dist_code;
       WP2_CHECK_STATUS(ReadLZ77Golomb(kSymbolDist, cluster, /*min=*/0,
-                                      /*max=*/kMaxLZ77Distance, "dist", sr,
-                                      dec_, &dist_code, cost_ptr));
-      const int dist = PlaneCodeToDistance(width, dist_code);
-      WP2_CHECK_OK(src - data >= (ptrdiff_t)(4 * dist),
-                   WP2_STATUS_BITSTREAM_ERROR);
+                                      max_plane_code, "dist", sr, dec_,
+                                      &dist_code, cost_ptr));
+      const uint32_t dist = PlaneCodeToDistance(width, dist_code);
+      WP2_CHECK_OK(pixel_ind >= dist, WP2_STATUS_BITSTREAM_ERROR);
 
       const uint32_t max_length =
           std::min((uint32_t)((src_end - src) / 4), kMaxLZ77Length);

@@ -186,12 +186,14 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
       }
       case kSymbolTypeCopy: {
         WP2::ANSDebugPrefix prefix(enc, "copy");
-        const uint32_t distance = DistanceToPlaneCode(width, v.GetDistance());
-        WriteLZ77Golomb(kSymbolDist, histogram_ix, distance,
-                        /*min=*/0, /*max=*/kMaxLZ77Distance, "dist", sw, enc,
-                        &cost);
+        const uint32_t pixel_ind = x + y * width;
+        const uint32_t plane_code = DistanceToPlaneCode(width, v.GetDistance());
+        const uint32_t max_plane_code =
+            std::min(pixel_ind, kMaxLZ77Distance) + kCodeToPlaneCodes - 1;
+        WriteLZ77Golomb(kSymbolDist, histogram_ix, plane_code,
+                        /*min=*/0, max_plane_code, "dist", sw, enc, &cost);
         const uint32_t max_length =
-            std::min(width * height - (x + y * width), kMaxLZ77Length);
+            std::min(width * height - pixel_ind, kMaxLZ77Length);
         WriteLZ77Golomb(kSymbolLen, histogram_ix, v.GetLength(), kMinLZ77Length,
                         max_length, "len", sw, enc, &cost);
         break;
