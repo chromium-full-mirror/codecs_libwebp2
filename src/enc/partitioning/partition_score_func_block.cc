@@ -151,10 +151,9 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
   const float lambda = MapQuality(*config_, 200.f, -199.f);  // Empirical.
   constexpr float kNiceScale = 0.01f;  // Has no impact on the result.
   *score = 1.0f / (1.0f + kNiceScale * (lambda * total_rate + total_disto));
-  const bool is_best = (*score > best_score);
   WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug(
       blocks, num_blocks, rate, disto, extra_rate / total_pixels, total_rate,
-      total_disto, *score, is_best));
+      total_disto, *score, /*is_best=*/(*score > best_score)));
   return WP2_STATUS_OK;
 }
 

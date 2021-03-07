@@ -149,7 +149,9 @@ static void EstimateNoise(const YUVPlane& yuv, const EncoderConfig& config,
     const uint32_t X = max_idx % kMinBlockSizePix;
     const uint32_t Y = max_idx / kMinBlockSizePix;
     map->noise_map_[idx].freq[channel] = X + Y;
+#if !defined(WP2_REDUCE_BINARY_SIZE)
     GrainVDebug(config, x_pix, y_pix, channel, map->noise_map_[idx], out);
+#endif
   }
 }
 
