@@ -72,10 +72,10 @@ static inline WP2Status ReadLZ77Golomb(
       WP2::Golomb::NumExtraBits(prefix, kLZZGolombPrefixSize);
 
   // Figure out the rest of the Golomb representation.
-  uint32_t extra_bits_value;
+  uint32_t extra_bits_value = 0;
   const std::string label_bits = WP2SPrint("%s_bits", label);
   if (extra_bits_num == 0) {
-    extra_bits_value = 0;
+    // keep extra_bits_value = 0
   } else if (prefix == (int32_t)golomb_max.prefix) {
     // In case we are in the upper part of the Golomb representation.
     const uint32_t new_range =
