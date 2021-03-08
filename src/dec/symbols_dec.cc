@@ -118,6 +118,7 @@ SymbolReader::Stat* SymbolReader::AddRange(
   stat->is_symmetric = is_symmetric;
   stat->use_mapping = false;
   stat->range = range;
+  assert(range > 0);
   return stat;
 }
 
@@ -322,18 +323,19 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
       }
       break;
     case Stat::Type::kRange: {
-      uint32_t range;
-      if (!use_max_value) {
-        range = stat.range;
-      } else if (stat.use_mapping) {
-        // Find the biggest range such that mapping[range-1] <= max_value.
-        range = std::upper_bound(stat.mappings, stat.mappings + stat.range,
-                                 max_value) -
-                stat.mappings;
-        assert(range == stat.range || stat.mappings[range] > max_value);
-        assert(stat.mappings[range - 1] <= max_value);
-      } else {
-        range = std::min(stat.range, (uint16_t)(max_value + 1));
+      uint32_t range = stat.range;
+      if (use_max_value) {
+        if (stat.use_mapping) {
+          if (stat.mappings[range - 1] > max_value) {
+            // Find the biggest range such that mapping[range-1] <= max_value.
+            range = std::upper_bound(stat.mappings, stat.mappings + range,
+                                     max_value) - stat.mappings;
+            assert(stat.mappings[range] > max_value &&
+                   stat.mappings[range - 1] <= max_value);
+          }
+        } else {
+          range = std::min(range, max_value + 1);
+        }
       }
       *value = dec_->ReadRValue(range, "range");
 #if defined(WP2_BITTRACE)
