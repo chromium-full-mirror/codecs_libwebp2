@@ -26,9 +26,6 @@
 namespace WP2 {
 
 // Class simplifying the reading of symbols.
-// A symbol can be:
-// - trivial if it is always the same value
-// - from  a specific dictionary depending on its type
 struct StatExtra {
   const ANSSymbolInfo* codes;
   uint32_t log2_tab_size;
@@ -66,9 +63,9 @@ class SymbolReader : public SymbolIO<StatExtra> {
   }
   // Same as above except we know that the read value cannot be strictly
   // superior to 'max_value'.
-  WP2Status TryRead(uint32_t sym, uint32_t cluster, uint32_t max_value,
-                    WP2_OPT_LABEL, int32_t* const value,
-                    float* const cost = nullptr);
+  WP2Status ReadWithMax(uint32_t sym, uint32_t cluster, uint32_t max_value,
+                        WP2_OPT_LABEL, int32_t* const value,
+                        float* const cost = nullptr);
   // Fills the array 'is_maybe_used' with true when the symbol might be used,
   // false if we are sure it is not used.
   void GetPotentialUsage(uint32_t sym, uint32_t cluster, bool is_maybe_used[],
@@ -80,13 +77,9 @@ class SymbolReader : public SymbolIO<StatExtra> {
   void AddTrivial(uint32_t sym, uint32_t cluster, bool is_symmetric,
                   int32_t value);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to range value,
-  // in [0:'range').
-  void AddRange(uint32_t sym, uint32_t cluster, bool is_symmetric,
+  // in [0:'range'), without mapping by default. Returns the corresponding Stat.
+  Stat* AddRange(uint32_t sym, uint32_t cluster, bool is_symmetric,
                 uint16_t range);
-  // For the 'cluster'th cluster of symbol 'sym', set the mapping_[] to
-  // the content of 'mapping'.
-  void AddMapping(uint32_t sym, uint32_t cluster, bool is_symmetric,
-                  const Vector_u16& mapping);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to dictionary
   // value, using info from 'infos'. 'infos' is modified in this call.
   WP2Status AddDict(uint32_t sym, uint32_t cluster, bool is_symmetric,
@@ -106,9 +99,9 @@ class SymbolReader : public SymbolIO<StatExtra> {
   static uint32_t FindSymbol(const Stat& stat, uint32_t max_value);
 
   ANSDec* dec_;
-  // Codes used for fast probability check for symbols relying on dictionaries.
+  // Code tables used by dictionaries (StatExtra.codes point to them).
   Vector<ANSCodes> codes_;
-  // Tmp variable to use during the update (to avoid re-allocations).
+  // Tmp variable used during the updates to avoid re-allocations.
   ANSCodes infos_;
 };
 

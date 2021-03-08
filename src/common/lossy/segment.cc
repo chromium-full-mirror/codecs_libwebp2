@@ -210,9 +210,9 @@ WP2Status Segment::ReadEncodingMethods(SymbolReader* const sr,
           // Use 'max_value' to remove the EncodingMethod::kDCOnly possibility.
           int32_t method;
           WP2_CHECK_STATUS(
-              sr->TryRead(symbol, cluster,
-                          /*max_value=*/(uint32_t)EncodingMethod::kMethod1,
-                          kChannelStr[channel], &method));
+              sr->ReadWithMax(symbol, cluster,
+                              /*max_value=*/(uint32_t)EncodingMethod::kMethod1,
+                              kChannelStr[channel], &method));
           cb->method_[channel][tf_i] = (EncodingMethod)method;
         }
       }

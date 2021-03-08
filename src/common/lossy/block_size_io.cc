@@ -274,8 +274,8 @@ WP2Status ReadBlockSplit(const SplitIteratorBase& it, SymbolReader* const sr,
   const uint32_t cluster = stats.block_index_[it.CurrentBlock().block.dim()];
   const uint32_t max = it.NumSplitPatterns() - 1;
   int32_t read_value;
-  WP2_CHECK_STATUS(
-      sr->TryRead(kSymbolBlockSize, cluster, max, "block_split", &read_value));
+  WP2_CHECK_STATUS(sr->ReadWithMax(kSymbolBlockSize, cluster, max,
+                                   "block_split", &read_value));
   *split_idx = read_value;
   return WP2_STATUS_OK;
 }

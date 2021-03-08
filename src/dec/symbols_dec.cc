@@ -54,14 +54,13 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
   Vector_u16 counts;
   WP2_CHECK_ALLOC_OK(counts.resize(histo_size));
 
-  // 'type' is 0 for raw probabilities, 1 for Huffman-represented
-  // probabilities.
-  const uint8_t type = dec->ReadUValue(1, "coding_type");
+  // do_huffman: false = raw probabilities, true = power of two probabilities
+  const bool do_huffman = dec->ReadBool("coding_type");
   const uint32_t max_count_bits =
       std::min(kMaxFreqBits, 1u + (uint32_t)WP2Log2Floor(max_count));
   // Read the probabilities.
   uint32_t max_freq_bits;
-  if (type == 1) {  // Huffman
+  if (do_huffman) {  // Huffman
     max_freq_bits =
         dec->ReadRange(1, 1 + WP2Log2Floor(max_count_bits), "max_freq_bits");
   } else {  // Raw
@@ -76,7 +75,6 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
 
   // Store everything in the info.
   WP2_CHECK_ALLOC_OK(infos.resize(nnz));
-  const bool do_huffman = (type == 1 || type == 2);
   for (uint32_t ind = 0, k = 0; k < counts.size(); ++k) {
     if (counts[k] > 0) {
       assert(ind < nnz);  // We cannot have more non-zeros than needed.
@@ -117,23 +115,14 @@ void SymbolReader::AddTrivial(uint32_t sym, uint32_t cluster, bool is_symmetric,
   stat->param.trivial_value = value;
 }
 
-void SymbolReader::AddMapping(uint32_t sym, uint32_t cluster, bool is_symmetric,
-                              const Vector_u16& mapping) {
-  Stat* const stat = GetStats(sym, cluster);
-  stat->type = Stat::Type::kRange;
-  stat->is_symmetric = is_symmetric;
-  stat->use_mapping = true;
-  for (uint32_t k = 0; k < mapping.size(); ++k) stat->mappings[k] = mapping[k];
-  stat->range = mapping.size();
-}
-
-void SymbolReader::AddRange(uint32_t sym, uint32_t cluster, bool is_symmetric,
-                            uint16_t range) {
+SymbolReader::Stat* SymbolReader::AddRange(
+    uint32_t sym, uint32_t cluster, bool is_symmetric, uint16_t range) {
   Stat* const stat = GetStats(sym, cluster);
   stat->type = Stat::Type::kRange;
   stat->is_symmetric = is_symmetric;
   stat->use_mapping = false;
   stat->range = range;
+  return stat;
 }
 
 WP2Status SymbolReader::AddDict(uint32_t sym, uint32_t cluster,
@@ -187,12 +176,12 @@ int32_t SymbolReader::Read(uint32_t sym, uint32_t cluster, WP2_OPT_LABEL,
   return value;
 }
 
-WP2Status SymbolReader::TryRead(uint32_t sym, uint32_t cluster,
-                                uint32_t max_value, WP2_OPT_LABEL,
-                                int32_t* const value, float* const cost) {
+WP2Status SymbolReader::ReadWithMax(uint32_t sym, uint32_t cluster,
+                                    uint32_t max_value, WP2_OPT_LABEL,
+                                    int32_t* const value, float* const cost) {
   const WP2Status status = ReadInternal(sym, cluster, /*use_max_value=*/true,
                                         max_value, label, value, cost);
-  if (dec_->GetStatus() != WP2_STATUS_OK) return dec_->GetStatus();
+  WP2_CHECK_STATUS(dec_->GetStatus());
   return status;
 }
 
@@ -342,7 +331,7 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
       if (!use_max_value) {
         range = stat.range;
       } else if (stat.use_mapping) {
-        // Find the biggest range such that mapping[range] <= max_value.
+        // Find the biggest range such that mapping[range-1] <= max_value.
         range = std::upper_bound(stat.mappings, stat.mappings + stat.range,
                                  max_value) -
                 stat.mappings;
@@ -615,11 +604,8 @@ WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t cluster,
     WP2_CHECK_STATUS(AddDict(sym, cluster, is_symmetric, &infos_));
   } else {  // kRange
     const uint32_t nnz = dec_->ReadRange(1, nnz_range, "size");
-    Stat* const stat = GetStats(sym, cluster);
-    stat->type = Stat::Type::kRange;
-    stat->is_symmetric = is_symmetric;
+    Stat* const stat = AddRange(sym, cluster, is_symmetric, nnz);
     stat->use_mapping = true;
-    stat->range = nnz;
     WP2_CHECK_STATUS(LoadMapping(dec_, nnz, range, stat->mappings));
   }
   return dec_->GetStatus();

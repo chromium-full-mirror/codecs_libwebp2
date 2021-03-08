@@ -140,8 +140,8 @@ WP2Status Decoder::DecodeGroup4(uint32_t width, uint32_t last_row,
         mode = (Group4Mode)sr->Read(kSymbolG4Type, "mode", cost_ptr);
       } else if (max_mode == 1) {
         int32_t mode_int;
-        WP2_CHECK_STATUS(sr->TryRead(kSymbolG4Type, /*cluster=*/0, max_mode,
-                                     "mode", &mode_int, cost_ptr));
+        WP2_CHECK_STATUS(sr->ReadWithMax(kSymbolG4Type, /*cluster=*/0, max_mode,
+                                         "mode", &mode_int, cost_ptr));
         mode = (mode_int == 0)           ? Group4Mode::kVertical
                : horizontal_mode_allowed ? Group4Mode::kHorizontal
                                          : Group4Mode::kPass;
@@ -157,7 +157,7 @@ WP2Status Decoder::DecodeGroup4(uint32_t width, uint32_t last_row,
         case Group4Mode::kHorizontal: {
           const char* const str[2] = {"hdist_bg_minus1", "hdist_fg_minus1"};
           int32_t a0a1_minus1;
-          WP2_CHECK_STATUS(sr->TryRead(
+          WP2_CHECK_STATUS(sr->ReadWithMax(
               kSymbolG4HorizontalDist, a0_color != first_color, a0a1_max - 1,
               str[a0_color != first_color], &a0a1_minus1, cost_ptr));
           const uint32_t a1 = a0 + a0a1_minus1 + 1;
@@ -165,7 +165,7 @@ WP2Status Decoder::DecodeGroup4(uint32_t width, uint32_t last_row,
           if (x < width) {
             const int a1a2_max = (int)width - a1;
             int32_t a1a2_minus1;
-            WP2_CHECK_STATUS(sr->TryRead(
+            WP2_CHECK_STATUS(sr->ReadWithMax(
                 kSymbolG4HorizontalDist, a0_color == first_color, a1a2_max - 1,
                 str[a0_color == first_color], &a1a2_minus1, cost_ptr));
             const uint32_t a2 = a1 + a1a2_minus1 + 1;
@@ -195,9 +195,9 @@ WP2Status Decoder::DecodeGroup4(uint32_t width, uint32_t last_row,
           const int min_dist = -(int)kGroup4Window;
           const int max_dist = (int)std::min(b1 + kGroup4Window, width) - b1;
           int32_t a1b1;
-          WP2_CHECK_STATUS(sr->TryRead(kSymbolG4VerticalDist, /*cluster=*/0,
-                                       max_dist - min_dist, "vdist", &a1b1,
-                                       cost_ptr));
+          WP2_CHECK_STATUS(sr->ReadWithMax(kSymbolG4VerticalDist, /*cluster=*/0,
+                                           max_dist - min_dist, "vdist", &a1b1,
+                                           cost_ptr));
 
           const uint32_t a1 = b1 + a1b1 + min_dist;
           // We need to keep x < width as we do not optimize upon min_dist.

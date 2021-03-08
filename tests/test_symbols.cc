@@ -543,9 +543,9 @@ TEST(SymbolsTest, MaxValue) {
   for (float mul : {1.f, 1.2f, 2.f, 100.f}) {
     for (const DataGenerator::Symbol& sym : symbols) {
       int32_t value;
-      ASSERT_WP2_OK(sr.TryRead(sym.s, sym.cluster,
-                               /*max_value=*/std::abs(sym.value) * mul, "sym",
-                               &value, nullptr));
+      ASSERT_WP2_OK(sr.ReadWithMax(sym.s, sym.cluster,
+                                   /*max_value=*/std::abs(sym.value) * mul,
+                                   "sym", &value, nullptr));
       ASSERT_EQ(std::abs(value), std::abs(sym.value)) << "mul " << mul;
     }
   }
@@ -937,6 +937,7 @@ class SymbolWriterForTest : public SymbolWriter {
   using SymbolWriter::AddDict;
   using SymbolWriter::AddGolomb;
   using SymbolWriter::AddRange;
+  using SymbolWriter::AddTrivial;
 };
 
 class SymbolReaderForTest : public SymbolReader {
@@ -945,7 +946,6 @@ class SymbolReaderForTest : public SymbolReader {
   using SymbolReader::AddAdaptiveSymbol;
   using SymbolReader::AddDict;
   using SymbolReader::AddGolomb;
-  using SymbolReader::AddMapping;
   using SymbolReader::AddRange;
   using SymbolReader::AddTrivial;
 };
@@ -965,8 +965,8 @@ class SymbolCostTest : public ::testing::TestWithParam<std::tuple<bool, bool>> {
       SCOPED_TRACE(SPrintf("value  %d", i));
       if (!max_values.empty()) {
         int32_t v = 0;
-        EXPECT_WP2_OK(sr->TryRead(kSymbol, kCluster, max_values[i], "label", &v,
-                                  cost_ptr));
+        EXPECT_WP2_OK(sr->ReadWithMax(kSymbol, kCluster, max_values[i],
+                                      "label", &v, cost_ptr));
         EXPECT_EQ(values[i], v);
       } else {
         EXPECT_EQ(values[i], sr->Read(kSymbol, "label", cost_ptr));
@@ -1390,8 +1390,8 @@ TEST(SymbolsTest, MaxValuePrecision) {
 
   // Check the decoder does not crash.
   int32_t value;
-  ASSERT_WP2_OK(sr.TryRead(/*sym=*/0, /*cluster=*/0, /*max_value=*/1, "sym",
-                           &value, nullptr));
+  ASSERT_WP2_OK(sr.ReadWithMax(/*sym=*/0, /*cluster=*/0, /*max_value=*/1, "sym",
+                               &value, nullptr));
 }
 #endif
 

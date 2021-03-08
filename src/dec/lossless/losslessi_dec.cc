@@ -67,7 +67,7 @@ static inline WP2Status ReadLZ77Golomb(
   // Read information about the Golomb representation.
   int32_t prefix;
   WP2_CHECK_STATUS(
-      sr->TryRead(sym, cluster, golomb_max.prefix, label, &prefix, cost));
+      sr->ReadWithMax(sym, cluster, golomb_max.prefix, label, &prefix, cost));
   const uint32_t extra_bits_num =
       WP2::Golomb::NumExtraBits(prefix, kLZZGolombPrefixSize);
 
@@ -393,9 +393,9 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
         last_cached += 4;
       }
       int32_t cache_index;
-      WP2_CHECK_STATUS(sr->TryRead(kSymbolCache, cluster,
-                                   color_cache->IndexRange() - 1, "cache_idx",
-                                   &cache_index, cost_ptr));
+      WP2_CHECK_STATUS(sr->ReadWithMax(kSymbolCache, cluster,
+                                       color_cache->IndexRange() - 1,
+                                       "cache_idx", &cache_index, cost_ptr));
       color_cache->Lookup(cache_index, src);
       if (!gparams_->has_alpha_) assert(src[0] == WP2::kAlphaMax);
     } else {                                            // Not reached
