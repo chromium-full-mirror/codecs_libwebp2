@@ -112,6 +112,8 @@ class PixelMode {
 class HashChain {
  public:
   HashChain() {
+    constexpr uint8_t kWindowSizeBits = 1 + WP2Log2Floor_k(WP2::kMaxTileSize);
+    (void)kWindowSizeBits;
     static_assert(kMaxLengthBits + kWindowSizeBits <= 8 * sizeof(uint64_t),
                   "Wrong bits");
   }
@@ -149,9 +151,6 @@ class HashChain {
  private:
   static constexpr uint8_t kHashBits = 18;
   static constexpr uint32_t kHashSize = (1u << kHashBits);
-
-  static constexpr uint8_t kWindowSizeBits =
-      1 + WP2Log2Floor_k(kMaxLZ77Distance);
 };
 
 // -----------------------------------------------------------------------------

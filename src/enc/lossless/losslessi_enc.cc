@@ -283,24 +283,22 @@ WP2Status EncodeImageNoClusters(WP2::ANSEncBase* const enc,
 
   // Calculate backward references from ARGB image.
   WP2_CHECK_STATUS(hash_chain->Fill(effort, argb, width, height));
-  LosslessSymbolsInfo symbols_info_new;
-  WP2_CHECK_STATUS(symbols_info_new.CopyFrom(symbols_info));
   BackwardRefsPool::RefsPtr refs = BackwardRefsPool::GetEmptyBackwardRefs();
   CacheConfig cache_config;
   WP2_CHECK_STATUS(GetBackwardReferences(
       width, height, argb, effort, kLZ77Standard | kLZ77RLE,
-      /*cache_bits_max=*/0, *hash_chain, symbols_info_new, &cache_config,
-      ref_pool, &refs));
+      /*cache_bits_max=*/0, *hash_chain, symbols_info, &cache_config, ref_pool,
+      &refs));
 
   // Record symbol statistics.
   WP2::SymbolRecorder recorder;
   WP2::ANSEncNoop noop;
-  WP2_CHECK_STATUS(recorder.Allocate(symbols_info_new, /*num_records=*/0));
+  WP2_CHECK_STATUS(recorder.Allocate(symbols_info, /*num_records=*/0));
   WP2_CHECK_STATUS(StorePixels(width, height, *refs, &noop, &recorder));
 
   // Store headers.
-  WP2_CHECK_STATUS(WriteHeaders(recorder, symbols_info_new, width * height,
-                                effort, enc, dicts, &sw));
+  WP2_CHECK_STATUS(WriteHeaders(recorder, symbols_info, width * height, effort,
+                                enc, dicts, &sw));
 
   // Store actual literals.
   WP2_CHECK_STATUS(StorePixels(width, height, /*histo_bits=*/0, *refs, progress,
@@ -419,11 +417,7 @@ WP2Status Encoder::EncodeImageInternal(
                     std::min(kMaxHistogramImageSize, num_segments_max),
                     "num_histograms_m2");
       LosslessSymbolsInfo symbols_info_tmp;
-      WP2_CHECK_STATUS(symbols_info_tmp.CopyFrom(symbols_info));
-      symbols_info_tmp.SetCacheRange(0);
-      symbols_info_tmp.SetAsLabelImage();
-      symbols_info_tmp.SetMinMax(kSymbolG, /*min=*/0,
-                                 /*max=*/num_segments - 1);
+      symbols_info_tmp.InitAsLabelImage(num_segments);
       WP2_CHECK_STATUS(EncodeImageNoClusters(
           enc, dicts, segments.data(), &hash_chain_, &ref_pool_,
           histogram_width, histogram_height, symbols_info_tmp, config_.effort,
@@ -510,13 +504,11 @@ WP2Status Encoder::ApplyPredictFilter(const int16_t min_values[4],
   const WP2::ANSDebugPrefix prefix(enc, "predictor");
   enc->PutRange(pred_bits, kTransformBitsMin, kTransformBitsMax,
                 "transform_bits");
-  LosslessSymbolsInfo symbols_info;
-  symbols_info.Init();
-  symbols_info.SetMinMax(kSymbolG, /*min=*/0, /*max=*/kNumPredictors - 1);
-  symbols_info.SetAsLabelImage();
   const uint32_t transform_width = SubSampleSize(argb_buffer_.width, pred_bits);
   const uint32_t transform_height =
       SubSampleSize(argb_buffer_.height, pred_bits);
+  LosslessSymbolsInfo symbols_info;
+  symbols_info.InitAsLabelImage(kNumPredictors);
   const WP2Status status = EncodeImageNoClusters(
       enc, dicts, transform_data_, (HashChain*)&hash_chain_,
       (BackwardRefsPool*)&ref_pool_, transform_width, transform_height,
@@ -536,13 +528,12 @@ WP2Status Encoder::ApplyCrossColorFilter(const ProgressRange& progress,
   const WP2::ANSDebugPrefix prefix(enc, "cross_color");
   enc->PutRange(ccolor_transform_bits, kTransformBitsMin, kTransformBitsMax,
                 "transform_bits");
-  LosslessSymbolsInfo symbols_info;
-  symbols_info.Init();
-  symbols_info.SetAsCrossColorImage();
   const uint32_t transform_width =
       SubSampleSize(argb_buffer_.width, ccolor_transform_bits);
   const uint32_t transform_height =
       SubSampleSize(argb_buffer_.height, ccolor_transform_bits);
+  LosslessSymbolsInfo symbols_info;
+  symbols_info.InitAsCrossColorImage();
   WP2_CHECK_STATUS(EncodeImageNoClusters(
       enc, dicts, transform_data_, (HashChain*)&hash_chain_,
       (BackwardRefsPool*)&ref_pool_, transform_width, transform_height,
@@ -815,9 +806,7 @@ WP2Status Encoder::ApplyAndWriteTransforms(
     WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
   } else if (config.transforms[0] == TransformType::kColorIndexing &&
              config.transforms[1] == TransformType::kNum) {
-    symbols_info->SetAsLabelImage();
-    const uint32_t palette_size = palette_.Size();
-    symbols_info->SetMinMax(kSymbolG, /*min=*/0, /*max=*/palette_size - 1);
+    symbols_info->InitAsLabelImage(palette_.Size());
   } else {
     // Find the ranges of the ARGB values in the image.
     int16_t minima[4], maxima[4];

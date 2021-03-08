@@ -689,24 +689,16 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
                                          "transform_bits");
 
       // Read the transform header.
-      LosslessSymbolsInfo symbols_info;
-      WP2_CHECK_STATUS(symbols_info.CopyFrom(hdr_.symbols_info_));
-      symbols_info.SetInfo(kSymbolA, /*min=*/WP2::SymbolsInfo::kInvalidBound,
-                           /*max=*/WP2::SymbolsInfo::kInvalidBound,
-                           /*num_clusters=*/0,
-                           WP2::SymbolsInfo::StorageMethod::kUnused);
-      if (type == TransformType::kPredictor) {
-        symbols_info.SetAsLabelImage();
-        symbols_info.SetMinMax(kSymbolG, /*min=*/0, /*max=*/kNumPredictors - 1);
-      } else {
-        symbols_info.SetAsCrossColorImage();
-      }
-      symbols_info.SetNumClusters(1);
-      symbols_info.SetCacheRange(0);
       const uint32_t sub_width =
           SubSampleSize(transform->width_, transform->bits_);
       const uint32_t sub_height =
           SubSampleSize(transform->height_, transform->bits_);
+      LosslessSymbolsInfo symbols_info;
+      if (type == TransformType::kPredictor) {
+        symbols_info.InitAsLabelImage(kNumPredictors);
+      } else {
+        symbols_info.InitAsCrossColorImage();
+      }
       WP2_CHECK_STATUS(ReadANSStats(sub_width, sub_height, symbols_info));
 
       // Read the transform image.
@@ -853,8 +845,7 @@ WP2Status Decoder::DecodeHeader() {
 
   // Modify the main image ranges if we only use the palette.
   if (num_transforms == 1 && transforms[0] == TransformType::kColorIndexing) {
-    hdr_.symbols_info_.SetAsLabelImage();
-    hdr_.symbols_info_.SetMinMax(kSymbolG, /*min=*/0, /*max=*/num_colors_ - 1);
+    hdr_.symbols_info_.InitAsLabelImage(num_colors_);
   } else if (num_transforms != 0) {
     int16_t minima_range[4], maxima_range[4];
     // Find the ranges in which the ARGB values are.
@@ -926,9 +917,7 @@ WP2Status Decoder::DecodeHeader() {
 
     // Read the entropy image probabilities.
     LosslessSymbolsInfo symbols_info;
-    symbols_info.Init(gparams_->has_alpha_, hdr_.symbols_info_.SampleFormat());
-    symbols_info.SetAsLabelImage();
-    symbols_info.SetMinMax(kSymbolG, /*min=*/0, /*max=*/num_histo - 1);
+    symbols_info.InitAsLabelImage(num_histo);
     WP2_CHECK_STATUS(
         ReadANSStats(histogram_width, histogram_height, symbols_info));
 

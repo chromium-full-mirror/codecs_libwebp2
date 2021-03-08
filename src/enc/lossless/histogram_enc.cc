@@ -921,9 +921,7 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
 
       WP2::ANSDictionaries dicts;
       LosslessSymbolsInfo symbols_info_tmp;
-      // 'has_alpha' is false as it is a label image.
-      symbols_info_tmp.Init(/*has_alpha=*/false, symbols_info.SampleFormat());
-      symbols_info_tmp.SetAsLabelImage();
+      symbols_info_tmp.InitAsLabelImage(merged_histo->histograms_.size());
       WP2_CHECK_STATUS(EncodeImageNoClusters(
           &enc, &dicts, segments, &hash_chain, &ref_pool, histo_ysize,
           histo_xsize, symbols_info_tmp, effort, encode_progress));

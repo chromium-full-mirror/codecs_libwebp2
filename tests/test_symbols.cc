@@ -289,7 +289,8 @@ TEST(SymbolsInfo, BasicTest) {
 
 TEST(SymbolsInfo, LossessSymbolsInfo) {
   WP2L::LosslessSymbolsInfo info;
-  info.Init(/*has_alpha=*/true, WP2_Argb_32, /*num_clusters=*/3);
+  info.Init(/*has_alpha=*/true, WP2_Argb_32);
+  info.SetNumClusters(3);
   info.SetCacheRange(1 << 2);
   EXPECT_EQ(info.Range(WP2L::kSymbolA, /*cluster=*/0), (uint32_t)(1 << 8));
   EXPECT_EQ(info.NumClusters(WP2L::kSymbolA), 3u);

@@ -671,8 +671,15 @@ bool IsSymbolUsed(const Symbol sym, const bool is_maybe_used[kSymbolTypeNum]);
 class LosslessSymbolsInfo : public WP2::SymbolsInfo {
  public:
   LosslessSymbolsInfo();
-  void Init(bool has_alpha = false, WP2SampleFormat format = WP2_Argb_32,
-            uint32_t num_clusters = 1);
+  // By default, there is only one cluster per symbol and the cache bits are set
+  // to 0.
+  void Init(bool has_alpha, WP2SampleFormat format);
+  // Set the symbols A,R,B as useless as all the information will be stored in
+  // G channel.
+  void InitAsLabelImage(uint32_t num_labels);
+  // Set the symbol A as useless and R,G,B as ranging with the cross color image
+  // bounds kRedToBlueMax, kGreenToBlueMax, kGreenToRedMax
+  void InitAsCrossColorImage();
 
   virtual ~LosslessSymbolsInfo() = default;
 
@@ -682,12 +689,6 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
   void SetNumClusters(uint32_t num_clusters);
 
   void SetCacheRange(uint32_t cache_range);
-  // Set the symbols A,R,B as useless as all the information will be stored in
-  // G channel.
-  void SetAsLabelImage();
-  // Set the symbol A as useless and R,G,B as ranging with the cross color image
-  // bounds kRedToBlueMax, kGreenToBlueMax, kGreenToRedMax
-  void SetAsCrossColorImage();
   WP2SampleFormat SampleFormat() const { return sample_format_; }
 
   // Returns whether alpha is used and whether it is a label image (ARB unused).
@@ -695,6 +696,8 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
   static bool IsLabelImage(const SymbolsInfo& info);
 
  private:
+  void InitNonARGB();
+
   WP2SampleFormat sample_format_;
 };
 

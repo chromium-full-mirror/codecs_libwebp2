@@ -398,10 +398,10 @@ LosslessSymbolsInfo::LosslessSymbolsInfo() : sample_format_(WP2_FORMAT_NUM) {
   for (uint32_t i = 0; i < kSymbolNum; ++i) SetUnused(i);
 }
 
-void LosslessSymbolsInfo::Init(bool has_alpha, WP2SampleFormat sample_format,
-                               uint32_t num_clusters) {
+void LosslessSymbolsInfo::Init(bool has_alpha, WP2SampleFormat sample_format) {
   sample_format_ = sample_format;
   constexpr StorageMethod storage_method = StorageMethod::kAuto;
+  constexpr uint32_t num_clusters = 1u;
   SetInfo(kSymbolType, /*min=*/0, /*max=*/kSymbolTypeNum - 1, num_clusters,
           storage_method);
   if (has_alpha) {
@@ -417,6 +417,12 @@ void LosslessSymbolsInfo::Init(bool has_alpha, WP2SampleFormat sample_format,
   SetInfo(kSymbolB, /*min=*/0, /*max=*/WP2::FormatMax(sample_format, 3),
           num_clusters, storage_method);
 
+  InitNonARGB();
+}
+
+void LosslessSymbolsInfo::InitNonARGB() {
+  constexpr StorageMethod storage_method = StorageMethod::kAuto;
+  constexpr uint32_t num_clusters = 1u;
   WP2::Golomb golomb_max(kMaxLZ77Distance + kCodeToPlaneCodes - 1,
                          kLZZGolombPrefixSize);
   SetInfo(kSymbolDist, /*min=*/0, golomb_max.prefix, num_clusters,
@@ -428,6 +434,28 @@ void LosslessSymbolsInfo::Init(bool has_alpha, WP2SampleFormat sample_format,
           storage_method);
 
   SetCacheRange(0);
+}
+
+void LosslessSymbolsInfo::InitAsLabelImage(uint32_t num_labels) {
+  SetNumClusters(1);
+  SetUnused(kSymbolA);
+  SetUnused(kSymbolR);
+  SetInfo(kSymbolG, /*min=*/0, /*max=*/num_labels - 1, /*num_clusters=*/1,
+          StorageMethod::kAuto);
+  SetUnused(kSymbolB);
+  InitNonARGB();
+}
+
+void LosslessSymbolsInfo::InitAsCrossColorImage() {
+  SetNumClusters(1);
+  SetUnused(kSymbolA);
+  SetInfo(kSymbolR, /*min=*/-(int32_t)kRedToBlueMax, /*max=*/kRedToBlueMax,
+          /*num_clusters=*/1, StorageMethod::kAuto);
+  SetInfo(kSymbolG, /*min=*/-(int32_t)kGreenToBlueMax,
+          /*max=*/kGreenToBlueMax, /*num_clusters=*/1, StorageMethod::kAuto);
+  SetInfo(kSymbolB, /*min=*/-(int32_t)kGreenToRedMax, /*max=*/kGreenToRedMax,
+          /*num_clusters=*/1, StorageMethod::kAuto);
+  InitNonARGB();
 }
 
 WP2Status LosslessSymbolsInfo::CopyFrom(const LosslessSymbolsInfo& other) {
@@ -453,20 +481,6 @@ void LosslessSymbolsInfo::SetCacheRange(uint32_t cache_range) {
     SetInfo(kSymbolCache, /*min=*/0, /*max=*/cache_range - 1, num_clusters,
             StorageMethod::kAuto);
   }
-}
-
-void LosslessSymbolsInfo::SetAsLabelImage() {
-  SetUnused(kSymbolA);
-  SetUnused(kSymbolR);
-  SetUnused(kSymbolB);
-}
-
-void LosslessSymbolsInfo::SetAsCrossColorImage() {
-  SetUnused(kSymbolA);
-  SetMinMax(kSymbolR, /*min=*/-(int32_t)kRedToBlueMax, /*max=*/kRedToBlueMax);
-  SetMinMax(kSymbolG, /*min=*/-(int32_t)kGreenToBlueMax,
-            /*max=*/kGreenToBlueMax);
-  SetMinMax(kSymbolB, /*min=*/-(int32_t)kGreenToRedMax, /*max=*/kGreenToRedMax);
 }
 
 bool IsSymbolUsed(const Symbol sym, const bool is_maybe_used[kSymbolTypeNum]) {
