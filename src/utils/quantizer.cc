@@ -95,7 +95,7 @@ void Quantizer::Config::WriteHistogramHeader(uint32_t symbol_range,
   if (param.is_sparse) assert(size_to_write == histo.nnz);
   assert(size_to_write >= histo.nnz);
 
-  enc->PutBool(param.type == 1, "coding_type");
+  enc->PutBool(param.type == Huffman, "use_huffman");
 }
 
 void Quantizer::Config::WriteHistogramCounts(uint32_t symbol_range,

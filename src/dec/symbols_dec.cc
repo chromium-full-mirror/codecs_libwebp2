@@ -54,8 +54,8 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
   Vector_u16 counts;
   WP2_CHECK_ALLOC_OK(counts.resize(histo_size));
 
-  // do_huffman: false = raw probabilities, true = power of two probabilities
-  const bool do_huffman = dec->ReadBool("coding_type");
+  // do_huffman: false = raw probabilities, true = power-of-two probabilities
+  const bool do_huffman = dec->ReadBool("use_huffman");
   const uint32_t max_count_bits =
       std::min(kMaxFreqBits, 1u + (uint32_t)WP2Log2Floor(max_count));
   // Read the probabilities.
@@ -87,10 +87,6 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
 }
 
 //------------------------------------------------------------------------------
-
-static bool ANSSymbolInfoCmp(const ANSSymbolInfo& i1, const ANSSymbolInfo& i2) {
-  return (i1.symbol < i2.symbol);
-}
 
 WP2Status SymbolReader::Init(const SymbolsInfo& symbols_info,
                              ANSDec* const dec) {
@@ -133,19 +129,18 @@ WP2Status SymbolReader::AddDict(uint32_t sym, uint32_t cluster,
   stat->type = Stat::Type::kDict;
   stat->is_symmetric = is_symmetric;
   stat->use_mapping = true;
-  // Make sure the symbols are ordered like in the encoding.
-  // TODO(vrabaud): this should be prevented by the bitstream syntax
-  std::sort(infos->begin(), infos->end(), ANSSymbolInfoCmp);
   // Create the mappings.
   Vector_u32 counts;
   WP2_CHECK_ALLOC_OK(counts.resize(infos->size()));
   for (uint32_t k = 0; k < counts.size(); ++k) {
     stat->mappings[k] = (*infos)[k].symbol;
+    // verify that symbols are sorted by syntax design
+    assert(k == 0 || stat->mappings[k] > stat->mappings[k - 1]);
     counts[k] = (*infos)[k].freq;
   }
   assert(infos->size() <= ANS_MAX_SYMBOLS);
-  // Convert the histogram to a spread table.
 
+  // Convert the histogram to a spread table.
   WP2_CHECK_ALLOC_OK(codes_.resize(codes_.size() + 1));
   stat->extra.log2_tab_size = ANS_LOG_TAB_SIZE;
   WP2_CHECK_STATUS(ANSCountsToSpreadTable(
