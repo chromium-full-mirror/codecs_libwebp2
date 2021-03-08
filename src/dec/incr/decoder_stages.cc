@@ -187,11 +187,19 @@ static WP2Status SetupOutputBuffer(const AnimationFrame& frame_info,
   return WP2_STATUS_OK;
 }
 
-WP2Status Decoder::BlendFrame(Rectangle window, bool dispose) {
+// Blends the part of the current frame within 'rect' in the background.
+static WP2Status BlendFrame(Rectangle rect, const BitstreamFeatures& features,
+                            Decoder::State* const state,
+                            ArgbBuffer* const output) {
+  assert(state->current_frame_index < state->frames.size());
+  const AnimationFrame& frame = state->frames[state->current_frame_index].info;
+  if (!frame.blend) return WP2_STATUS_OK;
+  const Rectangle clipped = rect.ClipWith(frame.window);
+  if (clipped.GetArea() == 0) return WP2_STATUS_OK;
   ArgbBuffer* const bg =
-      state_->using_blended_buffer ? &state_->blended_buffer : output_;
-  if (dispose) bg->Fill(window, ToArgb32b(features_.background_color));
-  WP2_CHECK_STATUS(bg->CompositeUnder(state_->raw_output_buffer, window));
+      state->using_blended_buffer ? &state->blended_buffer : output;
+  if (frame.dispose) bg->Fill(clipped, ToArgb32b(features.background_color));
+  WP2_CHECK_STATUS(bg->CompositeUnder(state->raw_output_buffer, clipped));
   return WP2_STATUS_OK;
 }
 
@@ -213,6 +221,20 @@ static Rectangle GetRawAreaToCopy(const Decoder::State& state) {
                               ? frame.window.y + state.frame_num_final_rows
                               : state.raw_output_buffer.height();
   return {0, 0, width, height};
+}
+
+// Returns the part of 'raw_area_to_copy' not in 'previously_copied_raw_area'.
+static Rectangle GetNewRawAreaToCopy(Rectangle previously_copied_raw_area,
+                                     Rectangle raw_area_to_copy) {
+  assert(raw_area_to_copy.x == 0 && raw_area_to_copy.y == 0);
+  assert(raw_area_to_copy.height >= previously_copied_raw_area.height);
+  assert(previously_copied_raw_area.width == 0 ||
+         (raw_area_to_copy.width == previously_copied_raw_area.width));
+
+  return Rectangle(raw_area_to_copy.x,
+                   raw_area_to_copy.y + previously_copied_raw_area.height,
+                   raw_area_to_copy.width,
+                   raw_area_to_copy.height - previously_copied_raw_area.height);
 }
 
 //------------------------------------------------------------------------------
@@ -444,19 +466,26 @@ void Decoder::DecodeAvailableData() {
           if (current_frame_index < state_->discard_frames_before_index) {
             keep_decoding = true;
           } else {
-            state_->index_of_frame_in_output_buffer = current_frame_index;
             const bool is_preframe =
                 current_frame_features.info.duration_ms == 0;
-            // Blend the preframe if necessary.
-            if (is_preframe && current_frame_features.info.blend) {
-              state_->status = BlendFrame(current_frame_features.info.window,
-                                          current_frame_features.info.dispose);
-            }
             // Merge all consecutive preframes with the next regular frame,
             // forming a final frame. Don't notify for preframe readiness.
             keep_decoding =
                 (is_preframe || current_frame_features.final_frame_index <
                                     state_->skip_final_frames_before_index);
+            if (keep_decoding) {
+              // The output will not be directly accessible by the user (so no
+              // OrientateBuffer() call) but might be needed by a following
+              // non-disposing frame (hence the BlendFrame() now).
+              const Rectangle new_raw_area = GetNewRawAreaToCopy(
+                  copied_raw_area,
+                  {0, 0, features_.raw_width, features_.raw_height});
+              state_->status =
+                  BlendFrame(new_raw_area, features_, state_, output_);
+            } else {
+              // Blending and orientation are done outside this loop.
+            }
+            state_->index_of_frame_in_output_buffer = current_frame_index;
           }
           if (state_->status == WP2_STATUS_OK) {
             state_->current_frame_is_ready = true;
@@ -485,29 +514,12 @@ void Decoder::DecodeAvailableData() {
   if (TryGetDecodedFeatures() != nullptr && state_->using_raw_output_buffer &&
       state_->current_frame_index >= state_->discard_frames_before_index &&
       !output_->IsEmpty()) {
-    const Rectangle raw_area_to_copy = GetRawAreaToCopy(*state_);
-    assert(raw_area_to_copy.x == 0 && raw_area_to_copy.y == 0);
-    assert(raw_area_to_copy.height >= copied_raw_area.height);
-    assert(copied_raw_area.width == 0 ||
-           (raw_area_to_copy.width == copied_raw_area.width));
-
-    const Rectangle new_raw_area_to_copy = Rectangle(
-        raw_area_to_copy.x, raw_area_to_copy.y + copied_raw_area.height,
-        raw_area_to_copy.width,
-        raw_area_to_copy.height - copied_raw_area.height);
+    const Rectangle new_raw_area_to_copy =
+        GetNewRawAreaToCopy(copied_raw_area, GetRawAreaToCopy(*state_));
 
     if (new_raw_area_to_copy.GetArea() > 0) {
-      WP2Status postprocess_status = WP2_STATUS_OK;
-      assert(state_->current_frame_index < state_->frames.size());
-      const AnimationFrame& frame =
-          state_->frames[state_->current_frame_index].info;
-      if (frame.blend) {
-        const Rectangle clipped = new_raw_area_to_copy.ClipWith(frame.window);
-        if (clipped.GetArea() > 0) {
-          postprocess_status = BlendFrame(clipped, frame.dispose);
-        }
-      }
-
+      WP2Status postprocess_status =
+          BlendFrame(new_raw_area_to_copy, features_, state_, output_);
       if (postprocess_status == WP2_STATUS_OK &&
           state_->must_use_raw_output_buffer) {
         // Also handles the conversion from Argb32 to something else, if needed.

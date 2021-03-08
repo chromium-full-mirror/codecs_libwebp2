@@ -317,7 +317,6 @@ class Decoder {
  private:
   WP2Status DecodeAvailableTiles();
   WP2Status DiscardAvailableTiles();
-  WP2Status BlendFrame(Rectangle window, bool dispose);
 
   const DecoderConfig& config_;
   ArgbBuffer* output_, internal_output_;

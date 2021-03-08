@@ -503,10 +503,10 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
          background_color.r, background_color.g, background_color.b);
 
   ASSERT_WP2_OK(EncodeHeader(
-      config, width, height, rgb_bit_depth, has_alpha,
-      /*is_anim=*/(subframes.size() > 1), /*loop_forever=*/false,
-      ToArgb38b(background_color), /*preview_color=*/RGB12b{10, 0, 30},
-      /*has_icc=*/false, /*has_trailing_data=*/false, &encoded_data));
+      config, width, height, rgb_bit_depth, has_alpha, /*is_anim=*/true,
+      /*loop_forever=*/false, ToArgb38b(background_color),
+      /*preview_color=*/RGB12b{10, 0, 30}, /*has_icc=*/false,
+      /*has_trailing_data=*/false, &encoded_data));
 
   SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha,
                                    config.tile_shape);
