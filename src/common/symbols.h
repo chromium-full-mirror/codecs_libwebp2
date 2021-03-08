@@ -673,13 +673,13 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
   LosslessSymbolsInfo();
   // By default, there is only one cluster per symbol and the cache bits are set
   // to 0.
-  void Init(bool has_alpha, WP2SampleFormat format);
+  void Init(uint32_t num_pixels, bool has_alpha, WP2SampleFormat format);
   // Set the symbols A,R,B as useless as all the information will be stored in
   // G channel.
-  void InitAsLabelImage(uint32_t num_labels);
+  void InitAsLabelImage(uint32_t num_pixels, uint32_t num_labels);
   // Set the symbol A as useless and R,G,B as ranging with the cross color image
   // bounds kRedToBlueMax, kGreenToBlueMax, kGreenToRedMax
-  void InitAsCrossColorImage();
+  void InitAsCrossColorImage(uint32_t num_pixels);
 
   virtual ~LosslessSymbolsInfo() = default;
 
@@ -696,7 +696,7 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
   static bool IsLabelImage(const SymbolsInfo& info);
 
  private:
-  void InitNonARGB();
+  void InitNonARGB(uint32_t num_pixels);
 
   WP2SampleFormat sample_format_;
 };

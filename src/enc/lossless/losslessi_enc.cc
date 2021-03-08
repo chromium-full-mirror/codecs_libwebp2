@@ -188,8 +188,7 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
         WP2::ANSDebugPrefix prefix(enc, "copy");
         const uint32_t pixel_ind = x + y * width;
         const uint32_t plane_code = DistanceToPlaneCode(width, v.GetDistance());
-        const uint32_t max_plane_code =
-            std::min(pixel_ind, kMaxLZ77Distance) + kCodeToPlaneCodes - 1;
+        const uint32_t max_plane_code = pixel_ind + kCodeToPlaneCodes - 1;
         WriteLZ77Golomb(kSymbolDist, histogram_ix, plane_code,
                         /*min=*/0, max_plane_code, "dist", sw, enc, &cost);
         const uint32_t max_length =
@@ -417,7 +416,8 @@ WP2Status Encoder::EncodeImageInternal(
                     std::min(kMaxHistogramImageSize, num_segments_max),
                     "num_histograms_m2");
       LosslessSymbolsInfo symbols_info_tmp;
-      symbols_info_tmp.InitAsLabelImage(num_segments);
+      symbols_info_tmp.InitAsLabelImage(histogram_width * histogram_height,
+                                        num_segments);
       WP2_CHECK_STATUS(EncodeImageNoClusters(
           enc, dicts, segments.data(), &hash_chain_, &ref_pool_,
           histogram_width, histogram_height, symbols_info_tmp, config_.effort,
@@ -508,7 +508,8 @@ WP2Status Encoder::ApplyPredictFilter(const int16_t min_values[4],
   const uint32_t transform_height =
       SubSampleSize(argb_buffer_.height, pred_bits);
   LosslessSymbolsInfo symbols_info;
-  symbols_info.InitAsLabelImage(kNumPredictors);
+  symbols_info.InitAsLabelImage(transform_width * transform_height,
+                                kNumPredictors);
   const WP2Status status = EncodeImageNoClusters(
       enc, dicts, transform_data_, (HashChain*)&hash_chain_,
       (BackwardRefsPool*)&ref_pool_, transform_width, transform_height,
@@ -533,7 +534,7 @@ WP2Status Encoder::ApplyCrossColorFilter(const ProgressRange& progress,
   const uint32_t transform_height =
       SubSampleSize(argb_buffer_.height, ccolor_transform_bits);
   LosslessSymbolsInfo symbols_info;
-  symbols_info.InitAsCrossColorImage();
+  symbols_info.InitAsCrossColorImage(transform_width * transform_height);
   WP2_CHECK_STATUS(EncodeImageNoClusters(
       enc, dicts, transform_data_, (HashChain*)&hash_chain_,
       (BackwardRefsPool*)&ref_pool_, transform_width, transform_height,
@@ -806,7 +807,8 @@ WP2Status Encoder::ApplyAndWriteTransforms(
     WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
   } else if (config.transforms[0] == TransformType::kColorIndexing &&
              config.transforms[1] == TransformType::kNum) {
-    symbols_info->InitAsLabelImage(palette_.Size());
+    symbols_info->InitAsLabelImage(pic_.width() * pic_.height(),
+                                   palette_.Size());
   } else {
     // Find the ranges of the ARGB values in the image.
     int16_t minima[4], maxima[4];
@@ -870,7 +872,8 @@ Encoder::Encoder(const WP2::EncoderConfig& config,
   argb_scratch_ = nullptr;
   transform_data_ = nullptr;
 
-  symbols_info_.Init(has_alpha_, pic_.format());
+  symbols_info_.Init(picture.width() * picture.height(), has_alpha_,
+                     pic_.format());
 
   EncLDspInit();
 }

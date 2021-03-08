@@ -469,7 +469,7 @@ WP2Status InternalParams::WriteAsImage(const ProgressRange& progress,
   }
   LosslessSymbolsInfo symbols_info;
   assert(format_ == encoder->symbols_info_.SampleFormat());
-  symbols_info.Init(has_alpha_, format_);
+  symbols_info.Init(num_colors_, has_alpha_, format_);
   WP2_CHECK_STATUS(EncodeImageNoClusters(
       enc, dict, tmp_palette.data(), &encoder->hash_chain_, &encoder->ref_pool_,
       num_colors_, 1, symbols_info, /*effort=*/3, progress));

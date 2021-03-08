@@ -364,8 +364,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
       WP2::ANSDebugPrefix prefix(dec_, "copy");
 
       const uint32_t pixel_ind = (src - data) / 4;
-      const uint32_t max_plane_code =
-          std::min(pixel_ind, kMaxLZ77Distance) + kCodeToPlaneCodes - 1;
+      const uint32_t max_plane_code = pixel_ind + kCodeToPlaneCodes - 1;
       uint32_t dist_code;
       WP2_CHECK_STATUS(ReadLZ77Golomb(kSymbolDist, cluster, /*min=*/0,
                                       max_plane_code, "dist", sr, dec_,
@@ -569,7 +568,8 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
   if (dec_->ReadBool("use_image")) {
     // Read the header of the palette image.
     LosslessSymbolsInfo symbols_info;
-    symbols_info.Init(gparams_->has_alpha_, hdr_.symbols_info_.SampleFormat());
+    symbols_info.Init(num_colors_, gparams_->has_alpha_,
+                      hdr_.symbols_info_.SampleFormat());
     WP2_CHECK_STATUS(ReadANSStats(num_colors_, 1, symbols_info));
 
     // Read the palette image.
@@ -694,10 +694,11 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       const uint32_t sub_height =
           SubSampleSize(transform->height_, transform->bits_);
       LosslessSymbolsInfo symbols_info;
+      const uint32_t num_pixels = sub_width * sub_height;
       if (type == TransformType::kPredictor) {
-        symbols_info.InitAsLabelImage(kNumPredictors);
+        symbols_info.InitAsLabelImage(num_pixels, kNumPredictors);
       } else {
-        symbols_info.InitAsCrossColorImage();
+        symbols_info.InitAsCrossColorImage(num_pixels);
       }
       WP2_CHECK_STATUS(ReadANSStats(sub_width, sub_height, symbols_info));
 
@@ -758,8 +759,9 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
 // -----------------------------------------------------------------------------
 // Metadata
 
-void Metadata::Init(bool has_alpha, WP2SampleFormat format) {
-  symbols_info_.Init(has_alpha, format);
+void Metadata::Init(uint32_t num_pixels, bool has_alpha,
+                    WP2SampleFormat format) {
+  symbols_info_.Init(num_pixels, has_alpha, format);
   histogram_mask_ = 0;
   histogram_subsample_bits_ = 0;
   histogram_xsize_ = 0;
@@ -781,7 +783,8 @@ void Decoder::Init(const WP2::DecoderConfig& config,
   last_out_row_ = 0;
   tile_ = tile;
   tile->num_decoded_rows = 0;
-  hdr_.Init(gparams.has_alpha_, tile->rgb_output.format());
+  hdr_.Init(tile->rect.GetArea(), gparams.has_alpha_,
+            tile->rgb_output.format());
 }
 
 WP2Status Decoder::AllocateInternalBuffers(uint32_t final_width) {
@@ -845,7 +848,7 @@ WP2Status Decoder::DecodeHeader() {
 
   // Modify the main image ranges if we only use the palette.
   if (num_transforms == 1 && transforms[0] == TransformType::kColorIndexing) {
-    hdr_.symbols_info_.InitAsLabelImage(num_colors_);
+    hdr_.symbols_info_.InitAsLabelImage(tile_->rect.GetArea(), num_colors_);
   } else if (num_transforms != 0) {
     int16_t minima_range[4], maxima_range[4];
     // Find the ranges in which the ARGB values are.
@@ -917,7 +920,8 @@ WP2Status Decoder::DecodeHeader() {
 
     // Read the entropy image probabilities.
     LosslessSymbolsInfo symbols_info;
-    symbols_info.InitAsLabelImage(num_histo);
+    symbols_info.InitAsLabelImage(histogram_width * histogram_height,
+                                  num_histo);
     WP2_CHECK_STATUS(
         ReadANSStats(histogram_width, histogram_height, symbols_info));
 

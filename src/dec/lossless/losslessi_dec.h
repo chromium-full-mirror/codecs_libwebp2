@@ -46,7 +46,7 @@ class Transform {
 
 class Metadata {
  public:
-  void Init(bool has_alpha, WP2SampleFormat format);
+  void Init(uint32_t num_pixels, bool has_alpha, WP2SampleFormat format);
 
   LosslessSymbolsInfo symbols_info_;
   CacheConfig cache_config_;

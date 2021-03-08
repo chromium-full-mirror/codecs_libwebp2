@@ -196,22 +196,19 @@ static int GetMaxItersForSpeed(int effort) {
          (effort == 5) ? 8 + 75 * 75 / 128 : 45 + effort * effort;
 }
 
-static uint32_t GetWindowSizeForHashChain(int effort, uint32_t width,
-                                          const uint32_t window_size) {
-  const uint32_t max_window_size = (effort >= 7) ? window_size
-                                 : (effort >= 5) ? (width << 8)
-                                 : (effort >= 3) ? (width << 6)
-                                 : (width << 4);
+static uint32_t GetWindowSizeForHashChain(int effort, uint32_t width) {
+  const uint32_t max_window_size = (effort >= 7)   ? WP2::kMaxTilePixels
+                                   : (effort >= 5) ? (width << 8)
+                                   : (effort >= 3) ? (width << 6)
+                                                   : (width << 4);
   assert(width > 0);
-  return std::min(max_window_size, window_size);
+  return std::min(max_window_size, WP2::kMaxTilePixels);
 }
 
 WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
                           uint32_t height) {
   const int size = width * height;
   const int iter_max = GetMaxItersForSpeed(effort);
-  const uint32_t window_size =
-      GetWindowSizeForHashChain(effort, width, kMaxLZ77Distance);
   int pos;
   // Temporarily use the offset_length_ as a hash chain.
   auto chain = reinterpret_cast<int32_t*>(offset_length_.data());
@@ -287,6 +284,7 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
   // (hence an offset of 0).
   assert(size > 2);
   offset_length_[0] = offset_length_[size - 1] = 0;
+  const uint32_t window_size = GetWindowSizeForHashChain(effort, width);
   for (uint32_t base_position = size - 2; base_position > 0;) {
     const uint32_t max_len = std::min(size - 1 - base_position, kMaxLZ77Length);
     const int16_t* const argb_start = &argb[4 * base_position];
@@ -347,7 +345,6 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
     max_base_position = base_position;
     while (true) {
       assert(best_length <= kMaxLZ77Length);
-      assert(best_distance <= kMaxLZ77Distance);
       offset_length_[base_position] =
           ((uint64_t)best_distance << kMaxLengthBits) | (uint64_t)best_length;
       --base_position;

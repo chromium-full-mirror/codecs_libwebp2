@@ -112,7 +112,7 @@ class PixelMode {
 class HashChain {
  public:
   HashChain() {
-    constexpr uint8_t kWindowSizeBits = 1 + WP2Log2Floor_k(WP2::kMaxTileSize);
+    constexpr uint8_t kWindowSizeBits = 1 + WP2Log2Floor_k(WP2::kMaxTilePixels);
     (void)kWindowSizeBits;
     static_assert(kMaxLengthBits + kWindowSizeBits <= 8 * sizeof(uint64_t),
                   "Wrong bits");
