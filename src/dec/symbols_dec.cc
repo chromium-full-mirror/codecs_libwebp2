@@ -98,6 +98,7 @@ WP2Status SymbolReader::Init(const SymbolsInfo& symbols_info,
       num_auto += symbols_info.NumClusters(s);
     }
   }
+  WP2_CHECK_ALLOC_OK(counts_.reserve(num_auto));
   WP2_CHECK_ALLOC_OK(codes_.reserve(num_auto));
   WP2_CHECK_STATUS(SymbolIO<StatExtra>::Init(symbols_info));
   return WP2_STATUS_OK;
@@ -125,29 +126,38 @@ SymbolReader::Stat* SymbolReader::AddRange(
 WP2Status SymbolReader::AddDict(uint32_t sym, uint32_t cluster,
                                 bool is_symmetric, ANSCodes* const infos) {
   Stat* const stat = GetStats(sym, cluster);
-
-  assert(infos->size() > 1);
+  const uint32_t num_symbols = infos->size();
+  assert(num_symbols > 1 && num_symbols <= ANS_MAX_SYMBOLS);
   stat->type = Stat::Type::kDict;
   stat->is_symmetric = is_symmetric;
   stat->use_mapping = true;
-  // Create the mappings.
-  Vector_u32 counts;
-  WP2_CHECK_ALLOC_OK(counts.resize(infos->size()));
-  for (uint32_t k = 0; k < counts.size(); ++k) {
-    stat->mappings[k] = (*infos)[k].symbol;
-    // verify that symbols are sorted by syntax design
-    assert(k == 0 || stat->mappings[k] > stat->mappings[k - 1]);
-    counts[k] = (*infos)[k].freq;
-  }
-  assert(infos->size() <= ANS_MAX_SYMBOLS);
 
-  // Convert the histogram to a spread table.
-  WP2_CHECK_ALLOC_OK(codes_.resize(codes_.size() + 1));
+  // Create the mappings.
+  WP2_CHECK_ALLOC_OK(counts_.resize(counts_.size() + 1));
+  Vector_u32& counts = counts_.back();
+  WP2_CHECK_ALLOC_OK(counts.resize(num_symbols + 1));  // note: one extra entry
+  counts[0] = 0;
+  for (uint32_t k = 0; k < num_symbols; ++k) {
+    stat->mappings[k] = (*infos)[k].symbol;
+    // verify that symbols are sorted, by syntax design
+    assert(k == 0 || stat->mappings[k] > stat->mappings[k - 1]);
+    counts[k + 1] = (*infos)[k].freq;
+  }
   stat->extra.log2_tab_size = ANS_LOG_TAB_SIZE;
-  WP2_CHECK_STATUS(ANSCountsToSpreadTable(
-      &counts[0], counts.size(), 1u << stat->extra.log2_tab_size,
-      codes_.back()));  // will allocate codes_.back()
+  const uint32_t tab_size = 1u << stat->extra.log2_tab_size;
+  WP2_CHECK_STATUS(ANSNormalizeCounts(&counts[1], num_symbols, tab_size));
+
+  // Convert the counts to a spread table.
+  WP2_CHECK_ALLOC_OK(codes_.resize(codes_.size() + 1));
+  // will allocate codes_.back()
+  WP2_CHECK_STATUS(
+      ANSCountsToSpreadTable(&counts[1], num_symbols, tab_size, codes_.back()));
   stat->extra.codes = codes_.back().data();
+  stat->extra.cumul = counts_.back().data();
+  stat->extra.num_symbols = num_symbols;
+  // convert counts[] to cumulative
+  for (uint32_t k = 1; k <= num_symbols; ++k) counts[k] += counts[k - 1];
+  assert(counts[num_symbols] == tab_size);
   return WP2_STATUS_OK;
 }
 
@@ -182,111 +192,17 @@ WP2Status SymbolReader::ReadWithMax(uint32_t sym, uint32_t cluster,
 }
 
 uint32_t SymbolReader::FindSymbol(const Stat& stat, uint32_t max_value) {
-  if (stat.mappings[stat.extra.codes[0].symbol] > max_value) {
-    // If the first symbol is already bigger than the max_value, stop here.
-    return 0;
-  }
-  uint32_t i_sup = (1u << stat.extra.log2_tab_size) - 1;
-  i_sup -= stat.extra.codes[i_sup].offset;
-  if (stat.mappings[stat.extra.codes[i_sup].symbol] <= max_value) {
-    // Stop if the last interval is actually the right one.
-    return i_sup;
-  }
-
-  // Use a binary search to find i_inf such that:
-  // stat.mappings[symbol at i_inf] <= max_value
-  // and stat.mappings[next symbol after the one at i_inf] > max_value
-  uint32_t i_inf = 0;
-  while (true) {
-    const uint32_t i_inf_next = i_inf + stat.extra.codes[i_inf].freq;
-    // Stop if we reached a good interval.
-    if (stat.mappings[stat.extra.codes[i_inf_next].symbol] > max_value) {
-      break;
-    }
-    i_inf = i_inf_next;
-    uint32_t i_mid = (i_inf + i_sup) / 2;
-    const ANSSymbolInfo& info_mid = stat.extra.codes[i_mid];
-    i_mid -= info_mid.offset;
-    if (stat.mappings[info_mid.symbol] > max_value) {
-      i_sup = i_mid;
-    } else {
-      i_inf = i_mid;
-    }
-  }
-
-  // Make sure the interval is valid: check its symbol.
-  const ANSSymbolInfo& info_inf = stat.extra.codes[i_inf];
-  assert(stat.mappings[info_inf.symbol] <= max_value);
-  // Check if we are the last interval.
-  if (i_inf + info_inf.freq == (1u << stat.extra.log2_tab_size)) return i_inf;
-  // If not, check the symbol of the next interval.
-  const ANSSymbolInfo& info_inf_next = stat.extra.codes[i_inf + info_inf.freq];
-  if (stat.mappings[info_inf_next.symbol] <= max_value) assert(false);
-  return i_inf;
+  const uint32_t num_symbols = stat.extra.num_symbols;
+  // Stop if the first symbol is already larger than the max_value.
+  if (stat.mappings[0] > max_value) return 0;
+  // Stop if the last interval is actually the right one.
+  if (stat.mappings[num_symbols - 1] <= max_value) return num_symbols - 1;
+  const uint32_t idx =
+      std::upper_bound(stat.mappings, stat.mappings + num_symbols, max_value) -
+      stat.mappings;
+  assert(idx >= 1);
+  return idx - 1;
 }
-
-//------------------------------------------------------------------------------
-// Some non-essential code
-
-#if defined(WP2_BITTRACE)
-static ANSSymbolInfo GetInfo(const ANSSymbolInfo* const codes, uint32_t value) {
-  uint32_t i = 0;
-  while (codes[i].symbol < value &&
-         i + codes[i].freq < (1 << ANS_LOG_TAB_SIZE)) {
-    i += codes[i].freq;
-  }
-  ANSSymbolInfo info;
-  info.offset = i;
-  info.freq = codes[i].freq;
-  info.symbol = codes[i].symbol;
-  return info;
-}
-
-// Returns the index of 'mapped' in the 'mappings' array. If 'mapped' is not
-// in the array, the index of the first value below it is returned.
-static uint16_t Unmap(const uint16_t* const mappings, uint32_t mapping_size,
-                      uint16_t mapped) {
-  if (mappings[0] > mapped) return 0;
-  uint32_t i_sup = mapping_size - 1;
-  if (mappings[i_sup] <= mapped) return i_sup;
-
-  // Use a binary search to find i_inf such that:
-  // mappings[i_inf] <= max_value
-  // and mappings[i_inf + 1] > max_value
-  uint32_t i_inf = 0;
-  while (true) {
-    // Stop if we reached a good interval.
-    if (mappings[i_inf + 1] > mapped) {
-      break;
-    }
-    ++i_inf;
-    uint32_t i_mid = (i_inf + i_sup) / 2;
-    if (mappings[i_mid] > mapped) {
-      i_sup = i_mid;
-    } else {
-      i_inf = i_mid;
-    }
-  }
-  assert(mappings[i_inf] <= mapped);
-  assert(i_inf == (mapping_size - 1) || mappings[i_inf + 1] > mapped);
-  return i_inf;
-}
-
-// Returns the frequency value for symbol "value", scaled to take into account
-// that the max possible value is "max_value". Both "value" and "max_value"
-// should be raw values (not mapped).
-static uint32_t ScaleFreq(const ANSSymbolInfo* codes, uint32_t log2_tab_size,
-                          uint32_t value, uint32_t max_value) {
-  const uint32_t tab_size = (1u << log2_tab_size);
-  const ANSSymbolInfo& info = GetInfo(codes, value);
-  const ANSSymbolInfo& info_max = GetInfo(codes, max_value);
-  const uint32_t offset =
-      info.offset * tab_size / (info_max.offset + info_max.freq);
-  const uint32_t offset_next =
-      (info.offset + info.freq) * tab_size / (info_max.offset + info_max.freq);
-  return offset_next - offset;
-}
-#endif  // WP2_BITTRACE
 
 //------------------------------------------------------------------------------
 // Main call.
@@ -349,15 +265,12 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
       if (use_max_value) {
         const uint32_t max_index = FindSymbol(stat, max_value);
         raw_value = dec_->ReadSymbol(stat.extra.codes, stat.extra.log2_tab_size,
-                                     max_index, "dict");
+                                     stat.extra.cumul[max_index], "dict");
 #if defined(WP2_BITTRACE)
         if (cost != nullptr) {
-          const uint32_t mapping_size =
-              stat.extra.codes[(1 << stat.extra.log2_tab_size) - 1].symbol + 1;
-          const uint32_t scaled_freq =
-              ScaleFreq(stat.extra.codes, stat.extra.log2_tab_size, raw_value,
-                        Unmap(stat.mappings, mapping_size, max_value));
-          *cost -= std::log2(scaled_freq) - stat.extra.log2_tab_size;
+          const uint32_t freq = stat.extra.freq(raw_value);
+          const uint32_t total_freq = stat.extra.cumul[max_index + 1];
+          *cost -= std::log2(1.* freq / total_freq);
         }
 #endif
       } else {
@@ -365,7 +278,7 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
                                      stat.extra.log2_tab_size, "dict");
 #if defined(WP2_BITTRACE)
         if (cost != nullptr) {
-          const uint16_t freq = GetInfo(stat.extra.codes, raw_value).freq;
+          const uint32_t freq = stat.extra.freq(raw_value);
           *cost -= std::log2(freq) - stat.extra.log2_tab_size;
         }
 #endif
@@ -383,12 +296,12 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
         const Golomb golomb_max(max_value, prefix_size);
         const uint32_t i_inf = FindSymbol(stat, golomb_max.prefix);
         const uint32_t raw_prefix = dec_->ReadSymbol(
-            &stat.extra.codes[0], stat.extra.log2_tab_size, i_inf, "golomb");
+            &stat.extra.codes[0], stat.extra.log2_tab_size,
+            stat.extra.cumul[i_inf], "golomb");
         prefix =
             std::min(golomb_max.prefix, (uint32_t)stat.mappings[raw_prefix]);
         const uint32_t max_prefix =
-            std::min(golomb_max.prefix,
-                     (uint32_t)stat.mappings[stat.extra.codes[i_inf].symbol]);
+            std::min(golomb_max.prefix, (uint32_t)stat.mappings[i_inf]);
         // Use ranges if we are at the last interval.
         use_range = (prefix == max_prefix);
         if (use_range) {
@@ -400,10 +313,9 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
         }
 #if defined(WP2_BITTRACE)
         if (cost != nullptr) {
-          const uint32_t scaled_freq =
-              ScaleFreq(stat.extra.codes, stat.extra.log2_tab_size, raw_prefix,
-                        golomb_max.prefix);
-          *cost -= std::log2(scaled_freq) - stat.extra.log2_tab_size;
+          const uint32_t freq = stat.extra.freq(raw_prefix);
+          const uint32_t total_freq = stat.extra.cumul[i_inf + 1];
+          *cost -= std::log2(1. * freq / total_freq);
         }
 #endif
       } else {
@@ -415,7 +327,7 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
         if (use_range) range = stat.range;
 #if defined(WP2_BITTRACE)
         if (cost != nullptr) {
-          const uint16_t freq = GetInfo(stat.extra.codes, raw_prefix).freq;
+          const uint32_t freq = stat.extra.freq(raw_prefix);
           *cost -= std::log2(freq) - stat.extra.log2_tab_size;
         }
 #endif
@@ -627,11 +539,8 @@ void SymbolReader::GetPotentialUsage(uint32_t sym, uint32_t cluster,
       if (stat.use_mapping) {
         std::fill(is_maybe_used, is_maybe_used + size, false);
       }
-      for (uint32_t k = 0; k < (1u << stat.extra.log2_tab_size);
-           k += stat.extra.codes[k].freq) {
-        is_maybe_used[stat.use_mapping
-                          ? stat.mappings[stat.extra.codes[k].symbol]
-                          : stat.extra.codes[k].symbol] = true;
+      for (uint32_t k = 0; k < stat.extra.num_symbols; ++k) {
+        is_maybe_used[stat.use_mapping ? stat.mappings[k] : k] = true;
       }
       break;
     case Stat::Type::kGolomb: {
@@ -640,11 +549,8 @@ void SymbolReader::GetPotentialUsage(uint32_t sym, uint32_t cluster,
         std::fill(is_maybe_used, is_maybe_used + size, false);
       }
       const uint32_t prefix_size = stat.param.golomb.prefix_size;
-      for (uint32_t k = 0; k < (1u << stat.extra.log2_tab_size);
-           k += stat.extra.codes[k].freq) {
-        const uint32_t m = stat.use_mapping
-                               ? stat.mappings[stat.extra.codes[k].symbol]
-                               : stat.extra.codes[k].symbol;
+      for (uint32_t k = 0; k < stat.extra.num_symbols; ++k) {
+        const uint32_t m = stat.use_mapping ? stat.mappings[k] : k;
         const uint32_t extra_bits_num = Golomb::NumExtraBits(m, prefix_size);
         const uint32_t m1 = Golomb::Merge(m, prefix_size, 0);
         const uint32_t m2 =

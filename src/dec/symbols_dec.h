@@ -27,8 +27,14 @@ namespace WP2 {
 
 // Class simplifying the reading of symbols.
 struct StatExtra {
-  const ANSSymbolInfo* codes;
+  uint32_t num_symbols;
+  // normalized cumulative distribution of counts:
+  //   cumul[0] = 0,  cumul[num_symbols] = tab_size
+  const uint32_t* cumul;
   uint32_t log2_tab_size;
+  const ANSSymbolInfo* codes;
+
+  uint32_t freq(uint32_t sym) const { return (cumul[sym + 1] - cumul[sym]); }
 };
 
 class SymbolReader : public SymbolIO<StatExtra> {
@@ -95,12 +101,14 @@ class SymbolReader : public SymbolIO<StatExtra> {
   WP2Status ReadInternal(uint32_t sym, uint32_t cluster, bool use_max_value,
                          uint32_t max_value, WP2_OPT_LABEL,
                          int32_t* const value, float* const cost = nullptr);
-  // Finds the biggest symbol 'sym' such that 'stat.mappings[sym] <= max_value'.
+  // return the largest index 'idx' such that 'stat.mappings[idx] <= max_value'.
   static uint32_t FindSymbol(const Stat& stat, uint32_t max_value);
 
   ANSDec* dec_;
   // Code tables used by dictionaries (StatExtra.codes point to them).
   Vector<ANSCodes> codes_;
+  // Cumulative frequencies for dictionaries (StatExtra.cumul point to them).
+  Vector<Vector_u32> counts_;
   // Tmp variable used during the updates to avoid re-allocations.
   ANSCodes infos_;
 };
