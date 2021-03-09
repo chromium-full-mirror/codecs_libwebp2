@@ -37,16 +37,14 @@ namespace WP2 {
 
 // For each block, tries some split patterns and keeps the best one then
 // recurses on sub-blocks.
-class SplitRecursePartitioner : public Partitioner {
+class SplitPartitioner : public Partitioner {
  public:
   WP2Status Init(const EncoderConfig& config, const YUVPlane& yuv,
                  const Rectangle& tile_rect,
                  PartitionScoreFunc* const score_func) override;
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks) override;
-  WP2Status GetBestPartition(const ProgressRange& progress,
                              VectorNoCtor<Block>* const blocks,
-                             Vector_u32* const splits);
+                             Vector_u32* const splits) override;
 };
 
 //------------------------------------------------------------------------------

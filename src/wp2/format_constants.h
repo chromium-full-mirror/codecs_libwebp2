@@ -102,16 +102,16 @@ enum BasePredictor {
 // Algorithm used for image partitioning.
 enum PartitionMethod {
   // Combine several heuristics in successive block size passes:
-  MULTIPASS_PARTITIONING,        // (fast)
+  MULTIPASS_PARTITIONING,  // (fast)
   // For each pos starting from top left, take the best block size depending on:
-  BLOCK_ENCODE_PARTITIONING,     // block encoding score (slow)
-  SPLIT_RECURSE_PARTITIONING,    // whole or split block encoding score (slow)
-  TILE_ENCODE_PARTITIONING,      // tile encoding score (super slow)
+  BLOCK_ENCODE_PARTITIONING,  // block encoding score (slow)
+  SPLIT_PARTITIONING,         // whole or split block encoding score (slow)
+  TILE_ENCODE_PARTITIONING,   // tile encoding score (super slow)
   // Per 32x32 area, take the best one of a few block layouts:
   AREA_ENCODE_PARTITIONING,      // (slow)
   SUB_AREA_ENCODE_PARTITIONING,  // same but for each block in area (very slow)
   // Per tile, take the best one of all possible block layouts:
-  EXHAUSTIVE_PARTITIONING,       // (extremely slow)
+  EXHAUSTIVE_PARTITIONING,  // (extremely slow)
   // Fixed block size (except on edges). Also depends on the partition set.
   ALL_4X4_PARTITIONING,
   ALL_8X8_PARTITIONING,

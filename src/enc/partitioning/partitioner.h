@@ -46,8 +46,11 @@ class Partitioner : public WP2Allocable {
                          PartitionScoreFunc* const score_func);
 
   // Computes and returns the best layout. Input 'blocks' are considered forced.
+  // Some partitioners also fill in 'splits' (if not nullptr), as an
+  // alternate way to encode block geometry. See also split_iterator.h
   virtual WP2Status GetBestPartition(const ProgressRange& progress,
-                                     VectorNoCtor<Block>* const blocks) = 0;
+                                     VectorNoCtor<Block>* const blocks,
+                                     Vector_u32* const splits) = 0;
 
  protected:
   // Gets or sets areas as occupied.
@@ -86,6 +89,12 @@ class Partitioner : public WP2Allocable {
 WP2Status AddForcedBlocks(const EncoderConfig& config,
                           const Rectangle& padded_tile_rect,
                           VectorNoCtor<Block>* const out);
+
+// Returns true if the given split pattern (given as the whole block + sub
+// blocks) is compatible with the given forced blocks which must be sorted.
+bool IsCompatibleWithForcedBlocks(const Block& block, Block* sub_blocks,
+                                  uint32_t num_sub_blocks,
+                                  const VectorNoCtor<Block>& forced_blocks);
 
 //------------------------------------------------------------------------------
 

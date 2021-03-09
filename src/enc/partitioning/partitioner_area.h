@@ -42,7 +42,8 @@ class AreaRDOptPartitioner : public Partitioner {
   AreaRDOptPartitioner(uint32_t area_width, uint32_t area_height)  // In pixels.
       : area_width_(area_width), area_height_(area_height) {}
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks) override;
+                             VectorNoCtor<Block>* const blocks,
+                             Vector_u32* const splits) override;
 
  private:
   virtual WP2Status GetAreaBestPartition(const Rectangle& area,
@@ -63,7 +64,8 @@ class SubAreaRDOptPartitioner : public AreaRDOptPartitioner {
       : AreaRDOptPartitioner(area_width, area_height),
         front_mgr_(area_width, area_height) {}
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks) override;
+                             VectorNoCtor<Block>* const blocks,
+                             Vector_u32* const splits) override;
 
  private:
   WP2Status GetAreaBestPartition(const Rectangle& area,

@@ -48,7 +48,8 @@ class ExhaustivePartitioner : public Partitioner {
                  PartitionScoreFunc* const score_func) override;
 
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks) override;
+                             VectorNoCtor<Block>* const blocks,
+                             Vector_u32* const splits) override;
 
  private:
   // Finds the next valid partition. If 'found', returns its 'score'.

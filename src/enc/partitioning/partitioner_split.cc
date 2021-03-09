@@ -37,47 +37,17 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
-WP2Status SplitRecursePartitioner::Init(const EncoderConfig& config,
-                                        const YUVPlane& yuv,
-                                        const Rectangle& tile_rect,
-                                        PartitionScoreFunc* const score_func) {
+WP2Status SplitPartitioner::Init(const EncoderConfig& config,
+                                 const YUVPlane& yuv,
+                                 const Rectangle& tile_rect,
+                                 PartitionScoreFunc* const score_func) {
   WP2_CHECK_STATUS(Partitioner::Init(config, yuv, tile_rect, score_func));
   WP2_CHECK_OK(config.partition_snapping, WP2_STATUS_INVALID_CONFIGURATION);
   return WP2_STATUS_OK;
 }
 
-// Returns true if the given split pattern (given as the whole block + sub
-// blocks) is compatible with the given forced blocks.
-static bool IsCompatibleWithForcedBlocks(
-    const Block& block, Block* sub_blocks, uint32_t num_sub_blocks,
-    const VectorNoCtor<Block>& forced_blocks) {
-  auto forced_block_it =
-      std::lower_bound(forced_blocks.begin(), forced_blocks.end(), block);
-  while (forced_block_it != forced_blocks.end() &&
-         (forced_block_it->y() < block.y() + block.h())) {
-    if (block.rect().Contains(forced_block_it->rect())) {
-      if (num_sub_blocks == 1 && block.dim() != forced_block_it->dim()) {
-        return false;
-      }
-      for (uint32_t i = 0; i < num_sub_blocks; ++i) {
-        if (sub_blocks[i].rect().Intersects(forced_block_it->rect()) &&
-            !sub_blocks[i].rect().Contains(forced_block_it->rect())) {
-          return false;
-        }
-      }
-    }
-    ++forced_block_it;
-  }
-  return true;
-}
-
-WP2Status SplitRecursePartitioner::GetBestPartition(
-    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
-  return GetBestPartition(progress, blocks, /*splits=*/nullptr);
-}
-
 static float GetSplitCost(const SplitIteratorDefault& it, uint32_t split_idx,
-                          uint32_t num_sub_blocks,
+                          Block sub_blocks[4], uint32_t num_sub_blocks,
                           SymbolCounter* const symbol_counter,
                           ANSEncCounter* const counter) {
   counter->Reset();
@@ -88,9 +58,14 @@ static float GetSplitCost(const SplitIteratorDefault& it, uint32_t split_idx,
     WP2_CHECK_STATUS(it_copy.CopyFrom(it));
     it_copy.SplitCurrentBlock(split_idx);
     for (uint32_t i = 0; i < num_sub_blocks; ++i) {
-      if (it_copy.CurrentBlock().splittable) {
+      const SplitIteratorBase::SplitInfo& current_block =
+          it_copy.CurrentBlock();
+      assert(current_block.block == sub_blocks[i]);
+      if (current_block.splittable) {
         WriteBlockSplit(it_copy, kNoSplitIndex, symbol_counter, counter);
         it_copy.SplitCurrentBlock(kNoSplitIndex);
+        assert(!it_copy.CurrentBlock().splittable);
+        it_copy.NextBlock();
       } else {
         it_copy.NextBlock();
       }
@@ -99,9 +74,9 @@ static float GetSplitCost(const SplitIteratorDefault& it, uint32_t split_idx,
   return counter->GetCost();
 }
 
-WP2Status SplitRecursePartitioner::GetBestPartition(
-    const ProgressRange& progress, VectorNoCtor<Block>* const blocks,
-    Vector_u32* const splits) {
+WP2Status SplitPartitioner::GetBestPartition(const ProgressRange& progress,
+                                             VectorNoCtor<Block>* const blocks,
+                                             Vector_u32* const splits) {
   std::fill(occupancy_.begin(), occupancy_.end(), false);
   const uint32_t max_num_blocks = num_block_cols_ * num_block_rows_;
   uint32_t max_num_blocks_left = max_num_blocks;
@@ -160,8 +135,9 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
         }
 
         // Cost of writing this split.
-        const float split_cost = GetSplitCost(it, split_idx, num_sub_blocks,
-                                              &symbol_counter, &counter);
+        const float split_cost =
+            GetSplitCost(it, split_idx, sub_blocks, num_sub_blocks,
+                         &symbol_counter, &counter);
 
         float score;
         WP2_CHECK_STATUS(score_func->ComputeScore(
@@ -171,7 +147,12 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
           best_score = score;
         }
       }
-      assert(best_pattern_idx != -1);
+      if (best_pattern_idx == -1) {
+        // All patterns were skipped because of forced blocks. Just pick the
+        // first one.
+        assert(!forced_blocks.empty());
+        best_pattern_idx = 0;
+      }
 
       // Remember the decision.
       WriteBlockSplit(it, best_pattern_idx, &symbol_recorder, &enc_noop);

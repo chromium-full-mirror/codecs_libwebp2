@@ -143,6 +143,31 @@ WP2Status Partitioner::RegisterForcedBlocks(
   return WP2_STATUS_OK;
 }
 
+bool IsCompatibleWithForcedBlocks(const Block& block, Block* sub_blocks,
+                                  uint32_t num_sub_blocks,
+                                  const VectorNoCtor<Block>& forced_blocks) {
+  auto forced_block_it =
+      std::lower_bound(forced_blocks.begin(), forced_blocks.end(), block);
+  while (forced_block_it != forced_blocks.end() &&
+         (forced_block_it->y() < block.y() + block.h())) {
+    if (block.rect().Intersects(forced_block_it->rect())) {
+      // Intersects with but does not contain it => not compatible.
+      if (!block.rect().Contains(forced_block_it->rect())) return false;
+      if (num_sub_blocks == 1 && block.dim() != forced_block_it->dim()) {
+        return false;
+      }
+      for (uint32_t i = 0; i < num_sub_blocks; ++i) {
+        if (sub_blocks[i].rect().Intersects(forced_block_it->rect()) &&
+            !sub_blocks[i].rect().Contains(forced_block_it->rect())) {
+          return false;
+        }
+      }
+    }
+    ++forced_block_it;
+  }
+  return true;
+}
+
 //------------------------------------------------------------------------------
 
 }  // namespace WP2

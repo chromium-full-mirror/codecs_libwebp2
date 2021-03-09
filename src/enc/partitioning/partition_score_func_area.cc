@@ -84,7 +84,8 @@ WP2Status AreaScoreFunc::Init(const EncoderConfig& config,
         partitioner.Init(cfg_no_dbg, *src_, tile_rect_, &score_func));
     // TODO(yguyon): Add forced blocks from 'config' to 'default_partition_'
     WP2_CHECK_STATUS(partitioner.GetBestPartition(default_partition_progress,
-                                                  &default_partition_));
+                                                  &default_partition_,
+                                                  /*splits=*/nullptr));
     // Sort the blocks to find those in a given area faster.
     std::sort(default_partition_.begin(), default_partition_.end(), comp_);
   }
@@ -475,7 +476,8 @@ WP2Status SubAreaScoreFunc::GetAreaRemainingDefaultPartition(
   const uint32_t num_already_added_area_blocks = area_remaining_blocks->size();
 
   // Get the default partitioning of the remaining empty spaces into 'blocks'.
-  WP2_CHECK_STATUS(partitioner.GetBestPartition(partitioner_progress, &blocks));
+  WP2_CHECK_STATUS(partitioner.GetBestPartition(partitioner_progress, &blocks,
+                                                /*splits=*/nullptr));
   // Sort in lexico order only the new blocks.
   std::sort(blocks.begin() + num_default_blocks_to_ignore, blocks.end());
 

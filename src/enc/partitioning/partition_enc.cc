@@ -67,10 +67,9 @@ WP2Status ExtractBlockPartition(const EncoderConfig& config,
       score_func.reset(multi_score_func);
       break;
     case BLOCK_ENCODE_PARTITIONING:
-    case SPLIT_RECURSE_PARTITIONING:
-      score_func.reset(
-          new (WP2Allocable::nothrow) BlockScoreFunc(/*use_splits=*/(
-              final_partition_method == SPLIT_RECURSE_PARTITIONING)));
+    case SPLIT_PARTITIONING:
+      score_func.reset(new (WP2Allocable::nothrow) BlockScoreFunc(
+          /*use_splits=*/(final_partition_method == SPLIT_PARTITIONING)));
       break;
     case AREA_ENCODE_PARTITIONING:
       score_func.reset(new (WP2Allocable::nothrow)
@@ -105,7 +104,6 @@ WP2Status ExtractBlockPartition(const EncoderConfig& config,
   WP2_CHECK_ALLOC_OK(score_func != nullptr);
 
   std::unique_ptr<Partitioner> partitioner;
-  SplitRecursePartitioner* split_partitioner = nullptr;
   switch (final_partition_method) {
     case MULTIPASS_PARTITIONING:
       partitioner.reset(new (WP2Allocable::nothrow)
@@ -119,10 +117,8 @@ WP2Status ExtractBlockPartition(const EncoderConfig& config,
     case ALL_32X32_PARTITIONING:
       partitioner.reset(new (WP2Allocable::nothrow) TopLeftBestPartitioner());
       break;
-    case SPLIT_RECURSE_PARTITIONING:
-      split_partitioner =
-          (new (WP2Allocable::nothrow) SplitRecursePartitioner());
-      partitioner.reset(split_partitioner);
+    case SPLIT_PARTITIONING:
+      partitioner.reset(new (WP2Allocable::nothrow) SplitPartitioner());
       break;
     case AREA_ENCODE_PARTITIONING:
       partitioner.reset(new (WP2Allocable::nothrow) AreaRDOptPartitioner(
@@ -148,13 +144,8 @@ WP2Status ExtractBlockPartition(const EncoderConfig& config,
                                     score_func_init_progress));
 
   WP2_CHECK_STATUS(partitioner->Init(config, yuv, tile_rect, score_func.get()));
-  if (split_partitioner != nullptr) {
-    WP2_CHECK_STATUS(split_partitioner->GetBestPartition(partitioner_progress,
-                                                         blocks, splits));
-  } else {
-    WP2_CHECK_STATUS(
-        partitioner->GetBestPartition(partitioner_progress, blocks));
-  }
+  WP2_CHECK_STATUS(
+      partitioner->GetBestPartition(partitioner_progress, blocks, splits));
 
 #if defined(BLOCK_STATS)
   static WP2::Stats<const char*> blk_stats("block-type", "%s",

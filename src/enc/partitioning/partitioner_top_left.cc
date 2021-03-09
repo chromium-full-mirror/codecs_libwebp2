@@ -36,7 +36,8 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 WP2Status TopLeftBestPartitioner::GetBestPartition(
-    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
+    const ProgressRange& progress, VectorNoCtor<Block>* const blocks,
+    Vector_u32* const) {
   std::fill(occupancy_.begin(), occupancy_.end(), false);
   const uint32_t max_num_blocks = num_block_cols_ * num_block_rows_;
   uint32_t max_num_blocks_left = max_num_blocks;

@@ -104,7 +104,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(::testing::Values("source1_64x48.png"),
                        /*quality=*/::testing::Values(75),
                        ::testing::Values(EncoderConfig::kDefault.effort),
-                       ::testing::Values(SPLIT_RECURSE_PARTITIONING,
+                       ::testing::Values(SPLIT_PARTITIONING,
                                          AREA_ENCODE_PARTITIONING,
                                          SUB_AREA_ENCODE_PARTITIONING),
                        ::testing::Values(ALL_RECTS),

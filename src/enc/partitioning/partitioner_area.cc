@@ -37,7 +37,8 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 WP2Status AreaRDOptPartitioner::GetBestPartition(
-    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
+    const ProgressRange& progress, VectorNoCtor<Block>* const blocks,
+    Vector_u32* const) {
   std::fill(occupancy_.begin(), occupancy_.end(), false);
   uint32_t max_num_blocks_left = num_block_cols_ * num_block_rows_;
 
@@ -117,11 +118,12 @@ WP2Status AreaRDOptPartitioner::GetAreaBestPartition(
 //------------------------------------------------------------------------------
 
 WP2Status SubAreaRDOptPartitioner::GetBestPartition(
-    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
+    const ProgressRange& progress, VectorNoCtor<Block>* const blocks,
+    Vector_u32* const splits) {
   WP2_CHECK_STATUS(front_mgr_.Init(config_->partition_set,
                                    config_->partition_snapping,
                                    tile_rect_.width, tile_rect_.height));
-  return AreaRDOptPartitioner::GetBestPartition(progress, blocks);
+  return AreaRDOptPartitioner::GetBestPartition(progress, blocks, splits);
 }
 
 WP2Status SubAreaRDOptPartitioner::GetAreaBestPartition(

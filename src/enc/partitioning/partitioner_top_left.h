@@ -39,7 +39,8 @@ namespace WP2 {
 class TopLeftBestPartitioner : public Partitioner {
  public:
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks) override;
+                             VectorNoCtor<Block>* const blocks,
+                             Vector_u32* const splits) override;
 
  private:
   // Returns the 'best_block' size within 'max_block'.

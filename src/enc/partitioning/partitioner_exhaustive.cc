@@ -54,7 +54,8 @@ WP2Status ExhaustivePartitioner::Init(const EncoderConfig& config,
 }
 
 WP2Status ExhaustivePartitioner::GetBestPartition(
-    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
+    const ProgressRange& progress, VectorNoCtor<Block>* const blocks,
+    Vector_u32* const) {
   std::fill(occupancy_.begin(), occupancy_.end(), false);
 
   WP2_CHECK_ALLOC_OK(forced_blocks_.resize(blocks->size()));

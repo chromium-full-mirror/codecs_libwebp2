@@ -220,7 +220,7 @@ void FuzzedParameters::ExtractConfig(EncoderConfig* const config) {
   config->partition_snapping =
       (config->partition_method == AREA_ENCODE_PARTITIONING ||
        config->partition_method == SUB_AREA_ENCODE_PARTITIONING ||
-       config->partition_method == SPLIT_RECURSE_PARTITIONING)
+       config->partition_method == SPLIT_PARTITIONING)
           ? true
           : ExtractBool();
 

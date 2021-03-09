@@ -44,7 +44,8 @@ class MultiPassPartitioner : public Partitioner {
       : multi_score_func_(score_func) {}
 
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks) override;
+                             VectorNoCtor<Block>* const blocks,
+                             Vector_u32* const splits) override;
 
  private:
   enum class Grid { Snapped, NonSnapped, All };

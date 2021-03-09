@@ -38,7 +38,8 @@ namespace WP2 {
 using Pass = MultiScoreFunc::Pass;
 
 WP2Status MultiPassPartitioner::GetBestPartition(
-    const ProgressRange& progress, VectorNoCtor<Block>* const blocks) {
+    const ProgressRange& progress, VectorNoCtor<Block>* const blocks,
+    Vector_u32* const) {
   std::fill(occupancy_.begin(), occupancy_.end(), false);
   uint32_t max_num_blocks_left = num_block_cols_ * num_block_rows_;
   WP2_CHECK_STATUS(RegisterForcedBlocks(*blocks, &max_num_blocks_left));
