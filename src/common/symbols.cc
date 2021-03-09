@@ -422,19 +422,25 @@ void LosslessSymbolsInfo::Init(uint32_t num_pixels, bool has_alpha,
 }
 
 void LosslessSymbolsInfo::InitNonARGB(uint32_t num_pixels) {
-  constexpr StorageMethod storage_method = StorageMethod::kAuto;
-  constexpr uint32_t num_clusters = 1u;
-  // Distance is at most num_pixels - 1 but we have to add kCodeToPlaneCodes - 1
-  // to convert to code.
-  WP2::Golomb golomb_max(num_pixels - 1 + kCodeToPlaneCodes - 1,
-                         kLZZGolombPrefixSize);
-  SetInfo(kSymbolDist, /*min=*/0, golomb_max.prefix, num_clusters,
-          storage_method);
-  // Length is at most num_pixels - 1.
-  golomb_max =
-      WP2::Golomb(num_pixels - 1 - kMinLZ77Length, kLZZGolombPrefixSize);
-  SetInfo(kSymbolLen, /*min=*/0, golomb_max.prefix, num_clusters,
-          storage_method);
+  // Length is at most num_pixels - 1 as it has to fit in the image.
+  // By format definition, it is also <= kMaxLZ77Length.
+  const uint32_t max_length = std::min(kMaxLZ77Length, num_pixels - 1);
+  if (max_length < kMinLZ77Length) {
+    SetUnused(kSymbolDist);
+    SetUnused(kSymbolLen);
+  } else {
+    constexpr StorageMethod storage_method = StorageMethod::kAuto;
+    constexpr uint32_t num_clusters = 1u;
+    // Distance is at most num_pixels - 1 but we have to add
+    // kCodeToPlaneCodes - 1 to convert to code.
+    WP2::Golomb golomb_max(num_pixels - 1 + kCodeToPlaneCodes - 1,
+                           kLZZGolombPrefixSize);
+    SetInfo(kSymbolDist, /*min=*/0, golomb_max.prefix, num_clusters,
+            storage_method);
+    golomb_max = WP2::Golomb(max_length - kMinLZ77Length, kLZZGolombPrefixSize);
+    SetInfo(kSymbolLen, /*min=*/0, golomb_max.prefix, num_clusters,
+            storage_method);
+  }
 
   SetCacheRange(0);
 }

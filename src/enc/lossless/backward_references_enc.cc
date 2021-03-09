@@ -842,9 +842,15 @@ static WP2Status GetBackwardReferencesImpl(
   // ANS. Those methods were good to reduce the entropy of the distances but we
   // might only use LZ77 now that costs are better estimated.
 
-  // Always try not to use LZ77. This is useful for one-color images for
-  // example.
-  lz77_types_to_try |= kLZ77None;
+  if (symbols_info.IsUnused(kSymbolDist)) {
+    // Do not analyze LZ77 if the symbols have been disabled.
+    assert(symbols_info.IsUnused(kSymbolLen));
+    lz77_types_to_try = kLZ77None;
+  } else {
+    // Always try not to use LZ77. This is useful for one-color images for
+    // example.
+    lz77_types_to_try |= kLZ77None;
+  }
 
   const CacheConfig kNoCache{CacheType::kNone, 0};
 
