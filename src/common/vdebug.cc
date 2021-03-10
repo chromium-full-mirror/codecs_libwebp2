@@ -665,7 +665,8 @@ void CodedBlockBase::StorePredictionModes(
     const DecoderConfig& config, const Rectangle& tile_rect, Channel channel,
     const Predictors& preds, Plane16* const raw_prediction,
     ArgbBuffer* const debug_output) const {
-  const Rectangle r_px = AsRect().ClipWith(tile_rect);
+  const Rectangle r_px =
+      AsRect().ClipWith({0, 0, tile_rect.width, tile_rect.height});
 
   // Whole block
   const bool selected = VDSelected(tile_rect.x, tile_rect.y, r_px, config);
