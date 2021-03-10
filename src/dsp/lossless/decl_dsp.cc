@@ -338,7 +338,7 @@ WP2_TSAN_IGNORE_FUNCTION void DecLDspInitSSE() {
 
 #endif  // WP2_USE_SSE
 
-}    // namespace
+}  // namespace
 
 //------------------------------------------------------------------------------
 
@@ -384,13 +384,12 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
 
 SimpleColorSpaceInverseFunc AddGreenToBlueAndRed;
 SimpleColorSpaceInverseFunc YCoCgRToRGB;
-PredictorNonClampedAddSubFunc PredictorsNonClampedAdd[kNumPredictorsNonClamped];
-PredictorClampedAddSubFunc PredictorsClampedAdd[kNumPredictorsClamped];
+PredictorNonClampedAddFunc PredictorsNonClampedAdd[kNumPredictorsNonClamped];
+PredictorClampedAddFunc PredictorsClampedAdd[kNumPredictorsClamped];
 
 // exposed plain-C implementations
-PredictorNonClampedAddSubFunc
-    PredictorsNonClampedAdd_C[kNumPredictorsNonClamped];
-PredictorClampedAddSubFunc PredictorsClampedAdd_C[kNumPredictorsClamped];
+PredictorNonClampedAddFunc PredictorsNonClampedAdd_C[kNumPredictorsNonClamped];
+PredictorClampedAddFunc PredictorsClampedAdd_C[kNumPredictorsClamped];
 
 TransformColorInverseFunc TransformColorInverse;
 

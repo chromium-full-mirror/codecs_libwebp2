@@ -444,11 +444,10 @@ CombinedShannonEntropyFunc CombinedShannonEntropy;
 
 BufferAddFunc BufferAdd;
 
-PredictorNonClampedAddSubFunc PredictorsNonClampedSub[kNumPredictorsNonClamped];
-PredictorNonClampedAddSubFunc
-    PredictorsNonClampedSub_C[kNumPredictorsNonClamped];
-PredictorClampedAddSubFunc PredictorsClampedSub[kNumPredictorsClamped];
-PredictorClampedAddSubFunc PredictorsClampedSub_C[kNumPredictorsClamped];
+PredictorNonClampedSubFunc PredictorsNonClampedSub[kNumPredictorsNonClamped];
+PredictorNonClampedSubFunc PredictorsNonClampedSub_C[kNumPredictorsNonClamped];
+PredictorClampedSubFunc PredictorsClampedSub[kNumPredictorsClamped];
+PredictorClampedSubFunc PredictorsClampedSub_C[kNumPredictorsClamped];
 
 static volatile WP2CPUInfo lossless_enc_last_cpuinfo_used =
     (WP2CPUInfo)&lossless_enc_last_cpuinfo_used;

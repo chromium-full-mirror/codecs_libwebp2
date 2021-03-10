@@ -27,12 +27,21 @@ namespace WP2L {
 //------------------------------------------------------------------------------
 // Decoding
 
-extern PredictorNonClampedAddSubFunc
+typedef void (*PredictorNonClampedAddFunc)(const int16_t* in, bool has_alpha,
+                                           const int16_t* upper,
+                                           uint32_t num_pixels, int16_t* out);
+extern PredictorNonClampedAddFunc
     PredictorsNonClampedAdd[kNumPredictorsNonClamped];
-extern PredictorNonClampedAddSubFunc
+extern PredictorNonClampedAddFunc
     PredictorsNonClampedAdd_C[kNumPredictorsNonClamped];
-extern PredictorClampedAddSubFunc PredictorsClampedAdd[kNumPredictorsClamped];
-extern PredictorClampedAddSubFunc PredictorsClampedAdd_C[kNumPredictorsClamped];
+typedef void (*PredictorClampedAddFunc)(const int16_t* in, bool has_alpha,
+                                        const int16_t* upper,
+                                        uint32_t num_pixels,
+                                        const int16_t min_value[4],
+                                        const int16_t max_values[4],
+                                        int16_t* out);
+extern PredictorClampedAddFunc PredictorsClampedAdd[kNumPredictorsClamped];
+extern PredictorClampedAddFunc PredictorsClampedAdd_C[kNumPredictorsClamped];
 
 typedef void (*SimpleColorSpaceInverseFunc)(const int16_t* src,
                                             uint32_t num_pixels, int16_t* dst);
