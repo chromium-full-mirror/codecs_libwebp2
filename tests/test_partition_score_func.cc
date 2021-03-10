@@ -45,7 +45,6 @@ TEST(PartitionScoreFuncTest, BlockScoreFunc) {
   gparams.features_ = &features;
   ASSERT_WP2_OK(GlobalAnalysis(rgb, yuv, transf, config, &gparams));
   ASSERT_WP2_OK(gparams.InitRndMtxSet());
-  ASSERT_WP2_OK(gparams.Init());
 
   const Rectangle tile_rect = yuv.AsRect();
   const Block kBlocks[] = {{0, 0, BLK_4x4}, {1, 0, BLK_4x8}, {0, 1, BLK_4x4}};

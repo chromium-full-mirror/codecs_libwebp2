@@ -230,14 +230,4 @@ void GlobalParams::Reset() {
   v_quant_multiplier_ = kDefaultQuantMultiplier;
 }
 
-WP2Status GlobalParams::Init() {
-  if (type_ != GP_LOSSLESS) {
-    WP2_CHECK_STATUS(InitFixedPredictors());
-  }
-  if (type_ != GP_LOSSY) {
-    // TODO(skal): lossless
-  }
-  return WP2_STATUS_OK;
-}
-
 }    // namespace WP2

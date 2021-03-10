@@ -56,9 +56,6 @@ class GlobalParams {
 
   void Reset();
 
-  // finish initializing the satellite data
-  WP2Status Init();
-
  public:
   // TODO(skal): should we have a GP_NONE for super-small images with default
   //             global params?

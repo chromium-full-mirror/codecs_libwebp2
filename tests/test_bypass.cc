@@ -70,7 +70,6 @@ TEST_P(BypassTest, MaxChunkSize) {
 
     ASSERT_WP2_OK(GlobalAnalysis(enc_tile.rgb_input, enc_tile.yuv_input, transf,
                                  config, &gparams));
-    ASSERT_WP2_OK(gparams.Init());
     ASSERT_WP2_OK(BypassTileEnc(gparams, &enc_tile, &writer));
   }
 

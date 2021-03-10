@@ -410,7 +410,6 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
 
   // TODO(skal): analysis and num_mtx_ decision...
   WP2_CHECK_STATUS(gparams.InitRndMtxSet());
-  WP2_CHECK_STATUS(gparams.Init());
 
   WP2_CHECK_STATUS(
       EncodeGLBL(config, gparams, quality_hint, image_has_alpha, output));
