@@ -2536,7 +2536,6 @@ WP2Status Decoder::RegisterUnprocessedRowForVDebug(
     }
   }
 
-  const bool opaque = WP2::VDMatch(decoder_info->visual_debug, "force-opaque");
   for (uint32_t y = 0; y < num_rows; ++y) {
     const uint32_t abs_y = tile_->rect.y + last_row_ + y;
     uint8_t* const row = (uint8_t*)decoder_info->debug_output.GetRow(abs_y);
@@ -2554,7 +2553,6 @@ WP2Status Decoder::RegisterUnprocessedRowForVDebug(
         row[abs_x * 4 + c] =
             WP2::RightShiftRound(rows[offset + c], num_bits - 8);
       }
-      if (opaque) row[abs_x * 4 + 0] = 255;
     }
   }
 

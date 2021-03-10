@@ -211,8 +211,7 @@ const VDToken kVisualDebug  // NOLINT - non-trivially destructible global var
         "u",
         "v",
         {"histogram", {"y", "u", "v"}}}},
-      {"lossless",
-       {{"symbols", "clusters", {"transformed", {"regular", "force-opaque"}}}}},
+      {"lossless", {{"symbols", "clusters", {"transformed", {"regular"}}}}},
       // Requires WP2_BITTRACE to be defined during the compilation.
       {"bits-per-pixel", {{"overall"}, {"coeffs", {"y", "u", "v"}}}},
       {"error-map",
@@ -450,6 +449,7 @@ class Params {
     kWhite,
     kBlack,
     kPink,
+    kOpaque,  // no background is displayed, behaves as if alpha == kMaxAlpha
     kBackgroundNum,
   } background_ = kCheckerboard;
 
@@ -2539,7 +2539,7 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
   } else if (key == 'o' || key == 'O') {
     ModifyR(background_, kBackgroundNum, key == 'o');
     const char* const kBackgroundName[] = {"Checkerboard", "Clearly White",
-                                           "Just Black", "Not Pink"};
+                                           "Just Black", "Not Pink", "Opaque"};
     STATIC_ASSERT_ARRAY_SIZE(kBackgroundName, kBackgroundNum);
     SetMessage(SPrintf("Background: %s", kBackgroundName[background_]));
   } else if (key == 'l') {
@@ -3246,18 +3246,36 @@ void DisplayBackground(uint32_t width, uint32_t height,
 
 void DisplayBuffer(const ArgbBuffer& buffer, Params::Background background) {
   if (buffer.IsEmpty()) return;
+  WP2SampleFormat format = buffer.format();
   if (buffer.HasTransparency()) {
-    DisplayBackground(buffer.width(), buffer.height(), background);
+    if (background != Params::kOpaque) {
+      DisplayBackground(buffer.width(), buffer.height(), background);
+    } else {
+      // Make sure the RGB values will not be modified by the converter through
+      // a de-multiplication.
+      if (format == WP2_Argb_32) {
+        format = WP2_ARGB_32;
+      } else if (format == WP2_rgbA_32) {
+        format = WP2_RGBA_32;
+      } else if (format == WP2_bgrA_32) {
+        format = WP2_BGRA_32;
+      } else {
+        assert(!WP2IsPremultiplied(format));
+      }
+    }
   }
 
   // convert from src->Argb Argb format to GL's BGRA format.
   std::vector<uint8_t> rgba(4u * buffer.width() * buffer.height());
-  const WP2ArgbConverterF convert =
-      WP2ConversionFunction(buffer.format(), WP2_RGBA_32);
+  const WP2ArgbConverterF convert = WP2ConversionFunction(format, WP2_RGBA_32);
   for (uint32_t y = 0; y < buffer.height(); ++y) {
     const uint8_t* const src = buffer.GetRow8(y);
     uint8_t* const dst = &rgba[y * 4u * buffer.width()];
     convert(src, buffer.width(), dst);
+    if (background == Params::kOpaque) {
+      // Set alpha to 0xff.
+      for (uint32_t i = 3; i < 4u * buffer.width(); i += 4) dst[i] = 0xff;
+    }
   }
   glDrawPixels(buffer.width(), buffer.height(), GL_RGBA, GL_UNSIGNED_BYTE,
                reinterpret_cast<const GLvoid*>(&rgba[0]));
