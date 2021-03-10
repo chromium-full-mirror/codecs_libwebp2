@@ -326,7 +326,7 @@ static constexpr uint32_t kHistogramBitsMax = 9;
 // but most images require at the very most 200 histograms. It also impacts the
 // amount of RAM used for decoding.
 static constexpr uint32_t kMaxHistogramImageSize = 1500;
-// Maximum abslute values of the residuals. Those values should be chosen so
+// Maximum absolute values of the residuals. Those values should be chosen so
 // that values in this range can fit in the ANS range (it's statically checked).
 static constexpr int16_t kMaxAbsResidual8 = 3 * (1 << 8);
 static constexpr int16_t kMaxAbsResidual10 = 3 * (1 << 10);

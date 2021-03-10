@@ -533,11 +533,21 @@ bool LosslessSymbolsInfo::IsLabelImage(const SymbolsInfo& info) {
 static inline void UpdateMinMax(uint32_t channel1, uint32_t channel2,
                                 int16_t coeff, int32_t num_bits, bool do_clamp,
                                 int16_t* const minima, int16_t* const maxima) {
-  const int16_t delta = WP2::RightShiftRound(
-      coeff * std::max(std::abs(minima[channel2]), std::abs(maxima[channel2])),
-      kColorTransformBits);
-  minima[channel1] -= delta;
-  maxima[channel1] += delta;
+  // Extend the interval with all possible deltas.
+  int16_t minimum = minima[channel1];
+  int16_t maximum = maxima[channel1];
+  for (int16_t delta :
+       {ColorTransformDelta((int32_t)coeff * minima[channel2]),
+        ColorTransformDelta(-(int32_t)coeff * minima[channel2]),
+        ColorTransformDelta((int32_t)coeff * maxima[channel2]),
+        ColorTransformDelta(-(int32_t)coeff * maxima[channel2])}) {
+    minimum = std::min(
+        {(int)minimum, minima[channel1] - delta, minima[channel1] + delta});
+    maximum = std::max(
+        {(int)maximum, maxima[channel1] - delta, maxima[channel1] + delta});
+  }
+  minima[channel1] = minimum;
+  maxima[channel1] = maximum;
   if (!do_clamp) return;
   const int16_t abs_value_max =
       (num_bits == 8) ? kMaxAbsResidual8 : kMaxAbsResidual10;

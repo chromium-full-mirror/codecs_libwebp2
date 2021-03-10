@@ -396,12 +396,12 @@ static inline void ColorCodeToMultipliers(const int16_t* const color,
   m->red_to_blue = color[1];
 }
 
-static inline void MultipliersToColorCode(const Multipliers* const m,
+static inline void MultipliersToColorCode(const Multipliers& m,
                                           int16_t* const res) {
   res[0] = 0;
-  res[1] = m->red_to_blue;
-  res[2] = m->green_to_blue;
-  res[3] = m->green_to_red;
+  res[1] = m.red_to_blue;
+  res[2] = m.green_to_blue;
+  res[3] = m.green_to_red;
 }
 
 static float PredictionCostCrossColor(const Vector_u32& accumulated,
@@ -417,9 +417,9 @@ static float PredictionCostCrossColor(const Vector_u32& accumulated,
 
 static float GetPredictionCostCrossColorRed(
     const int16_t* const argb, uint32_t width, uint32_t abs_value_max,
-    int tile_width, int tile_height, Multipliers prev_x, Multipliers prev_y,
-    int16_t green_to_red, const Vector_u32& accumulated_red_histo,
-    Vector_u32* const tmp_histo) {
+    int tile_width, int tile_height, const Multipliers& prev_x,
+    const Multipliers& prev_y, int16_t green_to_red,
+    const Vector_u32& accumulated_red_histo, Vector_u32* const tmp_histo) {
   std::fill(tmp_histo->begin(), tmp_histo->end(), 0);
   float cur_diff;
 
@@ -446,8 +446,8 @@ static float GetPredictionCostCrossColorRed(
 
 static void GetBestGreenToRed(const int16_t* argb, uint32_t width,
                               uint32_t abs_value_max, int tile_width,
-                              int tile_height, Multipliers prev_x,
-                              Multipliers prev_y, int effort,
+                              int tile_height, const Multipliers& prev_x,
+                              const Multipliers& prev_y, int effort,
                               const Vector_u32& accumulated_red_histo,
                               Multipliers* const best_tx,
                               Vector_u32* const tmp_histo) {
@@ -482,8 +482,8 @@ static void GetBestGreenToRed(const int16_t* argb, uint32_t width,
 
 static float GetPredictionCostCrossColorBlue(
     const int16_t* const argb, int stride, uint32_t abs_value_max,
-    int tile_width, int tile_height, Multipliers prev_x, Multipliers prev_y,
-    int16_t green_to_blue, int16_t red_to_blue,
+    int tile_width, int tile_height, const Multipliers& prev_x,
+    const Multipliers& prev_y, int16_t green_to_blue, int16_t red_to_blue,
     const Vector_u32& accumulated_blue_histo, Vector_u32* tmp_histo) {
   std::fill(tmp_histo->begin(), tmp_histo->end(), 0);
   float cur_diff;
@@ -521,8 +521,8 @@ static constexpr uint32_t kGreenRedToBlueNumAxis = 8;
 static constexpr uint32_t kGreenRedToBlueMaxIters = 7;
 static void GetBestGreenRedToBlue(const int16_t* argb, uint32_t width,
                                   uint32_t abs_value_max, int tile_width,
-                                  int tile_height, Multipliers prev_x,
-                                  Multipliers prev_y, int effort,
+                                  int tile_height, const Multipliers& prev_x,
+                                  const Multipliers& prev_y, int effort,
                                   const Vector_u32& accumulated_blue_histo,
                                   Multipliers* const best_tx,
                                   Vector_u32* tmp_histo) {
@@ -572,8 +572,9 @@ static void GetBestGreenRedToBlue(const int16_t* argb, uint32_t width,
 }
 
 static Multipliers GetBestColorTransformForTile(
-    int tile_x, int tile_y, int bits, Multipliers prev_x, Multipliers prev_y,
-    int effort, int xsize, int ysize, const Vector_u32& accumulated_red_histo,
+    int tile_x, int tile_y, int bits, const Multipliers& prev_x,
+    const Multipliers& prev_y, int effort, int xsize, int ysize,
+    const Vector_u32& accumulated_red_histo,
     const Vector_u32& accumulated_blue_histo, const int16_t* const argb,
     uint32_t abs_value_max, Vector_u32* const tmp_histo) {
   const int max_tile_size = 1 << bits;
@@ -599,13 +600,13 @@ static Multipliers GetBestColorTransformForTile(
 
 static void CopyTileWithColorTransform(int tile_x, int tile_y,
                                        uint32_t max_tile_size,
-                                       Multipliers color_transform,
+                                       const Multipliers& color_transform,
                                        Buffer_s16* buffer) {
   const int xscan = std::min(max_tile_size, buffer->width - tile_x);
   int yscan = std::min(max_tile_size, buffer->height - tile_y);
   int16_t* argb = &buffer->GetRow(tile_y)[4 * tile_x];
   while (yscan-- > 0) {
-    TransformColor(&color_transform, xscan, argb);
+    TransformColor(color_transform, xscan, argb);
     argb += 4 * buffer->width;
   }
 }
@@ -649,7 +650,7 @@ WP2Status ColorSpaceTransform(uint32_t bits, int effort,
           tile_x, tile_y, bits, prev_x, prev_y, effort, width, height,
           accumulated_red_histo, accumulated_blue_histo, data, abs_value_max,
           &tmp_histo);
-      MultipliersToColorCode(&prev_x, &image[4 * offset]);
+      MultipliersToColorCode(prev_x, &image[4 * offset]);
       CopyTileWithColorTransform(tile_x_offset, tile_y_offset, max_tile_size,
                                  prev_x, buffer);
 

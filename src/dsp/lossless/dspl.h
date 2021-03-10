@@ -56,13 +56,18 @@ STATIC_ASSERT_ARRAY_SIZE(kPredictorIndex, kNumPredictors);
 // Color transforms.
 
 typedef struct {
-  int16_t green_to_red;
-  int16_t green_to_blue;
-  int16_t red_to_blue;
+  int32_t green_to_red;
+  int32_t green_to_blue;
+  int32_t red_to_blue;
 } Multipliers;
 
-static inline int32_t ColorTransformDelta(int16_t color_pred, int16_t color) {
-  return WP2::RightShiftRound((int32_t)color_pred * color, kColorTransformBits);
+// Given a color_product (color_pred*color or sum of such), finalizes it by
+// shifting it to return a proper delta.
+static inline int32_t ColorTransformDelta(int32_t color_product) {
+  // This assumes a sign extension of the shift which is the case in C++20 and
+  // is easier to implement in SIMD. Doing the proper rounding (e.g. -48 is
+  // rounded to -64, not -32) provides negligeable benefit.
+  return WP2::RightShiftRound(color_product, kColorTransformBits);
 }
 
 //------------------------------------------------------------------------------

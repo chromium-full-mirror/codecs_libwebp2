@@ -216,8 +216,9 @@ void TransformColorInverse_C(const Multipliers& m,
     const int16_t green = src[2];
     int new_red = red;
     int new_blue = src[3];
-    new_red += ColorTransformDelta(m.green_to_red, green);
-    new_blue += (m.green_to_blue * green + m.red_to_blue * new_red + 16) >> 5;
+    new_red += ColorTransformDelta(m.green_to_red * green);
+    new_blue +=
+        ColorTransformDelta(m.green_to_blue * green + m.red_to_blue * new_red);
     dst[0] = src[0];
     dst[1] = new_red;
     dst[2] = src[2];
@@ -321,8 +322,9 @@ void TransformColorInverse_SSE(const WP2L::Multipliers& m,
     const int16_t green = src[2];
     int32_t new_red = red;
     int32_t new_blue = src[3];
-    new_red += (green_to_red * green + 16) >> 5;
-    new_blue += (green_to_blue * green + red_to_blue * new_red + 16) >> 5;
+    new_red += ColorTransformDelta(green_to_red * green);
+    new_blue +=
+        ColorTransformDelta(green_to_blue * green + red_to_blue * new_red);
     dst[0] = src[0];
     dst[1] = new_red;
     dst[2] = src[2];
