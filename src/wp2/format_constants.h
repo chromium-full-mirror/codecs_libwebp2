@@ -107,6 +107,8 @@ enum PartitionMethod {
   BLOCK_ENCODE_PARTITIONING,  // block encoding score (slow)
   SPLIT_PARTITIONING,         // whole or split block encoding score (slow)
   TILE_ENCODE_PARTITIONING,   // tile encoding score (super slow)
+  // Decide recursively how best to split blocks.
+  SPLIT_RECURSE_PARTITIONING,
   // Per 32x32 area, take the best one of a few block layouts:
   AREA_ENCODE_PARTITIONING,      // (slow)
   SUB_AREA_ENCODE_PARTITIONING,  // same but for each block in area (very slow)

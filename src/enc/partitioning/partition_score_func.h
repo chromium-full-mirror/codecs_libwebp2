@@ -61,6 +61,8 @@ class PartitionScoreFunc : public WP2Allocable {
   const GlobalParams& gparams() const { return *gparams_; }
 
  protected:
+  WP2Status CopyInternal(const PartitionScoreFunc& other);
+
   const EncoderConfig* config_ = nullptr;
   const GlobalParams* gparams_ = nullptr;
   Rectangle tile_rect_;            // In pixels, not padded.

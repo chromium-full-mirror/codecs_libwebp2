@@ -197,13 +197,13 @@ void SplitIteratorRecurse::SplitCurrentBlock(uint32_t idx) {
 
   Block blocks[4];
   GetSplitPatternBlocks(current_block, split_pattern, blocks);
-
+  // Only recurse when using the 2x2 split.
+  const bool recurse = (split_pattern.num_blocks == 4) &&
+                       (blocks[0].w() == (current_block.w() / 2)) &&
+                       (blocks[0].area() > 1);
   for (int32_t i = split_pattern.num_blocks - 1; i >= 0; --i) {
     const Block& block = blocks[i];
-    const bool splittable =
-        (split_pattern.num_blocks > 1 &&
-         GetNumSplitPatterns(partition_set_, block.dim()) > 1);
-    block_queue_.push_back_no_resize({block, splittable});
+    block_queue_.push_back_no_resize({block, recurse});
   }
 }
 

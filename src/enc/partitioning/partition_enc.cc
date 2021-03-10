@@ -34,6 +34,7 @@
 #include "src/enc/partitioning/partitioner_exhaustive.h"
 #include "src/enc/partitioning/partitioner_multi.h"
 #include "src/enc/partitioning/partitioner_split.h"
+#include "src/enc/partitioning/partitioner_split_recurse.h"
 #include "src/enc/partitioning/partitioner_top_left.h"
 #include "src/enc/wp2_enc_i.h"
 
@@ -68,8 +69,10 @@ WP2Status ExtractBlockPartition(const EncoderConfig& config,
       break;
     case BLOCK_ENCODE_PARTITIONING:
     case SPLIT_PARTITIONING:
+    case SPLIT_RECURSE_PARTITIONING:
       score_func.reset(new (WP2Allocable::nothrow) BlockScoreFunc(
-          /*use_splits=*/(final_partition_method == SPLIT_PARTITIONING)));
+          /*use_splits=*/(final_partition_method !=
+                          BLOCK_ENCODE_PARTITIONING)));
       break;
     case AREA_ENCODE_PARTITIONING:
       score_func.reset(new (WP2Allocable::nothrow)
@@ -119,6 +122,9 @@ WP2Status ExtractBlockPartition(const EncoderConfig& config,
       break;
     case SPLIT_PARTITIONING:
       partitioner.reset(new (WP2Allocable::nothrow) SplitPartitioner());
+      break;
+    case SPLIT_RECURSE_PARTITIONING:
+      partitioner.reset(new (WP2Allocable::nothrow) SplitRecursePartitioner());
       break;
     case AREA_ENCODE_PARTITIONING:
       partitioner.reset(new (WP2Allocable::nothrow) AreaRDOptPartitioner(

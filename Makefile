@@ -501,6 +501,7 @@ HDRS = \
     src/enc/partitioning/partitioner_exhaustive.h \
     src/enc/partitioning/partitioner_multi.h \
     src/enc/partitioning/partitioner_split.h \
+    src/enc/partitioning/partitioner_split_recurse.h \
     src/enc/partitioning/partitioner_top_left.h \
     src/enc/preview/preview_enc.h \
     src/enc/residuals_enc_aom.h \
@@ -997,6 +998,8 @@ DIST_FILES= \
             src/enc/partitioning/partitioner_multi.cc \
             src/enc/partitioning/partitioner_split.h \
             src/enc/partitioning/partitioner_split.cc \
+            src/enc/partitioning/partitioner_split_recurse.h \
+            src/enc/partitioning/partitioner_split_recurse.cc \
             src/enc/partitioning/partitioner_top_left.h \
             src/enc/partitioning/partitioner_top_left.cc \
             src/enc/predictor_enc.cc \

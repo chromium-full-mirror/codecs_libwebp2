@@ -84,7 +84,7 @@ WP2Status SplitPartitioner::GetBestPartition(const ProgressRange& progress,
   // Begin with the user-defined blocks, if any (debug).
   WP2_CHECK_STATUS(RegisterForcedBlocks(*blocks, &max_num_blocks_left));
 
-  // Sort forced blocks by position for binary search below.
+  // Sort forced blocks by position for IsCompatibleWithForcedBlocks.
   VectorNoCtor<Block> forced_blocks;
   WP2_CHECK_ALLOC_OK(forced_blocks.resize(blocks->size()));
   std::copy(blocks->begin(), blocks->end(), forced_blocks.begin());

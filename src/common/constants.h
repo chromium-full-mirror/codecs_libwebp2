@@ -61,9 +61,9 @@ static constexpr uint64_t kMaxNumBytesPerPixel =
 
 static constexpr char kChannelStr[4][2] = {"Y", "U", "V", "A"};
 const char* const kPartitionMethodString[] = {
-    "Multipass", "Block-enc",    "Split-enc",   "Tile-enc",
-    "Area-enc",  "Sub-area-enc", "Exhaustive",  "Fixed-4x4",
-    "Fixed-8x8", "Fixed-16x16",  "Fixed-32x32", "Auto"};
+    "Multipass",   "Block-enc",    "Split-enc",  "Tile-enc",  "SplitRec-enc",
+    "Area-enc",    "Sub-area-enc", "Exhaustive", "Fixed-4x4", "Fixed-8x8",
+    "Fixed-16x16", "Fixed-32x32",  "Auto"};
 STATIC_ASSERT_ARRAY_SIZE(kPartitionMethodString, WP2::NUM_PARTITION_METHODS);
 
 // Number of sets of residual statistics. For now, there is one set per method.

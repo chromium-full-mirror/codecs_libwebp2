@@ -1,0 +1,76 @@
+// Copyright 2021 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// -----------------------------------------------------------------------------
+//
+// Tool for finding the best block layout.
+//
+// Author: Maryla (maryla@google.com)
+
+#ifndef WP2_ENC_PARTITIONER_SPLIT_RECURSE_H_
+#define WP2_ENC_PARTITIONER_SPLIT_RECURSE_H_
+
+#include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/predictor.h"
+#include "src/common/symbols.h"
+#include "src/enc/partitioning/partition_score_func_block.h"
+#include "src/enc/partitioning/partitioner.h"
+#include "src/enc/symbols_enc.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
+#include "src/utils/vector.h"
+#include "src/wp2/encode.h"
+
+namespace WP2 {
+
+//------------------------------------------------------------------------------
+
+// For each block, tries some split patterns and keeps the best one then
+// recurses on sub-blocks.
+class SplitRecursePartitioner : public Partitioner {
+ public:
+  WP2Status Init(const EncoderConfig& config, const YUVPlane& yuv,
+                 const Rectangle& tile_rect,
+                 PartitionScoreFunc* const score_func) override;
+  WP2Status GetBestPartition(const ProgressRange& progress,
+                             VectorNoCtor<Block>* const blocks,
+                             Vector_u32* const splits) override;
+
+ private:
+  //  Tries all split patterns for the block it.CurrentBlock() and appends
+  // the split indices to 'best_pattern_idxs'.
+  WP2Status FindBestPattern(const VectorNoCtor<Block>& forced_blocks,
+                            const SplitIteratorDefault& it,
+                            BlockScoreFunc* const score_func,
+                            SymbolCounter* const symbol_counter,
+                            ANSEncCounter* const counter, float extra_rate,
+                            Vector_u32* const best_pattern_idxs,
+                            float* const best_score) const;
+
+  // Recursively computes the score for the given split pattern.
+  WP2Status ComputeScore(const VectorNoCtor<Block>& forced_blocks,
+                         const SplitIteratorDefault& it, uint32_t split_idx,
+                         Block sub_blocks[4], uint32_t num_sub_blocks,
+                         BlockScoreFunc* const score_func,
+                         SymbolCounter* const symbol_counter,
+                         ANSEncCounter* const counter, float best_score,
+                         float extra_rate, Vector_u32* const best_pattern_idxs,
+                         float* const score) const;
+};
+
+//------------------------------------------------------------------------------
+
+}  // namespace WP2
+
+#endif  // WP2_ENC_PARTITIONER_SPLIT_RECURSE_H_

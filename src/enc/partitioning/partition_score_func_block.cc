@@ -76,6 +76,22 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
   return WP2_STATUS_OK;
 }
 
+WP2Status BlockScoreFunc::CopyFrom(const BlockScoreFunc& other) {
+  WP2_CHECK_STATUS(PartitionScoreFunc::CopyInternal(other));
+  use_splits_ = other.use_splits_;
+  WP2_CHECK_ALLOC_OK(transforms_.copy_from(other.transforms_));
+  WP2_CHECK_ALLOC_OK(transforms_subset_.copy_from((other.transforms_subset_)));
+  WP2_CHECK_STATUS(buffer_.Copy(other.buffer_, /*resize_if_needed=*/true));
+  WP2_CHECK_STATUS(front_mgr_.CopyInternal(other.front_mgr_));
+  WP2_CHECK_STATUS(dicts_.CopyFrom(other.dicts_));
+  WP2_CHECK_STATUS(syntax_writer_.CopyFrom(other.syntax_writer_, &dicts_));
+  if (DCDiffusionMap::GetDiffusion(config_->error_diffusion) > 0) {
+    WP2_CHECK_STATUS(dc_error_u_.CopyFrom(other.dc_error_u_));
+    WP2_CHECK_STATUS(dc_error_v_.CopyFrom(other.dc_error_v_));
+  }
+  return WP2_STATUS_OK;
+}
+
 WP2Status BlockScoreFunc::ComputeScore(const Block& block,
                                        const ProgressRange& progress,
                                        float* const score) {

@@ -55,6 +55,17 @@ WP2Status PartitionScoreFunc::Init(const EncoderConfig& config,
 
 WP2Status PartitionScoreFunc::Use(const Block& block) { return WP2_STATUS_OK; }
 
+WP2Status PartitionScoreFunc::CopyInternal(const PartitionScoreFunc& other) {
+  config_ = other.config_;
+  gparams_ = other.gparams_;
+  tile_rect_ = other.tile_rect_;
+  src_ = other.src_;
+  with_alpha_ = other.with_alpha_;
+  num_block_cols_ = other.num_block_cols_;
+  num_block_rows_ = other.num_block_rows_;
+  return WP2_STATUS_OK;
+}
+
 //------------------------------------------------------------------------------
 
 WP2Status FixedSizeScoreFunc::ComputeScore(const Block& block,

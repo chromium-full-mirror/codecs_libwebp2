@@ -48,6 +48,7 @@ class BlockScoreFunc : public PartitionScoreFunc {
   WP2Status Init(const EncoderConfig& config, const Rectangle& tile_rect,
                  const YUVPlane& yuv, const GlobalParams& gparams,
                  const ProgressRange& progress) override;
+  WP2Status CopyFrom(const BlockScoreFunc& other);
 
   WP2Status ComputeScore(const Block& block, const ProgressRange& progress,
                          float* const score) override;
