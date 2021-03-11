@@ -338,7 +338,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
 #else
     float* const cost_ptr = nullptr;
 #endif
-    uint32_t length;
+    uint32_t length = 0;  // Silence -Werror=maybe-uninitialized
     const auto type =
         (SymbolType) sr->Read(kSymbolType, cluster, "lossless_mode", cost_ptr);
     WP2_CHECK_STATUS(dec_->GetStatus());
@@ -366,7 +366,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
 
       const uint32_t pixel_ind = (src - data) / 4;
       const uint32_t max_plane_code = pixel_ind + kCodeToPlaneCodes - 1;
-      uint32_t dist_code;
+      uint32_t dist_code = 0;  // Silence -Werror=maybe-uninitialized
       WP2_CHECK_STATUS(ReadLZ77Golomb(kSymbolDist, cluster, /*min=*/0,
                                       max_plane_code, "dist", sr, dec_,
                                       &dist_code, cost_ptr));
