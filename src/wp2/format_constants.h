@@ -315,8 +315,6 @@ static constexpr uint32_t kCodeToPlaneCodes = 120u;
 // WebP had (1<<12)-1 for length and (1<<20)-120 for distance.
 // Any value can be used, it does not have to be a power of two.
 static constexpr uint32_t kMaxLZ77Length = (1u << 14);
-// TODO(vrabaud) get the code to work for a higher value.
-static constexpr uint32_t kMinLZ77Length = 1;
 static constexpr uint32_t kLZZGolombPrefixSize = 2;
 
 // Min and max number of sampling bits for histograms.

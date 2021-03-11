@@ -102,7 +102,8 @@ static inline WP2Status ReadLZ77Golomb(
     }
     if (cost != nullptr) *cost += extra_bits_num;
   }
-  *result = WP2::Golomb::Merge(prefix, kLZZGolombPrefixSize, extra_bits_value);
+  *result =
+      min + WP2::Golomb::Merge(prefix, kLZZGolombPrefixSize, extra_bits_value);
   return WP2_STATUS_OK;
 }
 
@@ -377,7 +378,6 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
       WP2_CHECK_STATUS(ReadLZ77Golomb(kSymbolLen, cluster,
                                       /*min=*/kMinLZ77Length, max_length, "len",
                                       sr, dec_, &length, cost_ptr));
-      length += kMinLZ77Length;
       WP2_CHECK_OK(src_end - src >= (ptrdiff_t)(4 * length),
                    WP2_STATUS_BITSTREAM_ERROR);
 

@@ -422,13 +422,17 @@ void LosslessSymbolsInfo::Init(uint32_t num_pixels, bool has_alpha,
 }
 
 void LosslessSymbolsInfo::InitNonARGB(uint32_t num_pixels) {
-  // Length is at most num_pixels - 1 as it has to fit in the image.
-  // By format definition, it is also <= kMaxLZ77Length.
-  const uint32_t max_length = std::min(kMaxLZ77Length, num_pixels - 1);
-  if (max_length < kMinLZ77Length) {
+  SetCacheRange(0);
+  if (num_pixels == 1) {
+    // Disable all symbol types for 1 x 1 images.
+    SetInfo(kSymbolType, /*min=*/0, /*max=*/0, NumClusters(kSymbolType),
+            StorageMethod::kAuto);
     SetUnused(kSymbolDist);
     SetUnused(kSymbolLen);
   } else {
+    // Length is at most num_pixels - 1 as it has to fit in the image.
+    // By format definition, it is also <= kMaxLZ77Length.
+    const uint32_t max_length = std::min(kMaxLZ77Length, num_pixels - 1);
     constexpr StorageMethod storage_method = StorageMethod::kAuto;
     constexpr uint32_t num_clusters = 1u;
     // Distance is at most num_pixels - 1 but we have to add
@@ -441,8 +445,6 @@ void LosslessSymbolsInfo::InitNonARGB(uint32_t num_pixels) {
     SetInfo(kSymbolLen, /*min=*/0, golomb_max.prefix, num_clusters,
             storage_method);
   }
-
-  SetCacheRange(0);
 }
 
 void LosslessSymbolsInfo::InitAsLabelImage(uint32_t num_pixels,
