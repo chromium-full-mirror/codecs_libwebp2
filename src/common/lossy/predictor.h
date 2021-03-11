@@ -85,7 +85,7 @@ class Predictor : public WP2Allocable {
   // The three following methods are for predictors that signal some
   // parameters in the bitstream.
 
-  // Computes parameters needed for this transform and stores them in the block.
+  // Computes parameters needed for this predictor and stores them in the block.
   // This should be called on the encoder side before using the predictor.
   // Returns false if the predictor seems too costly or useless, and should be
   // avoided.
