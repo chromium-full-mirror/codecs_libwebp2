@@ -30,7 +30,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 
-#ifdef WP2_HAVE_AOM
+#if defined(WP2_HAVE_AOM)
 #include "aom/aom_decoder.h"
 #include "aom/aom_encoder.h"
 #include "aom/aomcx.h"
@@ -38,11 +38,16 @@
 
 #if defined(WP2_HAVE_AOM_DBG)
 #include "stats/aomstats.h"
+#include "config/aom_config.h"
 // to benefit from these, one should build libaom using the config:
 //  cmake ../ -DCONFIG_ACCOUNTING=1 -DCONFIG_INSPECTION=1
 #include "av1/common/common_data.h"
+#if defined(CONFIG_ACCOUNTING) && CONFIG_ACCOUNTING
 #include "av1/decoder/accounting.h"
+#endif
+#if defined(CONFIG_INSPECTION) && CONFIG_INSPECTION
 #include "av1/decoder/inspection.h"
+#endif
 #endif  // defined(WP2_HAVE_AOM_DBG)
 
 // libgav1 can be used as decoder instead of libaom
@@ -62,7 +67,7 @@
 
 #endif  // WP2_HAVE_AOM
 
-#ifdef WP2_HAVE_AVIF
+#if defined(WP2_HAVE_AVIF)
 #include "avif/avif.h"
 #endif
 
@@ -82,6 +87,8 @@ bool encode_frame(aom_codec_ctx_t* const codec, aom_image_t* const img, int pts,
     if (report_error) {
       fprintf(stderr, "aom_codec_encode() failed ['%s']\n",
               aom_codec_err_to_string(err));
+      const char* const details = aom_codec_error_detail(codec);
+      if (details != nullptr) fprintf(stderr, "Details: [%s]\n", details);
     }
     return false;
   }
@@ -100,8 +107,7 @@ bool encode_frame(aom_codec_ctx_t* const codec, aom_image_t* const img, int pts,
 
 //------------------------------------------------------------------------------
 
-#if defined(WP2_HAVE_AOM_DBG)
-
+#if defined(CONFIG_INSPECTION) && CONFIG_INSPECTION
 void inspect_cb(void* pbi, void* data) {
   insp_frame_data* const frame_data = (insp_frame_data*)data;
   ifd_inspect(frame_data, pbi, /*skip_non_transform=*/0);
@@ -298,6 +304,8 @@ void DrawBoxes(const std::vector<Rectangle>& boxes, Argb32b color,
   for (const auto& rect : boxes) out->DrawRect(rect, color);
 }
 
+#endif  // CONFIG_INSPECTION
+
 // category id, similar to those reported by 'dwebp'
 // clang-format off
 static const char* const kCtgCoeffs        = "coeffs";
@@ -359,7 +367,15 @@ class Cleaner {
 
 //------------------------------------------------------------------------------
 
-WP2Status MapAomStatus(aom_codec_err_t aom_status) {
+#if defined(WP2_HAVE_AOM)
+
+WP2Status MapAomStatus(aom_codec_err_t aom_status,
+                       aom_codec_ctx_t* const ctx = nullptr) {
+  if (aom_status != AOM_CODEC_OK) {
+    fprintf(stderr, "Error: [%s]\n", aom_codec_err_to_string(aom_status));
+    const char* const details = aom_codec_error_detail(ctx);
+    if (details != nullptr) fprintf(stderr, "Details: [%s]\n", details);
+  }
   switch (aom_status) {
     case AOM_CODEC_OK:
       return WP2_STATUS_OK;
@@ -384,14 +400,13 @@ WP2Status MapAomStatus(aom_codec_err_t aom_status) {
   }
 }
 
-// performs "if (status != AOM_CODEC_OK) return MapAomStatus(status);"
-#define CHECK_AOM_STATUS(status)             \
-  do {                                       \
-    const aom_codec_err_t __S__ = (status);  \
-    if (__S__ != AOM_CODEC_OK) {             \
-      fprintf(stderr, #status " failed!\n"); \
-      return MapAomStatus(status);           \
-    }                                        \
+// performs "if (status != AOM_CODEC_OK) return MapAomStatus(status, ctx);"
+#define CHECK_AOM_STATUS(status, ctx) do {      \
+    const aom_codec_err_t __S__ = (status);     \
+    if (__S__ != AOM_CODEC_OK) {                \
+      fprintf(stderr, #status " failed!\n");    \
+      return MapAomStatus(__S__, ctx);          \
+    }                                           \
   } while (0)
 
 // From twopass_encoder.c / aomenc.c
@@ -402,7 +417,7 @@ WP2Status wp2_get_frame_stats(aom_codec_ctx_t* ctx, const aom_image_t* img,
   *got_stats = false;
   aom_codec_iter_t iter = NULL;
   const aom_codec_cx_pkt_t* pkt = NULL;
-  CHECK_AOM_STATUS(aom_codec_encode(ctx, img, pts, duration, flags));
+  CHECK_AOM_STATUS(aom_codec_encode(ctx, img, pts, duration, flags), ctx);
 
   while ((pkt = aom_codec_get_cx_data(ctx, &iter)) != NULL) {
     *got_stats = true;
@@ -460,7 +475,7 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   }
 
   aom_codec_enc_cfg_t cfg;
-  CHECK_AOM_STATUS(aom_codec_enc_config_default(itf, &cfg, 0));
+  CHECK_AOM_STATUS(aom_codec_enc_config_default(itf, &cfg, 0), codec);
   cfg.g_w = w;
   cfg.g_h = h;
   if (pass == AOM_RC_ONE_PASS) {
@@ -481,39 +496,48 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   cfg.g_pass = pass;
   cfg.rc_twopass_stats_in = stats;
 
-  CHECK_AOM_STATUS(aom_codec_enc_init(codec, itf, &cfg, 0));
+  CHECK_AOM_STATUS(aom_codec_enc_init(codec, itf, &cfg, 0), codec);
 
   // ~~~ Uncomment to disable various AV1 features ~~~
   // ### Disable palettes.
-  // CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_PALETTE, 0));
+  // CHECK_AOM_STATUS(
+  //     aom_codec_control(codec, AV1E_SET_ENABLE_PALETTE, 0), codec);
   // ### Disable intra block copy.
-  // CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_INTRABC, 0));
+  // CHECK_AOM_STATUS(
+  //     aom_codec_control(codec, AV1E_SET_ENABLE_INTRABC, 0), codec);
   // ### Disable "filter" predictors.
   // CHECK_AOM_STATUS(
-  //     aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA, 0));
+  //     aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA, 0), codec);
 
   if (params.disable_transforms) {
-    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_INTRA_DCT_ONLY, 1));
+    CHECK_AOM_STATUS(
+        aom_codec_control(codec, AV1E_SET_INTRA_DCT_ONLY, 1), codec);
   }
 
   if (params.quality > 95) {
-    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_LOSSLESS, 1));
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_LOSSLESS, 1), codec);
   } else {
     const int level = std::lround(63 - params.quality * 63 / 95);
-    CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_CQ_LEVEL, level));
+    CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_CQ_LEVEL, level), codec);
   }
 
   // The only metrics AV1 can be tuned for are PSNR, SSIM or VMAF.
-  WP2_CHECK_OK(params.tuning == PSNR || params.tuning == SSIM,
+  WP2_CHECK_OK(params.tuning >= 0 || params.tuning <= 3,
                WP2_STATUS_INVALID_CONFIGURATION);
-  const int tuning = (params.tuning == PSNR) ? 0 : 1;
-  CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_TUNING, tuning));
+  // we avoid including aomcx.h to get aom_tune_metric (=moving target) directly
+  const int tuning = (params.tuning == 0) ? 0 :  // PSNR
+                     (params.tuning == 2) ? 7 /* AOM_TUNE_VMAF_NEG_MAX_GAIN */ :
+                     (params.tuning == 3) ? 8 /* AOM_TUNE_BUTTERAUGLI */ :
+                                            1;   // fallback to default SSIM
+  CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_TUNING, tuning), codec);
+
   // AV1's speed param goes opposite to WP2's
   const int speed = std::max(8 - (int)params.effort * 8 / 9, 0);
-  CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_CPUUSED, speed));
+  CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_CPUUSED, speed), codec);
   if (params.filter_strength == 0) {
-    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_CDEF, 0));
-    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_RESTORATION, 0));
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_CDEF, 0), codec);
+    CHECK_AOM_STATUS(
+        aom_codec_control(codec, AV1E_SET_ENABLE_RESTORATION, 0), codec);
   }
   return WP2_STATUS_OK;
 }
@@ -544,7 +568,7 @@ WP2Status FirstPassAV1(const ArgbBuffer& ref, const ParamsAV1& params,
         &codec, NULL, /*pts=*/0, /*duration=*/1, kFlags, stats, &got_stats));
   } while (got_stats);
   if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
-  CHECK_AOM_STATUS(aom_codec_destroy(&codec));
+  CHECK_AOM_STATUS(aom_codec_destroy(&codec), nullptr);
   return WP2_STATUS_OK;
 }
 
@@ -575,7 +599,7 @@ WP2Status EncodeAV1WithLibaom(const ArgbBuffer& image, const ParamsAV1& params,
   while (encode_frame(&codec, NULL, -1, 0, bitsteam)) { /* flush encoder */
   }
   if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
-  CHECK_AOM_STATUS(aom_codec_destroy(&codec));
+  CHECK_AOM_STATUS(aom_codec_destroy(&codec), nullptr);
 
   return WP2_STATUS_OK;
 }
@@ -598,11 +622,11 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
 
   const aom_codec_dec_cfg cfg = {params.threads, ref.width(), ref.height(), 1};
   aom_codec_ctx_t codec;
-  CHECK_AOM_STATUS(aom_codec_dec_init(&codec, itf, &cfg, 0));
+  CHECK_AOM_STATUS(aom_codec_dec_init(&codec, itf, &cfg, 0), &codec);
 
-  CHECK_AOM_STATUS(aom_codec_control(&codec, AV1_SET_SKIP_LOOP_FILTER));
+  CHECK_AOM_STATUS(aom_codec_control(&codec, AV1_SET_SKIP_LOOP_FILTER), &codec);
 
-#if defined(WP2_HAVE_AOM_DBG)
+#if defined(CONFIG_INSPECTION) && CONFIG_INSPECTION
   insp_frame_data frame_data;
   ifd_init(&frame_data, ref.width(), ref.height());
   WP2_CHECK_OK(frame_data.mi_grid != NULL, WP2_STATUS_OUT_OF_MEMORY);
@@ -615,12 +639,13 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
        quant != nullptr) &&
       (aom_codec_control(&codec, AV1_SET_INSPECTION_CALLBACK, &inspect) ==
        AOM_CODEC_OK);
-#endif  // WP2_HAVE_AOM_DBG
+#endif  // CONFIG_INSPECTION
 
   Av1DecodeReturn user_priv = {nullptr, 0, 0};  // Necessary to enable inspect
   const double start_time = GetStopwatchTime();
-  CHECK_AOM_STATUS(aom_codec_decode(&codec, (const uint8_t*)bitstream.data(),
-                                    bitstream.size(), &user_priv));
+  CHECK_AOM_STATUS(
+      aom_codec_decode(&codec, (const uint8_t*)bitstream.data(),
+                       bitstream.size(), &user_priv), &codec);
   if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
   aom_image_t* img = NULL;
   aom_codec_iter_t iter = NULL;
@@ -641,8 +666,8 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
     fprintf(stderr, "Round-trip error!\n");
     return WP2_STATUS_OUT_OF_MEMORY;
   }
-#if defined(WP2_HAVE_AOM_DBG)
-#if defined(WP2_BITTRACE)
+
+#if defined(WP2_BITTRACE) && defined(CONFIG_ACCOUNTING) && CONFIG_ACCOUNTING
   if (params.bittrace > 0) {
     Accounting* acc = NULL;
     if (aom_codec_control(&codec, AV1_GET_ACCOUNTING, &acc) == AOM_CODEC_OK) {
@@ -673,7 +698,8 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
       fprintf(stderr, "Error! AV1 accounting (bit traces) not compiled in\n");
     }
   }
-#endif  // WP2_BITTRACE
+#endif  // WP2_BITTRACE && CONFIG_ACCOUNTING
+#if defined(CONFIG_INSPECTION) && CONFIG_INSPECTION
   if (use_inspect) {
     if (params.draw_mi_data != nullptr) {
       if (std::strcmp(params.draw_mi_data, "quant") == 0) {
@@ -712,9 +738,9 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
       }
     }
   }
-#endif  // WP2_HAVE_AOM_DBG
+#endif  // CONFIG_INSPECTION
 
-  CHECK_AOM_STATUS(aom_codec_destroy(&codec));
+  CHECK_AOM_STATUS(aom_codec_destroy(&codec), &codec);
   return WP2_STATUS_OK;
 }
 
@@ -887,7 +913,7 @@ WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
 //------------------------------------------------------------------------------
 // AVIF
 
-#ifdef WP2_HAVE_AVIF
+#if defined(WP2_HAVE_AVIF)
 
 static float ToAvifQuantizer(float quality) {
   // Note AVIF_QUANTIZER_LOSSLESS doesn't actually seem lossless.

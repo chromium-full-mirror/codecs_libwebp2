@@ -77,7 +77,8 @@ void Help() {
   opt.Add("-pass <int>", "number of passes [1..2]");
   opt.Add("-420", "use YUV420 encoding (default)");
   opt.Add("-444", "use YUV444 encoding");
-  opt.Add("-tune <metric>", "choose PSNR or SSIM for tuning");
+  opt.Add("-tune <metric>", "choose metric for tuning. "
+                            "One of: psnr, ssim, vmaf, butteraugli");
   opt.Add("-notransforms", "disable transforms other than DCT");
   opt.AddMetricOptions();
 #if defined(WP2_HAVE_AOM_DBG)
@@ -148,9 +149,13 @@ int main(int argc, const char* argv[]) {
     } else if (!strcmp(argv[c], "-tune") && c + 1 < argc) {
       ++c;
       if (!strcmp(argv[c], "psnr") || !strcmp(argv[c], "PSNR")) {
-        params.tuning = WP2::PSNR;
+        params.tuning = 0;
       } else if (!strcmp(argv[c], "ssim") || !strcmp(argv[c], "SSIM")) {
-        params.tuning = WP2::SSIM;
+        params.tuning = 1;
+      } else if (!strcmp(argv[c], "vmaf")) {
+        params.tuning = 2;
+      } else if (!strcmp(argv[c], "butteraugli")) {
+        params.tuning = 3;
       } else {
         fprintf(stderr, "Ignored unhandled -tune '%s'\n", argv[c]);
       }

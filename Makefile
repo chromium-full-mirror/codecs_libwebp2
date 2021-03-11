@@ -11,11 +11,14 @@
 VERSION=0.1
 ARCHIVE_FILE=wp2-$(VERSION).tar.gz
 
+EXTRA_LIBS=
+EXTRA_FLAGS=
+
 # These flags assume you have libpng, libjpeg, libtiff, libgif and libwebp
 # installed. If not, either follow the install instructions below or just
 # comment out the next five lines.
-EXTRA_FLAGS= -DWP2_HAVE_PNG -DWP2_HAVE_JPEG -DWP2_HAVE_TIFF -DWP2_HAVE_GIF \
-             -DWP2_HAVE_WEBP
+EXTRA_FLAGS += -DWP2_HAVE_PNG -DWP2_HAVE_JPEG -DWP2_HAVE_TIFF -DWP2_HAVE_GIF
+EXTRA_FLAGS += -DWP2_HAVE_WEBP
 IMG_LIBS= -lpng -lz -ljpeg -ltiff -lgif \
           -lwebp -lwebpdemux -Wno-unused-command-line-argument
 
@@ -25,9 +28,9 @@ GTEST_FLAGS  = -I$(GTEST_DIR)/googletest/include
 GTEST_FLAGS += -I$(GTEST_DIR)/googlemock/include
 GTEST_LIBS = -L$(GTEST_DIR)/lib -lgtest -lgtest_main
 
+
 # OPENGL setup
-EXTRA_FLAGS += -I/usr/local/include -DWP2_HAVE_OPENGL
-EXTRA_LIBS  += -L/usr/local/lib
+EXTRA_FLAGS += -DWP2_HAVE_OPENGL
 ifeq ($(strip $(shell uname)), Darwin)
   # Work around a problem linking tables marked as common symbols,
   # cf., src/enc/yuv.[hc]
@@ -163,18 +166,21 @@ ifeq ($(REDUCED), 1)
   CXXFLAGS += -DWP2_REDUCE_BINARY_SIZE
 endif
 
-
 # for AOM_ACCOUNTING/INSPECTION, we need a specially built libaom, with the
 # flags CONFIG_ACCOUNTING/CONFIG_INSPECTION defined and access to inner
-# headers av1/decoder/...
+# headers av1/decoder/... Same for CONFIG_TUNE_VMAF and CONFIG_TUNE_BUTTERAUGLI.
 ifneq ($(AOM_PATH),)
-  CFLAGS += -I${AOM_PATH} -I${AOM_PATH}/build -DWP2_HAVE_AOM_DBG
-  CXXFLAGS += -I${AOM_PATH} -I${AOM_PATH}/build -DWP2_HAVE_AOM_DBG
-  EXTRA_LIBS += -L${AOM_PATH}/build
-  # we'll need AOM support compiled too, now:
-  AOM=1
+  EXTRA_INC= -I${AOM_PATH} -I${AOM_PATH}/build -DWP2_HAVE_AOM_DBG -DWP2_HAVE_AOM
+  CFLAGS += ${EXTRA_INC}
+  CXXFLAGS += ${EXTRA_INC}
+  EXTRA_LIBS += -L${AOM_PATH}/build -laom
+  # if you've built the libaom with CONFIG_TUNE_BUTTERAUGLI, you'll need libjxl:
+#  EXTRA_LIBS += -ljxl
+  # and same with CONFIG_TUNE_VMAF which requires libvmaf:
+#  EXTRA_LIBS += -lvmaf
 endif
 
+# For using system-wide installed libaom:
 ifeq ($(AOM), 1)
   CFLAGS += -DWP2_HAVE_AOM
   CXXFLAGS += -DWP2_HAVE_AOM
@@ -198,6 +204,9 @@ ifeq ($(ENC_DEC_MATCH), 1)
   CFLAGS += -DWP2_ENC_DEC_MATCH
   CXXFLAGS += -DWP2_ENC_DEC_MATCH
 endif
+
+EXTRA_FLAGS += -I/usr/local/include -DWP2_HAVE_OPENGL
+EXTRA_LIBS  += -L/usr/local/lib
 
 ifeq ($(USE_CLANG), 1)
   CC = clang -std=gnu99
@@ -300,6 +309,7 @@ ENC_OBJS = \
     src/enc/partitioning/partitioner_exhaustive.o \
     src/enc/partitioning/partitioner_multi.o \
     src/enc/partitioning/partitioner_split.o \
+    src/enc/partitioning/partitioner_split_recurse.o \
     src/enc/partitioning/partitioner_top_left.o \
     src/enc/predictor_enc.o \
     src/enc/residuals_enc.o \
