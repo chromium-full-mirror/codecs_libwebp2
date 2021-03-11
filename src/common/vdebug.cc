@@ -2457,7 +2457,8 @@ WP2Status Decoder::RegisterSymbolForVDebug(
   assert(length > 0);
   if (decoder_info == nullptr) return WP2_STATUS_OK;
   if (!WP2::VDMatch(decoder_info->visual_debug, "bits-per-pixel/overall") &&
-      !WP2::VDMatch(decoder_info->visual_debug, "lossless/symbols")) {
+      !WP2::VDMatch(decoder_info->visual_debug, "lossless/symbols") &&
+      !WP2::VDMatch(decoder_info->visual_debug, "lossless/transformed")) {
     return WP2_STATUS_OK;
   }
 
@@ -2507,14 +2508,33 @@ static const char* const kTransformNames[] = {"Predictor",     "CrossColor",
                                               "YCoCgR",        "SubstractGreen",
                                               "ColorIndexing", "Group4"};
 STATIC_ASSERT_ARRAY_SIZE(kTransformNames, (uint32_t)TransformType::kNum);
+static const char* const kPredictorNames[] = {"Black",
+                                              "180",
+                                              "90",
+                                              "45",
+                                              "135",
+                                              "Avg L,T,TR",
+                                              "157",
+                                              "Avg L,T",
+                                              "113",
+                                              "67",
+                                              "Avg all",
+                                              "Select L,TL,T",
+                                              "L+T-TL",
+                                              "(L+T)/2+((L+T)/2-TL)/2",
+                                              "Clamped L+T-TL"};
+STATIC_ASSERT_ARRAY_SIZE(kPredictorNames, (uint32_t)kNumPredictors);
 
-WP2Status Decoder::RegisterUnprocessedRowForVDebug(
-    uint32_t num_rows, uint32_t num_bits, const int16_t* const rows,
-    WP2::DecoderInfo* const decoder_info) {
+WP2Status Decoder::RegisterTransformedRowForVDebug(
+    uint32_t index, uint32_t num_rows, uint32_t num_bits,
+    const int16_t* const rows, WP2::DecoderInfo* const decoder_info) {
   if (decoder_info == nullptr) return WP2_STATUS_OK;
-  if (!WP2::VDMatch(decoder_info->visual_debug, "lossless/transformed")) {
+  assert(index >= 0 && index < kPossibleTransformCombinationSize);
+  const std::string menu = WP2SPrint("lossless/transformed/%d", index);
+  if (!WP2::VDMatch(decoder_info->visual_debug, menu.c_str())) {
     return WP2_STATUS_OK;
   }
+  const Transform& transform = transforms_[index];
 
   // Only show once per tile.
   if (last_row_ == 0 && VDSelected(tile_->rect, config_)) {
@@ -2522,20 +2542,38 @@ WP2Status Decoder::RegisterUnprocessedRowForVDebug(
     str += WP2SPrint("Tile at (%d, %d): %d transform(s)\n",
                      tile_->rect.x, tile_->rect.y, next_transform_);
     for (uint32_t i = 0; i < next_transform_; ++i) {
-      const Transform& transform = transforms_[i];
+      const Transform& transform_i = transforms_[i];
+      // Highlight the used transform.
+      if (i == index) str += "=> ";
       str += WP2SPrint("Transform #%d: %s", i,
-                       kTransformNames[(uint32_t)transform.type_]);
-      if (transform.type_ == TransformType::kCrossColor ||
-          transform.type_ == TransformType::kPredictor) {
-        str += WP2SPrint(" Bits: %d", transform.bits_);
-      } else if (transform.type_ == TransformType::kColorIndexing ||
-                 transform.type_ == TransformType::kGroup4) {
+                       kTransformNames[(uint32_t)transform_i.type_]);
+      if (transform_i.type_ == TransformType::kCrossColor ||
+          transform_i.type_ == TransformType::kPredictor) {
+        str += WP2SPrint(" Bits: %d", transform_i.bits_);
+      } else if (transform_i.type_ == TransformType::kColorIndexing ||
+                 transform_i.type_ == TransformType::kGroup4) {
         str += WP2SPrint(" Num colors: %d", num_colors_);
       }
       str += "\n";
     }
+    str += "\n";
+    // Display block info.
+    if (transform.type_ == TransformType::kPredictor) {
+      const uint32_t x =
+          (decoder_info->selection.x - tile_->rect.x) / (1 << transform.bits_);
+      const uint32_t y =
+          (decoder_info->selection.y - tile_->rect.y) / (1 << transform.bits_);
+      const uint32_t transform_width =
+          SubSampleSize(transform.width_, transform.bits_);
+      const uint16_t predictor =
+          transform.data_[y * 4 * transform_width + 4 * x + 2];
+      assert(predictor < kNumPredictors);
+      str += WP2SPrint("Block Predictor: %d %s\n", predictor,
+                       kPredictorNames[predictor]);
+    }
   }
 
+  // Display the result of the transform.
   for (uint32_t y = 0; y < num_rows; ++y) {
     const uint32_t abs_y = tile_->rect.y + last_row_ + y;
     uint8_t* const row = (uint8_t*)decoder_info->debug_output.GetRow(abs_y);
@@ -2544,14 +2582,41 @@ WP2Status Decoder::RegisterUnprocessedRowForVDebug(
       const uint32_t offset = (y * tile_->rect.width + x) * 4;
       if (decoder_info->selection.Contains(abs_x, abs_y)) {
         std::string& str = decoder_info->selection_info;
-        str += WP2SPrint("Pixel (%d, %d) argb (%u, %u, %u, %u)\n",
+        str += WP2SPrint("Pixel (%d, %d) argb (%d, %d, %d, %d)\n",
                          decoder_info->selection.x, decoder_info->selection.y,
                          rows[offset + 0], rows[offset + 1], rows[offset + 2],
                          rows[offset + 3]);
       }
-      for (uint32_t c = 0; c < 4; ++c) {
-        row[abs_x * 4 + c] =
-            WP2::RightShiftRound(rows[offset + c], num_bits - 8);
+      // Display the pixel by scaling it accordingly according to the type.
+      if (transform.type_ == TransformType::kSubtractGreen) {
+        for (uint32_t c = 0; c < 4; ++c) {
+          row[abs_x * 4 + c] = WP2::Clamp(
+              (int)WP2::RightShiftRound(rows[offset + c], num_bits - 8), 0,
+              255);
+        }
+      } else if (transform.type_ == TransformType::kPredictor ||
+                 transform.type_ == TransformType::kCrossColor) {
+        row[abs_x * 4 + 0] = 255;
+        for (uint32_t c : {1, 2, 3}) {
+          row[abs_x * 4 + c] = WP2::Clamp(128 + 10 * rows[offset + c], 0, 255);
+        }
+      } else if (transform.type_ == TransformType::kColorIndexing) {
+        row[abs_x * 4 + 0] = 255;
+        uint8_t val;
+        if (num_colors_ <= 200) {
+          val = (uint8_t)(55u + WP2::DivRound(200u * rows[offset + 2],
+                                              num_colors_ - 1));
+        } else if (num_colors_ <= 256) {
+          val = rows[offset + 2] + 256 - num_colors_;
+        } else {
+          val = WP2::Clamp((int)rows[offset + 2], 0, 255);
+        }
+        row[abs_x * 4 + 1] = row[abs_x * 4 + 2] = row[abs_x * 4 + 3] = val;
+      } else if (transform.type_ == TransformType::kYCoCgR) {
+        row[abs_x * 4 + 0] = rows[offset + 0];
+        for (uint32_t c : {1, 2, 3}) {
+          row[abs_x * 4 + c] = WP2::Clamp(128 + rows[offset + c], 0, 255);
+        }
       }
     }
   }

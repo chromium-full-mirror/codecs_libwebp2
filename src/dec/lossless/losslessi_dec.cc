@@ -231,6 +231,8 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
                     num_colors_, minima_range, maxima_range,
                     /*num_transforms=*/n);
     }
+    WP2_CHECK_REDUCED_STATUS(RegisterTransformedRowForVDebug(
+        n, num_rows, /*num_bits=*/8, rows, config_.info));
     InverseTransform(&transform, start_row, end_row, minima_range, maxima_range,
                      rows, gparams_->has_alpha_, rows_out);
     rows = rows_out;
@@ -245,8 +247,6 @@ WP2Status Decoder::ProcessRows(uint32_t row) {
   if (row > last_row_) {    // Emit output.
     WP2::ArgbBuffer* const buf = &tile_->rgb_output;
     const uint32_t num_rows = row - last_row_;
-    WP2_CHECK_REDUCED_STATUS(RegisterUnprocessedRowForVDebug(
-        num_rows, WP2Formatbpc(buf->format()), rows, config_.info));
     // We can't process more than kNumARGBCacheRows at a time (that's the size
     // of argb_cache_), but we currently don't need more than that.
     assert(num_rows <= kNumARGBCacheRows);
@@ -805,7 +805,8 @@ WP2Status Decoder::AllocateInternalBuffers(uint32_t final_width) {
   if (config_.info != nullptr && config_.info->bits_per_pixel != nullptr) {
     WP2_CHECK_STATUS(
         bits_per_pixel_.SetView(*config_.info->bits_per_pixel, tile_->rect));
-  } else if (VDMatch(config_, "bits-per-pixel")) {
+  } else if (VDMatch(config_, "bits-per-pixel") ||
+             VDMatch(config_, "lossless")) {
     WP2_CHECK_STATUS(
         bits_per_pixel_.Resize(tile_->rect.width, tile_->rect.height));
   }

@@ -117,9 +117,10 @@ class Decoder {
   // Visual debug. 'rows' should contain the raw decoded pixels before inverse
   // transforms are applied. 'decoder_info' can be nullptr (in which case
   // nothing is done).
-  WP2Status RegisterUnprocessedRowForVDebug(
-      uint32_t num_rows, uint32_t num_bits, const int16_t* const rows,
-      WP2::DecoderInfo* const decoder_info);
+  // 'index' is the transform index up to which the transforms are applied.
+  WP2Status RegisterTransformedRowForVDebug(
+      uint32_t index, uint32_t num_rows, uint32_t num_bits,
+      const int16_t* const rows, WP2::DecoderInfo* const decoder_info);
 
   // Visual debug for header info.
   WP2Status HeaderVDebug();
