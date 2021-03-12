@@ -196,10 +196,14 @@ static inline int GetMetaIndex(const WP2::Vector_s16& image, uint32_t width,
 
 WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
                                           const int16_t* rows) {
-  uint32_t n = next_transform_;
+  uint32_t num_transforms = 0;
+  while (num_transforms < kPossibleTransformCombinationSize &&
+         transforms_[num_transforms].type_ != TransformType::kNum) {
+    ++num_transforms;
+  }
   const uint32_t cache_pixs = tile_->rect.width * num_rows;
 
-  if (n == 0) {
+  if (num_transforms == 0) {
     // No transform called, hence just copy.
     std::copy(rows, rows + 4 * cache_pixs, argb_cache_);
     return WP2_STATUS_OK;
@@ -210,14 +214,14 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
 
   int16_t* const rows_out = (int16_t*)argb_cache_;
   // Inverse transforms.
-  while (n-- > 0) {
-    const Transform& transform = transforms_[n];
+  while (num_transforms-- > 0) {
+    const Transform& transform = transforms_[num_transforms];
     if (transform.type_ == TransformType::kColorIndexing ||
         transform.type_ == TransformType::kGroup4) {
       // Check that all color map indices are valid here rather than in dsp.
       // TODO(yguyon): Remove pessimization.
       const int16_t color_map_size = (int16_t)transform.data_.size() / 4;
-      const int16_t* const r_end = rows + 4 * num_rows * transform.width_;
+      const int16_t* const r_end = rows + 4 * num_rows * transform.width_pic_;
       for (const int16_t* r = rows; r < r_end; r += 4) {
         WP2_CHECK_OK(r[2] >= 0 && r[2] < color_map_size,
                      WP2_STATUS_BITSTREAM_ERROR);
@@ -227,15 +231,14 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
     if (transform.type_ == TransformType::kPredictor) {
       // Define the minimum/maximum values before applying the predictors.
       TransformType transforms_type[(uint32_t)TransformType::kNum];
-      for (uint32_t i = 0; i < n; ++i) {
+      for (uint32_t i = 0; i < num_transforms; ++i) {
         transforms_type[i] = transforms_[i].type_;
       }
       GetARGBRanges(transforms_type, hdr_.symbols_info_.SampleFormat(),
-                    num_colors_, minima_range, maxima_range,
-                    /*num_transforms=*/n);
+                    num_colors_, minima_range, maxima_range, num_transforms);
     }
     WP2_CHECK_REDUCED_STATUS(RegisterTransformedRowForVDebug(
-        n, num_rows, /*num_bits=*/8, rows, config_.info));
+        num_transforms, num_rows, /*num_bits=*/8, rows, config_.info));
     InverseTransform(&transform, start_row, end_row, minima_range, maxima_range,
                      rows, gparams_->has_alpha_, rows_out);
     rows = rows_out;
@@ -531,8 +534,8 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
   dec_->AddDebugPrefix("palette");
   // There are at least 2 colors in the palette.
   num_colors_ = ReadGolomb(
-      /*min=*/2, MaxPaletteSize(transform->width_ * transform->height_), 1,
-      dec_, "num_colors");
+      /*min=*/2, MaxPaletteSize(transform->width_pic_ * transform->height_pic_),
+      1, dec_, "num_colors");
 
   const bool is_grayscale = dec_->ReadBool("is_grayscale");
   const uint32_t num_channels = (is_grayscale ? 2 : 4);
@@ -669,14 +672,13 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
 }
 
 WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
-                                 TransformType type) {
-  Transform* const transform = &transforms_[next_transform_];
-
+                                 TransformType type,
+                                 Transform* const transform) {
   transform->type_ = type;
-  transform->width_ = width;
-  transform->height_ = height;
-  ++next_transform_;
-  assert(next_transform_ <= (uint32_t)TransformType::kNum);
+  transform->width_pic_ = width;
+  transform->height_pic_ = height;
+  transform->width_ = 0;
+  transform->height_ = 0;
 
   switch (type) {
     case TransformType::kPredictor:
@@ -691,24 +693,24 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
                                          "transform_bits");
 
       // Read the transform header.
-      const uint32_t sub_width =
-          SubSampleSize(transform->width_, transform->bits_);
-      const uint32_t sub_height =
-          SubSampleSize(transform->height_, transform->bits_);
+      transform->width_ =
+          SubSampleSize(transform->width_pic_, transform->bits_);
+      transform->height_ =
+          SubSampleSize(transform->height_pic_, transform->bits_);
       LosslessSymbolsInfo symbols_info;
-      const uint32_t num_pixels = sub_width * sub_height;
+      const uint32_t num_pixels = transform->width_ * transform->height_;
       if (type == TransformType::kPredictor) {
         symbols_info.InitAsLabelImage(num_pixels, kNumPredictors);
       } else {
         symbols_info.InitAsCrossColorImage(num_pixels);
       }
-      WP2_CHECK_STATUS(ReadANSStats(sub_width, sub_height, symbols_info));
+      WP2_CHECK_STATUS(
+          ReadANSStats(transform->width_, transform->height_, symbols_info));
 
       // Read the transform image.
-      WP2_CHECK_STATUS(
-          DecodeNoProcess(sub_width, sub_height, /*last_row=*/
-                          SubSampleSize(transform->height_, transform->bits_),
-                          &transform->data_));
+      WP2_CHECK_STATUS(DecodeNoProcess(transform->width_, transform->height_,
+                                       /*last_row=*/transform->height_,
+                                       &transform->data_));
       WP2_CHECK_STATUS(dec_->GetStatus());
 
       dec_->PopDebugPrefix();
@@ -835,10 +837,12 @@ WP2Status Decoder::DecodeHeader() {
     }
   }
 
+  // De-activate all transforms in case the decoder is re-used.
+  for (Transform& t : transforms_) t.type_ = TransformType::kNum;
   for (uint32_t i = 0; i < num_transforms; ++i) {
     TransformType type = transforms[i];
-    WP2_CHECK_STATUS(
-        ReadTransform(tile_->rect.width, tile_->rect.height, type));
+    WP2_CHECK_STATUS(ReadTransform(tile_->rect.width, tile_->rect.height, type,
+                                   &transforms_[i]));
     if (type == TransformType::kGroup4) {
       use_group4_ = true;
       // Make sure it is the only used transform.

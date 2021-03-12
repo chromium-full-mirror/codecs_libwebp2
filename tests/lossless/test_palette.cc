@@ -104,8 +104,8 @@ TEST_P(PaletteTest, RoundTrip) {
   decoder.Init(WP2::DecoderConfig::kDefault, gparams, &dec, &tile);
   WP2L::Transform transform;
   transform.type_ = WP2L::TransformType::kColorIndexing;
-  transform.width_ = kWidth;
-  transform.height_ = kHeight;
+  transform.width_pic_ = kWidth;
+  transform.height_pic_ = kHeight;
   ASSERT_WP2_OK(decoder.ReadPalette(&transform));
   EXPECT_EQ(transform.data_.size(), colors.size());
   for (uint32_t i = 0; i < 4 * num_colors; ++i) {

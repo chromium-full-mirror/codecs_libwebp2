@@ -115,7 +115,7 @@ void PredictorInverseTransform_C(const Transform* const transform,
                                  const int16_t max_values[4],
                                  const int16_t* in, bool has_alpha,
                                  int16_t* out) {
-  const int width = transform->width_;
+  const int width = transform->width_pic_;
   if (y_start == 0) {  // First Row follows the L (mode=1) mode.
     PredictorNonClampedAdd0_C(in, has_alpha, nullptr, 1, out);
     PredictorNonClampedAdd1_C(in + 4, has_alpha, nullptr, width - 1, out + 4);
@@ -128,9 +128,9 @@ void PredictorInverseTransform_C(const Transform* const transform,
     int y = y_start;
     const int tile_width = 1 << transform->bits_;
     const int tile_mask = tile_width - 1;
-    const int tiles_per_row = SubSampleSize(width, transform->bits_);
     const int16_t* pred_mode_base =
-        transform->data_.data() + 4 * (y >> transform->bits_) * tiles_per_row;
+        transform->data_.data() +
+        4 * (y >> transform->bits_) * transform->width_;
 
     while (y < y_end) {
       const int16_t* pred_mode_src = pred_mode_base;
@@ -163,7 +163,7 @@ void PredictorInverseTransform_C(const Transform* const transform,
       ++y;
       // Use the same mask, since tiles are squares.
       if ((y & tile_mask) == 0) {
-        pred_mode_base += 4 * tiles_per_row;
+        pred_mode_base += 4 * transform->width_;
       }
     }
   }
@@ -230,12 +230,12 @@ void TransformColorInverse_C(const Multipliers& m,
 void ColorSpaceInverseTransform_C(const Transform* const transform,
                                   int y_start, int y_end,
                                   const int16_t* src, int16_t* dst) {
-  const uint32_t width = transform->width_;
+  const uint32_t width = transform->width_pic_;
   const int tile_width = 1 << transform->bits_;
   const int mask = tile_width - 1;
   const int safe_width = width & ~mask;
   const int remaining_width = width - safe_width;
-  const int tiles_per_row = SubSampleSize(width, transform->bits_);
+  const int tiles_per_row = transform->width_;
   int y = y_start;
   const int16_t* pred_row =
       transform->data_.data() + 4 * (y >> transform->bits_) * tiles_per_row;
@@ -277,7 +277,7 @@ void ColorIndexInverseTransform_C(const Transform* const transform,
                                   uint32_t y_start, uint32_t y_end,
                                   const int16_t* const src,
                                   int16_t* const dst) {
-  const uint32_t width = transform->width_;
+  const uint32_t width = transform->width_pic_;
   MapColor(src, /*color_map=*/transform->data_.data(),
            /*color_map_size=*/transform->data_.size() / 4, y_start, y_end,
            width, dst);
@@ -346,9 +346,9 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
                       uint32_t row_end, const int16_t min_values[4],
                       const int16_t max_values[4], const int16_t* const in,
                       bool has_alpha, int16_t* const out) {
-  const uint32_t width = transform->width_;
+  const uint32_t width = transform->width_pic_;
   assert(row_start < row_end);
-  assert(row_end <= transform->height_);
+  assert(row_end <= transform->height_pic_);
 
   switch (transform->type_) {
     case TransformType::kYCoCgR:
@@ -360,7 +360,7 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
     case TransformType::kPredictor: {
       PredictorInverseTransform_C(transform, row_start, row_end, min_values,
                                   max_values, in, has_alpha, out);
-      if (row_end != transform->height_) {
+      if (row_end != transform->height_pic_) {
         // The last predicted row in this iteration will be the top-pred row
         // for the first row in next iteration.
         std::copy(out + 4 * (row_end - row_start - 1) * width,

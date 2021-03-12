@@ -2540,10 +2540,10 @@ WP2Status Decoder::RegisterTransformedRowForVDebug(
   // Only show once per tile.
   if (last_row_ == 0 && VDSelected(tile_->rect, config_)) {
     std::string& str = decoder_info->selection_info;
-    str += WP2SPrint("Tile at (%d, %d): %d transform(s)\n",
-                     tile_->rect.x, tile_->rect.y, next_transform_);
-    for (uint32_t i = 0; i < next_transform_; ++i) {
+    str += WP2SPrint("Tile at (%d, %d)\n", tile_->rect.x, tile_->rect.y);
+    for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {
       const Transform& transform_i = transforms_[i];
+      if (transform_i.type_ == TransformType::kNum) break;
       // Highlight the used transform.
       if (i == index) str += "=> ";
       str += WP2SPrint("Transform #%d: %s", i,
@@ -2564,10 +2564,8 @@ WP2Status Decoder::RegisterTransformedRowForVDebug(
           (decoder_info->selection.x - tile_->rect.x) / (1 << transform.bits_);
       const uint32_t y =
           (decoder_info->selection.y - tile_->rect.y) / (1 << transform.bits_);
-      const uint32_t transform_width =
-          SubSampleSize(transform.width_, transform.bits_);
       const uint16_t predictor =
-          transform.data_[y * 4 * transform_width + 4 * x + 2];
+          transform.data_[y * 4 * transform.width_ + 4 * x + 2];
       assert(predictor < kNumPredictors);
       str += WP2SPrint("Block Predictor: %d %s\n", predictor,
                        kPredictorNames[predictor]);
