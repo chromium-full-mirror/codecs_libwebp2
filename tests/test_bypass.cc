@@ -32,7 +32,8 @@ namespace {
 //------------------------------------------------------------------------------
 
 class BypassTest
-    : public ::testing::TestWithParam<std::tuple<const char*, bool, bool>> {};
+    : public ::testing::TestWithParam<std::tuple<
+          const char*, bool, bool, WP2SampleFormat, WP2SampleFormat>> {};
 
 // Encode decode raw pixels of a tile of maximum dimensions.
 TEST_P(BypassTest, MaxChunkSize) {
@@ -41,6 +42,10 @@ TEST_P(BypassTest, MaxChunkSize) {
   const bool force_alpha = std::get<2>(GetParam());
   const float quality = use_lossy ? 50.f : 100.f;
   const uint32_t width = (uint32_t)std::lround(std::sqrt(kMaxTilePixels));
+  // TODO(yguyon): Handle WP2_Argb_38 output for the lossy pipeline
+  const WP2SampleFormat src_format =
+      use_lossy ? WP2_Argb_32 : std::get<3>(GetParam());
+  const WP2SampleFormat dst_format = std::get<4>(GetParam());
 
   GlobalParams gparams;
   FeatureMap feature_map;
@@ -48,10 +53,14 @@ TEST_P(BypassTest, MaxChunkSize) {
   EncTile enc_tile;
   MemoryWriter writer;
   {  // Encode
-    // TODO(yguyon): Also encode/decode WP2_Argb_38 samples
     ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(),
                             &enc_tile.rgb_input));
     if (force_alpha) enc_tile.rgb_input.GetRow8(0)[0] = 42;
+    if (src_format != enc_tile.rgb_input.format()) {
+      ArgbBuffer tmp(src_format);
+      ASSERT_WP2_OK(tmp.Swap(&enc_tile.rgb_input));
+      ASSERT_WP2_OK(enc_tile.rgb_input.ConvertFrom(tmp));
+    }
     enc_tile.rect = {0, 0, width, width};
     ASSERT_EQ(enc_tile.rect.GetArea(), kMaxTilePixels);
     ASSERT_WP2_OK(
@@ -73,7 +82,7 @@ TEST_P(BypassTest, MaxChunkSize) {
     ASSERT_WP2_OK(BypassTileEnc(gparams, &enc_tile, &writer));
   }
 
-  if (use_lossy && gparams.has_alpha_) {
+  if ((use_lossy || WP2Formatbpc(src_format) == 10) && gparams.has_alpha_) {
     EXPECT_EQ(writer.size_, kMaxTileChunkSize);
   } else {
     EXPECT_LT(writer.size_, kMaxTileChunkSize);
@@ -82,7 +91,7 @@ TEST_P(BypassTest, MaxChunkSize) {
   {  // Decode
     BitstreamFeatures features;
     features.quality_hint = GetQualityHint(quality);
-    features.rgb_bit_depth = 8;
+    features.rgb_bit_depth = WP2Formatbpc(src_format);
     TilesLayout tiles;
     tiles.num_tiles_x = tiles.num_tiles_y = 1;
     tiles.tile_width = tiles.tile_height = width;
@@ -98,6 +107,7 @@ TEST_P(BypassTest, MaxChunkSize) {
           dec_tile.yuv_output.Resize(dec_tile.rect.width, dec_tile.rect.height,
                                      /*pad=*/kPredWidth, gparams.has_alpha_));
     } else {
+      ASSERT_WP2_OK(dec_tile.rgb_output.SetFormat(dst_format));
       ASSERT_WP2_OK(dec_tile.rgb_output.Resize(dec_tile.rect.width,
                                                dec_tile.rect.height));
     }
@@ -125,7 +135,9 @@ INSTANTIATE_TEST_SUITE_P(
     BypassTestInstantiation, BypassTest,
     ::testing::Combine(::testing::Values("taiwan.png"),
                        ::testing::Values(true, false),  // Lossy / lossless
-                       ::testing::Values(true, false)   // Force alpha
+                       ::testing::Values(true, false),  // Force alpha
+                       ::testing::Values(WP2_Argb_32, WP2_Argb_38),  // input
+                       ::testing::Values(WP2_Argb_32, WP2_Argb_38)   // output
                        ));
 
 //------------------------------------------------------------------------------

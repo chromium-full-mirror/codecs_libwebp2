@@ -31,29 +31,20 @@ namespace {
 class Lossless10Test : public ::testing::TestWithParam<const char*> {};
 
 TEST_P(Lossless10Test, Simple) {
-  ArgbBuffer src_32;
-  ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath(GetParam()).c_str(), &src_32));
-
-  // Convert the src to 10 bit.
   ArgbBuffer src(WP2_Argb_38);
-  ASSERT_WP2_OK(src.Resize(src_32.width(), src_32.height()));
-  UniformIntDistribution random(/*seed=*/0);
-  for (uint32_t y = 0; y < src_32.height(); ++y) {
-    const uint8_t* const row_in = src_32.GetRow8(y);
-    uint16_t* const row_out = src.GetRow16(y);
-    for (uint32_t x = 0; x < 4 * src_32.width(); x += 4) {
-      // Keep alpha on 8 bits.
-      row_out[x + 0] = row_in[x + 0];
-      if (row_out[x] == 0) {
-        // Respect alpha == 0 implies RGB == 0.
-        for (uint32_t c = 1; c < 4; ++c) row_out[x + c] = 0;
-      } else {
-        // Convert RGB to 10 bit and add noise.
-        for (uint32_t c = 1; c < 4; ++c) {
-          row_out[x + c] = (row_in[x + c] << 2) + random.Get(0, 3);
-        }
-      }
+  {
+    // Load 10-bit source.
+    ArgbBuffer src_32;
+    ASSERT_WP2_OK(
+        ReadImage(testing::GetTestDataPath(GetParam()).c_str(), &src_32));
+    ASSERT_WP2_OK(src.ConvertFrom(src_32));
+
+    // Make some noise.
+    UniformIntDistribution random(/*seed=*/9);
+    uint16_t* const px = src.GetRow16(0);
+    for (uint32_t i = 0; i < src.width() * src.height() * 4; ++i) {
+      if (i % 4 == 0 || px[i] < 3) continue;  // Leave alpha as is.
+      px[i] -= random.Get(0, 3);  // Make sure it stays valid alpha-premul.
     }
   }
 

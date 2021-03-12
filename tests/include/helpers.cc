@@ -23,6 +23,7 @@
 #include "imageio/image_enc.h"
 #include "src/utils/front_mgr.h"
 #include "src/utils/orientation.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace testing {
@@ -170,6 +171,30 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config) {
                                encoder_config.effort);
 }
 
+namespace {
+
+// Returns true and the coordinates of the first pixel that differ between 'a'
+// and 'b'. Returns false if 'a' and 'b' are identical.
+bool TryFindFirstDifference(const ArgbBuffer& a, const ArgbBuffer& b,
+                            uint32_t& pixel_x, uint32_t& pixel_y) {
+  assert(a.width() == b.width() && a.height() == b.height());
+  assert(a.format() == b.format());
+  for (uint32_t y = 0; y < a.height(); ++y) {
+    for (uint32_t x = 0; x < a.width(); ++x) {
+      const uint8_t* const pixel_a = a.GetPosition(x, y);
+      const uint8_t* const pixel_b = b.GetPosition(x, y);
+      if (!std::equal(pixel_a, pixel_a + WP2FormatBpp(a.format()), pixel_b)) {
+        pixel_x = x;
+        pixel_y = y;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+}  // namespace
+
 ::testing::AssertionResult Compare(const ArgbBuffer& src, const ArgbBuffer& dec,
                                    const std::string& file_name,
                                    float expected_distortion, MetricType metric,
@@ -188,8 +213,8 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config) {
   // unmultiplied.
   const bool convert =
       !WP2IsPremultiplied(src.format()) || (src.format() != dec.format());
-  WP2::ArgbBuffer src_converted(convert ? WP2_Argb_32 : src.format());
-  WP2::ArgbBuffer dec_converted(src_converted.format());
+  ArgbBuffer src_converted(convert ? WP2_Argb_32 : src.format());
+  ArgbBuffer dec_converted(src_converted.format());
   if (convert) {
     if (src_converted.ConvertFrom(src) != WP2_STATUS_OK ||
         dec_converted.ConvertFrom(dec) != WP2_STATUS_OK) {
@@ -202,9 +227,9 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config) {
     }
   }
 
-  WP2::ArgbBuffer dec_oriented(dec_converted.format());
-  if (decoding_orientation != WP2::Orientation::kOriginal) {
-    if (WP2::OrientateBuffer(WP2::GetInverseOrientation(decoding_orientation),
+  ArgbBuffer dec_oriented(dec_converted.format());
+  if (decoding_orientation != Orientation::kOriginal) {
+    if (OrientateBuffer(GetInverseOrientation(decoding_orientation),
                              dec, &dec_oriented) != WP2_STATUS_OK) {
       return ::testing::AssertionFailure() << "Failed to rotate buffer";
     }
@@ -227,24 +252,28 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config) {
         << disto[2] << ", " << disto[3] << ", " << disto[4] << " with file "
         << file_name << " (expected at least " << expected_distortion << ")"
         << (convert ? " (note buffers were converted to Argb)" : "");
-    for (uint32_t y = 0; y < src_converted.height(); ++y) {
-      const uint8_t* a = (const uint8_t*)src_converted.GetRow(y);
-      const uint8_t* b = (const uint8_t*)dec_oriented.GetRow(y);
-      for (uint32_t x = 0; x < src_converted.width(); ++x) {
-        const int32_t aa = a[0], ar = a[1], ag = a[2], ab = a[3];
-        const int32_t ba = b[0], br = b[1], bg = b[2], bb = b[3];
-        if (aa != ba || ar != br || ag != bg || ab != bb) {
-          assertion_failure << std::endl
-                            << "First different pixel at " << x << ", " << y
-                            << ":   " << aa << ", " << ar << ", " << ag << ", "
-                            << ab << " vs " << ba << ", " << br << ", " << bg
-                            << ", " << bb;
-          return assertion_failure;  // Don't spam.
-        }
-        a += 4;
-        b += 4;
-      }
+
+    uint32_t x, y;
+    if (!TryFindFirstDifference(src_converted, dec_oriented, x, y)) {
+      assert(false);  // There should be a difference.
+      return assertion_failure;
     }
+    const uint8_t* const a = src_converted.GetPosition(x, y);
+    const uint8_t* const b = dec_oriented.GetPosition(x, y);
+    int32_t aa, ar, ag, ab, ba, br, bg, bb;  // Print numbers, not chars
+    if (WP2Formatbpc(src_converted.format()) == 8) {
+      aa = a[0], ar = a[1], ag = a[2], ab = a[3];
+      ba = b[0], br = b[1], bg = b[2], bb = b[3];
+    } else {
+      const uint16_t* const a16 = (const uint16_t*)a;
+      const uint16_t* const b16 = (const uint16_t*)b;
+      aa = a16[0], ar = a16[1], ag = a16[2], ab = a16[3];
+      ba = b16[0], br = b16[1], bg = b16[2], bb = b16[3];
+    }
+    assertion_failure << std::endl
+                      << "First different pixel at " << x << ", " << y << ":   "
+                      << aa << ", " << ar << ", " << ag << ", " << ab << " vs "
+                      << ba << ", " << br << ", " << bg << ", " << bb;
     return assertion_failure;
   }
   return ::testing::AssertionSuccess();
@@ -395,19 +424,23 @@ void DumpImage(const ArgbBuffer& image, const std::string& file_path) {
 
 //------------------------------------------------------------------------------
 
+namespace {
+
 // Uniformly draws a random BlockSize whose width/height fit in bw/bh (in
 // kMinBlockSize units).
-static WP2::BlockSize UniformBlockSizeDrawInBounds(
-    uint32_t bw, uint32_t bh, UniformIntDistribution* const gen) {
+BlockSize UniformBlockSizeDrawInBounds(uint32_t bw, uint32_t bh,
+                                       UniformIntDistribution* const gen) {
   BlockSize dims[BLK_LAST + 1];
   uint32_t size = 0;
   for (uint32_t dim = 0; (BlockSize)dim != BLK_LAST; ++dim) {
-    if (WP2::BlockWidth[dim] <= bw && WP2::BlockHeight[dim] <= bh) {
+    if (BlockWidth[dim] <= bw && BlockHeight[dim] <= bh) {
       dims[size++] = (BlockSize)dim;
     }
   }
   return dims[gen->Get(0u, size - 1)];
 }
+
+}  // namespace
 
 //------------------------------------------------------------------------------
 
@@ -415,14 +448,14 @@ void CreatePartition(uint32_t w, uint32_t h, bool snapped,
                      UniformIntDistribution* const gen,
                      VectorNoCtor<Block>* const blocks) {
   const uint32_t bwidth = SizeBlocks(w), bheight = SizeBlocks(h);
-  WP2::FrontMgrLexico m;
-  WP2_ASSERT_STATUS(m.Init(ALL_RECTS, snapped, w, h));
-  while (!m.Done()) {
+  FrontMgrLexico manager;
+  WP2_ASSERT_STATUS(manager.Init(ALL_RECTS, snapped, w, h));
+  while (!manager.Done()) {
     // Find the beginning of the next block in lexicographic order.
     uint32_t bx = 0;
     uint32_t by = bheight;
     for (uint32_t x = 0; x < bwidth; ++x) {
-      const uint32_t y = m.GetOccupancy(x);
+      const uint32_t y = manager.GetOccupancy(x);
       if (y < by) {
         bx = x;
         by = y;
@@ -431,7 +464,7 @@ void CreatePartition(uint32_t w, uint32_t h, bool snapped,
     // Find max width/height.
     uint32_t max_bw = 1, max_bh = std::min(kMaxBlockSize, bheight - by);
     while (bx + max_bw < bwidth && max_bw < kMaxBlockSize &&
-           m.GetOccupancy(bx + max_bw) == m.GetOccupancy(bx)) {
+           manager.GetOccupancy(bx + max_bw) == manager.GetOccupancy(bx)) {
       ++max_bw;
     }
 
@@ -447,9 +480,9 @@ void CreatePartition(uint32_t w, uint32_t h, bool snapped,
     const Block block(bx, by, (BlockSize)dim);
 
     if (!blocks->push_back(block)) assert(false);
-    m.Use(block);
-    if (!m.IsUsed(bx, by)) assert(false);
-    if (m.IsUsed(bx, by + bh)) assert(false);
+    manager.Use(block);
+    if (!manager.IsUsed(bx, by)) assert(false);
+    if (manager.IsUsed(bx, by + bh)) assert(false);
   }
 }
 

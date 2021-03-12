@@ -165,8 +165,10 @@ uint32_t EmitRows(const int16_t* row_in, uint32_t mb_w, uint32_t mb_h,
       row_out[i] = alpha;
       if (alpha > 0) {
         for (int j = 1; j <= 3; ++j) {
-          row_out[i + j] =
-              premultiply ? WP2::DivBy255((T)row_in[j] * alpha) : (T)row_in[j];
+          row_out[i + j] = premultiply
+                               ? static_cast<T>(WP2::DivBy255(
+                                     static_cast<uint32_t>(row_in[j]) * alpha))
+                               : static_cast<T>(row_in[j]);
         }
       } else {
         // To optimize encoding, the encoder can store arbitrary rgb values when

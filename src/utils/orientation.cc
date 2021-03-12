@@ -24,6 +24,7 @@
 
 #include "src/dsp/dsp.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -220,9 +221,9 @@ WP2Status OrientateSubBuffer(Orientation orientation, const ArgbBuffer& src,
 
   const uint32_t src_pixel_depth = WP2FormatBpp(src.format());
   const uint32_t dst_pixel_depth = WP2FormatBpp(dst->format());
-  const uint8_t* src_row =
-      src.GetRow8(rect_in_src.y) + rect_in_src.x * src_pixel_depth;
-  uint8_t* dst_line = dst->GetRow8(dst_y) + dst_x * dst_pixel_depth;
+  const uint8_t* src_row = (const uint8_t*)src.GetRow(rect_in_src.y) +
+                           rect_in_src.x * src_pixel_depth;
+  uint8_t* dst_line = (uint8_t*)dst->GetRow(dst_y) + dst_x * dst_pixel_depth;
 
   int32_t dst_next_line;
   int32_t dst_next_pixel;

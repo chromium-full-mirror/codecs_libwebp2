@@ -104,8 +104,6 @@ TEST(FormatTest, ConvertSimple) {
 
     for (WP2SampleFormat format = WP2_Argb_32; format < WP2_FORMAT_NUM;
          format = (WP2SampleFormat)(format + 1)) {
-      // TODO(yguyon): Include WP2_Argb_38 when ready
-      if (WP2Formatbpc(format) != WP2Formatbpc(WP2_Argb_32)) continue;
       ArgbBuffer converted(format);
       ASSERT_WP2_OK(converted.ConvertFrom(original));
 
@@ -113,7 +111,12 @@ TEST(FormatTest, ConvertSimple) {
       ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(original, converted,
                                                       false, &reconverted));
 
-      ASSERT_TRUE(testing::Compare(original, reconverted, "1x1"))
+      const float expected_distortion =
+          WP2Formatbpc(converted.format()) < WP2Formatbpc(reconverted.format())
+              ? 90.f
+              : 99.f;
+      ASSERT_TRUE(
+          testing::Compare(original, reconverted, "1x1", expected_distortion))
           << "format: " << orig_format << " to: " << format;
     }
   }
@@ -130,8 +133,6 @@ TEST(FormatTest, ConvertImage) {
 
     for (WP2SampleFormat format = WP2_Argb_32; format < WP2_FORMAT_NUM;
          format = (WP2SampleFormat)(format + 1)) {
-      // TODO(yguyon): Include WP2_Argb_38 when ready
-      if (WP2Formatbpc(format) != WP2Formatbpc(WP2_Argb_32)) continue;
       ArgbBuffer converted(format);
       ASSERT_WP2_OK(converted.ConvertFrom(original));
 
@@ -139,7 +140,12 @@ TEST(FormatTest, ConvertImage) {
       ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(original, converted,
                                                       false, &reconverted));
 
-      ASSERT_TRUE(testing::Compare(original, reconverted, file_name))
+      const float expected_distortion = (WP2Formatbpc(converted.format()) !=
+                                         WP2Formatbpc(reconverted.format()))
+                                            ? 60.f
+                                            : 99.f;
+      ASSERT_TRUE(testing::Compare(original, reconverted, file_name,
+                                   expected_distortion))
           << "format: " << orig_format << " to: " << format;
     }
   }
@@ -156,7 +162,9 @@ class FormatTest : public ::testing::TestWithParam<Param> {};
 TEST_P(FormatTest, EncodeDecodeImage) {
   const char* src_file_name = std::get<0>(GetParam()).front();
   const WP2SampleFormat output_format = std::get<1>(GetParam());
-  const float quality = std::get<2>(GetParam());
+  // TODO(yguyon): Handle WP2_Argb_38 output for the lossy pipeline
+  const float quality =
+      (output_format == WP2_Argb_38) ? 100.f : std::get<2>(GetParam());
 
   ArgbBuffer src;
   MemoryWriter data;
@@ -244,20 +252,22 @@ TEST_P(FormatTest, EncodeDecodePreview) {
 }
 
 //------------------------------------------------------------------------------
-// Input images are expected to be of equal sizes inside a Param.
+// Input images (frames) are expected to be of equal size inside the same Param.
 
 INSTANTIATE_TEST_SUITE_P(
     FormatTestInstantiation, FormatTest,
     ::testing::Values(
         Param({"source1_64x48.png"}, WP2_ARGB_32, /*quality=*/100.0f),
-        Param({"source1_64x48.png"}, WP2_rgbA_32, /*quality=*/40.0f)));
+        Param({"source1_64x48.png"}, WP2_rgbA_32, /*quality=*/40.0f)
+        // TODO(yguyon): Include WP2_Argb_38 when ready
+        ));
 
+// Test all lossy/lossless bypass paths for each output format.
 INSTANTIATE_TEST_SUITE_P(
-    ExhaustiveFormatTestInstantiation, FormatTest,
+    BypassFormatTestInstantiation, FormatTest,
     ::testing::Combine(::testing::Values(std::vector<const char*>{
                            "source1_1x1.png"}),
-                       // TODO(yguyon): Include WP2_Argb_38 when ready
-                       ::testing::Range(WP2_Argb_32, WP2_Argb_38),
+                       ::testing::Range(WP2_Argb_32, WP2_FORMAT_NUM),
                        /*quality=*/::testing::Values(10.f, 100.f)));
 
 // This one takes a while to run so it is disabled.

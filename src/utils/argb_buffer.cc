@@ -238,18 +238,13 @@ WP2Status ArgbBuffer::CopyFrom(const ArgbBuffer& src) {
   WP2_CHECK_STATUS(Resize(src.width_, src.height_));
   const size_t dst_stride = src.width_ * WP2FormatBpp(format_);
   for (uint32_t y = 0; y < height_; ++y) {
-    void* const dst_ptr = GetRow(y);
-    const void* const src_ptr = src.GetRow(y);
-    std::memcpy(dst_ptr, src_ptr, dst_stride);
+    std::memcpy(GetRow(y), src.GetRow(y), dst_stride);
   }
   return WP2_STATUS_OK;
 }
 
 WP2Status ArgbBuffer::ConvertFrom(const ArgbBuffer& src) {
   if (format_ == src.format()) return CopyFrom(src);
-  WP2_CHECK_OK(src.format() == WP2_Argb_32 || src.format() == WP2_ARGB_32 ||
-                   format_ == WP2_Argb_32 || format_ == WP2_ARGB_32,
-               WP2_STATUS_INVALID_COLORSPACE);
   WP2ArgbConverterInit();
   const WP2ArgbConverterF convert =
       WP2ConversionFunction(src.format(), format_);
@@ -257,9 +252,7 @@ WP2Status ArgbBuffer::ConvertFrom(const ArgbBuffer& src) {
 
   WP2_CHECK_STATUS(Resize(src.width_, src.height_));
   for (uint32_t y = 0; y < height_; ++y) {
-    uint8_t* dst_ptr = (uint8_t*)GetRow(y);
-    const uint8_t* src_ptr = (const uint8_t*)src.GetRow(y);
-    convert(src_ptr, width_, dst_ptr);
+    convert(src.GetRow(y), width_, GetRow(y));
   }
   return WP2_STATUS_OK;
 }
@@ -267,9 +260,6 @@ WP2Status ArgbBuffer::ConvertFrom(const ArgbBuffer& src) {
 WP2Status ArgbBuffer::Import(WP2SampleFormat input_format,
                              uint32_t new_width, uint32_t new_height,
                              const uint8_t* samples, uint32_t samples_stride) {
-  WP2_CHECK_OK(input_format == WP2_Argb_32 || input_format == WP2_ARGB_32 ||
-                   format_ == WP2_Argb_32 || format_ == WP2_ARGB_32,
-               WP2_STATUS_INVALID_COLORSPACE);
   WP2ArgbConverterInit();
   const WP2ArgbConverterF convert =
       WP2ConversionFunction(input_format, format_);
@@ -277,7 +267,7 @@ WP2Status ArgbBuffer::Import(WP2SampleFormat input_format,
 
   WP2_CHECK_STATUS(Resize(new_width, new_height));
   for (uint32_t y = 0; y < new_height; ++y) {
-    convert(samples, new_width, (uint8_t*)GetRow(y));
+    convert(samples, new_width, GetRow(y));
     samples += samples_stride;
   }
   return WP2_STATUS_OK;
@@ -286,16 +276,13 @@ WP2Status ArgbBuffer::Import(WP2SampleFormat input_format,
 WP2Status ArgbBuffer::ImportRow(WP2SampleFormat input_format,
                                 uint32_t row_index, const uint8_t* samples) {
   WP2_CHECK_OK(samples != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(input_format == WP2_Argb_32 || input_format == WP2_ARGB_32 ||
-                   format_ == WP2_Argb_32 || format_ == WP2_ARGB_32,
-               WP2_STATUS_INVALID_COLORSPACE);
   WP2_CHECK_OK(row_index <= height_, WP2_STATUS_INVALID_PARAMETER);
   WP2ArgbConverterInit();
   const WP2ArgbConverterF convert =
       WP2ConversionFunction(input_format, format_);
   WP2_CHECK_OK(convert != nullptr, WP2_STATUS_INVALID_COLORSPACE);
 
-  convert(samples, width_, (uint8_t*)GetRow(row_index));
+  convert(samples, width_, GetRow(row_index));
   return WP2_STATUS_OK;
 }
 

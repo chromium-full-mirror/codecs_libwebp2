@@ -119,6 +119,9 @@ class TileDecoder : public WorkerBase {
  protected:
   // Decodes pixels as row-ordered raw samples.
   WP2Status BypassTileDec();
+  WP2Status BypassTileDecRgb8b();
+  WP2Status BypassTileDecRgb10b();
+  WP2Status BypassTileDecYuv();
 
  public:
   const BitstreamFeatures* features_ = nullptr;

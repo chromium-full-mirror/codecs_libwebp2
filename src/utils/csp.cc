@@ -379,6 +379,7 @@ WP2Status CSPTransform::CustomToArgb(uint32_t width, uint32_t height,
                                      const int16_t* a_buffer, uint32_t a_step,
                                      const CSPMtx& ccsp_to_rgb,
                                      ArgbBuffer* const argb) {
+  WP2_CHECK_OK(argb->format() == WP2_Argb_32, WP2_STATUS_INVALID_COLORSPACE);
   WP2_CHECK_OK(argb->width() == width && argb->height() == height,
                WP2_STATUS_BAD_DIMENSION);
   int16_t m[9];
