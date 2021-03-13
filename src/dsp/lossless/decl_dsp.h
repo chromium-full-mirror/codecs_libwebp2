@@ -29,7 +29,8 @@ namespace WP2L {
 
 typedef void (*PredictorNonClampedAddFunc)(const int16_t* in, bool has_alpha,
                                            const int16_t* upper,
-                                           uint32_t num_pixels, int16_t* out);
+                                           uint32_t num_pixels, int16_t* out,
+                                           int16_t* predicted);
 extern PredictorNonClampedAddFunc
     PredictorsNonClampedAdd[kNumPredictorsNonClamped];
 extern PredictorNonClampedAddFunc
@@ -39,7 +40,7 @@ typedef void (*PredictorClampedAddFunc)(const int16_t* in, bool has_alpha,
                                         uint32_t num_pixels,
                                         const int16_t min_value[4],
                                         const int16_t max_values[4],
-                                        int16_t* out);
+                                        int16_t* out, int16_t* predicted);
 extern PredictorClampedAddFunc PredictorsClampedAdd[kNumPredictorsClamped];
 extern PredictorClampedAddFunc PredictorsClampedAdd_C[kNumPredictorsClamped];
 
@@ -50,7 +51,8 @@ extern SimpleColorSpaceInverseFunc YCoCgRToRGB;
 
 typedef void (*TransformColorInverseFunc)(const Multipliers& m,
                                           const int16_t* src,
-                                          uint32_t num_pixels, int16_t* dst);
+                                          uint32_t num_pixels, int16_t* dst,
+                                          int16_t* predicted);
 extern TransformColorInverseFunc TransformColorInverse;
 
 class Transform;  // Defined in dec/lossless/losslessi_dec.h.
@@ -59,10 +61,12 @@ class Transform;  // Defined in dec/lossless/losslessi_dec.h.
 // rows. Transform will be applied to rows [row_start, row_end[.
 // The *in and *out pointers refer to source and destination data respectively
 // corresponding to the intermediate row (row_start).
+// If 'predicted' is not null, it will contain the predicted samples on return.
 void InverseTransform(const Transform* const transform, uint32_t row_start,
                       uint32_t row_end, const int16_t min_values[4],
                       const int16_t max_values[4], const int16_t* const in,
-                      bool has_alpha, int16_t* const out);
+                      bool has_alpha, int16_t* const out,
+                      int16_t* const predicted = nullptr);
 
 // Fills 'dst' with the samples from the 'color_map' at the indices specified by
 // the green channel of the pixels in 'src'.

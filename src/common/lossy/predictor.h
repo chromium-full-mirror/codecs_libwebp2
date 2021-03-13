@@ -121,8 +121,13 @@ class Predictor : public WP2Allocable {
   virtual std::string GetFakePredStr() const = 0;
   virtual std::string GetPredStr(const CodedBlockBase& cb,
                                  Channel channel) const = 0;
-  virtual void Draw(const WP2::Rectangle& rect,
-                    ArgbBuffer* const debug_output) const = 0;
+  // This function is only used for debugging and returns info about the
+  // predictor if it is an angle predictor.
+  virtual void GetAngleInfo(bool* const is_angle_predictor,
+                            float* const angle) const {
+    *is_angle_predictor = false;
+    *angle = std::numeric_limits<float>::max();
+  }
 
   static constexpr uint32_t kInvalidMode = std::numeric_limits<uint32_t>::max();
 
@@ -303,8 +308,6 @@ class CflPredictor : public Predictor {
   std::string GetFakePredStr() const override;
   std::string GetPredStr(const CodedBlockBase& cb,
                          Channel channel) const override;
-  void Draw(const WP2::Rectangle& rect,
-            ArgbBuffer* const debug_output) const override {}
 
   // Does a simple linear regression based on the context for chroma and luma,
   // assuming chroma = a * luma + b. Returns values in kCfLBits precision.

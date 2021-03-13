@@ -122,8 +122,16 @@ class Decoder {
   // nothing is done).
   // 'index' is the transform index up to which the transforms are applied.
   WP2Status RegisterTransformedRowForVDebug(
-      uint32_t index, uint32_t num_rows, uint32_t num_bits,
+      int index, uint32_t num_rows, uint32_t num_bits,
       const int16_t* const rows, WP2::DecoderInfo* const decoder_info);
+  // Display the predicted pixels for the predictor and cross-color transforms
+  WP2Status RegisterPredictedRowForVDebug(uint32_t index, uint32_t num_rows,
+                                          uint32_t num_bits,
+                                          const int16_t* const rows,
+                                          WP2::DecoderInfo* const decoder_info);
+  // Display the predictor and cross-color transforms.
+  WP2Status RegisterTransformForVDebug(const Transform& transform,
+                                       WP2::DecoderInfo* const decoder_info);
 
   // Visual debug for header info.
   WP2Status HeaderVDebug();
@@ -154,6 +162,9 @@ class Decoder {
   MoveToFrontCache mtf_;
   uint32_t num_colors_ = 0;
   WP2::Planef bits_per_pixel_;
+#ifndef WP2_REDUCE_BINARY_SIZE
+  WP2::ArgbBuffer predicted_;
+#endif
   WP2::DecoderConfig config_;
   const WP2::GlobalParams* gparams_ = nullptr;
   // Whether pixels mut be premultiplied with the alpha value before emitting.

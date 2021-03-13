@@ -39,22 +39,30 @@ WP2_UBSAN_IGNORE_UNSIGNED_OVERFLOW inline void AddPixels(
   for (uint32_t i = 1; i < 4; ++i) out[i] = a[i] + b[i];
 }
 
-void PredictorNonClampedAdd0_C(
-    const int16_t* in, bool has_alpha, const int16_t*, uint32_t num_pixels,
-    int16_t* out) {
+void PredictorNonClampedAdd0_C(const int16_t* in, bool has_alpha,
+                               const int16_t*, uint32_t num_pixels,
+                               int16_t* out, int16_t* predicted) {
   int16_t pred[4];
   WP2L::PredictorsNonClamped_C[0](/*left=*/nullptr, /*top=*/nullptr, pred);
   for (const int16_t* in_end = in + 4 * num_pixels; in < in_end;
        in += 4, out += 4) {
     AddPixels(in, has_alpha, pred, out);
+    if (predicted != nullptr) {
+      std::copy(pred, pred + 4, predicted);
+      predicted += 4;
+    }
   }
 }
-void PredictorNonClampedAdd1_C(
-    const int16_t* in, bool has_alpha, const int16_t*, uint32_t num_pixels,
-    int16_t* out) {
+void PredictorNonClampedAdd1_C(const int16_t* in, bool has_alpha,
+                               const int16_t*, uint32_t num_pixels,
+                               int16_t* out, int16_t* predicted) {
   for (const int16_t* in_end = in + 4 * num_pixels; in < in_end;
        in += 4, out += 4) {
     AddPixels(in, has_alpha, &out[-4], out);
+    if (predicted != nullptr) {
+      std::copy(&out[-4], &out[-4] + 4, predicted);
+      predicted += 4;
+    }
   }
 }
 
@@ -63,18 +71,22 @@ void PredictorNonClampedAdd1_C(
 
 // The predictor is added to the output pixel (which
 // is therefore considered as a residual) to get the final prediction.
-#define GENERATE_PREDICTOR_NON_CLAMPED_ADD(I)                              \
-void PredictorNonClampedAdd##I##_C(                                        \
-    const int16_t* in, bool has_alpha, const int16_t* upper,               \
-    uint32_t num_pixels, int16_t* out) {                                   \
-  int16_t pred[4];                                                         \
-  assert(upper != nullptr);                                                \
-  for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
-       out += 4, in += 4, upper += 4) {                                    \
-    PredictorsNonClamped_C[I](out - 4, upper, pred);                       \
-    AddPixels(in, has_alpha, pred, out);                                   \
-  }                                                                        \
-}
+#define GENERATE_PREDICTOR_NON_CLAMPED_ADD(I)                                \
+  void PredictorNonClampedAdd##I##_C(                                        \
+      const int16_t* in, bool has_alpha, const int16_t* upper,               \
+      uint32_t num_pixels, int16_t* out, int16_t* predicted) {               \
+    int16_t pred[4];                                                         \
+    assert(upper != nullptr);                                                \
+    for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
+         out += 4, in += 4, upper += 4) {                                    \
+      PredictorsNonClamped_C[I](out - 4, upper, pred);                       \
+      AddPixels(in, has_alpha, pred, out);                                   \
+      if (predicted != nullptr) {                                            \
+        std::copy(pred, pred + 4, predicted);                                \
+        predicted += 4;                                                      \
+      }                                                                      \
+    }                                                                        \
+  }
 
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(2)
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(3)
@@ -88,19 +100,23 @@ GENERATE_PREDICTOR_NON_CLAMPED_ADD(10)
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(11)
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(12)
 
-#define GENERATE_PREDICTOR_CLAMPED_ADD(I)                                  \
-void PredictorClampedAdd##I##_C(                                           \
-    const int16_t* in, bool has_alpha, const int16_t* upper,               \
-    uint32_t num_pixels, const int16_t min_values[4],                      \
-    const int16_t max_values[4], int16_t* out) {                           \
-  int16_t pred[4];                                                         \
-  assert(upper != nullptr);                                                \
-  for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
-       out += 4, in += 4, upper += 4) {                                    \
-    PredictorsClamped_C[I](out - 4, upper, min_values, max_values, pred);  \
-    AddPixels(in, has_alpha, pred, out);                                   \
-  }                                                                        \
-}
+#define GENERATE_PREDICTOR_CLAMPED_ADD(I)                                    \
+  void PredictorClampedAdd##I##_C(                                           \
+      const int16_t* in, bool has_alpha, const int16_t* upper,               \
+      uint32_t num_pixels, const int16_t min_values[4],                      \
+      const int16_t max_values[4], int16_t* out, int16_t* predicted) {       \
+    int16_t pred[4];                                                         \
+    assert(upper != nullptr);                                                \
+    for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
+         out += 4, in += 4, upper += 4) {                                    \
+      PredictorsClamped_C[I](out - 4, upper, min_values, max_values, pred);  \
+      AddPixels(in, has_alpha, pred, out);                                   \
+      if (predicted != nullptr) {                                            \
+        std::copy(pred, pred + 4, predicted);                                \
+        predicted += 4;                                                      \
+      }                                                                      \
+    }                                                                        \
+  }
 
 GENERATE_PREDICTOR_CLAMPED_ADD(0)
 GENERATE_PREDICTOR_CLAMPED_ADD(1)
@@ -109,62 +125,63 @@ GENERATE_PREDICTOR_CLAMPED_ADD(1)
 // Inverse transforms.
 
 // Inverse prediction.
-void PredictorInverseTransform_C(const Transform* const transform,
-                                 int y_start, int y_end,
-                                 const int16_t min_values[4],
-                                 const int16_t max_values[4],
-                                 const int16_t* in, bool has_alpha,
-                                 int16_t* out) {
+void PredictorInverseTransform_C(const Transform* const transform, int y_start,
+                                 int y_end, const int16_t min_values[4],
+                                 const int16_t max_values[4], const int16_t* in,
+                                 bool has_alpha, int16_t* out,
+                                 int16_t* predicted) {
   const int width = transform->width_pic_;
   if (y_start == 0) {  // First Row follows the L (mode=1) mode.
-    PredictorNonClampedAdd0_C(in, has_alpha, nullptr, 1, out);
-    PredictorNonClampedAdd1_C(in + 4, has_alpha, nullptr, width - 1, out + 4);
+    PredictorNonClampedAdd0_C(in, has_alpha, nullptr, 1, out, predicted);
+    PredictorNonClampedAdd1_C(in + 4, has_alpha, nullptr, width - 1, out + 4,
+                              predicted != nullptr ? predicted + 4 : nullptr);
     in += 4 * width;
     out += 4 * width;
+    if (predicted != nullptr) predicted += 4 * width;
     ++y_start;
   }
 
-  {
-    int y = y_start;
-    const int tile_width = 1 << transform->bits_;
-    const int tile_mask = tile_width - 1;
-    const int16_t* pred_mode_base =
-        transform->data_.data() +
-        4 * (y >> transform->bits_) * transform->width_;
+  int y = y_start;
+  const int tile_width = 1 << transform->bits_;
+  const int tile_mask = tile_width - 1;
+  const int16_t* pred_mode_base =
+      transform->data_.data() + 4 * (y >> transform->bits_) * transform->width_;
 
-    while (y < y_end) {
-      const int16_t* pred_mode_src = pred_mode_base;
-      int x = 1;
-      // First pixel follows the T (mode=2) mode.
-      PredictorNonClampedAdd2_C(in, has_alpha, out - 4 * width, 1, out);
-      // .. the rest:
-      while (x < width) {
-        int x_end = (x & ~tile_mask) + tile_width;
-        if (x_end > width) x_end = width;
-        switch (kPredictorType[pred_mode_src[2]]) {
-          case PredictorType::NonClamped:
-            PredictorsNonClampedAdd[kPredictorIndex[pred_mode_src[2]]](
-                in + 4 * x, has_alpha, out + 4 * x - 4 * width, x_end - x,
-                out + 4 * x);
-            break;
-          case PredictorType::Clamped:
-            PredictorsClampedAdd[kPredictorIndex[pred_mode_src[2]]](
-                in + 4 * x, has_alpha, out + 4 * x - 4 * width, x_end - x,
-                min_values, max_values, out + 4 * x);
-            break;
-          default:
-            assert(false);
-        }
-        x = x_end;
-        pred_mode_src += 4;
+  while (y < y_end) {
+    const int16_t* pred_mode_src = pred_mode_base;
+    int x = 1;
+    // First pixel follows the T (mode=2) mode.
+    PredictorNonClampedAdd2_C(in, has_alpha, out - 4 * width, 1, out,
+                              predicted);
+    // .. the rest:
+    while (x < width) {
+      int x_end = (x & ~tile_mask) + tile_width;
+      if (x_end > width) x_end = width;
+      switch (kPredictorType[pred_mode_src[2]]) {
+        case PredictorType::NonClamped:
+          PredictorsNonClampedAdd[kPredictorIndex[pred_mode_src[2]]](
+              in + 4 * x, has_alpha, out + 4 * x - 4 * width, x_end - x,
+              out + 4 * x, predicted != nullptr ? predicted + 4 * x : nullptr);
+          break;
+        case PredictorType::Clamped:
+          PredictorsClampedAdd[kPredictorIndex[pred_mode_src[2]]](
+              in + 4 * x, has_alpha, out + 4 * x - 4 * width, x_end - x,
+              min_values, max_values, out + 4 * x,
+              predicted != nullptr ? predicted + 4 * x : nullptr);
+          break;
+        default:
+          assert(false);
       }
-      in += 4 * width;
-      out += 4 * width;
-      ++y;
-      // Use the same mask, since tiles are squares.
-      if ((y & tile_mask) == 0) {
-        pred_mode_base += 4 * transform->width_;
-      }
+      x = x_end;
+      pred_mode_src += 4;
+    }
+    in += 4 * width;
+    out += 4 * width;
+    if (predicted != nullptr) predicted += 4 * width;
+    ++y;
+    // Use the same mask, since tiles are squares.
+    if ((y & tile_mask) == 0) {
+      pred_mode_base += 4 * transform->width_;
     }
   }
 }
@@ -207,29 +224,39 @@ inline void ColorCodeToMultipliers(const int16_t* const color_code,
   m->red_to_blue = color_code[1];
 }
 
-void TransformColorInverse_C(const Multipliers& m,
-                             const int16_t* src, uint32_t num_pixels,
-                             int16_t* dst) {
+void TransformColorInverse_C(const Multipliers& m, const int16_t* src,
+                             uint32_t num_pixels, int16_t* dst,
+                             int16_t* predicted) {
   for (const int16_t* src_end = src + 4 * num_pixels; src < src_end;
        src += 4, dst += 4) {
     const int16_t red = src[1];
     const int16_t green = src[2];
     int new_red = red;
     int new_blue = src[3];
+    if (predicted != nullptr) {
+      predicted[0] = src[0];
+      predicted[1] = ColorTransformDelta(m.green_to_red * green);
+      predicted[2] = src[2];
+    }
     new_red += ColorTransformDelta(m.green_to_red * green);
+    if (predicted != nullptr) {
+      predicted[3] = ColorTransformDelta(m.green_to_blue * green +
+                                         m.red_to_blue * new_red);
+    }
     new_blue +=
         ColorTransformDelta(m.green_to_blue * green + m.red_to_blue * new_red);
     dst[0] = src[0];
     dst[1] = new_red;
     dst[2] = src[2];
     dst[3] = new_blue;
+    if (predicted != nullptr) predicted += 4;
   }
 }
 
 // Color space inverse transform.
-void ColorSpaceInverseTransform_C(const Transform* const transform,
-                                  int y_start, int y_end,
-                                  const int16_t* src, int16_t* dst) {
+void ColorSpaceInverseTransform_C(const Transform* const transform, int y_start,
+                                  int y_end, const int16_t* src, int16_t* dst,
+                                  int16_t* predicted) {
   const uint32_t width = transform->width_pic_;
   const int tile_width = 1 << transform->bits_;
   const int mask = tile_width - 1;
@@ -247,16 +274,18 @@ void ColorSpaceInverseTransform_C(const Transform* const transform,
     const int16_t* const src_end = src + 4 * width;
     while (src < src_safe_end) {
       ColorCodeToMultipliers(pred, &m);
-      TransformColorInverse(m, src, tile_width, dst);
+      TransformColorInverse(m, src, tile_width, dst, predicted);
       src += 4 * tile_width;
       dst += 4 * tile_width;
+      if (predicted != nullptr) predicted += 4 * tile_width;
       pred += 4;
     }
     if (src < src_end) {  // Left-overs using C-version.
       ColorCodeToMultipliers(pred, &m);
-      TransformColorInverse(m, src, remaining_width, dst);
+      TransformColorInverse(m, src, remaining_width, dst, predicted);
       src += 4 * remaining_width;
       dst += 4 * remaining_width;
+      if (predicted != nullptr) predicted += 4 * remaining_width;
       pred += 4;
     }
     ++y;
@@ -288,9 +317,9 @@ void ColorIndexInverseTransform_C(const Transform* const transform,
 
 #if defined(WP2_USE_SSE)
 
-void TransformColorInverse_SSE(const WP2L::Multipliers& m,
-                               const int16_t* src, uint32_t num_pixels,
-                               int16_t* dst) {
+void TransformColorInverse_SSE(const WP2L::Multipliers& m, const int16_t* src,
+                               uint32_t num_pixels, int16_t* dst,
+                               int16_t* predicted) {
   const int32_t green_to_red = m.green_to_red;
   const int32_t green_to_blue = m.green_to_blue;
   const int32_t red_to_blue = m.red_to_blue;
@@ -307,6 +336,20 @@ void TransformColorInverse_SSE(const WP2L::Multipliers& m,
   mult2 = _mm_unpacklo_epi64(mult2, mult2);
 
   for (; src + 8 <= src_end; src += 8, dst += 8) {
+    if (predicted != nullptr) {
+      for (int c : {0, 4}) {
+        predicted[c + 0] = src[c + 0];
+        const int16_t red = src[c + 1];
+        const int16_t green = src[c + 2];
+        predicted[c + 1] = ColorTransformDelta(m.green_to_red * green);
+        predicted[c + 2] = green;
+        const int16_t new_red =
+            red + ColorTransformDelta(m.green_to_red * green);
+        predicted[c + 3] =
+            ColorTransformDelta(green_to_blue * green + red_to_blue * new_red);
+      }
+      predicted += 8;
+    }
     const __m128i A = _mm_loadu_si128((const __m128i*)src);
     const __m128i B = _mm_shuffle_epi8(A, perm);  // ARGB -> RGBG
     const __m128i C = _mm_madd_epi16(B, mult1);
@@ -322,7 +365,14 @@ void TransformColorInverse_SSE(const WP2L::Multipliers& m,
     const int16_t green = src[2];
     int32_t new_red = red;
     int32_t new_blue = src[3];
+    if (predicted != nullptr) {
+      predicted[1] = ColorTransformDelta(m.green_to_red * green);
+    }
     new_red += ColorTransformDelta(green_to_red * green);
+    if (predicted != nullptr) {
+      predicted[3] =
+          ColorTransformDelta(green_to_blue * green + red_to_blue * new_red);
+    }
     new_blue +=
         ColorTransformDelta(green_to_blue * green + red_to_blue * new_red);
     dst[0] = src[0];
@@ -345,7 +395,8 @@ WP2_TSAN_IGNORE_FUNCTION void DecLDspInitSSE() {
 void InverseTransform(const Transform* const transform, uint32_t row_start,
                       uint32_t row_end, const int16_t min_values[4],
                       const int16_t max_values[4], const int16_t* const in,
-                      bool has_alpha, int16_t* const out) {
+                      bool has_alpha, int16_t* const out,
+                      int16_t* const predicted) {
   const uint32_t width = transform->width_pic_;
   assert(row_start < row_end);
   assert(row_end <= transform->height_pic_);
@@ -359,7 +410,7 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
       break;
     case TransformType::kPredictor: {
       PredictorInverseTransform_C(transform, row_start, row_end, min_values,
-                                  max_values, in, has_alpha, out);
+                                  max_values, in, has_alpha, out, predicted);
       if (row_end != transform->height_pic_) {
         // The last predicted row in this iteration will be the top-pred row
         // for the first row in next iteration.
@@ -369,7 +420,8 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
       break;
     }
     case TransformType::kCrossColor:
-      ColorSpaceInverseTransform_C(transform, row_start, row_end, in, out);
+      ColorSpaceInverseTransform_C(transform, row_start, row_end, in, out,
+                                   predicted);
       break;
     case TransformType::kGroup4:
     case TransformType::kColorIndexing:

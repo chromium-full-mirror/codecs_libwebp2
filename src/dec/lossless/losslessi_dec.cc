@@ -214,8 +214,8 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
 
   int16_t* const rows_out = (int16_t*)argb_cache_;
   // Inverse transforms.
-  while (num_transforms-- > 0) {
-    const Transform& transform = transforms_[num_transforms];
+  for (int ind = num_transforms - 1; ind >= 0; --ind) {
+    const Transform& transform = transforms_[ind];
     if (transform.type_ == TransformType::kColorIndexing ||
         transform.type_ == TransformType::kGroup4) {
       // Check that all color map indices are valid here rather than in dsp.
@@ -231,18 +231,31 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
     if (transform.type_ == TransformType::kPredictor) {
       // Define the minimum/maximum values before applying the predictors.
       TransformType transforms_type[(uint32_t)TransformType::kNum];
-      for (uint32_t i = 0; i < num_transforms; ++i) {
-        transforms_type[i] = transforms_[i].type_;
-      }
+      for (int i = 0; i < ind; ++i) transforms_type[i] = transforms_[i].type_;
       GetARGBRanges(transforms_type, hdr_.symbols_info_.SampleFormat(),
-                    num_colors_, minima_range, maxima_range, num_transforms);
+                    num_colors_, minima_range, maxima_range, ind);
     }
+    int16_t* predicted = nullptr;
+#ifndef WP2_REDUCE_BINARY_SIZE
+    if ((transform.type_ == TransformType::kPredictor &&
+         VDMatch(config_, "lossless/prediction/raw")) ||
+        (transform.type_ == TransformType::kCrossColor &&
+         VDMatch(config_, "lossless/cross-color/raw"))) {
+      predicted = (int16_t*)predicted_.GetRow16(start_row);
+    }
+#endif
     WP2_CHECK_REDUCED_STATUS(RegisterTransformedRowForVDebug(
-        num_transforms, num_rows, /*num_bits=*/8, rows, config_.info));
+        ind, num_rows, /*num_bits=*/8, rows, config_.info));
     InverseTransform(&transform, start_row, end_row, minima_range, maxima_range,
-                     rows, gparams_->has_alpha_, rows_out);
+                     rows, gparams_->has_alpha_, rows_out, predicted);
+    WP2_CHECK_REDUCED_STATUS(RegisterPredictedRowForVDebug(
+        ind, num_rows, /*num_bits=*/8, predicted, config_.info));
     rows = rows_out;
   }
+  // In case the selected transformed image is the first one and the reference
+  // image is the original one.
+  WP2_CHECK_REDUCED_STATUS(RegisterTransformedRowForVDebug(
+      /*index=*/-1, num_rows, /*num_bits=*/8, rows, config_.info));
   return WP2_STATUS_OK;
 }
 
@@ -814,6 +827,10 @@ WP2Status Decoder::AllocateInternalBuffers(uint32_t final_width) {
     WP2_CHECK_STATUS(
         bits_per_pixel_.Resize(tile_->rect.width, tile_->rect.height));
   }
+  if (VDMatch(config_, "lossless")) {
+    WP2_CHECK_STATUS(predicted_.SetFormat(WP2_Argb_38));
+    WP2_CHECK_STATUS(predicted_.Resize(tile_->rect.width, tile_->rect.height));
+  }
 
   return WP2_STATUS_OK;
 }
@@ -850,6 +867,8 @@ WP2Status Decoder::DecodeHeader() {
       dec_->PopDebugPrefix();
       return WP2_STATUS_OK;
     }
+    WP2_CHECK_REDUCED_STATUS(
+        RegisterTransformForVDebug(transforms_[i], config_.info));
   }
   premultiply_ = (gparams_->has_alpha_ ? dec_->ReadBool("premultiply") : false);
 

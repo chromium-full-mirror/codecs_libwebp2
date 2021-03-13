@@ -211,7 +211,12 @@ const VDToken kVisualDebug  // NOLINT - non-trivially destructible global var
         "u",
         "v",
         {"histogram", {"y", "u", "v"}}}},
-      {"lossless", {{"symbols", "clusters", {"transformed", {"regular"}}}}},
+      {"lossless",
+       {{"symbols",
+         "clusters",
+         {"transformed", {"0", "1", "2"}},
+         {"prediction", {"reference", "raw", "modes"}},
+         {"cross-color", {"raw", "transform"}}}}},
       // Requires WP2_BITTRACE to be defined during the compilation.
       {"bits-per-pixel", {{"overall"}, {"coeffs", {"y", "u", "v"}}}},
       {"error-map",
@@ -2230,7 +2235,8 @@ bool Params::IsSegmentVisible() const {
 }
 
 bool Params::IsPredictorVisible() const {
-  return IsDebugViewVisible() && VDMatch(dec_config_, "prediction");
+  return IsDebugViewVisible() && VDMatch(dec_config_, "prediction") &&
+         !VDMatch(dec_config_, "lossless/prediction");
 }
 
 bool Params::IsTransformVisible() const {

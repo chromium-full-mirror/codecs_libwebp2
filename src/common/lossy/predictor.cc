@@ -134,8 +134,6 @@ class ZeroPredictor : public Predictor {
                          Channel channel) const override {
     return "zero predictor";
   }
-  void Draw(const WP2::Rectangle& rect,
-            ArgbBuffer* const debug_output) const override {}
 };
 
 //------------------------------------------------------------------------------
@@ -196,8 +194,6 @@ class LargeDCPredictor : public ContextPredictor {
     name += " context)";
     return name;
   }
-  void Draw(const WP2::Rectangle& rect,
-            ArgbBuffer* const debug_output) const override {}
 
  protected:
   void Predict(const int16_t context[], uint32_t w, uint32_t h,
@@ -221,8 +217,6 @@ class TMPredictor : public ContextPredictor {
       : min_value_(min_value), max_value_(max_value) {}
 
   std::string GetName() const override { return "TM predictor"; }
-  void Draw(const WP2::Rectangle& rect,
-            ArgbBuffer* const debug_output) const override {}
 
  protected:
   void Predict(const int16_t context[], uint32_t w, uint32_t h,
@@ -257,8 +251,6 @@ class SmoothPredictor : public ContextPredictor {
     name += ")";
     return name;
   }
-  void Draw(const WP2::Rectangle& rect,
-            ArgbBuffer* const debug_output) const override {}
 
  protected:
   void Predict(const int16_t context[], uint32_t w, uint32_t h,
@@ -330,8 +322,10 @@ class AnglePredictor : public ContextPredictor {
     return (uint8_t)idx;
   }
 
-  float GetAngleDegrees() const {
-    return 22.5f + 22.5f * ((int)angle_idx_ - 3) / 7.f;
+  void GetAngleInfo(bool* const is_angle_predictor,
+                    float* const angle) const override {
+    *is_angle_predictor = true;
+    *angle = 22.5f + 22.5f * ((int)angle_idx_ - 3) / 7.f;
   }
 
   uint32_t WriteParams(const CodedBlockBase& cb, Channel channel,
@@ -358,27 +352,13 @@ class AnglePredictor : public ContextPredictor {
   }
 
   std::string GetName() const override {
-    const int angle_deg = std::round(GetAngleDegrees());
+    bool is_angle_predictor;
+    float angle;
+    GetAngleInfo(&is_angle_predictor, &angle);
+    assert(is_angle_predictor);
+    const int angle_deg = std::round(angle);
     return "angle predictor (" + std::to_string(angle_deg) +
            " degrees, idx=" + std::to_string((int)angle_idx_) + ")";
-  }
-
-  void Draw(const WP2::Rectangle& rect,
-            ArgbBuffer* const debug_output) const override {
-    const float angle = (M_PI / 180.f) * GetAngleDegrees();
-    const float cos = std::cos(angle);
-    const float sin = std::sin(angle);
-    const uint32_t pixel_depth = WP2FormatBpp(debug_output->format());
-    const uint32_t l =
-        std::sqrt(rect.width * rect.width + rect.height * rect.height) / 2;
-    for (float i = 0; i < l; i += 0.5) {
-      const int y = std::round(rect.y + (rect.height - 1) / 2.f - i * sin);
-      const int x = std::round(rect.x + (rect.width - 1) / 2.f + i * cos);
-      if (!rect.Contains(x, y)) break;
-      const uint8_t color[4] = {255, 255, 0, 0};
-      uint8_t* const dst_pixel = debug_output->GetRow8(y) + x * pixel_depth;
-      std::memcpy(dst_pixel, color, pixel_depth);
-    }
   }
 
  protected:
@@ -419,9 +399,6 @@ class FusePredictor : public ContextPredictor {
     return name;
   }
 
-  void Draw(const WP2::Rectangle& rect,
-            ArgbBuffer* const debug_output) const override {}
-
  protected:
   void Predict(const int16_t context[], uint32_t w, uint32_t h,
                int16_t output[], uint32_t step) const override {
@@ -446,8 +423,6 @@ class GradientPredictor : public ContextPredictor {
       : min_value_(min_value), max_value_(max_value) {}
 
   std::string GetName() const override { return "gradient predictor"; }
-  void Draw(const WP2::Rectangle& rect,
-            ArgbBuffer* const debug_output) const override {}
 
  protected:
   void Predict(const int16_t c[], uint32_t w, uint32_t h, int16_t output[],
@@ -526,10 +501,6 @@ class AlphaPredictor : public Predictor {
                                        /*context_left=*/nullptr, cb.w_pix(),
                                        cb.h_pix(), output, cb.w_pix());
     return str;
-  }
-  void Draw(const WP2::Rectangle& rect,
-            ArgbBuffer* const debug_output) const override {
-    pred_->Draw(rect, debug_output);
   }
 
   uint32_t mode() const override { return pred_->mode(); }
