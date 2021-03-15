@@ -173,7 +173,7 @@ ifneq ($(AOM_PATH),)
   EXTRA_INC= -I${AOM_PATH} -I${AOM_PATH}/build -DWP2_HAVE_AOM_DBG -DWP2_HAVE_AOM
   CFLAGS += ${EXTRA_INC}
   CXXFLAGS += ${EXTRA_INC}
-  EXTRA_LIBS += -L${AOM_PATH}/build -laom
+  EXTRA_LIBS += ${AOM_PATH}/build/libaom.a
   # if you've built the libaom with CONFIG_TUNE_BUTTERAUGLI, you'll need libjxl:
 #  EXTRA_LIBS += -ljxl
   # and same with CONFIG_TUNE_VMAF which requires libvmaf:

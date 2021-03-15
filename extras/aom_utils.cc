@@ -526,7 +526,7 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
                WP2_STATUS_INVALID_CONFIGURATION);
   // we avoid including aomcx.h to get aom_tune_metric (=moving target) directly
   const int tuning = (params.tuning == 0) ? 0 :  // PSNR
-                     (params.tuning == 2) ? 7 /* AOM_TUNE_VMAF_NEG_MAX_GAIN */ :
+                     (params.tuning == 2) ? 6 /* AOM_TUNE_VMAF_MAX_GAIN */ :
                      (params.tuning == 3) ? 8 /* AOM_TUNE_BUTTERAUGLI */ :
                                             1;   // fallback to default SSIM
   CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_TUNING, tuning), codec);
