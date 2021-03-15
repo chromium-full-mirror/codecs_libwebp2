@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <numeric>
 
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"
@@ -888,43 +889,42 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t max_nnz,
 
 // If is_symmetric is set to true, the counts for v and -v are added
 // as counts for abs(v).
-void SymbolWriter::ConvertCountsToCachedHistogram(const uint32_t* const counts,
-                                                  int min, int max,
-                                                  bool is_symmetric,
-                                                  uint32_t* size,
-                                                  uint32_t* counts_total) {
-  *size = 0;
+uint32_t SymbolWriter::ConvertCountsToCachedHistogram(const uint32_t counts[],
+                                                      int min, int max,
+                                                      bool is_symmetric,
+                                                      uint32_t counts_total[]) {
+  uint32_t size = 0;
+  // If the values can be negative (is_symmetric == true), we clump together
+  // the statistics for x and -x.
   if (is_symmetric) {
     assert(min < 0);
-    *counts_total = 0;
-    for (int i = 0; i <= std::max(-min, max); ++i) {
-      // If the values can be negative, we clump together the statistics for x
-      // and -x.
+    counts -= min;
+    min = -min;
+    for (int i = 0; i <= std::max(min, max); ++i) {
       uint32_t count;
       if (i == 0) {
-        count = counts[-min];
+        count = counts[0];
       } else {
         count = 0;
-        if (-i >= min) count += counts[-min - i];
-        if (i <= max) count += counts[-min + i];
+        if (i <= min) count += counts[-i];
+        if (i <= max) count += counts[+i];
       }
       if (count == 0) continue;
-      histogram_[*size] = count;
-      *counts_total += count;
-      mapping_[*size] = i;
-      ++*size;
+      histogram_[size] = count;
+      mapping_[size] = i;
+      ++size;
     }
   } else {
-    const int range = max - min + 1;
-    for (int i = 0; i < range; ++i) {
+    for (int i = 0; i <= max - min; ++i) {
       const uint32_t count = counts[i];
       if (count == 0) continue;
-      histogram_[*size] = count;
-      *counts_total += count;
-      mapping_[*size] = i;
-      ++*size;
+      histogram_[size] = count;
+      mapping_[size] = i;
+      ++size;
     }
   }
+  *counts_total = std::accumulate(&histogram_[0], &histogram_[0] + size, 0u);
+  return size;
 }
 
 WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
@@ -934,14 +934,15 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
                                     ANSDictionaries* const dicts) {
   // Figure out how many symbols are used and the sizes in bits of the
   // probabilities and difference of consecutive symbols.
-  uint32_t size;
   const uint32_t range = symbols_info_.Range(sym, cluster);
   uint32_t counts_total = 0;
   const int32_t min_symbol = symbols_info_.Min(sym, cluster);
   const int32_t max_symbol = symbols_info_.Max(sym, cluster);
   const bool changes_sign = (min_symbol < 0) && (max_symbol > 0);
-  ConvertCountsToCachedHistogram(counts, min_symbol, max_symbol, changes_sign,
-                                 &size, &counts_total);
+  bool last_tried_symmetry = changes_sign;
+  uint32_t size =
+      ConvertCountsToCachedHistogram(counts, min_symbol, max_symbol,
+                                     last_tried_symmetry, &counts_total);
 
   // Deal with the trivial cases.
   ANSDebugPrefix prefix(enc, label);
@@ -982,9 +983,9 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
   for (uint32_t i = 0; i < (changes_sign ? 2u : 1u); ++i) {
     if (changes_sign && i == 1) {
       // Re-compute the counts for non symmetric negatives.
-      ConvertCountsToCachedHistogram(counts, min_symbol, max_symbol,
-                                     /*is_symmetric=*/false, &size,
-                                     &counts_total);
+      last_tried_symmetry = false;
+      size = ConvertCountsToCachedHistogram(counts, min_symbol, max_symbol,
+                                            last_tried_symmetry, &counts_total);
     }
     // Figure out the cost of using ranges.
     // Cost of mapping + cost of storing each symbol as a range + cost of size.
@@ -1024,15 +1025,10 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
       }
     }
   }
-  if (type_best == Stat::Type::kGolomb) {
-    // Now that we know if negatives are treates symmetrically and the best
-    // Golomb prefix, recompute the cached Golomg histograms.
-    // TODO(vrabaud) we could cache the 4 combinations and just re-use the best
-    //               one here: more RAM, less CPU.
-    ConvertCountsToCachedHistogram(counts, min_symbol, max_symbol,
-                                   is_symmetric_best, &size, &counts_total);
-    // Re-initialize the cached Golomb parameters.
-    FillCachedGolombHistogram(range, size, prefix_size_best);
+  // recomputation is needed only it was not already done above
+  if (is_symmetric_best != last_tried_symmetry) {
+    size = ConvertCountsToCachedHistogram(counts, min_symbol, max_symbol,
+                                          is_symmetric_best, &counts_total);
   }
 
   // TODO(vrabaud) For very small images, always choose range to save bits on
@@ -1040,11 +1036,17 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
   enc->PutRValue(type_best == Stat::Type::kRange ? 0 :
                  type_best == Stat::Type::kDict ? 1 : 2,
                  3, "type");
-  if (changes_sign && enc->PutBool(is_symmetric_best, "is_symmetric")) {
-    ConvertCountsToCachedHistogram(counts, min_symbol, max_symbol,
-                                   /*is_symmetric=*/true, &size, &counts_total);
+  if (changes_sign) {
+    enc->PutBool(is_symmetric_best, "is_symmetric");
+  } else {
+    assert(last_tried_symmetry == false);
+    assert(is_symmetric_best == false);
   }
+
   if (type_best == Stat::Type::kGolomb) {
+    // Re-initialize the cached Golomb parameters.
+    FillCachedGolombHistogram(range, size, prefix_size_best);
+
     const uint32_t golomb_prefix_size = config_best->param.golomb_prefix_size;
     const uint32_t golomb_size = config_best->param.golomb_size;
     const Golomb golomb(range - 1, golomb_prefix_size);

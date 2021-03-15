@@ -311,9 +311,10 @@ class SymbolWriter : public SymbolManager,
   bool ComputeCachedGolombHistogramCost(uint32_t range, uint32_t max_nnz,
                                         uint32_t size, uint32_t prefix_size,
                                         float cost_max);
-  void ConvertCountsToCachedHistogram(const uint32_t* const counts, int min,
-                                      int max, bool is_symmetric,
-                                      uint32_t* size, uint32_t* counts_total);
+  // return the number of non-zero counts (stored in mapping_[])
+  uint32_t ConvertCountsToCachedHistogram(const uint32_t counts[],
+                                          int min, int max, bool is_symmetric,
+                                          uint32_t counts_total[]);
 
   // Returns the biggest index such that mapping[index] is valid and index <=
   // max_value. If no such value exists, returns the first valid index above
