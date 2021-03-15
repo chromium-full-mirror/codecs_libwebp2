@@ -567,8 +567,9 @@ class ANSDictionary : public WP2Allocable {
 
   // Sets counts to a specific value.
   // When recording a symbol afterwards, the quantized counts will not be
-  // updated while the normal counts will be.
-  WP2Status SetQuantizedCounts(const Vector_u32& quantized_counts);
+  // updated while the normal counts will be. The quantized_counts[] array
+  // must have a size 'max_symbol_'.
+  WP2Status SetQuantizedCounts(const uint32_t quantized_counts[]);
   // Returns true if quantized_counts have been set.
   bool IsQuantized() const { return !quantized_counts_.empty(); }
 

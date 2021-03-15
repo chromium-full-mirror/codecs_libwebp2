@@ -371,7 +371,7 @@ TEST_F(TestANS, Test2) {
         EXPECT_GE(max_freq, 1u);
         EXPECT_TRUE(ANSCountsQuantize(false, max_freq, kMaxSymbol, &counts[0],
                                       nullptr));
-        EXPECT_WP2_OK(dict->SetQuantizedCounts(counts));
+        EXPECT_WP2_OK(dict->SetQuantizedCounts(counts.data()));
         break;
       }
       case 2: {
@@ -379,7 +379,7 @@ TEST_F(TestANS, Test2) {
         for (uint32_t& c : counts) {
           c = (c > 0u) ? random.Get(1u, 100u) : 0u;
         }
-        EXPECT_WP2_OK(dict->SetQuantizedCounts(counts));
+        EXPECT_WP2_OK(dict->SetQuantizedCounts(counts.data()));
         break;
       }
       default:
@@ -1325,7 +1325,7 @@ TEST_F(TestANS, DictionarySymbolCost) {
     quantized_counts[1] = 0;
     quantized_counts[2] = 2;
     quantized_counts[3] = 0;
-    EXPECT_WP2_OK(dict.SetQuantizedCounts(quantized_counts));
+    EXPECT_WP2_OK(dict.SetQuantizedCounts(quantized_counts.data()));
     EXPECT_EQ(dict.SymbolCost(0), 1);
     EXPECT_EQ(dict.SymbolCost(1), 0);
     EXPECT_EQ(dict.SymbolCost(2), 1);

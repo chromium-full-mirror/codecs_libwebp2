@@ -136,7 +136,7 @@ static bool Compress0(const std::string& in, ANSEnc* const enc) {
 
   // Quantize to fit in IO_BITS bits.
   if (ANSCountsQuantize(false, kMaxFreq, counts.size(), &counts[0], nullptr)) {
-    if (dict->SetQuantizedCounts(counts) != WP2_STATUS_OK) return false;
+    if (dict->SetQuantizedCounts(counts.data()) != WP2_STATUS_OK) return false;
   }
   std::vector<OptimizeArrayStorageStat> stats(counts.size());
   StoreVector(counts.data(), counts.size(), kMaxFreq, &stats[0], enc);

@@ -802,13 +802,13 @@ WP2Status ANSDictionary::ToCodingTable() {
   return WP2_STATUS_OK;
 }
 
-WP2Status ANSDictionary::SetQuantizedCounts(
-    const Vector_u32& quantized_counts) {
-  WP2_CHECK_OK(quantized_counts.size() == max_symbol_,
-               WP2_STATUS_INVALID_PARAMETER);
-  WP2_CHECK_ALLOC_OK(quantized_counts_.copy_from(quantized_counts));
-  total_quantized_ = std::accumulate(quantized_counts.begin(),
-                                     quantized_counts.end(), 0u);
+WP2Status ANSDictionary::SetQuantizedCounts(const uint32_t quantized_counts[]) {
+  WP2_CHECK_ALLOC_OK(quantized_counts_.resize(max_symbol_));
+  total_quantized_ = 0;
+  for (uint32_t i = 0; i < max_symbol_; ++i) {
+    quantized_counts_[i] = quantized_counts[i];
+    total_quantized_ += quantized_counts[i];
+  }
   return WP2_STATUS_OK;
 }
 

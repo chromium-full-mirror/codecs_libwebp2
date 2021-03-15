@@ -413,7 +413,6 @@ WP2Status SymbolWriter::Allocate() {
   const uint32_t symbol_range_max = symbols_info_.GetMaxRange();
   WP2_CHECK_ALLOC_OK(histogram_.resize(symbol_range_max));
   WP2_CHECK_ALLOC_OK(mapping_.resize(symbol_range_max));
-  WP2_CHECK_ALLOC_OK(infos_tmp_.resize(symbol_range_max));
   // The following buffers are also used when storing recursive histograms
   // (storage type HuffmanANS). Assuming a symbol appears at most once per
   // pixel, the range of a huffmanized histogram is log2(max pixels).
@@ -421,7 +420,6 @@ WP2Status SymbolWriter::Allocate() {
   const uint32_t histo_max_range =
       std::max(symbol_range_max, kMaxHistoValueBits);
   WP2_CHECK_ALLOC_OK(stats_buffer_.resize(histo_max_range));
-  WP2_CHECK_ALLOC_OK(counts_tmp_.reserve(histo_max_range));
 
   const Golomb golomb1(symbol_range_max - 1, 1);
   const Golomb golomb2(symbol_range_max - 1, 2);
@@ -473,8 +471,6 @@ WP2Status SymbolWriter::CopyFrom(const SymbolWriter& other,
             mappings_buffer_.begin());
 
   // Deep copy remaining direct members of SymbolWriter.
-  WP2_CHECK_ALLOC_OK(infos_tmp_.copy_from(other.infos_tmp_));
-  WP2_CHECK_ALLOC_OK(counts_tmp_.copy_from(other.counts_tmp_));
   WP2_CHECK_ALLOC_OK(histogram_.copy_from(other.histogram_));
   WP2_CHECK_ALLOC_OK(mapping_.copy_from(other.mapping_));
   WP2_CHECK_ALLOC_OK(histogram_golomb_.copy_from(other.histogram_golomb_));
@@ -499,10 +495,6 @@ void SymbolWriter::WriteHistogram(const Quantizer::Config& config,
 
 //------------------------------------------------------------------------------
 
-static bool ANSSymbolInfoCmp(const ANSSymbolInfo& i1, const ANSSymbolInfo& i2) {
-  return (i1.symbol < i2.symbol);
-}
-
 void SymbolWriter::AddTrivial(uint32_t sym, uint32_t cluster, bool is_symmetric,
                               int32_t value) {
   Stat* const stat = GetStats(sym, cluster);
@@ -515,6 +507,19 @@ void SymbolWriter::AddTrivial(uint32_t sym, uint32_t cluster, bool is_symmetric,
   stat->extra.mapping_size = 0;
 }
 
+void SymbolWriter::SetMapping(Stat* const stat,
+                              const uint16_t mapping[], uint32_t size) {
+  stat->use_mapping = true;
+  stat->range = size;
+  stat->extra.mapping_size = 1 + *std::max_element(mapping, mapping + size);
+  std::fill(stat->mappings, stat->mappings + stat->extra.mapping_size,
+            Stat::kInvalidMapping);
+  for (uint32_t k = 0; k < size; ++k) {
+    stat->mappings[mapping[k]] = k;
+    assert(k == 0 || mapping[k] > mapping[k - 1]);
+  }
+}
+
 void SymbolWriter::AddRange(uint32_t sym, uint32_t cluster, bool is_symmetric,
                             const uint16_t* const mapping, uint32_t size,
                             uint16_t max_range) {
@@ -522,18 +527,11 @@ void SymbolWriter::AddRange(uint32_t sym, uint32_t cluster, bool is_symmetric,
 
   stat->type = Stat::Type::kRange;
   stat->is_symmetric = is_symmetric;
-  stat->use_mapping = (mapping != nullptr);
+  stat->use_mapping = false;
   stat->extra.dict = nullptr;
   stat->extra.mapping_size = 0;
-  if (stat->use_mapping) {
-    stat->range = size;
-    stat->extra.mapping_size =
-        1 + *std::max_element(&mapping[0], &mapping[0] + size);
-    std::fill(stat->mappings, stat->mappings + stat->extra.mapping_size,
-              Stat::kInvalidMapping);
-    for (uint32_t i = 0; i < size; ++i) {
-      stat->mappings[mapping[i]] = i;
-    }
+  if (mapping != nullptr) {
+    SetMapping(stat, mapping, size);
   } else {
     assert(size == 0);
     stat->range = max_range;
@@ -552,38 +550,16 @@ WP2Status SymbolWriter::AddDict(uint32_t sym, uint32_t cluster,
 
   stat->type = Stat::Type::kDict;
   stat->is_symmetric = is_symmetric;
-  stat->use_mapping = true;
 
-  // Sort with the most frequent symbols first.
-  for (uint32_t i = 0; i < size; ++i) {
-    infos_tmp_[i].freq = quantized_counts[i];
-    assert(infos_tmp_[i].freq == quantized_counts[i]); /* no overflow */
-    infos_tmp_[i].symbol = mapping[i];
-  }
-  std::sort(&infos_tmp_[0], &infos_tmp_[0] + size, ANSSymbolInfoCmp);
-  // Figure out the mappings.
-  stat->extra.mapping_size = 0;
-  for (uint32_t k = 0; k < size; ++k) {
-    if (infos_tmp_[k].symbol >= stat->extra.mapping_size) {
-      stat->extra.mapping_size = 1 + infos_tmp_[k].symbol;
-    }
-  }
-  std::fill(stat->mappings, stat->mappings + stat->extra.mapping_size,
-            Stat::kInvalidMapping);
-  WP2_CHECK_ALLOC_OK(counts_tmp_.resize(size));
-  for (uint32_t k = 0; k < size; ++k) {
-    stat->mappings[infos_tmp_[k].symbol] = k;
-    counts_tmp_[k] = infos_tmp_[k].freq;
-  }
+  SetMapping(stat, mapping, size);
+
   WP2_CHECK_STATUS(dicts->Add(size));
   auto* const d = dicts->back();
-  // In case the counts were already quantized.
-  for (uint32_t k = 0; k < size; ++k) {
-    d->RecordSymbol(stat->mappings[mapping[k]], counts[k]);
-  }
-  WP2_CHECK_STATUS(d->SetQuantizedCounts(counts_tmp_));
-  WP2_CHECK_STATUS(d->ToCodingTable());
   stat->extra.dict = d;
+  // In case the counts were already quantized.
+  for (uint32_t k = 0; k < size; ++k) d->RecordSymbol(k, counts[k]);
+  WP2_CHECK_STATUS(d->SetQuantizedCounts(quantized_counts));
+  WP2_CHECK_STATUS(d->ToCodingTable());
   return WP2_STATUS_OK;
 }
 

@@ -270,7 +270,7 @@ class SymbolWriter : public SymbolManager,
                 uint16_t max_range);
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
   // a dictionary of statistics represented by 'counts', 'quantized_counts' and
-  // 'mapping'.
+  // 'mapping'. mapping[] must be already sorted in strictly increasing order.
   WP2Status AddDict(uint32_t sym, uint32_t cluster, bool is_symmetric,
                     const uint32_t* const counts,
                     const uint32_t* const quantized_counts,
@@ -279,12 +279,16 @@ class SymbolWriter : public SymbolManager,
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
   // Golomb of prefix size 'prefix_size' using the statistics represented by
   // 'counts', 'quantized_counts' and 'mapping'.
+  // mapping[] must be already sorted in strictly increasing order.
   WP2Status AddGolomb(uint32_t sym, uint32_t cluster, bool is_symmetric,
                       const uint32_t* const counts,
                       const uint32_t* const quantized_counts,
                       const uint16_t* const mapping, uint32_t size,
                       uint32_t prefix_size, ANSDictionaries* const dicts);
 
+  // Initializes the 'stat' object to use mapping.
+  static void SetMapping(Stat* const stat,
+                         const uint16_t mapping[], uint32_t size);
  private:
   // Writes the symbol of type 'sym' in the 'cluster'th cluster. 'WriteHeader'
   // needs to have been called before so that the SymbolWriter knows how to
@@ -315,9 +319,6 @@ class SymbolWriter : public SymbolManager,
   // max_value. If no such value exists, returns the first valid index above
   // max_value.
   static uint32_t FindBiggestMappingIndex(const Stat& stat, uint32_t max_index);
-  // Tmp variables to avoid multiple mallocs.
-  ANSCodes infos_tmp_;
-  Vector_u32 counts_tmp_;
   // Tmp variables for updating the SymbolWriter.
   Vector_u32 histogram_;
   // Contains the values - min of symbol.
