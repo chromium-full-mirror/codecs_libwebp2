@@ -145,14 +145,16 @@ class Encoder {
 //------------------------------------------------------------------------------
 // internal functions. Not public.
 
-WP2Status EncodeImageNoClusters(WP2::ANSEncBase* const enc,
-                                WP2::ANSDictionaries* const dicts,
-                                const int16_t* const argb,
-                                HashChain* const hash_chain,
-                                BackwardRefsPool* const ref_pool,
-                                uint32_t width, uint32_t height,
-                                const LosslessSymbolsInfo& symbols_info,
-                                int effort, const WP2::ProgressRange& progress);
+// Encodes any image that is not the main image (segment image, transform images
+// (predictors, palette ...)).
+WP2Status EncodeHelperImage(WP2::ANSEncBase* const enc,
+                            WP2::ANSDictionaries* const dicts,
+                            const int16_t* const argb,
+                            HashChain* const hash_chain,
+                            BackwardRefsPool* const ref_pool, uint32_t width,
+                            uint32_t height,
+                            const LosslessSymbolsInfo& symbols_info, int effort,
+                            const WP2::ProgressRange& progress);
 
 // Optional extra info that can be exported by EncodeImage.
 // Callers should allocate themselves the vectors that they wish filled in.

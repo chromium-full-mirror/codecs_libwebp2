@@ -98,10 +98,11 @@ class Decoder {
                              WP2::Planef* const bits_per_pixel = nullptr,
                              WP2::DecoderInfo* const decoder_info = nullptr,
                              int16_t** src_out = nullptr);
-  // Decodes an image but do not process the rows. This is used for entropy and
-  // transforms images that do not require row post-processing.
-  WP2Status DecodeNoProcess(uint32_t width, uint32_t height, uint32_t last_row,
-                            WP2::Vector_s16* const data_vec);
+  // Decodes any image that is not the main image (segment image, transform
+  // images (predictors, palette ...)).
+  WP2Status DecodeHelperImage(uint32_t width, uint32_t height,
+                              const LosslessSymbolsInfo& symbols_info,
+                              WP2::Vector_s16* const data_vec);
   // Decodes a sub-image encoded with the Group 4 algorithm.
   WP2Status DecodeGroup4(uint32_t width, uint32_t last_row,
                          WP2::Planef* const bits_per_pixel, int16_t** src_out);

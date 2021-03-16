@@ -122,6 +122,40 @@ static inline uint32_t PlaneCodeToDistance(uint32_t width,
 
 //------------------------------------------------------------------------------
 
+// Reads an image encode in a raw manner.
+static void ReadRawImage(uint32_t width, uint32_t height,
+                         const LosslessSymbolsInfo& symbols_info,
+                         WP2::ANSDec* dec, int16_t* const argb) {
+  // Cache the extrema.
+  int16_t mins[4], maxs[4];
+  for (Symbol sym : {kSymbolA, kSymbolR, kSymbolG, kSymbolB}) {
+    if (symbols_info.IsUnused(sym)) continue;
+    const uint32_t c = (int)sym - (int)kSymbolA;
+    mins[c] = symbols_info.Min(sym, /*cluster=*/0);
+    maxs[c] = symbols_info.Max(sym, /*cluster=*/0);
+  }
+  // Read the raw pixel values.
+  for (uint32_t y = 0; y < height; ++y) {
+    int16_t* const row = &argb[4 * width * y];
+    for (uint32_t x = 0; x < width; ++x) {
+      row[4 * x + 0] = symbols_info.IsUnused(kSymbolA)
+                           ? WP2::kAlphaMax
+                           : dec->ReadRange(mins[0], maxs[0],
+                                            kSymbolNames[(int)kSymbolA + 0]);
+      for (uint32_t c = 1; c < 4; ++c) {
+        row[4 * x + c] =
+            symbols_info.IsUnused((int)kSymbolA + c)
+                ? 0
+                : dec->ReadRange(WP2::DivBy255(mins[c] * row[4 * x + 0]),
+                                 WP2::DivBy255(maxs[c] * row[4 * x + 0]),
+                                 kSymbolNames[(int)kSymbolA + c]);
+      }
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
+
 // Reads packed symbol depending on GREEN channel
 WP2Status Decoder::ReadANSStats(uint32_t width, uint32_t height,
                                 const LosslessSymbolsInfo& symbols_info) {
@@ -468,12 +502,18 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
   return WP2_STATUS_OK;
 }
 
-WP2Status Decoder::DecodeNoProcess(uint32_t width, uint32_t height,
-                                   uint32_t last_row,
-                                   WP2::Vector_s16* const data_vec) {
+WP2Status Decoder::DecodeHelperImage(uint32_t width, uint32_t height,
+                                     const LosslessSymbolsInfo& symbols_info,
+                                     WP2::Vector_s16* const data_vec) {
   WP2_CHECK_ALLOC_OK(data_vec->resize(4 * (uint64_t)width * height));
-  WP2_CHECK_STATUS(
-      DecodeAndProcess(width, last_row, /*do_process=*/false, data_vec));
+  if (width * height == 1) {
+    ReadRawImage(width, height, symbols_info, dec_, data_vec->data());
+  } else {
+    WP2_CHECK_STATUS(ReadANSStats(width, height, symbols_info));
+
+    WP2_CHECK_STATUS(DecodeAndProcess(width, /*last_row=*/height,
+                                      /*do_process=*/false, data_vec));
+  }
   return WP2_STATUS_OK;
 }
 
@@ -588,11 +628,10 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
     LosslessSymbolsInfo symbols_info;
     symbols_info.Init(num_colors_, gparams_->has_alpha_,
                       hdr_.symbols_info_.SampleFormat());
-    WP2_CHECK_STATUS(ReadANSStats(num_colors_, 1, symbols_info));
 
     // Read the palette image.
     WP2_CHECK_STATUS(
-        DecodeNoProcess(num_colors_, 1, /*last_row=*/1, &transform->data_));
+        DecodeHelperImage(num_colors_, 1, symbols_info, &transform->data_));
     WP2_CHECK_STATUS(dec_->GetStatus());
 
     // Convert the diffs to proper colors.
@@ -717,13 +756,10 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       } else {
         symbols_info.InitAsCrossColorImage(num_pixels);
       }
-      WP2_CHECK_STATUS(
-          ReadANSStats(transform->width_, transform->height_, symbols_info));
 
       // Read the transform image.
-      WP2_CHECK_STATUS(DecodeNoProcess(transform->width_, transform->height_,
-                                       /*last_row=*/transform->height_,
-                                       &transform->data_));
+      WP2_CHECK_STATUS(DecodeHelperImage(transform->width_, transform->height_,
+                                         symbols_info, &transform->data_));
       WP2_CHECK_STATUS(dec_->GetStatus());
 
       dec_->PopDebugPrefix();
@@ -948,13 +984,10 @@ WP2Status Decoder::DecodeHeader() {
     LosslessSymbolsInfo symbols_info;
     symbols_info.InitAsLabelImage(histogram_width * histogram_height,
                                   num_histo);
-    WP2_CHECK_STATUS(
-        ReadANSStats(histogram_width, histogram_height, symbols_info));
 
     // Read the entropy image.
-    WP2_CHECK_STATUS(DecodeNoProcess(histogram_width, histogram_height,
-                                     /*last_row=*/histogram_height,
-                                     &hdr_.histogram_image_));
+    WP2_CHECK_STATUS(DecodeHelperImage(histogram_width, histogram_height,
+                                       symbols_info, &hdr_.histogram_image_));
 
     hdr_.histogram_subsample_bits_ = histogram_precision;
   } else {
