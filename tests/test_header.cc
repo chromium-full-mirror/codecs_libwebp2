@@ -191,6 +191,31 @@ TEST(HeaderTest, BitPackerUnpacker) {
   }
 }
 
+TEST(HeaderTest, BitUnpackerPrefetchBeforeReading) {
+  uint8_t buf[] = {1, 2, 3};
+  ExternalDataSource data_source(buf, sizeof(buf));
+  BitUnpacker dec(&data_source, "test");
+
+  for (uint32_t num_bits = 0; num_bits <= sizeof(buf) * 8; ++num_bits) {
+    EXPECT_TRUE(dec.Prefetch(num_bits));
+  }
+  EXPECT_FALSE(dec.Prefetch(sizeof(buf) * 8 + 1));
+  ASSERT_EQ(dec.ReadBits(1, "debug_label"), 1u);
+  ASSERT_EQ(dec.ReadBits(1, "debug_label"), 0u);
+}
+
+TEST(HeaderTest, BitUnpackerPrefetchAfterReading) {
+  uint8_t buf[] = {1, 2, 3};
+  ExternalDataSource data_source(buf, sizeof(buf));
+  BitUnpacker dec(&data_source, "test");
+
+  ASSERT_EQ(dec.ReadBits(1, "debug_label"), 1u);
+  ASSERT_EQ(dec.ReadBits(1, "debug_label"), 0u);
+  ASSERT_WP2_OK(dec.GetStatus());
+  EXPECT_TRUE(dec.Prefetch(sizeof(buf) * 8 - 2));
+  EXPECT_FALSE(dec.Prefetch(sizeof(buf) * 8 - 1));
+}
+
 //------------------------------------------------------------------------------
 
 TEST(HeaderTest, MinHeaderSize) {

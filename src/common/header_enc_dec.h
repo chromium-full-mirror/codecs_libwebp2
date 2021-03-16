@@ -81,10 +81,18 @@ class BitUnpacker {
   Rectangle ReadRect(uint32_t canvas_width, uint32_t canvas_height,
                      WP2_OPT_LABEL);
 
+  // Tries to fetch the next 'num_bits' if not already available.
+  // Returns true if the next 'num_bits' can be immediately read afterwards.
+  bool Prefetch(uint32_t num_bits);
+
   // Should be checked before using values extracted with the above functions.
   WP2Status GetStatus() const { return status_; }
 
  private:
+  // Returns the number of bytes necessary to extract the next 'num_bits'.
+  uint32_t GetMinNumBytes(uint32_t num_bits) const;
+
+  // Reads the next 'num_bits'.
   uint32_t ReadBitsInternal(uint32_t num_bits);
 
   DataSource* const data_source_;  // Input bitstream.

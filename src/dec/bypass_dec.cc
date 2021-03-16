@@ -123,9 +123,18 @@ WP2Status TileDecoder::BypassTileDecRgb8b() {
 
 WP2Status TileDecoder::BypassTileDecRgb10b() {
   BitUnpacker bit_unpacker(tile_->input, "raw_pixels");
+  const uint32_t num_bits_per_row =
+      (gparams_->has_alpha_ ? kAlphaBits : 0) + 3 * 10;
+
   for (tile_->num_decoded_rows = 0;
        tile_->num_decoded_rows < tile_->rect.height;
        ++tile_->num_decoded_rows) {
+    // Make sure enough data is fetched to read an entire row.
+    // Otherwise the decoding might be suspended in the middle of a row and the
+    // output buffer invalidated just before resuming in the middle of a pixel.
+    WP2_CHECK_OK(bit_unpacker.Prefetch(num_bits_per_row),
+                 WP2_STATUS_NOT_ENOUGH_DATA);
+
     const uint32_t y = tile_->num_decoded_rows;
     if (tile_->rgb_output.format() == WP2_Argb_32) {
       uint8_t* const row = tile_->rgb_output.GetRow8(y);
@@ -189,6 +198,8 @@ WP2Status TileDecoder::BypassTileDecYuv() {
     }
   }
 
+  const uint32_t num_bits_per_row =
+      (gparams_->has_alpha_ ? kAlphaBits : 0) + 3 * num_bits;
   BitUnpacker bit_unpacker(tile_->input, "raw_pixels");
   if (!gparams_->has_alpha_ && !tile_->yuv_output.A.IsEmpty()) {
     tile_->yuv_output.A.Fill(kAlphaMax);
@@ -197,6 +208,12 @@ WP2Status TileDecoder::BypassTileDecYuv() {
   for (tile_->num_decoded_rows = 0;
        tile_->num_decoded_rows < tile_->rect.height;
        ++tile_->num_decoded_rows) {
+    // Make sure enough data is fetched to read an entire row.
+    // Otherwise the decoding might be suspended in the middle of a row and the
+    // output buffer invalidated just before resuming in the middle of a pixel.
+    WP2_CHECK_OK(bit_unpacker.Prefetch(num_bits_per_row),
+                 WP2_STATUS_NOT_ENOUGH_DATA);
+
     const uint32_t y = tile_->num_decoded_rows;
     // Read interleaved channels to output samples line by line.
     for (Channel channel : {kYChannel, kUChannel, kVChannel}) {

@@ -116,15 +116,26 @@ Rectangle BitUnpacker::ReadRect(uint32_t canvas_width, uint32_t canvas_height,
   return rect;
 }
 
-uint32_t BitUnpacker::ReadBitsInternal(uint32_t num_bits) {
-  assert(num_bits <= 24);
-  if (status_ != WP2_STATUS_OK || num_bits == 0) return 0;
+bool BitUnpacker::Prefetch(uint32_t num_bits) {
+  if (status_ != WP2_STATUS_OK) return false;
+  const uint8_t* unused;
+  return data_source_->TryGetNext(GetMinNumBytes(num_bits),
+                                  /*data_pointer=*/&unused);
+}
 
+uint32_t BitUnpacker::GetMinNumBytes(uint32_t num_bits) const {
   assert(bit_pos_ > 0 && bit_pos_ <= 8);
   // (8 - bit_pos_) is the number of not-yet-used bits in 'byte_'.
   // Number of new bytes to read in order to have at least 'num_bits':
   //   num_bytes_to_read = ceil((num_bits - (8 - bit_pos_)) / 8)
-  const uint32_t num_bytes_to_read = (bit_pos_ + num_bits - 1) >> 3;
+  return (bit_pos_ + num_bits - 1) >> 3;
+}
+
+uint32_t BitUnpacker::ReadBitsInternal(uint32_t num_bits) {
+  assert(num_bits <= 24);
+  if (status_ != WP2_STATUS_OK || num_bits == 0) return 0;
+
+  const uint32_t num_bytes_to_read = GetMinNumBytes(num_bits);
   const uint8_t* bytes;
   if (!data_source_->TryReadNext(num_bytes_to_read, &bytes)) {
     status_ = WP2_STATUS_NOT_ENOUGH_DATA;
