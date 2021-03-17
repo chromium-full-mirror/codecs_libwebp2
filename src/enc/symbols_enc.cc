@@ -577,23 +577,18 @@ WP2Status SymbolWriter::AddGolomb(uint32_t sym, uint32_t cluster,
   return WP2_STATUS_OK;
 }
 
-uint32_t SymbolWriter::FindBiggestMappingIndex(const Stat& stat,
+uint32_t SymbolWriter::FindLargestMappingIndex(const Stat& stat,
                                                uint32_t max_index) {
-  const uint32_t index_ini =
-      std::min(max_index, (uint32_t)(stat.extra.mapping_size - 1));
+  const uint32_t index_ini = std::min(max_index + 1, stat.extra.mapping_size);
   uint32_t index = index_ini;
-  while (index > 0 && stat.mappings[index] == Stat::kInvalidMapping) {
-    --index;
+  while (index-- > 0) {
+    if (stat.mappings[index] != Stat::kInvalidMapping) return index;
   }
-  if (index == 0 && stat.mappings[index] == Stat::kInvalidMapping) {
-    index = index_ini;
-    while (index < stat.extra.mapping_size &&
-           stat.mappings[index] == Stat::kInvalidMapping) {
-      ++index;
-    }
-    assert(index < stat.extra.mapping_size);
+  // search index larger than max_index
+  for (index = index_ini; index < stat.extra.mapping_size; ++index) {
+    if (stat.mappings[index] != Stat::kInvalidMapping) return index;
   }
-  assert(stat.mappings[index] != Stat::kInvalidMapping);
+  assert(false);   // shouldn't happen
   return index;
 }
 
@@ -618,8 +613,8 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
         range = stat.range;
       } else if (stat.use_mapping) {
         // Find the biggest range <= max_value that is valid.
-        const uint32_t max_index = FindBiggestMappingIndex(stat, max_value);
-        range = stat.mappings[max_index] + 1;
+        const uint32_t max_idx = FindLargestMappingIndex(stat, max_value);
+        range = stat.mappings[max_idx] + 1;
         assert(range <= stat.range);
       } else {
         range = std::min(stat.range, (uint16_t)(max_value + 1));
@@ -630,26 +625,17 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
       break;
     }
     case Stat::Type::kDict: {
-      if (use_max_value) {
+      assert(stat.use_mapping);
+      const uint32_t idx = stat.mappings[value];
+      if (use_max_value && max_value + 1 < stat.extra.mapping_size) {
         // Get the info of the maximally usable symbol.
-        max_value =
-            std::min(max_value, (uint32_t)(stat.extra.mapping_size - 1));
-        while (max_value > 0 &&
-               stat.mappings[max_value] == Stat::kInvalidMapping) {
-          --max_value;
-        }
-        assert(stat.mappings[max_value] != Stat::kInvalidMapping);
-        enc->PutSymbol(stat.mappings[value], stat.mappings[max_value],
-                       *stat.extra.dict, "dict");
-        if (cost != nullptr) {
-          *cost += stat.extra.dict->SymbolCost(stat.mappings[value],
-                                               stat.mappings[max_value]);
-        }
+        const uint32_t max_idx =
+          stat.mappings[FindLargestMappingIndex(stat, max_value)];
+        enc->PutSymbol(idx, max_idx, *stat.extra.dict, "dict");
+        if (cost != nullptr) *cost += stat.extra.dict->SymbolCost(idx, max_idx);
       } else {
-        enc->PutSymbol(stat.mappings[value], *stat.extra.dict, "dict");
-        if (cost != nullptr) {
-          *cost += stat.extra.dict->SymbolCost(stat.mappings[value]);
-        }
+        enc->PutSymbol(idx, *stat.extra.dict, "dict");
+        if (cost != nullptr) *cost += stat.extra.dict->SymbolCost(idx);
       }
       break;
     }
@@ -662,9 +648,13 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
       if (use_max_value) {
         const Golomb golomb_max(max_value, prefix_size);
         const uint32_t max_prefix =
-            FindBiggestMappingIndex(stat, golomb_max.prefix);
+            FindLargestMappingIndex(stat, golomb_max.prefix);
         enc->PutSymbol(stat.mappings[golomb.prefix], stat.mappings[max_prefix],
                        *stat.extra.dict, "golomb");
+        if (cost != nullptr) {
+          *cost += stat.extra.dict->SymbolCost(stat.mappings[golomb.prefix],
+                                               stat.mappings[max_prefix]);
+        }
         use_range = (golomb.prefix == max_prefix);
         if (use_range) {
           // Get (the biggest value with a prefix of 'max_prefix') + 1.
@@ -672,10 +662,6 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
               max_value + 1,
               Golomb::Merge(max_prefix, prefix_size, 0) +
                   (1 << Golomb::NumExtraBits(max_prefix, prefix_size)));
-        }
-        if (cost != nullptr) {
-          *cost += stat.extra.dict->SymbolCost(stat.mappings[golomb.prefix],
-                                               stat.mappings[max_prefix]);
         }
       } else {
         enc->PutSymbol(stat.mappings[golomb.prefix], *stat.extra.dict,

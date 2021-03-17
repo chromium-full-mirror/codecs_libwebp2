@@ -316,10 +316,12 @@ class SymbolWriter : public SymbolManager,
                                           int min, int max, bool is_symmetric,
                                           uint32_t counts_total[]);
 
-  // Returns the biggest index such that mapping[index] is valid and index <=
-  // max_value. If no such value exists, returns the first valid index above
-  // max_value.
-  static uint32_t FindBiggestMappingIndex(const Stat& stat, uint32_t max_index);
+  // Returns the largest index such that mapping[index] is valid and index <=
+  // max_index. If no such value exists, returns the first valid index above
+  // max_index.
+  static uint32_t FindLargestMappingIndex(const Stat& stat, uint32_t max_index);
+
+ private:
   // Tmp variables for updating the SymbolWriter.
   Vector_u32 histogram_;
   // Contains the values - min of symbol.

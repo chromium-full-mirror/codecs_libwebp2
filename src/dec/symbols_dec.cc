@@ -196,10 +196,11 @@ uint32_t SymbolReader::FindSymbol(const Stat& stat, uint32_t max_value) {
   // Stop if the first symbol is already larger than the max_value.
   if (stat.mappings[0] > max_value) return 0;
   // Stop if the last interval is actually the right one.
-  if (stat.mappings[num_symbols - 1] <= max_value) return num_symbols - 1;
+  // TODO(skal): this case should be made impossible by the syntax.
+  if (max_value >= stat.mappings[num_symbols - 1]) return num_symbols - 1;
   const uint32_t idx =
-      std::upper_bound(stat.mappings, stat.mappings + num_symbols, max_value) -
-      stat.mappings;
+      std::upper_bound(stat.mappings, stat.mappings + num_symbols - 1,
+                       max_value) - stat.mappings;
   assert(idx >= 1);
   return idx - 1;
 }
@@ -261,15 +262,17 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
       break;
     }
     case Stat::Type::kDict: {
+      assert(stat.use_mapping);
       uint32_t raw_value;
-      if (use_max_value) {
-        const uint32_t max_index = FindSymbol(stat, max_value);
+      if (use_max_value &&
+          max_value < stat.mappings[stat.extra.num_symbols - 1]) {
+        const uint32_t max_idx = FindSymbol(stat, max_value);
         raw_value = dec_->ReadSymbol(stat.extra.codes, stat.extra.log2_tab_size,
-                                     stat.extra.cumul[max_index], "dict");
+                                     stat.extra.cumul[max_idx], "dict");
 #if defined(WP2_BITTRACE)
         if (cost != nullptr) {
           const uint32_t freq = stat.extra.freq(raw_value);
-          const uint32_t total_freq = stat.extra.cumul[max_index + 1];
+          const uint32_t total_freq = stat.extra.cumul[max_idx + 1];
           *cost -= std::log2(1.* freq / total_freq);
         }
 #endif
@@ -283,7 +286,6 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
         }
 #endif
       }
-      assert(stat.use_mapping);
       *value = stat.mappings[raw_value];
       break;
     }
