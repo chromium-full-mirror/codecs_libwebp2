@@ -897,12 +897,28 @@ TEST(SymbolsTest, SymbolCounter_Midway) {
 struct GolombSymbol {
   uint32_t value;
   uint32_t range;
-  uint32_t prefix_size;  // 1 or 2
+  uint32_t prefix_size;  // 0 or 1
 };
 
 TEST(SymbolsTest, SimpleGolomb) {
   WP2MathInit();
   static constexpr uint32_t kNumSymbol = 10000u;
+
+  // Make sure the Golomb representation is bijective.
+  for (uint32_t prefix_size = 0; prefix_size < 10; ++prefix_size) {
+    for (uint32_t prefix = 0; prefix < 20; ++prefix) {
+      const uint32_t extra_bits_num = Golomb::NumExtraBits(prefix, prefix_size);
+      for (uint32_t extra_bits_value = 0;
+           extra_bits_value < (1u << extra_bits_num); ++extra_bits_value) {
+        const uint32_t value =
+            Golomb::Merge(prefix, prefix_size, extra_bits_value);
+        const Golomb golomb(value, prefix_size);
+        ASSERT_EQ(golomb.extra_bits_num, extra_bits_num);
+        ASSERT_EQ(golomb.extra_bits_value, extra_bits_value);
+        ASSERT_EQ(golomb.prefix, prefix);
+      }
+    }
+  }
 
   UniformIntDistribution random(/*seed=*/0);
   std::vector<GolombSymbol> symbols;
@@ -910,8 +926,14 @@ TEST(SymbolsTest, SimpleGolomb) {
   for (uint32_t i = 0; i < kNumSymbol; ++i) {
     const uint32_t range = random.Get(1u, kANSMaxRange);
     const uint32_t value = random.Get(0u, range - 1);
-    const uint32_t prefix_size = random.Get(1u, 2u);
-    symbols.push_back({value, range, prefix_size});
+    const uint32_t prefix_size = random.Get(0u, 1u);
+    const GolombSymbol sym = {value, range, prefix_size};
+    const Golomb golomb(value, prefix_size);
+    ASSERT_EQ(golomb.extra_bits_num,
+              Golomb::NumExtraBits(golomb.prefix, prefix_size));
+    ASSERT_EQ(value, Golomb::Merge(golomb.prefix, prefix_size,
+                                   golomb.extra_bits_value));
+    symbols.push_back(sym);
   }
 
   ANSEnc enc;
@@ -1175,7 +1197,7 @@ TEST_P(SymbolCostTest, GolombCost) {
 
   std::vector<uint16_t> mapping = {1, 2, 4, 6, 9};
 
-  const uint32_t kGolombPrefixSize = 1;
+  const uint32_t kGolombPrefixSize = 0;
   std::vector<uint32_t> golomb_histogram = {3, 7, 1, 2, 1};
   std::vector<uint16_t> golomb_mapping = {0, 1, 2, 3, 4};
   const uint32_t golomb_size = golomb_histogram.size();

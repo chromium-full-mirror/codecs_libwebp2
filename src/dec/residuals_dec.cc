@@ -319,11 +319,10 @@ uint32_t ResidualReader::ReadCoeffsMethod01(
           const uint32_t prefix =
               sr->Read(kSymbolBits1, GetCluster(channel, num_channels_, method),
                        "residual2_prefix");
-          const uint32_t extra =
-              sr->dec()->ReadUValue(
-                  Golomb::NumExtraBits(prefix, /*prefix_size=*/1),
-                  "residual2_extra");
-          abs_v += Golomb::Merge(prefix, /*prefix_size=*/1, extra);
+          const uint32_t extra = sr->dec()->ReadUValue(
+              Golomb::NumExtraBits(prefix, /*prefix_size=*/0),
+              "residual2_extra");
+          abs_v += Golomb::Merge(prefix, /*prefix_size=*/0, extra);
           assert(abs_v <= kMaxCoeffValue);
         } else {
           abs_v = 3 + residual1;

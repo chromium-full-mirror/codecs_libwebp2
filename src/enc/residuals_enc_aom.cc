@@ -32,7 +32,7 @@ void AOMResidualWriter::WriteSign(
   assert(val <= max_value);
   if (val >= kQuantizerCoefficientBaseRangeContextClamp) {
     WriteGolomb(val, kQuantizerCoefficientBaseRangeContextClamp, max_value,
-                /*prefix_size=*/1, enc, "golomb");
+                /*prefix_size=*/0, enc, "golomb");
   }
   enc->PutBool(res < 0, "is_negative");
 }

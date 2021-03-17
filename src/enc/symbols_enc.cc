@@ -422,10 +422,11 @@ WP2Status SymbolWriter::Allocate() {
       std::max(symbol_range_max, kMaxHistoValueBits);
   WP2_CHECK_ALLOC_OK(stats_buffer_.resize(histo_max_range));
 
-  const Golomb golomb1(symbol_range_max - 1, 1);
-  const Golomb golomb2(symbol_range_max - 1, 2);
-  const uint32_t golomb_range_max =
-      1 + std::max(golomb1.prefix, golomb2.prefix);
+  uint32_t golomb_range_max = 0;
+  for (uint32_t prefix_size : {0, 1}) {
+    const Golomb golomb(symbol_range_max - 1, prefix_size);
+    golomb_range_max = std::max(golomb_range_max, 1 + golomb.prefix);
+  }
   WP2_CHECK_ALLOC_OK(histogram_golomb_.resize(golomb_range_max));
   WP2_CHECK_ALLOC_OK(mapping_golomb_.resize(golomb_range_max));
   WP2_CHECK_STATUS(
@@ -987,7 +988,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
     }
 
     // Compute the best cost of Golomb encoding.
-    for (uint32_t prefix_size : {1, 2}) {
+    for (uint32_t prefix_size : {0, 1}) {
       if (ComputeCachedGolombHistogramCost(range, max_nnz, size, prefix_size,
                                            cost_best)) {
         prefix_size_best = prefix_size;
@@ -1038,7 +1039,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
     const Golomb golomb(range - 1, golomb_prefix_size);
     const uint32_t range_golomb = golomb.prefix + 1;
     const uint32_t nnz_range_golomb = std::min(max_nnz, range_golomb);
-    enc->PutRange(golomb_prefix_size, 1, 2, "prefix_size");
+    enc->PutRange(golomb_prefix_size, 0, 1, "prefix_size");
     enc->PutRange(golomb_size, 2, nnz_range_golomb, "size");
     // Store the dictionary.
     WriteHistogram(*config_best, range_golomb, max_nnz, enc);

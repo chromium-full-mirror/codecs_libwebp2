@@ -588,7 +588,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
   // There are at least 2 colors in the palette.
   num_colors_ = ReadGolomb(
       /*min=*/2, MaxPaletteSize(transform->width_pic_ * transform->height_pic_),
-      1, dec_, "num_colors");
+      0, dec_, "num_colors");
 
   const bool is_grayscale = dec_->ReadBool("is_grayscale");
   const uint32_t num_channels = (is_grayscale ? 2 : 4);
@@ -918,25 +918,25 @@ WP2Status Decoder::DecodeHeader() {
                   minima_range, maxima_range);
     // Read the ARGB ranges. As the encoder tries to reduce the ranges of ARGB
     // values around zero, they are more efficiently stored as Golomb.
-    constexpr uint32_t kPrefixSize = 2;
     for (Symbol sym : {kSymbolA, kSymbolR, kSymbolG, kSymbolB}) {
       if (hdr_.symbols_info_.IsUnused(sym)) continue;
       const uint32_t channel = (int)sym - (int)kSymbolA;
       int16_t minimum, maximum;
       if (minima_range[channel] < 0 && dec_->ReadBool("min_is_negative")) {
-        minimum =
-            ReadGolomb(minima_range[channel], -1, kPrefixSize, dec_, "minimum");
+        minimum = ReadGolomb(minima_range[channel], -1, kARGBRangePrefixSize,
+                             dec_, "minimum");
         if (dec_->ReadBool("max_is_negative")) {
-          maximum = ReadGolomb(minimum, -1, kPrefixSize, dec_, "maximum");
+          maximum =
+              ReadGolomb(minimum, -1, kARGBRangePrefixSize, dec_, "maximum");
         } else {
-          maximum = ReadGolomb(0, maxima_range[channel], kPrefixSize, dec_,
-                            "maximum");
+          maximum = ReadGolomb(0, maxima_range[channel], kARGBRangePrefixSize,
+                               dec_, "maximum");
         }
       } else {
-        minimum =
-            ReadGolomb(0, maxima_range[channel], kPrefixSize, dec_, "minimum");
-        maximum = ReadGolomb(minimum, maxima_range[channel], kPrefixSize, dec_,
-                          "maximum");
+        minimum = ReadGolomb(0, maxima_range[channel], kARGBRangePrefixSize,
+                             dec_, "minimum");
+        maximum = ReadGolomb(minimum, maxima_range[channel],
+                             kARGBRangePrefixSize, dec_, "maximum");
       }
       hdr_.symbols_info_.SetMinMax(sym, minimum, maximum);
     }

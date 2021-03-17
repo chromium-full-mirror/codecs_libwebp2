@@ -499,7 +499,7 @@ WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t cluster,
                                 ? dec_->ReadBool("is_symmetric")
                                 : false;
   if (type == 2) {  // kGolomb
-    const uint32_t golomb_prefix_size = dec_->ReadRange(1, 2, "prefix_size");
+    const uint32_t golomb_prefix_size = dec_->ReadRange(0, 1, "prefix_size");
     const Golomb golomb(range - 1, golomb_prefix_size);
     const uint32_t range_golomb = golomb.prefix + 1;
     const uint32_t nnz =

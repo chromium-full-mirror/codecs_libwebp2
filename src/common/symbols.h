@@ -244,62 +244,42 @@ class SymbolsInfo {
 
 //------------------------------------------------------------------------------
 
-// Split the symbol 'v' into a 'prefix' (corresponding to the first or first
-// two bits depending on 'prefix_size'), the number of extra bits,
-// and the value contained in those extra bits.
+// Split the symbol 'v' into a 'prefix' (corresponding to the first
+// 'prefix_size' bits), the number of extra bits, and the value contained in
+// those extra bits. This prefix coding is used in deflate (cf rfc1951) and is
+// close to an exponential Golomb.
 struct Golomb {
   Golomb(uint32_t v, uint32_t prefix_size) {
-    assert(prefix_size == 1 || prefix_size == 2);
-    if (prefix_size == 2) {
-      if (v < 4) {
-        prefix = v;
-        extra_bits_num = 0;
-      } else {
-        const uint32_t highest_bit_index = WP2Log2Floor(v);
-        const uint32_t second_highest_bit = (v >> (highest_bit_index - 1)) & 1;
-        extra_bits_num = highest_bit_index - 1;
-        // Store highest bit position and whether the next highest bit is 1 into
-        // an int.
-        prefix = 2 * highest_bit_index + second_highest_bit;
-      }
-    } else {
-      if (v == 0) {
-        prefix = 0;
-        extra_bits_num = 0;
-      } else {
-        const uint16_t n = WP2Log2Floor(v);
-        extra_bits_num = n;
-        prefix = n + 1;
-      }
+    if (v < (2u << prefix_size)) {
+      prefix = v;
+      extra_bits_num = 0;
+      extra_bits_value = 0;
+      return;
     }
+    const uint32_t highest_bit_index = WP2Log2Floor(v);
+    extra_bits_num = highest_bit_index - prefix_size;
+    const uint32_t other_highest_bits =
+        (v - (1 << highest_bit_index)) >> extra_bits_num;
+    // Store highest bit position and the next highest bits into an int.
+    prefix = ((extra_bits_num + 1) << prefix_size) + other_highest_bits;
     extra_bits_value = v & ((1 << extra_bits_num) - 1);
   }
   // Given a 'prefix', returns the number of extra bits required to complete
   // it.
   static uint32_t NumExtraBits(uint32_t prefix, uint32_t prefix_size) {
-    assert(prefix_size == 1 || prefix_size == 2);
-    if (prefix_size == 2) {
-      if (prefix < 4) return 0;
-      return (prefix - 2) >> 1;
-    } else {
-      if (prefix <= 1) return 0;
-      return prefix - 1;
-    }
+    if (prefix < (2u << prefix_size)) return 0;
+    return (prefix >> prefix_size) - 1;
   }
   // Given a 'prefix' and 'extra_bits_value', combine the two to reconstruct
   // the final value.
   static uint32_t Merge(uint32_t prefix, uint32_t prefix_size,
                         uint32_t extra_bits_value) {
-    assert(prefix_size == 1 || prefix_size == 2);
-    if (prefix_size == 2) {
-      if (prefix < 3) return prefix;
-      const uint32_t extra_bits_num = (prefix - 2) >> 1;
-      const uint32_t offset = (2 + (prefix & 1)) << extra_bits_num;
-      return offset + extra_bits_value;
-    } else {
-      if (prefix < 2) return prefix;
-      return (1 << (prefix - 1)) + extra_bits_value;
-    }
+    if (prefix < (2u << prefix_size)) return prefix;
+    const uint32_t extra_bits_num = (prefix >> prefix_size) - 1;
+    uint32_t offset = 1 << prefix_size;
+    offset += prefix & ((1 << prefix_size) - 1);
+    offset <<= extra_bits_num;
+    return offset + extra_bits_value;
   }
 
   uint32_t prefix;

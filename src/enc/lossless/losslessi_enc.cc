@@ -895,26 +895,25 @@ WP2Status Encoder::ApplyAndWriteTransforms(
       assert(minima[c] <= maxima_range[c]);
     }
     // Write the ARGB ranges.
-    constexpr uint32_t kPrefixSize = 2;
     for (Symbol sym : {kSymbolA, kSymbolR, kSymbolG, kSymbolB}) {
       if (symbols_info->IsUnused(sym)) continue;
       const uint32_t channel = (int)sym - (int)kSymbolA;
       if (minima_range[channel] < 0 &&
           enc->PutBool(minima[channel] < 0, "min_is_negative")) {
-        WriteGolomb(minima[channel], minima_range[channel], -1, kPrefixSize,
-                    enc, "minimum");
+        WriteGolomb(minima[channel], minima_range[channel], -1,
+                    kARGBRangePrefixSize, enc, "minimum");
         if (enc->PutBool(maxima[channel] < 0, "max_is_negative")) {
-          WriteGolomb(maxima[channel], minima[channel], -1, kPrefixSize, enc,
-                      "maximum");
+          WriteGolomb(maxima[channel], minima[channel], -1,
+                      kARGBRangePrefixSize, enc, "maximum");
         } else {
-          WriteGolomb(maxima[channel], 0, maxima_range[channel], kPrefixSize,
-                      enc, "maximum");
+          WriteGolomb(maxima[channel], 0, maxima_range[channel],
+                      kARGBRangePrefixSize, enc, "maximum");
         }
       } else {
-        WriteGolomb(minima[channel], 0, maxima_range[channel], kPrefixSize, enc,
-                    "minimum");
+        WriteGolomb(minima[channel], 0, maxima_range[channel],
+                    kARGBRangePrefixSize, enc, "minimum");
         WriteGolomb(maxima[channel], minima[channel], maxima_range[channel],
-                    kPrefixSize, enc, "maximum");
+                    kARGBRangePrefixSize, enc, "maximum");
       }
       symbols_info->SetMinMax(sym, minima[channel], maxima[channel]);
     }
