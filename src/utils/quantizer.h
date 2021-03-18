@@ -47,9 +47,9 @@ class Quantizer {
     ConfigType type;
     bool is_sparse;
     uint8_t max_freq_bits;
-    // Golomb specific parameters.
-    uint32_t golomb_size;
-    uint32_t golomb_prefix_size;
+    // Prefix code specific parameters.
+    uint32_t prefix_code_histo_len;
+    uint32_t prefix_code_prefix_size;
   };
   struct HistogramSparse {
     uint32_t* counts;

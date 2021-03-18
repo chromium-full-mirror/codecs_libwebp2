@@ -277,14 +277,14 @@ class SymbolWriter : public SymbolManager,
                     const uint16_t* const mapping, uint32_t size,
                     ANSDictionaries* const dicts);
   // For the 'cluster'th cluster of symbol 'sym', sets the writing mode to
-  // Golomb of prefix size 'prefix_size' using the statistics represented by
-  // 'counts', 'quantized_counts' and 'mapping'.
+  // kPrefixCode of prefix size 'prefix_size' using the statistics represented
+  // by 'counts', 'quantized_counts' and 'mapping'.
   // mapping[] must be already sorted in strictly increasing order.
-  WP2Status AddGolomb(uint32_t sym, uint32_t cluster, bool is_symmetric,
-                      const uint32_t* const counts,
-                      const uint32_t* const quantized_counts,
-                      const uint16_t* const mapping, uint32_t size,
-                      uint32_t prefix_size, ANSDictionaries* const dicts);
+  WP2Status AddPrefixCode(uint32_t sym, uint32_t cluster, bool is_symmetric,
+                          const uint32_t* const counts,
+                          const uint32_t* const quantized_counts,
+                          const uint16_t* const mapping, uint32_t size,
+                          uint32_t prefix_size, ANSDictionaries* const dicts);
 
   // Initializes the 'stat' object to use mapping.
   static void SetMapping(Stat* const stat,
@@ -302,15 +302,15 @@ class SymbolWriter : public SymbolManager,
   void WriteHistogram(const Quantizer::Config& config, uint32_t symbol_range,
                       uint32_t max_count, ANSEncBase* const enc);
   // Fills the cached counts+mapping for the elements in [0, 'size'], given a
-  // Golomb prefix size and the possible range of the elements.
-  uint32_t FillCachedGolombHistogram(uint32_t range, uint32_t size,
-                                     uint32_t prefix_size);
-  // Computes the cost of storing a histogram as Golomb. Returns true if we
-  // find a confguration that beats the quantizer_'s best cost and 'cost_max',
-  // false otherwise.
-  bool ComputeCachedGolombHistogramCost(uint32_t range, uint32_t max_nnz,
-                                        uint32_t size, uint32_t prefix_size,
-                                        float cost_max);
+  // prefix code size and the possible range of the elements.
+  uint32_t FillCachedPrefixCodeHistogram(uint32_t range, uint32_t size,
+                                         uint32_t prefix_size);
+  // Computes the cost of storing a histogram with prefix code. Returns true if
+  // we find a confguration that beats the quantizer_'s best cost and
+  // 'cost_max', false otherwise.
+  bool ComputeCachedPrefixCodeHistogramCost(uint32_t range, uint32_t max_nnz,
+                                            uint32_t size, uint32_t prefix_size,
+                                            float cost_max);
   // return the number of non-zero counts (stored in mapping_[])
   uint32_t ConvertCountsToCachedHistogram(const uint32_t counts[],
                                           int min, int max, bool is_symmetric,
@@ -326,9 +326,9 @@ class SymbolWriter : public SymbolManager,
   Vector_u32 histogram_;
   // Contains the values - min of symbol.
   Vector_u16 mapping_;
-  Vector_u32 histogram_golomb_;
-  Vector_u16 mapping_golomb_;
-  // Quantizer for raw counts and Golomb counts.
+  Vector_u32 histogram_prefix_code_;
+  Vector_u16 mapping_prefix_code_;
+  // Quantizer for raw counts and prefix code counts.
   Quantizer quantizer_;
   VectorNoCtor<OptimizeArrayStorageStat> stats_buffer_;
   int effort_;

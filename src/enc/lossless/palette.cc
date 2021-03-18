@@ -584,8 +584,8 @@ WP2Status Palette::FindBestMethod(const ProgressRange& progress,
 
   WP2::ANSEncCounter bw;
   // Write the number of colors.
-  WP2::WriteGolomb(num_colors_, 2, max_palette_size_, /*prefix_size=*/0, &bw,
-                   "num_colors");
+  WP2::WritePrefixCode(num_colors_, 2, max_palette_size_, /*prefix_size=*/0,
+                       &bw, "num_colors");
 
   // Check if values are grayscale.
   bw.PutBool(is_grayscale_, "is_grayscale");
@@ -684,8 +684,8 @@ WP2Status Palette::Write(const ProgressRange& progress,
                          Encoder* const encoder) const {
   const WP2::ANSDebugPrefix prefix(enc, "palette");
   // Write the number of colors.
-  WP2::WriteGolomb(num_colors_, 2, max_palette_size_, /*prefix_size=*/0, enc,
-                   "num_colors");
+  WP2::WritePrefixCode(num_colors_, 2, max_palette_size_, /*prefix_size=*/0,
+                       enc, "num_colors");
 
   // Check if values are grayscale.
   enc->PutBool(is_grayscale_, "is_grayscale");

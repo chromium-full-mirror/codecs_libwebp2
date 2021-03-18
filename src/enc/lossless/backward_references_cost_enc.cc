@@ -107,15 +107,16 @@ class CostModel : public CountsBuffer<float> {
   }
 
   inline float GetLengthCost(uint32_t length) const {
-    WP2::Golomb golomb(length - kMinLZ77Length, kLZZGolombPrefixSize);
+    WP2::PrefixCode prefix_code(length - kMinLZ77Length, kLZZPrefixCodeSize);
     return counts_[kSymbolType][kSymbolTypeCopy] +
-           counts_[kSymbolLen][golomb.prefix] + golomb.extra_bits_num;
+           counts_[kSymbolLen][prefix_code.prefix] + prefix_code.extra_bits_num;
   }
 
   inline float GetDistanceCost(uint32_t distance) const {
     const int32_t code = DistanceToPlaneCode(width_, distance);
-    WP2::Golomb golomb(code, kLZZGolombPrefixSize);
-    return counts_[kSymbolDist][golomb.prefix] + golomb.extra_bits_num;
+    WP2::PrefixCode prefix_code(code, kLZZPrefixCodeSize);
+    return counts_[kSymbolDist][prefix_code.prefix] +
+           prefix_code.extra_bits_num;
   }
 
  private:

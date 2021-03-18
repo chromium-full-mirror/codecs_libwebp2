@@ -49,47 +49,49 @@ void swap(EncodeInfo& a, EncodeInfo& b) {
   swap(a.bits_per_pixel, b.bits_per_pixel);
 }
 
-// Writes a 'value' as Golomb where the prefix is stored as symbol 'sym' in
-// cluster 'cluster'.
-void WriteLZ77Golomb(uint32_t sym, uint32_t cluster, int32_t value,
-                     uint32_t min, uint32_t max, WP2_OPT_LABEL,
-                     WP2::SymbolManager* const sw, WP2::ANSEncBase* const enc,
-                     float* const cost) {
-  // Write information about the Golomb representation.
-  const WP2::Golomb golomb(value - min, kLZZGolombPrefixSize);
-  const WP2::Golomb golomb_max(max - min, kLZZGolombPrefixSize);
-  sw->ProcessWithCost(sym, cluster, golomb.prefix, golomb_max.prefix, label,
-                      enc, cost);
+// Writes a 'value' with prefix coding where the prefix is stored as symbol
+// 'sym' in cluster 'cluster'.
+void WriteLZ77PrefixCode(uint32_t sym, uint32_t cluster, int32_t value,
+                         uint32_t min, uint32_t max, WP2_OPT_LABEL,
+                         WP2::SymbolManager* const sw,
+                         WP2::ANSEncBase* const enc, float* const cost) {
+  // Write information about the prefix code representation.
+  const WP2::PrefixCode prefix_code(value - min, kLZZPrefixCodeSize);
+  const WP2::PrefixCode prefix_code_max(max - min, kLZZPrefixCodeSize);
+  sw->ProcessWithCost(sym, cluster, prefix_code.prefix, prefix_code_max.prefix,
+                      label, enc, cost);
 
-  if (golomb.extra_bits_num == 0) return;
+  if (prefix_code.extra_bits_num == 0) return;
 
   // Write the rest of the representation.
   const std::string label_bits = WP2SPrint("%s_bits", label);
-  if (golomb.prefix == golomb_max.prefix) {
+  if (prefix_code.prefix == prefix_code_max.prefix) {
     const uint32_t new_range =
         max - min + 1 -
-        WP2::Golomb::Merge(golomb.prefix, kLZZGolombPrefixSize, 0);
+        WP2::PrefixCode::Merge(prefix_code.prefix, kLZZPrefixCodeSize, 0);
     if (new_range <= WP2::kANSMaxRange) {
-      enc->PutRValue(golomb.extra_bits_value, new_range, label_bits.c_str());
+      enc->PutRValue(prefix_code.extra_bits_value, new_range,
+                     label_bits.c_str());
       if (cost != nullptr) *cost += WP2Log2(new_range);
     } else {
       // Go recursively.
-      WriteLZ77Golomb(sym, cluster, golomb.extra_bits_value,
-                      /*min=*/0, /*max=*/new_range - 1, label, sw, enc, cost);
+      WriteLZ77PrefixCode(sym, cluster, prefix_code.extra_bits_value,
+                          /*min=*/0, /*max=*/new_range - 1, label, sw, enc,
+                          cost);
     }
   } else {
-    if (golomb.extra_bits_num <= WP2::kANSMaxUniformBits) {
-      enc->PutUValue(golomb.extra_bits_value, golomb.extra_bits_num,
+    if (prefix_code.extra_bits_num <= WP2::kANSMaxUniformBits) {
+      enc->PutUValue(prefix_code.extra_bits_value, prefix_code.extra_bits_num,
                      label_bits.c_str());
     } else {
       enc->PutUValue(
-          golomb.extra_bits_value & ((1u << WP2::kANSMaxUniformBits) - 1),
+          prefix_code.extra_bits_value & ((1u << WP2::kANSMaxUniformBits) - 1),
           WP2::kANSMaxUniformBits, label_bits.c_str());
-      enc->PutUValue(golomb.extra_bits_value >> WP2::kANSMaxUniformBits,
-                     golomb.extra_bits_num - WP2::kANSMaxUniformBits,
+      enc->PutUValue(prefix_code.extra_bits_value >> WP2::kANSMaxUniformBits,
+                     prefix_code.extra_bits_num - WP2::kANSMaxUniformBits,
                      label_bits.c_str());
     }
-    if (cost != nullptr) *cost += golomb.extra_bits_num;
+    if (cost != nullptr) *cost += prefix_code.extra_bits_num;
   }
 }
 }  // namespace
@@ -244,12 +246,12 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
         const uint32_t pixel_ind = x + y * width;
         const uint32_t plane_code = DistanceToPlaneCode(width, v.GetDistance());
         const uint32_t max_plane_code = pixel_ind + kCodeToPlaneCodes - 1;
-        WriteLZ77Golomb(kSymbolDist, histogram_ix, plane_code,
-                        /*min=*/0, max_plane_code, "dist", sw, enc, &cost);
+        WriteLZ77PrefixCode(kSymbolDist, histogram_ix, plane_code,
+                            /*min=*/0, max_plane_code, "dist", sw, enc, &cost);
         const uint32_t max_length =
             std::min(width * height - pixel_ind, kMaxLZ77Length);
-        WriteLZ77Golomb(kSymbolLen, histogram_ix, v.GetLength(), kMinLZ77Length,
-                        max_length, "len", sw, enc, &cost);
+        WriteLZ77PrefixCode(kSymbolLen, histogram_ix, v.GetLength(),
+                            kMinLZ77Length, max_length, "len", sw, enc, &cost);
         break;
       }
       default:
@@ -900,20 +902,20 @@ WP2Status Encoder::ApplyAndWriteTransforms(
       const uint32_t channel = (int)sym - (int)kSymbolA;
       if (minima_range[channel] < 0 &&
           enc->PutBool(minima[channel] < 0, "min_is_negative")) {
-        WriteGolomb(minima[channel], minima_range[channel], -1,
-                    kARGBRangePrefixSize, enc, "minimum");
+        WritePrefixCode(minima[channel], minima_range[channel], -1,
+                        kARGBRangePrefixSize, enc, "minimum");
         if (enc->PutBool(maxima[channel] < 0, "max_is_negative")) {
-          WriteGolomb(maxima[channel], minima[channel], -1,
-                      kARGBRangePrefixSize, enc, "maximum");
+          WritePrefixCode(maxima[channel], minima[channel], -1,
+                          kARGBRangePrefixSize, enc, "maximum");
         } else {
-          WriteGolomb(maxima[channel], 0, maxima_range[channel],
-                      kARGBRangePrefixSize, enc, "maximum");
+          WritePrefixCode(maxima[channel], 0, maxima_range[channel],
+                          kARGBRangePrefixSize, enc, "maximum");
         }
       } else {
-        WriteGolomb(minima[channel], 0, maxima_range[channel],
-                    kARGBRangePrefixSize, enc, "minimum");
-        WriteGolomb(maxima[channel], minima[channel], maxima_range[channel],
-                    kARGBRangePrefixSize, enc, "maximum");
+        WritePrefixCode(minima[channel], 0, maxima_range[channel],
+                        kARGBRangePrefixSize, enc, "minimum");
+        WritePrefixCode(maxima[channel], minima[channel], maxima_range[channel],
+                        kARGBRangePrefixSize, enc, "maximum");
       }
       symbols_info->SetMinMax(sym, minima[channel], maxima[channel]);
     }

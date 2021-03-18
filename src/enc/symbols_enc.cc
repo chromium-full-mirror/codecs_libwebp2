@@ -384,7 +384,7 @@ int32_t SymbolCounter::ProcessInternal(uint32_t sym, uint32_t cluster,
         if (use_max_value) range = std::min(range, max_value + 1);
         if (symbols_info_.ProbablyGeometric(sym)) {
           // Very approximate. Favors lower values. TODO(maryla): find a better
-          // approximation of golomb cost.
+          // approximation of prefix coding cost.
           range = std::min(range, (value == 0) ? 2 : ((uint32_t)value << 2));
         }
         enc->PutRValue(value, range, label);
@@ -422,15 +422,16 @@ WP2Status SymbolWriter::Allocate() {
       std::max(symbol_range_max, kMaxHistoValueBits);
   WP2_CHECK_ALLOC_OK(stats_buffer_.resize(histo_max_range));
 
-  uint32_t golomb_range_max = 0;
+  uint32_t prefix_code_range_max = 0;
   for (uint32_t prefix_size : {0, 1}) {
-    const Golomb golomb(symbol_range_max - 1, prefix_size);
-    golomb_range_max = std::max(golomb_range_max, 1 + golomb.prefix);
+    const PrefixCode prefix_code(symbol_range_max - 1, prefix_size);
+    prefix_code_range_max =
+        std::max(prefix_code_range_max, 1 + prefix_code.prefix);
   }
-  WP2_CHECK_ALLOC_OK(histogram_golomb_.resize(golomb_range_max));
-  WP2_CHECK_ALLOC_OK(mapping_golomb_.resize(golomb_range_max));
+  WP2_CHECK_ALLOC_OK(histogram_prefix_code_.resize(prefix_code_range_max));
+  WP2_CHECK_ALLOC_OK(mapping_prefix_code_.resize(prefix_code_range_max));
   WP2_CHECK_STATUS(
-      quantizer_.Allocate(std::max(symbol_range_max, golomb_range_max)));
+      quantizer_.Allocate(std::max(symbol_range_max, prefix_code_range_max)));
   return WP2_STATUS_OK;
 }
 
@@ -475,8 +476,10 @@ WP2Status SymbolWriter::CopyFrom(const SymbolWriter& other,
   // Deep copy remaining direct members of SymbolWriter.
   WP2_CHECK_ALLOC_OK(histogram_.copy_from(other.histogram_));
   WP2_CHECK_ALLOC_OK(mapping_.copy_from(other.mapping_));
-  WP2_CHECK_ALLOC_OK(histogram_golomb_.copy_from(other.histogram_golomb_));
-  WP2_CHECK_ALLOC_OK(mapping_golomb_.copy_from(other.mapping_golomb_));
+  WP2_CHECK_ALLOC_OK(
+      histogram_prefix_code_.copy_from(other.histogram_prefix_code_));
+  WP2_CHECK_ALLOC_OK(
+      mapping_prefix_code_.copy_from(other.mapping_prefix_code_));
   // No need to copy Quantizer instances. They only contain data members to
   // avoid reallocations. TODO(yguyon): Check if more could be skipped
   WP2_CHECK_ALLOC_OK(stats_buffer_.copy_from(other.stats_buffer_));
@@ -565,16 +568,16 @@ WP2Status SymbolWriter::AddDict(uint32_t sym, uint32_t cluster,
   return WP2_STATUS_OK;
 }
 
-WP2Status SymbolWriter::AddGolomb(uint32_t sym, uint32_t cluster,
-                                  bool is_symmetric,
-                                  const uint32_t* const counts,
-                                  const uint32_t* const quantized_counts,
-                                  const uint16_t* const mapping, uint32_t size,
-                                  uint32_t prefix_size,
-                                  ANSDictionaries* const dicts) {
+WP2Status SymbolWriter::AddPrefixCode(uint32_t sym, uint32_t cluster,
+                                      bool is_symmetric,
+                                      const uint32_t* const counts,
+                                      const uint32_t* const quantized_counts,
+                                      const uint16_t* const mapping,
+                                      uint32_t size, uint32_t prefix_size,
+                                      ANSDictionaries* const dicts) {
   WP2_CHECK_STATUS(AddDict(sym, cluster, is_symmetric, counts, quantized_counts,
                            mapping, size, dicts));
-  SetGolombStat(sym, cluster, prefix_size);
+  SetPrefixCodeStat(sym, cluster, prefix_size);
   return WP2_STATUS_OK;
 }
 
@@ -640,53 +643,56 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
       }
       break;
     }
-    case Stat::Type::kGolomb: {
+    case Stat::Type::kPrefixCode: {
       // TODO(vrabaud) restrict when use_max_value is set.
-      const uint32_t prefix_size = stat.param.golomb.prefix_size;
-      const Golomb golomb(value, prefix_size);
+      const uint32_t prefix_size = stat.param.prefix_code.prefix_size;
+      const PrefixCode prefix_code(value, prefix_size);
       bool use_range;
       uint32_t range = 0;
       if (use_max_value) {
-        const Golomb golomb_max(max_value, prefix_size);
+        const PrefixCode prefix_code_max(max_value, prefix_size);
         const uint32_t max_prefix =
-            FindLargestMappingIndex(stat, golomb_max.prefix);
-        enc->PutSymbol(stat.mappings[golomb.prefix], stat.mappings[max_prefix],
-                       *stat.extra.dict, "golomb");
+            FindLargestMappingIndex(stat, prefix_code_max.prefix);
+        enc->PutSymbol(stat.mappings[prefix_code.prefix],
+                       stat.mappings[max_prefix], *stat.extra.dict,
+                       "prefix_code");
         if (cost != nullptr) {
-          *cost += stat.extra.dict->SymbolCost(stat.mappings[golomb.prefix],
-                                               stat.mappings[max_prefix]);
+          *cost += stat.extra.dict->SymbolCost(
+              stat.mappings[prefix_code.prefix], stat.mappings[max_prefix]);
         }
-        use_range = (golomb.prefix == max_prefix);
+        use_range = (prefix_code.prefix == max_prefix);
         if (use_range) {
           // Get (the biggest value with a prefix of 'max_prefix') + 1.
           range = std::min(
               max_value + 1,
-              Golomb::Merge(max_prefix, prefix_size, 0) +
-                  (1 << Golomb::NumExtraBits(max_prefix, prefix_size)));
+              PrefixCode::Merge(max_prefix, prefix_size, 0) +
+                  (1 << PrefixCode::NumExtraBits(max_prefix, prefix_size)));
         }
       } else {
-        enc->PutSymbol(stat.mappings[golomb.prefix], *stat.extra.dict,
-                       "golomb");
+        enc->PutSymbol(stat.mappings[prefix_code.prefix], *stat.extra.dict,
+                       "prefix_code");
         // If the last bit interval is truncated, go with ranges.
-        use_range = (golomb.prefix + 1 == stat.param.golomb.range);
+        use_range = (prefix_code.prefix + 1 == stat.param.prefix_code.range);
         if (use_range) range = stat.range;
         if (cost != nullptr) {
-          *cost += stat.extra.dict->SymbolCost(stat.mappings[golomb.prefix]);
+          *cost +=
+              stat.extra.dict->SymbolCost(stat.mappings[prefix_code.prefix]);
         }
       }
-      if (golomb.extra_bits_num > 0) {
+      if (prefix_code.extra_bits_num > 0) {
         if (use_range) {
-          assert(Golomb::Merge(golomb.prefix, prefix_size, 0) < range);
-          range -= Golomb::Merge(golomb.prefix, prefix_size, 0);
-          enc->PutRValue(golomb.extra_bits_value, range, "extra_bits_value");
+          assert(PrefixCode::Merge(prefix_code.prefix, prefix_size, 0) < range);
+          range -= PrefixCode::Merge(prefix_code.prefix, prefix_size, 0);
+          enc->PutRValue(prefix_code.extra_bits_value, range,
+                         "extra_bits_value");
           if (cost != nullptr) {
             *cost += std::log2(range);
           }
         } else {
-          enc->PutUValue(golomb.extra_bits_value, golomb.extra_bits_num,
-                         "extra_bits_value");
+          enc->PutUValue(prefix_code.extra_bits_value,
+                         prefix_code.extra_bits_num, "extra_bits_value");
           if (cost != nullptr) {
-            *cost += golomb.extra_bits_num;
+            *cost += prefix_code.extra_bits_num;
           }
         }
       }
@@ -735,54 +741,57 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
   return value_in;
 }
 
-uint32_t SymbolWriter::FillCachedGolombHistogram(uint32_t range, uint32_t size,
-                                                 uint32_t prefix_size) {
-  // Analyze whether a Golomb encoding would work.
-  const Golomb golomb(range - 1, prefix_size);
-  const uint32_t range_golomb = golomb.prefix + 1;
-  assert(range_golomb <= histogram_golomb_.size());
-  std::fill(&histogram_golomb_[0], &histogram_golomb_[0] + range_golomb, 0);
-  uint32_t size_golomb = 0;
+uint32_t SymbolWriter::FillCachedPrefixCodeHistogram(uint32_t range,
+                                                     uint32_t size,
+                                                     uint32_t prefix_size) {
+  // Analyze whether a prefix coding would work.
+  const PrefixCode prefix_code(range - 1, prefix_size);
+  const uint32_t range_prefix_code = prefix_code.prefix + 1;
+  assert(range_prefix_code <= histogram_prefix_code_.size());
+  std::fill(&histogram_prefix_code_[0],
+            &histogram_prefix_code_[0] + range_prefix_code, 0);
+  uint32_t histo_len = 0;
   for (uint32_t i = 0; i < size; ++i) {
-    const Golomb golomb_i(mapping_[i], prefix_size);
-    if (size_golomb == 0 ||
-        golomb_i.prefix != mapping_golomb_[size_golomb - 1]) {
-      mapping_golomb_[size_golomb++] = golomb_i.prefix;
-      assert(size_golomb - 1 < mapping_golomb_.size());
+    const PrefixCode prefix_code_i(mapping_[i], prefix_size);
+    if (histo_len == 0 ||
+        prefix_code_i.prefix != mapping_prefix_code_[histo_len - 1]) {
+      mapping_prefix_code_[histo_len++] = prefix_code_i.prefix;
+      assert(histo_len - 1 < mapping_prefix_code_.size());
     }
-    histogram_golomb_[size_golomb - 1] += histogram_[i];
+    histogram_prefix_code_[histo_len - 1] += histogram_[i];
   }
-  return size_golomb;
+  return histo_len;
 }
 
-bool SymbolWriter::ComputeCachedGolombHistogramCost(uint32_t range,
-                                                    uint32_t max_nnz,
-                                                    uint32_t size,
-                                                    uint32_t prefix_size,
-                                                    float cost_max) {
-  const uint32_t size_golomb =
-      FillCachedGolombHistogram(range, size, prefix_size);
-  // Do not use Golomb if there is only one value for now.
-  if (size_golomb == 1) {
+bool SymbolWriter::ComputeCachedPrefixCodeHistogramCost(uint32_t range,
+                                                        uint32_t max_nnz,
+                                                        uint32_t size,
+                                                        uint32_t prefix_size,
+                                                        float cost_max) {
+  const uint32_t histo_len =
+      FillCachedPrefixCodeHistogram(range, size, prefix_size);
+  // Do not use prefix coding if there is only one value for now.
+  if (histo_len == 1) {
     // TODO(vrabaud) Allow for a unique value (probably requires recursion).
     return false;
   }
-  const Golomb golomb(range - 1, prefix_size);
-  const uint32_t range_golomb = golomb.prefix + 1;
-  const uint32_t nnz_range_golomb = std::min(max_nnz, range_golomb);
+  const PrefixCode prefix_code(range - 1, prefix_size);
+  const uint32_t range_prefix_code = prefix_code.prefix + 1;
+  const uint32_t nnz_range_prefix_code = std::min(max_nnz, range_prefix_code);
   // Add the prefix_size and size cost.
-  float cost_extra = 1.f + WP2Log2(nnz_range_golomb - 2);
+  float cost_extra = 1.f + WP2Log2(nnz_range_prefix_code - 2);
   for (uint32_t i = 0; i < size; ++i) {
-    const Golomb golomb_i(mapping_[i], prefix_size);
-    cost_extra += golomb_i.extra_bits_num * histogram_[i];
+    const PrefixCode prefix_code_i(mapping_[i], prefix_size);
+    cost_extra += prefix_code_i.extra_bits_num * histogram_[i];
   }
   // Quantize the histogram to get the cost of using a dictionary.
-  if (quantizer_.Quantize(histogram_golomb_.data(), mapping_golomb_.data(),
-                          size_golomb, range_golomb, max_nnz,
-                          cost_max, cost_extra, effort_)) {
+  if (quantizer_.Quantize(histogram_prefix_code_.data(),
+                          mapping_prefix_code_.data(), histo_len,
+                          range_prefix_code, max_nnz, cost_max, cost_extra,
+                          effort_)) {
     Quantizer::Config* config_best = quantizer_.GetBest();
-    config_best->param.golomb_size = size_golomb;
-    config_best->param.golomb_prefix_size = prefix_size;
+    config_best->param.prefix_code_histo_len = histo_len;
+    config_best->param.prefix_code_prefix_size = prefix_size;
     return true;
   } else {
     // We could not beat the previous configuration.
@@ -987,14 +996,14 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
       is_symmetric_best = (changes_sign && i == 0);
     }
 
-    // Compute the best cost of Golomb encoding.
+    // Compute the best cost of prefix coding.
     for (uint32_t prefix_size : {0, 1}) {
-      if (ComputeCachedGolombHistogramCost(range, max_nnz, size, prefix_size,
-                                           cost_best)) {
+      if (ComputeCachedPrefixCodeHistogramCost(range, max_nnz, size,
+                                               prefix_size, cost_best)) {
         prefix_size_best = prefix_size;
         config_best = quantizer_.GetBest();
         cost_best = config_best->cost;
-        type_best = Stat::Type::kGolomb;
+        type_best = Stat::Type::kPrefixCode;
         is_symmetric_best = (changes_sign && i == 0);
       }
     }
@@ -1030,24 +1039,25 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
     assert(is_symmetric_best == false);
   }
 
-  if (type_best == Stat::Type::kGolomb) {
-    // Re-initialize the cached Golomb parameters.
-    FillCachedGolombHistogram(range, size, prefix_size_best);
+  if (type_best == Stat::Type::kPrefixCode) {
+    // Re-initialize the cached prefix code parameters.
+    FillCachedPrefixCodeHistogram(range, size, prefix_size_best);
 
-    const uint32_t golomb_prefix_size = config_best->param.golomb_prefix_size;
-    const uint32_t golomb_size = config_best->param.golomb_size;
-    const Golomb golomb(range - 1, golomb_prefix_size);
-    const uint32_t range_golomb = golomb.prefix + 1;
-    const uint32_t nnz_range_golomb = std::min(max_nnz, range_golomb);
-    enc->PutRange(golomb_prefix_size, 0, 1, "prefix_size");
-    enc->PutRange(golomb_size, 2, nnz_range_golomb, "size");
+    const uint32_t prefix_code_prefix_size =
+        config_best->param.prefix_code_prefix_size;
+    const uint32_t prefix_code_size = config_best->param.prefix_code_histo_len;
+    const PrefixCode prefix_code(range - 1, prefix_code_prefix_size);
+    const uint32_t range_prefix_size = prefix_code.prefix + 1;
+    const uint32_t nnz_range_prefix_size = std::min(max_nnz, range_prefix_size);
+    enc->PutRange(prefix_code_prefix_size, 0, 1, "prefix_size");
+    enc->PutRange(prefix_code_size, 2, nnz_range_prefix_size, "size");
     // Store the dictionary.
-    WriteHistogram(*config_best, range_golomb, max_nnz, enc);
+    WriteHistogram(*config_best, range_prefix_size, max_nnz, enc);
     // Create needed dictionaries.
-    WP2_CHECK_STATUS(
-        AddGolomb(sym, cluster, is_symmetric_best, histogram_golomb_.data(),
-                  config_best->histo.counts, mapping_golomb_.data(),
-                  golomb_size, golomb_prefix_size, dicts));
+    WP2_CHECK_STATUS(AddPrefixCode(
+        sym, cluster, is_symmetric_best, histogram_prefix_code_.data(),
+        config_best->histo.counts, mapping_prefix_code_.data(),
+        prefix_code_size, prefix_code_prefix_size, dicts));
   } else if (type_best == Stat::Type::kDict) {
     // The number of symbols is bounded by the number of possible symbols
     // and the size of the image.
@@ -1103,23 +1113,23 @@ void SymbolWriter::GetPotentialUsage(uint32_t sym, uint32_t cluster,
       }
       break;
     }
-    case Stat::Type::kGolomb: {
+    case Stat::Type::kPrefixCode: {
       // Go over the stats to figure out what is used or not.
       if (stat.use_mapping) {
         std::fill(is_maybe_used, is_maybe_used + size, false);
       }
       const Vector_u32& v = stat.extra.dict->Counts();
-      const uint32_t prefix_size = stat.param.golomb.prefix_size;
+      const uint32_t prefix_size = stat.param.prefix_code.prefix_size;
       if (stat.use_mapping) {
         for (uint32_t i = 0; i < stat.extra.mapping_size; ++i) {
           const auto m = stat.mappings[i];
           if (m != Stat::kInvalidMapping && v[m] > 0) {
             const uint32_t extra_bits_num =
-                Golomb::NumExtraBits(i, prefix_size);
-            const uint32_t i1 = Golomb::Merge(i, prefix_size, 0);
+                PrefixCode::NumExtraBits(i, prefix_size);
+            const uint32_t i1 = PrefixCode::Merge(i, prefix_size, 0);
             assert(i1 <= size);
             const uint32_t i2 =
-                Golomb::Merge(i, prefix_size, (1 << extra_bits_num) - 1);
+                PrefixCode::Merge(i, prefix_size, (1 << extra_bits_num) - 1);
             std::fill(is_maybe_used + i1,
                       is_maybe_used + std::min(i2 + 1, size), true);
           }
@@ -1127,11 +1137,12 @@ void SymbolWriter::GetPotentialUsage(uint32_t sym, uint32_t cluster,
       } else {
         for (uint32_t i = 0; i < stat.extra.dict->MaxSymbol(); ++i) {
           if (v[i] == 0) continue;
-          const uint32_t extra_bits_num = Golomb::NumExtraBits(i, prefix_size);
-          const uint32_t i1 = Golomb::Merge(i, prefix_size, 0);
+          const uint32_t extra_bits_num =
+              PrefixCode::NumExtraBits(i, prefix_size);
+          const uint32_t i1 = PrefixCode::Merge(i, prefix_size, 0);
           assert(i1 <= size);
           const uint32_t i2 =
-              Golomb::Merge(i, prefix_size, (1 << extra_bits_num) - 1);
+              PrefixCode::Merge(i, prefix_size, (1 << extra_bits_num) - 1);
           std::fill(is_maybe_used + i1, is_maybe_used + std::min(i2 + 1, size),
                     true);
         }

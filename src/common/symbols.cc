@@ -321,51 +321,53 @@ WP2Status SymbolsInfo::InitLossy(uint32_t num_segments,
 
 //------------------------------------------------------------------------------
 
-void WriteGolomb(int32_t value, int32_t min, int32_t max, uint32_t prefix_size,
-                 ANSEncBase* const enc, WP2_OPT_LABEL) {
+void WritePrefixCode(int32_t value, int32_t min, int32_t max,
+                     uint32_t prefix_size, ANSEncBase* const enc,
+                     WP2_OPT_LABEL) {
   ANSDebugPrefix ans_prefix(enc, label);
 
-  const Golomb golomb(value - min, prefix_size);
+  const PrefixCode prefix_code(value - min, prefix_size);
   uint32_t range = max - min + 1;
-  const Golomb max_golomb(range - 1, prefix_size);
+  const PrefixCode max_prefix_code(range - 1, prefix_size);
 
-  enc->PutRValue(golomb.prefix, max_golomb.prefix + 1, "golomb");
-  if (golomb.extra_bits_num > 0) {
+  enc->PutRValue(prefix_code.prefix, max_prefix_code.prefix + 1, "prefix_code");
+  if (prefix_code.extra_bits_num > 0) {
     // If the last bit interval is truncated, go with ranges.
-    if (golomb.prefix == max_golomb.prefix) {
-      assert(Golomb::Merge(golomb.prefix, prefix_size, 0) < range);
-      range -= Golomb::Merge(golomb.prefix, prefix_size, 0);
-      enc->PutRValue(golomb.extra_bits_value, range, "extra_bits_value");
+    if (prefix_code.prefix == max_prefix_code.prefix) {
+      assert(PrefixCode::Merge(prefix_code.prefix, prefix_size, 0) < range);
+      range -= PrefixCode::Merge(prefix_code.prefix, prefix_size, 0);
+      enc->PutRValue(prefix_code.extra_bits_value, range, "extra_bits_value");
     } else {
-      enc->PutUValue(golomb.extra_bits_value, golomb.extra_bits_num,
+      enc->PutUValue(prefix_code.extra_bits_value, prefix_code.extra_bits_num,
                      "extra_bits_value");
     }
   }
 }
 
-int32_t ReadGolomb(int32_t min, int32_t max, uint32_t prefix_size,
-                   ANSDec* const dec, WP2_OPT_LABEL) {
+int32_t ReadPrefixCode(int32_t min, int32_t max, uint32_t prefix_size,
+                       ANSDec* const dec, WP2_OPT_LABEL) {
   ANSDebugPrefix ans_prefix(dec, label);
 
   uint32_t range = max - min + 1;
-  const Golomb max_golomb(range - 1, prefix_size);
+  const PrefixCode max_prefix_code(range - 1, prefix_size);
 
-  const uint32_t prefix = dec->ReadRValue(max_golomb.prefix + 1, "golomb");
-  const uint32_t extra_bits = Golomb::NumExtraBits(prefix, prefix_size);
+  const uint32_t prefix =
+      dec->ReadRValue(max_prefix_code.prefix + 1, "prefix_code");
+  const uint32_t extra_bits = PrefixCode::NumExtraBits(prefix, prefix_size);
   uint32_t extra_bits_value;
   if (extra_bits == 0) {
     extra_bits_value = 0;
   } else {
     // Use ranges if we are at the last interval.
-    if (prefix == max_golomb.prefix) {
-      assert(Golomb::Merge(prefix, prefix_size, 0) < range);
-      range -= Golomb::Merge(prefix, prefix_size, 0);
+    if (prefix == max_prefix_code.prefix) {
+      assert(PrefixCode::Merge(prefix, prefix_size, 0) < range);
+      range -= PrefixCode::Merge(prefix, prefix_size, 0);
       extra_bits_value = dec->ReadRValue(range, "extra_bits_value");
     } else {
       extra_bits_value = dec->ReadUValue(extra_bits, "extra_bits_value");
     }
   }
-  return min + Golomb::Merge(prefix, prefix_size, extra_bits_value);
+  return min + PrefixCode::Merge(prefix, prefix_size, extra_bits_value);
 }
 
 }  // namespace WP2
@@ -437,12 +439,13 @@ void LosslessSymbolsInfo::InitNonARGB(uint32_t num_pixels) {
     constexpr uint32_t num_clusters = 1u;
     // Distance is at most num_pixels - 1 but we have to add
     // kCodeToPlaneCodes - 1 to convert to code.
-    WP2::Golomb golomb_max(num_pixels - 1 + kCodeToPlaneCodes - 1,
-                           kLZZGolombPrefixSize);
-    SetInfo(kSymbolDist, /*min=*/0, golomb_max.prefix, num_clusters,
+    WP2::PrefixCode prefix_code_max(num_pixels - 1 + kCodeToPlaneCodes - 1,
+                                    kLZZPrefixCodeSize);
+    SetInfo(kSymbolDist, /*min=*/0, prefix_code_max.prefix, num_clusters,
             storage_method);
-    golomb_max = WP2::Golomb(max_length - kMinLZ77Length, kLZZGolombPrefixSize);
-    SetInfo(kSymbolLen, /*min=*/0, golomb_max.prefix, num_clusters,
+    prefix_code_max =
+        WP2::PrefixCode(max_length - kMinLZ77Length, kLZZPrefixCodeSize);
+    SetInfo(kSymbolLen, /*min=*/0, prefix_code_max.prefix, num_clusters,
             storage_method);
   }
 }

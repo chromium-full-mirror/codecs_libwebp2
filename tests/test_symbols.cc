@@ -87,10 +87,10 @@ class DataGenerator {
   };
   // Enum to hint at the distribution of a symbol.
   enum class kHint {
-    kUniform,  // uniform distribution
-    kDict,     // random distribution
-    kGolomb,   // exponential distribution
-    kTrivial   // unique value
+    kUniform,     // uniform distribution
+    kDict,        // random distribution
+    kPrefixCode,  // exponential distribution
+    kTrivial      // unique value
   };
   DataGenerator(const SymbolsInfoTest& symbols_info,
                 UniformIntDistribution* random)
@@ -122,7 +122,7 @@ class DataGenerator {
           for (uint32_t j = 0; j <= tmp; ++j) probas.push_back(r);
         }
         break;
-      case kHint::kGolomb:
+      case kHint::kPrefixCode:
         probas.reserve(num_symbol_types);
         for (uint32_t r = 0; r < range; ++r) {
           const float rand_max = 1000.f * std::exp(-(float)r);
@@ -147,7 +147,7 @@ class DataGenerator {
       int32_t value = std::numeric_limits<int32_t>::max();
       switch (distribution) {
         case kHint::kDict:
-        case kHint::kGolomb:
+        case kHint::kPrefixCode:
           // Other symbols have biased data for which a dictionary will be more
           // efficient.
           value = probas[random_->Get(0, (int)probas.size() - 1)];
@@ -219,7 +219,7 @@ class DataGenerator {
 
 constexpr std::array<DataGenerator::kHint, 4> kDistributions = {
     DataGenerator::kHint::kUniform, DataGenerator::kHint::kDict,
-    DataGenerator::kHint::kGolomb, DataGenerator::kHint::kTrivial};
+    DataGenerator::kHint::kPrefixCode, DataGenerator::kHint::kTrivial};
 
 //------------------------------------------------------------------------------
 
@@ -894,61 +894,62 @@ TEST(SymbolsTest, SymbolCounter_Midway) {
   EXPECT_NEAR(enc_counter.GetCost(), real_cost, 1);
 }
 
-struct GolombSymbol {
+struct PrefixCodeSymbol {
   uint32_t value;
   uint32_t range;
-  uint32_t prefix_size;  // 0 or 1
+  uint32_t prefix_size;  // 0 to 10 for the tests
 };
 
-TEST(SymbolsTest, SimpleGolomb) {
+TEST(SymbolsTest, SimplePrefixCode) {
   WP2MathInit();
   static constexpr uint32_t kNumSymbol = 10000u;
 
-  // Make sure the Golomb representation is bijective.
-  for (uint32_t prefix_size = 0; prefix_size < 10; ++prefix_size) {
+  // Make sure the prefix coding representation is bijective.
+  for (uint32_t prefix_size = 0; prefix_size <= 10; ++prefix_size) {
     for (uint32_t prefix = 0; prefix < 20; ++prefix) {
-      const uint32_t extra_bits_num = Golomb::NumExtraBits(prefix, prefix_size);
+      const uint32_t extra_bits_num =
+          PrefixCode::NumExtraBits(prefix, prefix_size);
       for (uint32_t extra_bits_value = 0;
            extra_bits_value < (1u << extra_bits_num); ++extra_bits_value) {
         const uint32_t value =
-            Golomb::Merge(prefix, prefix_size, extra_bits_value);
-        const Golomb golomb(value, prefix_size);
-        ASSERT_EQ(golomb.extra_bits_num, extra_bits_num);
-        ASSERT_EQ(golomb.extra_bits_value, extra_bits_value);
-        ASSERT_EQ(golomb.prefix, prefix);
+            PrefixCode::Merge(prefix, prefix_size, extra_bits_value);
+        const PrefixCode prefix_code(value, prefix_size);
+        ASSERT_EQ(prefix_code.extra_bits_num, extra_bits_num);
+        ASSERT_EQ(prefix_code.extra_bits_value, extra_bits_value);
+        ASSERT_EQ(prefix_code.prefix, prefix);
       }
     }
   }
 
   UniformIntDistribution random(/*seed=*/0);
-  std::vector<GolombSymbol> symbols;
+  std::vector<PrefixCodeSymbol> symbols;
   symbols.reserve(kNumSymbol);
   for (uint32_t i = 0; i < kNumSymbol; ++i) {
     const uint32_t range = random.Get(1u, kANSMaxRange);
     const uint32_t value = random.Get(0u, range - 1);
-    const uint32_t prefix_size = random.Get(0u, 1u);
-    const GolombSymbol sym = {value, range, prefix_size};
-    const Golomb golomb(value, prefix_size);
-    ASSERT_EQ(golomb.extra_bits_num,
-              Golomb::NumExtraBits(golomb.prefix, prefix_size));
-    ASSERT_EQ(value, Golomb::Merge(golomb.prefix, prefix_size,
-                                   golomb.extra_bits_value));
+    const uint32_t prefix_size = random.Get(0u, 10u);
+    const PrefixCodeSymbol sym = {value, range, prefix_size};
+    const PrefixCode prefix_code(value, prefix_size);
+    ASSERT_EQ(prefix_code.extra_bits_num,
+              PrefixCode::NumExtraBits(prefix_code.prefix, prefix_size));
+    ASSERT_EQ(value, PrefixCode::Merge(prefix_code.prefix, prefix_size,
+                                       prefix_code.extra_bits_value));
     symbols.push_back(sym);
   }
 
   ANSEnc enc;
-  for (GolombSymbol& s : symbols) {
-    WriteGolomb(s.value, /*min=*/0, /*max=*/s.range - 1, s.prefix_size, &enc,
-                "test");
+  for (PrefixCodeSymbol& s : symbols) {
+    WritePrefixCode(s.value, /*min=*/0, /*max=*/s.range - 1, s.prefix_size,
+                    &enc, "test");
   }
 
   ASSERT_WP2_OK(enc.Assemble());
   ExternalDataSource data_source(enc.Buffer(), enc.BufferSize());
   ANSDec dec(&data_source);
 
-  for (GolombSymbol& s : symbols) {
-    ASSERT_EQ(s.value, (uint32_t)ReadGolomb(/*min=*/0, /*max=*/s.range - 1,
-                                            s.prefix_size, &dec, "test"));
+  for (PrefixCodeSymbol& s : symbols) {
+    ASSERT_EQ(s.value, (uint32_t)ReadPrefixCode(/*min=*/0, /*max=*/s.range - 1,
+                                                s.prefix_size, &dec, "test"));
   }
 }
 
@@ -957,7 +958,7 @@ class SymbolWriterForTest : public SymbolWriter {
   using SymbolWriter::AddAdaptiveBit;
   using SymbolWriter::AddAdaptiveSymbol;
   using SymbolWriter::AddDict;
-  using SymbolWriter::AddGolomb;
+  using SymbolWriter::AddPrefixCode;
   using SymbolWriter::AddRange;
   using SymbolWriter::AddTrivial;
 };
@@ -967,7 +968,7 @@ class SymbolReaderForTest : public SymbolReader {
   using SymbolReader::AddAdaptiveBit;
   using SymbolReader::AddAdaptiveSymbol;
   using SymbolReader::AddDict;
-  using SymbolReader::AddGolomb;
+  using SymbolReader::AddPrefixCode;
   using SymbolReader::AddRange;
   using SymbolReader::AddTrivial;
 };
@@ -1184,7 +1185,7 @@ TEST_P(SymbolCostTest, DictCost) {
   EXPECT_NEAR(enc.GetCost(), dec_cost, kCostError);
 }
 
-TEST_P(SymbolCostTest, GolombCost) {
+TEST_P(SymbolCostTest, PrefixCodeCost) {
   const bool use_max = std::get<0>(GetParam());
   const bool is_symmetric = std::get<1>(GetParam());
 
@@ -1197,25 +1198,25 @@ TEST_P(SymbolCostTest, GolombCost) {
 
   std::vector<uint16_t> mapping = {1, 2, 4, 6, 9};
 
-  const uint32_t kGolombPrefixSize = 0;
-  std::vector<uint32_t> golomb_histogram = {3, 7, 1, 2, 1};
-  std::vector<uint16_t> golomb_mapping = {0, 1, 2, 3, 4};
-  const uint32_t golomb_size = golomb_histogram.size();
-  ANSCodes golomb_infos;
-  ASSERT_TRUE(golomb_infos.resize(golomb_size));
-  for (uint32_t i = 0; i < golomb_size; ++i) {
-    golomb_infos[i].freq = golomb_histogram[i];
-    golomb_infos[i].symbol = golomb_mapping[i];
+  const uint32_t kPrefixCodePrefixSize = 0;
+  std::vector<uint32_t> prefix_code_histogram = {3, 7, 1, 2, 1};
+  std::vector<uint16_t> prefix_code_mapping = {0, 1, 2, 3, 4};
+  const uint32_t prefix_code_size = prefix_code_histogram.size();
+  ANSCodes prefix_code_infos;
+  ASSERT_TRUE(prefix_code_infos.resize(prefix_code_size));
+  for (uint32_t i = 0; i < prefix_code_size; ++i) {
+    prefix_code_infos[i].freq = prefix_code_histogram[i];
+    prefix_code_infos[i].symbol = prefix_code_mapping[i];
   }
 
   SymbolWriterForTest sw;
   ASSERT_WP2_OK(sw.Init(info, /*effort=*/5));
   ASSERT_WP2_OK(sw.Allocate());
   ANSDictionaries dicts;
-  ASSERT_WP2_OK(sw.AddGolomb(kSymbol, kCluster, is_symmetric,
-                             golomb_histogram.data(), golomb_histogram.data(),
-                             golomb_mapping.data(), golomb_size,
-                             kGolombPrefixSize, &dicts));
+  ASSERT_WP2_OK(sw.AddPrefixCode(
+      kSymbol, kCluster, is_symmetric, prefix_code_histogram.data(),
+      prefix_code_histogram.data(), prefix_code_mapping.data(),
+      prefix_code_size, kPrefixCodePrefixSize, &dicts));
 
   std::vector<int32_t> values;
   std::vector<uint32_t> max_values;
@@ -1245,8 +1246,8 @@ TEST_P(SymbolCostTest, GolombCost) {
   ASSERT_WP2_OK(sr.Init(info, &dec));
   ASSERT_WP2_OK(sr.Allocate());
 
-  ASSERT_WP2_OK(sr.AddGolomb(kSymbol, kCluster, is_symmetric, &golomb_infos,
-                             kGolombPrefixSize));
+  ASSERT_WP2_OK(sr.AddPrefixCode(kSymbol, kCluster, is_symmetric,
+                                 &prefix_code_infos, kPrefixCodePrefixSize));
 
   const float dec_cost = Decode(&sr, values, max_values, enc_cost);
 

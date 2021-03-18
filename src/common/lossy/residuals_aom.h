@@ -146,7 +146,7 @@ class AOMResidualIO {
 //------------------------------------------------------------------------------
 // From libgav1/src/tile/tile.cc
 
-// Range above kNumQuantizerBaseLevels which the exponential Golomb coding
+// Range above kNumQuantizerBaseLevels which the exponential prefix coding
 // process is activated.
 constexpr uint32_t kNumQuantizerBaseLevels = 3u;  // (inclusive) limit
 constexpr uint32_t kQuantizerCoefficientBaseRange = 12u;

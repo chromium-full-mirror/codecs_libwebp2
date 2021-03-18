@@ -158,7 +158,7 @@ static_assert(2 * kMaxPaletteSize < WP2::kANSMaxRange,
 static constexpr uint32_t kMinLZ77Length = 1u;
 static_assert(kMinLZ77Length == 1u, "kMinLZ77Length must be 1.");
 
-// Golomb prefix size when writing the ARGB ranges.
+// Prefix code size when writing the ARGB ranges.
 constexpr uint32_t kARGBRangePrefixSize = 1;
 
 }  // namespace WP2L

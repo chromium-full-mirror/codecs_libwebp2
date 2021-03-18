@@ -345,11 +345,11 @@ void ResidualWriter::StoreCoeffs(const int16_t* const coeffs,
                     residual1, "residual1", enc);
         if (residual1 == kResidual1Max) {
           const uint16_t residual2 = abs_v - 3 - kResidual1Max;
-          const Golomb golomb(residual2, /*prefix_size=*/0);
+          const PrefixCode prefix_code(residual2, /*prefix_size=*/0);
           sm->Process(kSymbolBits1, GetCluster(channel, num_channels, method),
-                      golomb.prefix, "residual2_prefix", enc);
-          enc->PutUValue(golomb.extra_bits_value, golomb.extra_bits_num,
-                         "residual2_extra");
+                      prefix_code.prefix, "residual2_prefix", enc);
+          enc->PutUValue(prefix_code.extra_bits_value,
+                         prefix_code.extra_bits_num, "residual2_extra");
         }
       }
     }
@@ -531,10 +531,10 @@ WP2Status ResidualWriter::GetPseudoRate(Channel channel, uint32_t num_channels,
     // but it's in the same ballpark.
     static constexpr uint32_t kChannelBits = 11;
     const uint32_t extra_bits_num =
-        Golomb((coeffs[0] >= 0) ? 2 * coeffs[0] : -2 * coeffs[0] - 1,
-               /*prefix_size=*/0)
+        PrefixCode((coeffs[0] >= 0) ? 2 * coeffs[0] : -2 * coeffs[0] - 1,
+                   /*prefix_size=*/0)
             .extra_bits_num;
-    // We assume a Golomb storage for DC and store DC as in StoreDC.
+    // We assume prefix coding for DC and store DC as in StoreDC.
     *pseudo_rate +=
         WP2Log2(kChannelBits) /* prefix */ + extra_bits_num /* abs_val */;
 

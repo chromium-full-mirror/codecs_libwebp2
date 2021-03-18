@@ -35,8 +35,9 @@ int16_t AOMResidualReader::ReadSign(int16_t coeff, uint32_t max_value,
                                     SymbolReader* const sr) {
   assert(coeff > 0);
   if (coeff >= (int16_t)kQuantizerCoefficientBaseRangeContextClamp) {
-    coeff = ReadGolomb(kQuantizerCoefficientBaseRangeContextClamp, max_value,
-                       /*prefix_size=*/0, sr->dec(), "golomb");
+    coeff =
+        ReadPrefixCode(kQuantizerCoefficientBaseRangeContextClamp, max_value,
+                       /*prefix_size=*/0, sr->dec(), "prefix_code");
   }
   return (sr->dec()->ReadBool("is_negative") ? -coeff : coeff);
 }

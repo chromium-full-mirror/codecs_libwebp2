@@ -161,11 +161,11 @@ WP2Status SymbolReader::AddDict(uint32_t sym, uint32_t cluster,
   return WP2_STATUS_OK;
 }
 
-WP2Status SymbolReader::AddGolomb(uint32_t sym, uint32_t cluster,
-                                  bool is_symmetric, ANSCodes* const infos,
-                                  uint32_t prefix_size) {
+WP2Status SymbolReader::AddPrefixCode(uint32_t sym, uint32_t cluster,
+                                      bool is_symmetric, ANSCodes* const infos,
+                                      uint32_t prefix_size) {
   WP2_CHECK_STATUS(AddDict(sym, cluster, is_symmetric, infos));
-  SetGolombStat(sym, cluster, prefix_size);
+  SetPrefixCodeStat(sym, cluster, prefix_size);
 
   return WP2_STATUS_OK;
 }
@@ -289,29 +289,29 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
       *value = stat.mappings[raw_value];
       break;
     }
-    case Stat::Type::kGolomb: {
-      const uint32_t prefix_size = stat.param.golomb.prefix_size;
+    case Stat::Type::kPrefixCode: {
+      const uint32_t prefix_size = stat.param.prefix_code.prefix_size;
       uint32_t prefix;
       bool use_range;
       uint32_t range = 0;
       if (use_max_value) {
-        const Golomb golomb_max(max_value, prefix_size);
-        const uint32_t i_inf = FindSymbol(stat, golomb_max.prefix);
-        const uint32_t raw_prefix = dec_->ReadSymbol(
-            &stat.extra.codes[0], stat.extra.log2_tab_size,
-            stat.extra.cumul[i_inf], "golomb");
-        prefix =
-            std::min(golomb_max.prefix, (uint32_t)stat.mappings[raw_prefix]);
+        const PrefixCode prefix_code_max(max_value, prefix_size);
+        const uint32_t i_inf = FindSymbol(stat, prefix_code_max.prefix);
+        const uint32_t raw_prefix =
+            dec_->ReadSymbol(&stat.extra.codes[0], stat.extra.log2_tab_size,
+                             stat.extra.cumul[i_inf], "prefix_code");
+        prefix = std::min(prefix_code_max.prefix,
+                          (uint32_t)stat.mappings[raw_prefix]);
         const uint32_t max_prefix =
-            std::min(golomb_max.prefix, (uint32_t)stat.mappings[i_inf]);
+            std::min(prefix_code_max.prefix, (uint32_t)stat.mappings[i_inf]);
         // Use ranges if we are at the last interval.
         use_range = (prefix == max_prefix);
         if (use_range) {
           // Get (the biggest value with a prefix of 'max_prefix') + 1.
           range = std::min(
               max_value + 1,
-              Golomb::Merge(max_prefix, prefix_size, 0) +
-                  (1 << Golomb::NumExtraBits(max_prefix, prefix_size)));
+              PrefixCode::Merge(max_prefix, prefix_size, 0) +
+                  (1 << PrefixCode::NumExtraBits(max_prefix, prefix_size)));
         }
 #if defined(WP2_BITTRACE)
         if (cost != nullptr) {
@@ -322,10 +322,10 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
 #endif
       } else {
         const uint32_t raw_prefix = dec_->ReadSymbol(
-            &stat.extra.codes[0], stat.extra.log2_tab_size, "golomb");
+            &stat.extra.codes[0], stat.extra.log2_tab_size, "prefix_code");
         prefix = stat.mappings[raw_prefix];
         // Use ranges if we are at the last interval.
-        use_range = (prefix + 1 == stat.param.golomb.range);
+        use_range = (prefix + 1 == stat.param.prefix_code.range);
         if (use_range) range = stat.range;
 #if defined(WP2_BITTRACE)
         if (cost != nullptr) {
@@ -334,14 +334,14 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
         }
 #endif
       }
-      const uint32_t extra_bits = Golomb::NumExtraBits(prefix, prefix_size);
+      const uint32_t extra_bits = PrefixCode::NumExtraBits(prefix, prefix_size);
       uint32_t extra_bits_value;
       if (extra_bits == 0) {
         extra_bits_value = 0;
       } else {
         if (use_range) {
-          assert(Golomb::Merge(prefix, prefix_size, 0) < range);
-          range -= Golomb::Merge(prefix, prefix_size, 0);
+          assert(PrefixCode::Merge(prefix, prefix_size, 0) < range);
+          range -= PrefixCode::Merge(prefix, prefix_size, 0);
           extra_bits_value = dec_->ReadRValue(range, "extra_bits_value");
 #if defined(WP2_BITTRACE)
           if (cost != nullptr) *cost += std::log2(range);
@@ -353,7 +353,7 @@ WP2Status SymbolReader::ReadInternal(uint32_t sym, uint32_t cluster,
 #endif
         }
       }
-      *value = Golomb::Merge(prefix, prefix_size, extra_bits_value);
+      *value = PrefixCode::Merge(prefix, prefix_size, extra_bits_value);
       break;
     }
     case Stat::Type::kAdaptiveBit: {
@@ -498,15 +498,17 @@ WP2Status SymbolReader::ReadHeader(uint32_t sym, uint32_t cluster,
   const bool is_symmetric = (min_symbol < 0 && max_symbol > 0)
                                 ? dec_->ReadBool("is_symmetric")
                                 : false;
-  if (type == 2) {  // kGolomb
-    const uint32_t golomb_prefix_size = dec_->ReadRange(0, 1, "prefix_size");
-    const Golomb golomb(range - 1, golomb_prefix_size);
-    const uint32_t range_golomb = golomb.prefix + 1;
+  if (type == 2) {  // kPrefixCode
+    const uint32_t prefix_code_prefix_size =
+        dec_->ReadRange(0, 1, "prefix_size");
+    const PrefixCode prefix_code(range - 1, prefix_code_prefix_size);
+    const uint32_t range_prefix_code = prefix_code.prefix + 1;
     const uint32_t nnz =
-        dec_->ReadRange(2, std::min(max_nnz, range_golomb), "size");
-    WP2_CHECK_STATUS(ReadHistogram(nnz, range_golomb, max_nnz, dec_, infos_));
+        dec_->ReadRange(2, std::min(max_nnz, range_prefix_code), "size");
     WP2_CHECK_STATUS(
-        AddGolomb(sym, cluster, is_symmetric, &infos_, golomb_prefix_size));
+        ReadHistogram(nnz, range_prefix_code, max_nnz, dec_, infos_));
+    WP2_CHECK_STATUS(AddPrefixCode(sym, cluster, is_symmetric, &infos_,
+                                   prefix_code_prefix_size));
   } else if (type == 1) {  // kDict
     // a kDict can't use more than ANS_MAX_SYMBOLS
     const uint32_t dict_range = std::min(nnz_range, (uint32_t)ANS_MAX_SYMBOLS);
@@ -545,18 +547,19 @@ void SymbolReader::GetPotentialUsage(uint32_t sym, uint32_t cluster,
         is_maybe_used[stat.use_mapping ? stat.mappings[k] : k] = true;
       }
       break;
-    case Stat::Type::kGolomb: {
+    case Stat::Type::kPrefixCode: {
       // Go over the stats to figure out what is used or not.
       if (stat.use_mapping) {
         std::fill(is_maybe_used, is_maybe_used + size, false);
       }
-      const uint32_t prefix_size = stat.param.golomb.prefix_size;
+      const uint32_t prefix_size = stat.param.prefix_code.prefix_size;
       for (uint32_t k = 0; k < stat.extra.num_symbols; ++k) {
         const uint32_t m = stat.use_mapping ? stat.mappings[k] : k;
-        const uint32_t extra_bits_num = Golomb::NumExtraBits(m, prefix_size);
-        const uint32_t m1 = Golomb::Merge(m, prefix_size, 0);
+        const uint32_t extra_bits_num =
+            PrefixCode::NumExtraBits(m, prefix_size);
+        const uint32_t m1 = PrefixCode::Merge(m, prefix_size, 0);
         const uint32_t m2 =
-            Golomb::Merge(m, prefix_size, (1 << extra_bits_num) - 1);
+            PrefixCode::Merge(m, prefix_size, (1 << extra_bits_num) - 1);
         std::fill(is_maybe_used + m1, is_maybe_used + std::min(m2 + 1, size),
                   true);
       }

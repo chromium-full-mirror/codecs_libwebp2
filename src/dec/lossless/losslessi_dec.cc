@@ -56,38 +56,38 @@ static const uint8_t kCodeToPlane[kCodeToPlaneCodes] = {
 
 //------------------------------------------------------------------------------
 
-// Reads a Golomb coded number where the prefix is stored as symbol 'sym' in
+// Reads a prefix coded number where the prefix is stored as symbol 'sym' in
 // cluster 'cluster'.
-static inline WP2Status ReadLZ77Golomb(
+static inline WP2Status ReadLZ77PrefixCode(
     uint32_t sym, uint32_t cluster, uint32_t min, uint32_t max, WP2_OPT_LABEL,
     WP2::SymbolReader* const sr, WP2::ANSDec* const dec, uint32_t* const result,
     float* const cost) {
-  const WP2::Golomb golomb_max(max - min, kLZZGolombPrefixSize);
+  const WP2::PrefixCode prefix_code_max(max - min, kLZZPrefixCodeSize);
 
-  // Read information about the Golomb representation.
+  // Read information about the prefix code representation.
   int32_t prefix;
-  WP2_CHECK_STATUS(
-      sr->ReadWithMax(sym, cluster, golomb_max.prefix, label, &prefix, cost));
+  WP2_CHECK_STATUS(sr->ReadWithMax(sym, cluster, prefix_code_max.prefix, label,
+                                   &prefix, cost));
   const uint32_t extra_bits_num =
-      WP2::Golomb::NumExtraBits(prefix, kLZZGolombPrefixSize);
+      WP2::PrefixCode::NumExtraBits(prefix, kLZZPrefixCodeSize);
 
-  // Figure out the rest of the Golomb representation.
+  // Figure out the rest of the prefix code representation.
   uint32_t extra_bits_value = 0;
   const std::string label_bits = WP2SPrint("%s_bits", label);
   if (extra_bits_num == 0) {
     // keep extra_bits_value = 0
-  } else if (prefix == (int32_t)golomb_max.prefix) {
-    // In case we are in the upper part of the Golomb representation.
+  } else if (prefix == (int32_t)prefix_code_max.prefix) {
+    // In case we are in the upper part of the prefix code representation.
     const uint32_t new_range =
-        max - min + 1 - WP2::Golomb::Merge(prefix, kLZZGolombPrefixSize, 0);
+        max - min + 1 - WP2::PrefixCode::Merge(prefix, kLZZPrefixCodeSize, 0);
     if (new_range <= WP2::kANSMaxRange) {
       extra_bits_value = dec->ReadRValue(new_range, label_bits.c_str());
       if (cost != nullptr) *cost += WP2Log2(new_range);
     } else {
       // Go recursively.
-      WP2_CHECK_STATUS(ReadLZ77Golomb(sym, cluster, /*min=*/0,
-                                      /*max=*/new_range - 1, label, sr, dec,
-                                      &extra_bits_value, cost));
+      WP2_CHECK_STATUS(ReadLZ77PrefixCode(sym, cluster, /*min=*/0,
+                                          /*max=*/new_range - 1, label, sr, dec,
+                                          &extra_bits_value, cost));
     }
   } else {
     if (extra_bits_num <= WP2::kANSMaxUniformBits) {
@@ -102,8 +102,8 @@ static inline WP2Status ReadLZ77Golomb(
     }
     if (cost != nullptr) *cost += extra_bits_num;
   }
-  *result =
-      min + WP2::Golomb::Merge(prefix, kLZZGolombPrefixSize, extra_bits_value);
+  *result = min + WP2::PrefixCode::Merge(prefix, kLZZPrefixCodeSize,
+                                         extra_bits_value);
   return WP2_STATUS_OK;
 }
 
@@ -419,17 +419,17 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
       const uint32_t pixel_ind = (src - data) / 4;
       const uint32_t max_plane_code = pixel_ind + kCodeToPlaneCodes - 1;
       uint32_t dist_code = 0;  // Silence -Werror=maybe-uninitialized
-      WP2_CHECK_STATUS(ReadLZ77Golomb(kSymbolDist, cluster, /*min=*/0,
-                                      max_plane_code, "dist", sr, dec_,
-                                      &dist_code, cost_ptr));
+      WP2_CHECK_STATUS(ReadLZ77PrefixCode(kSymbolDist, cluster, /*min=*/0,
+                                          max_plane_code, "dist", sr, dec_,
+                                          &dist_code, cost_ptr));
       const uint32_t dist = PlaneCodeToDistance(width, dist_code);
       WP2_CHECK_OK(pixel_ind >= dist, WP2_STATUS_BITSTREAM_ERROR);
 
       const uint32_t max_length =
           std::min((uint32_t)((src_end - src) / 4), kMaxLZ77Length);
-      WP2_CHECK_STATUS(ReadLZ77Golomb(kSymbolLen, cluster,
-                                      /*min=*/kMinLZ77Length, max_length, "len",
-                                      sr, dec_, &length, cost_ptr));
+      WP2_CHECK_STATUS(ReadLZ77PrefixCode(kSymbolLen, cluster,
+                                          /*min=*/kMinLZ77Length, max_length,
+                                          "len", sr, dec_, &length, cost_ptr));
       WP2_CHECK_OK(src_end - src >= (ptrdiff_t)(4 * length),
                    WP2_STATUS_BITSTREAM_ERROR);
 
@@ -586,7 +586,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
 
   dec_->AddDebugPrefix("palette");
   // There are at least 2 colors in the palette.
-  num_colors_ = ReadGolomb(
+  num_colors_ = ReadPrefixCode(
       /*min=*/2, MaxPaletteSize(transform->width_pic_ * transform->height_pic_),
       0, dec_, "num_colors");
 
@@ -917,26 +917,26 @@ WP2Status Decoder::DecodeHeader() {
     GetARGBRanges(transforms, hdr_.symbols_info_.SampleFormat(), num_colors_,
                   minima_range, maxima_range);
     // Read the ARGB ranges. As the encoder tries to reduce the ranges of ARGB
-    // values around zero, they are more efficiently stored as Golomb.
+    // values around zero, they are more efficiently stored with prefix coding.
     for (Symbol sym : {kSymbolA, kSymbolR, kSymbolG, kSymbolB}) {
       if (hdr_.symbols_info_.IsUnused(sym)) continue;
       const uint32_t channel = (int)sym - (int)kSymbolA;
       int16_t minimum, maximum;
       if (minima_range[channel] < 0 && dec_->ReadBool("min_is_negative")) {
-        minimum = ReadGolomb(minima_range[channel], -1, kARGBRangePrefixSize,
-                             dec_, "minimum");
+        minimum = ReadPrefixCode(minima_range[channel], -1,
+                                 kARGBRangePrefixSize, dec_, "minimum");
         if (dec_->ReadBool("max_is_negative")) {
-          maximum =
-              ReadGolomb(minimum, -1, kARGBRangePrefixSize, dec_, "maximum");
+          maximum = ReadPrefixCode(minimum, -1, kARGBRangePrefixSize, dec_,
+                                   "maximum");
         } else {
-          maximum = ReadGolomb(0, maxima_range[channel], kARGBRangePrefixSize,
-                               dec_, "maximum");
+          maximum = ReadPrefixCode(0, maxima_range[channel],
+                                   kARGBRangePrefixSize, dec_, "maximum");
         }
       } else {
-        minimum = ReadGolomb(0, maxima_range[channel], kARGBRangePrefixSize,
-                             dec_, "minimum");
-        maximum = ReadGolomb(minimum, maxima_range[channel],
-                             kARGBRangePrefixSize, dec_, "maximum");
+        minimum = ReadPrefixCode(0, maxima_range[channel], kARGBRangePrefixSize,
+                                 dec_, "minimum");
+        maximum = ReadPrefixCode(minimum, maxima_range[channel],
+                                 kARGBRangePrefixSize, dec_, "maximum");
       }
       hdr_.symbols_info_.SetMinMax(sym, minimum, maximum);
     }

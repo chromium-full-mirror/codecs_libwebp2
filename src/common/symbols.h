@@ -51,7 +51,7 @@ class SymbolsInfo {
   static constexpr int32_t kInvalidBound = std::numeric_limits<int32_t>::max();
 
   enum class StorageMethod {
-    // Automatically choose between dictionary, range, golomb.
+    // Automatically choose between dictionary, range, prefix coding.
     kAuto,
     // Adaptive bit using counts of 0/1 so far for probabilities.
     kAdaptiveBit,
@@ -248,8 +248,8 @@ class SymbolsInfo {
 // 'prefix_size' bits), the number of extra bits, and the value contained in
 // those extra bits. This prefix coding is used in deflate (cf rfc1951) and is
 // close to an exponential Golomb.
-struct Golomb {
-  Golomb(uint32_t v, uint32_t prefix_size) {
+struct PrefixCode {
+  PrefixCode(uint32_t v, uint32_t prefix_size) {
     if (v < (2u << prefix_size)) {
       prefix = v;
       extra_bits_num = 0;
@@ -287,12 +287,13 @@ struct Golomb {
   uint32_t extra_bits_value;
 };
 
-// Read/write a value in [min, max] using Golomb coding.
+// Read/write a value in [min, max] using prefix coding.
 // 'prefix_size' must be 1 or 2 (number of leading bits coded separately).
-void WriteGolomb(int32_t value, int32_t min, int32_t max, uint32_t prefix_size,
-                 ANSEncBase* const enc, WP2_OPT_LABEL);
-int32_t ReadGolomb(int32_t min, int32_t max, uint32_t prefix_size,
-                   ANSDec* const dec, WP2_OPT_LABEL);
+void WritePrefixCode(int32_t value, int32_t min, int32_t max,
+                     uint32_t prefix_size, ANSEncBase* const enc,
+                     WP2_OPT_LABEL);
+int32_t ReadPrefixCode(int32_t min, int32_t max, uint32_t prefix_size,
+                       ANSDec* const dec, WP2_OPT_LABEL);
 
 //------------------------------------------------------------------------------
 
@@ -346,8 +347,8 @@ class SymbolIO {
       kRange,
       // Symbol is stored as a dictionary.
       kDict,
-      // Symbol is stored with a Golomb encoding with a prefix of 1 or 2 bits.
-      kGolomb,
+      // Symbol is stored with a prefix code.
+      kPrefixCode,
       // Symbol is stored as an adaptive bit.
       kAdaptiveBit,
       // Symbol is stored as an adaptive symbol.
@@ -358,19 +359,19 @@ class SymbolIO {
     bool use_mapping;
     uint16_t* mappings;
     // If set to true, it assumes values are stored as abs(value) + sign with
-    // abs(value) stored as range/dict/Golomb/... Otherwise, value - min is the
-    // one stored as range/dict/Golomb/...
+    // abs(value) stored as range/dict/prefix code/... Otherwise, value - min is
+    // the one stored as range/dict/prefix code/...
     bool is_symmetric;
     // For type kRange, the symbol is stored as a value in [0;range[
     uint16_t range;
     union Param {
-      // For type kGolomb.
+      // For type kPrefixCode.
       struct {
         // Range of the prefix.
         uint16_t range;
-        // Size in bits of the Golomb prefix (1 or 2 for now).
+        // Size in bits of the prefix code.
         uint8_t prefix_size;
-      } golomb;
+      } prefix_code;
       // For type kTrivial, there is only one value. If the range contains
       // negative and positive values, the sign is stored apart.
       uint16_t trivial_value;
@@ -403,14 +404,14 @@ class SymbolIO {
   }
 
   // Helper function to set the stats of symbol 'sym' at 'cluster' to be proper
-  // Golomb.
-  void SetGolombStat(uint32_t sym, uint32_t cluster, uint32_t prefix_size) {
+  // prefix code.
+  void SetPrefixCodeStat(uint32_t sym, uint32_t cluster, uint32_t prefix_size) {
     Stat* const stat = GetStats(sym, cluster);
-    stat->type = Stat::Type::kGolomb;
+    stat->type = Stat::Type::kPrefixCode;
     stat->range = symbols_info_.Range(sym, cluster);
-    const Golomb g = Golomb(stat->range - 1, prefix_size);
-    stat->param.golomb.range = g.prefix + 1;
-    stat->param.golomb.prefix_size = prefix_size;
+    const PrefixCode prefix_code = PrefixCode(stat->range - 1, prefix_size);
+    stat->param.prefix_code.range = prefix_code.prefix + 1;
+    stat->param.prefix_code.prefix_size = prefix_size;
   }
 
   // Sets up the given symbol as an adaptive bit.
