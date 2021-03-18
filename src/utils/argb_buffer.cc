@@ -287,10 +287,16 @@ WP2Status ArgbBuffer::ImportRow(WP2SampleFormat input_format,
 }
 
 void ArgbBuffer::Fill(const Rectangle& window, Argb32b color) {
-  assert(format_ == WP2_Argb_32);
+  assert(format_ == WP2_Argb_32 || format_ == WP2_ARGB_32);
   assert(CheckPremultiplied(color));
   uint8_t bytes[4];
   ToUInt8(color, bytes);
+  // Unmultiply.
+  if (format_ == WP2_ARGB_32 && color.a != 255u && color.a != 0u) {
+    for (uint32_t c = 1; c <= 3; ++c) {
+      bytes[c] = DivRound<uint16_t>(bytes[c] * 255u, bytes[0]);
+    }
+  }
   Fill(window, bytes);
 }
 

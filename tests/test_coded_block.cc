@@ -25,8 +25,6 @@
 namespace WP2 {
 namespace {
 
-using ::testing::ElementsAre;
-
 struct FrontMgrLexicoTest {
   typedef FrontMgrLexico Type;
   static const uint32_t kId = 0;
@@ -138,15 +136,6 @@ static void SetCoords4x4(uint32_t num_blocks, uint32_t x, uint32_t y,
   cb->SetContextInput(*yuv);
   cb->SetReconstructedOutput(yuv);
 }
-
-// Expects that the first elements of 'array' match the given list.
-#define EXPECT_THAT_FIRST_ELEMENTS_ARE(array, ...)                   \
-  do {                                                               \
-    int16_t truncated[]{__VA_ARGS__};                                \
-    const uint32_t num = (sizeof(truncated) / sizeof(truncated[0])); \
-    std::copy(array, array + num, truncated);                        \
-    EXPECT_THAT(truncated, ElementsAre(__VA_ARGS__));                \
-  } while (0)
 
 TYPED_TEST(CodedBlockTest, GetContext_FirstBlock) {
   const uint32_t kSize = 16;

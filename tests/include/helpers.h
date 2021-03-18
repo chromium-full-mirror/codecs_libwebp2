@@ -50,6 +50,15 @@
 #define ASSERT_WP2_OK(expression) ASSERT_EQ(expression, WP2_STATUS_OK)
 #define EXPECT_WP2_OK(expression) EXPECT_EQ(expression, WP2_STATUS_OK)
 
+// Expects that the first elements of 'array' match the given list.
+#define EXPECT_THAT_FIRST_ELEMENTS_ARE(array, ...)                   \
+  do {                                                               \
+    int16_t truncated[]{__VA_ARGS__};                                \
+    const uint32_t num = (sizeof(truncated) / sizeof(truncated[0])); \
+    std::copy(array, array + num, truncated);                        \
+    EXPECT_THAT(truncated, ::testing::ElementsAre(__VA_ARGS__));     \
+  } while (0)
+
 // Just for testing. Warning, this function is NOT thread safe, and
 // should be used in a single-thread testing environment!
 extern void WP2DspReset();
