@@ -21,6 +21,7 @@
 #include "include/helpers.h"
 #include "src/enc/analysis.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {
@@ -80,7 +81,7 @@ TEST(PreprocessNearLosslessTest, Mask) {
       ReadImage(testing::GetTestDataPath("logo.png").c_str(), &original));
   original.SimpleHalfDownsample();  // Speed up the test.
 
-  // Convert image to a grayscale mask.
+  // Convert image to an opaque grayscale mask.
   ArgbBuffer mask;
   ASSERT_WP2_OK(mask.Resize(original.width(), original.height()));
   for (uint32_t y = 0; y < original.height(); ++y) {
@@ -94,7 +95,7 @@ TEST(PreprocessNearLosslessTest, Mask) {
 
   // Encode losslessly.
   EncoderConfig encoder_config;
-  encoder_config.alpha_quality = 100;  // lossless
+  encoder_config.quality = encoder_config.alpha_quality = kMaxQuality;
   MemoryWriter memory_writer;
   ASSERT_WP2_OK(Encode(mask, &memory_writer, encoder_config));
   uint32_t previous_size = memory_writer.size_;
@@ -102,7 +103,7 @@ TEST(PreprocessNearLosslessTest, Mask) {
   uint32_t previous_num_colors = CountColors(mask);
 
   // Encode at various near lossless levels.
-  for (uint32_t q : {99, 98, 97, 96}) {
+  for (uint32_t q = kMaxQuality - 1; q > kMaxLossyQuality; --q) {
     SCOPED_TRACE(SPrintf("Quality: %d", q));
     encoder_config.alpha_quality = q;
     ArgbBuffer preprocessed;
@@ -118,13 +119,13 @@ TEST(PreprocessNearLosslessTest, Mask) {
     EXPECT_LT(num_colors, previous_num_colors);
     previous_num_colors = num_colors;
 
+    // Encode the 'mask'. Because it is opaque, only the 'quality' setting
+    // (which is set to "lossless") is taken into account. 'alpha_quality' has
+    // no effect here.
     memory_writer.Reset();
     ASSERT_WP2_OK(Encode(preprocessed, &memory_writer, encoder_config));
-    const uint32_t size = memory_writer.size_;
-    // Would be nice if it was always smaller, but that's not the case... Allow
-    // a 3% increase :(
-    EXPECT_LT(size, previous_size * 1.03);
-    previous_size = size;
+    EXPECT_LT(memory_writer.size_, previous_size);
+    previous_size = memory_writer.size_;
 
     // Check that fully white and fully black pixels are unchanged.
     for (uint32_t y = 0; y < original.height(); ++y) {
