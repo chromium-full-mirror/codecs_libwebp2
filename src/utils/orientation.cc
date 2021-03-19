@@ -452,15 +452,16 @@ WP2Status OrientateBuffer(Orientation orientation, const YUVPlane& src,
 //------------------------------------------------------------------------------
 
 Orientation GetInverseOrientation(Orientation orientation) {
-  static constexpr Orientation kInverseOrientation[8]{
+  static constexpr Orientation kInverseOrientation[8] = {
       Orientation::kOriginal,
-      Orientation::k270Clockwise,
-      Orientation::k180,
-      Orientation::k90Clockwise,
       Orientation::kFlipLeftToRight,
-      Orientation::kFlipBotLeftToTopRgt,
+      Orientation::k180,
       Orientation::kFlipTopToBottom,
-      Orientation::kFlipTopLeftToBotRgt};
+      Orientation::kFlipBotLeftToTopRgt,
+      Orientation::k270Clockwise,
+      Orientation::kFlipTopLeftToBotRgt,
+      Orientation::k90Clockwise
+  };
 
   return kInverseOrientation[(uint32_t)orientation];
 }

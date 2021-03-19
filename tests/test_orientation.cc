@@ -279,7 +279,8 @@ TEST(OrientationTest, EncodeDecode) {
       ASSERT_WP2_OK(
           OrientateBuffer(GetInverseOrientation(orientation), &decoded));
       EXPECT_TRUE(testing::Compare(original, decoded, file_name,
-                                   testing::GetExpectedDistortion(config)));
+                                   testing::GetExpectedDistortion(config)))
+          << " orientation: " << (uint32_t)orientation;
     }
   }
 }

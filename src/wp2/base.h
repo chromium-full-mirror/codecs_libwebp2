@@ -284,15 +284,16 @@ struct Rectangle {
                Rectangle* const lft, Rectangle* const rgt) const;
 };
 
+// Follows orientation tags defined in JEITA CP-3451C (section 4.6.4.A)
 enum class Orientation {
   kOriginal = 0,
-  k90Clockwise,
-  k180,
-  k270Clockwise,
   kFlipLeftToRight,      // Mirror horizontally = vertical symmetry axis
-  kFlipBotLeftToTopRgt,  // 90 clockwise then mirror horizontally
+  k180,
   kFlipTopToBottom,      // Mirror vertically = horizontal symmetry axis
-  kFlipTopLeftToBotRgt   // 270 clockwise then mirror horizontally
+  kFlipBotLeftToTopRgt,  // 90 clockwise then mirror horizontally
+  k90Clockwise,
+  kFlipTopLeftToBotRgt,  // 270 clockwise then mirror horizontally
+  k270Clockwise
 };
 
 //------------------------------------------------------------------------------
