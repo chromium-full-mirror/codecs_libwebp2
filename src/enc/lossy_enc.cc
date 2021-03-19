@@ -321,7 +321,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
 
       if (config_->info != nullptr && config_->info->store_blocks) {
 #if defined(WP2_BITTRACE)
-        cb.ToBlockInfo(&block_info);
+        cb.ToBlockInfo(use_aom_coeffs, &block_info);
         block_info.rect.x += tile_rect.x;
         block_info.rect.y += tile_rect.y;
         block_info.bits = 0;

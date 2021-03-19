@@ -183,8 +183,7 @@ class CodedBlock : public CodedBlockBase {
 
   // Calls the base method and store some extra info
   // in 'blk'. Not a virtual.
-  void ToBlockInfo(BlockInfo* const blk) const;
-
+  void ToBlockInfo(bool use_aom_coeffs, BlockInfo* const blk) const;
 
   // Returns the sum of square error between 'p_in_' and 'p_out_' for the pixels
   // inside the block (padded).

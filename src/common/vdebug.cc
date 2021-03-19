@@ -123,7 +123,8 @@ WP2Status RegisterBitTrace(const DecoderConfig& config, uint32_t num_bytes,
 //------------------------------------------------------------------------------
 
 #if defined(WP2_BITTRACE)
-void CodedBlockBase::ToBlockInfo(BlockInfo* const blk) const {
+void CodedBlockBase::ToBlockInfo(bool use_aom_coeffs,
+                                 BlockInfo* const blk) const {
   const CodingParams& y_params = GetCodingParams(kYChannel);
 
   blk->rect = AsRect();
@@ -143,13 +144,15 @@ void CodedBlockBase::ToBlockInfo(BlockInfo* const blk) const {
   std::memset(blk->coeffs, 0, sizeof(blk->coeffs));
   std::fill(blk->split_tf, blk->split_tf + 4, false);
   std::fill(blk->encoding_method[0], blk->encoding_method[0] + 4 * 4, -1);
-  for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    if (c == kAChannel && !HasLossyAlpha()) continue;
-    blk->split_tf[c] = GetCodingParams(c).split_tf;
-    for (uint32_t i = 0; i < GetNumTransforms(c); ++i) {
-      blk->encoding_method[c][i] = (int8_t)method_[c][i];
-      std::copy(coeffs_[c][i], coeffs_[c][i] + NumCoeffsPerTransform(c),
-                blk->coeffs[c][i]);
+  if (!use_aom_coeffs) {
+    for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+      if (c == kAChannel && !HasLossyAlpha()) continue;
+      blk->split_tf[c] = GetCodingParams(c).split_tf;
+      for (uint32_t i = 0; i < GetNumTransforms(c); ++i) {
+        blk->encoding_method[c][i] = (int8_t)method_[c][i];
+        std::copy(coeffs_[c][i], coeffs_[c][i] + NumCoeffsPerTransform(c),
+                  blk->coeffs[c][i]);
+      }
     }
   }
   blk->bits = 0;  // unknown for now
@@ -158,8 +161,8 @@ void CodedBlockBase::ToBlockInfo(BlockInfo* const blk) const {
   std::memset(blk->pred_scores, 0, sizeof(blk->pred_scores));
 }
 
-void CodedBlock::ToBlockInfo(BlockInfo* const blk) const {
-  CodedBlockBase::ToBlockInfo(blk);
+void CodedBlock::ToBlockInfo(bool use_aom_coeffs, BlockInfo* const blk) const {
+  CodedBlockBase::ToBlockInfo(use_aom_coeffs, blk);
 
   // copy the encoder-specific part
   std::memcpy(blk->pred_scores, pred_scores_, sizeof(pred_scores_));
@@ -254,7 +257,7 @@ void VDDrawUndefinedPattern(ArgbBuffer* const debug_output) {
 //------------------------------------------------------------------------------
 
 // Returns true if the 'str' contains the 'token'. Tokens are separated by '/'.
-static bool VDMatch(const char str[], const char token[]) {
+bool VDMatch(const char str[], const char token[]) {
   if (str != nullptr && token != nullptr) {
     const uint32_t token_length = std::strlen(token);
     if (token_length == 0) return true;
@@ -791,7 +794,25 @@ void CodedBlockBase::StoreCoeffMethod(const DecoderConfig& config,
       dst_plane->Fill(
           {x_pix() + split_x, y_pix() + split_y, split_w - 1, split_h - 1},
           ToPixel10((uint32_t)method_[channel][tf_i],
-                    (uint32_t)EncodingMethod::kNumMethod));
+                    (uint32_t)EncodingMethod::kNumMethod + 1));
+      ++tf_i;
+    }
+  }
+}
+
+void CodedBlockBase::StoreHasCoeffs(const DecoderConfig& config,
+                                    Plane16* const dst_plane) const {
+  const Channel channel = VDChannel(config);
+  const BlockSize split_size =
+      GetSplitSize(dim(), GetCodingParams(channel).split_tf);
+  const uint32_t split_w = BlockWidthPix(split_size);
+  const uint32_t split_h = BlockHeightPix(split_size);
+  uint32_t tf_i = 0;
+  for (uint32_t split_y = 0; split_y < h_pix(); split_y += split_h) {
+    for (uint32_t split_x = 0; split_x < w_pix(); split_x += split_w) {
+      dst_plane->Fill(
+          {x_pix() + split_x, y_pix() + split_y, split_w - 1, split_h - 1},
+          ToPixel10((uint32_t)num_coeffs_[channel][tf_i] > 0, 2));
       ++tf_i;
     }
   }

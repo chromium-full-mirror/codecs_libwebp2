@@ -242,6 +242,7 @@ class SyntaxReader {
 
   const AlphaReader& alpha_reader() const { return *alpha_reader_; }
   bool use_splits() const { return use_splits_; }
+  bool use_aom_coeffs() const { return residual_reader_.use_aom(); }
 
   void ApplyDecoderConfig(const DecoderConfig& config);
 
@@ -291,6 +292,7 @@ class SyntaxReader {
 #if !defined(WP2_REDUCE_BINARY_SIZE)
 // Returns true if 'DecoderInfo::visual_debug' in the 'config' exists and
 // contains the 'token'. Tokens are separated by '/'.
+bool VDMatch(const char str[], const char token[]);
 bool VDMatch(const DecoderConfig& config, const char token[]);
 // Returns the channel corresponding to the current debug view. Asserts that
 // the debug view contains the name of a channel ("y", "u", "v" or "a") in its

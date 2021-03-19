@@ -110,7 +110,8 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     WP2_CHECK_REDUCED_STATUS(
         debug_output.SetView(config.info->debug_output, tile->rect));
     if (VDMatch(config, "prediction/raw") || VDMatch(config, "residuals") ||
-        VDMatch(config, "coeff-method") || VDMatch(config, "bits-per-pixel") ||
+        VDMatch(config, "coeff-method") || VDMatch(config, "has-coeffs") ||
+        VDMatch(config, "bits-per-pixel") ||
         VDMatch(config, "chroma-from-luma") || VDMatch(config, "a/lossless") ||
         VDMatch(config, "a/lossy") || VDMatch(config, "a/is_lossy")) {
       WP2_CHECK_STATUS(
@@ -327,8 +328,10 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     } else if (VDMatch(config, "compressed")) {
       cb.AppendCompressedPixels(config, tile->rect.x, tile->rect.y,
                                 &debug_output);
-    } else if (VDMatch(config, "coeff-method")) {
+    } else if (VDMatch(config, "coeff-method") && !reader.use_aom_coeffs()) {
       cb.StoreCoeffMethod(config, &vd_plane);
+    } else if (VDMatch(config, "has-coeffs")) {
+      cb.StoreHasCoeffs(config, &vd_plane);
     } else if (VDMatch(config, "bits-per-pixel")) {
       reader.StoreBitCost(config, tile->rect.x, tile->rect.y, cb.blk(),
                           &vd_plane);
@@ -344,7 +347,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     if (NormDiff(bt_sum, num_bits) > kDoubleSumTolerance) assert(false);
     blocks_bit_traces_sum += bt_sum;
     if (config.info != nullptr && config.info->store_blocks) {
-      cb.ToBlockInfo(&block_info);
+      cb.ToBlockInfo(reader.use_aom_coeffs(), &block_info);
       block_info.rect.x += tile->rect.x;
       block_info.rect.y += tile->rect.y;
       block_info.bits = num_bits;

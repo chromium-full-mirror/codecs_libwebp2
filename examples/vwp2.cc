@@ -85,6 +85,31 @@ constexpr int kScrollWheelUp = 3;
 constexpr int kScrollWheelDown = 4;
 
 //------------------------------------------------------------------------------
+
+// T must be cast-able to and from 'int'
+
+template <class T>
+void ModifyInRange(T& value, int max, int increment) {
+  int v = (int)value + increment;
+  v = (v + max) % max;  // deals with negative values
+  value = (T)v;
+}
+template <class T>
+void Modify(T& value, int max, bool increment, int increment_step = 1) {
+  ModifyInRange(value, max, increment ? increment_step : -increment_step);
+}
+// For ranges
+template <class T>
+void ModifyR(T& value, T max, bool increment, int increment_step = 1) {
+  if (glutGetModifiers() == GLUT_ACTIVE_ALT) {
+    // Toggle on/off (GLUT doesn't handle shift+alt+key: can't use 'increment')
+    value = (T)(((int)value > (int)max / 2) ? 0 : (int)max - 1);
+  } else {
+    Modify(value, max, increment, increment_step);
+  }
+}
+
+//------------------------------------------------------------------------------
 // Visual Debug: set DecoderInfo::visual_debug to get extra visual data into
 // DecoderInfo::debug_output during decoding.
 
@@ -125,17 +150,17 @@ std::vector<VDToken> GetVDTokensAlpha() {
   return r;
 }
 
-std::vector<VDToken> GetVDTokensUV() {
-  std::vector<VDToken> r = GetVDTokensChannelCommon();
-  r.emplace_back("coeff-method");
-  r.emplace_back<VDToken>(
-      {"chroma-from-luma", {"prediction", "slope", "intercept"}});
-  return r;
-}
-
 std::vector<VDToken> GetVDTokensY() {
   std::vector<VDToken> r = GetVDTokensChannelCommon();
   r.emplace_back("coeff-method");
+  r.emplace_back("has-coeffs");
+  return r;
+}
+
+std::vector<VDToken> GetVDTokensUV() {
+  std::vector<VDToken> r = GetVDTokensY();
+  r.emplace_back<VDToken>(
+      {"chroma-from-luma", {"prediction", "slope", "intercept"}});
   return r;
 }
 
@@ -260,6 +285,52 @@ std::string GetLeaf(const std::string& mask, int32_t leaf_offset = 0) {
     }
   }
   return "";
+}
+
+std::string ChangeChannel(const std::string& path, int increment_step = 1) {
+  Channel old_channel;
+  if (VDMatch(path.c_str(), "y")) {
+    old_channel = kYChannel;
+  } else if (VDMatch(path.c_str(), "u")) {
+    old_channel = kUChannel;
+  } else if (VDMatch(path.c_str(), "v")) {
+    old_channel = kVChannel;
+  } else if (VDMatch(path.c_str(), "a")) {
+    old_channel = kAChannel;
+  } else {
+    // Return path unchanged if it doesn't have a channel in it.
+    return path;
+  }
+  const char to_find = std::tolower(kChannelStr[(int)old_channel][0]);
+  uint32_t pos = 0;
+  while (pos < path.length()) {
+    if (path[pos] == to_find &&
+        ((pos == path.length() - 1) || path[pos + 1] == '/')) {
+      break;
+    }
+    // Find next slash
+    while (pos < path.length() && path[pos] != '/') ++pos;
+    ++pos;  // Move to first character after slash.
+  }
+  assert(pos < path.length());
+
+  std::vector<std::string> leaves_paths;
+  GetAllLeavesPaths(kVisualDebug, "", &leaves_paths);
+
+  int new_channel = old_channel;
+  for (uint32_t i = 0; i < 3; ++i) {  // At most 3 channels to try.
+    ModifyInRange(new_channel, 4, increment_step);
+    const char to_replace = std::tolower(kChannelStr[new_channel][0]);
+    std::string new_path = path;
+    new_path[pos] = to_replace;
+    // Check if this path exists.
+    if (std::find(leaves_paths.begin(), leaves_paths.end(), new_path) !=
+        leaves_paths.end()) {
+      return new_path;
+    }
+  }
+
+  return path;
 }
 
 //------------------------------------------------------------------------------
@@ -896,11 +967,13 @@ void Params::DisplayBitTraces() const {
 
 std::vector<std::string> Params::GetHelp() {
   std::vector<std::string> m;
-  // Adding a new shortcut? These are still available: j, p, u, y
+  // Adding a new shortcut? These are still available: j, p, u
   m.emplace_back("Keyboard shortcuts:");
   m.emplace_back(
       "  'i' ............... overlay file information ('I' for YUV disto)");
   m.emplace_back("  'v'/'V' ........... cycle through visual debugging");
+  m.emplace_back(
+      "  'y'/'Y' ........... cycle through channels (if on channel view)");
   m.emplace_back("  'e'/'E' ........... shortcut for error map");
   m.emplace_back(
       "  space ............. show the original uncompressed picture");
@@ -2412,29 +2485,6 @@ bool Params::ReadAndConvertPartition(bool read_only) {
 //------------------------------------------------------------------------------
 // Handlers
 
-// T must be cast-able to and from 'int'
-
-template <class T>
-void ModifyInRange(T& value, int max, int increment) {
-  int v = (int)value + increment;
-  v = (v + max) % max;  // deals with negative values
-  value = (T)v;
-}
-template <class T>
-void Modify(T& value, int max, bool increment, int increment_step = 1) {
-  ModifyInRange(value, max, increment ? increment_step : -increment_step);
-}
-// For ranges
-template <class T>
-void ModifyR(T& value, T max, bool increment, int increment_step = 1) {
-  if (glutGetModifiers() == GLUT_ACTIVE_ALT) {
-    // Toggle on/off (GLUT doesn't handle shift+alt+key: can't use 'increment')
-    value = (T)(((int)value > (int)max / 2) ? 0 : (int)max - 1);
-  } else {
-    Modify(value, max, increment, increment_step);
-  }
-}
-
 void Params::ReshapeWindow() {
   ApplyZoomLevel();
   glutReshapeWindow(viewport_width_, viewport_height_);
@@ -2757,6 +2807,12 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
     menu_selection_prev_ = menu_selection_;
     if (!SetMenuSelection(GetLeaf(menu_selection_,
                           /*leaf_offset=*/(key == 'v') ? 1 : -1))) return;
+  } else if (key == 'y' || key == 'Y') {
+    menu_selection_prev_ = menu_selection_;
+    if (!SetMenuSelection(
+            ChangeChannel(menu_selection_,
+                          /*increment_step=*/(key == 'y') ? 1 : -1)))
+      return;
   } else if (key == '`') {
     // jump back to previous menu
     std::swap(menu_selection_prev_, menu_selection_);

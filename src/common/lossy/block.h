@@ -128,7 +128,7 @@ class CodedBlockBase {
   void Reconstruct(Channel channel);
 
   // Exports debug info during decoding.
-  void ToBlockInfo(struct BlockInfo* const blk) const;
+  void ToBlockInfo(bool use_aom_coeffs, struct BlockInfo* const blk) const;
 
   // Printable string for debug.
   std::string Print() const;
@@ -251,6 +251,9 @@ class CodedBlockBase {
   // Visual debug: stores coeff methods
   void StoreCoeffMethod(const WP2::DecoderConfig& config,
                         Plane16* const dst_plane) const;
+  // Visual debug: stores whether there are coeffs
+  void StoreHasCoeffs(const WP2::DecoderConfig& config,
+                      Plane16* const dst_plane) const;
   // Visual debug: stores the slope for Chroma from luma ('a' in 'chroma =
   // a * luma + b'), after doing a linear regression on the context.
   void StoreCflSlope(Channel channel, int16_t yuv_min, int16_t yuv_max,
