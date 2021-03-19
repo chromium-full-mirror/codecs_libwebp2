@@ -112,9 +112,9 @@ TEST(FormatTest, ConvertSimple) {
                                                       false, &reconverted));
 
       const float expected_distortion =
-          WP2Formatbpc(converted.format()) < WP2Formatbpc(reconverted.format())
-              ? 90.f
-              : 99.f;
+          !WP2IsPremultiplied(orig_format) && WP2IsPremultiplied(format) ? 25.f
+          : WP2Formatbpc(orig_format) > WP2Formatbpc(format)             ? 90.f
+                                                                         : 99.f;
       ASSERT_TRUE(
           testing::Compare(original, reconverted, "1x1", expected_distortion))
           << "format: " << orig_format << " to: " << format;
@@ -140,10 +140,10 @@ TEST(FormatTest, ConvertImage) {
       ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(original, converted,
                                                       false, &reconverted));
 
-      const float expected_distortion = (WP2Formatbpc(converted.format()) !=
-                                         WP2Formatbpc(reconverted.format()))
-                                            ? 60.f
-                                            : 99.f;
+      const float expected_distortion =
+          !WP2IsPremultiplied(orig_format) && WP2IsPremultiplied(format) ? 25.f
+          : WP2Formatbpc(orig_format) > WP2Formatbpc(format)             ? 90.f
+                                                                         : 99.f;
       ASSERT_TRUE(testing::Compare(original, reconverted, file_name,
                                    expected_distortion))
           << "format: " << orig_format << " to: " << format;

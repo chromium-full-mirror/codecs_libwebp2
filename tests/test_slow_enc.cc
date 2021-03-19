@@ -44,12 +44,14 @@ TEST(EncodeDecodeLosslessTest, Lossless) {
   WP2Status status = Encode(original, &memory_writer, encoder_config);
   EXPECT_EQ(status, WP2_STATUS_OK);
 
-  ArgbBuffer decompressed;
+  ArgbBuffer decompressed(WP2_Argb_32);
   status = Decode(memory_writer.mem_, memory_writer.size_, &decompressed,
                   decoder_config);
   EXPECT_EQ(status, WP2_STATUS_OK);
 
-  ASSERT_TRUE(testing::Compare(original, decompressed, "internal"));
+  ArgbBuffer converted_original(decompressed.format());
+  ASSERT_WP2_OK(converted_original.ConvertFrom(original));
+  ASSERT_TRUE(testing::Compare(converted_original, decompressed, "internal"));
 }
 
 //------------------------------------------------------------------------------

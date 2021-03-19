@@ -125,8 +125,10 @@ TEST_P(BypassTest, MaxChunkSize) {
                                    gparams.transf_.GetYUVPrecisionBits() + 1,
                                    file_name));
     } else {
-      ASSERT_TRUE(
-          testing::Compare(enc_tile.rgb_input, dec_tile.rgb_output, file_name));
+      ArgbBuffer converted_rgb_output(enc_tile.rgb_input.format());
+      ASSERT_WP2_OK(converted_rgb_output.ConvertFrom(dec_tile.rgb_output));
+      ASSERT_TRUE(testing::Compare(enc_tile.rgb_input, converted_rgb_output,
+                                   file_name));
     }
   }
 }

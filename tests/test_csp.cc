@@ -25,6 +25,7 @@
 #include "src/dsp/math.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 
@@ -162,7 +163,11 @@ TEST_P(CspImageTest, Simple) {
   ArgbBuffer dst(format);
   ASSERT_WP2_OK(yuv.Export(transf, /*resize_if_needed=*/true, &dst));
 
-  const float min_expected_disto = (csp_type == Csp::kYCoCg) ? 99.f : 45.f;
+  // YUV is premultiplied so starting from unmultiplied will generate loss.
+  const float min_expected_disto =
+      (!WP2IsPremultiplied(format) && src.HasTransparency()) ? 25.f
+      : csp_type == Csp::kYCoCg                              ? 99.f
+                                                             : 45.f;
   ASSERT_TRUE(testing::Compare(src, dst, src_file_name, min_expected_disto));
 }
 

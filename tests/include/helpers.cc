@@ -208,40 +208,25 @@ bool TryFindFirstDifference(const ArgbBuffer& a, const ArgbBuffer& b,
            << " are different than the decompressed ones " << dec.width() << "x"
            << dec.height() << " with file " << file_name;
   }
-
-  // We only compare in premultiplied. Results are not guaranteed in
-  // unmultiplied.
-  const bool convert =
-      !WP2IsPremultiplied(src.format()) || (src.format() != dec.format());
-  ArgbBuffer src_converted(convert ? WP2_Argb_32 : src.format());
-  ArgbBuffer dec_converted(src_converted.format());
-  if (convert) {
-    if (src_converted.ConvertFrom(src) != WP2_STATUS_OK ||
-        dec_converted.ConvertFrom(dec) != WP2_STATUS_OK) {
-      return ::testing::AssertionFailure() << "Failed to convert";
-    }
-  } else {
-    if (src_converted.SetView(src) != WP2_STATUS_OK ||
-        dec_converted.SetView(dec) != WP2_STATUS_OK) {
-      return ::testing::AssertionFailure() << "Failed to set view";
-    }
+  if (src.format() != dec.format()) {
+    return ::testing::AssertionFailure() << "Format mismatch (" << src.format()
+                                         << " vs " << dec.format() << ")";
   }
 
-  ArgbBuffer dec_oriented(dec_converted.format());
+  ArgbBuffer dec_oriented(dec.format());
   if (decoding_orientation != Orientation::kOriginal) {
-    if (OrientateBuffer(GetInverseOrientation(decoding_orientation),
-                             dec, &dec_oriented) != WP2_STATUS_OK) {
+    if (OrientateBuffer(GetInverseOrientation(decoding_orientation), dec,
+                        &dec_oriented) != WP2_STATUS_OK) {
       return ::testing::AssertionFailure() << "Failed to rotate buffer";
     }
   } else {
-    if (dec_oriented.SetView(dec_converted) != WP2_STATUS_OK) {
+    if (dec_oriented.SetView(dec) != WP2_STATUS_OK) {
       return ::testing::AssertionFailure() << "Failed to set view";
     }
   }
 
   float disto[5];
-  if (dec_oriented.GetDistortion(src_converted, metric, disto) !=
-      WP2_STATUS_OK) {
+  if (dec_oriented.GetDistortion(src, metric, disto) != WP2_STATUS_OK) {
     return ::testing::AssertionFailure()
            << "Can not get distortion with file " << file_name;
   }
@@ -250,18 +235,17 @@ bool TryFindFirstDifference(const ArgbBuffer& a, const ArgbBuffer& b,
         ::testing::AssertionFailure()
         << "Distortion is too high: " << disto[0] << ", " << disto[1] << ", "
         << disto[2] << ", " << disto[3] << ", " << disto[4] << " with file "
-        << file_name << " (expected at least " << expected_distortion << ")"
-        << (convert ? " (note buffers were converted to Argb)" : "");
+        << file_name << " (expected at least " << expected_distortion << ")";
 
     uint32_t x, y;
-    if (!TryFindFirstDifference(src_converted, dec_oriented, x, y)) {
+    if (!TryFindFirstDifference(src, dec_oriented, x, y)) {
       assert(false);  // There should be a difference.
       return assertion_failure;
     }
-    const uint8_t* const a = src_converted.GetPosition(x, y);
+    const uint8_t* const a = src.GetPosition(x, y);
     const uint8_t* const b = dec_oriented.GetPosition(x, y);
     int32_t aa, ar, ag, ab, ba, br, bg, bb;  // Print numbers, not chars
-    if (WP2Formatbpc(src_converted.format()) == 8) {
+    if (WP2Formatbpc(src.format()) == 8) {
       aa = a[0], ar = a[1], ag = a[2], ab = a[3];
       ba = b[0], br = b[1], bg = b[2], bb = b[3];
     } else {
