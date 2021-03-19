@@ -87,9 +87,10 @@ TEST(PartitionScoreFuncTest, BlockScoreFunc) {
       score_func2.Init(config, tile_rect, yuv, gparams, ProgressRange()));
 
   // Test all block at once.
-  ASSERT_WP2_OK(
-      score_func2.ComputeScore(kBlocks, sizeof(kBlocks) / sizeof(kBlocks[0]),
-                               /*extra_rate=*/0, /*best_score=*/0, &score));
+  ASSERT_WP2_OK(score_func2.ComputeScore(kBlocks,
+                                         sizeof(kBlocks) / sizeof(kBlocks[0]),
+                                         /*extra_rate=*/0, /*best_score=*/0,
+                                         /*force_selected=*/false, &score));
   EXPECT_GT(score, 0);
   const float inverted_score = 1.f / score - 1.f;
   // Check the result is a weighted average of the scores of individual blocks.

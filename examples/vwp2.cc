@@ -325,6 +325,7 @@ class Params {
   std::string message_;
   int message_end_time_;
   bool show_interface_ = true;
+  size_t last_msg_hash_ = 0;
 
   // Converts from pixel sizes to relative sizes as used by OpenGL.
   float ToRelativeX(int32_t px) const { return px * 2.f / viewport_width_; }
@@ -1163,6 +1164,19 @@ void Params::PrintInfo() {
       msg.emplace_back(dinfo_.visual_debug);
       SplitIntoMessages(dinfo_.selection_info, &msg);
     }
+    const size_t hash = std::hash<std::string>{}(einfo_.selection_info);
+    constexpr uint32_t kMaxMsgLines = 35;
+    if (msg.size() > kMaxMsgLines) {
+      if (hash != last_msg_hash_) {  // Only print once, not on every redisplay.
+        printf("=========> continued\n");
+        for (uint32_t i = kMaxMsgLines; i < msg.size(); ++i) {
+          printf("%s\n", msg[i].c_str());
+        }
+      }
+      msg.resize(kMaxMsgLines + 1);
+      msg[kMaxMsgLines] = "(abridged, see console)";
+    }
+    last_msg_hash_ = hash;
   }
 
   if (!message_.empty()) {

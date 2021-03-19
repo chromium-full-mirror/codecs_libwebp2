@@ -55,6 +55,7 @@ class SplitRecursePartitioner : public Partitioner {
                             BlockScoreFunc* const score_func,
                             SymbolCounter* const symbol_counter,
                             ANSEncCounter* const counter, float extra_rate,
+                            uint32_t recursion_level, bool selected,
                             Vector_u32* const best_pattern_idxs,
                             float* const best_score) const;
 
@@ -65,8 +66,16 @@ class SplitRecursePartitioner : public Partitioner {
                          BlockScoreFunc* const score_func,
                          SymbolCounter* const symbol_counter,
                          ANSEncCounter* const counter, float best_score,
-                         float extra_rate, Vector_u32* const best_pattern_idxs,
+                         float extra_rate, uint32_t recursion_level,
+                         bool selected, Vector_u32* const best_pattern_idxs,
                          float* const score) const;
+
+  WP2Status VDebugRecursionLevel(const Block& block,
+                                 uint32_t recursion_level) const;
+  bool VDebugBlockSelected(const Block& block) const;
+  WP2Status RegisterScoreForVDebug(const Block& block, uint32_t recursion_level,
+                                   const float scores[4], float extra_rate,
+                                   float total_score, bool is_best) const;
 };
 
 //------------------------------------------------------------------------------

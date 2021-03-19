@@ -57,9 +57,10 @@ class BlockScoreFunc : public PartitionScoreFunc {
   // Can be used for evaluating a block against its sub-blocks, for example.
   // 'extra_rate' is an extra bit cost added to rd-opt score computation.
   // 'best_score' is the previous best score (if any), for debugging.
+  // 'force_selected' is for visual debug (forces outputting of debug info).
   WP2Status ComputeScore(const Block blocks[4], uint32_t num_blocks,
                          float extra_rate, float best_score,
-                         float* const score);
+                         bool force_selected, float* const score);
 
   WP2Status Use(const Block& block) override;
 
@@ -107,8 +108,8 @@ class BlockScoreFunc : public PartitionScoreFunc {
   WP2Status RegisterScoreForVDebug(const Block blocks[], uint32_t num_blocks,
                                    const float rate[4], const float disto[4],
                                    float extra_rate, float total_rate,
-                                   float total_disto, float score,
-                                   bool is_best);
+                                   float total_disto, float score, bool is_best,
+                                   bool force_selected);
 };
 
 //------------------------------------------------------------------------------

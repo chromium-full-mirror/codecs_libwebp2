@@ -141,7 +141,8 @@ WP2Status SplitPartitioner::GetBestPartition(const ProgressRange& progress,
 
         float score;
         WP2_CHECK_STATUS(score_func->ComputeScore(
-            sub_blocks, num_sub_blocks, split_cost, best_score, &score));
+            sub_blocks, num_sub_blocks, split_cost, best_score,
+            /*force_selected=*/false, &score));
         if (best_pattern_idx == -1 || score > best_score) {
           best_pattern_idx = split_idx;
           best_score = score;

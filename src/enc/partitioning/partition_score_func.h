@@ -74,6 +74,7 @@ class PartitionScoreFunc : public WP2Allocable {
   // Visual debug.
   WP2Status ClearVDebug() const;
   WP2Status RegisterScoreForVDebug(const Block& block, float score,
+                                   bool force_selected = false,
                                    bool ending_new_line = true) const;
   bool VDebugBlockSelected(const Block& block) const;
 };

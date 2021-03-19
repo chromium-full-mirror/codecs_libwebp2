@@ -96,14 +96,16 @@ WP2Status BlockScoreFunc::ComputeScore(const Block& block,
                                        const ProgressRange& progress,
                                        float* const score) {
   WP2_CHECK_STATUS(ComputeScore(&block, /*num_blocks=*/1, /*extra_rate=*/0,
-                                /*best_score=*/0, score));
+                                /*best_score=*/0,
+                                /*force_selected=*/false, score));
   WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;
 }
 
 WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
                                        uint32_t num_blocks, float extra_rate,
-                                       float best_score, float* const score) {
+                                       float best_score, bool force_selected,
+                                       float* const score) {
   // Copy the final state into the temporary scratch one.
   WP2_CHECK_STATUS(tmp_dicts_.CopyFrom(dicts_));
   WP2_CHECK_STATUS(tmp_syntax_writer_.CopyFrom(syntax_writer_, &tmp_dicts_));
@@ -169,7 +171,7 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
   *score = 1.0f / (1.0f + kNiceScale * (lambda * total_rate + total_disto));
   WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug(
       blocks, num_blocks, rate, disto, extra_rate / total_pixels, total_rate,
-      total_disto, *score, /*is_best=*/(*score > best_score)));
+      total_disto, *score, /*is_best=*/(*score > best_score), force_selected));
   return WP2_STATUS_OK;
 }
 

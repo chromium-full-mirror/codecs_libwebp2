@@ -39,14 +39,15 @@
 #include "src/dsp/dsp.h"
 #include "src/dsp/lossless/dspl.h"
 #include "src/dsp/math.h"
+#include "src/enc/block_enc.h"
 #include "src/enc/partitioning/partition_score_func_area.h"
 #include "src/enc/partitioning/partition_score_func_block.h"
 #include "src/enc/partitioning/partition_score_func_multi.h"
 #include "src/enc/partitioning/partitioner.h"
 #include "src/enc/partitioning/partitioner_exhaustive.h"
 #include "src/enc/partitioning/partitioner_multi.h"
+#include "src/enc/partitioning/partitioner_split_recurse.h"
 #include "src/enc/wp2_enc_i.h"
-#include "src/enc/block_enc.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
@@ -1849,9 +1850,10 @@ bool PartitionScoreFunc::VDebugBlockSelected(const Block& block) const {
 
 // Should be called after ClearVDebug() and for each block score computed.
 WP2Status PartitionScoreFunc::RegisterScoreForVDebug(
-    const Block& block, float score, bool ending_new_line) const {
+    const Block& block, float score, bool force_selected,
+    bool ending_new_line) const {
   if (!VDMatch(*config_, "encoder/partition/score") ||
-      !VDebugBlockSelected(block)) {
+      (!force_selected && !VDebugBlockSelected(block))) {
     return WP2_STATUS_OK;
   }
   if (config_->info != nullptr) {
@@ -1929,10 +1931,60 @@ WP2Status Partitioner::RegisterOrderForVDebug(
   return WP2_STATUS_OK;
 }
 
+bool SplitRecursePartitioner::VDebugBlockSelected(const Block& block) const {
+  // Top left corner of the block must be selected.
+  return VDSelected(
+      tile_rect_.x, tile_rect_.y,
+      {block.x_pix(), block.y_pix(), kMinBlockSizePix, kMinBlockSizePix},
+      *config_);
+}
+
+WP2Status SplitRecursePartitioner::VDebugRecursionLevel(
+    const Block& block, uint32_t recursion_level) const {
+  if (!VDMatch(*config_, "encoder/partition/score")) {
+    return WP2_STATUS_OK;
+  }
+
+  if (config_->info != nullptr) {
+    std::string& str = config_->info->selection_info;
+    for (uint32_t i = 0; i < recursion_level; ++i) {
+      str += WP2SPrint(" ");
+    }
+  }
+  return WP2_STATUS_OK;
+}
+
+WP2Status SplitRecursePartitioner::RegisterScoreForVDebug(
+    const Block& block, uint32_t recursion_level, const float scores[4],
+    float extra_rate, float total_score, bool is_best) const {
+  if (!VDMatch(*config_, "encoder/partition/score")) {
+    return WP2_STATUS_OK;
+  }
+
+  if (config_->info != nullptr) {
+    WP2_CHECK_STATUS(VDebugRecursionLevel(block, recursion_level));
+
+    std::string& str = config_->info->selection_info;
+    str += WP2SPrint("Block at %4u, %4u (%2u x %2u px), score: %9.3f",
+                     tile_rect_.x + block.x_pix(), tile_rect_.y + block.y_pix(),
+                     block.w_pix(), block.h_pix(), total_score);
+
+    str += WP2SPrint(" %s ", is_best ? "best" : "    ");
+    str += WP2SPrint("  4 blks, recursive scores: ");
+    for (uint32_t i = 0; i < 4; ++i) {
+      str += WP2SPrint(" %.3f ", scores[i]);
+    }
+    str += WP2SPrint(" +r%.3f", extra_rate);
+    str += "\n";
+  }
+
+  return WP2_STATUS_OK;
+}
+
 WP2Status BlockScoreFunc::RegisterScoreForVDebug(
     const Block blocks[], uint32_t num_blocks, const float rate[4],
     const float disto[4], float extra_rate, float total_rate, float total_disto,
-    float score, bool is_best) {
+    float score, bool is_best, bool force_selected) {
   Rectangle hull = blocks[0].rect();  // Print surrounding block if possible.
   for (uint32_t i = 1; i < num_blocks; ++i) {
     hull = hull.MergeWith(blocks[i].rect());
@@ -1940,12 +1992,12 @@ WP2Status BlockScoreFunc::RegisterScoreForVDebug(
 
   const Block hull_block(hull.x, hull.y, GetBlockSize(hull.width, hull.height));
   if (!VDMatch(*config_, "encoder/partition/score") ||
-      !VDebugBlockSelected(hull_block)) {
+      (!force_selected && !VDebugBlockSelected(hull_block))) {
     return WP2_STATUS_OK;
   }
 
   WP2_CHECK_STATUS(PartitionScoreFunc::RegisterScoreForVDebug(
-      hull_block, score, /*ending_new_line=*/false));
+      hull_block, score, force_selected, /*ending_new_line=*/false));
 
   if (config_->info != nullptr) {
     std::string& str = config_->info->selection_info;
