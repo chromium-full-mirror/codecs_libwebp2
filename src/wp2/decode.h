@@ -301,8 +301,7 @@ class Decoder {
 
   // Resets the anim decoder to the first frame but keeps known frame features.
   // The decoder will expect the same data, from the beginning of the bitstream.
-  // If 'output_buffer_changed' is false, some decoding might be avoided.
-  void Rewind(bool output_buffer_changed = true);
+  void Rewind();
 
   // Pointer-to-implementation forward declaration.
   struct State;

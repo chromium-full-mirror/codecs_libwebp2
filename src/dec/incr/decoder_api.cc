@@ -228,11 +228,11 @@ void Decoder::SkipNumNextFrames(uint32_t num_frames_to_skip) {
   }
 }
 
-void Decoder::Rewind(bool output_buffer_changed) {
+void Decoder::Rewind() {
   // Only rewind if no failure (USER_ABORT not being considered as one here).
   if (!Failed() ||
       (state_ != nullptr && state_->status == WP2_STATUS_USER_ABORT)) {
-    state_->Rewind(output_buffer_changed);
+    state_->Rewind();
   }
 }
 

@@ -62,7 +62,7 @@ TEST(AnimTest, SkipSome) {
       decoder.SkipNumNextFrames(kMaxNumFrames);
       ASSERT_FALSE(decoder.ReadFrame());
       ASSERT_FALSE(decoder.Failed());
-      decoder.Rewind(/*output_buffer_changed=*/false);
+      decoder.Rewind();
     }
 
     // Decode some frames.

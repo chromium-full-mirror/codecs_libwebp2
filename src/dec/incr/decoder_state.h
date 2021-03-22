@@ -149,9 +149,6 @@ struct Decoder::State : public WP2Allocable {
   // Fits the padded current frame ('frame_output_buffer').
   YUVPlane yuv_output_buffer;
 
-  // Index of the frame whose pixels are currently stored in the output buffer.
-  // If partially decoded, it is set to 'kMaxNumFrames' instead.
-  uint32_t index_of_frame_in_output_buffer = kMaxNumFrames;
   // Skipped frames won't be notified with FrameIsReady(), and may be discarded.
   // Frame features (ANMF chunks) will still be decoded, unless already stored.
   uint32_t skip_final_frames_before_index = 0;
@@ -186,8 +183,8 @@ struct Decoder::State : public WP2Allocable {
   uint32_t GetFrameNumDecodedRows() const;
 
   // Resets the state to the beginning of the bitstream. Previously decoded
-  // features are remembered. Pixels are kept unless 'output_buffer_changed'.
-  virtual void Rewind(bool output_buffer_changed);
+  // features are remembered.
+  virtual void Rewind();
 };
 
 struct DecoderStateArray : public Decoder::State {
@@ -196,7 +193,7 @@ struct DecoderStateArray : public Decoder::State {
       : Decoder::State(config, &array_data_source) {}
 
   // Rewinds also the 'array_data_source' so no need to call SetInput() again.
-  void Rewind(bool output_buffer_changed) override;
+  void Rewind() override;
 
   ExternalDataSource array_data_source;
   DataView last_input_set = {nullptr, 0};

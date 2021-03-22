@@ -40,11 +40,6 @@ WP2Status GlimpseAtNextFrame(const DecoderConfig& config,
                              const BitstreamFeatures& features,
                              Decoder::State* const state);
 
-// Returns true if a usable frame is already fully present in the output buffer.
-// In this case, execution should continue as if the last tile was just decoded.
-bool FrameIsAlreadyInOutputBuffer(uint32_t tile_width, uint32_t tile_height,
-                                  Decoder::State* const state);
-
 // If possible, skips entire frames and discards the related bitstream part.
 bool DiscardWholeFrames(Decoder::State* const state);
 

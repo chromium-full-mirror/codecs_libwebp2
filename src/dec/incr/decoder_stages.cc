@@ -291,15 +291,7 @@ void Decoder::DecodeAvailableData() {
       // TODO(maryla): merge with SetupOutputBuffer?
       case State::Stage::ALLOCATE_OUTPUT_BUFFER: {
         if (!state_->ShouldDiscardAllFrames()) {
-          if (state_->index_of_frame_in_output_buffer < kMaxNumFrames &&
-              (output_->IsEmpty() || output_->width() != features_.width ||
-               output_->height() != features_.height)) {
-            // Either Rewind() was given a false negative parameter
-            // 'output_buffer_changed', or the bitstream changed.
-            state_->status = WP2_STATUS_BAD_READ;
-          } else {
-            state_->status = output_->Resize(features_.width, features_.height);
-          }
+          state_->status = output_->Resize(features_.width, features_.height);
           if (state_->status == WP2_STATUS_OK) {
             state_->must_use_raw_output_buffer =
                 (features_.orientation != Orientation::kOriginal ||
@@ -343,37 +335,10 @@ void Decoder::DecodeAvailableData() {
             keep_decoding = true;
             break;  // Go to the WAITING_FOR_METADATA_CHUNKS part.
           }
-          if (FrameIsAlreadyInOutputBuffer(features_.tile_width,
-                                           features_.tile_height, state_)) {
-            state_->stage = State::Stage::WAITING_FOR_TILE_DATA;
-            copied_raw_area = {0, 0, 0, 0};
-            if (state_->frames[state_->current_frame_index].is_last) {
-              state_->status = state_->progress.Set(1. - kProgressEnd);
-            } else {
-              state_->status = state_->progress.Set(
-                  GetProgressAtFrame(state_->current_frame_index + 1));
-            }
-            keep_decoding = true;
-            break;  // Go to the WAITING_FOR_TILE_DATA part.
-          }
           if (DiscardWholeFrames(state_)) {
             copied_raw_area = {0, 0, 0, 0};
-            // Maybe the output buffer contains 'current_frame_index' now.
-            if (FrameIsAlreadyInOutputBuffer(features_.tile_width,
-                                             features_.tile_height, state_)) {
-              state_->stage = State::Stage::WAITING_FOR_TILE_DATA;
-              if (state_->frames[state_->current_frame_index].is_last) {
-                state_->status = state_->progress.Set(1. - kProgressEnd);
-              } else {
-                state_->status = state_->progress.Set(
-                    GetProgressAtFrame(state_->current_frame_index + 1));
-              }
-              keep_decoding = true;
-              break;  // Go to the WAITING_FOR_TILE_DATA part.
-            } else {
-              state_->status = state_->progress.Set(
-                  GetProgressAtFrame(state_->current_frame_index));
-            }
+            state_->status = state_->progress.Set(
+                GetProgressAtFrame(state_->current_frame_index));
           }
         }
 
@@ -394,16 +359,9 @@ void Decoder::DecodeAvailableData() {
           if (state_->status == WP2_STATUS_OK &&
               state_->current_frame_index >=
                   state_->discard_frames_before_index) {
-            // Make sure the (supposed) content of the output buffer is correct.
-            const AnimationFrame& frame_info =
-                state_->frames[state_->current_frame_index].info;
-            assert(frame_info.dispose ||
-                   (state_->index_of_frame_in_output_buffer + 1 ==
-                    state_->current_frame_index));
-            // The content of the output buffer is no longer an entire frame.
-            state_->index_of_frame_in_output_buffer = kMaxNumFrames;
-
-            state_->status = SetupOutputBuffer(frame_info, output_, state_);
+            state_->status = SetupOutputBuffer(
+                state_->frames[state_->current_frame_index].info, output_,
+                state_);
             if (state_->status == WP2_STATUS_OK) {
               ArgbBuffer* const buffer = state_->using_blended_buffer
                                              ? &state_->blended_buffer
@@ -485,7 +443,6 @@ void Decoder::DecodeAvailableData() {
             } else {
               // Blending and orientation are done outside this loop.
             }
-            state_->index_of_frame_in_output_buffer = current_frame_index;
           }
           if (state_->status == WP2_STATUS_OK) {
             state_->current_frame_is_ready = true;

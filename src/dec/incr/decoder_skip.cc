@@ -132,65 +132,6 @@ WP2Status GlimpseAtNextFrame(const DecoderConfig& config,
 
 //------------------------------------------------------------------------------
 
-bool FrameIsAlreadyInOutputBuffer(uint32_t tile_width, uint32_t tile_height,
-                                  Decoder::State* const state) {
-  uint32_t target_frame_index = state->current_frame_index;
-  if (state->skip_final_frames_before_index <
-      state->final_to_regular_index.size()) {
-    target_frame_index = std::max(
-        target_frame_index,
-        state->final_to_regular_index[state->skip_final_frames_before_index]);
-  }
-  if (state->index_of_frame_in_output_buffer == target_frame_index) {
-    assert(state->frames[target_frame_index].num_bytes !=
-           Decoder::State::kUnknown);
-    const size_t target_bitstream_position =
-        state->frames[target_frame_index].bitstream_position +
-        state->frames[target_frame_index].num_bytes;
-    const size_t bitstream_position =
-        state->data_source->GetNumDiscardedBytes();
-
-    if (bitstream_position > target_bitstream_position) {
-      state->status = WP2_STATUS_BAD_READ;  // Data source changed.
-    } else {
-      state->data_source->Discard(target_bitstream_position -
-                                  bitstream_position);
-      state->current_frame_index = target_frame_index;
-
-      // Simulate that all tiles are decoded.
-      const Rectangle& window = state->frames[target_frame_index].info.window;
-      state->status = GetTilesLayout(
-          window.width, window.height, tile_width, tile_height,
-          state->current_tiles_progress, &state->frame_output_buffer,
-          &state->yuv_output_buffer, &state->tiles_layout);
-      state->tiles_layout.num_assignable_tiles =
-          state->tiles_layout.tiles.size();
-      state->tiles_layout.first_unassigned_tile_index =
-          state->tiles_layout.num_assignable_tiles;
-      state->tiles_layout.num_decoded_tiles =
-          state->tiles_layout.num_assignable_tiles;
-      state->frame_num_converted_rows = window.height;
-      state->frame_num_final_rows = window.height;
-      state->intertile_filter.Clear();
-      // TODO(yguyon): Store one or two pixels when setting
-      //               'index_of_frame_in_output_buffer' and assert them here.
-    }
-    return true;  // Going directly to WAITING_FOR_TILE_DATA is expected.
-  }
-
-  if (state->index_of_frame_in_output_buffer >=
-          state->discard_frames_before_index &&
-      state->index_of_frame_in_output_buffer < target_frame_index) {
-    // Even more frames can be discarded.
-    state->discard_frames_before_index =
-        state->index_of_frame_in_output_buffer + 1;
-    // Rely on the following DiscardWholeFrames() to actually do the work.
-  }
-  return false;
-}
-
-//------------------------------------------------------------------------------
-
 bool DiscardWholeFrames(Decoder::State* const state) {
   if (state->frames.empty()) return false;
   uint32_t target_frame_index = std::min(state->discard_frames_before_index,

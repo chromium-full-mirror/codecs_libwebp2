@@ -289,7 +289,7 @@ class IncrementalDecodingTester {
           action.type == DecoderAction::Type::kRewindKeepBytes) {
         const bool output_buffer_changed = (action.value > 0);
         if (output_buffer_changed) output_.Deallocate();
-        GetDecoder().Rewind(output_buffer_changed);
+        GetDecoder().Rewind();
         *previous_input_size = 0;
         if (action.type != DecoderAction::Type::kRewindKeepBytes) {
           *available_input_size = 0;

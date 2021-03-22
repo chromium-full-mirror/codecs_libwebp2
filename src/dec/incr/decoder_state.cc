@@ -25,7 +25,7 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
-void Decoder::State::Rewind(bool output_buffer_changed) {
+void Decoder::State::Rewind() {
   if (partial_tile_decoder != nullptr) partial_tile_decoder->Clear();
   stage = Decoder::State::Stage::WAITING_FOR_HEADER_CHUNK;
   status = WP2_STATUS_NOT_ENOUGH_DATA;
@@ -36,7 +36,6 @@ void Decoder::State::Rewind(bool output_buffer_changed) {
   frame_num_final_rows = 0;
   intertile_filter.Clear();
   data_source->Reset();
-  if (output_buffer_changed) index_of_frame_in_output_buffer = kMaxNumFrames;
   skip_final_frames_before_index = 0;
   discard_frames_before_index = 0;
   // Keep the glimpsed frame position and the already decoded frame features.
@@ -44,8 +43,8 @@ void Decoder::State::Rewind(bool output_buffer_changed) {
   //       It is handled in Decoder::DecodeAvailableData() instead.
 }
 
-void DecoderStateArray::Rewind(bool output_buffer_changed) {
-  Decoder::State::Rewind(output_buffer_changed);
+void DecoderStateArray::Rewind() {
+  Decoder::State::Rewind();
   array_data_source.Update(last_input_set.bytes, last_input_set.size);
 }
 

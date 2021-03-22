@@ -280,7 +280,7 @@ TEST(AnimTest, Preframes) {
   ASSERT_EQ(first_features->window.height, second_features->window.height);
 
   // Check pixels just in case.
-  decoder.Rewind(/*output_buffer_changed=*/false);
+  decoder.Rewind();
   for (const ArgbBuffer& frame : frames) {
     ASSERT_TRUE(decoder.ReadFrame());
     ASSERT_FALSE(decoder.Failed());
