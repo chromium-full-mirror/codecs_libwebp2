@@ -124,7 +124,7 @@ WP2Status TileDecoder::BypassTileDecRgb8b() {
 WP2Status TileDecoder::BypassTileDecRgb10b() {
   BitUnpacker bit_unpacker(tile_->input, "raw_pixels");
   const uint32_t num_bits_per_row =
-      (gparams_->has_alpha_ ? kAlphaBits : 0) + 3 * 10;
+      ((gparams_->has_alpha_ ? kAlphaBits : 0) + 3 * 10) * tile_->rect.width;
 
   for (tile_->num_decoded_rows = 0;
        tile_->num_decoded_rows < tile_->rect.height;
