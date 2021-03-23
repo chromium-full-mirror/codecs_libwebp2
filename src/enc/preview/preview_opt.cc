@@ -299,7 +299,8 @@ WP2Status PreviewDataEnc::OptimizeColorIndices() {
 //------------------------------------------------------------------------------
 
 WP2Status PreviewData::Optimize(const ArgbBuffer& canvas,
-                                const PreviewConfig& config, bool log) {
+                                const PreviewConfig& config,
+                                const ProgressRange& progress, bool log) {
   WP2_CHECK_OK(config.IsValid(), WP2_STATUS_INVALID_CONFIGURATION);
 
   // Starting solution.
@@ -427,6 +428,8 @@ WP2Status PreviewData::Optimize(const ArgbBuffer& canvas,
     } else {   // restore previous best
       WP2_CHECK_STATUS(best.ImportFrom(*this));
     }
+
+    WP2_CHECK_STATUS(progress.AdvanceBy(1. / config.num_iterations));
   }
   return WP2_STATUS_OK;
 }

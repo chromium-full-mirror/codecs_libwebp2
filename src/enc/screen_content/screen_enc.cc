@@ -303,8 +303,8 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
       GetPreviewColor(input), has_icc, has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
-  WP2_CHECK_STATUS(EncodePreview(input, config, output));
-  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
+  const ProgressRange preview_progress(&progress, kOnePercent);
+  WP2_CHECK_STATUS(EncodePreview(input, config, preview_progress, output));
 
   WP2_CHECK_STATUS(EncodeICC(
       {input.metadata_.iccp.bytes, input.metadata_.iccp.size}, output));

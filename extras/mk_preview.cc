@@ -29,6 +29,7 @@
 #include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
 #include "src/common/preview/preview.h"  // TODO(skal): make better include
+#include "src/common/progress_watcher.h"
 #include "src/dec/preview/preview_dec.h"
 #include "src/enc/preview/preview_enc.h"
 #include "src/wp2/encode.h"
@@ -316,8 +317,9 @@ int main(int argc, const char* argv[]) {
   WP2::PreviewData data;
   if (bin_file == nullptr) {
     WP2::MemoryWriter writer;
-    CHECK_STATUS(WP2::EncodePreview(original, config, &writer),
-                "Error in EncodePreview()\n");
+    CHECK_STATUS(
+        WP2::EncodePreview(original, config, WP2::ProgressRange(), &writer),
+        "Error in EncodePreview()\n");
     CHECK_STATUS(data.Decode(writer.mem_, writer.size_),
                  "Round-trip error. SHOULDN'T HAPPEN!!'\n");
   } else {
@@ -333,8 +335,9 @@ int main(int argc, const char* argv[]) {
                   "Can't decode binary data [%s]", bin_file);
     }
     // optimize further
-    CHECK_STATUS(data.Optimize(original, config, /*log=*/true),
-                 "Optimize() call failed\n");
+    CHECK_STATUS(
+        data.Optimize(original, config, WP2::ProgressRange(), /*log=*/true),
+        "Optimize() call failed\n");
   }
 
   // save binary/text result

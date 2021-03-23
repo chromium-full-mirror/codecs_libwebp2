@@ -317,7 +317,12 @@ bool ProgressTester::OnUpdate(double progress) {
 }
 
 bool ProgressTimeout::OnUpdate(double progress) {
-  const std::chrono::duration<double> diff = Clock::now() - start_;
+  const std::chrono::time_point<Clock> now = Clock::now();
+  const std::chrono::duration<double> diff = now - start_;
+#if WP2_CHECK_PROGRESS_GRANULARITY  // Enable to detect missing progress calls.
+  if (diff.count() > 1.) abort();   // Checks that the duration between two
+  start_ = now;                     // OnUpdate() calls is not too long.
+#endif
   return (ProgressTester::OnUpdate(progress) && diff.count() < max_seconds_);
 }
 

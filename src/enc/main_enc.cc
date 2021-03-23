@@ -326,16 +326,21 @@ WP2Status EncodeHeader(const EncoderConfig& config,
 }
 
 WP2Status EncodePreview(const ArgbBuffer& buffer, const EncoderConfig& config,
-                        Writer* const output) {
+                        const ProgressRange& progress, Writer* const output) {
   // TODO(skal): add size limit on preview chunk length?
   if (config.create_preview) {
     MemoryWriter preview;
-    WP2_CHECK_STATUS(EncodePreview(
-        buffer, PreviewConfig(config.quality, config.effort), &preview));
+    WP2_CHECK_STATUS(EncodePreview(buffer,
+                                   PreviewConfig(config.quality, config.effort),
+                                   progress, &preview));
     WP2_CHECK_STATUS(WriteChunk({preview.mem_, preview.size_}, output));
-  } else if (config.preview_size > 0) {
-    WP2_CHECK_OK(config.preview != nullptr, WP2_STATUS_INVALID_PARAMETER);
-    WP2_CHECK_STATUS(WriteChunk({config.preview, config.preview_size}, output));
+  } else {
+    if (config.preview_size > 0) {
+      WP2_CHECK_OK(config.preview != nullptr, WP2_STATUS_INVALID_PARAMETER);
+      WP2_CHECK_STATUS(
+          WriteChunk({config.preview, config.preview_size}, output));
+    }
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   }
   return WP2_STATUS_OK;
 }
@@ -520,8 +525,8 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
       preview_color, has_icc, has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
-  WP2_CHECK_STATUS(EncodePreview(input, config, output));
-  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
+  const ProgressRange preview_progress(&progress, kOnePercent);
+  WP2_CHECK_STATUS(EncodePreview(input, config, preview_progress, output));
 
   WP2_CHECK_STATUS(EncodeICC(
       {input.metadata_.iccp.bytes, input.metadata_.iccp.size}, output));
@@ -652,8 +657,8 @@ WP2Status Encode(uint32_t width, uint32_t height,
                                 has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
-  WP2_CHECK_STATUS(EncodePreview(rgb_input, config, output));
-  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
+  const ProgressRange preview_progress(&progress, kOnePercent);
+  WP2_CHECK_STATUS(EncodePreview(rgb_input, config, preview_progress, output));
 
   WP2_CHECK_STATUS(
       EncodeICC({metadata.iccp.bytes, metadata.iccp.size}, output));

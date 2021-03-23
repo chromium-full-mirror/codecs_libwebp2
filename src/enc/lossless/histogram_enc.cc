@@ -625,7 +625,8 @@ void HistoQueue::MaybeUpdateHead(HistogramPair* const pair) {
 // Returns true on success, false otherwise.
 static WP2Status HistogramCombineGreedy(HistogramSet* const image_histo,
                                         SegmentImgWrapper* const segments,
-                                        PopulationAnalyzer* const analyzer) {
+                                        PopulationAnalyzer* const analyzer,
+                                        const WP2::ProgressRange& progress) {
   const uint32_t image_histo_size = image_histo->histograms_.size();
 
   // Priority queue of histogram pairs.
@@ -638,6 +639,7 @@ static WP2Status HistogramCombineGreedy(HistogramSet* const image_histo,
       WP2_CHECK_STATUS(queue.Push(i, j, 0.));
     }
   }
+  WP2_CHECK_STATUS(progress.AdvanceBy(0.5));
 
   while (queue.ValidIndices().size() > 1 && !queue.empty()) {
     const uint32_t idx1 = queue.front().idx1;
@@ -649,10 +651,13 @@ static WP2Status HistogramCombineGreedy(HistogramSet* const image_histo,
         WP2_CHECK_STATUS(queue.Push(idx1, i, /*threshold=*/0.));
       }
     }
+    // The number of loops is not trivial to compute so the ProgressHook is
+    // called but there is no advancement.
+    WP2_CHECK_STATUS(progress.AdvanceBy(0.));
   }
   // Remove histograms that have been merged.
   WP2_CHECK_STATUS(queue.RemoveInvalidHistograms());
-
+  WP2_CHECK_STATUS(progress.AdvanceBy(0.5));
   return WP2_STATUS_OK;
 }
 
@@ -874,16 +879,21 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
   // Don't combine the histograms using stochastic and greedy heuristics for
   // low-effort compression mode.
   if (effort > 0 || !entropy_combine) {
+    const WP2::ProgressRange stochastic_progress(combine_progress, 0.5);
+    const WP2::ProgressRange greedy_progress(combine_progress, 0.5);
+
     const float x = (effort == 5) ? 75.f / 100.f : effort / 9.f;
     // cubic ramp between 1 and MAX_HISTO_GREEDY:
     const auto threshold_size = (int)(1 + (x * x * x) * (MAX_HISTO_GREEDY - 1));
     bool do_greedy;
-    WP2_CHECK_STATUS(HistogramCombineStochastic(merged_histo, threshold_size,
-                                                0.f, &segments_wrap, &analyzer,
-                                                combine_progress, &do_greedy));
+    WP2_CHECK_STATUS(HistogramCombineStochastic(
+        merged_histo, threshold_size, 0.f, &segments_wrap, &analyzer,
+        stochastic_progress, &do_greedy));
     if (do_greedy) {
-      WP2_CHECK_STATUS(
-          HistogramCombineGreedy(merged_histo, &segments_wrap, &analyzer));
+      WP2_CHECK_STATUS(HistogramCombineGreedy(merged_histo, &segments_wrap,
+                                              &analyzer, greedy_progress));
+    } else {
+      WP2_CHECK_STATUS(greedy_progress.AdvanceBy(1.));
     }
   } else {
     WP2_CHECK_STATUS(combine_progress.AdvanceBy(1.));

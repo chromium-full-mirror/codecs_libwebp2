@@ -21,6 +21,7 @@
 #define WP2_COMMON_PREVIEW_PREVIEW_H_
 
 #include "src/common/color_precision.h"
+#include "src/common/progress_watcher.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/vector.h"
@@ -155,12 +156,13 @@ class PreviewData {
   bool CopyFrom(const PreviewData& other);
 
   // public entry for encoding / optimizing
-  WP2Status Generate(const ArgbBuffer& canvas, const PreviewConfig& config);
+  WP2Status Generate(const ArgbBuffer& canvas, const PreviewConfig& config,
+                     const ProgressRange& progress);
 
   // Tries to increase the quality and the size of the preview by randomly
   // mutating the data.
   WP2Status Optimize(const ArgbBuffer& canvas, const PreviewConfig& config,
-                     bool log = false);
+                     const ProgressRange& progress, bool log = false);
 
  protected:  // decoding I/O
   WP2Status DecodePalette(ANSDec* const dec);

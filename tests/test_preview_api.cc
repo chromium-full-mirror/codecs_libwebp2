@@ -71,7 +71,8 @@ TEST_P(PreviewTest, SimpleTest) {
   MemoryWriter writer;
   PreviewConfig config(quality, effort);
   config.analysis_method = analysis_method;
-  ASSERT_WP2_OK(EncodePreview(original_image, config, &writer));
+  ASSERT_WP2_OK(
+      EncodePreview(original_image, config, ProgressRange(), &writer));
 
   ArgbBuffer decompressed_preview;
   ASSERT_WP2_OK(decompressed_preview.Resize(original_image.width(),
@@ -127,7 +128,8 @@ TEST(PreviewTest, NoOptim) {
   config.grid_density = 1.0;
   config.blur_radius = 4;
   config.num_iterations = 0;
-  ASSERT_WP2_OK(EncodePreview(original_image, config, &writer));
+  ASSERT_WP2_OK(
+      EncodePreview(original_image, config, ProgressRange(), &writer));
 
   ArgbBuffer decompressed_preview;
   ASSERT_WP2_OK(decompressed_preview.Resize(original_image.width(),

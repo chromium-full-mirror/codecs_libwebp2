@@ -59,7 +59,7 @@ WP2Status EncodeHeader(const EncoderConfig& config,
 // Creates and compresses a preview from 'buffer' based on 'config' and writes
 // it to 'output'.
 WP2Status EncodePreview(const ArgbBuffer& buffer, const EncoderConfig& config,
-                        Writer* const output);
+                        const ProgressRange& progress, Writer* const output);
 
 // Writes 'iccp' to 'output'.
 WP2Status EncodeICC(DataView iccp, Writer* const output);

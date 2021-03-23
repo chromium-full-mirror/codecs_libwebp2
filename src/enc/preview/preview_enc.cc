@@ -434,16 +434,20 @@ WP2Status AdjustDimensions(const PreviewConfig& config,
 }  // namespace
 
 WP2Status PreviewData::Generate(const ArgbBuffer& canvas,
-                                const PreviewConfig& config) {
-  WP2_CHECK_OK(grid_width_ >= kPreviewMinGridSize &&
-               grid_width_ <= kPreviewMaxGridSize,
+                                const PreviewConfig& config,
+                                const ProgressRange& progress) {
+  WP2_CHECK_OK((grid_width_ >= kPreviewMinGridSize &&
+                grid_width_ <= kPreviewMaxGridSize),
                WP2_STATUS_INVALID_PARAMETER);
-  WP2_CHECK_OK(grid_height_ >= kPreviewMinGridSize &&
-               grid_height_ <= kPreviewMaxGridSize,
+  WP2_CHECK_OK((grid_height_ >= kPreviewMinGridSize &&
+                grid_height_ <= kPreviewMaxGridSize),
                WP2_STATUS_INVALID_PARAMETER);
 
-  const uint32_t max_num_vertices = std::min(config.num_vertices,
-                                             grid_width_ * grid_height_ - 4);
+  const ProgressRange collect_progress(progress, 0.1);
+  const ProgressRange optimize_progress(progress, 0.9);
+
+  const uint32_t max_num_vertices =
+      std::min(config.num_vertices, grid_width_ * grid_height_ - 4);
   // Find best vertices.
   if (config.analysis_method ==
       PreviewConfig::AnalysisMethod::kEdgeSelectionAndRepulsion) {
@@ -462,7 +466,10 @@ WP2Status PreviewData::Generate(const ArgbBuffer& canvas,
         canvas, max_num_vertices, this));
   }
   WP2_CHECK_STATUS(CollectColors2(canvas, config.num_colors));
-  WP2_CHECK_STATUS(Optimize(canvas, config, /* log= */false));
+  WP2_CHECK_STATUS(collect_progress.AdvanceBy(1.));
+
+  WP2_CHECK_STATUS(
+      Optimize(canvas, config, optimize_progress, /* log= */ false));
   return WP2_STATUS_OK;
 }
 
@@ -470,9 +477,13 @@ WP2Status PreviewData::Generate(const ArgbBuffer& canvas,
 // Entry point
 
 WP2Status EncodePreview(const ArgbBuffer& buffer, const PreviewConfig& config,
-                        Writer* const output) {
+                        const ProgressRange& progress, Writer* const output) {
   WP2_CHECK_OK(config.IsValid(), WP2_STATUS_INVALID_CONFIGURATION);
   WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
+
+  const ProgressRange blur_progress(progress, 0.1);
+  const ProgressRange generate_progress(progress, 0.8);
+  const ProgressRange encode_progress(progress, 0.1);
 
   // Prepare canvas.
   ArgbBuffer canvas(WP2_Argb_32);
@@ -486,13 +497,15 @@ WP2Status EncodePreview(const ArgbBuffer& buffer, const PreviewConfig& config,
 
   WP2_CHECK_STATUS(
       Blur(&canvas_view, config.blur_radius, config.blur_threshold));
+  WP2_CHECK_STATUS(blur_progress.AdvanceBy(1.));
 
   // Generate and optimize.
-  WP2_CHECK_STATUS(preview.Generate(canvas_view, config));
+  WP2_CHECK_STATUS(preview.Generate(canvas_view, config, generate_progress));
 
   // Create bitstream.
   ANSEnc enc;
   WP2_CHECK_STATUS(preview.Encode(&enc));
+  WP2_CHECK_STATUS(encode_progress.AdvanceBy(1.));
   WP2_CHECK_OK(output->Append(enc.Buffer(), enc.BufferSize()),
                WP2_STATUS_BAD_WRITE);
   return WP2_STATUS_OK;

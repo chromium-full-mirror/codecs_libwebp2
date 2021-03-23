@@ -48,7 +48,6 @@ WP2Status ProgressWatcher::Finish() {
   assert(progress_ < 1.);
   // If the following assertion fails, it might be a precision error
   // (progression is incremented by amounts that are too small).
-  // Try switching to doubles to see if the problem is fixed.
   assert(std::abs(progress_ + kProgressEnd - 1.) < 0.001);
   return Set(1.);
 }

@@ -23,6 +23,7 @@
 #include <cassert>
 
 #include "src/common/preview/preview.h"
+#include "src/common/progress_watcher.h"
 #include "src/utils/plane.h"
 #include "src/wp2/encode.h"
 
@@ -98,7 +99,7 @@ struct PreviewConfig {
 // Compresses 'buffer' into a preview and writes it to 'output'.
 // Returns WP2_STATUS_OK or an error.
 WP2Status EncodePreview(const ArgbBuffer& buffer, const PreviewConfig& config,
-                        Writer* const output);
+                        const ProgressRange& progress, Writer* const output);
 
 //------------------------------------------------------------------------------
 // Internal vertex collection

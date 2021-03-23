@@ -192,16 +192,19 @@ WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
       preview_color, has_icc, has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
+  const ProgressRange preview_progress(&progress, kOnePercent);
   if (config.create_preview && first_frame.rgb_pixels.IsEmpty()) {
     ArgbBuffer converted;
-    // TODO(yguyon): Maybe also converted in FrameEncoder::EncodeSubframe()
+    // The same conversion may happen in FrameEncoder::EncodeSubframe() too but
+    // for code simplicity it is done twice.
     WP2_CHECK_STATUS(first_frame.ccsp_pixels.Export(
         first_frame.ccsp_to_rgb, /*resize_if_needed=*/true, &converted));
-    WP2_CHECK_STATUS(EncodePreview(converted, config, output));
+    WP2_CHECK_STATUS(
+        EncodePreview(converted, config, preview_progress, output));
   } else {
-    WP2_CHECK_STATUS(EncodePreview(first_frame.rgb_pixels, config, output));
+    WP2_CHECK_STATUS(EncodePreview(first_frame.rgb_pixels, config,
+                                   preview_progress, output));
   }
-  WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   WP2_CHECK_STATUS(
       EncodeICC({metadata.iccp.bytes, metadata.iccp.size}, output));

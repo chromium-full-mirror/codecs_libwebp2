@@ -57,11 +57,14 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
       buffer_.Resize(src_->Y.w_, src_->Y.h_, /*pad=*/1, with_alpha_));
   WP2_CHECK_STATUS(front_mgr_.InitBase(tile_rect_.width, tile_rect_.height));
 
+  // Call the ProgressHook during the encoding of this block but do not advance
+  // progress. The steps woulb be insignificant anyway.
+  const ProgressRange sub_progress(progress, 0.);
   // Initialize the instances recording only final blocks.
   WP2_CHECK_STATUS(
       syntax_writer_.Init(&dicts_, *config_, *gparams_, yuv, chroma_subsampling,
                           tile_rect, num_block_cols_ * num_block_rows_,
-                          use_aom_coeffs, use_splits_, ProgressRange()));
+                          use_aom_coeffs, use_splits_, sub_progress));
   WP2_CHECK_STATUS(syntax_writer_.SetInitialSegmentIds());
   WP2_CHECK_STATUS(syntax_writer_.InitPass());
 
