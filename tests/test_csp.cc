@@ -45,8 +45,8 @@ TEST_P(CspTest, Ranges) {
   int32_t min[3] = {0}, max[3] = {0};
   for (uint32_t i = 0; i < 3; ++i) {
     for (uint32_t j = 0; j < 3; ++j) {
-      const int16_t rgb_min = 0 - transf.GetRgbAverage()[j];
-      const int16_t rgb_max = kRgbMax - transf.GetRgbAverage()[j];
+      const int16_t rgb_min = 0 - transf.GetRgb8Average()[j];
+      const int16_t rgb_max = kRgbMax - transf.GetRgb8Average()[j];
 
       const int32_t coeff = transf.GetRgbToYuvMatrix()[i * 3 + j];
       min[i] += coeff * ((coeff > 0) ? rgb_min : rgb_max);
@@ -112,10 +112,10 @@ TEST_P(CspTest, Precision) {
         const int16_t in_b = std::min(b, (int16_t)kRgbMax);
 
         int16_t in_y, in_u, in_v;
-        transf.ToYUV(in_r, in_g, in_b, &in_y, &in_u, &in_v);
+        transf.Rgb8ToYuv(in_r, in_g, in_b, &in_y, &in_u, &in_v);
 
         int16_t out_r, out_g, out_b;
-        transf.ToRGB(in_y, in_u, in_v, &out_r, &out_g, &out_b);
+        transf.YuvToRgb8(in_y, in_u, in_v, &out_r, &out_g, &out_b);
         error_sum += out_r - in_r + out_g - in_g + out_b - in_b;
         error_avg += std::abs(out_r - in_r) + std::abs(out_g - in_g) +
                      std::abs(out_b - in_b);
@@ -148,9 +148,17 @@ TEST_P(CspImageTest, Simple) {
   const Csp csp_type = std::get<1>(GetParam());
   const WP2SampleFormat format = std::get<2>(GetParam());
 
-  ArgbBuffer src(format);
+  ArgbBuffer src;
   ASSERT_WP2_OK(
       ReadImage(testing::GetTestDataPath(src_file_name).c_str(), &src));
+  // TODO(yguyon): Handle WP2_Argb_38 directly in ReadImage()
+  // TODO(yguyon): Handle WP2_Argb_38 with Csp::kCustom
+  if (src.format() != format &&
+      (format != WP2_Argb_38 || csp_type != Csp::kCustom)) {
+    ArgbBuffer tmp(format);
+    ASSERT_WP2_OK(tmp.Swap(&src));
+    ASSERT_WP2_OK(src.ConvertFrom(tmp));
+  }
 
   CSPTransform transf;
   ASSERT_WP2_OK(transf.Init(csp_type, src));
@@ -160,38 +168,37 @@ TEST_P(CspImageTest, Simple) {
   ASSERT_WP2_OK(yuv.Import(src, src.HasTransparency(), transf,
                            /*resize_if_needed=*/true, /*pad=*/kPredWidth));
 
-  ArgbBuffer dst(format);
+  ArgbBuffer dst(src.format());
   ASSERT_WP2_OK(yuv.Export(transf, /*resize_if_needed=*/true, &dst));
 
-  // YUV is premultiplied so starting from unmultiplied will generate loss.
-  const float min_expected_disto =
+  // Only kYCoCg <-> Argb 8b is lossless.
+  const float expected_distortion =
       (!WP2IsPremultiplied(format) && src.HasTransparency()) ? 25.f
-      : csp_type == Csp::kYCoCg                              ? 99.f
-                                                             : 45.f;
-  ASSERT_TRUE(testing::Compare(src, dst, src_file_name, min_expected_disto));
+      : (WP2Formatbpc(format) > 8)                           ? 40.f
+      : (csp_type != Csp::kYCoCg)                            ? 50.f
+                                                             : 99.f;
+  ASSERT_TRUE(testing::Compare(src, dst, src_file_name, expected_distortion));
 }
 
 INSTANTIATE_TEST_SUITE_P(
     CspImageTestInstantiation, CspImageTest,
-    ::testing::Combine(::testing::Values("source1_64x48.png"),
-                       ::testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kCustom,
-                                         Csp::kYIQ),
-                       // TODO(yguyon): Include WP2_Argb_38 when ready
-                       ::testing::Values(WP2_Argb_32, WP2_ARGB_32)));
+    ::testing::Combine(
+        ::testing::Values("source1_64x48.png"),
+        ::testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kCustom, Csp::kYIQ),
+        ::testing::Values(WP2_Argb_32, WP2_ARGB_32, WP2_Argb_38)));
 
 // This one takes a while to run so it is disabled.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_CspImageTestInstantiation, CspImageTest,
-    ::testing::Combine(::testing::Values("source0.pgm", "source0.ppm",
-                                         "source4.webp", "test_exif_xmp.webp"),
-                       ::testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kCustom,
-                                         Csp::kYIQ),
-                       // TODO(yguyon): Include WP2_Argb_38 when ready
-                       ::testing::Values(WP2_Argb_32, WP2_ARGB_32)));
+    ::testing::Combine(
+        ::testing::Values("source0.pgm", "source0.ppm", "source4.webp",
+                          "test_exif_xmp.webp"),
+        ::testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kCustom, Csp::kYIQ),
+        ::testing::Values(WP2_Argb_32, WP2_ARGB_32, WP2_Argb_38)));
 
 //------------------------------------------------------------------------------
-// This test exercizes a value underflow/overflow in ToYUV().
+// This test exercizes a value underflow/overflow in Rgb8ToYuv().
 // RGB are multiplied with RGBtoYUV matrix and after rounding, Y is outside the
 // maximum allowed values of +/-1023 (10 bits + sign). RGBtoYUV matrix float
 // computation and rounding to int is probably the root cause.

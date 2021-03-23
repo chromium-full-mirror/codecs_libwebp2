@@ -148,7 +148,7 @@ TEST_P(DecodeCustomCspTest, Comparison) {
       // Compare the reference output with the custom RGB output.
       // For kRGB10 there might be a slight difference due to rounding.
       // For transparent images, the lack of clamping by alpha of
-      // CSPTransform::YUVToCustom() can lead to noticeable differences.
+      // CSPTransform::YuvToCustom() can lead to noticeable differences.
       const float expected_disto =
           is_opaque ? ((matrix == Matrix::kRGB10) ? 45.f : 99.f) : 35.f;
       EXPECT_TRUE(testing::Compare(ref, output, src_file_name, expected_disto));
@@ -191,7 +191,7 @@ TEST_P(DecodeCustomCspTest, Comparison) {
       // "lossless" when it has been tampered with during compression (it can
       // output RGB values that are not exact multiples of 1<<kMtxShift).
       // For transparent images, the lack of clamping by alpha of
-      // CSPTransform::YUVToCustom() can lead to noticeable differences. There
+      // CSPTransform::YuvToCustom() can lead to noticeable differences. There
       // might also be some slight rounding discrepancies.
       const float expected_disto =
           (quality <= kMaxLossyQuality) ? (is_opaque ? 55.f : 45.f) : 85.f;

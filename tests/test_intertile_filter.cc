@@ -89,7 +89,7 @@ void CreateCanvasAndFilter(uint32_t width, uint32_t height,
   }
 
   CSPTransform csp;
-  canvas->Fill(csp.ToYUV(Argb32b{220, 220, 0, 60}));
+  canvas->Fill(csp.ToYuv(Argb32b{220, 220, 0, 60}));
   for (Channel c : {kYChannel, kUChannel, kVChannel}) {
     testing::Noise(csp.GetYUVMin(), csp.GetYUVMax(), /*seed=*/12 + c,
                    /*strength=*/noise_strength, &canvas->GetChannel(c));

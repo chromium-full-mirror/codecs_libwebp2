@@ -120,7 +120,7 @@ static WP2Status FillBorders(const BitstreamFeatures& features,
   } else {
     assert(csp_transform != nullptr);
     const Ayuv38b color =
-        csp_transform->ToYUV(ToArgb32b(features.background_color));
+        csp_transform->ToYuv(ToArgb32b(features.background_color));
 
     yuv_output->Fill(top, color);
     yuv_output->Fill(bot, color);

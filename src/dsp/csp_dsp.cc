@@ -31,7 +31,7 @@ constexpr uint32_t kMtxShift = 12u;
 
 // Converts a row of 'width' pixels from the 'y,u,v' planes into the
 // 'dst0,dst1,dst2' planes using an 'offset' then a 'mtx' multiplication.
-void YUVToCustom_C(const int16_t* y, const int16_t* u, const int16_t* v,
+void YuvToCustom_C(const int16_t* y, const int16_t* u, const int16_t* v,
                    const int16_t offset[3], const int16_t mtx[9],
                    int16_t* dst0, int16_t* dst1, int16_t* dst2,
                    uint32_t width) {
@@ -48,70 +48,99 @@ void YUVToCustom_C(const int16_t* y, const int16_t* u, const int16_t* v,
 
 //------------------------------------------------------------------------------
 
-// Converts the 0-centered 'y,u,v,a' values into the 'argb' channels using 'im'.
-// 'avg' is added to output positive 'argb' samples.
-void YUVAToArgb32(int16_t y, int16_t u, int16_t v, int32_t a,
-                 const int16_t avg[3], const int16_t im[9],
-                 uint8_t* const argb) {
-  int32_t tmp_r, tmp_g, tmp_b;
-  WP2::Multiply<int32_t>(y, u, v, im, &tmp_r, &tmp_g, &tmp_b);
-  tmp_r = avg[0] + WP2::RightShiftRound(tmp_r, kMtxShift);
-  tmp_g = avg[1] + WP2::RightShiftRound(tmp_g, kMtxShift);
-  tmp_b = avg[2] + WP2::RightShiftRound(tmp_b, kMtxShift);
+// Converts the 0-centered 'y,u,v,a' values into the alpha-premultiplied 'argb'
+// channels using the matrix 'im' and the offset 'avg'.
+// 'kNumRgbBits' can be either 8 or 10. Alpha is always 8-bit.
+template <int kNumRgbBits, typename TypeOut>
+void AyuvToArgb(int16_t y, int16_t u, int16_t v, int32_t a,
+                const int16_t avg[3], const int16_t im[9],
+                TypeOut* const argb) {
+  static_assert(sizeof(TypeOut) * 8 >= kNumRgbBits, "TypeOut is too narrow");
   a = WP2::Clamp<int32_t>(a, 0, WP2::kAlphaMax);
-  argb[0] = (uint8_t)a;
+  argb[0] = a;
   if (a == 0) {
-    argb[1] = argb[2] = argb[3] = 0;
+    argb[1] = argb[2] = argb[3] = 0;  // Alpha-premultiplied so 0 everywhere.
   } else {
-    argb[1] = (uint8_t)WP2::Clamp<int32_t>(tmp_r, 0, a);
-    argb[2] = (uint8_t)WP2::Clamp<int32_t>(tmp_g, 0, a);
-    argb[3] = (uint8_t)WP2::Clamp<int32_t>(tmp_b, 0, a);
+    // For 10b, the maximum value is 1023 for RGB but 255 for A. Shifting alpha
+    // by 2 would limit to 1020, hence the dithering to keep the full range.
+    if (kNumRgbBits == 10) a = (a << 2) | (a >> 6);
+    int32_t rgb[3];
+    WP2::Multiply<int32_t>(y, u, v, im, &rgb[0], &rgb[1], &rgb[2]);
+    for (uint32_t i : {0, 1, 2}) {
+      rgb[i] = WP2::RightShiftRound(rgb[i], kMtxShift - (kNumRgbBits - 8));
+      argb[1 + i] = WP2::Clamp<int32_t>(rgb[i] + avg[i], 0, a);
+    }
   }
 }
 
-// {YUV, alpha} to {alpha, premultiplied RGB}
-void YUVAToArgb32_C(const int16_t* y, const int16_t* u, const int16_t* v,
+// {Y, U, V, alpha} planes to {alpha, premultiplied R,G,B} channels
+void AyuvToArgb32_C(const int16_t* y, const int16_t* u, const int16_t* v,
                     const int16_t* a, const int16_t avg[3],
-                    const int16_t mtx[9], uint8_t* argb, uint32_t width) {
+                    const int16_t mtx[9], void* argb, uint32_t width) {
+  uint8_t* const argb32 = (uint8_t*)argb;
   for (uint32_t x = 0; x < width; ++x) {
-    YUVAToArgb32(y[x], u[x], v[x], a[x], avg, mtx, argb + 4 * x);
+    AyuvToArgb</*kNumRgbBits=*/8>(y[x], u[x], v[x], a[x], avg, mtx,
+                                   argb32 + 4 * x);
+  }
+}
+void AyuvToArgb38_C(const int16_t* y, const int16_t* u, const int16_t* v,
+                    const int16_t* a, const int16_t avg[3],
+                    const int16_t mtx[9], void* argb, uint32_t width) {
+  uint16_t* const argb38 = (uint16_t*)argb;
+  for (uint32_t x = 0; x < width; ++x) {
+    AyuvToArgb</*kNumRgbBits=*/10>(y[x], u[x], v[x], a[x], avg, mtx,
+                                   argb38 + 4 * x);
   }
 }
 
-// {YUV, alpha} to {alpha, unmultiplied RGB}
-void YUVAToARGB32_C(const int16_t* y, const int16_t* u, const int16_t* v,
+// {Y, U, V, alpha} planes to {alpha, unmultiplied R,G,B} channels
+void AyuvToARGB32_C(const int16_t* y, const int16_t* u, const int16_t* v,
                     const int16_t* a, const int16_t avg[3],
-                    const int16_t mtx[9], uint8_t* argb, uint32_t width) {
+                    const int16_t mtx[9], void* argb, uint32_t width) {
+  uint8_t* const argb32 = (uint8_t*)argb;
   for (uint32_t x = 0; x < width; ++x) {
     // Convert.
-    YUVAToArgb32(y[x], u[x], v[x], a[x], avg, mtx, argb + 4 * x);
+    AyuvToArgb</*kNumRgbBits=*/8>(y[x], u[x], v[x], a[x], avg, mtx,
+                                  argb32 + 4 * x);
 
     // Now demultiply.
-    if (argb[4 * x + 0] > 0 && argb[4 * x + 0] < WP2::kAlphaMax) {
-      const uint32_t m = WP2::kAlphaDiv[argb[4 * x + 0]];
+    if (argb32[4 * x + 0] > 0 && argb32[4 * x + 0] < WP2::kAlphaMax) {
+      const uint32_t m = WP2::kAlphaDiv[argb32[4 * x + 0]];
       for (int i : {1, 2, 3}) {
-        argb[4 * x + i] = WP2::DivByAlphaDiv(argb[4 * x + i], m);
+        argb32[4 * x + i] = WP2::DivByAlphaDiv(argb32[4 * x + i], m);
       }
     }
   }
 }
 
-// {YUV, alpha} to {alpha set to 255, unmultiplied RGB}
-void YUVAToXRGB32_C(const int16_t* y, const int16_t* u, const int16_t* v,
+// {Y, U, V, alpha} planes to {alpha set to 255, unmultiplied R,G,B} channels
+void AyuvToXRGB32_C(const int16_t* y, const int16_t* u, const int16_t* v,
                     const int16_t* a, const int16_t avg[3],
-                    const int16_t mtx[9], uint8_t* argb, uint32_t width) {
-  YUVAToARGB32_C(y, u, v, a, avg, mtx, argb, width);
+                    const int16_t mtx[9], void* argb, uint32_t width) {
+  uint8_t* const argb32 = (uint8_t*)argb;
+  AyuvToARGB32_C(y, u, v, a, avg, mtx, argb32, width);
   for (uint32_t x = 0; x < width; ++x) {
-    argb[4 * x] = WP2::kAlphaMax;
+    argb32[4 * x] = WP2::kAlphaMax;
   }
 }
 
-// {YUV} to {alpha set to 255, RGB}
-void YUVToArgb32_C(const int16_t* y, const int16_t* u, const int16_t* v,
-                   const int16_t avg[3], const int16_t mtx[9], uint8_t* argb,
+// {Y, U, V} planes to {alpha set to 255, R,G,B} channels
+void YuvToArgb32_C(const int16_t* y, const int16_t* u, const int16_t* v,
+                   const int16_t avg[3], const int16_t mtx[9], void* argb,
                    uint32_t width) {
+  uint8_t* const argb32 = (uint8_t*)argb;
   for (uint32_t x = 0; x < width; ++x) {
-    YUVAToArgb32(y[x], u[x], v[x], WP2::kAlphaMax, avg, mtx, argb + 4 * x);
+    AyuvToArgb</*kNumRgbBits=*/8>(y[x], u[x], v[x], WP2::kAlphaMax, avg, mtx,
+                                  argb32 + 4 * x);
+  }
+}
+void YuvToArgb38_C(const int16_t* y, const int16_t* u, const int16_t* v,
+                   const int16_t avg[3], const int16_t mtx[9], void* argb,
+                   uint32_t width) {
+  uint16_t* const argb38 = (uint16_t*)argb;
+  for (uint32_t x = 0; x < width; ++x) {
+    AyuvToArgb</*kNumRgbBits=*/10>(y[x], u[x], v[x], WP2::kAlphaMax, avg, mtx,
+                                   argb38 + 4 * x);
   }
 }
 
@@ -177,7 +206,7 @@ void YUVToArgb32_C(const int16_t* y, const int16_t* u, const int16_t* v,
 
 //------------------------------------------------------------------------------
 
-void YUVToCustom_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
+void YuvToCustom_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
                      const int16_t offset[3], const int16_t mtx[9],
                      int16_t* dst0, int16_t* dst1, int16_t* dst2,
                      uint32_t width) {
@@ -207,7 +236,7 @@ void YUVToCustom_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
   }
 
   if (x < width) {  // left-over
-    YUVToCustom_C(y + x, u + x, v + x, offset, mtx, dst0 + x, dst1 + x,
+    YuvToCustom_C(y + x, u + x, v + x, offset, mtx, dst0 + x, dst1 + x,
                   dst2 + x, width - x);
   }
 }
@@ -215,9 +244,10 @@ void YUVToCustom_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
 //------------------------------------------------------------------------------
 
 // {YUV, alpha} to {alpha, premultiplied RGB}
-void YUVAToArgb32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
+void AyuvToArgb32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
                       const int16_t* a, const int16_t avg[3],
-                      const int16_t mtx[9], uint8_t* argb, uint32_t width) {
+                      const int16_t mtx[9], void* argb, uint32_t width) {
+  uint8_t* const argb32 = (uint8_t*)argb;
   const __m128i Avg0 = _mm_set1_epi16(avg[0]);
   const __m128i Avg1 = _mm_set1_epi16(avg[1]);
   const __m128i Avg2 = _mm_set1_epi16(avg[2]);
@@ -239,19 +269,20 @@ void YUVAToArgb32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
     const __m128i B1 = _mm_min_epi16(A1, _mm_adds_epi16(Avg2, B0));
 
     // repack to 8b, with alpha
-    PACK_RGB(A1, R1, G1, B1, argb + 4 * x);
+    PACK_RGB(A1, R1, G1, B1, argb32 + 4 * x);
   }
 
   if (x < width) {  // left-over
-    YUVAToArgb32_C(y + x, u + x, v + x, a + x, avg, mtx, argb + 4 * x,
+    AyuvToArgb32_C(y + x, u + x, v + x, a + x, avg, mtx, argb32 + 4 * x,
                    width - x);
   }
 }
 
 // {YUV, alpha} to {alpha, unmultiplied RGB}
-void YUVAToARGB32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
+void AyuvToARGB32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
                       const int16_t* a, const int16_t avg[3],
-                      const int16_t mtx[9], uint8_t* argb, uint32_t width) {
+                      const int16_t mtx[9], void* argb, uint32_t width) {
+  uint8_t* const argb32 = (uint8_t*)argb;
   const __m128i Avg0 = _mm_set1_epi16(avg[0]);
   const __m128i Avg1 = _mm_set1_epi16(avg[1]);
   const __m128i Avg2 = _mm_set1_epi16(avg[2]);
@@ -272,40 +303,42 @@ void YUVAToARGB32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
     for (uint32_t i = 0; i < 8; ++i) {
       const uint8_t A = tmp[4 * i + 0];
       if (A == 255) {
-        argb[4 * (x + i) + 0] = tmp[4 * i + 0];
-        argb[4 * (x + i) + 1] = tmp[4 * i + 1];
-        argb[4 * (x + i) + 2] = tmp[4 * i + 2];
-        argb[4 * (x + i) + 3] = tmp[4 * i + 3];
+        argb32[4 * (x + i) + 0] = tmp[4 * i + 0];
+        argb32[4 * (x + i) + 1] = tmp[4 * i + 1];
+        argb32[4 * (x + i) + 2] = tmp[4 * i + 2];
+        argb32[4 * (x + i) + 3] = tmp[4 * i + 3];
       } else {
         const uint32_t M = WP2::kAlphaDiv[A];
-        argb[4 * (x + i) + 0] = A;
-        argb[4 * (x + i) + 1] = WP2::DivByAlphaDiv(tmp[4 * i + 1], M);
-        argb[4 * (x + i) + 2] = WP2::DivByAlphaDiv(tmp[4 * i + 2], M);
-        argb[4 * (x + i) + 3] = WP2::DivByAlphaDiv(tmp[4 * i + 3], M);
+        argb32[4 * (x + i) + 0] = A;
+        argb32[4 * (x + i) + 1] = WP2::DivByAlphaDiv(tmp[4 * i + 1], M);
+        argb32[4 * (x + i) + 2] = WP2::DivByAlphaDiv(tmp[4 * i + 2], M);
+        argb32[4 * (x + i) + 3] = WP2::DivByAlphaDiv(tmp[4 * i + 3], M);
       }
     }
   }
 
   if (x < width) {  // left-over
-    YUVAToARGB32_C(y + x, u + x, v + x, a + x, avg, mtx, argb + 4 * x,
+    AyuvToARGB32_C(y + x, u + x, v + x, a + x, avg, mtx, argb32 + 4 * x,
                    width - x);
   }
 }
 
 // {YUV, alpha} to {alpha set to 255, unmultiplied RGB}
-void YUVAToXRGB32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
+void AyuvToXRGB32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
                       const int16_t* a, const int16_t avg[3],
-                      const int16_t mtx[9], uint8_t* argb, uint32_t width) {
-  YUVAToARGB32_SSE(y, u, v, a, avg, mtx, argb, width);
+                      const int16_t mtx[9], void* argb, uint32_t width) {
+  AyuvToARGB32_SSE(y, u, v, a, avg, mtx, argb, width);
+  uint8_t* const argb32 = (uint8_t*)argb;
   for (uint32_t x = 0; x < width; ++x) {
-    argb[4 * x] = WP2::kAlphaMax;
+    argb32[4 * x] = WP2::kAlphaMax;
   }
 }
 
 // {YUV} to {alpha set to 255, RGB}
-void YUVToArgb32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
-                     const int16_t avg[3], const int16_t mtx[9], uint8_t* argb,
+void YuvToArgb32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
+                     const int16_t avg[3], const int16_t mtx[9], void* argb,
                      uint32_t width) {
+  uint8_t* const argb32 = (uint8_t*)argb;
   const __m128i Avg0 = _mm_set1_epi16(avg[0]);
   const __m128i Avg1 = _mm_set1_epi16(avg[1]);
   const __m128i Avg2 = _mm_set1_epi16(avg[2]);
@@ -327,11 +360,11 @@ void YUVToArgb32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
     const __m128i B1 = _mm_adds_epi16(Avg2, B0);
 
     // repack to 8b, with alpha
-    PACK_RGB(alpha, R1, G1, B1, argb + 4 * x);
+    PACK_RGB(alpha, R1, G1, B1, argb32 + 4 * x);
   }
 
   if (x < width) {  // left-over
-    YUVToArgb32_C(y + x, u + x, v + x, avg, mtx, argb + 4 * x, width - x);
+    YuvToArgb32_C(y + x, u + x, v + x, avg, mtx, argb32 + 4 * x, width - x);
   }
 }
 
@@ -344,11 +377,11 @@ void YUVToArgb32_SSE(const int16_t* y, const int16_t* u, const int16_t* v,
 #undef PACK_RGB
 
 WP2_TSAN_IGNORE_FUNCTION void WP2CSPConverterInitSSE() {
-  WP2YUVToCustom = YUVToCustom_SSE;
-  WP2YUVAToArgb32 = YUVAToArgb32_SSE;
-  WP2YUVAToARGB32 = YUVAToARGB32_SSE;
-  WP2YUVAToXRGB32 = YUVAToXRGB32_SSE;
-  WP2YUVToArgb32 = YUVToArgb32_SSE;
+  WP2YuvToCustom = YuvToCustom_SSE;
+  WP2AyuvToArgb32 = AyuvToArgb32_SSE;
+  WP2AyuvToARGB32 = AyuvToARGB32_SSE;
+  WP2AyuvToXRGB32 = AyuvToXRGB32_SSE;
+  WP2YuvToArgb32 = YuvToArgb32_SSE;
 }
 
 #endif  // WP2_USE_SSE
@@ -360,18 +393,17 @@ WP2_TSAN_IGNORE_FUNCTION void WP2CSPConverterInitSSE() {
 
 }  // namespace
 
-void (*WP2YUVToCustom)(const int16_t* y, const int16_t* u, const int16_t* v,
+void (*WP2YuvToCustom)(const int16_t* y, const int16_t* u, const int16_t* v,
                        const int16_t offset[3], const int16_t mtx[9],
                        int16_t* dst0, int16_t* dst1, int16_t* dst2,
                        uint32_t width) = nullptr;
 
-WP2YUVAToArgb32Func WP2YUVAToArgb32 = nullptr;
-WP2YUVAToArgb32Func WP2YUVAToARGB32 = nullptr;
-WP2YUVAToArgb32Func WP2YUVAToXRGB32 = nullptr;
-
-void (*WP2YUVToArgb32)(const int16_t* y, const int16_t* u, const int16_t* v,
-                       const int16_t avg[3], const int16_t mtx[9],
-                       uint8_t* argb, uint32_t width);
+WP2AyuvToArgbFunc WP2AyuvToArgb32;
+WP2AyuvToArgbFunc WP2AyuvToARGB32;
+WP2AyuvToArgbFunc WP2AyuvToXRGB32;
+WP2YuvToArgbFunc WP2YuvToArgb32;
+WP2AyuvToArgbFunc WP2AyuvToArgb38;
+WP2YuvToArgbFunc WP2YuvToArgb38;
 
 static volatile WP2CPUInfo csp_converter_last_cpuinfo_used =
     (WP2CPUInfo)&csp_converter_last_cpuinfo_used;
@@ -379,11 +411,13 @@ static volatile WP2CPUInfo csp_converter_last_cpuinfo_used =
 WP2_TSAN_IGNORE_FUNCTION void WP2CSPConverterInit() {
   if (csp_converter_last_cpuinfo_used == WP2GetCPUInfo) return;
 
-  WP2YUVToCustom = YUVToCustom_C;
-  WP2YUVAToArgb32 = YUVAToArgb32_C;
-  WP2YUVAToARGB32 = YUVAToARGB32_C;
-  WP2YUVAToXRGB32 = YUVAToXRGB32_C;
-  WP2YUVToArgb32 = YUVToArgb32_C;
+  WP2YuvToCustom = YuvToCustom_C;
+  WP2AyuvToArgb32 = AyuvToArgb32_C;
+  WP2AyuvToARGB32 = AyuvToARGB32_C;
+  WP2AyuvToXRGB32 = AyuvToXRGB32_C;
+  WP2YuvToArgb32 = YuvToArgb32_C;
+  WP2AyuvToArgb38 = AyuvToArgb38_C;
+  WP2YuvToArgb38 = YuvToArgb38_C;
 
   if (WP2GetCPUInfo != nullptr) {
 #if defined(WP2_USE_SSE)

@@ -99,7 +99,6 @@ constexpr uint32_t CSPTransform::kMtxShift;
 constexpr int16_t CSPTransform::kDefaultRgbAvg[3];
 
 static constexpr int32_t kMtxFixedPointMul = 1 << CSPTransform::kMtxShift;
-static constexpr int32_t kMtxRound = kMtxFixedPointMul >> 1;
 static constexpr int16_t kMaxMtxValue = (1 << CSPTransform::kMtxBits) - 1;
 
 //------------------------------------------------------------------------------
@@ -108,15 +107,15 @@ void CSPTransform::StoreCustomYUVBounds() {  // Compute min/max YUV values.
   int32_t min[3] = {0}, max[3] = {0};
   for (uint32_t i = 0; i < 3; ++i) {
     for (uint32_t j = 0; j < 3; ++j) {
-      const int16_t rgb_min = 0 - avg_[j];
-      const int16_t rgb_max = kRgbMax - avg_[j];
+      const int16_t rgb_min = 0 - avg8_[j];
+      const int16_t rgb_max = kRgbMax - avg8_[j];
 
       const int32_t coeff = m_[i * 3 + j];
       min[i] += coeff * ((coeff > 0) ? rgb_min : rgb_max);
       max[i] += coeff * ((coeff > 0) ? rgb_max : rgb_min);
     }
-    min[i] = (min[i] + kMtxRound) >> kMtxShift;
-    max[i] = (max[i] + kMtxRound) >> kMtxShift;
+    min[i] = RightShiftRound(min[i], kMtxShift);
+    max[i] = RightShiftRound(max[i], kMtxShift);
   }
   const int32_t global_min = std::min({min[0], min[1], min[2]});
   const int32_t global_max = std::max({max[0], max[1], max[2]});
@@ -126,7 +125,8 @@ void CSPTransform::StoreCustomYUVBounds() {  // Compute min/max YUV values.
 bool CSPTransform::Init(const int16_t yuv_to_rgb_matrix[9],
                         const int16_t rgb_avg[3]) {
   for (size_t i = 0; i < 9; ++i) im_[i] = yuv_to_rgb_matrix[i];
-  for (uint32_t i : {0, 1, 2}) avg_[i] = rgb_avg[i];
+  for (uint32_t i : {0, 1, 2}) avg8_[i] = rgb_avg[i];
+  for (uint32_t i : {0, 1, 2}) avg10_[i] = LeftShift(avg8_[i], 2);
   if (!ComputeRGBToYUVMatrix()) return false;
   StoreCustomYUVBounds();
   type_ = Csp::kCustom;
@@ -248,7 +248,7 @@ void CSPTransform::Print() const {
   }
 
   printf("=== avg: ");
-  printf("%3d %3d %3d", avg_[0], avg_[1], avg_[2]);
+  printf("%3d %3d %3d", avg8_[0], avg8_[1], avg8_[2]);
   printf("\n");
 }
 
@@ -280,93 +280,109 @@ bool CSPTransform::ComputeRGBToYUVMatrix() {
 
 //------------------------------------------------------------------------------
 
-static inline void RGBToYUV(const int16_t avg[3], const int16_t m[9],
+template <int kNumRgbBits>
+static inline void RgbToYuv(const int16_t avg[3], const int16_t m[9],
                             int16_t min_yuv_value, int16_t max_yuv_value,
                             int32_t r, int32_t g, int32_t b, int16_t* const y,
                             int16_t* const u, int16_t* const v) {
-  // kRgbBits to (kRgbBits+1)
+  constexpr int kNumExtraRgbBits = kNumRgbBits - 8;
+  constexpr int kShift = CSPTransform::kMtxShift + kNumExtraRgbBits;
+  // kNumRgbBits to (kNumRgbBits+1)
   const int32_t tmp_r = (int32_t)r - avg[0];
   const int32_t tmp_g = (int32_t)g - avg[1];
   const int32_t tmp_b = (int32_t)b - avg[2];
-  // (kRgbBits+1) to (yuv_bits_ + kMtxShift)
+  // (kNumRgbBits+1) to (yuv_bits_ + kMtxShift + kNumExtraRgbBits)
   int32_t tmp_y = m[0] * tmp_r + m[1] * tmp_g + m[2] * tmp_b;
   int32_t tmp_u = m[3] * tmp_r + m[4] * tmp_g + m[5] * tmp_b;
   int32_t tmp_v = m[6] * tmp_r + m[7] * tmp_g + m[8] * tmp_b;
-  // (yuv_bits_ + kMtxShift) to yuv_bits_
-  tmp_y = RightShift(tmp_y + kMtxRound, CSPTransform::kMtxShift);
-  tmp_u = RightShift(tmp_u + kMtxRound, CSPTransform::kMtxShift);
-  tmp_v = RightShift(tmp_v + kMtxRound, CSPTransform::kMtxShift);
+  // (yuv_bits_ + kMtxShift + kNumExtraRgbBits) to yuv_bits_
+  tmp_y = RightShiftRound(tmp_y, kShift);
+  tmp_u = RightShiftRound(tmp_u, kShift);
+  tmp_v = RightShiftRound(tmp_v, kShift);
   *y = ToInt16(tmp_y, min_yuv_value, max_yuv_value);
   *u = ToInt16(tmp_u, min_yuv_value, max_yuv_value);
   *v = ToInt16(tmp_v, min_yuv_value, max_yuv_value);
 }
 
-template <typename Trgb>
-static inline void YUVToRGB(const int16_t avg[3], const int16_t im[9],
+template <int kNumRgbBits, typename Trgb>
+static inline void YuvToRgb(const int16_t avg[3], const int16_t im[9],
                             int16_t y, int16_t u, int16_t v,
                             Trgb* const r, Trgb* const g, Trgb* const b) {
+  constexpr int kNumExtraRgbBits = kNumRgbBits - 8;
+  constexpr int kShift = CSPTransform::kMtxShift - kNumExtraRgbBits;
+  constexpr int kMax = (1 << kNumRgbBits) - 1;
   // yuv_bits_ to (kRgbBits+1 + kMtxShift)
   int32_t tmp_r = im[0] * y + im[1] * u + im[2] * v;
   int32_t tmp_g = im[3] * y + im[4] * u + im[5] * v;
   int32_t tmp_b = im[6] * y + im[7] * u + im[8] * v;
-  // (kRgbBits+1 + kMtxShift) to kRgbBits+1
-  tmp_r = RightShift(tmp_r + kMtxRound, CSPTransform::kMtxShift);
-  tmp_g = RightShift(tmp_g + kMtxRound, CSPTransform::kMtxShift);
-  tmp_b = RightShift(tmp_b + kMtxRound, CSPTransform::kMtxShift);
-  // (kRgbBits+1) to kRgbBits
-  *r = (Trgb)Clamp<int32_t>(tmp_r + avg[0], 0, kRgbMax);
-  *g = (Trgb)Clamp<int32_t>(tmp_g + avg[1], 0, kRgbMax);
-  *b = (Trgb)Clamp<int32_t>(tmp_b + avg[2], 0, kRgbMax);
-  // Don't assert that rgb fits in kRgbBits, just clamp it (lossy conversion).
+  // (kRgbBits+1 + kMtxShift) to kNumRgbBits+1
+  tmp_r = RightShiftRound(tmp_r, kShift);
+  tmp_g = RightShiftRound(tmp_g, kShift);
+  tmp_b = RightShiftRound(tmp_b, kShift);
+  // (kNumRgbBits+1) to kNumRgbBits
+  *r = (Trgb)Clamp<int32_t>(tmp_r + avg[0], 0, kMax);
+  *g = (Trgb)Clamp<int32_t>(tmp_g + avg[1], 0, kMax);
+  *b = (Trgb)Clamp<int32_t>(tmp_b + avg[2], 0, kMax);
+  // Do not assert that rgb fits, just clamp it (lossy conversion).
 }
 
-void CSPTransform::ToYUV(int32_t r, int32_t g, int32_t b, int16_t* const y,
-                         int16_t* const u, int16_t* const v) const {
-  RGBToYUV(avg_, m_, min_yuv_value_, max_yuv_value_, r, g, b, y, u, v);
+void CSPTransform::Rgb8ToYuv(int32_t r, int32_t g, int32_t b, int16_t* const y,
+                             int16_t* const u, int16_t* const v) const {
+  RgbToYuv</*kNumRgbBits=*/8>(avg8_, m_, min_yuv_value_, max_yuv_value_, r, g,
+                              b, y, u, v);
 }
 
-void CSPTransform::ToRGB(int16_t y, int16_t u, int16_t v, int16_t* const r,
-                         int16_t* const g, int16_t* const b) const {
-  YUVToRGB(avg_, im_, y, u, v, r, g, b);
+void CSPTransform::Rgb10ToYuv(int32_t r, int32_t g, int32_t b, int16_t* const y,
+                              int16_t* const u, int16_t* const v) const {
+  RgbToYuv</*kNumRgbBits=*/10>(avg10_, m_, min_yuv_value_, max_yuv_value_, r, g,
+                               b, y, u, v);
 }
 
-void CSPTransform::ToRGB(int16_t y, int16_t u, int16_t v, uint8_t* const r,
-                         uint8_t* const g, uint8_t* const b) const {
-  YUVToRGB(avg_, im_, y, u, v, r, g, b);
+void CSPTransform::YuvToRgb8(int16_t y, int16_t u, int16_t v, int16_t* const r,
+                             int16_t* const g, int16_t* const b) const {
+  YuvToRgb</*kNumRgbBits=*/8>(avg8_, im_, y, u, v, r, g, b);
 }
 
-void CSPTransform::ToYUV(const int16_t rgb[3], int16_t yuv[3]) const {
-  RGBToYUV(avg_, m_, min_yuv_value_, max_yuv_value_, rgb[0], rgb[1], rgb[2],
-           &yuv[0], &yuv[1], &yuv[2]);
+void CSPTransform::YuvToRgb8(int16_t y, int16_t u, int16_t v, uint8_t* const r,
+                             uint8_t* const g, uint8_t* const b) const {
+  YuvToRgb</*kNumRgbBits=*/8>(avg8_, im_, y, u, v, r, g, b);
+}
+
+void CSPTransform::Rgb8ToYuv(const int16_t* rgb, int16_t* yuv) const {
+  RgbToYuv</*kNumRgbBits=*/8>(avg8_, m_, min_yuv_value_, max_yuv_value_, rgb[0],
+                              rgb[1], rgb[2], &yuv[0], &yuv[1], &yuv[2]);
   // CheckRoundTrip(yuv, rgb);
 }
 
-void CSPTransform::ToRGB(const int16_t yuv[3], int16_t rgb[3]) const {
-  YUVToRGB(avg_, im_, yuv[0], yuv[1], yuv[2], &rgb[0], &rgb[1], &rgb[2]);
+void CSPTransform::YuvToRgb8(const int16_t* yuv, int16_t* rgb) const {
+  YuvToRgb</*kNumRgbBits=*/8>(avg8_, im_, yuv[0], yuv[1], yuv[2], &rgb[0],
+                              &rgb[1], &rgb[2]);
 }
 
-void CSPTransform::ToYUV(const uint8_t rgb[3], int16_t yuv[3]) const {
-  RGBToYUV(avg_, m_, min_yuv_value_, max_yuv_value_, rgb[0], rgb[1], rgb[2],
-           &yuv[0], &yuv[1], &yuv[2]);
+void CSPTransform::Rgb8ToYuv(const uint8_t* rgb, int16_t* yuv) const {
+  RgbToYuv</*kNumRgbBits=*/8>(avg8_, m_, min_yuv_value_, max_yuv_value_, rgb[0],
+                              rgb[1], rgb[2], &yuv[0], &yuv[1], &yuv[2]);
 }
 
-void CSPTransform::ToRGB(const int16_t yuv[3], uint8_t rgb[3]) const {
-  YUVToRGB(avg_, im_, yuv[0], yuv[1], yuv[2], &rgb[0], &rgb[1], &rgb[2]);
+void CSPTransform::YuvToRgb8(const int16_t* yuv, uint8_t* rgb) const {
+  YuvToRgb</*kNumRgbBits=*/8>(avg8_, im_, yuv[0], yuv[1], yuv[2], &rgb[0],
+                              &rgb[1], &rgb[2]);
 }
 
-Ayuv38b CSPTransform::ToYUV(const Argb32b& color) const {
+Ayuv38b CSPTransform::ToYuv(const Argb32b& color) const {
   Ayuv38b result;
   result.a = color.a;
-  RGBToYUV(avg_, m_, min_yuv_value_, max_yuv_value_, color.r, color.g, color.b,
-           &result.y, &result.u, &result.v);
+  RgbToYuv</*kNumRgbBits=*/8>(avg8_, m_, min_yuv_value_, max_yuv_value_,
+                              color.r, color.g, color.b, &result.y, &result.u,
+                              &result.v);
   return result;
 }
 
-Argb32b CSPTransform::ToRGB(const Ayuv38b& color) const {
+Argb32b CSPTransform::ToRgb8(const Ayuv38b& color) const {
   Argb32b result;
   result.a = color.a;
-  YUVToRGB(avg_, im_, color.y, color.u, color.v, &result.r, &result.g,
-           &result.b);
+  YuvToRgb</*kNumRgbBits=*/8>(avg8_, im_, color.y, color.u, color.v, &result.r,
+                              &result.g, &result.b);
   return result;
 }
 
@@ -425,7 +441,7 @@ WP2Status CSPTransform::CustomToArgb(uint32_t width, uint32_t height,
   return WP2_STATUS_OK;
 }
 
-WP2Status CSPTransform::CustomToYUV(uint32_t width, uint32_t height,
+WP2Status CSPTransform::CustomToYuv(uint32_t width, uint32_t height,
                                     const int16_t* c0_buffer, uint32_t c0_step,
                                     const int16_t* c1_buffer, uint32_t c1_step,
                                     const int16_t* c2_buffer, uint32_t c2_step,
@@ -452,7 +468,7 @@ WP2Status CSPTransform::CustomToYUV(uint32_t width, uint32_t height,
   }
 
   int32_t offset[3];  // M.avg
-  Multiply<int32_t>(avg_[0], avg_[1], avg_[2], m_,
+  Multiply<int32_t>(avg8_[0], avg8_[1], avg8_[2], m_,
                     &offset[0], &offset[1], &offset[2]);
   // 'offset' is now scaled by kMtxShift so it can be subtracted as is to 'yuv'
   // below which will also be scaled by kMtxShift.
@@ -481,7 +497,7 @@ WP2Status CSPTransform::CustomToYUV(uint32_t width, uint32_t height,
   return WP2_STATUS_OK;
 }
 
-WP2Status CSPTransform::YUVToCustom(
+WP2Status CSPTransform::YuvToCustom(
     uint32_t width, uint32_t height, const int16_t* y_buffer, uint32_t y_step,
     const int16_t* u_buffer, uint32_t u_step, const int16_t* v_buffer,
     uint32_t v_step, const CSPMtx& rgb_to_ccsp, int16_t* c0_buffer,
@@ -507,12 +523,12 @@ WP2Status CSPTransform::YUVToCustom(
   }
 
   int16_t offset[3];  // M.avg
-  Multiply(avg_[0], avg_[1], avg_[2], m_, kMtxShift,
+  Multiply(avg8_[0], avg8_[1], avg8_[2], m_, kMtxShift,
            &offset[0], &offset[1], &offset[2]);
 
   WP2CSPConverterInit();
   for (uint32_t y = 0; y < height; ++y) {
-    WP2YUVToCustom(y_buffer, u_buffer, v_buffer, offset,
+    WP2YuvToCustom(y_buffer, u_buffer, v_buffer, offset,
                    bn, c0_buffer, c1_buffer, c2_buffer, width);
     y_buffer += y_step;
     u_buffer += u_step;
@@ -529,7 +545,7 @@ WP2Status CSPTransform::YUVToCustom(
 bool CSPTransform::CheckRoundTrip(const int16_t yuv[3],
                                   const int16_t rgb[3]) const {
   int16_t out[3];
-  ToRGB(yuv, out);
+  YuvToRgb8(yuv, out);
   const int16_t delta =
       abs(rgb[0] - out[0]) + abs(rgb[1] - out[1]) + abs(rgb[2] - out[2]);
   const int16_t kErrorThreshold = 5;
@@ -743,7 +759,10 @@ WP2Status CSPTransform::Write(ANSEnc* const enc)  const {
     } else {
       for (auto& v : im_) PutSValue(v, kANSMaxUniformBits + 1, enc);
     }
-    for (auto& v : avg_) enc->PutUValue(v, kRgbBits, "avg");
+    for (auto& v : avg8_) enc->PutUValue(v, kRgbBits, "avg");
+    for (int i : {0, 1, 2}) {
+      if (avg10_[i] != LeftShift(avg8_[i], 2)) assert(false);
+    }
   }
   return WP2_STATUS_OK;
 }
@@ -759,7 +778,8 @@ WP2Status CSPTransform::Read(ANSDec* const dec) {
       // Completely custom matrices can be decoded.
       for (auto& v : im_) v = ReadSValue(kANSMaxUniformBits + 1, dec);
     }
-    for (auto& v : avg_) v = (uint16_t)dec->ReadUValue(kRgbBits, "avg");
+    for (auto& v : avg8_) v = (uint16_t)dec->ReadUValue(kRgbBits, "avg");
+    for (uint32_t i : {0, 1, 2}) avg10_[i] = LeftShift(avg8_[i], 2);
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     if (!ComputeRGBToYUVMatrix()) {  // (direct matrix is used in vwp2)
       // not critical, but shouldn't happen in an ideal world!
@@ -1058,11 +1078,11 @@ WP2Status CSPTransform::Optimize(const ArgbBuffer& image) {
   double cov[3][3];
   double custom_to_rgb_matrix[9];
   int16_t im[9];
-  if (ExtractCovarianceMtx(argb, w, h, stride, cov, avg_, is_premultiplied) &&
+  if (ExtractCovarianceMtx(argb, w, h, stride, cov, avg8_, is_premultiplied) &&
       ExtractEigenMtx(cov, custom_to_rgb_matrix) &&
       NormalizeFromInput(
           argb, w, h, stride, is_premultiplied,
-          std::max((int16_t)std::abs(min_yuv_value_), max_yuv_value_), avg_,
+          std::max((int16_t)std::abs(min_yuv_value_), max_yuv_value_), avg8_,
           custom_to_rgb_matrix, im)) {
     int32_t error;
     WP2_CHECK_STATUS(MakeEigenMatrixEncodable(im, im_, &error));
@@ -1077,6 +1097,7 @@ WP2Status CSPTransform::Optimize(const ArgbBuffer& image) {
     if (ComputeRGBToYUVMatrix()) {
       type_ = Csp::kCustom;
       assert(yuv_bits_ <= kMaxYuvBits + 1);
+      for (uint32_t i : {0, 1, 2}) avg10_[i] = LeftShift(avg8_[i], 2);
       return WP2_STATUS_OK;
     }
   }
@@ -1095,7 +1116,7 @@ void CSPTransform::Apply(ArgbBuffer* const image, uint32_t num_precision_bits,
       // Set alpha to opaque.
       dst[4 * i + 0] = kAlphaMax;
       int16_t yuv[3];
-      ToYUV(&dst[4 * i + 1], yuv);
+      Rgb8ToYuv(&dst[4 * i + 1], yuv);
       for (uint32_t c = 0; c < 3; ++c) {
         const int32_t max_yuv_value = (1 << (num_precision_bits - 1));
         // Convert to 8b-unsigned.

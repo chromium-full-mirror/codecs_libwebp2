@@ -569,7 +569,7 @@ WP2Status Decode(const uint8_t* input_data, size_t input_data_size,
   WP2_CHECK_STATUS(InternalDecode(config, &data_source, /*rgb_output=*/nullptr,
                                   &output, metadata, &csp_transform));
 
-  WP2_CHECK_STATUS(csp_transform.YUVToCustom(
+  WP2_CHECK_STATUS(csp_transform.YuvToCustom(
       features.width, features.height, output.Y.Row(0), output.Y.Step(),
       output.U.Row(0), output.U.Step(), output.V.Row(0), output.V.Step(),
       rgb_to_ccsp, output.Y.Row(0), output.Y.Step(), output.U.Row(0),

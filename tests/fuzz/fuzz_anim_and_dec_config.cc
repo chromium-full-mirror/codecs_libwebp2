@@ -39,9 +39,8 @@ class FuzzedParametersSetup : public FuzzedParameters {
         ExtractUInt32(1, std::max((size_t)kHeaderMinSize, max_bitstream_size));
     const DecoderType decoder_type =
         (DecoderType)ExtractUInt32((uint32_t)DecoderType::kSwappingCustom);
-    // TODO(yguyon): Also test WP2_Argb_38 when it is ready
     const WP2SampleFormat output_format =
-        (WP2SampleFormat)ExtractUInt32((uint32_t)WP2_BGR_24);
+        (WP2SampleFormat)ExtractUInt32((uint32_t)WP2_Argb_38);
     const bool compare_with_single_chunk = ExtractBool();
 
     std::vector<DecoderAction> actions;

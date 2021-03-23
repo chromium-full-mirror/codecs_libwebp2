@@ -162,9 +162,9 @@ class FormatTest : public ::testing::TestWithParam<Param> {};
 TEST_P(FormatTest, EncodeDecodeImage) {
   const char* src_file_name = std::get<0>(GetParam()).front();
   const WP2SampleFormat output_format = std::get<1>(GetParam());
-  // TODO(yguyon): Handle WP2_Argb_38 output for the lossy pipeline
+  // TODO(yguyon): Handle WP2_Argb_38 output for the lossless pipeline
   const float quality =
-      (output_format == WP2_Argb_38) ? 100.f : std::get<2>(GetParam());
+      (output_format == WP2_Argb_38) ? 40.f : std::get<2>(GetParam());
 
   ArgbBuffer src;
   MemoryWriter data;
@@ -254,13 +254,14 @@ TEST_P(FormatTest, EncodeDecodePreview) {
 //------------------------------------------------------------------------------
 // Input images (frames) are expected to be of equal size inside the same Param.
 
+// Simple straightforward tests.
 INSTANTIATE_TEST_SUITE_P(
     FormatTestInstantiation, FormatTest,
     ::testing::Values(
         Param({"source1_64x48.png"}, WP2_ARGB_32, /*quality=*/100.0f),
-        Param({"source1_64x48.png"}, WP2_rgbA_32, /*quality=*/40.0f)
-        // TODO(yguyon): Include WP2_Argb_38 when ready
-        ));
+        Param({"source1_64x48.png"}, WP2_rgbA_32, /*quality=*/40.0f),
+        Param({"source1_64x48.png"}, WP2_Argb_38, /*quality=*/100.0f),
+        Param({"source1_64x48.png"}, WP2_Argb_38, /*quality=*/40.0f)));
 
 // Test all lossy/lossless bypass paths for each output format.
 INSTANTIATE_TEST_SUITE_P(
@@ -281,8 +282,7 @@ INSTANTIATE_TEST_SUITE_P(
                                      "alpha_ramp.webp"},
             std::vector<const char*>{"source0.pgm", "source1.png",
                                      "source2.tiff", "source3.jpg"}),
-        // TODO(yguyon): Include WP2_Argb_38 when ready
-        ::testing::Range(WP2_Argb_32, WP2_Argb_38),
+        ::testing::Range(WP2_Argb_32, WP2_FORMAT_NUM),
         ::testing::Values(0.f, 70.f, 96.f)));
 
 //------------------------------------------------------------------------------

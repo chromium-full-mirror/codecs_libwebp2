@@ -399,7 +399,7 @@ RGB12b GetPreviewColor(const YUVPlane& canvas,
   color.u = GetAverageColor(canvas.U);
   color.v = GetAverageColor(canvas.V);
   // TODO(yguyon): Verify it makes sense with premultiplied alpha.
-  return ToRGB12b(csp_transform.ToRGB(color));
+  return ToRGB12b(csp_transform.ToRgb8(color));
 }
 
 RGB12b GetPreviewColor(const YUVPlane& canvas, const CSPMtx& ccsp_to_rgb) {

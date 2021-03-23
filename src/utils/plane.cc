@@ -321,30 +321,50 @@ static WP2Status ResizeIfAllowed(uint32_t width, uint32_t height, uint32_t pad,
 WP2Status YUVPlane::Import(const ArgbBuffer& rgb, bool import_alpha,
                            const CSPTransform& csp_transform,
                            bool resize_if_needed, size_t pad) {
-  WP2_CHECK_OK(rgb.format() == WP2_Argb_32 || rgb.format() == WP2_ARGB_32,
-               WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(rgb.format() == WP2_Argb_32 ||
+               rgb.format() == WP2_ARGB_32 ||
+               rgb.format() == WP2_Argb_38, WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_STATUS(ResizeIfAllowed(rgb.width(), rgb.height(), pad, import_alpha,
                                    resize_if_needed, this));
-  const uint32_t x_stride = WP2FormatBpp(rgb.format());
-  const bool premultiply = (rgb.format() == WP2_ARGB_32) && import_alpha;
-  for (size_t y = 0; y < rgb.height(); ++y) {
-    int16_t* const y_row = Y.Row(y);
-    int16_t* const u_row = U.Row(y);
-    int16_t* const v_row = V.Row(y);
-    int16_t* const a_row = import_alpha ? A.Row(y) : nullptr;
-    const uint8_t* rgb_row = rgb.GetRow8(y);
-    for (size_t x = 0; x < rgb.width(); ++x, rgb_row += x_stride) {
-      // If import_alpha is false, alpha should always be kAlphaMax.
-      assert(import_alpha || rgb_row[0] == kAlphaMax);
-      int32_t r = rgb_row[1], g = rgb_row[2], b = rgb_row[3];
-      const uint8_t a = rgb_row[0];
-      if (premultiply && a != kAlphaMax) {
-        r = WP2::DivBy255(r * a);
-        g = WP2::DivBy255(g * a);
-        b = WP2::DivBy255(b * a);
+  const bool premultiply = !WP2IsPremultiplied(rgb.format()) && import_alpha;
+  if (WP2Formatbpc(rgb.format()) == 8) {
+    assert(WP2FormatBpp(rgb.format()) == 4);  // 4 expected channels.
+    for (size_t y = 0; y < rgb.height(); ++y) {
+      int16_t* const y_row = Y.Row(y);
+      int16_t* const u_row = U.Row(y);
+      int16_t* const v_row = V.Row(y);
+      int16_t* const a_row = import_alpha ? A.Row(y) : nullptr;
+      const uint8_t* rgb_row = rgb.GetRow8(y);
+      for (size_t x = 0; x < rgb.width(); ++x, rgb_row += 4) {
+        // Do not discard alpha by accident.
+        if (rgb_row[0] != kAlphaMax) assert(import_alpha);
+        int32_t r = rgb_row[1], g = rgb_row[2], b = rgb_row[3];
+        const uint8_t a = rgb_row[0];
+        if (premultiply && a != kAlphaMax) {
+          r = WP2::DivBy255(r * a);
+          g = WP2::DivBy255(g * a);
+          b = WP2::DivBy255(b * a);
+        }
+        csp_transform.Rgb8ToYuv(r, g, b, &y_row[x], &u_row[x], &v_row[x]);
+        if (a_row != nullptr) a_row[x] = a;
       }
-      csp_transform.ToYUV(r, g, b, &y_row[x], &u_row[x], &v_row[x]);
-      if (a_row != nullptr) a_row[x] = a;
+    }
+  } else {
+    assert(WP2FormatBpp(rgb.format()) == 8);  // 4 expected channels.
+    assert(!premultiply);                     // There is no ARGB_38 for now.
+    for (size_t y = 0; y < rgb.height(); ++y) {
+      int16_t* const y_row = Y.Row(y);
+      int16_t* const u_row = U.Row(y);
+      int16_t* const v_row = V.Row(y);
+      int16_t* const a_row = import_alpha ? A.Row(y) : nullptr;
+      const uint16_t* rgb_row = rgb.GetRow16(y);
+      for (size_t x = 0; x < rgb.width(); ++x, rgb_row += 4) {
+        // Do not discard alpha by accident.
+        if (rgb_row[0] != kAlphaMax) assert(import_alpha);
+        csp_transform.Rgb10ToYuv(rgb_row[1], rgb_row[2], rgb_row[3],
+                                 &y_row[x], &u_row[x], &v_row[x]);
+        if (a_row != nullptr) a_row[x] = rgb_row[0];
+      }
     }
   }
   WP2_CHECK_STATUS(FillPad(rgb.width(), rgb.height()));
@@ -390,7 +410,7 @@ WP2Status YUVPlane::Import(const YUVPlane& ccsp, const CSPMtx& ccsp_to_rgb,
   WP2_CHECK_STATUS(ResizeIfAllowed(width, height, pad, ccsp.HasAlpha(),
                                    resize_if_needed, this));
 
-  WP2_CHECK_STATUS(csp_transform.CustomToYUV(
+  WP2_CHECK_STATUS(csp_transform.CustomToYuv(
       width, height, ccsp.Y.Row(0), ccsp.Y.Step(), ccsp.U.Row(0), ccsp.U.Step(),
       ccsp.V.Row(0), ccsp.V.Step(), ccsp_to_rgb, Y.Row(0), Y.Step(), U.Row(0),
       U.Step(), V.Row(0), V.Step()));
@@ -409,8 +429,9 @@ WP2Status YUVPlane::Import(const YUVPlane& ccsp, const CSPMtx& ccsp_to_rgb,
 WP2Status YUVPlane::Export(const CSPTransform& transform, bool resize_if_needed,
                            ArgbBuffer* const dst,
                            const SamplingTaps* const upsample_if_needed) const {
-  WP2_CHECK_OK(dst->format() == WP2_Argb_32 || dst->format() == WP2_ARGB_32,
-               WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(dst->format() == WP2_Argb_32 ||
+               dst->format() == WP2_ARGB_32 ||
+               dst->format() == WP2_Argb_38, WP2_STATUS_INVALID_PARAMETER);
   if (IsDownsampled()) {
     WP2_CHECK_OK(upsample_if_needed != nullptr, WP2_STATUS_INVALID_COLORSPACE);
     YUVPlane upsampled;
@@ -423,23 +444,28 @@ WP2Status YUVPlane::Export(const CSPTransform& transform, bool resize_if_needed,
     WP2_CHECK_OK(resize_if_needed, WP2_STATUS_BAD_DIMENSION);
     WP2_CHECK_STATUS(dst->Resize(GetWidth(), GetHeight()));
   }
-  // we only handle XRGB32 or ARGB32 for now
-  WP2_CHECK_OK(WP2FormatBpp(dst->format()) == 4, WP2_STATUS_INVALID_COLORSPACE);
-  static_assert(kRgbBits == 8, "YUVPlane::Export() handles only 8b RGB");
+  const int16_t* const rgb_average =
+      (WP2Formatbpc(dst->format()) == 8) ? transform.GetRgb8Average()
+                                         : transform.GetRgb10Average();
   WP2CSPConverterInit();
   if (HasAlpha()) {
-    WP2YUVAToArgb32Func cvrt_func =
-        (WP2IsPremultiplied(dst->format())) ? WP2YUVAToArgb32 : WP2YUVAToARGB32;
+    WP2AyuvToArgbFunc cvrt_func =
+        (dst->format() == WP2_Argb_32) ? WP2AyuvToArgb32 :
+        (dst->format() == WP2_ARGB_32) ? WP2AyuvToARGB32 :
+                                         WP2AyuvToArgb38;
     for (size_t y = 0; y < dst->height(); ++y) {
-      cvrt_func(Y.Row(y), U.Row(y), V.Row(y), A.Row(y),
-                transform.GetRgbAverage(), transform.GetYuvToRgbMatrix(),
-                dst->GetRow8(y), dst->width());
+      cvrt_func(Y.Row(y), U.Row(y), V.Row(y), A.Row(y), rgb_average,
+                transform.GetYuvToRgbMatrix(), dst->GetRow(y), dst->width());
     }
   } else {
+    // No alpha: premultiplying has no impact, so Argb/ARGB do not matter.
+    WP2YuvToArgbFunc cvrt_func =
+        (dst->format() == WP2_Argb_32 || dst->format() == WP2_ARGB_32)
+            ? WP2YuvToArgb32
+            : WP2YuvToArgb38;
     for (size_t y = 0; y < dst->height(); ++y) {
-      WP2YUVToArgb32(Y.Row(y), U.Row(y), V.Row(y), transform.GetRgbAverage(),
-                     transform.GetYuvToRgbMatrix(), dst->GetRow8(y),
-                     dst->width());
+      cvrt_func(Y.Row(y), U.Row(y), V.Row(y), rgb_average,
+                transform.GetYuvToRgbMatrix(), dst->GetRow(y), dst->width());
     }
   }
   return WP2_STATUS_OK;
@@ -546,7 +572,7 @@ static WP2Status Composite(const YUVPlane& background,
   WP2_CHECK_STATUS(CheckPlanesSameSize(foreground));
   WP2_CHECK_OK(background.Y.IsSameSize(foreground.Y), WP2_STATUS_BAD_DIMENSION);
 
-  const Ayuv38b shift = transform.ToYUV({255, 0, 0, 0});
+  const Ayuv38b shift = transform.ToYuv({255, 0, 0, 0});
   for (uint32_t y = 0; y < foreground.Y.h_; ++y) {
     int16_t* const dst_row[4] = {dst->Y.Row(y), dst->U.Row(y), dst->V.Row(y),
                                  dst->A.Row(y)};

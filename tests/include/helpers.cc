@@ -591,11 +591,13 @@ void WP2DspReset() {
   for (auto& f : WP2ArgbConvertFrom) f = nullptr;
   for (auto& f : WP2ArgbConvertTo) f = nullptr;
 
-  WP2YUVToCustom = nullptr;
-  WP2YUVAToArgb32 = nullptr;
-  WP2YUVAToARGB32 = nullptr;
-  WP2YUVAToXRGB32 = nullptr;
-  WP2YUVToArgb32 = nullptr;
+  WP2YuvToCustom = nullptr;
+  WP2AyuvToArgb32 = nullptr;
+  WP2AyuvToARGB32 = nullptr;
+  WP2AyuvToXRGB32 = nullptr;
+  WP2YuvToArgb32 = nullptr;
+  WP2AyuvToArgb38 = nullptr;
+  WP2YuvToArgb38 = nullptr;
 
   WP2Transpose16b = nullptr;
   WP2Transpose32b = nullptr;

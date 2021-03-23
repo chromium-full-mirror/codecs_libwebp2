@@ -624,7 +624,7 @@ WP2Status Encode(uint32_t width, uint32_t height,
     WP2_CHECK_STATUS(
         yuv_input.Resize(width, height, /*pad=*/kPredWidth, has_alpha));
 
-    WP2_CHECK_STATUS(csp_transform.CustomToYUV(
+    WP2_CHECK_STATUS(csp_transform.CustomToYuv(
         width, height, c0_buffer, c0_step, c1_buffer, c1_step, c2_buffer,
         c2_step, ccsp_to_rgb, yuv_input.Y.Row(0), yuv_input.Y.Step(),
         yuv_input.U.Row(0), yuv_input.U.Step(), yuv_input.V.Row(0),

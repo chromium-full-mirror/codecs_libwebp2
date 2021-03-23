@@ -957,7 +957,7 @@ void AdjustAlphaPrediction(const CodedBlockBase& cb, CSPTransform transform,
     const int16_t* const v_src = cb.GetContextPlane(kVChannel).Row( j);
     for (uint16_t i = 0; i < cb.w_pix(); ++i) {
       int16_t r, g, b;
-      transform.ToRGB(y_src[i], u_src[i], v_src[i], &r, &g, &b);
+      transform.YuvToRgb8(y_src[i], u_src[i], v_src[i], &r, &g, &b);
 
       // Alpha is larger than the largest R, G or B value.
       // TODO(maryla): since this is based on reconstructed RGB, there might be

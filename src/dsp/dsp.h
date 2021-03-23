@@ -226,24 +226,27 @@ void WP2ArgbConverterInit();
 
 // Applies the matrix mtx[] to (y,u,v)[] + offset[].
 // mtx[] is assumed to be 12-bit fixed-point precision matrix.
-extern void (*WP2YUVToCustom)(
+extern void (*WP2YuvToCustom)(
   const int16_t* y, const int16_t* u, const int16_t* v,
   const int16_t offset[3], const int16_t mtx[9],
   int16_t* dst0, int16_t* dst1, int16_t* dst2, uint32_t width);
 
-// Same but outputs to ARGB (alternated 8b channels).
-typedef void (*WP2YUVAToArgb32Func)(
+// Same but outputs to ARGB (alternated channels).
+typedef void (*WP2AyuvToArgbFunc)(
   const int16_t* y, const int16_t* u, const int16_t* v, const int16_t* a,
-  const int16_t avg[3], const int16_t mtx[9], uint8_t* argb, uint32_t width);
-
-extern WP2YUVAToArgb32Func WP2YUVAToArgb32;  // Convert to pre-multiplied Argb32
-extern WP2YUVAToArgb32Func WP2YUVAToARGB32;  // Convert to  un-multiplied ARGB32
-extern WP2YUVAToArgb32Func WP2YUVAToXRGB32;  // Convert to  un-multiplied XRGB32
-
-// Same but there is no alpha input.
-extern void (*WP2YUVToArgb32)(
+  const int16_t avg[3], const int16_t mtx[9], void* argb, uint32_t width);
+typedef void (*WP2YuvToArgbFunc)(
   const int16_t* y, const int16_t* u, const int16_t* v,
-  const int16_t avg[3], const int16_t mtx[9], uint8_t* argb, uint32_t width);
+  const int16_t avg[3], const int16_t mtx[9], void* argb, uint32_t width);
+
+// 8-bit output
+extern WP2AyuvToArgbFunc WP2AyuvToArgb32;  // Convert to pre-multiplied Argb
+extern WP2AyuvToArgbFunc WP2AyuvToARGB32;  // Convert to  un-multiplied ARGB
+extern WP2AyuvToArgbFunc WP2AyuvToXRGB32;  // Convert to  un-multiplied XRGB
+extern WP2YuvToArgbFunc WP2YuvToArgb32;    // Convert to Argb (opaque input)
+// 10-bit output
+extern WP2AyuvToArgbFunc WP2AyuvToArgb38;  // Convert to pre-multiplied Argb
+extern WP2YuvToArgbFunc WP2YuvToArgb38;    // Convert to Argb (opaque input)
 
 void WP2CSPConverterInit();
 

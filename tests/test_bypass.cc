@@ -42,9 +42,7 @@ TEST_P(BypassTest, MaxChunkSize) {
   const bool force_alpha = std::get<2>(GetParam());
   const float quality = use_lossy ? 50.f : 100.f;
   const uint32_t width = (uint32_t)std::lround(std::sqrt(kMaxTilePixels));
-  // TODO(yguyon): Handle WP2_Argb_38 output for the lossy pipeline
-  const WP2SampleFormat src_format =
-      use_lossy ? WP2_Argb_32 : std::get<3>(GetParam());
+  const WP2SampleFormat src_format = std::get<3>(GetParam());
   const WP2SampleFormat dst_format = std::get<4>(GetParam());
 
   GlobalParams gparams;

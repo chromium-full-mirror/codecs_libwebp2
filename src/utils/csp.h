@@ -78,21 +78,23 @@ class CSPTransform {
   Csp GetType() const { return type_; }
 
   // YUV <-> RGB conversion with several type overloads.
-  void ToYUV(int32_t r, int32_t g, int32_t b,
-             int16_t* const y, int16_t* const u, int16_t* const v) const;
-  void ToRGB(int16_t y, int16_t u, int16_t v,
-             int16_t* const r, int16_t* const g, int16_t* const b) const;
-  void ToRGB(int16_t y, int16_t u, int16_t v,
-             uint8_t* const r, uint8_t* const g, uint8_t* const b) const;
+  void Rgb8ToYuv(int32_t r, int32_t g, int32_t b,
+                 int16_t* const y, int16_t* const u, int16_t* const v) const;
+  void Rgb10ToYuv(int32_t r, int32_t g, int32_t b,
+                  int16_t* const y, int16_t* const u, int16_t* const v) const;
+  void YuvToRgb8(int16_t y, int16_t u, int16_t v,
+                 int16_t* const r, int16_t* const g, int16_t* const b) const;
+  void YuvToRgb8(int16_t y, int16_t u, int16_t v,
+                 uint8_t* const r, uint8_t* const g, uint8_t* const b) const;
 
-  void ToYUV(const int16_t rgb[3], int16_t yuv[3]) const;
-  void ToRGB(const int16_t yuv[3], int16_t rgb[3]) const;
+  void Rgb8ToYuv(const int16_t* rgb, int16_t* yuv) const;
+  void YuvToRgb8(const int16_t* yuv, int16_t* rgb) const;
 
-  void ToYUV(const uint8_t rgb[3], int16_t yuv[3]) const;
-  void ToRGB(const int16_t yuv[3], uint8_t rgb[3]) const;
+  void Rgb8ToYuv(const uint8_t* rgb, int16_t* yuv) const;
+  void YuvToRgb8(const int16_t* yuv, uint8_t* rgb) const;
 
-  Ayuv38b ToYUV(const Argb32b& color) const;
-  Argb32b ToRGB(const Ayuv38b& color) const;
+  Ayuv38b ToYuv(const Argb32b& color) const;
+  Argb32b ToRgb8(const Ayuv38b& color) const;
 
   // Converts the channels 'c0, c1, c2' from a custom color space to RGB using
   // 'ccsp_to_rgb_matrix'. Copies alpha if not null and clamp RGB to [0:alpha].
@@ -107,7 +109,7 @@ class CSPTransform {
   // Converts the channels 'c0, c1, c2' from a custom color space to
   // 'CSPTransform::type_' color space using 'ccsp_to_rgb_matrix'.
   // Input 'c0/1/2_buffer' can be the same as output 'y/u/v_buffer' (inplace).
-  WP2Status CustomToYUV(uint32_t width, uint32_t height,
+  WP2Status CustomToYuv(uint32_t width, uint32_t height,
                         const int16_t* c0_buffer, uint32_t c0_step,
                         const int16_t* c1_buffer, uint32_t c1_step,
                         const int16_t* c2_buffer, uint32_t c2_step,
@@ -118,7 +120,7 @@ class CSPTransform {
   // Converts the channels 'y, u, v' from the 'CSPTransform::type_' color space
   // to a custom color space defined by 'rgb_to_ccsp_matrix'.
   // Input 'y/u/v_buffer' can be the same as output 'c0/1/2_buffer' (inplace).
-  WP2Status YUVToCustom(uint32_t width, uint32_t height,
+  WP2Status YuvToCustom(uint32_t width, uint32_t height,
                         const int16_t* y_buffer, uint32_t y_step,
                         const int16_t* u_buffer, uint32_t u_step,
                         const int16_t* v_buffer, uint32_t v_step,
@@ -127,6 +129,7 @@ class CSPTransform {
                         int16_t* c2_buffer, uint32_t c2_step) const;
 
   // Returns false if the yuv_to_rgb_matrix[] is not invertible.
+  // 'rgb_avg' is considered to be in [0:255].
   WP2_NO_DISCARD bool Init(const int16_t yuv_to_rgb_matrix[9],
                            const int16_t rgb_avg[3] = kDefaultRgbAvg);
 
@@ -163,7 +166,8 @@ class CSPTransform {
   bool CheckRoundTrip(const int16_t yuv[3], const int16_t rgb[3]) const;
   const int16_t* GetRgbToYuvMatrix() const { return m_; }
   const int16_t* GetYuvToRgbMatrix() const { return im_; }
-  const int16_t* GetRgbAverage() const { return avg_; }
+  const int16_t* GetRgb8Average() const { return avg8_; }
+  const int16_t* GetRgb10Average() const { return avg10_; }
   // In-place apply the transform to 'image' area defined by {x,y,w,h}.
   // Output is yuva packed as 8b-unsigned (not s16).
   // 'num_precision_bits' includes the sign.
@@ -187,9 +191,9 @@ class CSPTransform {
   int16_t min_yuv_value_;
   int16_t max_yuv_value_;
 
-  int16_t m_[9];    // RGB to YUV matrix, scaled by 1<<kMtxShift.
-  int16_t im_[9];   // YUV to RGB matrix, scaled by 1<<kMtxShift.
-  int16_t avg_[3];  // Input RGB average. Used as translation.
+  int16_t m_[9];                // RGB to YUV matrix, scaled by 1<<kMtxShift.
+  int16_t im_[9];               // YUV to RGB matrix, scaled by 1<<kMtxShift.
+  int16_t avg8_[3], avg10_[3];  // Input 8/10b RGB average. Used as translation.
 };
 
 //------------------------------------------------------------------------------

@@ -219,6 +219,7 @@ WP2Status OrientateSubBuffer(Orientation orientation, const ArgbBuffer& src,
   WP2_CHECK_OK(dst_width <= dst->width(), WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(dst_height <= dst->height(), WP2_STATUS_INVALID_PARAMETER);
 
+  // Both 32- and 38-bit are possible for input or output.
   const uint32_t src_pixel_depth = WP2FormatBpp(src.format());
   const uint32_t dst_pixel_depth = WP2FormatBpp(dst->format());
   const uint8_t* src_row = (const uint8_t*)src.GetRow(rect_in_src.y) +

@@ -109,9 +109,9 @@ TEST_P(EncodeCustomCspTest, Comparison) {
         const uint32_t px = x * WP2FormatBpp(src.format());
         const uint8_t* const pixel = src.GetRow8(y) + px;
         if (encode_alpha) custom_input.A.At(x, y) = pixel[0];
-        csp_transform.ToYUV(pixel[1], pixel[2], pixel[3],
-                            &custom_input.Y.At(x, y), &custom_input.U.At(x, y),
-                            &custom_input.V.At(x, y));
+        csp_transform.Rgb8ToYuv(
+            pixel[1], pixel[2], pixel[3], &custom_input.Y.At(x, y),
+            &custom_input.U.At(x, y), &custom_input.V.At(x, y));
       }
     }
   }
