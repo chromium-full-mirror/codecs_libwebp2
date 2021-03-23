@@ -18,6 +18,7 @@
 #include <string>
 #include <tuple>
 
+#include "examples/example_utils.h"
 #include "extras/ccsp_imageio.h"
 #include "extras/extras.h"
 #include "imageio/image_dec.h"
@@ -57,6 +58,85 @@ namespace {
     }
   }
   return ::testing::AssertionSuccess();
+}
+
+//------------------------------------------------------------------------------
+
+// Tests GetDistortion for all format/metric combinations.
+TEST(GetDistortion, HandlesAllFormats) {
+  for (uint32_t f = 0; f < WP2_Argb_38; ++f) {
+    SCOPED_TRACE(SPrintf("format %d", f));
+    const WP2SampleFormat format = (WP2SampleFormat)f;
+    for (uint32_t metric = 0; metric < NUM_METRIC_TYPES; ++metric) {
+      SCOPED_TRACE(SPrintf("metric %d", metric));
+      ArgbBuffer orig(format);
+      const uint32_t kWidth = 10, kHeight = 10;  // Big enough for PSNRHVS
+      const uint8_t kOrigValue = 100;
+      std::vector<uint8_t> data_orig(
+          kWidth * kHeight * WP2FormatBpp(format) + 1, kOrigValue);
+      const uint32_t stride = kWidth * WP2FormatBpp(format);
+      ASSERT_WP2_OK(orig.SetExternal(kWidth, kHeight, &data_orig[0], stride));
+
+      std::vector<uint8_t> data_copy = data_orig;
+      // Make some changes that should have no impact.
+      const uint8_t kChangedValue = kOrigValue / 2;
+      // Change outside of the image.
+      data_copy[data_copy.size() - 1] = kChangedValue;
+      // Change nonexistent alpha channel.
+      if (format == WP2_XRGB_32) data_copy[0] = kChangedValue;
+      if (format == WP2_RGBX_32 || format == WP2_BGRX_32) {
+        data_copy[3] = kChangedValue;
+      }
+
+      ArgbBuffer copy(orig.format());
+      ASSERT_WP2_OK(copy.SetExternal(kWidth, kHeight, &data_copy[0], stride));
+
+      float disto[5];
+      const WP2Status status =
+          copy.GetDistortion(orig, (MetricType)metric, disto);
+      // Some format/metric combinations are not supported.
+      if (status == WP2_STATUS_UNSUPPORTED_FEATURE ||
+          status == WP2_STATUS_INVALID_PARAMETER) {
+        continue;
+      }
+
+      ASSERT_WP2_OK(status);
+      uint32_t alpha_channel_index;
+      const bool has_alpha = WP2FormatHasAlpha(format, &alpha_channel_index);
+      for (uint32_t c = 0; c < 4; ++c) {
+        if (!has_alpha && c == alpha_channel_index) continue;
+        EXPECT_EQ(disto[c], 99);
+      }
+      EXPECT_EQ(disto[4], 99);  // total disto == 99
+
+      // Make a change that SHOULD cause some distortion.
+      const uint32_t kChangedChannelIdx = 1;
+      data_copy[kChangedChannelIdx] = kChangedValue;
+      ASSERT_WP2_OK(copy.GetDistortion(orig, (MetricType)metric, disto));
+      if (metric == LSIM) {
+        // LSIM should still find 99 if only one pixel is changed (because it
+        // matches with surrounding pixels).
+        EXPECT_EQ(disto[4], 99);
+        continue;
+      }
+      // Other metrics should find a difference.
+      EXPECT_LT(disto[4], 99);  // total disto < 99
+
+      // For argb metrics, only the changed channel should have a disto < 99.
+      const bool is_yuv_metric =
+          metric == PSNRHVS || metric == PSNR_YUV || metric == SSIM_YUV;
+      if (is_yuv_metric) continue;
+
+      for (uint32_t c = 0; c < 4; ++c) {
+        if (!has_alpha && c == alpha_channel_index) continue;
+        if (c == kChangedChannelIdx) {
+          EXPECT_LT(disto[c], 99);
+        } else {
+          EXPECT_EQ(disto[c], 99);
+        }
+      }
+    }
+  }
 }
 
 //------------------------------------------------------------------------------

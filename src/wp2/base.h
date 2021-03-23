@@ -144,7 +144,9 @@ WP2_EXTERN uint32_t WP2FormatBpp(WP2SampleFormat format);
 WP2_EXTERN uint32_t WP2Formatbpc(WP2SampleFormat format);
 
 // Returns true if the 'format' has an alpha channel.
-// Also returns its index if 'alpha_channel_index' is not null and there is one.
+// Also returns its index if 'alpha_channel_index' is not null and there is one
+// or there is a spot for alpha (e.g. RGBX). Otherwise 'alpha_channel_index'
+// is set to WP2FormatBpp(format).
 WP2_EXTERN bool WP2FormatHasAlpha(WP2SampleFormat format,
                                   uint32_t* alpha_channel_index = nullptr);
 
@@ -415,10 +417,10 @@ class ArgbBuffer {
   bool HasTransparency() const;
 
   // Computes PSNR, SSIM, LSIM or PSNRHVS distortion metric between two images.
-  // Results are in dB, stored in result[] in the A/R/G/B/All order.
-  // For PSNRHVS, the result[] content is A/Y/U/V/All.
-  // Warning: this function is rather CPU-intensive.
-  // Returns WP2_STATUS_OK upon success (no memory allocation error, etc.)
+  // Results are in dB, stored in result[] in the the same order as the channels
+  // in the format, with result[4] being the aggregate metric for all channels.
+  // For PSNRHVS, the result[] content is A/Y/U/V/All. Warning: this function is
+  // rather CPU-intensive.
   WP2_NO_DISCARD WP2Status GetDistortion(const ArgbBuffer& ref,
                                          MetricType metric_type,
                                          float result[5]) const;

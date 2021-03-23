@@ -52,7 +52,17 @@ bool WP2FormatHasAlpha(WP2SampleFormat format, uint32_t* alpha_channel_index) {
     case WP2_BGRA_32:
       if (alpha_channel_index != nullptr) *alpha_channel_index = 3;
       return true;
+    case WP2_XRGB_32:
+      if (alpha_channel_index != nullptr) *alpha_channel_index = 0;
+      return false;
+    case WP2_RGBX_32:
+    case WP2_BGRX_32:
+      if (alpha_channel_index != nullptr) *alpha_channel_index = 3;
+      return false;
     default:
+      if (alpha_channel_index != nullptr) {
+        *alpha_channel_index = WP2FormatBpp(format);
+      }
       return false;
   }
 }

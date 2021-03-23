@@ -460,6 +460,8 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
   const double pix_size = width() * height();
   const double max = 255.;  // Maximum value per pixel per channel.
   double total_distortion = 0.;
+  uint32_t alpha_channel_index = 0;
+  WP2FormatHasAlpha(format_, &alpha_channel_index);
   const bool has_transparency = HasTransparency();
   const bool include_alpha = has_transparency && include_alpha_in_all;
   const uint32_t pix_channel_size = pix_size * (include_alpha ? 4 : 3);
@@ -467,32 +469,41 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     WP2PSNRInit();
     uint64_t result_64b[4] = {0, 0, 0, 0};
     for (uint32_t y = 0; y < height(); ++y) {
-      if (WP2Formatbpc(ref.format()) <= 8) {
+      if (WP2Formatbpc(ref.format()) == 8) {
         const uint8_t* const ptr1 = GetRow8(y);
         const uint8_t* const ptr2 = ref.GetRow8(y);
-        WP2SumSquaredError4x8u(ptr1, ptr2, width(), result_64b);
+        if (WP2FormatBpp(format_) == 4) {
+          WP2SumSquaredError4x8u(ptr1, ptr2, width(), result_64b);
+        } else {
+          assert(WP2FormatBpp(format_) == 3);
+          WP2SumSquaredError3x8u(ptr1, ptr2, width(), result_64b);
+        }
       } else {
         const uint16_t* const ptr1 = GetRow16(y);
         const uint16_t* const ptr2 = ref.GetRow16(y);
-        WP2SumSquaredError2x16u(ptr1, ptr2, width(), result_64b);
+        WP2SumSquaredError4x16u(ptr1, ptr2, width(), result_64b);
       }
     }
     for (uint32_t c = 0; c < 4; ++c) {
-      if (c > 0 || include_alpha) total_distortion += (float)result_64b[c];
+      if (c != alpha_channel_index || include_alpha) {
+        total_distortion += (float)result_64b[c];
+      }
       result[c] = (float)GetPSNR(result_64b[c], pix_size, max);
     }
     result[4] = (float)GetPSNR(total_distortion, pix_channel_size, max);
   } else if (metric_type == SSIM) {
-    assert(WP2Formatbpc(ref.format()) <= 8);  // not supported yet
+    WP2_CHECK_OK(WP2FormatBpp(format_) == 4, WP2_STATUS_UNSUPPORTED_FEATURE);
     WP2SSIMInit();
     for (uint32_t c = 0; c < 4; ++c) {
       const double disto = AccumulateSSIM(*this, ref, c);
-      if (c > 0 || include_alpha) total_distortion += disto;
+      if (c != alpha_channel_index || include_alpha) {
+        total_distortion += disto;
+      }
       result[c] = (float)GetLogSSIM(disto, pix_size);
     }
     result[4] = (float)GetLogSSIM(total_distortion, pix_channel_size);
   } else if (metric_type == MSSSIM || metric_type == MSSSIM_ORIGINAL) {
-    assert(WP2Formatbpc(ref.format()) <= 8);  // not supported yet
+    WP2_CHECK_OK(WP2FormatBpp(format_) == 4, WP2_STATUS_UNSUPPORTED_FEATURE);
     WP2SSIMInit();
     // working copies, to be down-scaled
     ArgbBuffer buf1(ref.format()), buf2(format());
@@ -515,14 +526,19 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
       const double norm = 1. / (buf1.width() * buf1.height());
       const double sum = norm * AccumulateSSIM(buf1, buf2, c);
       acc[c] *= pow(sum, exponents[kNumMSSSIMPasses - 1]);
-      if (c > 0 || include_alpha) total += acc[c];
+      if (c != alpha_channel_index || include_alpha) {
+        total += acc[c];
+      }
       result[c] = GetLogSSIM(acc[c], 1.);
     }
     result[4] = GetLogSSIM(total, include_alpha ? 4. : 3.);
   } else if (metric_type == LSIM) {
+    WP2_CHECK_OK(WP2FormatBpp(format_) == 4, WP2_STATUS_UNSUPPORTED_FEATURE);
     for (uint32_t c = 0; c < 4; ++c) {
       const double disto = AccumulateLSIM(*this, ref, c);
-      if (c > 0 || include_alpha) total_distortion += disto;
+      if (c != alpha_channel_index || include_alpha) {
+        total_distortion += disto;
+      }
       result[c] = (float)GetPSNR(disto, pix_size, max);
     }
     result[4] = (float)GetPSNR(total_distortion, pix_channel_size, max);

@@ -743,8 +743,11 @@ extern uint64_t (*WP2SumSquaredError16s)(const int16_t* src1,
 extern void (*WP2SumSquaredError4x8u)(const uint8_t* src1,
                                       const uint8_t* src2,
                                       uint32_t len, uint64_t result[4]);
+// Accumulate 24b samples channels by channels. result[] is not reset to 0.
+extern void (*WP2SumSquaredError3x8u)(const uint8_t* src1, const uint8_t* src2,
+                                      uint32_t len, uint64_t result[3]);
 // Accumulate 64b samples channels by channels. result[] is not reset to 0.
-extern void (*WP2SumSquaredError2x16u)(const uint16_t* src1,
+extern void (*WP2SumSquaredError4x16u)(const uint16_t* src1,
                                        const uint16_t* src2, uint32_t len,
                                        uint64_t result[4]);
 // returns the SSE for a w x h block.
