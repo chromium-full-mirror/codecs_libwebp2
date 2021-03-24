@@ -144,15 +144,15 @@ void CodedBlockBase::ToBlockInfo(bool use_aom_coeffs,
   std::memset(blk->coeffs, 0, sizeof(blk->coeffs));
   std::fill(blk->split_tf, blk->split_tf + 4, false);
   std::fill(blk->encoding_method[0], blk->encoding_method[0] + 4 * 4, -1);
-  if (!use_aom_coeffs) {
-    for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-      if (c == kAChannel && !HasLossyAlpha()) continue;
-      blk->split_tf[c] = GetCodingParams(c).split_tf;
-      for (uint32_t i = 0; i < GetNumTransforms(c); ++i) {
-        blk->encoding_method[c][i] = (int8_t)method_[c][i];
-        std::copy(coeffs_[c][i], coeffs_[c][i] + NumCoeffsPerTransform(c),
-                  blk->coeffs[c][i]);
-      }
+  for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+    if (c == kAChannel && !HasLossyAlpha()) continue;
+    blk->split_tf[c] = GetCodingParams(c).split_tf;
+    for (uint32_t i = 0; i < GetNumTransforms(c); ++i) {
+      blk->encoding_method[c][i] = use_aom_coeffs
+                                       ? (int)EncodingMethod::kNumMethod + 1
+                                       : (int8_t)method_[c][i];
+      std::copy(coeffs_[c][i], coeffs_[c][i] + NumCoeffsPerTransform(c),
+                blk->coeffs[c][i]);
     }
   }
   blk->bits = 0;  // unknown for now

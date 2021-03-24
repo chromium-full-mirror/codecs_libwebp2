@@ -349,7 +349,7 @@ class Params {
     einfo_.store_blocks = true;  // Preemptively to avoid (slow) reencoding.
 #endif
   }
-  WP2_NO_DISCARD bool SetCurrentFile(size_t file_number);
+  WP2_NO_DISCARD bool SetCurrentFile(uint32_t file_number);
   WP2_NO_DISCARD bool SetBitstream(const char* const file_name);
   WP2_NO_DISCARD bool SetAltFile(const char* const file_name);
   WP2_NO_DISCARD bool SetAltImage();
@@ -535,6 +535,7 @@ class Params {
 
   size_t current_file_;
   std::vector<std::string> files_;
+  std::string original_file_;  // used with view_only_
   std::string input_;   // input file
   std::string output_;  // currently encoded file
 
@@ -1196,7 +1197,7 @@ void Params::PrintInfo() {
         kOnOff[dec_config_.enable_restoration_filter],
         kOnOff[enc_config_.enable_alpha_filter]));
 
-    if (!view_only_) {
+    if (!view_only_ || !original_file_.empty()) {
       msg.emplace_back(SPrintf("%s=%.2f  (a %.1f, r %.1f, g %.1f, b %.1f)",
           kMetricNames[distortion_metric_], distortion_[4], distortion_[0],
           distortion_[1], distortion_[2], distortion_[3]));
@@ -1215,7 +1216,7 @@ void Params::PrintInfo() {
           kOnOff[enc_config_.tune_perceptual],
           kOnOff[enc_config_.use_random_matrix],
           kOnOff[enc_config_.store_grain], dec_config_.grain_amplitude));
-     }
+    }
 #if defined(WP2_BITTRACE)
     DisplayBitTraces();
 #endif  // WP2_BITTRACE
@@ -1439,7 +1440,7 @@ bool Params::DecodeOutput() {
 
   if (view_only_ && GuessImageFormat((const uint8_t*)output_.data(),
                                      output_.size()) != FileFormat::WP2) {
-    status_ = out_.ConvertFrom(in_);
+    status_ = Decode(output_, &out_, dec_config_);
   } else {
     if (VDMatch(dec_config_, "original")) {
       // The reference image is needed in 'debug_output' if the 'visual_debug'
@@ -1788,58 +1789,73 @@ void Params::ApplyZoomLevel() {
   }
 }
 
-bool Params::SetCurrentFile(size_t file) {
-  if (file >= files_.size()) file = files_.size() - 1;
-  if (file != current_file_) {
-    ClearForcedElements();
-    current_file_ = file;
-    const std::string& file_name = files_[file];
-    status_ = IoUtilReadFile(file_name.c_str(), &input_);
-    if (status_ != WP2_STATUS_OK) {
-      fprintf(stderr, "Could not read the input file %s\n", file_name.c_str());
-      return false;
-    }
-    const uint8_t* data = (const uint8_t*)input_.data();
-    const size_t data_size = input_.size();
+bool Params::SetCurrentFile(uint32_t file_number) {
+  if (file_number >= files_.size()) file_number = files_.size() - 1;
+  if (file_number == current_file_) return WP2_STATUS_OK;
 
-    const FileFormat format = GuessImageFormat(data, data_size);
-    if (format == FileFormat::UNSUPPORTED) {
-      fprintf(stderr, "Unsupported input format\n");
-      return false;
-    }
-    if (ReadImage(data, data_size, &in_, format) != WP2_STATUS_OK) {
-      fprintf(stderr, "Could not decode the input file %s\n",
-              file_name.c_str());
-      return false;
-    }
-
-    if (crop_ && in_.SetView(in_, crop_area_) != WP2_STATUS_OK) {
-      fprintf(stderr, "Error! Cropping operation failed. Skipping.");
-    }
-
-    preview_color_ = {0x00u, 0x00u, 0x00u, 0x00u};
-    preview_.Deallocate();
-    if (format == FileFormat::WP2) {
-      BitstreamFeatures wp2_features;
-      if (wp2_features.Read(data, data_size) != WP2_STATUS_OK) {
-        fprintf(stderr, "Inconsistent state: could not read WP2 features.\n");
-        return false;
-      }
-      if (wp2_features.has_preview &&
-          ExtractPreview(data, data_size, &preview_) != WP2_STATUS_OK) {
-        fprintf(stderr, "Could not decode preview of %s\n",
-                file_name.c_str());
-        preview_.Deallocate();
-      }
-      preview_color_ = ToArgb32b(wp2_features.preview_color);
-    }
-    width_ = in_.width();
-    height_ = in_.height();
-    view_zoom_level_ = 0;
-    view_rect_ = {0, 0, width_, height_};
-
-    if (!EncodeAndDecode()) return false;
+  ClearForcedElements();
+  current_file_ = file_number;
+  const std::string& file_name = files_[file_number];
+  status_ = IoUtilReadFile(file_name.c_str(), &input_);
+  if (status_ != WP2_STATUS_OK) {
+    fprintf(stderr, "Could not read the input file %s\n", file_name.c_str());
+    return false;
   }
+  const uint8_t* data = (const uint8_t*)input_.data();
+  const size_t data_size = input_.size();
+
+  const FileFormat format = GuessImageFormat(data, data_size);
+  if (format == FileFormat::UNSUPPORTED) {
+    fprintf(stderr, "Unsupported input format\n");
+    return false;
+  }
+
+  if (ReadImage(data, data_size, &in_, format) != WP2_STATUS_OK) {
+    fprintf(stderr, "Could not decode the input file %s\n", file_name.c_str());
+    return false;
+  }
+  if (view_only_ && !original_file_.empty()) {
+    ArgbBuffer tmp_orig;
+    if (ReadImage(original_file_.c_str(), &tmp_orig) != WP2_STATUS_OK) {
+      fprintf(stderr, "Warning: could not decode the original file %s\n",
+              original_file_.c_str());
+    } else if (tmp_orig.width() != in_.width() ||
+               tmp_orig.height() != in_.height()) {
+      fprintf(stderr,
+              "Warning: original file dimensions %d x %d don't match encoded "
+              "file %d x %d\n",
+              tmp_orig.width(), tmp_orig.height(), in_.width(), in_.height());
+    } else if (in_.Swap(&tmp_orig) != WP2_STATUS_OK) {
+      return false;
+    }
+  }
+
+  if (crop_ && in_.SetView(in_, crop_area_) != WP2_STATUS_OK) {
+    fprintf(stderr, "Error! Cropping operation failed. Skipping.");
+  }
+
+  preview_color_ = {0x00u, 0x00u, 0x00u, 0x00u};
+  preview_.Deallocate();
+  if (format == FileFormat::WP2) {
+    BitstreamFeatures wp2_features;
+    if (wp2_features.Read(data, data_size) != WP2_STATUS_OK) {
+      fprintf(stderr, "Inconsistent state: could not read WP2 features.\n");
+      return false;
+    }
+    if (wp2_features.has_preview &&
+        ExtractPreview(data, data_size, &preview_) != WP2_STATUS_OK) {
+      fprintf(stderr, "Could not decode preview of %s\n", file_name.c_str());
+      preview_.Deallocate();
+    }
+    preview_color_ = ToArgb32b(wp2_features.preview_color);
+  }
+  width_ = in_.width();
+  height_ = in_.height();
+  view_zoom_level_ = 0;
+  view_rect_ = {0, 0, width_, height_};
+
+  if (!EncodeAndDecode()) return false;
+
   return (status_ == WP2_STATUS_OK);
 }
 
@@ -2028,7 +2044,7 @@ class ParagraphMaker {
 
 constexpr uint32_t kLastChannel = 4;
 constexpr const char* const kEncNames[] = {
-  "X", "Mtd0", "Mtd1", "DC  ", "Zero"
+    "X", "Mtd0", "Mtd1", "DC  ", "Zero", "AOM",
 };
 
 // Isolate the bit costs about residuals (Y, U, V, A, remaining stuff).
@@ -2185,7 +2201,7 @@ void Params::PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
               line += SPrintf("  %c ", symbol);
             }
           } else {
-            const int32_t v = b_enc.coeffs[channel][tf_i][idx];
+            const int32_t v = b.coeffs[channel][tf_i][idx];
             line += v ? SPrintf("%3d ", v) : "  . ";
           }
         }
@@ -2229,8 +2245,11 @@ void Params::PrintPredModes(const BlockInfo& b,
 void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
   if (display_block_ == kDisplayNone) return;
 #if defined(WP2_BITTRACE)
-  assert(dinfo_.store_blocks && einfo_.store_blocks &&
-         einfo_.blocks.size() == dinfo_.blocks.size());
+  assert(dinfo_.store_blocks && einfo_.store_blocks);
+  if (!view_only_) {
+    assert(einfo_.blocks.size() == dinfo_.blocks.size());
+  }
+
   // Sort encoded and decoded blocks for easy comparison.
   for (std::vector<BlockInfo>* blocks : {&dinfo_.blocks, &einfo_.blocks}) {
     std::sort(blocks->begin(), blocks->end(),
@@ -2244,7 +2263,7 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
   const int selection_y = (int)dinfo_.selection.y;
   for (uint32_t index = 0; index < dinfo_.blocks.size(); ++index) {
     const BlockInfo& b = dinfo_.blocks[index];
-    const BlockInfo& b_enc = einfo_.blocks[index];
+    const BlockInfo& b_enc = view_only_ ? b : einfo_.blocks[index];
     assert(b.rect == b_enc.rect);
     assert(b.segment_id == b_enc.segment_id);
     assert(b.y_context_is_constant == b_enc.y_context_is_constant);
@@ -3473,6 +3492,8 @@ void Help() {
   opt.Add("-nomt", "disable multi-threading");
   opt.Add("-[no]metadata", "include [or ignore] source metadata");
   opt.Add("-d", "decode-only: just show the .wp2 file");
+  opt.Add("-original <file>",
+          "in decode-only mode (-d), path of the original image");
   opt.Add("-alt <file>", "alternative image to compare with");
   opt.Add("-vbt <int>", "number of visual bittrace levels");
   opt.Add("-version", "print version number and exit");
@@ -3517,6 +3538,8 @@ int main(int argc, char* argv[]) {
       params.show_ = Params::kInfo;
     } else if (!strcmp(argv[c], "-d")) {
       params.view_only_ = true;
+    } else if (!strcmp(argv[c], "-original") && c + 1 < argc) {
+      params.original_file_ = argv[++c];
     } else if (!strcmp(argv[c], "-alt") && c + 1 < argc) {
       alt_name = argv[++c];
     } else if (!strcmp(argv[c], "-pm") && c + 1 < argc) {

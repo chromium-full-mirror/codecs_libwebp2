@@ -39,7 +39,7 @@ static uint32_t Interpolate(const uint16_t values[],
   return (uint32_t)std::lrintf(v);
 }
 
-WP2Status QuantMtx::Allocate() {
+WP2Status QuantMtx::AllocateForEncoder() {
   WP2_CHECK_ALLOC_OK(iquants.resize(kDataSize));
   WP2_CHECK_ALLOC_OK(bias.resize(kDataSize));
   return WP2_STATUS_OK;

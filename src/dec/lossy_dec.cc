@@ -165,6 +165,25 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   ContextCache context_cache;
   cb.SetContextCache(&context_cache);
 
+#if defined(WP2_BITTRACE)
+  // Segments for debugging, with quant intialized for encoding.
+  Vector<Segment> debug_segments;
+  if (config.info != nullptr && config.info->store_blocks) {
+    const uint32_t num_segments = gparams.segments_.size();
+    WP2_CHECK_ALLOC_OK(debug_segments.resize(num_segments));
+    for (uint32_t i = 0; i < num_segments; ++i) {
+      debug_segments[i].SetYUVBounds(gparams.transf_.GetYUVMin(),
+                                     gparams.transf_.GetYUVMax());
+      for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+        gparams.segments_[i].GetQuantSteps(
+            debug_segments[i].quant_steps_[(uint32_t)c], kYChannel);
+      }
+      WP2_CHECK_STATUS(debug_segments[i].AllocateForEncoder());
+      debug_segments[i].FinalizeQuant();
+    }
+  }
+#endif
+
   uint32_t block_idx = 0;
   while ((dec->GetStatus() == WP2_STATUS_OK) && !mgr->Done()) {
     Block block;
@@ -354,6 +373,32 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
       block_info.bit_traces.clear();
       block_info.bit_traces.insert(dec->GetBitTracesCustom().begin(),
                                    dec->GetBitTracesCustom().end());
+      // Requantize and transform coeffs for the debugging UI.
+      for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+        if (channel == kAChannel && !cb.HasLossyAlpha()) continue;
+        const Segment& segment =
+            debug_segments[(channel == kAChannel) ? 0 : cb.id_];
+        const CodedBlockBase::CodingParams& params =
+            *cb.GetCodingParams(channel);
+        const BlockSize split_size = GetSplitSize(cb.dim(), params.split_tf);
+        const uint32_t split_w = BlockWidthPix(split_size);
+        const uint32_t split_h = BlockHeightPix(split_size);
+        for (uint32_t tf_i = 0; tf_i < cb.GetNumTransforms(channel); ++tf_i) {
+          int32_t tf_res[kMaxBlockSizePix2];
+          const bool reduced_transform =
+              ((channel == kUChannel || channel == kVChannel) && cb.is420_);
+          WP2Transform2D(block_info.coeffs[channel][tf_i], params.tf_x(),
+                         params.tf_y(), split_w, split_h, tf_res,
+                         reduced_transform);
+          uint32_t unused_num_coeffs;
+          int16_t unused_dequantized[kMaxBlockSizePix2];
+          segment.GetQuant(channel).Quantize(
+              tf_res, cb.tdim(channel), cb.IsFirstCoeffDC(channel),
+              block_info.coeffs[channel][tf_i], &unused_num_coeffs,
+              unused_dequantized);
+        }
+      }
+
       WP2_CHECK_STATUS(tiles_layout->assignment_lock.Acquire());
       config.info->blocks.push_back(block_info);
       tiles_layout->assignment_lock.Release();

@@ -315,11 +315,11 @@ void Segment::GetQuantSteps(uint16_t quants[kNumQuantZones],
 
 WP2Status Segment::AllocateForEncoder(bool for_alpha) {
   if (for_alpha) {
-    WP2_CHECK_STATUS(quant_a_.Allocate());
+    WP2_CHECK_STATUS(quant_a_.AllocateForEncoder());
   } else {
-    WP2_CHECK_STATUS(quant_y_.Allocate());
-    WP2_CHECK_STATUS(quant_u_.Allocate());
-    WP2_CHECK_STATUS(quant_v_.Allocate());
+    WP2_CHECK_STATUS(quant_y_.AllocateForEncoder());
+    WP2_CHECK_STATUS(quant_u_.AllocateForEncoder());
+    WP2_CHECK_STATUS(quant_v_.AllocateForEncoder());
   }
   return WP2_STATUS_OK;
 }

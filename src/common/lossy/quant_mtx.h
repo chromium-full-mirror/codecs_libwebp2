@@ -37,7 +37,7 @@ static constexpr uint32_t kNumQuantZones = 4;
 struct QuantMtx {
  public:
   // allocate the *encoding* data space
-  WP2Status Allocate();
+  WP2Status AllocateForEncoder();
 
   // Initialize quant_steps[] for steps[].
   // max_residual is the maximum absolute input values to be quantized.

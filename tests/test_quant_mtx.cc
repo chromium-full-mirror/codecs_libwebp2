@@ -39,7 +39,7 @@ TEST_F(QuantMtxTest, DCError) {
     SCOPED_TRACE(SPrintf("trf: %s (scale %d)", kTDimNames[trf], scale));
     for (uint16_t quant : {128, 200, 50, 10, 1}) {
       SCOPED_TRACE(SPrintf("quant step: %d", quant));
-      ASSERT_WP2_OK(mtx.Allocate());
+      ASSERT_WP2_OK(mtx.AllocateForEncoder());
       const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
       mtx.Init(/*max_residual=*/1000, /*q_scale=*/1, quants);
       for (int32_t dc : {1000, 0, -1000}) {
@@ -63,7 +63,7 @@ TEST_F(QuantMtxTest, DCErrorRoundTrip) {
     for (uint16_t quant : {128, 200, 51, 36, 23, 228}) {
       SCOPED_TRACE(SPrintf("quant: %d", quant));
       QuantMtx mtx;
-      ASSERT_WP2_OK(mtx.Allocate());
+      ASSERT_WP2_OK(mtx.AllocateForEncoder());
       const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
       mtx.Init(kMaxResidual, /*q_scale=*/1, quants);
       int32_t residuals[kMaxBlockSizePix2] = {0};
@@ -128,7 +128,7 @@ TEST_P(QuantMtxTestCpuInfo, DcQuantizedDynamicRange) {
 
   constexpr uint32_t kMaxResidual = 130;
   QuantMtx mtx;
-  ASSERT_WP2_OK(mtx.Allocate());
+  ASSERT_WP2_OK(mtx.AllocateForEncoder());
 
   for (const BlockSize block_size : kAllBlockSizes) {
     std::fill(residuals, residuals + kMaxCoeffs, kMaxResidual);
