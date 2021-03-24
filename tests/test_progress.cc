@@ -45,9 +45,9 @@ TEST_P(EncDecProgressTest, Encode) {
   encoder_config.thread_level = std::get<2>(GetParam());
 
   ArgbBuffer src;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(), &src));
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(file_name).c_str(), &src));
 
-  testing::ProgressTester progress_tester;
+  testutil::ProgressTester progress_tester;
   encoder_config.progress_hook = &progress_tester;
 
   // Test that it fails as expected.
@@ -76,9 +76,9 @@ TEST_P(EncDecProgressTest, Decode) {
 
   ArgbBuffer src;
   MemoryWriter data;
-  ASSERT_WP2_OK(testing::CompressImage(file_name, &data, &src, quality));
+  ASSERT_WP2_OK(testutil::CompressImage(file_name, &data, &src, quality));
 
-  testing::ProgressTester progress_tester;
+  testutil::ProgressTester progress_tester;
 
   ArgbBuffer output;
   DecoderConfig config;
@@ -107,8 +107,8 @@ TEST_P(EncDecProgressTest, Decode) {
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &output, config));
   ASSERT_EQ(progress_tester.last_progress_, 1.);
 
-  ASSERT_TRUE(testing::Compare(src, output, file_name,
-                               testing::GetExpectedDistortion(quality)));
+  ASSERT_TRUE(testutil::Compare(src, output, file_name,
+                                testutil::GetExpectedDistortion(quality)));
 }
 
 // Decoder progression (same as above but use the class API)
@@ -119,9 +119,9 @@ TEST_P(EncDecProgressTest, Decoder) {
 
   ArgbBuffer src;
   MemoryWriter data;
-  ASSERT_WP2_OK(testing::CompressImage(file_name, &data, &src, quality));
+  ASSERT_WP2_OK(testutil::CompressImage(file_name, &data, &src, quality));
 
-  testing::ProgressTester progress_tester;
+  testutil::ProgressTester progress_tester;
 
   ArgbBuffer output;
   DecoderConfig config;
@@ -157,8 +157,8 @@ TEST_P(EncDecProgressTest, Decoder) {
   ASSERT_FALSE(decoder.ReadFrame());
   ASSERT_EQ(progress_tester.last_progress_, 1.);
 
-  ASSERT_TRUE(testing::Compare(src, output, file_name,
-                               testing::GetExpectedDistortion(quality)));
+  ASSERT_TRUE(testutil::Compare(src, output, file_name,
+                                testutil::GetExpectedDistortion(quality)));
 }
 
 //------------------------------------------------------------------------------
@@ -195,7 +195,7 @@ TEST(EncProgressTest, UserAbortBeforeAnyEncoding) {
   // First pixel is invalid (alpha < rgb), other pixels are undefined.
   for (int i : {0, 1, 2, 3}) src.GetRow8(0)[i] = 100 + 25 * i;
 
-  testing::ProgressTester progress_tester;
+  testutil::ProgressTester progress_tester;
   progress_tester.fail_at_ = 0.;
   EncoderConfig encoder_config;
   encoder_config.progress_hook = &progress_tester;
@@ -209,7 +209,7 @@ TEST(DecProgressTest, UserAbortBeforeAnyDecoding) {
   std::array<uint8_t, 64> encoded_data = {(uint8_t)'u'};  // Junk
 
   DecoderConfig config = DecoderConfig::kDefault;
-  testing::ProgressTester progress_stopper;
+  testutil::ProgressTester progress_stopper;
   config.progress_hook = &progress_stopper;
 
   std::array<uint8_t, encoded_data.size()> decoded_pixels{0};
@@ -260,7 +260,7 @@ TEST_P(ProgressPrecisionTest, Encode) {
 
   MemoryWriter encoded_bitstream;
   EncoderConfig encoder_config = EncoderConfig::kDefault;
-  testing::ProgressTester progress_tester;
+  testutil::ProgressTester progress_tester;
   encoder_config.progress_hook = &progress_tester;
   encoder_config.effort = 0;
   encoder_config.quality = quality;

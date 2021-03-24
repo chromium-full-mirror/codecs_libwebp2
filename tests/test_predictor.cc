@@ -416,7 +416,7 @@ TEST(LargePredictors, TestSimpleAnglePredictorSpeed) {
       }
       for (uint32_t j = 0; j < h; ++j) {
         for (uint32_t i = 0; i < w; ++i) {
-          CRC = testing::SillyCRC(CRC, prediction.At(i, j));
+          CRC = testutil::SillyCRC(CRC, prediction.At(i, j));
         }
       }
 

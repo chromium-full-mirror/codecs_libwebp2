@@ -60,7 +60,7 @@ class PreviewTest
 
 TEST_P(PreviewTest, SimpleTest) {
   const std::string file_name = std::get<0>(GetParam());
-  const std::string file_path = testing::GetTestDataPath(file_name);
+  const std::string file_path = testutil::GetTestDataPath(file_name);
   const float quality = std::get<1>(GetParam());
   const int effort = std::get<2>(GetParam());
   const PreviewConfig::AnalysisMethod analysis_method = std::get<3>(GetParam());
@@ -80,8 +80,8 @@ TEST_P(PreviewTest, SimpleTest) {
   ASSERT_WP2_OK(
       DecodePreview(writer.mem_, writer.size_, &decompressed_preview));
 
-  ASSERT_TRUE(testing::Compare(original_image, decompressed_preview, file_name,
-                               kMinExpectedSimilarity));
+  ASSERT_TRUE(testutil::Compare(original_image, decompressed_preview, file_name,
+                                kMinExpectedSimilarity));
 
   ShowOutput(file_name, original_image, decompressed_preview);
 }
@@ -115,7 +115,7 @@ TEST(PreviewTest, NoOptim) {
   WP2MathInit();
 #endif
   const std::string file_name = "alpha_ramp.png";
-  const std::string file_path = testing::GetTestDataPath(file_name);
+  const std::string file_path = testutil::GetTestDataPath(file_name);
 
   ArgbBuffer original_image;
   ASSERT_WP2_OK(ReadImage(file_path.c_str(), &original_image));
@@ -137,8 +137,8 @@ TEST(PreviewTest, NoOptim) {
   ASSERT_WP2_OK(
       DecodePreview(writer.mem_, writer.size_, &decompressed_preview));
 
-  EXPECT_TRUE(testing::Compare(original_image, decompressed_preview, file_name,
-                               kMinExpectedSimilarity));
+  EXPECT_TRUE(testutil::Compare(original_image, decompressed_preview, file_name,
+                                kMinExpectedSimilarity));
 
   ShowOutput(file_name, original_image, decompressed_preview);
 }
@@ -147,7 +147,7 @@ TEST(PreviewTest, NoOptim) {
 
 TEST(PreviewTest, EncodeDecode) {
   const std::string file_name = "test_exif_xmp.webp";
-  const std::string file_path = testing::GetTestDataPath(file_name);
+  const std::string file_path = testutil::GetTestDataPath(file_name);
 
   ArgbBuffer original_image;
   ASSERT_WP2_OK(ReadImage(file_path.c_str(), &original_image));
@@ -163,8 +163,8 @@ TEST(PreviewTest, EncodeDecode) {
   ASSERT_WP2_OK(ExtractPreview(memory_writer.mem_, memory_writer.size_,
                                &decompressed_preview));
 
-  EXPECT_TRUE(testing::Compare(original_image, decompressed_preview, file_name,
-                               kMinExpectedSimilarity));
+  EXPECT_TRUE(testutil::Compare(original_image, decompressed_preview, file_name,
+                                kMinExpectedSimilarity));
 
   ShowOutput(file_name, original_image, decompressed_preview);
 }
@@ -173,7 +173,7 @@ TEST(PreviewTest, EncodeDecode) {
 
 TEST(PreviewTest, CustomSize) {
   const std::string file_name = "test_exif_xmp.webp";
-  const std::string file_path = testing::GetTestDataPath(file_name);
+  const std::string file_path = testutil::GetTestDataPath(file_name);
 
   ArgbBuffer original_image;
   ASSERT_WP2_OK(ReadImage(file_path.c_str(), &original_image));
@@ -200,8 +200,8 @@ TEST(PreviewTest, CustomSize) {
 // To get coverage on the preview skipping code.
 TEST(PreviewTest, Skipped) {
   ArgbBuffer original_image;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath("source1_64x48.png").c_str(),
-                          &original_image));
+  ASSERT_WP2_OK(ReadImage(
+      testutil::GetTestDataPath("source1_64x48.png").c_str(), &original_image));
 
   EncoderConfig config;
   config.quality = 0.f;  // Lowest preview settings; it will be skipped anyway.
@@ -218,8 +218,8 @@ TEST(PreviewTest, Skipped) {
 // Test the 'binary preview' encoder option
 TEST(PreviewTest, PreviewData) {
   ArgbBuffer original_image;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath("source1_64x48.png").c_str(),
-                          &original_image));
+  ASSERT_WP2_OK(ReadImage(
+      testutil::GetTestDataPath("source1_64x48.png").c_str(), &original_image));
   ArgbBuffer ignored_output;
   MemoryWriter writer;
   EncoderConfig config;

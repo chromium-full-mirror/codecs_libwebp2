@@ -80,8 +80,8 @@ TEST_P(MallocFailureTest, Encoding) {
     src.Deallocate();
     data.Reset();
     SetMallocFailAt(malloc_fail_at);
-    status = testing::CompressImage(src_file_name, &data, &src, quality, effort,
-                                    thread_level);
+    status = testutil::CompressImage(src_file_name, &data, &src, quality,
+                                     effort, thread_level);
     if (status != WP2_STATUS_OK) {
       ASSERT_EQ(status, WP2_STATUS_OUT_OF_MEMORY)
           << "Allocation failure number " << malloc_fail_at << " is uncaught";
@@ -101,9 +101,9 @@ TEST_P(MallocFailureTest, Encoding) {
       SetMallocFailAt(malloc_fail_at + i);
       ArgbBuffer another_src;  // Keep first OK output though.
       NoAllocationFailureMemoryWriter another_data;
-      ASSERT_WP2_OK(testing::CompressImage(src_file_name, &another_data,
-                                           &another_src, quality, effort,
-                                           thread_level))
+      ASSERT_WP2_OK(testutil::CompressImage(src_file_name, &another_data,
+                                            &another_src, quality, effort,
+                                            thread_level))
           << "False positives from " << malloc_fail_at << " to "
           << (malloc_fail_at + i - 1);
     }
@@ -114,8 +114,8 @@ TEST_P(MallocFailureTest, Encoding) {
     DecoderConfig config;
     config.thread_level = 8;
     ASSERT_WP2_OK(Decode(data.Data(), data.Size(), &output, config));
-    ASSERT_TRUE(testing::Compare(src, output, src_file_name,
-                                 testing::GetExpectedDistortion(quality)));
+    ASSERT_TRUE(testutil::Compare(src, output, src_file_name,
+                                  testutil::GetExpectedDistortion(quality)));
   }
 }
 
@@ -133,8 +133,8 @@ TEST_P(MallocFailureTest, Decoding) {
   ArgbBuffer src;
   MemoryWriter data;
   SetMallocFailAt(0);
-  ASSERT_WP2_OK(testing::CompressImage(src_file_name, &data, &src, quality,
-                                       effort, /*thread_level=*/1));
+  ASSERT_WP2_OK(testutil::CompressImage(src_file_name, &data, &src, quality,
+                                        effort, /*thread_level=*/1));
 
   ArgbBuffer output;
   DecoderConfig config;
@@ -169,8 +169,8 @@ TEST_P(MallocFailureTest, Decoding) {
     }
 
     SetMallocFailAt(0);
-    ASSERT_TRUE(testing::Compare(src, output, src_file_name,
-                                 testing::GetExpectedDistortion(quality)));
+    ASSERT_TRUE(testutil::Compare(src, output, src_file_name,
+                                  testutil::GetExpectedDistortion(quality)));
   }
 }
 

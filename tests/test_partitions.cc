@@ -41,7 +41,7 @@ TEST_P(PartitionsTest, Simple) {
   config.partition_set = std::get<4>(GetParam());
   config.partition_snapping = std::get<5>(GetParam());
 
-  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testutil::EncodeDecodeCompare(file_name, config));
 }
 
 INSTANTIATE_TEST_SUITE_P(

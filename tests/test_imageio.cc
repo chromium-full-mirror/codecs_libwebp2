@@ -32,11 +32,11 @@ TEST(ReadImageTest, Metadata) {
 
   // Read image with metadata.
   ASSERT_WP2_OK(ReadImage(
-      testing::GetTestDataPath("test_exif_xmp.webp").c_str(), &buffer));
+      testutil::GetTestDataPath("test_exif_xmp.webp").c_str(), &buffer));
   EXPECT_TRUE(!buffer.metadata_.IsEmpty());
   // Read image without metadata.
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath("source1_64x48.png").c_str(),
-                          &buffer));
+  ASSERT_WP2_OK(ReadImage(
+      testutil::GetTestDataPath("source1_64x48.png").c_str(), &buffer));
   // Expect nothing left from first image.
   EXPECT_TRUE(buffer.metadata_.IsEmpty());
 }
@@ -61,7 +61,7 @@ TEST_P(WriteImageTest, Argb) {
   const char* const file_name = GetParam();
   Data data;
   ASSERT_WP2_OK(
-      IoUtilReadFile(testing::GetTestDataPath(file_name).c_str(), &data));
+      IoUtilReadFile(testutil::GetTestDataPath(file_name).c_str(), &data));
   const FileFormat format = GuessImageFormat(data.bytes, data.size);
 
   ArgbBuffer original;
@@ -72,7 +72,7 @@ TEST_P(WriteImageTest, Argb) {
   }
   ASSERT_WP2_OK(ReadImage(data.bytes, data.size, &original));
 
-  const std::string temp_file_path = testing::GetTempDataPath(file_name);
+  const std::string temp_file_path = testutil::GetTempDataPath(file_name);
   std::remove(temp_file_path.c_str());  // Make sure it doesn't exist.
   size_t written_file_size, read_file_size;
   ASSERT_WP2_OK(SaveImage(original, temp_file_path.c_str(), /*overwrite=*/true,
@@ -87,14 +87,14 @@ TEST_P(WriteImageTest, Argb) {
   const bool is_ccsp = IsCustomColorSpace(GetFormatFromExtension(file_name));
   const float expected_distortion = is_ccsp ? 40.f : 99.f;
   EXPECT_TRUE(
-      testing::Compare(original, comparison, file_name, expected_distortion));
+      testutil::Compare(original, comparison, file_name, expected_distortion));
 }
 
 TEST_P(WriteImageTest, Ccsp) {
   const char* const file_name = GetParam();
   Data data;
   ASSERT_WP2_OK(
-      IoUtilReadFile(testing::GetTestDataPath(file_name).c_str(), &data));
+      IoUtilReadFile(testutil::GetTestDataPath(file_name).c_str(), &data));
   const FileFormat format = GuessImageFormat(data.bytes, data.size);
 
   YUVPlane original;
@@ -124,7 +124,7 @@ TEST_P(WriteImageTest, Ccsp) {
         original, {0, 0, original.GetWidth(), original.GetHeight()}));
   }
 
-  const std::string temp_file_path = testing::GetTempDataPath(file_name);
+  const std::string temp_file_path = testutil::GetTempDataPath(file_name);
   std::remove(temp_file_path.c_str());  // Make sure it doesn't exist.
   ASSERT_WP2_OK(SaveImage(upsampled, ccsp_to_rgb,
                           file_num_bits, temp_file_path.c_str(),
@@ -135,7 +135,8 @@ TEST_P(WriteImageTest, Ccsp) {
   ASSERT_WP2_OK(ReadImage(temp_file_path.c_str(), &comparison, &ccsp_to_rgb));
 
   // Reading an Argb color space into a YUVPlane will not generate loss.
-  EXPECT_TRUE(testing::Compare(original, comparison, file_num_bits, file_name));
+  EXPECT_TRUE(
+      testutil::Compare(original, comparison, file_num_bits, file_name));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -150,9 +151,8 @@ TEST(Y4MTest, Nearest) {
 
   YUVPlane original;
   CSPMtx ccsp_to_rgb = {};
-  ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath(file_name).c_str(), &original,
-                &ccsp_to_rgb));
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(file_name).c_str(),
+                          &original, &ccsp_to_rgb));
   ASSERT_TRUE(original.IsDownsampled());
   // Crop.
   ASSERT_WP2_OK(original.Y.SetView(original.Y, {0, 0, 1, 41}));
@@ -166,15 +166,15 @@ TEST(Y4MTest, Nearest) {
 
   uint32_t bit_depth;
   ASSERT_WP2_OK(
-      ReadBitDepth(testing::GetTestDataPath(file_name).c_str(), &bit_depth));
-  EXPECT_TRUE(testing::Compare(original, upsampled, bit_depth, file_name));
+      ReadBitDepth(testutil::GetTestDataPath(file_name).c_str(), &bit_depth));
+  EXPECT_TRUE(testutil::Compare(original, upsampled, bit_depth, file_name));
 }
 
 //------------------------------------------------------------------------------
 
 TEST(WriteImageTest, NegativeArgbBuffer) {
   ArgbBuffer buffer;
-  const std::string dst = testing::GetTempDataPath("some_path.some_extension");
+  const std::string dst = testutil::GetTempDataPath("some_path.some_extension");
 
   ASSERT_TRUE(buffer.IsEmpty());
   EXPECT_EQ(SaveImage(buffer, dst.c_str()), WP2_STATUS_INVALID_PARAMETER);
@@ -191,7 +191,7 @@ TEST(WriteImageTest, NegativeYUVPlane) {
   const CSPMtx bad_ccsp_to_rgb({1, 0, 0, 0, 1, 0, 0, 0, 1}, 1000);
   const uint32_t file_num_bits = 8;
   const uint32_t bad_file_num_bits = 2;
-  const std::string dst = testing::GetTempDataPath("some_path.some_extension");
+  const std::string dst = testutil::GetTempDataPath("some_path.some_extension");
 
   ASSERT_TRUE(buffer.IsEmpty());
   EXPECT_EQ(SaveImage(buffer, good_ccsp_to_rgb, file_num_bits, dst.c_str()),

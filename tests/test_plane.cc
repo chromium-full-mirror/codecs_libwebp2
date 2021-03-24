@@ -57,7 +57,7 @@ TEST_P(PlaneTest, Simple) {
   ArgbBuffer pic;
   size_t size = 0;
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath(file_name).c_str(), &pic, &size));
+      ReadImage(testutil::GetTestDataPath(file_name).c_str(), &pic, &size));
 
   ArgbBuffer pic2;
   YUVPlane yuv, yuv2;
@@ -74,8 +74,8 @@ TEST_P(PlaneTest, Simple) {
   ASSERT_EQ(yuv.IsEmpty(), yuv2.IsEmpty());
   ASSERT_EQ(yuv.IsView(), yuv2.IsView());
   // Expect equality.
-  EXPECT_TRUE(
-      testing::Compare(yuv, yuv2, transf.GetYUVPrecisionBits() + 1, file_name));
+  EXPECT_TRUE(testutil::Compare(yuv, yuv2, transf.GetYUVPrecisionBits() + 1,
+                                file_name));
 
   ASSERT_WP2_OK(yuv.Downsample(down_filter));
   // Should fail because downsampled.
@@ -148,7 +148,7 @@ TEST_P(PlaneTest, TestAClamped) {
 }
 
 TEST_P(PlaneTest, TestSpeedSample) {
-  const std::string& file_name = testing::GetTestDataPath(GetParam());
+  const std::string& file_name = testutil::GetTestDataPath(GetParam());
   const tap_t up_taps[5] = {0, -3, 16, 5, -2};
   const SamplingTaps up_filter = {SamplingTaps::Taps(2, up_taps + 2),
                                   SamplingTaps::Taps(2, up_taps + 2)};
@@ -189,7 +189,7 @@ INSTANTIATE_TEST_SUITE_P(PlaneTestInstantiation, PlaneTest,
 TEST(PlaneTest, GetDistortion) {
   ArgbBuffer pic;
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath("source1_64x48.png").c_str(), &pic));
+      ReadImage(testutil::GetTestDataPath("source1_64x48.png").c_str(), &pic));
 
   YUVPlane original, comparison;
   CSPTransform transf;
@@ -204,8 +204,8 @@ TEST(PlaneTest, GetDistortion) {
     ASSERT_EQ(distortion, 99.f);
   }
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    testing::Noise(transf.GetYUVMin(), transf.GetYUVMax(), /*seed=*/channel,
-                   /*strength=*/5, &comparison.GetChannel(channel));
+    testutil::Noise(transf.GetYUVMin(), transf.GetYUVMax(), /*seed=*/channel,
+                    /*strength=*/5, &comparison.GetChannel(channel));
     ASSERT_WP2_OK(comparison.GetDistortion(original, bit_depth, PSNR, disto));
     const bool modified_channel[] = {channel >= kAChannel, channel >= kYChannel,
                                      channel >= kUChannel, channel >= kVChannel,

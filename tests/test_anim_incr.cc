@@ -32,7 +32,7 @@ namespace {
 //------------------------------------------------------------------------------
 
 typedef std::tuple<std::vector<const char*>, std::vector<uint32_t>, float, int,
-                   uint32_t, testing::IncrementalDecodingTestSetup>
+                   uint32_t, testutil::IncrementalDecodingTestSetup>
     Param;
 
 class AnimTestIncr : public ::testing::TestWithParam<Param> {};
@@ -43,13 +43,13 @@ TEST_P(AnimTestIncr, Simple) {
   const float quality = std::get<2>(GetParam());
   const int effort = std::get<3>(GetParam());
   const uint32_t thread_level = std::get<4>(GetParam());
-  testing::IncrementalDecodingTestSetup setup = std::get<5>(GetParam());
+  testutil::IncrementalDecodingTestSetup setup = std::get<5>(GetParam());
 
   std::vector<ArgbBuffer> frames;
   MemoryWriter encoded_data;
-  ASSERT_WP2_OK(testing::CompressAnimation(file_names, durations_ms,
-                                           &encoded_data, &frames, quality,
-                                           effort, thread_level));
+  ASSERT_WP2_OK(testutil::CompressAnimation(file_names, durations_ms,
+                                            &encoded_data, &frames, quality,
+                                            effort, thread_level));
 
   DecoderConfig config = DecoderConfig::kDefault;
   config.thread_level = thread_level;
@@ -60,17 +60,17 @@ TEST_P(AnimTestIncr, Simple) {
     setup.incr_size_step = step;
     std::vector<ArgbBuffer> decoded_frames;
     std::vector<uint32_t> decoded_durations_ms;
-    ASSERT_WP2_OK(testing::DecodeIncremental(
+    ASSERT_WP2_OK(testutil::DecodeIncremental(
         config, input, setup, &decoded_frames, &decoded_durations_ms));
 
     // Hard to know which frames to compare if some were skipped.
     if (setup.actions.empty() ||
-        setup.actions.back().type != testing::DecoderAction::Type::kSkip) {
+        setup.actions.back().type != testutil::DecoderAction::Type::kSkip) {
       ASSERT_EQ(decoded_frames.size(), frames.size());
       for (size_t i = 0; i < frames.size(); ++i) {
-        EXPECT_TRUE(testing::Compare(decoded_frames[i], frames[i],
-                                     file_names[i],
-                                     testing::GetExpectedDistortion(quality)));
+        EXPECT_TRUE(
+            testutil::Compare(decoded_frames[i], frames[i], file_names[i],
+                              testutil::GetExpectedDistortion(quality)));
         EXPECT_EQ(decoded_durations_ms[i], durations_ms[i]);
       }
     }
@@ -88,12 +88,12 @@ INSTANTIATE_TEST_SUITE_P(
             {"source1_64x48.png"},
             /*frame durations (ms):*/ {1000},
             /*quality=*/0.0f, /*effort=*/4, /*thread_level=*/2,
-            {1, testing::DecoderType::kArray, WP2_Argb_32, kDoNotCompare, {}}),
+            {1, testutil::DecoderType::kArray, WP2_Argb_32, kDoNotCompare, {}}),
         Param({"alpha_ramp.png", "alpha_ramp.webp"},
               /*frame durations (ms):*/ {50, 1},
               /*quality=*/100.0f, /*effort=*/0, /*thread_level=*/4,
               {1,
-               testing::DecoderType::kUnstableCustom,
+               testutil::DecoderType::kUnstableCustom,
                WP2_ARGB_32,
                kDoNotCompare,
                {}}),
@@ -101,7 +101,7 @@ INSTANTIATE_TEST_SUITE_P(
               /*frame durations (ms):*/ {1000},
               /*quality=*/40.0f, /*effort=*/0, /*thread_level=*/0,
               {1,
-               testing::DecoderType::kSwappingCustom,
+               testutil::DecoderType::kSwappingCustom,
                WP2_rgbA_32,
                kDoNotCompare,
                {}})));
@@ -115,20 +115,23 @@ INSTANTIATE_TEST_SUITE_P(
               /*frame durations (ms):*/ {50, 70, 1},
               /*quality=*/100.0f, /*effort=*/2, /*thread_level=*/0,
               {1,
-               testing::DecoderType::kUnstableCustom,
+               testutil::DecoderType::kUnstableCustom,
                WP2_RGBA_32,
                kDoNotCompare,
                {}}),
-        Param(
-            {"source0.pgm", "source1.png", "source2.tiff", "source3.jpg"},
-            /*frame durations (ms):*/ {kMaxFrameDurationMs, 1, 20, 3},
-            /*quality=*/75.0f, /*effort=*/4, /*thread_level=*/8,
-            {1, testing::DecoderType::kStream, WP2_XRGB_32, kDoNotCompare, {}}),
+        Param({"source0.pgm", "source1.png", "source2.tiff", "source3.jpg"},
+              /*frame durations (ms):*/ {kMaxFrameDurationMs, 1, 20, 3},
+              /*quality=*/75.0f, /*effort=*/4, /*thread_level=*/8,
+              {1,
+               testutil::DecoderType::kStream,
+               WP2_XRGB_32,
+               kDoNotCompare,
+               {}}),
         Param({"source3.jpg", "source2.tiff", "source3.jpg"},
               /*frame durations (ms):*/ {123, 456, 789},
               /*quality=*/25.0f, /*effort=*/3, /*thread_level=*/5,
               {1,
-               testing::DecoderType::kSwappingCustom,
+               testutil::DecoderType::kSwappingCustom,
                WP2_RGBX_32,
                kDoNotCompare,
                {}}),
@@ -136,7 +139,7 @@ INSTANTIATE_TEST_SUITE_P(
               /*frame durations (ms):*/ {kMaxFrameDurationMs, 3},
               /*quality=*/75.0f, /*effort=*/2, /*thread_level=*/8,
               {1,
-               testing::DecoderType::kStream,
+               testutil::DecoderType::kStream,
                WP2_bgrA_32,
                kDoNotCompare,
                {}})));
@@ -147,11 +150,11 @@ INSTANTIATE_TEST_SUITE_P(
                             /*frame durations (ms):*/ {1000},
                             /*quality=*/0.0f, /*effort=*/4, /*thread_level=*/2,
                             {1,
-                             testing::DecoderType::kArray,
+                             testutil::DecoderType::kArray,
                              WP2_BGRA_32,
                              kDoNotCompare,
-                             {{testing::DecoderAction::Type::kRewind, 0, 0},
-                              {testing::DecoderAction::Type::kRewind, 100,
+                             {{testutil::DecoderAction::Type::kRewind, 0, 0},
+                              {testutil::DecoderAction::Type::kRewind, 100,
                                0}}})));
 
 // This one takes a while to run so it is disabled.
@@ -163,60 +166,60 @@ INSTANTIATE_TEST_SUITE_P(
               /*frame durations (ms):*/ {1},
               /*quality=*/100.0f, /*effort=*/7, /*thread_level=*/0,
               {1,
-               testing::DecoderType::kArray,
+               testutil::DecoderType::kArray,
                WP2_BGRX_32,
                kCompareWithSingleChunkDec,
-               {{testing::DecoderAction::Type::kRewind, 100000000, 0}}}),
+               {{testutil::DecoderAction::Type::kRewind, 100000000, 0}}}),
         Param({"test_exif_xmp.webp"},
               /*frame durations (ms):*/ {1},
               /*quality=*/33.0f, /*effort=*/0, /*thread_level=*/1,
               {1,
-               testing::DecoderType::kArray,
+               testutil::DecoderType::kArray,
                WP2_Argb_32,
                kDoNotCompare,
-               {{testing::DecoderAction::Type::kSkip, 35, 1}}}),
+               {{testutil::DecoderAction::Type::kSkip, 35, 1}}}),
         Param({"alpha_ramp.png", "alpha_ramp.lossy.webp", "alpha_ramp.webp"},
               /*frame durations (ms):*/ {50, 70, 1},
               /*quality=*/100.0f, /*effort=*/2, /*thread_level=*/0,
               {1,
-               testing::DecoderType::kUnstableCustom,
+               testutil::DecoderType::kUnstableCustom,
                WP2_RGB_24,
                kDoNotCompare,
-               {{testing::DecoderAction::Type::kSkip, 355, 1},
-                {testing::DecoderAction::Type::kRewindKeepBytes, 356, 0},
-                {testing::DecoderAction::Type::kSkip, 357, 0}}}),
+               {{testutil::DecoderAction::Type::kSkip, 355, 1},
+                {testutil::DecoderAction::Type::kRewindKeepBytes, 356, 0},
+                {testutil::DecoderAction::Type::kSkip, 357, 0}}}),
         Param({"source0.pgm", "source1.png", "source2.tiff", "source3.jpg"},
               /*frame durations (ms):*/ {kMaxFrameDurationMs, 1, 20, 3},
               /*quality=*/75.0f, /*effort=*/4, /*thread_level=*/8,
               {1,
-               testing::DecoderType::kStream,
+               testutil::DecoderType::kStream,
                WP2_BGR_24,
                kDoNotCompare,
-               {{testing::DecoderAction::Type::kSkip, 15, kMaxNumFrames + 1},
-                {testing::DecoderAction::Type::kRewindKeepBytes, 12000, 1}}}),
+               {{testutil::DecoderAction::Type::kSkip, 15, kMaxNumFrames + 1},
+                {testutil::DecoderAction::Type::kRewindKeepBytes, 12000, 1}}}),
         Param({"source0.pgm", "source1.png", "source2.tiff", "source3.jpg"},
               /*frame durations (ms):*/ {5689, 21121, 52, 3},
               /*quality=*/50.0f, /*effort=*/5, /*thread_level=*/4,
               {1,
-               testing::DecoderType::kArray,
+               testutil::DecoderType::kArray,
                WP2_Argb_32,
                kCompareWithSingleChunkDec,
-               {{testing::DecoderAction::Type::kSkip, 0, kMaxNumFrames},
-                {testing::DecoderAction::Type::kRewind, 100000000, 0},
-                {testing::DecoderAction::Type::kSkip, 0, 1},
-                {testing::DecoderAction::Type::kRewind,
+               {{testutil::DecoderAction::Type::kSkip, 0, kMaxNumFrames},
+                {testutil::DecoderAction::Type::kRewind, 100000000, 0},
+                {testutil::DecoderAction::Type::kSkip, 0, 1},
+                {testutil::DecoderAction::Type::kRewind,
                  kHeaderMaxSize + kANMFMaxHeaderSize + 1, 0},
-                {testing::DecoderAction::Type::kSkip, 0, kMaxNumFrames},
-                {testing::DecoderAction::Type::kRewind, 100000000, 0}}}),
+                {testutil::DecoderAction::Type::kSkip, 0, kMaxNumFrames},
+                {testutil::DecoderAction::Type::kRewind, 100000000, 0}}}),
         Param({"source3.jpg", "source2.tiff", "source3.jpg"},
               /*frame durations (ms):*/ {123, 456, 789},
               /*quality=*/25.0f, /*effort=*/3, /*thread_level=*/5,
               {1,
-               testing::DecoderType::kSwappingCustom,
+               testutil::DecoderType::kSwappingCustom,
                WP2_Argb_38,
                kDoNotCompare,
-               {{testing::DecoderAction::Type::kSkip, 0, 2},
-                {testing::DecoderAction::Type::kRewind, 100000000, 1}}})));
+               {{testutil::DecoderAction::Type::kSkip, 0, 2},
+                {testutil::DecoderAction::Type::kRewind, 100000000, 1}}})));
 
 //------------------------------------------------------------------------------
 
@@ -224,7 +227,7 @@ INSTANTIATE_TEST_SUITE_P(
 // pixels.
 TEST(AnimTestIncr, SkipAndCompareFeatures) {
   MemoryWriter writer;
-  ASSERT_WP2_OK(testing::CompressAnimation(
+  ASSERT_WP2_OK(testutil::CompressAnimation(
       {"source0.pgm", "source1.png", "source3.jpg", "source4.webp"},
       {50, 50, 50, 50}, &writer, nullptr, EncoderConfig::kDefault.quality,
       EncoderConfig::kDefault.effort, EncoderConfig::kDefault.thread_level,

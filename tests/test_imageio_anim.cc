@@ -28,8 +28,8 @@ namespace {
 
 // TODO(yguyon): test broken / exotic GIF files
 TEST(ReadImageTest, Animation) {
-  const std::string file_gif = testing::GetTestDataPath("animation0.gif");
-  const std::string file_webp = testing::GetTestDataPath("animation0.webp");
+  const std::string file_gif = testutil::GetTestDataPath("animation0.gif");
+  const std::string file_webp = testutil::GetTestDataPath("animation0.webp");
   const float expected_distortion = 35.f;
 
   std::vector<ArgbBuffer> frames_gif;
@@ -40,10 +40,10 @@ TEST(ReadImageTest, Animation) {
   std::vector<uint32_t> durations_webp;
   uint32_t loop_count_webp;
 
-  ASSERT_WP2_OK(testing::ReadAnimation(file_gif, &frames_gif, &durations_gif,
-                                       &loop_count_gif));
-  ASSERT_WP2_OK(testing::ReadAnimation(file_webp, &frames_webp, &durations_webp,
-                                       &loop_count_webp));
+  ASSERT_WP2_OK(testutil::ReadAnimation(file_gif, &frames_gif, &durations_gif,
+                                        &loop_count_gif));
+  ASSERT_WP2_OK(testutil::ReadAnimation(file_webp, &frames_webp,
+                                        &durations_webp, &loop_count_webp));
 
   ASSERT_EQ(frames_gif.size(), frames_webp.size());
   ASSERT_EQ(frames_gif.size(), durations_gif.size());
@@ -51,8 +51,8 @@ TEST(ReadImageTest, Animation) {
   EXPECT_EQ(loop_count_gif, loop_count_webp);
   for (size_t i = 0; i < frames_gif.size(); ++i) {
     EXPECT_EQ(durations_gif[i], durations_webp[i]);
-    EXPECT_TRUE(testing::Compare(frames_gif[i], frames_webp[i], "animation0",
-                                 expected_distortion));
+    EXPECT_TRUE(testutil::Compare(frames_gif[i], frames_webp[i], "animation0",
+                                  expected_distortion));
   }
 }
 
@@ -93,9 +93,9 @@ TEST(ReadImageTest, AnimationMetadata) {
   {
     ArgbBuffer decoded;
     ASSERT_WP2_OK(ReadImage(output.mem_, output.size_, &decoded));
-    EXPECT_TRUE(testing::HasSameData(decoded.metadata_.iccp, good_iccp));
-    EXPECT_TRUE(testing::HasSameData(decoded.metadata_.xmp, good_xmp));
-    EXPECT_TRUE(testing::HasSameData(decoded.metadata_.exif, good_exif));
+    EXPECT_TRUE(testutil::HasSameData(decoded.metadata_.iccp, good_iccp));
+    EXPECT_TRUE(testutil::HasSameData(decoded.metadata_.xmp, good_xmp));
+    EXPECT_TRUE(testutil::HasSameData(decoded.metadata_.exif, good_exif));
   }
 
   // Decode and check metadata for all frames.
@@ -105,9 +105,9 @@ TEST(ReadImageTest, AnimationMetadata) {
     bool is_last_frame = true;
     do {
       ASSERT_WP2_OK(image_reader.ReadFrame(&is_last_frame));
-      EXPECT_TRUE(testing::HasSameData(decoded.metadata_.iccp, good_iccp));
-      EXPECT_TRUE(testing::HasSameData(decoded.metadata_.xmp, good_xmp));
-      EXPECT_TRUE(testing::HasSameData(decoded.metadata_.exif, good_exif));
+      EXPECT_TRUE(testutil::HasSameData(decoded.metadata_.iccp, good_iccp));
+      EXPECT_TRUE(testutil::HasSameData(decoded.metadata_.xmp, good_xmp));
+      EXPECT_TRUE(testutil::HasSameData(decoded.metadata_.exif, good_exif));
     } while (!is_last_frame);
   }
 }

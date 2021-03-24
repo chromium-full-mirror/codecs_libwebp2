@@ -37,7 +37,7 @@ class DspTest : public ::testing::TestWithParam<WP2CPUInfo> {
 
 TEST_P(DspTest, SSETest16s) {
   WP2PSNRInit();
-  testing::PrecalculatedRandom<65536u, int16_t> rnd(-1024, 1024);
+  testutil::PrecalculatedRandom<65536u, int16_t> rnd(-1024, 1024);
   uint64_t sum = 0;
   constexpr uint32_t max_h = 128;
   constexpr uint32_t max_w = 128;
@@ -57,7 +57,7 @@ TEST_P(DspTest, SSETest16s) {
 
 TEST_P(DspTest, SSETest16sHalf) {
   WP2PSNRInit();
-  testing::PrecalculatedRandom<65536u, int16_t> rnd(-1024, 1024);
+  testutil::PrecalculatedRandom<65536u, int16_t> rnd(-1024, 1024);
   uint64_t sum = 0;
   constexpr uint32_t max_h = 128;
   constexpr uint32_t max_w = 128;
@@ -77,7 +77,7 @@ TEST_P(DspTest, SSETest16sHalf) {
 
 TEST_P(DspTest, SSETest8u) {
   WP2PSNRInit();
-  testing::PrecalculatedRandom<65536u, uint8_t> rnd(0, 256);
+  testutil::PrecalculatedRandom<65536u, uint8_t> rnd(0, 256);
   uint64_t sum = 0;
   constexpr uint32_t max_w = 128;
   for (uint32_t N = 0; N < 3000000; ++N) {
@@ -93,7 +93,7 @@ TEST_P(DspTest, SSETest8u) {
 
 TEST_P(DspTest, SSETest4x8u) {
   WP2PSNRInit();
-  testing::PrecalculatedRandom<65536u, uint8_t> rnd(0, 256);
+  testutil::PrecalculatedRandom<65536u, uint8_t> rnd(0, 256);
   constexpr uint32_t max_w = 128;
   uint64_t sums[4] = { 0 };
   for (uint32_t N = 0; N < 2000000; ++N) {
@@ -154,8 +154,8 @@ TEST_P(DspTest, ANSGetSymbol) {
 
 TEST_P(DspTest, Alpha) {
   WP2AlphaInit();
-  testing::PrecalculatedRandom<65536u, uint8_t> rnd8(0, 256);
-  testing::PrecalculatedRandom<65536u, int16_t> rnd16(-32768, 32768);
+  testutil::PrecalculatedRandom<65536u, uint8_t> rnd8(0, 256);
+  testutil::PrecalculatedRandom<65536u, int16_t> rnd16(-32768, 32768);
   const uint32_t kMaxLen = 500;
   std::vector<uint8_t> tmp8(kMaxLen, 0);
   std::vector<int16_t> tmp16(kMaxLen, 0);
@@ -288,7 +288,7 @@ TEST_P(DspTest, CdefDirection8x8) {
 //------------------------------------------------------------------------------
 
 INSTANTIATE_TEST_SUITE_P(DspTestInstantiation, DspTest,
-    ::testing::ValuesIn(testing::kWP2CpuInfos));
+                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
 
 }  // namespace
 }  // namespace WP2

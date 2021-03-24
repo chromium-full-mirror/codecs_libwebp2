@@ -150,7 +150,7 @@ class DistoTest
 // samples are alpha-premultiplied).
 TEST_P(DistoTest, ComparedToRGB) {
   const std::string file_path =
-      testing::GetTestDataPath(std::get<0>(GetParam()));
+      testutil::GetTestDataPath(std::get<0>(GetParam()));
   const MetricType metric = std::get<1>(GetParam());
 
   // Load image into 'original_ccsp' and apply noise to get 'distorted_ccsp'.
@@ -159,10 +159,11 @@ TEST_P(DistoTest, ComparedToRGB) {
   ASSERT_WP2_OK(ReadImage(file_path.c_str(), &original_ccsp, &ccsp_to_rgb));
   ASSERT_WP2_OK(distorted_ccsp.Copy(original_ccsp, /*resize_if_needed=*/true));
   // Distort alpha first then clamp distorted RGB samples.
-  testing::Noise(0, 255, /*seed=*/kAChannel, /*strength=*/5, &distorted_ccsp.A);
+  testutil::Noise(0, 255, /*seed=*/kAChannel, /*strength=*/5,
+                  &distorted_ccsp.A);
   for (Channel channel : {kYChannel, kUChannel, kVChannel}) {
     Plane16* const plane = &distorted_ccsp.GetChannel(channel);
-    testing::Noise(0, 255, /*seed=*/channel, /*strength=*/5, plane);
+    testutil::Noise(0, 255, /*seed=*/channel, /*strength=*/5, plane);
     if (distorted_ccsp.HasAlpha()) {
       assert(!distorted_ccsp.IsDownsampled());
       for (uint32_t y = 0; y < plane->h_; ++y) {
@@ -224,7 +225,7 @@ TEST_P(DistoTest, ComparedToRGB) {
 // Compare distortion for down/upsampled chroma.
 TEST_P(DistoTest, ChromaSubsampling) {
   const std::string file_path =
-      testing::GetTestDataPath(std::get<0>(GetParam()));
+      testutil::GetTestDataPath(std::get<0>(GetParam()));
   const MetricType metric = std::get<1>(GetParam());
 
   // Load image into 'original_ccsp' and apply noise to get 'distorted_ccsp'.
@@ -237,8 +238,8 @@ TEST_P(DistoTest, ChromaSubsampling) {
 
   ASSERT_WP2_OK(distorted_420.Copy(original_420, /*resize_if_needed=*/true));
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    testing::Noise(0, 255, /*seed=*/channel, /*strength=*/5,
-                   &distorted_420.GetChannel(channel));
+    testutil::Noise(0, 255, /*seed=*/channel, /*strength=*/5,
+                    &distorted_420.GetChannel(channel));
   }
 
   // 420 -> 444 with no interpolation for closer distortion.
@@ -385,7 +386,7 @@ TEST_P(MorePreciseCCSPTest, EncodeDecode) {
 
   Data data;
   ASSERT_WP2_OK(
-      IoUtilReadFile(testing::GetTestDataPath(file_name).c_str(), &data));
+      IoUtilReadFile(testutil::GetTestDataPath(file_name).c_str(), &data));
   const FileFormat format = GuessImageFormat(data.bytes, data.size);
   uint32_t bit_depth;
   ASSERT_WP2_OK(ReadBitDepth(data.bytes, data.size, &bit_depth));

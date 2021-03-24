@@ -33,7 +33,7 @@ TEST_P(UVModeTest, Simple) {
   EncoderConfig config = EncoderConfig::kDefault;
   config.uv_mode = std::get<1>(GetParam());
 
-  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testutil::EncodeDecodeCompare(file_name, config));
 }
 
 INSTANTIATE_TEST_SUITE_P(

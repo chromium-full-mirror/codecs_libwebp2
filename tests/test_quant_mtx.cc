@@ -208,8 +208,8 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
         EXPECT_EQ(out2[i], 0);
       }
       for (uint32_t i = 0; i < len; ++i) {
-        crc1 = testing::SillyCRC(crc1, out1[i]);
-        crc2 = testing::SillyCRC(crc2, out2[i]);
+        crc1 = testutil::SillyCRC(crc1, out1[i]);
+        crc2 = testutil::SillyCRC(crc2, out2[i]);
       }
     }
   }
@@ -218,7 +218,7 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
 }
 
 INSTANTIATE_TEST_SUITE_P(QuantMtxTest1Instantiation, QuantMtxTestCpuInfo,
-                         ::testing::ValuesIn(testing::kWP2CpuInfos));
+                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
 
 //------------------------------------------------------------------------------
 

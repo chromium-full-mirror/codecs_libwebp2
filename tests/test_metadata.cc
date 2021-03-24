@@ -27,7 +27,7 @@ namespace {
 // Encode decode metadata of 1 byte per ICC, EXIF and XMP chunk.
 TEST(MetadataTest, MinChunkSize) {
   ArgbBuffer original, decoded;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath("source1_1x1.png").c_str(),
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath("source1_1x1.png").c_str(),
                           &original));
 
   Metadata& a = original.metadata_;
@@ -43,9 +43,9 @@ TEST(MetadataTest, MinChunkSize) {
   ASSERT_WP2_OK(Decode(memory_writer.mem_, memory_writer.size_, &decoded));
   const Metadata& b = decoded.metadata_;
 
-  EXPECT_TRUE(testing::HasSameData(a.iccp, b.iccp));
-  EXPECT_TRUE(testing::HasSameData(a.xmp, b.xmp));
-  EXPECT_TRUE(testing::HasSameData(a.exif, b.exif));
+  EXPECT_TRUE(testutil::HasSameData(a.iccp, b.iccp));
+  EXPECT_TRUE(testutil::HasSameData(a.xmp, b.xmp));
+  EXPECT_TRUE(testutil::HasSameData(a.exif, b.exif));
 }
 
 //------------------------------------------------------------------------------
@@ -53,7 +53,7 @@ TEST(MetadataTest, MinChunkSize) {
 // Encode decode metadata of maximum size per ICC, EXIF and XMP chunk.
 TEST(MetadataTest, MaxChunkSize) {
   ArgbBuffer original, decoded;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath("source1_1x1.png").c_str(),
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath("source1_1x1.png").c_str(),
                           &original));
 
   Metadata& a = original.metadata_;
@@ -70,9 +70,9 @@ TEST(MetadataTest, MaxChunkSize) {
   ASSERT_WP2_OK(Decode(memory_writer.mem_, memory_writer.size_, &decoded));
   const Metadata& b = decoded.metadata_;
 
-  EXPECT_TRUE(testing::HasSameData(a.iccp, b.iccp));
-  EXPECT_TRUE(testing::HasSameData(a.xmp, b.xmp));
-  EXPECT_TRUE(testing::HasSameData(a.exif, b.exif));
+  EXPECT_TRUE(testutil::HasSameData(a.iccp, b.iccp));
+  EXPECT_TRUE(testutil::HasSameData(a.xmp, b.xmp));
+  EXPECT_TRUE(testutil::HasSameData(a.exif, b.exif));
 }
 
 //------------------------------------------------------------------------------
@@ -80,7 +80,7 @@ TEST(MetadataTest, MaxChunkSize) {
 // Make sure metadata of forbidden size fails the encoding.
 TEST(MetadataTest, MaxChunkSizePlusOne) {
   ArgbBuffer original;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath("source1_1x1.png").c_str(),
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath("source1_1x1.png").c_str(),
                           &original));
 
   ASSERT_WP2_OK(

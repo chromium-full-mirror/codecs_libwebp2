@@ -57,8 +57,8 @@ YUVPlane CreateNoisyWavyPixels(uint32_t width, uint32_t height,
   Wave(min_value, max_value, kPi * 0.5, pixels.U.h_, &pixels.U);  // Vertical.
   Wave(min_value, max_value, kPi * 2.1, 10., &pixels.V);          // Something.
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    testing::Noise(min_value, max_value, /*seed=*/channel, /*strength=*/5,
-                   &pixels.GetChannel(channel));
+    testutil::Noise(min_value, max_value, /*seed=*/channel, /*strength=*/5,
+                    &pixels.GetChannel(channel));
   }
   return pixels;
 }
@@ -67,12 +67,12 @@ YUVPlane CreateNoisyWavyPixels(uint32_t width, uint32_t height,
 void Filter(uint32_t num_precision_bits, int16_t min_value, int16_t max_value,
             uint32_t quality_hint, YUVPlane* const pixels) {
   const Vector<Segment> segments =
-      testing::CreateSegments(quality_hint, min_value, max_value);
+      testutil::CreateSegments(quality_hint, min_value, max_value);
   const double residual_density = 1. * quality_hint / kMaxLossyQualityHint;
   const double min_bpp = 4. * quality_hint / kMaxLossyQualityHint;
   FilterBlockMap blocks;
-  testing::CreateBlocks(/*tile_x=*/0, /*tile_y=*/0, segments, residual_density,
-                        min_bpp, num_precision_bits, pixels, &blocks);
+  testutil::CreateBlocks(/*tile_x=*/0, /*tile_y=*/0, segments, residual_density,
+                         min_bpp, num_precision_bits, pixels, &blocks);
 
   DecoderConfig config = DecoderConfig::kDefault;
   config.enable_directional_filter = true;
@@ -99,29 +99,29 @@ class DirectionalFilterTest : public ::testing::TestWithParam<
 // Tests that no pixel is modified if each plane has one unique color.
 TEST_P(DirectionalFilterTest, FilteringPlain) {
   const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
   YUVPlane pixels =
-      testing::CreatePlainPixels(width, height, min_value, max_value);
+      testutil::CreatePlainPixels(width, height, min_value, max_value);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
   ASSERT_NO_FATAL_FAILURE(Filter(num_precision_bits, min_value, max_value,
                                  /*quality_hint=*/0, &pixels));
 
-  EXPECT_TRUE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_TRUE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_TRUE(testing::AreEqual(pixels.V, reference.V));
+  EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_TRUE(testutil::AreEqual(pixels.V, reference.V));
 }
 
 // Tests that pixels are filtered.
 TEST_P(DirectionalFilterTest, MaxFilteringBlocked) {
   const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
@@ -132,16 +132,16 @@ TEST_P(DirectionalFilterTest, MaxFilteringBlocked) {
   ASSERT_NO_FATAL_FAILURE(Filter(num_precision_bits, min_value, max_value,
                                  /*quality_hint=*/0, &pixels));
 
-  EXPECT_FALSE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_FALSE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_FALSE(testing::AreEqual(pixels.V, reference.V));
+  EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_FALSE(testutil::AreEqual(pixels.V, reference.V));
 }
 
 // Tests that no pixel is modified if it's the highest quality.
 TEST_P(DirectionalFilterTest, NoFiltering) {
   const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
@@ -153,9 +153,9 @@ TEST_P(DirectionalFilterTest, NoFiltering) {
                                  /*quality_hint=*/kMaxLossyQualityHint,
                                  &pixels));
 
-  EXPECT_TRUE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_TRUE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_TRUE(testing::AreEqual(pixels.V, reference.V));
+  EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_TRUE(testutil::AreEqual(pixels.V, reference.V));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -177,8 +177,8 @@ TEST(DirectionalFilterTest, Simple) {
   decoder_config.enable_directional_filter = true;
   decoder_config.enable_restoration_filter = false;
 
-  ASSERT_TRUE(testing::EncodeDecodeCompare("source4.webp", encoder_config,
-                                           decoder_config));
+  ASSERT_TRUE(testutil::EncodeDecodeCompare("source4.webp", encoder_config,
+                                            decoder_config));
 }
 
 // Tests that PSNR is better with the directional filter than without.
@@ -193,10 +193,9 @@ TEST(DirectionalFilterTest, BetterPSNR) {
   decoder_config_filter.enable_directional_filter = true;
 
   float disto_diff[5];
-  ASSERT_WP2_OK(
-      testing::GetDistortionDiff("source1.png", {1, 42, 300, 66},
-                                 encoder_config, decoder_config_no_filter,
-                                 decoder_config_filter, disto_diff));
+  ASSERT_WP2_OK(testutil::GetDistortionDiff(
+      "source1.png", {1, 42, 300, 66}, encoder_config, decoder_config_no_filter,
+      decoder_config_filter, disto_diff));
   EXPECT_GT(disto_diff[4], 0.f);
 }
 

@@ -27,9 +27,9 @@ namespace WP2 {
 namespace {
 
 void BM_DecodeImage(benchmark::State& state) {
-  const char* const file_name = testing::kFiles[state.range(0)];
+  const char* const file_name = testutil::kFiles[state.range(0)];
   ArgbBuffer original;
-  ASSERT_EQ(ReadImage(testing::GetTestDataPath(file_name).c_str(), &original),
+  ASSERT_EQ(ReadImage(testutil::GetTestDataPath(file_name).c_str(), &original),
             WP2_STATUS_OK);
 
   MemoryWriter data;
@@ -41,7 +41,7 @@ void BM_DecodeImage(benchmark::State& state) {
     EXPECT_EQ(Decode(data.mem_, data.size_, &output), WP2_STATUS_OK);
   }
 }
-BENCHMARK(BM_DecodeImage)->DenseRange(0, testing::kNumFiles - 1);
+BENCHMARK(BM_DecodeImage)->DenseRange(0, testutil::kNumFiles - 1);
 
 }  // namespace
 }  // namespace WP2

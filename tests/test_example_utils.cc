@@ -29,8 +29,8 @@ namespace {
 //------------------------------------------------------------------------------
 
 TEST(PathTest, Simple) {
-  ASSERT_TRUE(IsDirectory(testing::GetTestDataPath("")));
-  ASSERT_FALSE(IsDirectory(testing::GetTestDataPath("source1.png")));
+  ASSERT_TRUE(IsDirectory(testutil::GetTestDataPath("")));
+  ASSERT_FALSE(IsDirectory(testutil::GetTestDataPath("source1.png")));
 
 #if defined(_WIN32)
   ASSERT_EQ(JoinPath("path", "file.png"), "path\\file.png");

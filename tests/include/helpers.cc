@@ -26,7 +26,7 @@
 #include "src/wp2/base.h"
 
 namespace WP2 {
-namespace testing {
+namespace testutil {
 
 //------------------------------------------------------------------------------
 
@@ -338,7 +338,7 @@ void ProgressTimeout::Reset() {
     const DecoderConfig& decoder_config) {
   ArgbBuffer original;
   WP2Status status =
-      ReadImage(testing::GetTestDataPath(file_name).c_str(), &original);
+      ReadImage(testutil::GetTestDataPath(file_name).c_str(), &original);
   if (status != WP2_STATUS_OK) {
     return ::testing::AssertionFailure() << "Failed to read file " << file_name
                                          << ": " << WP2GetStatusMessage(status);
@@ -359,8 +359,8 @@ void ProgressTimeout::Reset() {
            << "Failed to decode: " << WP2GetStatusMessage(status);
   }
 
-  return testing::Compare(original, decompressed, file_name,
-                          testing::GetExpectedDistortion(encoder_config));
+  return testutil::Compare(original, decompressed, file_name,
+                           testutil::GetExpectedDistortion(encoder_config));
 }
 
 WP2Status GetDistortionDiff(const std::string& file_name,
@@ -477,7 +477,7 @@ void CreatePartition(uint32_t w, uint32_t h, bool snapped,
 
 //------------------------------------------------------------------------------
 
-}  // namespace testing
+}  // namespace testutil
 }  // namespace WP2
 
 #define PRINT_SETTING1(var_name)                                             \

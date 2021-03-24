@@ -192,7 +192,7 @@ TEST_P(YUVImportExportTest, All) {
                                             : (csp_type != Csp::kYCoCg)  ? 50.f
                                                                          : 99.f;
           ASSERT_TRUE(
-              testing::Compare(buffer, converted, "1x1", expected_distortion));
+              testutil::Compare(buffer, converted, "1x1", expected_distortion));
         }
       }
     }
@@ -222,7 +222,7 @@ TEST_P(BackAndForthTest, Comparison) {
 
   YUVPlane original;
   CSPMtx file_to_rgb = {};
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(),
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(file_name).c_str(),
                           &original, &file_to_rgb));
   if (original.IsDownsampled()) {
     ASSERT_WP2_OK(original.Upsample());
@@ -250,8 +250,8 @@ TEST_P(BackAndForthTest, Comparison) {
     // right shift or a clamping of the samples (int16_t) during the RGB step.
     const float expected_distortion =
         (file_to_rgb.shift - kept_precision == 0) ? 99.f : 50.f;
-    EXPECT_TRUE(testing::Compare(converted, bypass_rgb, ccsp_bit_depth,
-                                 file_name, expected_distortion));
+    EXPECT_TRUE(testutil::Compare(converted, bypass_rgb, ccsp_bit_depth,
+                                  file_name, expected_distortion));
   }
 
   {
@@ -259,8 +259,8 @@ TEST_P(BackAndForthTest, Comparison) {
     ASSERT_WP2_OK(back_to_rgb.Copy(converted, /*resize_if_needed=*/true));
     ASSERT_WP2_OK(back_to_rgb.Apply(ccsp_to_rgb.mtx(), ccsp_to_rgb.shift));
     // Almost no loss thanks to the 'kept_precision' above.
-    EXPECT_TRUE(testing::Compare(rgb, back_to_rgb, ccsp_bit_depth, file_name,
-                                 /*expected_distortion=*/90.f));
+    EXPECT_TRUE(testutil::Compare(rgb, back_to_rgb, ccsp_bit_depth, file_name,
+                                  /*expected_distortion=*/90.f));
   }
 }
 
@@ -284,14 +284,14 @@ TEST(CspCustomTest, Simple) {
 
   // Make sure Csp::kCustom is going to be used and not the default Csp::kYCoCg.
   ArgbBuffer img;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(), &img));
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(file_name).c_str(), &img));
   CSPTransform transf;
   ASSERT_WP2_OK(transf.Init(Csp::kCustom, img));
   ASSERT_EQ(transf.GetType(), Csp::kCustom);
 
   EncoderConfig config = EncoderConfig::kDefault;
   config.csp_type = Csp::kCustom;
-  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testutil::EncodeDecodeCompare(file_name, config));
 }
 
 //------------------------------------------------------------------------------
@@ -350,7 +350,7 @@ class SpeedTest : public ::testing::TestWithParam<WP2CPUInfo> {
       for (uint32_t iter = 0; iter < kIter; ++iter) {
         func(y, u, v, a, avg_, mtx_, &out[0], len);
       }
-      for (auto i : out) crc = testing::SillyCRC(crc, i);
+      for (auto i : out) crc = testutil::SillyCRC(crc, i);
     }
     return crc;
   }
@@ -372,7 +372,7 @@ class SpeedTest : public ::testing::TestWithParam<WP2CPUInfo> {
       for (uint32_t iter = 0; iter < kIter; ++iter) {
         func(y, u, v, avg_, mtx_, &out[0], len);
       }
-      for (auto i : out) crc = testing::SillyCRC(crc, i);
+      for (auto i : out) crc = testutil::SillyCRC(crc, i);
     }
     return crc;
   }
@@ -395,7 +395,7 @@ TEST_P(SpeedTest, YuvToCustom) {
                      &out[0 * kMaxLen], &out[1 * kMaxLen], &out[2 * kMaxLen],
                      len);
     }
-    for (auto i : out) crc = testing::SillyCRC(crc, i);
+    for (auto i : out) crc = testutil::SillyCRC(crc, i);
   }
   EXPECT_EQ(crc, 1929850794u);
 }
@@ -431,7 +431,7 @@ TEST_P(SpeedTest, YuvToArgb38) {
 }
 
 INSTANTIATE_TEST_SUITE_P(SpeedTestInstantiation, SpeedTest,
-    ::testing::ValuesIn(testing::kWP2CpuInfos));
+                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
 
 //------------------------------------------------------------------------------
 

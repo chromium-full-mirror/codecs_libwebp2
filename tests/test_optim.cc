@@ -164,7 +164,7 @@ TEST_P(ImageTest, ImageOptimTest) {
 
   ArgbBuffer pic;
   size_t size = 0;
-  const std::string name = testing::GetTestDataPath(std::get<0>(GetParam()));
+  const std::string name = testutil::GetTestDataPath(std::get<0>(GetParam()));
   ASSERT_WP2_OK(ReadImage(name.c_str(), &pic, &size));
 
   YUVPlane yuv;
@@ -203,12 +203,12 @@ TEST_P(ImageTest, ImageOptimTest) {
   ArgbBuffer pic2;
   ASSERT_WP2_OK(ref.Export(transf, /*resize_if_needed=*/true, &pic2));
   if (debug) {
-    const std::string temp_file = testing::GetTempDataPath("tmp2.png");
+    const std::string temp_file = testutil::GetTempDataPath("tmp2.png");
     ASSERT_TRUE(SaveImage(pic2, temp_file.c_str(), /*overwrite=*/true))
         << "Error while saving temp file " << temp_file;
     printf("saved %s\n", temp_file.c_str());
   }
-  ASSERT_TRUE(testing::Compare(pic, pic2, name, 30.f));
+  ASSERT_TRUE(testutil::Compare(pic, pic2, name, 30.f));
 }
 
 INSTANTIATE_TEST_SUITE_P(ImageTestInstantiation, ImageTest,

@@ -26,9 +26,9 @@ namespace WP2 {
 namespace {
 
 void BM_EncodeImage(benchmark::State& state) {
-  const char* const file_name = testing::kFiles[state.range(0)];
+  const char* const file_name = testutil::kFiles[state.range(0)];
   ArgbBuffer original;
-  ASSERT_EQ(ReadImage(testing::GetTestDataPath(file_name).c_str(), &original),
+  ASSERT_EQ(ReadImage(testutil::GetTestDataPath(file_name).c_str(), &original),
             WP2_STATUS_OK);
 
   for (const auto& _ : state) {
@@ -37,7 +37,7 @@ void BM_EncodeImage(benchmark::State& state) {
     EXPECT_EQ(Encode(original, &data), WP2_STATUS_OK);
   }
 }
-BENCHMARK(BM_EncodeImage)->DenseRange(0, testing::kNumFiles - 1);
+BENCHMARK(BM_EncodeImage)->DenseRange(0, testutil::kNumFiles - 1);
 
 }  // namespace
 }  // namespace WP2

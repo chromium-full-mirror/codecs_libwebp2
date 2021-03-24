@@ -64,7 +64,7 @@
 extern void WP2DspReset();
 
 namespace WP2 {
-namespace testing {
+namespace testutil {
 
 //------------------------------------------------------------------------------
 
@@ -284,7 +284,7 @@ static inline uint32_t SillyCRC(uint32_t crc, uint32_t v) {
   return ((crc >> 3) + (17 + v)) ^ ((crc << 5) * (23 + 7 * v));
 }
 
-}  // namespace testing
+}  // namespace testutil
 }  // namespace WP2
 
 // Displays an error message instead of a number, even in ASSERT_EQ() output.

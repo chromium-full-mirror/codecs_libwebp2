@@ -64,7 +64,7 @@ TEST_P(DecodeCustomCspTest, Comparison) {
 
   ArgbBuffer src;
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath(src_file_name).c_str(), &src));
+      ReadImage(testutil::GetTestDataPath(src_file_name).c_str(), &src));
   if (!keep_alpha) {
     ASSERT_WP2_OK(src.CompositeOver(Argb32b{255, 0, 0, 0}));
   }
@@ -79,8 +79,8 @@ TEST_P(DecodeCustomCspTest, Comparison) {
   ArgbBuffer ref;
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &ref));
   // No point in going further if the reference does not pass.
-  ASSERT_TRUE(testing::Compare(src, ref, src_file_name,
-                               testing::GetExpectedDistortion(quality)));
+  ASSERT_TRUE(testutil::Compare(src, ref, src_file_name,
+                                testutil::GetExpectedDistortion(quality)));
 
   YUVPlane custom_output;  // Might contain RGB.
   Metadata metadata;
@@ -107,9 +107,9 @@ TEST_P(DecodeCustomCspTest, Comparison) {
       get_metadata ? &metadata : nullptr));
 
   if (get_metadata) {
-    EXPECT_TRUE(testing::HasSameData(metadata.iccp, ref.metadata_.iccp));
-    EXPECT_TRUE(testing::HasSameData(metadata.xmp, ref.metadata_.xmp));
-    EXPECT_TRUE(testing::HasSameData(metadata.exif, ref.metadata_.exif));
+    EXPECT_TRUE(testutil::HasSameData(metadata.iccp, ref.metadata_.iccp));
+    EXPECT_TRUE(testutil::HasSameData(metadata.xmp, ref.metadata_.xmp));
+    EXPECT_TRUE(testutil::HasSameData(metadata.exif, ref.metadata_.exif));
   }
 
   switch (matrix) {
@@ -143,15 +143,16 @@ TEST_P(DecodeCustomCspTest, Comparison) {
         }
       }
       // Compare the source input with the custom RGB output.
-      EXPECT_TRUE(testing::Compare(src, output, src_file_name,
-                                   testing::GetExpectedDistortion(quality)));
+      EXPECT_TRUE(testutil::Compare(src, output, src_file_name,
+                                    testutil::GetExpectedDistortion(quality)));
       // Compare the reference output with the custom RGB output.
       // For kRGB10 there might be a slight difference due to rounding.
       // For transparent images, the lack of clamping by alpha of
       // CSPTransform::YuvToCustom() can lead to noticeable differences.
       const float expected_disto =
           is_opaque ? ((matrix == Matrix::kRGB10) ? 45.f : 99.f) : 35.f;
-      EXPECT_TRUE(testing::Compare(ref, output, src_file_name, expected_disto));
+      EXPECT_TRUE(
+          testutil::Compare(ref, output, src_file_name, expected_disto));
       break;
     }
     case Matrix::kYCoCg:
@@ -195,9 +196,9 @@ TEST_P(DecodeCustomCspTest, Comparison) {
       // might also be some slight rounding discrepancies.
       const float expected_disto =
           (quality <= kMaxLossyQuality) ? (is_opaque ? 55.f : 45.f) : 85.f;
-      EXPECT_TRUE(
-          testing::Compare(ref_yuv, non_padded_yuv, bit_depth, src_file_name,
-                           expected_disto)) << "quality : " << quality;
+      EXPECT_TRUE(testutil::Compare(ref_yuv, non_padded_yuv, bit_depth,
+                                    src_file_name, expected_disto))
+          << "quality : " << quality;
       break;
     }
   }
@@ -289,7 +290,7 @@ TEST_P(StrideBufferSizeTest, Combination) {
   const BufferParam& p = GetParam();
 
   MemoryWriter data;
-  ASSERT_WP2_OK(testing::CompressImage(p.src_file_name, &data));
+  ASSERT_WP2_OK(testutil::CompressImage(p.src_file_name, &data));
 
   Data r, g, b, a;
   ASSERT_WP2_OK(r.Resize(p.r_buffer_size, /*keep_bytes=*/false));
@@ -319,7 +320,7 @@ class YUVPlaneTest : public ::testing::TestWithParam<std::string> {};
 
 TEST_P(YUVPlaneTest, LosslessUpsampling) {
   const std::string& file_name = GetParam();
-  const std::string file_path = testing::GetTestDataPath(file_name);
+  const std::string file_path = testutil::GetTestDataPath(file_name);
 
   YUVPlane original;
   CSPMtx ccsp_to_rgb = {};
@@ -334,18 +335,18 @@ TEST_P(YUVPlaneTest, LosslessUpsampling) {
   // Upsampling then downsampling with no interpolation is lossless.
   ASSERT_WP2_OK(upsampled.UpsampleFrom(original, SamplingTaps::kUpNearest));
   ASSERT_WP2_OK(upsampled.Downsample(SamplingTaps::kDownAvg));
-  EXPECT_TRUE(testing::Compare(original, upsampled, bit_depth, file_name));
+  EXPECT_TRUE(testutil::Compare(original, upsampled, bit_depth, file_name));
 
   // Lossy upsampling and downsampling.
   ASSERT_WP2_OK(upsampled.UpsampleFrom(original, SamplingTaps::kUpSmooth));
   ASSERT_WP2_OK(upsampled.Downsample(SamplingTaps::kDownSharp));
   EXPECT_TRUE(
-      testing::Compare(original, upsampled, bit_depth, file_name, 30.f));
+      testutil::Compare(original, upsampled, bit_depth, file_name, 30.f));
 }
 
 TEST_P(YUVPlaneTest, NotTooLossyDownsampling) {
   const std::string& file_name = GetParam();
-  const std::string file_path = testing::GetTestDataPath(file_name);
+  const std::string file_path = testutil::GetTestDataPath(file_name);
 
   YUVPlane original;
   CSPMtx ccsp_to_rgb = {};
@@ -360,13 +361,13 @@ TEST_P(YUVPlaneTest, NotTooLossyDownsampling) {
   ASSERT_WP2_OK(downsampled.DownsampleFrom(original, SamplingTaps::kDownAvg));
   ASSERT_WP2_OK(downsampled.Upsample(SamplingTaps::kUpNearest));
   EXPECT_TRUE(
-      testing::Compare(original, downsampled, bit_depth, file_name, 28.f));
+      testutil::Compare(original, downsampled, bit_depth, file_name, 28.f));
 
   // save the furniture
   ASSERT_WP2_OK(downsampled.DownsampleFrom(original, SamplingTaps::kDownSharp));
   ASSERT_WP2_OK(downsampled.Upsample(SamplingTaps::kUpSmooth));
   EXPECT_TRUE(
-      testing::Compare(original, downsampled, bit_depth, file_name, 29.f));
+      testutil::Compare(original, downsampled, bit_depth, file_name, 29.f));
 
   float disto[5];
   ASSERT_WP2_OK(downsampled.GetDistortion(original, bit_depth, PSNR, disto));

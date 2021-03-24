@@ -39,8 +39,8 @@ uint32_t CountColors(const ArgbBuffer& buffer) {
 
 TEST(PreprocessNearLosslessTest, Photo) {
   ArgbBuffer original;
-  ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath("background.png").c_str(), &original));
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath("background.png").c_str(),
+                          &original));
   original.SimpleHalfDownsample();  // Speed up the test.
 
   // Encode losslessly.
@@ -78,7 +78,7 @@ TEST(PreprocessNearLosslessTest, Photo) {
 TEST(PreprocessNearLosslessTest, Mask) {
   ArgbBuffer original;
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath("logo.png").c_str(), &original));
+      ReadImage(testutil::GetTestDataPath("logo.png").c_str(), &original));
   original.SimpleHalfDownsample();  // Speed up the test.
 
   // Convert image to an opaque grayscale mask.

@@ -50,7 +50,7 @@ TEST_P(SpeedTestCpuInfo, TestAddSub) {
     const uint32_t len = (rng.GetUnsigned(kMaxLen - 1) + 1) & ~3;
     const int32_t min = -(1 + rng.GetUnsigned(1023u));
     const int32_t max =  (1 + rng.GetUnsigned(1023u));
-    testing::PrecalculatedRandom<kMaxLen * 3, int16_t> rnd16(-2048, 2048);
+    testutil::PrecalculatedRandom<kMaxLen * 3, int16_t> rnd16(-2048, 2048);
     for (uint32_t l = 0; l < kNumLoops; ++l) {
       rnd16.Fill(src, len);
       rnd16.Fill(pred, len);
@@ -82,7 +82,7 @@ TEST_P(SpeedTestCpuInfo, TestAddSubBlock) {
       const uint32_t height = 1 + rng.GetUnsigned(32 - 1);
       const int32_t min = -(1 + rng.GetUnsigned(1023u));
       const int32_t max =  (1 + rng.GetUnsigned(1023u));
-      testing::PrecalculatedRandom<kMaxLen * 3, int16_t> rnd16(-2048, 2048);
+      testutil::PrecalculatedRandom<kMaxLen * 3, int16_t> rnd16(-2048, 2048);
       for (uint32_t l = 0; l < kNumLoops; ++l) {
         rnd16.Fill(src, kMaxLen);
         rnd16.Fill(pred, kMaxLen);
@@ -133,7 +133,7 @@ TEST_P(SpeedTestCpuInfo, TestBufferAdd) {
   for (auto& c : C) c = 0;
   for (auto& d : D) d = 0;
   for (uint32_t t = 0; t < kNumTests; ++t) {
-    testing::PrecalculatedRandom<kMaxLen * 2, uint32_t> rnd32(0, 1 << 12);
+    testutil::PrecalculatedRandom<kMaxLen * 2, uint32_t> rnd32(0, 1 << 12);
     const uint32_t proba = rng.GetUnsigned(255);
     uint32_t nzero = rng.GetUnsigned(532);  // shouldn't matter
     uint32_t* nzero_ptr = &nzero;
@@ -147,11 +147,11 @@ TEST_P(SpeedTestCpuInfo, TestBufferAdd) {
       rnd32.Fill(&B[0], len);
       WP2L::BufferAdd(&A[0], &B[0], len, &C[0], nzero_ptr);
       WP2L::BufferAdd(&A[0], &D[0], len, &D[0], nzero_ptr);
-      CRC = testing::SillyCRC(CRC, nzero);
+      CRC = testutil::SillyCRC(CRC, nzero);
     }
   }
-  for (auto& c : C) CRC = testing::SillyCRC(CRC, c);
-  for (auto& d : D) CRC = testing::SillyCRC(CRC, d);
+  for (auto& c : C) CRC = testutil::SillyCRC(CRC, c);
+  for (auto& d : D) CRC = testutil::SillyCRC(CRC, d);
   ASSERT_EQ(468228884u, CRC);
 }
 
@@ -167,7 +167,7 @@ void DoTestSSIM(int min_range, int max_range, double result) {
   for (uint32_t t = 0; t < kNumTests; ++t) {
     const uint32_t width  = 1 + rng.GetUnsigned(kMaxDim);
     const uint32_t height = 1 + rng.GetUnsigned(kMaxDim);
-    testing::PrecalculatedRandom<kMaxDim * 7, T> rnd(min_range, max_range);
+    testutil::PrecalculatedRandom<kMaxDim * 7, T> rnd(min_range, max_range);
     double score;
     Plane<T> plane1, plane2, plane3;
     ASSERT_WP2_OK(plane1.Resize(width, height));
@@ -214,7 +214,7 @@ void DoTestPSNR(int min_range, int max_range, uint64_t result) {
   for (uint32_t t = 0; t < kNumTests; ++t) {
     const uint32_t width  = 1 + rng.GetUnsigned(kMaxDim);
     const uint32_t height = 1 + rng.GetUnsigned(kMaxDim);
-    testing::PrecalculatedRandom<kMaxDim * 7, T> rnd(min_range, max_range);
+    testutil::PrecalculatedRandom<kMaxDim * 7, T> rnd(min_range, max_range);
     uint64_t score;
     Plane<T> plane1, plane2, plane3;
     ASSERT_WP2_OK(plane1.Resize(width, height));
@@ -281,7 +281,7 @@ TEST_P(SpeedTestCpuInfo, TestCflPrediction) {
 //------------------------------------------------------------------------------
 
 INSTANTIATE_TEST_SUITE_P(SpeedTestInstantiation, SpeedTestCpuInfo,
-                         ::testing::ValuesIn(testing::kWP2CpuInfos));
+                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
 
 }  // namespace
 }  // namespace WP2

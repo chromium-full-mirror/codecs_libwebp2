@@ -24,19 +24,17 @@
 #include "tests/fuzz/fuzz_utils.h"
 #include "tests/include/helpers.h"
 
-using WP2::testing::GetExpectedDistortion;
-using WP2::testing::TestAnimEncConfig;
-
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Input is considered random data and converted to parameters.
-  WP2::testing::FuzzedParameters params(data, size);
+  WP2::testutil::FuzzedParameters params(data, size);
 
   // Extract a random config.
   WP2::EncoderConfig config;
   params.ExtractConfig(&config);
 
   // Make sure the encoding stops before the fuzzer timeout.
-  WP2::testing::ProgressTimeout progress(WP2::testing::kEncodingMaxNumSeconds);
+  WP2::testutil::ProgressTimeout progress(
+      WP2::testutil::kEncodingMaxNumSeconds);
   config.progress_hook = &progress;
   progress.fail_at_ = params.ExtractBool() ? params.ExtractDouble(0., 1.) : 2.;
 
@@ -80,7 +78,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   // Input can be random noise; output can get heavily distorted but it's fine.
   const float expected_distortion =
-      WP2::testing::GetExpectedDistortion(config) - 15.f;
-  return TestAnimEncConfig(original_frames, durations_ms, loop_forever, config,
-                           expected_distortion);
+      WP2::testutil::GetExpectedDistortion(config) - 15.f;
+  return WP2::testutil::TestAnimEncConfig(
+      original_frames, durations_ms, loop_forever, config, expected_distortion);
 }

@@ -169,7 +169,8 @@ TEST_P(BufferTest, API) {
   const bool use_decoder = std::get<2>(GetParam());
   ArgbBuffer src;
   MemoryWriter data;
-  ASSERT_WP2_OK(testing::CompressImage(filename, &data, &src, quality, effort));
+  ASSERT_WP2_OK(
+      testutil::CompressImage(filename, &data, &src, quality, effort));
   EXPECT_FALSE(src.IsView());
   ASSERT_WP2_OK(src.SetView(src, {1, 1, src.width() / 2, src.height() / 2}));
   EXPECT_FALSE(src.IsView());  // We still own the memory.
@@ -183,19 +184,19 @@ TEST_P(BufferTest, API) {
       output1, {0, 0, output1.width() / 2, output1.height() / 2}));
   ASSERT_EQ(Decode(data.mem_, data.size_, &output2, use_decoder),
             WP2_STATUS_BAD_DIMENSION);
-  EXPECT_FALSE(testing::Compare(output1, output2, filename));
+  EXPECT_FALSE(testutil::Compare(output1, output2, filename));
   // Try a tightly fit one
   ASSERT_WP2_OK(output2.SetView(output1));
   EXPECT_TRUE(output2.IsView());
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &output2, use_decoder));
   EXPECT_TRUE(output2.IsView());  // should decode directly in the view
-  EXPECT_TRUE(testing::Compare(output1, output2, filename));
+  EXPECT_TRUE(testutil::Compare(output1, output2, filename));
 
   // And then a large internal one
   output2.Deallocate();
   ASSERT_WP2_OK(output2.Resize(output1.width() * 2, output1.height() * 3));
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &output2, use_decoder));
-  EXPECT_TRUE(testing::Compare(output1, output2, filename));
+  EXPECT_TRUE(testutil::Compare(output1, output2, filename));
 
   // And a too large external one
   ASSERT_WP2_OK(output1.Resize(output1.width() * 2, output1.height() * 3));
@@ -294,7 +295,7 @@ TEST(BufferTest, CompositeOnBuffer) {
   ASSERT_WP2_OK(buffer.CompositeOver(bg_buffer));
   ASSERT_WP2_OK(bg_buffer2.CompositeUnder(buffer2));
 
-  ASSERT_TRUE(testing::Compare(buffer, bg_buffer2, "buffer"));
+  ASSERT_TRUE(testutil::Compare(buffer, bg_buffer2, "buffer"));
 
   uint8_t* row = buffer.GetRow8(0);
 
@@ -347,12 +348,12 @@ TEST(BufferTest, CompositeYuv) {
   const uint32_t height = 50;
   ASSERT_WP2_OK(foreground.Resize(width, height));
   foreground.Fill({128, 128, 128, 128});
-  testing::Noise(/*seed=*/1, /*strength=*/128, &foreground);
+  testutil::Noise(/*seed=*/1, /*strength=*/128, &foreground);
 
   ArgbBuffer background(WP2_Argb_32);
   ASSERT_WP2_OK(background.Resize(width, height));
   background.Fill({128, 128, 128, 128});
-  testing::Noise(/*seed=*/2, /*strength=*/128, &background);
+  testutil::Noise(/*seed=*/2, /*strength=*/128, &background);
 
   CSPTransform csp;
   static constexpr int16_t kYuvToRgb[] = {
@@ -388,8 +389,8 @@ TEST(BufferTest, CompositeYuv) {
 
   // All three methods should give the same result.
   // CompositeOVer/CompositeUnder.
-  EXPECT_TRUE(testing::Compare(yuv_composite_over, yuv_composite_under, 16,
-                               "test", 99));
+  EXPECT_TRUE(testutil::Compare(yuv_composite_over, yuv_composite_under, 16,
+                                "test", 99));
   // Composite in RGB vs YUV. We allow for some rounding error.
   for (uint32_t y = 0; y < height; ++y) {
     for (uint32_t x = 0; x < width; ++x) {

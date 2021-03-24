@@ -33,7 +33,7 @@
 #include "tests/include/helpers.h"   // For WP2::GetTestDataPath()
 
 namespace WP2 {
-namespace testing {
+namespace testutil {
 
 //------------------------------------------------------------------------------
 
@@ -289,5 +289,5 @@ void SaveBeforeAfter(const ArgbBuffer& original, const ArgbBuffer& decompressed,
 
 //------------------------------------------------------------------------------
 
-}  // namespace testing
+}  // namespace testutil
 }  // namespace WP2

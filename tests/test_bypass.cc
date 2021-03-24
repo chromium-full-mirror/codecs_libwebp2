@@ -51,7 +51,7 @@ TEST_P(BypassTest, MaxChunkSize) {
   EncTile enc_tile;
   MemoryWriter writer;
   {  // Encode
-    ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(),
+    ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(file_name).c_str(),
                             &enc_tile.rgb_input));
     if (force_alpha) enc_tile.rgb_input.GetRow8(0)[0] = 42;
     if (src_format != enc_tile.rgb_input.format()) {
@@ -119,14 +119,14 @@ TEST_P(BypassTest, MaxChunkSize) {
     ASSERT_WP2_OK(dec.Execute());
 
     if (use_lossy) {
-      ASSERT_TRUE(testing::Compare(enc_tile.yuv_input, dec_tile.yuv_output,
-                                   gparams.transf_.GetYUVPrecisionBits() + 1,
-                                   file_name));
+      ASSERT_TRUE(testutil::Compare(enc_tile.yuv_input, dec_tile.yuv_output,
+                                    gparams.transf_.GetYUVPrecisionBits() + 1,
+                                    file_name));
     } else {
       ArgbBuffer converted_rgb_output(enc_tile.rgb_input.format());
       ASSERT_WP2_OK(converted_rgb_output.ConvertFrom(dec_tile.rgb_output));
-      ASSERT_TRUE(testing::Compare(enc_tile.rgb_input, converted_rgb_output,
-                                   file_name));
+      ASSERT_TRUE(testutil::Compare(enc_tile.rgb_input, converted_rgb_output,
+                                    file_name));
     }
   }
 }

@@ -23,7 +23,7 @@
 #include "src/utils/random.h"
 
 namespace WP2 {
-namespace testing {
+namespace testutil {
 
 //------------------------------------------------------------------------------
 
@@ -159,5 +159,5 @@ void CreateBlocks(uint32_t tile_x, uint32_t tile_y,
 
 //------------------------------------------------------------------------------
 
-}  // namespace testing
+}  // namespace testutil
 }  // namespace WP2

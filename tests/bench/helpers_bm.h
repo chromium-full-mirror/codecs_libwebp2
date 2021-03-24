@@ -24,7 +24,7 @@
 #include "gtest/gtest.h"
 
 namespace WP2 {
-namespace testing {
+namespace testutil {
 
 // The benchmarks print only the indices and not the names of the files, that's
 // why the association is written here for convenience:
@@ -56,7 +56,7 @@ static const char* const kFiles[]{
 
 static constexpr size_t kNumFiles = sizeof(kFiles) / sizeof(kFiles[0]);
 
-}  // namespace testing
+}  // namespace testutil
 }  // namespace WP2
 
 #endif  // WP2_TESTS_BENCH_HELPERS_BM_H_

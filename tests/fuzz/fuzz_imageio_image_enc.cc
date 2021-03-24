@@ -33,7 +33,7 @@
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Input is considered random data and converted to parameters.
-  WP2::testing::FuzzedParameters params(data, size);
+  WP2::testutil::FuzzedParameters params(data, size);
 
   // Create a randomly sized valid buffer with random pixels.
   WP2::ArgbBuffer buffer = params.ExtractArgbBuffer(

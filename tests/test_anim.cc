@@ -51,9 +51,9 @@ TEST_P(AnimTest, Simple) {
 
   std::vector<ArgbBuffer> frames;
   MemoryWriter encoded_data;
-  ASSERT_WP2_OK(testing::CompressAnimation(file_names, durations_ms,
-                                           &encoded_data, &frames, quality,
-                                           effort, thread_level));
+  ASSERT_WP2_OK(testutil::CompressAnimation(file_names, durations_ms,
+                                            &encoded_data, &frames, quality,
+                                            effort, thread_level));
 
   // Decode.
   DecoderConfig decoder_config;
@@ -65,8 +65,8 @@ TEST_P(AnimTest, Simple) {
     uint32_t duration_ms;
     ASSERT_TRUE(decoder.ReadFrame(&duration_ms));
     EXPECT_EQ(duration_ms, durations_ms[i]);
-    EXPECT_TRUE(testing::Compare(decoder.GetPixels(), frames[i], file_names[i],
-                                 testing::GetExpectedDistortion(quality)));
+    EXPECT_TRUE(testutil::Compare(decoder.GetPixels(), frames[i], file_names[i],
+                                  testutil::GetExpectedDistortion(quality)));
     if (i + 1 < frames.size() ||
         decoder.TryGetDecodedFeatures()->has_trailing_data) {
       // Not the last frame, or last frame but waiting for metadata.
@@ -91,9 +91,9 @@ TEST_P(AnimTest, FirstFrame) {
 
   std::vector<ArgbBuffer> frames;
   MemoryWriter encoded_data;
-  ASSERT_WP2_OK(testing::CompressAnimation(file_names, durations_ms,
-                                           &encoded_data, &frames, quality,
-                                           effort, thread_level));
+  ASSERT_WP2_OK(testutil::CompressAnimation(file_names, durations_ms,
+                                            &encoded_data, &frames, quality,
+                                            effort, thread_level));
 
   // Decode.
   ArgbBuffer decoded_frame;
@@ -101,8 +101,8 @@ TEST_P(AnimTest, FirstFrame) {
   decoder_config.thread_level = thread_level;
   ASSERT_WP2_OK(Decode(encoded_data.mem_, encoded_data.size_, &decoded_frame,
                        decoder_config));
-  EXPECT_TRUE(testing::Compare(decoded_frame, frames[0], file_names[0],
-                               testing::GetExpectedDistortion(quality)));
+  EXPECT_TRUE(testutil::Compare(decoded_frame, frames[0], file_names[0],
+                                testutil::GetExpectedDistortion(quality)));
 }
 
 // Input images are expected to be of equal sizes inside a Param.
@@ -221,7 +221,7 @@ TEST(AnimTest, Metadata) {
   }
 
   EXPECT_TRUE(
-      testing::HasSameData(decoded_image.metadata_.exif, metadata_good.exif));
+      testutil::HasSameData(decoded_image.metadata_.exif, metadata_good.exif));
 
   EXPECT_EQ(decoded_image.metadata_.xmp.size, metadata_good.xmp.size);
   EXPECT_EQ(decoded_image.metadata_.xmp.bytes, nullptr);
@@ -240,7 +240,7 @@ TEST(AnimTest, Preframes) {
   // selected as the best option.
   ASSERT_WP2_OK(first_frame.Resize(512, 512));
   first_frame.Fill({128, 128, 128, 128});
-  testing::Noise(/*seed=*/42, /*strength=*/128, &first_frame);
+  testutil::Noise(/*seed=*/42, /*strength=*/128, &first_frame);
 
   // Copy of first frame except for two areas that are far from each other
   // (top-left and bottom-right), to force the generation of one preframe.
@@ -251,8 +251,8 @@ TEST(AnimTest, Preframes) {
   ASSERT_WP2_OK(bottom_right.SetView(
       first_frame, {first_frame.width() - area_size,
                     first_frame.height() - area_size, area_size, area_size}));
-  testing::Noise(/*seed=*/12, /*strength=*/255, &top_left);
-  testing::Noise(/*seed=*/0, /*strength=*/255, &bottom_right);
+  testutil::Noise(/*seed=*/12, /*strength=*/255, &top_left);
+  testutil::Noise(/*seed=*/0, /*strength=*/255, &bottom_right);
 
   // Encode losslessly.
   EncoderConfig config;
@@ -284,8 +284,8 @@ TEST(AnimTest, Preframes) {
   for (const ArgbBuffer& frame : frames) {
     ASSERT_TRUE(decoder.ReadFrame());
     ASSERT_FALSE(decoder.Failed());
-    EXPECT_TRUE(testing::Compare(decoder.GetPixels(), frame, "preframe",
-                                 testing::GetExpectedDistortion(config)));
+    EXPECT_TRUE(testutil::Compare(decoder.GetPixels(), frame, "preframe",
+                                  testutil::GetExpectedDistortion(config)));
   }
   ASSERT_WP2_OK(decoder.GetStatus());
 }
@@ -295,7 +295,7 @@ TEST(AnimTest, Preframes) {
 TEST(AnimTest, NoAnimButFrameData) {
   ArgbBuffer src;
   MemoryWriter encoded_data;
-  ASSERT_WP2_OK(testing::CompressImage("source1.png", &encoded_data, &src));
+  ASSERT_WP2_OK(testutil::CompressImage("source1.png", &encoded_data, &src));
 
   ArrayDecoder decoder(encoded_data.mem_, encoded_data.size_);
   ASSERT_TRUE(decoder.ReadFrame());

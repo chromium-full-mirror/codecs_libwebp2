@@ -33,7 +33,7 @@ namespace {
 void CreateData(uint32_t w, uint32_t h, bool snapped,
                 UniformIntDistribution* const gen,
                 VectorNoCtor<Block>* const blocks, bool dump = false) {
-  testing::CreatePartition(w, h, snapped, gen, blocks);
+  testutil::CreatePartition(w, h, snapped, gen, blocks);
   std::vector<uint8_t> occupancy(w * h, 0x00);
   uint8_t color = 0xff;
   for (const Block& block : *blocks) {

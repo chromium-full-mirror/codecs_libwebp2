@@ -45,7 +45,7 @@ TEST(TestSyntaxWriter, CopyFrom) {
   // Load the sample image and convert it to luma/chroma.
   ArgbBuffer rgb;
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath("source1.png").c_str(), &rgb));
+      ReadImage(testutil::GetTestDataPath("source1.png").c_str(), &rgb));
   ASSERT_WP2_OK(rgb.SetView(rgb, tile_rect));
   CSPTransform csp_transform;
   YUVPlane yuv, out;

@@ -25,7 +25,7 @@
 #include "tests/fuzz/fuzz_utils.h"
 
 namespace WP2 {
-namespace testing {
+namespace testutil {
 
 int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
                       const std::vector<uint32_t>& durations_ms,
@@ -95,5 +95,5 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
   return 0;
 }
 
-}  // namespace testing
+}  // namespace testutil
 }  // namespace WP2

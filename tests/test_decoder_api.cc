@@ -26,11 +26,11 @@ namespace {
 
 Data GenerateBitstream() {
   MemoryWriter writer;
-  if (testing::CompressImage("test_exif_xmp.webp", &writer, nullptr,
-                             EncoderConfig::kDefault.quality,
-                             EncoderConfig::kDefault.effort,
-                             EncoderConfig::kDefault.thread_level,
-                             /*num_downsamplings=*/2) != WP2_STATUS_OK) {
+  if (testutil::CompressImage("test_exif_xmp.webp", &writer, nullptr,
+                              EncoderConfig::kDefault.quality,
+                              EncoderConfig::kDefault.effort,
+                              EncoderConfig::kDefault.thread_level,
+                              /*num_downsamplings=*/2) != WP2_STATUS_OK) {
     abort();
   }
   Data data;  // Transfer ownership.
@@ -43,7 +43,7 @@ Data GenerateBitstream() {
 
 Data GenerateAnimatedBitstream() {
   MemoryWriter writer;
-  if (testing::CompressAnimation(
+  if (testutil::CompressAnimation(
           {"source0.pgm", "source1.png"}, {50, 50}, &writer, nullptr,
           EncoderConfig::kDefault.quality, EncoderConfig::kDefault.effort,
           EncoderConfig::kDefault.thread_level,

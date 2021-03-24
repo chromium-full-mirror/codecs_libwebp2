@@ -116,7 +116,7 @@ TEST(FormatTest, ConvertSimple) {
           : WP2Formatbpc(orig_format) > WP2Formatbpc(format)             ? 90.f
                                                                          : 99.f;
       ASSERT_TRUE(
-          testing::Compare(original, reconverted, "1x1", expected_distortion))
+          testutil::Compare(original, reconverted, "1x1", expected_distortion))
           << "format: " << orig_format << " to: " << format;
     }
   }
@@ -129,7 +129,7 @@ TEST(FormatTest, ConvertImage) {
     const std::string& file_name = "source1_64x48.png";
     ArgbBuffer original(orig_format);
     ASSERT_WP2_OK(
-        ReadImage(testing::GetTestDataPath(file_name).c_str(), &original));
+        ReadImage(testutil::GetTestDataPath(file_name).c_str(), &original));
 
     for (WP2SampleFormat format = WP2_Argb_32; format < WP2_FORMAT_NUM;
          format = (WP2SampleFormat)(format + 1)) {
@@ -144,8 +144,8 @@ TEST(FormatTest, ConvertImage) {
           !WP2IsPremultiplied(orig_format) && WP2IsPremultiplied(format) ? 25.f
           : WP2Formatbpc(orig_format) > WP2Formatbpc(format)             ? 90.f
                                                                          : 99.f;
-      ASSERT_TRUE(testing::Compare(original, reconverted, file_name,
-                                   expected_distortion))
+      ASSERT_TRUE(testutil::Compare(original, reconverted, file_name,
+                                    expected_distortion))
           << "format: " << orig_format << " to: " << format;
     }
   }
@@ -168,8 +168,8 @@ TEST_P(FormatTest, EncodeDecodeImage) {
 
   ArgbBuffer src;
   MemoryWriter data;
-  ASSERT_WP2_OK(testing::CompressImage(src_file_name, &data, &src, quality,
-                                       /*effort=*/2));
+  ASSERT_WP2_OK(testutil::CompressImage(src_file_name, &data, &src, quality,
+                                        /*effort=*/2));
 
   ArgbBuffer output(output_format);
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &output));
@@ -177,8 +177,8 @@ TEST_P(FormatTest, EncodeDecodeImage) {
   ArgbBuffer output_original_format(src.format());
   ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(src, output, true,
                                                   &output_original_format));
-  ASSERT_TRUE(testing::Compare(src, output_original_format, src_file_name,
-                               testing::GetExpectedDistortion(quality)))
+  ASSERT_TRUE(testutil::Compare(src, output_original_format, src_file_name,
+                                testutil::GetExpectedDistortion(quality)))
       << output_format;
 }
 
@@ -193,9 +193,9 @@ TEST_P(FormatTest, EncodeDecodeAnimation) {
 
   std::vector<ArgbBuffer> frames;
   MemoryWriter encoded_data;
-  ASSERT_WP2_OK(testing::CompressAnimation(file_names, durations_ms,
-                                           &encoded_data, &frames, quality,
-                                           effort, thread_level));
+  ASSERT_WP2_OK(testutil::CompressAnimation(file_names, durations_ms,
+                                            &encoded_data, &frames, quality,
+                                            effort, thread_level));
 
   ArgbBuffer decoded_frame(output_format);
   ArrayDecoder decoder(encoded_data.mem_, encoded_data.size_,
@@ -207,9 +207,9 @@ TEST_P(FormatTest, EncodeDecodeAnimation) {
     ArgbBuffer decoded_frame_original_format(frames[i].format());
     ASSERT_WP2_OK(ConvertOutputBackToOriginalFormat(
         frames[i], decoded_frame, true, &decoded_frame_original_format));
-    EXPECT_TRUE(testing::Compare(frames[i], decoded_frame_original_format,
-                                 file_names[i],
-                                 testing::GetExpectedDistortion(quality)));
+    EXPECT_TRUE(testutil::Compare(frames[i], decoded_frame_original_format,
+                                  file_names[i],
+                                  testutil::GetExpectedDistortion(quality)));
   }
 }
 
@@ -225,7 +225,7 @@ TEST_P(FormatTest, EncodeDecodePreview) {
 
   ArgbBuffer original_image;
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath(file_name).c_str(), &original_image));
+      ReadImage(testutil::GetTestDataPath(file_name).c_str(), &original_image));
 
   EncoderConfig config;
   config.quality = quality;
@@ -295,7 +295,7 @@ uint32_t Unmult(uint32_t a, uint32_t v) {
 
 class ExhaustiveTest
     : public ::testing::TestWithParam<
-          std::tuple<testing::WP2CPUInfoStruct, bool, WP2SampleFormat>> {
+          std::tuple<testutil::WP2CPUInfoStruct, bool, WP2SampleFormat>> {
   void SetUp() override {
     WP2DspReset();
     WP2GetCPUInfo = std::get<0>(GetParam()).cpu_info;
@@ -366,7 +366,7 @@ TEST_P(ExhaustiveTest, TestArgbConvertToFrom) {
 
 INSTANTIATE_TEST_SUITE_P(
     ExhaustiveTestInstantiation, ExhaustiveTest,
-    ::testing::Combine(::testing::ValuesIn(testing::kWP2CpuInfoStructs),
+    ::testing::Combine(::testing::ValuesIn(testutil::kWP2CpuInfoStructs),
                        ::testing::Values(false, true),  // src_is_premul_
                        // TODO(yguyon): Include WP2_Argb_38 when ready
                        ::testing::Range(WP2_Argb_32, WP2_Argb_38)  // tmp_format
@@ -392,7 +392,7 @@ static struct FmtTestCase {
   { WP2_BGRX_32, "WP2_BGRX_32", 414125, false },
 };
 
-typedef std::tuple<FmtTestCase, testing::WP2CPUInfoStruct> SpeedTestParam;
+typedef std::tuple<FmtTestCase, testutil::WP2CPUInfoStruct> SpeedTestParam;
 static void PrintTo(const SpeedTestParam& p, std::ostream* os) {
   *os << "{" << std::get<0>(p).name << ", " << std::get<1>(p).name << "}";
 }
@@ -463,9 +463,10 @@ TEST_P(SpeedTest, TestBackForth) {
   EXPECT_TRUE(DoTest());
 }
 
-INSTANTIATE_TEST_SUITE_P(SpeedTestInstantiation, SpeedTest,
+INSTANTIATE_TEST_SUITE_P(
+    SpeedTestInstantiation, SpeedTest,
     ::testing::Combine(::testing::ValuesIn(kFmtTestCases),
-                       ::testing::ValuesIn(testing::kWP2CpuInfoStructs)));
+                       ::testing::ValuesIn(testutil::kWP2CpuInfoStructs)));
 
 //------------------------------------------------------------------------------
 

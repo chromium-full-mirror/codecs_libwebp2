@@ -22,7 +22,7 @@
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Input is considered random data and converted to parameters.
-  WP2::testing::FuzzedParameters params(data, size);
+  WP2::testutil::FuzzedParameters params(data, size);
 
   // Extract a random config.
   WP2::DecoderConfig config;
@@ -33,10 +33,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // remaining bytes.
   WP2::Data encoded_data;
   if (!params.TryExtractWP2Bitstream(&encoded_data)) return 0;  // malloc fail.
-  WP2::testing::LimitConfigForBigImages(encoded_data, &config);
+  WP2::testutil::LimitConfigForBigImages(encoded_data, &config);
 
   // Success is not expected but it shouldn't crash.
-  return WP2::testing::TestImageDecConfig(
+  return WP2::testutil::TestImageDecConfig(
       {encoded_data.bytes, encoded_data.size}, config,
       /*expected_success=*/false);
 }

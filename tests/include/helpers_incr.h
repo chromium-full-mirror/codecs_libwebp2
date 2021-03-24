@@ -25,7 +25,7 @@
 #include "src/wp2/decode.h"
 
 namespace WP2 {
-namespace testing {
+namespace testutil {
 
 enum class DecoderType { kArray, kStream, kUnstableCustom, kSwappingCustom };
 struct DecoderAction {
@@ -65,7 +65,7 @@ WP2Status DecodeIncremental(
     std::vector<ArgbBuffer>* const decoded_frames = nullptr,
     std::vector<uint32_t>* const decoded_durations_ms = nullptr);
 
-}  // namespace testing
+}  // namespace testutil
 }  // namespace WP2
 
 #endif  // WP2_TESTS_INCLUDE_HELPERS_INCR_H_

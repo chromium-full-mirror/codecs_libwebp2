@@ -35,8 +35,8 @@ namespace {
 
 TEST(ScreenEnc, Basic) {
   ArgbBuffer input;
-  ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath("source1_64x48.png").c_str(), &input));
+  ASSERT_WP2_OK(ReadImage(
+      testutil::GetTestDataPath("source1_64x48.png").c_str(), &input));
 
   const uint32_t block_size = 16;
   const uint32_t block_height = DivCeil(input.height(), block_size);
@@ -56,8 +56,8 @@ TEST(ScreenEnc, Basic) {
   EXPECT_WP2_OK(Decode(writer.mem_, writer.size_, &output));
 
   constexpr float kMinExpectedSimilarity = 35.f;
-  ASSERT_TRUE(testing::Compare(input, output, "source1_64x48.png",
-                               kMinExpectedSimilarity));
+  ASSERT_TRUE(testutil::Compare(input, output, "source1_64x48.png",
+                                kMinExpectedSimilarity));
 }
 
 }  // namespace

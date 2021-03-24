@@ -24,7 +24,7 @@
 #include "tests/include/helpers.h"
 
 namespace WP2 {
-namespace testing {
+namespace testutil {
 
 int TestImageEncConfig(const ArgbBuffer& original, const EncoderConfig& config,
                        float expected_distortion) {
@@ -71,5 +71,5 @@ int TestImageDecConfig(DataView encoded_data, const DecoderConfig& config,
   return 0;
 }
 
-}  // namespace testing
+}  // namespace testutil
 }  // namespace WP2

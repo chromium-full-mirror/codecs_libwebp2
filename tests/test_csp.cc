@@ -150,7 +150,7 @@ TEST_P(CspImageTest, Simple) {
 
   ArgbBuffer src;
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath(src_file_name).c_str(), &src));
+      ReadImage(testutil::GetTestDataPath(src_file_name).c_str(), &src));
   // TODO(yguyon): Handle WP2_Argb_38 directly in ReadImage()
   // TODO(yguyon): Handle WP2_Argb_38 with Csp::kCustom
   if (src.format() != format &&
@@ -177,7 +177,7 @@ TEST_P(CspImageTest, Simple) {
       : (WP2Formatbpc(format) > 8)                           ? 40.f
       : (csp_type != Csp::kYCoCg)                            ? 50.f
                                                              : 99.f;
-  ASSERT_TRUE(testing::Compare(src, dst, src_file_name, expected_distortion));
+  ASSERT_TRUE(testutil::Compare(src, dst, src_file_name, expected_distortion));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -209,7 +209,7 @@ TEST_P(CustomCspTest, RoundingError) {
   const char* const file_name = GetParam();
   EncoderConfig config = EncoderConfig::kDefault;
   config.csp_type = Csp::kCustom;
-  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testutil::EncodeDecodeCompare(file_name, config));
 }
 
 INSTANTIATE_TEST_SUITE_P(CustomCspTestInstantiation, CustomCspTest,
@@ -234,10 +234,10 @@ TEST_P(DecodeArgbTest, Valid) {
 
   ArgbBuffer src(WP2_Argb_32), dst(WP2_Argb_32);
   MemoryWriter data;
-  ASSERT_WP2_OK(testing::CompressImage(src_file_name, &data, &src, quality));
+  ASSERT_WP2_OK(testutil::CompressImage(src_file_name, &data, &src, quality));
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &dst));
-  ASSERT_TRUE(testing::Compare(src, dst, src_file_name,
-                               testing::GetExpectedDistortion(quality)));
+  ASSERT_TRUE(testutil::Compare(src, dst, src_file_name,
+                                testutil::GetExpectedDistortion(quality)));
 
   for (const ArgbBuffer* const buffer : {&src, &dst}) {
     for (uint32_t y = 0; y < buffer->height(); ++y) {

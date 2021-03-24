@@ -33,7 +33,7 @@ TEST_P(TileShapeTest, Simple) {
   EncoderConfig config = EncoderConfig::kDefault;
   config.tile_shape = (TileShape)std::get<1>(GetParam());
 
-  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testutil::EncodeDecodeCompare(file_name, config));
 }
 
 INSTANTIATE_TEST_SUITE_P(

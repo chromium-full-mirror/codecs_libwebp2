@@ -57,7 +57,7 @@ TEST_P(EncodeDecodeCustomCspTest, Comparison) {
   const bool encode_alpha = std::get<3>(GetParam());
 
   ArgbBuffer src;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(), &src));
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(file_name).c_str(), &src));
 
   YUVPlane custom_input, custom_output;  // Might contain RGB.
 
@@ -113,9 +113,9 @@ TEST_P(EncodeDecodeCustomCspTest, Comparison) {
   // there might be some slight rounding differences.
   const uint32_t bit_depth = csp_transform.GetYUVPrecisionBits() + 1;
   const float expected_distortion =
-      std::min(testing::GetExpectedDistortion(quality), 80.f);
-  ASSERT_TRUE(testing::Compare(custom_input, custom_output, bit_depth,
-                               file_name, expected_distortion));
+      std::min(testutil::GetExpectedDistortion(quality), 80.f);
+  ASSERT_TRUE(testutil::Compare(custom_input, custom_output, bit_depth,
+                                file_name, expected_distortion));
 }
 
 //------------------------------------------------------------------------------

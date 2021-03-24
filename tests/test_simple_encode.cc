@@ -25,7 +25,7 @@ namespace {
 TEST(EncodeTest, Simple) {
   ArgbBuffer src;
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath("source1.png").c_str(), &src));
+      ReadImage(testutil::GetTestDataPath("source1.png").c_str(), &src));
 
   MemoryWriter memory_writer;
   EXPECT_WP2_OK(Encode(src, &memory_writer));

@@ -64,7 +64,7 @@ TEST_P(EncodeCustomCspTest, Comparison) {
   ArgbBuffer src;
   MemoryWriter ref_data;
   ASSERT_WP2_OK(
-      testing::CompressImage(src_file_name, &ref_data, &src, quality));
+      testutil::CompressImage(src_file_name, &ref_data, &src, quality));
 
   YUVPlane custom_input;  // Might contain RGB.
   const uint32_t padded_width = Pad(src.width(), kPredWidth);
@@ -138,18 +138,18 @@ TEST_P(EncodeCustomCspTest, Comparison) {
   ASSERT_WP2_OK(Decode(ref_data.mem_, ref_data.size_, &ref));
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &dst));
 
-  ASSERT_TRUE(testing::Compare(src, ref, src_file_name,
-                               testing::GetExpectedDistortion(quality)));
-  ASSERT_TRUE(testing::Compare(src, dst, src_file_name,
-                               testing::GetExpectedDistortion(quality)));
-  ASSERT_TRUE(testing::Compare(
+  ASSERT_TRUE(testutil::Compare(src, ref, src_file_name,
+                                testutil::GetExpectedDistortion(quality)));
+  ASSERT_TRUE(testutil::Compare(src, dst, src_file_name,
+                                testutil::GetExpectedDistortion(quality)));
+  ASSERT_TRUE(testutil::Compare(
       ref, dst, src_file_name,
       (matrix == Matrix::kRGB8 || matrix == Matrix::kRGB10) ? 99.f : 50.f));
 
   if (encode_metadata) {
-    EXPECT_TRUE(testing::HasSameData(dst.metadata_.iccp, ref.metadata_.iccp));
-    EXPECT_TRUE(testing::HasSameData(dst.metadata_.xmp, ref.metadata_.xmp));
-    EXPECT_TRUE(testing::HasSameData(dst.metadata_.exif, ref.metadata_.exif));
+    EXPECT_TRUE(testutil::HasSameData(dst.metadata_.iccp, ref.metadata_.iccp));
+    EXPECT_TRUE(testutil::HasSameData(dst.metadata_.xmp, ref.metadata_.xmp));
+    EXPECT_TRUE(testutil::HasSameData(dst.metadata_.exif, ref.metadata_.exif));
   }
 }
 
@@ -208,7 +208,7 @@ TEST_P(ReadCustomCspTest, Y4M) {
   YUVPlane ccsp;
   CSPMtx ccsp_to_rgb = {};
   Metadata metadata;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(), &ccsp,
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(file_name).c_str(), &ccsp,
                           &ccsp_to_rgb, &metadata));
   // Limit canvas size to avoid a timeout.
   ASSERT_WP2_OK(ccsp.SetView(ccsp, {0, 0, std::min(ccsp.GetWidth(), 255u),
@@ -246,8 +246,8 @@ TEST_P(ReadCustomCspTest, Y4M) {
   ArgbBuffer decoded;
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &decoded));
 
-  EXPECT_TRUE(testing::Compare(converted, decoded, file_name,
-                               testing::GetExpectedDistortion(quality)));
+  EXPECT_TRUE(testutil::Compare(converted, decoded, file_name,
+                                testutil::GetExpectedDistortion(quality)));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -294,7 +294,8 @@ TEST_P(StrideTest, Combination) {
   const BufferParam& p = GetParam();
 
   ArgbBuffer src;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(p.file_name).c_str(), &src));
+  ASSERT_WP2_OK(
+      ReadImage(testutil::GetTestDataPath(p.file_name).c_str(), &src));
 
   Vector_s16 rgba[4];
   for (uint32_t c : {0, 1, 2, 3}) {

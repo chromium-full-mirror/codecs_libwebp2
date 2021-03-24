@@ -378,7 +378,7 @@ WP2Status GetPessimizationProportion(
 TEST(PessimizationTest, NotRandom) {
   constexpr const char file_name[] = "source1_64x48.png";
   ArgbBuffer src;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(), &src));
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(file_name).c_str(), &src));
   MemoryWriter writer;
   ASSERT_WP2_OK(Encode(src, &writer));
   bool is_valid;
@@ -507,7 +507,8 @@ TEST_P(ImageMutationTest, FromValidImage) {
   {
     // Read and encode an image, only keep the bitstream.
     ArgbBuffer src;
-    ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(file_name).c_str(), &src));
+    ASSERT_WP2_OK(
+        ReadImage(testutil::GetTestDataPath(file_name).c_str(), &src));
     ASSERT_WP2_OK(src.SetView(src, {0, 0, std::min(src.width(), max_tile_size),
                                     std::min(src.height(), max_tile_size)}));
     ASSERT_WP2_OK(Encode(src, &writer, config));

@@ -40,25 +40,25 @@ TEST_P(ComparisonTest, RGBAndYUV) {
 
   ArgbBuffer rgb;
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath(rgb_file_name).c_str(), &rgb));
+      ReadImage(testutil::GetTestDataPath(rgb_file_name).c_str(), &rgb));
 
   YUVPlane ccsp;
   CSPMtx ccsp_to_rgb = {};
   Metadata metadata;
-  ASSERT_WP2_OK(ReadImage(testing::GetTestDataPath(ccsp_file_name).c_str(),
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(ccsp_file_name).c_str(),
                           &ccsp, &ccsp_to_rgb, &metadata));
 
   ArgbBuffer converted;
   ASSERT_WP2_OK(ccsp.Export(ccsp_to_rgb, /*resize_if_needed=*/true, &converted,
                             /*upsample_if_needed=*/&SamplingTaps::kUpSmooth));
 
-  EXPECT_TRUE(testing::Compare(rgb, converted,
-                               rgb_file_name + "/" + ccsp_file_name,
-                               expected_distortion));
+  EXPECT_TRUE(testutil::Compare(rgb, converted,
+                                rgb_file_name + "/" + ccsp_file_name,
+                                expected_distortion));
   if (rgb_file_name == ccsp_file_name) {
-    EXPECT_TRUE(testing::HasSameData(rgb.metadata_.iccp, metadata.iccp));
-    EXPECT_TRUE(testing::HasSameData(rgb.metadata_.xmp, metadata.xmp));
-    EXPECT_TRUE(testing::HasSameData(rgb.metadata_.exif, metadata.exif));
+    EXPECT_TRUE(testutil::HasSameData(rgb.metadata_.iccp, metadata.iccp));
+    EXPECT_TRUE(testutil::HasSameData(rgb.metadata_.xmp, metadata.xmp));
+    EXPECT_TRUE(testutil::HasSameData(rgb.metadata_.exif, metadata.exif));
   }
 }
 
@@ -85,9 +85,9 @@ class DownsampledTest : public ::testing::TestWithParam<Param> {};
 TEST_P(DownsampledTest, CCSP) {
   const std::string file_name = std::get<0>(GetParam());
   const std::string downsampled_file_name = std::get<1>(GetParam());
-  const std::string file_path = testing::GetTestDataPath(file_name);
+  const std::string file_path = testutil::GetTestDataPath(file_name);
   const std::string downsampled_file_path =
-      testing::GetTestDataPath(downsampled_file_name);
+      testutil::GetTestDataPath(downsampled_file_name);
   const float expected_distortion = std::get<2>(GetParam());
 
   YUVPlane ccsp, downsampled_ccsp;
@@ -106,9 +106,9 @@ TEST_P(DownsampledTest, CCSP) {
       ReadBitDepth(downsampled_file_path.c_str(), &downsampled_bit_depth));
   ASSERT_EQ(bit_depth, downsampled_bit_depth);
 
-  EXPECT_TRUE(testing::Compare(ccsp, downsampled_ccsp, bit_depth,
-                               file_name + "/" + downsampled_file_name,
-                               expected_distortion));
+  EXPECT_TRUE(testutil::Compare(ccsp, downsampled_ccsp, bit_depth,
+                                file_name + "/" + downsampled_file_name,
+                                expected_distortion));
   float disto[5];
   ASSERT_WP2_OK(downsampled_ccsp.GetDistortion(ccsp, bit_depth, PSNR, disto));
   EXPECT_EQ(disto[0], 99.f);  // Luma and alpha are not impacted by
@@ -131,7 +131,7 @@ TEST_P(Y4MTest, ToYCbCr) {
   const char* const file_name = GetParam();
   Data data;
   ASSERT_WP2_OK(
-      IoUtilReadFile(testing::GetTestDataPath(file_name).c_str(), &data));
+      IoUtilReadFile(testutil::GetTestDataPath(file_name).c_str(), &data));
   ASSERT_EQ(GuessImageFormat(data.bytes, std::min(data.size, (size_t)64)),
             FileFormat::Y4M_444);
 
@@ -152,7 +152,7 @@ TEST_P(Y4MTest, ToYCbCr) {
   YUVPlane ycbcr;
   ASSERT_WP2_OK(ToYCbCr(ccsp, ccsp_to_rgb, file_num_bits,
                         /*downsample=*/nullptr, &ycbcr));
-  EXPECT_TRUE(testing::Compare(ccsp, ycbcr, bit_depth, file_name));
+  EXPECT_TRUE(testutil::Compare(ccsp, ycbcr, bit_depth, file_name));
 }
 
 INSTANTIATE_TEST_SUITE_P(Y4MTestInstantiation, Y4MTest,
@@ -174,7 +174,7 @@ TEST_P(MatrixConversionTest, Comparison) {
 
   Data data;
   ASSERT_WP2_OK(
-      IoUtilReadFile(testing::GetTestDataPath(file_name).c_str(), &data));
+      IoUtilReadFile(testutil::GetTestDataPath(file_name).c_str(), &data));
   const FileFormat file_format =
       GuessImageFormat(data.bytes, std::min(data.size, (size_t)64));
   ASSERT_NE(file_format, FileFormat::UNSUPPORTED);
@@ -214,8 +214,8 @@ TEST_P(MatrixConversionTest, Comparison) {
     // The error margin increases with the output precision.
     expected_distortion -= 5.f * (num_bits - 8);
   }
-  EXPECT_TRUE(testing::Compare(ycbcr_from_ccsp, ycbcr_from_rgb, bit_depth,
-                               file_name, expected_distortion));
+  EXPECT_TRUE(testutil::Compare(ycbcr_from_ccsp, ycbcr_from_rgb, bit_depth,
+                                file_name, expected_distortion));
 }
 
 INSTANTIATE_TEST_SUITE_P(

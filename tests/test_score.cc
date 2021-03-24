@@ -56,8 +56,8 @@ TEST_P(ScoreTestCpuInfo, TestMinMax) {
     for (uint32_t ind = 0; ind < kNumTests; ++ind) {
       WP2::GetBlockMinMax(data, step, kNumBlks, min, max);
     }
-    for (auto& v : min) CRC = testing::SillyCRC(CRC, v);
-    for (auto& v : max) CRC = testing::SillyCRC(CRC, v);
+    for (auto& v : min) CRC = testutil::SillyCRC(CRC, v);
+    for (auto& v : max) CRC = testutil::SillyCRC(CRC, v);
   }
   EXPECT_EQ(CRC, 3632092995u);
 }
@@ -83,8 +83,8 @@ TEST_P(ScoreTestCpuInfo, TestMinMax_5x5) {
     for (uint32_t ind = 0; ind < kNumTests; ++ind) {
       const uint32_t off = (ind % (kW - 8)) + kStep * ((ind / kW) % (kH - 5));
       WP2::GetBlockMinMax_5x5(data + off, kStep, &min, &max);
-      CRC = testing::SillyCRC(CRC, min);
-      CRC = testing::SillyCRC(CRC, max);
+      CRC = testutil::SillyCRC(CRC, min);
+      CRC = testutil::SillyCRC(CRC, max);
     }
     int16_t min2, max2;
     WP2::GetBlockMinMax_5x5(data, kStep, &min, &max);
@@ -97,7 +97,7 @@ TEST_P(ScoreTestCpuInfo, TestMinMax_5x5) {
 }
 
 INSTANTIATE_TEST_SUITE_P(ScoreTestCpuInfoInstantiation, ScoreTestCpuInfo,
-                         ::testing::ValuesIn(testing::kWP2CpuInfos));
+                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
 
 }  // namespace
 }  // namespace WP2

@@ -30,8 +30,8 @@ constexpr int32_t kYUVMax = (1 << (kNumBits - 1)) - 1;
 
 void RegisterBlock(uint16_t x, uint16_t y, BlockSize dim, bool has_lossy_alpha,
                    FilterBlockMap* const blocks) {
-  testing::RegisterBlock(x, y, dim, /*segment_id=*/0, /*res_den=*/0.5f,
-                         /*min_bpp=*/1.f, has_lossy_alpha, blocks);
+  testutil::RegisterBlock(x, y, dim, /*segment_id=*/0, /*res_den=*/0.5f,
+                          /*min_bpp=*/1.f, has_lossy_alpha, blocks);
 }
 
 void Filter(const FilterBlockMap& blocks, uint32_t h) {
@@ -63,8 +63,8 @@ TEST(AlphaFilterTest, DoesntFilterLossless) {
   YUVPlane pixels;
   ASSERT_WP2_OK(pixels.Resize(32, 16, /*pad=*/1, /*has_alpha=*/true));
   pixels.A.Fill(0);
-  testing::Noise(0, kAlphaMax, /*seed=*/0, /*strength=*/kAlphaMax / 2,
-                 &pixels.A);
+  testutil::Noise(0, kAlphaMax, /*seed=*/0, /*strength=*/kAlphaMax / 2,
+                  &pixels.A);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
@@ -84,7 +84,7 @@ TEST(AlphaFilterTest, DoesntFilterLossless) {
 
   ASSERT_NO_FATAL_FAILURE(Filter(blocks, pixels.A.h_));
 
-  EXPECT_TRUE(testing::AreEqual(pixels.A, reference.A));
+  EXPECT_TRUE(testutil::AreEqual(pixels.A, reference.A));
 }
 
 TEST(AlphaFilterTest, DoesFilterLossyBlocks) {
@@ -93,8 +93,8 @@ TEST(AlphaFilterTest, DoesFilterLossyBlocks) {
   const uint32_t height = 16;
   ASSERT_WP2_OK(pixels.Resize(width, height, /*pad=*/1, /*has_alpha=*/true));
   pixels.A.Fill(0);
-  testing::Noise(0, kAlphaMax, /*seed=*/0, /*strength=*/kAlphaMax / 2,
-                 &pixels.A);
+  testutil::Noise(0, kAlphaMax, /*seed=*/0, /*strength=*/kAlphaMax / 2,
+                  &pixels.A);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
@@ -118,16 +118,16 @@ TEST(AlphaFilterTest, DoesFilterLossyBlocks) {
   YUVPlane ref_view, pixels_view;
   ASSERT_WP2_OK(ref_view.SetView(reference, {0, 0, 16, 16}));
   ASSERT_WP2_OK(pixels_view.SetView(pixels, {0, 0, 16, 16}));
-  EXPECT_FALSE(testing::AreEqual(pixels_view.A, ref_view.A));
+  EXPECT_FALSE(testutil::AreEqual(pixels_view.A, ref_view.A));
   ASSERT_WP2_OK(ref_view.SetView(reference, {16, 0, 8, 8}));
   ASSERT_WP2_OK(pixels_view.SetView(pixels, {16, 0, 8, 8}));
-  EXPECT_TRUE(testing::AreEqual(pixels_view.A, ref_view.A));
+  EXPECT_TRUE(testutil::AreEqual(pixels_view.A, ref_view.A));
   ASSERT_WP2_OK(ref_view.SetView(reference, {24, 0, 8, 16}));
   ASSERT_WP2_OK(pixels_view.SetView(pixels, {24, 0, 8, 16}));
-  EXPECT_TRUE(testing::AreEqual(pixels_view.A, ref_view.A));
+  EXPECT_TRUE(testutil::AreEqual(pixels_view.A, ref_view.A));
   ASSERT_WP2_OK(ref_view.SetView(reference, {16, 8, 8, 8}));
   ASSERT_WP2_OK(pixels_view.SetView(pixels, {16, 8, 8, 8}));
-  EXPECT_FALSE(testing::AreEqual(pixels_view.A, ref_view.A));
+  EXPECT_FALSE(testutil::AreEqual(pixels_view.A, ref_view.A));
 
   const uint32_t block_size = 4;
   Integral ref_integral;
@@ -161,7 +161,7 @@ TEST(AlphaFilterTest, PreservesHardEdges) {
   RegisterBlock(0, 0, BLK_32x32, /*has_lossy_alpha=*/true, &blocks);
 
   ASSERT_NO_FATAL_FAILURE(Filter(blocks, pixels.A.h_));
-  EXPECT_TRUE(testing::AreEqual(pixels.A, reference.A));
+  EXPECT_TRUE(testutil::AreEqual(pixels.A, reference.A));
 }
 
 TEST(AlphaFilterTest, BlursSoftEdges) {
@@ -185,7 +185,7 @@ TEST(AlphaFilterTest, BlursSoftEdges) {
   RegisterBlock(0, 0, BLK_32x32, /*has_lossy_alpha=*/true, &blocks);
 
   ASSERT_NO_FATAL_FAILURE(Filter(blocks, pixels.A.h_));
-  EXPECT_FALSE(testing::AreEqual(pixels.A, reference.A));
+  EXPECT_FALSE(testutil::AreEqual(pixels.A, reference.A));
 
   // Expect horizontally increasing values.
   for (uint32_t x = 1; x < pixels.A.w_; ++x) {
@@ -210,7 +210,7 @@ TEST(AlphaFilterTest, BetterPSNR) {
   DecoderConfig decoder_config = DecoderConfig::kDefault;
 
   float disto_diff[5];
-  ASSERT_WP2_OK(testing::GetDistortionDiff(
+  ASSERT_WP2_OK(testutil::GetDistortionDiff(
       "source1.png", {25, 27, 200, 208}, encoder_config_no_filter,
       encoder_config_filter, decoder_config, disto_diff));
   // PSNR should be better with the alpha filter than without.

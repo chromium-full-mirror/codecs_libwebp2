@@ -37,8 +37,8 @@ YUVPlane CreateNoisyPixels(uint32_t width, uint32_t height,
   WP2_ASSERT_STATUS(pixels.Resize(width, height));
   pixels.Fill(Ayuv38b{kAlphaMax, min_value, 0, max_value});
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    testing::Noise(min_value, max_value, /*seed=*/channel, 5,
-                   &pixels.GetChannel(channel));
+    testutil::Noise(min_value, max_value, /*seed=*/channel, 5,
+                    &pixels.GetChannel(channel));
   }
   return pixels;
 }
@@ -48,12 +48,12 @@ void Filter(uint32_t num_precision_bits, int16_t min_value, int16_t max_value,
             const int8_t tap_weights[kWieFltTapDist], uint32_t quality_hint,
             YUVPlane* const pixels) {
   const Vector<Segment> segments =
-      testing::CreateSegments(quality_hint, min_value, max_value);
+      testutil::CreateSegments(quality_hint, min_value, max_value);
   const double residual_density = 1. * quality_hint / kMaxLossyQualityHint;
   const double min_bpp = 4. * quality_hint / kMaxLossyQualityHint;
   FilterBlockMap blocks;
-  testing::CreateBlocks(/*tile_x=*/0, /*tile_y=*/0, segments, residual_density,
-                        min_bpp, num_precision_bits, pixels, &blocks);
+  testutil::CreateBlocks(/*tile_x=*/0, /*tile_y=*/0, segments, residual_density,
+                         min_bpp, num_precision_bits, pixels, &blocks);
 
   RstrFltParams params(pixels->Y.w_, pixels->Y.h_);
   params.SetAll(tap_weights);
@@ -83,13 +83,13 @@ class RestorationFilterTest : public ::testing::TestWithParam<
 // Tests that no pixel is modified if each plane has one unique color.
 TEST_P(RestorationFilterTest, FilteringPlain) {
   const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
   YUVPlane pixels =
-      testing::CreatePlainPixels(width, height, min_value, max_value);
+      testutil::CreatePlainPixels(width, height, min_value, max_value);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
@@ -97,16 +97,16 @@ TEST_P(RestorationFilterTest, FilteringPlain) {
                                  kDefaultTapWeights,
                                  /*quality_hint=*/0, &pixels));
 
-  EXPECT_TRUE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_TRUE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_TRUE(testing::AreEqual(pixels.V, reference.V));
+  EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_TRUE(testutil::AreEqual(pixels.V, reference.V));
 }
 
 // Tests that pixels are filtered.
 TEST_P(RestorationFilterTest, MaxFilteringBlocked) {
   const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
@@ -118,16 +118,16 @@ TEST_P(RestorationFilterTest, MaxFilteringBlocked) {
                                  kDefaultTapWeights,
                                  /*quality_hint=*/0, &pixels));
 
-  EXPECT_FALSE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_FALSE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_FALSE(testing::AreEqual(pixels.V, reference.V));
+  EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_FALSE(testutil::AreEqual(pixels.V, reference.V));
 }
 
 // Tests that no pixel is modified if it's the highest quality.
 TEST_P(RestorationFilterTest, NoFiltering) {
   const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
@@ -139,16 +139,16 @@ TEST_P(RestorationFilterTest, NoFiltering) {
       Filter(num_precision_bits, min_value, max_value, kDefaultTapWeights,
              /*quality_hint=*/kMaxLossyQualityHint, &pixels));
 
-  EXPECT_TRUE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_TRUE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_TRUE(testing::AreEqual(pixels.V, reference.V));
+  EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_TRUE(testutil::AreEqual(pixels.V, reference.V));
 }
 
 // Tests that no pixel is modified if the filter tap weights are the identity.
 TEST_P(RestorationFilterTest, Identity) {
   const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
@@ -160,9 +160,9 @@ TEST_P(RestorationFilterTest, Identity) {
                                  kIdentityTapWeights,
                                  /*quality_hint=*/0, &pixels));
 
-  EXPECT_TRUE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_TRUE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_TRUE(testing::AreEqual(pixels.V, reference.V));
+  EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_TRUE(testutil::AreEqual(pixels.V, reference.V));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -195,8 +195,8 @@ TEST(RestorationFilterTest, Simple) {
   decoder_config.enable_directional_filter = false;
   decoder_config.enable_restoration_filter = true;
 
-  ASSERT_TRUE(testing::EncodeDecodeCompare("source4.webp", encoder_config,
-                                           decoder_config));
+  ASSERT_TRUE(testutil::EncodeDecodeCompare("source4.webp", encoder_config,
+                                            decoder_config));
 }
 
 // Tests that PSNR is better with the restoration filter than without.
@@ -211,10 +211,9 @@ TEST(RestorationFilterTest, BetterPSNR) {
   decoder_config_filter.enable_restoration_filter = true;
 
   float disto_diff[5];
-  ASSERT_WP2_OK(testing::GetDistortionDiff("source1.png", {1, 0, 300, 200},
-                                           encoder_config,
-                                           decoder_config_no_filter,
-                                           decoder_config_filter, disto_diff));
+  ASSERT_WP2_OK(testutil::GetDistortionDiff(
+      "source1.png", {1, 0, 300, 200}, encoder_config, decoder_config_no_filter,
+      decoder_config_filter, disto_diff));
   EXPECT_GT(disto_diff[4], 0.f);
 }
 

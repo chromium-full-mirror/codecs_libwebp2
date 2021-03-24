@@ -27,7 +27,7 @@
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
-namespace testing {
+namespace testutil {
 namespace {
 
 // Like assert() but is not silent if NDEBUG is defined (-c opt).
@@ -503,8 +503,8 @@ class IncrementalDecodingTester {
     CHECK_OR_DIE(decoded_area.width == output_.width());
     CHECK_OR_DIE(decoded_area.height == output_.height());
     // Compare incremental data and the current canvas.
-    CHECK_OR_DIE(testing::Compare(incremental_output_, output_,
-                                  "incrementally decoded"));
+    CHECK_OR_DIE(testutil::Compare(incremental_output_, output_,
+                                   "incrementally decoded"));
 
     if (GetDecoder().TryGetDecodedFeatures()->is_animation) {
       CHECK_OR_DIE(
@@ -597,5 +597,5 @@ WP2Status DecodeIncremental(const DecoderConfig& config, DataView input,
 
 #undef CHECK_OR_DIE
 
-}  // namespace testing
+}  // namespace testutil
 }  // namespace WP2

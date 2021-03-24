@@ -29,7 +29,7 @@ namespace {
 class IncrementalDecoderTest
     : public ::testing::TestWithParam<
           std::tuple<std::string, bool, uint32_t,
-                     DecoderConfig::IncrementalMode, testing::DecoderType>> {};
+                     DecoderConfig::IncrementalMode, testutil::DecoderType>> {};
 
 TEST_P(IncrementalDecoderTest, Simple) {
   const std::string src_file_name = std::get<0>(GetParam());
@@ -38,11 +38,11 @@ TEST_P(IncrementalDecoderTest, Simple) {
   const uint32_t thread_level = std::get<2>(GetParam());
   const DecoderConfig::IncrementalMode incremental_mode =
       std::get<3>(GetParam());
-  const testing::DecoderType decoder_type = std::get<4>(GetParam());
+  const testutil::DecoderType decoder_type = std::get<4>(GetParam());
 
   ArgbBuffer src;
   MemoryWriter writer;
-  ASSERT_WP2_OK(testing::CompressImage(src_file_name, &writer, &src, quality));
+  ASSERT_WP2_OK(testutil::CompressImage(src_file_name, &writer, &src, quality));
 
   DecoderConfig config = DecoderConfig::kDefault;
   config.thread_level = thread_level;
@@ -56,18 +56,18 @@ TEST_P(IncrementalDecoderTest, Simple) {
   // Try incremental decoding with different steps.
   for (const size_t step : {(size_t)1, writer.size_ / 20, writer.size_}) {
     std::vector<ArgbBuffer> decoded_frames;
-    ASSERT_WP2_OK(testing::DecodeIncremental(
+    ASSERT_WP2_OK(testutil::DecodeIncremental(
         config, {writer.mem_, writer.size_},
         {step, decoder_type, WP2_Argb_32, /*cmp=*/false, {}}, &decoded_frames));
     ASSERT_EQ(decoded_frames.size(), 1u);
-    EXPECT_TRUE(testing::Compare(src, decoded_frames.front(), src_file_name,
-                                 testing::GetExpectedDistortion(quality)));
+    EXPECT_TRUE(testutil::Compare(src, decoded_frames.front(), src_file_name,
+                                  testutil::GetExpectedDistortion(quality)));
 
     // Assert that the output of the incremental decoder is the same as Decode()
     // for lossy.
     if (!lossless) {
-      EXPECT_TRUE(testing::Compare(decoded_frames.front(), reference_output,
-                                   src_file_name));
+      EXPECT_TRUE(testutil::Compare(decoded_frames.front(), reference_output,
+                                    src_file_name));
     }
   }
 }
@@ -81,7 +81,7 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::Values(false) /* lossy */,
         ::testing::Values(64) /* extra threads */,
         ::testing::Values(DecoderConfig::IncrementalMode::PARTIAL_TILE_CONTEXT),
-        ::testing::Values(testing::DecoderType::kUnstableCustom)));
+        ::testing::Values(testutil::DecoderType::kUnstableCustom)));
 
 //------------------------------------------------------------------------------
 
@@ -89,14 +89,14 @@ INSTANTIATE_TEST_SUITE_P(
 // position in the bitstream.
 TEST(IncrementalDecoderTest, RewindAfterMetadata) {
   MemoryWriter writer;
-  ASSERT_WP2_OK(testing::CompressImage("source1_64x48.png", &writer));
+  ASSERT_WP2_OK(testutil::CompressImage("source1_64x48.png", &writer));
 
-  const testing::IncrementalDecodingTestSetup setup(
-      writer.size_, testing::DecoderType::kArray, WP2_ARGB_32, /*cmp=*/false,
-      {{testing::DecoderAction::Type::kRewindKeepBytes, writer.size_ + 1,
+  const testutil::IncrementalDecodingTestSetup setup(
+      writer.size_, testutil::DecoderType::kArray, WP2_ARGB_32, /*cmp=*/false,
+      {{testutil::DecoderAction::Type::kRewindKeepBytes, writer.size_ + 1,
         /*output_buffer_changed*/ 0}});
-  ASSERT_WP2_OK(testing::DecodeIncremental(DecoderConfig::kDefault,
-                                           {writer.mem_, writer.size_}, setup));
+  ASSERT_WP2_OK(testutil::DecodeIncremental(
+      DecoderConfig::kDefault, {writer.mem_, writer.size_}, setup));
 }
 
 //------------------------------------------------------------------------------
@@ -105,13 +105,13 @@ TEST(IncrementalDecoderTest, RewindAfterMetadata) {
 // in one shot.
 TEST(IncrementalDecoderTest, Compare) {
   MemoryWriter writer;
-  ASSERT_WP2_OK(testing::CompressImage("source1_64x48.png", &writer));
+  ASSERT_WP2_OK(testutil::CompressImage("source1_64x48.png", &writer));
 
-  const testing::IncrementalDecodingTestSetup setup(
-      writer.size_, testing::DecoderType::kArray, WP2_RGBA_32, /*cmp=*/true,
+  const testutil::IncrementalDecodingTestSetup setup(
+      writer.size_, testutil::DecoderType::kArray, WP2_RGBA_32, /*cmp=*/true,
       {});
-  ASSERT_WP2_OK(testing::DecodeIncremental(DecoderConfig::kDefault,
-                                           {writer.mem_, writer.size_}, setup));
+  ASSERT_WP2_OK(testutil::DecodeIncremental(
+      DecoderConfig::kDefault, {writer.mem_, writer.size_}, setup));
 }
 
 //------------------------------------------------------------------------------

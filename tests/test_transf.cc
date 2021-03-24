@@ -88,7 +88,7 @@ TEST_P(TransposeTest, Transpose32) {
 }
 
 INSTANTIATE_TEST_SUITE_P(TransposeTestInstantiation, TransposeTest,
-    ::testing::ValuesIn(testing::kWP2CpuInfos));
+                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
 
 //------------------------------------------------------------------------------
 
@@ -434,7 +434,7 @@ TEST_P(PrintTransformTest, Simple) {
   std::snprintf(file_path, sizeof(file_path) / sizeof(file_path[0]),
                 "/tmp/transform_%s_%s_%ux%u.png", WP2TransformNames[tf_x],
                 WP2TransformNames[tf_y], size, size);
-  testing::DumpImage(image, file_path);
+  testutil::DumpImage(image, file_path);
 }
 
 // "DISABLED_" keeps it from running.

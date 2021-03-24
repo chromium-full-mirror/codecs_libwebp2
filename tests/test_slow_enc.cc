@@ -35,7 +35,7 @@ TEST(EncodeDecodeLosslessTest, Lossless) {
 
   ArgbBuffer original(WP2_ARGB_32);
   EXPECT_EQ(original.Resize(256, 16), WP2_STATUS_OK);
-  testing::PrecalculatedRandom<65536u, uint8_t> rnd(0, 255);
+  testutil::PrecalculatedRandom<65536u, uint8_t> rnd(0, 255);
 
   rnd.Fill(original.GetRow8(0), original.stride(), original.height(),
            original.stride());
@@ -51,7 +51,7 @@ TEST(EncodeDecodeLosslessTest, Lossless) {
 
   ArgbBuffer converted_original(decompressed.format());
   ASSERT_WP2_OK(converted_original.ConvertFrom(original));
-  ASSERT_TRUE(testing::Compare(converted_original, decompressed, "internal"));
+  ASSERT_TRUE(testutil::Compare(converted_original, decompressed, "internal"));
 }
 
 //------------------------------------------------------------------------------
@@ -66,7 +66,7 @@ TEST_P(EncodeDecodeTest, Simple) {
   config.effort = std::get<2>(GetParam());
   config.sns = std::get<3>(GetParam());
 
-  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testutil::EncodeDecodeCompare(file_name, config));
 }
 
 INSTANTIATE_TEST_SUITE_P(

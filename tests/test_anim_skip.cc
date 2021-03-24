@@ -40,7 +40,7 @@ WP2Status CreateNoiseAnimation(uint32_t num_frames, Writer* const writer) {
   WP2_CHECK_STATUS(frame.Resize(32, 32));
   for (uint32_t i = 1; i <= num_frames; ++i) {
     frame.Fill({128, 128, 128, 128});
-    testing::Noise(/*seed=*/i, /*strength=*/128, &frame);
+    testutil::Noise(/*seed=*/i, /*strength=*/128, &frame);
     WP2_CHECK_STATUS(animation_encoder.AddFrame(frame, /*duration_ms=*/i));
   }
   WP2_CHECK_STATUS(animation_encoder.Encode(writer));

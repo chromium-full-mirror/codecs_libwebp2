@@ -32,7 +32,7 @@
 #include "src/wp2/encode.h"
 
 namespace WP2 {
-namespace testing {
+namespace testutil {
 
 // Limit read image size to avoid out-of-memory issues.
 // Hint:  kMaxNumPixels * kMaxBytesPerPixel (4) * kMaxNumFullCanvasAlloc (3)
@@ -109,7 +109,7 @@ int TestImageDecConfig(DataView encoded_data, const DecoderConfig& config,
 void SaveBeforeAfter(const ArgbBuffer& original, const ArgbBuffer& decompressed,
                      const std::string& path);
 
-}  // namespace testing
+}  // namespace testutil
 }  // namespace WP2
 
 #endif  // WP2_TESTS_FUZZ_FUZZ_UTILS_H_

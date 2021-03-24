@@ -27,9 +27,9 @@ namespace {
 TEST(ImageIoUtilTest, Simple) {
   std::string data;
   ASSERT_WP2_OK(IoUtilReadFile(
-                testing::GetTestDataPath("source1_64x48.png").c_str(), &data));
+      testutil::GetTestDataPath("source1_64x48.png").c_str(), &data));
 
-  const std::string file_path = testing::GetTempDataPath("test_image_io_util");
+  const std::string file_path = testutil::GetTempDataPath("test_image_io_util");
   std::remove(file_path.c_str());  // Make sure it doesn't exist.
   ASSERT_WP2_OK(IoUtilWriteFile(data, file_path.c_str(), /*overwrite=*/false));
   ASSERT_EQ(IoUtilWriteFile(data, file_path.c_str(), /*overwrite=*/false),
@@ -39,7 +39,7 @@ TEST(ImageIoUtilTest, Simple) {
   ASSERT_EQ(IoUtilWriteFile(data, "/tmp", /*overwrite=*/true),
             WP2_STATUS_INVALID_PARAMETER);
   EXPECT_EQ(
-      IoUtilReadFile(testing::GetTestDataPath("missing_file").c_str(), &data),
+      IoUtilReadFile(testutil::GetTestDataPath("missing_file").c_str(), &data),
       WP2_STATUS_INVALID_PARAMETER);
 }
 

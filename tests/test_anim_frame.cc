@@ -36,16 +36,15 @@
 namespace WP2 {
 namespace {
 
-using WP2::testing::GetTestDataPath;
+using WP2::testutil::GetTestDataPath;
 
 constexpr ProgressRange kProgress;
 
 TEST(AnimFrameTest, ForceLossless) {
   std::vector<ArgbBuffer> buffers;
-  ASSERT_WP2_OK(
-      testing::ReadImages({GetTestDataPath("logo.png"),
-                           GetTestDataPath("background.png")},
-                           &buffers));
+  ASSERT_WP2_OK(testutil::ReadImages(
+      {GetTestDataPath("logo.png"), GetTestDataPath("background.png")},
+      &buffers));
 
   Vector<Frame> frames;
   ASSERT_TRUE(frames.resize(2));
@@ -84,14 +83,14 @@ TEST(AnimFrameTest, ForceLossless) {
   uint32_t duration_ms = 0;
   ASSERT_TRUE(decoder.ReadFrame(&duration_ms));
   EXPECT_EQ(duration_ms, first_frame.duration_ms);
-  EXPECT_TRUE(testing::Compare(first_frame.rgb_pixels, decoder.GetPixels(),
-                               "logo", 99.f));
+  EXPECT_TRUE(testutil::Compare(first_frame.rgb_pixels, decoder.GetPixels(),
+                                "logo", 99.f));
 
   // We don't force lossless on the second frame so it will probably be lossy.
   ASSERT_TRUE(decoder.ReadFrame(&duration_ms));
   EXPECT_EQ(duration_ms, second_frame.duration_ms);
-  EXPECT_TRUE(testing::Compare(second_frame.rgb_pixels, decoder.GetPixels(),
-                               "background", 35.f));
+  EXPECT_TRUE(testutil::Compare(second_frame.rgb_pixels, decoder.GetPixels(),
+                                "background", 35.f));
 
   // Then ReadFrame() returns false when all data is decoded.
   EXPECT_FALSE(decoder.ReadFrame());
@@ -129,7 +128,7 @@ TEST_P(ParameterizedAnimFrameTest, Blend) {
   const Orientation orientation = std::get<0>(GetParam());
 
   std::vector<ArgbBuffer> buffers;
-  ASSERT_WP2_OK(testing::ReadImages(
+  ASSERT_WP2_OK(testutil::ReadImages(
       {GetTestDataPath("background.png"), GetTestDataPath("logo.png"),
        GetTestDataPath("composited.png")},
       &buffers));
@@ -190,15 +189,15 @@ TEST_P(ParameterizedAnimFrameTest, Blend) {
   uint32_t duration_ms;
   ASSERT_TRUE(decoder.ReadFrame(&duration_ms));
   EXPECT_EQ(duration_ms, first_frame.duration_ms);
-  EXPECT_TRUE(testing::Compare(buffers[0], decoded_frame_, "background", 35.,
-                               PSNR, config.decoding_orientation));
+  EXPECT_TRUE(testutil::Compare(buffers[0], decoded_frame_, "background", 35.,
+                                PSNR, config.decoding_orientation));
 
   // Second frame (shows "logo.png" composited on "background.png" which is
   // "composited.png").
   ASSERT_TRUE(decoder.ReadFrame(&duration_ms));
   EXPECT_EQ(duration_ms, second_frame.duration_ms);
-  EXPECT_TRUE(testing::Compare(buffers[2], decoded_frame_, "composited", 35.,
-                               PSNR, config.decoding_orientation));
+  EXPECT_TRUE(testutil::Compare(buffers[2], decoded_frame_, "composited", 35.,
+                                PSNR, config.decoding_orientation));
 
   // Then ReadFrame() returns false when all data is decoded.
   EXPECT_FALSE(decoder.ReadFrame());
@@ -209,7 +208,7 @@ TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
   const Orientation orientation = std::get<0>(GetParam());
 
   std::vector<ArgbBuffer> buffers;
-  ASSERT_WP2_OK(testing::ReadImages(
+  ASSERT_WP2_OK(testutil::ReadImages(
       {GetTestDataPath("background.png"), GetTestDataPath("logo.png"),
        GetTestDataPath("composited.png")},
       &buffers));
@@ -273,16 +272,16 @@ TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
   ASSERT_TRUE(decoder.ReadFrame(&duration_ms));
   EXPECT_EQ(duration_ms, second_frame.duration_ms);
   EXPECT_TRUE(decoder.TryGetFrameDecodedFeatures(0)->is_last);
-  EXPECT_TRUE(testing::Compare(buffers[2], decoded_frame_, "composited", 35.,
-                               PSNR, config.decoding_orientation));
+  EXPECT_TRUE(testutil::Compare(buffers[2], decoded_frame_, "composited", 35.,
+                                PSNR, config.decoding_orientation));
 
   // Normal (non incremental) decode.
   ArgbBuffer decoded_first_frame;
   ASSERT_WP2_OK(Decode(encoded_data.mem_, encoded_data.size_,
                        &decoded_first_frame, DecoderConfig::kDefault));
   // We should get the same result as incremental decoding.
-  EXPECT_TRUE(testing::Compare(decoded_frame_, decoded_first_frame,
-                               "composited", 99.f));
+  EXPECT_TRUE(testutil::Compare(decoded_frame_, decoded_first_frame,
+                                "composited", 99.f));
 
   // Then ReadFrame() returns false when all data is decoded.
   EXPECT_FALSE(decoder.ReadFrame());
@@ -428,9 +427,9 @@ TEST_P(ParameterizedAnimFrameTest, RandomFrames) {
 
     uint32_t duration_ms = 0;
     ASSERT_TRUE(decoder.ReadFrame(&duration_ms));
-    EXPECT_TRUE(testing::Compare(frame.rgb_pixels, decoded_frame_, "fake data",
-                                 testing::GetExpectedDistortion(config.quality),
-                                 PSNR, orientation))
+    EXPECT_TRUE(testutil::Compare(
+        frame.rgb_pixels, decoded_frame_, "fake data",
+        testutil::GetExpectedDistortion(config.quality), PSNR, orientation))
         << "Error on final frame " << i;
 
     ASSERT_WP2_OK(
@@ -549,15 +548,15 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
     ASSERT_TRUE(decoder.ReadFrame(&duration_ms));
     ASSERT_TRUE(decoded_frame_.IsView() &&
                 decoded_frame_.GetRow(0) == decoded_frame_internal_.GetRow(0));
-    EXPECT_TRUE(testing::Compare(expected_buffer, decoded_frame_, "fake data",
-                                 testing::GetExpectedDistortion(config.quality),
-                                 PSNR, orientation))
+    EXPECT_TRUE(testutil::Compare(
+        expected_buffer, decoded_frame_, "fake data",
+        testutil::GetExpectedDistortion(config.quality), PSNR, orientation))
         << "Error on final frame " << final_frame_index;
 
     if (final_frame_index == 0) {
       // Compare output of classic decoder (which only decodes the first frame).
-      EXPECT_TRUE(testing::Compare(decoded_frame_, decoded_first_frame,
-                                   "fake data", 99.))
+      EXPECT_TRUE(testutil::Compare(decoded_frame_, decoded_first_frame,
+                                    "fake data", 99.))
           << "Error on first frame";
     }
 

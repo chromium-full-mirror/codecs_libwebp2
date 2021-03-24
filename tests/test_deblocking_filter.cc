@@ -76,26 +76,26 @@ FilterBlockMap CreateAlignedBlocks(const Vector<Segment>& segments,
   EXPECT_WP2_OK(blocks.Allocate());
   const uint32_t s = segments.size();
   uint32_t id = 0;  // Segment id
-  testing::RegisterBlock(0, 0, BLK_16x8, id++ % s, res_den, min_bpp,
-                         /*with_lossy_alpha=*/true, &blocks);
-  testing::RegisterBlock(4, 0, BLK_16x8, id++ % s, res_den, min_bpp,
-                         /*with_lossy_alpha=*/true, &blocks);
-  testing::RegisterBlock(0, 2, BLK_8x16, id++ % s, res_den, min_bpp,
-                         /*with_lossy_alpha=*/true, &blocks);
-  testing::RegisterBlock(2, 2, BLK_16x16, id++ % s, res_den, min_bpp,
-                         /*with_lossy_alpha=*/true, &blocks);
-  testing::RegisterBlock(6, 2, BLK_8x4, id++ % s, res_den, min_bpp,
-                         /*with_lossy_alpha=*/true, &blocks);
-  testing::RegisterBlock(6, 3, BLK_4x4, id++ % s, res_den, min_bpp,
-                         /*with_lossy_alpha=*/false, &blocks);
-  testing::RegisterBlock(7, 3, BLK_4x4, id++ % s, res_den, min_bpp,
-                         /*with_lossy_alpha=*/true, &blocks);
-  testing::RegisterBlock(6, 4, BLK_8x16, id++ % s, res_den, min_bpp,
-                         /*with_lossy_alpha=*/true, &blocks);
-  testing::RegisterBlock(0, 6, BLK_8x8, id++ % s, res_den, min_bpp,
-                         /*with_lossy_alpha=*/true, &blocks);
-  testing::RegisterBlock(2, 6, BLK_16x8, id++ % s, res_den, min_bpp,
-                         /*with_lossy_alpha=*/false, &blocks);
+  testutil::RegisterBlock(0, 0, BLK_16x8, id++ % s, res_den, min_bpp,
+                          /*with_lossy_alpha=*/true, &blocks);
+  testutil::RegisterBlock(4, 0, BLK_16x8, id++ % s, res_den, min_bpp,
+                          /*with_lossy_alpha=*/true, &blocks);
+  testutil::RegisterBlock(0, 2, BLK_8x16, id++ % s, res_den, min_bpp,
+                          /*with_lossy_alpha=*/true, &blocks);
+  testutil::RegisterBlock(2, 2, BLK_16x16, id++ % s, res_den, min_bpp,
+                          /*with_lossy_alpha=*/true, &blocks);
+  testutil::RegisterBlock(6, 2, BLK_8x4, id++ % s, res_den, min_bpp,
+                          /*with_lossy_alpha=*/true, &blocks);
+  testutil::RegisterBlock(6, 3, BLK_4x4, id++ % s, res_den, min_bpp,
+                          /*with_lossy_alpha=*/false, &blocks);
+  testutil::RegisterBlock(7, 3, BLK_4x4, id++ % s, res_den, min_bpp,
+                          /*with_lossy_alpha=*/true, &blocks);
+  testutil::RegisterBlock(6, 4, BLK_8x16, id++ % s, res_den, min_bpp,
+                          /*with_lossy_alpha=*/true, &blocks);
+  testutil::RegisterBlock(0, 6, BLK_8x8, id++ % s, res_den, min_bpp,
+                          /*with_lossy_alpha=*/true, &blocks);
+  testutil::RegisterBlock(2, 6, BLK_16x8, id++ % s, res_den, min_bpp,
+                          /*with_lossy_alpha=*/false, &blocks);
   return blocks;
 }
 
@@ -103,7 +103,7 @@ FilterBlockMap CreateAlignedBlocks(const Vector<Segment>& segments,
 void Deblock(uint32_t num_precision_bits, int16_t min_value, int16_t max_value,
              uint32_t quality_hint, YUVPlane* const pixels) {
   const Vector<Segment> segments =
-      testing::CreateSegments(quality_hint, min_value, max_value);
+      testutil::CreateSegments(quality_hint, min_value, max_value);
   const double residual_density = 1. * quality_hint / kMaxLossyQualityHint;
   const double min_bpp = 4. * quality_hint / kMaxLossyQualityHint;
   // The created block edges should match at least some of the boundaries of
@@ -137,27 +137,27 @@ class DeblockingFilterTest : public ::testing::TestWithParam<uint32_t> {};
 // Tests that no pixel is modified if each plane has one unique color.
 TEST_P(DeblockingFilterTest, FilteringPlain) {
   const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
 
-  YUVPlane pixels = testing::CreatePlainPixels(kPixelsWidth, kPixelsHeight,
-                                               min_value, max_value);
+  YUVPlane pixels = testutil::CreatePlainPixels(kPixelsWidth, kPixelsHeight,
+                                                min_value, max_value);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
   Deblock(num_precision_bits, min_value, max_value, /*quality_hint=*/0,
           &pixels);
 
-  EXPECT_TRUE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_TRUE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_TRUE(testing::AreEqual(pixels.V, reference.V));
+  EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_TRUE(testutil::AreEqual(pixels.V, reference.V));
 }
 
 // Tests that some pixels are deblocked for horizontal and vertical edges.
 TEST_P(DeblockingFilterTest, MaxFilteringBlocked) {
   const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
 
   YUVPlane pixels =
       CreateBlockedPixels(min_value, max_value, /*with_alpha=*/false);
@@ -167,17 +167,17 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlocked) {
   Deblock(num_precision_bits, min_value, max_value, /*quality_hint=*/0,
           &pixels);
 
-  EXPECT_FALSE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_FALSE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_FALSE(testing::AreEqual(pixels.V, reference.V));
+  EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_FALSE(testutil::AreEqual(pixels.V, reference.V));
 }
 
 // Tests that some pixels are deblocked for horizontal and vertical edges
 // when the alpha plane is constant.
 TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithPlainAlpha) {
   const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
 
   YUVPlane pixels =
       CreateBlockedPixels(min_value, max_value, /*with_alpha=*/true);
@@ -187,18 +187,18 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithPlainAlpha) {
   Deblock(num_precision_bits, min_value, max_value, /*quality_hint=*/0,
           &pixels);
 
-  EXPECT_FALSE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_FALSE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_FALSE(testing::AreEqual(pixels.V, reference.V));
-  EXPECT_TRUE(testing::AreEqual(pixels.A, reference.A));
+  EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_FALSE(testutil::AreEqual(pixels.V, reference.V));
+  EXPECT_TRUE(testutil::AreEqual(pixels.A, reference.A));
 }
 
 // Tests that some pixels are deblocked for horizontal and vertical edges
 // when the alpha plane has low variance. Alpha plane should also be deblocked.
 TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithLowVarianceAlpha) {
   const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
 
   YUVPlane pixels =
       CreateBlockedPixels(min_value, max_value, /*with_alpha=*/true);
@@ -210,17 +210,17 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithLowVarianceAlpha) {
   Deblock(num_precision_bits, min_value, max_value, /*quality_hint=*/0,
           &pixels);
 
-  EXPECT_FALSE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_FALSE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_FALSE(testing::AreEqual(pixels.V, reference.V));
-  EXPECT_FALSE(testing::AreEqual(pixels.A, reference.A));
+  EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_FALSE(testutil::AreEqual(pixels.V, reference.V));
+  EXPECT_FALSE(testutil::AreEqual(pixels.A, reference.A));
 }
 
 // Tests that pixels are not deblocked when alpha plane has high variance.
 TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithHighVarianceAlpha) {
   const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
 
   YUVPlane pixels =
       CreateBlockedPixels(min_value, max_value, /*with_alpha=*/true);
@@ -236,17 +236,17 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithHighVarianceAlpha) {
   Deblock(num_precision_bits, min_value, max_value, /*quality_hint=*/0,
           &pixels);
 
-  EXPECT_TRUE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_TRUE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_TRUE(testing::AreEqual(pixels.V, reference.V));
-  EXPECT_TRUE(testing::AreEqual(pixels.A, reference.A));
+  EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_TRUE(testutil::AreEqual(pixels.V, reference.V));
+  EXPECT_TRUE(testutil::AreEqual(pixels.A, reference.A));
 }
 
 // Tests that no pixel is modified if it's the highest quality.
 TEST_P(DeblockingFilterTest, NoFiltering) {
   const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testing::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testing::GetMaxValueSigned(num_precision_bits);
+  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
+  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
 
   YUVPlane pixels = CreateBlockedPixels(min_value, max_value);
   YUVPlane reference;
@@ -255,9 +255,9 @@ TEST_P(DeblockingFilterTest, NoFiltering) {
   Deblock(num_precision_bits, min_value, max_value,
           /*quality_hint=*/kMaxLossyQualityHint, &pixels);
 
-  EXPECT_TRUE(testing::AreEqual(pixels.Y, reference.Y));
-  EXPECT_TRUE(testing::AreEqual(pixels.U, reference.U));
-  EXPECT_TRUE(testing::AreEqual(pixels.V, reference.V));
+  EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
+  EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
+  EXPECT_TRUE(testutil::AreEqual(pixels.V, reference.V));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -277,8 +277,8 @@ TEST(DeblockingFilterTest, Simple) {
   decoder_config.enable_directional_filter = false;
   decoder_config.enable_restoration_filter = false;
 
-  ASSERT_TRUE(testing::EncodeDecodeCompare("source4.webp", encoder_config,
-                                           decoder_config));
+  ASSERT_TRUE(testutil::EncodeDecodeCompare("source4.webp", encoder_config,
+                                            decoder_config));
 }
 
 // Tests that PSNR is better with the deblocking filter than without.
@@ -294,27 +294,26 @@ TEST(DeblockingFilterTest, BetterPSNR) {
   decoder_config_filter.enable_deblocking_filter = true;
 
   float disto_diff[5];
-  ASSERT_WP2_OK(
-      testing::GetDistortionDiff("source1.png", {25, 1, 150, 200},
-                                 encoder_config, decoder_config_no_filter,
-                                 decoder_config_filter, disto_diff));
+  ASSERT_WP2_OK(testutil::GetDistortionDiff(
+      "source1.png", {25, 1, 150, 200}, encoder_config,
+      decoder_config_no_filter, decoder_config_filter, disto_diff));
   EXPECT_GT(disto_diff[4], 0.f);
 }
 
 //------------------------------------------------------------------------------
 
 TEST(HelpersFilterTest, MinMaxValueSigned) {
-  EXPECT_EQ(testing::GetMinValueSigned(/*num_precision_bits=*/8),
+  EXPECT_EQ(testutil::GetMinValueSigned(/*num_precision_bits=*/8),
             std::numeric_limits<int8_t>::min());
-  EXPECT_EQ(testing::GetMaxValueSigned(/*num_precision_bits=*/8),
+  EXPECT_EQ(testutil::GetMaxValueSigned(/*num_precision_bits=*/8),
             std::numeric_limits<int8_t>::max());
 
-  EXPECT_EQ(testing::GetMinValueSigned(/*num_precision_bits=*/10), -512);
-  EXPECT_EQ(testing::GetMaxValueSigned(/*num_precision_bits=*/10), 511);
+  EXPECT_EQ(testutil::GetMinValueSigned(/*num_precision_bits=*/10), -512);
+  EXPECT_EQ(testutil::GetMaxValueSigned(/*num_precision_bits=*/10), 511);
 
-  EXPECT_EQ(testing::GetMinValueSigned(/*num_precision_bits=*/16),
+  EXPECT_EQ(testutil::GetMinValueSigned(/*num_precision_bits=*/16),
             std::numeric_limits<int16_t>::min());
-  EXPECT_EQ(testing::GetMaxValueSigned(/*num_precision_bits=*/16),
+  EXPECT_EQ(testutil::GetMaxValueSigned(/*num_precision_bits=*/16),
             std::numeric_limits<int16_t>::max());
 }
 
@@ -339,7 +338,7 @@ TEST_P(FilterTestCpuInfo, TestMeasureLength) {
       for (uint32_t s = 0; s <= kDblkMaxSharpness; ++s) {
         uint8_t out[32];
         MeasureFlatLengths(s, half, B, kDblCacheStep, out, 32);
-        for (uint32_t o : out) crc = testing::SillyCRC(crc, o);
+        for (uint32_t o : out) crc = testutil::SillyCRC(crc, o);
       }
     }
   }
@@ -355,7 +354,7 @@ TEST_P(FilterTestCpuInfo, TestWouldDeblock) {
     for (auto& a : A) a = gen.Get(-1024, 1024);
     for (uint32_t half = 1; half <= kDblkMaxHalf; ++half) {
       for (uint32_t t = 0; t <= 220; ++t) {
-        crc = testing::SillyCRC(crc, WouldDeblockLine(t, half, B));
+        crc = testutil::SillyCRC(crc, WouldDeblockLine(t, half, B));
       }
     }
   }
@@ -381,7 +380,7 @@ TEST_P(FilterTestCpuInfo, TestDeblockLines) {
         }
       }
       for (int x = -h; x < h; ++x) {
-        crc = testing::SillyCRC(crc, B[x]);
+        crc = testutil::SillyCRC(crc, B[x]);
       }
     }
   }
@@ -414,7 +413,7 @@ TEST_P(FilterTestCpuInfo, TestCopyTransposed) {
 }
 
 INSTANTIATE_TEST_SUITE_P(FilterTestCpuInfoInstantiation, FilterTestCpuInfo,
-                         ::testing::ValuesIn(testing::kWP2CpuInfos));
+                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
 
 //------------------------------------------------------------------------------
 

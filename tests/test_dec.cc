@@ -36,7 +36,7 @@ TEST_P(Lossless10Test, Simple) {
     // Load 10-bit source.
     ArgbBuffer src_32;
     ASSERT_WP2_OK(
-        ReadImage(testing::GetTestDataPath(GetParam()).c_str(), &src_32));
+        ReadImage(testutil::GetTestDataPath(GetParam()).c_str(), &src_32));
     ASSERT_WP2_OK(src.ConvertFrom(src_32));
 
     // Make some noise.
@@ -56,8 +56,8 @@ TEST_P(Lossless10Test, Simple) {
   ArgbBuffer output(WP2_Argb_38);
   ASSERT_WP2_OK(Decode(mem.mem_, mem.size_, &output));
 
-  ASSERT_TRUE(testing::Compare(src, output, GetParam(),
-                               testing::GetExpectedDistortion(config_enc)));
+  ASSERT_TRUE(testutil::Compare(src, output, GetParam(),
+                                testutil::GetExpectedDistortion(config_enc)));
 }
 
 INSTANTIATE_TEST_SUITE_P(Lossless10TestInstantiation, Lossless10Test,
@@ -77,16 +77,16 @@ TEST_P(DecodeTest, Simple) {
 
   ArgbBuffer src;
   MemoryWriter data;
-  ASSERT_WP2_OK(testing::CompressImage(src_file_name, &data, &src, quality,
-                                       /*effort=*/3));
+  ASSERT_WP2_OK(testutil::CompressImage(src_file_name, &data, &src, quality,
+                                        /*effort=*/3));
 
   ArgbBuffer output;
   DecoderConfig config;
   config.thread_level = thread_level;
   ASSERT_WP2_OK(Decode(data.mem_, data.size_, &output, config));
 
-  ASSERT_TRUE(testing::Compare(src, output, src_file_name,
-                               testing::GetExpectedDistortion(quality)));
+  ASSERT_TRUE(testutil::Compare(src, output, src_file_name,
+                                testutil::GetExpectedDistortion(quality)));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -110,7 +110,7 @@ TEST(DecodeTest, RawBuffer) {
 
   ArgbBuffer src;
   MemoryWriter data;
-  ASSERT_WP2_OK(testing::CompressImage(src_file_name, &data, &src, quality));
+  ASSERT_WP2_OK(testutil::CompressImage(src_file_name, &data, &src, quality));
 
   Data output_buffer;
   const uint32_t min_stride = src.width() * WP2FormatBpp(src.format());
@@ -127,8 +127,8 @@ TEST(DecodeTest, RawBuffer) {
                                    output_buffer.bytes, arbitrary_stride,
                                    /*is_slow=*/true));
 
-  ASSERT_TRUE(testing::Compare(src, output, src_file_name,
-                               testing::GetExpectedDistortion(quality)));
+  ASSERT_TRUE(testutil::Compare(src, output, src_file_name,
+                                testutil::GetExpectedDistortion(quality)));
 }
 
 //------------------------------------------------------------------------------

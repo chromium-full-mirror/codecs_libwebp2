@@ -27,7 +27,7 @@
 //------------------------------------------------------------------------------
 
 namespace WP2 {
-namespace testing {
+namespace testutil {
 namespace {
 
 class FuzzedParametersSetup : public FuzzedParameters {
@@ -84,17 +84,17 @@ void LimitSetupForBigImages(const Data& bitstream,
 }
 
 }  // namespace
-}  // namespace testing
+}  // namespace testutil
 }  // namespace WP2
 
 //------------------------------------------------------------------------------
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Input is considered random data and converted to parameters.
-  WP2::testing::FuzzedParametersSetup params(data, size);
+  WP2::testutil::FuzzedParametersSetup params(data, size);
 
   // Extract a random decoding pattern (when to rewind, which frames to skip).
-  WP2::testing::IncrementalDecodingTestSetup setup = params.ExtractSetup(size);
+  WP2::testutil::IncrementalDecodingTestSetup setup = params.ExtractSetup(size);
 
   // Extract a random config.
   WP2::DecoderConfig config;
@@ -105,11 +105,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // remaining bytes.
   WP2::Data encoded_data;
   if (!params.TryExtractWP2Bitstream(&encoded_data)) return 0;  // malloc fail.
-  WP2::testing::LimitSetupForBigImages(encoded_data, &setup);
-  WP2::testing::LimitConfigForBigImages(encoded_data, &config);
+  WP2::testutil::LimitSetupForBigImages(encoded_data, &setup);
+  WP2::testutil::LimitConfigForBigImages(encoded_data, &config);
 
   // Success is not expected but it should not crash or return a weird error.
-  const WP2Status status = WP2::testing::DecodeIncremental(
+  const WP2Status status = WP2::testutil::DecodeIncremental(
       config, {encoded_data.bytes, encoded_data.size}, setup);
   if (status != WP2_STATUS_OK &&
       status != WP2_STATUS_NOT_ENOUGH_DATA &&

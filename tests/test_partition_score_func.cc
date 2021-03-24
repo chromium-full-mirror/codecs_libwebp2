@@ -33,7 +33,7 @@ namespace {
 TEST(PartitionScoreFuncTest, BlockScoreFunc) {
   ArgbBuffer rgb;
   ASSERT_WP2_OK(
-      ReadImage(testing::GetTestDataPath("background.png").c_str(), &rgb));
+      ReadImage(testutil::GetTestDataPath("background.png").c_str(), &rgb));
 
   const EncoderConfig& config = EncoderConfig::kDefault;
   CSPTransform transf;

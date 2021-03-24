@@ -115,7 +115,7 @@ TEST_P(PartitionSetTest, Simple) {
   config.quality = std::get<1>(GetParam());
   config.partition_set = std::get<2>(GetParam());
 
-  ASSERT_TRUE(testing::EncodeDecodeCompare(file_name, config));
+  ASSERT_TRUE(testutil::EncodeDecodeCompare(file_name, config));
 }
 
 INSTANTIATE_TEST_SUITE_P(

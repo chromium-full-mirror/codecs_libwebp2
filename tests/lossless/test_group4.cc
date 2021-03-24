@@ -116,7 +116,8 @@ TEST_P(Group4Test, Pattern) {
   WP2_ASSERT_STATUS(Decode(memory_writer.mem_, memory_writer.size_,
                            &decompressed, decoder_config));
 
-  EXPECT_TRUE(testing::Compare(original, decompressed, /*file_name=*/"pattern"))
+  EXPECT_TRUE(
+      testutil::Compare(original, decompressed, /*file_name=*/"pattern"))
       << DisplayMask(dim, original) << DisplayMask(dim, decompressed);
 }  // namespace
 

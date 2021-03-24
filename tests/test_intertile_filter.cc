@@ -75,7 +75,7 @@ void CreateCanvasAndFilter(uint32_t width, uint32_t height,
   yuvs.reserve(tiles_layout.tiles.size());  // Plane16 has no safe copy ctor.
 
   for (Tile& tile : tiles_layout.tiles) {
-    segments.emplace_back(testing::CreateSegments(quality_hint, -128, 127));
+    segments.emplace_back(testutil::CreateSegments(quality_hint, -128, 127));
     yuvs.emplace_back();
     ASSERT_WP2_OK(
         yuvs.back().Resize(tile.yuv_output.Y.w_, tile.yuv_output.Y.h_));
@@ -83,16 +83,16 @@ void CreateCanvasAndFilter(uint32_t width, uint32_t height,
       yuvs.back().GetChannel(c).Fill(0);
     }
 
-    testing::CreateBlocks(tile.rect.x, tile.rect.y, segments.back(), res_den,
-                          min_bpp, /*num_precision_bits=*/8, &yuvs.back(),
-                          &tile.block_map);
+    testutil::CreateBlocks(tile.rect.x, tile.rect.y, segments.back(), res_den,
+                           min_bpp, /*num_precision_bits=*/8, &yuvs.back(),
+                           &tile.block_map);
   }
 
   CSPTransform csp;
   canvas->Fill(csp.ToYuv(Argb32b{220, 220, 0, 60}));
   for (Channel c : {kYChannel, kUChannel, kVChannel}) {
-    testing::Noise(csp.GetYUVMin(), csp.GetYUVMax(), /*seed=*/12 + c,
-                   /*strength=*/noise_strength, &canvas->GetChannel(c));
+    testutil::Noise(csp.GetYUVMin(), csp.GetYUVMax(), /*seed=*/12 + c,
+                    /*strength=*/noise_strength, &canvas->GetChannel(c));
   }
   ASSERT_WP2_OK(unfiltered->Copy(*canvas, /*resize_if_needed=*/true));
 
@@ -114,7 +114,7 @@ TEST_P(IntertileFilterTest, Plain) {
                         /*noise_strength=*/0, /*enable_filter=*/true,
                         /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/0.,
                         step_, &canvas, &unfiltered);
-  ASSERT_TRUE(testing::AreEqual(canvas, unfiltered));
+  ASSERT_TRUE(testutil::AreEqual(canvas, unfiltered));
 }
 
 // Tests that no pixel is modified if the filter is disabled.
@@ -124,7 +124,7 @@ TEST_P(IntertileFilterTest, DisabledFilter) {
                         /*noise_strength=*/10, /*enable_filter=*/false,
                         /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/0.,
                         step_, &canvas, &unfiltered);
-  ASSERT_TRUE(testing::AreEqual(canvas, unfiltered));
+  ASSERT_TRUE(testutil::AreEqual(canvas, unfiltered));
 }
 
 // Tests that no pixel is modified if the quality is too high.
@@ -134,7 +134,7 @@ TEST_P(IntertileFilterTest, HighQuality) {
                         /*noise_strength=*/10, /*enable_filter=*/true,
                         /*quality_hint=*/kMaxLossyQualityHint, /*res_den=*/0.,
                         /*min_bpp=*/0., step_, &canvas, &unfiltered);
-  ASSERT_TRUE(testing::AreEqual(canvas, unfiltered));
+  ASSERT_TRUE(testutil::AreEqual(canvas, unfiltered));
 }
 
 // Tests that no pixel is modified if the bpp are too high.
@@ -144,7 +144,7 @@ TEST_P(IntertileFilterTest, HighBpp) {
                         /*noise_strength=*/10, /*enable_filter=*/true,
                         /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/2.,
                         step_, &canvas, &unfiltered);
-  ASSERT_TRUE(testing::AreEqual(canvas, unfiltered));
+  ASSERT_TRUE(testutil::AreEqual(canvas, unfiltered));
 }
 
 // Tests that no pixel is modified if there is only one tile.
@@ -154,7 +154,7 @@ TEST_P(IntertileFilterTest, OneTile) {
                         /*noise_strength=*/10, /*enable_filter=*/true,
                         /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/0.,
                         step_, &canvas, &unfiltered);
-  ASSERT_TRUE(testing::AreEqual(canvas, unfiltered));
+  ASSERT_TRUE(testutil::AreEqual(canvas, unfiltered));
 }
 
 // Tests that pixels are modified if there are several tiles.
@@ -164,9 +164,9 @@ TEST_P(IntertileFilterTest, TileRow) {
                         /*noise_strength=*/10, /*enable_filter=*/true,
                         /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/0.,
                         step_, &canvas, &unfiltered);
-  ASSERT_FALSE(testing::AreEqual(canvas.Y, unfiltered.Y));
-  ASSERT_FALSE(testing::AreEqual(canvas.U, unfiltered.U));
-  ASSERT_FALSE(testing::AreEqual(canvas.V, unfiltered.V));
+  ASSERT_FALSE(testutil::AreEqual(canvas.Y, unfiltered.Y));
+  ASSERT_FALSE(testutil::AreEqual(canvas.U, unfiltered.U));
+  ASSERT_FALSE(testutil::AreEqual(canvas.V, unfiltered.V));
 }
 TEST_P(IntertileFilterTest, TileColumn) {
   YUVPlane canvas, unfiltered;
@@ -174,9 +174,9 @@ TEST_P(IntertileFilterTest, TileColumn) {
                         /*noise_strength=*/10, /*enable_filter=*/true,
                         /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/0.,
                         step_, &canvas, &unfiltered);
-  ASSERT_FALSE(testing::AreEqual(canvas.Y, unfiltered.Y));
-  ASSERT_FALSE(testing::AreEqual(canvas.U, unfiltered.U));
-  ASSERT_FALSE(testing::AreEqual(canvas.V, unfiltered.V));
+  ASSERT_FALSE(testutil::AreEqual(canvas.Y, unfiltered.Y));
+  ASSERT_FALSE(testutil::AreEqual(canvas.U, unfiltered.U));
+  ASSERT_FALSE(testutil::AreEqual(canvas.V, unfiltered.V));
 }
 
 // Tests that pixels are modified in the same way independently of the step.
@@ -190,14 +190,14 @@ TEST_P(IntertileFilterTest, Deterministic) {
                           /*enable_filter=*/true, /*quality_hint=*/0,
                           /*res_den=*/0., /*min_bpp=*/0.,
                           steps[i], &canvas[i], &unfiltered[i]);
-    ASSERT_FALSE(testing::AreEqual(canvas[i].Y, unfiltered[i].Y));
-    ASSERT_FALSE(testing::AreEqual(canvas[i].U, unfiltered[i].U));
-    ASSERT_FALSE(testing::AreEqual(canvas[i].V, unfiltered[i].V));
+    ASSERT_FALSE(testutil::AreEqual(canvas[i].Y, unfiltered[i].Y));
+    ASSERT_FALSE(testutil::AreEqual(canvas[i].U, unfiltered[i].U));
+    ASSERT_FALSE(testutil::AreEqual(canvas[i].V, unfiltered[i].V));
     if (i > 0) {
       // The noise seed being the same, the same base image is expected.
-      ASSERT_TRUE(testing::AreEqual(unfiltered[0], unfiltered[i]));
+      ASSERT_TRUE(testutil::AreEqual(unfiltered[0], unfiltered[i]));
       // Same expected filtering too.
-      ASSERT_TRUE(testing::AreEqual(canvas[0], canvas[i]));
+      ASSERT_TRUE(testutil::AreEqual(canvas[0], canvas[i]));
     }
   }
 }

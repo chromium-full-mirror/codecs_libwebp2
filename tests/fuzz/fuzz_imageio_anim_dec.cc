@@ -34,7 +34,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   WP2::ArgbBuffer buffer;
   WP2::ImageReader image_reader(data, size, &buffer, WP2::FileFormat::AUTO,
                                 WP2::LogLevel::QUIET,
-                                WP2::testing::kMaxNumPixels);
+                                WP2::testutil::kMaxNumPixels);
   bool is_last_frame = true;
   while (image_reader.ReadFrame(&is_last_frame) == WP2_STATUS_OK &&
          !is_last_frame) {
