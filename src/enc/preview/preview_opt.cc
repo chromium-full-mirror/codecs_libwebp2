@@ -332,6 +332,8 @@ WP2Status PreviewData::Optimize(const ArgbBuffer& canvas,
 
     if (num_solutions_since_last_improvement >
         config.GetMaxNumConsecutiveSolutionsWithoutImprovement()) {
+      WP2_CHECK_STATUS(progress.AdvanceBy(
+          1. * (config.num_iterations - iteration) / config.num_iterations));
       break;
     }
     bool maybe_duplicated_vertices = false;
