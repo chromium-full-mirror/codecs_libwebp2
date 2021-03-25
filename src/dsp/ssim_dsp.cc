@@ -23,6 +23,7 @@
 
 #if defined(WP2_USE_SSE)
 #include <initializer_list>
+#include "src/dsp/dsp_x86.h"
 #endif
 
 //------------------------------------------------------------------------------
@@ -160,7 +161,7 @@ const __m128i kWeight4_32b = MakeWeight32b(4);
 
 uint32_t HorizontalAdd16b_SSE(const __m128i* const m) {
   uint16_t tmp[8];
-  _mm_storeu_si128((__m128i*)tmp, *m);
+  Store128b(*m, tmp);
   uint16_t res = 0;  // use a 16b accumulator to help clang find optims!
   for (uint32_t i = 0; i < 8; ++i) res += tmp[i];
   return (uint32_t)res;
@@ -173,30 +174,30 @@ uint32_t HorizontalAdd32b_SSE(const __m128i* const m) {
   return (uint32_t)_mm_cvtsi128_si32(c);
 }
 
-#define ACCUMULATE_ROW_4x8u(W) do {                                 \
-  /* process 7 32b-pixels at a time */                              \
-  const __m128i a0 = _mm_loadu_si128((const __m128i*)(src1 +  0));  \
-  const __m128i b0 = _mm_loadu_si128((const __m128i*)(src2 +  0));  \
-  const __m128i c0 = _mm_loadu_si128((const __m128i*)(src1 + 16));  \
-  const __m128i d0 = _mm_loadu_si128((const __m128i*)(src2 + 16));  \
-  /* select the lowest 8b channel */                                \
-  const __m128i a1 = _mm_and_si128(a0, mask);                       \
-  const __m128i b1 = _mm_and_si128(b0, mask);                       \
-  const __m128i c1 = _mm_and_si128(c0, mask);                       \
-  const __m128i d1 = _mm_and_si128(d0, mask);                       \
-  /* convert to 16b and multiply by weight */                       \
-  const __m128i a2 = _mm_packs_epi32(a1, c1);                       \
-  const __m128i b2 = _mm_packs_epi32(b1, d1);                       \
-  const __m128i wa2 = _mm_mullo_epi16(a2, W);                       \
-  const __m128i wb2 = _mm_mullo_epi16(b2, W);                       \
-  /* accumulate */                                                  \
-  xm  = _mm_add_epi16(xm, wa2);                                     \
-  ym  = _mm_add_epi16(ym, wb2);                                     \
-  xxm = _mm_add_epi32(xxm, _mm_madd_epi16(a2, wa2));                \
-  xym = _mm_add_epi32(xym, _mm_madd_epi16(a2, wb2));                \
-  yym = _mm_add_epi32(yym, _mm_madd_epi16(b2, wb2));                \
-  src1 += stride1;                                                  \
-  src2 += stride2;                                                  \
+#define ACCUMULATE_ROW_4x8u(W) do {                        \
+  /* process 7 32b-pixels at a time */                     \
+  const __m128i a0 = Load128b(src1 +  0);                  \
+  const __m128i b0 = Load128b(src2 +  0);                  \
+  const __m128i c0 = Load128b(src1 + 16);                  \
+  const __m128i d0 = Load128b(src2 + 16);                  \
+  /* select the lowest 8b channel */                       \
+  const __m128i a1 = _mm_and_si128(a0, mask);              \
+  const __m128i b1 = _mm_and_si128(b0, mask);              \
+  const __m128i c1 = _mm_and_si128(c0, mask);              \
+  const __m128i d1 = _mm_and_si128(d0, mask);              \
+  /* convert to 16b and multiply by weight */              \
+  const __m128i a2 = _mm_packs_epi32(a1, c1);              \
+  const __m128i b2 = _mm_packs_epi32(b1, d1);              \
+  const __m128i wa2 = _mm_mullo_epi16(a2, W);              \
+  const __m128i wb2 = _mm_mullo_epi16(b2, W);              \
+  /* accumulate */                                         \
+  xm  = _mm_add_epi16(xm, wa2);                            \
+  ym  = _mm_add_epi16(ym, wb2);                            \
+  xxm = _mm_add_epi32(xxm, _mm_madd_epi16(a2, wa2));       \
+  xym = _mm_add_epi32(xym, _mm_madd_epi16(a2, wb2));       \
+  yym = _mm_add_epi32(yym, _mm_madd_epi16(b2, wb2));       \
+  src1 += stride1;                                         \
+  src2 += stride2;                                         \
 } while (0)
 
 void SSIMGet_SSE_4x(const uint8_t* src1, size_t stride1,
@@ -253,11 +254,11 @@ __m128i Load8x8bTo16s(const uint8_t* const ptr) {
   ACCUMULATE_ROW(a0, b0, W1, W2);                                   \
 } while (0)
 
-#define ACCUMULATE_ROW_16b(W1, W2) do {                             \
-  /* process 7 16b-pixels at a time */                              \
-  const __m128i a0 = _mm_loadu_si128((const __m128i*)(src1));       \
-  const __m128i b0 = _mm_loadu_si128((const __m128i*)(src2));       \
-  ACCUMULATE_ROW(a0, b0, W1, W2);                                   \
+#define ACCUMULATE_ROW_16b(W1, W2) do {    \
+  /* process 7 16b-pixels at a time */     \
+  const __m128i a0 = Load128b(src1);       \
+  const __m128i b0 = Load128b(src2);       \
+  ACCUMULATE_ROW(a0, b0, W1, W2);          \
 } while (0)
 
 void SSIMGet_SSE_8u(const uint8_t* src1, size_t stride1,
@@ -454,8 +455,8 @@ uint64_t SumSquaredError8u_SSE(const uint8_t* A, const uint8_t* B,
   __m128i sum = _mm_setzero_si128();
   uint32_t i = 0;
   for (; i + 16 <= len; i += 16) {
-    const __m128i a = _mm_loadu_si128((const __m128i*)&A[i]);
-    const __m128i b = _mm_loadu_si128((const __m128i*)&B[i]);
+    const __m128i a = Load128b(&A[i]);
+    const __m128i b = Load128b(&B[i]);
     __m128i tmp_sum;
     SubtractAndAccumulate_SSE(a, b, &tmp_sum);
     sum = _mm_add_epi32(sum, tmp_sum);
@@ -465,7 +466,7 @@ uint64_t SumSquaredError8u_SSE(const uint8_t* A, const uint8_t* B,
   for (; i < len; ++i) sum_i += (A[i] - B[i]) * (A[i] - B[i]);
 
   uint32_t tmp[4];
-  _mm_storeu_si128((__m128i*)tmp, sum);
+  Store128b(sum, tmp);
   sum_i += tmp[3] + tmp[2] + tmp[1] + tmp[0];
   return sum_i;
 }
@@ -474,10 +475,8 @@ inline void SubtractAndAccumulate16s_SSE(const __m128i* const a,
                                          const __m128i* const b,
                                          __m128i* const sum1,
                                          __m128i* const sum2) {
-  const __m128i A0 = _mm_sub_epi16(_mm_loadu_si128(a + 0),
-                                   _mm_loadu_si128(b + 0));
-  const __m128i A1 = _mm_sub_epi16(_mm_loadu_si128(a + 1),
-                                   _mm_loadu_si128(b + 1));
+  const __m128i A0 = _mm_sub_epi16(Load128b(a + 0), Load128b(b + 0));
+  const __m128i A1 = _mm_sub_epi16(Load128b(a + 1), Load128b(b + 1));
   const __m128i B0 = _mm_madd_epi16(A0, A0);
   const __m128i B1 = _mm_madd_epi16(A1, A1);
   const __m128i C0 = _mm_add_epi32(B0, B1);
@@ -501,7 +500,7 @@ uint64_t SumSquaredError16s_SSE(const int16_t* A, const int16_t* B,
   }
   sum1 = _mm_add_epi64(sum1, sum2);
   uint64_t tmp[2];
-  _mm_storeu_si128((__m128i*)&tmp[0], sum1);
+  Store128b(sum1, tmp);
   uint64_t sum_i = tmp[1] + tmp[0];
 
   for (; i < len; ++i) sum_i += (A[i] - B[i]) * (A[i] - B[i]);
@@ -536,14 +535,14 @@ void SumSquaredError4x8u_SSE(const uint8_t* A, const uint8_t* B,
   __m128i sum = _mm_setzero_si128();
   uint32_t i = 0;
   for (; i + 4 <= len; i += 4) {
-    const __m128i a = _mm_loadu_si128((const __m128i*)&A[4 * i]);
-    const __m128i b = _mm_loadu_si128((const __m128i*)&B[4 * i]);
+    const __m128i a = Load128b(&A[4 * i]);
+    const __m128i b = Load128b(&B[4 * i]);
     __m128i tmp_sum;
     SubtractAndAccumulate4x_SSE(a, b, &tmp_sum);
     sum = _mm_add_epi32(sum, tmp_sum);
   }
   uint32_t tmp[4];
-  _mm_storeu_si128((__m128i*)tmp, sum);
+  Store128b(sum, tmp);
   result[0] += tmp[0];
   result[1] += tmp[1];
   result[2] += tmp[2];
@@ -551,6 +550,36 @@ void SumSquaredError4x8u_SSE(const uint8_t* A, const uint8_t* B,
   for (; i < len; ++i) {
     for (uint32_t c = 0; c < 4; ++c) {
       const uint32_t diff = A[4 * i + c] - B[4 * i + c];
+      result[c] += diff * diff;
+    }
+  }
+}
+
+void SumSquaredError3x8u_SSE(const uint8_t* A, const uint8_t* B,
+                             uint32_t len, uint64_t result[4]) {
+  const __m128i kShuffleCst = _mm_setr_epi8(
+    0, 1, 2, -1, 3, 4, 5, -1, 6, 7, 8, -1, 9, 10, 11, -1);
+  __m128i sum = _mm_setzero_si128();
+  uint32_t i = 0;
+  // load 4*4 bytes, but process 3*4 bytes
+  for (; i + 4 * 4 <= 3 * len; i += 4 * 3) {
+    const __m128i rgb24_A = Load128b(A + i);
+    const __m128i rgb24_B = Load128b(B + i);
+    __m128i rgb32_A = _mm_shuffle_epi8(rgb24_A, kShuffleCst);
+    __m128i rgb32_B = _mm_shuffle_epi8(rgb24_B, kShuffleCst);
+    __m128i tmp_sum;
+    SubtractAndAccumulate4x_SSE(rgb32_A, rgb32_B, &tmp_sum);
+    sum = _mm_add_epi32(sum, tmp_sum);
+  }
+  uint32_t tmp[4];
+  Store128b(sum, tmp);
+  result[0] += tmp[0];
+  result[1] += tmp[1];
+  result[2] += tmp[2];
+
+  for (; i < 3 * len; i += 3) {
+    for (uint32_t c = 0; c < 3; ++c) {
+      const uint32_t diff = A[i + c] - B[i + c];
       result[c] += diff * diff;
     }
   }
@@ -564,11 +593,11 @@ uint64_t SumSquaredErrorBlock_SSE(const int16_t* src1, uint32_t step1,
   for (uint32_t j = 0; j < bh; ++j) {
     uint32_t i = 0;
     for (; i + 8 <= bw; i += 8) {
-      const __m128i a0 = _mm_loadu_si128((const __m128i*)&src1[i]);
-      const __m128i b0 = _mm_loadu_si128((const __m128i*)&src2[i]);
+      const __m128i a0 = Load128b(&src1[i]);
+      const __m128i b0 = Load128b(&src2[i]);
       const __m128i c0 = _mm_sub_epi16(a0, b0);
       const __m128i sum_tmp = _mm_madd_epi16(c0, c0);
-      _mm_storeu_si128((__m128i*)tmp, sum_tmp);
+      Store128b(sum_tmp, tmp);
       sum_i += tmp[3] + tmp[2] + tmp[1] + tmp[0];
     }
     for (; i + 4 <= bw; i += 4) {
@@ -576,7 +605,7 @@ uint64_t SumSquaredErrorBlock_SSE(const int16_t* src1, uint32_t step1,
       const __m128i b0 = _mm_loadl_epi64((const __m128i*)&src2[i]);
       const __m128i c0 = _mm_sub_epi16(a0, b0);
       const __m128i sum_tmp = _mm_madd_epi16(c0, c0);
-      _mm_storeu_si128((__m128i*)tmp, sum_tmp);
+      Store128b(sum_tmp, tmp);
       sum_i += tmp[1] + tmp[0];
     }
     for (; i < bw; ++i) {
@@ -593,7 +622,7 @@ static WP2_TSAN_IGNORE_FUNCTION void WP2PSNRInitSSE() {
   WP2SumSquaredErrorBlock = SumSquaredErrorBlock_SSE;
   WP2SumSquaredError8u = SumSquaredError8u_SSE;
   WP2SumSquaredError4x8u = SumSquaredError4x8u_SSE;
-  // TODO(mayrla): WP2SumSquaredError3x8u
+  WP2SumSquaredError3x8u = SumSquaredError3x8u_SSE;
   WP2SumSquaredError16s = SumSquaredError16s_SSE;
 }
 

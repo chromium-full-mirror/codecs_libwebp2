@@ -658,6 +658,8 @@ void WP2DspReset() {
   WP2SumSquaredError8u = nullptr;
   WP2SumSquaredError16s = nullptr;
   WP2SumSquaredError4x8u = nullptr;
+  WP2SumSquaredError3x8u = nullptr;
+  WP2SumSquaredError4x16u = nullptr;
 
   WP2SumSquaredErrorBlock = nullptr;
   WP2SumSquaredErrorHalfBlock = nullptr;

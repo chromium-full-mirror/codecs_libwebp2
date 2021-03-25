@@ -467,17 +467,14 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
   const uint32_t pix_channel_size = pix_size * (include_alpha ? 4 : 3);
   if (metric_type == PSNR) {
     WP2PSNRInit();
+    auto metric_call = (WP2FormatBpp(format_) == 4) ? WP2SumSquaredError4x8u
+                                                    : WP2SumSquaredError3x8u;
     uint64_t result_64b[4] = {0, 0, 0, 0};
     for (uint32_t y = 0; y < height(); ++y) {
       if (WP2Formatbpc(ref.format()) == 8) {
         const uint8_t* const ptr1 = GetRow8(y);
         const uint8_t* const ptr2 = ref.GetRow8(y);
-        if (WP2FormatBpp(format_) == 4) {
-          WP2SumSquaredError4x8u(ptr1, ptr2, width(), result_64b);
-        } else {
-          assert(WP2FormatBpp(format_) == 3);
-          WP2SumSquaredError3x8u(ptr1, ptr2, width(), result_64b);
-        }
+        metric_call(ptr1, ptr2, width(), result_64b);
       } else {
         const uint16_t* const ptr1 = GetRow16(y);
         const uint16_t* const ptr2 = ref.GetRow16(y);

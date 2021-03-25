@@ -35,7 +35,7 @@ class DspTest : public ::testing::TestWithParam<WP2CPUInfo> {
   }
 };
 
-TEST_P(DspTest, SSETest16s) {
+TEST_P(DspTest, SSETest16sFullBlock) {
   WP2PSNRInit();
   testutil::PrecalculatedRandom<65536u, int16_t> rnd(-1024, 1024);
   uint64_t sum = 0;
@@ -55,7 +55,7 @@ TEST_P(DspTest, SSETest16s) {
   EXPECT_EQ(sum, 11322889319853296395llu);
 }
 
-TEST_P(DspTest, SSETest16sHalf) {
+TEST_P(DspTest, SSETest16sHalfBlock) {
   WP2PSNRInit();
   testutil::PrecalculatedRandom<65536u, int16_t> rnd(-1024, 1024);
   uint64_t sum = 0;
@@ -105,6 +105,38 @@ TEST_P(DspTest, SSETest4x8u) {
   }
   const uint64_t sum = sums[0] ^ (sums[1] + sums[2] - sums[3]);
   EXPECT_EQ(sum, 211731994llu);
+}
+
+TEST_P(DspTest, SSETest3x8u) {
+  WP2PSNRInit();
+  testutil::PrecalculatedRandom<65536u, uint8_t> rnd(0, 256);
+  constexpr uint32_t max_w = 1024;
+  uint64_t sums[3] = { 0 };
+  for (uint32_t N = 0; N < 200000; ++N) {
+    const uint32_t w = 1 + rnd.GetUnsigned(max_w);
+    uint8_t tmp1[3 * max_w], tmp2[3 * max_w];
+    rnd.Fill(tmp1, 3 * w);
+    rnd.Fill(tmp2, 3 * w);
+    WP2SumSquaredError3x8u(tmp1, tmp2, w, sums);
+  }
+  const uint64_t sum = sums[0] ^ (sums[1] - sums[2]);
+  EXPECT_EQ(sum, 18446742956550012216llu);
+}
+
+TEST_P(DspTest, SSETest16s) {
+  WP2PSNRInit();
+  testutil::PrecalculatedRandom<65536u, int16_t> rnd(0, 256);
+  constexpr uint32_t max_w = 1024;
+  uint64_t sum = 0;
+  for (uint32_t N = 0; N < 200000; ++N) {
+    const uint32_t w = 1 + rnd.GetUnsigned(max_w);
+    int16_t tmp1[max_w], tmp2[max_w];
+    rnd.Fill(tmp1, w);
+    rnd.Fill(tmp2, w);
+    sum = ((sum << 2) + (sum << 3))
+        ^ WP2SumSquaredError16s(tmp1, tmp2, w);
+  }
+  EXPECT_EQ(sum, 16061882581321156135llu);
 }
 
 //------------------------------------------------------------------------------
