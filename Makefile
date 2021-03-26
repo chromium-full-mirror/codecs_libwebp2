@@ -43,12 +43,6 @@ ifeq ($(strip $(shell uname)), Darwin)
   # anmd this is for freeglut:
   EXTRA_FLAGS += -DWP2_HAVE_FREEGLUT
   GL_LIBS = -lglut -lGL
-  # for now, we force linking again MacOS 10.14 sdk, since
-  # OpenGL is broken with 10.15.
-  SYSROOT=-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.14.sdk
-  CFLAGS += $(SYSROOT)
-  CXXFLAGS += $(SYSROOT)
-  LDFLAGS += $(SYSROOT)
 else
   GL_LIBS = -lglut -lGL
 endif
