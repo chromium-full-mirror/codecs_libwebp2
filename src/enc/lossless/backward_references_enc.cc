@@ -713,29 +713,19 @@ static WP2Status CalculateBestCacheConfig(
 
     const BackwardRefs& refs = (i == 0) ? refs_in : *refs_tmp;
 
-    WP2::ANSEncNoop enc_noop;
+    WP2::ANSEncCounter enc_counter;
     WP2::SymbolRecorder symbol_recorder;
     WP2_CHECK_STATUS(symbol_recorder.Allocate(info, /*num_records=*/0));
     WP2_CHECK_STATUS(
-        StorePixels(width, height, refs, &enc_noop, &symbol_recorder));
+        StorePixels(width, height, refs, &enc_counter, &symbol_recorder));
 
     // Get the header cost in bits.
-    WP2::ANSEncCounter enc_counter;
     WP2::SymbolWriter symbol_writer;
-    WP2_CHECK_STATUS(symbol_writer.Init(info, effort));
-    WP2_CHECK_STATUS(symbol_writer.Allocate());
-    WP2::ANSDictionaries dicts;
+    float storage_cost;
     WP2_CHECK_STATUS(WriteHeaders(symbol_recorder, info, num_pixels, effort,
-                                  &enc_counter, &dicts, &symbol_writer));
-    const float cost_header = enc_counter.GetCost();
-
-    // Get the storage cost by going through a proper write.
-    // TODO(vrabaud) this is slow: we cannot initialize a SymbolCounter from the
-    //               SymbolWriter because stats are lost.
-    WP2::ANSEnc enc;
-    WP2_CHECK_STATUS(StorePixels(width, height, refs, &enc, &symbol_writer));
-    const float cost_main = enc.GetCost(dicts);
-    const float cost = cost_header + cost_main;
+                                  &enc_counter, /*dicts=*/nullptr,
+                                  &symbol_writer, &storage_cost));
+    const float cost = enc_counter.GetCost() + storage_cost;
 
     if (cost < cost_min) {
       *cache_config = cache_config_tmp;
@@ -804,19 +794,17 @@ static WP2Status GetStorageCost(uint32_t width, uint32_t height,
                                 float* const cost) {
   // Get the symbols stats.
   WP2::SymbolRecorder recorder;
-  WP2::ANSEncNoop enc_noop;
+  WP2::ANSEncCounter enc_counter;
   WP2_CHECK_STATUS(recorder.Allocate(symbols_info, /*num_records=*/0));
-  WP2_CHECK_STATUS(StorePixels(width, height, refs, &enc_noop, &recorder));
+  WP2_CHECK_STATUS(StorePixels(width, height, refs, &enc_counter, &recorder));
 
   // Compute how much it would take to write the headers and the image.
-  WP2::ANSEncCounter enc_counter;
-  WP2::ANSDictionaries dicts;
   WP2::SymbolWriter symbol_writer;
+  float storage_cost;
   WP2_CHECK_STATUS(WriteHeaders(recorder, symbols_info, num_pixels, effort,
-                                &enc_counter, &dicts, &symbol_writer));
-  WP2_CHECK_STATUS(
-      StorePixels(width, height, refs, &enc_counter, &symbol_writer));
-  *cost = enc_counter.GetCost();
+                                &enc_counter, /*dicts=*/nullptr, &symbol_writer,
+                                &storage_cost));
+  *cost = enc_counter.GetCost() + storage_cost;
   return WP2_STATUS_OK;
 }
 

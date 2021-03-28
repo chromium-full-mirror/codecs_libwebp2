@@ -242,13 +242,19 @@ class SymbolWriter : public SymbolManager,
   // minimum value of the symbol), decides how to store it
   // (trivial/range/dictionary) and writes the meta-information used to later be
   // able to decode the symbols.
+  // If not nullptr, dicts are filled with symbol stats.
+  // If not nullptr, storage_cost contains the cost of storing the symbol with
+  // the best method chosen by WriteHeader.
+  // TODO(vrabaud) Implement 'storage_cost' for Adaptive symbols.
   WP2Status WriteHeader(uint32_t sym, uint32_t cluster, uint32_t max_nnz,
                         const uint32_t* const counts, WP2_OPT_LABEL,
-                        ANSEncBase* const enc, ANSDictionaries* const dicts);
+                        ANSEncBase* const enc, ANSDictionaries* const dicts,
+                        float* const storage_cost = nullptr);
   // Same as above but uses counts from the provided SymbolRecorder.
   WP2Status WriteHeader(uint32_t sym, uint32_t cluster, uint32_t max_nnz,
                         const SymbolRecorder& syntax_recorder, WP2_OPT_LABEL,
-                        ANSEncBase* const enc, ANSDictionaries* const dicts);
+                        ANSEncBase* const enc, ANSDictionaries* const dicts,
+                        float* const storage_cost = nullptr);
   // Same as above but writes headers for all clusters.
   WP2Status WriteHeader(uint32_t sym, uint32_t max_nnz,
                         const SymbolRecorder& syntax_recorder, WP2_OPT_LABEL,

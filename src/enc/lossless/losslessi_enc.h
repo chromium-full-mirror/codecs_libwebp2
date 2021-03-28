@@ -199,7 +199,8 @@ WP2Status WriteHeaders(const WP2::SymbolRecorder& recorder,
                        uint32_t num_pixels, int effort,
                        WP2::ANSEncBase* const enc,
                        WP2::ANSDictionaries* const dicts,
-                       WP2::SymbolWriter* const sw);
+                       WP2::SymbolWriter* const sw,
+                       float* const cost = nullptr);
 
 // Converts a distance to a code taking into account the proximity to the
 // current pixel.

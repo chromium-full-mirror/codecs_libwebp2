@@ -293,18 +293,37 @@ WP2Status StorePixels(uint32_t width, uint32_t height, const BackwardRefs& refs,
 WP2Status WriteHeaders(const WP2::SymbolRecorder& recorder,
                        const LosslessSymbolsInfo& symbols_info,
                        uint32_t num_pixels, int effort,
-                       WP2::ANSEncBase* const enc,
-                       WP2::ANSDictionaries* const dicts,
-                       WP2::SymbolWriter* const sw) {
+                       WP2::ANSEncBase* const enc, WP2::ANSDictionaries* dicts,
+                       WP2::SymbolWriter* const sw, float* const cost) {
   WP2::ANSDebugPrefix prefix(enc, "symbols");
   WP2_CHECK_STATUS(sw->Init(symbols_info, effort));
   WP2_CHECK_STATUS(sw->Allocate());
+  float cost_tmp = 0.f;
+  float* cost_tmp_ptr;
+  if (cost == nullptr) {
+    cost_tmp_ptr = nullptr;
+  } else {
+    *cost = 0.f;
+    cost_tmp_ptr = &cost_tmp;
+  }
+  WP2::ANSDictionaries dict_tmp;
+  WP2::ANSDictionaries* dict_tmp_ptr;
+  if (dicts == nullptr) {
+    // Even if dicts are not asked for, we need to compute them for kSymbolNames
+    // so that they can be used in GetPotentialUsage.
+    dicts = &dict_tmp;
+    dict_tmp_ptr = nullptr;
+  } else {
+    dict_tmp_ptr = dicts;
+  }
 
   // Iterate over all histograms and get the aggregate number of codes used.
   for (uint32_t i = 0; i < symbols_info.NumClusters(kSymbolType); ++i) {
     // Deal with the first symbol type.
     WP2_CHECK_STATUS(sw->WriteHeader(kSymbolType, i, num_pixels, recorder,
-                                     kSymbolNames[kSymbolType], enc, dicts));
+                                     kSymbolNames[kSymbolType], enc, dicts,
+                                     cost_tmp_ptr));
+    if (cost != nullptr) *cost += cost_tmp;
     bool is_maybe_used[kSymbolTypeNum];
     // TODO(vrabaud) For kSymbolType, it's either a dictionary, or a trivial
     // symbol (not a range) so we could limit the storage to those two methods.
@@ -320,7 +339,9 @@ WP2Status WriteHeaders(const WP2::SymbolRecorder& recorder,
       Symbol sym = (Symbol)s;
       if (!IsSymbolUsed(sym, is_maybe_used)) continue;
       WP2_CHECK_STATUS(sw->WriteHeader(sym, i, num_pixels, recorder,
-                                       kSymbolNames[s], enc, dicts));
+                                       kSymbolNames[s], enc, dict_tmp_ptr,
+                                       cost_tmp_ptr));
+      if (cost != nullptr) *cost += cost_tmp;
     }
   }
 

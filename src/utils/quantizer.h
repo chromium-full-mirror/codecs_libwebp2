@@ -72,6 +72,9 @@ class Quantizer {
     uint32_t* histogram_to_write;
     size_t size_to_write;
     HistogramSparse histo;
+    // Cost of storing the symbols only (without the header).
+    float cost_symbols_only;
+    // Overall cost: header cost + cost_symbols_only.
     float cost;
   };
 

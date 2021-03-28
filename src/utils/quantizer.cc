@@ -139,6 +139,7 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
     config_best_->param.max_freq_bits = 0;
     config_best_->size_to_write = 0;
     config_best_->histo.nnz = 0;
+    config_best_->cost_symbols_only = 0.f;
     config_best_->cost = 0.f;
     return;
   }
@@ -193,16 +194,16 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
     for (const ConfigType type : {Raw, Huffman}) {
       uint8_t max_freq_bits = bits[i];
       // Compute the cost of storing the data with the quantized probabilities.
-      float cost_ini;
+      float cost_symbols_only;
       uint32_t* const histogram_quantized = config->histo.counts;
 
       if (type == Huffman) {
         ANSCountsQuantizeHuffman(size_sparse, histogram, histogram_quantized,
-                                 max_freq_bits, &cost_ini);
+                                 max_freq_bits, &cost_symbols_only);
       } else {
         const uint32_t freq_max = (1u << max_freq_bits) - 1;
         ANSCountsQuantize(false, freq_max, size_sparse, histogram,
-                          histogram_quantized, &cost_ini);
+                          histogram_quantized, &cost_symbols_only);
       }
       // Iterate over sparsity.
       for (uint32_t j = 0; j < 2; ++j) {
@@ -210,7 +211,7 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
         if (!is_sparse && skip_non_sparse) continue;
         // Reset variables.
         max_freq_bits = bits[i];
-        config->cost = cost_ini + cost_header[j];
+        config->cost = cost_symbols_only + cost_header[j];
 
         // No need to continue if the bit cost without the histogram cost is
         // already bigger.
@@ -270,6 +271,7 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
                                      &counter);
         config->histo.counts = counts_bak;
         config->cost += counter.GetCost();
+        config->cost_symbols_only = cost_symbols_only;
 
         // Keep the best configuration.
         if (config->cost >= config_best_->cost) {

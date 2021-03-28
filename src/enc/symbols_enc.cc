@@ -558,13 +558,15 @@ WP2Status SymbolWriter::AddDict(uint32_t sym, uint32_t cluster,
 
   SetMapping(stat, mapping, size);
 
-  WP2_CHECK_STATUS(dicts->Add(size));
-  auto* const d = dicts->back();
-  stat->extra.dict = d;
-  // In case the counts were already quantized.
-  for (uint32_t k = 0; k < size; ++k) d->RecordSymbol(k, counts[k]);
-  WP2_CHECK_STATUS(d->SetQuantizedCounts(quantized_counts));
-  WP2_CHECK_STATUS(d->ToCodingTable());
+  if (dicts != nullptr) {
+    WP2_CHECK_STATUS(dicts->Add(size));
+    auto* const d = dicts->back();
+    stat->extra.dict = d;
+    // In case the counts were already quantized.
+    for (uint32_t k = 0; k < size; ++k) d->RecordSymbol(k, counts[k]);
+    WP2_CHECK_STATUS(d->SetQuantizedCounts(quantized_counts));
+    WP2_CHECK_STATUS(d->ToCodingTable());
+  }
   return WP2_STATUS_OK;
 }
 
@@ -779,11 +781,13 @@ bool SymbolWriter::ComputeCachedPrefixCodeHistogramCost(uint32_t range,
   const uint32_t range_prefix_code = prefix_code.prefix + 1;
   const uint32_t nnz_range_prefix_code = std::min(max_nnz, range_prefix_code);
   // Add the prefix_size and size cost.
-  float cost_extra = 1.f + WP2Log2(nnz_range_prefix_code - 2);
+  float cost_extra_bits = 0.f;
   for (uint32_t i = 0; i < size; ++i) {
     const PrefixCode prefix_code_i(mapping_[i], prefix_size);
-    cost_extra += prefix_code_i.extra_bits_num * histogram_[i];
+    cost_extra_bits += prefix_code_i.extra_bits_num * histogram_[i];
   }
+  const float cost_extra =
+      1.f + WP2Log2(nnz_range_prefix_code - 2) + cost_extra_bits;
   // Quantize the histogram to get the cost of using a dictionary.
   if (quantizer_.Quantize(histogram_prefix_code_.data(),
                           mapping_prefix_code_.data(), histo_len,
@@ -792,6 +796,7 @@ bool SymbolWriter::ComputeCachedPrefixCodeHistogramCost(uint32_t range,
     Quantizer::Config* config_best = quantizer_.GetBest();
     config_best->param.prefix_code_histo_len = histo_len;
     config_best->param.prefix_code_prefix_size = prefix_size;
+    config_best->cost_symbols_only += cost_extra_bits;
     return true;
   } else {
     // We could not beat the previous configuration.
@@ -803,7 +808,9 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
                                     uint32_t max_nnz,
                                     const SymbolRecorder& recorder,
                                     WP2_OPT_LABEL, ANSEncBase* const enc,
-                                    ANSDictionaries* const dicts) {
+                                    ANSDictionaries* const dicts,
+                                    float* const storage_cost) {
+  if (storage_cost != nullptr) *storage_cost = 0.f;
   if (symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kUnused) {
     return WP2_STATUS_OK;
   }
@@ -821,17 +828,20 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
 
   switch (symbols_info_.Method(sym)) {
     case SymbolsInfo::StorageMethod::kAdaptiveBit:
+      assert(storage_cost == nullptr);  // not yet implemented
       WP2_CHECK_STATUS(AddAdaptiveBit(
           sym, cluster, symbols_info_.StartingProbaP0(sym, cluster),
           symbols_info_.StartingProbaP1(sym, cluster)));
       break;
     case SymbolsInfo::StorageMethod::kAdaptiveSym: {
+      assert(storage_cost == nullptr);  // not yet implemented
       WP2_CHECK_STATUS(AddAdaptiveSymbol(sym, cluster,
                                          ANSAdaptiveSymbol::Method::kAOM,
                                          kANSAProbaInvalidSpeed));
       break;
     }
     case SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed: {
+      assert(storage_cost == nullptr);
       if (max_nnz <= 1) {
         // Adaptation method/speed don't matter if we only use this symbol once.
         return AddAdaptiveSymbol(sym, cluster,
@@ -858,10 +868,9 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
       return enc->GetStatus();
     }
     case SymbolsInfo::StorageMethod::kAuto: {
-      return WriteHeader(
-          sym, cluster, max_nnz,
-          recorder.GetRecordedDict(sym, cluster).Counts().data(),
-          label, enc, dicts);
+      return WriteHeader(sym, cluster, max_nnz,
+                         recorder.GetRecordedDict(sym, cluster).Counts().data(),
+                         label, enc, dicts, storage_cost);
     }
     case SymbolsInfo::StorageMethod::kUnused:
       // Dealt with above.
@@ -877,8 +886,8 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t max_nnz,
                                     ANSDictionaries* const dicts) {
   for (uint32_t cluster = 0; cluster < symbols_info_.NumClusters(sym);
        ++cluster) {
-    WP2_CHECK_STATUS(
-        WriteHeader(sym, cluster, max_nnz, syntax_recorder, label, enc, dicts));
+    WP2_CHECK_STATUS(WriteHeader(sym, cluster, max_nnz, syntax_recorder, label,
+                                 enc, dicts));
   }
   return WP2_STATUS_OK;
 }
@@ -927,7 +936,8 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
                                     uint32_t max_nnz,
                                     const uint32_t* const counts, WP2_OPT_LABEL,
                                     ANSEncBase* const enc,
-                                    ANSDictionaries* const dicts) {
+                                    ANSDictionaries* const dicts,
+                                    float* const storage_cost) {
   // Figure out how many symbols are used and the sizes in bits of the
   // probabilities and difference of consecutive symbols.
   const uint32_t range = symbols_info_.Range(sym, cluster);
@@ -945,6 +955,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
   const uint32_t nnz_range = std::min(max_nnz, range);
   assert(size <= nnz_range);
   if (size <= 1) {
+    if (storage_cost != nullptr) *storage_cost = 0.f;
     if (size == 0) {
       enc->PutRValue(kSymbolCountZero,
                      nnz_range == 1 ? kSymbolCountLast - 1 : kSymbolCountLast,
@@ -957,6 +968,8 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
       if (changes_sign) {
         enc->PutRange(mapping_[0], 0, std::max(-min_symbol, max_symbol),
                       "symbol");
+        // Add 1 bit per element for the sign.
+        if (storage_cost != nullptr) *storage_cost = counts_total;
       } else {
         enc->PutRange(mapping_[0], 0, max_symbol - min_symbol, "symbol");
       }
@@ -992,6 +1005,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
     if (cost_range < cost_best) {
       config_best = nullptr;
       cost_best = cost_range;
+      if (storage_cost != nullptr) *storage_cost = counts_total * WP2Log2(size);
       type_best = Stat::Type::kRange;
       is_symmetric_best = (changes_sign && i == 0);
     }
@@ -1003,6 +1017,9 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
         prefix_size_best = prefix_size;
         config_best = quantizer_.GetBest();
         cost_best = config_best->cost;
+        if (storage_cost != nullptr) {
+          *storage_cost = config_best->cost_symbols_only;
+        }
         type_best = Stat::Type::kPrefixCode;
         is_symmetric_best = (changes_sign && i == 0);
       }
@@ -1016,6 +1033,9 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
                               max_nnz, cost_best, cost_extra, effort_)) {
         config_best = quantizer_.GetBest();
         cost_best = config_best->cost;
+        if (storage_cost != nullptr) {
+          *storage_cost = config_best->cost_symbols_only;
+        }
         type_best = Stat::Type::kDict;
         is_symmetric_best = (changes_sign && i == 0);
       }
