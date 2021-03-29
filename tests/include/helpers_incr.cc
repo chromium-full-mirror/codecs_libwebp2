@@ -411,12 +411,15 @@ class IncrementalDecodingTester {
     CHECK_OR_DIE(decoded_area.width <= output_.width());
     CHECK_OR_DIE(decoded_area.height >= previous_decoded_area_.height);
     CHECK_OR_DIE(decoded_area.height <= output_.height());
+
+    // Check that incremental decoding is not outputting all pixels at once.
+    // Unfortunately this is hard to check for animations (border, preframes).
     if (frame_index_ == previous_frame_index_ &&
         available_input_size >= previous_input_size &&
         available_input_size - previous_input_size <= 2 &&
+        features != nullptr && !features->is_animation &&
         config_.incremental_mode ==
-            DecoderConfig::IncrementalMode::PARTIAL_TILE_CONTEXT &&
-        features != nullptr) {
+            DecoderConfig::IncrementalMode::PARTIAL_TILE_CONTEXT) {
       const uint32_t num_lines =
           (features->raw_width != features->width)
               ? decoded_area.width - previous_decoded_area_.width
