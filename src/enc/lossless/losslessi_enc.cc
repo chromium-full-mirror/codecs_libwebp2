@@ -406,13 +406,15 @@ WP2Status Encoder::EncodeImageInternal(
   // colors.
   const bool use_palette =
       (std::find(config.transforms, end, TransformType::kColorIndexing) != end);
+  const uint32_t width = argb_buffer_.width, height = argb_buffer_.height;
+  const bool cache_is_disabled = (width * height == 1);
   const uint32_t cache_bits_max =
-      use_palette ? std::min(1u + (uint32_t)WP2Log2Floor(palette_.Size()),
-                             kMaxCacheBits)
-                  : kMaxCacheBits;
+      cache_is_disabled ? 0
+      : use_palette     ? std::min(1u + (uint32_t)WP2Log2Floor(palette_.Size()),
+                               kMaxCacheBits)
+                        : kMaxCacheBits;
 
   const int16_t* const argb = argb_buffer_.data;
-  const uint32_t width = argb_buffer_.width, height = argb_buffer_.height;
   const uint32_t histogram_bits = config.histo_bits;
   const uint32_t histogram_width = SubSampleSize(width, histogram_bits);
   const uint32_t histogram_height = SubSampleSize(height, histogram_bits);
@@ -470,7 +472,8 @@ WP2Status Encoder::EncodeImageInternal(
     // Write the global header
     enc->AddDebugPrefix("GlobalHeader");
     // Color Cache parameters.
-    if (enc->PutBool(cache_config.type != CacheType::kNone, "color_cache")) {
+    if (!cache_is_disabled &&
+        enc->PutBool(cache_config.type != CacheType::kNone, "color_cache")) {
       assert(cache_config.cache_bits > 0);
       enc->PutRange(cache_config.cache_bits, 1, kMaxCacheBits,
                     "color_cache_bits");

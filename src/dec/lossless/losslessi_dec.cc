@@ -947,7 +947,8 @@ WP2Status Decoder::DecodeHeader() {
   // Color cache
   hdr_.cache_config_.type = CacheType::kNone;
   hdr_.cache_config_.cache_bits = 0;
-  if (dec_->ReadBool("color_cache")) {
+  // Color cache is disabled for 1x1 images.
+  if (tile_->rect.GetArea() > 1 && dec_->ReadBool("color_cache")) {
     hdr_.cache_config_.type = CacheType::kHash;
     hdr_.cache_config_.cache_bits =
         dec_->ReadRange(1, kMaxCacheBits, "color_cache_bits");
@@ -996,18 +997,16 @@ WP2Status Decoder::DecodeHeader() {
   }
   WP2_CHECK_STATUS(dec_->GetStatus());
 
-  // Read the ANS probabilities.
-  LosslessSymbolsInfo symbols_info;
-  WP2_CHECK_STATUS(symbols_info.CopyFrom(hdr_.symbols_info_));
-  symbols_info.SetNumClusters(num_histo);
-  symbols_info.SetCacheRange(GetColorCacheRange(hdr_.cache_config_));
-  WP2_CHECK_STATUS(
-      ReadANSStats(tile_->rect.width, tile_->rect.height, symbols_info));
-
   // Finish setting up the color-cache
   if (hdr_.cache_config_.type != CacheType::kNone) {
     hdr_.symbols_info_.SetCacheRange(GetColorCacheRange(hdr_.cache_config_));
   }
+  // Read the ANS probabilities.
+  LosslessSymbolsInfo symbols_info;
+  WP2_CHECK_STATUS(symbols_info.CopyFrom(hdr_.symbols_info_));
+  symbols_info.SetNumClusters(num_histo);
+  WP2_CHECK_STATUS(
+      ReadANSStats(tile_->rect.width, tile_->rect.height, symbols_info));
 
   // Update information about the image.
   const int num_bits = hdr_.histogram_subsample_bits_;

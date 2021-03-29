@@ -402,6 +402,7 @@ LosslessSymbolsInfo::LosslessSymbolsInfo() : sample_format_(WP2_FORMAT_NUM) {
 
 void LosslessSymbolsInfo::Init(uint32_t num_pixels, bool has_alpha,
                                WP2SampleFormat sample_format) {
+  num_pixels_ = num_pixels;
   sample_format_ = sample_format;
   constexpr StorageMethod storage_method = StorageMethod::kAuto;
   constexpr uint32_t num_clusters = 1u;
@@ -424,7 +425,6 @@ void LosslessSymbolsInfo::Init(uint32_t num_pixels, bool has_alpha,
 }
 
 void LosslessSymbolsInfo::InitNonARGB(uint32_t num_pixels) {
-  SetCacheRange(0);
   if (num_pixels == 1) {
     // Disable all symbol types for 1 x 1 images.
     SetInfo(kSymbolType, /*min=*/0, /*max=*/0, NumClusters(kSymbolType),
@@ -448,10 +448,12 @@ void LosslessSymbolsInfo::InitNonARGB(uint32_t num_pixels) {
     SetInfo(kSymbolLen, /*min=*/0, prefix_code_max.prefix, num_clusters,
             storage_method);
   }
+  SetCacheRange(0);
 }
 
 void LosslessSymbolsInfo::InitAsLabelImage(uint32_t num_pixels,
                                            uint32_t num_labels) {
+  num_pixels_ = num_pixels;
   SetNumClusters(1);
   SetUnused(kSymbolA);
   SetUnused(kSymbolR);
@@ -462,6 +464,7 @@ void LosslessSymbolsInfo::InitAsLabelImage(uint32_t num_pixels,
 }
 
 void LosslessSymbolsInfo::InitAsCrossColorImage(uint32_t num_pixels) {
+  num_pixels_ = num_pixels;
   SetNumClusters(1);
   SetUnused(kSymbolA);
   SetInfo(kSymbolR, /*min=*/-(int32_t)kRedToBlueMax, /*max=*/kRedToBlueMax,
@@ -476,6 +479,7 @@ void LosslessSymbolsInfo::InitAsCrossColorImage(uint32_t num_pixels) {
 WP2Status LosslessSymbolsInfo::CopyFrom(const LosslessSymbolsInfo& other) {
   WP2_CHECK_STATUS(SymbolsInfo::CopyFrom(other));
   sample_format_ = other.sample_format_;
+  num_pixels_ = other.num_pixels_;
   return WP2_STATUS_OK;
 }
 
@@ -486,11 +490,12 @@ void LosslessSymbolsInfo::SetNumClusters(uint32_t num_clusters) {
 void LosslessSymbolsInfo::SetCacheRange(uint32_t cache_range) {
   const uint32_t num_clusters = NumClusters(kSymbolType);
   if (cache_range == 0) {
-    // Do not consider kSymbolTypeCacheIdx if the cache is unused.
-    SetInfo(kSymbolType, /*min=*/0, /*max=*/kSymbolTypeNum - 2, num_clusters,
-            StorageMethod::kAuto);
+    // Do not consider kSymbolCache if the cache is unused.
+    SetInfo(kSymbolType, /*min=*/0, /*max=*/IsUnused(kSymbolDist) ? 0 : 1,
+            num_clusters, StorageMethod::kAuto);
     SetUnused(kSymbolCache);
   } else {
+    assert(num_pixels_ > 1);
     SetInfo(kSymbolType, /*min=*/0, /*max=*/kSymbolTypeNum - 1, num_clusters,
             StorageMethod::kAuto);
     SetInfo(kSymbolCache, /*min=*/0, /*max=*/cache_range - 1, num_clusters,

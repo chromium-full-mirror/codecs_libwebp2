@@ -680,6 +680,7 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
   void InitNonARGB(uint32_t num_pixels);
 
   WP2SampleFormat sample_format_;
+  uint32_t num_pixels_;
 };
 
 // Fills ranges of ARGB symbols according to the transforms applied to the
