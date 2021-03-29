@@ -26,7 +26,7 @@
 
 #include "src/common/lossy/residuals.h"
 #include "src/common/symbols.h"
-#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/quantizer.h"
 #include "src/utils/vector.h"
 

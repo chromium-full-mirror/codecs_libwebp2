@@ -358,8 +358,11 @@ IMAGE_UTIL_OBJS = \
 
 ANS_OBJS = \
     src/utils/ans.o \
-    src/utils/ans_cost_table.o \
     src/utils/ans_utils.o \
+
+ANS_ENC_OBJS = \
+    src/utils/ans_enc.o \
+    src/utils/ans_cost_table.o \
 
 PREVIEW_OBJS = \
     src/common/preview/preview.o \
@@ -429,12 +432,10 @@ EXTRAS_OBJS = \
     extras/y4menc.o \
     extras/y4mdec.o \
 
-LIBWP2ANS_OBJS = $(ANS_OBJS)
-LIBWP2PREVIEW_OBJS = $(PREVIEW_OBJS)
 LIBWP2DECODER_OBJS = $(DEC_OBJS) $(DSP_DEC_OBJS) $(UTILS_DEC_OBJS) \
-                     $(LIBWP2ANS_OBJS) $(LIBWP2PREVIEW_OBJS) $(COMMON_DEC_OBJS)
+                     $(ANS_OBJS) $(PREVIEW_OBJS) $(COMMON_DEC_OBJS)
 LIBWP2_OBJS = $(LIBWP2DECODER_OBJS) $(ENC_OBJS) $(DSP_ENC_OBJS) \
-               $(UTILS_ENC_OBJS)
+               $(UTILS_ENC_OBJS) $(ANS_ENC_OBJS)
 
 HDRS_INSTALLED = \
     src/wp2/base.h \
@@ -540,8 +541,6 @@ OUT_LIBS += imageio/libimageenc.a
 OUT_LIBS += extras/libextras.a
 OUT_LIBS += examples/example_utils.a
 OUT_LIBS += src/libwebp2decoder.a
-OUT_LIBS += src/libwebp2ans.a
-OUT_LIBS += src/libwebp2preview.a
 OUT_LIBS += src/libwebp2.a
 # libs for testing. Let's just include everything we could need
 BASE_LIBS =
@@ -583,8 +582,6 @@ imageio/libimageio_util.a: $(IMAGE_UTIL_OBJS) $(IMAGE_UTIL_HDRS)
 examples/example_utils.a: $(EXAMPLE_UTILS_OBJS) $(EXAMPLE_UTILS_HDRS)
 extras/libextras.a: $(EXTRAS_OBJS)
 src/libwebp2decoder.a: $(LIBWP2DECODER_OBJS)
-src/libwebp2ans.a: $(LIBWP2ANS_OBJS)
-src/libwebp2preview.a: $(LIBWP2PREVIEW_OBJS)
 src/libwebp2.a: $(LIBWP2_OBJS)
 
 %.a:
@@ -1026,6 +1023,8 @@ DIST_FILES= \
             src/enc/writer_enc.cc \
             src/utils/ans.h \
             src/utils/ans.cc \
+            src/utils/ans_enc.h \
+            src/utils/ans_enc.cc \
             src/utils/ans_cost_table.cc \
             src/utils/ans_utils.h \
             src/utils/ans_utils.cc \

@@ -127,6 +127,7 @@ common_srcs := \
 
 utils_srcs := \
   src/utils/ans.cc \
+  src/utils/ans_enc.cc \
   src/utils/ans_cost_table.cc \
   src/utils/ans_utils.cc \
   src/utils/argb_buffer.cc \

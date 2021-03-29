@@ -24,6 +24,7 @@
 #include "src/dec/symbols_dec.h"
 #include "src/enc/symbols_enc.h"
 #include "src/utils/random.h"
+#include "src/utils/data_source.h"
 
 namespace WP2 {
 namespace {

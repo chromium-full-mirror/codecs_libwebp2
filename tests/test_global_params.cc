@@ -15,6 +15,7 @@
 #include "include/helpers.h"
 #include "src/common/global_params.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/data_source.h"
 
 using ::testing::AssertionResult;
 

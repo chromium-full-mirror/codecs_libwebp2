@@ -24,7 +24,7 @@
 #include <numeric>
 
 #include "src/dsp/math.h"
-#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 
 namespace WP2 {
 

@@ -21,6 +21,7 @@
 #include "src/enc/wp2_enc_i.h"
 #include "src/dec/residuals_dec_aom.h"
 #include "src/enc/residuals_enc_aom.h"
+#include "src/utils/data_source.h"
 
 namespace WP2 {
 namespace {

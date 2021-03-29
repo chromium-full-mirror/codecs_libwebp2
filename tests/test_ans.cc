@@ -30,6 +30,7 @@
 #include "src/dsp/dsp.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
+#include "src/utils/data_source.h"
 #include "src/utils/quantizer.h"
 #include "src/utils/random.h"
 

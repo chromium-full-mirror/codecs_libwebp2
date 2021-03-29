@@ -27,6 +27,7 @@
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
+#include "src/utils/data_source.h"
 #include "src/utils/utils.h"
 
 namespace WP2 {

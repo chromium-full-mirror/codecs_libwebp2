@@ -27,6 +27,7 @@
 #include "src/common/lossy/transforms.h"
 #include "src/dsp/dsp.h"
 #include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/plane.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"

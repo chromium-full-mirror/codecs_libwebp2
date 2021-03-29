@@ -190,8 +190,10 @@ target_compile_definitions(wp2_dsp PUBLIC ${WP2_DEFINITIONS})
 # ANS library.
 add_library(
   wp2_ans OBJECT
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ans.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ans.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ans.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ans_enc.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ans_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ans_cost_table.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ans_utils.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/ans_utils.h)

@@ -28,6 +28,7 @@
 #include "src/common/constants.h"
 #include "src/common/lossy/block_size.h"
 #include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"

@@ -27,7 +27,7 @@
 #include "src/enc/partitioning/partitioner.h"
 #include "src/enc/preview/preview_enc.h"
 #include "src/enc/wp2_enc_i.h"
-#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
