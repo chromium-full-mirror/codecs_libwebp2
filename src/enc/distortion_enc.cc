@@ -61,77 +61,14 @@ double GetLogSSIM(double v, double size) {
 
 // -----------------------------------------------------------------------------
 
-template<uint32_t channel_step>
-void WP2SSIMGetClipped(const uint8_t* const src1, size_t step1,
-                       const uint8_t* const src2, size_t step2,
-                       uint32_t xo, uint32_t yo, uint32_t W, uint32_t H,
-                       WP2DistoStats* const stats);
+typedef double (*SSIMCalculationFunc)(uint32_t bit_depth,
+                                      const WP2DistoStats& stats);
 
-template<>
-void WP2SSIMGetClipped<4>(const uint8_t* const src1, size_t step1,
-                          const uint8_t* const src2, size_t step2,
-                          uint32_t xo, uint32_t yo, uint32_t W, uint32_t H,
-                          WP2DistoStats* const stats) {
-  return WP2SSIMGetClipped4x8u(src1, step1, src2, step2, xo, yo, W, H, stats);
-}
-
-template<>
-void WP2SSIMGetClipped<1>(const uint8_t* const src1, size_t step1,
-                          const uint8_t* const src2, size_t step2,
-                          uint32_t xo, uint32_t yo, uint32_t W, uint32_t H,
-                          WP2DistoStats* const stats) {
-  return WP2SSIMGetClipped8u(src1, step1, src2, step2, xo, yo, W, H, stats);
-}
-
-template<uint32_t channel_step>
-void WP2SSIMGetClipped(const int16_t* const src1, size_t step1,
-                       const int16_t* const src2, size_t step2,
-                       uint32_t xo, uint32_t yo, uint32_t W, uint32_t H,
-                       WP2DistoStats* const stats) {
-  static_assert(channel_step == 1, "invalid channel step");
-  return WP2SSIMGetClipped16s(src1, step1, src2, step2, xo, yo, W, H,
-                              stats);
-}
-
-// -----------------------------------------------------------------------------
-
-template<uint32_t channel_step>
-void WP2SSIMGet(const uint8_t* const src1, size_t step1,
-                const uint8_t* const src2, size_t step2,
-                WP2DistoStats* const stats);
-
-template<>
-void WP2SSIMGet<4>(const uint8_t* const src1, size_t step1,
-                   const uint8_t* const src2, size_t step2,
-                   WP2DistoStats* const stats) {
-  return WP2SSIMGet4x8u(src1, step1, src2, step2, stats);
-}
-
-template<>
-void WP2SSIMGet<1>(const uint8_t* const src1, size_t step1,
-                   const uint8_t* const src2, size_t step2,
-                   WP2DistoStats* const stats) {
-  return WP2SSIMGet8u(src1, step1, src2, step2, stats);
-}
-
-template<uint32_t channel_step>
-void WP2SSIMGet(const int16_t* const src1, size_t step1,
-                const int16_t* const src2, size_t step2,
-                WP2DistoStats* const stats) {
-  static_assert(channel_step == 1, "invalid channel step");
-  return WP2SSIMGet16s(src1, step1, src2, step2, stats);
-}
-
-// -----------------------------------------------------------------------------
-
-typedef double (*WP2SSIMGetFromStatsFunc)(uint32_t bit_depth,
-                                          const WP2DistoStats& stats);
-
-template <class T, uint32_t channel_step,
-          WP2SSIMGetFromStatsFunc get_from_stats = WP2SSIMCalculation>
-double AccumulateSSIM(uint32_t w, uint32_t h, uint32_t bit_depth,
-                      const T* const src, uint32_t src_step,
-                      const T* const ref, uint32_t ref_step) {
+template <class T, uint32_t channel_step, SSIMCalculationFunc calculation>
+double AccumulateSSIM(WP2SSIMGetFunc get, WP2SSIMGetClippedFunc get_clipped,
+                      uint32_t w, uint32_t h, uint32_t bit_depth,
+                      const T* const src, uint32_t src_step, const T* const ref,
+                      uint32_t ref_step) {
   const uint32_t pad = kWP2SSIMMargin - kWP2SSIMKernel;
   const uint32_t w0 = std::min(w, kWP2SSIMKernel);
   const uint32_t w1 = std::max(pad, w) - pad;
@@ -142,17 +79,15 @@ double AccumulateSSIM(uint32_t w, uint32_t h, uint32_t bit_depth,
   for (y = 0; y < h0; ++y) {
     for (x = 0; x < w; ++x) {
       WP2DistoStats stats;
-      WP2SSIMGetClipped<channel_step>(src, src_step, ref, ref_step,
-                                      x, y, w, h, &stats);
-      sum += get_from_stats(bit_depth, stats);
+      get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
+      sum += calculation(bit_depth, stats);
     }
   }
   for (; y < h1; ++y) {
     for (x = 0; x < w0; ++x) {
       WP2DistoStats stats;
-      WP2SSIMGetClipped<channel_step>(src, src_step, ref, ref_step,
-                                      x, y, w, h, &stats);
-      sum += get_from_stats(bit_depth, stats);
+      get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
+      sum += calculation(bit_depth, stats);
     }
     const size_t y_src_off = (y - kWP2SSIMKernel) * src_step;
     const size_t y_ref_off = (y - kWP2SSIMKernel) * ref_step;
@@ -160,44 +95,33 @@ double AccumulateSSIM(uint32_t w, uint32_t h, uint32_t bit_depth,
       const size_t off1 = channel_step * (x - kWP2SSIMKernel) + y_src_off;
       const size_t off2 = channel_step * (x - kWP2SSIMKernel) + y_ref_off;
       WP2DistoStats stats;
-      WP2SSIMGet<channel_step>(src + off1, src_step, ref + off2, ref_step,
-                               &stats);
-      sum += get_from_stats(bit_depth, stats);
+      get(src + off1, src_step, ref + off2, ref_step, &stats);
+      sum += calculation(bit_depth, stats);
     }
     for (; x < w; ++x) {
       WP2DistoStats stats;
-      WP2SSIMGetClipped<channel_step>(src, src_step, ref, ref_step,
-                                      x, y, w, h, &stats);
-      sum += get_from_stats(bit_depth, stats);
+      get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
+      sum += calculation(bit_depth, stats);
     }
   }
   for (; y < h; ++y) {
     for (x = 0; x < w; ++x) {
       WP2DistoStats stats;
-      WP2SSIMGetClipped<channel_step>(src, src_step, ref, ref_step,
-                                      x, y, w, h, &stats);
-      sum += get_from_stats(bit_depth, stats);
+      get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
+      sum += calculation(bit_depth, stats);
     }
   }
   return sum;
 }
 
-template<WP2SSIMGetFromStatsFunc get_from_stats>
+template <SSIMCalculationFunc calculation>
 double AccumulateSSIM(const WP2::ArgbBuffer& a, const WP2::ArgbBuffer& b,
                       uint32_t channel) {
-  return AccumulateSSIM<uint8_t, /*CHANNEL_STRIDE=*/4, get_from_stats>(
-      a.width(), a.height(), /*bit_depth=*/8, a.GetRow8(0) + channel,
-      a.stride(), b.GetRow8(0) + channel, b.stride());
-}
-
-double AccumulateSSIM(const WP2::ArgbBuffer& a, const WP2::ArgbBuffer& b,
-                      uint32_t channel) {
-  return AccumulateSSIM<WP2SSIMCalculation>(a, b, channel);
-}
-
-double AccumulateCsSSIM(const WP2::ArgbBuffer& a, const WP2::ArgbBuffer& b,
-                        uint32_t channel) {
-  return AccumulateSSIM<WP2CsSSIMCalculation>(a, b, channel);
+  assert(WP2FormatBpp(a.format()) == 4 && WP2FormatBpp(b.format()) == 4);
+  return AccumulateSSIM<uint8_t, /*channel_step=*/4, calculation>(
+      WP2SSIMGet4x8u, WP2SSIMGetClipped4x8u, a.width(), a.height(),
+      /*bit_depth=*/8, a.GetRow8(0) + channel, a.stride(),
+      b.GetRow8(0) + channel, b.stride());
 }
 
 }  // namespace
@@ -492,7 +416,7 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     WP2_CHECK_OK(WP2FormatBpp(format_) == 4, WP2_STATUS_UNSUPPORTED_FEATURE);
     WP2SSIMInit();
     for (uint32_t c = 0; c < 4; ++c) {
-      const double disto = AccumulateSSIM(*this, ref, c);
+      const double disto = AccumulateSSIM<WP2SSIMCalculation>(*this, ref, c);
       if (c != alpha_channel_index || include_alpha) {
         total_distortion += disto;
       }
@@ -512,7 +436,8 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     for (uint32_t pass = 0; pass < kNumMSSSIMPasses - 1; ++pass) {
       const double norm = 1. / (buf1.width() * buf1.height());
       for (uint32_t c = 0; c < 4; ++c) {
-        const double sum = norm * AccumulateCsSSIM(buf1, buf2, c);
+        const double sum =
+            norm * AccumulateSSIM<WP2CsSSIMCalculation>(buf1, buf2, c);
         acc[c] *= pow(sum, exponents[pass]);
       }
       buf1.SimpleHalfDownsample();
@@ -521,7 +446,8 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     double total = 0.;
     for (uint32_t c = 0; c < 4; ++c) {
       const double norm = 1. / (buf1.width() * buf1.height());
-      const double sum = norm * AccumulateSSIM(buf1, buf2, c);
+      const double sum =
+          norm * AccumulateSSIM<WP2SSIMCalculation>(buf1, buf2, c);
       acc[c] *= pow(sum, exponents[kNumMSSSIMPasses - 1]);
       if (c != alpha_channel_index || include_alpha) {
         total += acc[c];
@@ -668,8 +594,8 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     if (metric_type == SSIM) {
       for (uint32_t c = 0; c < 4; ++c) {
         WP2DistoStats stats;
-        WP2SSIMGetClipped<4>(ptr1 + c, stride(), ptr2 + c, ref.stride(), x, y,
-                             width(), height(), &stats);
+        WP2SSIMGetClipped4x8u(ptr1 + c, stride(), ptr2 + c, ref.stride(), x, y,
+                              width(), height(), &stats);
         total += WP2SSIMCalculation(/*bit_depth=*/8, stats);
       }
       total = GetLogSSIM(total, 4.);
@@ -695,8 +621,10 @@ WP2Status Plane16::GetSSIM(const Plane16& src, uint32_t bit_depth,
                            double* const score) const {
   WP2_CHECK_OK(w_ == src.w_ && h_ == src.h_, WP2_STATUS_BAD_DIMENSION);
   WP2SSIMInit();
-  *score = AccumulateSSIM<int16_t, /*channel_step=*/1>(
-      w_, h_, bit_depth, Row(0), Step(), src.Row(0), src.Step());
+  *score = AccumulateSSIM<int16_t, /*channel_step=*/1, WP2SSIMCalculation>(
+      (bit_depth >= 12) ? WP2SSIMGet12s : WP2SSIMGet10s,
+      (bit_depth >= 12) ? WP2SSIMGetClipped12s : WP2SSIMGetClipped10s, w_, h_,
+      bit_depth, Row(0), Step(), src.Row(0), src.Step());
   return WP2_STATUS_OK;
 }
 
@@ -704,9 +632,11 @@ template <>
 WP2Status Plane<uint8_t>::GetSSIM(const Plane<uint8_t>& src, uint32_t bit_depth,
                                   double* const score) const {
   WP2_CHECK_OK(w_ == src.w_ && h_ == src.h_, WP2_STATUS_BAD_DIMENSION);
+  assert(bit_depth <= 8);
   WP2SSIMInit();
-  *score = AccumulateSSIM<uint8_t, /*channel_step=*/1>(
-      w_, h_, bit_depth, Row(0), Step(), src.Row(0), src.Step());
+  *score = AccumulateSSIM<uint8_t, /*channel_step=*/1, WP2SSIMCalculation>(
+      WP2SSIMGet8u, WP2SSIMGetClipped8u, w_, h_, bit_depth, Row(0), Step(),
+      src.Row(0), src.Step());
   return WP2_STATUS_OK;
 }
 

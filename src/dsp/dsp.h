@@ -678,38 +678,28 @@ extern double WP2SSIMCalculation(uint32_t bit_depth,
 extern double WP2CsSSIMCalculation(uint32_t bit_depth,
                                    const WP2DistoStats& stats);
 
-// These functions assume an xstep of '4'.
-// src1 and src2 are absolute pointers to top-left corner.
-typedef void (*WP2SSIMGetClipped8uFunc)(const uint8_t* src1, size_t step1,
-                                        const uint8_t* src2, size_t step2,
-                                        // center position:
-                                        uint32_t xo, uint32_t yo,
-                                        // plane dimension:
-                                        uint32_t W, uint32_t H,
-                                        WP2DistoStats* const stats);
-typedef void (*WP2SSIMGetClipped16sFunc)(const int16_t* src1, size_t step1,
-                                         const int16_t* src2, size_t step2,
-                                         // center position:
-                                         uint32_t xo, uint32_t yo,
-                                         // plane dimension:
-                                         uint32_t W, uint32_t H,
-                                         WP2DistoStats* const stats);
+// Returns the accumulated 'stats' of a (kWP2SSIMKernel*2+1)-sided pixel square.
+// 'src1' and 'src2' are absolute pointers to the top-left corner.
+typedef void (*WP2SSIMGetFunc)(const void* src1, size_t step1,
+                               const void* src2, size_t step2,
+                               WP2DistoStats* const stats);
+// Same as above but handles the canvas edges, where the square does not fit.
+// 'center_x,y' are the coordinates of the center of the square and
+// 'width,height' are the dimensions of the whole canvas.
+typedef void (*WP2SSIMGetClippedFunc)(const void* src1, size_t step1,
+                                      const void* src2, size_t step2,
+                                      uint32_t center_x, uint32_t center_y,
+                                      uint32_t width, uint32_t height,
+                                      WP2DistoStats* const stats);
 
-// This version is called with the guarantee that you can load 8 bytes and
-// 8 rows at offset src1 and src2 (when xstep is '4')
-typedef void (*WP2SSIMGet8uFunc)(const uint8_t* src1, size_t step1,
-                                 const uint8_t* src2, size_t step2,
-                                 WP2DistoStats* const stats);
-typedef void (*WP2SSIMGet16sFunc)(const int16_t* src1, size_t step1,
-                                  const int16_t* src2, size_t step2,
-                                  WP2DistoStats* const stats);
-
-extern WP2SSIMGet8uFunc WP2SSIMGet4x8u;                // unclipped / unchecked
-extern WP2SSIMGet8uFunc WP2SSIMGet8u;                  // unclipped / unchecked
-extern WP2SSIMGet16sFunc WP2SSIMGet16s;                // unclipped / unchecked
-extern WP2SSIMGetClipped8uFunc WP2SSIMGetClipped4x8u;  // with clipping
-extern WP2SSIMGetClipped8uFunc WP2SSIMGetClipped8u;    // with clipping
-extern WP2SSIMGetClipped16sFunc WP2SSIMGetClipped16s;  // with clipping
+extern WP2SSIMGetFunc WP2SSIMGet4x8u;  // 4 channels, unsigned 8-bit depth.
+extern WP2SSIMGetFunc WP2SSIMGet8u;    // Single channel, unsigned 8-bit depth.
+extern WP2SSIMGetFunc WP2SSIMGet10s;   // Single channel, signed 11b or fewer.
+extern WP2SSIMGetFunc WP2SSIMGet12s;   // Single channel, signed 12b or more.
+extern WP2SSIMGetClippedFunc WP2SSIMGetClipped4x8u;  // Same but clipped.
+extern WP2SSIMGetClippedFunc WP2SSIMGetClipped8u;
+extern WP2SSIMGetClippedFunc WP2SSIMGetClipped10s;
+extern WP2SSIMGetClippedFunc WP2SSIMGetClipped12s;
 
 void WP2SSIMInit();
 

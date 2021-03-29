@@ -18,6 +18,7 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <cassert>
+#include <cmath>
 
 #include "src/dsp/dsp.h"
 
@@ -33,55 +34,52 @@ static constexpr uint32_t kWeight[2 * kWP2SSIMKernel + 1] = {
   1, 2, 3, 4, 3, 2, 1
 };
 
+// Computes the Structural Similarity
+// See https://en.wikipedia.org/wiki/Structural_similarity
 double WP2SSIMCalculation(uint32_t bit_depth, const WP2DistoStats& stats) {
-  const uint32_t N = stats.w;
   assert(bit_depth >= 8);
-  // Scaling w2 helps scaling C1, C2, C3.
-  const uint32_t w2 = (N * N) << ((bit_depth - 8) * 2);
+  // Scale C1, C2, C3 according to the input 'bit_depth'.
+  const uint32_t w2 = (stats.w * stats.w) << ((bit_depth - 8) * 2);
   const uint32_t C1 = 20 * w2;
   const uint32_t C2 = 60 * w2;
-  const uint32_t C3 = 8 * 8 * w2;   // 'dark' limit ~= 6
+  const uint32_t C3 = 8 * 8 * w2;  // "dark" limit ~= 6
   const uint64_t xmxm = (uint64_t)stats.xm * stats.xm;
   const uint64_t ymym = (uint64_t)stats.ym * stats.ym;
-  if (xmxm + ymym >= C3) {
-    const int64_t xmym = (int64_t)stats.xm * stats.ym;
-    const int64_t sxy = stats.xym * N - xmym;    // can be negative
-    const uint64_t sxx = stats.xxm * N - xmxm;
-    const uint64_t syy = stats.yym * N - ymym;
-    // we descale by 8 to prevent overflow during the fnum/fden multiply.
-    const uint64_t num_S = (2 * (uint64_t)(sxy < 0 ? 0 : sxy) + C2) >> 8;
-    const uint64_t den_S = (sxx + syy + C2) >> 8;
-    const double fnum = (double)(2 * xmym + C1) * (double)num_S;
-    const double fden = (double)(xmxm + ymym + C1) * (double)den_S;
-    const double r = (fnum < 0. ? 0. : fnum) / fden;
-    assert(r >= 0. && r <= 1.0);
-    return r;
-  }
-  return 1.;   // area is too dark to contribute meaningfully
+  if (xmxm + ymym < C3) return 1.;  // Area is too close to 0 to be meaningful.
+
+  const int64_t xmym = (int64_t)stats.xm * stats.ym;
+  const int64_t sxy = stats.xym * stats.w - xmym;  // can be negative
+  const uint64_t sxx = stats.xxm * stats.w - xmxm;
+  const uint64_t syy = stats.yym * stats.w - ymym;
+  // TODO(yguyon): Check that (sxy < 0 ? 0 : sxy) is valid with negative input
+  const uint64_t num_S = 2 * (uint64_t)(sxy < 0 ? 0 : sxy) + C2;
+  const uint64_t den_S = sxx + syy + C2;
+  const double fnum = 1. * (2 * xmym + C1) * num_S;
+  const double fden = 1. * (xmxm + ymym + C1) * den_S;
+  const double r = (fnum < 0. ? 0. : fnum) / fden;
+  assert(r >= 0. && r <= 1.0);
+  return r;
 }
 
 double WP2CsSSIMCalculation(uint32_t bit_depth, const WP2DistoStats& stats) {
-  const uint32_t N = stats.w;
   assert(bit_depth >= 8);
-  // Scaling w2 helps scaling C2, C3.
-  const uint32_t w2 = (N * N) << ((bit_depth - 8) * 2);
+  // Scale C1, C2, C3 according to the input 'bit_depth'.
+  const uint32_t w2 = (stats.w * stats.w) << ((bit_depth - 8) * 2);
   const uint32_t C2 = 60 * w2;
-  const uint32_t C3 = 8 * 8 * w2;   // 'dark' limit ~= 6
+  const uint32_t C3 = 8 * 8 * w2;  // "dark" limit ~= 6
   const uint64_t xmxm = (uint64_t)stats.xm * stats.xm;
   const uint64_t ymym = (uint64_t)stats.ym * stats.ym;
-  if (xmxm + ymym >= C3) {
-    const int64_t xmym = (int64_t)stats.xm * stats.ym;
-    const int64_t sxy = stats.xym * N - xmym;    // can be negative
-    const uint64_t sxx = stats.xxm * N - xmxm;
-    const uint64_t syy = stats.yym * N - ymym;
-    // we descale by 8 to prevent overflow during the fnum/fden multiply.
-    const uint64_t num_S = (2 * (uint64_t)(sxy < 0 ? 0 : sxy) + C2) >> 8;
-    const uint64_t den_S = (sxx + syy + C2) >> 8;
-    const double r = (double)num_S / den_S;
-    assert(r >= 0. && r <= 1.0);
-    return r;
-  }
-  return 1.;   // area is too dark to contribute meaningfully
+  if (xmxm + ymym < C3) return 1.;  // Area is too close to 0 to be meaningful.
+
+  const int64_t xmym = (int64_t)stats.xm * stats.ym;
+  const int64_t sxy = stats.xym * stats.w - xmym;  // can be negative
+  const uint64_t sxx = stats.xxm * stats.w - xmxm;
+  const uint64_t syy = stats.yym * stats.w - ymym;
+  const uint64_t num_S = 2 * (uint64_t)(sxy < 0 ? 0 : sxy) + C2;
+  const uint64_t den_S = sxx + syy + C2;
+  const double r = 1. * num_S / den_S;
+  assert(r >= 0. && r <= 1.0);
+  return r;
 }
 
 //------------------------------------------------------------------------------
@@ -89,8 +87,8 @@ double WP2CsSSIMCalculation(uint32_t bit_depth, const WP2DistoStats& stats) {
 namespace {
 
 template <class T, uint32_t channel_step>
-void SSIMGetClipped_C(const T* src1, size_t step1,
-                      const T* src2, size_t step2, uint32_t xo, uint32_t yo,
+void SSIMGetClipped_C(const void* src1, size_t step1,
+                      const void* src2, size_t step2, uint32_t xo, uint32_t yo,
                       uint32_t W, uint32_t H, WP2DistoStats* const stats) {
   const uint32_t ymin = (yo < kWP2SSIMKernel) ? 0 : yo - kWP2SSIMKernel;
   const uint32_t ymax = (yo + kWP2SSIMKernel > H - 1) ? H - 1
@@ -98,14 +96,14 @@ void SSIMGetClipped_C(const T* src1, size_t step1,
   const uint32_t xmin = (xo < kWP2SSIMKernel) ? 0 : xo - kWP2SSIMKernel;
   const uint32_t xmax = (xo + kWP2SSIMKernel > W - 1) ? W - 1
                                                       : xo + kWP2SSIMKernel;
-  src1 += ymin * step1;
-  src2 += ymin * step2;
+  src1 = (const T*)src1 + ymin * step1;
+  src2 = (const T*)src2 + ymin * step2;
   for (uint32_t y = ymin; y <= ymax; ++y) {
     for (uint32_t x = xmin; x <= xmax; ++x) {
       const int32_t w =
           kWeight[kWP2SSIMKernel + x - xo] * kWeight[kWP2SSIMKernel + y - yo];
-      const int32_t s1 = src1[channel_step * x];
-      const int32_t s2 = src2[channel_step * x];
+      const int32_t s1 = ((const T*)src1)[channel_step * x];
+      const int32_t s2 = ((const T*)src2)[channel_step * x];
       stats->w += w;
       stats->xm += w * s1;
       stats->ym += w * s2;
@@ -113,27 +111,27 @@ void SSIMGetClipped_C(const T* src1, size_t step1,
       stats->xym += w * s1 * s2;
       stats->yym += w * s2 * s2;
     }
-    src1 += step1;
-    src2 += step2;
+    src1 = (const T*)src1 + step1;
+    src2 = (const T*)src2 + step2;
   }
 }
 
 template <class T, uint32_t channel_step>
-void SSIMGet_C(const T* src1, size_t step1, const T* src2, size_t step2,
+void SSIMGet_C(const void* src1, size_t step1, const void* src2, size_t step2,
                WP2DistoStats* const stats) {
   for (uint32_t y = 0; y <= 2 * kWP2SSIMKernel; ++y) {
     for (uint32_t x = 0; x <= 2 * kWP2SSIMKernel; ++x) {
       const int32_t w = kWeight[x] * kWeight[y];
-      const int32_t s1 = src1[channel_step * x];
-      const int32_t s2 = src2[channel_step * x];
+      const int32_t s1 = ((const T*)src1)[channel_step * x];
+      const int32_t s2 = ((const T*)src2)[channel_step * x];
       stats->xm  += w * s1;
       stats->ym  += w * s2;
       stats->xxm += w * s1 * s1;
       stats->xym += w * s1 * s2;
       stats->yym += w * s2 * s2;
     }
-    src1 += step1;
-    src2 += step2;
+    src1 = (const T*)src1 + step1;
+    src2 = (const T*)src2 + step2;
   }
   stats->w += kWP2SSIMWeightSum;
 }
@@ -167,41 +165,42 @@ uint32_t HorizontalAdd16b_SSE(const __m128i* const m) {
   return (uint32_t)res;
 }
 
-uint32_t HorizontalAdd32b_SSE(const __m128i* const m) {
+int32_t HorizontalAdd32b_SSE(const __m128i* const m) {
   const __m128i a = _mm_srli_si128(*m, 8);
   const __m128i b = _mm_add_epi32(*m, a);
   const __m128i c = _mm_add_epi32(b, _mm_srli_si128(b, 4));
-  return (uint32_t)_mm_cvtsi128_si32(c);
+  return (int32_t)_mm_cvtsi128_si32(c);
 }
 
-#define ACCUMULATE_ROW_4x8u(W) do {                        \
-  /* process 7 32b-pixels at a time */                     \
-  const __m128i a0 = Load128b(src1 +  0);                  \
-  const __m128i b0 = Load128b(src2 +  0);                  \
-  const __m128i c0 = Load128b(src1 + 16);                  \
-  const __m128i d0 = Load128b(src2 + 16);                  \
-  /* select the lowest 8b channel */                       \
-  const __m128i a1 = _mm_and_si128(a0, mask);              \
-  const __m128i b1 = _mm_and_si128(b0, mask);              \
-  const __m128i c1 = _mm_and_si128(c0, mask);              \
-  const __m128i d1 = _mm_and_si128(d0, mask);              \
-  /* convert to 16b and multiply by weight */              \
-  const __m128i a2 = _mm_packs_epi32(a1, c1);              \
-  const __m128i b2 = _mm_packs_epi32(b1, d1);              \
-  const __m128i wa2 = _mm_mullo_epi16(a2, W);              \
-  const __m128i wb2 = _mm_mullo_epi16(b2, W);              \
-  /* accumulate */                                         \
-  xm  = _mm_add_epi16(xm, wa2);                            \
-  ym  = _mm_add_epi16(ym, wb2);                            \
-  xxm = _mm_add_epi32(xxm, _mm_madd_epi16(a2, wa2));       \
-  xym = _mm_add_epi32(xym, _mm_madd_epi16(a2, wb2));       \
-  yym = _mm_add_epi32(yym, _mm_madd_epi16(b2, wb2));       \
-  src1 += stride1;                                         \
-  src2 += stride2;                                         \
-} while (0)
+#define ACCUMULATE_ROW_4x8u(W)                              \
+  do {                                                      \
+    /* process 7 32b-pixels at a time */                    \
+    const __m128i a0 = Load128b((const uint8_t*)src1 + 0);  \
+    const __m128i b0 = Load128b((const uint8_t*)src2 + 0);  \
+    const __m128i c0 = Load128b((const uint8_t*)src1 + 16); \
+    const __m128i d0 = Load128b((const uint8_t*)src2 + 16); \
+    /* select the lowest 8b channel */                      \
+    const __m128i a1 = _mm_and_si128(a0, mask);             \
+    const __m128i b1 = _mm_and_si128(b0, mask);             \
+    const __m128i c1 = _mm_and_si128(c0, mask);             \
+    const __m128i d1 = _mm_and_si128(d0, mask);             \
+    /* convert to 16b and multiply by weight */             \
+    const __m128i a2 = _mm_packs_epi32(a1, c1);             \
+    const __m128i b2 = _mm_packs_epi32(b1, d1);             \
+    const __m128i wa2 = _mm_mullo_epi16(a2, W);             \
+    const __m128i wb2 = _mm_mullo_epi16(b2, W);             \
+    /* accumulate */                                        \
+    xm = _mm_add_epi16(xm, wa2);                            \
+    ym = _mm_add_epi16(ym, wb2);                            \
+    xxm = _mm_add_epi32(xxm, _mm_madd_epi16(a2, wa2));      \
+    xym = _mm_add_epi32(xym, _mm_madd_epi16(a2, wb2));      \
+    yym = _mm_add_epi32(yym, _mm_madd_epi16(b2, wb2));      \
+    src1 = (const uint8_t*)src1 + step1;                    \
+    src2 = (const uint8_t*)src2 + step2;                    \
+  } while (0)
 
-void SSIMGet_SSE_4x(const uint8_t* src1, size_t stride1,
-                    const uint8_t* src2, size_t stride2,
+void SSIMGet_SSE_4x(const void* src1, size_t step1,
+                    const void* src2, size_t step2,
                     WP2DistoStats* const stats) {
   const __m128i zero = _mm_setzero_si128();
   const __m128i mask = _mm_set1_epi32(0xffu);
@@ -228,41 +227,46 @@ __m128i Load8x8bTo16s(const uint8_t* const ptr) {
   return _mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)ptr));
 }
 
-#define ACCUMULATE_ROW(a0, b0, W1, W2) do {                         \
-  /* convert to 32b */                                              \
-  const __m128i wa = _mm_madd_epi16(a0, W1);                        \
-  const __m128i wb = _mm_madd_epi16(b0, W1);                        \
-  const __m128i a1 = _mm_shuffle_epi8(a0, kShuffleCst);             \
-  const __m128i b1 = _mm_shuffle_epi8(b0, kShuffleCst);             \
-  const __m128i aa = _mm_madd_epi16(a1, a1);                        \
-  const __m128i bb = _mm_madd_epi16(b1, b1);                        \
-  const __m128i ab = _mm_madd_epi16(a1, b1);                        \
-  /* accumulate */                                                  \
-  xm  = _mm_add_epi32(xm, wa);                                      \
-  ym  = _mm_add_epi32(ym, wb);                                      \
-  xxm = _mm_add_epi32(xxm, _mm_mullo_epi32(aa, W2));                \
-  xym = _mm_add_epi32(xym, _mm_mullo_epi32(ab, W2));                \
-  yym = _mm_add_epi32(yym, _mm_mullo_epi32(bb, W2));                \
-  src1 += stride1;                                                  \
-  src2 += stride2;                                                  \
-} while (0)
+#define ACCUMULATE_ROW(a0, b0, W1, W2)                    \
+  do {                                                    \
+    /* convert to 32b */                                  \
+    const __m128i wa = _mm_madd_epi16(a0, W1);            \
+    const __m128i wb = _mm_madd_epi16(b0, W1);            \
+    const __m128i a1 = _mm_shuffle_epi8(a0, kShuffleCst); \
+    const __m128i b1 = _mm_shuffle_epi8(b0, kShuffleCst); \
+    const __m128i aa = _mm_madd_epi16(a1, a1);            \
+    const __m128i bb = _mm_madd_epi16(b1, b1);            \
+    const __m128i ab = _mm_madd_epi16(a1, b1);            \
+    /* accumulate */                                      \
+    xm = _mm_add_epi32(xm, wa);                           \
+    ym = _mm_add_epi32(ym, wb);                           \
+    xxm = _mm_add_epi32(xxm, _mm_mullo_epi32(aa, W2));    \
+    xym = _mm_add_epi32(xym, _mm_mullo_epi32(ab, W2));    \
+    yym = _mm_add_epi32(yym, _mm_mullo_epi32(bb, W2));    \
+  } while (0)
 
-#define ACCUMULATE_ROW_8b(W1, W2) do {                              \
-  /* process 7 8b-pixels at a time */                               \
-  const __m128i a0 = Load8x8bTo16s(src1);                           \
-  const __m128i b0 = Load8x8bTo16s(src2);                           \
-  ACCUMULATE_ROW(a0, b0, W1, W2);                                   \
-} while (0)
+#define ACCUMULATE_ROW_8b(W1, W2)                           \
+  do {                                                      \
+    /* process 7 8b-pixels at a time */                     \
+    const __m128i a0 = Load8x8bTo16s((const uint8_t*)src1); \
+    const __m128i b0 = Load8x8bTo16s((const uint8_t*)src2); \
+    ACCUMULATE_ROW(a0, b0, W1, W2);                         \
+    src1 = (const uint8_t*)src1 + step1;                    \
+    src2 = (const uint8_t*)src2 + step2;                    \
+  } while (0)
 
-#define ACCUMULATE_ROW_16b(W1, W2) do {    \
-  /* process 7 16b-pixels at a time */     \
-  const __m128i a0 = Load128b(src1);       \
-  const __m128i b0 = Load128b(src2);       \
-  ACCUMULATE_ROW(a0, b0, W1, W2);          \
-} while (0)
+#define ACCUMULATE_ROW_16b(W1, W2)       \
+  do {                                   \
+    /* process 7 16b-pixels at a time */ \
+    const __m128i a0 = Load128b(src1);   \
+    const __m128i b0 = Load128b(src2);   \
+    ACCUMULATE_ROW(a0, b0, W1, W2);      \
+    src1 = (const int16_t*)src1 + step1; \
+    src2 = (const int16_t*)src2 + step2; \
+  } while (0)
 
-void SSIMGet_SSE_8u(const uint8_t* src1, size_t stride1,
-                    const uint8_t* src2, size_t stride2,
+void SSIMGet_SSE_8u(const void* src1, size_t step1,
+                    const void* src2, size_t step2,
                     WP2DistoStats* const stats) {
   // Constant to shuffle 16b values [A B C D E F G H] into [A G|B F|C E|D 0].
   const __m128i kShuffleCst = _mm_set_epi16(
@@ -285,8 +289,8 @@ void SSIMGet_SSE_8u(const uint8_t* src1, size_t stride1,
   stats->yym += HorizontalAdd32b_SSE(&yym);
 }
 
-void SSIMGet_SSE_16s(const int16_t* src1, size_t stride1,
-                     const int16_t* src2, size_t stride2,
+void SSIMGet_SSE_10s(const void* src1, size_t step1,
+                     const void* src2, size_t step2,
                      WP2DistoStats* const stats) {
   // Constant to shuffle 16b values [A B C D E F G H] into [A G|B F|C E|D 0].
   const __m128i kShuffleCst = _mm_set_epi16(
@@ -314,7 +318,8 @@ void SSIMGet_SSE_16s(const int16_t* src1, size_t stride1,
 WP2_TSAN_IGNORE_FUNCTION void WP2SSIMInitSSE() {
   WP2SSIMGet4x8u = SSIMGet_SSE_4x;
   WP2SSIMGet8u = SSIMGet_SSE_8u;
-  WP2SSIMGet16s = SSIMGet_SSE_16s;
+  WP2SSIMGet10s = SSIMGet_SSE_10s;
+  // TODO(yguyon): WP2SSIMGet12s = SSIMGet_SSE_12s;
 }
 
 #endif  // WP2_USE_SSE
@@ -323,12 +328,14 @@ WP2_TSAN_IGNORE_FUNCTION void WP2SSIMInitSSE() {
 
 //------------------------------------------------------------------------------
 
-WP2SSIMGet8uFunc WP2SSIMGet4x8u = nullptr;
-WP2SSIMGet8uFunc WP2SSIMGet8u = nullptr;
-WP2SSIMGet16sFunc WP2SSIMGet16s = nullptr;
-WP2SSIMGetClipped8uFunc WP2SSIMGetClipped4x8u = nullptr;
-WP2SSIMGetClipped8uFunc WP2SSIMGetClipped8u = nullptr;
-WP2SSIMGetClipped16sFunc WP2SSIMGetClipped16s = nullptr;
+WP2SSIMGetFunc WP2SSIMGet4x8u = nullptr;
+WP2SSIMGetFunc WP2SSIMGet8u = nullptr;
+WP2SSIMGetFunc WP2SSIMGet10s = nullptr;
+WP2SSIMGetFunc WP2SSIMGet12s = nullptr;
+WP2SSIMGetClippedFunc WP2SSIMGetClipped4x8u = nullptr;
+WP2SSIMGetClippedFunc WP2SSIMGetClipped8u = nullptr;
+WP2SSIMGetClippedFunc WP2SSIMGetClipped10s = nullptr;
+WP2SSIMGetClippedFunc WP2SSIMGetClipped12s = nullptr;
 
 static volatile WP2CPUInfo ssim_last_cpuinfo_used =
     (WP2CPUInfo)&ssim_last_cpuinfo_used;
@@ -338,10 +345,12 @@ WP2_TSAN_IGNORE_FUNCTION void WP2SSIMInit() {
 
   WP2SSIMGet4x8u = SSIMGet_C<uint8_t, 4>;
   WP2SSIMGet8u = SSIMGet_C<uint8_t, 1>;
-  WP2SSIMGet16s = SSIMGet_C<int16_t, 1>;
+  WP2SSIMGet10s = SSIMGet_C<int16_t, 1>;
+  WP2SSIMGet12s = SSIMGet_C<int16_t, 1>;
   WP2SSIMGetClipped4x8u = SSIMGetClipped_C<uint8_t, 4>;
   WP2SSIMGetClipped8u = SSIMGetClipped_C<uint8_t, 1>;
-  WP2SSIMGetClipped16s = SSIMGetClipped_C<int16_t, 1>;
+  WP2SSIMGetClipped10s = SSIMGetClipped_C<int16_t, 1>;
+  WP2SSIMGetClipped12s = SSIMGetClipped_C<int16_t, 1>;
 
   if (WP2GetCPUInfo != nullptr) {
 #if defined(WP2_USE_SSE)

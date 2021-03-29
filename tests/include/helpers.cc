@@ -649,11 +649,13 @@ void WP2DspReset() {
 
   WP2SSIMGet4x8u = nullptr;
   WP2SSIMGet8u = nullptr;
-  WP2SSIMGet16s = nullptr;
+  WP2SSIMGet10s = nullptr;
+  WP2SSIMGet12s = nullptr;
 
   WP2SSIMGetClipped4x8u = nullptr;
   WP2SSIMGetClipped8u = nullptr;
-  WP2SSIMGetClipped16s = nullptr;
+  WP2SSIMGetClipped10s = nullptr;
+  WP2SSIMGetClipped12s = nullptr;
 
   WP2SumSquaredError8u = nullptr;
   WP2SumSquaredError16s = nullptr;

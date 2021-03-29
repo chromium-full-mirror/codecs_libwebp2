@@ -141,6 +141,46 @@ TEST(GetDistortion, HandlesAllFormats) {
 
 //------------------------------------------------------------------------------
 
+// Verify that distortion results are not bitdepth-dependent.
+TEST(DistoTest, BitDepth) {
+  YUVPlane original_8b, distorted_8b;
+  for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+    Plane16& original_plane = original_8b.GetChannel(c);
+    Plane16& distorted_plane = distorted_8b.GetChannel(c);
+    ASSERT_WP2_OK(original_plane.Resize(512, 512));
+    original_plane.Fill((c == kAChannel) ? 128 : 0);
+    const int32_t min = (c == kAChannel) ? -128 : 0;
+    const int32_t max = (c == kAChannel) ? 127 : 0;
+    testutil::Noise(min, max, /*seed=*/c, /*strength=*/128, &original_plane);
+    ASSERT_WP2_OK(
+        distorted_plane.Copy(original_plane, /*resize_if_needed=*/true));
+    testutil::Noise(min, max, /*seed=*/c, /*strength=*/5, &distorted_plane);
+  }
+
+  for (uint32_t bit_depth : {9, 10, 11, 12}) {
+    YUVPlane original, distorted;
+    ASSERT_WP2_OK(original.Copy(original_8b, /*resize_if_needed=*/true));
+    ASSERT_WP2_OK(distorted.Copy(distorted_8b, /*resize_if_needed=*/true));
+    const int32_t m = 1 << (bit_depth - 8);
+    const int32_t k8bTo12bMatrix[] = {m, 0, 0, 0, m, 0, 0, 0, m};
+    ASSERT_WP2_OK(original.Apply(k8bTo12bMatrix, /*shift=*/0));
+    ASSERT_WP2_OK(distorted.Apply(k8bTo12bMatrix, /*shift=*/0));
+
+    for (MetricType metric : {PSNR, SSIM}) {
+      float disto_8b[5], disto[5];
+      ASSERT_WP2_OK(distorted_8b.GetDistortion(original_8b, /*bit_depth=*/8,
+                                               metric, disto_8b));
+      ASSERT_WP2_OK(
+          distorted.GetDistortion(original, bit_depth, metric, disto));
+      for (uint32_t i = 0; i < 5; ++i) {
+        EXPECT_NEAR(disto_8b[i], disto[i], 1e-6) << "Channel " << i;
+      }
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
+
 class DistoTest
     : public ::testing::TestWithParam<std::tuple<std::string, MetricType>> {};
 
@@ -200,25 +240,6 @@ TEST_P(DistoTest, ComparedToRGB) {
     // total distortion.
     const float error_margin = (original_ccsp.HasAlpha() && i == 4) ? 1.f : 0.f;
     EXPECT_NEAR(disto_ccsp[i], disto_rgb[i], error_margin) << i;
-  }
-
-  // Also verify that the distortion for the same samples with a higher bit
-  // depth is similar.
-  YUVPlane original_ccsp_12b, distorted_ccsp_12b;
-  ASSERT_WP2_OK(
-      original_ccsp_12b.Copy(original_ccsp, /*resize_if_needed=*/true));
-  ASSERT_WP2_OK(
-      distorted_ccsp_12b.Copy(distorted_ccsp, /*resize_if_needed=*/true));
-  constexpr int32_t kRGBToRGB12Matrix[] = {16, 0, 0, 0, 16, 0, 0, 0, 16};
-  ASSERT_WP2_OK(original_ccsp_12b.Apply(kRGBToRGB12Matrix, /*shift=*/0));
-  ASSERT_WP2_OK(distorted_ccsp_12b.Apply(kRGBToRGB12Matrix, /*shift=*/0));
-  float disto_ccsp_12b[5];
-  ASSERT_WP2_OK(distorted_ccsp_12b.GetDistortion(
-      original_ccsp_12b, /*bit_depth=*/12, metric, disto_ccsp_12b));
-  for (uint32_t i = 0; i < 5; ++i) {
-    // SSIM is less precise.
-    const float error_margin = (metric == SSIM && i >= 1) ? 0.02f : 0.f;
-    EXPECT_NEAR(disto_ccsp[i], disto_ccsp_12b[i], error_margin) << i;
   }
 }
 
