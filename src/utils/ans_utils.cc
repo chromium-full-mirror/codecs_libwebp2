@@ -682,7 +682,8 @@ float StoreMapping(const uint16_t* const mapping, size_t size, uint32_t range,
   if (enc != nullptr) {
     enc->PutBool(is_series, "is_series");
   }
-  if (is_series) return 1.f;
+  float cost_tot = 1.f;
+  if (is_series) return cost_tot;
 
   WP2MathInit();  // Initialization for WP2Log2.
 
@@ -706,15 +707,16 @@ float StoreMapping(const uint16_t* const mapping, size_t size, uint32_t range,
       best_method = method;
     }
   }
+  cost_tot += cost_min;
 
   if (enc != nullptr) {
     enc->PutRValue((uint32_t)best_method, kNumMapping, "method");
     StoreMappingHelper(mapping, size, range, stats, stats_size, best_method,
                        enc);
   }
+  cost_tot += WP2Log2(kNumMapping);
 
-  // Add the bit for 'is_series'.
-  return 1.f + cost_min;
+  return cost_tot;
 }
 
 //------------------------------------------------------------------------------
