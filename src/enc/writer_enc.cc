@@ -17,6 +17,7 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>  // for memcpy()
 #include <string>
@@ -28,23 +29,25 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
+bool MemoryWriter::Reserve(size_t size) {
+  const uint64_t next_size = (uint64_t)size_ + size;
+  if (next_size <= max_size_) return true;
+  const uint64_t kMinSize = 8192u;
+  const uint64_t next_max_size =
+      std::max({kMinSize, 2u * (uint64_t)max_size_, next_size});
+  uint8_t* const new_mem = (uint8_t*)WP2Malloc(next_max_size, 1);
+  if (new_mem == nullptr) return false;
+  if (size_ > 0) memcpy(new_mem, mem_, size_);
+  WP2Free(mem_);
+  mem_ = new_mem;
+  // down-cast is ok, thanks to WP2Malloc
+  max_size_ = (size_t)next_max_size;
+  return true;
+}
+
 bool MemoryWriter::Append(const void* data, size_t data_size) {
-  uint64_t next_size;
-  next_size = (uint64_t)size_ + data_size;
-  if (next_size > max_size_) {
-    uint8_t* new_mem;
-    uint64_t next_max_size = 2ULL * max_size_;
-    if (next_max_size < next_size) next_max_size = next_size;
-    if (next_max_size < 8192ULL) next_max_size = 8192ULL;
-    new_mem = (uint8_t*)WP2Malloc(next_max_size, 1);
-    if (new_mem == nullptr) return false;
-    if (size_ > 0) memcpy(new_mem, mem_, size_);
-    WP2Free(mem_);
-    mem_ = new_mem;
-    // down-cast is ok, thanks to WP2Malloc
-    max_size_ = (size_t)next_max_size;
-  }
   if (data_size > 0) {
+    if (!Reserve(data_size)) return false;
     memcpy(mem_ + size_, data, data_size);
     size_ += data_size;
   }
@@ -60,9 +63,13 @@ void MemoryWriter::Reset() {
 
 //------------------------------------------------------------------------------
 
+bool StringWriter::Reserve(size_t size) {
+  if (str_ != nullptr) str_->reserve(str_->size() + size);
+  return true;
+}
+
 bool StringWriter::Append(const void* data, size_t data_size) {
-  if (data_size > 0) {
-    assert(str_ != nullptr);
+  if (str_ != nullptr && data_size > 0) {
     str_->append((const char*)data, data_size);
   }
   return true;

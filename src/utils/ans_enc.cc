@@ -506,6 +506,9 @@ static_assert(BufferPage::kPageSize % IO_BYTES == 0,
 class VectorWriter : public Writer {
  public:
   explicit VectorWriter(Vector_u8& out) : out_(out) {}
+  WP2_NO_DISCARD bool Reserve(size_t size) override {
+    return out_.reserve(out_.size() + size);
+  }
   WP2_NO_DISCARD bool Append(const void* data, size_t data_size) override {
     return out_.append((const uint8_t*)data, data_size);
   }
@@ -596,6 +599,7 @@ uint32_t ANSEnc::GetBitstreamSize() const {
 }
 
 WP2Status ANSEnc::WriteBitstreamTo(Writer& writer) const {
+  WP2_CHECK_ALLOC_OK(writer.Reserve(GetBitstreamSize()));
   size_t size = BufferPage::kPageSize - buffer_pos_;  // fractional last size
   size_t pos = buffer_pos_;
   for (const BufferPage* p = pages_; p != nullptr; p = p->prev) {
