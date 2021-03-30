@@ -54,7 +54,7 @@ WP2Status TileDecoder::BypassTileDec() {
                                   num_read_bytes_before;
   (void)num_read_bytes;
 #if !defined(WP2_ENC_DEC_MATCH)
-  assert(num_read_bytes !=
+  assert(num_read_bytes ==
          GetTileMaxNumBytes(features_->rgb_bit_depth, *gparams_, tile_->rect));
 #endif
 
