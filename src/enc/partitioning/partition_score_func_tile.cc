@@ -126,12 +126,14 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
                                    const ProgressRange& progress,
                                    float* const score) {
   ANSEnc& enc = enc_tiles_layout_.tiles.front().enc;
-  enc.WipeOut();
+  enc.Reset();
   enc_tiles_layout_.gparams = &local_gparams_;
   tile_encoder_.tile_->progress = progress;
   // Encode the whole tile with the forced 'blocks'.
   WP2_CHECK_STATUS(tile_encoder_.LossyEncode(blocks, &enc));
-  WP2_CHECK_STATUS(enc.Assemble());
+  WP2_CHECK_STATUS(enc.Assemble(/*clear_tokens=*/true));
+  Vector_u8 bits;
+  WP2_CHECK_STATUS(enc.GetBuffer(bits));
 
   // Reset the unique tile to a fresh state.
   const uint32_t width = decompressed_argb_.width();
@@ -148,9 +150,9 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
   // Plug ANSEnc output to ANSDec input.
   Tile* const tile = &tiles_layout_.tiles.front();
   tile->chunk_size_is_known = true;
-  tile->chunk_size = enc.BufferSize();
+  tile->chunk_size = bits.size();
   tiles_layout_.gparams = &local_gparams_;
-  tile->private_input = ExternalDataSource(enc.Buffer(), enc.BufferSize());
+  tile->private_input = ExternalDataSource(bits.data(), bits.size());
   tile->input = &tile->private_input;
 
   // Decode to 'decompressed_argb_'.

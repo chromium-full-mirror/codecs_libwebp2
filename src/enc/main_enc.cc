@@ -57,7 +57,7 @@ WP2Status TileEncoder::AssignNextTile() {
 WP2Status TileEncoder::Execute() {
   while (tile_ != nullptr) {
     ANSEnc& enc = tile_->enc;
-    assert(enc.Buffer() == nullptr);
+    assert(enc.BufferSize() == 0);
     if (tiles_layout_->gparams->type_ == GlobalParams::GP_BOTH) {
       ANSDebugPrefix prefix(&enc, "GlobalHeader");
       enc.PutBool(use_lossless_, "use_lossless");
@@ -73,7 +73,7 @@ WP2Status TileEncoder::Execute() {
       WP2_CHECK_STATUS(LossyEncode(partition, &enc));
     }
 
-    WP2_CHECK_STATUS(enc.Assemble());
+    WP2_CHECK_STATUS(enc.Assemble(/*clear_tokens=*/true));
 
     WP2_CHECK_STATUS(AssignNextTile());
   }
@@ -211,10 +211,9 @@ WP2Status CodeTiles(EncTilesLayout* const tiles_layout,
       WP2_CHECK_STATUS(BypassTileEnc(*tiles_layout->gparams, &tile, output));
     } else {
       // TODO(yguyon): Check if 'tile.enc.BufferSize()' can even be 0.
-      WP2_CHECK_ALLOC_OK(
-          output->Append(tile.enc.Buffer(), tile.enc.BufferSize()));
+      WP2_CHECK_STATUS(tile.enc.EmitBytes(*output));
     }
-    tile.enc.WipeOut();
+    tile.enc.Reset();
   }
   return status;
 }
@@ -382,8 +381,10 @@ WP2Status EncodeGLBL(const EncoderConfig& config, const GlobalParams& gparams,
                      Writer* const output) {
   ANSEnc enc;
   WP2_CHECK_STATUS(gparams.Write(quality_hint, image_has_alpha, &enc));
-  WP2_CHECK_STATUS(enc.Assemble());
-  WP2_CHECK_STATUS(WriteChunk({enc.Buffer(), enc.BufferSize()}, output));
+  WP2_CHECK_STATUS(enc.Assemble(/*clear_tokens=*/true));
+  Vector_u8 bits;
+  WP2_CHECK_STATUS(enc.GetBuffer(bits));
+  WP2_CHECK_STATUS(WriteChunk({bits.data(), bits.size()}, output));
   return WP2_STATUS_OK;
 }
 

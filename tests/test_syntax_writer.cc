@@ -148,8 +148,10 @@ TEST(TestSyntaxWriter, CopyFrom) {
     cost_dicts = enc.GetCost(dicts);
     num_tokens = enc.NumTokens();
     ASSERT_WP2_OK(enc.Assemble());
+    Vector_u8 tmp;
+    ASSERT_WP2_OK(enc.GetBuffer(tmp));
     ASSERT_TRUE(buffer.resize(enc.BufferSize()));
-    std::copy(enc.Buffer(), enc.Buffer() + enc.BufferSize(), buffer.data());
+    std::copy(tmp.begin(), tmp.end(), buffer.data());
   }
 
   // 'syntax_writer' does not exist anymore, compare the clone output now.
@@ -163,9 +165,10 @@ TEST(TestSyntaxWriter, CopyFrom) {
   ASSERT_EQ(cost_dicts, enc_copy.GetCost(dicts_copy));
   ASSERT_EQ(num_tokens, enc_copy.NumTokens());
   ASSERT_WP2_OK(enc_copy.Assemble());
+  Vector_u8 tmp;
+  ASSERT_WP2_OK(enc_copy.GetBuffer(tmp));
   ASSERT_EQ(buffer.size(), enc_copy.BufferSize());
-  ASSERT_TRUE(std::equal(buffer.data(), buffer.data() + buffer.size(),
-                         enc_copy.Buffer()));
+  ASSERT_TRUE(std::equal(tmp.begin(), tmp.end(), buffer.begin()));
 }
 
 //------------------------------------------------------------------------------

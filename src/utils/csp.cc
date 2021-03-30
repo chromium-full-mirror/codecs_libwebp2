@@ -735,8 +735,10 @@ WP2Status CSPTransform::MakeEigenMatrixEncodable(const int16_t m[9],
   WP2MathInit();
   ANSEnc enc;
   WriteEigenMatrix(m, &enc);
-  WP2_CHECK_STATUS(enc.Assemble());
-  ExternalDataSource data(enc.Buffer(), enc.BufferSize());
+  WP2_CHECK_STATUS(enc.Assemble(/*clear_tokens=*/true));
+  Vector_u8 bits;
+  WP2_CHECK_STATUS(enc.GetBuffer(bits));
+  ExternalDataSource data(bits.data(), bits.size());
   ANSDec dec(&data);
   ReadEigenMatrix(&dec, dm);
   WP2_CHECK_STATUS(dec.GetStatus());

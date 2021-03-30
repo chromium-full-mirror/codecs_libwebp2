@@ -32,6 +32,7 @@
 #include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/data_source.h"
+#include "src/wp2/encode.h"  // for StringWriter
 
 namespace WP2 {
 namespace {
@@ -177,7 +178,8 @@ static bool Compress(const std::string& in, std::string* const out,
   const bool ok = (method == 0) ? Compress0(in, &enc) : CompressN(in, &enc);
   if (!ok) return false;
   if (enc.Assemble() != WP2_STATUS_OK) return false;
-  *out = std::string((const char*)enc.Buffer(), enc.BufferSize());
+  StringWriter writer(out);
+  if (enc.EmitBytes(writer) != WP2_STATUS_OK) return false;
   return true;
 }
 

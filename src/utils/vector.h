@@ -178,6 +178,15 @@ class VectorBase {
     num_items_ -= std::distance(first, last);
   }
 
+  // Appends 'size' elements by copy. Returns false on error.
+  bool append(const T data[], size_t size) {
+    if (size == 0) return true;
+    if (!reserve(Internal::NextCapacity(num_items_ + size))) return false;
+    std::copy(data, data + size, &items_[num_items_]);
+    num_items_ += size;
+    return true;
+  }
+
   // Destructs all the items.
   void clear() { erase(begin(), end()); }
 

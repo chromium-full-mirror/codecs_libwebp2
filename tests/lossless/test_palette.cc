@@ -98,7 +98,9 @@ TEST_P(PaletteTest, RoundTrip) {
   GlobalParams gparams;
   gparams.has_alpha_ = has_alpha;
   ASSERT_WP2_OK(enc.Assemble());
-  ExternalDataSource data_source(enc.Buffer(), enc.BufferSize());
+  Vector_u8 bits;
+  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   Tile tile;
   decoder.Init(WP2::DecoderConfig::kDefault, gparams, &dec, &tile);

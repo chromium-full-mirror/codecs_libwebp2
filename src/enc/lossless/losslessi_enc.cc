@@ -861,7 +861,7 @@ WP2Status Encoder::ApplyAndWriteTransforms(
   bool is_group4;
   if (cache_data) {
     // First store to cached_transforms_core_ for future use.
-    cached_transforms_enc_.Clear();
+    cached_transforms_enc_.Reset();
     cached_transforms_enc_.CopyDebugPrefix(*enc);
     WP2_CHECK_STATUS(
         DoApplyAndWriteTransforms(config, config_prev, progress, symbols_info,

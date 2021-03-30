@@ -29,6 +29,7 @@
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/utils.h"
+#include "src/wp2/encode.h"   // for Writer
 
 namespace WP2 {
 
@@ -482,51 +483,69 @@ WP2Status ANSAdaptiveSymbols::CopyFrom(const ANSAdaptiveSymbols& dicts) {
 }
 
 //------------------------------------------------------------------------------
-// Encoder
+// ANSEnc: Encoder
 
 // internal structure for storing tokens in linked pages.
-const uint32_t kAnsMaxTokenPerPage = 4096;
 struct ANSTokenPage : public WP2Allocable {
-  const ANSTokenPage* prev;  // previous -finished- pages
+  static constexpr uint32_t kAnsMaxTokenPerPage = 4096u;
   ANSToken tokens[kAnsMaxTokenPerPage];
+  const ANSTokenPage* prev;  // previous complete pages
   int nb_tokens;
 };
 
-// Reset the bitstream buffer.
-void ANSEnc::ResetBuffer() {
-  buffer_.clear();
-  buffer_pos_ = 0;
-  state_ = ANS_SIGNATURE;
-  assert(state_ >= IO_LIMIT);
-}
+struct BufferPage : public WP2Allocable {
+  // adjust the page size so that the total is exactly 4k.
+  static const uint32_t kPageSize = 4096u - sizeof(BufferPage*);
+  uint8_t data[kPageSize];
+  BufferPage* prev;   // list of pages, in reverse order
+};
+static_assert(sizeof(BufferPage) <= 4096u, "non-adjusted BufferPage size");
+static_assert(BufferPage::kPageSize % IO_BYTES == 0,
+              "BufferPage::data must be able to hold uint16_t's");
+
+class VectorWriter : public Writer {
+ public:
+  explicit VectorWriter(Vector_u8& out) : out_(out) {}
+  WP2_NO_DISCARD bool Append(const void* data, size_t data_size) override {
+    return out_.append((const uint8_t*)data, data_size);
+  }
+
+ protected:
+  Vector_u8& out_;
+};
+
+//------------------------------------------------------------------------------
 
 ANSEnc::ANSEnc() {
   tokens_ = nullptr;
-  list_ = nullptr;
+  pages_ = nullptr;
   status_ = WP2_STATUS_OK;
-  ResetBuffer();
   Reset();
 }
 
-ANSEnc::~ANSEnc() { WipeOut(); }
+void ANSEnc::Reset() {
+  FreeTokenPages();
+  // there's no point in preserving the byte pages now that the token are gone
+  FreeBufferPages();
+}
+
+ANSEnc::~ANSEnc() { Reset(); }
 
 ANSEnc::ANSEnc(ANSEnc&& other) noexcept { TrivialMoveCtor(this, &other); }
 
 WP2Status ANSEnc::Clone(const ANSEnc& e) {
-  WipeOut();
+  Reset();
 #if defined(WP2_BITTRACE) || defined(WP2_TRACE) || defined(WP2_ENC_DEC_MATCH)
   debug_prefix_ = e.debug_prefix_;
 #endif
   status_ = e.status_;
   WP2_CHECK_STATUS(status_);
   state_ = e.state_;
-  buffer_pos_ = e.buffer_pos_;
-  WP2_CHECK_ALLOC_OK(buffer_.copy_from(e.buffer_));
   // Copy the tokens.
   const ANSTokenPage* page_e = e.tokens_;
   while (page_e != nullptr) {
-    if (!NewPage()) {
-      WipeOut();
+    if (!NewTokenPage()) {
+      Reset();
       return WP2_STATUS_OUT_OF_MEMORY;
     }
     memcpy(tokens_->tokens, page_e->tokens, sizeof(page_e->tokens));
@@ -534,31 +553,71 @@ WP2Status ANSEnc::Clone(const ANSEnc& e) {
     page_e = page_e->prev;
   }
   nb_tokens_ = e.nb_tokens_;
+
+  // We don't copy the buffer pages. They need a new call to Assemble() to
+  // be regenerated anyway.
+  assert(pages_ == nullptr && num_pages_ == 0);
+  assert(buffer_ == nullptr && buffer_pos_ == 0);
   return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
-// emit symbol/bit/uniform-value
+// buffer / pages management
 
-bool ANSEnc::ReallocBuffer() {
-  const uint32_t cur_size = BufferSize();
-  const uint32_t new_size = std::max(4096u, 2u * cur_size);
-  Vector_u8 new_buffer;
-  if (!new_buffer.resize(new_size)) {
-    status_ = WP2_STATUS_OUT_OF_MEMORY;
-    return false;
-  }
-  if (cur_size > 0) {
-    memcpy(&new_buffer[new_size - cur_size], &buffer_[buffer_pos_], cur_size);
-  }
-  buffer_pos_ = new_size - cur_size;
-  swap(buffer_, new_buffer);
+bool ANSEnc::NewBufferPage() {
+  // too much memory allocated? potential overflow?
+  if (num_pages_ >= 0xffffffffu / BufferPage::kPageSize) return false;
+  BufferPage* const new_page = new (WP2Allocable::nothrow) BufferPage;
+  if (new_page == nullptr) return false;
+  new_page->prev = pages_;
+  pages_ = new_page;
+  buffer_ = new_page->data;
+  buffer_pos_ = BufferPage::kPageSize;
+  ++num_pages_;
   return true;
 }
 
+void ANSEnc::FreeBufferPages() {
+  while (pages_ != nullptr) {
+    BufferPage* const prev = pages_->prev;
+    delete pages_;
+    pages_ = prev;
+  }
+  num_pages_ = 0;
+  buffer_ = nullptr;
+  buffer_pos_ = 0;
+  state_ = ANS_SIGNATURE;
+  assert(state_ >= IO_LIMIT);
+}
+
+WP2Status ANSEnc::GetBuffer(Vector_u8& bits) {
+  bits.clear();
+  VectorWriter w(bits);
+  return EmitBytes(w);
+}
+
+uint32_t ANSEnc::BufferSize() const {
+  // should not overflow, since num_pages_ is capped
+  return (num_pages_ * BufferPage::kPageSize - buffer_pos_);
+}
+
+WP2Status ANSEnc::EmitBytes(Writer& writer) const {
+  size_t size = BufferPage::kPageSize - buffer_pos_;  // fractional last size
+  size_t pos = buffer_pos_;
+  for (const BufferPage* p = pages_; p != nullptr; p = p->prev) {
+    WP2_CHECK_ALLOC_OK(writer.Append((const void*)(p->data + pos), size));
+    size = BufferPage::kPageSize;  // all other subsequent pages are complete
+    pos = 0;
+  }
+  return WP2_STATUS_OK;
+}
+
+//------------------------------------------------------------------------------
+// emit symbol/bit/uniform-value/etc
+
 uint32_t ANSEnc::EmitWord(uint32_t s) {
   if (buffer_pos_ < IO_BYTES) {
-    if (!ReallocBuffer()) return (s >> IO_BITS);   // error
+    if (!NewBufferPage()) return (s >> IO_BITS);   // error
   }
   buffer_pos_ -= IO_BYTES;
   // written in endian-neutral way. Compiler will optimize with a memcpy()
@@ -629,8 +688,8 @@ void ANSEnc::EmitRValue(uint32_t value, uint32_t range) {
 
 //------------------------------------------------------------------------------
 
-WP2Status ANSEnc::Assemble() {
-  ResetBuffer();
+WP2Status ANSEnc::Assemble(bool clear_tokens) {
+  FreeBufferPages();
   const ANSTokenPage* page = tokens_;
   while (page != nullptr) {
     int n = page->nb_tokens;
@@ -670,9 +729,18 @@ WP2Status ANSEnc::Assemble() {
       }
     }
     page = page->prev;
+    if (clear_tokens) {
+      delete tokens_;
+      tokens_ = (ANSTokenPage*)page;
+    }
   }
   state_ = EmitWord(state_);
   state_ = EmitWord(state_);
+  assert(!clear_tokens || tokens_ == nullptr);
+
+  // finalize the last (incomplete) buffer
+  assert(pages_ != nullptr);
+  assert(num_pages_ > 0);
   return status_;
 }
 
@@ -839,11 +907,6 @@ float ANSEncBase::GetCostFull(const ANSDictionaries& dicts) const {
   return GetCost(dicts) + kANSPaddingCost;
 }
 
-void ANSEnc::WipeOut() {
-  ResetBuffer();
-  Clear();
-}
-
 WP2Status ANSEnc::AppendTokens(const ANSEnc& enc, uint32_t start_token,
                                uint32_t n_tokens) {
   // Figure out the pages in order
@@ -962,67 +1025,6 @@ uint32_t ANSEnc::PutRValueInternal(uint32_t value, uint32_t range) {
   return value;
 }
 
-//------------------------------------------------------------------------------
-
-void ANSEnc::Reset(bool delete_pages) {
-  ANSTokenPage* page = tokens_;
-  while (page != nullptr) {
-    ANSTokenPage* const next = (ANSTokenPage*)page->prev;
-    if (delete_pages) {
-      delete page;
-    } else {
-      page->prev = list_;
-      list_ = page;
-    }
-    page = next;
-  }
-  tokens_ = nullptr;
-  nb_tokens_ = 0;
-}
-
-// Reset the bistream, the message and free old pages.
-void ANSEnc::Clear() {
-  Reset();
-  state_ = ANS_SIGNATURE;
-  while (list_ != nullptr) {
-    ANSTokenPage* const next = (ANSTokenPage*)list_->prev;
-    delete list_;
-    list_ = next;
-  }
-}
-
-//------------------------------------------------------------------------------
-// Token pages management
-
-bool ANSEnc::NewPage() {
-  ANSTokenPage* page = list_;
-  if (page != nullptr) {
-    list_ = (ANSTokenPage*)page->prev;
-  } else {
-    page = new (WP2Allocable::nothrow) ANSTokenPage;
-    if (page == nullptr) {
-      status_ = WP2_STATUS_OUT_OF_MEMORY;
-      return false;
-    }
-  }
-  page->prev = tokens_;
-  page->nb_tokens = 0;
-  tokens_ = page;
-  return true;
-}
-
-void ANSEnc::EnqueueToken(ANSToken tok) {
-  ANSTokenPage* page = tokens_;
-  if (page == nullptr || page->nb_tokens == kAnsMaxTokenPerPage) {
-    if (!NewPage()) return;
-    page = tokens_;
-  }
-  page->tokens[page->nb_tokens++] = tok;
-  ++nb_tokens_;
-}
-
-uint32_t ANSEnc::NumTokens() const { return nb_tokens_; }
-
 // Append a debug token whose cost is not counted.
 #if defined(WP2_ENC_DEC_MATCH)
 uint32_t ANSEnc::PutDebugUValue(uint32_t value, uint32_t bits) {
@@ -1034,6 +1036,44 @@ uint32_t ANSEnc::PutDebugUValue(uint32_t value, uint32_t bits) {
 #endif
 
 //------------------------------------------------------------------------------
+// Token pages management
+
+bool ANSEnc::NewTokenPage() {
+  ANSTokenPage* page = new (WP2Allocable::nothrow) ANSTokenPage;
+  if (page == nullptr) {
+    status_ = WP2_STATUS_OUT_OF_MEMORY;
+    return false;
+  }
+  page->prev = tokens_;
+  page->nb_tokens = 0;
+  tokens_ = page;
+  return true;
+}
+
+void ANSEnc::FreeTokenPages() {
+  ANSTokenPage* page = tokens_;
+  while (page != nullptr) {
+    ANSTokenPage* const prev = (ANSTokenPage*)page->prev;
+    delete page;
+    page = prev;
+  }
+  tokens_ = nullptr;
+  nb_tokens_ = 0;
+}
+
+void ANSEnc::EnqueueToken(ANSToken tok) {
+  ANSTokenPage* page = tokens_;
+  if (page == nullptr || page->nb_tokens == ANSTokenPage::kAnsMaxTokenPerPage) {
+    if (!NewTokenPage()) return;
+    page = tokens_;
+  }
+  page->tokens[page->nb_tokens++] = tok;
+  ++nb_tokens_;
+}
+
+uint32_t ANSEnc::NumTokens() const { return nb_tokens_; }
+
+//------------------------------------------------------------------------------
 
 void swap(ANSEnc& e1, ANSEnc& e2) {
   using std::swap;
@@ -1042,10 +1082,11 @@ void swap(ANSEnc& e1, ANSEnc& e2) {
 #endif
   swap(e1.status_, e2.status_);
   swap(e1.state_, e2.state_);
+  swap(e1.pages_, e2.pages_);
+  swap(e1.num_pages_, e2.num_pages_);
   swap(e1.buffer_, e2.buffer_);
   swap(e1.buffer_pos_, e2.buffer_pos_);
   swap(e1.tokens_, e2.tokens_);
-  swap(e1.list_, e2.list_);
   swap(e1.nb_tokens_, e2.nb_tokens_);
 }
 

@@ -158,14 +158,17 @@ WP2_NO_DISCARD WP2Status ConvertTextFiles(int argc, const char* argv[]) {
       printf("### argv[c] ###\n%s\n", out.c_str());
     } else if (!dry_run) {
       const std::string out_name = RemoveFileExtension(argv[c]) + ".bits";
+      Vector_u8 out;
+      CHECK_STATUS(enc.GetBuffer(out), "GetBuffer() failed.");
       CHECK_STATUS(
-          IoUtilWriteFile(enc.Buffer(), enc.BufferSize(),
-                          out_name.c_str(), overwrite),
+          IoUtilWriteFile(out.data(), out.size(), out_name.c_str(), overwrite),
           "Couldn't save compressed bits [%s]!\n", out_name.c_str());
     }
     if (check) {
       PreviewData verif;
-      CHECK_STATUS(verif.Decode(enc.Buffer(), enc.BufferSize()),
+      Vector_u8 out;
+      CHECK_STATUS(enc.GetBuffer(out), "GetBuffer() failed.");
+      CHECK_STATUS(verif.Decode(out.data(), out.size()),
                    "Round-trip Decode() failed.\n");
       CHECK_TRUE(verif == data, "Round-trip verification failed!\n");
     }
@@ -344,8 +347,10 @@ int main(int argc, const char* argv[]) {
   WP2::ANSEnc enc;
   CHECK_STATUS(data.Encode(&enc),
                "Error encoding to binary! SHOULDN'T HAPPEN!!\n");
-  const uint32_t preview_size = enc.BufferSize();
-  const uint8_t* const preview_data = enc.Buffer();
+  WP2::Vector_u8 bits;
+  CHECK_STATUS(enc.GetBuffer(bits), "GetBuffer() failed.");
+  const uint32_t preview_size = bits.size();
+  const uint8_t* const preview_data = bits.data();
   VERBOSE("Creating preview for %s. Size:%u\n", img_file, preview_size);
 
   if (out_file != nullptr) {

@@ -317,9 +317,11 @@ TEST_F(TestANS, Test0) {
       /*bin_symbol=*/nullptr, /*asymbol=*/nullptr, /*dicts=*/nullptr, &random,
       &tokens, &enc);
 
-  EXPECT_WP2_OK(enc.Assemble());
-  const uint32_t size = enc.BufferSize();
-  const uint8_t* buf = enc.Buffer();
+  EXPECT_WP2_OK(enc.Assemble(true));
+  Vector_u8 bits;
+  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  const uint32_t size = bits.size();
+  const uint8_t* buf = bits.data();
   const int size_expected = (int)std::lround(enc.GetCostFull());
   if (kVerbose) {
     printf("%u symbols -> actual bits: %d / expected bits:%d\n",
@@ -398,9 +400,9 @@ TEST_F(TestANS, Test2) {
     EXPECT_WP2_OK(enc.Assemble());
 
     // Decode the buffer.
-    const uint32_t size = enc.BufferSize();
-    const uint8_t* buf = enc.Buffer();
-    ExternalDataSource data_source(buf, size);
+    Vector_u8 bits;
+    EXPECT_WP2_OK(enc.GetBuffer(bits));
+    ExternalDataSource data_source(bits.data(), bits.size());
     ANSDec dec(&data_source);
     ASSERT_WP2_OK(ANSCountsToSpreadTable(&counts[0], kMaxSymbol,
                                          ANS_TAB_SIZE, codes));
@@ -470,9 +472,9 @@ TEST_F(TestANS, Test3) {
   // Decode the meta-info.
   ANSCodes codes;
   EXPECT_TRUE(codes.resize(535));
-  const uint32_t size = enc.BufferSize();
-  const uint8_t* buf = enc.Buffer();
-  ExternalDataSource data_source(buf, size);
+  Vector_u8 bits;
+  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   {
     const uint32_t max_freq = dec.ReadRange(1, kANSMaxRange, "max_freq");
@@ -557,13 +559,15 @@ TEST_P(TestANSCostEstimation, Simple) {
 
     if (enc == &enc0) {
       EXPECT_WP2_OK(enc0.Assemble());
-      size = (int)(8 * enc0.BufferSize());  // store for later comparison
+      Vector_u8 bits0;
+      EXPECT_WP2_OK(enc0.GetBuffer(bits0));
+      size = (int)(8 * bits0.size());       // store for later comparison
       if (info.type != Token::Symbol) {     // omit the dictionary case for now
         ANSBinSymbol new_bin_symbol;
         ANSAdaptiveSymbol new_asymbol;
         new_asymbol.SetAdaptationSpeed(ANSAdaptiveSymbol::Method::kAOM);
         new_asymbol.InitFromUniform(APROBA_MAX_SYMBOL);
-        EXPECT_TRUE(VerifyBuffer(enc0.Buffer(), enc0.BufferSize(),
+        EXPECT_TRUE(VerifyBuffer(bits0.data(), bits0.size(),
                                  /*codes=*/nullptr, &new_bin_symbol,
                                  &new_asymbol, tokens));
       }
@@ -720,7 +724,9 @@ TEST_F(TestANS, Test6a) {
                       /*asymbol=*/nullptr, /*dicts=*/nullptr, &random, &tokens,
                       &encoder);
     EXPECT_WP2_OK(encoder.Assemble());
-    EXPECT_TRUE(VerifyBuffer(encoder.Buffer(), encoder.BufferSize(),
+    Vector_u8 bits;
+    EXPECT_WP2_OK(encoder.GetBuffer(bits));
+    EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(),
                              /*codes=*/nullptr, /*bin_symbol=*/nullptr,
                              /*asymbol=*/nullptr, tokens));
   }
@@ -740,7 +746,9 @@ TEST_F(TestANS, Test6b) {
     }
   }
   EXPECT_WP2_OK(encoder.Assemble());
-  EXPECT_TRUE(VerifyBuffer(encoder.Buffer(), encoder.BufferSize(),
+  Vector_u8 bits;
+  EXPECT_WP2_OK(encoder.GetBuffer(bits));
+  EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(),
                            /*codes=*/nullptr, /*bin_symbol=*/nullptr,
                            /*asymbol=*/nullptr, tokens));
 }
@@ -760,7 +768,9 @@ TEST_F(TestANS, Test6c) {
     }
   }
   EXPECT_WP2_OK(encoder.Assemble());
-  EXPECT_TRUE(VerifyBuffer(encoder.Buffer(), encoder.BufferSize(),
+  Vector_u8 bits;
+  EXPECT_WP2_OK(encoder.GetBuffer(bits));
+  EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(),
                            /*codes=*/nullptr, /*bin_symbol=*/nullptr,
                            /*asymbol=*/nullptr, tokens));
 }
@@ -778,7 +788,9 @@ TEST_F(TestANS, Test6d) {
     }
   }
   EXPECT_WP2_OK(encoder.Assemble());
-  EXPECT_TRUE(VerifyBuffer(encoder.Buffer(), encoder.BufferSize(),
+  Vector_u8 bits;
+  EXPECT_WP2_OK(encoder.GetBuffer(bits));
+  EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(),
                            /*codes=*/nullptr, /*bin_symbol=*/nullptr,
                            /*asymbol=*/nullptr, tokens));
 }
@@ -825,7 +837,9 @@ TEST_F(TestANS, Test7) {
     std::vector<ANSCodes> codes;
     GetCodesFromTokens(max_symbols, tokens, codes);
     EXPECT_WP2_OK(enc.Assemble());
-    EXPECT_TRUE(VerifyBuffer(enc.Buffer(), enc.BufferSize(), &codes,
+    Vector_u8 bits;
+    EXPECT_WP2_OK(enc.GetBuffer(bits));
+    EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(), &codes,
                              /*bin_symbol=*/nullptr, /*asymbol=*/nullptr,
                              tokens));
   }
@@ -862,7 +876,9 @@ TEST_F(TestANS, Test7) {
     // Decode the buffer.
     std::vector<ANSCodes> codes;
     GetCodesFromTokens(max_symbols_new, tokens, codes);
-    EXPECT_TRUE(VerifyBuffer(enc[0].Buffer(), enc[0].BufferSize(), &codes,
+    Vector_u8 bits;
+    EXPECT_WP2_OK(enc[0].GetBuffer(bits));
+    EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(), &codes,
                              /*bin_symbol=*/nullptr, /*asymbol=*/nullptr,
                              tokens));
   }
@@ -902,9 +918,9 @@ TEST_P(TestANSBitCounts, Simple) {
     GetCodesFromTokens(max_symbols, tokens, codes);
   }
   EXPECT_WP2_OK(enc.Assemble());
-  const uint32_t size = enc.BufferSize();
-  const uint8_t* buf = enc.Buffer();
-  ExternalDataSource data_source(buf, size);
+  Vector_u8 bits;
+  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   for (const Token& tok : tokens) {
     if (tok.type == Token::Bit) {
@@ -929,11 +945,11 @@ TEST_P(TestANSBitCounts, Simple) {
   const double bit_count = dec.GetBitCount();
 
   // difference between final size and bit-trace:
-  const double error = (size - bit_count / 8.) / size;
+  const double error = (bits.size() - bit_count / 8.) / bits.size();
   if (kVerbose) {
     printf("%s: %d elemt. Bits: actual: %d, reported: %.2lf (%.2lf%% off)\n",
-           info.name.c_str(), (int)tokens.size(), (int)size * 8, bit_count,
-           error * 100);
+           info.name.c_str(), (int)tokens.size(),
+           (int)bits.size() * 8, bit_count, error * 100.f);
   }
   EXPECT_LE(std::abs(error), ANSDec::kBitCountAccuracy);
 #endif
@@ -1007,12 +1023,10 @@ TEST_P(TestANSAdaptiveSymbol, Simple) {
   w_dict.SetAdaptationSpeed(ANSAdaptiveSymbol::Method::kConstant, adapt_speed);
   w_dict.InitFromUniform(APROBA_MAX_SYMBOL);
   ANSEnc enc;
-  enc.Clear();
   for (const uint8_t& s : syms) enc.PutASymbol(s, &w_dict, "asym");
-  EXPECT_WP2_OK(enc.Assemble());
-  const uint32_t size = enc.BufferSize();
-  const uint8_t* buf = enc.Buffer();
-
+  EXPECT_WP2_OK(enc.Assemble(true));
+  Vector_u8 bits;
+  EXPECT_WP2_OK(enc.GetBuffer(bits));
   if (kVerbose) {
     for (uint32_t s = 0; s < APROBA_MAX_SYMBOL; ++s) {
       const float real_p = real_cumul[s] * 100.f / syms.size();
@@ -1022,11 +1036,11 @@ TEST_P(TestANSAdaptiveSymbol, Simple) {
           s, (cumul[s + 1] - cumul[s]) * 100.f / sum, real_p, dict_p,
           fabs(1. - dict_p / real_p) * 100.);
     }
-    printf("%d symbols, size=%d\n", (int)syms.size(), (int)size);
+    printf("%d symbols, size=%d\n", (int)syms.size(), (int)bits.size());
   }
 
   // Decode and check
-  ExternalDataSource data_source(buf, size);
+  ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   ANSAdaptiveSymbol r_dict;
   r_dict.SetAdaptationSpeed(ANSAdaptiveSymbol::Method::kConstant, adapt_speed);
@@ -1091,7 +1105,6 @@ TEST_P(TestANSAdaptiveSymbol, VsDictionary) {
   for (uint8_t s : msg) dict->RecordSymbol(s);
 
   ANSEnc enc;
-  enc.Clear();
   ANSAdaptiveSymbol asym;
   asym.SetAdaptationSpeed(ANSAdaptiveSymbol::Method::kConstant, speed);
   EXPECT_WP2_OK(asym.InitFromCounts(pdf, APROBA_MAX_SYMBOL));
@@ -1100,7 +1113,7 @@ TEST_P(TestANSAdaptiveSymbol, VsDictionary) {
   EXPECT_WP2_OK(enc.Assemble());
   const float size1 = 8.f * enc.BufferSize();
 
-  enc.Clear();
+  enc.Reset();
   EXPECT_WP2_OK(dict->ToCodingTable());
   for (uint8_t s : msg) enc.PutSymbol(s, *dict, "test2");
   EXPECT_WP2_OK(enc.Assemble());
@@ -1131,7 +1144,7 @@ TEST_P(TestANSAdaptiveSymbol, VsDictionary) {
   for (uint32_t i = 0; i < msg.size(); i += 2) dict->RecordSymbol(msg[i]);
   EXPECT_WP2_OK(dict->ToCodingTable());
 
-  enc.Clear();
+  enc.Reset();
   EXPECT_WP2_OK(asym.InitFromCounts(pdf, APROBA_MAX_SYMBOL));
 
   for (uint32_t i = 0; i < msg.size(); ++i) {
@@ -1256,9 +1269,9 @@ TEST_P(TestANSMapping, Simple) {
     enc.PutRange(31, 0, 263, "verif-bit");
     EXPECT_WP2_OK(enc.Assemble());
     // Read back the mapping.
-    const uint32_t size = enc.BufferSize();
-    const uint8_t* buf = enc.Buffer();
-    ExternalDataSource data_source(buf, size);
+    Vector_u8 bits;
+    EXPECT_WP2_OK(enc.GetBuffer(bits));
+    ExternalDataSource data_source(bits.data(), bits.size());
     ANSDec dec(&data_source);
     EXPECT_TRUE(mapping_res.resize(n));
     EXPECT_WP2_OK(LoadMapping(&dec, n, range, mapping_res.data()));
@@ -1376,10 +1389,10 @@ TEST_F(TestANS, LargeRange) {
   }
 
   // Read.
-  ASSERT_WP2_OK(enc.Assemble());
-  const uint32_t size = enc.BufferSize();
-  const uint8_t* buf = enc.Buffer();
-  ExternalDataSource data_source(buf, size);
+  ASSERT_WP2_OK(enc.Assemble(true));
+  Vector_u8 bits;
+  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   for (const auto& t : test_cases) {
     const uint32_t value = std::get<0>(t);
