@@ -169,6 +169,7 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
   // Compute the histogram header costs for non_sparse and sparse.
   float cost_header[2];
   uint32_t histogram_to_write_sizes[2];
+  config->param.type = Raw;
   config->histo.nnz = size_sparse;
   config->histo.mapping = mapping;
   for (uint32_t i = 0; i < 2; ++i) {
