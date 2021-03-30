@@ -57,7 +57,7 @@ WP2Status TileEncoder::AssignNextTile() {
 WP2Status TileEncoder::Execute() {
   while (tile_ != nullptr) {
     ANSEnc& enc = tile_->enc;
-    assert(enc.BufferSize() == 0);
+    assert(enc.GetBitstreamSize() == 0);
     if (tiles_layout_->gparams->type_ == GlobalParams::GP_BOTH) {
       ANSDebugPrefix prefix(&enc, "GlobalHeader");
       enc.PutBool(use_lossless_, "use_lossless");
@@ -73,7 +73,7 @@ WP2Status TileEncoder::Execute() {
       WP2_CHECK_STATUS(LossyEncode(partition, &enc));
     }
 
-    WP2_CHECK_STATUS(enc.Assemble(/*clear_tokens=*/true));
+    WP2_CHECK_STATUS(enc.AssembleToBitstream(/*clear_tokens=*/true));
 
     WP2_CHECK_STATUS(AssignNextTile());
   }
@@ -200,18 +200,18 @@ WP2Status CodeTiles(EncTilesLayout* const tiles_layout,
     {
       uint8_t buffer[kMaxVarIntLength];
       const uint32_t size =
-          WriteVarInt(std::min(tile.enc.BufferSize(), max_num_bytes), 1,
+          WriteVarInt(std::min(tile.enc.GetBitstreamSize(), max_num_bytes), 1,
                       max_num_bytes, buffer);
       WP2_CHECK_ALLOC_OK(output->Append(buffer, size));
     }
 
-    if (tile.enc.BufferSize() >= max_num_bytes) {
+    if (tile.enc.GetBitstreamSize() >= max_num_bytes) {
       // Discard ANS encoding because it takes at least as many bytes as raw
       // pixels.
       WP2_CHECK_STATUS(BypassTileEnc(*tiles_layout->gparams, &tile, output));
     } else {
-      // TODO(yguyon): Check if 'tile.enc.BufferSize()' can even be 0.
-      WP2_CHECK_STATUS(tile.enc.EmitBytes(*output));
+      // TODO(yguyon): Check if 'tile.enc.GetBitstreamSize()' can even be 0.
+      WP2_CHECK_STATUS(tile.enc.WriteBitstreamTo(*output));
     }
     tile.enc.Reset();
   }
@@ -381,9 +381,9 @@ WP2Status EncodeGLBL(const EncoderConfig& config, const GlobalParams& gparams,
                      Writer* const output) {
   ANSEnc enc;
   WP2_CHECK_STATUS(gparams.Write(quality_hint, image_has_alpha, &enc));
-  WP2_CHECK_STATUS(enc.Assemble(/*clear_tokens=*/true));
+  WP2_CHECK_STATUS(enc.AssembleToBitstream(/*clear_tokens=*/true));
   Vector_u8 bits;
-  WP2_CHECK_STATUS(enc.GetBuffer(bits));
+  WP2_CHECK_STATUS(enc.WriteBitstreamTo(bits));
   WP2_CHECK_STATUS(WriteChunk({bits.data(), bits.size()}, output));
   return WP2_STATUS_OK;
 }

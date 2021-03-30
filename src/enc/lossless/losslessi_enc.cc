@@ -1042,9 +1042,9 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
                                                  &current_encode_info));
 
     // If we are better than what we already have.
-    WP2_CHECK_STATUS(enc.Assemble());
-    if (enc.BufferSize() < best_size) {
-      best_size = enc.BufferSize();
+    WP2_CHECK_STATUS(enc.AssembleToBitstream());
+    if (enc.GetBitstreamSize() < best_size) {
+      best_size = enc.GetBitstreamSize();
       // Store the BitWriter.
       WP2::swap(enc, enc_best);
       if (encode_info != nullptr) {

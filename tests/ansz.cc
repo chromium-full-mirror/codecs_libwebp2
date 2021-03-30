@@ -177,9 +177,9 @@ static bool Compress(const std::string& in, std::string* const out,
   enc.PutUValue(method == ORDER_0 ? 0 : 1, 1, "method");
   const bool ok = (method == 0) ? Compress0(in, &enc) : CompressN(in, &enc);
   if (!ok) return false;
-  if (enc.Assemble() != WP2_STATUS_OK) return false;
+  if (enc.AssembleToBitstream() != WP2_STATUS_OK) return false;
   StringWriter writer(out);
-  if (enc.EmitBytes(writer) != WP2_STATUS_OK) return false;
+  if (enc.WriteBitstreamTo(writer) != WP2_STATUS_OK) return false;
   return true;
 }
 

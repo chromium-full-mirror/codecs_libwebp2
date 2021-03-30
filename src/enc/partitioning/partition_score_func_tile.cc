@@ -131,9 +131,9 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
   tile_encoder_.tile_->progress = progress;
   // Encode the whole tile with the forced 'blocks'.
   WP2_CHECK_STATUS(tile_encoder_.LossyEncode(blocks, &enc));
-  WP2_CHECK_STATUS(enc.Assemble(/*clear_tokens=*/true));
+  WP2_CHECK_STATUS(enc.AssembleToBitstream(/*clear_tokens=*/true));
   Vector_u8 bits;
-  WP2_CHECK_STATUS(enc.GetBuffer(bits));
+  WP2_CHECK_STATUS(enc.WriteBitstreamTo(bits));
 
   // Reset the unique tile to a fresh state.
   const uint32_t width = decompressed_argb_.width();
@@ -170,7 +170,8 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
 
   // Compute a score based on distortion and the number of bits per pixel.
   const float ssim = distortion_[4];
-  const float bpp = std::max(1u, enc.BufferSize()) * 8.f / (width * height);
+  const float bpp =
+      std::max(1u, enc.GetBitstreamSize()) * 8.f / (width * height);
   const float lambda = MapQuality(*config_, 7.00f, -2.85f);
   *score = ssim - lambda * bpp;
   return WP2_STATUS_OK;

@@ -147,10 +147,10 @@ TEST(TestSyntaxWriter, CopyFrom) {
     cost = enc.GetCost();
     cost_dicts = enc.GetCost(dicts);
     num_tokens = enc.NumTokens();
-    ASSERT_WP2_OK(enc.Assemble());
+    ASSERT_WP2_OK(enc.AssembleToBitstream());
     Vector_u8 tmp;
-    ASSERT_WP2_OK(enc.GetBuffer(tmp));
-    ASSERT_TRUE(buffer.resize(enc.BufferSize()));
+    ASSERT_WP2_OK(enc.WriteBitstreamTo(tmp));
+    ASSERT_TRUE(buffer.resize(enc.GetBitstreamSize()));
     std::copy(tmp.begin(), tmp.end(), buffer.data());
   }
 
@@ -164,10 +164,10 @@ TEST(TestSyntaxWriter, CopyFrom) {
   ASSERT_EQ(cost, enc_copy.GetCost());
   ASSERT_EQ(cost_dicts, enc_copy.GetCost(dicts_copy));
   ASSERT_EQ(num_tokens, enc_copy.NumTokens());
-  ASSERT_WP2_OK(enc_copy.Assemble());
+  ASSERT_WP2_OK(enc_copy.AssembleToBitstream());
   Vector_u8 tmp;
-  ASSERT_WP2_OK(enc_copy.GetBuffer(tmp));
-  ASSERT_EQ(buffer.size(), enc_copy.BufferSize());
+  ASSERT_WP2_OK(enc_copy.WriteBitstreamTo(tmp));
+  ASSERT_EQ(buffer.size(), enc_copy.GetBitstreamSize());
   ASSERT_TRUE(std::equal(tmp.begin(), tmp.end(), buffer.begin()));
 }
 

@@ -109,7 +109,7 @@ struct EncTile {
   ArgbBuffer rgb_input;  // Not padded.
   YUVPlane yuv_input;    // Padded.
 
-  // Output. Assemble() to get the encoded bytes.
+  // Output. AssembleToBitstream()+WriteBitstreamTo() to get the encoded bytes.
   ANSEnc enc;
   ProgressRange progress;
 };

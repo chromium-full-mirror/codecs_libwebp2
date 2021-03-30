@@ -104,7 +104,7 @@ std::string PreviewToBase64(const PreviewData& data) {
 
   std::string out;
   Vector_u8 bits;
-  if (enc.GetBuffer(bits) != WP2_STATUS_OK) return "";
+  if (enc.WriteBitstreamTo(bits) != WP2_STATUS_OK) return "";
   const uint32_t size = bits.size();
   const uint8_t* const buf = bits.data();
   // Base64 converts 3 bytes to 4 ASCII characters, hence the 4/3 size expansion

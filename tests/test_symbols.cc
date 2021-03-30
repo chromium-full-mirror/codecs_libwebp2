@@ -342,10 +342,10 @@ void VerifyProcessRead(const SymbolsInfoTest& info, uint32_t num_symbols,
   for (const DataGenerator::Symbol& sym : symbols) {
     sw->ProcessWithCost(sym.s, sym.cluster, sym.value, "sym", &enc, &enc_cost);
   }
-  EXPECT_WP2_OK(enc.Assemble(/*clear_tokens=*/false));
+  EXPECT_WP2_OK(enc.AssembleToBitstream(/*clear_tokens=*/false));
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
-  EXPECT_EQ(bits.size(), enc.BufferSize());
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
+  EXPECT_EQ(bits.size(), enc.GetBitstreamSize());
 
   // Decode the symbol reader statistics.
   ExternalDataSource data_source(bits.data(), bits.size());
@@ -474,8 +474,8 @@ TEST(SymbolsTest, Uniform) {
   }
   const uint32_t range = max - min + 1;
   EXPECT_GT(range, 0u);
-  EXPECT_WP2_OK(enc.Assemble());
-  const uint32_t size = enc.BufferSize();
+  EXPECT_WP2_OK(enc.AssembleToBitstream());
+  const uint32_t size = enc.GetBitstreamSize();
 
   // With uniform data, the symbol writer should choose the range storage
   // method (there is a little overhead for storing the range).
@@ -531,11 +531,11 @@ TEST(SymbolsTest, MaxValue) {
                   std::abs(sym.value) * mul, "sym", &enc);
     }
   }
-  EXPECT_WP2_OK(enc.Assemble());
+  EXPECT_WP2_OK(enc.AssembleToBitstream());
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   const uint32_t size = bits.size();
-  ASSERT_EQ(size, enc.BufferSize());
+  ASSERT_EQ(size, enc.GetBitstreamSize());
   const uint8_t* buf = bits.data();
 
   // Decode the symbol reader statistics.
@@ -592,15 +592,15 @@ TEST(SymbolsTest, StorageMethodAdaptive) {
   for (const DataGenerator::Symbol& sym : symbols) {
     sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
   }
-  EXPECT_WP2_OK(enc.Assemble());
-  uint32_t size = enc.BufferSize();
+  EXPECT_WP2_OK(enc.AssembleToBitstream());
+  uint32_t size = enc.GetBitstreamSize();
 
   // Since the data is uniform, the adaptive bit shouldn't win much.
   EXPECT_NEAR(symbols.size() * std::log2(kMaxSymbol + 1) / 8, size, size * 0.1);
 
   // Decode the symbol reader statistics.
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   SymbolReader sr;
@@ -619,8 +619,8 @@ TEST(SymbolsTest, StorageMethodAdaptive) {
     const uint32_t value = (i < kNumSymbol / 2) ? 0 : 1;
     sw->Process(/*sym=*/0, /*cluster=*/0, value, "sym", &enc);
   }
-  EXPECT_WP2_OK(enc.Assemble());
-  size = enc.BufferSize();
+  EXPECT_WP2_OK(enc.AssembleToBitstream());
+  size = enc.GetBitstreamSize();
   // Since the data is very correlated it should be pretty cheap.
   EXPECT_LT(size, kNumSymbol * std::log2(kMaxSymbol + 1) * 0.015);
 }
@@ -667,15 +667,15 @@ TEST(SymbolsTest, StorageMethodAdaptiveWithAutoSpeed) {
   for (const DataGenerator::Symbol& sym : symbols) {
     sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
   }
-  EXPECT_WP2_OK(enc.Assemble());
-  uint32_t size = enc.BufferSize();
+  EXPECT_WP2_OK(enc.AssembleToBitstream());
+  uint32_t size = enc.GetBitstreamSize();
 
   // Since the data is very correlated it should be pretty cheap.
   EXPECT_LT(size, kNumSymbol * std::log2(kMaxSymbol + 1) * 0.02);
 
   // Decode the symbol reader statistics.
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   SymbolReader sr;
@@ -950,9 +950,9 @@ TEST(SymbolsTest, SimplePrefixCode) {
                     &enc, "test");
   }
 
-  ASSERT_WP2_OK(enc.Assemble());
+  ASSERT_WP2_OK(enc.AssembleToBitstream());
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   for (PrefixCodeSymbol& s : symbols) {
@@ -1055,9 +1055,9 @@ TEST_P(SymbolCostTest, TrivialCost) {
     }
   }
 
-  ASSERT_WP2_OK(enc.Assemble());
+  ASSERT_WP2_OK(enc.AssembleToBitstream());
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
 
@@ -1113,9 +1113,9 @@ TEST_P(SymbolCostTest, RangeCost) {
     values.push_back(v);
   }
 
-  ASSERT_WP2_OK(enc.Assemble());
+  ASSERT_WP2_OK(enc.AssembleToBitstream());
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
 
@@ -1181,9 +1181,9 @@ TEST_P(SymbolCostTest, DictCost) {
     }
   }
 
-  ASSERT_WP2_OK(enc.Assemble());
+  ASSERT_WP2_OK(enc.AssembleToBitstream());
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
 
@@ -1252,9 +1252,9 @@ TEST_P(SymbolCostTest, PrefixCodeCost) {
     }
   }
 
-  ASSERT_WP2_OK(enc.Assemble());
+  ASSERT_WP2_OK(enc.AssembleToBitstream());
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
 
@@ -1305,9 +1305,9 @@ TEST_P(SymbolCostTest, AdaptiveBitCost) {
     }
   }
 
-  ASSERT_WP2_OK(enc.Assemble());
+  ASSERT_WP2_OK(enc.AssembleToBitstream());
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
 
@@ -1363,9 +1363,9 @@ TEST_P(SymbolCostTest, AdaptiveSymCost) {
       }
     }
 
-    ASSERT_WP2_OK(enc.Assemble());
+    ASSERT_WP2_OK(enc.AssembleToBitstream());
     Vector_u8 bits;
-    EXPECT_WP2_OK(enc.GetBuffer(bits));
+    EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
     ExternalDataSource data_source(bits.data(), bits.size());
     ANSDec dec(&data_source);
 
@@ -1419,9 +1419,9 @@ TEST(SymbolsTest, MaxValuePrecision) {
   // we want it to go to the end of the tab size.
   enc.PutUValue(ANS_TAB_SIZE - 1, ANS_LOG_TAB_SIZE, "hack");
   // No need to write data as the stats are stored anyway. Just wrap up.
-  EXPECT_WP2_OK(enc.Assemble(/*clear_tokens=*/true));
+  EXPECT_WP2_OK(enc.AssembleToBitstream(/*clear_tokens=*/true));
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   // Decode the symbol reader statistics.
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);

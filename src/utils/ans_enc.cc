@@ -554,8 +554,8 @@ WP2Status ANSEnc::Clone(const ANSEnc& e) {
   }
   nb_tokens_ = e.nb_tokens_;
 
-  // We don't copy the buffer pages. They need a new call to Assemble() to
-  // be regenerated anyway.
+  // We don't copy the buffer pages. They need a new call to
+  // AssembleToBitstream() to be regenerated anyway.
   assert(pages_ == nullptr && num_pages_ == 0);
   assert(buffer_ == nullptr && buffer_pos_ == 0);
   return WP2_STATUS_OK;
@@ -590,18 +590,12 @@ void ANSEnc::FreeBufferPages() {
   assert(state_ >= IO_LIMIT);
 }
 
-WP2Status ANSEnc::GetBuffer(Vector_u8& bits) {
-  bits.clear();
-  VectorWriter w(bits);
-  return EmitBytes(w);
-}
-
-uint32_t ANSEnc::BufferSize() const {
+uint32_t ANSEnc::GetBitstreamSize() const {
   // should not overflow, since num_pages_ is capped
   return (num_pages_ * BufferPage::kPageSize - buffer_pos_);
 }
 
-WP2Status ANSEnc::EmitBytes(Writer& writer) const {
+WP2Status ANSEnc::WriteBitstreamTo(Writer& writer) const {
   size_t size = BufferPage::kPageSize - buffer_pos_;  // fractional last size
   size_t pos = buffer_pos_;
   for (const BufferPage* p = pages_; p != nullptr; p = p->prev) {
@@ -610,6 +604,12 @@ WP2Status ANSEnc::EmitBytes(Writer& writer) const {
     pos = 0;
   }
   return WP2_STATUS_OK;
+}
+
+WP2Status ANSEnc::WriteBitstreamTo(Vector_u8& bits) const {
+  bits.clear();
+  VectorWriter w(bits);
+  return WriteBitstreamTo(w);
 }
 
 //------------------------------------------------------------------------------
@@ -688,7 +688,7 @@ void ANSEnc::EmitRValue(uint32_t value, uint32_t range) {
 
 //------------------------------------------------------------------------------
 
-WP2Status ANSEnc::Assemble(bool clear_tokens) {
+WP2Status ANSEnc::AssembleToBitstream(bool clear_tokens) {
   FreeBufferPages();
   const ANSTokenPage* page = tokens_;
   while (page != nullptr) {

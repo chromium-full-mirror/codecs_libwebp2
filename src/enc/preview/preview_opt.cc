@@ -70,8 +70,8 @@ WP2Status PreviewDataEnc::GetScore(float bigger_size_penalty) {
   // Encode() will sort vertices and palette, but it shouldn't change the result
   ANSEnc enc;
   WP2_CHECK_STATUS(Encode(&enc));
-  WP2_CHECK_STATUS(enc.Assemble());
-  num_bytes_ = enc.BufferSize();
+  WP2_CHECK_STATUS(enc.AssembleToBitstream());
+  num_bytes_ = enc.GetBitstreamSize();
 
   WP2_CHECK_STATUS(triangulation_.Create(*this));
 

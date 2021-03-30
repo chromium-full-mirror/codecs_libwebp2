@@ -92,7 +92,7 @@ int main(int argc, const char* argv[]) {
       return 1;
   }
   // Test for asserts in the Emit functions.
-  const WP2Status status = enc.Assemble();
+  const WP2Status status = enc.AssembleToBitstream();
   (void)status;
   assert(status == WP2_STATUS_OK);
 

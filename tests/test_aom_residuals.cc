@@ -130,9 +130,9 @@ TEST_P(ResidualWriterTest, AOM) {
           }
 
           // Read the data.
-          EXPECT_WP2_OK(enc.Assemble());
+          EXPECT_WP2_OK(enc.AssembleToBitstream());
           Vector_u8 bits;
-          EXPECT_WP2_OK(enc.GetBuffer(bits));
+          EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
           const uint32_t size = bits.size();
           const uint8_t* buf = bits.data();
           // Initialize decoder and symbol reader.

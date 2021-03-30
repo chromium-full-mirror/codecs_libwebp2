@@ -95,7 +95,7 @@ class ANSDictionary : public WP2Allocable {
   Vector_u32 counts_;
   // quantized counts (non-empty if some quantized counts have been set)
   Vector_u32 quantized_counts_;
-  // the following params must be set before calling ANSEnc::Assemble()
+  // the following params must be set before calling AssembleToBitstream().
   uint32_t log2_tab_size_;  // final expect total of counts[], used for coding
   // (0="default to ANS_LOG_TAB_SIZE")
   // Must be in [0,16] range.
@@ -294,23 +294,20 @@ class ANSEnc : public ANSEncBase {
   // Deep copies the given ANSEnc into the current ANSEnc.
   WP2Status Clone(const ANSEnc& e);
 
-  // Generates a bitstream from the current state.
-  // The bitstream is stored internally as pages and can be traversed
-  // using EmitBytes() or flattened into a vector when calling GetBuffer().
+  // Generates a bitstream from the current state. The bitstream is stored
+  // internally as pages and can be retrieved using WriteBitstreamTo().
   // If clear_tokens is true, token page will be cleared (not even recycled)
   // during the process, leaving only the buffer pages afterward. Note that the
   // tokens should be preserved if calling GetCost().
-  WP2Status Assemble(bool clear_tokens = false);
+  WP2Status AssembleToBitstream(bool clear_tokens = false);
 
   // Returns the size of the assembled bitstream, in bytes.
-  // Only valid if Assemble() has been called.
-  uint32_t BufferSize() const;
+  // Only valid if AssembleToBitstream() has been called.
+  uint32_t GetBitstreamSize() const;
 
-  // Traverses the assembled pages and calls the writer on each buffers.
-  WP2Status EmitBytes(Writer& writer) const;
-
-  // Retrieves the flattened coded buffer as a vector.
-  WP2Status GetBuffer(Vector_u8& bits);
+  // Outputs the bitstream.
+  WP2Status WriteBitstreamTo(Writer& writer) const;
+  WP2Status WriteBitstreamTo(Vector_u8& bits) const;
 
   // Reclaims all memory, resets the encoder.
   // (to be called in case of error, for instance).

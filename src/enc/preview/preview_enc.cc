@@ -382,7 +382,7 @@ WP2Status PreviewData::Encode(ANSEnc* const enc) const {
         WP2_CHECK_STATUS(EncodeVertices(enc));
   }
   WP2_CHECK_STATUS(enc->GetStatus());
-  WP2_CHECK_STATUS(enc->Assemble(/*clear_tokens=*/true));
+  WP2_CHECK_STATUS(enc->AssembleToBitstream(/*clear_tokens=*/true));
   return WP2_STATUS_OK;
 }
 
@@ -506,7 +506,7 @@ WP2Status EncodePreview(const ArgbBuffer& buffer, const PreviewConfig& config,
   ANSEnc enc;
   WP2_CHECK_STATUS(preview.Encode(&enc));
   WP2_CHECK_STATUS(encode_progress.AdvanceBy(1.));
-  WP2_CHECK_STATUS(enc.EmitBytes(*output));
+  WP2_CHECK_STATUS(enc.WriteBitstreamTo(*output));
   return WP2_STATUS_OK;
 }
 

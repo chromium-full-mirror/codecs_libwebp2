@@ -317,9 +317,9 @@ TEST_F(TestANS, Test0) {
       /*bin_symbol=*/nullptr, /*asymbol=*/nullptr, /*dicts=*/nullptr, &random,
       &tokens, &enc);
 
-  EXPECT_WP2_OK(enc.Assemble(true));
+  EXPECT_WP2_OK(enc.AssembleToBitstream(true));
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   const uint32_t size = bits.size();
   const uint8_t* buf = bits.data();
   const int size_expected = (int)std::lround(enc.GetCostFull());
@@ -397,11 +397,11 @@ TEST_F(TestANS, Test2) {
     // Error is usually less than 0.1%.
     EXPECT_NEAR(cost1, cost2, 0.001 * cost1) << "type: " << type;
 
-    EXPECT_WP2_OK(enc.Assemble());
+    EXPECT_WP2_OK(enc.AssembleToBitstream());
 
     // Decode the buffer.
     Vector_u8 bits;
-    EXPECT_WP2_OK(enc.GetBuffer(bits));
+    EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
     ExternalDataSource data_source(bits.data(), bits.size());
     ANSDec dec(&data_source);
     ASSERT_WP2_OK(ANSCountsToSpreadTable(&counts[0], kMaxSymbol,
@@ -467,13 +467,13 @@ TEST_F(TestANS, Test3) {
     EXPECT_WP2_OK(dict->ToCodingTable());
     for (const uint32_t& i : symbols) enc.PutSymbol(i, *dict, "id");
   }
-  EXPECT_WP2_OK(enc.Assemble());
+  EXPECT_WP2_OK(enc.AssembleToBitstream());
 
   // Decode the meta-info.
   ANSCodes codes;
   EXPECT_TRUE(codes.resize(535));
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   {
@@ -558,9 +558,9 @@ TEST_P(TestANSCostEstimation, Simple) {
                       &random, &tokens, enc);
 
     if (enc == &enc0) {
-      EXPECT_WP2_OK(enc0.Assemble());
+      EXPECT_WP2_OK(enc0.AssembleToBitstream());
       Vector_u8 bits0;
-      EXPECT_WP2_OK(enc0.GetBuffer(bits0));
+      EXPECT_WP2_OK(enc0.WriteBitstreamTo(bits0));
       size = (int)(8 * bits0.size());       // store for later comparison
       if (info.type != Token::Symbol) {     // omit the dictionary case for now
         ANSBinSymbol new_bin_symbol;
@@ -723,9 +723,9 @@ TEST_F(TestANS, Test6a) {
                       /*max_symbol=*/0, kMaxRange, /*bin_symbol=*/nullptr,
                       /*asymbol=*/nullptr, /*dicts=*/nullptr, &random, &tokens,
                       &encoder);
-    EXPECT_WP2_OK(encoder.Assemble());
+    EXPECT_WP2_OK(encoder.AssembleToBitstream());
     Vector_u8 bits;
-    EXPECT_WP2_OK(encoder.GetBuffer(bits));
+    EXPECT_WP2_OK(encoder.WriteBitstreamTo(bits));
     EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(),
                              /*codes=*/nullptr, /*bin_symbol=*/nullptr,
                              /*asymbol=*/nullptr, tokens));
@@ -745,9 +745,9 @@ TEST_F(TestANS, Test6b) {
       tokens.emplace_back(Token::Range, value, range);
     }
   }
-  EXPECT_WP2_OK(encoder.Assemble());
+  EXPECT_WP2_OK(encoder.AssembleToBitstream());
   Vector_u8 bits;
-  EXPECT_WP2_OK(encoder.GetBuffer(bits));
+  EXPECT_WP2_OK(encoder.WriteBitstreamTo(bits));
   EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(),
                            /*codes=*/nullptr, /*bin_symbol=*/nullptr,
                            /*asymbol=*/nullptr, tokens));
@@ -767,9 +767,9 @@ TEST_F(TestANS, Test6c) {
       tokens.emplace_back(Token::Range, value, range);
     }
   }
-  EXPECT_WP2_OK(encoder.Assemble());
+  EXPECT_WP2_OK(encoder.AssembleToBitstream());
   Vector_u8 bits;
-  EXPECT_WP2_OK(encoder.GetBuffer(bits));
+  EXPECT_WP2_OK(encoder.WriteBitstreamTo(bits));
   EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(),
                            /*codes=*/nullptr, /*bin_symbol=*/nullptr,
                            /*asymbol=*/nullptr, tokens));
@@ -787,9 +787,9 @@ TEST_F(TestANS, Test6d) {
       }
     }
   }
-  EXPECT_WP2_OK(encoder.Assemble());
+  EXPECT_WP2_OK(encoder.AssembleToBitstream());
   Vector_u8 bits;
-  EXPECT_WP2_OK(encoder.GetBuffer(bits));
+  EXPECT_WP2_OK(encoder.WriteBitstreamTo(bits));
   EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(),
                            /*codes=*/nullptr, /*bin_symbol=*/nullptr,
                            /*asymbol=*/nullptr, tokens));
@@ -836,9 +836,9 @@ TEST_F(TestANS, Test7) {
     }
     std::vector<ANSCodes> codes;
     GetCodesFromTokens(max_symbols, tokens, codes);
-    EXPECT_WP2_OK(enc.Assemble());
+    EXPECT_WP2_OK(enc.AssembleToBitstream());
     Vector_u8 bits;
-    EXPECT_WP2_OK(enc.GetBuffer(bits));
+    EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
     EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(), &codes,
                              /*bin_symbol=*/nullptr, /*asymbol=*/nullptr,
                              tokens));
@@ -862,7 +862,7 @@ TEST_F(TestANS, Test7) {
     EXPECT_WP2_OK(enc[0].AppendTokens(enc[1], 0, enc[1].NumTokens()));
     EXPECT_WP2_OK(dicts[0].AppendAndClear(&dicts[1]));
     EXPECT_WP2_OK(dicts[0].ToCodingTable());
-    EXPECT_WP2_OK(enc[0].Assemble());
+    EXPECT_WP2_OK(enc[0].AssembleToBitstream());
     // Update the ids in the tokens.
     uint32_t n_dict_0 = max_symbols[0].size();
     for (uint32_t i = kNumElements * n_dict_0; i < tokens.size(); ++i) {
@@ -877,7 +877,7 @@ TEST_F(TestANS, Test7) {
     std::vector<ANSCodes> codes;
     GetCodesFromTokens(max_symbols_new, tokens, codes);
     Vector_u8 bits;
-    EXPECT_WP2_OK(enc[0].GetBuffer(bits));
+    EXPECT_WP2_OK(enc[0].WriteBitstreamTo(bits));
     EXPECT_TRUE(VerifyBuffer(bits.data(), bits.size(), &codes,
                              /*bin_symbol=*/nullptr, /*asymbol=*/nullptr,
                              tokens));
@@ -917,9 +917,9 @@ TEST_P(TestANSBitCounts, Simple) {
       info.types.end()) {
     GetCodesFromTokens(max_symbols, tokens, codes);
   }
-  EXPECT_WP2_OK(enc.Assemble());
+  EXPECT_WP2_OK(enc.AssembleToBitstream());
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   for (const Token& tok : tokens) {
@@ -1024,9 +1024,9 @@ TEST_P(TestANSAdaptiveSymbol, Simple) {
   w_dict.InitFromUniform(APROBA_MAX_SYMBOL);
   ANSEnc enc;
   for (const uint8_t& s : syms) enc.PutASymbol(s, &w_dict, "asym");
-  EXPECT_WP2_OK(enc.Assemble(true));
+  EXPECT_WP2_OK(enc.AssembleToBitstream(true));
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   if (kVerbose) {
     for (uint32_t s = 0; s < APROBA_MAX_SYMBOL; ++s) {
       const float real_p = real_cumul[s] * 100.f / syms.size();
@@ -1110,14 +1110,14 @@ TEST_P(TestANSAdaptiveSymbol, VsDictionary) {
   EXPECT_WP2_OK(asym.InitFromCounts(pdf, APROBA_MAX_SYMBOL));
 
   for (uint8_t s : msg) enc.PutASymbol(s, &asym, "test1");
-  EXPECT_WP2_OK(enc.Assemble());
-  const float size1 = 8.f * enc.BufferSize();
+  EXPECT_WP2_OK(enc.AssembleToBitstream());
+  const float size1 = 8.f * enc.GetBitstreamSize();
 
   enc.Reset();
   EXPECT_WP2_OK(dict->ToCodingTable());
   for (uint8_t s : msg) enc.PutSymbol(s, *dict, "test2");
-  EXPECT_WP2_OK(enc.Assemble());
-  const float size2 = 8.f * enc.BufferSize();
+  EXPECT_WP2_OK(enc.AssembleToBitstream());
+  const float size2 = 8.f * enc.GetBitstreamSize();
 
   // tolerance of ASym vs Dictionary
   const float kTolerance[16] = {
@@ -1154,8 +1154,8 @@ TEST_P(TestANSAdaptiveSymbol, VsDictionary) {
       enc.PutASymbol(msg[i], &asym, "asym");
     }
   }
-  EXPECT_WP2_OK(enc.Assemble());
-  const float size = 8.f * enc.BufferSize();
+  EXPECT_WP2_OK(enc.AssembleToBitstream());
+  const float size = 8.f * enc.GetBitstreamSize();
   const float cost = enc.GetCost(dicts);
 
   // tolerance of ASym vs Dictionary
@@ -1267,10 +1267,10 @@ TEST_P(TestANSMapping, Simple) {
     ANSEnc enc;
     StoreMapping(mapping_ini.data(), n, range, stats.data(), &enc);
     enc.PutRange(31, 0, 263, "verif-bit");
-    EXPECT_WP2_OK(enc.Assemble());
+    EXPECT_WP2_OK(enc.AssembleToBitstream());
     // Read back the mapping.
     Vector_u8 bits;
-    EXPECT_WP2_OK(enc.GetBuffer(bits));
+    EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
     ExternalDataSource data_source(bits.data(), bits.size());
     ANSDec dec(&data_source);
     EXPECT_TRUE(mapping_res.resize(n));
@@ -1389,9 +1389,9 @@ TEST_F(TestANS, LargeRange) {
   }
 
   // Read.
-  ASSERT_WP2_OK(enc.Assemble(true));
+  ASSERT_WP2_OK(enc.AssembleToBitstream(true));
   Vector_u8 bits;
-  EXPECT_WP2_OK(enc.GetBuffer(bits));
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   for (const auto& t : test_cases) {

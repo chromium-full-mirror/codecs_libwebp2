@@ -28,9 +28,9 @@ WP2Status WriteAndRead(const GlobalParams& params_to_write,
   constexpr int kQualityHint = 8;
   constexpr bool kImageHasAlpha = true;
   WP2_CHECK_STATUS(params_to_write.Write(kQualityHint, kImageHasAlpha, &enc));
-  WP2_CHECK_STATUS(enc.Assemble());
+  WP2_CHECK_STATUS(enc.AssembleToBitstream());
   Vector_u8 bits;
-  WP2_CHECK_STATUS(enc.GetBuffer(bits));
+  WP2_CHECK_STATUS(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   WP2_CHECK_STATUS(read_params->Read(kQualityHint, kImageHasAlpha, &dec));
