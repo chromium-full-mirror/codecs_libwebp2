@@ -156,11 +156,13 @@ bool HasALosslessTile(DataView input) {
   AnimationFrame frame;
   uint32_t frame_index = 0;
   do {
-    GlobalParams gparams;
     if (DecodeANMF(DecoderConfig::kDefault, &data_source, features, frame_index,
-                   &frame) != WP2_STATUS_OK ||
-        DecodeGLBL(&data_source, DecoderConfig::kDefault, features, &gparams) !=
-            WP2_STATUS_OK) {
+                   &frame) != WP2_STATUS_OK) {
+      return false;
+    }
+    GlobalParams gparams;
+    if (DecodeGLBL(&data_source, DecoderConfig::kDefault, features, &gparams) !=
+        WP2_STATUS_OK) {
       return false;
     }
     // It would be more accurate to check each tile but false positives are not
@@ -168,7 +170,9 @@ bool HasALosslessTile(DataView input) {
     if (gparams.type_ != GlobalParams::GP_LOSSY) {
       return true;
     }
-    if (SkipTiles(&data_source, features, frame.window) != WP2_STATUS_OK) {
+
+    if (SkipTiles(gparams, &data_source, features, frame.window) !=
+        WP2_STATUS_OK) {
       return false;
     }
     ++frame_index;

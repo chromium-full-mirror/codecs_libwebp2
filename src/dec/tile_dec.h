@@ -141,8 +141,12 @@ WP2Status SetupWorkers(const BitstreamFeatures& features,
                        TilesLayout* const tiles_layout,
                        Vector<TileDecoder>* const workers);
 
+// Skips global params and then calls SkipTiles.
+WP2Status SkipGlobalParamsAndTiles(DataSource* const data_source,
+                                   const BitstreamFeatures& features,
+                                   const Rectangle& window);
 // Skips all tiles fitting in 'window' from the 'data_source'.
-WP2Status SkipTiles(DataSource* const data_source,
+WP2Status SkipTiles(const GlobalParams& gparams, DataSource* const data_source,
                     const BitstreamFeatures& features, const Rectangle& window);
 
 //------------------------------------------------------------------------------

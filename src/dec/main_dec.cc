@@ -401,7 +401,8 @@ WP2Status InternalDecode(const DecoderConfig& config,
   while (!frame.is_last) {
     WP2_CHECK_STATUS(
         DecodeANMF(config, data_source, features, frame_index, &frame));
-    WP2_CHECK_STATUS(SkipTiles(data_source, features, frame.window));
+    WP2_CHECK_STATUS(
+        SkipGlobalParamsAndTiles(data_source, features, frame.window));
     ++frame_index;
   }
 
@@ -659,7 +660,8 @@ WP2Status ExtractMetadata(const uint8_t* data, size_t data_size,
     do {
       WP2_CHECK_STATUS(DecodeANMF(DecoderConfig::kDefault, &data_source,
                                   features, frame_index, &frame));
-      WP2_CHECK_STATUS(SkipTiles(&data_source, features, frame.window));
+      WP2_CHECK_STATUS(
+          SkipGlobalParamsAndTiles(&data_source, features, frame.window));
       ++frame_index;
     } while (!frame.is_last);
 

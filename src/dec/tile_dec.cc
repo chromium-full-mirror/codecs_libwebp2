@@ -247,13 +247,21 @@ uint32_t GetTileMaxNumBytes(uint32_t rgb_bit_depth, const GlobalParams& gparams,
 
 //------------------------------------------------------------------------------
 
-// Reads the size of each tile and skips them.
-WP2Status SkipTiles(DataSource* const data_source,
-                    const BitstreamFeatures& features,
-                    const Rectangle& window) {
+// Reads the global params and then reads each tile and skips them.
+WP2Status SkipGlobalParamsAndTiles(DataSource* const data_source,
+                                   const BitstreamFeatures& features,
+                                   const Rectangle& window) {
   GlobalParams gparams;
   WP2_CHECK_STATUS(
       DecodeGLBL(data_source, DecoderConfig::kDefault, features, &gparams));
+  WP2_CHECK_STATUS(SkipTiles(gparams, data_source, features, window));
+  return WP2_STATUS_OK;
+}
+
+// Reads the size of each tile and skips them.
+WP2Status SkipTiles(const GlobalParams& gparams, DataSource* const data_source,
+                    const BitstreamFeatures& features,
+                    const Rectangle& window) {
   const uint32_t num_tiles = GetNumTiles(
       window.width, window.height, features.tile_width, features.tile_height);
   for (uint32_t tile_index = 0; tile_index < num_tiles; ++tile_index) {
