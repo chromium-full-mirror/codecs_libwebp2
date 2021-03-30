@@ -22,6 +22,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <limits>
 
 #include "src/common/constants.h"
 #include "src/utils/ans.h"
@@ -110,11 +111,13 @@ class BitPacker {
  public:
   BitPacker(uint8_t* buf, uint32_t size, const char debug_prefix[])
       : buf_(buf),
-        max_pos_(size * 8),
         bit_pos_(0),
         error_(false),
         debug_prefix_(debug_prefix) {
     (void)debug_prefix_;
+    // Check for potential overflows.
+    max_pos_ = (uint32_t)std::min(
+        (uint64_t)size * 8, (uint64_t)std::numeric_limits<uint32_t>::max());
     memset(buf, 0, size);
   }
   // Write next bits. 'num_bits' must be in range [1, 24].

@@ -116,9 +116,11 @@ class TileDecoder : public WorkerBase {
   // As long as 'tile_' is not null, decode it and TryAssignNextTile().
   WP2Status Execute() override;
 
- protected:
   // Decodes pixels as row-ordered raw samples.
   WP2Status BypassTileDec();
+
+ protected:
+  // Decodes pixels as row-ordered raw samples.
   WP2Status BypassTileDecRgb8b();
   WP2Status BypassTileDecRgb10b();
   WP2Status BypassTileDecYuv();

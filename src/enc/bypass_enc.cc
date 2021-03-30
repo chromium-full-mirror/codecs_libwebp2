@@ -76,7 +76,9 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
       }
 
       WP2_CHECK_OK(bit_packer.Ok(), WP2_STATUS_BAD_WRITE);
+#if !defined(WP2_ENC_DEC_MATCH)
       assert(bit_packer.Used() == max_num_bytes);
+#endif
       WP2_CHECK_ALLOC_OK(output->Append(data.bytes, data.size));
     }
   } else {
@@ -109,7 +111,9 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
     }
 
     WP2_CHECK_OK(bit_packer.Ok(), WP2_STATUS_BAD_WRITE);
+#if !defined(WP2_ENC_DEC_MATCH)
     assert(bit_packer.Used() == max_num_bytes);
+#endif
     WP2_CHECK_ALLOC_OK(output->Append(data.bytes, data.size));
   }
   return WP2_STATUS_OK;

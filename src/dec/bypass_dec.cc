@@ -52,10 +52,11 @@ WP2Status TileDecoder::BypassTileDec() {
   const uint32_t num_read_bytes = tile_->input->GetNumDiscardedBytes() +
                                   tile_->input->GetNumReadBytes() -
                                   num_read_bytes_before;
-  if (num_read_bytes !=
-      GetTileMaxNumBytes(features_->rgb_bit_depth, *gparams_, tile_->rect)) {
-    assert(false);
-  }
+  (void)num_read_bytes;
+#if !defined(WP2_ENC_DEC_MATCH)
+  assert(num_read_bytes !=
+         GetTileMaxNumBytes(features_->rgb_bit_depth, *gparams_, tile_->rect));
+#endif
 
 #if defined(WP2_BITTRACE)
   if (config_->info != nullptr) {
@@ -73,8 +74,10 @@ WP2Status TileDecoder::BypassTileDec() {
 WP2Status TileDecoder::BypassTileDecRgb8b() {
   const uint32_t bytes_per_row =
       tile_->rect.width * (gparams_->has_alpha_ ? 4 : 3);
+#if !defined(WP2_ENC_DEC_MATCH)
   assert(bytes_per_row * tile_->rect.height ==
          GetTileMaxNumBytes(features_->rgb_bit_depth, *gparams_, tile_->rect));
+#endif
 
   for (tile_->num_decoded_rows = 0;
        tile_->num_decoded_rows < tile_->rect.height;

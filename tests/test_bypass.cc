@@ -80,11 +80,13 @@ TEST_P(BypassTest, MaxChunkSize) {
     ASSERT_WP2_OK(BypassTileEnc(gparams, &enc_tile, &writer));
   }
 
+#if !defined(WP2_ENC_DEC_MATCH)
   if ((use_lossy || WP2Formatbpc(src_format) == 10) && gparams.has_alpha_) {
     EXPECT_EQ(writer.size_, kMaxTileChunkSize);
   } else {
     EXPECT_LT(writer.size_, kMaxTileChunkSize);
   }
+#endif
 
   {  // Decode
     BitstreamFeatures features;
@@ -116,7 +118,12 @@ TEST_P(BypassTest, MaxChunkSize) {
     dec.tiles_layout_ = &tiles;
     dec.tile_ = &dec_tile;
     dec.self_assigning_ = false;
+#if defined(WP2_ENC_DEC_MATCH)
+    ASSERT_WP2_OK(dec.BypassTileDec());
+#else
+    // Make sure bypass is chosen.
     ASSERT_WP2_OK(dec.Execute());
+#endif
 
     if (use_lossy) {
       ASSERT_TRUE(testutil::Compare(enc_tile.yuv_input, dec_tile.yuv_output,
