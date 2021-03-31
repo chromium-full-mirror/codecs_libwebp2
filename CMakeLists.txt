@@ -593,6 +593,11 @@ endif()
 # Build the executables if asked for.
 if(WP2_BUILD_EXAMPLES)
   # utils
+  # stacktrace_addr2line is more accurate but slower and loses the line numbers.
+  # On Ubuntu, you need to install the libboost-stacktrace-dev package.
+  # If not installed, on platforms where glibc is present, a mangled version
+  # will be used.
+  find_package(Boost QUIET COMPONENTS stacktrace_backtrace)
   add_library(
     example_utils STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/custom_memory.cc
@@ -602,6 +607,13 @@ if(WP2_BUILD_EXAMPLES)
   target_link_libraries(example_utils imageio webp2)
   if(WP2_DEFINITIONS)
     target_compile_definitions(example_utils PUBLIC ${WP2_DEFINITIONS})
+  endif()
+  if (Boost_FOUND)
+    message(STATUS "Found Boost for stacktrace debugging.")
+    target_include_directories(example_utils PRIVATE ${Boost_INCLUDE_DIRS})
+    target_compile_definitions(example_utils PUBLIC
+                               WP2_HAVE_BOOST BOOST_STACKTRACE_USE_BACKTRACE)
+    target_link_libraries(example_utils ${Boost_LIBRARIES} dl)
   endif()
 
   # cwp2

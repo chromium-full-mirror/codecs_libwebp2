@@ -24,6 +24,15 @@
 // std::mutex might be forbidden in the library, but here it's for debugging.
 #include <mutex>  // NOLINT
 
+#if !defined(_MSC_VER)
+#ifdef WP2_HAVE_BOOST
+#include <boost/stacktrace.hpp>
+#include <sstream>
+#else
+#include <execinfo.h>
+#endif
+#endif
+
 #include "./example_utils.h"
 
 static std::unordered_map<void*, size_t> all_blocks;
@@ -37,6 +46,33 @@ static std::mutex mutex;
 
 namespace WP2 {
 
+// Get the stack trace.
+static std::string GetTrace() {
+#if defined(_MSC_VER)
+  return "";
+#else
+#ifdef WP2_HAVE_BOOST
+  std::stringstream ss;
+  ss << boost::stacktrace::stacktrace();
+  return ss.str();
+#else
+  // glibc solution with mangled names.
+  static constexpr uint32_t kMaxSize = 1024;
+  void* array[kMaxSize];
+  const size_t size = backtrace(array, kMaxSize);
+  char** strings = backtrace_symbols(array, size);
+  assert(strings != NULL);
+  std::string trace;
+  for (size_t i = 0; i < size; i++) {
+    trace += strings[i];
+    trace += "\n";
+  }
+  free(strings);
+  return trace;
+#endif
+#endif
+}
+
 bool WP2MemoryFailNow(size_t size) {
   fprintf(stderr, "=== FAILING to allocate %u more bytes NOW ===\n",
           (uint32_t)size);
@@ -45,7 +81,7 @@ bool WP2MemoryFailNow(size_t size) {
 
 MemoryTrace::~MemoryTrace() {
   if (print_info || show_traffic || memory_limit > 0 || countdown_to_fail > 0 ||
-      mem_allocated > 0) {
+      mem_allocated > 0 || top_stacktrace_num > 0) {
     std::lock_guard<std::mutex> lock(mutex);
     fprintf(stderr, "\n=== MEMORY INFO ===\n");
     fprintf(stderr, "num calls to: malloc = %4d\n", num_malloc_calls);
@@ -63,6 +99,23 @@ MemoryTrace::~MemoryTrace() {
       }
     }
     all_blocks.clear();
+    if (top_stacktrace_num > 0) {
+      // Compute the most frequent stack traces.
+      typedef std::pair<std::string, uint32_t> Pair;
+      std::vector<Pair> counts;
+      for (const auto& iter : counts_per_trace) counts.push_back(iter);
+      std::sort(
+          counts.begin(), counts.end(),
+          [](const Pair& p1, const Pair& p2) { return p1.second > p2.second; });
+      fprintf(stderr, "\n");
+      for (uint32_t i = 0;
+           i < std::min(top_stacktrace_num, (uint32_t)counts.size()); ++i) {
+        fprintf(stderr,
+                "Most called %d/%d: %d calls (might be a duplicate)\n\n", i + 1,
+                top_stacktrace_num, counts[i].second);
+        fprintf(stderr, "%s\n\n", counts[i].first.c_str());
+      }
+    }
   }
 }
 
@@ -93,6 +146,7 @@ bool MemoryTrace::Register(void* ptr, size_t size) {
   mem_allocated += size;
   total_allocation += size;
   if (mem_allocated > high_water_mark) high_water_mark = mem_allocated;
+  if (top_stacktrace_num > 0) ++counts_per_trace[GetTrace()];
   if (show_traffic) {
     if (countdown_to_fail > 0) {
       fprintf(stderr, "fail-count: %5d [mem=%5u \t(+%7u)  ptr=%p]\n",
@@ -136,6 +190,7 @@ void ProgramOptions::AddMemoryOptionSection() {
   Add("-mem_limit <int>", "sets the maximum allowed total memory usage");
   Add("-mem_fail <int>", "sets a maximum number of allocations");
   Add("-mem_traffic", "report all malloc/free traffic (verbose!)");
+  Add("-mem_top <int>", "report top malloc/free stack traces");
 #endif
 }
 
@@ -157,6 +212,13 @@ bool ProgramOptions::ParseMemoryOptions(char* arg[], int argc, int& skip) {
     kMemoryTrace.countdown_to_fail = 1 + ExUtilGetUInt(arg[1], &error);
     if (error) return false;
     skip = 2;
+#if !defined(_MSC_VER)
+  } else if (!strcmp(arg[0], "-mem_top")) {
+    if (argc < 2) return false;  // not enough args
+    kMemoryTrace.top_stacktrace_num = ExUtilGetUInt(arg[1], &error);
+    if (error) return false;
+    skip = 2;
+#endif
   } else {
     return false;
   }
