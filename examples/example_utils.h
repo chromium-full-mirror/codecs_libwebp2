@@ -94,6 +94,7 @@ extern struct MemoryTrace : public WP2MemoryHook {
   bool show_traffic = false;    // prints all the malloc/free calls
   int countdown_to_fail = 0;    // fails after n mallocs calls. 0 = off.
   uint32_t top_stacktrace_num = 0;  // number of top stacks
+  bool top_alloc_size = false;  // if true, gather top allocation stacktraces
   size_t memory_limit = 0;      // limit to total memory allocated. 0 = off.
   // For a given stack trace, stores how many times it has been registered.
   std::unordered_map<std::string, uint32_t> counts_per_trace;

@@ -111,8 +111,9 @@ MemoryTrace::~MemoryTrace() {
       for (uint32_t i = 0;
            i < std::min(top_stacktrace_num, (uint32_t)counts.size()); ++i) {
         fprintf(stderr,
-                "Most called %d/%d: %d calls (might be a duplicate)\n\n", i + 1,
-                top_stacktrace_num, counts[i].second);
+                "Most called %d/%d: %d %s (might be a duplicate)\n\n", i + 1,
+                top_stacktrace_num, counts[i].second,
+                top_alloc_size ? "bytes" : "calls");
         fprintf(stderr, "%s\n\n", counts[i].first.c_str());
       }
     }
@@ -146,7 +147,9 @@ bool MemoryTrace::Register(void* ptr, size_t size) {
   mem_allocated += size;
   total_allocation += size;
   if (mem_allocated > high_water_mark) high_water_mark = mem_allocated;
-  if (top_stacktrace_num > 0) ++counts_per_trace[GetTrace()];
+  if (top_stacktrace_num > 0) {
+    counts_per_trace[GetTrace()] += top_alloc_size ? size : 1;
+  }
   if (show_traffic) {
     if (countdown_to_fail > 0) {
       fprintf(stderr, "fail-count: %5d [mem=%5u \t(+%7u)  ptr=%p]\n",
@@ -190,7 +193,9 @@ void ProgramOptions::AddMemoryOptionSection() {
   Add("-mem_limit <int>", "sets the maximum allowed total memory usage");
   Add("-mem_fail <int>", "sets a maximum number of allocations");
   Add("-mem_traffic", "report all malloc/free traffic (verbose!)");
+  // these two tracing modes are mutually exclusive:
   Add("-mem_top <int>", "report top malloc/free stack traces");
+  Add("-mem_top_alloc <int>", "report top allocation stack traces");
 #endif
 }
 
@@ -213,8 +218,9 @@ bool ProgramOptions::ParseMemoryOptions(char* arg[], int argc, int& skip) {
     if (error) return false;
     skip = 2;
 #if !defined(_MSC_VER)
-  } else if (!strcmp(arg[0], "-mem_top")) {
+  } else if (!strcmp(arg[0], "-mem_top") || !strcmp(arg[0], "-mem_top_alloc")) {
     if (argc < 2) return false;  // not enough args
+    kMemoryTrace.top_alloc_size = !strcmp(arg[0], "-mem_top_alloc");
     kMemoryTrace.top_stacktrace_num = ExUtilGetUInt(arg[1], &error);
     if (error) return false;
     skip = 2;
