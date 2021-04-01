@@ -243,8 +243,7 @@ class IncrementalDecodingTester {
 
       // Check the state of the decoder and the output.
       if (idec.TryGetDecodedFeatures() != nullptr) {
-        WP2_CHECK_STATUS(
-            CheckAnimation(available_input_size, decoded_a_full_frame));
+        WP2_CHECK_STATUS(CheckAnimation(decoded_a_full_frame));
         if (!idec.TryGetDecodedFeatures()->is_animation && !rewinded_) {
           CHECK_OR_DIE(idec.GetNumFrameDecodedFeatures() <= 1u);
         }
@@ -279,6 +278,7 @@ class IncrementalDecodingTester {
   }
 
  private:
+  // Rewind and/or skip frames according to the test 'setup_'.
   void ApplyActions(size_t* const available_input_size,
                     size_t* const previous_input_size,
                     uint32_t* const current_action_index,
@@ -293,6 +293,7 @@ class IncrementalDecodingTester {
           action.type == DecoderAction::Type::kRewindKeepBytes) {
         const bool output_buffer_changed = (action.value > 0);
         if (output_buffer_changed) output_.Deallocate();
+        output_.metadata_.Clear();  // For CheckSameOutputAsSingleChunk()
         GetDecoder().Rewind();
         *previous_input_size = 0;
         if (action.type != DecoderAction::Type::kRewindKeepBytes) {
@@ -321,6 +322,7 @@ class IncrementalDecodingTester {
     }
   }
 
+  // Contains the checks done on the features of each frame.
   static void CheckFrameFeatures(const FrameFeatures* const frame_features,
                                  uint32_t frame_index,
                                  const ArgbBuffer& output) {
@@ -346,17 +348,15 @@ class IncrementalDecodingTester {
     }
   }
 
-  WP2Status CheckAnimation(size_t available_input_size,
-                           bool decoded_a_full_frame) const {
+  // Contains the checks related to animated images.
+  WP2Status CheckAnimation(bool decoded_a_full_frame) const {
     const Decoder& idec = GetDecoder();
     const uint32_t num_known_frames = idec.GetNumFrameDecodedFeatures();
     if (num_skipped_frames_ == 0 || decoded_a_full_frame) {
       CHECK_OR_DIE(idec.GetCurrentFrameIndex() == frame_index_);
       if (!rewinded_) {
-        CHECK_OR_DIE(frame_index_ <= num_known_frames);
-        if (decoded_a_full_frame) {
-          CHECK_OR_DIE(frame_index_ < num_known_frames);
-        }
+        CHECK_OR_DIE(frame_index_ <
+                     num_known_frames + (decoded_a_full_frame ? 0 : 1));
       }
     }
     for (uint32_t i = 0; i < num_known_frames; ++i) {
@@ -395,6 +395,7 @@ class IncrementalDecodingTester {
     return WP2_STATUS_OK;
   }
 
+  // Verifies that the currently decoded area makes sense (only increasing etc.)
   void CheckDecodedArea(size_t available_input_size,
                         size_t previous_input_size) const {
     const Rectangle decoded_area = GetDecoder().GetDecodedArea();
@@ -451,8 +452,11 @@ class IncrementalDecodingTester {
     }
   }
 
+  // Contains the checks related to partial frame decoding.
   void CheckIncrementalOutput() const {
     CHECK_OR_DIE(GetDecoder().TryGetDecodedFeatures() != nullptr);
+    // Make sure there is no transparent pixel in the incremental output if the
+    // bitstream is declared as opaque.
     if (GetDecoder().TryGetDecodedFeatures()->is_opaque) {
       ArgbBuffer view(output_.format());
       CHECK_OR_DIE(view.SetView(output_, GetDecoder().GetDecodedArea()) ==
@@ -461,6 +465,8 @@ class IncrementalDecodingTester {
     }
   }
 
+  // Stores the newly decoded pixels at each incremental decoding step for later
+  // verification.
   void SaveIncrementalOutput() {
     if (incremental_output_.IsEmpty()) {
       CHECK_OR_DIE(incremental_output_.Resize(
@@ -480,20 +486,41 @@ class IncrementalDecodingTester {
     previous_decoded_area_ = GetDecoder().GetDecodedArea();
   }
 
+  // Verifies that the output image and features are the same whether the
+  // bitstream is decoded as a single whole chunk or incrementally.
   void CheckSameOutputAsSingleChunk(size_t available_input_size,
                                     bool decoded_a_full_frame,
                                     uint32_t duration_ms) const {
     ArgbBuffer cmp_output(output_.format());
     ArrayDecoder cmp_idec(config_, &cmp_output);
     cmp_idec.SetInput(input_.bytes, available_input_size);
+
+    // To correctly compare the bool output of ReadFrame(), the next expected
+    // frame must be the same, so skip what is needed.
     cmp_idec.SkipNumNextFrames(frame_index_);
+
     uint32_t cmp_duration_ms = 0;
-    const bool cmp_decoded_a_full_frame = cmp_idec.ReadFrame(&cmp_duration_ms);
+    bool cmp_decoded_a_full_frame = cmp_idec.ReadFrame(&cmp_duration_ms);
     CHECK_OR_DIE(!cmp_idec.Failed());
+
+    if (cmp_decoded_a_full_frame && !decoded_a_full_frame &&
+        GetDecoder().TryGetFrameDecodedFeatures(frame_index_) != nullptr &&
+        GetDecoder().TryGetFrameDecodedFeatures(frame_index_)->is_last) {
+      // The current frame was previously decoded and it is the last one:
+      // nothing is expected.
+      cmp_decoded_a_full_frame = cmp_idec.ReadFrame();  // Should be false.
+    }
+
+    CHECK_OR_DIE(
+        HasSameData(cmp_output.metadata_.iccp, output_.metadata_.iccp) &&
+        HasSameData(cmp_output.metadata_.xmp, output_.metadata_.xmp) &&
+        HasSameData(cmp_output.metadata_.exif, output_.metadata_.exif));
+
     CHECK_OR_DIE(cmp_decoded_a_full_frame == decoded_a_full_frame);
-    if (cmp_decoded_a_full_frame) {
+    if (decoded_a_full_frame) {
       CHECK_OR_DIE(cmp_duration_ms == duration_ms);
     }
+
     const Rectangle decoded_area = GetDecoder().GetDecodedArea();
     CHECK_OR_DIE(cmp_idec.GetDecodedArea() == decoded_area);
     if (decoded_area.GetArea() > 0) {
@@ -504,6 +531,7 @@ class IncrementalDecodingTester {
     }
   }
 
+  // Contains the checks done when a frame is completely decoded.
   WP2Status CheckFullFrame(size_t available_input_size,
                            uint32_t duration_ms) const {
     const Rectangle decoded_area = GetDecoder().GetDecodedArea();
@@ -537,6 +565,7 @@ class IncrementalDecodingTester {
     return WP2_STATUS_OK;
   }
 
+  // Stores each completely decoded frame for later comparison.
   void SaveFullFrame(uint32_t duration_ms,
                      std::vector<ArgbBuffer>* const decoded_frames,
                      std::vector<uint32_t>* const decoded_durations_ms) const {
