@@ -682,7 +682,9 @@ static WP2Status CalculateBestCacheConfig(
     uint32_t width, uint32_t height, const int16_t* const argb,
     uint32_t num_pixels, int effort, const BackwardRefs& refs_in,
     BackwardRefsPool* const ref_pool, uint32_t cache_bits_max,
-    const LosslessSymbolsInfo& symbols_info, CacheConfig* const cache_config) {
+    LosslessSymbolsInfo* symbols_info,
+    WP2::SymbolRecorder* const symbol_recorder,
+    CacheConfig* const cache_config) {
   if (effort <= 3 || cache_bits_max == 0) {
     cache_config->type = CacheType::kNone;
     cache_config->cache_bits = 0;
@@ -696,15 +698,13 @@ static WP2Status CalculateBestCacheConfig(
   auto refs_tmp = ref_pool->GetFreeBackwardRefs();
   for (uint32_t i = 0; i <= cache_bits_max; ++i) {
     // Compute the symbol statistics.
-    LosslessSymbolsInfo info;
-    WP2_CHECK_STATUS(info.CopyFrom(symbols_info));
 
     // TODO(maryla): try other types.
     const CacheConfig cache_config_tmp = {
         (i > 0) ? CacheType::kHash : CacheType::kNone, i};
 
     // Update the refs to deal with a cache of size 'i' bits.
-    info.SetCacheRange(GetColorCacheRange(cache_config_tmp));
+    symbols_info->SetCacheRange(GetColorCacheRange(cache_config_tmp));
     if (i > 0) {
       WP2_CHECK_STATUS(refs_tmp->CopyFrom(refs_in));
       WP2_CHECK_STATUS(
@@ -714,16 +714,15 @@ static WP2Status CalculateBestCacheConfig(
     const BackwardRefs& refs = (i == 0) ? refs_in : *refs_tmp;
 
     WP2::ANSEncCounter enc_counter;
-    WP2::SymbolRecorder symbol_recorder;
-    WP2_CHECK_STATUS(symbol_recorder.Allocate(info, /*num_records=*/0));
+    symbol_recorder->ResetCounts();
     WP2_CHECK_STATUS(
-        StorePixels(width, height, refs, &enc_counter, &symbol_recorder));
+        StorePixels(width, height, refs, &enc_counter, symbol_recorder));
 
     // Get the header cost in bits.
     WP2::SymbolWriter symbol_writer;
     float storage_cost;
-    WP2_CHECK_STATUS(WriteHeaders(symbol_recorder, info, num_pixels, effort,
-                                  &enc_counter, /*dicts=*/nullptr,
+    WP2_CHECK_STATUS(WriteHeaders(*symbol_recorder, *symbols_info, num_pixels,
+                                  effort, &enc_counter, /*dicts=*/nullptr,
                                   &symbol_writer, &storage_cost));
     const float cost = enc_counter.GetCost() + storage_cost;
 
@@ -816,10 +815,12 @@ extern WP2Status BackwardReferencesTraceBackwards(
 static WP2Status GetBackwardReferencesImpl(
     uint32_t width, uint32_t height, const int16_t* const argb, int effort,
     int lz77_types_to_try, uint32_t cache_bits_max, const HashChain& hash_chain,
-    const LosslessSymbolsInfo& symbols_info, CacheConfig* const cache_config,
+    const LosslessSymbolsInfo& symbols_info,
+    WP2::SymbolRecorder* const symbol_recorder, CacheConfig* const cache_config,
     BackwardRefsPool* ref_pool, BackwardRefsPool::RefsPtr* const refs_best) {
   LosslessSymbolsInfo symbols_info_tmp;
   WP2_CHECK_STATUS(symbols_info_tmp.CopyFrom(symbols_info));
+  symbols_info_tmp.SetNumClusters(1);
   const uint32_t num_pixels = width * height;
   float bit_cost_best = std::numeric_limits<float>::max();
   HashChain hash_chain_box;
@@ -874,17 +875,14 @@ static WP2Status GetBackwardReferencesImpl(
     assert(refs_tmp->IsValid(num_pixels));
 
     // Next, try with a color cache and update the references.
-    symbols_info_tmp.SetNumClusters(/*num_clusters=*/1);
     CacheConfig cache_config_tmp;
     WP2_CHECK_STATUS(CalculateBestCacheConfig(
         width, height, argb, num_pixels, effort, *refs_tmp, ref_pool,
-        cache_bits_max, symbols_info_tmp, &cache_config_tmp));
+        cache_bits_max, &symbols_info_tmp, symbol_recorder, &cache_config_tmp));
+    symbols_info_tmp.SetCacheRange(GetColorCacheRange(cache_config_tmp));
     if (cache_config_tmp.type != CacheType::kNone) {
-      symbols_info_tmp.SetCacheRange(GetColorCacheRange(cache_config_tmp));
       WP2_CHECK_STATUS(
           BackwardRefsWithLocalCache(argb, cache_config_tmp, refs_tmp_ptr));
-    } else {
-      symbols_info_tmp.SetCacheRange(0);
     }
 
     float bit_cost;
@@ -911,7 +909,6 @@ static WP2Status GetBackwardReferencesImpl(
         if (bit_cost_trace < bit_cost) {
           bit_cost = bit_cost_trace;
           refs_tmp.swap(refs_tmp_trace);
-          //          *cache_config = cache_config_tmp;
         }
       }
     }
@@ -932,7 +929,8 @@ static WP2Status GetBackwardReferencesImpl(
 WP2Status GetBackwardReferences(
     uint32_t width, uint32_t height, const int16_t* const argb, int effort,
     int lz77_types_to_try, uint32_t cache_bits_max, const HashChain& hash_chain,
-    const LosslessSymbolsInfo& symbols_info, CacheConfig* const cache_config,
+    const LosslessSymbolsInfo& symbols_info,
+    WP2::SymbolRecorder* const symbol_recorder, CacheConfig* const cache_config,
     BackwardRefsPool* const ref_pool, BackwardRefsPool::RefsPtr* const refs) {
   if (effort == 0) {
     cache_config->type = CacheType::kNone;
@@ -940,9 +938,10 @@ WP2Status GetBackwardReferences(
     return GetBackwardReferencesLowEffort(width, height, argb, hash_chain,
                                           ref_pool, refs);
   } else {
-    return GetBackwardReferencesImpl(
-        width, height, argb, effort, lz77_types_to_try, cache_bits_max,
-        hash_chain, symbols_info, cache_config, ref_pool, refs);
+    return GetBackwardReferencesImpl(width, height, argb, effort,
+                                     lz77_types_to_try, cache_bits_max,
+                                     hash_chain, symbols_info, symbol_recorder,
+                                     cache_config, ref_pool, refs);
   }
 }
 

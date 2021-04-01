@@ -90,6 +90,51 @@ void SymbolRecorder::DeepClear() {
   values_.clear();
 }
 
+void SymbolRecorder::ResetCounts() {
+  for (ANSDictionary* dict : dicts_) dict->ResetCounts();
+
+  for (uint32_t sym = 0; sym < symbols_info_.Size(); ++sym) {
+    const uint32_t num_clusters = symbols_info_.NumClusters(sym);
+    switch (symbols_info_.Method(sym)) {
+      case SymbolsInfo::StorageMethod::kAuto:
+        break;
+      case SymbolsInfo::StorageMethod::kAdaptiveBit: {
+        for (uint32_t cluster = 0; cluster < num_clusters; ++cluster) {
+          a_bits_[index_[sym] + cluster] =
+              ANSBinSymbol(symbols_info_.StartingProbaP0(sym, cluster),
+                           symbols_info_.StartingProbaP1(sym, cluster));
+        }
+        break;
+      }
+      case SymbolsInfo::StorageMethod::kAdaptiveSym: {
+        for (uint32_t cluster = 0, ind = index_[sym]; cluster < num_clusters;
+             ++cluster) {
+          const uint32_t range = symbols_info_.Range(sym, cluster);
+          if (range > 0) {
+            a_symbols_[ind].InitFromUniform(range);
+            ++ind;
+          }
+        }
+        break;
+      }
+      case SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed: {
+        for (uint32_t cluster = 0; cluster < num_clusters; ++cluster) {
+          const uint32_t range = symbols_info_.Range(sym, cluster);
+          if (range > 0) {
+            a_symbols_[values_index_[sym] + cluster].InitFromUniform(range);
+            std::fill(values_[values_index_[sym] + cluster].begin(),
+                      values_[values_index_[sym] + cluster].end(), 0);
+          }
+        }
+        break;
+      }
+      case SymbolsInfo::StorageMethod::kUnused: {
+        break;
+      }
+    }
+  }
+}
+
 WP2Status SymbolRecorder::Allocate(const SymbolsInfo& symbols_info,
                                    uint32_t num_records) {
   WP2_CHECK_STATUS(symbols_info_.CopyFrom(symbols_info));

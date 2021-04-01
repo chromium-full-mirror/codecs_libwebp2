@@ -29,6 +29,10 @@
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
+namespace WP2 {
+class SymbolRecorder;
+}  // namespace WP2
+
 namespace WP2L {
 
 // -----------------------------------------------------------------------------
@@ -307,7 +311,8 @@ enum LZ77Type {
 WP2Status GetBackwardReferences(
     uint32_t width, uint32_t height, const int16_t* const argb, int effort,
     int lz77_types_to_try, uint32_t cache_bits_max, const HashChain& hash_chain,
-    const LosslessSymbolsInfo& symbols_info, CacheConfig* const cache_config,
+    const LosslessSymbolsInfo& symbols_info,
+    WP2::SymbolRecorder* const symbol_recorder, CacheConfig* const cache_config,
     BackwardRefsPool* const ref_pool, BackwardRefsPool::RefsPtr* const refs);
 }  // namespace WP2L
 

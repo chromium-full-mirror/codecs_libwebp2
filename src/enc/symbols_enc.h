@@ -99,6 +99,8 @@ class SymbolRecorder : public SymbolManager {
   WP2Status Allocate(const SymbolsInfo& symbols_info, uint32_t num_records);
   WP2Status CopyFrom(const SymbolRecorder& other);
   void DeepClear();
+  // Resets the stats for all the symbols without de-allocating the memory.
+  void ResetCounts();
 
   // Copies the dictionaries to a backup: useful for multi-pass.
   WP2Status MakeBackup();

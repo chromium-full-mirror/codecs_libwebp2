@@ -366,10 +366,12 @@ WP2Status EncodeHelperImage(WP2::ANSEncBase* const enc,
   WP2_CHECK_STATUS(hash_chain->Fill(effort, argb, width, height));
   BackwardRefsPool::RefsPtr refs = BackwardRefsPool::GetEmptyBackwardRefs();
   CacheConfig cache_config;
+  WP2::SymbolRecorder symbol_recorder;
+  WP2_CHECK_STATUS(symbol_recorder.Allocate(symbols_info, /*num_records=*/0));
   WP2_CHECK_STATUS(GetBackwardReferences(
       width, height, argb, effort, kLZ77Standard | kLZ77RLE,
-      /*cache_bits_max=*/0, *hash_chain, symbols_info, &cache_config, ref_pool,
-      &refs));
+      /*cache_bits_max=*/0, *hash_chain, symbols_info, &symbol_recorder,
+      &cache_config, ref_pool, &refs));
 
   // Record symbol statistics.
   WP2::SymbolRecorder recorder;
@@ -431,6 +433,23 @@ WP2Status Encoder::EncodeImageInternal(
   assert(histogram_bits >= kHistogramBitsMin);
   assert(histogram_bits <= kHistogramBitsMax);
 
+  LosslessSymbolsInfo symbols_info;
+  WP2_CHECK_STATUS(symbols_info.CopyFrom(symbols_info_init));
+  // Get the maximum range for the color cache symbol.
+  uint32_t max_range = 0;
+  for (uint32_t i = 0; i <= cache_bits_max; ++i) {
+    const CacheConfig cache_config_tmp = {
+        (i > 0) ? CacheType::kHash : CacheType::kNone, i};
+    max_range = std::max(max_range, GetColorCacheRange(cache_config_tmp));
+  }
+  symbols_info.SetCacheRange(max_range);
+  symbols_info.SetNumClusters(1);
+  // Create a SymbolRecorder that can record the maximum number of cache
+  // symbols.
+  WP2::SymbolRecorder symbol_recorder_one_segment;
+  WP2_CHECK_STATUS(
+      symbol_recorder_one_segment.Allocate(symbols_info, /*num_records=*/0));
+
   // Calculate backward references from ARGB image.
   WP2_CHECK_STATUS(enc_init.Clone(*enc));
   WP2_CHECK_STATUS(dicts_init.CopyFrom(*dicts));
@@ -451,15 +470,14 @@ WP2Status Encoder::EncodeImageInternal(
     const ProgressRange header_progress(idx_progress, 0.2);
     const ProgressRange literals_progress(idx_progress, 0.2);
 
-    LosslessSymbolsInfo symbols_info;
-    WP2_CHECK_STATUS(symbols_info.CopyFrom(symbols_info_init));
     BackwardRefsPool::RefsPtr refs_best =
         BackwardRefsPool::GetEmptyBackwardRefs();
     CacheConfig cache_config;
     WP2_CHECK_STATUS(GetBackwardReferences(
         width, height, argb, config_.effort,
         config.lz77s_types_to_try[lz77s_idx], cache_bits_max, hash_chain_,
-        symbols_info, &cache_config, &ref_pool_, &refs_best));
+        symbols_info, &symbol_recorder_one_segment, &cache_config, &ref_pool_,
+        &refs_best));
     symbols_info.SetCacheRange(GetColorCacheRange(cache_config));
     WP2_CHECK_ALLOC_OK(
         histogram_image.Allocate(num_segments_max, symbols_info));
