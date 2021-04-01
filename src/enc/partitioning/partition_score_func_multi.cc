@@ -77,7 +77,7 @@ static void GetSpread(const Plane16& src, Plane16* const dst) {
         GetBlockMinMaxGeneric(row + x + min_sub_x, src_step,
                               max_sub_x + 1 - min_sub_x,
                               max_sub_y + 1 - min_sub_y, &min, &max);
-        p_dst[x] = (int16_t)ClampToSigned(max - min, kMaxYuvBits + 1u);
+        p_dst[x] = (int16_t)ClampToSigned(max - min, kYuvMaxPrec + 1u);
       }
     } else {
       const int16_t* const row = p_src - src_step * kMaxDist;
@@ -91,7 +91,7 @@ static void GetSpread(const Plane16& src, Plane16* const dst) {
         } else {
           GetBlockMinMax_5x5(row + x - kMaxDist, src_step, &min, &max);
         }
-        p_dst[x] = (int16_t)ClampToSigned(max - min, kMaxYuvBits + 1u);
+        p_dst[x] = (int16_t)ClampToSigned(max - min, kYuvMaxPrec + 1u);
       }
     }
     p_dst += dst_step;
@@ -153,7 +153,7 @@ WP2Status MultiScoreFunc::Init(const EncoderConfig& config,
   WP2_CHECK_ALLOC_OK(
       direction_certainty_.resize(num_block_cols_ * num_block_rows_));
 
-  const uint32_t bitdepth = gparams.transf_.GetYUVPrecisionBits() + 1;
+  const uint32_t bitdepth = gparams.transf_.GetYuvDepth().num_bits;
   for (uint32_t y = 0; y < num_block_rows_; ++y) {
     const int16_t* x_ptr = &src_->Y.At(/*x=*/0, y * kMinBlockSizePix);
     for (uint32_t i = y * num_block_cols_; i < (y + 1) * num_block_cols_;

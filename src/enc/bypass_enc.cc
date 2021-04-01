@@ -84,7 +84,7 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
   } else {
     // YUV input is expected even though RGB may also be available.
     assert(!tile->yuv_input.IsEmpty());
-    const uint32_t channel_bits = gparams.transf_.GetYUVPrecisionBits() + 1u;
+    const uint32_t channel_bits = gparams.transf_.GetYuvDepth().num_bits;
 
     // Allocate, fill and write the 'data' to 'output'.
     // TODO(yguyon): Use less memory by outputting 8 lines by 8 lines?

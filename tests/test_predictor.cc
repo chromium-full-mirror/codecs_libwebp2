@@ -307,7 +307,7 @@ TEST(LargePredictors, UniformTest) {
     const uint32_t w = BlockWidthPix(dim), h = BlockHeightPix(dim);
     const uint32_t ctx_size = ContextSize(kContextSmall, w, h);
     int16_t ctx[kMaxContextSize];
-    const int16_t max = 1 << WP2::kMaxYuvBits;
+    const int16_t max = 1 << WP2::kYuvMaxPrec;
     const int16_t min = -max;
     for (uint32_t n = 0; n < kNumTests; ++n) {
       const int16_t r = gen.Get(min, max);
@@ -355,7 +355,7 @@ TEST(LargePredictors, TestSimpleAngle) {
       const ContextType context_type = GetContextType(ind);
       const uint32_t ctx_size = ContextSize(context_type, w, h);
       int16_t ctx[kMaxContextSize];
-      const int16_t max = 1 << WP2::kMaxYuvBits;
+      const int16_t max = 1 << WP2::kYuvMaxPrec;
       const int16_t min = -max;
       const int16_t r = gen.Get(min, max);
       for (uint32_t i = 0; i < ctx_size; ++i) ctx[i] = r;
@@ -380,9 +380,8 @@ WP2Status SaveOutput(BlockSize dim, uint32_t angle_idx,
   ArgbBuffer debug_image;
   const uint32_t w = BlockWidthPix(dim), h = BlockHeightPix(dim);
   WP2_CHECK_STATUS(debug_image.Resize(w, h));
-  WP2_CHECK_STATUS(prediction.ToGray(&debug_image,
-                                     /*num_bits=*/WP2::kMaxYuvBits,
-                                     /*shift=*/true));
+  WP2_CHECK_STATUS(prediction.ToGray(
+      &debug_image, /*bit_depth=*/{WP2::kYuvMaxPrec + 1, /*is_signed=*/true}));
   WP2_CHECK_STATUS(
       SaveImage(debug_image,
                 SPrintf("/tmp/pred-%d-%d.png", angle_idx, dim).c_str(), true));
@@ -397,7 +396,7 @@ WP2Status SaveOutput(BlockSize dim, uint32_t angle_idx,
 TEST(LargePredictors, TestSimpleAnglePredictorSpeed) {
   WP2::PredictionInit();
   UniformIntDistribution gen(76234);
-  constexpr int16_t max = 1 << WP2::kMaxYuvBits;
+  constexpr int16_t max = 1 << WP2::kYuvMaxPrec;
   constexpr int16_t min = -max;
   int16_t ctx[kMaxContextSize];
   for (auto& v : ctx) v = gen.Get(min, max);

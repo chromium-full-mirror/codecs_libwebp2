@@ -759,8 +759,8 @@ void CflPredictor::LinearRegression(const int16_t* const luma,
   // Tighten the scaling/offset value to avoid obvious overflows.
   // Warning! alpha-from-chroma heavily relies on saturating to [0..255],
   // and generate large 'B' constants. We must not clip 'B' with min/max_value_
-  // but with the max codable range (kMaxYuvBits = 9b) to retain this property.
-  const int32_t max_range = 2 << (kCflFracBits + kMaxYuvBits);
+  // but with the max codable range (kYuvMaxPrec = 9b) to retain this property.
+  const int32_t max_range = 2 << (kCflFracBits + kYuvMaxPrec);
   if (std::abs(B) > max_range) {
     A = 0;
     B = DivRound(LeftShift(uv_sum, kCflFracBits), num_values);

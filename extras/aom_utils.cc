@@ -441,7 +441,7 @@ WP2Status wp2_get_frame_stats(aom_codec_ctx_t* ctx, const aom_image_t* img,
 WP2Status CreateAV1Img(const ArgbBuffer& ref, aom_image_t* const raw,
                        bool use_yuv444 = false) {
   YUVPlane yuv;
-  WP2_CHECK_STATUS(ToYCbCr(ref, /*ycbcr_num_bits=*/8,
+  WP2_CHECK_STATUS(ToYCbCr(ref, /*ycbcr_bit_depth=*/{8, /*is_signed=*/false},
                            use_yuv444 ? nullptr : &SamplingTaps::kDownSharp,
                            &yuv));
 
@@ -931,8 +931,9 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
   out->clear();
 
   YUVPlane yuv;
-  WP2_CHECK_STATUS(ToYCbCr(
-      ref, 8, params.use_yuv444 ? nullptr : &SamplingTaps::kDownSharp, &yuv));
+  WP2_CHECK_STATUS(
+      ToYCbCr(ref, /*ycbcr_bit_depth=*/{8, /*is_signed=*/false},
+              params.use_yuv444 ? nullptr : &SamplingTaps::kDownSharp, &yuv));
 
   const uint32_t w = ref.width();
   const uint32_t h = ref.height();

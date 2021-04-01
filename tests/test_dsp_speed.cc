@@ -159,8 +159,8 @@ TEST_P(SpeedTestCpuInfo, TestBufferAdd) {
 
 // Generates random data in [min_range:max_range[ and distorts it by 'max_diff'.
 // Checks that the distortion result matches the 'expected_average_score'.
-template <typename T, int kBitDepth>
-void DoTestSsim(int min_range, int max_range, int max_diff,
+template <typename T>
+void DoTestSsim(BitDepth bit_depth, int max_diff,
                 double expected_average_score) {
   constexpr uint32_t kMaxDim = 300;
   constexpr uint32_t kNumTests = 5;
@@ -170,11 +170,12 @@ void DoTestSsim(int min_range, int max_range, int max_diff,
   for (uint32_t t = 0; t < kNumTests; ++t) {
     const uint32_t width  = 1 + rng.GetUnsigned(kMaxDim);
     const uint32_t height = 1 + rng.GetUnsigned(kMaxDim);
-    testutil::PrecalculatedRandom<kMaxDim * 7, T> rnd(min_range, max_range);
+    testutil::PrecalculatedRandom<kMaxDim * 7, T> rnd(bit_depth.min(),
+                                                      bit_depth.max() + 1);
     double score;
     Plane<T> plane1, plane2;
     ASSERT_WP2_OK(plane1.Resize(width, height));
-    EXPECT_EQ(plane1.GetSSIM(plane2, kBitDepth, &score),
+    EXPECT_EQ(plane1.GetSSIM(plane2, bit_depth, &score),
               WP2_STATUS_BAD_DIMENSION);
     ASSERT_WP2_OK(plane2.Resize(width, height));
     for (uint32_t y = 0; y < height; ++y) {
@@ -187,7 +188,7 @@ void DoTestSsim(int min_range, int max_range, int max_diff,
       }
     }
     for (uint32_t l = 0; l < kNumLoops; ++l) {
-      ASSERT_WP2_OK(plane1.GetSSIM(plane2, kBitDepth, &score));
+      ASSERT_WP2_OK(plane1.GetSSIM(plane2, bit_depth, &score));
       if (max_diff == 0) {
         EXPECT_EQ(score, 1. * width * height);
       } else {
@@ -200,42 +201,39 @@ void DoTestSsim(int min_range, int max_range, int max_diff,
 }
 
 TEST_P(SpeedTestCpuInfo, TestSsim8bits) {
-  constexpr int kMinRange = 0, kMaxRange = 256;
-  DoTestSsim<uint8_t, 8>(kMinRange, kMaxRange, /*max_diff=*/0,
-                         /*expected_average_score=*/1.);
-  DoTestSsim<uint8_t, 8>(kMinRange, kMaxRange, /*max_diff=*/1,
-                         /*expected_average_score=*/0.99990578289445553);
-  DoTestSsim<uint8_t, 8>(kMinRange, kMaxRange, /*max_diff=*/50,
-                         /*expected_average_score=*/0.77854488910920416);
-  DoTestSsim<uint8_t, 8>(kMinRange, kMaxRange,
-                         /*max_diff=*/kMaxRange - kMinRange,
-                         /*expected_average_score=*/0.078342300386812946);
+  constexpr BitDepth kBitDepth = {8, /*is_signed=*/false};
+  DoTestSsim<uint8_t>(kBitDepth, /*max_diff=*/0,
+                      /*expected_average_score=*/1.);
+  DoTestSsim<uint8_t>(kBitDepth, /*max_diff=*/1,
+                      /*expected_average_score=*/0.99990578289445553);
+  DoTestSsim<uint8_t>(kBitDepth, /*max_diff=*/50,
+                      /*expected_average_score=*/0.77854488910920416);
+  DoTestSsim<uint8_t>(kBitDepth, /*max_diff=*/256,
+                      /*expected_average_score=*/0.078342300386812946);
 }
 
 TEST_P(SpeedTestCpuInfo, TestSsim10bits) {
-  constexpr int kMinRange = -512, kMaxRange = 512;
-  DoTestSsim<int16_t, 10>(kMinRange, kMaxRange, /*max_diff=*/0,
-                          /*expected_average_score=*/1.);
-  DoTestSsim<int16_t, 10>(kMinRange, kMaxRange, /*max_diff=*/1,
-                          /*expected_average_score=*/0.9999983977231518);
-  DoTestSsim<int16_t, 10>(kMinRange, kMaxRange, /*max_diff=*/50,
-                          /*expected_average_score=*/0.99596831375426853);
-  DoTestSsim<int16_t, 10>(kMinRange, kMaxRange,
-                          /*max_diff=*/kMaxRange - kMinRange,
-                          /*expected_average_score=*/0.20170015131280025);
+  constexpr BitDepth kBitDepth = {10, /*is_signed=*/true};
+  DoTestSsim<int16_t>(kBitDepth, /*max_diff=*/0,
+                      /*expected_average_score=*/1.);
+  DoTestSsim<int16_t>(kBitDepth, /*max_diff=*/1,
+                      /*expected_average_score=*/0.9999983977231518);
+  DoTestSsim<int16_t>(kBitDepth, /*max_diff=*/50,
+                      /*expected_average_score=*/0.99596831375426853);
+  DoTestSsim<int16_t>(kBitDepth, /*max_diff=*/1024,
+                      /*expected_average_score=*/0.20170015131280025);
 }
 
 TEST_P(SpeedTestCpuInfo, TestSsim12bits) {
-  constexpr int kMinRange = -2048, kMaxRange = 2048;
-  DoTestSsim<int16_t, 12>(kMinRange, kMaxRange, /*max_diff=*/0,
-                          /*expected_average_score=*/1.);
-  DoTestSsim<int16_t, 12>(kMinRange, kMaxRange, /*max_diff=*/1,
-                          /*expected_average_score=*/0.99999989986046256);
-  DoTestSsim<int16_t, 12>(kMinRange, kMaxRange, /*max_diff=*/50,
-                          /*expected_average_score=*/0.99974890122298021);
-  DoTestSsim<int16_t, 12>(kMinRange, kMaxRange,
-                          /*max_diff=*/kMaxRange - kMinRange,
-                          /*expected_average_score=*/0.20169647034266905);
+  constexpr BitDepth kBitDepth = {12, /*is_signed=*/true};
+  DoTestSsim<int16_t>(kBitDepth, /*max_diff=*/0,
+                      /*expected_average_score=*/1.);
+  DoTestSsim<int16_t>(kBitDepth, /*max_diff=*/1,
+                      /*expected_average_score=*/0.99999989986046256);
+  DoTestSsim<int16_t>(kBitDepth, /*max_diff=*/50,
+                      /*expected_average_score=*/0.99974890122298021);
+  DoTestSsim<int16_t>(kBitDepth, /*max_diff=*/4096,
+                      /*expected_average_score=*/0.20169647034266905);
 }
 
 //------------------------------------------------------------------------------

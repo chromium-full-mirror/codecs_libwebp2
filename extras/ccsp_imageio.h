@@ -100,8 +100,8 @@ WP2Status ReadImage(const char* const file_path, YUVPlane* const ccsp_buffer,
 
 // Decodes enough 'data' to get the 'bit_depth' of the image.
 WP2Status ReadBitDepth(const uint8_t* const data, size_t data_size,
-                       uint32_t* const bit_depth);
-WP2Status ReadBitDepth(const char* const file_path, uint32_t* const bit_depth);
+                       BitDepth* const bit_depth);
+WP2Status ReadBitDepth(const char* const file_path, BitDepth* const bit_depth);
 
 //------------------------------------------------------------------------------
 
@@ -109,7 +109,7 @@ WP2Status ReadBitDepth(const char* const file_path, uint32_t* const bit_depth);
 // this order on 'buffer' samples to obtain Argb 8 bits.
 // Returns WP2_STATUS_OK or an error. Returns written 'file_size' if not null.
 WP2Status SaveImage(const YUVPlane& buffer, const CSPMtx& ccsp_to_rgb,
-                    uint32_t file_num_bits, const char* file_path,
+                    BitDepth file_num_bits, const char* file_path,
                     bool overwrite = false,
                     FileFormat format = FileFormat::AUTO,
                     const Metadata& metadata = Metadata(),
@@ -119,14 +119,15 @@ WP2Status SaveImage(const YUVPlane& buffer, const CSPMtx& ccsp_to_rgb,
 // Converts samples to MPEG-2 YCbCr color space.
 // Halves Cb and Cr resolution if 'downsample' is not null.
 WP2Status ToYCbCr(const YUVPlane& ccsp, const CSPMtx& ccsp_to_rgb,
-                  uint32_t ycbcr_num_bits, const SamplingTaps* const downsample,
-                  YUVPlane* const ycbcr);
+                  BitDepth ycbcr_bit_depth,
+                  const SamplingTaps* const downsample, YUVPlane* const ycbcr);
 // This specialized version uses kRGBToYCbCrMatrix[] (hence: reduced range)
-WP2Status ToYCbCr(const ArgbBuffer& rgb, uint32_t ycbcr_num_bits,
+WP2Status ToYCbCr(const ArgbBuffer& rgb, BitDepth ycbcr_bit_depth,
                   const SamplingTaps* const downsample, YUVPlane* const ycbcr);
 
 // Expects 'buffer' in MPEG-2 YCbCr color space.
-WP2Status WriteY4M(const YUVPlane& buffer, uint32_t num_bits, FILE* const fout);
+WP2Status WriteY4M(const YUVPlane& buffer, BitDepth bit_depth,
+                   FILE* const fout);
 
 //------------------------------------------------------------------------------
 

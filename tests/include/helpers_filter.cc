@@ -27,19 +27,13 @@ namespace testutil {
 
 //------------------------------------------------------------------------------
 
-int16_t GetMinValueSigned(uint32_t num_precision_bits) {
-  return LeftShift<int16_t>(-1, num_precision_bits - 1u);
-}
-int16_t GetMaxValueSigned(uint32_t num_precision_bits) {
-  return (int16_t)(LeftShift(1, num_precision_bits - 1u) - 1);
-}
-
 YUVPlane CreatePlainPixels(uint32_t width, uint32_t height,
-                           int16_t min_value, int16_t max_value) {
+                           BitDepth bit_depth) {
+  const int16_t min = bit_depth.min(), max = bit_depth.max();
   YUVPlane pixels;
   WP2_ASSERT_STATUS(pixels.Resize(width, height));
   // Testing full range.
-  pixels.Fill(Ayuv38b{kAlphaMax, 0, min_value, max_value});
+  pixels.Fill(Ayuv38b{kAlphaMax, (int16_t)((min + max) / 2), min, max});
   return pixels;
 }
 
@@ -104,11 +98,10 @@ static constexpr uint32_t GetApproxQualityFactor(uint32_t quality_hint) {
                                : (float)kMaxQuality);
 }
 
-Vector<Segment> CreateSegments(uint32_t quality_hint,
-                               int16_t min_value, int16_t max_value) {
+Vector<Segment> CreateSegments(uint32_t quality_hint, BitDepth bit_depth) {
   Vector<Segment> segments;
   if (!segments.resize(1)) abort();
-  segments[0].SetYUVBounds(min_value, max_value);
+  segments[0].SetYUVBounds(bit_depth.min(), bit_depth.max());
   segments[0].SetQuality(quality_hint, GetApproxQualityFactor(quality_hint),
                          kDefaultQuantMultiplier, kDefaultQuantMultiplier);
   return segments;
@@ -137,11 +130,10 @@ void RegisterBlock(uint16_t x, uint16_t y, BlockSize dim, uint32_t segment_id,
 
 void CreateBlocks(uint32_t tile_x, uint32_t tile_y,
                   const Vector<Segment>& segments, double res_den,
-                  double min_bpp, uint32_t num_precision_bits,
-                  YUVPlane* const pixels, FilterBlockMap* const blocks) {
-  const int32_t min = -(1 << (num_precision_bits - 1)), max = -min - 1;
-  blocks->Init({tile_x, tile_y, pixels->Y.w_, pixels->Y.h_}, num_precision_bits,
-               min, max, pixels);
+                  double min_bpp, BitDepth bit_depth, YUVPlane* const pixels,
+                  FilterBlockMap* const blocks) {
+  blocks->Init({tile_x, tile_y, pixels->Y.w_, pixels->Y.h_}, bit_depth,
+               bit_depth.min(), bit_depth.max(), pixels);
   if (blocks->Allocate() != WP2_STATUS_OK) abort();
 
   const uint32_t seed = 7 * pixels->Y.w_ + pixels->Y.h_;

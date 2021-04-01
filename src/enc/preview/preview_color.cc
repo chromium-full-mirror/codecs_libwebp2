@@ -159,7 +159,7 @@ Argb32b GetAverageColor(const ArgbBuffer& canvas, uint32_t radius,
 static int16_t GetAverageColor(const Plane16& plane) {
   const int64_t num_pixels = plane.w_ * plane.h_;
   int64_t accumulator = 0;
-  assert(kMaxYuvBits + WP2Log2Ceil_k(num_pixels) < sizeof(accumulator) * 8 - 1);
+  assert(kYuvMaxPrec + WP2Log2Ceil_k(num_pixels) < sizeof(accumulator) * 8 - 1);
 
   for (uint32_t y = 0; y < plane.h_; ++y) {
     const int16_t* const row = plane.Row(y);

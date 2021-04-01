@@ -157,7 +157,7 @@ TEST(DistoTest, BitDepth) {
     testutil::Noise(min, max, /*seed=*/c, /*strength=*/5, &distorted_plane);
   }
 
-  for (uint32_t bit_depth : {9, 10, 11, 12}) {
+  for (uint32_t bit_depth : {9, 10, 11, 12}) {  // Sign included.
     YUVPlane original, distorted;
     ASSERT_WP2_OK(original.Copy(original_8b, /*resize_if_needed=*/true));
     ASSERT_WP2_OK(distorted.Copy(distorted_8b, /*resize_if_needed=*/true));
@@ -168,10 +168,11 @@ TEST(DistoTest, BitDepth) {
 
     for (MetricType metric : {PSNR, SSIM}) {
       float disto_8b[5], disto[5];
-      ASSERT_WP2_OK(distorted_8b.GetDistortion(original_8b, /*bit_depth=*/8,
-                                               metric, disto_8b));
-      ASSERT_WP2_OK(
-          distorted.GetDistortion(original, bit_depth, metric, disto));
+      ASSERT_WP2_OK(distorted_8b.GetDistortion(
+          original_8b, /*bit_depth=*/{8, /*is_signed=*/true}, metric,
+          disto_8b));
+      ASSERT_WP2_OK(distorted.GetDistortion(
+          original, {bit_depth, /*is_signed=*/true}, metric, disto));
       for (uint32_t i = 0; i < 5; ++i) {
         EXPECT_NEAR(disto_8b[i], disto[i], 1e-6) << "Channel " << i;
       }
@@ -230,8 +231,9 @@ TEST_P(DistoTest, ComparedToRGB) {
 
   // Compute distortion with YUVPlane and ArgbBuffer.
   float disto_ccsp[5], disto_rgb[5];
-  ASSERT_WP2_OK(distorted_ccsp.GetDistortion(original_ccsp, /*bit_depth=*/8,
-                                             metric, disto_ccsp));
+  ASSERT_WP2_OK(distorted_ccsp.GetDistortion(
+      original_ccsp, /*bit_depth=*/{8, /*is_signed=*/false}, metric,
+      disto_ccsp));
   ASSERT_WP2_OK(distorted_rgb.GetDistortion(original_rgb, metric, disto_rgb));
 
   // Same metric for each channel.
@@ -273,7 +275,7 @@ TEST_P(DistoTest, ChromaSubsampling) {
       distorted_444.UpsampleFrom(distorted_420, SamplingTaps::kUpNearest));
 
   // Compare 420 and 444 distortions.
-  uint32_t bit_depth;
+  BitDepth bit_depth;
   ASSERT_WP2_OK(ReadBitDepth(file_path.c_str(), &bit_depth));
   float disto_420[5], disto_444[5];
   ASSERT_WP2_OK(
@@ -333,7 +335,7 @@ WP2Status EncodeInCCSP(const YUVPlane& original_ccsp, const CSPMtx& ccsp_to_rgb,
 // Decode to RGB then convert or decode directly to 'decoded_ccsp'.
 
 WP2Status DecodeInRGB(const uint8_t* const data, size_t data_size,
-                      FileFormat format, uint32_t bit_depth, bool has_alpha,
+                      FileFormat format, BitDepth bit_depth, bool has_alpha,
                       bool is_downsampled, YUVPlane* const decoded_ccsp) {
   ArgbBuffer decoded_rgb;
   WP2_CHECK_STATUS(Decode(data, data_size, &decoded_rgb));
@@ -343,7 +345,7 @@ WP2Status DecodeInRGB(const uint8_t* const data, size_t data_size,
         decoded_rgb, bit_depth,
         is_downsampled ? &SamplingTaps::kDownSharp : nullptr, decoded_ccsp));
   } else {
-    const CSPMtx identity({1, 0, 0, 0, 1, 0, 0, 0, 1}, bit_depth - 8);
+    const CSPMtx identity({1, 0, 0, 0, 1, 0, 0, 0, 1}, bit_depth.num_bits - 8);
     WP2_CHECK_STATUS(decoded_ccsp->Import(decoded_rgb, has_alpha, identity,
                                           /*resize_if_needed=*/true));
     if (is_downsampled) WP2_CHECK_ALLOC_OK(decoded_ccsp->Downsample());
@@ -352,16 +354,16 @@ WP2Status DecodeInRGB(const uint8_t* const data, size_t data_size,
 }
 
 WP2Status DecodeInCCSP(const uint8_t* const data, size_t data_size,
-                       FileFormat format, uint32_t bit_depth, bool has_alpha,
+                       FileFormat format, BitDepth bit_depth, bool has_alpha,
                        bool is_downsampled, YUVPlane* const decoded_ccsp) {
   // Select output color space and bit depth.
   int16_t rgb_to_ccsp_matrix[9] = {};
   uint32_t rgb_to_ccsp_shift;
   if (IsCustomColorSpace(format)) {
     std::copy(kRGBToYCbCrMatrix, kRGBToYCbCrMatrix + 9, rgb_to_ccsp_matrix);
-    rgb_to_ccsp_shift = kRGBToYCbCrShift - (bit_depth - 8);
+    rgb_to_ccsp_shift = kRGBToYCbCrShift - (bit_depth.num_bits - 8);
   } else {
-    const int16_t v = 1 << (bit_depth - 8);
+    const int16_t v = 1 << (bit_depth.num_bits - 8);
     SetArray<int16_t>(rgb_to_ccsp_matrix, {v, 0, 0, 0, v, 0, 0, 0, v});
     rgb_to_ccsp_shift = 0;
   }
@@ -409,7 +411,7 @@ TEST_P(MorePreciseCCSPTest, EncodeDecode) {
   ASSERT_WP2_OK(
       IoUtilReadFile(testutil::GetTestDataPath(file_name).c_str(), &data));
   const FileFormat format = GuessImageFormat(data.bytes, data.size);
-  uint32_t bit_depth;
+  BitDepth bit_depth;
   ASSERT_WP2_OK(ReadBitDepth(data.bytes, data.size, &bit_depth));
 
   YUVPlane original_ccsp;

@@ -67,16 +67,16 @@ TEST_P(CspTest, Ranges) {
     // Check min/max values fit within YUV precision bits.
     // TODO(maryla): these are higher bounds for now but it would be nice to
     // track actual min/max values.
-    EXPECT_LE(std::abs(min_value), 1 << transf.GetYUVPrecisionBits());
-    EXPECT_LT(std::abs(max_value), 1 << transf.GetYUVPrecisionBits());
+    EXPECT_GE(min_value, transf.GetYuvDepth().min());
+    EXPECT_LE(max_value, transf.GetYuvDepth().max());
   }
   // Check we couldn't be using fewer bits.
   const int32_t global_min = std::min({min[0], min[1], min[2]});
   const int32_t global_max = std::max({max[0], max[1], max[2]});
   EXPECT_EQ(global_min, transf.GetYUVMin());
   EXPECT_EQ(global_max, transf.GetYUVMax());
-  EXPECT_GT(std::abs(global_min), 1 << (transf.GetYUVPrecisionBits() - 1));
-  EXPECT_GT(std::abs(global_max), 1 << (transf.GetYUVPrecisionBits() - 1));
+  EXPECT_LT(global_min, transf.GetYuvDepth().min() / 2);
+  EXPECT_GT(global_max, transf.GetYuvDepth().max() / 2);
 
   printf("\nNorms:\n  {");
   for (uint32_t i = 0; i < 3; ++i) {
@@ -84,10 +84,7 @@ TEST_P(CspTest, Ranges) {
   }
   printf("}\n");
 
-  uint32_t kExpectedYUVBits[kNumCspTypes] = {/* YCoCg */ 9, /* YCbCr */ 9,
-                                             /* Custom, not tested */ 0,
-                                             /* YIQ */ 9};
-  EXPECT_EQ(transf.GetYUVPrecisionBits(), kExpectedYUVBits[(uint32_t)csp_type]);
+  EXPECT_EQ(transf.GetYuvDepth(), (BitDepth{10, /*is_signed=*/true}));
 }
 
 TEST_P(CspTest, Precision) {

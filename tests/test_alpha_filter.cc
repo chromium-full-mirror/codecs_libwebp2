@@ -24,9 +24,7 @@
 namespace WP2 {
 namespace {
 
-constexpr uint32_t kNumBits = 8;
-constexpr int32_t kYUVMin = -(1 << (kNumBits - 1));
-constexpr int32_t kYUVMax = (1 << (kNumBits - 1)) - 1;
+constexpr BitDepth kBitDepth = {8, /*is_signed=*/true};
 
 void RegisterBlock(uint16_t x, uint16_t y, BlockSize dim, bool has_lossy_alpha,
                    FilterBlockMap* const blocks) {
@@ -74,8 +72,8 @@ TEST(AlphaFilterTest, DoesntFilterLossless) {
   // |         | 8x8 |    |
   // | ________|_____|____|
   FilterBlockMap blocks;
-  blocks.Init(/*tile_rect=*/{0, 0, 32, 16}, kNumBits, kYUVMin, kYUVMax,
-              &pixels);
+  blocks.Init(/*tile_rect=*/{0, 0, 32, 16}, kBitDepth, kBitDepth.min(),
+              kBitDepth.max(), &pixels);
   ASSERT_WP2_OK(blocks.Allocate());
   RegisterBlock(0, 0, BLK_16x16, /*has_lossy_alpha=*/false, &blocks);
   RegisterBlock(4, 0, BLK_8x8, /*has_lossy_alpha=*/false, &blocks);
@@ -104,8 +102,8 @@ TEST(AlphaFilterTest, DoesFilterLossyBlocks) {
   // |  lossy  | 8x8 |    |
   // | ________|lossy|____|
   FilterBlockMap blocks;
-  blocks.Init(/*tile_rect=*/{0, 0, width, height}, kNumBits, kYUVMin, kYUVMax,
-              &pixels);
+  blocks.Init(/*tile_rect=*/{0, 0, width, height}, kBitDepth, kBitDepth.min(),
+              kBitDepth.max(), &pixels);
   ASSERT_WP2_OK(blocks.Allocate());
   RegisterBlock(0, 0, BLK_16x16, /*has_lossy_alpha=*/true, &blocks);
   RegisterBlock(4, 0, BLK_8x8, /*has_lossy_alpha=*/false, &blocks);
@@ -155,8 +153,8 @@ TEST(AlphaFilterTest, PreservesHardEdges) {
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
   FilterBlockMap blocks;
-  blocks.Init(/*tile_rect=*/{0, 0, width, height}, kNumBits, kYUVMin, kYUVMax,
-              &pixels);
+  blocks.Init(/*tile_rect=*/{0, 0, width, height}, kBitDepth, kBitDepth.min(),
+              kBitDepth.max(), &pixels);
   ASSERT_WP2_OK(blocks.Allocate());
   RegisterBlock(0, 0, BLK_32x32, /*has_lossy_alpha=*/true, &blocks);
 
@@ -179,8 +177,8 @@ TEST(AlphaFilterTest, BlursSoftEdges) {
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
   FilterBlockMap blocks;
-  blocks.Init(/*tile_rect=*/{0, 0, width, height}, kNumBits, kYUVMin, kYUVMax,
-              &pixels);
+  blocks.Init(/*tile_rect=*/{0, 0, width, height}, kBitDepth, kBitDepth.min(),
+              kBitDepth.max(), &pixels);
   ASSERT_WP2_OK(blocks.Allocate());
   RegisterBlock(0, 0, BLK_32x32, /*has_lossy_alpha=*/true, &blocks);
 

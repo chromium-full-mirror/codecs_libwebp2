@@ -76,12 +76,12 @@ WP2Status WritePAM(const ArgbBuffer& buffer, FILE* const fout) {
 // Raw PGM
 
 static WP2Status SaveRow(const Plane16& src, uint32_t y, FILE* const out,
-                         uint32_t shift, Vector_u8& tmp) {
+                         uint32_t shift, int32_t offset, Vector_u8& tmp) {
   const uint32_t width = src.w_;
   const int16_t* const row = src.Row(y);
   WP2_CHECK_ALLOC_OK(tmp.resize(width));
   for (uint32_t i = 0; i < width; ++i) {
-    tmp[i] = Clamp<int32_t>((row[i] >> shift) + 128, 0, 255);
+    tmp[i] = Clamp<int32_t>((row[i] >> shift) + offset, 0, 255);
   }
   WP2_CHECK_OK(fwrite(&tmp[0], width, 1, out) == 1, WP2_STATUS_BAD_WRITE);
   return WP2_STATUS_OK;
@@ -98,13 +98,15 @@ WP2Status WritePGM(const ArgbBuffer& buffer, FILE* const fout,
                    /*resize_if_needed=*/true));
   fprintf(fout, "P5\n%u %u\n255\n", width * (has_alpha ? 4 : 3), height);
   Vector_u8 tmp;
-  const uint32_t shift = (transform.GetYUVPrecisionBits() + 1) - kRgbBits;
+  const BitDepth bit_depth = transform.GetYuvDepth();
+  const uint32_t shift = bit_depth.num_bits - kRgbBits;
+  const int32_t offset = bit_depth.is_signed ? 128 : 0;
   for (uint32_t y = 0; y < height; ++y) {
-    WP2_CHECK_STATUS(SaveRow(yuva.GetChannel(kYChannel), y, fout, shift, tmp));
-    WP2_CHECK_STATUS(SaveRow(yuva.GetChannel(kUChannel), y, fout, shift, tmp));
-    WP2_CHECK_STATUS(SaveRow(yuva.GetChannel(kVChannel), y, fout, shift, tmp));
+    WP2_CHECK_STATUS(SaveRow(yuva.Y, y, fout, shift, offset, tmp));
+    WP2_CHECK_STATUS(SaveRow(yuva.U, y, fout, shift, offset, tmp));
+    WP2_CHECK_STATUS(SaveRow(yuva.V, y, fout, shift, offset, tmp));
     if (has_alpha) {
-      WP2_CHECK_STATUS(SaveRow(yuva.GetChannel(kAChannel), y, fout, 0, tmp));
+      WP2_CHECK_STATUS(SaveRow(yuva.A, y, fout, 0, 0, tmp));
     }
   }
   return WP2_STATUS_OK;

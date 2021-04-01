@@ -397,11 +397,13 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
 #if !defined(WP2_REDUCE_BINARY_SIZE)
   if (!vd_plane.IsEmpty()) {
     if (VDMatch(*config_, "a")) {
-      WP2_CHECK_STATUS(
-          vd_plane.ToGray(&debug_output, /*num_bits=*/8,
-                          /*shift=*/VDMatch(*config_, "original-residuals")));
+      const bool is_res = VDMatch(*config_, "original-residuals");
+      WP2_CHECK_STATUS(vd_plane.ToGray(
+          &debug_output,
+          /*bit_depth=*/{is_res ? 9u : 8u, /*is_signed=*/is_res}));
     } else {
-      WP2_CHECK_STATUS(vd_plane.ToGray(&debug_output, /*num_bits=*/10));
+      WP2_CHECK_STATUS(vd_plane.ToGray(&debug_output,
+                                       /*bit_depth=*/{10, /*is_signed=*/true}));
     }
   }
 #endif  // WP2_REDUCE_BINARY_SIZE

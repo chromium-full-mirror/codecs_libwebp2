@@ -141,7 +141,7 @@ TEST(OrientationTest, YUVPlaneRotation) {
   ArgbBuffer rgb;
   ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(file_name).c_str(), &rgb));
   CSPTransform csp_transform;
-  const uint32_t bit_depth = csp_transform.GetYUVPrecisionBits() + 1;
+  const BitDepth bit_depth = csp_transform.GetYuvDepth();
   YUVPlane original;
   ASSERT_WP2_OK(original.Import(rgb, rgb.HasTransparency(), csp_transform,
                                 /*resize_if_needed=*/true));
@@ -201,7 +201,7 @@ TEST(OrientationTest, YUVPlaneFlip) {
   ArgbBuffer rgb;
   ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(file_name).c_str(), &rgb));
   CSPTransform csp_transform;
-  const uint32_t bit_depth = csp_transform.GetYUVPrecisionBits() + 1;
+  const BitDepth bit_depth = csp_transform.GetYuvDepth();
   YUVPlane original;
   ASSERT_WP2_OK(original.Import(rgb, rgb.HasTransparency(), csp_transform,
                                 /*resize_if_needed=*/true));

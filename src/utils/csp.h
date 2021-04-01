@@ -30,6 +30,26 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
+// Stores the bit depth of a color sample.
+struct BitDepth {
+  bool operator==(const BitDepth& o) const {
+    return num_bits == o.num_bits && is_signed == o.is_signed;
+  }
+  bool operator!=(const BitDepth& o) const { return !operator==(o); }
+
+  // Extreme possibles values.
+  int32_t min() const { return is_signed ? -(1 << precision()) : 0; }
+  int32_t max() const { return (1 << precision()) - 1; }
+
+  // Right shift to apply to a sample to obtain a unit value.
+  uint32_t precision() const { return num_bits - (is_signed ? 1 : 0); }
+
+  uint32_t num_bits;  // Number of bits used to store the range of all values.
+  bool is_signed;     // Whether a value can be negative.
+};
+
+//------------------------------------------------------------------------------
+
 class ANSEnc;
 class ANSDec;
 
@@ -59,7 +79,7 @@ struct CSPMtx {
 
 // Custom YUV <-> RGB transform matrix
 // YUV samples are internally represented using yuv_bits_ (including sign).
-// The maximum precision is kMaxYuvBits (+ 1 bit for the sign).
+// The maximum precision is kYuvMaxPrec (+ 1 bit for the sign).
 // The inverse matrix (YUV to RGB) is im_[].
 // The direct matrix m_[] (RGB to YUV) is always derived from im_[], and not
 // computed 'as is' nor stored. It uplifts from kRgbBits input to yuv_bits_
@@ -154,8 +174,8 @@ class CSPTransform {
   WP2Status Write(ANSEnc* const enc) const;
   WP2Status Read(ANSDec* const dec);
 
-  // Returns the number of bits used to store YUV samples, without the sign.
-  uint32_t GetYUVPrecisionBits() const { return yuv_bits_ - 1; }
+  // Returns the number of bits used to store each Y, U or V sample.
+  BitDepth GetYuvDepth() const { return yuv_depth_; }
   // Returns min/max YUV values that this transform produces.
   int16_t GetYUVMin() const { return min_yuv_value_; }
   int16_t GetYUVMax() const { return max_yuv_value_; }
@@ -170,8 +190,7 @@ class CSPTransform {
   const int16_t* GetRgb10Average() const { return avg10_; }
   // In-place apply the transform to 'image' area defined by {x,y,w,h}.
   // Output is yuva packed as 8b-unsigned (not s16).
-  // 'num_precision_bits' includes the sign.
-  void Apply(ArgbBuffer* const image, uint32_t num_precision_bits,
+  void Apply(ArgbBuffer* const image, BitDepth bit_depth,
              uint32_t x, uint32_t y, uint32_t w, uint32_t h) const;
 
  private:
@@ -179,7 +198,7 @@ class CSPTransform {
   static constexpr int16_t kDefaultRgbAvg[3] = {
       (1u << (kRgbBits - 1)), (1u << (kRgbBits - 1)), (1u << (kRgbBits - 1))};
 
-  // Sets yuv_bits_ and min_yuv_value_/max_yuv_value_.
+  // Sets 'yuv_depth_' and 'min,max_yuv_value_'.
   void SetYUVBounds(int16_t yuv_min, int16_t yuv_max);
   bool ComputeRGBToYUVMatrix();  // Computes m_[] from im_[].
   // deduce best YUV bounds from m_ and avg_
@@ -187,7 +206,7 @@ class CSPTransform {
 
   Csp type_;
 
-  uint32_t yuv_bits_;  // Depends on type. Includes sign.
+  BitDepth yuv_depth_;  // Depends on type.
   int16_t min_yuv_value_;
   int16_t max_yuv_value_;
 

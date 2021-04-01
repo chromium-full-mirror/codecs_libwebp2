@@ -86,9 +86,8 @@ WP2Status PlaneBase::CheckRect(const Rectangle& rect) const {
 //------------------------------------------------------------------------------
 
 template <>
-WP2Status Plane16::ToGray(WP2::ArgbBuffer* dst, uint32_t num_bits,
-                          bool shift) const {
-  assert(num_bits >= 8 && num_bits <= 16);
+WP2Status Plane16::ToGray(WP2::ArgbBuffer* dst, BitDepth bit_depth) const {
+  assert(dst->format() == WP2_Argb_32);
   const uint32_t H = std::min(h_, dst->height());
   const uint32_t W = std::min(w_, dst->width());
   for (uint32_t y = 0; y < H; ++y) {
@@ -97,36 +96,36 @@ WP2Status Plane16::ToGray(WP2::ArgbBuffer* dst, uint32_t num_bits,
     for (uint32_t x = 0; x < W; ++x) {
       dst_y[4 * x + 0] = 0xff;
       dst_y[4 * x + 1] = dst_y[4 * x + 2] = dst_y[4 * x + 3] = (uint8_t)Clamp(
-          (shift ? 128 : 0) + RightShiftRound(src_y[x], num_bits - 8), 0, 255);
+          ChangePrecision(src_y[x] - bit_depth.min(), bit_depth.num_bits, 8), 0,
+          255);
     }
   }
   return WP2_STATUS_OK;
 }
 
 template <>
-WP2Status Planef::ToGray(WP2::ArgbBuffer* dst, uint32_t num_bits,
-                         bool shift) const {
+WP2Status Planef::ToGray(WP2::ArgbBuffer* dst, BitDepth bit_depth) const {
   const uint32_t H = std::min(h_, dst->height());
   const uint32_t W = std::min(w_, dst->width());
+  const uint32_t num_bits = bit_depth.num_bits + (bit_depth.is_signed ? 1 : 0);
   const float scale =
       (num_bits >= 8) ? 1.f / (1 << (num_bits - 8)) : (1 << (8 - num_bits));
+  const float offset = bit_depth.is_signed ? 128.f : 0.f;
   for (uint32_t y = 0; y < H; ++y) {
     uint8_t* const dst_y = dst->GetRow8(y);
     const float* const src_y = Row(y);
     for (uint32_t x = 0; x < W; ++x) {
       dst_y[4 * x + 0] = 0xff;
-      dst_y[4 * x + 1] = dst_y[4 * x + 2] = dst_y[4 * x + 3] = (uint8_t)Clamp(
-          (shift ? 128.f : 0.f) + (src_y[x] * scale), 0.f, 255.f);
+      dst_y[4 * x + 1] = dst_y[4 * x + 2] = dst_y[4 * x + 3] =
+          (uint8_t)Clamp(src_y[x] * scale + offset, 0.f, 255.f);
     }
   }
   return WP2_STATUS_OK;
 }
 
 template <>
-WP2Status Plane8u::ToGray(WP2::ArgbBuffer* dst, uint32_t num_bits,
-                          bool shift) const {
-  assert(num_bits <= 8);
-  (void)shift;
+WP2Status Plane8u::ToGray(WP2::ArgbBuffer* dst, BitDepth bit_depth) const {
+  assert(bit_depth.num_bits <= 8 && !bit_depth.is_signed);
   const uint32_t h = std::min(h_, dst->height());
   const uint32_t w = std::min(w_, dst->width());
   for (uint32_t y = 0; y < h; ++y) {
@@ -135,7 +134,7 @@ WP2Status Plane8u::ToGray(WP2::ArgbBuffer* dst, uint32_t num_bits,
     for (uint32_t x = 0; x < w; ++x) {
       dst_y[4 * x + 0] = 0xff;
       dst_y[4 * x + 1] = dst_y[4 * x + 2] = dst_y[4 * x + 3] =
-          (src_y[x] << (8 - num_bits));
+          (src_y[x] << (8 - bit_depth.num_bits));
     }
   }
   return WP2_STATUS_OK;

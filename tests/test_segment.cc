@@ -263,7 +263,7 @@ TEST(TestSegment, IsMergeableWith) {
 TEST(TestSegment, MinQuant) {
   Segment segment;
   // Largest possible input range.
-  segment.SetYUVBounds(-(1 << kMaxYuvBits), (1 << kMaxYuvBits) - 1);
+  segment.SetYUVBounds(-(1 << kYuvMaxPrec), (1 << kYuvMaxPrec) - 1);
   // Lowest possible quantization.
   segment.SetQuality(kMaxLossyQualityHint, /*quality_factor=*/0,
                      /*u_quant_multiplier=*/0,

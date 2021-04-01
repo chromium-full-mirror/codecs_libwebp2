@@ -167,7 +167,7 @@ void CSPTransform::InitYCoCg() {
   type_ = Csp::kYCoCg;
   // With 10 bits par channel ([-512:511] if 'rgb_avg' is 128), the YCoCg
   // transformation is lossless.
-  assert(yuv_bits_ <= kMaxYuvBits + 1);
+  assert(yuv_depth_.precision() <= kYuvMaxPrec);
 }
 
 void CSPTransform::InitYCbCr() {
@@ -177,7 +177,7 @@ void CSPTransform::InitYCbCr() {
       1.16, -0.39, -0.81,
       1.16,  2.01,  0.00
   };
-  // This is not lossless: use the maximum range (yuv_bits_ == kMaxYuvBits + 1).
+  // This is not lossless: use the maximum range (yuv_bits_ == kYuvMaxPrec + 1).
   MultiplyMatrix(yuv_to_rgb_matrix, kMtxFixedPointMul / 4);
   int16_t kYCbCrMatrix[9];
   for (int i = 0; i < 9; ++i) {
@@ -193,7 +193,7 @@ void CSPTransform::InitYCbCr() {
 #endif
   if (!Init(kYCbCrMatrix)) assert(false);
   type_ = Csp::kYCbCr;
-  assert(yuv_bits_ == kMaxYuvBits + 1);
+  assert(yuv_depth_.precision() <= kYuvMaxPrec);
 }
 
 void CSPTransform::InitYIQ() {
@@ -205,7 +205,7 @@ void CSPTransform::InitYIQ() {
   };
   double yuv_to_rgb_matrix[9];
   TryInvertMatrix(rgb_to_yuv_matrix, yuv_to_rgb_matrix);
-  // This is not lossless: use the maximum range (yuv_bits_ == kMaxYuvBits + 1).
+  // This is not lossless: use the maximum range (yuv_bits_ == kYuvMaxPrec + 1).
   MultiplyMatrix(yuv_to_rgb_matrix, kMtxFixedPointMul / 2);
   int16_t kYIQMatrix[9];
   for (int i = 0; i < 9; ++i) {
@@ -221,7 +221,7 @@ void CSPTransform::InitYIQ() {
 #endif
   if (!Init(kYIQMatrix)) assert(false);
   type_ = Csp::kYIQ;
-  assert(yuv_bits_ == kMaxYuvBits + 1);
+  assert(yuv_depth_.precision() <= kYuvMaxPrec);
 }
 
 void CSPTransform::Print() const {
@@ -256,8 +256,10 @@ void CSPTransform::Print() const {
 //------------------------------------------------------------------------------
 
 void CSPTransform::SetYUVBounds(int16_t yuv_min, int16_t yuv_max) {
-  yuv_bits_ =
-      std::ceil(std::log2(std::max((int16_t)std::abs(yuv_min), yuv_max))) + 1;
+  const bool is_signed = (yuv_min < 0);
+  yuv_depth_ = {WP2Log2Ceil_k(std::max((int16_t)std::abs(yuv_min), yuv_max)) +
+                    (is_signed ? 1u : 0u),
+                is_signed};
   min_yuv_value_ = yuv_min;
   max_yuv_value_ = yuv_max;
 }
@@ -773,8 +775,8 @@ WP2Status CSPTransform::Write(ANSEnc* const enc)  const {
 WP2Status CSPTransform::Read(ANSDec* const dec) {
   type_ = (Csp)dec->ReadRValue(kNumCspTypes, "csp_type");
   if (type_ == Csp::kCustom) {
-    SetYUVBounds(-(1 << kMaxYuvBits), (1 << kMaxYuvBits) - 1);
-    assert(yuv_bits_ <= kMaxYuvBits + 1);
+    SetYUVBounds(-(1 << kYuvMaxPrec), (1 << kYuvMaxPrec) - 1);
+    assert(yuv_depth_.precision() == kYuvMaxPrec);
     if (dec->ReadBool("eigen")) {
       ReadEigenMatrix(dec, im_);
     } else {
@@ -1076,7 +1078,7 @@ WP2Status CSPTransform::Optimize(const ArgbBuffer& image) {
   const uint32_t w = image.width();
   const uint32_t h = image.height();
   const size_t stride = image.stride();
-  SetYUVBounds(-(1 << kMaxYuvBits), (1 << kMaxYuvBits) - 1);
+  SetYUVBounds(-(1 << kYuvMaxPrec), (1 << kYuvMaxPrec) - 1);
 
   double cov[3][3];
   double custom_to_rgb_matrix[9];
@@ -1099,7 +1101,7 @@ WP2Status CSPTransform::Optimize(const ArgbBuffer& image) {
     }
     if (ComputeRGBToYUVMatrix()) {
       type_ = Csp::kCustom;
-      assert(yuv_bits_ <= kMaxYuvBits + 1);
+      assert(yuv_depth_.precision() <= kYuvMaxPrec);
       for (uint32_t i : {0, 1, 2}) avg10_[i] = LeftShift(avg8_[i], 2);
       return WP2_STATUS_OK;
     }
@@ -1109,7 +1111,7 @@ WP2Status CSPTransform::Optimize(const ArgbBuffer& image) {
 
 //------------------------------------------------------------------------------
 
-void CSPTransform::Apply(ArgbBuffer* const image, uint32_t num_precision_bits,
+void CSPTransform::Apply(ArgbBuffer* const image, BitDepth bit_depth,
                          uint32_t x, uint32_t y, uint32_t w, uint32_t h) const {
   if (image == nullptr || image->IsEmpty()) return;
   for (uint32_t j = 0; j < h; ++j) {
@@ -1121,10 +1123,10 @@ void CSPTransform::Apply(ArgbBuffer* const image, uint32_t num_precision_bits,
       int16_t yuv[3];
       Rgb8ToYuv(&dst[4 * i + 1], yuv);
       for (uint32_t c = 0; c < 3; ++c) {
-        const int32_t max_yuv_value = (1 << (num_precision_bits - 1));
         // Convert to 8b-unsigned.
-        dst[4 * i + 1 + c] =
-            (uint8_t)Clamp(DivRound(yuv[c] * 128, max_yuv_value) + 128, 0, 255);
+        dst[4 * i + 1 + c] = (uint8_t)Clamp(
+            ChangePrecision(yuv[c] - bit_depth.min(), bit_depth.num_bits, 8), 0,
+            255);
       }
     }
   }

@@ -336,7 +336,7 @@ class CflPredictor : public Predictor {
   // number of bits for represent the 'a' and 'b' parameters, with sign.
   // 'a' is in range [-4,4), 'b' is in range [-1024, 1023]
   static constexpr uint32_t kCflABits = kCflFracBits + 2 + 1;
-  static constexpr uint32_t kCflBBits = kCflFracBits + kMaxYuvBits + 2;
+  static constexpr uint32_t kCflBBits = kCflFracBits + kYuvMaxPrec + 2;
   static constexpr float kCflNorm = 1. / (1 << kCflFracBits);
 
   const int16_t min_value_;

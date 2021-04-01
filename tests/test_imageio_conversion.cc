@@ -100,7 +100,7 @@ TEST_P(DownsampledTest, CCSP) {
   ASSERT_WP2_OK(downsampled_ccsp.Upsample());
   ASSERT_FALSE(downsampled_ccsp.IsDownsampled());
 
-  uint32_t bit_depth, downsampled_bit_depth;
+  BitDepth bit_depth, downsampled_bit_depth;
   ASSERT_WP2_OK(ReadBitDepth(file_path.c_str(), &bit_depth));
   ASSERT_WP2_OK(
       ReadBitDepth(downsampled_file_path.c_str(), &downsampled_bit_depth));
@@ -135,7 +135,7 @@ TEST_P(Y4MTest, ToYCbCr) {
   ASSERT_EQ(GuessImageFormat(data.bytes, std::min(data.size, (size_t)64)),
             FileFormat::Y4M_444);
 
-  uint32_t bit_depth;
+  BitDepth bit_depth;
   ASSERT_WP2_OK(ReadBitDepth(data.bytes, data.size, &bit_depth));
 
   YUVPlane ccsp;
@@ -143,8 +143,10 @@ TEST_P(Y4MTest, ToYCbCr) {
   ASSERT_WP2_OK(ReadImage(data.bytes, data.size, &ccsp, &ccsp_to_rgb));
 
   ASSERT_GE(ccsp_to_rgb.shift, CSPTransform::kMtxShift);
-  const uint32_t file_num_bits = CCSPImageReader::kMinBitDepth +
-                                 (ccsp_to_rgb.shift - CSPTransform::kMtxShift);
+  const BitDepth file_num_bits = {
+      CCSPImageReader::kMinBitDepth +
+          (ccsp_to_rgb.shift - CSPTransform::kMtxShift),
+      /*is_signed=*/false};
   ASSERT_FALSE(ccsp.IsDownsampled());
   ASSERT_EQ(bit_depth, file_num_bits);
 
@@ -164,12 +166,12 @@ INSTANTIATE_TEST_SUITE_P(Y4MTestInstantiation, Y4MTest,
 
 class MatrixConversionTest
     : public ::testing::TestWithParam<
-          std::tuple<const char*, bool, uint32_t, const SamplingTaps*>> {};
+          std::tuple<const char*, bool, BitDepth, const SamplingTaps*>> {};
 
 TEST_P(MatrixConversionTest, Comparison) {
   const char* const file_name = std::get<0>(GetParam());
   const bool through_ycocg = std::get<1>(GetParam());
-  const uint32_t num_bits = std::get<2>(GetParam());
+  const BitDepth ycbcr_bit_depth = std::get<2>(GetParam());
   const SamplingTaps* const downsample = std::get<3>(GetParam());
 
   Data data;
@@ -179,7 +181,7 @@ TEST_P(MatrixConversionTest, Comparison) {
       GuessImageFormat(data.bytes, std::min(data.size, (size_t)64));
   ASSERT_NE(file_format, FileFormat::UNSUPPORTED);
 
-  uint32_t bit_depth;
+  BitDepth bit_depth;
   ASSERT_WP2_OK(ReadBitDepth(data.bytes, data.size, &bit_depth));
 
   YUVPlane ccsp;
@@ -199,20 +201,20 @@ TEST_P(MatrixConversionTest, Comparison) {
     // Try converting to YCbCr with a matrix which is not the identity neither
     // the inverse (YCbCr>RGB), so why not YCoCg.
     ASSERT_WP2_OK(ToYCbCr(ccsp, CSPMtx(kYCoCgToRGBMatrix, kYCoCgToRGBShift),
-                          num_bits, downsample, &ycbcr_from_ccsp));
+                          ycbcr_bit_depth, downsample, &ycbcr_from_ccsp));
   } else {
-    ASSERT_WP2_OK(
-        ToYCbCr(ccsp, ccsp_to_rgb, num_bits, downsample, &ycbcr_from_ccsp));
+    ASSERT_WP2_OK(ToYCbCr(ccsp, ccsp_to_rgb, ycbcr_bit_depth, downsample,
+                          &ycbcr_from_ccsp));
   }
   YUVPlane ycbcr_from_rgb;
-  ASSERT_WP2_OK(ToYCbCr(rgb, num_bits, downsample, &ycbcr_from_rgb));
+  ASSERT_WP2_OK(ToYCbCr(rgb, ycbcr_bit_depth, downsample, &ycbcr_from_rgb));
 
   float expected_distortion = 99.f;
   if (IsCustomColorSpace(file_format)) {
     // Some precision error might happen when reading CCSP directly into RGB.
     expected_distortion = 50.f;
     // The error margin increases with the output precision.
-    expected_distortion -= 5.f * (num_bits - 8);
+    expected_distortion -= 5.f * (ycbcr_bit_depth.num_bits - 8);
   }
   EXPECT_TRUE(testutil::Compare(ycbcr_from_ccsp, ycbcr_from_rgb, bit_depth,
                                 file_name, expected_distortion));
@@ -223,7 +225,8 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(::testing::Values("source1_1x1.png",
                                          "ccsp/source3_C444p10.y4m"),
                        ::testing::Values(false, true),  // through_ycocg
-                       ::testing::Values(8, 10),        // num_bits
+                       ::testing::Values(BitDepth{8, /*is_signed=*/false},
+                                         BitDepth{10, /*is_signed=*/false}),
                        ::testing::Values(&SamplingTaps::kDownSharp,
                                          &SamplingTaps::kDownAvg, nullptr)));
 
@@ -237,7 +240,9 @@ INSTANTIATE_TEST_SUITE_P(
                                          "ccsp/source3_C444p12.y4m",
                                          "alpha_ramp.bmp"),
                        ::testing::Values(false, true),  // through_ycocg
-                       ::testing::Values(8, 10, 12),    // num_bits
+                       ::testing::Values(BitDepth{8, /*is_signed=*/false},
+                                         BitDepth{10, /*is_signed=*/false},
+                                         BitDepth{12, /*is_signed=*/false}),
                        ::testing::Values(&SamplingTaps::kDownSharp,
                                          &SamplingTaps::kDownAvg, nullptr)));
 

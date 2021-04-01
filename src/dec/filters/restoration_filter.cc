@@ -42,7 +42,7 @@ RestorationFilter::RestorationFilter(const DecoderConfig& config,
       blocks_(blocks),
       enabled_(IsRestorationFilterEnabled(config)),
       params_(params) {
-  assert(blocks_.num_precision_bits_ >= 8u);  // To match AV1 algorithms.
+  assert(blocks_.bit_depth_.num_bits >= 8u);  // To match AV1 algorithms.
 }
 
 WP2Status RestorationFilter::Allocate() {
@@ -164,7 +164,7 @@ uint32_t RestorationFilter::Enhances(uint32_t num_rows) {
               /*bottom=*/unfiltered_bottom, pixels_plane->Step(),
               /*n_left=*/0, /*n_right=*/0, n_top, n_bottom, tap_weights_h,
               tap_weights_v, filter_strength_map_.data(),
-              blocks_.tile_rect_.width, blocks_.num_precision_bits_,
+              blocks_.tile_rect_.width, blocks_.bit_depth_.num_bits,
               pixels_plane->Step(), pixels_plane->Row(y)));
         }
       }

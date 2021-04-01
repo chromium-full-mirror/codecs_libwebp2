@@ -50,7 +50,7 @@ void AddGrain4x4_C(int16_t* samples, size_t step, WP2::PseudoRNG* const rng,
   if (amp == 0) return;
   int16_t tmp[4 * 4];
   GenerateGrain4x4_C(rng, amp, freq, tmp);
-  const int32_t max_value = (1 << WP2::kMaxYuvBits) - 1;
+  const int32_t max_value = (1 << WP2::kYuvMaxPrec) - 1;
   for (uint32_t j = 0; j < 4; ++j) {
     for (uint32_t i = 0; i < 4; ++i) {
       samples[i] = WP2::Clamp(samples[i] + tmp[i + j * 4],

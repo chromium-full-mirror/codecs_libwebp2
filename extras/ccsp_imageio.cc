@@ -160,25 +160,30 @@ WP2Status ReadImage(const char* const file_path, YUVPlane* const ccsp_buffer,
                    format, log_level);
 }
 
-static constexpr uint32_t kUnknownBitDepth = 0;
-static uint32_t GetY4MBitDepth(const char* const header, size_t header_size) {
+namespace {
+
+constexpr BitDepth kUnknownBitDepth = {0, false};
+BitDepth GetY4MBitDepth(const char* const header, size_t header_size) {
   const char* tag = strnstr(header, header_size, " C420");
   if (tag == nullptr) tag = strnstr(header, header_size, " C444");
   if (tag == nullptr) return kUnknownBitDepth;
   tag += 5;
   header_size -= tag - header;
-  if (tag[0] == ' ' || tag[0] == '\n' || tag[0] == '\r') return 8;
-  if (strlcmp(tag, "jpeg", header_size) == 0) return 8;  // C***jpeg is 8 bits
-  if (strlcmp(tag, "p8", header_size) == 0) return 8;    // unlikely
-  if (strlcmp(tag, "p9", header_size) == 0) return 9;    // unlikely
-  if (strlcmp(tag, "p10", header_size) == 0) return 10;
-  if (strlcmp(tag, "p11", header_size) == 0) return 11;  // unlikely
-  if (strlcmp(tag, "p12", header_size) == 0) return 12;
+  constexpr bool kHasSign = false;  // Y4M format contains only positive values.
+  if (tag[0] == ' ' || tag[0] == '\n' || tag[0] == '\r') return {8, kHasSign};
+  if (strlcmp(tag, "jpeg", header_size) == 0) return {8, kHasSign};
+  if (strlcmp(tag, "p8", header_size) == 0) return {8, kHasSign};  // unlikely
+  if (strlcmp(tag, "p9", header_size) == 0) return {9, kHasSign};  // unlikely
+  if (strlcmp(tag, "p10", header_size) == 0) return {10, kHasSign};
+  if (strlcmp(tag, "p11", header_size) == 0) return {11, kHasSign};  // unlikely
+  if (strlcmp(tag, "p12", header_size) == 0) return {12, kHasSign};
   return kUnknownBitDepth;
 }
 
+}  // namespace
+
 WP2Status ReadBitDepth(const uint8_t* const data, size_t data_size,
-                       uint32_t* const bit_depth) {
+                       BitDepth* const bit_depth) {
   WP2_CHECK_OK(data != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(data_size >= 12, WP2_STATUS_NOT_ENOUGH_DATA);
   WP2_CHECK_OK(bit_depth != nullptr, WP2_STATUS_NULL_PARAMETER);
@@ -191,12 +196,12 @@ WP2Status ReadBitDepth(const uint8_t* const data, size_t data_size,
     WP2_CHECK_OK(*bit_depth != kUnknownBitDepth,
                  WP2_STATUS_UNSUPPORTED_FEATURE);
   } else {
-    *bit_depth = 8;
+    *bit_depth = {8, /*is_signed=*/false};
   }
   return WP2_STATUS_OK;
 }
 
-WP2Status ReadBitDepth(const char* const file_path, uint32_t* const bit_depth) {
+WP2Status ReadBitDepth(const char* const file_path, BitDepth* const bit_depth) {
   Data data;
   WP2_CHECK_STATUS(IoUtilReadFile(file_path, &data));
   return ReadBitDepth(data.bytes, data.size, bit_depth);
@@ -205,7 +210,7 @@ WP2Status ReadBitDepth(const char* const file_path, uint32_t* const bit_depth) {
 //------------------------------------------------------------------------------
 
 WP2Status SaveImage(const YUVPlane& buffer, const CSPMtx& ccsp_to_rgb,
-                    uint32_t file_num_bits, const char* file_path,
+                    BitDepth file_num_bits, const char* file_path,
                     bool overwrite, FileFormat format, const Metadata& metadata,
                     const SamplingTaps& filter, size_t* const file_size) {
   WP2_CHECK_OK(file_path != nullptr, WP2_STATUS_NULL_PARAMETER);
@@ -225,7 +230,8 @@ WP2Status SaveImage(const YUVPlane& buffer, const CSPMtx& ccsp_to_rgb,
   WP2_CHECK_OK(ccsp_to_rgb.shift <= 16, WP2_STATUS_INVALID_PARAMETER);
 
   if (!IsCustomColorSpace(format)) {  // Output Argb samples.
-    WP2_CHECK_OK(file_num_bits == 8, WP2_STATUS_INVALID_COLORSPACE);
+    WP2_CHECK_OK(file_num_bits.num_bits == 8 && !file_num_bits.is_signed,
+                 WP2_STATUS_INVALID_COLORSPACE);
     ArgbBuffer argb_buffer;
     WP2_CHECK_STATUS(buffer.Export(ccsp_to_rgb, /*resize_if_needed=*/true,
                                    &argb_buffer, &SamplingTaps::kUpSmooth));

@@ -1042,8 +1042,8 @@ WP2Status Decoder::DecodeLines(uint32_t n_lines) {
     WP2::ArgbBuffer debug_output;
     WP2_CHECK_STATUS(
         debug_output.SetView(config_.info->debug_output, tile_->rect));
-    WP2_CHECK_STATUS(
-        bits_per_pixel_.ToGray(&debug_output, /*num_bits=*/5, /*shift=*/false));
+    WP2_CHECK_STATUS(bits_per_pixel_.ToGray(
+        &debug_output, /*bit_depth=*/{5, /*is_signed=*/false}));
   }
 #endif  // WP2_REDUCE_BINARY_SIZE
 

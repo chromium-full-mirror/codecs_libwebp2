@@ -101,16 +101,17 @@ TEST_P(WriteImageTest, Ccsp) {
   CSPMtx ccsp_to_rgb = {};
   ASSERT_WP2_OK(ReadImage(data.bytes, data.size, &original, &ccsp_to_rgb));
 
-  uint32_t file_num_bits;
+  BitDepth file_num_bits;
   if (IsCustomColorSpace(format)) {
     ASSERT_GE(ccsp_to_rgb.shift, CSPTransform::kMtxShift);
-    file_num_bits = CCSPImageReader::kMinBitDepth +
-                    (ccsp_to_rgb.shift - CSPTransform::kMtxShift);
+    file_num_bits = {CCSPImageReader::kMinBitDepth +
+                         (ccsp_to_rgb.shift - CSPTransform::kMtxShift),
+                     /*is_signed=*/false};
   } else {
-    file_num_bits = 8;
+    file_num_bits = {8, /*is_signed=*/false};
   }
 
-  uint32_t bit_depth;
+  BitDepth bit_depth;
   ASSERT_WP2_OK(ReadBitDepth(data.bytes, data.size, &bit_depth));
   ASSERT_EQ(file_num_bits, bit_depth);
 
@@ -164,7 +165,7 @@ TEST(Y4MTest, Nearest) {
   ASSERT_WP2_OK(upsampled.UpsampleFrom(original, SamplingTaps::kUpNearest));
   ASSERT_WP2_OK(upsampled.Downsample(SamplingTaps::kDownAvg));
 
-  uint32_t bit_depth;
+  BitDepth bit_depth;
   ASSERT_WP2_OK(
       ReadBitDepth(testutil::GetTestDataPath(file_name).c_str(), &bit_depth));
   EXPECT_TRUE(testutil::Compare(original, upsampled, bit_depth, file_name));
@@ -189,8 +190,8 @@ TEST(WriteImageTest, NegativeYUVPlane) {
   YUVPlane buffer;
   const CSPMtx good_ccsp_to_rgb({1, 0, 0, 0, 1, 0, 0, 0, 1}, 0);
   const CSPMtx bad_ccsp_to_rgb({1, 0, 0, 0, 1, 0, 0, 0, 1}, 1000);
-  const uint32_t file_num_bits = 8;
-  const uint32_t bad_file_num_bits = 2;
+  const BitDepth file_num_bits = {8, /*is_signed=*/false};
+  const BitDepth bad_file_num_bits = {2, /*is_signed=*/true};
   const std::string dst = testutil::GetTempDataPath("some_path.some_extension");
 
   ASSERT_TRUE(buffer.IsEmpty());

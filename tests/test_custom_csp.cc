@@ -43,7 +43,10 @@ constexpr CSPMtx kCCSPToRGBShifts[] = {{kRGB8ToRGBMatrix, kRGB8ToRGBShift},
                                        {kYCoCgToRGBMatrix, kYCoCgToRGBShift},
                                        {kYpUVToRGBMatrix, kYpUVToRGBShift}};
 
-constexpr const uint32_t kCCSPBitDepth[] = {8, 10, 10, 11};
+constexpr const BitDepth kCCSPBitDepth[] = {{8, /*is_signed=*/false},
+                                            {10, /*is_signed=*/false},
+                                            {9, /*is_signed=*/true},
+                                            {10, /*is_signed=*/true}};
 
 //------------------------------------------------------------------------------
 
@@ -218,7 +221,7 @@ TEST_P(BackAndForthTest, Comparison) {
   const Matrix matrix = std::get<1>(GetParam());
   const CSPMtx& rgb_to_ccsp = kRGBToCCSPMatrices[(int)matrix];
   const CSPMtx& ccsp_to_rgb = kCCSPToRGBShifts[(int)matrix];
-  const uint32_t ccsp_bit_depth = kCCSPBitDepth[(int)matrix];
+  const BitDepth ccsp_bit_depth = kCCSPBitDepth[(int)matrix];
 
   YUVPlane original;
   CSPMtx file_to_rgb = {};

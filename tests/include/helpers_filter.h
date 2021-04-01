@@ -30,12 +30,8 @@ namespace testutil {
 
 //------------------------------------------------------------------------------
 
-int16_t GetMinValueSigned(uint32_t num_precision_bits);
-int16_t GetMaxValueSigned(uint32_t num_precision_bits);
-
 // Fills Y, U and V with extreme but single values.
-YUVPlane CreatePlainPixels(uint32_t width, uint32_t height,
-                           int16_t min_value, int16_t max_value);
+YUVPlane CreatePlainPixels(uint32_t width, uint32_t height, BitDepth bit_depth);
 
 // Adds noise.
 void Noise(int32_t min_value, int32_t max_value, size_t seed, int32_t strength,
@@ -52,8 +48,7 @@ bool AreEqual(const ArgbBuffer& a, const ArgbBuffer& b);
 //------------------------------------------------------------------------------
 
 // Creates as many segments as 'qualities' with YUV bounds in [min, max_value].
-Vector<Segment> CreateSegments(uint32_t quality_hint,
-                               int16_t min_value, int16_t max_value);
+Vector<Segment> CreateSegments(uint32_t quality_hint, BitDepth bit_depth);
 
 // Helper for 'blocks->RegisterBlock()' with a CodedBlock mockup.
 void RegisterBlock(uint16_t x, uint16_t y, BlockSize dim, uint32_t segment_id,
@@ -65,8 +60,8 @@ void RegisterBlock(uint16_t x, uint16_t y, BlockSize dim, uint32_t segment_id,
 // minimum number of bits per pixel (as deduced from the bitstream).
 void CreateBlocks(uint32_t tile_x, uint32_t tile_y,
                   const Vector<Segment>& segments, double res_den,
-                  double min_bpp, uint32_t num_precision_bits,
-                  YUVPlane* const pixels, FilterBlockMap* const blocks);
+                  double min_bpp, BitDepth bit_depth, YUVPlane* const pixels,
+                  FilterBlockMap* const blocks);
 
 //------------------------------------------------------------------------------
 

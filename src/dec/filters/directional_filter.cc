@@ -62,7 +62,7 @@ DirectionalFilter::DirectionalFilter(const DecoderConfig& config,
       features_(features),
       blocks_(blocks),
       enabled_(IsDirectionalFilterEnabled(config, features)) {
-  assert(blocks_.num_precision_bits_ >= 8u);  // To match AV1 algorithms.
+  assert(blocks_.bit_depth_.num_bits >= 8u);  // To match AV1 algorithms.
 }
 
 WP2Status DirectionalFilter::Allocate() {
@@ -135,7 +135,7 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
   if (num_filterable_rows <= num_filtered_rows_) return num_filtered_rows_;
 
   const uint32_t block_step = blocks_.max_num_blocks_x_;
-  const uint32_t precision_shift = (blocks_.num_precision_bits_ - 8u);
+  const uint32_t precision_shift = (blocks_.bit_depth_.num_bits - 8u);
 
   // Temporary padded buffer for CDEF computation.
   // 'kDrctFltSize x kDrctFltSize' pixels + margins of 'kDrctFltTapDist' pixels.
@@ -210,7 +210,7 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
       // Get overall direction and its variance.
       uint32_t direction, variance;
       CdefDirection8x8(&pixels->Y.At(x, y), (int32_t)pixels->Y.Step(),
-                       blocks_.num_precision_bits_, &direction, &variance);
+                       blocks_.bit_depth_.num_bits, &direction, &variance);
 
       // Margins for taps. Top-left is the origin.
       const uint32_t n_left = x;
@@ -247,7 +247,7 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
                 (int32_t)n_right, (int32_t)n_top, (int32_t)n_bottom,
                 tmp, kTmpStep);
 
-        CdefFiltering(tmp, kTmpStep, blocks_.num_precision_bits_, width, height,
+        CdefFiltering(tmp, kTmpStep, blocks_.bit_depth_.num_bits, width, height,
                       AdjustPriStr(c, shifted_pri_str, variance),
                       shifted_sec_str, GetDamping(c, precision_shift),
                       direction, &pixels_plane->At(x, y),

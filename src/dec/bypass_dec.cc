@@ -174,9 +174,8 @@ WP2Status TileDecoder::BypassTileDecRgb10b() {
 //------------------------------------------------------------------------------
 
 WP2Status TileDecoder::BypassTileDecYuv() {
-  const uint32_t num_bits = gparams_->transf_.GetYUVPrecisionBits() + 1u;
-
-  tile_->block_map.Init(tile_->rect, num_bits, gparams_->transf_.GetYUVMin(),
+  tile_->block_map.Init(tile_->rect, gparams_->transf_.GetYuvDepth(),
+                        gparams_->transf_.GetYUVMin(),
                         gparams_->transf_.GetYUVMax(), &tile_->yuv_output);
   if (IsFilterBlockMapNeeded(*config_, *features_, *gparams_, *tiles_layout_)) {
     WP2_CHECK_STATUS(tile_->block_map.Allocate());
@@ -201,6 +200,7 @@ WP2Status TileDecoder::BypassTileDecYuv() {
     }
   }
 
+  const uint32_t num_bits = gparams_->transf_.GetYuvDepth().num_bits;
   const uint32_t num_bits_per_row =
       (gparams_->has_alpha_ ? kAlphaBits : 0) + 3 * num_bits;
   BitUnpacker bit_unpacker(tile_->input, "raw_pixels");

@@ -75,7 +75,8 @@ void CreateCanvasAndFilter(uint32_t width, uint32_t height,
   yuvs.reserve(tiles_layout.tiles.size());  // Plane16 has no safe copy ctor.
 
   for (Tile& tile : tiles_layout.tiles) {
-    segments.emplace_back(testutil::CreateSegments(quality_hint, -128, 127));
+    segments.emplace_back(testutil::CreateSegments(
+        quality_hint, /*bit_depth=*/{8, /*is_signed=*/true}));
     yuvs.emplace_back();
     ASSERT_WP2_OK(
         yuvs.back().Resize(tile.yuv_output.Y.w_, tile.yuv_output.Y.h_));
@@ -84,8 +85,8 @@ void CreateCanvasAndFilter(uint32_t width, uint32_t height,
     }
 
     testutil::CreateBlocks(tile.rect.x, tile.rect.y, segments.back(), res_den,
-                           min_bpp, /*num_precision_bits=*/8, &yuvs.back(),
-                           &tile.block_map);
+                           min_bpp, /*bit_depth=*/{8, /*is_signed=*/true},
+                           &yuvs.back(), &tile.block_map);
   }
 
   CSPTransform csp;

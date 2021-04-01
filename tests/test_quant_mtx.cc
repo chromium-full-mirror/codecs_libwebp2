@@ -307,7 +307,7 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
     const uint32_t num_coeffs = kNumCoeffs[tdim];
     // Set the raw coeffs to the min/max possible values.
     for (uint32_t i = 0; i < kMaxCoeffs; ++i) {
-      residuals[i] = (1 << kMaxYuvBits) * sqrt(num_coeffs);
+      residuals[i] = (1 << kYuvMaxPrec) * sqrt(num_coeffs);
       if (i % 2 == 0) {
         residuals[i] *= -1;
       }
@@ -321,11 +321,11 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
 
       // Quantize!
       const uint16_t quants[kNumQuantZones] = { quant, quant, quant, quant };
-      segments[0].quant_y_.Init(/*max_residual=*/(1 << kMaxYuvBits),
+      segments[0].quant_y_.Init(/*max_residual=*/(1 << kYuvMaxPrec),
                                 /*q_scale=*/1, quants);
-      segments[0].quant_u_.Init(/*max_residual=*/(1 << kMaxYuvBits),
+      segments[0].quant_u_.Init(/*max_residual=*/(1 << kYuvMaxPrec),
                                 /*q_scale=*/1, quants);
-      segments[0].quant_v_.Init(/*max_residual=*/(1 << kMaxYuvBits),
+      segments[0].quant_v_.Init(/*max_residual=*/(1 << kYuvMaxPrec),
                                 /*q_scale=*/1, quants);
 
       int16_t dequantized[kMaxCoeffs];  // unused

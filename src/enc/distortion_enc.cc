@@ -28,13 +28,14 @@
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 
+namespace WP2 {
 namespace {
 
 // Max value returned in case of exact similarity.
-const double kNoDistortion_dB = 99.;
+constexpr double kNoDistortion_dB = 99.;
 // If there is the slightest difference, clamp to a value strictly lower than
 // 99 dB because it is used as "pristine lossless level".
-const double kMinDistortion_dB = kNoDistortion_dB - 0.1;
+constexpr double kMinDistortion_dB = kNoDistortion_dB - 0.1;
 
 // 'v' contains the total sum of the squared differences.
 // 'size' is the number of pixels and 'max' is the maximum difference value.
@@ -66,7 +67,7 @@ typedef double (*SSIMCalculationFunc)(uint32_t bit_depth,
 
 template <class T, uint32_t channel_step, SSIMCalculationFunc calculation>
 double AccumulateSSIM(WP2SSIMGetFunc get, WP2SSIMGetClippedFunc get_clipped,
-                      uint32_t w, uint32_t h, uint32_t bit_depth,
+                      uint32_t w, uint32_t h, BitDepth bit_depth,
                       const T* const src, uint32_t src_step, const T* const ref,
                       uint32_t ref_step) {
   const uint32_t pad = kWP2SSIMMargin - kWP2SSIMKernel;
@@ -80,14 +81,14 @@ double AccumulateSSIM(WP2SSIMGetFunc get, WP2SSIMGetClippedFunc get_clipped,
     for (x = 0; x < w; ++x) {
       WP2DistoStats stats;
       get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
-      sum += calculation(bit_depth, stats);
+      sum += calculation(bit_depth.num_bits, stats);
     }
   }
   for (; y < h1; ++y) {
     for (x = 0; x < w0; ++x) {
       WP2DistoStats stats;
       get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
-      sum += calculation(bit_depth, stats);
+      sum += calculation(bit_depth.num_bits, stats);
     }
     const size_t y_src_off = (y - kWP2SSIMKernel) * src_step;
     const size_t y_ref_off = (y - kWP2SSIMKernel) * ref_step;
@@ -96,45 +97,43 @@ double AccumulateSSIM(WP2SSIMGetFunc get, WP2SSIMGetClippedFunc get_clipped,
       const size_t off2 = channel_step * (x - kWP2SSIMKernel) + y_ref_off;
       WP2DistoStats stats;
       get(src + off1, src_step, ref + off2, ref_step, &stats);
-      sum += calculation(bit_depth, stats);
+      sum += calculation(bit_depth.num_bits, stats);
     }
     for (; x < w; ++x) {
       WP2DistoStats stats;
       get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
-      sum += calculation(bit_depth, stats);
+      sum += calculation(bit_depth.num_bits, stats);
     }
   }
   for (; y < h; ++y) {
     for (x = 0; x < w; ++x) {
       WP2DistoStats stats;
       get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
-      sum += calculation(bit_depth, stats);
+      sum += calculation(bit_depth.num_bits, stats);
     }
   }
   return sum;
 }
 
 template <SSIMCalculationFunc calculation>
-double AccumulateSSIM(const WP2::ArgbBuffer& a, const WP2::ArgbBuffer& b,
+double AccumulateSSIM(const ArgbBuffer& a, const ArgbBuffer& b,
                       uint32_t channel) {
   assert(WP2FormatBpp(a.format()) == 4 && WP2FormatBpp(b.format()) == 4);
   return AccumulateSSIM<uint8_t, /*channel_step=*/4, calculation>(
       WP2SSIMGet4x8u, WP2SSIMGetClipped4x8u, a.width(), a.height(),
-      /*bit_depth=*/8, a.GetRow8(0) + channel, a.stride(),
-      b.GetRow8(0) + channel, b.stride());
+      /*bit_depth=*/{8, /*is_signed=*/false}, a.GetRow8(0) + channel,
+      a.stride(), b.GetRow8(0) + channel, b.stride());
 }
-
-}  // namespace
 
 //------------------------------------------------------------------------------
 // MSSSIM tools
 
-static constexpr uint32_t kNumMSSSIMPasses = 5;
-static constexpr float kMSSSIMExponentsOriginal[kNumMSSSIMPasses] = {
+constexpr uint32_t kNumMSSSIMPasses = 5;
+constexpr float kMSSSIMExponentsOriginal[kNumMSSSIMPasses] = {
     // Simoncelli & al:
     // https://ece.uwaterloo.ca/~z70wang/publications/msssim.pdf
     0.0448f, 0.2856f, 0.3001f, 0.2363f, 0.13333f};
-static constexpr float kMSSSIMExponentsCustom[kNumMSSSIMPasses] = {
+constexpr float kMSSSIMExponentsCustom[kNumMSSSIMPasses] = {
     // Modified exponents that weight more the 1rst layer, and are more regular:
     0.35f, 0.23f, 0.19f, 0.15f, 0.08f};
 
@@ -143,8 +142,6 @@ static constexpr float kMSSSIMExponentsCustom[kNumMSSSIMPasses] = {
 //
 // For every pixel in the *reference* picture, we search for the local best
 // match in the compressed image. This is not a symmetrical measure.
-
-namespace {
 
 // Search radius. Shouldn't be too large.
 constexpr uint32_t kRadius = 2u;
@@ -169,9 +166,8 @@ double AccumulateLSIM(const uint8_t* const src, uint32_t src_stride,
   return best_sse;
 }
 
-double AccumulateLSIM(const WP2::ArgbBuffer& src_buffer,
-                      const WP2::ArgbBuffer& ref_buffer,
-                      uint32_t channel) {
+double AccumulateLSIM(const ArgbBuffer& src_buffer,
+                      const ArgbBuffer& ref_buffer, uint32_t channel) {
   const uint32_t w = src_buffer.width(), h = ref_buffer.height();
   const uint8_t* const src = src_buffer.GetRow8(0) + channel;
   const size_t src_stride = src_buffer.stride();
@@ -271,8 +267,7 @@ void Dct8(int32_t dct[64]) {
   memcpy(dct, tmp, sizeof(tmp));
 }
 
-float CalcPSNRHVS(const WP2::Plane16& a, const WP2::Plane16& b,
-                  const float mask[64]) {
+float CalcPSNRHVS(const Plane16& a, const Plane16& b, const float mask[64]) {
   assert(a.w_ == b.w_);
   assert(a.h_ == b.h_);
 
@@ -351,8 +346,6 @@ float CalcPSNRHVS(const WP2::Plane16& a, const WP2::Plane16& b,
 }    // namespace
 
 //------------------------------------------------------------------------------
-
-namespace WP2 {
 
 WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
                                     const Rectangle& window,
@@ -486,11 +479,11 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
       }
       result[4] = (float)GetPSNR(total_distortion, pix_channel_size, max);
     } else if (metric_type == PSNR_YUV) {
-      WP2_CHECK_STATUS(yuv0.GetDistortion(
-          yuv1, transf.GetYUVPrecisionBits() + 1, PSNR, result));
+      WP2_CHECK_STATUS(
+          yuv0.GetDistortion(yuv1, transf.GetYuvDepth(), PSNR, result));
     } else if (metric_type == SSIM_YUV) {
-      WP2_CHECK_STATUS(yuv0.GetDistortion(
-          yuv1, transf.GetYUVPrecisionBits() + 1, SSIM, result));
+      WP2_CHECK_STATUS(
+          yuv0.GetDistortion(yuv1, transf.GetYuvDepth(), SSIM, result));
     } else {
       return WP2_STATUS_INVALID_PARAMETER;
     }
@@ -617,22 +610,22 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
 //------------------------------------------------------------------------------
 
 template <>
-WP2Status Plane16::GetSSIM(const Plane16& src, uint32_t bit_depth,
+WP2Status Plane16::GetSSIM(const Plane16& src, BitDepth bit_depth,
                            double* const score) const {
   WP2_CHECK_OK(w_ == src.w_ && h_ == src.h_, WP2_STATUS_BAD_DIMENSION);
   WP2SSIMInit();
   *score = AccumulateSSIM<int16_t, /*channel_step=*/1, WP2SSIMCalculation>(
-      (bit_depth >= 12) ? WP2SSIMGet12s : WP2SSIMGet10s,
-      (bit_depth >= 12) ? WP2SSIMGetClipped12s : WP2SSIMGetClipped10s, w_, h_,
-      bit_depth, Row(0), Step(), src.Row(0), src.Step());
+      (bit_depth.num_bits >= 12) ? WP2SSIMGet12s : WP2SSIMGet10s,
+      (bit_depth.num_bits >= 12) ? WP2SSIMGetClipped12s : WP2SSIMGetClipped10s,
+      w_, h_, bit_depth, Row(0), Step(), src.Row(0), src.Step());
   return WP2_STATUS_OK;
 }
 
 template <>
-WP2Status Plane<uint8_t>::GetSSIM(const Plane<uint8_t>& src, uint32_t bit_depth,
+WP2Status Plane<uint8_t>::GetSSIM(const Plane<uint8_t>& src, BitDepth bit_depth,
                                   double* const score) const {
   WP2_CHECK_OK(w_ == src.w_ && h_ == src.h_, WP2_STATUS_BAD_DIMENSION);
-  assert(bit_depth <= 8);
+  assert(bit_depth.num_bits <= 8 && !bit_depth.is_signed);
   WP2SSIMInit();
   *score = AccumulateSSIM<uint8_t, /*channel_step=*/1, WP2SSIMCalculation>(
       WP2SSIMGet8u, WP2SSIMGetClipped8u, w_, h_, bit_depth, Row(0), Step(),
@@ -640,7 +633,7 @@ WP2Status Plane<uint8_t>::GetSSIM(const Plane<uint8_t>& src, uint32_t bit_depth,
   return WP2_STATUS_OK;
 }
 
-WP2Status YUVPlane::GetDistortion(const YUVPlane& ref, uint32_t bit_depth,
+WP2Status YUVPlane::GetDistortion(const YUVPlane& ref, BitDepth bit_depth,
                                   MetricType metric_type,
                                   float result[5]) const {
   WP2_CHECK_OK(!IsEmpty(), WP2_STATUS_NULL_PARAMETER);
@@ -669,7 +662,7 @@ WP2Status YUVPlane::GetDistortion(const YUVPlane& ref, uint32_t bit_depth,
     // Hack to still have a "valid" general distortion with a bit depth and/or
     // subsampling mix: bring all squared errors to 8 bits and full sampling.
     constexpr double kMax = (1u << 8) - 1u;
-    const double range_scale = std::exp2(8. - bit_depth);
+    const double range_scale = std::exp2(8. - bit_depth.num_bits);
     const double yuv_scale = range_scale * range_scale;  // Squared error.
     const double uv_scale = yuv_scale * uv_multiplier;
     const double result_double[] = {
@@ -694,8 +687,10 @@ WP2Status YUVPlane::GetDistortion(const YUVPlane& ref, uint32_t bit_depth,
         const Plane16& p = GetChannel(channel);
         const Plane16& ref_p = ref.GetChannel(channel);
         double disto;
-        WP2_CHECK_STATUS(p.GetSSIM(ref_p,
-            (channel == kAChannel) ? kAlphaBits : bit_depth, &disto));
+        constexpr BitDepth kAlphaBitDepth = {kAlphaBits, /*is_signed=*/false};
+        WP2_CHECK_STATUS(p.GetSSIM(
+            ref_p, (channel == kAChannel) ? kAlphaBitDepth : bit_depth,
+            &disto));
         if (channel == kUChannel || channel == kVChannel) {
           disto *= uv_multiplier;  // Simulate 'num_pixels' for 420.
         }

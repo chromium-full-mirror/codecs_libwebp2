@@ -389,8 +389,9 @@ TEST(BufferTest, CompositeYuv) {
 
   // All three methods should give the same result.
   // CompositeOVer/CompositeUnder.
-  EXPECT_TRUE(testutil::Compare(yuv_composite_over, yuv_composite_under, 16,
-                                "test", 99));
+  EXPECT_TRUE(testutil::Compare(yuv_composite_over, yuv_composite_under,
+                                /*bit_depth=*/{16, /*is_signed=*/true}, "test",
+                                99));
   // Composite in RGB vs YUV. We allow for some rounding error.
   for (uint32_t y = 0; y < height; ++y) {
     for (uint32_t x = 0; x < width; ++x) {

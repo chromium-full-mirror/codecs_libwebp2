@@ -264,7 +264,7 @@ bool TryFindFirstDifference(const ArgbBuffer& a, const ArgbBuffer& b,
 }
 
 ::testing::AssertionResult Compare(const YUVPlane& src, const YUVPlane& dec,
-                                   uint32_t bit_depth,
+                                   BitDepth bit_depth,
                                    const std::string& file_name,
                                    float expected_distortion,
                                    MetricType metric) {

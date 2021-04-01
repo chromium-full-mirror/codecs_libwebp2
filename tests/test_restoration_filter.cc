@@ -32,28 +32,28 @@ namespace {
 //------------------------------------------------------------------------------
 
 YUVPlane CreateNoisyPixels(uint32_t width, uint32_t height,
-                           int16_t min_value, int16_t max_value) {
+                           BitDepth bit_depth) {
+  const int16_t min = bit_depth.min(), max = bit_depth.max();
   YUVPlane pixels;
   WP2_ASSERT_STATUS(pixels.Resize(width, height));
-  pixels.Fill(Ayuv38b{kAlphaMax, min_value, 0, max_value});
+  pixels.Fill(Ayuv38b{kAlphaMax, min, (int16_t)((min + max) / 2), max});
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    testutil::Noise(min_value, max_value, /*seed=*/channel, 5,
+    testutil::Noise(bit_depth.min(), bit_depth.max(), /*seed=*/channel, 5,
                     &pixels.GetChannel(channel));
   }
   return pixels;
 }
 
 // Applies the restoration filter on 'pixels' with 'filter_strength'.
-void Filter(uint32_t num_precision_bits, int16_t min_value, int16_t max_value,
-            const int8_t tap_weights[kWieFltTapDist], uint32_t quality_hint,
-            YUVPlane* const pixels) {
+void Filter(BitDepth bit_depth, const int8_t tap_weights[kWieFltTapDist],
+            uint32_t quality_hint, YUVPlane* const pixels) {
   const Vector<Segment> segments =
-      testutil::CreateSegments(quality_hint, min_value, max_value);
+      testutil::CreateSegments(quality_hint, bit_depth);
   const double residual_density = 1. * quality_hint / kMaxLossyQualityHint;
   const double min_bpp = 4. * quality_hint / kMaxLossyQualityHint;
   FilterBlockMap blocks;
   testutil::CreateBlocks(/*tile_x=*/0, /*tile_y=*/0, segments, residual_density,
-                         min_bpp, num_precision_bits, pixels, &blocks);
+                         min_bpp, bit_depth, pixels, &blocks);
 
   RstrFltParams params(pixels->Y.w_, pixels->Y.h_);
   params.SetAll(tap_weights);
@@ -78,23 +78,19 @@ constexpr int8_t kIdentityTapWeights[kWieFltTapDist]{0, 0, 0};
 constexpr int8_t kDefaultTapWeights[kWieFltTapDist]{3, -7, 15};
 
 class RestorationFilterTest : public ::testing::TestWithParam<
-                                  std::tuple<uint32_t, uint32_t, uint32_t>> {};
+                                  std::tuple<BitDepth, uint32_t, uint32_t>> {};
 
 // Tests that no pixel is modified if each plane has one unique color.
 TEST_P(RestorationFilterTest, FilteringPlain) {
-  const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = std::get<0>(GetParam());
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
-  YUVPlane pixels =
-      testutil::CreatePlainPixels(width, height, min_value, max_value);
+  YUVPlane pixels = testutil::CreatePlainPixels(width, height, bit_depth);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(Filter(num_precision_bits, min_value, max_value,
-                                 kDefaultTapWeights,
+  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth, kDefaultTapWeights,
                                  /*quality_hint=*/0, &pixels));
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
@@ -104,17 +100,15 @@ TEST_P(RestorationFilterTest, FilteringPlain) {
 
 // Tests that pixels are filtered.
 TEST_P(RestorationFilterTest, MaxFilteringBlocked) {
-  const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = std::get<0>(GetParam());
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
-  YUVPlane pixels = CreateNoisyPixels(width, height, min_value, max_value);
+  YUVPlane pixels = CreateNoisyPixels(width, height, bit_depth);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(Filter(num_precision_bits, min_value, max_value,
+  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth,
                                  kDefaultTapWeights,
                                  /*quality_hint=*/0, &pixels));
 
@@ -125,18 +119,16 @@ TEST_P(RestorationFilterTest, MaxFilteringBlocked) {
 
 // Tests that no pixel is modified if it's the highest quality.
 TEST_P(RestorationFilterTest, NoFiltering) {
-  const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = std::get<0>(GetParam());
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
-  YUVPlane pixels = CreateNoisyPixels(width, height, min_value, max_value);
+  YUVPlane pixels = CreateNoisyPixels(width, height, bit_depth);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
   ASSERT_NO_FATAL_FAILURE(
-      Filter(num_precision_bits, min_value, max_value, kDefaultTapWeights,
+      Filter(bit_depth, kDefaultTapWeights,
              /*quality_hint=*/kMaxLossyQualityHint, &pixels));
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
@@ -146,17 +138,15 @@ TEST_P(RestorationFilterTest, NoFiltering) {
 
 // Tests that no pixel is modified if the filter tap weights are the identity.
 TEST_P(RestorationFilterTest, Identity) {
-  const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = std::get<0>(GetParam());
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
-  YUVPlane pixels = CreateNoisyPixels(width, height, min_value, max_value);
+  YUVPlane pixels = CreateNoisyPixels(width, height, bit_depth);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(Filter(num_precision_bits, min_value, max_value,
+  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth,
                                  kIdentityTapWeights,
                                  /*quality_hint=*/0, &pixels));
 
@@ -167,21 +157,24 @@ TEST_P(RestorationFilterTest, Identity) {
 
 INSTANTIATE_TEST_SUITE_P(
     RestorationFilterTestInstantiation, RestorationFilterTest,
-    ::testing::Combine(
-        /*num_precision_bits=*/::testing::Values(8u, 10u),
-        /*width=*/::testing::Values(kWieFltWidth / 3),
-        /*height=*/::testing::Values(3 * kWieFltHeight - 1u)));
+    ::testing::Combine(::testing::Values(BitDepth{8, /*is_signed=*/true},
+                                         BitDepth{10, /*is_signed=*/true}),
+                       ::testing::Values(kWieFltWidth / 3),       // width
+                       ::testing::Values(3 * kWieFltHeight - 1u)  // height
+                       ));
 
 // Disabled to reduce the number of test cases.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_MoreRestorationFilterTestInstantiation, RestorationFilterTest,
-    ::testing::Combine(
-        /*num_precision_bits=*/::testing::Values(8u, 10u, 12u),
-        /*width=*/::testing::Values(kWieFltWidth / 2, kWieFltWidth),
-        /*height=*/
-        ::testing::Values(kWieFltHeight / 5, kWieFltHeight,
-                          3 * kWieFltHeight + 7u)));
+    ::testing::Combine(::testing::Values(BitDepth{8, /*is_signed=*/true},
+                                         BitDepth{10, /*is_signed=*/true},
+                                         BitDepth{12, /*is_signed=*/true}),
+                       ::testing::Values(kWieFltWidth / 2,
+                                         kWieFltWidth),  // width
+                       ::testing::Values(kWieFltHeight / 5, kWieFltHeight,
+                                         3 * kWieFltHeight + 7u)  // height
+                       ));
 
 //------------------------------------------------------------------------------
 

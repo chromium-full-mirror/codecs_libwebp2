@@ -187,7 +187,6 @@ TEST_P(DecodeCustomCspTest, Comparison) {
       if (!custom_output.A.IsEmpty()) {
         ASSERT_WP2_OK(non_padded_yuv.A.SetView(custom_output.A, rect));
       }
-      const uint32_t bit_depth = csp_transform.GetYUVPrecisionBits() + 1;
       // Some error is expected for lossy qualities because YCoCg is no longer
       // "lossless" when it has been tampered with during compression (it can
       // output RGB values that are not exact multiples of 1<<kMtxShift).
@@ -196,7 +195,8 @@ TEST_P(DecodeCustomCspTest, Comparison) {
       // might also be some slight rounding discrepancies.
       const float expected_disto =
           (quality <= kMaxLossyQuality) ? (is_opaque ? 55.f : 45.f) : 85.f;
-      EXPECT_TRUE(testutil::Compare(ref_yuv, non_padded_yuv, bit_depth,
+      EXPECT_TRUE(testutil::Compare(ref_yuv, non_padded_yuv,
+                                    csp_transform.GetYuvDepth(),
                                     src_file_name, expected_disto))
           << "quality : " << quality;
       break;
@@ -328,7 +328,7 @@ TEST_P(YUVPlaneTest, LosslessUpsampling) {
   // Ignoring the 'ccsp_to_rgb_matrix', the color space is not tested here.
   ASSERT_WP2_OK(original.Downsample());
 
-  uint32_t bit_depth;
+  BitDepth bit_depth;
   ASSERT_WP2_OK(ReadBitDepth(file_path.c_str(), &bit_depth));
 
   YUVPlane upsampled;
@@ -353,7 +353,7 @@ TEST_P(YUVPlaneTest, NotTooLossyDownsampling) {
   ASSERT_WP2_OK(ReadImage(file_path.c_str(), &original, &ccsp_to_rgb));
   // Ignoring 'ccsp_to_rgb' because the color space is not tested here.
 
-  uint32_t bit_depth;
+  BitDepth bit_depth;
   ASSERT_WP2_OK(ReadBitDepth(file_path.c_str(), &bit_depth));
 
   YUVPlane downsampled;

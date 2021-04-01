@@ -353,13 +353,9 @@ class Plane : public PlaneBase {
     return WP2_STATUS_OK;
   }
 
-  // Mostly for debugging. 'dst' is not resized. If 'shift' is true and this is
-  // a signed plane (e.g. int16_t), shifts values so that zero is mapped to 128.
-  // Otherwise 0 is mapped to 0 and negative values are clamped.
-  // 'num_bits' is the number of bits on which this plane's values are expressed
-  // which will get shifted to 8 bits to fit in 'dst'. For Planef, it just means
-  // values are expected to be <= (1 << num_bits)
-  WP2Status ToGray(ArgbBuffer* dst, uint32_t num_bits, bool shift = true) const;
+  // Mostly for debugging. 'dst' is not resized. 'bit_depth' describes the data
+  // in this Plane that will be converted to 8-bit unsigned to fit in 'dst'.
+  WP2Status ToGray(ArgbBuffer* dst, BitDepth bit_depth) const;
 
   // Process 'src's samples with arbitrary function.
   WP2Status Process(const ArgbBuffer& src,
@@ -378,7 +374,7 @@ class Plane : public PlaneBase {
   // Computes sum of squared error. Implemented for 8u/16s.
   WP2Status GetSSE(const Plane<T>& src, uint64_t* const score) const;
   // Computes SSIM. Implemented for 16s.
-  WP2Status GetSSIM(const Plane<T>& src, uint32_t bit_depth,
+  WP2Status GetSSIM(const Plane<T>& src, BitDepth bit_depth,
                     double* const score) const;
 
  protected:
@@ -577,11 +573,11 @@ class YUVPlane {
   WP2Status CompositeUnder(const YUVPlane& foreground,
                            const CSPTransform& transform);
 
-  // Computes the distortion between two images having a 'bit_depth' including
-  // the sign (except alpha that stays on 8 bits). Not all 'metric_type' are
-  // implemented. Results are in dB, stored in 'result' in the A/Y/U/V/All
-  // order. Returns WP2_STATUS_OK or an error.
-  WP2Status GetDistortion(const YUVPlane& ref, uint32_t bit_depth,
+  // Computes the distortion between two images. 'bit_depth' is for YUV because
+  // alpha is always unsigned 8 bits. Not all 'metric_type' are implemented.
+  // Results are in dB, stored in 'result' in the A/Y/U/V/All order. Returns
+  // WP2_STATUS_OK or an error.
+  WP2Status GetDistortion(const YUVPlane& ref, BitDepth bit_depth,
                           MetricType metric_type, float result[5]) const;
 
   // TODO(maryla): the A plane could be a Plane8.

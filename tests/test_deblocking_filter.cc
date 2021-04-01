@@ -39,8 +39,7 @@ constexpr uint32_t kPixelsHeight = kMaxPixelsHeight - (kMinBlockSizePix - 1u);
 
 // Creates areas with close values, otherwise the filter will not be applied.
 // If with_alpha is true, adds a fully opaque (255) alpha plane.
-YUVPlane CreateBlockedPixels(int16_t min_value, int16_t max_value,
-                             bool with_alpha = false) {
+YUVPlane CreateBlockedPixels(BitDepth bit_depth, bool with_alpha = false) {
   YUVPlane pixels;
   WP2_ASSERT_STATUS(
       pixels.Resize(kPixelsWidth, kPixelsHeight, /*pad=*/1, with_alpha));
@@ -50,13 +49,13 @@ YUVPlane CreateBlockedPixels(int16_t min_value, int16_t max_value,
   pixels.Y.Fill({0, 0, half_x, kMaxPixelsHeight}, 42);
   pixels.Y.Fill({half_x, 0, half_x, kMaxPixelsHeight}, 38);
   // Testing vertical edge.
-  pixels.U.Fill({0, 0, kMaxPixelsWidth, half_y}, min_value);
-  pixels.U.Fill({0, half_y, kMaxPixelsWidth, half_y}, (int16_t)(min_value + 4));
+  pixels.U.Fill({0, 0, kMaxPixelsWidth, half_y}, bit_depth.min());
+  pixels.U.Fill({0, half_y, kMaxPixelsWidth, half_y}, bit_depth.min() + 4);
   // Testing both.
-  pixels.V.Fill({0, 0, half_x, half_y}, (int16_t)(max_value - 7));
-  pixels.V.Fill({half_x, 0, half_x, half_y}, max_value);
-  pixels.V.Fill({0, half_y, half_x, half_y}, (int16_t)(max_value - 12));
-  pixels.V.Fill({half_x, half_y, half_x, half_y}, (int16_t)(max_value - 5));
+  pixels.V.Fill({0, 0, half_x, half_y}, bit_depth.max() - 7);
+  pixels.V.Fill({half_x, 0, half_x, half_y}, bit_depth.max());
+  pixels.V.Fill({0, half_y, half_x, half_y}, bit_depth.max() - 12);
+  pixels.V.Fill({half_x, half_y, half_x, half_y}, bit_depth.max() - 5);
 
   if (with_alpha) pixels.A.Fill(kAlphaMax);
 
@@ -65,14 +64,12 @@ YUVPlane CreateBlockedPixels(int16_t min_value, int16_t max_value,
 
 FilterBlockMap CreateAlignedBlocks(const Vector<Segment>& segments,
                                    double res_den, double min_bpp,
-                                   uint32_t num_precision_bits,
-                                   YUVPlane* const pixels) {
+                                   BitDepth bit_depth, YUVPlane* const pixels) {
   assert((pixels->Y.w_ + kMinBlockSizePix - 1u) / kMinBlockSizePix == 8u);
   assert((pixels->Y.h_ + kMinBlockSizePix - 1u) / kMinBlockSizePix == 8u);
   FilterBlockMap blocks;
-  const int32_t min = -(1 << (num_precision_bits - 1)), max = -min - 1;
   blocks.Init(/*tile_rect=*/{0, 0, pixels->Y.w_, pixels->Y.h_},
-              num_precision_bits, min, max, pixels);
+              bit_depth, bit_depth.min(), bit_depth.max(), pixels);
   EXPECT_WP2_OK(blocks.Allocate());
   const uint32_t s = segments.size();
   uint32_t id = 0;  // Segment id
@@ -100,16 +97,16 @@ FilterBlockMap CreateAlignedBlocks(const Vector<Segment>& segments,
 }
 
 // Applies the deblocking filter on 'pixels' with 'filter_strength'.
-void Deblock(uint32_t num_precision_bits, int16_t min_value, int16_t max_value,
-             uint32_t quality_hint, YUVPlane* const pixels) {
+void Deblock(BitDepth bit_depth, uint32_t quality_hint,
+             YUVPlane* const pixels) {
   const Vector<Segment> segments =
-      testutil::CreateSegments(quality_hint, min_value, max_value);
+      testutil::CreateSegments(quality_hint, bit_depth);
   const double residual_density = 1. * quality_hint / kMaxLossyQualityHint;
   const double min_bpp = 4. * quality_hint / kMaxLossyQualityHint;
   // The created block edges should match at least some of the boundaries of
   // the areas defined in CreateBlockedPixels().
-  const FilterBlockMap blocks = CreateAlignedBlocks(
-      segments, residual_density, min_bpp, num_precision_bits, pixels);
+  const FilterBlockMap blocks = CreateAlignedBlocks(segments, residual_density,
+                                                    min_bpp, bit_depth, pixels);
 
   DecoderConfig config = DecoderConfig::kDefault;
   config.enable_deblocking_filter = true;
@@ -132,21 +129,18 @@ void Deblock(uint32_t num_precision_bits, int16_t min_value, int16_t max_value,
 //------------------------------------------------------------------------------
 
 // Param: num_precision_bits
-class DeblockingFilterTest : public ::testing::TestWithParam<uint32_t> {};
+class DeblockingFilterTest : public ::testing::TestWithParam<BitDepth> {};
 
 // Tests that no pixel is modified if each plane has one unique color.
 TEST_P(DeblockingFilterTest, FilteringPlain) {
-  const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = GetParam();
 
-  YUVPlane pixels = testutil::CreatePlainPixels(kPixelsWidth, kPixelsHeight,
-                                                min_value, max_value);
+  YUVPlane pixels =
+      testutil::CreatePlainPixels(kPixelsWidth, kPixelsHeight, bit_depth);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(num_precision_bits, min_value, max_value, /*quality_hint=*/0,
-          &pixels);
+  Deblock(bit_depth, /*quality_hint=*/0, &pixels);
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
@@ -155,17 +149,13 @@ TEST_P(DeblockingFilterTest, FilteringPlain) {
 
 // Tests that some pixels are deblocked for horizontal and vertical edges.
 TEST_P(DeblockingFilterTest, MaxFilteringBlocked) {
-  const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = GetParam();
 
-  YUVPlane pixels =
-      CreateBlockedPixels(min_value, max_value, /*with_alpha=*/false);
+  YUVPlane pixels = CreateBlockedPixels(bit_depth, /*with_alpha=*/false);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(num_precision_bits, min_value, max_value, /*quality_hint=*/0,
-          &pixels);
+  Deblock(bit_depth, /*quality_hint=*/0, &pixels);
 
   EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
@@ -175,17 +165,13 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlocked) {
 // Tests that some pixels are deblocked for horizontal and vertical edges
 // when the alpha plane is constant.
 TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithPlainAlpha) {
-  const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = GetParam();
 
-  YUVPlane pixels =
-      CreateBlockedPixels(min_value, max_value, /*with_alpha=*/true);
+  YUVPlane pixels = CreateBlockedPixels(bit_depth, /*with_alpha=*/true);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(num_precision_bits, min_value, max_value, /*quality_hint=*/0,
-          &pixels);
+  Deblock(bit_depth, /*quality_hint=*/0, &pixels);
 
   EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
@@ -196,19 +182,15 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithPlainAlpha) {
 // Tests that some pixels are deblocked for horizontal and vertical edges
 // when the alpha plane has low variance. Alpha plane should also be deblocked.
 TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithLowVarianceAlpha) {
-  const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = GetParam();
 
-  YUVPlane pixels =
-      CreateBlockedPixels(min_value, max_value, /*with_alpha=*/true);
+  YUVPlane pixels = CreateBlockedPixels(bit_depth, /*with_alpha=*/true);
   // The rest is 255.
   pixels.A.Fill({0, 0, kMaxPixelsWidth / 2, kMaxPixelsWidth / 2}, 250);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(num_precision_bits, min_value, max_value, /*quality_hint=*/0,
-          &pixels);
+  Deblock(bit_depth, /*quality_hint=*/0, &pixels);
 
   EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
@@ -218,12 +200,9 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithLowVarianceAlpha) {
 
 // Tests that pixels are not deblocked when alpha plane has high variance.
 TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithHighVarianceAlpha) {
-  const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = GetParam();
 
-  YUVPlane pixels =
-      CreateBlockedPixels(min_value, max_value, /*with_alpha=*/true);
+  YUVPlane pixels = CreateBlockedPixels(bit_depth, /*with_alpha=*/true);
   const uint32_t half_x = kMaxPixelsWidth / 2;
   const uint32_t half_y = kMaxPixelsHeight / 2;
   // Testing horizontal edge.
@@ -233,8 +212,7 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithHighVarianceAlpha) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(num_precision_bits, min_value, max_value, /*quality_hint=*/0,
-          &pixels);
+  Deblock(bit_depth, /*quality_hint=*/0, &pixels);
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
@@ -244,15 +222,13 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithHighVarianceAlpha) {
 
 // Tests that no pixel is modified if it's the highest quality.
 TEST_P(DeblockingFilterTest, NoFiltering) {
-  const uint32_t num_precision_bits = GetParam();
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = GetParam();
 
-  YUVPlane pixels = CreateBlockedPixels(min_value, max_value);
+  YUVPlane pixels = CreateBlockedPixels(bit_depth);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(num_precision_bits, min_value, max_value,
+  Deblock(bit_depth,
           /*quality_hint=*/kMaxLossyQualityHint, &pixels);
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
@@ -260,9 +236,11 @@ TEST_P(DeblockingFilterTest, NoFiltering) {
   EXPECT_TRUE(testutil::AreEqual(pixels.V, reference.V));
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    DeblockingFilterTestInstantiation, DeblockingFilterTest,
-    /*num_precision_bits=*/::testing::Values(8u, 10u, 12u));
+INSTANTIATE_TEST_SUITE_P(DeblockingFilterTestInstantiation,
+                         DeblockingFilterTest,
+                         ::testing::Values(BitDepth{8, /*is_signed=*/true},
+                                           BitDepth{10, /*is_signed=*/true},
+                                           BitDepth{12, /*is_signed=*/true}));
 
 //------------------------------------------------------------------------------
 
@@ -303,18 +281,17 @@ TEST(DeblockingFilterTest, BetterPSNR) {
 //------------------------------------------------------------------------------
 
 TEST(HelpersFilterTest, MinMaxValueSigned) {
-  EXPECT_EQ(testutil::GetMinValueSigned(/*num_precision_bits=*/8),
-            std::numeric_limits<int8_t>::min());
-  EXPECT_EQ(testutil::GetMaxValueSigned(/*num_precision_bits=*/8),
-            std::numeric_limits<int8_t>::max());
+  constexpr BitDepth kBd8 = {8, /*is_signed=*/false};
+  EXPECT_EQ(kBd8.min(), std::numeric_limits<uint8_t>::min());
+  EXPECT_EQ(kBd8.max(), std::numeric_limits<uint8_t>::max());
 
-  EXPECT_EQ(testutil::GetMinValueSigned(/*num_precision_bits=*/10), -512);
-  EXPECT_EQ(testutil::GetMaxValueSigned(/*num_precision_bits=*/10), 511);
+  constexpr BitDepth kBd10 = {10, /*is_signed=*/true};
+  EXPECT_EQ(kBd10.min(), -512);
+  EXPECT_EQ(kBd10.max(), 511);
 
-  EXPECT_EQ(testutil::GetMinValueSigned(/*num_precision_bits=*/16),
-            std::numeric_limits<int16_t>::min());
-  EXPECT_EQ(testutil::GetMaxValueSigned(/*num_precision_bits=*/16),
-            std::numeric_limits<int16_t>::max());
+  constexpr BitDepth kBd16 = {16, /*is_signed=*/true};
+  EXPECT_EQ(kBd16.min(), std::numeric_limits<int16_t>::min());
+  EXPECT_EQ(kBd16.max(), std::numeric_limits<int16_t>::max());
 }
 
 //------------------------------------------------------------------------------

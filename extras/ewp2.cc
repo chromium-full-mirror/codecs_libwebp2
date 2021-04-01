@@ -32,6 +32,7 @@
 
 using WP2::ExUtilGetFloat;
 using WP2::ExUtilGetInt;
+using WP2::ExUtilGetUInt;
 using WP2::FileFormat;
 using WP2::GetFileName;
 using WP2::ProgramOptions;
@@ -121,7 +122,8 @@ int main(int argc, char* argv[]) {
   bool keep_metadata = true;
   WP2::EncoderConfig wp2_enc_config;
 
-  uint32_t y4m_enc_bit_depth = 8;  // 4:4:4 8b by default
+  // 4:4:4 8b by default
+  WP2::BitDepth y4m_enc_bit_depth = {8, /*is_signed=*/false};
   uint32_t y4m_enc_420 = false;
   const WP2::SamplingTaps* downsampling_filter = &WP2::SamplingTaps::kDownSharp;
   const WP2::SamplingTaps* upsampling_filter = &WP2::SamplingTaps::kUpSmooth;
@@ -152,10 +154,12 @@ int main(int argc, char* argv[]) {
       wp2_enc_config.csp_type = (WP2::Csp)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-y4m_depth") && c + 1 < argc) {
       parsed_flag_y4m_depth = true;
-      y4m_enc_bit_depth = ExUtilGetInt(argv[++c], &parse_error);
-      CHECK_TRUE(y4m_enc_bit_depth >= WP2::CCSPImageReader::kMinBitDepth &&
-                 y4m_enc_bit_depth <= WP2::CCSPImageReader::kMaxBitDepth,
-                 "Error! Bit depth is outside allowed range.");
+      y4m_enc_bit_depth = {ExUtilGetUInt(argv[++c], &parse_error),
+                           /*is_signed=*/false};
+      CHECK_TRUE(
+          (y4m_enc_bit_depth.num_bits >= WP2::CCSPImageReader::kMinBitDepth &&
+           y4m_enc_bit_depth.num_bits <= WP2::CCSPImageReader::kMaxBitDepth),
+          "Error! Bit depth is outside allowed range.");
     } else if (!strcmp(argv[c], "-y4m_444") || !strcmp(argv[c], "-y4m_420")) {
       parsed_flag_y4m_420 = true;
       y4m_enc_420 = !strcmp(argv[c], "-y4m_420");
@@ -269,7 +273,7 @@ int main(int argc, char* argv[]) {
     CHECK_STATUS(features.Read(in_data.bytes, in_data.size),
                  "Error! Failed to decode the wp2 image header.");
     const uint32_t rgb_to_ycbcr_shift =
-        WP2::kRGBToYCbCrShift - (y4m_enc_bit_depth - 8);
+        WP2::kRGBToYCbCrShift - (y4m_enc_bit_depth.num_bits - 8);
 
     // Allocate a padded buffer to avoid doing it internally.
     // TODO(yguyon): Check if 'has_alpha' is needed beforehand (decode GParams).
@@ -378,10 +382,11 @@ int main(int argc, char* argv[]) {
                                  /*overwrite=*/true, file_size_ptr),
             "Error! Failed to write image '%s'.", out_path.c_str());
       } else {
-        const uint32_t file_num_bits = (out_format == FileFormat::Y4M_444 ||
-                                        out_format == FileFormat::Y4M_420)
-                                           ? y4m_enc_bit_depth
-                                           : 8u;
+        const WP2::BitDepth file_num_bits =
+            (out_format == FileFormat::Y4M_444 ||
+             out_format == FileFormat::Y4M_420)
+                ? y4m_enc_bit_depth
+                : WP2::BitDepth{8, /*is_signed=*/false};
         CHECK_STATUS(
             WP2::SaveImage(ccsp_buffer, ccsp_to_rgb, file_num_bits,
                            out_path.c_str(), /*overwrite=*/true, out_format,
@@ -424,7 +429,7 @@ int main(int argc, char* argv[]) {
     CHECK_TRUE(
         cmp_matrix == ref_matrix,
         "Error! Can only compute distortion for the same color space.");
-    uint32_t cmp_bit_depth, ref_bit_depth;
+    WP2::BitDepth cmp_bit_depth, ref_bit_depth;
     CHECK_STATUS(WP2::ReadBitDepth(cmp_path.c_str(), &cmp_bit_depth),
                  "Error! Failed to read bit depth of '%s'.", cmp_path.c_str());
     CHECK_STATUS(WP2::ReadBitDepth(ref_path.c_str(), &ref_bit_depth),

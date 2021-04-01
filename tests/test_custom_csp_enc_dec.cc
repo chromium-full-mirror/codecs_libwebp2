@@ -111,10 +111,10 @@ TEST_P(EncodeDecodeCustomCspTest, Comparison) {
   // Even if the color space is custom, the actual source is RGB so there is no
   // loss due to conversion as there is no real precision beyond 8 bits. However
   // there might be some slight rounding differences.
-  const uint32_t bit_depth = csp_transform.GetYUVPrecisionBits() + 1;
   const float expected_distortion =
       std::min(testutil::GetExpectedDistortion(quality), 80.f);
-  ASSERT_TRUE(testutil::Compare(custom_input, custom_output, bit_depth,
+  ASSERT_TRUE(testutil::Compare(custom_input, custom_output,
+                                csp_transform.GetYuvDepth(),
                                 file_name, expected_distortion));
 }
 

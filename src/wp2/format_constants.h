@@ -175,7 +175,7 @@ static constexpr uint32_t kAlphaBits = 8u;
 static constexpr uint32_t kAlphaMax = (1 << kAlphaBits) - 1;  // Inclusive.
 
 // Max precision for YUV values, excluding the sign.
-static constexpr uint32_t kMaxYuvBits = 9u;
+static constexpr uint32_t kYuvMaxPrec = 9u;
 
 // Prediction block dimensions:
 static constexpr uint32_t kMinBlockSizePix = 4u;   // min block size in pixels
@@ -199,7 +199,7 @@ static constexpr uint32_t kMaxAspectRatio = 64;
 static_assert(kMaxTileSize * kMaxTileSize / kMaxTilePixels <= kMaxAspectRatio,
               "Extreme aspect ratios are no good");
 static constexpr uint32_t kMaxTileChunkSize =
-    (kMaxTilePixels * (kAlphaBits + (kMaxYuvBits + 1) * 3) + 7) / 8;
+    (kMaxTilePixels * (kAlphaBits + (kYuvMaxPrec + 1) * 3) + 7) / 8;
 static_assert(kMaxTileChunkSize <= kMaxChunkSize,
               "Tile bypass may not fit in a chunk");
 

@@ -65,6 +65,7 @@ namespace WP2 {
 
 void SyntaxWriter::PutRawPixels(const Block& block, const YUVPlane& pixels,
                                 ANSEnc* const enc) {
+  assert(gparams_->transf_.GetYuvDepth().is_signed);
   enc->PutRValue(block.x(), SizeBlocks(tile_rect_.width), "DEEP_MATCH_X");
   enc->PutRValue(block.y(), SizeBlocks(tile_rect_.height), "DEEP_MATCH_Y");
   enc->PutRValue(block.w(), kMaxBlockSize + 1, "DEEP_MATCH_W");
@@ -74,7 +75,7 @@ void SyntaxWriter::PutRawPixels(const Block& block, const YUVPlane& pixels,
     for (uint32_t y = 0; y < block.h_pix(); ++y) {
       for (uint32_t x = 0; x < block.w_pix(); ++x) {
         enc->PutSUValue(pixels.GetChannel(channel).At(x, y),
-                        gparams_->transf_.GetYUVPrecisionBits() + 1,
+                        gparams_->transf_.GetYuvDepth().num_bits,
                         kChannelStr[channel]);
       }
     }
@@ -84,6 +85,7 @@ void SyntaxWriter::PutRawPixels(const Block& block, const YUVPlane& pixels,
 void SyntaxReader::ReadAndCompareRawPixels(const Block& block,
                                            const YUVPlane& pixels,
                                            ANSDec* const dec) {
+  assert(gparams_->transf_.GetYuvDepth().is_signed);
   const uint32_t block_x = dec->ReadRValue(SizeBlocks(width_), "DEEP_MATCH_X");
   const uint32_t block_y = dec->ReadRValue(SizeBlocks(height_), "DEEP_MATCH_Y");
   const uint32_t block_w = dec->ReadRValue(kMaxBlockSize + 1, "DEEP_MATCH_W");
@@ -95,7 +97,7 @@ void SyntaxReader::ReadAndCompareRawPixels(const Block& block,
     for (uint32_t y = 0; y < block.h_pix(); ++y) {
       for (uint32_t x = 0; x < block.w_pix(); ++x) {
         const int32_t px = dec->ReadSUValue(
-            gparams_->transf_.GetYUVPrecisionBits() + 1, kChannelStr[channel]);
+            gparams_->transf_.GetYuvDepth().num_bits, kChannelStr[channel]);
         if (px != pixels.GetChannel(channel).At(x, y)) assert(false);
       }
     }
@@ -1424,10 +1426,9 @@ void DeblockingFilter::ApplyVDebug(uint32_t num_rows) {
       ApplyVDebugAlphaDiff(unfiltered_pixels_, *blocks_.pixels_,
                            blocks_.tile_rect_, &config_.info->debug_output);
     } else {
-      const int32_t yuv_max_value =
-          (1 << (blocks_.num_precision_bits_ - 1)) - 1;
-      ApplyVDebugDiff(unfiltered_pixels_, *blocks_.pixels_, yuv_max_value, 16,
-                      blocks_.tile_rect_, &config_.info->debug_output);
+      ApplyVDebugDiff(unfiltered_pixels_, *blocks_.pixels_,
+                      blocks_.bit_depth_.max(), 16, blocks_.tile_rect_,
+                      &config_.info->debug_output);
     }
   }
 }
@@ -1444,9 +1445,9 @@ void GrainFilter::SavePixelsForVDebug(uint32_t num_rows) {
 
 void GrainFilter::ApplyVDebug(uint32_t num_rows) {
   if (VDMatch(config_, "diff") && num_rows == blocks_.tile_rect_.height) {
-    const int32_t yuv_max_value = (1 << (blocks_.num_precision_bits_ - 1)) - 1;
-    ApplyVDebugDiff(unfiltered_pixels_, *blocks_.pixels_, yuv_max_value, 2,
-                    blocks_.tile_rect_, &config_.info->debug_output);
+    ApplyVDebugDiff(unfiltered_pixels_, *blocks_.pixels_,
+                    blocks_.bit_depth_.max(), 2, blocks_.tile_rect_,
+                    &config_.info->debug_output);
   }
 }
 
@@ -1521,9 +1522,9 @@ void DirectionalFilter::RegisterPixelsForVDebug(uint32_t from_x, uint32_t to_x,
 
 void DirectionalFilter::ApplyVDebug(uint32_t num_rows) {
   if (VDMatch(config_, "diff") && num_rows == blocks_.tile_rect_.height) {
-    const int32_t yuv_max_value = (1 << (blocks_.num_precision_bits_ - 1)) - 1;
-    ApplyVDebugDiff(unfiltered_pixels_, *blocks_.pixels_, yuv_max_value, 16,
-                    blocks_.tile_rect_, &config_.info->debug_output);
+    ApplyVDebugDiff(unfiltered_pixels_, *blocks_.pixels_,
+                    blocks_.bit_depth_.max(), 16, blocks_.tile_rect_,
+                    &config_.info->debug_output);
   }
 }
 
@@ -1590,9 +1591,9 @@ void RestorationFilter::RegisterPixelsForVDebug(uint32_t from_x, uint32_t to_x,
 
 void RestorationFilter::ApplyVDebug(uint32_t num_rows) {
   if (VDMatch(config_, "diff") && num_rows == blocks_.tile_rect_.height) {
-    const int32_t yuv_max_value = (1 << (blocks_.num_precision_bits_ - 1)) - 1;
-    ApplyVDebugDiff(unfiltered_pixels_, *blocks_.pixels_, yuv_max_value, 16,
-                    blocks_.tile_rect_, &config_.info->debug_output);
+    ApplyVDebugDiff(unfiltered_pixels_, *blocks_.pixels_,
+                    blocks_.bit_depth_.max(), 16, blocks_.tile_rect_,
+                    &config_.info->debug_output);
   }
 }
 
@@ -1614,8 +1615,7 @@ void IntertileFilter::SavePixelsForVDebug(uint32_t num_rows) {
 void IntertileFilter::ApplyVDebug(uint32_t num_rows) {
   if (VDMatch(*config_, "diff") && (num_rows == canvas_.Y.h_)) {
     const FilterBlockMap& blocks = tiles_layout_->GetTileAt(0, 0).block_map;
-    const int32_t yuv_max_value = (1 << (blocks.num_precision_bits_ - 1)) - 1;
-    ApplyVDebugDiff(unfiltered_pixels_, canvas_, yuv_max_value, 16,
+    ApplyVDebugDiff(unfiltered_pixels_, canvas_, blocks.bit_depth_.max(), 16,
                     {0, 0, canvas_.Y.w_, canvas_.Y.h_},
                     &config_->info->debug_output);
   }
@@ -1759,14 +1759,14 @@ void ApplyVDebugBeforeAfter(const DecoderConfig& config,
     ApplyVDebugDiff(*debug_output, argb, 2, debug_output);
   } else if (VDMatch(config, "y") || VDMatch(config, "u") ||
              VDMatch(config, "v")) {
-    const uint32_t yuv_bits = csp_tranform.GetYUVPrecisionBits() + 1;
     if (VDMatch(config, "original")) {
-      csp_tranform.Apply(debug_output, yuv_bits, 0, 0, debug_output->width(),
-                         debug_output->height());
+      csp_tranform.Apply(debug_output, csp_tranform.GetYuvDepth(), 0, 0,
+                         debug_output->width(), debug_output->height());
       ToGray(*debug_output, VDChannel(config) + 1, debug_output);
     } else if (VDMatch(config, "compressed")) {
       const Plane16& plane = tile.yuv_output.GetChannel(VDChannel(config));
-      WP2_ASSERT_STATUS(plane.ToGray(debug_output, yuv_bits));
+      WP2_ASSERT_STATUS(
+          plane.ToGray(debug_output, csp_tranform.GetYuvDepth()));
     }
   } else {
     const bool a = VDMatch(config, "a"), r = VDMatch(config, "r");
@@ -1830,6 +1830,9 @@ void ApplyVDebugBeforeAfter(const DecoderConfig& config,
 //------------------------------------------------------------------------------
 // Encoder-related
 
+static constexpr BitDepth kYuvMaxBitDepth = {kYuvMaxPrec + 1,
+                                             /*is_signed=*/true};
+
 // Fills the background of the current tile with luma and display some info.
 WP2Status PartitionScoreFunc::ClearVDebug() const {
   if (VDMatch(*config_, "encoder/partition")) {
@@ -1846,16 +1849,16 @@ WP2Status PartitionScoreFunc::ClearVDebug() const {
                          tile_rect_.x, tile_rect_.y, tile_rect_.width,
                          tile_rect_.height, kPartitionMethodString[pm]);
       } else {
-        WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kMaxYuvBits));
+        WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kYuvMaxBitDepth));
       }
       debug_output.DrawRect(
           debug_output.AsRect(),
-          Argb32b{255,
-                  (uint8_t)(      pm * 255 / NUM_PARTITION_METHODS),
+          Argb32b{255, (uint8_t)(pm * 255 / NUM_PARTITION_METHODS),
                   (uint8_t)(100 + pm * 100 / NUM_PARTITION_METHODS),
-                  (uint8_t)( 50 + pm *  50 / NUM_PARTITION_METHODS)}, 0x03);
+                  (uint8_t)(50 + pm * 50 / NUM_PARTITION_METHODS)},
+          0x03);
     } else if (VDMatch(*config_, "score")) {
-      WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kMaxYuvBits));
+      WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kYuvMaxBitDepth));
     }
   }
   return WP2_STATUS_OK;
@@ -2185,7 +2188,7 @@ WP2Status MultiScoreFunc::DrawLossyLuma(const Block& block,
   std::copy(coeffs, coeffs + block.w_pix() * block.h_pix(), p.Row(0));
   ArgbBuffer block_debug_output;
   WP2_CHECK_STATUS(block_debug_output.SetView(*debug_output, block_rect));
-  WP2_CHECK_STATUS(p.ToGray(&block_debug_output, kMaxYuvBits + 1u));
+  WP2_CHECK_STATUS(p.ToGray(&block_debug_output, kYuvMaxBitDepth));
 
   if (draw_side) {
     // If there is enough space, also display the original luma.
@@ -2195,7 +2198,7 @@ WP2Status MultiScoreFunc::DrawLossyLuma(const Block& block,
       WP2_CHECK_STATUS(block_debug_output.SetView(
           *debug_output, {block.x_pix() - block.w_pix(), block.y_pix(),
                           block.w_pix(), block.h_pix()}));
-      WP2_CHECK_STATUS(p.ToGray(&block_debug_output, kMaxYuvBits + 1u));
+      WP2_CHECK_STATUS(p.ToGray(&block_debug_output, kYuvMaxBitDepth));
     }
 
     // If there is enough space, also display the quantized luma for the
@@ -2208,7 +2211,7 @@ WP2Status MultiScoreFunc::DrawLossyLuma(const Block& block,
       WP2_CHECK_STATUS(block_debug_output.SetView(
           *debug_output, {block.x_pix() + block.w_pix(), block.y_pix(),
                           block.w_pix(), block.h_pix()}));
-      WP2_CHECK_STATUS(p.ToGray(&block_debug_output, kMaxYuvBits + 1u));
+      WP2_CHECK_STATUS(p.ToGray(&block_debug_output, kYuvMaxBitDepth));
     }
   }
   return WP2_STATUS_OK;
@@ -2287,7 +2290,7 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
 
   // Image processing output.
   if (VDMatch(*config_, "spread-5x5")) {
-    WP2_CHECK_STATUS(spread_.Y.ToGray(&debug_output, kMaxYuvBits + 1u));
+    WP2_CHECK_STATUS(spread_.Y.ToGray(&debug_output, kYuvMaxBitDepth));
     if (VDSelected(0, 0, tile_rect_, *config_)) {
       const uint32_t x = config_->info->selection.x - tile_rect_.x;
       const uint32_t y = config_->info->selection.y - tile_rect_.y;
@@ -2303,7 +2306,7 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
   // Display the general orientation of all 4x4 blocks in the grid.
   if (VDMatch(*config_, "direction-4x4")) {
     // Display the luma source as background.
-    WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kMaxYuvBits + 1u));
+    WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kYuvMaxBitDepth));
     for (uint32_t y = 0; y + 4 <= debug_output.height(); y += 4) {
       for (uint32_t x = 0; x + 4 <= debug_output.width(); x += 4) {
         const Rectangle block_rect = {x, y,
@@ -2331,7 +2334,7 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
   }
 
   // Original luma.
-  WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kMaxYuvBits + 1u));
+  WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kYuvMaxBitDepth));
 
   // clang-format off
   Block block(0, 0, VDMatch(*config_, "32x32") ? BLK_32x32 :

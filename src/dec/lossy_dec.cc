@@ -88,7 +88,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   SyntaxReader reader(dec, tile->rect);
   WP2_CHECK_STATUS(reader.ReadHeader(features, gparams, *tile));
 
-  tile->block_map.Init(tile->rect, gparams.transf_.GetYUVPrecisionBits() + 1u,
+  tile->block_map.Init(tile->rect, gparams.transf_.GetYuvDepth(),
                        gparams.transf_.GetYUVMin(), gparams.transf_.GetYUVMax(),
                        &tile->yuv_output);
   if (IsFilterBlockMapNeeded(config, features, gparams, *tiles_layout)) {
@@ -460,10 +460,13 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     tile->block_map.ApplyVDebug(config, &debug_output);
   } else if (!vd_plane.IsEmpty()) {
     if (VDMatch(config, "a")) {
-      WP2_CHECK_STATUS(vd_plane.ToGray(&debug_output, /*num_bits=*/8,
-                                       /*shift=*/VDMatch(config, "residuals")));
+      const bool is_res = VDMatch(config, "residuals");
+      WP2_CHECK_STATUS(vd_plane.ToGray(
+          &debug_output,
+          /*bit_depth=*/{is_res ? 9u : 8u, /*is_signed=*/is_res}));
     } else {
-      WP2_CHECK_STATUS(vd_plane.ToGray(&debug_output, /*num_bits=*/10));
+      WP2_CHECK_STATUS(vd_plane.ToGray(&debug_output,
+                                       /*bit_depth=*/{10, /*is_signed=*/true}));
     }
   }
 #endif  // WP2_REDUCE_BINARY_SIZE

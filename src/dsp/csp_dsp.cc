@@ -36,7 +36,7 @@ void YuvToCustom_C(const int16_t* y, const int16_t* u, const int16_t* v,
                    int16_t* dst0, int16_t* dst1, int16_t* dst2,
                    uint32_t width) {
   for (uint32_t x = 0; x < width; ++x) {
-    // TODO(yguyon): No overflow guaranteed only if custom ccsp is kMaxYuvBits
+    // TODO(yguyon): No-overflow guaranteed only if custom ccsp is kYuvMaxPrec
     int32_t ccsp[3];
     WP2::Multiply(y[x] + offset[0], u[x] + offset[1], v[x] + offset[2], mtx,
                   &ccsp[0], &ccsp[1], &ccsp[2]);

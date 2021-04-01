@@ -166,7 +166,7 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
   WP2_CHECK_STATUS(
       decompressed_view.SetView(decompressed_yuv_, {0, 0, width, height}));
   WP2_CHECK_STATUS(decompressed_view.GetDistortion(
-      original_view, kMaxYuvBits + 1, PSNR, distortion_));
+      original_view, {kYuvMaxPrec + 1, /*is_signed=*/true}, PSNR, distortion_));
 
   // Compute a score based on distortion and the number of bits per pixel.
   const float ssim = distortion_[4];

@@ -42,15 +42,15 @@ bool IsFilterBlockMapNeeded(const DecoderConfig& config,
 
 //------------------------------------------------------------------------------
 
-void FilterBlockMap::Init(const Rectangle& tile_rect,
-                          uint32_t num_precision_bits, int32_t yuv_min,
-                          int32_t yuv_max, YUVPlane* const pixels) {
+void FilterBlockMap::Init(const Rectangle& tile_rect, BitDepth bit_depth,
+                          int32_t yuv_min, int32_t yuv_max,
+                          YUVPlane* const pixels) {
   if (pixels != nullptr) {
     assert(pixels->GetWidth() >= tile_rect.width &&
            pixels->GetHeight() >= tile_rect.height);
   }
   tile_rect_ = tile_rect;
-  num_precision_bits_ = num_precision_bits;
+  bit_depth_ = bit_depth;
   yuv_min_ = yuv_min;
   yuv_max_ = yuv_max;
   pixels_ = pixels;
@@ -139,7 +139,7 @@ void FilterBlockMap::RegisterBlock(const CodedBlockBase& cb,
 }
 
 void FilterBlockMap::Clear() {
-  Init(/*tile_rect=*/{0, 0, 0, 0}, /*num_precision_bits=*/0,
+  Init(/*tile_rect=*/{0, 0, 0, 0}, /*bit_depth=*/{0, false},
        /*yuv_min=*/0, /*yuv_max=*/0, /*pixels=*/nullptr);
 }
 

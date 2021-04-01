@@ -176,7 +176,7 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config);
     Orientation decoding_orientation = Orientation::kOriginal);
 
 ::testing::AssertionResult Compare(const YUVPlane& src, const YUVPlane& dec,
-                                   uint32_t bit_depth,
+                                   BitDepth bit_depth,
                                    const std::string& file_name,
                                    float expected_distortion = 99.f,
                                    MetricType metric = PSNR);

@@ -50,29 +50,29 @@ void Wave(int16_t min_value, int16_t max_value, double angle, double wavelength,
 }
 
 YUVPlane CreateNoisyWavyPixels(uint32_t width, uint32_t height,
-                               int16_t min_value, int16_t max_value) {
+                               BitDepth bit_depth) {
+  const int16_t min = bit_depth.min(), max = bit_depth.max();
   YUVPlane pixels;
   WP2_ASSERT_STATUS(pixels.Resize(width, height));
-  Wave(min_value, max_value, kPi * 0.0, pixels.Y.w_, &pixels.Y);  // Horizontal.
-  Wave(min_value, max_value, kPi * 0.5, pixels.U.h_, &pixels.U);  // Vertical.
-  Wave(min_value, max_value, kPi * 2.1, 10., &pixels.V);          // Something.
+  Wave(min, max, kPi * 0.0, pixels.Y.w_, &pixels.Y);  // Horizontal.
+  Wave(min, max, kPi * 0.5, pixels.U.h_, &pixels.U);  // Vertical.
+  Wave(min, max, kPi * 2.1, 10., &pixels.V);          // Something.
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    testutil::Noise(min_value, max_value, /*seed=*/channel, /*strength=*/5,
+    testutil::Noise(min, max, /*seed=*/channel, /*strength=*/5,
                     &pixels.GetChannel(channel));
   }
   return pixels;
 }
 
 // Applies the directional filter on 'pixels' with 'filter_strength'.
-void Filter(uint32_t num_precision_bits, int16_t min_value, int16_t max_value,
-            uint32_t quality_hint, YUVPlane* const pixels) {
+void Filter(BitDepth bit_depth, uint32_t quality_hint, YUVPlane* const pixels) {
   const Vector<Segment> segments =
-      testutil::CreateSegments(quality_hint, min_value, max_value);
+      testutil::CreateSegments(quality_hint, bit_depth);
   const double residual_density = 1. * quality_hint / kMaxLossyQualityHint;
   const double min_bpp = 4. * quality_hint / kMaxLossyQualityHint;
   FilterBlockMap blocks;
   testutil::CreateBlocks(/*tile_x=*/0, /*tile_y=*/0, segments, residual_density,
-                         min_bpp, num_precision_bits, pixels, &blocks);
+                         min_bpp, bit_depth, pixels, &blocks);
 
   DecoderConfig config = DecoderConfig::kDefault;
   config.enable_directional_filter = true;
@@ -94,23 +94,19 @@ void Filter(uint32_t num_precision_bits, int16_t min_value, int16_t max_value,
 //------------------------------------------------------------------------------
 
 class DirectionalFilterTest : public ::testing::TestWithParam<
-                                  std::tuple<uint32_t, uint32_t, uint32_t>> {};
+                                  std::tuple<BitDepth, uint32_t, uint32_t>> {};
 
 // Tests that no pixel is modified if each plane has one unique color.
 TEST_P(DirectionalFilterTest, FilteringPlain) {
-  const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = std::get<0>(GetParam());
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
-  YUVPlane pixels =
-      testutil::CreatePlainPixels(width, height, min_value, max_value);
+  YUVPlane pixels = testutil::CreatePlainPixels(width, height, bit_depth);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(Filter(num_precision_bits, min_value, max_value,
-                                 /*quality_hint=*/0, &pixels));
+  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth, /*quality_hint=*/0, &pixels));
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
@@ -119,18 +115,15 @@ TEST_P(DirectionalFilterTest, FilteringPlain) {
 
 // Tests that pixels are filtered.
 TEST_P(DirectionalFilterTest, MaxFilteringBlocked) {
-  const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = std::get<0>(GetParam());
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
-  YUVPlane pixels = CreateNoisyWavyPixels(width, height, min_value, max_value);
+  YUVPlane pixels = CreateNoisyWavyPixels(width, height, bit_depth);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(Filter(num_precision_bits, min_value, max_value,
-                                 /*quality_hint=*/0, &pixels));
+  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth, /*quality_hint=*/0, &pixels));
 
   EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
@@ -139,19 +132,16 @@ TEST_P(DirectionalFilterTest, MaxFilteringBlocked) {
 
 // Tests that no pixel is modified if it's the highest quality.
 TEST_P(DirectionalFilterTest, NoFiltering) {
-  const uint32_t num_precision_bits = std::get<0>(GetParam());
-  const int16_t min_value = testutil::GetMinValueSigned(num_precision_bits);
-  const int16_t max_value = testutil::GetMaxValueSigned(num_precision_bits);
+  const BitDepth bit_depth = std::get<0>(GetParam());
   const uint32_t width = std::get<1>(GetParam());
   const uint32_t height = std::get<2>(GetParam());
 
-  YUVPlane pixels = CreateNoisyWavyPixels(width, height, min_value, max_value);
+  YUVPlane pixels = CreateNoisyWavyPixels(width, height, bit_depth);
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(Filter(num_precision_bits, min_value, max_value,
-                                 /*quality_hint=*/kMaxLossyQualityHint,
-                                 &pixels));
+  ASSERT_NO_FATAL_FAILURE(
+      Filter(bit_depth, /*quality_hint=*/kMaxLossyQualityHint, &pixels));
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
@@ -161,9 +151,12 @@ TEST_P(DirectionalFilterTest, NoFiltering) {
 INSTANTIATE_TEST_SUITE_P(
     DirectionalFilterTestInstantiation, DirectionalFilterTest,
     ::testing::Combine(
-        /*num_precision_bits=*/::testing::Values(8u, 10u, 12u),
-        /*width=*/::testing::Values(kDrctFltSize, 3 * kDrctFltSize - 1u),
-        /*height=*/::testing::Values(kDrctFltSize, 3 * kDrctFltSize - 1u)));
+        ::testing::Values(BitDepth{8, /*is_signed=*/true},
+                          BitDepth{10, /*is_signed=*/true},
+                          BitDepth{12, /*is_signed=*/true}),
+        ::testing::Values(kDrctFltSize, 3 * kDrctFltSize - 1u),  // width
+        ::testing::Values(kDrctFltSize, 3 * kDrctFltSize - 1u)   // height
+        ));
 
 //------------------------------------------------------------------------------
 

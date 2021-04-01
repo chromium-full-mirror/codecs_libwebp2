@@ -79,7 +79,7 @@ DeblockingFilter::DeblockingFilter(const DecoderConfig& config,
       features_(features),
       blocks_(blocks),
       enabled_(IsDeblockingFilterEnabled(config, features)) {
-  assert(blocks_.num_precision_bits_ >= 8u);  // To match AV1 algorithms.
+  assert(blocks_.bit_depth_.num_bits >= 8u);  // To match AV1 algorithms.
 }
 
 WP2Status DeblockingFilter::Allocate() {
@@ -173,7 +173,7 @@ uint32_t DeblockingFilter::DeblockHorizontally(uint32_t from_y, uint32_t to_y) {
 
       DeblockEdge(config_, /*intertile=*/false, blocks_.tile_rect_,
                   blocks_.pixels_->HasAlpha(), features_.quality_hint,
-                  blocks_.num_precision_bits_, blocks_.yuv_min_,
+                  blocks_.bit_depth_.num_bits, blocks_.yuv_min_,
                   blocks_.yuv_max_, row_block_features[left_block_x],
                   row_block_features[right_block_x],
                   /*edge_rect=*/{q0_x, y, 0, num_pixel_rows}, blocks_.pixels_);
@@ -238,7 +238,7 @@ uint32_t DeblockingFilter::DeblockVertically(uint32_t to_y) {
 
       DeblockEdge(config_, /*intertile=*/false, blocks_.tile_rect_,
                   blocks_.pixels_->HasAlpha(), features_.quality_hint,
-                  blocks_.num_precision_bits_, blocks_.yuv_min_,
+                  blocks_.bit_depth_.num_bits, blocks_.yuv_min_,
                   blocks_.yuv_max_, *up_block_features, *down_block_features,
                   /*edge_rect=*/{x, q0_y, num_pixel_cols, 0}, blocks_.pixels_);
 

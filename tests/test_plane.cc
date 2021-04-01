@@ -62,7 +62,7 @@ TEST_P(PlaneTest, Simple) {
   ArgbBuffer pic2;
   YUVPlane yuv, yuv2;
   CSPTransform transf;
-  const uint32_t bit_depth = transf.GetYUVPrecisionBits() + 1;
+  const BitDepth bit_depth = transf.GetYuvDepth();
   ASSERT_TRUE(yuv.IsEmpty());
   ASSERT_WP2_OK(yuv.Import(pic, pic.HasTransparency(), transf,
                            /*resize_if_needed=*/true));
@@ -74,8 +74,7 @@ TEST_P(PlaneTest, Simple) {
   ASSERT_EQ(yuv.IsEmpty(), yuv2.IsEmpty());
   ASSERT_EQ(yuv.IsView(), yuv2.IsView());
   // Expect equality.
-  EXPECT_TRUE(testutil::Compare(yuv, yuv2, transf.GetYUVPrecisionBits() + 1,
-                                file_name));
+  EXPECT_TRUE(testutil::Compare(yuv, yuv2, bit_depth, file_name));
 
   ASSERT_WP2_OK(yuv.Downsample(down_filter));
   // Should fail because downsampled.
@@ -173,8 +172,7 @@ TEST_P(PlaneTest, TestSpeedSample) {
     ASSERT_WP2_OK(yuv.Upsample(up_filter));
   }
   float disto[5];
-  const uint32_t bit_depth = transf.GetYUVPrecisionBits() + 1;
-  ASSERT_WP2_OK(yuv2.GetDistortion(yuv, bit_depth, PSNR, disto));
+  ASSERT_WP2_OK(yuv2.GetDistortion(yuv, transf.GetYuvDepth(), PSNR, disto));
   ASSERT_GT(disto[4], 32.f);
   ASSERT_LT(disto[4], 45.f);
 }
@@ -193,7 +191,7 @@ TEST(PlaneTest, GetDistortion) {
 
   YUVPlane original, comparison;
   CSPTransform transf;
-  const uint32_t bit_depth = transf.GetYUVPrecisionBits() + 1;
+  const BitDepth bit_depth = transf.GetYuvDepth();
   ASSERT_WP2_OK(original.Import(pic, pic.HasTransparency(), transf,
                                 /*resize_if_needed=*/true));
   ASSERT_WP2_OK(comparison.Copy(original, /*resize_if_needed=*/true));

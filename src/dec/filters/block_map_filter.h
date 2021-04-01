@@ -44,9 +44,9 @@ bool IsFilterBlockMapNeeded(const DecoderConfig& config,
 class FilterBlockMap {
  public:
   // 'tile_rect' contains the position and the dimensions of the tile in the
-  // image in pixels, not padded. 'num_precision_bits' includes the sign.
+  // image in pixels, not padded.
   // 'pixels' should point to the padded tile samples.
-  void Init(const Rectangle& tile_rect, uint32_t num_precision_bits,
+  void Init(const Rectangle& tile_rect, BitDepth bit_depth,
             int32_t yuv_min, int32_t yuv_max, YUVPlane* const pixels);
 
   // Allocates storage to register block features.
@@ -71,7 +71,7 @@ class FilterBlockMap {
   };
 
   Rectangle tile_rect_;  // Tile bounds within frame (px, not padded).
-  uint32_t num_precision_bits_ = 0;  // Sign included.
+  BitDepth bit_depth_ = {0, false};
   int32_t yuv_min_ = 0, yuv_max_ = 0;
   YUVPlane* pixels_ = nullptr;  // Tile samples, padded.
 

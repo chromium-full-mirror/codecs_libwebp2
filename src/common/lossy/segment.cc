@@ -328,7 +328,7 @@ void Segment::SetYUVBounds(int16_t yuv_min, int16_t yuv_max) {
   max_residual_ = 1 + yuv_max - yuv_min;
   // Adjust quantization based on the actual yuv/alpha range, compared to
   // the max yuv range which is what the quantizer is tuned for by default.
-  q_scale_ = (float)(1 << (kMaxYuvBits + 1)) / max_residual_;
+  q_scale_ = (float)(1 << (kYuvMaxPrec + 1)) / max_residual_;
 }
 
 void Segment::FinalizeQuant(float lambda) {
@@ -351,7 +351,7 @@ void Segment::FinalizeAlphaQuant(float lambda) {
   const float q_scale = 1.0f;
   quant_a_.Init(/*max_residual=*/kAlphaMax, q_scale, quant_steps_[kAChannel]);
   if (lambda > 0) {
-    const float q_scale_a = (float)(1 << (kMaxYuvBits + 1)) / (1 + kAlphaMax);
+    const float q_scale_a = (float)(1 << (kYuvMaxPrec + 1)) / (1 + kAlphaMax);
     quant_a_.SetLambda(lambda / q_scale_a);
   }
 }
