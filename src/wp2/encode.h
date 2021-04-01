@@ -137,9 +137,6 @@ struct EncoderConfig {
                                         // graphdefs structure:
                                         // base/qq/[en|de]coder.pbbin
 
-  // Enable alpha post processing filter (edge preserving blur).
-  bool enable_alpha_filter = true;
-
   // TODO(maryla): remove from public API. Should match kDefaultQuantMultiplier.
   int u_quant_multiplier = 7;  // 0.875
   int v_quant_multiplier = 7;

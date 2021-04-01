@@ -99,6 +99,7 @@ struct DecoderConfig {
   bool enable_deblocking_filter = true;    // Reduces blocky artifacts.
   bool enable_directional_filter = false;  // Reduces noise and ringing.
   bool enable_restoration_filter = false;  // Denoises and enhances edges.
+  bool enable_alpha_filter = true;  // Edge-preserving blur for alpha only.
 
   // Amplitude factor for the grain generation [0(=off) .. 100]
   uint8_t grain_amplitude = 0;

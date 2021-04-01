@@ -129,9 +129,8 @@ WP2Status GlobalParams::AssignAlphaQuantizations(const YUVPlane& yuv,
       has_alpha_ && (config.alpha_quality <= kMaxLossyQuality);
 
   if (maybe_use_lossy_alpha_) {
-    // TODO(maryla): we could detect automatically cases where the alpha
-    // filter should not be applied.
-    enable_alpha_filter_ = config.enable_alpha_filter;
+    // TODO(maryla): detect when to enable/disable alpha filtering.
+    enable_alpha_filter_ = true;
     const uint32_t max_quality = kMaxLossyQuality;
     const uint32_t quant_factor0 =
         (uint32_t)std::lround(

@@ -238,8 +238,6 @@ void FuzzedParameters::ExtractConfig(EncoderConfig* const config) {
   config->thread_level = (int)ExtractUInt32((1u << 31) - 1u);
   config->low_memory = ExtractBool();
   // 'use_neural_compression' is not fuzzed.
-
-  config->enable_alpha_filter = ExtractBool();
 }
 
 //------------------------------------------------------------------------------
@@ -249,6 +247,7 @@ void FuzzedParameters::ExtractConfig(DecoderConfig* const config) {
   config->enable_deblocking_filter = ExtractBool();
   config->enable_directional_filter = ExtractBool();
   config->enable_restoration_filter = ExtractBool();
+  config->enable_alpha_filter = ExtractBool();
   config->grain_amplitude = (uint8_t)ExtractUInt32(100);
   config->incremental_mode = (DecoderConfig::IncrementalMode)ExtractUInt32(1);
 }

@@ -1159,11 +1159,18 @@ void Params::PrintInfo() {
       msg.emplace_back(" -- WARNING: Showing original WP2 image --");
     }
 
-    msg.emplace_back(SPrintf("Size: %u [%.2f bpp] (enc %u ms + dec %u ms)",
-        (uint32_t)output_.size(), 8.f * output_.size() / (width_ * height_),
-        enc_duration_ms_, dec_duration_ms_));
-    msg.emplace_back(SPrintf(" (%.1f%% of original)",
-                             100.f * output_.size() / input_.size()));
+    msg.emplace_back(SPrintf("Size: %u [%.2f bpp] (", (uint32_t)output_.size(),
+                             8.f * output_.size() / (width_ * height_)));
+    if (!view_only_) {
+      msg.back() += SPrintf("enc %u ms %u threads + ", enc_duration_ms_,
+                            enc_config_.thread_level);
+    }
+    msg.back() += SPrintf("dec %u ms %u threads)", dec_duration_ms_,
+                          dec_config_.thread_level);
+    if (!view_only_) {
+      msg.back() += SPrintf(" (%.1f%% of original)",
+                            100.f * output_.size() / input_.size());
+    }
 
     if (in_.metadata_.IsEmpty()) {
       assert(out_.metadata_.IsEmpty());
@@ -1195,7 +1202,7 @@ void Params::PrintInfo() {
         kOnOff[dec_config_.enable_deblocking_filter],
         kOnOff[dec_config_.enable_directional_filter],
         kOnOff[dec_config_.enable_restoration_filter],
-        kOnOff[enc_config_.enable_alpha_filter]));
+        kOnOff[dec_config_.enable_alpha_filter]));
 
     if (!view_only_ || !original_file_.empty()) {
       msg.emplace_back(SPrintf("%s=%.2f  (a %.1f, r %.1f, g %.1f, b %.1f)",
@@ -2658,11 +2665,11 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
     AddInfo(SPrintf("export WP2DBG=%d", wp2dbg_value_));
 #endif
   } else if (key == 'f' || key == 'F') {
-    if (glutGetModifiers() == GLUT_ACTIVE_ALT) {
+    if (glutGetModifiers() == (GLUT_ACTIVE_ALT | GLUT_ACTIVE_SHIFT)) {
+      dec_config_.enable_alpha_filter = !dec_config_.enable_alpha_filter;
+    } else if (glutGetModifiers() == GLUT_ACTIVE_ALT) {
       dec_config_.enable_restoration_filter =
           !dec_config_.enable_restoration_filter;
-    } else if (glutGetModifiers() == (GLUT_ACTIVE_ALT | GLUT_ACTIVE_SHIFT)) {
-      enc_config_.enable_alpha_filter = !enc_config_.enable_alpha_filter;
     } else if (key == 'F') {
       dec_config_.enable_directional_filter =
           !dec_config_.enable_directional_filter;
@@ -2670,12 +2677,12 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
       dec_config_.enable_deblocking_filter =
           !dec_config_.enable_deblocking_filter;
     }
-    if (!EncodeAndDecode()) return;
+    if (!DecodeOutput()) return;
     SetMessage(SPrintf("Filters: dblk=%s, drct=%s, rstr=%s, alpha=%s",
                        kOnOff[dec_config_.enable_deblocking_filter],
                        kOnOff[dec_config_.enable_directional_filter],
                        kOnOff[dec_config_.enable_restoration_filter],
-                       kOnOff[enc_config_.enable_alpha_filter]));
+                       kOnOff[dec_config_.enable_alpha_filter]));
   } else if (key == 'g' || key == 'G') {
     if (key == 'G') {
       enc_config_.store_grain = false;

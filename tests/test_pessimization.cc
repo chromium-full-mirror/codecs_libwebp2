@@ -128,8 +128,7 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
     gparams->maybe_use_lossy_alpha_ =
         gparams->has_alpha_ && (config.effort > 0) &&
         (config.alpha_quality <= kMaxLossyQuality) && random->FlipACoin();
-    gparams->enable_alpha_filter_ =
-        gparams->maybe_use_lossy_alpha_ && config.enable_alpha_filter;
+    gparams->enable_alpha_filter_ = gparams->maybe_use_lossy_alpha_;
     const float quant_factor =
         99.f * (kMaxLossyQuality - config.alpha_quality) / kMaxLossyQuality;
     const float lambda = std::max(85.f, -42.f * config.alpha_quality + 3400.f);

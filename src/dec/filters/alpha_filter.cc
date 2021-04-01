@@ -54,7 +54,8 @@ static constexpr uint16_t kEnableThreshold = 10;
 bool IsAlphaFilterEnabled(const DecoderConfig& config,
                           const GlobalParams& gparams) {
   return gparams.maybe_use_lossy_alpha_ &&
-         (gparams.enable_alpha_filter_ || VDMatch(config, "alpha-filter")) &&
+         ((gparams.enable_alpha_filter_ && config.enable_alpha_filter) ||
+          VDMatch(config, "alpha-filter")) &&
          (gparams.segments_[0].a_quality_factor_ >= kEnableThreshold);
 }
 

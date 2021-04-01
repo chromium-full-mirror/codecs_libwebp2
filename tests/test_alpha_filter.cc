@@ -198,19 +198,18 @@ TEST(AlphaFilterTest, BlursSoftEdges) {
 }
 
 TEST(AlphaFilterTest, BetterPSNR) {
-  EncoderConfig encoder_config_no_filter = EncoderConfig::kDefault;
-  encoder_config_no_filter.alpha_quality = 50;  // Expect compression artifacts.
-  encoder_config_no_filter.enable_alpha_filter = false;
+  EncoderConfig encoder_config = EncoderConfig::kDefault;
+  encoder_config.alpha_quality = 50;  // Expect compression artifacts.
 
-  EncoderConfig encoder_config_filter = encoder_config_no_filter;
-  encoder_config_filter.enable_alpha_filter = true;
-
-  DecoderConfig decoder_config = DecoderConfig::kDefault;
+  DecoderConfig decoder_config_filter = DecoderConfig::kDefault;
+  decoder_config_filter.enable_alpha_filter = true;
+  DecoderConfig decoder_config_no_filter = DecoderConfig::kDefault;
+  decoder_config_no_filter.enable_alpha_filter = false;
 
   float disto_diff[5];
   ASSERT_WP2_OK(testutil::GetDistortionDiff(
-      "source1.png", {25, 27, 200, 208}, encoder_config_no_filter,
-      encoder_config_filter, decoder_config, disto_diff));
+      "source1.png", {25, 27, 200, 208}, encoder_config,
+      decoder_config_no_filter, decoder_config_filter, disto_diff));
   // PSNR should be better with the alpha filter than without.
   EXPECT_GT(disto_diff[4], 0.f);
 }

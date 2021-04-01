@@ -537,7 +537,6 @@ std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& config) {
   PRINT_SETTING2(low_memory, bool);
   PRINT_SETTING1(use_neural_compression);
   PRINT_SETTINGP(info, EncoderInfo);
-  PRINT_SETTING2(enable_alpha_filter, bool);
   out << std::endl;
   return out;
 }
@@ -549,6 +548,7 @@ std::ostream& operator<<(std::ostream& out, const WP2::DecoderConfig& config) {
   PRINT_SETTING2(enable_deblocking_filter, bool);
   PRINT_SETTING2(enable_directional_filter, bool);
   PRINT_SETTING2(enable_restoration_filter, bool);
+  PRINT_SETTING2(enable_alpha_filter, bool);
   PRINT_SETTING1(grain_amplitude);
   PRINT_SETTING2(incremental_mode, DecoderConfig::IncrementalMode);
   PRINT_SETTINGP(progress_hook, ProgressHook);
