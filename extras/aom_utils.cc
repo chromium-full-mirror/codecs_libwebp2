@@ -35,10 +35,11 @@
 #include "aom/aom_encoder.h"
 #include "aom/aomcx.h"
 #include "aom/aomdx.h"
+#include "config/aom_config.h"
+#include "config/aom_version.h"
 
 #if defined(WP2_HAVE_AOM_DBG)
 #include "stats/aomstats.h"
-#include "config/aom_config.h"
 // to benefit from these, one should build libaom using the config:
 //  cmake ../ -DCONFIG_ACCOUNTING=1 -DCONFIG_INSPECTION=1
 #include "av1/common/common_data.h"
@@ -843,6 +844,12 @@ WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
                       std::vector<Rectangle>* const blocks,
                       std::vector<Rectangle>* const transforms,
                       QuantAV1* const quant) {
+  if (aom_codec_version() != VERSION_PACKED) {
+    fprintf(stderr, "Version mismatch! (%x vs %x)\n",
+                     aom_codec_version(), VERSION_PACKED);
+    fprintf(stderr, "Please check includes and lib locations.\n");
+    return WP2_STATUS_VERSION_MISMATCH;
+  }
   WP2_CHECK_STATUS(EncodeAV1WithLibaom(
       ref, params, stats, out, (timing != nullptr) ? &timing[0] : nullptr));
 
