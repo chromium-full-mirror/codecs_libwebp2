@@ -183,27 +183,6 @@ void BufferAdd_C(const uint32_t* const a, const uint32_t* const b,
 //------------------------------------------------------------------------------
 // Predictors
 
-void PredictorNonClampedSub0_C(const int16_t* in, bool has_alpha,
-                               const int16_t*, uint32_t num_pixels,
-                               int16_t* out) {
-  for (const int16_t* const in_end = in + 4 * num_pixels; in < in_end;
-       in += 4, out += 4) {
-    out[0] = has_alpha ? in[0] - WP2::kAlphaMax : WP2::kAlphaMax;
-    out[1] = in[1];
-    out[2] = in[2];
-    out[3] = in[3];
-  }
-}
-
-void PredictorNonClampedSub1_C(const int16_t* in, bool has_alpha,
-                               const int16_t*, uint32_t num_pixels,
-                               int16_t* out) {
-  for (const int16_t* const in_end = in + 4 * num_pixels; in < in_end;
-       in += 4, out += 4) {
-    WP2L::SubPixels(in, has_alpha, &in[-4], out);
-  }
-}
-
 // Macros used to create a batch predictor that iteratively uses a
 // one-pixel predictor.
 
@@ -214,25 +193,24 @@ void PredictorNonClampedSub1_C(const int16_t* in, bool has_alpha,
                                      const int16_t* upper,                   \
                                      uint32_t num_pixels, int16_t* out) {    \
     int16_t pred[4];                                                         \
-    assert(upper != nullptr);                                                \
+    if (I != 0) assert(in != nullptr && upper != nullptr);                   \
     for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
-         out += 4, in += 4, upper += 4) {                                    \
+         out += 4) {                                                         \
       WP2L::PredictorsNonClamped_C[I](in - 4, upper, pred);                  \
       WP2L::SubPixels(in, has_alpha, pred, out);                             \
+      if (I != 0) {                                                          \
+        in += 4;                                                             \
+        upper += 4;                                                          \
+      }                                                                      \
     }                                                                        \
   }
 
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(0)
+GENERATE_PREDICTOR_NON_CLAMPED_SUB(1)
 GENERATE_PREDICTOR_NON_CLAMPED_SUB(2)
 GENERATE_PREDICTOR_NON_CLAMPED_SUB(3)
 GENERATE_PREDICTOR_NON_CLAMPED_SUB(4)
 GENERATE_PREDICTOR_NON_CLAMPED_SUB(5)
-GENERATE_PREDICTOR_NON_CLAMPED_SUB(6)
-GENERATE_PREDICTOR_NON_CLAMPED_SUB(7)
-GENERATE_PREDICTOR_NON_CLAMPED_SUB(8)
-GENERATE_PREDICTOR_NON_CLAMPED_SUB(9)
-GENERATE_PREDICTOR_NON_CLAMPED_SUB(10)
-GENERATE_PREDICTOR_NON_CLAMPED_SUB(11)
-GENERATE_PREDICTOR_NON_CLAMPED_SUB(12)
 
 #define GENERATE_PREDICTOR_CLAMPED_SUB(I)                                      \
   void PredictorClampedSub##I##_C(const int16_t* in, bool has_alpha,           \
@@ -251,6 +229,19 @@ GENERATE_PREDICTOR_NON_CLAMPED_SUB(12)
 
 GENERATE_PREDICTOR_CLAMPED_SUB(0)
 GENERATE_PREDICTOR_CLAMPED_SUB(1)
+
+template <int MAIN_ANGLE>
+void PredictorAngleSub_C(const int16_t* in, bool has_alpha,
+                         const int16_t* upper, uint32_t num_pixels,
+                         int16_t* out) {
+  int16_t pred[4];
+  if (MAIN_ANGLE != 180) assert(upper != nullptr);
+  for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end;
+       out += 4, in += 4, upper += 4) {
+    WP2L::AnglePredict<MAIN_ANGLE>(in - 4, upper, pred);
+    WP2L::SubPixels(in, has_alpha, pred, out);
+  }
+}
 
 //------------------------------------------------------------------------------
 // SSE version
@@ -448,6 +439,11 @@ PredictorNonClampedSubFunc PredictorsNonClampedSub[kNumPredictorsNonClamped];
 PredictorNonClampedSubFunc PredictorsNonClampedSub_C[kNumPredictorsNonClamped];
 PredictorClampedSubFunc PredictorsClampedSub[kNumPredictorsClamped];
 PredictorClampedSubFunc PredictorsClampedSub_C[kNumPredictorsClamped];
+PredictorAngleSubFunc PredictorsAngleSub[kNumPredictorsAngle];
+PredictorAngleSubFunc PredictorsAngleSub_C[kNumPredictorsAngle];
+PredictorNonClampedSubFunc PredictorSubBlack;
+PredictorAngleSubFunc PredictorSubTop;
+PredictorAngleSubFunc PredictorSubLeft;
 
 static volatile WP2CPUInfo lossless_enc_last_cpuinfo_used =
     (WP2CPUInfo)&lossless_enc_last_cpuinfo_used;
@@ -475,6 +471,16 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInit() {
   COPY_PREDICTOR_NON_CLAMPED_ARRAY(Sub, Sub_C);
   COPY_PREDICTOR_CLAMPED_ARRAY(Sub, Sub);
   COPY_PREDICTOR_CLAMPED_ARRAY(Sub, Sub_C);
+  PredictorsAngleSub[0] = PredictorAngleSub_C<45>;
+  PredictorsAngleSub[1] = PredictorAngleSub_C<67>;
+  PredictorsAngleSub[2] = PredictorAngleSub_C<90>;
+  PredictorsAngleSub[3] = PredictorAngleSub_C<113>;
+  PredictorsAngleSub[4] = PredictorAngleSub_C<135>;
+  PredictorsAngleSub[5] = PredictorAngleSub_C<157>;
+  PredictorsAngleSub[6] = PredictorAngleSub_C<180>;
+  PredictorSubBlack = PredictorsNonClampedSub[0];
+  PredictorSubTop = PredictorsAngleSub[kPredictorAngleTopIndex];
+  PredictorSubLeft = PredictorsAngleSub[kPredictorAngleLeftIndex];
 
   // If defined, use CPUInfo() to overwrite some pointers with faster versions.
   if (WP2GetCPUInfo != NULL) {

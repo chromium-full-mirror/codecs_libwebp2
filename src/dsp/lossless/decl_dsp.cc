@@ -39,33 +39,6 @@ WP2_UBSAN_IGNORE_UNSIGNED_OVERFLOW inline void AddPixels(
   for (uint32_t i = 1; i < 4; ++i) out[i] = a[i] + b[i];
 }
 
-void PredictorNonClampedAdd0_C(const int16_t* in, bool has_alpha,
-                               const int16_t*, uint32_t num_pixels,
-                               int16_t* out, int16_t* predicted) {
-  int16_t pred[4];
-  WP2L::PredictorsNonClamped_C[0](/*left=*/nullptr, /*top=*/nullptr, pred);
-  for (const int16_t* in_end = in + 4 * num_pixels; in < in_end;
-       in += 4, out += 4) {
-    AddPixels(in, has_alpha, pred, out);
-    if (predicted != nullptr) {
-      std::copy(pred, pred + 4, predicted);
-      predicted += 4;
-    }
-  }
-}
-void PredictorNonClampedAdd1_C(const int16_t* in, bool has_alpha,
-                               const int16_t*, uint32_t num_pixels,
-                               int16_t* out, int16_t* predicted) {
-  for (const int16_t* in_end = in + 4 * num_pixels; in < in_end;
-       in += 4, out += 4) {
-    AddPixels(in, has_alpha, &out[-4], out);
-    if (predicted != nullptr) {
-      std::copy(&out[-4], &out[-4] + 4, predicted);
-      predicted += 4;
-    }
-  }
-}
-
 // Macros used to create a batch predictor that iteratively uses a
 // one-pixel predictor.
 
@@ -76,29 +49,25 @@ void PredictorNonClampedAdd1_C(const int16_t* in, bool has_alpha,
       const int16_t* in, bool has_alpha, const int16_t* upper,               \
       uint32_t num_pixels, int16_t* out, int16_t* predicted) {               \
     int16_t pred[4];                                                         \
-    assert(upper != nullptr);                                                \
+    if (I != 0) assert(upper != nullptr);                                    \
     for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
-         out += 4, in += 4, upper += 4) {                                    \
+         out += 4, in += 4) {                                                \
       PredictorsNonClamped_C[I](out - 4, upper, pred);                       \
       AddPixels(in, has_alpha, pred, out);                                   \
       if (predicted != nullptr) {                                            \
         std::copy(pred, pred + 4, predicted);                                \
         predicted += 4;                                                      \
       }                                                                      \
+      if (I != 0) upper += 4;                                                \
     }                                                                        \
   }
 
+GENERATE_PREDICTOR_NON_CLAMPED_ADD(0)
+GENERATE_PREDICTOR_NON_CLAMPED_ADD(1)
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(2)
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(3)
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(4)
 GENERATE_PREDICTOR_NON_CLAMPED_ADD(5)
-GENERATE_PREDICTOR_NON_CLAMPED_ADD(6)
-GENERATE_PREDICTOR_NON_CLAMPED_ADD(7)
-GENERATE_PREDICTOR_NON_CLAMPED_ADD(8)
-GENERATE_PREDICTOR_NON_CLAMPED_ADD(9)
-GENERATE_PREDICTOR_NON_CLAMPED_ADD(10)
-GENERATE_PREDICTOR_NON_CLAMPED_ADD(11)
-GENERATE_PREDICTOR_NON_CLAMPED_ADD(12)
 
 #define GENERATE_PREDICTOR_CLAMPED_ADD(I)                                    \
   void PredictorClampedAdd##I##_C(                                           \
@@ -121,8 +90,30 @@ GENERATE_PREDICTOR_NON_CLAMPED_ADD(12)
 GENERATE_PREDICTOR_CLAMPED_ADD(0)
 GENERATE_PREDICTOR_CLAMPED_ADD(1)
 
+template <int MAIN_ANGLE>
+void PredictorAngleAdd_C(const int16_t* in, bool has_alpha,
+                         const int16_t* upper, uint32_t num_pixels,
+                         int16_t* out, int16_t* predicted) {
+  int16_t pred[4];
+  if (MAIN_ANGLE != 180) assert(upper != nullptr);
+  for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end;
+       out += 4, in += 4) {
+    AnglePredict<MAIN_ANGLE>(out - 4, upper, pred);
+    AddPixels(in, has_alpha, pred, out);
+    if (predicted != nullptr) {
+      std::copy(pred, pred + 4, predicted);
+      predicted += 4;
+    }
+    if (upper != nullptr) upper += 4;
+  }
+}
+
 //------------------------------------------------------------------------------
 // Inverse transforms.
+
+PredictorNonClampedAddFunc PredictorsAddBlack;
+PredictorAngleAddFunc PredictorsAddTop;
+PredictorAngleAddFunc PredictorsAddLeft;
 
 // Inverse prediction.
 void PredictorInverseTransform_C(const Transform* const transform, int y_start,
@@ -132,9 +123,9 @@ void PredictorInverseTransform_C(const Transform* const transform, int y_start,
                                  int16_t* predicted) {
   const int width = transform->width_pic_;
   if (y_start == 0) {  // First Row follows the L (mode=1) mode.
-    PredictorNonClampedAdd0_C(in, has_alpha, nullptr, 1, out, predicted);
-    PredictorNonClampedAdd1_C(in + 4, has_alpha, nullptr, width - 1, out + 4,
-                              predicted != nullptr ? predicted + 4 : nullptr);
+    PredictorsAddBlack(in, has_alpha, nullptr, 1, out, predicted);
+    PredictorsAddLeft(in + 4, has_alpha, nullptr, width - 1, out + 4,
+                      predicted != nullptr ? predicted + 4 : nullptr);
     in += 4 * width;
     out += 4 * width;
     if (predicted != nullptr) predicted += 4 * width;
@@ -151,8 +142,7 @@ void PredictorInverseTransform_C(const Transform* const transform, int y_start,
     const int16_t* pred_mode_src = pred_mode_base;
     int x = 1;
     // First pixel follows the T (mode=2) mode.
-    PredictorNonClampedAdd2_C(in, has_alpha, out - 4 * width, 1, out,
-                              predicted);
+    PredictorsAddTop(in, has_alpha, out - 4 * width, 1, out, predicted);
     // .. the rest:
     while (x < width) {
       int x_end = (x & ~tile_mask) + tile_width;
@@ -168,6 +158,11 @@ void PredictorInverseTransform_C(const Transform* const transform, int y_start,
               in + 4 * x, has_alpha, out + 4 * x - 4 * width, x_end - x,
               min_values, max_values, out + 4 * x,
               predicted != nullptr ? predicted + 4 * x : nullptr);
+          break;
+        case PredictorType::Angle:
+          PredictorsAngleAdd[kPredictorIndex[pred_mode_src[2]]](
+              in + 4 * x, has_alpha, out + 4 * x - 4 * width, x_end - x,
+              out + 4 * x, predicted != nullptr ? predicted + 4 * x : nullptr);
           break;
         default:
           assert(false);
@@ -438,6 +433,7 @@ SimpleColorSpaceInverseFunc AddGreenToBlueAndRed;
 SimpleColorSpaceInverseFunc YCoCgRToRGB;
 PredictorNonClampedAddFunc PredictorsNonClampedAdd[kNumPredictorsNonClamped];
 PredictorClampedAddFunc PredictorsClampedAdd[kNumPredictorsClamped];
+PredictorAngleAddFunc PredictorsAngleAdd[kNumPredictorsAngle];
 
 // exposed plain-C implementations
 PredictorNonClampedAddFunc PredictorsNonClampedAdd_C[kNumPredictorsNonClamped];
@@ -459,6 +455,16 @@ WP2_TSAN_IGNORE_FUNCTION void DecLDspInit() {
   COPY_PREDICTOR_NON_CLAMPED_ARRAY(Add, Add_C)
   COPY_PREDICTOR_CLAMPED_ARRAY(Add, Add)
   COPY_PREDICTOR_CLAMPED_ARRAY(Add, Add_C)
+  PredictorsAngleAdd[0] = PredictorAngleAdd_C<45>;
+  PredictorsAngleAdd[1] = PredictorAngleAdd_C<67>;
+  PredictorsAngleAdd[2] = PredictorAngleAdd_C<90>;
+  PredictorsAngleAdd[3] = PredictorAngleAdd_C<113>;
+  PredictorsAngleAdd[4] = PredictorAngleAdd_C<135>;
+  PredictorsAngleAdd[5] = PredictorAngleAdd_C<157>;
+  PredictorsAngleAdd[6] = PredictorAngleAdd_C<180>;
+  PredictorsAddBlack = PredictorsNonClampedAdd[0];
+  PredictorsAddTop = PredictorsAngleAdd[kPredictorAngleTopIndex];
+  PredictorsAddLeft = PredictorsAngleAdd[kPredictorAngleLeftIndex];
 
   AddGreenToBlueAndRed = AddGreenToBlueAndRed_C;
   YCoCgRToRGB = YCoCgR2RGB_C;

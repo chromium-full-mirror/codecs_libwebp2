@@ -33,8 +33,7 @@ typedef void (*PredictorNonClampedAddFunc)(const int16_t* in, bool has_alpha,
                                            int16_t* predicted);
 extern PredictorNonClampedAddFunc
     PredictorsNonClampedAdd[kNumPredictorsNonClamped];
-extern PredictorNonClampedAddFunc
-    PredictorsNonClampedAdd_C[kNumPredictorsNonClamped];
+
 typedef void (*PredictorClampedAddFunc)(const int16_t* in, bool has_alpha,
                                         const int16_t* upper,
                                         uint32_t num_pixels,
@@ -42,7 +41,11 @@ typedef void (*PredictorClampedAddFunc)(const int16_t* in, bool has_alpha,
                                         const int16_t max_values[4],
                                         int16_t* out, int16_t* predicted);
 extern PredictorClampedAddFunc PredictorsClampedAdd[kNumPredictorsClamped];
-extern PredictorClampedAddFunc PredictorsClampedAdd_C[kNumPredictorsClamped];
+
+typedef void (*PredictorAngleAddFunc)(const int16_t* in, bool has_alpha,
+                                      const int16_t* upper, uint32_t num_pixels,
+                                      int16_t* out, int16_t* predicted);
+extern PredictorAngleAddFunc PredictorsAngleAdd[kNumPredictorsAngle];
 
 typedef void (*SimpleColorSpaceInverseFunc)(const int16_t* src,
                                             uint32_t num_pixels, int16_t* dst);

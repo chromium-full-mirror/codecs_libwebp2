@@ -118,58 +118,24 @@ void PredictorNonClamped0_C(const int16_t*, const int16_t*, int16_t* out) {
   out[2] = 0;
   out[3] = 0;
 }
-void PredictorNonClamped1_C(const int16_t* left, const int16_t*, int16_t* out) {
-  out[0] = left[0];
-  out[1] = left[1];
-  out[2] = left[2];
-  out[3] = left[3];
-}
-void PredictorNonClamped2_C(const int16_t*, const int16_t* top, int16_t* out) {
-  out[0] = top[0];
-  out[1] = top[1];
-  out[2] = top[2];
-  out[3] = top[3];
-}
-void PredictorNonClamped3_C(const int16_t*, const int16_t* top, int16_t* out) {
-  out[0] = top[4];
-  out[1] = top[5];
-  out[2] = top[6];
-  out[3] = top[7];
-}
-void PredictorNonClamped4_C(const int16_t*, const int16_t* top, int16_t* out) {
-  out[0] = top[-4];
-  out[1] = top[-3];
-  out[2] = top[-2];
-  out[3] = top[-1];
-}
-void PredictorNonClamped5_C(const int16_t* left, const int16_t* top,
+void PredictorNonClamped1_C(const int16_t* left, const int16_t* top,
                             int16_t* out) {
   Average3(left, top, top + 4, out);
 }
-void PredictorNonClamped6_C(const int16_t* left, const int16_t* top,
-                            int16_t* out) {
-  Average2(left, top - 4, out);
-}
-void PredictorNonClamped7_C(const int16_t* left, const int16_t* top,
+void PredictorNonClamped2_C(const int16_t* left, const int16_t* top,
                             int16_t* out) {
   Average2(left, top, out);
 }
-void PredictorNonClamped8_C(const int16_t*, const int16_t* top, int16_t* out) {
-  Average2(top - 4, top, out);
-}
-void PredictorNonClamped9_C(const int16_t*, const int16_t* top, int16_t* out) {
-  Average2(top, top + 4, out);
-}
-void PredictorNonClamped10_C(const int16_t* left, const int16_t* top,
-                             int16_t* out) {
+void PredictorNonClamped3_C(const int16_t* left, const int16_t* top,
+                            int16_t* out) {
   Average4(left, top - 4, top, top + 4, out);
 }
-void PredictorNonClamped11_C(const int16_t* left, const int16_t* top,
-                             int16_t* out) {
+void PredictorNonClamped4_C(const int16_t* left, const int16_t* top,
+                            int16_t* out) {
   Select(top, left, top - 4, out);
 }
-void PredictorNonClamped12_C(const int16_t* left, const int16_t* top,
-                             int16_t* out) {
+void PredictorNonClamped5_C(const int16_t* left, const int16_t* top,
+                            int16_t* out) {
   ClampedAddSubtractFull(left, top, top - 4, out);
 }
 // Predictors of type Clamped.
@@ -186,12 +152,58 @@ void PredictorClamped1_C(const int16_t* left, const int16_t* top,
 
 }  // namespace
 
+// Angle predictors.
+namespace WP2L {
+template <>
+void AnglePredict<45>(const int16_t* left, const int16_t* top, int16_t* out) {
+  out[0] = top[4];
+  out[1] = top[5];
+  out[2] = top[6];
+  out[3] = top[7];
+}
+template <>
+void AnglePredict<67>(const int16_t* left, const int16_t* top, int16_t* out) {
+  Average2(top, top + 4, out);
+}
+template <>
+void AnglePredict<90>(const int16_t* left, const int16_t* top, int16_t* out) {
+  out[0] = top[0];
+  out[1] = top[1];
+  out[2] = top[2];
+  out[3] = top[3];
+}
+template <>
+void AnglePredict<113>(const int16_t* left, const int16_t* top, int16_t* out) {
+  Average2(top - 4, top, out);
+}
+template <>
+void AnglePredict<135>(const int16_t* left, const int16_t* top, int16_t* out) {
+  out[0] = top[-4];
+  out[1] = top[-3];
+  out[2] = top[-2];
+  out[3] = top[-1];
+}
+template <>
+void AnglePredict<157>(const int16_t* left, const int16_t* top, int16_t* out) {
+  Average2(left, top - 4, out);
+}
+template <>
+void AnglePredict<180>(const int16_t* left, const int16_t* top, int16_t* out) {
+  out[0] = left[0];
+  out[1] = left[1];
+  out[2] = left[2];
+  out[3] = left[3];
+}
+
+}  // namespace WP2L
+
 //------------------------------------------------------------------------------
 
 namespace WP2L {
 
 PredictorNonClampedFunc PredictorsNonClamped[kNumPredictorsNonClamped];
 PredictorClampedFunc PredictorsClamped[kNumPredictorsClamped];
+PredictorAngleFunc PredictorsAngle[kNumPredictorsAngle];
 
 // exposed plain-C implementations
 PredictorNonClampedFunc PredictorsNonClamped_C[kNumPredictorsNonClamped];
@@ -209,6 +221,13 @@ WP2_TSAN_IGNORE_FUNCTION void DspInit() {
   COPY_PREDICTOR_NON_CLAMPED_ARRAY(, _C)
   COPY_PREDICTOR_CLAMPED_ARRAY(, )
   COPY_PREDICTOR_CLAMPED_ARRAY(, _C)
+  PredictorsAngle[0] = AnglePredict<45>;
+  PredictorsAngle[1] = AnglePredict<67>;
+  PredictorsAngle[2] = AnglePredict<90>;
+  PredictorsAngle[3] = AnglePredict<113>;
+  PredictorsAngle[4] = AnglePredict<135>;
+  PredictorsAngle[5] = AnglePredict<157>;
+  PredictorsAngle[6] = AnglePredict<180>;
 
   // If defined, use CPUInfo() to overwrite some pointers with faster versions.
   if (WP2GetCPUInfo != NULL) {

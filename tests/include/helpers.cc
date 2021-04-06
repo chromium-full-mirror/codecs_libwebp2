@@ -21,6 +21,9 @@
 #include "imageio/anim_image_dec.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
+#include "src/dsp/lossless/decl_dsp.h"
+#include "src/dsp/lossless/dspl.h"
+#include "src/dsp/lossless/encl_dsp.h"
 #include "src/utils/front_mgr.h"
 #include "src/utils/orientation.h"
 #include "src/wp2/base.h"
@@ -590,6 +593,10 @@ void WP2DspReset() {
   WP2::ANSInit();
   WP2MathInit();
 
+  WP2L::DecLDspInit();
+  WP2L::DspInit();
+  WP2L::EncLDspInit();
+
   // then, we reset the pointer-to-functions for good
   WP2GetCPUInfo = saved_cpu_info;
 
@@ -684,4 +691,35 @@ void WP2DspReset() {
   WP2Log2Slow  = nullptr;
   WP2SLog2m1Slow = nullptr;
   WP2InnerProduct = nullptr;
+
+  // decl_dsp
+  for (auto& p : WP2L::PredictorsNonClampedAdd) p = nullptr;
+  for (auto& p : WP2L::PredictorsClampedAdd) p = nullptr;
+  for (auto& p : WP2L::PredictorsAngleAdd) p = nullptr;
+  WP2L::AddGreenToBlueAndRed = nullptr;
+  WP2L::YCoCgRToRGB = nullptr;
+  WP2L::TransformColorInverse = nullptr;
+  WP2L::MapColor = nullptr;
+
+  // dspl
+  for (auto& p : WP2L::PredictorsNonClamped) p = nullptr;
+  for (auto& p : WP2L::PredictorsClamped) p = nullptr;
+  for (auto& p : WP2L::PredictorsAngle) p = nullptr;
+
+  // encl_dsp
+  WP2L::SubtractGreenFromBlueAndRed = nullptr;
+  WP2L::RGB2YCoCgR = nullptr;
+  WP2L::TransformColor = nullptr;
+  WP2L::CollectColorBlueTransforms = nullptr;
+  WP2L::CollectColorRedTransforms = nullptr;
+  WP2L::ExtraCost = nullptr;
+  WP2L::ExtraCostCombined = nullptr;
+  WP2L::CombinedShannonEntropy = nullptr;
+  WP2L::BufferAdd = nullptr;
+  for (auto& p : WP2L::PredictorsNonClampedSub) p = nullptr;
+  for (auto& p : WP2L::PredictorsClampedSub) p = nullptr;
+  for (auto& p : WP2L::PredictorsAngleSub) p = nullptr;
+  WP2L::PredictorSubBlack = nullptr;
+  WP2L::PredictorSubTop = nullptr;
+  WP2L::PredictorSubLeft = nullptr;
 }

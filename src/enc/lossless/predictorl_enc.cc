@@ -55,26 +55,47 @@ float PredictionCostSpatial(const Vector_u32& counts, int weight_0,
   return -0.1f * bits;
 }
 
-float PredictionCostSpatialHistogram(const Vector_u32 accumulated[4],
-                                     const Vector_u32 tile[4]) {
-  int i;
+// Class containing one counter vector per channel.
+class ChannelVector {
+ public:
+  const Vector_u32& operator[](int i) const { return data_[i]; }
+  Vector_u32& operator[](int i) { return data_[i]; }
+  void swap(ChannelVector& v) {
+    for (uint32_t i = 0; i < 4; ++i) {
+      data_[i].swap(v[i]);
+    }
+  }
+  void Update(const ChannelVector& v) {
+    for (uint32_t i = 0; i < 4; i++) {
+      for (uint32_t j = 0; j < v[i].size(); j++) {
+        data_[i][j] += v[i][j];
+      }
+    }
+  }
+
+ private:
+  Vector_u32 data_[4];
+};
+
+float PredictionCostSpatialHistogram(const ChannelVector& accumulated,
+                                     const ChannelVector& tile) {
   float retval = 0.f;
-  for (i = 0; i < 4; ++i) {
+  for (uint32_t c = 0; c < 4u; ++c) {
     const float kExpValue = 0.94f;
-    retval += PredictionCostSpatial(tile[i], 1, kExpValue);
-    retval += CombinedShannonEntropy(tile[i].data(), accumulated[i].data(),
-                                     tile[i].size());
+    retval += PredictionCostSpatial(tile[c], 1, kExpValue);
+    retval += CombinedShannonEntropy(tile[c].data(), accumulated[c].data(),
+                                     tile[c].size());
   }
   return retval;
 }
 
-inline void UpdateHisto(Vector_u32 histo_argb[4], const int16_t* const argb,
-                        uint32_t max_x) {
+inline void UpdateHisto(const int16_t* const argb, uint32_t max_x,
+                        ChannelVector* histo_argb) {
   for (uint32_t x = 0; x < max_x; ++x) {
-    for (uint32_t i = 0; i < 4; ++i) {
+    for (uint32_t c = 0; c < 4u; ++c) {
       const uint32_t index =
-          MakeIndex(argb[4 * x + i], histo_argb[i].size() - 1);
-      ++histo_argb[i][index];
+          MakeIndex(argb[4 * x + c], (*histo_argb)[c].size() - 1);
+      ++(*histo_argb)[c][index];
     }
   }
 }
@@ -83,64 +104,42 @@ inline void UpdateHisto(Vector_u32 histo_argb[4], const int16_t* const argb,
 //------------------------------------------------------------------------------
 // Spatial transform functions.
 
-static inline void PredictBatch(int mode, int x_start, int y,
-                                uint32_t num_pixels,
-                                const int16_t min_values[4],
-                                const int16_t max_values[4],
-                                const int16_t* const current, bool has_alpha,
-                                const int16_t* const upper, int16_t* out) {
-  if (x_start == 0) {
-    if (y == 0) {
-      // ARGB_BLACK.
-      PredictorsNonClampedSub[0](current, has_alpha, nullptr, 1, out);
-    } else {
-      // Top one.
-      PredictorsNonClampedSub[2](current, has_alpha, upper, 1, out);
-    }
-    ++x_start;
-    out += 4;
-    --num_pixels;
-  }
-  if (y == 0) {
-    // Left one.
-    PredictorsNonClampedSub[1](&current[4 * x_start], has_alpha, nullptr,
-                               num_pixels, out);
-  } else {
-    switch (kPredictorType[mode]) {
-      case PredictorType::NonClamped:
-        PredictorsNonClampedSub[kPredictorIndex[mode]](
-            &current[4 * x_start], has_alpha, &upper[4 * x_start], num_pixels,
-            out);
-        break;
-      case PredictorType::Clamped:
-        PredictorsClampedSub[kPredictorIndex[mode]](
-            &current[4 * x_start], has_alpha, &upper[4 * x_start], num_pixels,
-            min_values, max_values, out);
-        break;
-      default:
-        assert(false);
-    }
-  }
-}
+// Struct containing the info about a predictor.
+struct Predictor {
+  Predictor(uint32_t mode_in, const int16_t min_values_in[4],
+            const int16_t max_values_in[4])
+      : mode(mode_in),
+        type(kPredictorType[mode]),
+        index(kPredictorIndex[mode]),
+        min_values(min_values_in),
+        max_values(max_values_in) {}
+  uint32_t mode;
+  PredictorType type;
+  uint32_t index;
+  const int16_t* min_values;
+  const int16_t* max_values;
+};
 
 // Stores the difference between the pixel and its prediction in "out".
 // In case of a lossy encoding, updates the source image to avoid propagating
 // the deviation further to pixels which depend on the current pixel for their
 // predictions.
-static inline void GetResidual(int width, const int16_t min_values[4],
-                               const int16_t max_values[4],
-                               int16_t* const upper_row,
+static inline void GetResidual(int width, int16_t* const upper_row,
                                int16_t* const current_row, bool has_alpha,
-                               int mode, int x_start, int x_end, int y,
-                               int16_t* const out) {
+                               const Predictor& pred, int x_start, int x_end,
+                               int y, int16_t* const out) {
   PredictorNonClampedFunc pred_non_clamped;
   PredictorClampedFunc pred_clamped;
-  switch (kPredictorType[mode]) {
+  PredictorAngleFunc pred_angle;
+  switch (pred.type) {
     case PredictorType::NonClamped:
-      pred_non_clamped = PredictorsNonClamped[kPredictorIndex[mode]];
+      pred_non_clamped = PredictorsNonClamped[pred.index];
       break;
     case PredictorType::Clamped:
-      pred_clamped = PredictorsClamped[kPredictorIndex[mode]];
+      pred_clamped = PredictorsClamped[pred.index];
+      break;
+    case PredictorType::Angle:
+      pred_angle = PredictorsAngle[pred.index];
       break;
     default:
       assert(false);
@@ -160,14 +159,17 @@ static inline void GetResidual(int width, const int16_t min_values[4],
     } else if (x == 0) {
       ColorCopy(&upper_row[4 * x], predict);  // Top.
     } else {
-      switch (kPredictorType[mode]) {
+      switch (pred.type) {
         case PredictorType::NonClamped:
           pred_non_clamped(&current_row[4 * (x - 1)], &upper_row[4 * x],
                            predict);
           break;
         case PredictorType::Clamped:
-          pred_clamped(&current_row[4 * (x - 1)], &upper_row[4 * x], min_values,
-                       max_values, predict);
+          pred_clamped(&current_row[4 * (x - 1)], &upper_row[4 * x],
+                       pred.min_values, pred.max_values, predict);
+          break;
+        case PredictorType::Angle:
+          pred_angle(&current_row[4 * (x - 1)], &upper_row[4 * x], predict);
           break;
         default:
           assert(false);
@@ -201,11 +203,12 @@ static inline void GetResidual(int width, const int16_t min_values[4],
 }
 
 // Returns best predictor and updates the accumulated histogram.
-static int GetBestPredictorForTile(
+static void GetBestPredictorForTile(
     int tile_x, int tile_y, uint32_t bits, const int16_t min_values[4],
     const int16_t max_values[4], const Buffer_s16& buffer,
     const int16_t* const modes, int16_t* const argb_scratch,
-    Vector_u32 accumulated[4], Vector_u32 tmp_histo[][4]) {
+    ChannelVector* accumulated, ChannelVector tmp_histo[2],
+    Predictor* const pred_best) {
   const int start_x = tile_x << bits;
   const int start_y = tile_y << bits;
   const int tile_size = 1 << bits;
@@ -231,17 +234,18 @@ static int GetBestPredictorForTile(
   int16_t* upper_row = argb_scratch;
   int16_t* current_row = &upper_row[4 * (width + 1)];
   float best_diff = std::numeric_limits<float>::max();
-  uint32_t best_mode = 0;
+  *pred_best = Predictor(/*mode_in=*/0, min_values, max_values);
   uint32_t mode;
   // Need pointers to be able to swap arrays.
-  Vector_u32* histo_argb = &tmp_histo[0][0];
-  Vector_u32* best_histo = &tmp_histo[1][0];
+  ChannelVector& histo_argb = tmp_histo[0];
+  ChannelVector& best_histo = tmp_histo[1];
   int16_t residuals[4 * (1 << kTransformBitsMax)];
   assert(bits >= kTransformBitsMin && bits <= kTransformBitsMax);
   assert(max_x <= (1 << kTransformBitsMax));
 
   for (mode = 0; mode < kNumPredictors; ++mode) {
     float cur_diff;
+    const Predictor pred(mode, min_values, max_values);
     int relative_y;
     for (uint32_t i = 0; i < 4; ++i) {
       std::fill(histo_argb[i].begin(), histo_argb[i].end(), 0);
@@ -268,30 +272,23 @@ static int GetBestPredictorForTile(
                     4 * (max_x + have_left + (y + 1 < height)),
                 &current_row[4 * context_start_x]);
 
-      GetResidual(width, min_values, max_values, upper_row, current_row,
-                  buffer.has_alpha, mode, start_x, start_x + max_x, y,
-                  residuals);
-      UpdateHisto(histo_argb, residuals, max_x);
+      GetResidual(width, upper_row, current_row, buffer.has_alpha, pred,
+                  start_x, start_x + max_x, y, residuals);
+      UpdateHisto(residuals, max_x, &histo_argb);
     }
-    cur_diff = PredictionCostSpatialHistogram(accumulated, histo_argb);
+    cur_diff = PredictionCostSpatialHistogram(*accumulated, histo_argb);
     // Favor keeping the areas locally similar.
     if (mode == left_mode) cur_diff -= kSpatialPredictorBias;
     if (mode == above_mode) cur_diff -= kSpatialPredictorBias;
 
     if (cur_diff < best_diff) {
-      std::swap(histo_argb, best_histo);
+      histo_argb.swap(best_histo);
       best_diff = cur_diff;
-      best_mode = mode;
+      *pred_best = pred;
     }
   }
 
-  for (uint32_t i = 0; i < 4; i++) {
-    for (uint32_t j = 0; j < best_histo[i].size(); j++) {
-      accumulated[i][j] += best_histo[i][j];
-    }
-  }
-
-  return best_mode;
+  accumulated->Update(best_histo);
 }
 
 // Converts pixels of the image to residuals with respect to predictions.
@@ -312,21 +309,15 @@ static void CopyImageWithPrediction(int bits, const int16_t min_values[4],
     std::copy(buffer->GetRow(y), buffer->GetPosition(y + 1 < height, y + 1),
               current_row);
 
-    if (effort == 0) {
-      PredictBatch(kPredLowEffort, 0, y, width, min_values, max_values,
-                   current_row, buffer->has_alpha, upper_row,
-                   buffer->GetRow(y));
-    } else {
-      for (uint32_t x = 0; x < width;) {
-        const int mode =
-            modes[4 * ((y >> bits) * tiles_per_row + (x >> bits)) + 2];
-        uint32_t x_end = x + (1 << bits);
-        if (x_end > width) x_end = width;
-        GetResidual(width, min_values, max_values, upper_row, current_row,
-                    buffer->has_alpha, mode, x, x_end, y,
-                    buffer->GetPosition(x, y));
-        x = x_end;
-      }
+    for (uint32_t x = 0; x < width;) {
+      const int mode =
+          modes[4 * ((y >> bits) * tiles_per_row + (x >> bits)) + 2];
+      const Predictor pred(mode, min_values, max_values);
+      uint32_t x_end = x + (1 << bits);
+      if (x_end > width) x_end = width;
+      GetResidual(width, upper_row, current_row, buffer->has_alpha, pred, x,
+                  x_end, y, buffer->GetPosition(x, y));
+      x = x_end;
     }
   }
 }
@@ -348,8 +339,8 @@ WP2Status CreateResidualImage(uint32_t bits, const int16_t min_values[4],
       image[4 * i + 3] = 0;
     }
   } else {
-    Vector_u32 histo[4];
-    Vector_u32 tmp_histo[2][4];
+    ChannelVector histo;
+    ChannelVector tmp_histo[2];
     for (uint32_t c = 0; c < 4; ++c) {
       uint32_t histo_size = 0;
       for (int16_t i : {(int16_t)-min_values[c], min_values[c],
@@ -362,14 +353,15 @@ WP2Status CreateResidualImage(uint32_t bits, const int16_t min_values[4],
         WP2_CHECK_ALLOC_OK(tmp_histo[j][c].resize(histo_size));
       }
     }
+    Predictor pred(/*mode_in=*/0, min_values, max_values);
     for (uint32_t tile_y = 0; tile_y < tiles_per_col; ++tile_y) {
       for (uint32_t tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
-        const int pred = GetBestPredictorForTile(
-            tile_x, tile_y, bits, min_values, max_values, *buffer, image,
-            argb_scratch, histo, tmp_histo);
+        GetBestPredictorForTile(tile_x, tile_y, bits, min_values, max_values,
+                                *buffer, image, argb_scratch, &histo, tmp_histo,
+                                &pred);
         image[4 * (tile_y * tiles_per_row + tile_x) + 0] = 0;
         image[4 * (tile_y * tiles_per_row + tile_x) + 1] = 0;
-        image[4 * (tile_y * tiles_per_row + tile_x) + 2] = pred;
+        image[4 * (tile_y * tiles_per_row + tile_x) + 2] = pred.mode;
         image[4 * (tile_y * tiles_per_row + tile_x) + 3] = 0;
       }
     }

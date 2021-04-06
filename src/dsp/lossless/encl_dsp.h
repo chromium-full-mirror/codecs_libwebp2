@@ -59,6 +59,7 @@ typedef bool (*CollectColorRedTransformsFunc)(
     uint32_t histo_size, uint32_t* const histo);
 extern CollectColorRedTransformsFunc CollectColorRedTransforms;
 
+// Predictors.
 typedef void (*PredictorNonClampedSubFunc)(const int16_t* in, bool has_alpha,
                                            const int16_t* upper,
                                            uint32_t num_pixels, int16_t* out);
@@ -75,6 +76,15 @@ typedef void (*PredictorClampedSubFunc)(const int16_t* in, bool has_alpha,
                                         int16_t* out);
 extern PredictorClampedSubFunc PredictorsClampedSub[kNumPredictorsClamped];
 extern PredictorClampedSubFunc PredictorsClampedSub_C[kNumPredictorsClamped];
+
+typedef void (*PredictorAngleSubFunc)(const int16_t* in, bool has_alpha,
+                                      const int16_t* upper, uint32_t num_pixels,
+                                      int16_t* out);
+extern PredictorAngleSubFunc PredictorsAngleSub[kNumPredictorsAngle];
+
+extern PredictorNonClampedSubFunc PredictorSubBlack;
+extern PredictorAngleSubFunc PredictorSubTop;
+extern PredictorAngleSubFunc PredictorSubLeft;
 
 //------------------------------------------------------------------------------
 // Entropy-cost related functions.

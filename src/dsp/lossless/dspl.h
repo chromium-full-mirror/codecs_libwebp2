@@ -33,23 +33,27 @@ namespace WP2L {
 // The type 0 predictors are linear combinations of the surrounding pixels.
 // The type 1 predictors are a clamped linear combination of the surrounding
 // pixels.
-static constexpr uint32_t kNumPredictorsNonClamped = 13;
-static constexpr uint32_t kNumPredictorsClamped = 2;
+static constexpr uint32_t kNumPredictorsNonClamped = 6u;
+static constexpr uint32_t kNumPredictorsClamped = 2u;
+static constexpr uint32_t kNumPredictorsAngle = 7u;
 static constexpr uint32_t kNumPredictors =
-    kNumPredictorsNonClamped + kNumPredictorsClamped;
-enum class PredictorType { NonClamped, Clamped };
+    kNumPredictorsNonClamped + kNumPredictorsClamped + kNumPredictorsAngle;
+enum class PredictorType { NonClamped, Clamped, Angle };
 static constexpr PredictorType kPredictorType[] = {
-    PredictorType::NonClamped, PredictorType::NonClamped,
-    PredictorType::NonClamped, PredictorType::NonClamped,
-    PredictorType::NonClamped, PredictorType::NonClamped,
-    PredictorType::NonClamped, PredictorType::NonClamped,
-    PredictorType::NonClamped, PredictorType::NonClamped,
+    PredictorType::NonClamped, PredictorType::Angle,
+    PredictorType::Angle,      PredictorType::Angle,
+    PredictorType::Angle,      PredictorType::NonClamped,
+    PredictorType::Angle,      PredictorType::NonClamped,
+    PredictorType::Angle,      PredictorType::Angle,
     PredictorType::NonClamped, PredictorType::NonClamped,
     PredictorType::NonClamped, PredictorType::Clamped,
     PredictorType::Clamped};
 STATIC_ASSERT_ARRAY_SIZE(kPredictorType, kNumPredictors);
-static constexpr uint32_t kPredictorIndex[] = {0, 1, 2,  3,  4,  5, 6, 7,
-                                               8, 9, 10, 11, 12, 0, 1};
+// TODO(vrabaud) the order of predictors is chosen to not create regressions
+//               (changing the order of predictors slightly changes the
+//               compression)
+static constexpr uint32_t kPredictorIndex[] = {0u, 6u, 2u, 0u, 4u, 1u, 5u, 2u,
+                                               3u, 1u, 3u, 4u, 5u, 0u, 1u};
 STATIC_ASSERT_ARRAY_SIZE(kPredictorIndex, kNumPredictors);
 
 //------------------------------------------------------------------------------
@@ -97,34 +101,37 @@ typedef void (*PredictorNonClampedFunc)(const int16_t* left, const int16_t* top,
 extern PredictorNonClampedFunc PredictorsNonClamped[kNumPredictorsNonClamped];
 extern PredictorNonClampedFunc PredictorsNonClamped_C[kNumPredictorsNonClamped];
 
+#define COPY_PREDICTOR_NON_CLAMPED_ARRAY(IN, OUT)                  \
+  do {                                                             \
+    (PredictorsNonClamped##OUT)[0] = PredictorNonClamped##IN##0_C; \
+    (PredictorsNonClamped##OUT)[1] = PredictorNonClamped##IN##1_C; \
+    (PredictorsNonClamped##OUT)[2] = PredictorNonClamped##IN##2_C; \
+    (PredictorsNonClamped##OUT)[3] = PredictorNonClamped##IN##3_C; \
+    (PredictorsNonClamped##OUT)[4] = PredictorNonClamped##IN##4_C; \
+    (PredictorsNonClamped##OUT)[5] = PredictorNonClamped##IN##5_C; \
+  } while (0);
+
 typedef void (*PredictorClampedFunc)(const int16_t* left, const int16_t* top,
                                      const int16_t min_values[4],
                                      const int16_t max_values[4], int16_t* out);
 extern PredictorClampedFunc PredictorsClamped[kNumPredictorsClamped];
 extern PredictorClampedFunc PredictorsClamped_C[kNumPredictorsClamped];
 
-#define COPY_PREDICTOR_NON_CLAMPED_ARRAY(IN, OUT)                    \
-  do {                                                               \
-    (PredictorsNonClamped##OUT)[0] = PredictorNonClamped##IN##0_C;   \
-    (PredictorsNonClamped##OUT)[1] = PredictorNonClamped##IN##1_C;   \
-    (PredictorsNonClamped##OUT)[2] = PredictorNonClamped##IN##2_C;   \
-    (PredictorsNonClamped##OUT)[3] = PredictorNonClamped##IN##3_C;   \
-    (PredictorsNonClamped##OUT)[4] = PredictorNonClamped##IN##4_C;   \
-    (PredictorsNonClamped##OUT)[5] = PredictorNonClamped##IN##5_C;   \
-    (PredictorsNonClamped##OUT)[6] = PredictorNonClamped##IN##6_C;   \
-    (PredictorsNonClamped##OUT)[7] = PredictorNonClamped##IN##7_C;   \
-    (PredictorsNonClamped##OUT)[8] = PredictorNonClamped##IN##8_C;   \
-    (PredictorsNonClamped##OUT)[9] = PredictorNonClamped##IN##9_C;   \
-    (PredictorsNonClamped##OUT)[10] = PredictorNonClamped##IN##10_C; \
-    (PredictorsNonClamped##OUT)[11] = PredictorNonClamped##IN##11_C; \
-    (PredictorsNonClamped##OUT)[12] = PredictorNonClamped##IN##12_C; \
-  } while (0);
-
 #define COPY_PREDICTOR_CLAMPED_ARRAY(IN, OUT)                \
   do {                                                       \
     (PredictorsClamped##OUT)[0] = PredictorClamped##IN##0_C; \
     (PredictorsClamped##OUT)[1] = PredictorClamped##IN##1_C; \
   } while (0);
+
+typedef void (*PredictorAngleFunc)(const int16_t* left, const int16_t* top,
+                                   int16_t* out);
+extern PredictorAngleFunc PredictorsAngle[kNumPredictorsAngle];
+template <int MAIN_ANGLE>
+void AnglePredict(const int16_t* left, const int16_t* top, int16_t* out);
+
+// Indices of the left/top predictors in PredictorsAngle.
+static uint32_t constexpr kPredictorAngleLeftIndex = 6u;
+static uint32_t constexpr kPredictorAngleTopIndex = 2u;
 
 // Must be called before calling any of the above methods.
 void DspInit();
