@@ -571,7 +571,7 @@ WP2Status CodedBlock::GetRates(const BlockContext& context,
   const bool is_uv = (channel == kUChannel || channel == kVChannel);
   const float lambda = lambda_mult_ * (is_uv ? quant.lambda2 : quant.lambda1);
 
-  *dist = GetDisto(channel);
+  *dist = GetDisto(channel) + lambda * tf_rate;
   *res_rate = *dist;
   *pred_rate = *dist;
 
