@@ -23,6 +23,7 @@
 
 #include "src/common/lossy/predictor.h"
 #include "src/enc/block_enc.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -54,30 +55,39 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
 
   // Computes the score and dist of the given predictor 'p' applied to 'cb'.
   WP2Status UpdateUVPredScore(const Predictor& p, CodedBlock* const cb) {
-    uint32_t dist[4];
-    float scores[4], res_rate[4], pred_rate[4];
-    for (Channel channel : {kUChannel, kVChannel}) {
-      const QuantMtx& quant = segment_.GetQuant(channel);
-      cb->Quantize(quant, channel, reduced_);
-      WP2_CHECK_STATUS(cb->GetRates(
-          context_, quant, channel, num_channels_, /*tf_rate=*/0.f, counters_,
-          &dist[channel], &res_rate[channel], &pred_rate[channel],
-          &scores[channel], best_score_));
+    constexpr uint32_t kU = 0, kV = 1;   // notation for easier reading
+    constexpr Channel kChannels[] = {kUChannel, kVChannel};
+
+    uint32_t dist[2];
+    float scores[2], res_rate[2], pred_rate[2];
+    for (uint32_t c : {kU, kV}) {
+      const QuantMtx& quant = segment_.GetQuant(kChannels[c]);
+      cb->Quantize(quant, kChannels[c], reduced_);
+
+      dist[c] = cb->GetDisto(kChannels[c]);
+
+      WP2_CHECK_STATUS(cb->ResidualRate(
+          context_, kChannels[c], num_channels_, counters_->residuals(),
+          counters_->residuals_aom(), &res_rate[c]));
+      WP2_CHECK_STATUS(cb->PredictorRate(kChannels[c], counters_->predictor(),
+                                         &pred_rate[c]));
+      const float lambda = cb->lambda_mult_ * quant.lambda2;
+      scores[c] = dist[c] + lambda * (res_rate[c] + pred_rate[c]);
     }
 
-    score_ = scores[kUChannel] + scores[kVChannel];
-    dist_ = dist[kUChannel] + dist[kVChannel];
+    score_ = scores[kU] + scores[kV];
+    dist_ = dist[kU] + dist[kV];
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     // Store scores for debug.
-    for (Channel channel : {kUChannel, kVChannel}) {
-      const QuantMtx& quant = segment_.GetQuant(channel);
-      cb->StorePredictionScore(
-          config_, tile_rect_, channel, p, cb->GetCodingParams(channel)->tf,
-          dist[channel], cb->lambda_mult_ * quant.lambda2, res_rate[channel],
-          pred_rate[channel], /*tf_rate=*/0.f, scores[channel],
-          /*is_best=*/(score_ < best_score_),
-          CodedBlock::SearchType::kPredAndTransform);
+    for (uint32_t c : {kU, kV}) {
+      const QuantMtx& quant = segment_.GetQuant(kChannels[c]);
+      cb->StorePredictionScore(config_, tile_rect_, kChannels[c], p,
+                               cb->GetCodingParams(kChannels[c])->tf, dist[c],
+                               cb->lambda_mult_ * quant.lambda2, res_rate[c],
+                               pred_rate[c], /*tf_rate=*/0.f, scores[c],
+                               /*is_best=*/(score_ < best_score_),
+                               CodedBlock::SearchType::kPredAndTransform);
     }
 #endif  // WP2_REDUCE_BINARY_SIZE
 
@@ -97,16 +107,23 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
            cb->GetImplicitTf(channel_) == tf);
 
     const QuantMtx& quant = segment_.GetQuant(channel_);
-    float res_rate, pred_rate, tf_rate;
-
     cb->TransformAndReconstruct(quant, channel_, reduced_, prediction, res,
                                 tmp);
+    dist_ = cb->GetDisto(channel_);
 
+    float res_rate, pred_rate, tf_rate;
+    WP2_CHECK_STATUS(cb->ResidualRate(context_, channel_, num_channels_,
+                                      counters_->residuals(),
+                                      counters_->residuals_aom(), &res_rate));
+    WP2_CHECK_STATUS(
+        cb->PredictorRate(channel_, counters_->predictor(), &pred_rate));
     WP2_CHECK_STATUS(cb->TransformRate(channel_, num_transforms,
                                        counters_->transform(), &tf_rate));
-    WP2_CHECK_STATUS(cb->GetRates(context_, quant, channel_, num_channels_,
-                                  tf_rate, counters_, &dist_, &res_rate,
-                                  &pred_rate, &score_, best_score_));
+    const float lambda = cb->lambda_mult_ * quant.lambda1;
+    score_ = dist_ + lambda * (res_rate + pred_rate + tf_rate);
+    // Note: some of the steps above could be skipped as soon as the distortion
+    // and/or the rate is higher than the current 'best_score_' but angle
+    // predictor scores are reused in Predictors::FindBest() to find sub-angles.
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     // Store score for debug.

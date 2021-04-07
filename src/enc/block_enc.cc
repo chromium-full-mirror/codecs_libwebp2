@@ -561,35 +561,6 @@ WP2Status CodedBlock::TransformRate(Channel channel, uint32_t num_transforms,
   return WP2_STATUS_OK;
 }
 
-// Get residual and predictor rates.
-WP2Status CodedBlock::GetRates(const BlockContext& context,
-                               const QuantMtx& quant, Channel channel,
-                               uint32_t num_channels, float tf_rate,
-                               Counters* const counters, uint32_t* const dist,
-                               float* const res_rate, float* const pred_rate,
-                               float* const score, float best_score) const {
-  const bool is_uv = (channel == kUChannel || channel == kVChannel);
-  const float lambda = lambda_mult_ * (is_uv ? quant.lambda2 : quant.lambda1);
-
-  *dist = GetDisto(channel) + lambda * tf_rate;
-  *res_rate = *dist;
-  *pred_rate = *dist;
-
-  *score = *dist;
-  if (*score >= best_score) {   // early-out? => return a disqualifying score
-    return WP2_STATUS_OK;
-  }
-  WP2_CHECK_STATUS(ResidualRate(context, channel, num_channels,
-                                counters->residuals(),
-                                counters->residuals_aom(), res_rate));
-  *score += lambda * (*res_rate);
-  if (*score >= best_score) return WP2_STATUS_OK;
-
-  WP2_CHECK_STATUS(PredictorRate(channel, counters->predictor(), pred_rate));
-  *score += lambda * (*pred_rate);
-  return WP2_STATUS_OK;
-}
-
 WP2Status CodedBlock::FindBestPredTf(
     const EncoderConfig& config, const Rectangle& tile_rect,
     const Predictors& preds, const Segment& segment,

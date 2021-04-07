@@ -210,13 +210,6 @@ class CodedBlock : public CodedBlockBase {
   WP2Status ResidualRate(const BlockContext& context, Channel channel,
                          uint32_t num_channels, SymbolCounter* const counter,
                          SymbolCounter* const aom_counter, float* rate) const;
-  // Gets the different distortion/rates of a block as well as the final score.
-  WP2Status GetRates(const BlockContext& context,
-                     const QuantMtx& quant, Channel channel,
-                     uint32_t num_channels, float tf_rate,
-                     Counters* const counters, uint32_t* const dist,
-                     float* const res_rate, float* const pred_rate,
-                     float* const score, float best_score) const;
 
   // Pseudo-Visual debug: force the transform of the block.
   TransformPair GetForcedTransform(const EncoderConfig& config,
