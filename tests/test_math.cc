@@ -222,6 +222,28 @@ TEST(Math, SqrtFloor) {
   }
 }
 
+TEST(Math, DivCeil) {
+  for (uint32_t a = 0; a <= 1024; ++a) {
+    for (uint32_t b = 1; b <= 1024; ++b) {
+      ASSERT_NEAR(1. * DivCeil(a, b), std::ceil(1. * a / b), 0.00000001)
+          << "a = " << a << ", b = " << b;
+    }
+  }
+}
+
+TEST(Math, DivRound) {
+  for (int32_t a = -1024; a <= 1024; ++a) {
+    for (int32_t b = -1024; b < 0; ++b) {
+      ASSERT_NEAR(1. * DivRound(a, b), std::round(1. * a / b), 0.00000001)
+          << "a = " << a << ", b = " << b;
+    }
+    for (int32_t b = 1; b <= 1024; ++b) {
+      ASSERT_NEAR(1. * DivRound(a, b), std::round(1. * a / b), 0.00000001)
+          << "a = " << a << ", b = " << b;
+    }
+  }
+}
+
 // Test that DivBy255() is a good enough approximation of DivRound(v, 255).
 TEST(Math, DivBy255) {
   for (int32_t v = -1024 * 256; v <= 1024 * 256; ++v) {
