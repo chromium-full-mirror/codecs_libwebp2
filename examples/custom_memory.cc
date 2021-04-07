@@ -24,13 +24,11 @@
 // std::mutex might be forbidden in the library, but here it's for debugging.
 #include <mutex>  // NOLINT
 
-#if !defined(_MSC_VER)
-#ifdef WP2_HAVE_BOOST
+#if defined(WP2_HAVE_BOOST)
 #include <boost/stacktrace.hpp>
 #include <sstream>
-#else
+#elif defined(WP2_HAVE_BACKTRACE)
 #include <execinfo.h>
-#endif
 #endif
 
 #include "./example_utils.h"
@@ -48,14 +46,11 @@ namespace WP2 {
 
 // Get the stack trace.
 static std::string GetTrace() {
-#if defined(_MSC_VER)
-  return "";
-#else
-#ifdef WP2_HAVE_BOOST
+#if defined(WP2_HAVE_BOOST)
   std::stringstream ss;
   ss << boost::stacktrace::stacktrace();
   return ss.str();
-#else
+#elif defined(WP2_HAVE_BACKTRACE)
   // glibc solution with mangled names.
   static constexpr uint32_t kMaxSize = 1024;
   void* array[kMaxSize];
@@ -69,7 +64,8 @@ static std::string GetTrace() {
   }
   free(strings);
   return trace;
-#endif
+#else
+  return "";
 #endif
 }
 

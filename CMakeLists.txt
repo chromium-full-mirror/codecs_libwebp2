@@ -614,6 +614,15 @@ if(WP2_BUILD_EXAMPLES)
     target_compile_definitions(example_utils PUBLIC
                                WP2_HAVE_BOOST BOOST_STACKTRACE_USE_BACKTRACE)
     target_link_libraries(example_utils ${Boost_LIBRARIES} dl)
+  else()
+    find_package(Backtrace)
+    if (Backtrace_FOUND)
+      message(STATUS "Found Backtrace for stacktrace debugging.")
+      target_include_directories(example_utils
+                                 PRIVATE ${Backtrace_INCLUDE_DIRS})
+      target_compile_definitions(example_utils PUBLIC WP2_HAVE_BACKTRACE)
+      target_link_libraries(example_utils ${Backtrace_LIBRARIES})
+    endif()
   endif()
 
   # cwp2
