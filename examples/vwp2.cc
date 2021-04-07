@@ -1683,7 +1683,7 @@ bool Params::EncodeAV1(bool copy_partition, float av1_quality,
   ParamsAV1 cfg;
   cfg.quality = av1_quality;
   // The settings below seem to give the best results (yes, even threads).
-  cfg.effort = 9;
+  cfg.effort = enc_config_.effort;
   cfg.threads = 1;
   cfg.pass = 2;
   cfg.use_yuv444 = (enc_config_.uv_mode != EncoderConfig::UVMode420);
@@ -1691,7 +1691,8 @@ bool Params::EncodeAV1(bool copy_partition, float av1_quality,
   cfg.draw_transforms = (display_block_ == kDisplayYCoeffs);
   if (copy_partition) force_partition_.clear();
 
-  printf("Compressing AV1 at quality %.1f...\n", cfg.quality);
+  printf("Compressing AV1 at quality %.1f (effort:%d)...\n",
+         cfg.quality, cfg.effort);
   std::string tmp;
   double timing[2];
   ShiftAlt();

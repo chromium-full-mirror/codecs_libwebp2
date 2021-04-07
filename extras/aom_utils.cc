@@ -1046,4 +1046,26 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
 
 //------------------------------------------------------------------------------
 
+std::string WP2::ParamsAV1::ToString() const {
+  std::string str;
+  str += WP2SPrint("quality = %f\n", quality);
+  str += WP2SPrint("alpha_quality = %f\n", alpha_quality);
+  str += WP2SPrint("size = %d\n", size);
+  str += WP2SPrint("effort = %d\n", effort);
+  str += WP2SPrint("threads = %d\n", threads);
+  str += WP2SPrint("pass = %d\n", pass);
+  str += WP2SPrint("use_yuv444 = %d\n", use_yuv444);
+  str += WP2SPrint("filter_strength = %f\n", filter_strength);
+  str += WP2SPrint("tuning = %d\n", tuning);
+  str += WP2SPrint("bittrace = %d\n", bittrace);
+  str += WP2SPrint("compact_trace = %d\n", compact_trace);
+  str += WP2SPrint("draw_blocks = %d\n", draw_blocks);
+  str += WP2SPrint("draw_transforms = %d\n", draw_transforms);
+  str += WP2SPrint("draw_mi_data = %s\n", draw_mi_data ? draw_mi_data : "---");
+  str += WP2SPrint("draw_mi_number = %d\n", draw_mi_number);
+  str += WP2SPrint("use_libgav1_decoder = %d\n", use_libgav1_decoder);
+  str += WP2SPrint("disable_transforms = %d\n", disable_transforms);
+  return str;
+}
+
 }  // namespace WP2
