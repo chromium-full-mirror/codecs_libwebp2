@@ -35,17 +35,16 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 // Prints the distortion stored in 'values'.
-static void PrintDistortion(WP2::MetricType metric, float values[5],
+static void PrintDistortion(MetricType metric, float values[5],
                             size_t data_size, bool short_output) {
   if (!short_output) {
     fprintf(stderr, "%s: ", kMetricNames[metric]);
-    if (metric == WP2::PSNR_YUV || metric == WP2::SSIM_YUV ||
-        metric == WP2::PSNRHVS) {
-      fprintf(stderr, "A: %2.2f  Y: %2.2f  U: %2.2f  V: %2.2f   ",
-              values[0], values[1], values[2], values[3]);
+    if (metric == PSNR_YUV || metric == SSIM_YUV || metric == PSNRHVS) {
+      fprintf(stderr, "A: %2.2f  Y: %2.2f  U: %2.2f  V: %2.2f   ", values[0],
+              values[1], values[2], values[3]);
     } else {
-      fprintf(stderr, "A: %2.2f  R: %2.2f  G: %2.2f  B: %2.2f   ",
-              values[0], values[1], values[2], values[3]);
+      fprintf(stderr, "A: %2.2f  R: %2.2f  G: %2.2f  B: %2.2f   ", values[0],
+              values[1], values[2], values[3]);
     }
     fprintf(stderr, "Total size: %7d %s: %2.2f\n", (int)data_size,
             kMetricNames[metric], values[4]);
@@ -54,10 +53,10 @@ static void PrintDistortion(WP2::MetricType metric, float values[5],
   }
 }
 
-WP2Status PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
+WP2Status PrintDistortion(const std::vector<ArgbBuffer>& refs,
                           const uint8_t* const data, size_t data_size,
-                          WP2::MetricType metric, bool short_output) {
-  WP2::ArrayDecoder decoder(data, data_size);
+                          MetricType metric, bool short_output) {
+  ArrayDecoder decoder(data, data_size);
   uint32_t num_frames = 0;
   float avg_values[5] = {0};
   while (decoder.ReadFrame()) {
@@ -65,7 +64,7 @@ WP2Status PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
                "Round trip error!! This shouldn't happen.");
     float values[5];
     CHECK_STATUS(decoder.GetPixels().GetDistortionBlackOrWhiteBackground(
-                 refs[num_frames], metric, values),
+                     refs[num_frames], metric, values),
                  "Error while computing distortion!");
     if (!short_output) {
       fprintf(stderr, "Frame %3u distortion ", num_frames);
@@ -98,10 +97,10 @@ WP2Status PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
   return WP2_STATUS_OK;
 }
 
-WP2Status PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
-                          size_t data_size, WP2::MetricType metric,
+WP2Status PrintDistortion(const ArgbBuffer& ref, const uint8_t* const data,
+                          size_t data_size, MetricType metric,
                           bool short_output) {
-  std::vector<WP2::ArgbBuffer> refs(1);
+  std::vector<ArgbBuffer> refs(1);
   CHECK_STATUS(refs.front().SetView(ref), "SetView failed");
   return PrintDistortion(refs, data, data_size, metric, short_output);
 }
@@ -128,11 +127,11 @@ void ConvertToGray(ArgbBuffer* const pic) {
 WP2Status CollectBitTraces(const uint8_t* const data, size_t data_size,
                            int bit_trace, uint32_t bit_trace_level,
                            bool short_output, bool show_histograms) {
-  WP2::DecoderConfig config;
-  WP2::DecoderInfo info;
+  DecoderConfig config;
+  DecoderInfo info;
   config.info = &info;
 
-  WP2::ArrayDecoder decoder(data, data_size, config);
+  ArrayDecoder decoder(data, data_size, config);
   while (decoder.ReadFrame()) continue;  // Decode everything.
   CHECK_STATUS(decoder.GetStatus(),
                "Round trip error!! This shouldn't happen.");
@@ -156,7 +155,7 @@ WP2Status CollectBitTraces(const uint8_t* const data, size_t data_size,
 
 std::string PrintSummary(const BitstreamFeatures& bitstream,
                          size_t input_data_size, bool short_output) {
-  const WP2::Argb32b prev_col = ToArgb32b(bitstream.preview_color);
+  const Argb32b prev_col = ToArgb32b(bitstream.preview_color);
   const uint32_t degrees = (uint32_t)bitstream.orientation * 90;
 
   std::string str;
@@ -212,8 +211,8 @@ bool IsDirectory(const std::string& path) {
 #endif  // _WIN32
 }
 
-bool GetFilesIn(const std::string& dir_path,
-                FileList* const files, bool recursive) {
+bool GetFilesIn(const std::string& dir_path, FileList* const files,
+                bool recursive) {
 #ifdef _WIN32
   WIN32_FIND_DATA ffd;
   HANDLE handle = FindFirstFile(JoinPath(dir_path, "*").c_str(), &ffd);
@@ -299,31 +298,31 @@ std::string InputFileToOutputDir(const std::string& input_file_path,
 // Handy class just for collecting all params / work variable in a single place.
 struct PartitionParams {
  public:
-  const WP2::BlockSize* valid_blocks;
+  const BlockSize* valid_blocks;
   uint32_t max_width, max_height;
   bool skip_invalid;
   uint32_t split_count;
-  std::vector<WP2::Rectangle> partition;
+  std::vector<Rectangle> partition;
 
  public:
   // search the valid dimension that is strictly smaller than 'd'.
   uint32_t SearchValidDim(uint32_t d, bool search_width) const {
-    uint32_t new_d = WP2::kMinBlockSizePix;
-    for (const WP2::BlockSize* b = valid_blocks; *b != WP2::BLK_LAST; ++b) {
-      const uint32_t test_d = search_width ? WP2::BlockWidthPix(*b)
-                                           : WP2::BlockHeightPix(*b);
+    uint32_t new_d = kMinBlockSizePix;
+    for (const BlockSize* b = valid_blocks; *b != BLK_LAST; ++b) {
+      const uint32_t test_d =
+          search_width ? BlockWidthPix(*b) : BlockHeightPix(*b);
       if (test_d > new_d && test_d < d) new_d = test_d;
     }
     return new_d;
   }
-  void AddBox(const WP2::Rectangle& r) {
-    uint32_t w = std::min(r.width,  max_width - r.x);
+  void AddBox(const Rectangle& r) {
+    uint32_t w = std::min(r.width, max_width - r.x);
     uint32_t h = std::min(r.height, max_height - r.y);
     w = (w + 3u) & ~3u;
     h = (h + 3u) & ~3u;
 
-    for (const WP2::BlockSize* b = valid_blocks; *b != WP2::BLK_LAST; ++b) {
-      if (w == WP2::BlockWidthPix(*b) && h == WP2::BlockHeightPix(*b)) {
+    for (const BlockSize* b = valid_blocks; *b != BLK_LAST; ++b) {
+      if (w == BlockWidthPix(*b) && h == BlockHeightPix(*b)) {
         // we found a valid block to push.
         partition.emplace_back(r.x, r.y, w, h);
         return;
@@ -334,18 +333,18 @@ struct PartitionParams {
     split_count += 1;
     if (w >= h) {
       const uint32_t new_w = SearchValidDim(w, /*search_width=*/true);
-      AddBox({r.x +     0, r.y,     new_w, h});
+      AddBox({r.x + 0, r.y, new_w, h});
       AddBox({r.x + new_w, r.y, w - new_w, h});
     } else {
       const uint32_t new_h = SearchValidDim(h, /*search_width=*/false);
-      AddBox({r.x, r.y +     0, w,     new_h});
+      AddBox({r.x, r.y + 0, w, new_h});
       AddBox({r.x, r.y + new_h, w, h - new_h});
     }
   }
 };
 
 bool ReadPartition(const char file_path[], bool read_only,
-                   std::vector<WP2::Rectangle>* const partition) {
+                   std::vector<Rectangle>* const partition) {
   std::FILE* const file = std::fopen(file_path, "r");
   if (file == nullptr) {
     // If not 'read_only', it's considered output, not an error.
@@ -354,7 +353,7 @@ bool ReadPartition(const char file_path[], bool read_only,
   char line[128];
   while (std::fgets(line, sizeof(line), file) != nullptr) {
     if (line[0] == '\0' || line[0] == '\n') continue;
-    WP2::Rectangle r;
+    Rectangle r;
     if (std::sscanf(line, "%u %u %u %u",  // NOLINT (sscanf() not recommended)
                     &r.x, &r.y, &r.width, &r.height) != 4) {
       std::fclose(file);
@@ -367,15 +366,15 @@ bool ReadPartition(const char file_path[], bool read_only,
 }
 
 void ConvertPartition(uint32_t pic_width, uint32_t pic_height,
-                      WP2::PartitionSet partition_set, bool ignore_invalid,
-                      std::vector<WP2::Rectangle>* const partition) {
-  PartitionParams p = {WP2::GetBlockSizes(partition_set),
+                      PartitionSet partition_set, bool ignore_invalid,
+                      std::vector<Rectangle>* const partition) {
+  PartitionParams p = {GetBlockSizes(partition_set),
                        pic_width,
                        pic_height,
                        ignore_invalid,
                        /*split_count=*/0,
                        /*partition=*/{}};
-  for (WP2::Rectangle r : *partition) p.AddBox(r);
+  for (Rectangle r : *partition) p.AddBox(r);
   if (p.split_count > 0) {
     fprintf(stderr, "Number of splits: %u (from %d to %d blocks)\n",
             p.split_count, (uint32_t)partition->size(),
@@ -384,11 +383,11 @@ void ConvertPartition(uint32_t pic_width, uint32_t pic_height,
   std::swap(*partition, p.partition);
 }
 
-bool WritePartition(const std::vector<WP2::Rectangle>& partition,
+bool WritePartition(const std::vector<Rectangle>& partition,
                     const char file_path[]) {
   std::FILE* const file = std::fopen(file_path, "w");
   if (file == nullptr) return false;
-  for (const WP2::Rectangle& rect : partition) {
+  for (const Rectangle& rect : partition) {
     fprintf(file, "%u %u %u %u\n", rect.x, rect.y, rect.width, rect.height);
   }
   std::fclose(file);
@@ -430,10 +429,10 @@ static void SafePrint(const char s_in[], uint32_t margin, uint32_t max = 80u) {
   assert(margin < 80 && max <= 80);
   // print truncated word-delimited string
   while (margin + strlen(s_in) >= max) {
-    char tmp[80 + 1] = { 0 };
+    char tmp[80 + 1] = {0};
     snprintf(tmp, max - margin, "%s", s_in);
     char* end = strrchr(tmp, ' ');
-    if (end == NULL) end = tmp + max - margin;   // word is too long. Ellipsis?
+    if (end == NULL) end = tmp + max - margin;  // word is too long. Ellipsis?
     *end = 0;
     s_in += end + 1 - tmp;
     printf("%s\n%*s", tmp, margin, "");
@@ -449,9 +448,9 @@ void ProgramOptions::Print() const {
   }
   // left-justify and print
   for (uint32_t i = 0; i < content_.size(); ++i) {
-    if (content_[i].first == nullptr) {   // Print normal text.
+    if (content_[i].first == nullptr) {  // Print normal text.
       printf("%s\n", content_[i].second.c_str());
-    } else {                              // Print the arguments.
+    } else {  // Print the arguments.
       const size_t padding = strlen(content_[i].first);
       printf("  %s %.*s.. ", content_[i].first, (int)(size_max - padding),
              "...............................................................");
@@ -477,21 +476,21 @@ bool ProgramOptions::ParseSystemOptions(const char* const arg,
 }
 
 bool ProgramOptions::ParseMetricOptions(const char* const arg,
-                                        WP2::MetricType* type) {
+                                        MetricType* type) {
   if (!strcmp(arg, "-psnr")) {
-    *type = WP2::PSNR;
+    *type = PSNR;
   } else if (!strcmp(arg, "-psnrhvs")) {
-    *type = WP2::PSNRHVS;
+    *type = PSNRHVS;
   } else if (!strcmp(arg, "-psnr_yuv")) {
-    *type = WP2::PSNR_YUV;
+    *type = PSNR_YUV;
   } else if (!strcmp(arg, "-ssim")) {
-    *type = WP2::SSIM;
+    *type = SSIM;
   } else if (!strcmp(arg, "-ssim_yuv")) {
-    *type = WP2::SSIM_YUV;
+    *type = SSIM_YUV;
   } else if (!strcmp(arg, "-msssim")) {
-    *type = WP2::MSSSIM;
+    *type = MSSSIM;
   } else if (!strcmp(arg, "-lsim")) {
-    *type = WP2::LSIM;
+    *type = LSIM;
   } else {
     return false;
   }

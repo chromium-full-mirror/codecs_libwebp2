@@ -47,6 +47,7 @@
 #include "src/utils/plane.h"
 #include "src/utils/random.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 
@@ -2708,10 +2709,27 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
                     (uint32_t)einfo_.force_predictor.size(),
                     (uint32_t)einfo_.force_transform.size()));
   } else if (key == 'd') {
-    if (!WritePartition(force_partition_, partition_file_path_)) {
-      fprintf(stderr, "Error: Unable to write partition file");
+    std::vector<WP2::Rectangle> blocks;
+    if (!force_partition_.empty()) {
+      blocks = force_partition_;
     } else {
-      AddInfo(SPrintf("Dumped %u blocks", (uint32_t)force_partition_.size()));
+      if (!dinfo_.store_blocks) {
+        dinfo_.store_blocks = true;
+        if (!DecodeOutput()) return;
+        dinfo_.store_blocks = false;
+      }
+#if defined(WP2_BITTRACE)
+      for (const BlockInfo& info : dinfo_.blocks) {
+        blocks.emplace_back(info.rect);
+      }
+#endif  // WP2_BITTRACE
+    }
+    if (blocks.empty()) {
+      AddInfo("Nothing to dump");
+    } else if (WritePartition(blocks, partition_file_path_)) {
+      AddInfo(SPrintf("Dumped %u blocks", (uint32_t)blocks.size()));
+    } else {
+      fprintf(stderr, "Error: Unable to write partition file");
     }
   } else if (key == 'D') {
     if (ReadAndConvertPartition(/*read_only=*/true)) {
