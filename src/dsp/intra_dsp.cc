@@ -343,6 +343,44 @@ void SimpleAnglePredictor(uint8_t angle_idx, const int16_t ctx[],
 
 }  // namespace WP2
 
+namespace WP2L {
+
+namespace {
+// Computes src1 * (kOne - frac) + src2 * frac
+void AnglePredInterpolate_C(const int16_t* const src1,
+                            const int16_t* const src2, int32_t frac,
+                            int16_t* const dst) {
+  assert(frac >= 0 && frac <= kOne);
+  for (uint32_t c = 0; c < 4; ++c) {
+    dst[c] = src1[c] +
+             WP2::RightShift((src2[c] - src1[c]) * frac, kAnglePredPrecision);
+  }
+}
+}  // namespace
+
+void SubAnglePredictor(uint8_t angle_idx, const int16_t* const left,
+                       const int16_t* const top, int16_t* dst) {
+  const int32_t cot = kCoTanTable[angle_idx];
+  // Line equation in X and Y of slope 'angle' going through pixel (x, y):
+  // (X-x)*sin(-angle) - (Y-y)*cos(-angle) = 0, with x axis going
+  // right, y axis going down (hence the angle opposition).
+  // Can be simplified to: (X-x)*sin(angle) + (Y-y)*cos(angle) = 0
+  if (angle_idx < WP2::kAngle_90) {
+    // (X-0)*sin(angle) + (-1-0)*cos(angle) = 0
+    // Hence X = cotan(angle).
+    AnglePredInterpolate_C(top, top + 4, cot, dst);
+  } else if (angle_idx < WP2::kAngle_135) {
+    // (-1 + X-0)*sin(angle) + (-1-0)*cos(angle) = 0
+    // Hence X = cotan(angle) + 1.
+    AnglePredInterpolate_C(top - 4, top, cot + kOne, dst);
+  } else {
+    // (-1-0)*sin(angle) + (0-Y-0)*cos(angle) = 0
+    // Hence Y = -tan(angle).
+    AnglePredInterpolate_C(left, top - 4, -kTanTable[angle_idx], dst);
+  }
+}
+}  // namespace WP2L
+
 //------------------------------------------------------------------------------
 
 namespace {

@@ -91,14 +91,14 @@ GENERATE_PREDICTOR_CLAMPED_ADD(0)
 GENERATE_PREDICTOR_CLAMPED_ADD(1)
 
 template <int MAIN_ANGLE>
-void PredictorAngleAdd_C(const int16_t* in, bool has_alpha,
+void PredictorAngleAdd_C(int delta, const int16_t* in, bool has_alpha,
                          const int16_t* upper, uint32_t num_pixels,
                          int16_t* out, int16_t* predicted) {
   int16_t pred[4];
   if (MAIN_ANGLE != 180) assert(upper != nullptr);
   for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end;
        out += 4, in += 4) {
-    AnglePredict<MAIN_ANGLE>(out - 4, upper, pred);
+    AnglePredict<MAIN_ANGLE>(delta, out - 4, upper, pred);
     AddPixels(in, has_alpha, pred, out);
     if (predicted != nullptr) {
       std::copy(pred, pred + 4, predicted);
@@ -124,8 +124,8 @@ void PredictorInverseTransform_C(const Transform* const transform, int y_start,
   const int width = transform->width_pic_;
   if (y_start == 0) {  // First Row follows the L (mode=1) mode.
     PredictorsAddBlack(in, has_alpha, nullptr, 1, out, predicted);
-    PredictorsAddLeft(in + 4, has_alpha, nullptr, width - 1, out + 4,
-                      predicted != nullptr ? predicted + 4 : nullptr);
+    PredictorsAddLeft(/*delta=*/0, in + 4, has_alpha, nullptr, width - 1,
+                      out + 4, predicted != nullptr ? predicted + 4 : nullptr);
     in += 4 * width;
     out += 4 * width;
     if (predicted != nullptr) predicted += 4 * width;
@@ -142,7 +142,8 @@ void PredictorInverseTransform_C(const Transform* const transform, int y_start,
     const int16_t* pred_mode_src = pred_mode_base;
     int x = 1;
     // First pixel follows the T (mode=2) mode.
-    PredictorsAddTop(in, has_alpha, out - 4 * width, 1, out, predicted);
+    PredictorsAddTop(/*delta=*/0, in, has_alpha, out - 4 * width, 1, out,
+                     predicted);
     // .. the rest:
     while (x < width) {
       int x_end = (x & ~tile_mask) + tile_width;
@@ -161,8 +162,9 @@ void PredictorInverseTransform_C(const Transform* const transform, int y_start,
           break;
         case PredictorType::Angle:
           PredictorsAngleAdd[kPredictorIndex[pred_mode_src[2]]](
-              in + 4 * x, has_alpha, out + 4 * x - 4 * width, x_end - x,
-              out + 4 * x, predicted != nullptr ? predicted + 4 * x : nullptr);
+              /*delta=*/pred_mode_src[3], in + 4 * x, has_alpha,
+              out + 4 * x - 4 * width, x_end - x, out + 4 * x,
+              predicted != nullptr ? predicted + 4 * x : nullptr);
           break;
         default:
           assert(false);
@@ -403,7 +405,8 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
     case TransformType::kSubtractGreen:
       AddGreenToBlueAndRed(in, (row_end - row_start) * width, out);
       break;
-    case TransformType::kPredictor: {
+    case TransformType::kPredictor:
+    case TransformType::kPredictorWSub: {
       PredictorInverseTransform_C(transform, row_start, row_end, min_values,
                                   max_values, in, has_alpha, out, predicted);
       if (row_end != transform->height_pic_) {

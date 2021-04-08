@@ -509,6 +509,13 @@ extern GenerateGrainF GenerateGrain4x4;
 //------------------------------------------------------------------------------
 // Predictions
 
+namespace WP2L {
+// Predicts one pixel using the 4 pixel context and a sub-angle.
+// This is used in lossless but re-uses a lot of private lossy code.
+extern void SubAnglePredictor(uint8_t angle_idx, const int16_t* const left,
+                              const int16_t* const top, int16_t* dst);
+}  // namespace WP2L
+
 namespace WP2 {
 
 // 'step' is in *dst units, not bytes.
@@ -537,8 +544,11 @@ constexpr uint32_t kNumDirectionalAngles = kAnglePredNum * kDirectionalMaxDelta;
 // angle_idx goes for 0 (12.86 degrees) to 69 (234.64 degrees).
 // Some notable values:
 constexpr uint32_t kAngle_45 = 10;
+constexpr uint32_t kAngle_67 = 17;
 constexpr uint32_t kAngle_90 = 24;
+constexpr uint32_t kAngle_113 = 31;
 constexpr uint32_t kAngle_135 = 38;
+constexpr uint32_t kAngle_157 = 45;
 constexpr uint32_t kAngle_180 = 52;
 constexpr uint32_t kAngle_225 = 66;
 static_assert(kAngle_90 - kAngle_45 == 2 * kDirectionalMaxDelta &&

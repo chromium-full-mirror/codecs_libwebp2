@@ -231,14 +231,14 @@ GENERATE_PREDICTOR_CLAMPED_SUB(0)
 GENERATE_PREDICTOR_CLAMPED_SUB(1)
 
 template <int MAIN_ANGLE>
-void PredictorAngleSub_C(const int16_t* in, bool has_alpha,
+void PredictorAngleSub_C(int delta, const int16_t* in, bool has_alpha,
                          const int16_t* upper, uint32_t num_pixels,
                          int16_t* out) {
   int16_t pred[4];
   if (MAIN_ANGLE != 180) assert(upper != nullptr);
   for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end;
        out += 4, in += 4, upper += 4) {
-    WP2L::AnglePredict<MAIN_ANGLE>(in - 4, upper, pred);
+    WP2L::AnglePredict<MAIN_ANGLE>(delta, in - 4, upper, pred);
     WP2L::SubPixels(in, has_alpha, pred, out);
   }
 }
@@ -440,7 +440,7 @@ PredictorNonClampedSubFunc PredictorsNonClampedSub_C[kNumPredictorsNonClamped];
 PredictorClampedSubFunc PredictorsClampedSub[kNumPredictorsClamped];
 PredictorClampedSubFunc PredictorsClampedSub_C[kNumPredictorsClamped];
 PredictorAngleSubFunc PredictorsAngleSub[kNumPredictorsAngle];
-PredictorAngleSubFunc PredictorsAngleSub_C[kNumPredictorsAngle];
+
 PredictorNonClampedSubFunc PredictorSubBlack;
 PredictorAngleSubFunc PredictorSubTop;
 PredictorAngleSubFunc PredictorSubLeft;

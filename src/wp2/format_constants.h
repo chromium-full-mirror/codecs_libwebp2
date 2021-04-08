@@ -347,8 +347,9 @@ static constexpr uint32_t kGreenToRedMax = 127;
 
 enum class TransformType {
   kPredictor,
+  kPredictorWSub,  // predictors with sub-modes (unused)
   kCrossColor,
-  kYCoCgR,
+  kYCoCgR,  // reversible YCoCg (unused)
   kSubtractGreen,
   kColorIndexing,
   kGroup4,

@@ -420,6 +420,7 @@ void LosslessSymbolsInfo::Init(uint32_t num_pixels, bool has_alpha,
           num_clusters, storage_method);
   SetInfo(kSymbolB, /*min=*/0, /*max=*/WP2::FormatMax(sample_format, 3),
           num_clusters, storage_method);
+  SetUnused(kSymbolSubMode);
 
   InitNonARGB(num_pixels);
 }
@@ -476,6 +477,21 @@ void LosslessSymbolsInfo::InitAsCrossColorImage(uint32_t num_pixels) {
   InitNonARGB(num_pixels);
 }
 
+WP2Status LosslessSymbolsInfo::InitSubMode() {
+  SetInfo(kSymbolSubMode, -3, 3, /*num_clusters=*/3,
+          LosslessSymbolsInfo::StorageMethod::kAuto);
+  // 45 degrees.
+  WP2_CHECK_STATUS(
+      SetMinMax(kSymbolSubMode, /*cluster=*/0, /*min=*/0, /*max=*/3));
+  // 180 degrees.
+  WP2_CHECK_STATUS(
+      SetMinMax(kSymbolSubMode, /*cluster=*/1, /*min=*/-3, /*max=*/0));
+  // Everything else.
+  WP2_CHECK_STATUS(
+      SetMinMax(kSymbolSubMode, /*cluster=*/2, /*min=*/-3, /*max=*/3));
+  return WP2_STATUS_OK;
+}
+
 WP2Status LosslessSymbolsInfo::CopyFrom(const LosslessSymbolsInfo& other) {
   WP2_CHECK_STATUS(SymbolsInfo::CopyFrom(other));
   sample_format_ = other.sample_format_;
@@ -518,6 +534,8 @@ bool IsSymbolUsed(const Symbol sym, const bool is_maybe_used[kSymbolTypeNum]) {
     case kSymbolDist:
     case kSymbolLen:
       return is_maybe_used[kSymbolTypeCopy];
+    case kSymbolSubMode:
+      return false;
     default:
       assert(false);
       return true;
@@ -592,6 +610,7 @@ void GetARGBRanges(const TransformType* transforms, WP2SampleFormat format,
     if (transforms[i] == TransformType::kNum) break;
     switch (transforms[i]) {
       case TransformType::kPredictor:
+      case TransformType::kPredictorWSub:
         // The predictors are convex or clamped in the current bounds. Only the
         // black predictor can give results out of those bounds.
         // The ranges are updated to be the ranges of the residuals.

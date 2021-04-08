@@ -2604,9 +2604,9 @@ WP2Status Decoder::RegisterSymbolForVDebug(
   return WP2_STATUS_OK;
 }
 
-static const char* const kTransformNames[] = {"Predictor",     "CrossColor",
-                                              "YCoCgR",        "SubstractGreen",
-                                              "ColorIndexing", "Group4"};
+static const char* const kTransformNames[] = {
+    "Predictor",      "Predictor with sub", "CrossColor", "YCoCgR",
+    "SubstractGreen", "ColorIndexing",      "Group4"};
 STATIC_ASSERT_ARRAY_SIZE(kTransformNames, (uint32_t)TransformType::kNum);
 static const char* const kPredictorNames[] = {"Black",
                                               "180",
@@ -2654,7 +2654,8 @@ static void DisplayBuffer(uint32_t last_row, uint32_t num_rows,
       if (decoder_info->selection.Contains(abs_x, abs_y)) {
         std::string& str = decoder_info->selection_info;
         // Display block info.
-        if (transform.type_ == TransformType::kPredictor) {
+        if (transform.type_ == TransformType::kPredictor ||
+            transform.type_ == TransformType::kPredictorWSub) {
           const uint32_t x_sub = x >> transform.bits_;
           const uint32_t y_sub = y >> transform.bits_;
           const uint32_t transform_width = transform.width_;
@@ -2698,7 +2699,8 @@ WP2Status Decoder::RegisterTransformedRowForVDebug(
   assert(index >= -1 && index < (int)kPossibleTransformCombinationSize);
   const bool next_is_predictor =
       (index + 1 < (int)kPossibleTransformCombinationSize &&
-       transforms_[index + 1].type_ == TransformType::kPredictor);
+       (transforms_[index + 1].type_ == TransformType::kPredictor ||
+        transforms_[index + 1].type_ == TransformType::kPredictorWSub));
   if (next_is_predictor && WP2::VDMatch(decoder_info->visual_debug,
                                         "lossless/prediction/reference")) {
     // This case is when displaying the reference image before a transform.
@@ -2724,7 +2726,8 @@ WP2Status Decoder::RegisterTransformedRowForVDebug(
       str += WP2SPrint("Transform #%d: %s", i,
                        kTransformNames[(uint32_t)transform_i.type_]);
       if (transform_i.type_ == TransformType::kCrossColor ||
-          transform_i.type_ == TransformType::kPredictor) {
+          transform_i.type_ == TransformType::kPredictor ||
+          transform_i.type_ == TransformType::kPredictorWSub) {
         str += WP2SPrint(" Bits: %d", transform_i.bits_);
       } else if (transform_i.type_ == TransformType::kColorIndexing ||
                  transform_i.type_ == TransformType::kGroup4) {
@@ -2741,6 +2744,7 @@ WP2Status Decoder::RegisterTransformedRowForVDebug(
                   /*offset=*/0, /*scale=*/1.f, /*discard_alpha=*/false,
                   /*duplicate_green=*/false, decoder_info);
   } else if (transform.type_ == TransformType::kPredictor ||
+             transform.type_ == TransformType::kPredictorWSub ||
              transform.type_ == TransformType::kCrossColor) {
     DisplayBuffer(last_row_, num_rows, tile_->rect, transform, rows, num_bits,
                   /*offset=*/128.f, /*scale=*/10.f, /*discard_alpha=*/true,
@@ -2792,7 +2796,8 @@ WP2Status Decoder::RegisterPredictedRowForVDebug(
   DisplayTileInfo(config_, last_row_, tile_->rect, decoder_info);
 
   // Display the prediction of the transform.
-  if (transform.type_ == TransformType::kPredictor) {
+  if (transform.type_ == TransformType::kPredictor ||
+      transform.type_ == TransformType::kPredictorWSub) {
     DisplayBuffer(last_row_, num_rows, tile_->rect, transform, rows, num_bits,
                   /*offset=*/0, /*scale=*/1.f, /*discard_alpha=*/false,
                   /*duplicate_green=*/false, decoder_info);
@@ -2815,7 +2820,8 @@ WP2Status Decoder::RegisterTransformForVDebug(
     const Transform& transform, WP2::DecoderInfo* const decoder_info) {
   if (decoder_info == nullptr) return WP2_STATUS_OK;
   if (!(WP2::VDMatch(decoder_info->visual_debug, "lossless/prediction/modes") &&
-        transform.type_ == TransformType::kPredictor) &&
+        (transform.type_ == TransformType::kPredictor ||
+         transform.type_ == TransformType::kPredictorWSub)) &&
       !(WP2::VDMatch(decoder_info->visual_debug,
                      "lossless/cross-color/transform") &&
         transform.type_ == TransformType::kCrossColor)) {
@@ -2835,7 +2841,8 @@ WP2Status Decoder::RegisterTransformForVDebug(
       const WP2::Rectangle block_rect =
           WP2::Rectangle(block_x, block_y, tsize, tsize).ClipWith(tile_->rect);
       WP2::Argb32b color;
-      if (transform.type_ == TransformType::kPredictor) {
+      if (transform.type_ == TransformType::kPredictor ||
+          transform.type_ == TransformType::kPredictorWSub) {
         // Display predictors.
         const uint16_t predictor = data[2];
         const uint8_t c = WP2::ToPixel8(predictor, kNumPredictors);
@@ -2857,7 +2864,8 @@ WP2Status Decoder::RegisterTransformForVDebug(
       // Display block info.
       if (decoder_info->selection.Intersects(block_rect)) {
         std::string& str = decoder_info->selection_info;
-        if (transform.type_ == TransformType::kPredictor) {
+        if (transform.type_ == TransformType::kPredictor ||
+            transform.type_ == TransformType::kPredictorWSub) {
           str += WP2SPrint("Block Predictor: %d %s\n", data[2],
                            kPredictorNames[data[2]]);
         } else if (transform.type_ == TransformType::kCrossColor) {

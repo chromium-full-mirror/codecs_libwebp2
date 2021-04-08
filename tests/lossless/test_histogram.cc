@@ -44,6 +44,7 @@ TEST(LosslessHistogram, HistoQueue) {
     h->Init();
     for (uint32_t i = 0; i < 100; ++i) {
       const uint32_t s = generator.Get(0u, (uint32_t)kSymbolNum - 1);
+      if (symbols_info.IsUnused(s)) continue;
       h->counts_[s][generator.Get(0u, symbols_info.Range(s, 0))] =
           generator.Get(0u, max_count);
     }

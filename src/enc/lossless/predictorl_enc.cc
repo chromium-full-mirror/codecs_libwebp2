@@ -23,11 +23,12 @@
 #include "src/dsp/lossless/encl_dsp.h"
 #include "src/dsp/math.h"
 #include "src/enc/lossless/losslessi_enc.h"
+#include "src/enc/symbols_enc.h"
 
 using WP2::Vector_u32;
 
 static const float kSpatialPredictorBias = 15.f;
-static const int kPredLowEffort = 11;
+static const int kPredLowEffort = 11;  // select predictor
 
 //------------------------------------------------------------------------------
 // Methods to calculate Entropy (Shannon).
@@ -90,7 +91,7 @@ float PredictionCostSpatialHistogram(const ChannelVector& accumulated,
 }
 
 inline void UpdateHisto(const int16_t* const argb, uint32_t max_x,
-                        ChannelVector* histo_argb) {
+                        ChannelVector* const histo_argb) {
   for (uint32_t x = 0; x < max_x; ++x) {
     for (uint32_t c = 0; c < 4u; ++c) {
       const uint32_t index =
@@ -106,19 +107,38 @@ inline void UpdateHisto(const int16_t* const argb, uint32_t max_x,
 
 // Struct containing the info about a predictor.
 struct Predictor {
-  Predictor(uint32_t mode_in, const int16_t min_values_in[4],
-            const int16_t max_values_in[4])
+  Predictor(uint32_t mode_in, int8_t sub_mode_in,
+            const int16_t min_values_in[4], const int16_t max_values_in[4])
       : mode(mode_in),
+        sub_mode(sub_mode_in),
         type(kPredictorType[mode]),
         index(kPredictorIndex[mode]),
         min_values(min_values_in),
         max_values(max_values_in) {}
   uint32_t mode;
+  int8_t sub_mode;
   PredictorType type;
   uint32_t index;
   const int16_t* min_values;
   const int16_t* max_values;
 };
+
+void WriteSubModes(uint32_t transform_width, uint32_t transform_height,
+                   const int16_t* const transform_data,
+                   WP2::SymbolManager* const sw, WP2::ANSEncBase* const enc) {
+  for (uint32_t y = 0; y < transform_height; ++y) {
+    for (uint32_t x = 0; x < transform_width; ++x) {
+      const int16_t* const pix =
+          &transform_data[y * 4 * transform_width + 4 * x];
+      if (kPredictorType[pix[2]] != PredictorType::Angle) continue;
+      const uint32_t cluster =
+          (kPredictorIndex[pix[2]] == 0)                         ? 0
+          : (kPredictorIndex[pix[2]] == kNumPredictorsAngle - 1) ? 1
+                                                                 : 2;
+      sw->Process(kSymbolSubMode, cluster, pix[3], "sub_mode", enc);
+    }
+  }
+}
 
 // Stores the difference between the pixel and its prediction in "out".
 // In case of a lossy encoding, updates the source image to avoid propagating
@@ -128,9 +148,9 @@ static inline void GetResidual(int width, int16_t* const upper_row,
                                int16_t* const current_row, bool has_alpha,
                                const Predictor& pred, int x_start, int x_end,
                                int y, int16_t* const out) {
-  PredictorNonClampedFunc pred_non_clamped;
-  PredictorClampedFunc pred_clamped;
-  PredictorAngleFunc pred_angle;
+  PredictorNonClampedFunc pred_non_clamped = nullptr;
+  PredictorClampedFunc pred_clamped = nullptr;
+  PredictorAngleFunc pred_angle = nullptr;
   switch (pred.type) {
     case PredictorType::NonClamped:
       pred_non_clamped = PredictorsNonClamped[pred.index];
@@ -169,7 +189,8 @@ static inline void GetResidual(int width, int16_t* const upper_row,
                        pred.min_values, pred.max_values, predict);
           break;
         case PredictorType::Angle:
-          pred_angle(&current_row[4 * (x - 1)], &upper_row[4 * x], predict);
+          pred_angle(/*delta=*/pred.sub_mode, &current_row[4 * (x - 1)],
+                     &upper_row[4 * x], predict);
           break;
         default:
           assert(false);
@@ -204,11 +225,12 @@ static inline void GetResidual(int width, int16_t* const upper_row,
 
 // Returns best predictor and updates the accumulated histogram.
 static void GetBestPredictorForTile(
-    int tile_x, int tile_y, uint32_t bits, const int16_t min_values[4],
-    const int16_t max_values[4], const Buffer_s16& buffer,
-    const int16_t* const modes, int16_t* const argb_scratch,
-    ChannelVector* accumulated, ChannelVector tmp_histo[2],
-    Predictor* const pred_best) {
+    int tile_x, int tile_y, uint32_t bits, bool use_sub_modes,
+    const int16_t min_values[4], const int16_t max_values[4],
+    const Buffer_s16& buffer, const int16_t* const modes,
+    int16_t* const argb_scratch, ChannelVector accumulated[2],
+    ChannelVector tmp_histo[2], Predictor* const pred_best,
+    Predictor* const pred_wsub_best) {
   const int start_x = tile_x << bits;
   const int start_y = tile_y << bits;
   const int tile_size = 1 << bits;
@@ -221,21 +243,15 @@ static void GetBestPredictorForTile(
   // they exist.
   const int context_start_x = start_x - have_left;
   const int tiles_per_row = SubSampleSize(width, bits);
-  // Prediction modes of the left and above neighbor tiles.
-  const uint32_t left_mode =
-      (tile_x > 0) ? modes[4 * (tile_y * tiles_per_row + tile_x - 1) + 2]
-                   : 0xff;
-  const uint32_t above_mode =
-      (tile_y > 0) ? modes[4 * ((tile_y - 1) * tiles_per_row + tile_x) + 2]
-                   : 0xff;
   // The width of upper_row and current_row is one pixel larger than image width
   // to allow the top right pixel to point to the leftmost pixel of the next row
   // when at the right edge.
   int16_t* upper_row = argb_scratch;
   int16_t* current_row = &upper_row[4 * (width + 1)];
   float best_diff = std::numeric_limits<float>::max();
-  *pred_best = Predictor(/*mode_in=*/0, min_values, max_values);
-  uint32_t mode;
+  *pred_best =
+      Predictor(/*mode_in=*/0, /*sub_mode_in=*/0, min_values, max_values);
+  *pred_wsub_best = *pred_best;
   // Need pointers to be able to swap arrays.
   ChannelVector& histo_argb = tmp_histo[0];
   ChannelVector& best_histo = tmp_histo[1];
@@ -243,58 +259,103 @@ static void GetBestPredictorForTile(
   assert(bits >= kTransformBitsMin && bits <= kTransformBitsMax);
   assert(max_x <= (1 << kTransformBitsMax));
 
-  for (mode = 0; mode < kNumPredictors; ++mode) {
-    float cur_diff;
-    const Predictor pred(mode, min_values, max_values);
-    int relative_y;
-    for (uint32_t i = 0; i < 4; ++i) {
-      std::fill(histo_argb[i].begin(), histo_argb[i].end(), 0);
-    }
-    if (start_y > 0) {
-      // Read the row above the tile which will become the first upper_row.
-      // Include a pixel to the left if it exists; include a pixel to the right
-      // in all cases (wrapping to the leftmost pixel of the next row if it does
-      // not exist).
-      std::copy(buffer.GetPosition(context_start_x, start_y - 1),
-                buffer.GetPosition(context_start_x, start_y - 1) +
-                    4 * (max_x + have_left + 1),
-                &current_row[4 * context_start_x]);
-    }
-    for (relative_y = 0; relative_y < max_y; ++relative_y) {
-      const int y = start_y + relative_y;
-      std::swap(upper_row, current_row);
-      // Read current_row. Include a pixel to the left if it exists; include a
-      // pixel to the right in all cases except at the bottom right corner of
-      // the image (wrapping to the leftmost pixel of the next row if it does
-      // not exist in the current row).
-      std::copy(buffer.GetPosition(context_start_x, y),
-                buffer.GetPosition(context_start_x, y) +
-                    4 * (max_x + have_left + (y + 1 < height)),
-                &current_row[4 * context_start_x]);
+  // First pass: not trying sub-modes, second pass: trying them.
+  // If sub-modes are used, 'modes' contains in ARGB:
+  //   - 0, best mode without using sub-modes, best mode when using sub-modes,
+  //     sub-mode of best mode when using sub-modes
+  // If sub-modes are not used, 'modes' contains in ARGB:
+  //   - 0, 0, best mode without using sub-modes, 0.
+  // TODO(vrabaud) For the second pass, we should only test the top angle
+  // predictors like done for lossy (for CPU optimization).
+  for (uint32_t pass = 0; pass < (use_sub_modes ? 2u : 1u); ++pass) {
+    if (pass == 1u) *pred_wsub_best = *pred_best;
+    // Prediction modes of the left and above neighbor tiles.
+    const uint32_t left_mode =
+        (tile_x > 0) ? modes[4 * (tile_y * tiles_per_row + tile_x - 1) +
+                             (pass == 0u ? use_sub_modes ? 1 : 2 : 2)]
+                     : 0xff;
+    const uint32_t above_mode =
+        (tile_y > 0) ? modes[4 * ((tile_y - 1) * tiles_per_row + tile_x) +
+                             (pass == 0u ? use_sub_modes ? 1 : 2 : 2)]
+                     : 0xff;
+    for (uint32_t mode = 0; mode < kNumPredictors; ++mode) {
+      int8_t sub_mode_min = 0, sub_mode_max = 0;
+      if (pass == 1) {
+        if (kPredictorType[mode] != PredictorType::Angle) continue;
+        if (kPredictorIndex[mode] == 0) {
+          // 45 degrees.
+          sub_mode_min = 0;
+          sub_mode_max = 3;
+        } else if (kPredictorIndex[mode] == kNumPredictorsAngle - 1) {
+          // 180 degrees.
+          sub_mode_min = -3;
+          sub_mode_max = 0;
+        } else {
+          // Anything else.
+          sub_mode_min = -3;
+          sub_mode_max = 3;
+        }
+      }
+      for (int8_t sub_mode = sub_mode_min; sub_mode <= sub_mode_max;
+           ++sub_mode) {
+        const Predictor pred(mode, sub_mode, min_values, max_values);
+        int relative_y;
+        for (uint32_t i = 0; i < 4; ++i) {
+          std::fill(histo_argb[i].begin(), histo_argb[i].end(), 0);
+        }
+        if (start_y > 0) {
+          // Read the row above the tile which will become the first upper_row.
+          // Include a pixel to the left if it exists; include a pixel to the
+          // right in all cases (wrapping to the leftmost pixel of the next row
+          // if it does not exist).
+          std::copy(buffer.GetPosition(context_start_x, start_y - 1),
+                    buffer.GetPosition(context_start_x, start_y - 1) +
+                        4 * (max_x + have_left + 1),
+                    &current_row[4 * context_start_x]);
+        }
+        for (relative_y = 0; relative_y < max_y; ++relative_y) {
+          const int y = start_y + relative_y;
+          std::swap(upper_row, current_row);
+          // Read current_row. Include a pixel to the left if it exists; include
+          // a pixel to the right in all cases except at the bottom right corner
+          // of the image (wrapping to the leftmost pixel of the next row if it
+          // does not exist in the current row).
+          std::copy(buffer.GetPosition(context_start_x, y),
+                    buffer.GetPosition(context_start_x, y) +
+                        4 * (max_x + have_left + (y + 1 < height)),
+                    &current_row[4 * context_start_x]);
 
-      GetResidual(width, upper_row, current_row, buffer.has_alpha, pred,
-                  start_x, start_x + max_x, y, residuals);
-      UpdateHisto(residuals, max_x, &histo_argb);
-    }
-    cur_diff = PredictionCostSpatialHistogram(*accumulated, histo_argb);
-    // Favor keeping the areas locally similar.
-    if (mode == left_mode) cur_diff -= kSpatialPredictorBias;
-    if (mode == above_mode) cur_diff -= kSpatialPredictorBias;
+          GetResidual(width, upper_row, current_row, buffer.has_alpha, pred,
+                      start_x, start_x + max_x, y, residuals);
+          UpdateHisto(residuals, max_x, &histo_argb);
+        }
+        float cur_diff =
+            PredictionCostSpatialHistogram(accumulated[pass], histo_argb);
+        // Favor keeping the areas locally similar.
+        if (mode == left_mode) cur_diff -= kSpatialPredictorBias;
+        if (mode == above_mode) cur_diff -= kSpatialPredictorBias;
 
-    if (cur_diff < best_diff) {
-      histo_argb.swap(best_histo);
-      best_diff = cur_diff;
-      *pred_best = pred;
+        if (cur_diff < best_diff) {
+          histo_argb.swap(best_histo);
+          best_diff = cur_diff;
+          if (pass == 0) {
+            *pred_best = Predictor(mode, sub_mode, min_values, max_values);
+          } else {
+            *pred_wsub_best = Predictor(mode, sub_mode, min_values, max_values);
+          }
+        }
+      }
     }
+
+    accumulated[pass].Update(best_histo);
   }
-
-  accumulated->Update(best_histo);
 }
 
 // Converts pixels of the image to residuals with respect to predictions.
 static void CopyImageWithPrediction(int bits, const int16_t min_values[4],
                                     const int16_t max_values[4],
                                     const int16_t* const modes, int effort,
+                                    bool use_sub_mode,
                                     int16_t* const argb_scratch,
                                     Buffer_s16* const buffer) {
   const uint32_t width = buffer->width, height = buffer->height;
@@ -312,7 +373,11 @@ static void CopyImageWithPrediction(int bits, const int16_t min_values[4],
     for (uint32_t x = 0; x < width;) {
       const int mode =
           modes[4 * ((y >> bits) * tiles_per_row + (x >> bits)) + 2];
-      const Predictor pred(mode, min_values, max_values);
+      const int8_t sub_mode =
+          use_sub_mode
+              ? modes[4 * ((y >> bits) * tiles_per_row + (x >> bits)) + 3]
+              : 0;
+      const Predictor pred(mode, sub_mode, min_values, max_values);
       uint32_t x_end = x + (1 << bits);
       if (x_end > width) x_end = width;
       GetResidual(width, upper_row, current_row, buffer->has_alpha, pred, x,
@@ -324,11 +389,12 @@ static void CopyImageWithPrediction(int bits, const int16_t min_values[4],
 
 // Finds the best predictor for each tile, and converts the image to residuals
 // with respect to predictions.
-WP2Status CreateResidualImage(uint32_t bits, const int16_t min_values[4],
+WP2Status CreateResidualImage(uint32_t bits, bool can_use_sub_modes,
+                              const int16_t min_values[4],
                               const int16_t max_values[4], int effort,
                               Buffer_s16* const buffer,
-                              int16_t* const argb_scratch,
-                              int16_t* const image) {
+                              int16_t* const argb_scratch, int16_t* const image,
+                              bool* const use_sub_modes) {
   const uint32_t tiles_per_row = SubSampleSize(buffer->width, bits);
   const uint32_t tiles_per_col = SubSampleSize(buffer->height, bits);
   if (effort == 0) {
@@ -338,8 +404,9 @@ WP2Status CreateResidualImage(uint32_t bits, const int16_t min_values[4],
       image[4 * i + 2] = kPredLowEffort;
       image[4 * i + 3] = 0;
     }
+    *use_sub_modes = false;
   } else {
-    ChannelVector histo;
+    ChannelVector histo[2];
     ChannelVector tmp_histo[2];
     for (uint32_t c = 0; c < 4; ++c) {
       uint32_t histo_size = 0;
@@ -347,28 +414,77 @@ WP2Status CreateResidualImage(uint32_t bits, const int16_t min_values[4],
                         (int16_t)-max_values[c], max_values[c]}) {
         histo_size = std::max(histo_size, 1u + MakeIndex(i));
       }
-      WP2_CHECK_ALLOC_OK(histo[c].resize(histo_size));
-      std::fill(histo[c].begin(), histo[c].end(), 0);
       for (uint32_t j = 0; j < 2; ++j) {
         WP2_CHECK_ALLOC_OK(tmp_histo[j][c].resize(histo_size));
+        WP2_CHECK_ALLOC_OK(histo[j][c].resize(histo_size));
+        std::fill(histo[j][c].begin(), histo[j][c].end(), 0);
       }
     }
-    Predictor pred(/*mode_in=*/0, min_values, max_values);
+    Predictor pred(/*mode_in=*/0, /*sub_mode_in=*/0, min_values, max_values);
+    Predictor pred_wsub(/*mode_in=*/0, /*sub_mode_in=*/0, min_values,
+                        max_values);
     for (uint32_t tile_y = 0; tile_y < tiles_per_col; ++tile_y) {
       for (uint32_t tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
-        GetBestPredictorForTile(tile_x, tile_y, bits, min_values, max_values,
-                                *buffer, image, argb_scratch, &histo, tmp_histo,
-                                &pred);
+        GetBestPredictorForTile(
+            tile_x, tile_y, bits, can_use_sub_modes, min_values, max_values,
+            *buffer, image, argb_scratch, histo, tmp_histo, &pred, &pred_wsub);
         image[4 * (tile_y * tiles_per_row + tile_x) + 0] = 0;
-        image[4 * (tile_y * tiles_per_row + tile_x) + 1] = 0;
-        image[4 * (tile_y * tiles_per_row + tile_x) + 2] = pred.mode;
-        image[4 * (tile_y * tiles_per_row + tile_x) + 3] = 0;
+        if (can_use_sub_modes) {
+          image[4 * (tile_y * tiles_per_row + tile_x) + 1] = pred.mode;
+          image[4 * (tile_y * tiles_per_row + tile_x) + 2] = pred_wsub.mode;
+          image[4 * (tile_y * tiles_per_row + tile_x) + 3] = pred_wsub.sub_mode;
+        } else {
+          image[4 * (tile_y * tiles_per_row + tile_x) + 1] = 0;
+          image[4 * (tile_y * tiles_per_row + tile_x) + 2] = pred.mode;
+          image[4 * (tile_y * tiles_per_row + tile_x) + 3] = 0;
+        }
       }
+    }
+
+    // Figure out if writing the sub modes is worth it.
+    if (can_use_sub_modes) {
+      // Compare the costs of storing residuals without and with sub-modes.
+      float costs[2];
+      for (uint32_t i = 0; i < 2; ++i) {
+        costs[i] = 0.f;
+        for (uint32_t c = 0; c < 4; ++c) {
+          costs[i] += WP2::ANSCountsQuantizedCost(
+              histo[i][c].data(), histo[i][c].data(), histo[i][c].size());
+        }
+      }
+      // Compute the cost of storing the sub-modes.
+      LosslessSymbolsInfo symbols_info;
+      WP2_CHECK_STATUS(symbols_info.InitSubMode());
+      const uint32_t transform_size = tiles_per_row * tiles_per_col;
+      WP2::SymbolRecorder recorder;
+      WP2_CHECK_STATUS(
+          recorder.Allocate(symbols_info, /*num_records=*/transform_size));
+      WP2::ANSEncNoop enc_noop;
+      WriteSubModes(tiles_per_row, tiles_per_col, image, &recorder, &enc_noop);
+      WP2::SymbolWriter sw;
+      WP2_CHECK_STATUS(sw.Init(symbols_info, effort));
+      WP2_CHECK_STATUS(sw.Allocate());
+      WP2::ANSEncCounter enc;
+      WP2::ANSDictionaries dicts;
+      WP2_CHECK_STATUS(sw.WriteHeader(kSymbolSubMode, transform_size, recorder,
+                                      "sub_mode", &enc, &dicts));
+      WriteSubModes(tiles_per_row, tiles_per_col, image, &sw, &enc);
+      // Compare the cost of sub-mode storage to what we gain using sub-modes.
+      *use_sub_modes = (enc.GetCost() + costs[1] < costs[0]);
+      if (!*use_sub_modes) {
+        // Reset the modes/sub-modes when not using sub-modes.
+        for (uint32_t i = 0; i < tiles_per_row * tiles_per_col; i += 4) {
+          image[i + 2] = image[i + 1];
+          image[i + 3] = 0;
+        }
+      }
+    } else {
+      *use_sub_modes = false;
     }
   }
 
   CopyImageWithPrediction(bits, min_values, max_values, image, effort,
-                          argb_scratch, buffer);
+                          *use_sub_modes, argb_scratch, buffer);
   return WP2_STATUS_OK;
 }
 

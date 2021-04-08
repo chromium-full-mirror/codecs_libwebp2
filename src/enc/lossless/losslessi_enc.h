@@ -117,6 +117,7 @@ class Encoder {
   void ApplySubtractGreen();
   WP2Status ApplyPredictFilter(const int16_t min_values[4],
                                const int16_t max_values[4],
+                               bool can_use_sub_modes,
                                const WP2::ProgressRange& progress,
                                uint32_t pred_bits, WP2::ANSEnc* const enc,
                                WP2::ANSDictionaries* const dicts);
@@ -209,12 +210,21 @@ uint32_t DistanceToPlaneCode(uint32_t width, uint32_t dist);
 //------------------------------------------------------------------------------
 // Image transforms in predictor_enc.cc
 
+// Writes the predictor sub modes (sub angles for now).
+void WriteSubModes(uint32_t transform_width, uint32_t transform_height,
+                   const int16_t* const transform_data,
+                   WP2::SymbolManager* const sw, WP2::ANSEncBase* const enc);
+
 // Computes the signed residuals after applying the predictors.
-WP2Status CreateResidualImage(uint32_t bits, const int16_t min_values[4],
+// 'can_use_sub_modes' indicates whether sub-modes are allowed by the transform
+// and should be tried to find the best predictors.
+// 'use_sub_modes' returns whether it is actually used or not.
+WP2Status CreateResidualImage(uint32_t bits, bool can_use_sub_modes,
+                              const int16_t min_values[4],
                               const int16_t max_values[4], int effort,
                               Buffer_s16* const buffer,
-                              int16_t* const argb_scratch,
-                              int16_t* const image);
+                              int16_t* const argb_scratch, int16_t* const image,
+                              bool* const use_sub_modes);
 
 WP2Status ColorSpaceTransform(uint32_t bits, int effort,
                               Buffer_s16* const buffer, int16_t* image);
@@ -238,6 +248,15 @@ struct CrunchConfig {
   uint32_t transform_bits;
   // Use a MoveToFrontCache in group4 to signal new colors.
   bool group4_use_move_to_front;
+  // Returns whether one of the transforms is kPredictorWSub.
+  bool HasSubModes() const {
+    for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {
+      if (transforms[i] == TransformType::kPredictorWSub) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   // Return true if caching the current CrunchConfig results will help 'config'.
   bool ShouldBeCachedFor(const CrunchConfig& config) const;

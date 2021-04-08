@@ -609,10 +609,11 @@ enum Symbol {
   kSymbolCache,
   kSymbolDist,
   kSymbolLen,
+  kSymbolSubMode,
   kSymbolNum
 };
-static const char* const kSymbolNames[] = {"type", "a",     "r",    "g",
-                                           "b",    "cache", "dist", "len"};
+static const char* const kSymbolNames[] = {
+    "type", "a", "r", "g", "b", "cache", "dist", "len", "sub_mode"};
 STATIC_ASSERT_ARRAY_SIZE(kSymbolNames, kSymbolNum);
 
 // Group 4 symbols.
@@ -662,6 +663,8 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
   // Set the symbol A as useless and R,G,B as ranging with the cross color image
   // bounds kRedToBlueMax, kGreenToBlueMax, kGreenToRedMax
   void InitAsCrossColorImage(uint32_t num_pixels);
+  // Initialize kSymbolSubMode.
+  WP2Status InitSubMode();
 
   virtual ~LosslessSymbolsInfo() = default;
 

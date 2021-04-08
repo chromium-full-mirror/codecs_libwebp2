@@ -138,6 +138,7 @@ void PredictorNonClamped5_C(const int16_t* left, const int16_t* top,
                             int16_t* out) {
   ClampedAddSubtractFull(left, top, top - 4, out);
 }
+
 // Predictors of type Clamped.
 void PredictorClamped0_C(const int16_t* left, const int16_t* top,
                          const int16_t min_values[4],
@@ -149,50 +150,72 @@ void PredictorClamped1_C(const int16_t* left, const int16_t* top,
                          const int16_t max_values[4], int16_t* out) {
   AddSubtractHalf(left, top, top - 4, min_values, max_values, out);
 }
-
 }  // namespace
 
 // Angle predictors.
 namespace WP2L {
 template <>
-void AnglePredict<45>(const int16_t* left, const int16_t* top, int16_t* out) {
-  out[0] = top[4];
-  out[1] = top[5];
-  out[2] = top[6];
-  out[3] = top[7];
+void AnglePredict<45>(int delta, const int16_t* left, const int16_t* top,
+                      int16_t* out) {
+  if (delta == 0) {
+    std::copy(top + 4, top + 8, out);
+  } else {
+    SubAnglePredictor(WP2::kAngle_45 + delta, left, top, out);
+  }
 }
 template <>
-void AnglePredict<67>(const int16_t* left, const int16_t* top, int16_t* out) {
-  Average2(top, top + 4, out);
+void AnglePredict<67>(int delta, const int16_t* left, const int16_t* top,
+                      int16_t* out) {
+  if (delta == 0) {
+    Average2(top, top + 4, out);
+  } else {
+    SubAnglePredictor(WP2::kAngle_67 + delta, left, top, out);
+  }
 }
 template <>
-void AnglePredict<90>(const int16_t* left, const int16_t* top, int16_t* out) {
-  out[0] = top[0];
-  out[1] = top[1];
-  out[2] = top[2];
-  out[3] = top[3];
+void AnglePredict<90>(int delta, const int16_t* left, const int16_t* top,
+                      int16_t* out) {
+  if (delta == 0) {
+    std::copy(top, top + 4, out);
+  } else {
+    SubAnglePredictor(WP2::kAngle_90 + delta, left, top, out);
+  }
 }
 template <>
-void AnglePredict<113>(const int16_t* left, const int16_t* top, int16_t* out) {
-  Average2(top - 4, top, out);
+void AnglePredict<113>(int delta, const int16_t* left, const int16_t* top,
+                       int16_t* out) {
+  if (delta == 0) {
+    Average2(top - 4, top, out);
+  } else {
+    SubAnglePredictor(WP2::kAngle_113 + delta, left, top, out);
+  }
 }
 template <>
-void AnglePredict<135>(const int16_t* left, const int16_t* top, int16_t* out) {
-  out[0] = top[-4];
-  out[1] = top[-3];
-  out[2] = top[-2];
-  out[3] = top[-1];
+void AnglePredict<135>(int delta, const int16_t* left, const int16_t* top,
+                       int16_t* out) {
+  if (delta == 0) {
+    std::copy(top - 4, top, out);
+  } else {
+    SubAnglePredictor(WP2::kAngle_135 + delta, left, top, out);
+  }
 }
 template <>
-void AnglePredict<157>(const int16_t* left, const int16_t* top, int16_t* out) {
-  Average2(left, top - 4, out);
+void AnglePredict<157>(int delta, const int16_t* left, const int16_t* top,
+                       int16_t* out) {
+  if (delta == 0) {
+    Average2(left, top - 4, out);
+  } else {
+    SubAnglePredictor(WP2::kAngle_157 + delta, left, top, out);
+  }
 }
 template <>
-void AnglePredict<180>(const int16_t* left, const int16_t* top, int16_t* out) {
-  out[0] = left[0];
-  out[1] = left[1];
-  out[2] = left[2];
-  out[3] = left[3];
+void AnglePredict<180>(int delta, const int16_t* left, const int16_t* top,
+                       int16_t* out) {
+  if (delta == 0) {
+    std::copy(left, left + 4, out);
+  } else {
+    SubAnglePredictor(WP2::kAngle_180 + delta, left, top, out);
+  }
 }
 
 }  // namespace WP2L

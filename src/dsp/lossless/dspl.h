@@ -123,11 +123,12 @@ extern PredictorClampedFunc PredictorsClamped_C[kNumPredictorsClamped];
     (PredictorsClamped##OUT)[1] = PredictorClamped##IN##1_C; \
   } while (0);
 
-typedef void (*PredictorAngleFunc)(const int16_t* left, const int16_t* top,
-                                   int16_t* out);
+typedef void (*PredictorAngleFunc)(int delta, const int16_t* left,
+                                   const int16_t* top, int16_t* out);
 extern PredictorAngleFunc PredictorsAngle[kNumPredictorsAngle];
 template <int MAIN_ANGLE>
-void AnglePredict(const int16_t* left, const int16_t* top, int16_t* out);
+void AnglePredict(int delta, const int16_t* left, const int16_t* top,
+                  int16_t* out);
 
 // Indices of the left/top predictors in PredictorsAngle.
 static uint32_t constexpr kPredictorAngleLeftIndex = 6u;

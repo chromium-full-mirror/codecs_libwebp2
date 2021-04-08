@@ -77,9 +77,9 @@ typedef void (*PredictorClampedSubFunc)(const int16_t* in, bool has_alpha,
 extern PredictorClampedSubFunc PredictorsClampedSub[kNumPredictorsClamped];
 extern PredictorClampedSubFunc PredictorsClampedSub_C[kNumPredictorsClamped];
 
-typedef void (*PredictorAngleSubFunc)(const int16_t* in, bool has_alpha,
-                                      const int16_t* upper, uint32_t num_pixels,
-                                      int16_t* out);
+typedef void (*PredictorAngleSubFunc)(int delta, const int16_t* in,
+                                      bool has_alpha, const int16_t* upper,
+                                      uint32_t num_pixels, int16_t* out);
 extern PredictorAngleSubFunc PredictorsAngleSub[kNumPredictorsAngle];
 
 extern PredictorNonClampedSubFunc PredictorSubBlack;

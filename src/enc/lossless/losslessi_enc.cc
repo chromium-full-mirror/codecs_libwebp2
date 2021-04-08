@@ -595,15 +595,14 @@ void Encoder::ApplySubtractGreen() {
 // Finds the best spatial predictor for each prediction block (of size
 // 2^(enc->transform_bits_)), saves the residuals in enc->argb_ and writes the
 // transform for each block in the form of an image.
-WP2Status Encoder::ApplyPredictFilter(const int16_t min_values[4],
-                                      const int16_t max_values[4],
-                                      const ProgressRange& progress,
-                                      uint32_t pred_bits,
-                                      WP2::ANSEnc* const enc,
-                                      WP2::ANSDictionaries* const dicts) {
-  WP2_CHECK_STATUS(CreateResidualImage(pred_bits, min_values, max_values,
-                                       config_.effort, &argb_buffer_,
-                                       argb_scratch_, transform_data_));
+WP2Status Encoder::ApplyPredictFilter(
+    const int16_t min_values[4], const int16_t max_values[4],
+    bool can_use_sub_modes, const ProgressRange& progress, uint32_t pred_bits,
+    WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts) {
+  bool use_sub_modes;
+  WP2_CHECK_STATUS(CreateResidualImage(
+      pred_bits, can_use_sub_modes, min_values, max_values, config_.effort,
+      &argb_buffer_, argb_scratch_, transform_data_, &use_sub_modes));
 
   const WP2::ANSDebugPrefix prefix(enc, "predictor");
   enc->PutRange(pred_bits, kTransformBitsMin, kTransformBitsMax,
@@ -618,6 +617,26 @@ WP2Status Encoder::ApplyPredictFilter(const int16_t min_values[4],
       enc, dicts, transform_data_, (HashChain*)&hash_chain_,
       (BackwardRefsPool*)&ref_pool_, transform_width, transform_height,
       symbols_info, config_.effort, progress);
+
+  if (can_use_sub_modes &&
+      enc->PutBool(use_sub_modes, "use_sub_modes")) {
+    const WP2::ANSDebugPrefix prefix_sub_modes(enc, "sub_modes");
+    // Also encode the sub-modes.
+    const uint32_t transform_size = transform_width * transform_height;
+    WP2_CHECK_STATUS(symbols_info.InitSubMode());
+    WP2::SymbolRecorder recorder;
+    WP2_CHECK_STATUS(
+        recorder.Allocate(symbols_info, /*num_records=*/transform_size));
+    WP2::ANSEncNoop enc_noop;
+    WriteSubModes(transform_width, transform_height, transform_data_, &recorder,
+                  &enc_noop);
+    WP2::SymbolWriter sw;
+    WP2_CHECK_STATUS(sw.Init(symbols_info, config_.effort));
+    WP2_CHECK_STATUS(sw.Allocate());
+    WP2_CHECK_STATUS(sw.WriteHeader(kSymbolSubMode, transform_size, recorder,
+                                    "sub_mode", enc, dicts));
+    WriteSubModes(transform_width, transform_height, transform_data_, &sw, enc);
+  }
   return status;
 }
 
@@ -665,7 +684,9 @@ WP2Status Encoder::AllocateTransformBuffer(
     const TransformType* end =
         config.transforms + kPossibleTransformCombinationSize;
     use_predict |=
-        (std::find(config.transforms, end, TransformType::kPredictor) != end);
+        (std::find(config.transforms, end, TransformType::kPredictor) != end ||
+         std::find(config.transforms, end, TransformType::kPredictorWSub) !=
+             end);
     use_cross_color |=
         (std::find(config.transforms, end, TransformType::kCrossColor) != end);
   }
@@ -812,6 +833,7 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
       case TransformType::kYCoCgR:
       case TransformType::kSubtractGreen:
       case TransformType::kPredictor:
+      case TransformType::kPredictorWSub:
       case TransformType::kCrossColor:
         if (need_copy) {
           WP2_CHECK_STATUS(MakeInputImageCopy(config));
@@ -823,15 +845,16 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
         } else if (type == TransformType::kSubtractGreen) {
           ApplySubtractGreen();
           WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
-        } else if (type == TransformType::kPredictor) {
+        } else if (type == TransformType::kPredictor ||
+                   type == TransformType::kPredictorWSub) {
           // Define the minimum/maximum values before applying the predictors.
           int16_t minima_range[4], maxima_range[4];
           GetARGBRanges(config.transforms, symbols_info_.SampleFormat(),
                         palette_.Size(), minima_range, maxima_range,
                         /*num_transforms=*/i);
-          WP2_CHECK_STATUS(
-              ApplyPredictFilter(minima_range, maxima_range, progress_local,
-                                 config.transform_bits, enc, dicts));
+          WP2_CHECK_STATUS(ApplyPredictFilter(
+              minima_range, maxima_range, config.HasSubModes(), progress_local,
+              config.transform_bits, enc, dicts));
         } else {
           WP2_CHECK_STATUS(ApplyCrossColorFilter(
               progress_local, config.transform_bits, enc, dicts));
