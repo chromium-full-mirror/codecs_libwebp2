@@ -294,7 +294,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     // VisualDebug
-    if (VDMatch(config, "prediction/raw")) {
+    if (VDMatch(config, "prediction/raw") && !VDMatch(config, "lossless")) {
       const Channel c = VDChannel(config);
       if (c != kAChannel || cb.HasLossyAlpha()) {
         cb.StorePredictionModes(config, tile->rect, c, gparams.GetPredictors(c),
@@ -335,7 +335,8 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
         cb.StoreResiduals(config, tile->rect.x, tile->rect.y,
                           gparams.segments_[0].quant_a_, kAChannel, &vd_plane);
       }
-    } else if (VDMatch(config, "prediction/modes")) {
+    } else if (VDMatch(config, "prediction/modes") &&
+               !VDMatch(config, "lossless")) {
       const Channel c = VDChannel(config);
       if (c != kAChannel || cb.HasLossyAlpha()) {
         cb.StorePredictionModes(config, tile->rect, c, gparams.GetPredictors(c),

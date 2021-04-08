@@ -502,7 +502,9 @@ void CodedBlock::StoreOriginalResiduals(
           tile_pos_x, tile_pos_y,
           {x_pix() + split_x, y_pix() + split_y, split_w, split_h}, config);
       for (uint32_t k = 0, y = 0; y < split_h; ++y) {
+        if (y_pix() + split_y + y >= dst_plane->h_) break;
         for (uint32_t x = 0; x < split_w; ++x, ++k) {
+          if (x_pix() + split_x + x >= dst_plane->w_) break;
           const int16_t value = original_res[tf_i][k];
           dst_plane->At(x_pix() + split_x + x, y_pix() + split_y + y) = value;
           if (selected) str += WP2SPrint("%4d ", value);
@@ -600,7 +602,7 @@ void CodedBlock::StorePredictionScore(
 
     // Check the formula did not change.
     assert(std::abs(dist + lambda * (res_rate + pred_rate + tf_rate) - score) <
-           0.001f);
+           0.1f);
 
     // Print at least all better predictors. Skip worse ones if too many.
     std::string& str = config.info->selection_info;
@@ -713,6 +715,10 @@ void CodedBlockBase::StorePredictionModes(
 void CodedBlockBase::AppendOriginalPixels(
     const DecoderConfig& config, uint32_t tile_x, uint32_t tile_y,
     const CSPTransform& csp_tranform, ArgbBuffer* const debug_output) const {
+  if (!(VDMatch(config, "y") || VDMatch(config, "u") || VDMatch(config, "v") ||
+        VDMatch(config, "a"))) {
+    return;
+  }
   if (VDSelected(AsRect(tile_x, tile_y), config)) {
     const Channel channel = VDChannel(config);
     YUVPlane original_yuv;  // 'debug_output' should be the original RGB pixels.
@@ -741,9 +747,12 @@ void CodedBlockBase::AppendCompressedPixels(
   if (VDMatch(config, "r") || VDMatch(config, "g") || VDMatch(config, "b")) {
     return;
   }
+  const Channel channel = VDChannel(config);
+  if (channel == kAChannel && !HasLossyAlpha()) return;
+
   if (VDSelected(AsRect(tile_x, tile_y), config)) {
     OutputPixelValuesWithContext(config, tile_x, tile_y, *this,
-                                 out_.GetChannel(VDChannel(config)));
+                                 out_.GetChannel(channel));
     config.info->selection_info +=
         "Compressed values are before applying post processing filters\n";
   }
@@ -896,14 +905,15 @@ void CodedBlock::StoreBestCflPrediction(Channel channel, int16_t yuv_min,
                                         Plane16* const dst_plane,
                                         std::string* const debug_str) const {
   const Plane16& luma = out_.GetChannel(kYChannel);
+  const Rectangle rect = AsRect().ClipWith(dst_plane->AsRect());
 
   float a, b;
   CflLinearRegression(channel, yuv_min, yuv_max, &a, &b, debug_str);
 
-  for (uint32_t y = 0; y < h_pix(); ++y) {
-    for (uint32_t x = 0; x < w_pix(); ++x) {
+  for (uint32_t y = 0; y < rect.height; ++y) {
+    for (uint32_t x = 0; x < rect.width; ++x) {
       const int32_t v = std::lround(a * luma.At(x, y) + b);
-      dst_plane->At(x_pix() + x, y_pix() + y) = (int16_t)v;
+      dst_plane->At(rect.x + x, rect.y + y) = (int16_t)v;
     }
   }
 }
@@ -914,14 +924,15 @@ void CodedBlock::StoreBestCflResiduals(Channel channel, int16_t yuv_min,
                                        std::string* const debug_str) const {
   const Plane16& luma = out_.GetChannel(kYChannel);
   const Plane16& chroma = in_.GetChannel(channel);
+  const Rectangle rect = AsRect().ClipWith(dst_plane->AsRect());
 
   float a, b;
   CflLinearRegression(channel, yuv_min, yuv_max, &a, &b, debug_str);
 
-  for (uint32_t y = 0; y < h_pix(); ++y) {
-    for (uint32_t x = 0; x < w_pix(); ++x) {
+  for (uint32_t y = 0; y < rect.height; ++y) {
+    for (uint32_t x = 0; x < rect.width; ++x) {
       const int32_t v = std::lround(a * luma.At(x, y) + b);
-      dst_plane->At(x_pix() + x, y_pix() + y) = (int16_t)(chroma.At(x, y) - v);
+      dst_plane->At(rect.x + x, rect.y + y) = (int16_t)(chroma.At(x, y) - v);
     }
   }
 }
