@@ -29,36 +29,34 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 // ANS quantizations.
 
-void ANSCountsQuantizeHuffman(uint32_t size,
-                              const uint32_t* const counts,
-                              uint32_t* const out,
-                              uint32_t max_bits,
+void ANSCountsQuantizeHuffman(uint32_t size, const uint32_t* const counts,
+                              uint32_t* const out, uint32_t max_bits,
                               float* const cost) {
   const uint32_t current_max_value = *std::max_element(counts, counts + size);
   const uint32_t max_value = std::min(1u << (max_bits - 1), current_max_value);
 
   uint32_t sum = 0, sum_q = 0;
-  const float norm = 1. * max_value / current_max_value;
-  if (cost != nullptr) *cost = 0;
+  const float norm = 1.f * max_value / current_max_value;
+  *cost = 0.f;
   for (size_t c = 0; c < size; ++c) {
     if (counts[c] > 0) {
       const float scaled = std::max(counts[c] * norm, 1.f);
-      const uint32_t num_bits = (uint32_t)(std::log2(scaled) + .5);
-      const uint32_t huffmanized = 1u << num_bits;
-      out[c] = huffmanized;
-      if (cost != nullptr) {
-        *cost -= counts[c] * num_bits;
-        sum += counts[c];
-        sum_q += huffmanized;
+      uint32_t num_bits = WP2Log2Floor((uint32_t)scaled);
+      uint32_t huffmanized = (1u << num_bits);
+      if ((huffmanized << 1) - scaled < scaled - huffmanized) {
+        ++num_bits;
+        huffmanized <<= 1;
       }
+      out[c] = huffmanized;
+      *cost -= counts[c] * num_bits;
+      sum += counts[c];
+      sum_q += huffmanized;
     } else {
       out[c] = 0;
     }
   }
 
-  if (cost != nullptr) {
-    *cost += sum * log2(sum_q);
-  }
+  *cost += sum * WP2Log2(sum_q);
 }
 
 bool ANSCountsQuantize(bool do_expand, uint32_t max_freq, uint32_t size,
@@ -75,7 +73,7 @@ bool ANSCountsQuantize(bool do_expand, uint32_t max_freq, uint32_t size,
   if (max_value == 0 || max_freq == max_value ||
       (!do_expand && max_value <= max_freq)) {
     if (out != counts) memcpy(out, counts, size * sizeof(uint32_t));
-    if (cost != nullptr) *cost = ANSCountsQuantizedCost(counts, counts, size);
+    if (cost != nullptr) *cost = ANSCountsCost(counts, size);
     return false;
   }
   uint32_t sum = 0, sum_q = 0;
@@ -86,7 +84,7 @@ bool ANSCountsQuantize(bool do_expand, uint32_t max_freq, uint32_t size,
       const int new_count = (int)(counts[c] * norm + .5);
       out[c] = (new_count < 1) ? 1 : new_count;
       if (cost != nullptr) {
-        *cost -= counts[c] * log2(out[c]);
+        *cost -= counts[c] * WP2Log2(out[c]);
         sum += counts[c];
         sum_q += out[c];
       }
@@ -95,7 +93,7 @@ bool ANSCountsQuantize(bool do_expand, uint32_t max_freq, uint32_t size,
     }
   }
   if (cost != nullptr) {
-    const float cost_sum = 0.f - sum * log2(sum_q);
+    const float cost_sum = 0.f - sum * WP2Log2(sum_q);
     if (*cost == cost_sum) {
       // Remove rounding errors when only one count is non-zero.
       *cost = 0.f;
@@ -107,19 +105,17 @@ bool ANSCountsQuantize(bool do_expand, uint32_t max_freq, uint32_t size,
 }
 
 // The bit cost of an element "i" is:
-// log2(1/proba[i]) = log2(sum(distribution)/distribution[i])
-float ANSCountsQuantizedCost(const uint32_t* counts,
-                             const uint32_t* distribution, uint32_t size) {
-  uint32_t sum = 0, sum_q = 0;
+// log2(1/proba[i]) = log2(sum(counts)/counts[i])
+float ANSCountsCost(const uint32_t* counts, uint32_t size) {
+  uint32_t sum = 0;
   float cost = 0.f;
   for (size_t i = 0; i < size; ++i) {
-    if (distribution[i] == 0) continue;
-    cost -= counts[i] * log2(distribution[i]);
+    if (counts[i] == 0) continue;
+    cost += WP2SLog2m1(counts[i]);
     sum += counts[i];
-    sum_q += distribution[i];
   }
-  if (sum_q > 0) {
-    const float cost_sum = 0.f - sum * log2(sum_q);
+  if (sum > 0) {
+    const float cost_sum = WP2SLog2m1(sum);
     if (cost == cost_sum) {
       // Remove rounding errors when only one count is non-zero.
       cost = 0.f;
@@ -684,8 +680,6 @@ float StoreMapping(const uint16_t* const mapping, size_t size, uint32_t range,
   }
   float cost_tot = 1.f;
   if (is_series) return cost_tot;
-
-  WP2MathInit();  // Initialization for WP2Log2.
 
   // Find the optimal stats[] sequence for the kStoreVector case
   const size_t stats_size = CollectOptimalStats(mapping, size, range, stats);

@@ -187,9 +187,8 @@ static inline void PrintBitTraceCluster(const std::vector<TraceType>& values,
       std::vector<uint32_t> counts(v.second.histo.rbegin()->first + 1, 0u);
       for (const auto& p : v.second.histo) counts[p.first] = p.second;
       // Display the type and entropy.
-      const float entropy = WP2::ANSCountsQuantizedCost(
-                                counts.data(), counts.data(), counts.size()) /
-                            byte_factor;
+      const float entropy =
+          WP2::ANSCountsCost(counts.data(), counts.size()) / byte_factor;
       constexpr const char* types[] = {"Bit",    "ABit",    "RValue",
                                        "UValue", "ASymbol", "Symbol"};
       fprintf(stderr, "%*s %s, entr: %.1f %s [",

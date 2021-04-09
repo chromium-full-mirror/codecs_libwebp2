@@ -448,8 +448,8 @@ WP2Status CreateResidualImage(uint32_t bits, bool can_use_sub_modes,
       for (uint32_t i = 0; i < 2; ++i) {
         costs[i] = 0.f;
         for (uint32_t c = 0; c < 4; ++c) {
-          costs[i] += WP2::ANSCountsQuantizedCost(
-              histo[i][c].data(), histo[i][c].data(), histo[i][c].size());
+          costs[i] +=
+              WP2::ANSCountsCost(histo[i][c].data(), histo[i][c].size());
         }
       }
       // Compute the cost of storing the sub-modes.

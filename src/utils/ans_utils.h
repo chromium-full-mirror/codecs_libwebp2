@@ -35,9 +35,8 @@ namespace WP2 {
 // ANS quantizations.
 
 // Scale the counts to fit in max_bits and replace them with the nearest powers
-// of 2. If cost is not null, set it to the cost of encoding the original
-// counts using the quantized counts (same as calling
-// ANSCountsQuantizedCost(counts, out, size)).
+// of 2. 'cost' is set to the cost of encoding the original counts using the
+// quantized counts.
 void ANSCountsQuantizeHuffman(uint32_t size,
                               const uint32_t* const counts,
                               uint32_t* const out,
@@ -57,11 +56,8 @@ bool ANSCountsQuantize(bool do_expand, uint32_t max_freq, uint32_t size,
                        const uint32_t* const counts, uint32_t* const out,
                        float* const cost);
 
-// Given an original set of symbol counts, and some distribution (e.g
-// a quantized version of counts), output the bit cost of the symbols when
-// using this distribution.
-float ANSCountsQuantizedCost(const uint32_t* counts,
-                             const uint32_t* distribution, uint32_t size);
+// Outputs the bit cost of a histogram.
+float ANSCountsCost(const uint32_t* counts, uint32_t size);
 
 //------------------------------------------------------------------------------
 // ANS vector storage.

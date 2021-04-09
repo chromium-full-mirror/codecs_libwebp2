@@ -347,8 +347,7 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
     ++histo[kHistoAlphaPred].data[0];
 
     for (uint32_t j = 0; j < kHistoNum; ++j) {
-      entropy[j] = WP2::ANSCountsQuantizedCost(&histo[j].data[0],
-                                               &histo[j].data[0], histo[j].len);
+      entropy[j] = WP2::ANSCountsCost(&histo[j].data[0], histo[j].len);
     }
 
     // Compute the entropy of the different entropy modes.

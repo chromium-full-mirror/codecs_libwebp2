@@ -688,8 +688,7 @@ TEST_F(TestANS, Test5b) {
   counts[kIndex] = kMaxCount;
 
   // Test that the cost of non-quantized histogram is 0.
-  const float cost1 =
-      ANSCountsQuantizedCost(&counts[0], &counts[0], counts.size());
+  const float cost1 = ANSCountsCost(&counts[0], counts.size());
   EXPECT_EQ(cost1, 0.f);
 
   // Test that the cost of quantized histogram is 0.
@@ -699,11 +698,6 @@ TEST_F(TestANS, Test5b) {
                     &counts[0], &distribution[0], &cost2);
   EXPECT_EQ(distribution[kIndex], kMaxCountQuantized);
   EXPECT_EQ(cost2, 0.f);
-
-  // Test that the cost of quantized histogram is 0.
-  const float cost3 =
-      ANSCountsQuantizedCost(&counts[0], &distribution[0], counts.size());
-  EXPECT_EQ(cost3, 0.f);
 }
 
 //------------------------------------------------------------------------------
