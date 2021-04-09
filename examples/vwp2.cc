@@ -441,6 +441,7 @@ class Params {
   const char* partition_file_path_ = "/tmp/partition.txt";
   const char* dump_wp2_path_ = "/tmp/dump.wp2";
   const char* dump_png_path_ = "/tmp/dump.png";
+  const char* dump_av1_path_ = "/tmp/dump.av1";
   // If not empty, is the current block being drawn with the mouse.
   Rectangle forcing_block_;
   // Same as EncoderInfo::force_partition but not yet encoded.
@@ -1705,6 +1706,13 @@ bool Params::EncodeAV1(bool copy_partition, float av1_quality,
   }
   printf("Done compressing AV1 in just %.2f seconds (%u bytes)!\n", timing[0],
          (uint32_t)tmp.size());
+  if (IoUtilWriteFile(tmp, dump_av1_path_,
+                      /*overwrite=*/true) != WP2_STATUS_OK) {
+    fprintf(stderr, "Warning, could not save AV1 bitstream to %s\n",
+            dump_av1_path_);
+  } else {
+    printf("Saved AV1 bitstream to %s\n", dump_av1_path_);
+  }
 
   if (av1_file_size != nullptr) *av1_file_size = tmp.size();
   alt1_msg_ = SPrintf("AV1 - size = %u", (uint32_t)tmp.size());
@@ -2973,9 +2981,9 @@ void Params::HandleMouseMove(int x, int y, bool button_pressed) {
   } else if (view_zoom_level_ != 0 &&
              !(glutGetModifiers() & GLUT_ACTIVE_SHIFT)) {
     // Moving the view. (Shift is used for selecting areas).
-    int x_change =
+    const int x_change =
         (mouse_x_down_ - x) * (int)view_rect_.width / (int)viewport_width_;
-    int y_change =
+    const int y_change =
         (mouse_y_down_ - y) * (int)view_rect_.height / (int)viewport_height_;
     view_rect_.x =
         Clamp<int>(view_rect_down_.x + x_change, 0, width_ - view_rect_.width);
@@ -3239,7 +3247,8 @@ void Params::HandleMouseClick(int button, int state, int x, int y) {
   const uint32_t img_x_down = ToImageX(mouse_x_down_);
   const uint32_t img_y_down = ToImageY(mouse_y_down_);
 
-  const int incr = (button == kScrollWheelUp) ? 1 : -1;
+  const int incr = (button == kScrollWheelUp) ? 1 :
+                   (button == kScrollWheelDown) ? -1 : 0;
 
   if (HandleMenuClick(button, state, img_x_down, img_y_down, img_x, img_y) ||
       HandleSegmentClick(button, state, img_x_down, img_y_down, img_x, img_y) ||
@@ -3252,8 +3261,7 @@ void Params::HandleMouseClick(int button, int state, int x, int y) {
     return;  // Event was handled, nothing more to do.
   }
 
-  if (state == GLUT_DOWN &&
-      (button == kScrollWheelUp || button == kScrollWheelDown)) {
+  if (state == GLUT_DOWN && incr != 0) {
     UpdateViewZoomLevel(incr);
   }
 }
@@ -3684,6 +3692,8 @@ int main(int argc, char* argv[]) {
         params.dump_wp2_path_ = argv[c];
       } else if (extension == "png") {
         params.dump_png_path_ = argv[c];
+      } else if (extension == "av1") {
+        params.dump_av1_path_ = argv[c];
       } else {
         printf("Unhandled extension for -set_dump_path '%s'\n", argv[c]);
         parse_error = true;
