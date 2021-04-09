@@ -307,12 +307,9 @@ static float Log2Slow_C(uint32_t v) {
     const uint32_t log_v = WP2Log2Floor(v) - 7;
 
     float log_2 = kWP2Log2Table[v >> log_v] + log_v;
-    if (log_v >= kApproxLogMax) {
-      // Since the division is still expensive, add this correction factor only
-      // for large values of 'v'.
-      const float correction = 1.442695041f * (v & ((1 << log_v) - 1));
-      log_2 += correction / v;
-    }
+    // Please check SLog2m1Slow_C for an explanation.
+    const float correction = 1.44269504089f * (v & ((1 << log_v) - 1));
+    log_2 += correction / v;
     return log_2;
   } else {
     return std::log2(v);
