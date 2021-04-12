@@ -131,18 +131,6 @@ class SwappingCustomDecoder : public ExternalCustomDecoder {
 
 //------------------------------------------------------------------------------
 
-// Copies pixels 'from' 'rect' 'to' 'rect'.
-void ImportRect(const ArgbBuffer& from, const Rectangle& rect,
-                ArgbBuffer* const to) {
-  if (rect.GetArea() == 0) return;
-  ArgbBuffer from_view(from.format()), to_view(to->format());
-  CHECK_OR_DIE(from_view.SetView(from, rect) == WP2_STATUS_OK);
-  CHECK_OR_DIE(to_view.SetView(*to, rect) == WP2_STATUS_OK);
-  CHECK_OR_DIE(to_view.CopyFrom(from_view) == WP2_STATUS_OK);
-}
-
-//------------------------------------------------------------------------------
-
 // Returns true if a lossless tile is reached with no error, false otherwise.
 bool HasALosslessTile(DataView input) {
   ExternalDataSource data_source(input.bytes, input.size);
@@ -250,8 +238,13 @@ class IncrementalDecodingTester {
       }
       CheckDecodedArea(available_input_size, previous_input_size);
       if (idec.GetDecodedArea().GetArea() > 0) {
-        CheckIncrementalOutput();
-        SaveIncrementalOutput();
+        // Only check new pixels to avoid timeouts when parsing a large image at
+        // every byte.
+        Rectangle top, bottom, left, right;
+        GetDecoder().GetDecodedArea().Exclude(previous_decoded_area_, &top,
+                                              &bottom, &left, &right);
+        CheckIncrementalOutput(top, bottom, left, right);
+        SaveIncrementalOutput(top, bottom, left, right);
       }
       previous_frame_index_ = frame_index_;
       if (setup_.compare_with_single_chunk) {
@@ -259,7 +252,8 @@ class IncrementalDecodingTester {
                                      duration_ms);
       }
       if (decoded_a_full_frame) {
-        WP2_CHECK_STATUS(CheckFullFrame(available_input_size, duration_ms));
+        WP2_CHECK_STATUS(CheckFullFrame(available_input_size,
+                                        previous_input_size, duration_ms));
         SaveFullFrame(duration_ms, decoded_frames, decoded_durations_ms);
         if (!idec.TryGetFrameDecodedFeatures(frame_index_)->is_last) {
           ++frame_index_;
@@ -453,22 +447,27 @@ class IncrementalDecodingTester {
   }
 
   // Contains the checks related to partial frame decoding.
-  void CheckIncrementalOutput() const {
+  void CheckIncrementalOutput(Rectangle top, Rectangle bottom, Rectangle left,
+                              Rectangle right) const {
     CHECK_OR_DIE(GetDecoder().TryGetDecodedFeatures() != nullptr);
     // Make sure there is no transparent pixel in the incremental output if the
     // bitstream is declared as opaque.
     if (GetDecoder().TryGetDecodedFeatures()->is_opaque) {
-      ArgbBuffer view(output_.format());
-      CHECK_OR_DIE(view.SetView(output_, GetDecoder().GetDecodedArea()) ==
-                   WP2_STATUS_OK);
-      CHECK_OR_DIE(!view.HasTransparency());
+      for (Rectangle rect : {top, bottom, left, right}) {
+        if (rect.GetArea() == 0) continue;
+        ArgbBuffer view(output_.format());
+        CHECK_OR_DIE(view.SetView(output_, rect) == WP2_STATUS_OK);
+        CHECK_OR_DIE(!view.HasTransparency());
+      }
     }
   }
 
   // Stores the newly decoded pixels at each incremental decoding step for later
   // verification.
-  void SaveIncrementalOutput() {
+  void SaveIncrementalOutput(Rectangle top, Rectangle bottom, Rectangle left,
+                             Rectangle right) {
     if (incremental_output_.IsEmpty()) {
+      CHECK_OR_DIE(GetDecoder().TryGetDecodedFeatures() != nullptr);
       CHECK_OR_DIE(incremental_output_.Resize(
                        GetDecoder().TryGetDecodedFeatures()->width,
                        GetDecoder().TryGetDecodedFeatures()->height) ==
@@ -476,13 +475,14 @@ class IncrementalDecodingTester {
     }
 
     // Copy newly decoded pixels.
-    Rectangle top, bot, lft, rgt;
-    GetDecoder().GetDecodedArea().Exclude(previous_decoded_area_, &top, &bot,
-                                          &lft, &rgt);
-    ImportRect(output_, top, &incremental_output_);
-    ImportRect(output_, bot, &incremental_output_);
-    ImportRect(output_, lft, &incremental_output_);
-    ImportRect(output_, rgt, &incremental_output_);
+    for (Rectangle rect : {top, bottom, left, right}) {
+      if (rect.GetArea() == 0) continue;
+      ArgbBuffer from_view(output_.format());
+      ArgbBuffer to_view(incremental_output_.format());
+      CHECK_OR_DIE(from_view.SetView(output_, rect) == WP2_STATUS_OK);
+      CHECK_OR_DIE(to_view.SetView(incremental_output_, rect) == WP2_STATUS_OK);
+      CHECK_OR_DIE(to_view.CopyFrom(from_view) == WP2_STATUS_OK);
+    }
     previous_decoded_area_ = GetDecoder().GetDecodedArea();
   }
 
@@ -533,6 +533,7 @@ class IncrementalDecodingTester {
 
   // Contains the checks done when a frame is completely decoded.
   WP2Status CheckFullFrame(size_t available_input_size,
+                           size_t previous_input_size,
                            uint32_t duration_ms) const {
     const Rectangle decoded_area = GetDecoder().GetDecodedArea();
     CHECK_OR_DIE(decoded_area.width == output_.width());
@@ -556,7 +557,7 @@ class IncrementalDecodingTester {
     size_t offset, length;
     CHECK_OR_DIE(
         GetDecoder().TryGetFrameLocation(frame_index_, &offset, &length));
-    if (incr_size_step_ == 1) {
+    if (previous_input_size + 1 == available_input_size) {
       // A frame was just decoded during a byte-by-byte incremental decoding.
       CHECK_OR_DIE(available_input_size == offset + length);
     } else {
