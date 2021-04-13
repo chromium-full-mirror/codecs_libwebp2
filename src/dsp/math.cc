@@ -36,7 +36,6 @@
 // very high degree (the ratio of these two is 0.99999x).
 // Keeping a high threshold for now.
 constexpr uint32_t kApproxLogWithCorrectionMax = 65536;
-constexpr uint32_t kApproxLogMax = 2;
 
 // lookup table for small values of log2(int)
 const float kWP2Log2Table[kLogLookupIdxMax] = {
