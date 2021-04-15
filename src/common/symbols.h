@@ -663,6 +663,8 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
   // Set the symbol A as useless and R,G,B as ranging with the cross color image
   // bounds kRedToBlueMax, kGreenToBlueMax, kGreenToRedMax
   void InitAsCrossColorImage(uint32_t num_pixels);
+  // Initialize to store predictors.
+  void InitAsPredictorImage(uint32_t num_pixels);
   // Initialize kSymbolSubMode.
   WP2Status InitSubMode();
 

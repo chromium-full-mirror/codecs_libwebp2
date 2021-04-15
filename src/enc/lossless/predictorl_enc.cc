@@ -29,6 +29,8 @@ using WP2::Vector_u32;
 
 static const float kSpatialPredictorBias = 15.f;
 static const int kPredLowEffort = 11;  // select predictor
+static constexpr uint32_t kNumPredictorsBitsMask =
+    (1u << WP2L::kNumPredictorsBits) - 1;
 
 //------------------------------------------------------------------------------
 // Methods to calculate Entropy (Shannon).
@@ -123,21 +125,41 @@ struct Predictor {
   const int16_t* max_values;
 };
 
-void WriteSubModes(uint32_t transform_width, uint32_t transform_height,
-                   const int16_t* const transform_data,
-                   WP2::SymbolManager* const sw, WP2::ANSEncBase* const enc) {
-  for (uint32_t y = 0; y < transform_height; ++y) {
-    for (uint32_t x = 0; x < transform_width; ++x) {
-      const int16_t* const pix =
-          &transform_data[y * 4 * transform_width + 4 * x];
-      if (kPredictorType[pix[2]] != PredictorType::Angle) continue;
-      const uint32_t cluster =
-          (kPredictorIndex[pix[2]] == 0)                         ? 0
-          : (kPredictorIndex[pix[2]] == kNumPredictorsAngle - 1) ? 1
-                                                                 : 2;
-      sw->Process(kSymbolSubMode, cluster, pix[3], "sub_mode", enc);
-    }
+static void WriteSubModesImpl(const int16_t* const modes, bool needs_shift,
+                              const WP2::Vector_s8& sub_modes,
+                              WP2::SymbolManager* const sw,
+                              WP2::ANSEncBase* const enc) {
+  for (uint32_t i = 0; i < sub_modes.size(); i += 4) {
+    const uint32_t mode =
+        needs_shift ? (modes[i + 2] >> kNumPredictorsBits) : modes[i + 2];
+    if (kPredictorType[mode] != PredictorType::Angle) continue;
+    const uint32_t cluster =
+        (kPredictorIndex[mode] == 0)                         ? 0
+        : (kPredictorIndex[mode] == kNumPredictorsAngle - 1) ? 1
+                                                             : 2;
+    sw->Process(kSymbolSubMode, cluster, sub_modes[i + 2], "sub_mode", enc);
   }
+}
+
+WP2Status WriteSubModes(const int16_t* const modes, bool needs_shift,
+                        const WP2::Vector_s8& sub_modes, int effort,
+                        WP2::ANSEncBase* const enc,
+                        WP2::ANSDictionaries* const dicts) {
+  LosslessSymbolsInfo symbols_info;
+  WP2_CHECK_STATUS(symbols_info.InitSubMode());
+  WP2::SymbolRecorder recorder;
+  const uint32_t num_pixels = sub_modes.size() / 4;
+  WP2_CHECK_STATUS(recorder.Allocate(symbols_info, /*num_records=*/num_pixels));
+  WP2::ANSEncNoop enc_noop;
+  WriteSubModesImpl(modes, needs_shift, sub_modes, &recorder, &enc_noop);
+
+  WP2::SymbolWriter sw;
+  WP2_CHECK_STATUS(sw.Init(symbols_info, effort));
+  WP2_CHECK_STATUS(sw.Allocate());
+  WP2_CHECK_STATUS(sw.WriteHeader(kSymbolSubMode, num_pixels, recorder,
+                                  "sub_mode", enc, dicts));
+  WriteSubModesImpl(modes, needs_shift, sub_modes, &sw, enc);
+  return WP2_STATUS_OK;
 }
 
 // Stores the difference between the pixel and its prediction in "out".
@@ -270,13 +292,17 @@ static void GetBestPredictorForTile(
   for (uint32_t pass = 0; pass < (use_sub_modes ? 2u : 1u); ++pass) {
     if (pass == 1u) *pred_wsub_best = *pred_best;
     // Prediction modes of the left and above neighbor tiles.
+    const uint32_t ind_left = 4 * (tile_y * tiles_per_row + tile_x - 1);
     const uint32_t left_mode =
-        (tile_x > 0) ? modes[4 * (tile_y * tiles_per_row + tile_x - 1) +
-                             (pass == 0u ? use_sub_modes ? 1 : 2 : 2)]
+        (tile_x > 0) ? (pass == 0u)
+                           ? modes[ind_left + 2] & kNumPredictorsBitsMask
+                           : modes[ind_left + 2] >> kNumPredictorsBits
                      : 0xff;
+    const uint32_t ind_above = 4 * ((tile_y - 1) * tiles_per_row + tile_x);
     const uint32_t above_mode =
-        (tile_y > 0) ? modes[4 * ((tile_y - 1) * tiles_per_row + tile_x) +
-                             (pass == 0u ? use_sub_modes ? 1 : 2 : 2)]
+        (tile_y > 0) ? (pass == 0u)
+                           ? modes[ind_above + 2] & kNumPredictorsBitsMask
+                           : modes[ind_above + 2] >> kNumPredictorsBits
                      : 0xff;
     for (uint32_t mode = 0; mode < kNumPredictors; ++mode) {
       int8_t sub_mode_min = 0, sub_mode_max = 0;
@@ -355,7 +381,7 @@ static void GetBestPredictorForTile(
 static void CopyImageWithPrediction(int bits, const int16_t min_values[4],
                                     const int16_t max_values[4],
                                     const int16_t* const modes, int effort,
-                                    bool use_sub_mode,
+                                    const WP2::Vector_s8& sub_modes,
                                     int16_t* const argb_scratch,
                                     Buffer_s16* const buffer) {
   const uint32_t width = buffer->width, height = buffer->height;
@@ -371,15 +397,13 @@ static void CopyImageWithPrediction(int bits, const int16_t min_values[4],
               current_row);
 
     for (uint32_t x = 0; x < width;) {
-      const int mode =
-          modes[4 * ((y >> bits) * tiles_per_row + (x >> bits)) + 2];
-      const int8_t sub_mode =
-          use_sub_mode
-              ? modes[4 * ((y >> bits) * tiles_per_row + (x >> bits)) + 3]
-              : 0;
-      const Predictor pred(mode, sub_mode, min_values, max_values);
-      uint32_t x_end = x + (1 << bits);
-      if (x_end > width) x_end = width;
+      const uint32_t x_end = std::min(x + (1 << bits), width);
+      const uint32_t ind = 4 * ((y >> bits) * tiles_per_row + (x >> bits));
+      const Predictor pred(
+          modes[ind + 2],
+          /*sub_mode_in=*/sub_modes.empty() ? 0 : sub_modes[ind + 2],
+          min_values, max_values);
+
       GetResidual(width, upper_row, current_row, buffer->has_alpha, pred, x,
                   x_end, y, buffer->GetPosition(x, y));
       x = x_end;
@@ -393,18 +417,23 @@ WP2Status CreateResidualImage(uint32_t bits, bool can_use_sub_modes,
                               const int16_t min_values[4],
                               const int16_t max_values[4], int effort,
                               Buffer_s16* const buffer,
-                              int16_t* const argb_scratch, int16_t* const image,
-                              bool* const use_sub_modes) {
-  const uint32_t tiles_per_row = SubSampleSize(buffer->width, bits);
-  const uint32_t tiles_per_col = SubSampleSize(buffer->height, bits);
+                              int16_t* const argb_scratch, int16_t* const modes,
+                              WP2::Vector_s8* const sub_modes) {
+  // Define the mode image dimensions.
+  const uint32_t width = SubSampleSize(buffer->width, bits);
+  const uint32_t height = SubSampleSize(buffer->height, bits);
+  if (can_use_sub_modes) {
+    WP2_CHECK_ALLOC_OK(sub_modes->resize(4 * width * height));
+  } else {
+    sub_modes->clear();
+  }
   if (effort == 0) {
-    for (uint32_t i = 0; i < tiles_per_row * tiles_per_col; ++i) {
-      image[4 * i + 0] = 0;
-      image[4 * i + 1] = 0;
-      image[4 * i + 2] = kPredLowEffort;
-      image[4 * i + 3] = 0;
+    for (uint32_t i = 0; i < 4 * width * height; i += 4) {
+      modes[i + 0] = 0;
+      modes[i + 1] = 0;
+      modes[i + 2] = kPredLowEffort;
+      modes[i + 3] = 0;
     }
-    *use_sub_modes = false;
   } else {
     ChannelVector histo[2];
     ChannelVector tmp_histo[2];
@@ -423,20 +452,20 @@ WP2Status CreateResidualImage(uint32_t bits, bool can_use_sub_modes,
     Predictor pred(/*mode_in=*/0, /*sub_mode_in=*/0, min_values, max_values);
     Predictor pred_wsub(/*mode_in=*/0, /*sub_mode_in=*/0, min_values,
                         max_values);
-    for (uint32_t tile_y = 0; tile_y < tiles_per_col; ++tile_y) {
-      for (uint32_t tile_x = 0; tile_x < tiles_per_row; ++tile_x) {
+    for (uint32_t tile_y = 0; tile_y < height; ++tile_y) {
+      for (uint32_t tile_x = 0; tile_x < width; ++tile_x) {
         GetBestPredictorForTile(
             tile_x, tile_y, bits, can_use_sub_modes, min_values, max_values,
-            *buffer, image, argb_scratch, histo, tmp_histo, &pred, &pred_wsub);
-        image[4 * (tile_y * tiles_per_row + tile_x) + 0] = 0;
+            *buffer, modes, argb_scratch, histo, tmp_histo, &pred, &pred_wsub);
+        const uint32_t ind = 4 * (tile_y * width + tile_x);
+        for (uint32_t c : {0, 1, 3}) modes[ind + c] = 0;
+        // Store the modes in the green channel.
         if (can_use_sub_modes) {
-          image[4 * (tile_y * tiles_per_row + tile_x) + 1] = pred.mode;
-          image[4 * (tile_y * tiles_per_row + tile_x) + 2] = pred_wsub.mode;
-          image[4 * (tile_y * tiles_per_row + tile_x) + 3] = pred_wsub.sub_mode;
+          (*sub_modes)[ind + 2] = pred_wsub.sub_mode;
+          // Store the two possible predictors at the same spot.
+          modes[ind + 2] = (pred_wsub.mode << kNumPredictorsBits) | pred.mode;
         } else {
-          image[4 * (tile_y * tiles_per_row + tile_x) + 1] = 0;
-          image[4 * (tile_y * tiles_per_row + tile_x) + 2] = pred.mode;
-          image[4 * (tile_y * tiles_per_row + tile_x) + 3] = 0;
+          modes[ind + 2] = pred.mode;
         }
       }
     }
@@ -453,38 +482,27 @@ WP2Status CreateResidualImage(uint32_t bits, bool can_use_sub_modes,
         }
       }
       // Compute the cost of storing the sub-modes.
-      LosslessSymbolsInfo symbols_info;
-      WP2_CHECK_STATUS(symbols_info.InitSubMode());
-      const uint32_t transform_size = tiles_per_row * tiles_per_col;
-      WP2::SymbolRecorder recorder;
-      WP2_CHECK_STATUS(
-          recorder.Allocate(symbols_info, /*num_records=*/transform_size));
-      WP2::ANSEncNoop enc_noop;
-      WriteSubModes(tiles_per_row, tiles_per_col, image, &recorder, &enc_noop);
-      WP2::SymbolWriter sw;
-      WP2_CHECK_STATUS(sw.Init(symbols_info, effort));
-      WP2_CHECK_STATUS(sw.Allocate());
       WP2::ANSEncCounter enc;
       WP2::ANSDictionaries dicts;
-      WP2_CHECK_STATUS(sw.WriteHeader(kSymbolSubMode, transform_size, recorder,
-                                      "sub_mode", &enc, &dicts));
-      WriteSubModes(tiles_per_row, tiles_per_col, image, &sw, &enc);
+      WP2_CHECK_STATUS(WriteSubModes(modes, /*needs_shift=*/true, *sub_modes,
+                                     effort, &enc, &dicts));
+
       // Compare the cost of sub-mode storage to what we gain using sub-modes.
-      *use_sub_modes = (enc.GetCost() + costs[1] < costs[0]);
-      if (!*use_sub_modes) {
-        // Reset the modes/sub-modes when not using sub-modes.
-        for (uint32_t i = 0; i < tiles_per_row * tiles_per_col; i += 4) {
-          image[i + 2] = image[i + 1];
-          image[i + 3] = 0;
+      if (enc.GetCost(dicts) + costs[1] < costs[0]) {
+        for (uint32_t i = 0; i < 4 * width * height; i += 4) {
+          modes[i + 2] >>= kNumPredictorsBits;
+        }
+      } else {
+        sub_modes->clear();
+        for (uint32_t i = 0; i < 4 * width * height; i += 4) {
+          modes[i + 2] &= kNumPredictorsBitsMask;
         }
       }
-    } else {
-      *use_sub_modes = false;
     }
   }
 
-  CopyImageWithPrediction(bits, min_values, max_values, image, effort,
-                          *use_sub_modes, argb_scratch, buffer);
+  CopyImageWithPrediction(bits, min_values, max_values, modes, effort,
+                          *sub_modes, argb_scratch, buffer);
   return WP2_STATUS_OK;
 }
 

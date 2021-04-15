@@ -148,24 +148,31 @@ void PredictorInverseTransform_C(const Transform* const transform, int y_start,
     while (x < width) {
       int x_end = (x & ~tile_mask) + tile_width;
       if (x_end > width) x_end = width;
-      switch (kPredictorType[pred_mode_src[2]]) {
+      const uint32_t mode = pred_mode_src[2] & ((1 << kNumPredictorsBits) - 1);
+      switch (kPredictorType[mode]) {
         case PredictorType::NonClamped:
-          PredictorsNonClampedAdd[kPredictorIndex[pred_mode_src[2]]](
+          PredictorsNonClampedAdd[kPredictorIndex[mode]](
               in + 4 * x, has_alpha, out + 4 * x - 4 * width, x_end - x,
               out + 4 * x, predicted != nullptr ? predicted + 4 * x : nullptr);
           break;
         case PredictorType::Clamped:
-          PredictorsClampedAdd[kPredictorIndex[pred_mode_src[2]]](
+          PredictorsClampedAdd[kPredictorIndex[mode]](
               in + 4 * x, has_alpha, out + 4 * x - 4 * width, x_end - x,
               min_values, max_values, out + 4 * x,
               predicted != nullptr ? predicted + 4 * x : nullptr);
           break;
-        case PredictorType::Angle:
-          PredictorsAngleAdd[kPredictorIndex[pred_mode_src[2]]](
-              /*delta=*/pred_mode_src[3], in + 4 * x, has_alpha,
+        case PredictorType::Angle: {
+          const int sub_mode_positive =
+              (pred_mode_src[2] >> kNumPredictorsBits);
+          const int sub_mode = (sub_mode_positive % 2 == 0)
+                                   ? sub_mode_positive / 2
+                                   : (sub_mode_positive + 1) / -2;
+          PredictorsAngleAdd[kPredictorIndex[mode]](
+              /*delta=*/sub_mode, in + 4 * x, has_alpha,
               out + 4 * x - 4 * width, x_end - x, out + 4 * x,
               predicted != nullptr ? predicted + 4 * x : nullptr);
           break;
+        }
         default:
           assert(false);
       }

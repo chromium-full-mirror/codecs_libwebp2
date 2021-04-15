@@ -211,20 +211,25 @@ uint32_t DistanceToPlaneCode(uint32_t width, uint32_t dist);
 // Image transforms in predictor_enc.cc
 
 // Writes the predictor sub modes (sub angles for now).
-void WriteSubModes(uint32_t transform_width, uint32_t transform_height,
-                   const int16_t* const transform_data,
-                   WP2::SymbolManager* const sw, WP2::ANSEncBase* const enc);
+// 'sub_modes' is a 4-channel image with the sub-mode being stored in index 2.
+// If 'has_both_modes' is true, the mode is obtained from 'modes' as
+//      modes[4 * x + 2] >> kNumPredictorsBits.
+// If false, it is simply modes[4 * x + 2].
+WP2Status WriteSubModes(const int16_t* const modes, bool needs_shift,
+                        const WP2::Vector_s8& sub_modes, int effort,
+                        WP2::ANSEncBase* const enc,
+                        WP2::ANSDictionaries* const dicts);
 
 // Computes the signed residuals after applying the predictors.
 // 'can_use_sub_modes' indicates whether sub-modes are allowed by the transform
 // and should be tried to find the best predictors.
-// 'use_sub_modes' returns whether it is actually used or not.
+// If sub-modes are used, 'sub_modes' is not empty and contains the sub-modes.
 WP2Status CreateResidualImage(uint32_t bits, bool can_use_sub_modes,
                               const int16_t min_values[4],
                               const int16_t max_values[4], int effort,
                               Buffer_s16* const buffer,
-                              int16_t* const argb_scratch, int16_t* const image,
-                              bool* const use_sub_modes);
+                              int16_t* const argb_scratch, int16_t* const modes,
+                              WP2::Vector_s8* const sub_modes);
 
 WP2Status ColorSpaceTransform(uint32_t bits, int effort,
                               Buffer_s16* const buffer, int16_t* image);

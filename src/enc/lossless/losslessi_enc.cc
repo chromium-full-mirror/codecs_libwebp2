@@ -599,10 +599,10 @@ WP2Status Encoder::ApplyPredictFilter(
     const int16_t min_values[4], const int16_t max_values[4],
     bool can_use_sub_modes, const ProgressRange& progress, uint32_t pred_bits,
     WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts) {
-  bool use_sub_modes;
+  WP2::Vector_s8 sub_modes;
   WP2_CHECK_STATUS(CreateResidualImage(
       pred_bits, can_use_sub_modes, min_values, max_values, config_.effort,
-      &argb_buffer_, argb_scratch_, transform_data_, &use_sub_modes));
+      &argb_buffer_, argb_scratch_, transform_data_, &sub_modes));
 
   const WP2::ANSDebugPrefix prefix(enc, "predictor");
   enc->PutRange(pred_bits, kTransformBitsMin, kTransformBitsMax,
@@ -611,31 +611,17 @@ WP2Status Encoder::ApplyPredictFilter(
   const uint32_t transform_height =
       SubSampleSize(argb_buffer_.height, pred_bits);
   LosslessSymbolsInfo symbols_info;
-  symbols_info.InitAsLabelImage(transform_width * transform_height,
-                                kNumPredictors);
+  symbols_info.InitAsPredictorImage(transform_width * transform_height);
   const WP2Status status = EncodeHelperImage(
       enc, dicts, transform_data_, (HashChain*)&hash_chain_,
       (BackwardRefsPool*)&ref_pool_, transform_width, transform_height,
       symbols_info, config_.effort, progress);
 
-  if (can_use_sub_modes &&
-      enc->PutBool(use_sub_modes, "use_sub_modes")) {
+  if (can_use_sub_modes && enc->PutBool(!sub_modes.empty(), "use_sub_modes")) {
     const WP2::ANSDebugPrefix prefix_sub_modes(enc, "sub_modes");
     // Also encode the sub-modes.
-    const uint32_t transform_size = transform_width * transform_height;
-    WP2_CHECK_STATUS(symbols_info.InitSubMode());
-    WP2::SymbolRecorder recorder;
-    WP2_CHECK_STATUS(
-        recorder.Allocate(symbols_info, /*num_records=*/transform_size));
-    WP2::ANSEncNoop enc_noop;
-    WriteSubModes(transform_width, transform_height, transform_data_, &recorder,
-                  &enc_noop);
-    WP2::SymbolWriter sw;
-    WP2_CHECK_STATUS(sw.Init(symbols_info, config_.effort));
-    WP2_CHECK_STATUS(sw.Allocate());
-    WP2_CHECK_STATUS(sw.WriteHeader(kSymbolSubMode, transform_size, recorder,
-                                    "sub_mode", enc, dicts));
-    WriteSubModes(transform_width, transform_height, transform_data_, &sw, enc);
+    WP2_CHECK_STATUS(WriteSubModes(transform_data_, /*needs_shift=*/false,
+                                   sub_modes, config_.effort, enc, dicts));
   }
   return status;
 }

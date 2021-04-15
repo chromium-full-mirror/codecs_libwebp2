@@ -477,6 +477,10 @@ void LosslessSymbolsInfo::InitAsCrossColorImage(uint32_t num_pixels) {
   InitNonARGB(num_pixels);
 }
 
+void LosslessSymbolsInfo::InitAsPredictorImage(uint32_t num_pixels) {
+  InitAsLabelImage(num_pixels, kNumPredictors);
+}
+
 WP2Status LosslessSymbolsInfo::InitSubMode() {
   SetInfo(kSymbolSubMode, -3, 3, /*num_clusters=*/3,
           LosslessSymbolsInfo::StorageMethod::kAuto);

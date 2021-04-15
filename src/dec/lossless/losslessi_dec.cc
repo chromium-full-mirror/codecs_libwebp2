@@ -757,7 +757,7 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       const uint32_t num_pixels = transform->width_ * transform->height_;
       if (type == TransformType::kPredictor ||
           type == TransformType::kPredictorWSub) {
-        symbols_info.InitAsLabelImage(num_pixels, kNumPredictors);
+        symbols_info.InitAsPredictorImage(num_pixels);
       } else {
         symbols_info.InitAsCrossColorImage(num_pixels);
       }
@@ -765,15 +765,8 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       // Read the transform image.
       WP2_CHECK_STATUS(DecodeHelperImage(transform->width_, transform->height_,
                                          symbols_info, &transform->data_));
-      if (type == TransformType::kPredictor) {
-        // Sets sub-modes to 0 (default).
-        for (uint32_t i = 0; i < 4 * transform->height_ * transform->width_;
-             i += 4) {
-          int16_t* const pix = &transform->data_[i];
-          if (kPredictorType[pix[2]] == PredictorType::Angle) pix[3] = 0;
-        }
-      } else if (type == TransformType::kPredictorWSub &&
-                 dec_->ReadBool("use_sub_modes")) {
+      if (type == TransformType::kPredictorWSub &&
+          dec_->ReadBool("use_sub_modes")) {
         const WP2::ANSDebugPrefix prefix_sub_modes(dec_, "sub_modes");
         WP2_CHECK_STATUS(symbols_info.InitSubMode());
 
@@ -786,14 +779,19 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
         // Read the sub-modes.
         for (uint32_t i = 0; i < 4 * transform->height_ * transform->width_;
              i += 4) {
-          int16_t* const pix = &transform->data_[i];
-          if (kPredictorType[pix[2]] != PredictorType::Angle) continue;
+          int16_t& mode = transform->data_[i + 2];
+          if (kPredictorType[mode] != PredictorType::Angle) continue;
           // Decide between 45 degrees, 180, or anything else.
           const uint32_t cluster =
-              (kPredictorIndex[pix[2]] == 0)                         ? 0
-              : (kPredictorIndex[pix[2]] == kNumPredictorsAngle - 1) ? 1
-                                                                     : 2;
-          pix[3] = sr.Read(kSymbolSubMode, cluster, "sub_mode");
+              (kPredictorIndex[mode] == 0)                         ? 0
+              : (kPredictorIndex[mode] == kNumPredictorsAngle - 1) ? 1
+                                                                   : 2;
+          const int sub_mode = sr.Read(kSymbolSubMode, cluster, "sub_mode");
+          // Store the signed sub-mode as signed so that it is positive and
+          // does not create issues with future (potentially signed) shifts.
+          // Also make surec 0 maps to 0 for when we do not use sub-modes.
+          mode |= ((sub_mode >= 0 ? 2 * sub_mode : -2 * sub_mode - 1)
+                   << kNumPredictorsBits);
         }
       }
       WP2_CHECK_STATUS(dec_->GetStatus());

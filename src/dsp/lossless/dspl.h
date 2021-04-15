@@ -38,6 +38,11 @@ static constexpr uint32_t kNumPredictorsClamped = 2u;
 static constexpr uint32_t kNumPredictorsAngle = 7u;
 static constexpr uint32_t kNumPredictors =
     kNumPredictorsNonClamped + kNumPredictorsClamped + kNumPredictorsAngle;
+static constexpr uint32_t kNumPredictorsBits =
+    1 + WP2Log2Floor_k(kNumPredictors);
+// Make sure we can store two predictors and the sub-mode on 16 bits.
+static_assert(2 * kNumPredictorsBits <= 16,
+              "Wrong number of bits for predictor storage");
 enum class PredictorType { NonClamped, Clamped, Angle };
 static constexpr PredictorType kPredictorType[] = {
     PredictorType::NonClamped, PredictorType::Angle,
