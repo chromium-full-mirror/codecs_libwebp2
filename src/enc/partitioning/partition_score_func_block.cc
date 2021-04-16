@@ -169,7 +169,7 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
   total_disto /= total_pixels;
 
   // Estimate a score from the written bits and the distortion.
-  const float lambda = MapQuality(*config_, 200.f, -199.f);  // Empirical.
+  const float lambda = MapQuality(*config_, 200.f, 1.f);  // Empirical.
   constexpr float kNiceScale = 0.01f;  // Has no impact on the result.
   *score = 1.0f / (1.0f + kNiceScale * (lambda * total_rate + total_disto));
   WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug(

@@ -78,9 +78,9 @@ WP2Status FixedSizeScoreFunc::ComputeScore(const Block& block,
 
 //------------------------------------------------------------------------------
 
-float MapQuality(const EncoderConfig& config, float min, float slope) {
+float MapQuality(const EncoderConfig& config, float min, float max) {
   const float x = 1.f * config.quality / kMaxLossyQuality;
-  return std::max(0.f, min + x * slope);
+  return std::max(0.f, min + x * (max - min));
 }
 
 //------------------------------------------------------------------------------

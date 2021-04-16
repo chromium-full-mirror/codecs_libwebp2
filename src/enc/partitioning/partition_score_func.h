@@ -95,8 +95,8 @@ class FixedSizeScoreFunc : public PartitionScoreFunc {
 
 //------------------------------------------------------------------------------
 
-// Maps 'config.quality' from [0, 95] to [min, (min + slope)].
-float MapQuality(const EncoderConfig& config, float min, float slope);
+// Maps 'config.quality' from [0, 95] to [min, max].
+float MapQuality(const EncoderConfig& config, float min, float max);
 
 //------------------------------------------------------------------------------
 

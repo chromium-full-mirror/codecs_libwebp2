@@ -172,7 +172,7 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
   const float ssim = distortion_[4];
   const float bpp =
       std::max(1u, enc.GetBitstreamSize()) * 8.f / (width * height);
-  const float lambda = MapQuality(*config_, 7.00f, -2.85f);
+  const float lambda = MapQuality(*config_, 7.00f, 4.15f);
   *score = ssim - lambda * bpp;
   return WP2_STATUS_OK;
 }

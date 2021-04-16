@@ -35,8 +35,8 @@
 
 namespace WP2 {
 
-struct BaseSlope {
-  float base, slope;
+struct Slope {
+  float from, to;  // Value at 0 (min quality) and value at 1 (max quality).
 };
 
 //------------------------------------------------------------------------------
@@ -338,20 +338,20 @@ float MultiScoreFunc::GetLumaAlphaGradient(const Block& block) const {
 float MultiScoreFunc::GetLumaAlphaGradientThreshold(const Block& block) const {
   // The threshold is tighter for bigger blocks at higher qualities.
   // Medium blocks are ignored except at high qualities.
-  constexpr BaseSlope kBaseSlope[] = {
+  constexpr Slope kSlope[] = {
       {0.f, 0.f},        //  4x4, unused
       {0.f, 0.f},        //  8x4, unused
-      {-0.6f, 0.7f},     //  8x8  16x4
-      {-0.06f, 0.08f},   // 16x8
-      {-0.03f, 0.045f},  // 16x16 32x8
-      {0.04f, -0.035f},  // 32x16
-      {0.05f, -0.045f},  // 32x32
+      {-0.6f, 0.1f},     //  8x8  16x4
+      {-0.06f, 0.02f},   // 16x8
+      {-0.03f, 0.015f},  // 16x16 32x8
+      {0.04f, 0.005f},   // 32x16
+      {0.05f, 0.005f},   // 32x32
   };
-  STATIC_ASSERT_ARRAY_SIZE(kBaseSlope, WP2Log2Ceil_k(kMaxBlockSize2) + 1);
+  STATIC_ASSERT_ARRAY_SIZE(kSlope, WP2Log2Ceil_k(kMaxBlockSize2) + 1);
   const uint32_t index = (uint32_t)WP2Log2Floor(block.rect().GetArea());
   assert((1u << index) == block.rect().GetArea());
   return yuv_range_ *
-         MapQuality(*config_, kBaseSlope[index].base, kBaseSlope[index].slope);
+         MapQuality(*config_, kSlope[index].from, kSlope[index].to);
 }
 
 //------------------------------------------------------------------------------
@@ -393,7 +393,7 @@ float MultiScoreFunc::GetStdDevRangeThreshold(const Block& block) const {
   // The higher the quality, the narrower the standard deviation range needs to
   // be for a block to be accepted. Accept bigger blocks during partitioning at
   // low qualities, and seek smaller blocks at high qualities.
-  return MapQuality(*config_, 0.50f, -0.38f);
+  return MapQuality(*config_, 0.50f, 0.12f);
 }
 
 //------------------------------------------------------------------------------
@@ -440,7 +440,7 @@ float MultiScoreFunc::GetQuantDCT(const Block& block) const {
 float MultiScoreFunc::GetQuantDCTThreshold(const Block& block) const {
   // This metric is only useful at low qualities, for large blocks that would
   // still look fine with an aggressive quantization.
-  return MapQuality(*config_, 4.00f, -4.75f);
+  return MapQuality(*config_, 4.00f, -0.75f);
 }
 
 //------------------------------------------------------------------------------
@@ -480,7 +480,7 @@ float MultiScoreFunc::GetDirection(const Block& block) const {
 }
 
 float MultiScoreFunc::GetDirectionThreshold(const Block& block) const {
-  return MapQuality(*config_, 0.15f, -0.0475f);
+  return MapQuality(*config_, 0.15f, 0.1025f);
 }
 
 //------------------------------------------------------------------------------
