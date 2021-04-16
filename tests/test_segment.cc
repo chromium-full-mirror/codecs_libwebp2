@@ -169,18 +169,17 @@ TEST(TestSegment, Quantization) {
   segment.SetYUVBounds(-500, 500);
   segment.SetQuality(GetQualityHint(60.f), kQualityToQFactor(60.f),
                      kNeutralMultiplier / 2, kNeutralMultiplier * 2);
-  const uint16_t lambda = 100;
-  segment.FinalizeQuant(/*lambda=*/lambda);
+  segment.FinalizeQuant();
   const uint32_t quantized_range1 = segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
   const uint32_t u_quantized_range1 =
       segment.quant_u_.GetMaxAbsResDC(TRF_16x16);
   const uint32_t v_quantized_range1 =
       segment.quant_v_.GetMaxAbsResDC(TRF_16x16);
   segment.SetYUVBounds(-200, 200);
-  segment.FinalizeQuant(lambda);
+  segment.FinalizeQuant();
   const uint32_t quantized_range2 = segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
   segment.SetYUVBounds(-1000, 1000);
-  segment.FinalizeQuant(lambda);
+  segment.FinalizeQuant();
   const uint32_t quantized_range3 = segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
   // V is more quantized than U.
   EXPECT_LT(v_quantized_range1, u_quantized_range1);
@@ -192,13 +191,13 @@ TEST(TestSegment, Quantization) {
   // Here the range of YUV values is not centered so the max quantized value.
   // Still the range is eventually the same.
   segment.SetYUVBounds(0, 1000);
-  segment.FinalizeQuant(lambda);
+  segment.FinalizeQuant();
   const uint32_t uncentered_range = segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
   EXPECT_NEAR(uncentered_range, quantized_range3, 1);
 
   segment.SetQuality(GetQualityHint(20.f), kQualityToQFactor(20.f),
                      kDefaultQuantMultiplier, kDefaultQuantMultiplier);
-  segment.FinalizeQuant(lambda);
+  segment.FinalizeQuant();
   const uint32_t lower_quality_factor_range =
       segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
   // Counter intuitively, a lower "quality" setting actually means we quantize
@@ -212,15 +211,14 @@ TEST(TestSegment, UVQuantMultiplier) {
   segment.SetQuality(GetQualityHint(50.f), kQualityToQFactor(50.f),
                      /*u_quant_multiplier=*/kNeutralMultiplier,
                      /*v_quant_multiplier=*/kNeutralMultiplier);
-  const uint16_t lambda = 10;
-  segment.FinalizeQuant(lambda);
+  segment.FinalizeQuant();
   EXPECT_EQ(segment.quant_steps_[kUChannel][3],
             segment.quant_steps_[kVChannel][3]);
 
   segment.SetQuality(GetQualityHint(50.f), kQualityToQFactor(50.f),
                      /*u_quant_multiplier=*/1,
                      /*v_quant_multiplier=*/(1 << kQuantMultiplierBits));
-  segment.FinalizeQuant(lambda);
+  segment.FinalizeQuant();
   EXPECT_LE(segment.quant_steps_[kUChannel][3],
             segment.quant_steps_[kVChannel][3]);
 }
@@ -230,22 +228,17 @@ TEST(TestSegment, IsMergeableWith) {
   segment1.SetYUVBounds(-512, 512);
   segment1.SetQuality(GetQualityHint(42.f), kQualityToQFactor(42.f),
                       kDefaultQuantMultiplier, kDefaultQuantMultiplier);
-  segment1.FinalizeQuant(100);
+  segment1.FinalizeQuant();
 
   Segment segment2;
   segment2.SetYUVBounds(-512, 512);
   segment2.SetQuality(GetQualityHint(42.f), kQualityToQFactor(42.f),
                       kDefaultQuantMultiplier, kDefaultQuantMultiplier);
-  segment2.FinalizeQuant(/*lambda=*/100);
+  segment2.FinalizeQuant();
 
   // Segments are the same.
   EXPECT_TRUE(segment1.IsMergeableWith(segment2));
   EXPECT_TRUE(segment2.IsMergeableWith(segment1));
-
-  // Change lambda, segments are still mergeable (we don't take lambda into
-  // account right now).
-  segment2.FinalizeQuant(/*lambda=*/200);
-  EXPECT_TRUE(segment1.IsMergeableWith(segment2));
 
   // Set a different quality. Segments are now different.
   segment2.SetQuality(GetQualityHint(43.f), kQualityToQFactor(43.f),
@@ -268,7 +261,7 @@ TEST(TestSegment, MinQuant) {
   segment.SetQuality(kMaxLossyQualityHint, /*quality_factor=*/0,
                      /*u_quant_multiplier=*/0,
                      /*v_quant_multiplier=*/0);
-  segment.FinalizeQuant(/*lambda=*/100);
+  segment.FinalizeQuant();
   // Make sure the max dc value is STRICTLY lower than kMaxDcValue which means
   // it wasn't capped. If this test fails, it probably means kMaxDcValue is too
   // small.
@@ -277,7 +270,7 @@ TEST(TestSegment, MinQuant) {
   EXPECT_LT(segment.GetMaxAbsDC(kVChannel), kMaxDcValue);
 
   segment.SetAlphaQuality(/*quality_factor=*/0);
-  segment.FinalizeAlphaQuant(/*lambda=*/33.);
+  segment.FinalizeAlphaQuant();
   EXPECT_LT(segment.GetMaxAbsDC(kAChannel), kMaxDcValue);
 }
 

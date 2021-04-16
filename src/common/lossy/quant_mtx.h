@@ -47,7 +47,7 @@ struct QuantMtx {
             const uint16_t steps[kNumQuantZones]);
   // Set the lambda magic constants (encoder), using quant_steps[].
   // Must be called after Init().
-  void SetLambda(float lambda);
+  void SetLambda();
 
   // Quantizes or dequantizes.
   // If 'first_is_dc', 'coeffs[0]' will be treated differently.

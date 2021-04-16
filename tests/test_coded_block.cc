@@ -91,8 +91,7 @@ TYPED_TEST(CodedBlockTest, FindBestModes) {
   ASSERT_WP2_OK(segment.AllocateForEncoder());
   const uint16_t quants[kNumQuantZones] = {128, 128, 128, 128};
   segment.quant_y_.Init(/*max_residual=*/1024, /*q_scale=*/1, quants);
-  // Force lambda value to make test less brittle.
-  segment.quant_y_.SetLambda(1.f);
+  segment.quant_y_.SetLambda();
 
   SymbolsInfo symbols_info;
   ASSERT_WP2_OK(

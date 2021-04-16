@@ -130,9 +130,9 @@ class Segment {
 
   // Initializes the quant_mtx based on quant_steps_[].
   // q_scale must be set before calling this.
-  void FinalizeQuant(float lambda = 0.f);
+  void FinalizeQuant();
   // Same, for kAChannel. Must be called *after* FinalizeQuant().
-  void FinalizeAlphaQuant(float lambda = 0.f);
+  void FinalizeAlphaQuant();
 
   // must be called before FinalizeQuant()
   WP2Status AllocateForEncoder(bool for_alpha = false);
@@ -142,10 +142,9 @@ class Segment {
   // The alpha quantization factor will be set to default value.
   void SetQuantizationFactor(const CSPTransform& transform,
                              uint32_t quality_hint, uint32_t u_quant_multiplier,
-                             uint32_t v_quant_multiplier, uint32_t qfactor,
-                             float lambda_mult);
+                             uint32_t v_quant_multiplier, uint32_t qfactor);
   // Same, but for alpha channel. Must be called *after* SetQuantizationFactor()
-  void SetAlphaQuantizationFactor(uint32_t qfactor, float lambda);
+  void SetAlphaQuantizationFactor(uint32_t qfactor);
 
   // Returns true if this segment is "close enough" to 'other' that they can be
   // merged (some fields might still be different).

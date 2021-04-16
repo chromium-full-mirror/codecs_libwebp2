@@ -122,7 +122,7 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
       gparams->segments_[i].SetQuantizationFactor(
           gparams->transf_, GetQualityHint(config.quality),
           kDefaultQuantMultiplier, kDefaultQuantMultiplier,
-          random->Get(1, 128) / 1.28f, random->Get(1, 128) / 1.28f * 40.f);
+          /*qfactor=*/random->Get(1, 128) / 1.28f);
       gparams->segments_[i].use_grain_ = false;  // Nah.
     }
     gparams->maybe_use_lossy_alpha_ =
@@ -131,8 +131,7 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
     gparams->enable_alpha_filter_ = gparams->maybe_use_lossy_alpha_;
     const float quant_factor =
         99.f * (kMaxLossyQuality - config.alpha_quality) / kMaxLossyQuality;
-    const float lambda = std::max(85.f, -42.f * config.alpha_quality + 3400.f);
-    gparams->segments_.front().SetAlphaQuantizationFactor(quant_factor, lambda);
+    gparams->segments_.front().SetAlphaQuantizationFactor(quant_factor);
 
     WP2_CHECK_STATUS(gparams->InitFixedPredictors());
   }

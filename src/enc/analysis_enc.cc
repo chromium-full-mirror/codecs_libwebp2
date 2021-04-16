@@ -109,7 +109,7 @@ WP2Status GlobalParams::AssignQuantizations(const EncoderConfig& config) {
     WP2_CHECK_STATUS(segments_[idx].AllocateForEncoder());
     segments_[idx].SetQuantizationFactor(
         transf_, GetQualityHint(config.quality), u_quant_multiplier_,
-        v_quant_multiplier_, qualities[idx], 1.f);
+        v_quant_multiplier_, qualities[idx]);
   }
   return WP2_STATUS_OK;
 }
@@ -138,7 +138,7 @@ WP2Status GlobalParams::AssignAlphaQuantizations(const YUVPlane& yuv,
     assert(!segments_.empty());
     for (auto& s : segments_) {
       WP2_CHECK_STATUS(s.AllocateForEncoder(/*for_alpha=*/true));
-      s.SetAlphaQuantizationFactor(quant_factor0, /*lambda=*/1.f);
+      s.SetAlphaQuantizationFactor(quant_factor0);
     }
   }
   return WP2_STATUS_OK;

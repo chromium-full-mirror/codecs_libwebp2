@@ -41,14 +41,13 @@ WP2Status WriteAndRead(const GlobalParams& params_to_write,
 TEST(GlobalParmas, ReadWriteUVQUantMultiplier) {
   GlobalParams params;
   ASSERT_TRUE(params.segments_.resize(3));
-  const uint32_t lambda = 1000;
   params.u_quant_multiplier_ = kDefaultQuantMultiplier;
   params.v_quant_multiplier_ = kDefaultQuantMultiplier + 2;
   for (Segment& s : params.segments_) {
     s.SetYUVBounds(-512, 512);
-    s.SetQuality(kMaxLossyQualityHint / 2, 10, params.u_quant_multiplier_,
-                 params.v_quant_multiplier_);
-    s.FinalizeQuant(lambda);
+    s.SetQuality(kMaxLossyQualityHint / 2, /*quality_factor=*/10,
+                 params.u_quant_multiplier_, params.v_quant_multiplier_);
+    s.FinalizeQuant();
   }
   ASSERT_TRUE(params.IsOk());
 

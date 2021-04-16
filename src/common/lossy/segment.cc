@@ -331,44 +331,39 @@ void Segment::SetYUVBounds(int16_t yuv_min, int16_t yuv_max) {
   q_scale_ = (float)(1 << (kYuvMaxPrec + 1)) / max_residual_;
 }
 
-void Segment::FinalizeQuant(float lambda) {
+void Segment::FinalizeQuant() {
   assert(q_scale_ > 0.f);   // must have been set prior to calling this
   quant_y_.Init(max_residual_, q_scale_, quant_steps_[kYChannel]);
   quant_u_.Init(max_residual_, q_scale_, quant_steps_[kUChannel]);
   quant_v_.Init(max_residual_, q_scale_, quant_steps_[kVChannel]);
-  if (lambda > 0) {
-    quant_y_.SetLambda(lambda / q_scale_);
-    quant_u_.SetLambda(lambda / q_scale_);
-    quant_v_.SetLambda(lambda / q_scale_);
-  }
 }
 
-void Segment::FinalizeAlphaQuant(float lambda) {
+void Segment::FinalizeAlphaQuant() {
   // Max residual value is different for alpha since it doesn't go through the
   // CSP transform. Alpha is between 0 and kAlphaMax. After subtracting
   // predicted values from actual values, the residuals are between -kAlphaMax
   // and kAlphaMax. So the max absolute value is still kAlphaMax.
   const float q_scale = 1.0f;
   quant_a_.Init(/*max_residual=*/kAlphaMax, q_scale, quant_steps_[kAChannel]);
-  if (lambda > 0) {
-    const float q_scale_a = (float)(1 << (kYuvMaxPrec + 1)) / (1 + kAlphaMax);
-    quant_a_.SetLambda(lambda / q_scale_a);
-  }
 }
 
 void Segment::SetQuantizationFactor(const CSPTransform& transform,
                                     uint32_t quality_hint,
                                     uint32_t u_quant_multiplier,
                                     uint32_t v_quant_multiplier,
-                                    uint32_t qfactor, float lambda_mult) {
+                                    uint32_t qfactor) {
   SetYUVBounds(transform.GetYUVMin(), transform.GetYUVMax());
   SetQuality(quality_hint, qfactor, u_quant_multiplier, v_quant_multiplier);
-  FinalizeQuant(lambda_mult);
+  FinalizeQuant();
+  quant_y_.SetLambda();
+  quant_u_.SetLambda();
+  quant_v_.SetLambda();
 }
 
-void Segment::SetAlphaQuantizationFactor(uint32_t qfactor, float lambda) {
+void Segment::SetAlphaQuantizationFactor(uint32_t qfactor) {
   SetAlphaQuality(qfactor);
-  FinalizeAlphaQuant(lambda);
+  FinalizeAlphaQuant();
+  quant_a_.SetLambda();
 }
 
 //------------------------------------------------------------------------------

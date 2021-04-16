@@ -150,10 +150,10 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
   }
 }
 
-void QuantMtx::SetLambda(float lambda) {
+void QuantMtx::SetLambda() {
   // this expression was fit over the sampling of several images encoded at
   // fixed quality (=quant_steps[1]) with varying lambda.
-  const double lambda_f = 300. * pow(Qs[quant_steps[1]] / 50., 1.5);
+  const double lambda_f = 300. * std::pow(Qs[quant_steps[1]] / 50., 1.5);
 
   assert(lambda_f > 0.);
   lambda1 = lambda_f;
