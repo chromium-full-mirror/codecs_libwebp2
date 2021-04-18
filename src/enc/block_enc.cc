@@ -278,8 +278,8 @@ static WP2Status UVScore(const EncoderConfig& config, uint32_t tile_pos_x,
                          const int32_t res_v[kMaxBlockSizePix2], TrfSize dim,
                          bool reduced, SymbolCounter* const counter,
                          CodedBlock* const cb, float* score) {
-  const float lambda_u = quant_u.lambda2 * 2.f;  // Another magic constant.
-  const float lambda_v = quant_v.lambda2 * 2.f;
+  const float lambda_u = quant_u.lambda * 2.f;  // Another magic constant.
+  const float lambda_v = quant_v.lambda * 2.f;
 
   uint32_t tmp_num_coeffs_u, tmp_num_coeffs_v;
   int16_t tmp_coeffs_u[kMaxBlockSizePix2];
@@ -450,8 +450,7 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
 
   TransformPair best_tf = transforms.front();
   float best_score = 0.f;
-  const float lambda =
-      lambda_mult_ * ((channel == kYChannel) ? quant.lambda1 : quant.lambda2);
+  const float lambda = lambda_mult_ * quant.lambda;
   bool is_first = true;
 
   // Predict from mode once and for all.
@@ -606,8 +605,7 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
 
   bool best_split_tf = false;  // avoids -Werror=maybe-uninitialized
   float best_score = 0.f;
-  const float lambda =
-      lambda_mult_ * ((channel == kYChannel) ? quant.lambda1 : quant.lambda2);
+  const float lambda = lambda_mult_ * quant.lambda;
   bool is_first = true;
 
   // Predict from mode once and for all.

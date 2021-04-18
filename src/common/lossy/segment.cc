@@ -358,6 +358,11 @@ void Segment::SetQuantizationFactor(const CSPTransform& transform,
   quant_y_.SetLambda();
   quant_u_.SetLambda();
   quant_v_.SetLambda();
+
+  // Distortion is slightly more important for chroma than for luma or alpha
+  // because the range of values is usually tighter.
+  quant_u_.lambda *= 0.84f;
+  quant_v_.lambda *= 0.84f;
 }
 
 void Segment::SetAlphaQuantizationFactor(uint32_t qfactor) {

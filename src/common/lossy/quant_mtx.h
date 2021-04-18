@@ -69,10 +69,7 @@ struct QuantMtx {
   void Print() const;  // debug
 
  public:
-  // lambda multipliers
-  float lambda1;   // used for Y mode-decision
-  float lambda2;   // used for UV mode-decision
-  float lambda3;   // used for prediction-mode bits
+  float lambda;  // used for rate-distortion optimization
 
  protected:
   uint16_t quant_steps[kNumQuantZones] = {0};   // quant id for each zones

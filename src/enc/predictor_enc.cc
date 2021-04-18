@@ -71,7 +71,7 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
           counters_->residuals_aom(), &res_rate[c]));
       WP2_CHECK_STATUS(cb->PredictorRate(kChannels[c], counters_->predictor(),
                                          &pred_rate[c]));
-      const float lambda = cb->lambda_mult_ * quant.lambda2;
+      const float lambda = cb->lambda_mult_ * quant.lambda;
       scores[c] = dist[c] + lambda * (res_rate[c] + pred_rate[c]);
     }
 
@@ -84,7 +84,7 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
       const QuantMtx& quant = segment_.GetQuant(kChannels[c]);
       cb->StorePredictionScore(config_, tile_rect_, kChannels[c], p,
                                cb->GetCodingParams(kChannels[c])->tf, dist[c],
-                               cb->lambda_mult_ * quant.lambda2, res_rate[c],
+                               cb->lambda_mult_ * quant.lambda, res_rate[c],
                                pred_rate[c], /*tf_rate=*/0.f, scores[c],
                                /*is_best=*/(score_ < best_score_),
                                CodedBlock::SearchType::kPredAndTransform);
@@ -119,7 +119,7 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
         cb->PredictorRate(channel_, counters_->predictor(), &pred_rate));
     WP2_CHECK_STATUS(cb->TransformRate(channel_, num_transforms,
                                        counters_->transform(), &tf_rate));
-    const float lambda = cb->lambda_mult_ * quant.lambda1;
+    const float lambda = cb->lambda_mult_ * quant.lambda;
     score_ = dist_ + lambda * (res_rate + pred_rate + tf_rate);
     // Note: some of the steps above could be skipped as soon as the distortion
     // and/or the rate is higher than the current 'best_score_' but angle
@@ -128,9 +128,8 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     // Store score for debug.
     cb->StorePredictionScore(config_, tile_rect_, channel_, p, params->tf,
-                             dist_, cb->lambda_mult_ * quant.lambda1, res_rate,
-                             pred_rate, tf_rate, score_,
-                             /*is_best=*/(score_ < best_score_),
+                             dist_, lambda, res_rate, pred_rate, tf_rate,
+                             score_, /*is_best=*/(score_ < best_score_),
                              CodedBlock::SearchType::kPredAndTransform);
 #endif  // WP2_REDUCE_BINARY_SIZE
 
