@@ -33,41 +33,38 @@ namespace WP2 {
 
 namespace {
 
-bool TryReadTileChunkSize(uint32_t rgb_bit_depth, const GlobalParams& gparams,
-                          DataSource* const data_source,
-                          const DecoderConfig& config, Tile* const tile) {
+WP2Status TryReadTileChunkSize(uint32_t rgb_bit_depth,
+                               const GlobalParams& gparams,
+                               DataSource* const data_source,
+                               const DecoderConfig& config, Tile* const tile) {
   assert(tile->rect.GetArea() > 0);
   if (!tile->chunk_size_is_known) {  // If not previously decoded.
     const size_t size_before = data_source->GetNumReadBytes();
     (void)size_before;
-    const WP2Status chunk_size_status = DecodeTileChunkSize(
-        rgb_bit_depth, gparams, tile->rect, data_source, &tile->chunk_size);
-    if (chunk_size_status != WP2_STATUS_OK) {
-      // Tile chunk size is unknown, don't decode this tile for now.
-      // No byte is marked as read by DecodeTileChunkSize() if not STATUS_OK,
-      // so UnmarkAllReadBytes() is not needed.
-      return false;
-    }
+    WP2_CHECK_STATUS(DecodeTileChunkSize(rgb_bit_depth, gparams, tile->rect,
+                                         data_source, &tile->chunk_size));
+    // If not STATUS_OK, tile chunk size is unknown, do not decode this tile for
+    // now. No byte is marked as read by DecodeTileChunkSize() if not STATUS_OK,
+    // so UnmarkAllReadBytes() is not needed.
     tile->chunk_size_is_known = true;
-    WP2_CHECK_REDUCED_STATUS(
-        RegisterBitTrace(config, data_source->GetNumReadBytes() - size_before,
-                         "chunk_size"));
+    WP2_CHECK_REDUCED_STATUS(RegisterBitTrace(
+        config, data_source->GetNumReadBytes() - size_before, "chunk_size"));
   }
-  return true;
+  return WP2_STATUS_OK;
 }
 
 // Returns true if the next tile has all its chunk data available.
 // 'bitstream_pos_after_tile' is set to 0 if it is too early to know it.
-bool TryReadTile(DataSource* const data_source,
-                 const BitstreamFeatures& features, const DecoderConfig& config,
-                 TilesLayout* const tiles_layout, Tile* const tile,
-                 PartialTileDecoder* const partial_tile_decoder,
-                 size_t* const bitstream_position_at_end_of_tile) {
+WP2Status TryReadTile(DataSource* const data_source,
+                      const BitstreamFeatures& features,
+                      const DecoderConfig& config,
+                      TilesLayout* const tiles_layout, Tile* const tile,
+                      PartialTileDecoder* const partial_tile_decoder,
+                      size_t* const bitstream_position_at_end_of_tile) {
   *bitstream_position_at_end_of_tile = Decoder::State::kUnknown;
-  if (!TryReadTileChunkSize(features.rgb_bit_depth, *tiles_layout->gparams,
-                            data_source, config, tile)) {
-    return false;
-  }
+  WP2_CHECK_STATUS(TryReadTileChunkSize(features.rgb_bit_depth,
+                                        *tiles_layout->gparams, data_source,
+                                        config, tile));
   *bitstream_position_at_end_of_tile = data_source->GetNumDiscardedBytes() +
                                        data_source->GetNumReadBytes() +
                                        tile->chunk_size;
@@ -75,34 +72,32 @@ bool TryReadTile(DataSource* const data_source,
   if (data_source->TryReadNext(tile->chunk_size, &tile->data_handle)) {
     // All of the tile chunk data is available, decode it in one shot.
     ++tiles_layout->num_assignable_tiles;
-    return true;
+    return WP2_STATUS_OK;
   } else {
     if (partial_tile_decoder != nullptr) {
-      // TryGetNext() should always be able to return GetNumNextBytes(), but
-      // just in case, decode previous tiles if possible instead of returning
-      // an error right now.
-      if (data_source->TryGetNext(data_source->GetNumNextBytes(),
-                                  &tile->data_handle)) {
-        if (partial_tile_decoder->Init(features, config, tiles_layout, tile) !=
-            WP2_STATUS_OK) {
-          return false;  // this is most probably a memory alloc failure
-        }
+      const size_t num_next_bytes = data_source->GetNumNextBytes();
+      if (num_next_bytes > 0) {
+        WP2_CHECK_OK(
+            data_source->TryGetNext(num_next_bytes, &tile->data_handle),
+            WP2_STATUS_BAD_READ);
+        WP2_CHECK_STATUS(
+            partial_tile_decoder->Init(features, config, tiles_layout, tile));
       }
     }
-    return false;  // Part of the data is missing.
+    return WP2_STATUS_NOT_ENOUGH_DATA;
   }
 }
 
-bool TrySkipTile(DataSource* const data_source,
-                 const BitstreamFeatures& features, const DecoderConfig& config,
-                 TilesLayout* const tiles_layout, Tile* const tile) {
-  if (!TryReadTileChunkSize(features.rgb_bit_depth, *tiles_layout->gparams,
-                            data_source, config, tile)) {
-    return false;
-  }
+WP2Status TrySkipTile(DataSource* const data_source,
+                      const BitstreamFeatures& features,
+                      const DecoderConfig& config,
+                      TilesLayout* const tiles_layout, Tile* const tile) {
+  WP2_CHECK_STATUS(TryReadTileChunkSize(features.rgb_bit_depth,
+                                        *tiles_layout->gparams, data_source,
+                                        config, tile));
   data_source->MarkNumBytesAsRead(tile->chunk_size);
   ++tiles_layout->num_assignable_tiles;
-  return true;
+  return WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
@@ -198,9 +193,12 @@ WP2Status Decoder::DecodeAvailableTiles() {
     const uint32_t tile_index = tiles_layout->num_assignable_tiles;
     Tile& tile = state_->tiles_layout.tiles[tile_index];
     size_t bitstream_position_at_end_of_tile;
-    const bool tile_is_fully_available = TryReadTile(
+    const WP2Status tile_status = TryReadTile(
         state_->data_source, features_, config_, &state_->tiles_layout, &tile,
         state_->partial_tile_decoder.get(), &bitstream_position_at_end_of_tile);
+    if (tile_status != WP2_STATUS_NOT_ENOUGH_DATA) {  // Stop on true errors.
+      WP2_CHECK_STATUS(tile_status);
+    }
 
     // Save the frame byte size as soon as it is known: during last tile.
     if (tile_index + 1 == tiles_layout->tiles.size() &&
@@ -209,7 +207,9 @@ WP2Status Decoder::DecodeAvailableTiles() {
           SaveFrameNumBytes(bitstream_position_at_end_of_tile,
                             &state_->frames[state_->current_frame_index]));
     }
-    if (!tile_is_fully_available) break;
+    if (tile_status != WP2_STATUS_OK) {
+      break;  // Missing bytes in this tile, no need to look at the next one.
+    }
   }
 
   // Now that the primary 'state_->data_source' was read as much as possible and
@@ -314,10 +314,13 @@ WP2Status Decoder::DiscardAvailableTiles() {
 
   while (tiles_layout.num_assignable_tiles < tiles_layout.tiles.size()) {
     Tile& tile = tiles_layout.tiles[tiles_layout.num_assignable_tiles];
-    const bool skipped_tile = TrySkipTile(
+    const WP2Status tile_status = TrySkipTile(
         state_->data_source, features_, config_, &state_->tiles_layout, &tile);
+    if (tile_status != WP2_STATUS_NOT_ENOUGH_DATA) {
+      WP2_CHECK_STATUS(tile_status);
+    }
     state_->data_source->Discard(state_->data_source->GetNumReadBytes());
-    if (!skipped_tile) break;
+    if (tile_status != WP2_STATUS_OK) break;
     WP2_CHECK_STATUS(tile.row_progress.AdvanceBy(tile.rect.height));
   }
 
