@@ -32,7 +32,8 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 // Counters
 
-WP2Status Counters::Init(const SymbolRecorder& recorder) {
+WP2Status Counters::Init(uint32_t effort, const SymbolRecorder& recorder) {
+  effort_ = effort;
   recorder_ = &recorder;
 
   transform_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
@@ -40,43 +41,57 @@ WP2Status Counters::Init(const SymbolRecorder& recorder) {
   WP2_CHECK_STATUS(transform_->Allocate(
       {kSymbolHasCoeffs, kSymbolTransform, kSymbolSplitTransform}));
 
-  residuals_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
-  WP2_CHECK_ALLOC_OK(residuals_ != nullptr);
-  WP2_CHECK_STATUS(residuals_->Allocate(
-      {kSymbolDC, kSymbolResidualUseBounds, kSymbolResidualBound1IsX,
-       kSymbolResidualUseBound2, kSymbolResidualIsZero, kSymbolResidualIsOne,
-       kSymbolResidualIsTwo, kSymbolResidualEndOfBlock,
-       kSymbolResidualHasOnlyOnesLeft}));
-
-  residuals_aom_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
-  WP2_CHECK_ALLOC_OK(residuals_aom_ != nullptr);
-  WP2_CHECK_STATUS(residuals_aom_->Allocate(
-      {kSymbolTransform,
-       kAOMEOBPT4, kAOMEOBPT8,
-       kAOMEOBPT16, kAOMEOBPT32, kAOMEOBPT64,
-       kAOMEOBPT128, kAOMEOBPT256, kAOMEOBPT512, kAOMEOBPT1024, kAOMEOBExtra,
-       kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange}));
-
   predictor_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
   WP2_CHECK_ALLOC_OK(predictor_ != nullptr);
   WP2_CHECK_STATUS(
       predictor_->Allocate({kSymbolModeY, kSymbolModeUV, kSymbolModeA}));
+
+  if (effort >= kSlowCounterEffortThreshold) {
+    // Using the UpdatingSymbolCounter slows down encoding by ~9%
+    residuals_slow_.reset(new (WP2Allocable::nothrow)
+                              UpdatingSymbolCounter(recorder_));
+    WP2_CHECK_ALLOC_OK(residuals_slow_ != nullptr);
+    residuals_ = residuals_slow_.get();
+    residuals_aom_slow_.reset(new (WP2Allocable::nothrow)
+                                  UpdatingSymbolCounter(recorder_));
+    WP2_CHECK_ALLOC_OK(residuals_aom_slow_ != nullptr);
+    residuals_aom_ = residuals_aom_slow_.get();
+  } else {
+    residuals_fast_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
+    WP2_CHECK_ALLOC_OK(residuals_fast_ != nullptr);
+    residuals_ = residuals_fast_.get();
+    residuals_aom_fast_.reset(new (WP2Allocable::nothrow)
+                                  SymbolCounter(recorder_));
+    WP2_CHECK_ALLOC_OK(residuals_aom_fast_ != nullptr);
+    residuals_aom_ = residuals_aom_fast_.get();
+  }
+  WP2_CHECK_STATUS(residuals()->Allocate(
+      {kSymbolDC, kSymbolResidualUseBounds, kSymbolResidualBound1IsX,
+       kSymbolResidualUseBound2, kSymbolResidualIsZero, kSymbolResidualIsOne,
+       kSymbolResidualIsTwo, kSymbolResidualEndOfBlock,
+       kSymbolResidualHasOnlyOnesLeft}));
+  WP2_CHECK_STATUS(residuals_aom()->Allocate(
+      {kSymbolTransform, kAOMEOBPT4, kAOMEOBPT8, kAOMEOBPT16, kAOMEOBPT32,
+       kAOMEOBPT64, kAOMEOBPT128, kAOMEOBPT256, kAOMEOBPT512, kAOMEOBPT1024,
+       kAOMEOBExtra, kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange}));
   return WP2_STATUS_OK;
 }
 
 WP2Status Counters::CopyFrom(const Counters& other,
                              const SymbolRecorder& recorder) {
   if (&recorder != recorder_) {
-    WP2_CHECK_STATUS(Init(recorder));
+    WP2_CHECK_STATUS(Init(other.effort_, recorder));
   } else {
     // Init() was already called.
     assert(transform_ != nullptr && residuals_ != nullptr &&
            residuals_aom_ != nullptr && predictor_ != nullptr);
   }
-  WP2_CHECK_STATUS(transform_->CopyFrom(*other.transform_));
-  WP2_CHECK_STATUS(residuals_->CopyFrom(*other.residuals_));
-  WP2_CHECK_STATUS(residuals_aom_->CopyFrom(*other.residuals_aom_));
-  WP2_CHECK_STATUS(predictor_->CopyFrom(*other.predictor_));
+  if (residuals_slow_ != nullptr) {
+    WP2_CHECK_STATUS(residuals_slow_->CopyFrom(*other.residuals_slow_));
+  }
+  if (residuals_aom_slow_ != nullptr) {
+    WP2_CHECK_STATUS(residuals_aom_slow_->CopyFrom(*other.residuals_aom_slow_));
+  }
   return WP2_STATUS_OK;
 }
 

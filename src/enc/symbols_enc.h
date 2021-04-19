@@ -153,6 +153,8 @@ class SymbolRecorder : public SymbolManager {
 // Class for using with an ANSEncCounter to count space taken. It's meant to be
 // used with an ANSEncCounter. Then call GetCost() on the counter to
 // know the size.
+// The base SymbolCounter class does NOT update propabilities for adaptive
+// bits/symbols. See also UpdatingSymbolCounter.
 class SymbolCounter : public SymbolManager, public WP2Allocable {
  public:
   static constexpr uint32_t kMaxLossyClusters =
@@ -163,14 +165,34 @@ class SymbolCounter : public SymbolManager, public WP2Allocable {
 
   const SymbolsInfo& symbols_info() const override { return symbols_info_; }
 
-  // Allocates memory. Callers must decide in advance how many adaptive bits/
-  // symbols to allocate. This number must take into account the number of
-  // clusters (num distinct symbol types * num clusters). If an attempt is made
-  // to call Process() with more cluster/symbol types than were allocated, an
-  // assertion will fail.
-  WP2Status Allocate(std::initializer_list<uint32_t> syms);
-  WP2Status CopyFrom(const SymbolCounter& other);
-  void Clear();
+  // Allocates memory. Callers must decide in advance which symbols will be
+  // used. Calls to Process() for symbols that were not passed in Allocate()
+  // may fail.
+  virtual WP2Status Allocate(std::initializer_list<uint32_t> syms);
+  virtual void Clear();
+
+ protected:
+  int32_t ProcessInternal(uint32_t sym, uint32_t cluster, int32_t value_in,
+                          bool use_max_value, uint32_t max_value, WP2_OPT_LABEL,
+                          ANSEncBase* const enc, float* const) override;
+
+  const SymbolRecorder* const recorder_;
+  const SymbolsInfo& symbols_info_;
+  static constexpr uint32_t kInvalidIndex =
+      std::numeric_limits<uint32_t>::max();
+};
+
+// SymbolCounter that updates probabilities for adaptive bits/symbols. It's
+// slower and uses more memory.
+class UpdatingSymbolCounter : public SymbolCounter {
+ public:
+  explicit UpdatingSymbolCounter(const SymbolRecorder* const recorder)
+      : SymbolCounter(recorder) {}
+
+  WP2Status CopyFrom(const UpdatingSymbolCounter& other);
+
+  WP2Status Allocate(std::initializer_list<uint32_t> syms) override;
+  void Clear() override;
 
  protected:
   int32_t ProcessInternal(uint32_t sym, uint32_t cluster, int32_t value_in,
@@ -181,10 +203,6 @@ class SymbolCounter : public SymbolManager, public WP2Allocable {
   ANSBinSymbol* GetABit(uint32_t sym, uint32_t cluster);
   ANSAdaptiveSymbol* GetASymbol(uint32_t sym, uint32_t cluster);
 
-  const SymbolRecorder* const recorder_;
-  const SymbolsInfo& symbols_info_;
-  static constexpr uint32_t kInvalidIndex =
-      std::numeric_limits<uint32_t>::max();
   // For each symbol, the index in a_bits_/a_symbols_ where its storage for each
   // cluster starts.
   std::array<uint32_t, kSymbolNumMax> indices_;

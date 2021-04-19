@@ -27,6 +27,7 @@ namespace WP2 {
 
 class SymbolReader;
 class SymbolCounter;
+class UpdatingSymbolCounter;
 class SymbolRecorder;
 
 //------------------------------------------------------------------------------
@@ -57,23 +58,30 @@ class BlockContext {
 // mallocs).
 class Counters : public WP2Allocable {
  public:
-  WP2Status Init(const SymbolRecorder& recorder);
+  WP2Status Init(uint32_t effort, const SymbolRecorder& recorder);
   WP2Status CopyFrom(const Counters& other, const SymbolRecorder& recorder);
   const SymbolRecorder* recorder() const { return recorder_; }
   // Returns a pointer to the counter with symbols related to transforms.
   SymbolCounter* transform() { return transform_.get(); }
-  // Returns a pointer to the counter with symbols related to residuals.
-  SymbolCounter* residuals() { return residuals_.get(); }
-  // Returns a pointer to the counter with symbols related to AOM residual.
-  SymbolCounter* residuals_aom() { return residuals_aom_.get(); }
   // Returns a pointer to the counter with symbols related to predictors.
   SymbolCounter* predictor() { return predictor_.get(); }
+  // Returns a pointer to the counter with symbols related to residuals.
+  SymbolCounter* residuals() { return residuals_; }
+  // Returns a pointer to the counter with symbols related to AOM residual.
+  SymbolCounter* residuals_aom() { return residuals_aom_; }
 
  private:
+  static constexpr uint32_t kSlowCounterEffortThreshold = 5;
+  uint32_t effort_;
   std::unique_ptr<SymbolCounter> transform_;
-  std::unique_ptr<SymbolCounter> residuals_;
-  std::unique_ptr<SymbolCounter> residuals_aom_;
   std::unique_ptr<SymbolCounter> predictor_;
+  // Either the fast or slow version is used depending on 'effort'.
+  std::unique_ptr<SymbolCounter> residuals_fast_;
+  std::unique_ptr<UpdatingSymbolCounter> residuals_slow_;
+  SymbolCounter* residuals_;
+  std::unique_ptr<SymbolCounter> residuals_aom_fast_;
+  std::unique_ptr<UpdatingSymbolCounter> residuals_aom_slow_;
+  SymbolCounter* residuals_aom_;
   const SymbolRecorder* recorder_ = nullptr;
 };
 

@@ -68,6 +68,7 @@ class SymbolsInfoTest : public SymbolsInfo {
 
 //------------------------------------------------------------------------------
 
+// Initializes 'num_symbol_types' symbols of type auto.
 void SetupInfo(uint32_t num_symbol_types, int32_t min_symbol,
                int32_t max_symbol, uint32_t num_clusters,
                UniformIntDistribution* random, SymbolsInfoTest* info) {
@@ -335,9 +336,6 @@ void VerifyProcessRead(const SymbolsInfoTest& info, uint32_t num_symbols,
   const float header_cost = enc.GetCost();
 
   // Write the symbols.
-  // We do not send max_nnz, the ranges, the clusters and the symbol types as
-  // they do not require the SymbolWriter, they usually are just sent as raw
-  // signal in the ANS encoder.
   float enc_cost = 0.f;
   for (const DataGenerator::Symbol& sym : symbols) {
     sw->ProcessWithCost(sym.s, sym.cluster, sym.value, "sym", &enc, &enc_cost);
@@ -463,9 +461,6 @@ TEST(SymbolsTest, Uniform) {
   generator.WriteHeader(info, recorder, &max_nnz, &dicts, &enc, sw.get());
 
   // Write the symbols.
-  // We do not send max_nnz, the ranges, the clusters and the symbol types as
-  // they do not require the SymbolWriter, they usually are just sent as raw
-  // signal in the ANS encoder.
   int32_t min = symbols[0].value, max = symbols[0].value;
   for (const DataGenerator::Symbol& sym : symbols) {
     sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
@@ -692,8 +687,22 @@ TEST(SymbolsTest, StorageMethodAdaptiveWithAutoSpeed) {
 
 //------------------------------------------------------------------------------
 
-// Test that SymbolCounter gives accurate measurements.
-TEST(SymbolsTest, SymbolCounter) {
+enum SymbolCounterType { kFast, kUpdating };
+
+std::unique_ptr<SymbolCounter> CreateSymbolCounter(
+    SymbolCounterType type, const SymbolRecorder& recorder) {
+  return std::unique_ptr<SymbolCounter>(
+      (type == kUpdating)
+          ? new (WP2Allocable::nothrow) UpdatingSymbolCounter(&recorder)
+          : new (WP2Allocable::nothrow) SymbolCounter(&recorder));
+}
+
+class TestSymbolCounter : public ::testing::TestWithParam<SymbolCounterType> {};
+
+// Test that UpdatingSymbolCounter gives accurate measurements.
+TEST_P(TestSymbolCounter, SymbolCounter) {
+  const SymbolCounterType type = GetParam();
+
   ANSInit();
   static constexpr uint32_t kNumSymbol = 10000u;
   static constexpr int32_t kMinSymbol = -5;
@@ -703,22 +712,28 @@ TEST(SymbolsTest, SymbolCounter) {
 
   // Generate the data.
   SymbolsInfoTest info;
+  // Three 'auto' symbols.
   SetupInfo(/*num_symbol_types=*/3, kMinSymbol, kMaxSymbol, kNumClusters,
             &random, &info);
-  // Adaptive bit.
-  info.SetInfo(3, /*min=*/0, /*max=*/1, /*num_clusters=*/4,
-               StorageMethod::kAdaptiveBit);
-  EXPECT_WP2_OK(
-      info.SetStartingProba(/*sym=*/3, /*cluster=*/2, /*p0=*/3, /*p1=*/7));
-  EXPECT_WP2_OK(
-      info.SetStartingProba(/*sym=*/3, /*cluster=*/3, /*p0=*/100, /*p1=*/1));
-  // Adaptive symbol.
-  info.SetInfo(info.Size(), /*min=*/0, /*max=*/9, /*num_clusters=*/3,
-               StorageMethod::kAdaptiveSym);
-  // Test that binary symbols are not only kAdaptiveBit but can also be
-  // kAdaptiveSym.
-  info.SetInfo(info.Size(), /*min=*/0, /*max=*/1, /*num_clusters=*/2,
-               StorageMethod::kAdaptiveSym);
+
+  // Only the UpdatingSymbolCounter is accurate for adaptive bits/symbols.
+  if (type == kUpdating) {
+    // Adaptive bit.
+    info.SetInfo(/*sym=*/info.Size(), /*min=*/0, /*max=*/1, /*num_clusters=*/4,
+                 StorageMethod::kAdaptiveBit);
+    EXPECT_WP2_OK(
+        info.SetStartingProba(/*sym=*/3, /*cluster=*/2, /*p0=*/3, /*p1=*/7));
+    EXPECT_WP2_OK(
+        info.SetStartingProba(/*sym=*/3, /*cluster=*/3, /*p0=*/100, /*p1=*/1));
+    // Adaptive symbol.
+    info.SetInfo(/*sym=*/info.Size(), /*min=*/0, /*max=*/9, /*num_clusters=*/3,
+                 StorageMethod::kAdaptiveSym);
+    // Test that binary symbols are not only kAdaptiveBit but can also be
+    // kAdaptiveSym.
+    info.SetInfo(/*sym=*/info.Size(), /*min=*/0, /*max=*/1, /*num_clusters=*/2,
+                 StorageMethod::kAdaptiveSym);
+  }
+
   const uint32_t num_symbol_types = info.Size();
   DataGenerator generator(info, &random);
 
@@ -747,9 +762,6 @@ TEST(SymbolsTest, SymbolCounter) {
   const float header_cost = enc.GetCost();
 
   // Write the symbols.
-  // We do not send max_nnz, the ranges, the clusters and the symbol types as
-  // they do not require the SymbolWriter, they usually are just sent as raw
-  // signal in the ANS encoder.
   for (const DataGenerator::Symbol& sym : symbols) {
     sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
   }
@@ -757,16 +769,19 @@ TEST(SymbolsTest, SymbolCounter) {
 
   recorder.ResetRecord(/*reset_backup=*/true);
   ANSEncCounter enc_counter;
-  SymbolCounter symbol_counter(&recorder);
-  ASSERT_WP2_OK(symbol_counter.Allocate(/*syms=*/{3, 4, 5}));
+  std::unique_ptr<SymbolCounter> symbol_counter =
+      CreateSymbolCounter(type, recorder);
+  ASSERT_WP2_OK(symbol_counter->Allocate(/*syms=*/{3, 4, 5}));
   for (const DataGenerator::Symbol& sym : symbols) {
-    symbol_counter.Process(sym.s, sym.cluster, sym.value, "sym", &enc_counter);
+    symbol_counter->Process(sym.s, sym.cluster, sym.value, "sym", &enc_counter);
   }
 
   EXPECT_NEAR(enc_counter.GetCost(), real_cost, 22);
 }
 
-TEST(SymbolsTest, SymbolCounter_Dictionary) {
+TEST_P(TestSymbolCounter, SymbolCounter_Dictionary) {
+  const SymbolCounterType type = GetParam();
+
   WP2MathInit();
   // Generate the data.
   SymbolsInfoTest info;
@@ -777,14 +792,15 @@ TEST(SymbolsTest, SymbolCounter_Dictionary) {
   ASSERT_WP2_OK(recorder.Allocate(info, /*num_records=*/0));
 
   ANSEncCounter counter;
-  SymbolCounter symbol_counter(&recorder);
-  ASSERT_WP2_OK(symbol_counter.Allocate(/*syms=*/{}));
-  symbol_counter.Process(0, 1, "test", &counter);
+  std::unique_ptr<SymbolCounter> symbol_counter =
+      CreateSymbolCounter(type, recorder);
+  ASSERT_WP2_OK(symbol_counter->Allocate(/*syms=*/{}));
+  symbol_counter->Process(0, 1, "test", &counter);
   // Before anything was recorded, all values are assumed to have the same cost
   // which is log2(range) = log2(8) = 3
   EXPECT_EQ(counter.GetCost(), 3);
   counter.Reset();
-  symbol_counter.Process(0, 3, "test", &counter);
+  symbol_counter->Process(0, 3, "test", &counter);
   EXPECT_EQ(counter.GetCost(), 3);
 
   ANSEncNoop noop;
@@ -795,15 +811,15 @@ TEST(SymbolsTest, SymbolCounter_Dictionary) {
   for (uint8_t i : data) recorder.Process(/*sym=*/0, i, "test", &noop);
 
   counter.Reset();
-  symbol_counter.Process(0, 1, "test", &counter);
+  symbol_counter->Process(0, 1, "test", &counter);
   // After recording, costs are based on the recorded stats. -log2(1/4) = 2
   EXPECT_EQ(counter.GetCost(), 2);
   counter.Reset();
-  symbol_counter.Process(0, 3, "test", &counter);
+  symbol_counter->Process(0, 3, "test", &counter);
   // -log2(3/4)
   EXPECT_NEAR(counter.GetCost(), 0.415, 0.001);
   counter.Reset();
-  symbol_counter.Process(0, 2, "test", &counter);
+  symbol_counter->Process(0, 2, "test", &counter);
   // Value "2" was never recorded so we assume a cost above -1*log2(1/400).
   EXPECT_NEAR(counter.GetCost(), 8.643, 0.001);
   ASSERT_WP2_OK(recorder.MakeBackup());
@@ -812,7 +828,7 @@ TEST(SymbolsTest, SymbolCounter_Dictionary) {
     recorder.ResetRecord(reset_backup);
     counter.Reset();
     for (uint8_t i : data) {
-      symbol_counter.Process(/*sym=*/0, i, "test", &counter);
+      symbol_counter->Process(/*sym=*/0, i, "test", &counter);
     }
     costs[reset_backup ? 1 : 0] = counter.GetCost();
   }
@@ -823,15 +839,20 @@ TEST(SymbolsTest, SymbolCounter_Dictionary) {
 
 // Test that SymbolCounter gives accurate measurements when given a
 // SymbolRecorder that has already recorded a bunch of data.
-TEST(SymbolsTest, SymbolCounter_Midway) {
+TEST_P(TestSymbolCounter, SymbolCounter_Midway) {
+  const SymbolCounterType type = GetParam();
+
   WP2MathInit();
   ANSInit();
   static constexpr uint32_t kNumSymbol = 10000u;
   UniformIntDistribution random(/*seed=*/0);
 
+  // Only the UpdatingSymbolCounter is accurate for adaptive bits/symbols.
+  SymbolsInfoTest info;
+
   // Here we only test adaptive bits and symbols, for which the counter should
   // know exactly how much space they'll take.
-  SymbolsInfoTest info;
+
   // Adaptive bit.
   info.SetInfo(0, /*min=*/0, /*max=*/1, /*num_clusters=*/4,
                StorageMethod::kAdaptiveBit);
@@ -842,6 +863,7 @@ TEST(SymbolsTest, SymbolCounter_Midway) {
   // Adaptive symbol.
   info.SetInfo(1, /*min=*/0, /*max=*/9, /*num_clusters=*/3,
                StorageMethod::kAdaptiveSym);
+
   const uint32_t num_symbol_types = info.Size();
   DataGenerator generator(info, &random);
 
@@ -871,9 +893,6 @@ TEST(SymbolsTest, SymbolCounter_Midway) {
   recorder.ResetRecord(/*reset_backup=*/true);
 
   // Write and record half of the symbols.
-  // We do not send max_nnz, the ranges, the clusters and the symbol types as
-  // they do not require the SymbolWriter, they usually are just sent as raw
-  // signal in the ANS encoder.
   const uint32_t half = symbols.size() / 2;
   for (uint32_t i = 0; i < half; ++i) {
     const DataGenerator::Symbol& sym = symbols[i];
@@ -883,19 +902,41 @@ TEST(SymbolsTest, SymbolCounter_Midway) {
 
   const float half_cost = enc.GetCost();
 
+  // Has this symbol been seen? per symbol type, per cluster.
+  std::vector<std::vector<bool>> seen(info.Size());
+  for (uint32_t i = 0; i < info.Size(); ++i) {
+    seen[i].resize(info.NumClusters(i));
+  }
+
   // Write the second half of symbols.
   for (uint32_t i = half; i < symbols.size(); ++i) {
     const DataGenerator::Symbol& sym = symbols[i];
+    // The "fast" symbol counter doesn't update adaptive symbols, so it's only
+    // accurate for the first instance of each symbol. Therefore we only
+    // process one value for each symbol type/cluster.
+    if (type == kFast && seen[sym.s][sym.cluster]) continue;
+
+    seen[sym.s][sym.cluster] = true;
     sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
   }
   const float real_cost = enc.GetCost() - half_cost;
 
   ANSEncCounter enc_counter;
-  SymbolCounter symbol_counter(&recorder);
-  ASSERT_WP2_OK(symbol_counter.Allocate(/*syms=*/{0, 1}));
+  std::unique_ptr<SymbolCounter> symbol_counter =
+      CreateSymbolCounter(type, recorder);
+  ASSERT_WP2_OK(symbol_counter->Allocate(/*syms=*/{0, 1}));
+
+  for (uint32_t i = 0; i < info.Size(); ++i) {
+    std::fill(seen[i].begin(), seen[i].end(), false);
+  }
   for (uint32_t i = half; i < symbols.size(); ++i) {
     const DataGenerator::Symbol& sym = symbols[i];
-    symbol_counter.Process(sym.s, sym.cluster, sym.value, "sym", &enc_counter);
+    // The "fast" symbol counter doesn't update adaptive symbols, so it's only
+    // accurate for the first instance of each symbol. Therefore we only
+    // process one value for each symbol type/cluster.
+    if (type == kFast && seen[sym.s][sym.cluster]) continue;
+    seen[sym.s][sym.cluster] = true;
+    symbol_counter->Process(sym.s, sym.cluster, sym.value, "sym", &enc_counter);
   }
 
   EXPECT_NEAR(enc_counter.GetCost(), real_cost, 1);
@@ -960,6 +1001,11 @@ TEST(SymbolsTest, SimplePrefixCode) {
                                                 s.prefix_size, &dec, "test"));
   }
 }
+
+INSTANTIATE_TEST_SUITE_P(TestSymbolCounterInstanciation, TestSymbolCounter,
+                         ::testing::Values(kFast, kUpdating));
+
+//------------------------------------------------------------------------------
 
 class SymbolWriterForTest : public SymbolWriter {
  public:

@@ -347,7 +347,7 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
         SymbolRecorder recorder;
         ASSERT_WP2_OK(recorder.Allocate(symbols_info, /*num_records=*/0));
         Counters counters;
-        ASSERT_WP2_OK(counters.Init(recorder));
+        ASSERT_WP2_OK(counters.Init(/*effort=*/5, recorder));
 
         // Check the coeffs can be successfully written by SyntaxWriter.
         SyntaxWriter syntax_writer;

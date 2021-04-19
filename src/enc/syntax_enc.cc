@@ -141,7 +141,7 @@ WP2Status SyntaxWriter::InitPass() {
     WP2_CHECK_STATUS(symbol_recorder_.MakeBackup());
   }
   ++pass_number_;
-  WP2_CHECK_STATUS(counters_.Init(symbol_recorder_));
+  WP2_CHECK_STATUS(counters_.Init(config_->effort, symbol_recorder_));
   context_.Reset();
   WP2_CHECK_STATUS(ResetRecord());
   return WP2_STATUS_OK;

@@ -103,7 +103,7 @@ TYPED_TEST(CodedBlockTest, FindBestModes) {
                        /*num_clusters=*/1, SymbolsInfo::StorageMethod::kAuto);
   ASSERT_WP2_OK(recorder.Allocate(symbols_info, /*num_records=*/0));
   Counters counters;
-  ASSERT_WP2_OK(counters.Init(recorder));
+  ASSERT_WP2_OK(counters.Init(/*effort=*/5, recorder));
 
   Vector<TransformPair> transforms;
   ASSERT_TRUE(transforms.push_back(kDctDct));

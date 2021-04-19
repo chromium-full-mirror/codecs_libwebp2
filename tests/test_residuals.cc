@@ -43,7 +43,7 @@ TEST_P(ResidualTest, Simple) {
   SymbolRecorder recorder;
   ASSERT_WP2_OK(recorder.Allocate(symbols_info, /*num_records=*/0));
   Counters counters;
-  ASSERT_WP2_OK(counters.Init(recorder));
+  ASSERT_WP2_OK(counters.Init(/*effort=*/5, recorder));
 
   constexpr uint32_t kNumTests = 5;
   constexpr uint32_t kMaxNumCoeffs = kMaxBlockSizePix2;

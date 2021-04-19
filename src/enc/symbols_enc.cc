@@ -298,93 +298,10 @@ int32_t SymbolRecorder::ProcessInternal(uint32_t sym, uint32_t cluster,
 constexpr uint32_t SymbolCounter::kInvalidIndex;
 
 WP2Status SymbolCounter::Allocate(std::initializer_list<uint32_t> syms) {
-  num_a_bits_ = 0u;
-  num_a_symbols_ = 0u;
-  indices_.fill(kInvalidIndex);
-  for (uint32_t sym : syms) {
-    assert(sym < kSymbolNumMax);
-    // In some partitioning (e.g. BlockScoreFunc), symbols_info is
-    // actually empty, so choose the maximum possible.
-    const uint32_t num_clusters = (symbols_info_.Size() == 0)
-                                      ? kMaxLossyClusters
-                                      : symbols_info_.NumClusters(sym);
-    switch (symbols_info_.Method(sym)) {
-      case SymbolsInfo::StorageMethod::kAdaptiveBit:
-        indices_[sym] = num_a_bits_;
-        num_a_bits_ += num_clusters;
-        break;
-      case SymbolsInfo::StorageMethod::kAdaptiveSym:
-      case SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed:
-        indices_[sym] = num_a_symbols_;
-        num_a_symbols_ += num_clusters;
-        break;
-      case SymbolsInfo::StorageMethod::kUnused:
-        break;
-      default:
-        // In practice, it should be assert(false) but some symbols might have
-        // a different method during tests.
-        break;
-    }
-  }
-  WP2_CHECK_ALLOC_OK(a_bits_.resize(num_a_bits_));
-  WP2_CHECK_ALLOC_OK(a_symbols_.resize(num_a_symbols_));
-  // If the following asserts ever break, just increase the size of the arrays.
-  // For now, the sizes are tuned to our current usage.
-  assert(num_a_bits_ <= a_bit_initialized_.size());
-  assert(num_a_symbols_ <= a_symbol_initialized_.size());
-  Clear();
   return WP2_STATUS_OK;
 }
 
-WP2Status SymbolCounter::CopyFrom(const SymbolCounter& other) {
-  // Nothing to copy in base classes SymbolManager and WP2Allocable.
-  indices_ = other.indices_;
-  num_a_bits_ = other.num_a_bits_;
-  a_bit_initialized_ = other.a_bit_initialized_;
-  WP2_CHECK_STATUS(a_bits_.CopyFrom(other.a_bits_));
-  num_a_symbols_ = other.num_a_symbols_;
-  a_symbol_initialized_ = other.a_symbol_initialized_;
-  WP2_CHECK_STATUS(a_symbols_.CopyFrom(other.a_symbols_));
-  return WP2_STATUS_OK;
-}
-
-void SymbolCounter::Clear() {
-  // Somehow, memset is faster than std::fill.
-  memset(&a_bit_initialized_[0], 0, num_a_bits_ * sizeof(false));
-  memset(&a_symbol_initialized_[0], 0, num_a_symbols_ * sizeof(false));
-}
-
-ANSBinSymbol* SymbolCounter::GetABit(uint32_t sym, uint32_t cluster) {
-  assert(symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAdaptiveBit);
-  assert(indices_[sym] != kInvalidIndex);
-  const uint32_t ind = indices_[sym] + cluster;
-  if (!a_bit_initialized_[ind]) {
-    a_bits_[ind] = recorder_->GetABit(sym, cluster);
-    a_bit_initialized_[ind] = true;
-  }
-  return &a_bits_[ind];
-}
-
-ANSAdaptiveSymbol* SymbolCounter::GetASymbol(uint32_t sym, uint32_t cluster) {
-  assert(symbols_info_.Range(sym, cluster) != 0);
-  const SymbolsInfo::StorageMethod method = symbols_info_.Method(sym);
-  assert(method == SymbolsInfo::StorageMethod::kAdaptiveSym ||
-         method == SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed);
-  assert(indices_[sym] != kInvalidIndex);
-  const uint32_t ind = indices_[sym] + cluster;
-  if (!a_symbol_initialized_[ind]) {
-    if (method == SymbolsInfo::StorageMethod::kAdaptiveSym) {
-      a_symbols_[ind] = recorder_->GetASymbol(sym, cluster);
-    } else {
-      // Adaptive symbol with auto speed. We approximate it as regular adaptive
-      // symbol with the default speed.
-      // TODO(maryla): not sure this is the best. Maybe just assume a range?
-      a_symbols_[ind] = recorder_->GetASymbolWithSpeed(sym, cluster);
-    }
-    a_symbol_initialized_[ind] = true;
-  }
-  return &a_symbols_[ind];
-}
+void SymbolCounter::Clear() {}
 
 int32_t SymbolCounter::ProcessInternal(uint32_t sym, uint32_t cluster,
                                        int32_t value_in, bool use_max_value,
@@ -437,16 +354,139 @@ int32_t SymbolCounter::ProcessInternal(uint32_t sym, uint32_t cluster,
       break;
     }
     case SymbolsInfo::StorageMethod::kAdaptiveBit:
+      // Does NOT update the adaptive bit.
+      enc->PutBit(value_in, recorder_->GetABit(sym, cluster).NumZeros(),
+                  recorder_->GetABit(sym, cluster).NumTotal(), label);
+      break;
+    case SymbolsInfo::StorageMethod::kAdaptiveSym:
+      // Does NOT update the adaptive symbol.
+      enc->PutSymbol(value_in, recorder_->GetASymbol(sym, cluster), label);
+      break;
+    case SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed:
+      // Does NOT update the adaptive symbol.
+      enc->PutSymbol(value_in, recorder_->GetASymbolWithSpeed(sym, cluster),
+                     label);
+      break;
+    case SymbolsInfo::StorageMethod::kUnused:
+      // Even though the object can be created with unused symbols (e.g. alpha
+      // symbols), those should never be used.
+      assert(false);
+      break;
+  }
+  return value_in;
+}
+
+//------------------------------------------------------------------------------
+
+WP2Status UpdatingSymbolCounter::Allocate(
+    std::initializer_list<uint32_t> syms) {
+  num_a_bits_ = 0u;
+  num_a_symbols_ = 0u;
+  indices_.fill(kInvalidIndex);
+  for (uint32_t sym : syms) {
+    assert(sym < kSymbolNumMax);
+    // In some partitioning (e.g. BlockScoreFunc), symbols_info is
+    // actually empty, so choose the maximum possible.
+    const uint32_t num_clusters = (symbols_info_.Size() == 0)
+                                      ? kMaxLossyClusters
+                                      : symbols_info_.NumClusters(sym);
+    switch (symbols_info_.Method(sym)) {
+      case SymbolsInfo::StorageMethod::kAdaptiveBit:
+        indices_[sym] = num_a_bits_;
+        num_a_bits_ += num_clusters;
+        break;
+      case SymbolsInfo::StorageMethod::kAdaptiveSym:
+      case SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed:
+        indices_[sym] = num_a_symbols_;
+        num_a_symbols_ += num_clusters;
+        break;
+      case SymbolsInfo::StorageMethod::kUnused:
+        break;
+      default:
+        // In practice, it should be assert(false) but some symbols might have
+        // a different method during tests.
+        break;
+    }
+  }
+  WP2_CHECK_ALLOC_OK(a_bits_.resize(num_a_bits_));
+  WP2_CHECK_ALLOC_OK(a_symbols_.resize(num_a_symbols_));
+  // If the following asserts ever break, just increase the size of the arrays.
+  // For now, the sizes are tuned to our current usage.
+  assert(num_a_bits_ <= a_bit_initialized_.size());
+  assert(num_a_symbols_ <= a_symbol_initialized_.size());
+  Clear();
+  return WP2_STATUS_OK;
+}
+
+WP2Status UpdatingSymbolCounter::CopyFrom(const UpdatingSymbolCounter& other) {
+  // Nothing to copy in base classes (we intentionally do not copy recorder_)
+  indices_ = other.indices_;
+  num_a_bits_ = other.num_a_bits_;
+  a_bit_initialized_ = other.a_bit_initialized_;
+  WP2_CHECK_STATUS(a_bits_.CopyFrom(other.a_bits_));
+  num_a_symbols_ = other.num_a_symbols_;
+  a_symbol_initialized_ = other.a_symbol_initialized_;
+  WP2_CHECK_STATUS(a_symbols_.CopyFrom(other.a_symbols_));
+  return WP2_STATUS_OK;
+}
+
+void UpdatingSymbolCounter::Clear() {
+  // Somehow, memset is faster than std::fill.
+  memset(&a_bit_initialized_[0], 0, num_a_bits_ * sizeof(false));
+  memset(&a_symbol_initialized_[0], 0, num_a_symbols_ * sizeof(false));
+}
+
+ANSBinSymbol* UpdatingSymbolCounter::GetABit(uint32_t sym, uint32_t cluster) {
+  assert(symbols_info_.Method(sym) == SymbolsInfo::StorageMethod::kAdaptiveBit);
+  assert(indices_[sym] != kInvalidIndex);
+  const uint32_t ind = indices_[sym] + cluster;
+  if (!a_bit_initialized_[ind]) {
+    a_bits_[ind] = recorder_->GetABit(sym, cluster);
+    a_bit_initialized_[ind] = true;
+  }
+  return &a_bits_[ind];
+}
+
+ANSAdaptiveSymbol* UpdatingSymbolCounter::GetASymbol(uint32_t sym,
+                                                     uint32_t cluster) {
+  assert(symbols_info_.Range(sym, cluster) != 0);
+  const SymbolsInfo::StorageMethod method = symbols_info_.Method(sym);
+  assert(method == SymbolsInfo::StorageMethod::kAdaptiveSym ||
+         method == SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed);
+  assert(indices_[sym] != kInvalidIndex);
+  const uint32_t ind = indices_[sym] + cluster;
+  if (!a_symbol_initialized_[ind]) {
+    if (method == SymbolsInfo::StorageMethod::kAdaptiveSym) {
+      a_symbols_[ind] = recorder_->GetASymbol(sym, cluster);
+    } else {
+      // Adaptive symbol with auto speed. We approximate it as regular adaptive
+      // symbol with the default speed.
+      // TODO(maryla): not sure this is the best. Maybe just assume a range?
+      a_symbols_[ind] = recorder_->GetASymbolWithSpeed(sym, cluster);
+    }
+    a_symbol_initialized_[ind] = true;
+  }
+  return &a_symbols_[ind];
+}
+
+int32_t UpdatingSymbolCounter::ProcessInternal(
+    uint32_t sym, uint32_t cluster, int32_t value_in, bool use_max_value,
+    uint32_t max_value, WP2_OPT_LABEL, ANSEncBase* const enc,
+    float* const cost) {
+  assert(value_in <= symbols_info_.Max(sym, cluster));
+  assert(value_in >= symbols_info_.Min(sym, cluster));
+  assert(!use_max_value || (uint32_t)std::abs(value_in) <= max_value);
+  switch (symbols_info_.Method(sym)) {
+    case SymbolsInfo::StorageMethod::kAdaptiveBit:
       enc->PutABit(value_in, GetABit(sym, cluster), label);
       break;
     case SymbolsInfo::StorageMethod::kAdaptiveSym:
     case SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed:
       enc->PutASymbol(value_in, GetASymbol(sym, cluster), label);
       break;
-    case SymbolsInfo::StorageMethod::kUnused:
-      // Even though the object can be created with unused symbols (e.g. alpha
-      // symbols), those should never be used.
-      assert(false);
+    default:
+      SymbolCounter::ProcessInternal(sym, cluster, value_in, use_max_value,
+                                     max_value, label, enc, nullptr);
       break;
   }
   return value_in;
