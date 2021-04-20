@@ -84,8 +84,9 @@ TEST_P(PaletteTest, RoundTrip) {
   const WP2::EncoderConfig encoder_config;
   WP2L::Encoder encoder(encoder_config, buffer, has_alpha);
   ASSERT_WP2_OK(encoder.Allocate());
-  ASSERT_WP2_OK(
-      palette.FindBestMethod(ProgressRange(), &encoder, /*effort=*/5));
+  ASSERT_WP2_OK(palette.FindBestMethod(buffer, ProgressRange(),
+                                       WP2L::Palette::Sorting::kMinimalSize,
+                                       /*effort=*/5, &encoder));
   ASSERT_WP2_OK(palette.Write(ProgressRange(), &enc, &dicts, &encoder));
 
   // Apply palette on buffer.

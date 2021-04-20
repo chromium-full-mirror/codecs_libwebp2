@@ -489,8 +489,8 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   const WP2::ProgressRange entropy_progress(progress, 0.5);
 
   WP2_CHECK_STATUS(encoder->palette_.AnalyzeAndCreate(pic));
-  WP2_CHECK_STATUS(
-      encoder->palette_.FindBestMethod(palette_progress, encoder, effort));
+  WP2_CHECK_STATUS(encoder->palette_.FindBestMethod(
+      pic, palette_progress, Palette::Sorting::kMinimalSize, effort, encoder));
 
   // Do not use a palette when there is only one color as ANS will optimize it
   // anyway.
@@ -562,6 +562,22 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   // Remove the internal info.
   for (const EntropyConfig& c : entropy_configs) {
     WP2_CHECK_ALLOC_OK(configs->push_back(c.config));
+  }
+  // Use the minimal-size method for palette storage by default.
+  uint32_t configs_size = configs->size();
+  for (uint32_t i = 0; i < configs_size; ++i) {
+    CrunchConfig& config = (*configs)[i];
+    for (uint32_t t = 0; t < kPossibleTransformCombinationSize; ++t) {
+      if (config.transforms[t] == TransformType::kColorIndexing) {
+        config.palette_sorting_type = Palette::Sorting::kMinimalSize;
+        if (effort == 9) {
+          // Try more methods for palette sorting.
+          WP2_CHECK_ALLOC_OK(configs->push_back(config));
+          configs->back().palette_sorting_type = Palette::Sorting::kLuminance;
+        }
+        break;
+      }
+    }
   }
   // Configs are ordered with the smallest entropies first to favor early exits
   // later. Still, we slightly change the order so that increasingly including

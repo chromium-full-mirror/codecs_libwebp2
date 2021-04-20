@@ -108,9 +108,21 @@ uint32_t CrunchConfig::GetNumTransforms() const {
 }
 
 bool CrunchConfig::ShouldBeCachedFor(const CrunchConfig& config) const {
-  return (use_premultiplied == config.use_premultiplied) &&
-         std::equal(transforms, transforms + GetNumTransforms(),
-                    config.transforms);
+  // First, make sure the pre-multiplication is the same and that the set of
+  // transforms is a subset.
+  if (use_premultiplied != config.use_premultiplied ||
+      !std::equal(transforms, transforms + GetNumTransforms(),
+                  config.transforms)) {
+    return false;
+  }
+  // If we have a palette, make sure the type is the same.
+  for (uint32_t i = 0; i < GetNumTransforms(); ++i) {
+    if (transforms[i] == TransformType::kColorIndexing &&
+        palette_sorting_type != config.palette_sorting_type) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // -----------------------------------------------------------------------------
@@ -788,7 +800,12 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
     switch (type) {
       case TransformType::kColorIndexing: {
         // Encode palette.
-        WP2_CHECK_STATUS(palette_.Write(progress_local, enc, dicts, this));
+        ProgressRange palette_find(progress_local, 0.5);
+        ProgressRange palette_write(progress_local, 0.5);
+        WP2_CHECK_STATUS(palette_.FindBestMethod(pic_, palette_find,
+                                                 config.palette_sorting_type,
+                                                 config_.effort, this));
+        WP2_CHECK_STATUS(palette_.Write(palette_write, enc, dicts, this));
         WP2_CHECK_STATUS(MapImageFromPalette(config));
         need_copy = false;
         break;

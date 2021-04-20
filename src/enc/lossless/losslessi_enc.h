@@ -253,6 +253,7 @@ struct CrunchConfig {
   uint32_t transform_bits;
   // Use a MoveToFrontCache in group4 to signal new colors.
   bool group4_use_move_to_front;
+  Palette::Sorting palette_sorting_type;
   // Returns whether one of the transforms is kPredictorWSub.
   bool HasSubModes() const {
     for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {

@@ -35,6 +35,12 @@ class InternalParams;
 
 class Palette {
  public:
+  // Color sorting technique.
+  // kLexicographic: colors in lexicographic order
+  // kMinimalSize: the palette storage size is minimized
+  // kLuminance: colors are first sorted by alpha, and then by
+  //             luma = 0.299 * R + 0.587 * G + 0.114 * B
+  enum class Sorting { kLexicographic, kMinimalSize, kLuminance, kUndefined };
   Palette() : num_colors_(0) {}
   void Init(WP2SampleFormat format, bool has_alpha) {
     format_ = format;
@@ -57,8 +63,9 @@ class Palette {
   // Try to find the best writing method 'method_'. Might reorder the colors_.
   // The storage cost cost_ will be calculated.
   // The 'effort' parameter impacts the depth of analyzis to get a better cost.
-  WP2Status FindBestMethod(const WP2::ProgressRange& progress,
-                           Encoder* const encoder, int effort);
+  WP2Status FindBestMethod(const WP2::ArgbBuffer& pic,
+                           const WP2::ProgressRange& progress, Sorting type,
+                           int effort, Encoder* const encoder);
   // Returns the bit cost of the current palette, set by FindBestMethod().
   float GetCost() const { return cost_; }
   // Writes the palette to the provided bitwriter 'enc' according to method_.
@@ -71,11 +78,21 @@ class Palette {
 
  private:
   bool IsGrayScale() const;  // returns true if palette is grayscale (r==b==g)
+
+  // Sort the palette so that it takes the least space to store.
+  WP2Status SortMinimalSize(const WP2::ProgressRange& progress, int effort,
+                            float cost_header, Encoder* const encoder,
+                            InternalParams* const params);
+  // Sort the palette so that it is sorted by luminance.
+  WP2Status SortLuminance(const WP2::ProgressRange& progress, int effort,
+                          float cost_header, Encoder* const encoder,
+                          InternalParams* const params);
+
   // try coding a palette 'colors' and if it has a better cost_, set it as the
   // new colors_.
-  WP2Status TryPalette(WP2::Vector_s16& colors,
+  WP2Status TryPalette(float cost_header, WP2::Vector_s16& colors,
                        const WP2::ProgressRange& progress,
-                       Encoder* const encoder, InternalParams& params,
+                       Encoder* const encoder, InternalParams* const params,
                        bool also_as_image = true);
 
  private:
@@ -83,19 +100,20 @@ class Palette {
   bool has_alpha_ = false;
   bool is_grayscale_ = false;
   WP2::Vector_s16 colors_;
-  uint32_t num_colors_ = 0;     // 0 = palette is disabled
-  uint32_t max_palette_size_ = 0;   // depends on picture
+  uint32_t num_colors_ = 0;        // 0 = palette is disabled
+  uint32_t max_palette_size_ = 0;  // depends on picture
   bool full_optimize_ = false;  // depending on size, do full size-optimization
 
   // The following is updated after calling AnalyzeAndCreate().
   enum PaletteStorageMethod {
-    kMethodVerbatim = 0,   // store as-is
-    kMethodImage,          // Store as an image.
+    kMethodVerbatim = 0,  // store as-is
+    kMethodImage,         // Store as an image.
     // Store as a list of values in range [0:previous value] or [previous
     // value:channel_max] (whichever is best according to the sign).
     kMethodList
   } method_ = kMethodVerbatim;
   float cost_;
+  Sorting sort_type_ = Sorting::kUndefined;
 };
 
 }  // namespace WP2L
