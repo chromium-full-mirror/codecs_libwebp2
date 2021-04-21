@@ -23,7 +23,7 @@
 namespace WP2 {
 namespace {
 
-class ScoreTestCpuInfo : public ::testing::TestWithParam<WP2CPUInfo> {
+class ScoreTestCpuInfo : public testing::TestWithParam<WP2CPUInfo> {
   void SetUp() override {
     WP2DspReset();
     WP2GetCPUInfo = GetParam();
@@ -97,7 +97,7 @@ TEST_P(ScoreTestCpuInfo, TestMinMax_5x5) {
 }
 
 INSTANTIATE_TEST_SUITE_P(ScoreTestCpuInfoInstantiation, ScoreTestCpuInfo,
-                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
+                         testing::ValuesIn(testutil::kWP2CpuInfos));
 
 }  // namespace
 }  // namespace WP2

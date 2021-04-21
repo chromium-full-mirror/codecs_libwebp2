@@ -56,7 +56,7 @@
     int16_t truncated[]{__VA_ARGS__};                                \
     const uint32_t num = (sizeof(truncated) / sizeof(truncated[0])); \
     std::copy(array, array + num, truncated);                        \
-    EXPECT_THAT(truncated, ::testing::ElementsAre(__VA_ARGS__));     \
+    EXPECT_THAT(truncated, testing::ElementsAre(__VA_ARGS__));       \
   } while (0)
 
 // Just for testing. Warning, this function is NOT thread safe, and
@@ -93,7 +93,7 @@ static bool GetCPUInfoForceSlowSSSE3(WP2CPUFeature feature) {
 
 static bool GetCPUInfoOnlyC(WP2CPUFeature feature) { return false; }
 
-// To be used with '::testing::ValuesIn(kWP2CPUInfos)'
+// To be used with 'testing::ValuesIn(kWP2CPUInfos)'
 // Warning! No multi-thread safe! don't use in *sharded* tests!
 const WP2CPUInfo kWP2CpuInfos[] = {
   GetCPUInfoOnlyC, GetCPUInfoForceSlowSSSE3,
@@ -170,16 +170,16 @@ float GetExpectedDistortion(
 float GetExpectedDistortion(const EncoderConfig& encoder_config);
 
 // Returns true if 'src' and 'dec' are similar of at least 'expected_distortion'
-::testing::AssertionResult Compare(
+testing::AssertionResult Compare(
     const ArgbBuffer& src, const ArgbBuffer& dec, const std::string& file_name,
     float expected_distortion = 99.f, MetricType metric = PSNR,
     Orientation decoding_orientation = Orientation::kOriginal);
 
-::testing::AssertionResult Compare(const YUVPlane& src, const YUVPlane& dec,
-                                   BitDepth bit_depth,
-                                   const std::string& file_name,
-                                   float expected_distortion = 99.f,
-                                   MetricType metric = PSNR);
+testing::AssertionResult Compare(const YUVPlane& src, const YUVPlane& dec,
+                                 BitDepth bit_depth,
+                                 const std::string& file_name,
+                                 float expected_distortion = 99.f,
+                                 MetricType metric = PSNR);
 
 // ProgressHook example. 'last_progress_' will record it. Set 'fail_at_' to make
 // ProgressHook::OnUpdate() return false when the specified progress is reached.
@@ -204,7 +204,7 @@ class ProgressTimeout : public ProgressTester {
 
 //------------------------------------------------------------------------------
 
-::testing::AssertionResult EncodeDecodeCompare(
+testing::AssertionResult EncodeDecodeCompare(
     const std::string& file_name,
     const EncoderConfig& encoder_config = EncoderConfig::kDefault,
     const DecoderConfig& decoder_config = DecoderConfig::kDefault);

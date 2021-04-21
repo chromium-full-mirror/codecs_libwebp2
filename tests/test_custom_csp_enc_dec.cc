@@ -41,7 +41,7 @@ constexpr const uint32_t kRGBToCCSPShifts[] = {
     kRGBToRGB8Shift, kRGBToRGB10Shift, kRGBToYCoCgShift, kRGBToYpUVShift};
 
 class EncodeDecodeCustomCspTest
-    : public ::testing::TestWithParam<
+    : public testing::TestWithParam<
           std::tuple<std::string, float, Matrix, bool>> {};
 
 //------------------------------------------------------------------------------
@@ -122,19 +122,19 @@ TEST_P(EncodeDecodeCustomCspTest, Comparison) {
 
 INSTANTIATE_TEST_SUITE_P(
     EncodeDecodeCustomCspTestAlpha, EncodeDecodeCustomCspTest,
-    ::testing::Combine(::testing::Values("source1_1x1.png", "alpha_ramp.png"),
-                       ::testing::Values(0.f, 100.f) /* quality */,
-                       ::testing::Values(Matrix::kRGB8, Matrix::kRGB10,
-                                         Matrix::kYCoCg, Matrix::kYpUV),
-                       ::testing::Values(true) /* encode_alpha */));
+    testing::Combine(testing::Values("source1_1x1.png", "alpha_ramp.png"),
+                     testing::Values(0.f, 100.f) /* quality */,
+                     testing::Values(Matrix::kRGB8, Matrix::kRGB10,
+                                     Matrix::kYCoCg, Matrix::kYpUV),
+                     testing::Values(true) /* encode_alpha */));
 
 INSTANTIATE_TEST_SUITE_P(
     EncodeDecodeCustomCspTestOpaque, EncodeDecodeCustomCspTest,
-    ::testing::Combine(::testing::Values("source3_222x167.jpg"),
-                       ::testing::Values(50.f, 100.f) /* quality */,
-                       ::testing::Values(Matrix::kRGB8, Matrix::kRGB10,
-                                         Matrix::kYCoCg, Matrix::kYpUV),
-                       ::testing::Values(false) /* encode_alpha */));
+    testing::Combine(testing::Values("source3_222x167.jpg"),
+                     testing::Values(50.f, 100.f) /* quality */,
+                     testing::Values(Matrix::kRGB8, Matrix::kRGB10,
+                                     Matrix::kYCoCg, Matrix::kYpUV),
+                     testing::Values(false) /* encode_alpha */));
 
 //------------------------------------------------------------------------------
 

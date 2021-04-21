@@ -35,7 +35,7 @@ typedef std::tuple<std::vector<const char*>, std::vector<uint32_t>, float, int,
                    uint32_t, testutil::IncrementalDecodingTestSetup>
     Param;
 
-class AnimTestIncr : public ::testing::TestWithParam<Param> {};
+class AnimTestIncr : public testing::TestWithParam<Param> {};
 
 TEST_P(AnimTestIncr, Simple) {
   const std::vector<const char*>& file_names = std::get<0>(GetParam());
@@ -83,7 +83,7 @@ constexpr bool kCompareWithSingleChunkDec = true;
 // Input images are expected to be of equal sizes inside a Param.
 INSTANTIATE_TEST_SUITE_P(
     AnimTestIncrInstantiation, AnimTestIncr,
-    ::testing::Values(
+    testing::Values(
         Param(
             {"source1_64x48.png"},
             /*frame durations (ms):*/ {1000},
@@ -110,7 +110,7 @@ INSTANTIATE_TEST_SUITE_P(
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_AnimTestIncrInstantiation, AnimTestIncr,
-    ::testing::Values(
+    testing::Values(
         Param({"alpha_ramp.png", "alpha_ramp.lossy.webp", "alpha_ramp.webp"},
               /*frame durations (ms):*/ {50, 70, 1},
               /*quality=*/100.0f, /*effort=*/2, /*thread_level=*/0,
@@ -146,22 +146,22 @@ INSTANTIATE_TEST_SUITE_P(
 
 INSTANTIATE_TEST_SUITE_P(
     AnimTestIncrRewind, AnimTestIncr,
-    ::testing::Values(Param({"source1_64x48.png"},
-                            /*frame durations (ms):*/ {1000},
-                            /*quality=*/0.0f, /*effort=*/4, /*thread_level=*/2,
-                            {1,
-                             testutil::DecoderType::kArray,
-                             WP2_BGRA_32,
-                             kDoNotCompare,
-                             {{testutil::DecoderAction::Type::kRewind, 0, 0},
-                              {testutil::DecoderAction::Type::kRewind, 100,
-                               0}}})));
+    testing::Values(Param({"source1_64x48.png"},
+                          /*frame durations (ms):*/ {1000},
+                          /*quality=*/0.0f, /*effort=*/4, /*thread_level=*/2,
+                          {1,
+                           testutil::DecoderType::kArray,
+                           WP2_BGRA_32,
+                           kDoNotCompare,
+                           {{testutil::DecoderAction::Type::kRewind, 0, 0},
+                            {testutil::DecoderAction::Type::kRewind, 100,
+                             0}}})));
 
 // This one takes a while to run so it is disabled.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_AnimTestIncrRewind, AnimTestIncr,
-    ::testing::Values(
+    testing::Values(
         Param({"source1_64x48.png"},
               /*frame durations (ms):*/ {1},
               /*quality=*/100.0f, /*effort=*/7, /*thread_level=*/0,

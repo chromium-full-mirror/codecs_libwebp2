@@ -17,7 +17,7 @@
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/data_source.h"
 
-using ::testing::AssertionResult;
+using testing::AssertionResult;
 
 namespace WP2 {
 namespace {

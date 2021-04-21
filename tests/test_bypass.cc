@@ -32,7 +32,7 @@ namespace {
 //------------------------------------------------------------------------------
 
 class BypassTest
-    : public ::testing::TestWithParam<std::tuple<
+    : public testing::TestWithParam<std::tuple<
           const char*, bool, bool, WP2SampleFormat, WP2SampleFormat>> {};
 
 // Encode decode raw pixels of a tile of maximum dimensions.
@@ -140,12 +140,12 @@ TEST_P(BypassTest, MaxChunkSize) {
 
 INSTANTIATE_TEST_SUITE_P(
     BypassTestInstantiation, BypassTest,
-    ::testing::Combine(::testing::Values("taiwan.png"),
-                       ::testing::Values(true, false),  // Lossy / lossless
-                       ::testing::Values(true, false),  // Force alpha
-                       ::testing::Values(WP2_Argb_32, WP2_Argb_38),  // input
-                       ::testing::Values(WP2_Argb_32, WP2_Argb_38)   // output
-                       ));
+    testing::Combine(testing::Values("taiwan.png"),
+                     testing::Values(true, false),  // Lossy / lossless
+                     testing::Values(true, false),  // Force alpha
+                     testing::Values(WP2_Argb_32, WP2_Argb_38),  // input
+                     testing::Values(WP2_Argb_32, WP2_Argb_38)   // output
+                     ));
 
 //------------------------------------------------------------------------------
 

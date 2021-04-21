@@ -28,7 +28,7 @@ namespace {
 //------------------------------------------------------------------------------
 // Test 10 bit lossless.
 
-class Lossless10Test : public ::testing::TestWithParam<const char*> {};
+class Lossless10Test : public testing::TestWithParam<const char*> {};
 
 TEST_P(Lossless10Test, Simple) {
   ArgbBuffer src(WP2_Argb_38);
@@ -61,14 +61,13 @@ TEST_P(Lossless10Test, Simple) {
 }
 
 INSTANTIATE_TEST_SUITE_P(Lossless10TestInstantiation, Lossless10Test,
-                         ::testing::Values("source1_1x1.png",
-                                           "source1_64x48.png"));
+                         testing::Values("source1_1x1.png",
+                                         "source1_64x48.png"));
 
 //------------------------------------------------------------------------------
 
 class DecodeTest
-    : public ::testing::TestWithParam<std::tuple<std::string, bool, uint32_t>> {
-};
+    : public testing::TestWithParam<std::tuple<std::string, bool, uint32_t>> {};
 
 TEST_P(DecodeTest, Simple) {
   const std::string src_file_name = std::get<0>(GetParam());
@@ -91,16 +90,16 @@ TEST_P(DecodeTest, Simple) {
 
 INSTANTIATE_TEST_SUITE_P(
     DecodeTestInstantiationSingleTile, DecodeTest,
-    ::testing::Combine(
-        ::testing::Values("source1_64x48.png") /* one-tile image */,
-        ::testing::Values(true) /* lossless */,
-        ::testing::Values(0) /* no multithread; just one tile anyway */));
+    testing::Combine(
+        testing::Values("source1_64x48.png") /* one-tile image */,
+        testing::Values(true) /* lossless */,
+        testing::Values(0) /* no multithread; just one tile anyway */));
 
 INSTANTIATE_TEST_SUITE_P(
     DecodeTestInstantiationMultiTile, DecodeTest,
-    ::testing::Combine(::testing::Values("source0.pgm") /* several tiles */,
-                       ::testing::Values(false) /* lossy */,
-                       ::testing::Values(0, 64) /* extra threads */));
+    testing::Combine(testing::Values("source0.pgm") /* several tiles */,
+                     testing::Values(false) /* lossy */,
+                     testing::Values(0, 64) /* extra threads */));
 
 //------------------------------------------------------------------------------
 

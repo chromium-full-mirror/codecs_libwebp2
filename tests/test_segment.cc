@@ -26,7 +26,7 @@
 namespace WP2 {
 namespace {
 
-using ::testing::ElementsAre;
+using testing::ElementsAre;
 
 TEST(ClusterHistogramTest, Simple) {
   const uint32_t histogram[10] = {1, 10, 2, 0, 1, 5, 6, 30, 3, 10};

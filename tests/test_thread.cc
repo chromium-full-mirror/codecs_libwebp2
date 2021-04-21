@@ -77,7 +77,7 @@ class TestWorker : public WorkerBase {
   const bool sanitize_;
 };
 
-class ThreadTest : public ::testing::TestWithParam<std::tuple<bool, bool>> {};
+class ThreadTest : public testing::TestWithParam<std::tuple<bool, bool>> {};
 
 TEST_P(ThreadTest, MultiThread) {
   const bool threaded = std::get<0>(GetParam());
@@ -107,8 +107,8 @@ TEST_P(ThreadTest, MultiThread) {
 }
 
 INSTANTIATE_TEST_SUITE_P(ThreadTestInstantiation, ThreadTest,
-                         ::testing::Combine(::testing::Bool() /* threaded */,
-                                            ::testing::Bool() /* use_lock */));
+                         testing::Combine(testing::Bool() /* threaded */,
+                                          testing::Bool() /* use_lock */));
 
 }  // namespace
 }  // namespace WP2

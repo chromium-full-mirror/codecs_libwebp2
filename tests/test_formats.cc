@@ -155,7 +155,7 @@ TEST(FormatTest, ConvertImage) {
 // Encode and decode tests
 
 typedef std::tuple<std::vector<const char*>, WP2SampleFormat, float> Param;
-class FormatTest : public ::testing::TestWithParam<Param> {};
+class FormatTest : public testing::TestWithParam<Param> {};
 
 //------------------------------------------------------------------------------
 
@@ -257,7 +257,7 @@ TEST_P(FormatTest, EncodeDecodePreview) {
 // Simple straightforward tests.
 INSTANTIATE_TEST_SUITE_P(
     FormatTestInstantiation, FormatTest,
-    ::testing::Values(
+    testing::Values(
         Param({"source1_64x48.png"}, WP2_ARGB_32, /*quality=*/100.0f),
         Param({"source1_64x48.png"}, WP2_rgbA_32, /*quality=*/40.0f),
         Param({"source1_64x48.png"}, WP2_Argb_38, /*quality=*/100.0f),
@@ -266,24 +266,24 @@ INSTANTIATE_TEST_SUITE_P(
 // Test all lossy/lossless bypass paths for each output format.
 INSTANTIATE_TEST_SUITE_P(
     BypassFormatTestInstantiation, FormatTest,
-    ::testing::Combine(::testing::Values(std::vector<const char*>{
-                           "source1_1x1.png"}),
-                       ::testing::Range(WP2_Argb_32, WP2_FORMAT_NUM),
-                       /*quality=*/::testing::Values(10.f, 100.f)));
+    testing::Combine(testing::Values(std::vector<const char*>{
+                         "source1_1x1.png"}),
+                     testing::Range(WP2_Argb_32, WP2_FORMAT_NUM),
+                     /*quality=*/testing::Values(10.f, 100.f)));
 
 // This one takes a while to run so it is disabled.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_HeavyFormatTestInstantiation, FormatTest,
-    ::testing::Combine(
-        ::testing::Values(
+    testing::Combine(
+        testing::Values(
             std::vector<const char*>{"source1_64x48.png"},
             std::vector<const char*>{"alpha_ramp.png", "alpha_ramp.lossy.webp",
                                      "alpha_ramp.webp"},
             std::vector<const char*>{"source0.pgm", "source1.png",
                                      "source2.tiff", "source3.jpg"}),
-        ::testing::Range(WP2_Argb_32, WP2_FORMAT_NUM),
-        ::testing::Values(0.f, 70.f, 96.f)));
+        testing::Range(WP2_Argb_32, WP2_FORMAT_NUM),
+        testing::Values(0.f, 70.f, 96.f)));
 
 //------------------------------------------------------------------------------
 // Exhaustive test (convert all combinations of alpha, red, green, blue values)
@@ -294,7 +294,7 @@ uint32_t Unmult(uint32_t a, uint32_t v) {
 }
 
 class ExhaustiveTest
-    : public ::testing::TestWithParam<
+    : public testing::TestWithParam<
           std::tuple<testutil::WP2CPUInfoStruct, bool, WP2SampleFormat>> {
   void SetUp() override {
     WP2DspReset();
@@ -366,11 +366,11 @@ TEST_P(ExhaustiveTest, TestArgbConvertToFrom) {
 
 INSTANTIATE_TEST_SUITE_P(
     ExhaustiveTestInstantiation, ExhaustiveTest,
-    ::testing::Combine(::testing::ValuesIn(testutil::kWP2CpuInfoStructs),
-                       ::testing::Values(false, true),  // src_is_premul_
-                       // TODO(yguyon): Include WP2_Argb_38 when ready
-                       ::testing::Range(WP2_Argb_32, WP2_Argb_38)  // tmp_format
-                       ));
+    testing::Combine(testing::ValuesIn(testutil::kWP2CpuInfoStructs),
+                     testing::Values(false, true),  // src_is_premul_
+                     // TODO(yguyon): Include WP2_Argb_38 when ready
+                     testing::Range(WP2_Argb_32, WP2_Argb_38)  // tmp_format
+                     ));
 
 //------------------------------------------------------------------------------
 // Speed test
@@ -397,7 +397,7 @@ static void PrintTo(const SpeedTestParam& p, std::ostream* os) {
   *os << "{" << std::get<0>(p).name << ", " << std::get<1>(p).name << "}";
 }
 
-class SpeedTest : public ::testing::TestWithParam<SpeedTestParam> {
+class SpeedTest : public testing::TestWithParam<SpeedTestParam> {
   void SetUp() override {
     WP2DspReset();
     WP2GetCPUInfo = std::get<1>(GetParam()).cpu_info;
@@ -465,8 +465,8 @@ TEST_P(SpeedTest, TestBackForth) {
 
 INSTANTIATE_TEST_SUITE_P(
     SpeedTestInstantiation, SpeedTest,
-    ::testing::Combine(::testing::ValuesIn(kFmtTestCases),
-                       ::testing::ValuesIn(testutil::kWP2CpuInfoStructs)));
+    testing::Combine(testing::ValuesIn(kFmtTestCases),
+                     testing::ValuesIn(testutil::kWP2CpuInfoStructs)));
 
 //------------------------------------------------------------------------------
 

@@ -31,7 +31,7 @@ namespace {
 
 typedef std::tuple<const char*, const char*, float> Param;
 
-class ComparisonTest : public ::testing::TestWithParam<Param> {};
+class ComparisonTest : public testing::TestWithParam<Param> {};
 
 TEST_P(ComparisonTest, RGBAndYUV) {
   const std::string rgb_file_name = std::get<0>(GetParam());
@@ -66,7 +66,7 @@ TEST_P(ComparisonTest, RGBAndYUV) {
 //   ffmpeg -i source3.jpg -pix_fmt yuv444p10le -strict -1 source3_C444p10.y4m
 INSTANTIATE_TEST_SUITE_P(
     ComparisonTestInstantiation, ComparisonTest,
-    ::testing::Values(
+    testing::Values(
         // Identical files should give the exact same result.
         Param{"source1.png", "source1.png", 99.f},
         // Files converted from RGB to YUV should be better with more bits.
@@ -80,7 +80,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 //------------------------------------------------------------------------------
 
-class DownsampledTest : public ::testing::TestWithParam<Param> {};
+class DownsampledTest : public testing::TestWithParam<Param> {};
 
 TEST_P(DownsampledTest, CCSP) {
   const std::string file_name = std::get<0>(GetParam());
@@ -117,7 +117,7 @@ TEST_P(DownsampledTest, CCSP) {
 
 INSTANTIATE_TEST_SUITE_P(
     DownsampledTestInstantiation, DownsampledTest,
-    ::testing::Values(
+    testing::Values(
         // Distortion is around 41 dB no matter the bit depth.
         Param{"ccsp/source3_C444p8.y4m", "ccsp/source3_C420p8.y4m", 40.f},
         Param{"ccsp/source3_C444p10.y4m", "ccsp/source3_C420p10.y4m", 40.f},
@@ -125,7 +125,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 //------------------------------------------------------------------------------
 
-class Y4MTest : public ::testing::TestWithParam<const char*> {};
+class Y4MTest : public testing::TestWithParam<const char*> {};
 
 TEST_P(Y4MTest, ToYCbCr) {
   const char* const file_name = GetParam();
@@ -158,14 +158,14 @@ TEST_P(Y4MTest, ToYCbCr) {
 }
 
 INSTANTIATE_TEST_SUITE_P(Y4MTestInstantiation, Y4MTest,
-                         ::testing::Values("ccsp/source3_C444p8.y4m",
-                                           "ccsp/source3_C444p10.y4m",
-                                           "ccsp/source3_C444p12.y4m"));
+                         testing::Values("ccsp/source3_C444p8.y4m",
+                                         "ccsp/source3_C444p10.y4m",
+                                         "ccsp/source3_C444p12.y4m"));
 
 //------------------------------------------------------------------------------
 
 class MatrixConversionTest
-    : public ::testing::TestWithParam<
+    : public testing::TestWithParam<
           std::tuple<const char*, bool, BitDepth, const SamplingTaps*>> {};
 
 TEST_P(MatrixConversionTest, Comparison) {
@@ -222,29 +222,28 @@ TEST_P(MatrixConversionTest, Comparison) {
 
 INSTANTIATE_TEST_SUITE_P(
     MatrixConversionTestInstantiation, MatrixConversionTest,
-    ::testing::Combine(::testing::Values("source1_1x1.png",
-                                         "ccsp/source3_C444p10.y4m"),
-                       ::testing::Values(false, true),  // through_ycocg
-                       ::testing::Values(BitDepth{8, /*is_signed=*/false},
-                                         BitDepth{10, /*is_signed=*/false}),
-                       ::testing::Values(&SamplingTaps::kDownSharp,
-                                         &SamplingTaps::kDownAvg, nullptr)));
+    testing::Combine(testing::Values("source1_1x1.png",
+                                     "ccsp/source3_C444p10.y4m"),
+                     testing::Values(false, true),  // through_ycocg
+                     testing::Values(BitDepth{8, /*is_signed=*/false},
+                                     BitDepth{10, /*is_signed=*/false}),
+                     testing::Values(&SamplingTaps::kDownSharp,
+                                     &SamplingTaps::kDownAvg, nullptr)));
 
 // Disabled to reduce the number of test cases.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_MoreMatrixConversionTestInstantiation, MatrixConversionTest,
-    ::testing::Combine(::testing::Values("alpha_ramp.pam", "source1_64x48.png",
-                                         "source3.jpg",
-                                         "ccsp/source3_C444p8.y4m",
-                                         "ccsp/source3_C444p12.y4m",
-                                         "alpha_ramp.bmp"),
-                       ::testing::Values(false, true),  // through_ycocg
-                       ::testing::Values(BitDepth{8, /*is_signed=*/false},
-                                         BitDepth{10, /*is_signed=*/false},
-                                         BitDepth{12, /*is_signed=*/false}),
-                       ::testing::Values(&SamplingTaps::kDownSharp,
-                                         &SamplingTaps::kDownAvg, nullptr)));
+    testing::Combine(testing::Values("alpha_ramp.pam", "source1_64x48.png",
+                                     "source3.jpg", "ccsp/source3_C444p8.y4m",
+                                     "ccsp/source3_C444p12.y4m",
+                                     "alpha_ramp.bmp"),
+                     testing::Values(false, true),  // through_ycocg
+                     testing::Values(BitDepth{8, /*is_signed=*/false},
+                                     BitDepth{10, /*is_signed=*/false},
+                                     BitDepth{12, /*is_signed=*/false}),
+                     testing::Values(&SamplingTaps::kDownSharp,
+                                     &SamplingTaps::kDownAvg, nullptr)));
 
 //------------------------------------------------------------------------------
 

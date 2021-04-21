@@ -26,7 +26,7 @@ namespace {
 //------------------------------------------------------------------------------
 
 class SpeedTest
-    : public ::testing::TestWithParam<std::tuple<std::string, float, int>> {};
+    : public testing::TestWithParam<std::tuple<std::string, float, int>> {};
 
 TEST_P(SpeedTest, Simple) {
   const std::string& file_name = std::get<0>(GetParam());
@@ -37,11 +37,10 @@ TEST_P(SpeedTest, Simple) {
   ASSERT_TRUE(testutil::EncodeDecodeCompare(file_name, config));
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    SpeedTestInstantiationAll, SpeedTest,
-    ::testing::Combine(::testing::Values("source1_64x48.png"),
-                       ::testing::Range(0.f, 100.f, 50.f),
-                       ::testing::Range(0, 9)));
+INSTANTIATE_TEST_SUITE_P(SpeedTestInstantiationAll, SpeedTest,
+                         testing::Combine(testing::Values("source1_64x48.png"),
+                                          testing::Range(0.f, 100.f, 50.f),
+                                          testing::Range(0, 9)));
 
 //------------------------------------------------------------------------------
 

@@ -35,9 +35,10 @@ struct FrontMgrMaxTest {
   static const uint32_t kId = 1;
 };
 
-typedef ::testing::Types<FrontMgrLexicoTest, FrontMgrMaxTest> FrontMgrs;
+typedef testing::Types<FrontMgrLexicoTest, FrontMgrMaxTest> FrontMgrs;
 
-template <class T> class CodedBlockTest : public ::testing::Test {
+template <class T>
+class CodedBlockTest : public testing::Test {
   void SetUp() override {
     WP2DspReset();
     WP2QuantizeInit();

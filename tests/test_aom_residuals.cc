@@ -30,7 +30,7 @@ namespace {
 
 using AOMTuple = std::tuple<BlockSize, uint32_t>;
 class ResidualWriterTest
-    : public ::testing::TestWithParam<std::tuple<AOMTuple, float>> {};
+    : public testing::TestWithParam<std::tuple<AOMTuple, float>> {};
 
 TEST_P(ResidualWriterTest, AOM) {
   WP2MathInit();
@@ -180,17 +180,13 @@ TEST_P(ResidualWriterTest, AOM) {
 
 INSTANTIATE_TEST_SUITE_P(
     ResidualWriterTestAllSizes, ResidualWriterTest,
-    ::testing::Combine(::testing::Values(AOMTuple(BLK_4x4, 4),
-                                         AOMTuple(BLK_8x8, 3),
-                                         AOMTuple(BLK_8x4, 3),
-                                         AOMTuple(BLK_4x8, 3),
-                                         AOMTuple(BLK_16x16, 2),
-                                         AOMTuple(BLK_16x8, 3),
-                                         AOMTuple(BLK_8x16, 3),
-                                         AOMTuple(BLK_16x32, 2),
-                                         AOMTuple(BLK_32x16, 2),
-                                         AOMTuple(BLK_32x32, 2)),
-                       ::testing::Values(0.f, 40.f, 75.f)));
+    testing::Combine(
+        testing::Values(AOMTuple(BLK_4x4, 4), AOMTuple(BLK_8x8, 3),
+                        AOMTuple(BLK_8x4, 3), AOMTuple(BLK_4x8, 3),
+                        AOMTuple(BLK_16x16, 2), AOMTuple(BLK_16x8, 3),
+                        AOMTuple(BLK_8x16, 3), AOMTuple(BLK_16x32, 2),
+                        AOMTuple(BLK_32x16, 2), AOMTuple(BLK_32x32, 2)),
+        testing::Values(0.f, 40.f, 75.f)));
 
 //------------------------------------------------------------------------------
 

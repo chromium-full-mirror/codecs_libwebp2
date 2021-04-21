@@ -27,8 +27,7 @@ enum class IteratorType { kLexico, kRecurse };
 
 // iterator type, partition set
 class TestSplitIterator
-    : public ::testing::TestWithParam<std::tuple<IteratorType, PartitionSet>> {
-};
+    : public testing::TestWithParam<std::tuple<IteratorType, PartitionSet>> {};
 
 TEST_P(TestSplitIterator, Random) {
   const IteratorType type = std::get<0>(GetParam());
@@ -85,14 +84,13 @@ TEST_P(TestSplitIterator, Random) {
   EXPECT_LE(num_blocks, max_blocks);
 }
 
-INSTANTIATE_TEST_SUITE_P(SplitRecurseIteratorInstanciation, TestSplitIterator,
-                         ::testing::Combine(
-                             /*type=*/::testing::Values(IteratorType::kLexico,
-                                                        IteratorType::kRecurse),
-                             /*partition_set=*/
-                             ::testing::Values(SMALL_SQUARES, MEDIUM_SQUARES,
-                                               SMALL_RECTS, SOME_RECTS,
-                                               ALL_RECTS)));
+INSTANTIATE_TEST_SUITE_P(
+    SplitRecurseIteratorInstanciation, TestSplitIterator,
+    testing::Combine(
+        /*type=*/testing::Values(IteratorType::kLexico, IteratorType::kRecurse),
+        /*partition_set=*/
+        testing::Values(SMALL_SQUARES, MEDIUM_SQUARES, SMALL_RECTS, SOME_RECTS,
+                        ALL_RECTS)));
 
 //------------------------------------------------------------------------------
 

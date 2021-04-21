@@ -385,7 +385,7 @@ TEST(PessimizationTest, NotRandom) {
 }
 
 // Try different configurations.
-class PessimizationTest : public ::testing::TestWithParam<
+class PessimizationTest : public testing::TestWithParam<
                               std::tuple<size_t, float, bool, uint32_t, bool>> {
 };
 
@@ -419,12 +419,12 @@ TEST_P(PessimizationTest, RandomBitstream) {
 
 INSTANTIATE_TEST_SUITE_P(
     PessimizationTestInstantiation, PessimizationTest,
-    ::testing::Combine(::testing::Values(42),           // seed
-                       ::testing::Values(75.f, 100.f),  // quality
-                       ::testing::Values(true, false),  // fixed tile size
-                       ::testing::Values(10),           // num tries
-                       ::testing::Values(false)         // print stats
-                       ));
+    testing::Combine(testing::Values(42),           // seed
+                     testing::Values(75.f, 100.f),  // quality
+                     testing::Values(true, false),  // fixed tile size
+                     testing::Values(10),           // num tries
+                     testing::Values(false)         // print stats
+                     ));
 
 //------------------------------------------------------------------------------
 
@@ -486,7 +486,7 @@ WP2Status MutateBitstream(uint32_t tile_width, uint32_t tile_height,
 
 // Mutate a valid bistream rather than generating completely random ones.
 class ImageMutationTest
-    : public ::testing::TestWithParam<
+    : public testing::TestWithParam<
           std::tuple<const char*, size_t, float, uint32_t, bool>> {};
 
 TEST_P(ImageMutationTest, FromValidImage) {
@@ -550,25 +550,24 @@ TEST_P(ImageMutationTest, FromValidImage) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    ImageMutationTestInstantiationLossy, ImageMutationTest,
-    ::testing::Combine(::testing::Values("source1_64x48.png",
-                                         "source1_32x32.png"),
-                       ::testing::Values(42),    // seed
-                       ::testing::Values(75.f),  // quality
-                       ::testing::Values(50),    // num tries
-                       ::testing::Values(false)  // print stats
-                       ));
+INSTANTIATE_TEST_SUITE_P(ImageMutationTestInstantiationLossy, ImageMutationTest,
+                         testing::Combine(testing::Values("source1_64x48.png",
+                                                          "source1_32x32.png"),
+                                          testing::Values(42),    // seed
+                                          testing::Values(75.f),  // quality
+                                          testing::Values(50),    // num tries
+                                          testing::Values(false)  // print stats
+                                          ));
 
-INSTANTIATE_TEST_SUITE_P(
-    ImageMutationTestInstantiationLossless, ImageMutationTest,
-    ::testing::Combine(::testing::Values("source1_64x48.png",
-                                         "source1_32x32.png"),
-                       ::testing::Values(12),     // seed
-                       ::testing::Values(100.f),  // quality
-                       ::testing::Values(50),     // num tries
-                       ::testing::Values(false)   // print stats
-                       ));
+INSTANTIATE_TEST_SUITE_P(ImageMutationTestInstantiationLossless,
+                         ImageMutationTest,
+                         testing::Combine(testing::Values("source1_64x48.png",
+                                                          "source1_32x32.png"),
+                                          testing::Values(12),     // seed
+                                          testing::Values(100.f),  // quality
+                                          testing::Values(50),     // num tries
+                                          testing::Values(false)  // print stats
+                                          ));
 
 //------------------------------------------------------------------------------
 

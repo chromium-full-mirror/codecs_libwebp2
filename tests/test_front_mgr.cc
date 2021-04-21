@@ -82,7 +82,7 @@ bool GetSnapped(FrontMgrType type) { return (type == kArea); }
 
 constexpr uint32_t kAreaSize = kMaxBlockSizePix;
 
-class TestFrontMgr : public ::testing::TestWithParam<
+class TestFrontMgr : public testing::TestWithParam<
                          std::tuple<uint32_t, uint32_t, FrontMgrType>> {};
 
 TEST_P(TestFrontMgr, LeftContext) {
@@ -211,10 +211,10 @@ TEST_P(TestFrontMgr, CopyFrom) {
 
 INSTANTIATE_TEST_SUITE_P(
     TestFrontMgrInstanciation, TestFrontMgr,
-    ::testing::Combine(
-        /*seed=*/::testing::Values(37, 42),
-        /*num_iterations=*/::testing::Values(7),
-        /*front_mgr_type=*/::testing::Values(kLexico, kMax, kArea)));
+    testing::Combine(
+        /*seed=*/testing::Values(37, 42),
+        /*num_iterations=*/testing::Values(7),
+        /*front_mgr_type=*/testing::Values(kLexico, kMax, kArea)));
 
 //------------------------------------------------------------------------------
 
@@ -249,7 +249,7 @@ TEST(TestFrontMgr, Comp) {
   std::sort(blocks.begin(), blocks.end(), comp);
   // Expected block order:   aaaabbbbddddeeee
   //                         ccccbbbbddddffff
-  EXPECT_THAT(blocks, ::testing::ElementsAre(
+  EXPECT_THAT(blocks, testing::ElementsAre(
                           Block{0, 0, BLK_16x4}, Block{4, 0, BLK_16x8},
                           Block{0, 4, BLK_16x4}, Block{8, 0, BLK_16x8},
                           Block{12, 0, BLK_16x4}, Block{12, 4, BLK_16x4}));

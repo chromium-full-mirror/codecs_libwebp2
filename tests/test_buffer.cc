@@ -147,8 +147,7 @@ TEST(BufferTest, Fill) {
 //------------------------------------------------------------------------------
 
 class BufferTest
-    : public ::testing::TestWithParam<std::tuple<std::string, bool, bool>> {
-};
+    : public testing::TestWithParam<std::tuple<std::string, bool, bool>> {};
 
 WP2Status Decode(const uint8_t* data, size_t data_size,
                  ArgbBuffer* output, bool use_decoder) {
@@ -207,10 +206,9 @@ TEST_P(BufferTest, API) {
 
 INSTANTIATE_TEST_SUITE_P(
     BufferTestInstantiation1, BufferTest,
-    ::testing::Combine(
-        ::testing::Values("source1.png"),
-        ::testing::Values(true, false) /* lossless */,
-        ::testing::Values(true, false) /* use_decoder */));
+    testing::Combine(testing::Values("source1.png"),
+                     testing::Values(true, false) /* lossless */,
+                     testing::Values(true, false) /* use_decoder */));
 
 //------------------------------------------------------------------------------
 

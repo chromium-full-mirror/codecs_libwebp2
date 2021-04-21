@@ -24,8 +24,9 @@ namespace {
 
 //------------------------------------------------------------------------------
 
-class ResidualTest : public ::testing::TestWithParam<
-                         std::tuple<Channel, TrfSize, bool, bool>> {};
+class ResidualTest
+    : public testing::TestWithParam<std::tuple<Channel, TrfSize, bool, bool>> {
+};
 
 TEST_P(ResidualTest, Simple) {
   const Channel channel = std::get<0>(GetParam());
@@ -73,8 +74,8 @@ TEST_P(ResidualTest, Simple) {
         EXPECT_EQ(encoding_method, EncodingMethod::kDCOnly);
       } else {
         EXPECT_THAT(encoding_method,
-                    ::testing::AnyOf(::testing::Eq(EncodingMethod::kMethod0),
-                                     ::testing::Eq(EncodingMethod::kMethod1)));
+                    testing::AnyOf(testing::Eq(EncodingMethod::kMethod0),
+                                   testing::Eq(EncodingMethod::kMethod1)));
       }
     } else {
       ASSERT_WP2_OK(ResidualWriter::GetPseudoRate(
@@ -91,12 +92,11 @@ TEST_P(ResidualTest, Simple) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    ResidualTestInstantiation, ResidualTest,
-    ::testing::Combine(::testing::Values(kYChannel, kUChannel, kVChannel,
-                                         kAChannel),
-                       ::testing::Values(TRF_4x4, TRF_8x32), ::testing::Bool(),
-                       ::testing::Bool()));
+INSTANTIATE_TEST_SUITE_P(ResidualTestInstantiation, ResidualTest,
+                         testing::Combine(testing::Values(kYChannel, kUChannel,
+                                                          kVChannel, kAChannel),
+                                          testing::Values(TRF_4x4, TRF_8x32),
+                                          testing::Bool(), testing::Bool()));
 
 //------------------------------------------------------------------------------
 

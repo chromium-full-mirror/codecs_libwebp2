@@ -28,7 +28,7 @@
 namespace WP2 {
 namespace {
 
-class DspTest : public ::testing::TestWithParam<WP2CPUInfo> {
+class DspTest : public testing::TestWithParam<WP2CPUInfo> {
   void SetUp() override {
     WP2DspReset();
     WP2GetCPUInfo = GetParam();
@@ -148,8 +148,8 @@ TEST_P(DspTest, ANSUpdateCDF) {
                               16377, 16377, 16377, 16377};
   uint16_t cumul[] = {0, 2340, 4681, 7021, 9362, 11702, 14043, 16384};
   ANSUpdateCDF(/*n=*/8, kCDFBase, kCDFVar, /*mult=*/12345, cumul);
-  EXPECT_THAT(cumul, ::testing::ElementsAre(0, 4984, 6884, 8783, 10684, 12583,
-                                            14483, 16384));
+  EXPECT_THAT(cumul, testing::ElementsAre(0, 4984, 6884, 8783, 10684, 12583,
+                                          14483, 16384));
 }
 
 // Special case where 'mult' is 65535 meaning factor is 1.
@@ -162,8 +162,8 @@ TEST_P(DspTest, ANSUpdateCDFCopy) {
   ANSUpdateCDF(/*n=*/7, kCDFBase, kCDFVar, /*mult=*/65535, cumul);
   const uint16_t cumul_to_check[] = {cumul[0], cumul[1], cumul[2], cumul[3],
                                      cumul[4], cumul[5], cumul[6]};
-  EXPECT_THAT(cumul_to_check, ::testing::ElementsAre(0, 16378, 16379, 16380,
-                                                     16381, 16382, 16383));
+  EXPECT_THAT(cumul_to_check, testing::ElementsAre(0, 16378, 16379, 16380,
+                                                   16381, 16382, 16383));
 }
 
 TEST_P(DspTest, ANSGetSymbol) {
@@ -320,7 +320,7 @@ TEST_P(DspTest, CdefDirection8x8) {
 //------------------------------------------------------------------------------
 
 INSTANTIATE_TEST_SUITE_P(DspTestInstantiation, DspTest,
-                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
+                         testing::ValuesIn(testutil::kWP2CpuInfos));
 
 }  // namespace
 }  // namespace WP2

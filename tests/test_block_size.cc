@@ -106,7 +106,7 @@ TEST(BlockSizeTest, GetSplitPatterns) {
 
 //------------------------------------------------------------------------------
 
-class PartitionSetTest : public ::testing::TestWithParam<
+class PartitionSetTest : public testing::TestWithParam<
                              std::tuple<std::string, float, PartitionSet>> {};
 
 TEST_P(PartitionSetTest, Simple) {
@@ -120,9 +120,9 @@ TEST_P(PartitionSetTest, Simple) {
 
 INSTANTIATE_TEST_SUITE_P(
     PartitionSetTestInstantiation, PartitionSetTest,
-    ::testing::Combine(::testing::Values("source1_64x48.png"),
-                       /*quality=*/::testing::Values(0, 75, kMaxLossyQuality),
-                       ::testing::Range(SMALL_SQUARES, NUM_PARTITION_SETS)));
+    testing::Combine(testing::Values("source1_64x48.png"),
+                     /*quality=*/testing::Values(0, 75, kMaxLossyQuality),
+                     testing::Range(SMALL_SQUARES, NUM_PARTITION_SETS)));
 
 //------------------------------------------------------------------------------
 

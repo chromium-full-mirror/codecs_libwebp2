@@ -39,7 +39,7 @@ typedef std::tuple<std::vector<const char*>, std::vector<uint32_t>, float, int,
                    uint32_t>
     Param;
 
-class AnimTest : public ::testing::TestWithParam<Param> {};
+class AnimTest : public testing::TestWithParam<Param> {};
 
 // Test AnimationEncoder with Decoder::Update().
 TEST_P(AnimTest, Simple) {
@@ -108,7 +108,7 @@ TEST_P(AnimTest, FirstFrame) {
 // Input images are expected to be of equal sizes inside a Param.
 INSTANTIATE_TEST_SUITE_P(
     AnimTestInstantiation, AnimTest,
-    ::testing::Values(
+    testing::Values(
         Param({"source1_64x48.png"},
               /*frame durations (ms):*/ {1000},
               /*quality=*/0.0f, /*effort=*/1, /*thread_level=*/0),
@@ -119,7 +119,7 @@ INSTANTIATE_TEST_SUITE_P(
 // Disabled because it takes too much time.
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_AnimTestInstantiation, AnimTest,
-    ::testing::Values(
+    testing::Values(
         Param({"source0.pgm", "source1.png", "source2.tiff", "source3.jpg"},
               /*frame durations (ms):*/ {kMaxFrameDurationMs, 1, 20, 3},
               /*quality=*/75.0f, /*effort=*/3, /*thread_level=*/1)));

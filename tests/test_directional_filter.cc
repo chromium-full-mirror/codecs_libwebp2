@@ -93,8 +93,9 @@ void Filter(BitDepth bit_depth, uint32_t quality_hint, YUVPlane* const pixels) {
 
 //------------------------------------------------------------------------------
 
-class DirectionalFilterTest : public ::testing::TestWithParam<
-                                  std::tuple<BitDepth, uint32_t, uint32_t>> {};
+class DirectionalFilterTest
+    : public testing::TestWithParam<std::tuple<BitDepth, uint32_t, uint32_t>> {
+};
 
 // Tests that no pixel is modified if each plane has one unique color.
 TEST_P(DirectionalFilterTest, FilteringPlain) {
@@ -150,12 +151,12 @@ TEST_P(DirectionalFilterTest, NoFiltering) {
 
 INSTANTIATE_TEST_SUITE_P(
     DirectionalFilterTestInstantiation, DirectionalFilterTest,
-    ::testing::Combine(
-        ::testing::Values(BitDepth{8, /*is_signed=*/true},
-                          BitDepth{10, /*is_signed=*/true},
-                          BitDepth{12, /*is_signed=*/true}),
-        ::testing::Values(kDrctFltSize, 3 * kDrctFltSize - 1u),  // width
-        ::testing::Values(kDrctFltSize, 3 * kDrctFltSize - 1u)   // height
+    testing::Combine(
+        testing::Values(BitDepth{8, /*is_signed=*/true},
+                        BitDepth{10, /*is_signed=*/true},
+                        BitDepth{12, /*is_signed=*/true}),
+        testing::Values(kDrctFltSize, 3 * kDrctFltSize - 1u),  // width
+        testing::Values(kDrctFltSize, 3 * kDrctFltSize - 1u)   // height
         ));
 
 //------------------------------------------------------------------------------

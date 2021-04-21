@@ -27,7 +27,7 @@ namespace WP2 {
 namespace {
 
 // num_colors, seed, src format
-class PaletteTest : public ::testing::TestWithParam<
+class PaletteTest : public testing::TestWithParam<
                         std::tuple<uint32_t, uint32_t, WP2SampleFormat>> {};
 
 TEST_P(PaletteTest, RoundTrip) {
@@ -138,12 +138,12 @@ TEST_P(PaletteTest, RoundTrip) {
 }
 
 INSTANTIATE_TEST_SUITE_P(PaletteTestInstantiation, PaletteTest,
-                         ::testing::Combine(
+                         testing::Combine(
                              // num_colors
-                             ::testing::Values<uint32_t>(2, 5, 10, 30, 50, 100),
+                             testing::Values<uint32_t>(2, 5, 10, 30, 50, 100),
                              // seed
-                             ::testing::Range<uint32_t>(0, 5),
-                             ::testing::Values(WP2_Argb_32, WP2_ARGB_32)));
+                             testing::Range<uint32_t>(0, 5),
+                             testing::Values(WP2_Argb_32, WP2_ARGB_32)));
 
 }  // namespace
 }  // namespace WP2

@@ -56,7 +56,7 @@ TEST(EncodeDecodeLosslessTest, Lossless) {
 
 //------------------------------------------------------------------------------
 
-class EncodeDecodeTest : public ::testing::TestWithParam<
+class EncodeDecodeTest : public testing::TestWithParam<
                              std::tuple<std::string, float, int, float>> {};
 
 TEST_P(EncodeDecodeTest, Simple) {
@@ -69,28 +69,28 @@ TEST_P(EncodeDecodeTest, Simple) {
   ASSERT_TRUE(testutil::EncodeDecodeCompare(file_name, config));
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    EncodeDecodeTestInstantiationLosslessMaxEffort, EncodeDecodeTest,
-    ::testing::Combine(::testing::Values("source1_64x48.png"),
-                       /*quality=*/::testing::Values(100.f),
-                       /*effort=*/::testing::Values(9),
-                       /*sns=*/::testing::Values(30.f)));
+INSTANTIATE_TEST_SUITE_P(EncodeDecodeTestInstantiationLosslessMaxEffort,
+                         EncodeDecodeTest,
+                         testing::Combine(testing::Values("source1_64x48.png"),
+                                          /*quality=*/testing::Values(100.f),
+                                          /*effort=*/testing::Values(9),
+                                          /*sns=*/testing::Values(30.f)));
 
 INSTANTIATE_TEST_SUITE_P(
     EncodeDecodeTestInstantiationLossyMaxEffort, EncodeDecodeTest,
-    ::testing::Combine(::testing::Values("source1_64x48.png"),
-                       /*quality=*/::testing::Values(75.f),
-                       /*effort=*/::testing::Values(9),
-                       ::testing::Values(EncoderConfig::kDefault.sns)));
+    testing::Combine(testing::Values("source1_64x48.png"),
+                     /*quality=*/testing::Values(75.f),
+                     /*effort=*/testing::Values(9),
+                     testing::Values(EncoderConfig::kDefault.sns)));
 
 // This one takes a while to run so it is disabled.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_EncodeDecodeTestInstantiation, EncodeDecodeTest,
-    ::testing::Combine(::testing::Values("alpha_ramp.png", "source3.jpg"),
-                       /*quality=*/::testing::Values(0.f, 50.f, 98.f),
-                       /*effort=*/::testing::Values(6, 7, 8, 9),
-                       ::testing::Values(EncoderConfig::kDefault.sns)));
+    testing::Combine(testing::Values("alpha_ramp.png", "source3.jpg"),
+                     /*quality=*/testing::Values(0.f, 50.f, 98.f),
+                     /*effort=*/testing::Values(6, 7, 8, 9),
+                     testing::Values(EncoderConfig::kDefault.sns)));
 
 //------------------------------------------------------------------------------
 

@@ -43,7 +43,7 @@ void Fill(Plane<T>* const p) {
 
 //------------------------------------------------------------------------------
 
-class PlaneTest : public ::testing::TestWithParam<std::string> {};
+class PlaneTest : public testing::TestWithParam<std::string> {};
 
 TEST_P(PlaneTest, Simple) {
   const std::string& file_name = GetParam();
@@ -178,9 +178,9 @@ TEST_P(PlaneTest, TestSpeedSample) {
 }
 
 INSTANTIATE_TEST_SUITE_P(PlaneTestInstantiation, PlaneTest,
-                         ::testing::Values("source0.ppm", "source1_64x48.png",
-                                           "source1_1x48.png",
-                                           "source1_64x1.png"));
+                         testing::Values("source0.ppm", "source1_64x48.png",
+                                         "source1_1x48.png",
+                                         "source1_64x1.png"));
 
 //------------------------------------------------------------------------------
 

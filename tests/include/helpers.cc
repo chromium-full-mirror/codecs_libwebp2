@@ -198,44 +198,44 @@ bool TryFindFirstDifference(const ArgbBuffer& a, const ArgbBuffer& b,
 
 }  // namespace
 
-::testing::AssertionResult Compare(const ArgbBuffer& src, const ArgbBuffer& dec,
-                                   const std::string& file_name,
-                                   float expected_distortion, MetricType metric,
-                                   Orientation decoding_orientation) {
+testing::AssertionResult Compare(const ArgbBuffer& src, const ArgbBuffer& dec,
+                                 const std::string& file_name,
+                                 float expected_distortion, MetricType metric,
+                                 Orientation decoding_orientation) {
   if (src.width() !=
           OrientateWidth(decoding_orientation, dec.width(), dec.height()) ||
       src.height() !=
           OrientateHeight(decoding_orientation, dec.width(), dec.height())) {
-    return ::testing::AssertionFailure()
+    return testing::AssertionFailure()
            << "Original image dimensions " << src.width() << "x" << src.height()
            << " are different than the decompressed ones " << dec.width() << "x"
            << dec.height() << " with file " << file_name;
   }
   if (src.format() != dec.format()) {
-    return ::testing::AssertionFailure() << "Format mismatch (" << src.format()
-                                         << " vs " << dec.format() << ")";
+    return testing::AssertionFailure() << "Format mismatch (" << src.format()
+                                       << " vs " << dec.format() << ")";
   }
 
   ArgbBuffer dec_oriented(dec.format());
   if (decoding_orientation != Orientation::kOriginal) {
     if (OrientateBuffer(GetInverseOrientation(decoding_orientation), dec,
                         &dec_oriented) != WP2_STATUS_OK) {
-      return ::testing::AssertionFailure() << "Failed to rotate buffer";
+      return testing::AssertionFailure() << "Failed to rotate buffer";
     }
   } else {
     if (dec_oriented.SetView(dec) != WP2_STATUS_OK) {
-      return ::testing::AssertionFailure() << "Failed to set view";
+      return testing::AssertionFailure() << "Failed to set view";
     }
   }
 
   float disto[5];
   if (dec_oriented.GetDistortion(src, metric, disto) != WP2_STATUS_OK) {
-    return ::testing::AssertionFailure()
+    return testing::AssertionFailure()
            << "Can not get distortion with file " << file_name;
   }
   if (disto[4] < expected_distortion) {
     auto assertion_failure =
-        ::testing::AssertionFailure()
+        testing::AssertionFailure()
         << "Distortion is too high: " << disto[0] << ", " << disto[1] << ", "
         << disto[2] << ", " << disto[3] << ", " << disto[4] << " with file "
         << file_name << " (expected at least " << expected_distortion << ")";
@@ -263,30 +263,29 @@ bool TryFindFirstDifference(const ArgbBuffer& a, const ArgbBuffer& b,
                       << ba << ", " << br << ", " << bg << ", " << bb;
     return assertion_failure;
   }
-  return ::testing::AssertionSuccess();
+  return testing::AssertionSuccess();
 }
 
-::testing::AssertionResult Compare(const YUVPlane& src, const YUVPlane& dec,
-                                   BitDepth bit_depth,
-                                   const std::string& file_name,
-                                   float expected_distortion,
-                                   MetricType metric) {
+testing::AssertionResult Compare(const YUVPlane& src, const YUVPlane& dec,
+                                 BitDepth bit_depth,
+                                 const std::string& file_name,
+                                 float expected_distortion, MetricType metric) {
   // some easy checks
   if ((src.Y.w_ != dec.Y.w_ || src.Y.h_ != dec.Y.h_) ||
       (src.U.w_ != dec.U.w_ || src.U.h_ != dec.U.h_) ||
       (src.V.w_ != dec.V.w_ || src.V.h_ != dec.V.h_) ||
       src.A.IsEmpty() != dec.A.IsEmpty()) {
-    return ::testing::AssertionFailure() << "Different image dimensions";
+    return testing::AssertionFailure() << "Different image dimensions";
   }
 
   float disto[5];
   if (dec.GetDistortion(src, bit_depth, metric, disto) != WP2_STATUS_OK) {
-    return ::testing::AssertionFailure()
+    return testing::AssertionFailure()
            << "Can not get distortion with file " << file_name;
   }
   if (disto[4] < expected_distortion) {
     auto assertion_failure =
-        ::testing::AssertionFailure()
+        testing::AssertionFailure()
         << "Distortion is too high: " << disto[0] << ", " << disto[1] << ", "
         << disto[2] << ", " << disto[3] << ", " << disto[4] << " with file "
         << file_name << " (expected at least " << expected_distortion << ")";
@@ -309,7 +308,7 @@ bool TryFindFirstDifference(const ArgbBuffer& a, const ArgbBuffer& b,
     }
     return assertion_failure;
   }
-  return ::testing::AssertionSuccess();
+  return testing::AssertionSuccess();
 }
 
 bool ProgressTester::OnUpdate(double progress) {
@@ -336,21 +335,20 @@ void ProgressTimeout::Reset() {
 
 //------------------------------------------------------------------------------
 
-::testing::AssertionResult EncodeDecodeCompare(
+testing::AssertionResult EncodeDecodeCompare(
     const std::string& file_name, const EncoderConfig& encoder_config,
     const DecoderConfig& decoder_config) {
   ArgbBuffer original;
-  WP2Status status =
-      ReadImage(testutil::GetTestDataPath(file_name).c_str(), &original);
+  WP2Status status = ReadImage(GetTestDataPath(file_name).c_str(), &original);
   if (status != WP2_STATUS_OK) {
-    return ::testing::AssertionFailure() << "Failed to read file " << file_name
-                                         << ": " << WP2GetStatusMessage(status);
+    return testing::AssertionFailure() << "Failed to read file " << file_name
+                                       << ": " << WP2GetStatusMessage(status);
   }
 
   MemoryWriter memory_writer;
   status = Encode(original, &memory_writer, encoder_config);
   if (status != WP2_STATUS_OK) {
-    return ::testing::AssertionFailure()
+    return testing::AssertionFailure()
            << "Failed to encode: " << WP2GetStatusMessage(status);
   }
 
@@ -358,12 +356,12 @@ void ProgressTimeout::Reset() {
   status = Decode(memory_writer.mem_, memory_writer.size_, &decompressed,
                   decoder_config);
   if (status != WP2_STATUS_OK) {
-    return ::testing::AssertionFailure()
+    return testing::AssertionFailure()
            << "Failed to decode: " << WP2GetStatusMessage(status);
   }
 
-  return testutil::Compare(original, decompressed, file_name,
-                           testutil::GetExpectedDistortion(encoder_config));
+  return Compare(original, decompressed, file_name,
+                 GetExpectedDistortion(encoder_config));
 }
 
 WP2Status GetDistortionDiff(const std::string& file_name,
@@ -688,7 +686,7 @@ void WP2DspReset() {
   WP2Quantize = nullptr;
   WP2Dequantize = nullptr;
 
-  WP2Log2Slow  = nullptr;
+  WP2Log2Slow = nullptr;
   WP2SLog2m1Slow = nullptr;
   WP2InnerProduct = nullptr;
 

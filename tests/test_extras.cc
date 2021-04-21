@@ -27,7 +27,7 @@ namespace {
 
 //------------------------------------------------------------------------------
 
-class RescaleTest : public ::testing::TestWithParam<int> {};
+class RescaleTest : public testing::TestWithParam<int> {};
 
 TEST_P(RescaleTest, ArgbBuffer) {
   static constexpr uint32_t min_size = 1, max_size = 301;
@@ -49,7 +49,7 @@ TEST_P(RescaleTest, ArgbBuffer) {
 }
 
 INSTANTIATE_TEST_SUITE_P(RescaleTestInstantiation, RescaleTest,
-                         ::testing::Range(1, 20));
+                         testing::Range(1, 20));
 
 //------------------------------------------------------------------------------
 // Make sure results of random number generation functions are always the same

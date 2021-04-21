@@ -100,7 +100,7 @@ TEST(AnimFrameTest, ForceLossless) {
 // orientation, is_slow.
 typedef std::tuple<Orientation, bool> Param;
 
-class ParameterizedAnimFrameTest : public ::testing::TestWithParam<Param> {
+class ParameterizedAnimFrameTest : public testing::TestWithParam<Param> {
  public:
   // Inits decoded_frame_ buffer.
   WP2Status InitDecodedFrame(uint32_t width, uint32_t height) {
@@ -572,26 +572,26 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
 
 INSTANTIATE_TEST_SUITE_P(
     ParameterizedAnimFrameTestInstantiationIsSlow, ParameterizedAnimFrameTest,
-    ::testing::Combine(::testing::Values(Orientation::kOriginal,
-                                         Orientation::k270Clockwise),
-                       ::testing::Values(true, false)  // is_slow
-                       ));
+    testing::Combine(testing::Values(Orientation::kOriginal,
+                                     Orientation::k270Clockwise),
+                     testing::Values(true, false)  // is_slow
+                     ));
 
 INSTANTIATE_TEST_SUITE_P(
     ParameterizedAnimFrameTestInstantiationRotate, ParameterizedAnimFrameTest,
-    ::testing::Combine(::testing::Values(Orientation::k90Clockwise,
-                                         Orientation::k180),
-                       ::testing::Values(false)  // is_slow
-                       ));
+    testing::Combine(testing::Values(Orientation::k90Clockwise,
+                                     Orientation::k180),
+                     testing::Values(false)  // is_slow
+                     ));
 
 INSTANTIATE_TEST_SUITE_P(
     ParameterizedAnimFrameTestInstantiationFlip, ParameterizedAnimFrameTest,
-    ::testing::Combine(::testing::Values(Orientation::kFlipLeftToRight,
-                                         Orientation::kFlipBotLeftToTopRgt,
-                                         Orientation::kFlipTopToBottom,
-                                         Orientation::kFlipTopLeftToBotRgt),
-                       ::testing::Values(false)  // is_slow
-                       ));
+    testing::Combine(testing::Values(Orientation::kFlipLeftToRight,
+                                     Orientation::kFlipBotLeftToTopRgt,
+                                     Orientation::kFlipTopToBottom,
+                                     Orientation::kFlipTopLeftToBotRgt),
+                     testing::Values(false)  // is_slow
+                     ));
 
 }  // namespace
 }  // namespace WP2

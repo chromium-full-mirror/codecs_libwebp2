@@ -34,7 +34,7 @@ namespace {
 
 //------------------------------------------------------------------------------
 
-class CspTest : public ::testing::TestWithParam<Csp> {};
+class CspTest : public testing::TestWithParam<Csp> {};
 
 TEST_P(CspTest, Ranges) {
   const Csp csp_type = GetParam();
@@ -132,12 +132,11 @@ TEST_P(CspTest, Precision) {
 }
 
 INSTANTIATE_TEST_SUITE_P(CspTestInstantiation, CspTest,
-                         ::testing::Values(Csp::kYCoCg, Csp::kYCbCr,
-                                           Csp::kYIQ));
+                         testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kYIQ));
 
 //------------------------------------------------------------------------------
 
-class CspImageTest : public ::testing::TestWithParam<
+class CspImageTest : public testing::TestWithParam<
                          std::tuple<std::string, Csp, WP2SampleFormat>> {};
 
 TEST_P(CspImageTest, Simple) {
@@ -179,20 +178,20 @@ TEST_P(CspImageTest, Simple) {
 
 INSTANTIATE_TEST_SUITE_P(
     CspImageTestInstantiation, CspImageTest,
-    ::testing::Combine(
-        ::testing::Values("source1_64x48.png"),
-        ::testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kCustom, Csp::kYIQ),
-        ::testing::Values(WP2_Argb_32, WP2_ARGB_32, WP2_Argb_38)));
+    testing::Combine(testing::Values("source1_64x48.png"),
+                     testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kCustom,
+                                     Csp::kYIQ),
+                     testing::Values(WP2_Argb_32, WP2_ARGB_32, WP2_Argb_38)));
 
 // This one takes a while to run so it is disabled.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_CspImageTestInstantiation, CspImageTest,
-    ::testing::Combine(
-        ::testing::Values("source0.pgm", "source0.ppm", "source4.webp",
-                          "test_exif_xmp.webp"),
-        ::testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kCustom, Csp::kYIQ),
-        ::testing::Values(WP2_Argb_32, WP2_ARGB_32, WP2_Argb_38)));
+    testing::Combine(testing::Values("source0.pgm", "source0.ppm",
+                                     "source4.webp", "test_exif_xmp.webp"),
+                     testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kCustom,
+                                     Csp::kYIQ),
+                     testing::Values(WP2_Argb_32, WP2_ARGB_32, WP2_Argb_38)));
 
 //------------------------------------------------------------------------------
 // This test exercizes a value underflow/overflow in Rgb8ToYuv().
@@ -200,7 +199,7 @@ INSTANTIATE_TEST_SUITE_P(
 // maximum allowed values of +/-1023 (10 bits + sign). RGBtoYUV matrix float
 // computation and rounding to int is probably the root cause.
 
-class CustomCspTest : public ::testing::TestWithParam<const char*> {};
+class CustomCspTest : public testing::TestWithParam<const char*> {};
 
 TEST_P(CustomCspTest, RoundingError) {
   const char* const file_name = GetParam();
@@ -210,20 +209,20 @@ TEST_P(CustomCspTest, RoundingError) {
 }
 
 INSTANTIATE_TEST_SUITE_P(CustomCspTestInstantiation, CustomCspTest,
-                         ::testing::Values("source1_64x48.png"));
+                         testing::Values("source1_64x48.png"));
 
 // This one takes a while to run so it is disabled.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(DISABLED_CustomCspTestInstantiation, CustomCspTest,
-                         ::testing::Values("source0.pgm", "source0.ppm",
-                                           "source1.png", "source3.jpg",
-                                           "source4.webp"));
+                         testing::Values("source0.pgm", "source0.ppm",
+                                         "source1.png", "source3.jpg",
+                                         "source4.webp"));
 
 //------------------------------------------------------------------------------
 // Make sure premultiplied color components are at most equal to alpha.
 
 class DecodeArgbTest
-    : public ::testing::TestWithParam<std::tuple<std::string, float>> {};
+    : public testing::TestWithParam<std::tuple<std::string, float>> {};
 
 TEST_P(DecodeArgbTest, Valid) {
   const std::string& src_file_name = std::get<0>(GetParam());
@@ -251,8 +250,8 @@ TEST_P(DecodeArgbTest, Valid) {
 
 INSTANTIATE_TEST_SUITE_P(
     DecodeArgbTestInstantiation, DecodeArgbTest,
-    ::testing::Combine(::testing::Values("source1_4x4.png"),
-                       ::testing::Values(0.f, 100.f) /* quality */));
+    testing::Combine(testing::Values("source1_4x4.png"),
+                     testing::Values(0.f, 100.f) /* quality */));
 
 //------------------------------------------------------------------------------
 // Tests CSPTransform::MakeEigenMatrixEncodable() results.
@@ -262,8 +261,7 @@ struct MtxValidity {
   std::array<double, 9> matrix;  // Elements.
 };
 
-class CspTestCustomCsp
-    : public ::testing::TestWithParam<MtxValidity> {};
+class CspTestCustomCsp : public testing::TestWithParam<MtxValidity> {};
 
 TEST_P(CspTestCustomCsp, EigenMtx) {
   const MtxValidity& param = GetParam();
@@ -285,23 +283,23 @@ TEST_P(CspTestCustomCsp, EigenMtx) {
 
 INSTANTIATE_TEST_SUITE_P(
     CspTestCustomCspInstantiation, CspTestCustomCsp,
-    ::testing::Values(  // error, matrix
+    testing::Values(  // error, matrix
         MtxValidity{0.,
                     {0., 0., 0.,  // Empty matrix
                      0., 0., 0.,  //
                      0., 0., 0.}},
         MtxValidity{0.,
-                    {1.,  0.,  0.,  // Identity matrix
-                     0., -1.,  0.,  //
-                     0.,  0., -1.}},
-        MtxValidity{0.9988,
-                    {1.,  0., 0.,  // Bad matrix
+                    {1., 0., 0.,   // Identity matrix
                      0., -1., 0.,  //
-                     0.,  0., 0.}},
+                     0., 0., -1.}},
+        MtxValidity{0.9988,
+                    {1., 0., 0.,   // Bad matrix
+                     0., -1., 0.,  //
+                     0., 0., 0.}},
         MtxValidity{0.1399,
-                    {1.,  0.,   0.,  // Bad matrix
+                    {1., 0., 0.,     // Bad matrix
                      0., -0.99, 0.,  //
-                     0.,  0.,  -1.}},
+                     0., 0., -1.}},
         MtxValidity{0.,
                     {0.263184, 0.321289, 0.199707,   // Valid output from
                      0.27002, 0.0107422, -0.373291,  // NormalizeFromInput()

@@ -24,7 +24,7 @@
 namespace WP2 {
 namespace {
 
-class QuantMtxTest : public ::testing::Test {
+class QuantMtxTest : public testing::Test {
   void SetUp() override {
     WP2DspReset();
     WP2TransformInit();
@@ -85,7 +85,7 @@ TEST_F(QuantMtxTest, DCErrorRoundTrip) {
 
 //------------------------------------------------------------------------------
 
-class QuantMtxTestCpuInfo : public ::testing::TestWithParam<WP2CPUInfo> {
+class QuantMtxTestCpuInfo : public testing::TestWithParam<WP2CPUInfo> {
   void SetUp() override {
     WP2DspReset();
     WP2GetCPUInfo = GetParam();
@@ -218,14 +218,14 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
 }
 
 INSTANTIATE_TEST_SUITE_P(QuantMtxTest1Instantiation, QuantMtxTestCpuInfo,
-                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
+                         testing::ValuesIn(testutil::kWP2CpuInfos));
 
 //------------------------------------------------------------------------------
 
-typedef ::testing::Types<FrontMgrLexico, FrontMgrMax> FrontMgrs;
+typedef testing::Types<FrontMgrLexico, FrontMgrMax> FrontMgrs;
 
 template <class T>
-class QuantMtxTestFrontMgrs : public ::testing::Test {
+class QuantMtxTestFrontMgrs : public testing::Test {
   void SetUp() override {
     WP2DspReset();
     WP2QuantizeInit();

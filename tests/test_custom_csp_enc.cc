@@ -41,8 +41,8 @@ constexpr const uint32_t kCCSPToRGBShifts[] = {
     kRGB8ToRGBShift, kRGB10ToRGBShift, kYCoCgToRGBShift, kYpUVToRGBShift};
 
 class EncodeCustomCspTest
-    : public ::testing::TestWithParam<std::tuple<
-          std::string, float, Matrix, bool, bool, bool, bool, bool, bool>> {
+    : public testing::TestWithParam<std::tuple<std::string, float, Matrix, bool,
+                                               bool, bool, bool, bool, bool>> {
   void SetUp() override { WP2CSPConverterInit(); }
 };
 
@@ -157,48 +157,44 @@ TEST_P(EncodeCustomCspTest, Comparison) {
 
 INSTANTIATE_TEST_SUITE_P(
     EncodeCustomCspTestInstantiation, EncodeCustomCspTest,
-    ::testing::Combine(::testing::Values("source1_1x1.png",
-                                         "source1_64x48.png"),
-                       ::testing::Values(0.f, 100.f) /* quality */,
-                       ::testing::Values(Matrix::kRGB8, Matrix::kRGB10,
-                                         Matrix::kYCoCg, Matrix::kYpUV),
-                       ::testing::Values(false, true) /* encode_alpha */,
-                       ::testing::Values(true) /* pad_y */,
-                       ::testing::Values(true) /* pad_u */,
-                       ::testing::Values(true) /* pad_v */,
-                       ::testing::Values(true) /* pad_a */,
-                       ::testing::Values(false) /* encode_metadata */));
+    testing::Combine(testing::Values("source1_1x1.png", "source1_64x48.png"),
+                     testing::Values(0.f, 100.f) /* quality */,
+                     testing::Values(Matrix::kRGB8, Matrix::kRGB10,
+                                     Matrix::kYCoCg, Matrix::kYpUV),
+                     testing::Values(false, true) /* encode_alpha */,
+                     testing::Values(true) /* pad_y */,
+                     testing::Values(true) /* pad_u */,
+                     testing::Values(true) /* pad_v */,
+                     testing::Values(true) /* pad_a */,
+                     testing::Values(false) /* encode_metadata */));
 
 INSTANTIATE_TEST_SUITE_P(
     EncodeCustomCspTestInstantiationPadding, EncodeCustomCspTest,
-    ::testing::Combine(::testing::Values("source1_1x1.png"),
-                       ::testing::Values(0.f, 100.f) /* quality */,
-                       ::testing::Values(Matrix::kRGB8),
-                       ::testing::Values(false, true) /* encode_alpha */,
-                       ::testing::Values(false, true) /* pad_y */,
-                       ::testing::Values(false, true) /* pad_u */,
-                       ::testing::Values(false, true) /* pad_v */,
-                       ::testing::Values(false, true) /* pad_a */,
-                       ::testing::Values(false) /* encode_metadata */));
+    testing::Combine(testing::Values("source1_1x1.png"),
+                     testing::Values(0.f, 100.f) /* quality */,
+                     testing::Values(Matrix::kRGB8),
+                     testing::Values(false, true) /* encode_alpha */,
+                     testing::Values(false, true) /* pad_y */,
+                     testing::Values(false, true) /* pad_u */,
+                     testing::Values(false, true) /* pad_v */,
+                     testing::Values(false, true) /* pad_a */,
+                     testing::Values(false) /* encode_metadata */));
 
 INSTANTIATE_TEST_SUITE_P(
     EncodeCustomCspTestInstantiationMetadata, EncodeCustomCspTest,
-    ::testing::Combine(::testing::Values("source1_1x1.png",
-                                         "test_exif_xmp.webp"),
-                       ::testing::Values(50.f) /* quality */,
-                       ::testing::Values(Matrix::kRGB8),
-                       ::testing::Values(true) /* encode_alpha */,
-                       ::testing::Values(false) /* pad_y */,
-                       ::testing::Values(true) /* pad_u */,
-                       ::testing::Values(false) /* pad_v */,
-                       ::testing::Values(true) /* pad_a */,
-                       ::testing::Values(true) /* encode_metadata */));
+    testing::Combine(
+        testing::Values("source1_1x1.png", "test_exif_xmp.webp"),
+        testing::Values(50.f) /* quality */, testing::Values(Matrix::kRGB8),
+        testing::Values(true) /* encode_alpha */,
+        testing::Values(false) /* pad_y */, testing::Values(true) /* pad_u */,
+        testing::Values(false) /* pad_v */, testing::Values(true) /* pad_a */,
+        testing::Values(true) /* encode_metadata */));
 
 //------------------------------------------------------------------------------
 // Encode the bytes read from a y4m file (YCbCr).
 
 class ReadCustomCspTest
-    : public ::testing::TestWithParam<std::tuple<const char*, float, bool>> {};
+    : public testing::TestWithParam<std::tuple<const char*, float, bool>> {};
 
 TEST_P(ReadCustomCspTest, Y4M) {
   const std::string file_name = std::get<0>(GetParam());
@@ -252,11 +248,11 @@ TEST_P(ReadCustomCspTest, Y4M) {
 
 INSTANTIATE_TEST_SUITE_P(
     ReadCustomCspTestInstantiation, ReadCustomCspTest,
-    ::testing::Combine(
-        ::testing::Values("source1_64x48.png", "ccsp/source3_C444p8.y4m",
-                          "ccsp/source3_C444p12.y4m"),
-        ::testing::Values(20.f, 100.f), /* quality */
-        ::testing::Values(false, true) /* use_animation_encoder */));
+    testing::Combine(testing::Values("source1_64x48.png",
+                                     "ccsp/source3_C444p8.y4m",
+                                     "ccsp/source3_C444p12.y4m"),
+                     testing::Values(20.f, 100.f), /* quality */
+                     testing::Values(false, true) /* use_animation_encoder */));
 
 //------------------------------------------------------------------------------
 
@@ -288,7 +284,7 @@ static struct BufferParam {
     "source1_32x32.png", {33, 35, 36, 0}, WP2_STATUS_OK }
 };
 
-class StrideTest : public ::testing::TestWithParam<BufferParam> {};
+class StrideTest : public testing::TestWithParam<BufferParam> {};
 
 TEST_P(StrideTest, Combination) {
   const BufferParam& p = GetParam();
@@ -321,8 +317,8 @@ TEST_P(StrideTest, Combination) {
       << p.label;
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    StrideTestInstantiation, StrideTest, ::testing::ValuesIn(kBufferParams));
+INSTANTIATE_TEST_SUITE_P(StrideTestInstantiation, StrideTest,
+                         testing::ValuesIn(kBufferParams));
 
 //------------------------------------------------------------------------------
 

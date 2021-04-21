@@ -43,8 +43,7 @@ static std::string DisplayMask(int dim, const ArgbBuffer &image) {
 
 enum class Type { kCircle, kRandom };
 
-class Group4Test : public ::testing::TestWithParam<std::tuple<Type, int, int>> {
-};
+class Group4Test : public testing::TestWithParam<std::tuple<Type, int, int>> {};
 
 static void RandomColor(UniformIntDistribution *const gen, uint8_t color[4]) {
   for (uint32_t c = 0; c < 4; ++c) {
@@ -123,10 +122,10 @@ TEST_P(Group4Test, Pattern) {
 
 INSTANTIATE_TEST_SUITE_P(
     Group4Test, Group4Test,
-    ::testing::Combine(::testing::Values(Type::kCircle, Type::kRandom),  // type
-                       ::testing::Range(0, 20),                          // seed
-                       ::testing::Values(WP2L::kGroup4Window, 101)       // dim
-                       ));
+    testing::Combine(testing::Values(Type::kCircle, Type::kRandom),  // type
+                     testing::Range(0, 20),                          // seed
+                     testing::Values(WP2L::kGroup4Window, 101)       // dim
+                     ));
 
 }  // namespace
 }  // namespace WP2

@@ -50,7 +50,7 @@ constexpr const BitDepth kCCSPBitDepth[] = {{8, /*is_signed=*/false},
 
 //------------------------------------------------------------------------------
 
-class CspMatrixTest : public ::testing::TestWithParam<std::tuple<Csp, Matrix>> {
+class CspMatrixTest : public testing::TestWithParam<std::tuple<Csp, Matrix>> {
   void SetUp() override { WP2CSPConverterInit(); }
 };
 
@@ -117,15 +117,15 @@ TEST_P(CspMatrixTest, All) {
 
 INSTANTIATE_TEST_SUITE_P(
     CspMatrixTestInstantiation, CspMatrixTest,
-    ::testing::Combine(::testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kYIQ),
-                       ::testing::Values(Matrix::kRGB8, Matrix::kRGB10,
-                                         Matrix::kYCoCg, Matrix::kYpUV)));
+    testing::Combine(testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kYIQ),
+                     testing::Values(Matrix::kRGB8, Matrix::kRGB10,
+                                     Matrix::kYCoCg, Matrix::kYpUV)));
 
 //------------------------------------------------------------------------------
 // Make sure the loss from the conversion RGB -> YUV -> RGB is low enough.
 
 class YUVImportExportTest
-    : public ::testing::TestWithParam<std::tuple<WP2SampleFormat, Csp, bool>> {
+    : public testing::TestWithParam<std::tuple<WP2SampleFormat, Csp, bool>> {
   void SetUp() override { WP2CSPConverterInit(); }
 };
 
@@ -204,15 +204,15 @@ TEST_P(YUVImportExportTest, All) {
 
 INSTANTIATE_TEST_SUITE_P(
     YUVImportExportTestInstantiation, YUVImportExportTest,
-    ::testing::Combine(::testing::Values(WP2_Argb_32, WP2_ARGB_32, WP2_Argb_38),
-                       ::testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kYIQ),
-                       ::testing::Values(true, false)  // import_alpha
-                       ));
+    testing::Combine(testing::Values(WP2_Argb_32, WP2_ARGB_32, WP2_Argb_38),
+                     testing::Values(Csp::kYCoCg, Csp::kYCbCr, Csp::kYIQ),
+                     testing::Values(true, false)  // import_alpha
+                     ));
 
 //------------------------------------------------------------------------------
 
 class BackAndForthTest
-    : public ::testing::TestWithParam<std::tuple<const char*, Matrix>> {
+    : public testing::TestWithParam<std::tuple<const char*, Matrix>> {
   void SetUp() override { WP2CSPConverterInit(); }
 };
 
@@ -269,16 +269,14 @@ TEST_P(BackAndForthTest, Comparison) {
 
 INSTANTIATE_TEST_SUITE_P(
     BackAndForthTestInstantiation, BackAndForthTest,
-    ::testing::Combine(::testing::Values("alpha_ramp.pam", "source1_1x1.png",
-                                         "source1_64x48.png", "source3.jpg",
-                                         "ccsp/source3_C420p8.y4m",
-                                         "ccsp/source3_C420p10.y4m",
-                                         "ccsp/source3_C420p12.y4m",
-                                         "ccsp/source3_C444p8.y4m",
-                                         "ccsp/source3_C444p10.y4m",
-                                         "ccsp/source3_C444p12.y4m"),
-                       ::testing::Values(Matrix::kRGB8, Matrix::kRGB10,
-                                         Matrix::kYCoCg, Matrix::kYpUV)));
+    testing::Combine(
+        testing::Values("alpha_ramp.pam", "source1_1x1.png",
+                        "source1_64x48.png", "source3.jpg",
+                        "ccsp/source3_C420p8.y4m", "ccsp/source3_C420p10.y4m",
+                        "ccsp/source3_C420p12.y4m", "ccsp/source3_C444p8.y4m",
+                        "ccsp/source3_C444p10.y4m", "ccsp/source3_C444p12.y4m"),
+        testing::Values(Matrix::kRGB8, Matrix::kRGB10, Matrix::kYCoCg,
+                        Matrix::kYpUV)));
 
 //------------------------------------------------------------------------------
 
@@ -300,7 +298,7 @@ TEST(CspCustomTest, Simple) {
 //------------------------------------------------------------------------------
 // Golden-checking test that can be used as a CPU usage benchmark.
 
-class SpeedTest : public ::testing::TestWithParam<WP2CPUInfo> {
+class SpeedTest : public testing::TestWithParam<WP2CPUInfo> {
   void SetUp() override {
     WP2DspReset();
     WP2GetCPUInfo = GetParam();
@@ -434,7 +432,7 @@ TEST_P(SpeedTest, YuvToArgb38) {
 }
 
 INSTANTIATE_TEST_SUITE_P(SpeedTestInstantiation, SpeedTest,
-                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
+                         testing::ValuesIn(testutil::kWP2CpuInfos));
 
 //------------------------------------------------------------------------------
 

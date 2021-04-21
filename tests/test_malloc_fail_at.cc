@@ -59,7 +59,7 @@ class NoAllocationFailureMemoryWriter : public Writer {
 };
 
 class MallocFailureTest
-    : public ::testing::TestWithParam<
+    : public testing::TestWithParam<
           std::tuple<std::string, float, int, uint32_t, int, int>> {};
 
 //------------------------------------------------------------------------------
@@ -178,45 +178,45 @@ TEST_P(MallocFailureTest, Decoding) {
 
 INSTANTIATE_TEST_SUITE_P(
     MallocFailureTestInstantiationLossy, MallocFailureTest,
-    ::testing::Combine(::testing::Values("source1_64x48.png"),
-                       ::testing::Values(75.f) /* quality */,
-                       ::testing::Values(0) /* effort */,
-                       ::testing::Values(8) /* multithreading */,
-                       ::testing::Values(3) /* min_malloc_fail_at */,
-                       ::testing::Values(4) /* max_malloc_fail_at */));
+    testing::Combine(testing::Values("source1_64x48.png"),
+                     testing::Values(75.f) /* quality */,
+                     testing::Values(0) /* effort */,
+                     testing::Values(8) /* multithreading */,
+                     testing::Values(3) /* min_malloc_fail_at */,
+                     testing::Values(4) /* max_malloc_fail_at */));
 
 INSTANTIATE_TEST_SUITE_P(
     MallocFailureTestInstantiationLossless, MallocFailureTest,
-    ::testing::Combine(::testing::Values("source1_64x48.png"),
-                       ::testing::Values(100.f) /* quality */,
-                       ::testing::Values(0) /* effort */,
-                       ::testing::Values(8) /* multithreading */,
-                       ::testing::Values(8) /* min_malloc_fail_at */,
-                       ::testing::Values(9) /* max_malloc_fail_at */));
+    testing::Combine(testing::Values("source1_64x48.png"),
+                     testing::Values(100.f) /* quality */,
+                     testing::Values(0) /* effort */,
+                     testing::Values(8) /* multithreading */,
+                     testing::Values(8) /* min_malloc_fail_at */,
+                     testing::Values(9) /* max_malloc_fail_at */));
 
 INSTANTIATE_TEST_SUITE_P(
     MallocFailureTestInstantiationSmall, MallocFailureTest,
-    ::testing::Combine(::testing::Values("source1_1x1.png"),
-                       ::testing::Values(0.f, 99.f) /* quality */,
-                       ::testing::Values(5) /* effort */,
-                       ::testing::Values(0) /* multithreading */,
-                       ::testing::Values(19) /* min_malloc_fail_at */,
-                       ::testing::Values(20) /* max_malloc_fail_at */));
+    testing::Combine(testing::Values("source1_1x1.png"),
+                     testing::Values(0.f, 99.f) /* quality */,
+                     testing::Values(5) /* effort */,
+                     testing::Values(0) /* multithreading */,
+                     testing::Values(19) /* min_malloc_fail_at */,
+                     testing::Values(20) /* max_malloc_fail_at */));
 
 // This one might take ages so it is disabled.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_MallocFailureTestInstantiation, MallocFailureTest,
-    ::testing::Combine(::testing::Values("source1.png", "source1_1x1.png",
-                                         "source1_1x48.png", "source1_64x1.png",
-                                         "source1_64x48.png",
-                                         "alpha_ramp.lossy.webp", "source3.jpg",
-                                         "test_exif_xmp.webp"),
-                       ::testing::Values(0.f, 50.f, 99.f, 100.f) /* quality */,
-                       ::testing::Values(0, 5, 9) /* effort */,
-                       ::testing::Values(0, 8) /* multithreading */,
-                       ::testing::Values(1) /* min_malloc_fail_at */,
-                       ::testing::Values(1000000) /* max_malloc_fail_at */));
+    testing::Combine(testing::Values("source1.png", "source1_1x1.png",
+                                     "source1_1x48.png", "source1_64x1.png",
+                                     "source1_64x48.png",
+                                     "alpha_ramp.lossy.webp", "source3.jpg",
+                                     "test_exif_xmp.webp"),
+                     testing::Values(0.f, 50.f, 99.f, 100.f) /* quality */,
+                     testing::Values(0, 5, 9) /* effort */,
+                     testing::Values(0, 8) /* multithreading */,
+                     testing::Values(1) /* min_malloc_fail_at */,
+                     testing::Values(1000000) /* max_malloc_fail_at */));
 
 //------------------------------------------------------------------------------
 

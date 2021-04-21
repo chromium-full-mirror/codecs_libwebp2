@@ -26,7 +26,7 @@ namespace {
 //------------------------------------------------------------------------------
 
 class TileShapeTest
-    : public ::testing::TestWithParam<std::tuple<std::string, TileShape>> {};
+    : public testing::TestWithParam<std::tuple<std::string, TileShape>> {};
 
 TEST_P(TileShapeTest, Simple) {
   const std::string& file_name = std::get<0>(GetParam());
@@ -38,12 +38,11 @@ TEST_P(TileShapeTest, Simple) {
 
 INSTANTIATE_TEST_SUITE_P(
     PredictorTestInstantiationAll, TileShapeTest,
-    ::testing::Combine(::testing::Values("source1_64x48.png", "background.png",
-                                         "large.png", "verylarge.png"),
-                       ::testing::Values(TILE_SHAPE_SQUARE_128,
-                                         TILE_SHAPE_SQUARE_256,
-                                         TILE_SHAPE_SQUARE_512,
-                                         TILE_SHAPE_WIDE)));
+    testing::Combine(testing::Values("source1_64x48.png", "background.png",
+                                     "large.png", "verylarge.png"),
+                     testing::Values(TILE_SHAPE_SQUARE_128,
+                                     TILE_SHAPE_SQUARE_256,
+                                     TILE_SHAPE_SQUARE_512, TILE_SHAPE_WIDE)));
 
 //------------------------------------------------------------------------------
 

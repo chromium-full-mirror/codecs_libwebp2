@@ -294,7 +294,7 @@ bool VerifyBuffer(const uint8_t* const buf, uint32_t size,
 
 //------------------------------------------------------------------------------
 
-class TestANS : public ::testing::Test {
+class TestANS : public testing::Test {
   void SetUp() override {
     WP2DspReset();
     WP2MathInit();
@@ -512,7 +512,7 @@ struct TokenInfo {
 };
 
 class TestANSCostEstimation
-    : public ::testing::TestWithParam<std::tuple<uint32_t, TokenInfo>> {};
+    : public testing::TestWithParam<std::tuple<uint32_t, TokenInfo>> {};
 
 // Test the cost estimation method
 TEST_P(TestANSCostEstimation, Simple) {
@@ -586,17 +586,17 @@ TEST_P(TestANSCostEstimation, Simple) {
 
 INSTANTIATE_TEST_SUITE_P(
     TestANSCostEstimationInstantiation, TestANSCostEstimation,
-    ::testing::Combine(::testing::Values(kBaseSeed),
-                       ::testing::ValuesIn(std::vector<TokenInfo>{
-                           {"Bit    ", Token::Bit, 0.15f},
-                           {"Bool   ", Token::Bool, 0.01f},
-                           {"ASymbol", Token::ASymbol, 2.0f},
-                           {"Symbol ", Token::Symbol, 0.02f},
-                           {"Range  ", Token::Range, 0.05f},
-                           {"MinMax ", Token::MinMax, 0.06f},
-                           {"Uniform", Token::Uniform, 0.01f},
-                           {"Signed ", Token::Signed, 0.01f},
-                           {"ABit   ", Token::ABit, 3.2f}})));
+    testing::Combine(testing::Values(kBaseSeed),
+                     testing::ValuesIn(std::vector<TokenInfo>{
+                         {"Bit    ", Token::Bit, 0.15f},
+                         {"Bool   ", Token::Bool, 0.01f},
+                         {"ASymbol", Token::ASymbol, 2.0f},
+                         {"Symbol ", Token::Symbol, 0.02f},
+                         {"Range  ", Token::Range, 0.05f},
+                         {"MinMax ", Token::MinMax, 0.06f},
+                         {"Uniform", Token::Uniform, 0.01f},
+                         {"Signed ", Token::Signed, 0.01f},
+                         {"ABit   ", Token::ABit, 3.2f}})));
 
 //------------------------------------------------------------------------------
 
@@ -886,7 +886,7 @@ struct TokenSetInfo {
 };
 
 class TestANSBitCounts
-    : public ::testing::TestWithParam<std::tuple<uint32_t, TokenSetInfo>> {};
+    : public testing::TestWithParam<std::tuple<uint32_t, TokenSetInfo>> {};
 
 // This test only works in WP2_BITTRACE mode!
 TEST_P(TestANSBitCounts, Simple) {
@@ -951,18 +951,18 @@ TEST_P(TestANSBitCounts, Simple) {
 
 INSTANTIATE_TEST_SUITE_P(
     TestANSBitCountsInstantiation, TestANSBitCounts,
-    ::testing::Combine(::testing::Values(kBaseSeed),
-                       ::testing::ValuesIn(std::vector<TokenSetInfo>{
-                           {"Bit     ", {Token::Bit}},
-                           {"Bool    ", {Token::Bool}},
-                           {"Symbol  ", {Token::Symbol}},
-                           {"Range   ", {Token::Range}},
-                           {"MinMax  ", {Token::MinMax}},
-                           {"Uniform ", {Token::Uniform}},
-                           {"Signed  ", {Token::Signed}},
-                           {"All     ",
-                            {Token::Bit, Token::Symbol, Token::Uniform,
-                             Token::Range}}})));
+    testing::Combine(testing::Values(kBaseSeed),
+                     testing::ValuesIn(std::vector<TokenSetInfo>{
+                         {"Bit     ", {Token::Bit}},
+                         {"Bool    ", {Token::Bool}},
+                         {"Symbol  ", {Token::Symbol}},
+                         {"Range   ", {Token::Range}},
+                         {"MinMax  ", {Token::MinMax}},
+                         {"Uniform ", {Token::Uniform}},
+                         {"Signed  ", {Token::Signed}},
+                         {"All     ",
+                          {Token::Bit, Token::Symbol, Token::Uniform,
+                           Token::Range}}})));
 
 // Make sure ANS does not spin forever when stats have a tail.
 TEST_F(TestANS, TestSpin) {
@@ -976,7 +976,7 @@ TEST_F(TestANS, TestSpin) {
 
 //------------------------------------------------------------------------------
 
-class TestANSAdaptiveSymbol : public ::testing::TestWithParam<uint32_t> {};
+class TestANSAdaptiveSymbol : public testing::TestWithParam<uint32_t> {};
 
 TEST_P(TestANSAdaptiveSymbol, Simple) {
   const uint32_t kNumSymbols = 1000 * kTestFactor;
@@ -1167,8 +1167,8 @@ TEST_P(TestANSAdaptiveSymbol, VsDictionary) {
 
 INSTANTIATE_TEST_SUITE_P(TestANSAdaptiveSymbolInstantiation,
                          TestANSAdaptiveSymbol,
-                         ::testing::Range(kBaseSeed,
-                                          kBaseSeed + 30 * kTestFactor));
+                         testing::Range(kBaseSeed,
+                                        kBaseSeed + 30 * kTestFactor));
 
 //------------------------------------------------------------------------------
 
@@ -1231,7 +1231,7 @@ TEST_F(TestANS, TestANSAdaptiveSymbolFromCDF) {
 
 //------------------------------------------------------------------------------
 
-class TestANSMapping : public ::testing::TestWithParam<uint32_t> {};
+class TestANSMapping : public testing::TestWithParam<uint32_t> {};
 
 TEST_P(TestANSMapping, Simple) {
   ANSInit();
@@ -1277,7 +1277,7 @@ TEST_P(TestANSMapping, Simple) {
 }
 
 INSTANTIATE_TEST_SUITE_P(TestANSMappingInstantiation, TestANSMapping,
-                         ::testing::Range(0u, 2u));
+                         testing::Range(0u, 2u));
 
 //------------------------------------------------------------------------------
 

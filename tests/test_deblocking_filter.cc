@@ -129,7 +129,7 @@ void Deblock(BitDepth bit_depth, uint32_t quality_hint,
 //------------------------------------------------------------------------------
 
 // Param: num_precision_bits
-class DeblockingFilterTest : public ::testing::TestWithParam<BitDepth> {};
+class DeblockingFilterTest : public testing::TestWithParam<BitDepth> {};
 
 // Tests that no pixel is modified if each plane has one unique color.
 TEST_P(DeblockingFilterTest, FilteringPlain) {
@@ -238,9 +238,9 @@ TEST_P(DeblockingFilterTest, NoFiltering) {
 
 INSTANTIATE_TEST_SUITE_P(DeblockingFilterTestInstantiation,
                          DeblockingFilterTest,
-                         ::testing::Values(BitDepth{8, /*is_signed=*/true},
-                                           BitDepth{10, /*is_signed=*/true},
-                                           BitDepth{12, /*is_signed=*/true}));
+                         testing::Values(BitDepth{8, /*is_signed=*/true},
+                                         BitDepth{10, /*is_signed=*/true},
+                                         BitDepth{12, /*is_signed=*/true}));
 
 //------------------------------------------------------------------------------
 
@@ -296,7 +296,7 @@ TEST(HelpersFilterTest, MinMaxValueSigned) {
 
 //------------------------------------------------------------------------------
 
-class FilterTestCpuInfo : public ::testing::TestWithParam<WP2CPUInfo> {
+class FilterTestCpuInfo : public testing::TestWithParam<WP2CPUInfo> {
   void SetUp() override {
     WP2DspReset();
     WP2GetCPUInfo = GetParam();
@@ -390,7 +390,7 @@ TEST_P(FilterTestCpuInfo, TestCopyTransposed) {
 }
 
 INSTANTIATE_TEST_SUITE_P(FilterTestCpuInfoInstantiation, FilterTestCpuInfo,
-                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
+                         testing::ValuesIn(testutil::kWP2CpuInfos));
 
 //------------------------------------------------------------------------------
 

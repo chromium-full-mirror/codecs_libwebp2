@@ -54,7 +54,7 @@ void ShowOutput(const std::string& file_name, const ArgbBuffer& original_image,
 //------------------------------------------------------------------------------
 
 class PreviewTest
-    : public ::testing::TestWithParam<
+    : public testing::TestWithParam<
           std::tuple<const char*, float, int, PreviewConfig::AnalysisMethod>> {
 };
 
@@ -88,22 +88,22 @@ TEST_P(PreviewTest, SimpleTest) {
 
 INSTANTIATE_TEST_SUITE_P(
     PreviewTestInstantiationFast, PreviewTest,
-    ::testing::Combine(
-        ::testing::Values("source1_64x48.png"),
-        ::testing::Values(40.f),  // Quality
-        ::testing::Values(3),     // Effort
-        ::testing::Values(
+    testing::Combine(
+        testing::Values("source1_64x48.png"),
+        testing::Values(40.f),  // Quality
+        testing::Values(3),     // Effort
+        testing::Values(
             PreviewConfig::AnalysisMethod::kEdgeSelectionAndRepulsion)));
 
 // This one might take ~10min so it is disabled.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_PreviewTestInstantiation, PreviewTest,
-    ::testing::Combine(
-        ::testing::Values("source0.ppm", "source1.png"),
-        ::testing::Values(10.f, 50.f),  // Quality
-        ::testing::Values(2, 5),        // Effort
-        ::testing::Values(
+    testing::Combine(
+        testing::Values("source0.ppm", "source1.png"),
+        testing::Values(10.f, 50.f),  // Quality
+        testing::Values(2, 5),        // Effort
+        testing::Values(
             PreviewConfig::AnalysisMethod::kEdgeSelectionAndRepulsion,
             PreviewConfig::AnalysisMethod::kColorDiffMaximization,
             PreviewConfig::AnalysisMethod::kRandomEdgeSelection)));

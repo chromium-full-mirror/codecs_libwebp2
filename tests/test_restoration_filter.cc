@@ -24,7 +24,7 @@
 #include "src/utils/utils.h"
 #include "src/wp2/format_constants.h"
 
-using ::testing::ElementsAre;
+using testing::ElementsAre;
 
 namespace WP2 {
 namespace {
@@ -77,8 +77,9 @@ void Filter(BitDepth bit_depth, const int8_t tap_weights[kWieFltTapDist],
 constexpr int8_t kIdentityTapWeights[kWieFltTapDist]{0, 0, 0};
 constexpr int8_t kDefaultTapWeights[kWieFltTapDist]{3, -7, 15};
 
-class RestorationFilterTest : public ::testing::TestWithParam<
-                                  std::tuple<BitDepth, uint32_t, uint32_t>> {};
+class RestorationFilterTest
+    : public testing::TestWithParam<std::tuple<BitDepth, uint32_t, uint32_t>> {
+};
 
 // Tests that no pixel is modified if each plane has one unique color.
 TEST_P(RestorationFilterTest, FilteringPlain) {
@@ -157,24 +158,24 @@ TEST_P(RestorationFilterTest, Identity) {
 
 INSTANTIATE_TEST_SUITE_P(
     RestorationFilterTestInstantiation, RestorationFilterTest,
-    ::testing::Combine(::testing::Values(BitDepth{8, /*is_signed=*/true},
-                                         BitDepth{10, /*is_signed=*/true}),
-                       ::testing::Values(kWieFltWidth / 3),       // width
-                       ::testing::Values(3 * kWieFltHeight - 1u)  // height
-                       ));
+    testing::Combine(testing::Values(BitDepth{8, /*is_signed=*/true},
+                                     BitDepth{10, /*is_signed=*/true}),
+                     testing::Values(kWieFltWidth / 3),       // width
+                     testing::Values(3 * kWieFltHeight - 1u)  // height
+                     ));
 
 // Disabled to reduce the number of test cases.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_MoreRestorationFilterTestInstantiation, RestorationFilterTest,
-    ::testing::Combine(::testing::Values(BitDepth{8, /*is_signed=*/true},
-                                         BitDepth{10, /*is_signed=*/true},
-                                         BitDepth{12, /*is_signed=*/true}),
-                       ::testing::Values(kWieFltWidth / 2,
-                                         kWieFltWidth),  // width
-                       ::testing::Values(kWieFltHeight / 5, kWieFltHeight,
-                                         3 * kWieFltHeight + 7u)  // height
-                       ));
+    testing::Combine(testing::Values(BitDepth{8, /*is_signed=*/true},
+                                     BitDepth{10, /*is_signed=*/true},
+                                     BitDepth{12, /*is_signed=*/true}),
+                     testing::Values(kWieFltWidth / 2,
+                                     kWieFltWidth),  // width
+                     testing::Values(kWieFltHeight / 5, kWieFltHeight,
+                                     3 * kWieFltHeight + 7u)  // height
+                     ));
 
 //------------------------------------------------------------------------------
 

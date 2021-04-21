@@ -25,7 +25,7 @@ namespace {
 
 //------------------------------------------------------------------------------
 
-class UVModeTest : public ::testing::TestWithParam<
+class UVModeTest : public testing::TestWithParam<
                        std::tuple<std::string, EncoderConfig::UVMode>> {};
 
 TEST_P(UVModeTest, Simple) {
@@ -38,16 +38,15 @@ TEST_P(UVModeTest, Simple) {
 
 INSTANTIATE_TEST_SUITE_P(
     UVModeTestInstantiation, UVModeTest,
-    ::testing::Combine(::testing::Values("source1_64x48.png",
-                                         "source3_222x167.jpg",
-                                         "source1_1x1.png"),
-                       ::testing::Range(EncoderConfig::UVModeAdapt,
-                                        EncoderConfig::NumUVMode)));
+    testing::Combine(testing::Values("source1_64x48.png", "source3_222x167.jpg",
+                                     "source1_1x1.png"),
+                     testing::Range(EncoderConfig::UVModeAdapt,
+                                    EncoderConfig::NumUVMode)));
 
 INSTANTIATE_TEST_SUITE_P(
     UVModeTestInstantiationSlow, UVModeTest,
-    ::testing::Combine(::testing::Values("test_exif_xmp.webp"),
-                       ::testing::Values(EncoderConfig::UVMode420)));
+    testing::Combine(testing::Values("test_exif_xmp.webp"),
+                     testing::Values(EncoderConfig::UVMode420)));
 
 //------------------------------------------------------------------------------
 

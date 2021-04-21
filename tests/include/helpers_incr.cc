@@ -539,8 +539,8 @@ class IncrementalDecodingTester {
     CHECK_OR_DIE(decoded_area.width == output_.width());
     CHECK_OR_DIE(decoded_area.height == output_.height());
     // Compare incremental data and the current canvas.
-    CHECK_OR_DIE(testutil::Compare(incremental_output_, output_,
-                                   "incrementally decoded"));
+    CHECK_OR_DIE(
+        Compare(incremental_output_, output_, "incrementally decoded"));
 
     if (GetDecoder().TryGetDecodedFeatures()->is_animation) {
       CHECK_OR_DIE(

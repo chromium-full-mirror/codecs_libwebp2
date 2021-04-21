@@ -697,7 +697,7 @@ std::unique_ptr<SymbolCounter> CreateSymbolCounter(
           : new (WP2Allocable::nothrow) SymbolCounter(&recorder));
 }
 
-class TestSymbolCounter : public ::testing::TestWithParam<SymbolCounterType> {};
+class TestSymbolCounter : public testing::TestWithParam<SymbolCounterType> {};
 
 // Test that UpdatingSymbolCounter gives accurate measurements.
 TEST_P(TestSymbolCounter, SymbolCounter) {
@@ -1003,7 +1003,7 @@ TEST(SymbolsTest, SimplePrefixCode) {
 }
 
 INSTANTIATE_TEST_SUITE_P(TestSymbolCounterInstanciation, TestSymbolCounter,
-                         ::testing::Values(kFast, kUpdating));
+                         testing::Values(kFast, kUpdating));
 
 //------------------------------------------------------------------------------
 
@@ -1028,7 +1028,7 @@ class SymbolReaderForTest : public SymbolReader {
 };
 
 // bool: use_max
-class SymbolCostTest : public ::testing::TestWithParam<std::tuple<bool, bool>> {
+class SymbolCostTest : public testing::TestWithParam<std::tuple<bool, bool>> {
  protected:
   float Decode(SymbolReader* const sr, const std::vector<int32_t>& values,
                const std::vector<uint32_t>& max_values, float enc_cost) {
@@ -1430,8 +1430,8 @@ TEST_P(SymbolCostTest, AdaptiveSymCost) {
 }
 
 INSTANTIATE_TEST_SUITE_P(SymbolReaderTestInstantiation, SymbolCostTest,
-                         ::testing::Combine(::testing::Values(false, true),
-                                            ::testing::Values(false, true)));
+                         testing::Combine(testing::Values(false, true),
+                                          testing::Values(false, true)));
 
 //------------------------------------------------------------------------------
 

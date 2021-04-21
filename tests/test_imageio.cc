@@ -55,7 +55,7 @@ TEST(ReadImageTest, NoStdoutFileSize) {
 //------------------------------------------------------------------------------
 // Test all formats that support read and lossless save.
 
-class WriteImageTest : public ::testing::TestWithParam<const char*> {};
+class WriteImageTest : public testing::TestWithParam<const char*> {};
 
 TEST_P(WriteImageTest, Argb) {
   const char* const file_name = GetParam();
@@ -140,9 +140,8 @@ TEST_P(WriteImageTest, Ccsp) {
       testutil::Compare(original, comparison, file_num_bits, file_name));
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    WriteImageTestInstantiation, WriteImageTest,
-    ::testing::Values("ccsp/source3_C420p8.y4m"));
+INSTANTIATE_TEST_SUITE_P(WriteImageTestInstantiation, WriteImageTest,
+                         testing::Values("ccsp/source3_C420p8.y4m"));
 
 //------------------------------------------------------------------------------
 

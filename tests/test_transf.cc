@@ -41,7 +41,7 @@ constexpr uint32_t kTransformSizes[] = {2, 4, 8, 16, 32};
 
 //------------------------------------------------------------------------------
 
-class TransposeTest : public ::testing::TestWithParam<WP2CPUInfo> {
+class TransposeTest : public testing::TestWithParam<WP2CPUInfo> {
   void SetUp() override {
     WP2DspReset();
     WP2GetCPUInfo = GetParam();
@@ -88,11 +88,11 @@ TEST_P(TransposeTest, Transpose32) {
 }
 
 INSTANTIATE_TEST_SUITE_P(TransposeTestInstantiation, TransposeTest,
-                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
+                         testing::ValuesIn(testutil::kWP2CpuInfos));
 
 //------------------------------------------------------------------------------
 
-class RandomTransform2DTest : public ::testing::TestWithParam<size_t> {
+class RandomTransform2DTest : public testing::TestWithParam<size_t> {
  public:
   void BuildAutoRegression(int16_t dst[], uint32_t size_x, uint32_t size_y,
                            UniformIntDistribution* const random) {
@@ -284,7 +284,7 @@ TEST_P(RandomTransform2DTest, Compare) {
 // are close enough to the thresholds it's fine.
 INSTANTIATE_TEST_SUITE_P(RandomTransform2DTestInstantiation,
                          RandomTransform2DTest,
-                         /*seed=*/::testing::Values(1, 2, 3, 4));
+                         /*seed=*/testing::Values(1, 2, 3, 4));
 
 TEST(Transform2DTest, Zero) {
   WP2TransformInit();
@@ -318,8 +318,7 @@ TEST(Transform2DTest, Zero) {
 //------------------------------------------------------------------------------
 
 class RandomTransformTest
-    : public ::testing::TestWithParam<std::tuple<WP2TransformType, uint32_t>> {
-};
+    : public testing::TestWithParam<std::tuple<WP2TransformType, uint32_t>> {};
 
 TEST_P(RandomTransformTest, TestTransformPrecision) {
   const WP2TransformType type = std::get<0>(GetParam());
@@ -367,10 +366,9 @@ TEST_P(RandomTransformTest, TestTransformPrecision) {
          type, S, max_err, tolerance_max);
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    RandomTransformTestInstantiation, RandomTransformTest,
-    ::testing::Combine(::testing::ValuesIn(kTransformTypes),
-                       ::testing::ValuesIn(kTransformSizes)));
+INSTANTIATE_TEST_SUITE_P(RandomTransformTestInstantiation, RandomTransformTest,
+                         testing::Combine(testing::ValuesIn(kTransformTypes),
+                                          testing::ValuesIn(kTransformSizes)));
 
 //------------------------------------------------------------------------------
 
@@ -387,7 +385,7 @@ TEST(TransformClass, All) {
 // each transform coefficient into an image.
 
 class PrintTransformTest
-    : public ::testing::TestWithParam<
+    : public testing::TestWithParam<
           std::tuple<WP2TransformType, WP2TransformType, uint32_t>> {};
 
 TEST_P(PrintTransformTest, Simple) {
@@ -438,11 +436,11 @@ TEST_P(PrintTransformTest, Simple) {
 }
 
 // "DISABLED_" keeps it from running.
-INSTANTIATE_TEST_SUITE_P(
-    DISABLED_PrintTransformTestInstantiation, PrintTransformTest,
-    ::testing::Combine(::testing::ValuesIn(kTransformTypes),
-                       ::testing::ValuesIn(kTransformTypes),
-                       ::testing::Values(8)));
+INSTANTIATE_TEST_SUITE_P(DISABLED_PrintTransformTestInstantiation,
+                         PrintTransformTest,
+                         testing::Combine(testing::ValuesIn(kTransformTypes),
+                                          testing::ValuesIn(kTransformTypes),
+                                          testing::Values(8)));
 
 //------------------------------------------------------------------------------
 

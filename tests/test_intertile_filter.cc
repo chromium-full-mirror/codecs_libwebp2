@@ -102,7 +102,7 @@ void CreateCanvasAndFilter(uint32_t width, uint32_t height,
 
 //------------------------------------------------------------------------------
 
-class IntertileFilterTest : public ::testing::TestWithParam<uint32_t> {
+class IntertileFilterTest : public testing::TestWithParam<uint32_t> {
  public:
   IntertileFilterTest() : step_(GetParam()) {}
   const uint32_t step_;
@@ -204,8 +204,8 @@ TEST_P(IntertileFilterTest, Deterministic) {
 }
 
 INSTANTIATE_TEST_SUITE_P(IntertileFilterTestInstantiation, IntertileFilterTest,
-                         ::testing::Values(1, kTileSize - 1, kTileSize,
-                                           kTileSize + 1, kTileSize * 10));
+                         testing::Values(1, kTileSize - 1, kTileSize,
+                                         kTileSize + 1, kTileSize * 10));
 
 //------------------------------------------------------------------------------
 

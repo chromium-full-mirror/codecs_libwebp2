@@ -152,8 +152,8 @@ TEST(OptimTest, GradientTest) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class ImageTest :
-    public ::testing::TestWithParam<std::tuple<std::string, bool>> {};
+class ImageTest : public testing::TestWithParam<std::tuple<std::string, bool>> {
+};
 
 TEST_P(ImageTest, ImageOptimTest) {
   bool debug = false;
@@ -211,9 +211,10 @@ TEST_P(ImageTest, ImageOptimTest) {
   ASSERT_TRUE(testutil::Compare(pic, pic2, name, 30.f));
 }
 
-INSTANTIATE_TEST_SUITE_P(ImageTestInstantiation, ImageTest,
-  ::testing::Combine(::testing::Values("source0.ppm", "source1_64x48.png"),
-                     ::testing::Values(true, false) /* use_default */));
+INSTANTIATE_TEST_SUITE_P(
+    ImageTestInstantiation, ImageTest,
+    testing::Combine(testing::Values("source0.ppm", "source1_64x48.png"),
+                     testing::Values(true, false) /* use_default */));
 
 ////////////////////////////////////////////////////////////////////////////////
 

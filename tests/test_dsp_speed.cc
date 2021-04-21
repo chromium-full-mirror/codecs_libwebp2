@@ -26,7 +26,7 @@
 namespace WP2 {
 namespace {
 
-class SpeedTestCpuInfo : public ::testing::TestWithParam<WP2CPUInfo> {
+class SpeedTestCpuInfo : public testing::TestWithParam<WP2CPUInfo> {
   void SetUp() override {
     WP2DspReset();
     WP2GetCPUInfo = GetParam();
@@ -315,7 +315,7 @@ TEST_P(SpeedTestCpuInfo, TestCflPrediction) {
 //------------------------------------------------------------------------------
 
 INSTANTIATE_TEST_SUITE_P(SpeedTestInstantiation, SpeedTestCpuInfo,
-                         ::testing::ValuesIn(testutil::kWP2CpuInfos));
+                         testing::ValuesIn(testutil::kWP2CpuInfos));
 
 }  // namespace
 }  // namespace WP2

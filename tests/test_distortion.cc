@@ -33,11 +33,10 @@ namespace {
 //------------------------------------------------------------------------------
 
 // Returns true if 'ccsp' and 'rgb' contain the same samples.
-::testing::AssertionResult AreEqual(const YUVPlane& ccsp,
-                                    const ArgbBuffer& rgb) {
+testing::AssertionResult AreEqual(const YUVPlane& ccsp, const ArgbBuffer& rgb) {
   if (ccsp.GetWidth() != rgb.width() || ccsp.GetHeight() != rgb.height() ||
       ccsp.IsDownsampled()) {
-    return ::testing::AssertionFailure();
+    return testing::AssertionFailure();
   }
 
   for (uint32_t y = 0; y < ccsp.GetHeight(); ++y) {
@@ -50,14 +49,14 @@ namespace {
       const int32_t ccsp_b = ccsp.V.At(x, y), rgb_b = rgb_row[x * 4 + 3];
       if (ccsp_a != rgb_a || ccsp_r != rgb_r || ccsp_g != rgb_g ||
           ccsp_b != rgb_b) {
-        return ::testing::AssertionFailure()
+        return testing::AssertionFailure()
                << " diff at " << x << ", " << y << ": " << ccsp_a << ", "
                << ccsp_r << ", " << ccsp_g << ", " << ccsp_b << " vs " << rgb_a
                << ", " << rgb_r << ", " << rgb_g << ", " << rgb_b;
       }
     }
   }
-  return ::testing::AssertionSuccess();
+  return testing::AssertionSuccess();
 }
 
 //------------------------------------------------------------------------------
@@ -183,7 +182,7 @@ TEST(DistoTest, BitDepth) {
 //------------------------------------------------------------------------------
 
 class DistoTest
-    : public ::testing::TestWithParam<std::tuple<std::string, MetricType>> {};
+    : public testing::TestWithParam<std::tuple<std::string, MetricType>> {};
 
 // Compare RGB distortion for YUVPlane and ArgbBuffer structs. It should be
 // equal for opaque images and might slightly differ otherwise (because some
@@ -293,10 +292,10 @@ TEST_P(DistoTest, ChromaSubsampling) {
 
 INSTANTIATE_TEST_SUITE_P(
     DistoTestInstantiation, DistoTest,
-    ::testing::Combine(::testing::Values("source0.pgm", "source0.ppm",
-                                         "source3.jpg", "source1_1x48.png",
-                                         "source1_64x1.png", "source1_1x1.png"),
-                       ::testing::Values(PSNR, SSIM)));
+    testing::Combine(testing::Values("source0.pgm", "source0.ppm",
+                                     "source3.jpg", "source1_1x48.png",
+                                     "source1_64x1.png", "source1_1x1.png"),
+                     testing::Values(PSNR, SSIM)));
 
 //------------------------------------------------------------------------------
 // Encode 'original_ccsp', either by converting it to RGB first or not.
@@ -396,7 +395,7 @@ enum class WhatToDo {
 };
 
 class MorePreciseCCSPTest
-    : public ::testing::TestWithParam<
+    : public testing::TestWithParam<
           std::tuple<const char*, float, WhatToDo, MetricType>> {};
 
 // Make sure encoding then decoding from and to custom color space samples does
@@ -495,30 +494,27 @@ TEST_P(MorePreciseCCSPTest, EncodeDecode) {
 
 INSTANTIATE_TEST_SUITE_P(
     MorePreciseCCSPTestInstantiationSmall, MorePreciseCCSPTest,
-    ::testing::Combine(::testing::Values("source1_1x1.png",
-                                         "source1_64x48.png"),
-                       ::testing::Values(0.f, 95.f, 100.f),
-                       ::testing::Values(WhatToDo::kEncodeBothAsCCSP,
-                                         WhatToDo::kDecodeBothAsCCSP),
-                       ::testing::Values(PSNR, SSIM)));
+    testing::Combine(testing::Values("source1_1x1.png", "source1_64x48.png"),
+                     testing::Values(0.f, 95.f, 100.f),
+                     testing::Values(WhatToDo::kEncodeBothAsCCSP,
+                                     WhatToDo::kDecodeBothAsCCSP),
+                     testing::Values(PSNR, SSIM)));
 
 // This one might take ages so it is disabled.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_MorePreciseCCSPTestInstantiation, MorePreciseCCSPTest,
-    ::testing::Combine(::testing::Values("source1_1x1.png", "source1_64x48.png",
-                                         "source1.png", "source3.jpg",
-                                         "ccsp/source3_C444p8.y4m",
-                                         "ccsp/source3_C444p12.y4m",
-                                         "ccsp/source3_C420p8.y4m",
-                                         "ccsp/source3_C420p12.y4m"),
-                       ::testing::Values(0.f, 75.f, 95.f, 100.f),
-                       ::testing::Values(WhatToDo::kEncodeDecodeSameWay,
-                                         WhatToDo::kEncodeBothAsCCSP,
-                                         WhatToDo::kEncodeBothAsRGB,
-                                         WhatToDo::kDecodeBothAsCCSP,
-                                         WhatToDo::kDecodeBothAsRGB),
-                       ::testing::Values(PSNR, SSIM)));
+    testing::Combine(
+        testing::Values("source1_1x1.png", "source1_64x48.png", "source1.png",
+                        "source3.jpg", "ccsp/source3_C444p8.y4m",
+                        "ccsp/source3_C444p12.y4m", "ccsp/source3_C420p8.y4m",
+                        "ccsp/source3_C420p12.y4m"),
+        testing::Values(0.f, 75.f, 95.f, 100.f),
+        testing::Values(WhatToDo::kEncodeDecodeSameWay,
+                        WhatToDo::kEncodeBothAsCCSP, WhatToDo::kEncodeBothAsRGB,
+                        WhatToDo::kDecodeBothAsCCSP,
+                        WhatToDo::kDecodeBothAsRGB),
+        testing::Values(PSNR, SSIM)));
 
 //------------------------------------------------------------------------------
 

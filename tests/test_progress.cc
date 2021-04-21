@@ -31,8 +31,7 @@ namespace {
 //------------------------------------------------------------------------------
 
 class EncDecProgressTest
-    : public ::testing::TestWithParam<std::tuple<const char*, bool, uint32_t>> {
-};
+    : public testing::TestWithParam<std::tuple<const char*, bool, uint32_t>> {};
 
 constexpr double kFailurePoints[] = {
     0., kOnePercent, kProgressBeforeFrames, 0.5, 1. - kProgressEnd, 0.9999, 1.};
@@ -165,25 +164,25 @@ TEST_P(EncDecProgressTest, Decoder) {
 
 INSTANTIATE_TEST_SUITE_P(
     ProgressTestInstantiationSingleTile, EncDecProgressTest,
-    ::testing::Combine(
-        ::testing::Values("source1_1x1.png",
-                          "source1_64x48.png") /* one-tile image */,
-        ::testing::Values(true) /* lossless */,
-        ::testing::Values(0) /* no multithread; just one tile anyway */));
+    testing::Combine(
+        testing::Values("source1_1x1.png",
+                        "source1_64x48.png") /* one-tile image */,
+        testing::Values(true) /* lossless */,
+        testing::Values(0) /* no multithread; just one tile anyway */));
 
 INSTANTIATE_TEST_SUITE_P(
     ProgressTestInstantiationMultiTile, EncDecProgressTest,
-    ::testing::Combine(::testing::Values("source0.pgm") /* several tiles */,
-                       ::testing::Values(false) /* lossy */,
-                       ::testing::Values(4) /* extra threads */));
+    testing::Combine(testing::Values("source0.pgm") /* several tiles */,
+                     testing::Values(false) /* lossy */,
+                     testing::Values(4) /* extra threads */));
 
 // This one takes a while to run so it is disabled.
 // Can still be run with flag --test_arg=--gunit_also_run_disabled_tests
 INSTANTIATE_TEST_SUITE_P(
     DISABLED_ProgressTestInstantiation, EncDecProgressTest,
-    ::testing::Combine(::testing::Values("source3.jpg", "alpha_ramp.png"),
-                       ::testing::Values(true, false) /* lossless, lossy */,
-                       ::testing::Values(0, 1, 64) /* extra threads */));
+    testing::Combine(testing::Values("source3.jpg", "alpha_ramp.png"),
+                     testing::Values(true, false) /* lossless, lossy */,
+                     testing::Values(0, 1, 64) /* extra threads */));
 
 //------------------------------------------------------------------------------
 
@@ -244,7 +243,7 @@ TEST(DecProgressTest, UserAbortBeforeAnyDecoding) {
 //------------------------------------------------------------------------------
 // Test progress precision with a lot of pixels.
 
-class ProgressPrecisionTest : public ::testing::TestWithParam<
+class ProgressPrecisionTest : public testing::TestWithParam<
                                   std::tuple<uint32_t, uint32_t, bool, float>> {
 };
 
@@ -282,13 +281,14 @@ TEST_P(ProgressPrecisionTest, Encode) {
   ASSERT_EQ(progress_tester.last_progress_, 1.);
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    ProgressPrecisionTestInstantiation, ProgressPrecisionTest,
-    ::testing::Combine(::testing::Values(1, 64),      // width
-                       ::testing::Values(1, 4096),    // height
-                       ::testing::Values(true),       // has_alpha
-                       ::testing::Values(25.f, 96.f)  // quality
-                       ));
+INSTANTIATE_TEST_SUITE_P(ProgressPrecisionTestInstantiation,
+                         ProgressPrecisionTest,
+                         testing::Combine(testing::Values(1, 64),    // width
+                                          testing::Values(1, 4096),  // height
+                                          testing::Values(true),  // has_alpha
+                                          testing::Values(25.f,
+                                                          96.f)  // quality
+                                          ));
 
 //------------------------------------------------------------------------------
 

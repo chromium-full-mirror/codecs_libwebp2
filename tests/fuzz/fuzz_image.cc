@@ -55,7 +55,7 @@ int TestImageEncConfig(const ArgbBuffer& original, const EncoderConfig& config,
     if (std::min(original.width(), original.height()) >= 8 &&
         !Compare(original, decoded, "image", expected_distortion)) {
       // Uncomment to save the original and decoded images as PNG files.
-      // WP2::testing::SaveBeforeAfter(original, decoded, "/tmp/comparison");
+      // testing::SaveBeforeAfter(original, decoded, "/tmp/comparison");
       abort();
     }
   }

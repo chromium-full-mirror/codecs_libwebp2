@@ -27,7 +27,7 @@ namespace {
 //------------------------------------------------------------------------------
 
 class IncrementalDecoderTest
-    : public ::testing::TestWithParam<
+    : public testing::TestWithParam<
           std::tuple<std::string, bool, uint32_t,
                      DecoderConfig::IncrementalMode, testutil::DecoderType>> {};
 
@@ -76,12 +76,12 @@ TEST_P(IncrementalDecoderTest, Simple) {
 
 INSTANTIATE_TEST_SUITE_P(
     IncrementalDecoderTestInstantiationPartialMultiTile, IncrementalDecoderTest,
-    ::testing::Combine(
-        ::testing::Values("source0.pgm") /* several tiles */,
-        ::testing::Values(false) /* lossy */,
-        ::testing::Values(64) /* extra threads */,
-        ::testing::Values(DecoderConfig::IncrementalMode::PARTIAL_TILE_CONTEXT),
-        ::testing::Values(testutil::DecoderType::kUnstableCustom)));
+    testing::Combine(
+        testing::Values("source0.pgm") /* several tiles */,
+        testing::Values(false) /* lossy */,
+        testing::Values(64) /* extra threads */,
+        testing::Values(DecoderConfig::IncrementalMode::PARTIAL_TILE_CONTEXT),
+        testing::Values(testutil::DecoderType::kUnstableCustom)));
 
 //------------------------------------------------------------------------------
 

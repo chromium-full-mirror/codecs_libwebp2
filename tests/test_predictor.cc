@@ -26,8 +26,8 @@
 namespace WP2 {
 namespace {
 
-using ::testing::ElementsAre;
-using ::testing::Ge;
+using testing::ElementsAre;
+using testing::Ge;
 
 class ContextCacheForTest : public ContextCache {
  public:
