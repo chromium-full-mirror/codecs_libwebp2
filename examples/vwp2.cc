@@ -409,6 +409,7 @@ class Params {
   uint32_t ToImageX(int viewport_x) const;
   uint32_t ToImageY(int viewport_y) const;
   // Same as glRectf() but with 'rect' in pixels, top-left being (0, 0).
+  // Draws a line if width or height is 0.
   void glRect(const Rectangle& rect, uint32_t thickness = 1) const;
 
   float sparks_x_[kNumSparks] = {0};
@@ -446,9 +447,7 @@ class Params {
   Rectangle forcing_block_;
   // Same as EncoderInfo::force_partition but not yet encoded.
   std::vector<Rectangle> force_partition_;
-  std::vector<EncoderInfo::ForcedSegment> force_segment_;
-  std::vector<EncoderInfo::ForcedPredictor> force_predictor_;
-  std::vector<EncoderInfo::ForcedTransform> force_transform_;
+  std::vector<EncoderInfo::ForcedParam> force_param_;
   void ClearForcedElements();
   bool IsDebugViewVisible() const;
   bool IsPartitionVisible() const;
@@ -504,18 +503,25 @@ class Params {
 
   // Functions below return true if the click event was handled, false if
   // nothing was done.
+  // Handles a click for the given param type.
+  bool HandleParamTypeClick(EncoderInfo::ForcedParam::Type type,
+                            uint32_t value_range, int button, int state,
+                            uint32_t img_x_down, uint32_t img_y_down,
+                            int incr = 1, Channel channel = kYChannel);
   bool HandleSegmentClick(int button, int state, uint32_t img_x_down,
-                          uint32_t img_y_down, uint32_t img_x, uint32_t img_y,
-                          int incr = 1);
+                          uint32_t img_y_down, int incr = 1);
   bool HandlePredictorClick(int button, int state, uint32_t img_x_down,
-                            uint32_t img_y_down, uint32_t img_x, uint32_t img_y,
-                            int incr);
+                            uint32_t img_y_down, int incr);
   bool HandleTransformClick(int button, int state, uint32_t img_x_down,
-                            uint32_t img_y_down, uint32_t img_x, uint32_t img_y,
-                            int incr);
+                            uint32_t img_y_down, int incr);
+  // Calls HandleSegmentClick, HandlePredictorClick and HandleTransformClick.
+  bool HandleForcedParamClick(int button, int state, uint32_t img_x_down,
+                              uint32_t img_y_down, uint32_t incr);
+
   bool HandlePartitionClick(int button, int state, uint32_t img_x_down,
                             uint32_t img_y_down, uint32_t img_x,
                             uint32_t img_y);
+
   bool HandleMenuClick(int button, int state, uint32_t img_x_down,
                        uint32_t img_y_down, uint32_t img_x, uint32_t img_y);
 
@@ -1418,9 +1424,7 @@ bool Params::EncodeImage() {
   } else {
     output_.clear();
     einfo_.force_partition = force_partition_;
-    einfo_.force_segment = force_segment_;
-    einfo_.force_predictor = force_predictor_;
-    einfo_.force_transform = force_transform_;
+    einfo_.force_param = force_param_;
 
     StringWriter writer(&output_);
     Metadata metadata;
@@ -1443,6 +1447,16 @@ bool Params::EncodeAndDecode() {
   if (!EncodeImage()) return false;
   return DecodeOutput();
 }
+
+namespace {
+void ClearForcedSegments(std::vector<EncoderInfo::ForcedParam>* params) {
+  std::remove_if(params->begin(), params->end(),
+                 [](const EncoderInfo::ForcedParam& forced) {
+                   return forced.type ==
+                          EncoderInfo::ForcedParam::Type::kSegment;
+                 });
+}
+}  // namespace
 
 bool Params::DecodeOutput() {
   const double start = GetStopwatchTime();
@@ -1512,8 +1526,8 @@ bool Params::DecodeOutput() {
       return false;
     }
   }
-  if (!force_segment_.empty() && !dinfo_.explicit_segment_ids) {
-    force_segment_.clear();
+  if (!force_param_.empty() && !dinfo_.explicit_segment_ids) {
+    ClearForcedSegments(&force_param_);
   }
 
   if (!ComputeYUVDistortion()) return false;
@@ -2008,7 +2022,14 @@ void Params::glRect(const Rectangle& rect, uint32_t thickness) const {
   const float px_h = 2.f / viewport_height_;
   for (uint32_t j = 0; j < thickness; ++j) {
     for (uint32_t i = 0; i < thickness; ++i) {
-      glRectf(x + i * px_w, y - j * px_h, x + w + i * px_w, y + h - j * px_h);
+      if (rect.width == 0 || rect.height == 0) {
+        glBegin(GL_LINES);
+        glVertex2f(x + i * px_w, y - j * px_h);
+        glVertex2f(x + w + i * px_w, y + h - j * px_h);
+        glEnd();
+      } else {
+        glRectf(x + i * px_w, y - j * px_h, x + w + i * px_w, y + h - j * px_h);
+      }
     }
   }
 }
@@ -2336,9 +2357,7 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
 
 void Params::ClearForcedElements() {
   force_partition_.clear();
-  force_segment_.clear();
-  force_predictor_.clear();
-  force_transform_.clear();
+  force_param_.clear();
   forcing_block_ = Rectangle();
 }
 
@@ -2387,11 +2406,46 @@ void Params::DisplayPartition() const {
   glColor4f(0.6f, 1.0f, 0.6f, 1.0f);
   for (const Rectangle& rect : force_partition_) glRect(rect, thick);
 
+  const bool split_visible = VDMatch(dec_config_, "split-tf");
+
   // If a block is currently being drawn with the mouse.
-  if (forcing_block_.width > 0 && forcing_block_.height > 0) {
+  if (forcing_block_.width > 0 && forcing_block_.height > 0 &&
+      (moved_since_last_down_ || !split_visible)) {
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     glRect(forcing_block_, thick);
   }
+
+  // Draw split_tf's.
+  glLineStipple(1.5 * thick, 0xAAAA);
+#if defined(WP2_BITTRACE)
+  if (split_visible) {
+    for (const auto& forced : force_param_) {
+      if (forced.type != EncoderInfo::ForcedParam::Type::kSplitTf) continue;
+      if (!view_rect_.Contains(forced.x, forced.y)) continue;
+      const BlockInfo* const b = einfo_.FindBlock(forced.x, forced.y);
+      assert(b != nullptr);
+      if (forced.value) {
+        glColor4f(0.0f, 0.8f, 0.0f, 1.0f);
+      } else {
+        glColor4f(1.0f, 0.2f, 0.0f, 1.0f);
+      }
+
+      const uint32_t bw = b->rect.width;
+      const uint32_t bh = b->rect.height;
+      const BlockSize split_size = GetSplitSize(
+          GetBlockSize(bw / kMinBlockSizePix, bh / kMinBlockSizePix),
+          /*split=*/true);
+      const uint32_t split_w = BlockWidthPix(split_size);
+      const uint32_t split_h = BlockHeightPix(split_size);
+      for (uint32_t x = split_w; x < bw - 1; x += split_w) {
+        glRect({b->rect.x + x, b->rect.y, 0, bh}, thick);
+      }
+      for (uint32_t y = split_h; y < bh - 1; y += split_h) {
+        glRect({b->rect.x, b->rect.y + y, bw, 0}, thick);
+      }
+    }
+  }
+#endif
 
   glDisable(GL_LINE_STIPPLE);
 }
@@ -2405,15 +2459,16 @@ void Params::DisplayForcedSegments() const {
   const uint32_t thick = getLineThickness();
   glLineStipple(2 * thick, 0xAAAA);
 
-  for (const auto& segment : force_segment_) {
-    if (!view_rect_.Contains(segment.x, segment.y)) continue;
-    const BlockInfo* const b = einfo_.FindBlock(segment.x, segment.y);
+  for (const auto& forced : force_param_) {
+    if (forced.type != EncoderInfo::ForcedParam::Type::kSegment) continue;
+    if (!view_rect_.Contains(forced.x, forced.y)) continue;
+    const BlockInfo* const b = einfo_.FindBlock(forced.x, forced.y);
     if (b != nullptr) {
       const Rectangle rect{b->rect.x, b->rect.y,
                            b->rect.width - 1, b->rect.height - 1};
       glColor4f(0.f, 0.f, 0.f, 1.f);
       glRect(rect, thick * 2);
-      const Argb32b color = kSegmentColors[segment.segment_id];
+      const Argb32b color = kSegmentColors[forced.value];
       glColor4f(color.r / 255.f, color.g / 255.f, color.b / 255.f, 1.f);
       glRect(rect, thick);
     }
@@ -2430,10 +2485,11 @@ void Params::DisplayForcedPredictors() const {
 
   glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-  for (const auto& predictor : force_predictor_) {
-    if (predictor.channel != channel) continue;
-    if (!view_rect_.Contains(predictor.x, predictor.y)) continue;
-    const BlockInfo* const b = einfo_.FindBlock(predictor.x, predictor.y);
+  for (const auto& forced : force_param_) {
+    if (forced.type != EncoderInfo::ForcedParam::Type::kPredictor) continue;
+    if (forced.channel != channel) continue;
+    if (!view_rect_.Contains(forced.x, forced.y)) continue;
+    const BlockInfo* const b = einfo_.FindBlock(forced.x, forced.y);
     if (b != nullptr) {
       if (channel == kYChannel && b->y_context_is_constant) {
         glColor4f(1.f, 0.f, 0.f, 1.f);
@@ -2447,7 +2503,7 @@ void Params::DisplayForcedPredictors() const {
             (channel == kAChannel) ? dinfo_.a_predictors :
                                      dinfo_.uv_predictors;
       const uint32_t predictor_id =
-            std::min(predictor.predictor_id, (uint8_t)(predictors.size() - 1));
+          std::min(forced.value, (uint32_t)(predictors.size() - 1));
 
       const float color = (float)predictor_id / (predictors.size() - 1);
       glColor4f(color, color, color, 1.f);
@@ -2455,8 +2511,8 @@ void Params::DisplayForcedPredictors() const {
 
       const std::string& title = predictors[predictor_id];
       glColor4f(1.f, 0.f, 1.f, 1.f);
-      PrintString((predictor.x - view_rect_.x) * 2.f / view_rect_.width - 1,
-                  1 - (predictor.y - view_rect_.y) * 2.f / view_rect_.height,
+      PrintString((forced.x - view_rect_.x) * 2.f / view_rect_.width - 1,
+                  1 - (forced.y - view_rect_.y) * 2.f / view_rect_.height,
                   title);
     }
   }
@@ -2472,7 +2528,8 @@ void Params::DisplayForcedTransforms() const {
   const uint32_t thick = getLineThickness();
   glLineStipple(2 * thick, 0xAAAA);
 
-  for (const auto& forced : force_transform_) {
+  for (const auto& forced : force_param_) {
+    if (forced.type != EncoderInfo::ForcedParam::Type::kTransform) continue;
     if (!view_rect_.Contains(forced.x, forced.y)) continue;
     const BlockInfo* const b = einfo_.FindBlock(forced.x, forced.y);
     if (b != nullptr) {
@@ -2481,9 +2538,9 @@ void Params::DisplayForcedTransforms() const {
       glColor4f(1.f, 1.f, 1.f, 1.f);
       glRect(rect, thick * 2);
 
-      const std::string title = SPrintf("%s_%s",
-          WP2TransformNames[kTfX[forced.transform]],
-          WP2TransformNames[kTfY[forced.transform]]);
+      const std::string title =
+          SPrintf("%s_%s", WP2TransformNames[kTfX[forced.value]],
+                  WP2TransformNames[kTfY[forced.value]]);
       glColor4f(1.f, 0.f, 1.f, 1.f);
       PrintString((forced.x - view_rect_.x) * 2.f / view_rect_.width - 1,
                   1 - (forced.y - view_rect_.y) * 2.f / view_rect_.height,
@@ -2711,11 +2768,17 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
     }
   } else if (key == 'c' || key == 'C') {
     if (!EncodeAndDecode()) return;
-    AddInfo(SPrintf("Forcing %u blocks %u segments %u predictors %u transforms",
-                    (uint32_t)einfo_.force_partition.size(),
-                    (uint32_t)einfo_.force_segment.size(),
-                    (uint32_t)einfo_.force_predictor.size(),
-                    (uint32_t)einfo_.force_transform.size()));
+    uint32_t count[(uint32_t)EncoderInfo::ForcedParam::Type::kNumTypes] = {0};
+    for (const auto& forced : force_param_) {
+      ++count[(uint32_t)forced.type];
+    }
+    AddInfo(SPrintf(
+        "Forcing %u blocks %u segments %u predictors %u transforms %u split_tf",
+        (uint32_t)einfo_.force_partition.size(),
+        count[(uint32_t)EncoderInfo::ForcedParam::Type::kSegment],
+        count[(uint32_t)EncoderInfo::ForcedParam::Type::kPredictor],
+        count[(uint32_t)EncoderInfo::ForcedParam::Type::kTransform],
+        count[(uint32_t)EncoderInfo::ForcedParam::Type::kSplitTf]));
   } else if (key == 'd') {
     std::vector<WP2::Rectangle> blocks;
     if (!force_partition_.empty()) {
@@ -2831,7 +2894,7 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
     enc_config_.segments -= 1;  // 'segments' value is 1-based
     ModifyR(enc_config_.segments, (int)kMaxNumSegments, key == '7');
     enc_config_.segments += 1;
-    force_segment_.clear();
+    ClearForcedSegments(&force_param_);
     if (!EncodeAndDecode()) return;
     SetMessage(SPrintf("Num segments: %d", enc_config_.segments));
   } else if (key == '8' || key == '*') {
@@ -3000,15 +3063,55 @@ void HandleMouseMoveButtonPressed(int x, int y) {
   global_params->HandleMouseMove(x, y, /*button_pressed=*/true);
 }
 
-bool Params::HandleSegmentClick(int button, int state, uint32_t img_x_down,
-                                uint32_t img_y_down, uint32_t img_x,
-                                uint32_t img_y, int incr) {
+bool Params::HandleParamTypeClick(EncoderInfo::ForcedParam::Type type,
+                                  uint32_t value_range, int button, int state,
+                                  uint32_t img_x_down, uint32_t img_y_down,
+                                  int incr, Channel channel) {
+  (void)type;
   (void)button;
   (void)state;
   (void)img_x_down;
   (void)img_y_down;
-  (void)img_x;
-  (void)img_y;
+  (void)incr;
+  (void)channel;
+
+#if defined(WP2_BITTRACE)
+  if (button == GLUT_LEFT_BUTTON || state != GLUT_DOWN) {
+    return false;
+  }
+
+  const BlockInfo* const b = einfo_.FindBlock(img_x_down, img_y_down);
+  assert(b != nullptr);
+
+  for (auto& forced : force_param_) {
+    if (forced.type != type) continue;
+    if (forced.x == b->rect.x && forced.y == b->rect.y) {
+      if (button == GLUT_MIDDLE_BUTTON) {  // Remove.
+        forced = force_param_.back();
+        force_param_.pop_back();
+      } else {
+        ModifyInRange(forced.value, value_range, incr);
+      }
+      return true;
+    }
+  }
+  if (button == GLUT_RIGHT_BUTTON) {
+    const EncoderInfo::ForcedParam forced = {type, b->rect.x, b->rect.y,
+                                             /*value=*/0, channel};
+    force_param_.push_back(forced);
+    return true;
+  }
+#endif
+
+  return false;
+}
+
+bool Params::HandleSegmentClick(int button, int state, uint32_t img_x_down,
+                                uint32_t img_y_down, int incr) {
+  (void)button;
+  (void)state;
+  (void)img_x_down;
+  (void)img_y_down;
 
 #if defined(WP2_BITTRACE)
   if (!IsSegmentVisible() || button == GLUT_LEFT_BUTTON || state != GLUT_DOWN) {
@@ -3024,91 +3127,43 @@ bool Params::HandleSegmentClick(int button, int state, uint32_t img_x_down,
   // No point in forcing the segment if there's only one...
   if (num_segments == 1) return false;
 
-  uint32_t block_x = 0, block_y = 0;
-  const BlockInfo* const b = einfo_.FindBlock(img_x_down, img_y_down);
-  if (b != nullptr) {
-    block_x = b->rect.x;
-    block_y = b->rect.y;
-  }
-
-  for (auto& forced_segment : force_segment_) {
-    if (forced_segment.x == block_x && forced_segment.y == block_y) {
-      if (button == GLUT_MIDDLE_BUTTON) {   // Remove.
-        forced_segment = force_segment_.back();
-        force_segment_.pop_back();
-      } else {
-        ModifyInRange(forced_segment.segment_id, num_segments, incr);
-      }
-      return true;
-    }
-  }
-  if (button == GLUT_RIGHT_BUTTON) {
-    EncoderInfo::ForcedSegment forced = {block_x, block_y, 0};
-    force_segment_.emplace_back(forced);
-    return true;
-  }
+  return HandleParamTypeClick(EncoderInfo::ForcedParam::Type::kSegment,
+                              num_segments, button, state, img_x_down,
+                              img_y_down, incr);
 #endif
 
   return false;
 }
 
 bool Params::HandlePredictorClick(int button, int state, uint32_t img_x_down,
-                                  uint32_t img_y_down, uint32_t img_x,
-                                  uint32_t img_y, int incr) {
+                                  uint32_t img_y_down, int incr) {
   (void)button;
   (void)state;
   (void)img_x_down;
   (void)img_y_down;
-  (void)img_x;
-  (void)img_y;
 
 #if defined(WP2_BITTRACE)
-  if (!IsPredictorVisible() || button == GLUT_LEFT_BUTTON ||
-      state != GLUT_DOWN) {
-    return false;
-  }
+  if (!IsPredictorVisible()) return false;
+
   Channel channel = VDChannel(dec_config_);
-  if (channel == kVChannel) channel = kUChannel;
-
-  const BlockInfo* const b = einfo_.FindBlock(img_x_down, img_y_down);
-  assert(b != nullptr);
-
-  for (auto& forced_predictor : force_predictor_) {
-    if (forced_predictor.x == b->rect.x &&
-        forced_predictor.y == b->rect.y &&
-        forced_predictor.channel == channel) {
-      if (button == GLUT_MIDDLE_BUTTON) {  // remove forced predictor
-        forced_predictor = force_predictor_.back();
-        force_predictor_.pop_back();
-      } else {   // increment / decrement id
-        const int num_predictors =
-          (channel == kYChannel) ? dinfo_.y_predictors.size() :
-          (channel == kAChannel) ? dinfo_.a_predictors.size() :
-                                   dinfo_.uv_predictors.size();
-        ModifyInRange(forced_predictor.predictor_id, num_predictors, incr);
-      }
-      return true;
-    }
-  }
-  if (button == GLUT_RIGHT_BUTTON) {
-    EncoderInfo::ForcedPredictor forced = {channel, b->rect.x, b->rect.y, 0};
-    force_predictor_.emplace_back(forced);
-    return true;
-  }
+  const int num_predictors = (channel == kYChannel) ? dinfo_.y_predictors.size()
+                             : (channel == kAChannel)
+                                 ? dinfo_.a_predictors.size()
+                                 : dinfo_.uv_predictors.size();
+  return HandleParamTypeClick(EncoderInfo::ForcedParam::Type::kPredictor,
+                              num_predictors, button, state, img_x_down,
+                              img_y_down, incr);
 #endif
 
   return false;
 }
 
 bool Params::HandleTransformClick(int button, int state, uint32_t img_x_down,
-                                  uint32_t img_y_down, uint32_t img_x,
-                                  uint32_t img_y, int incr) {
+                                  uint32_t img_y_down, int incr) {
   (void)button;
   (void)state;
   (void)img_x_down;
   (void)img_y_down;
-  (void)img_x;
-  (void)img_y;
 
 #if defined(WP2_BITTRACE)
   if (!IsTransformVisible() || button == GLUT_LEFT_BUTTON ||
@@ -3116,29 +3171,33 @@ bool Params::HandleTransformClick(int button, int state, uint32_t img_x_down,
     return false;
   }
 
-  const BlockInfo* const b = einfo_.FindBlock(img_x_down, img_y_down);
-  assert(b != nullptr);
-
-  for (auto& forced : force_transform_) {
-    if (forced.x == b->rect.x && forced.y == b->rect.y) {
-      if (button == GLUT_MIDDLE_BUTTON) {  // Remove.
-        forced = force_transform_.back();
-        force_transform_.pop_back();
-      } else {
-        ModifyInRange(forced.transform, kNumTransformPairs, incr);
-      }
-      return true;
-    }
-  }
-  if (button == GLUT_RIGHT_BUTTON) {
-    EncoderInfo::ForcedTransform forced = {b->rect.x, b->rect.y, 0};
-    force_transform_.emplace_back(forced);
-    return true;
-  }
+  return HandleParamTypeClick(EncoderInfo::ForcedParam::Type::kTransform,
+                              kNumTransformPairs, button, state, img_x_down,
+                              img_y_down, incr);
 #endif
 
   return false;
 }
+
+namespace {
+bool RemoveSplitTf(const EncoderInfo& einfo, uint32_t x, uint32_t y,
+                   std::vector<EncoderInfo::ForcedParam>* force_param) {
+#if defined(WP2_BITTRACE)
+  const BlockInfo* const b = einfo.FindBlock(x, y);
+  assert(b != nullptr);
+
+  for (auto& forced : *force_param) {
+    if (forced.type != EncoderInfo::ForcedParam::Type::kSplitTf) continue;
+    if (forced.x == b->rect.x && forced.y == b->rect.y) {
+      forced = force_param->back();
+      force_param->pop_back();
+      return true;
+    }
+  }
+#endif
+  return false;
+}
+}  // namespace
 
 bool Params::HandlePartitionClick(int button, int state, uint32_t img_x_down,
                                   uint32_t img_y_down, uint32_t img_x,
@@ -3146,6 +3205,8 @@ bool Params::HandlePartitionClick(int button, int state, uint32_t img_x_down,
   if (button != GLUT_RIGHT_BUTTON && button != GLUT_MIDDLE_BUTTON) {
     return false;
   }
+
+  const bool split_visible = VDMatch(dec_config_, "split-tf");
 
   if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
     if (IsPartitionVisible()) {
@@ -3161,22 +3222,60 @@ bool Params::HandlePartitionClick(int button, int state, uint32_t img_x_down,
   }
 
   const bool delete_only = button == GLUT_MIDDLE_BUTTON;
+
   if ((forcing_block_.width > 0 && forcing_block_.height > 0 &&
        state == GLUT_UP) ||
       delete_only) {
     bool removed_block = false;
     if (!moved_since_last_down_) {
-      // Remove the block under the mouse.
-      for (uint32_t i = 0; i < force_partition_.size(); ++i) {
-        if (force_partition_[i].Contains(img_x, img_y)) {
-          force_partition_[i] = force_partition_.back();
-          force_partition_.pop_back();
-          removed_block = true;
-          break;
+      if (delete_only) {
+        // Remove the block under the mouse.
+        for (Rectangle& forced : force_partition_) {
+          if (forced.Contains(img_x, img_y)) {
+            forced = force_partition_.back();
+            force_partition_.pop_back();
+            removed_block = true;
+            break;
+          }
         }
+        // And the forced split_tf if any.
+        if (split_visible) {
+          RemoveSplitTf(einfo_, img_x_down, img_y_down, &force_param_);
+        }
+      } else if (split_visible) {
+#if defined(WP2_BITTRACE)
+        const Rectangle& b_rect =
+            einfo_.FindBlock(img_x_down, img_y_down)->rect;
+        bool found = false;
+        // Cycle between forced split_tf, forced no split_tf, and removing the
+        // forced param.
+        for (auto& forced : force_param_) {
+          if (forced.type != EncoderInfo::ForcedParam::Type::kSplitTf) continue;
+          if (forced.x == b_rect.x && forced.y == b_rect.y) {
+            if (forced.value) {
+              // Switch from forced split_tf to forced NO split.
+              forced.value = false;
+            } else {
+              // Remove the forced param.
+              forced = force_param_.back();
+              force_param_.pop_back();
+            }
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          // Add forced split_tf.
+          const EncoderInfo::ForcedParam forced = {
+              EncoderInfo::ForcedParam::Type::kSplitTf, b_rect.x, b_rect.y,
+              /*value=*/true, kYChannel};
+          force_param_.push_back(forced);
+        }
+#endif
       }
     }
-    if (!removed_block && !delete_only) {
+    if (!removed_block && !delete_only &&
+        (moved_since_last_down_ || !split_visible)) {
       // Remove all blocks intersecting the new one.
       for (uint32_t i = 0; i < force_partition_.size();) {
         if (force_partition_[i].Intersects(forcing_block_)) {
@@ -3186,11 +3285,19 @@ bool Params::HandlePartitionClick(int button, int state, uint32_t img_x_down,
           ++i;
         }
       }
+      // Add new block.
       force_partition_.emplace_back(forcing_block_);
     }
   }
   forcing_block_ = {0, 0, 0, 0};
   return true;
+}
+
+bool Params::HandleForcedParamClick(int button, int state, uint32_t img_x_down,
+                                    uint32_t img_y_down, uint32_t incr) {
+  return HandleSegmentClick(button, state, img_x_down, img_y_down) ||
+         HandlePredictorClick(button, state, img_x_down, img_y_down, incr) ||
+         HandleTransformClick(button, state, img_x_down, img_y_down, incr);
 }
 
 bool Params::HandleMenuClick(int button, int state, uint32_t img_x_down,
@@ -3251,11 +3358,7 @@ void Params::HandleMouseClick(int button, int state, int x, int y) {
                    (button == kScrollWheelDown) ? -1 : 0;
 
   if (HandleMenuClick(button, state, img_x_down, img_y_down, img_x, img_y) ||
-      HandleSegmentClick(button, state, img_x_down, img_y_down, img_x, img_y) ||
-      HandlePredictorClick(button, state, img_x_down, img_y_down, img_x, img_y,
-                           incr) ||
-      HandleTransformClick(button, state, img_x_down, img_y_down, img_x, img_y,
-                           incr) ||
+      HandleForcedParamClick(button, state, img_x_down, img_y_down, incr) ||
       HandlePartitionClick(button, state, img_x_down, img_y_down, img_x,
                            img_y)) {
     return;  // Event was handled, nothing more to do.
@@ -3269,17 +3372,12 @@ void Params::HandleMouseClick(int button, int state, int x, int y) {
 void Params::HandleMouseWheel(bool is_up, int x, int y) {
   mouse_x_ = x;
   mouse_y_ = y;
-  const uint32_t img_x = ToImageX(x), img_y = ToImageY(y);
   const uint32_t img_x_down = ToImageX(mouse_x_down_);
   const uint32_t img_y_down = ToImageY(mouse_y_down_);
 
   const int incr = is_up ? 1 : -1;
-  if (HandlePredictorClick(GLUT_RIGHT_BUTTON, GLUT_DOWN, img_x_down, img_y_down,
-                           img_x, img_y, incr) ||
-      HandleSegmentClick(GLUT_RIGHT_BUTTON, GLUT_DOWN, img_x_down, img_y_down,
-                         img_x, img_y, incr) ||
-      HandleTransformClick(GLUT_RIGHT_BUTTON, GLUT_DOWN, img_x_down, img_y_down,
-                           img_x, img_y, incr)) {
+  if (HandleForcedParamClick(GLUT_RIGHT_BUTTON, GLUT_DOWN, img_x_down,
+                             img_y_down, incr)) {
     return;  // Event was handled, nothing more to do.
   }
 

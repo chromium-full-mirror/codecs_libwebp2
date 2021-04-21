@@ -202,8 +202,9 @@ WP2Status GlobalAnalysis(const ArgbBuffer& rgb, const YUVPlane& yuv,
     // WP2_CHECK_STATUS(SimplifySegments(&gparams->segments_));
 
     if (config.info != nullptr) {
-      for (const auto& forced_segment : config.info->force_segment) {
-        WP2_CHECK_OK(forced_segment.segment_id < gparams->segments_.size(),
+      for (const auto& forced : config.info->force_param) {
+        if (forced.type != EncoderInfo::ForcedParam::Type::kSegment) continue;
+        WP2_CHECK_OK(forced.value < gparams->segments_.size(),
                      WP2_STATUS_INVALID_CONFIGURATION);
       }
     }

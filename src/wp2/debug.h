@@ -96,27 +96,23 @@ struct EncoderInfo {
   // Remaining areas will be filled with the regular partitioning algorithm.
   // Coordinates are in pixels and must be multiples of kMinBlockSizePix.
   std::vector<Rectangle> force_partition;  // (input)
-  // Predetermined segment ids.
-  struct ForcedSegment {
+  // Predetermined encoding parameters.
+  struct ForcedParam {
+    enum class Type {
+      kTransform,
+      kSegment,
+      kPredictor,
+      kSplitTf,
+      kNumTypes,
+    };
+    Type type;
     // xy coordinates of the block in pixels.
     uint32_t x, y;
-    uint32_t segment_id;
+    // transform id, semgent id, predictor id or split_tf (bool)
+    uint32_t value;
+    Channel channel;  // only relevant for kPredictor
   };
-  std::vector<ForcedSegment> force_segment;
-  // Predetermined predictors.
-  struct ForcedPredictor {
-    Channel channel;
-    // xy coordinates of the block in pixels.
-    uint32_t x, y;
-    uint8_t predictor_id;
-  };
-  std::vector<ForcedPredictor> force_predictor;
-  struct ForcedTransform {
-    // xy coordinates of the block in pixels.
-    uint32_t x, y;
-    uint32_t transform;  // TransformPair
-  };
-  std::vector<ForcedTransform> force_transform;
+  std::vector<ForcedParam> force_param;
 
 #if defined(WP2_BITTRACE)
   std::vector<BlockInfo> blocks;  // Information about blocks (output).

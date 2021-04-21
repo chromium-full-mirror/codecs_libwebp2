@@ -219,6 +219,14 @@ class CodedBlock : public CodedBlockBase {
                          uint32_t num_channels, SymbolCounter* const counter,
                          SymbolCounter* const aom_counter, float* rate) const;
 
+  // Pseudo-Visual debug: force the split_tf of the block.
+  enum class SplitTf {
+    kForcedUnsplit,
+    kForcedSplit,
+    kUnknown,
+  };
+  SplitTf GetForcedSplitTf(const EncoderConfig& config, uint32_t tile_pos_x,
+                           uint32_t tile_pos_y);
   // Pseudo-Visual debug: force the transform of the block.
   TransformPair GetForcedTransform(const EncoderConfig& config,
                                    uint32_t tile_pos_x, uint32_t tile_pos_y);

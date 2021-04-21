@@ -329,13 +329,14 @@ uint8_t AssignSegmentId(const EncoderConfig& config,
                         const Rectangle& padded_tile, const Block& block,
                         uint32_t* const segment_score) {
   if (config.info != nullptr && gparams.explicit_segment_ids_) {
-    for (const auto& forced_segment : config.info->force_segment) {
-      if (block.x_pix() + padded_tile.x == forced_segment.x &&
-          block.y_pix() + padded_tile.y == forced_segment.y) {
+    for (const auto& forced : config.info->force_param) {
+      if (forced.type != EncoderInfo::ForcedParam::Type::kSegment) continue;
+      if (block.x_pix() + padded_tile.x == forced.x &&
+          block.y_pix() + padded_tile.y == forced.y) {
         if (segment_score != nullptr) {
           *segment_score = FeatureMap::kHistogramSize;
         }
-        return forced_segment.segment_id;
+        return forced.value;
       }
     }
   }

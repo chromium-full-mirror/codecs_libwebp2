@@ -172,6 +172,29 @@ void CodedBlock::ToBlockInfo(bool use_aom_coeffs, BlockInfo* const blk) const {
 
 #endif  // WP2_BITTRACE
 
+CodedBlock::SplitTf CodedBlock::GetForcedSplitTf(const EncoderConfig& config,
+                                                 uint32_t tile_pos_x,
+                                                 uint32_t tile_pos_y) {
+  (void)config;
+  (void)tile_pos_x;
+  (void)tile_pos_y;
+#if !defined(WP2_REDUCE_BINARY_SIZE)
+  EncoderInfo* const info = config.info;
+  if (info == nullptr) return SplitTf::kUnknown;
+
+  for (const auto& forced : info->force_param) {
+    if (forced.type != EncoderInfo::ForcedParam::Type::kSplitTf) continue;
+    if (forced.x != (x_pix() + tile_pos_x) ||
+        forced.y != (y_pix() + tile_pos_y)) {
+      continue;
+    }
+
+    return forced.value ? SplitTf::kForcedSplit : SplitTf::kForcedUnsplit;
+  }
+#endif  // WP2_REDUCE_BINARY_SIZE
+  return SplitTf::kUnknown;
+}
+
 //------------------------------------------------------------------------------
 
 // Declared in segment.h.

@@ -404,14 +404,15 @@ TransformPair CodedBlock::GetForcedTransform(const EncoderConfig& config,
   EncoderInfo* const info = config.info;
   if (info == nullptr) return kUnknownTf;
 
-  for (const EncoderInfo::ForcedTransform& forced : info->force_transform) {
+  for (const auto& forced : info->force_param) {
+    if (forced.type != EncoderInfo::ForcedParam::Type::kTransform) continue;
     if (forced.x != (x_pix() + tile_pos_x) ||
         forced.y != (y_pix() + tile_pos_y)) {
       continue;
     }
 
-    if (forced.transform >= kNumTransformPairs) return kUnknownTf;
-    return (TransformPair)forced.transform;
+    if (forced.value >= kNumTransformPairs) return kUnknownTf;
+    return (TransformPair)forced.value;
   }
 #endif  // WP2_REDUCE_BINARY_SIZE
   return kUnknownTf;
@@ -424,9 +425,10 @@ bool CodedBlock::SetForcedPredictor(const Predictors& preds,
                                     uint32_t tile_pos_x, uint32_t tile_pos_y,
                                     Channel channel) {
   EncoderInfo* const info = config.info;
-  if (info == nullptr || info->force_predictor.empty()) return false;
+  if (info == nullptr) return false;
 
-  for (const EncoderInfo::ForcedPredictor& forced : info->force_predictor) {
+  for (const auto& forced : info->force_param) {
+    if (forced.type != EncoderInfo::ForcedParam::Type::kPredictor) continue;
     if (forced.channel != channel ||
         forced.x != (x_pix() + tile_pos_x) ||
         forced.y != (y_pix() + tile_pos_y)) {
@@ -435,7 +437,7 @@ bool CodedBlock::SetForcedPredictor(const Predictors& preds,
 
     assert(!preds.empty());
     const Predictor* const pred =
-        preds[std::min(forced.predictor_id, (uint8_t)(preds.size() - 1))];
+        preds[std::min(forced.value, (uint32_t)(preds.size() - 1))];
     SetPredictor(channel, pred);
     pred_scores_[(channel == kVChannel) ? kUChannel : channel] = 1.f;
     return true;
@@ -617,6 +619,12 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
     assert(!params->split_tf);
     return WP2_STATUS_OK;
   }
+  const SplitTf forced_split =
+      GetForcedSplitTf(config, tile_rect.x, tile_rect.y);
+  if (forced_split == SplitTf::kForcedUnsplit) {
+    params->split_tf = false;
+    return WP2_STATUS_OK;
+  }
 
   bool best_split_tf = false;  // avoids -Werror=maybe-uninitialized
   float best_score = 0.f;
@@ -634,8 +642,14 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
     GetResiduals(channel, prediction_p, &tmp);  // <- depends on 'split_tf'
     TransformAndReconstruct(quant, channel, reduced, prediction_p, &tmp, &tmp);
 
-    if (params->split_tf && !HasCoeffs(channel)) {
-      continue;  // Split-tf with no coeff is forbidden.
+    if (split_tf) {
+      if (!HasCoeffs(channel)) {
+        continue;  // Split-tf with no coeff is forbidden.
+      } else if (forced_split == SplitTf::kForcedSplit) {
+        // Force split_tf (but only if there are some coeffs).
+        best_split_tf = true;
+        break;
+      }
     }
 
     const uint32_t distortion = GetDisto(channel);
