@@ -43,6 +43,7 @@ parity.
 
 Side-by-side codec comparisons can be found at:
 
+-   [2021-04-20](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_04_20/index.html#mural-in-northeast-pavillion-thomas-jefferson-building-by-elmer-e-garnsey-11670u-edit&AVIF-AOM=s&WEBP2=s&subset1)
 -   [2021-03-16](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_03_16/index.html#production-of-b-24-bombers-and-c-87-transports2&AVIF-AOM=s&WEBP2=s&subset1)
 -   [2021-02-15](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_02_15/index.html#steinway-vienna-panoramic&AVIF-AOM=s&WEBP2=s&subset1)
 -   [2021-02-02](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_02_02/index.html#endeavour-with-columbia-ferry-flyby-gpn-2000-001996&WEBP2=t&AVIF-AOM=t&subset1)
