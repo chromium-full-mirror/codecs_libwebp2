@@ -492,8 +492,7 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
     current_score += lambda * res_rate;
     if (!is_first && current_score >= best_score) continue;   // early-out
 
-    WP2_CHECK_STATUS(TransformRate(channel, transforms.size(),
-                                   counters->transform(), &tf_rate));
+    WP2_CHECK_STATUS(TransformRate(channel, counters->transform(), &tf_rate));
     current_score += lambda * tf_rate;
     const bool is_best = (is_first || current_score < best_score);
     if (is_best) {
@@ -565,7 +564,7 @@ WP2Status CodedBlock::PredictorRate(Channel channel,
   return WP2_STATUS_OK;
 }
 
-WP2Status CodedBlock::TransformRate(Channel channel, uint32_t num_transforms,
+WP2Status CodedBlock::TransformRate(Channel channel,
                                     SymbolCounter* const counter,
                                     float* const rate) const {
   ANSEncCounter enc;
@@ -663,8 +662,7 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
     score += lambda * res_rate;
     if (!is_first && score >= best_score) continue;   // early-out
 
-    WP2_CHECK_STATUS(TransformRate(channel, /*num_transforms=*/1,
-                                   counters->transform(), &tf_rate));
+    WP2_CHECK_STATUS(TransformRate(channel, counters->transform(), &tf_rate));
     score += lambda * tf_rate;
 
     const bool is_best = (is_first || score < best_score);

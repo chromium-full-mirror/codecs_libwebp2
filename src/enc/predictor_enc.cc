@@ -117,8 +117,8 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
                                       counters_->residuals_aom(), &res_rate));
     WP2_CHECK_STATUS(
         cb->PredictorRate(channel_, counters_->predictor(), &pred_rate));
-    WP2_CHECK_STATUS(cb->TransformRate(channel_, num_transforms,
-                                       counters_->transform(), &tf_rate));
+    WP2_CHECK_STATUS(
+        cb->TransformRate(channel_, counters_->transform(), &tf_rate));
     const float lambda = cb->lambda_mult_ * quant.lambda;
     score_ = dist_ + lambda * (res_rate + pred_rate + tf_rate);
     // Note: some of the steps above could be skipped as soon as the distortion

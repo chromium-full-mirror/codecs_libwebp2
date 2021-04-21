@@ -208,11 +208,9 @@ class CodedBlock : public CodedBlockBase {
 
   // Returns an estimation of the number of bits necessary to encode the
   // transform.
-  WP2Status TransformRate(Channel channel, uint32_t num_transforms,
+  WP2Status TransformRate(Channel channel,
                           SymbolCounter* const counter,
                           float* const rate) const;
-  WP2Status SplitTransformRate(Channel channel, SymbolCounter* const counter,
-                               float* const rate) const;
 
   // Estimated cost in bits of storing residuals for the given channel.
   WP2Status ResidualRate(const BlockContext& context, Channel channel,
