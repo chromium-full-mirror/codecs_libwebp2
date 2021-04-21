@@ -470,8 +470,10 @@ class Params {
   // given token.
   bool VDMatchEncDec(const char* token) const;
 
+  // Updates the current visual debug view.
+  bool SetVisualDebug(std::string visual_debug);
+
   bool IsHamburgerMenuVisible() const;
-  bool SetMenuSelection(const std::string& selection);
   void DisplayMenu();
   bool DisplaySubMenu(int32_t x, int32_t y, const VDToken& prefix,
                       std::string* const current_selection);
@@ -557,8 +559,8 @@ class Params {
   EncoderConfig enc_config_;  // encoding parameters
   DecoderConfig dec_config_;
   std::string menu_selection_ = "decompressed";  // hovered menu selection
-  std::string menu_selection_prev_ = "decompressed";  // last menu selected
-  std::string visual_debug_ = "decompressed";    // displayed debug output
+  std::string visual_debug_ = "decompressed";    // displayed debug view
+  std::string visual_debug_prev_ = "decompressed";  // last displayed debug view
 
   bool view_only_ = false;
   bool use_premultiplied_ = false;  // original samples in ARGB
@@ -601,10 +603,10 @@ class Params {
 // Made accessible to plain C function callbacks of glut.
 Params* global_params = nullptr;
 
-bool Params::SetMenuSelection(const std::string& selection) {
-  menu_selection_ = selection;
-  assert(!menu_selection_.empty());
-  visual_debug_ = menu_selection_;
+bool Params::SetVisualDebug(std::string visual_debug) {
+  assert(!visual_debug.empty());
+  visual_debug_prev_ = visual_debug_;
+  visual_debug_ = visual_debug;
   dinfo_.visual_debug = visual_debug_.c_str();
   einfo_.visual_debug = visual_debug_.c_str();
 
@@ -2689,12 +2691,11 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
     glutPostRedisplay();
   } else if (key == 'E' || key == 'e') {
     std::string selection =
-        GetLeaf(menu_selection_, /*leaf_offset=*/(key == 'e') ? 1 : -1);
+        GetLeaf(visual_debug_, /*leaf_offset=*/(key == 'e') ? 1 : -1);
     if (selection.find("error-map") != 0) {  // NOLINT
       selection = "error-map/PSNR";
     }
-    menu_selection_prev_ = menu_selection_;
-    if (!SetMenuSelection(selection)) return;
+    if (!SetVisualDebug(selection)) return;
   } else if (key == 's' || key == 'S') {
     ModifyR(enc_config_.effort, 10, key == 's');
     if (!EncodeAndDecode()) return;
@@ -2920,19 +2921,17 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
       SetMessage(keep_metadata_ ? "Metadata: on" : "Metadata: off");
     }
   } else if (key == 'v' || key == 'V') {
-    menu_selection_prev_ = menu_selection_;
-    if (!SetMenuSelection(GetLeaf(menu_selection_,
-                          /*leaf_offset=*/(key == 'v') ? 1 : -1))) return;
+    if (!SetVisualDebug(GetLeaf(visual_debug_,
+                                /*leaf_offset=*/(key == 'v') ? 1 : -1)))
+      return;
   } else if (key == 'y' || key == 'Y') {
-    menu_selection_prev_ = menu_selection_;
-    if (!SetMenuSelection(
-            ChangeChannel(menu_selection_,
+    if (!SetVisualDebug(
+            ChangeChannel(visual_debug_,
                           /*increment_step=*/(key == 'y') ? 1 : -1)))
       return;
   } else if (key == '`') {
     // jump back to previous menu
-    std::swap(menu_selection_prev_, menu_selection_);
-    if (!SetMenuSelection(menu_selection_)) return;
+    if (!SetVisualDebug(visual_debug_prev_)) return;
   } else if (key == 'z' || key == 'Z') {
     zoom_level_ += (key == 'z') ? +1 : -1;  // Zoom in or out.
     ReshapeWindow();
@@ -3317,7 +3316,7 @@ bool Params::HandleMenuClick(int button, int state, uint32_t img_x_down,
       forcing_block_ = {0, 0, 0, 0};
       if (!menu_selection_.empty()) {
         // Select the first available leaf (DFS) if not already the case.
-        if (!SetMenuSelection(GetLeaf(menu_selection_))) return true;
+        if (!SetVisualDebug(GetLeaf(menu_selection_))) return true;
       }
     } else {
       // Handle area selection (for histogram view).
