@@ -193,7 +193,8 @@ void FuzzedParameters::ExtractConfig(EncoderConfig* const config) {
   config->target_size = ExtractBool() ? 0 : (size_t)ExtractUInt32(1 << 20);
   config->target_psnr = ExtractBool() ? 0.f : (float)ExtractDouble(.01, 99.);
   config->alpha_quality = (float)ExtractDouble(0., kMaxQuality);
-  config->effort = (int)ExtractUInt32(9);
+  config->effort = (int)ExtractUInt32(kMinEffort, kMaxEffort);
+  config->use_av1 = false;  // TODO(yguyon): Test AV1
 
   config->decoding_orientation = (Orientation)ExtractUInt32(7);
   config->create_preview = ExtractBool();

@@ -151,7 +151,9 @@ GlobalParams::Type DecideGlobalParamsType(const EncoderConfig& config) {
   // compression outputting RGB.
   if (config.use_neural_compression) return GlobalParams::GP_BOTH;
   // TODO(skal): mixed lossy / lossless case.
-  if (config.quality <= kMaxLossyQuality) return GlobalParams::GP_LOSSY;
+  if (config.quality <= kMaxLossyQuality) {
+    return (config.use_av1 ? GlobalParams::GP_AV1 : GlobalParams::GP_LOSSY);
+  }
   return GlobalParams::GP_LOSSLESS;
 }
 
@@ -164,12 +166,14 @@ WP2Status GlobalAnalysis(const ArgbBuffer& rgb, const YUVPlane& yuv,
 
   gparams->type_ = DecideGlobalParamsType(config);
 
-  if (gparams->type_ != GlobalParams::GP_LOSSY) {
+  if (gparams->type_ == GlobalParams::GP_LOSSLESS ||
+      gparams->type_ == GlobalParams::GP_BOTH) {
     WP2_CHECK_OK(!rgb.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
     gparams->has_alpha_ = rgb.HasTransparency();
     // TODO(skal): extract global params from lossless code
   }
-  if (gparams->type_ != GlobalParams::GP_LOSSLESS) {
+  if (gparams->type_ == GlobalParams::GP_LOSSY ||
+      gparams->type_ == GlobalParams::GP_BOTH) {
     WP2_CHECK_OK(!yuv.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
     // If CSPTransform::Init() failed with kCustom, it felt back to another Csp.
     WP2_CHECK_OK(

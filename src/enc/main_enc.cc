@@ -56,24 +56,29 @@ WP2Status TileEncoder::AssignNextTile() {
 
 WP2Status TileEncoder::Execute() {
   while (tile_ != nullptr) {
-    ANSEnc& enc = tile_->enc;
-    assert(enc.GetBitstreamSize() == 0);
-    if (tiles_layout_->gparams->type_ == GlobalParams::GP_BOTH) {
-      ANSDebugPrefix prefix(&enc, "GlobalHeader");
-      enc.PutBool(use_lossless_, "use_lossless");
-    }
-    if (use_lossless_) {
-      WP2_CHECK_STATUS(LosslessEncode(&enc));
+    if (tiles_layout_->gparams->type_ == GlobalParams::GP_AV1) {
+      WP2_CHECK_STATUS(Av1Encode(&tile_->data));
     } else {
-      const Rectangle padded_tile_rect = {tile_->rect.x, tile_->rect.y,
-                                          Pad(tile_->rect.width, kPredWidth),
-                                          Pad(tile_->rect.height, kPredWidth)};
-      VectorNoCtor<Block> partition;
-      WP2_CHECK_STATUS(AddForcedBlocks(*config_, padded_tile_rect, &partition));
-      WP2_CHECK_STATUS(LossyEncode(partition, &enc));
-    }
+      ANSEnc& enc = tile_->enc;
+      assert(enc.GetBitstreamSize() == 0);
+      if (tiles_layout_->gparams->type_ == GlobalParams::GP_BOTH) {
+        ANSDebugPrefix prefix(&enc, "GlobalHeader");
+        enc.PutBool(use_lossless_, "use_lossless");
+      }
+      if (use_lossless_) {
+        WP2_CHECK_STATUS(LosslessEncode(&enc));
+      } else {
+        const Rectangle padded_tile_rect = {
+            tile_->rect.x, tile_->rect.y, Pad(tile_->rect.width, kPredWidth),
+            Pad(tile_->rect.height, kPredWidth)};
+        VectorNoCtor<Block> partition;
+        WP2_CHECK_STATUS(
+            AddForcedBlocks(*config_, padded_tile_rect, &partition));
+        WP2_CHECK_STATUS(LossyEncode(partition, &enc));
+      }
 
-    WP2_CHECK_STATUS(enc.AssembleToBitstream(/*clear_tokens=*/true));
+      WP2_CHECK_STATUS(enc.AssembleToBitstream(/*clear_tokens=*/true));
+    }
 
     WP2_CHECK_STATUS(AssignNextTile());
   }
@@ -197,23 +202,31 @@ WP2Status CodeTiles(EncTilesLayout* const tiles_layout,
         (tile.rgb_input.format() == WP2_Argb_38) ? 10 : 8;
     const uint32_t max_num_bytes =
         GetTileMaxNumBytes(rgb_bit_depth, *tiles_layout->gparams, tile.rect);
+    assert((tile.enc.GetBitstreamSize() == 0) ^ (tile.data.size == 0));
+    const uint32_t num_bytes =
+        (tile.data.size > 0) ? tile.data.size : tile.enc.GetBitstreamSize();
     {
       uint8_t buffer[kMaxVarIntLength];
       const uint32_t size =
-          WriteVarInt(std::min(tile.enc.GetBitstreamSize(), max_num_bytes), 1,
+          WriteVarInt(std::min(num_bytes, max_num_bytes), 1,
                       max_num_bytes, buffer);
       WP2_CHECK_ALLOC_OK(output->Append(buffer, size));
     }
 
-    if (tile.enc.GetBitstreamSize() >= max_num_bytes) {
+    if (num_bytes >= max_num_bytes) {
       // Discard ANS encoding because it takes at least as many bytes as raw
       // pixels.
       WP2_CHECK_STATUS(BypassTileEnc(*tiles_layout->gparams, &tile, output));
     } else {
-      // TODO(yguyon): Check if 'tile.enc.GetBitstreamSize()' can even be 0.
-      WP2_CHECK_STATUS(tile.enc.WriteBitstreamTo(*output));
+      if (tile.data.size > 0) {
+        WP2_CHECK_ALLOC_OK(output->Append(tile.data.bytes, tile.data.size));
+      } else {
+        // TODO(yguyon): Check if 'tile.enc.GetBitstreamSize()' can even be 0.
+        WP2_CHECK_STATUS(tile.enc.WriteBitstreamTo(*output));
+      }
     }
     tile.enc.Reset();
+    tile.data.Clear();
   }
   return status;
 }
@@ -534,7 +547,8 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   const GlobalParams::Type type = DecideGlobalParamsType(config);
-  const bool yuv_is_needed = (type != GlobalParams::GP_LOSSLESS);
+  const bool yuv_is_needed =
+      (type == GlobalParams::GP_LOSSY || type == GlobalParams::GP_BOTH);
 
   YUVPlane yuv_input;
   CSPTransform csp_transform;
@@ -607,14 +621,16 @@ WP2Status Encode(uint32_t width, uint32_t height,
   WP2_CHECK_STATUS(SetupEncoderInfo(width, height, config));
 
   const GlobalParams::Type type = DecideGlobalParamsType(config);
+  const bool yuv_is_needed =
+      (type == GlobalParams::GP_LOSSY || type == GlobalParams::GP_BOTH);
   const bool rgb_is_needed =
-      (type != GlobalParams::GP_LOSSY ||   // for lossless
-       config.csp_type == Csp::kCustom ||  // for CSPTransform::Optimize()
-       config.create_preview);             // for EncodePreview()
+      (type == GlobalParams::GP_LOSSLESS || type == GlobalParams::GP_BOTH ||
+       type == GlobalParams::GP_AV1 ||
+       (yuv_is_needed &&
+        config.csp_type == Csp::kCustom) ||  // for CSPTransform::Optimize()
+       config.create_preview);               // for EncodePreview()
   // TODO(yguyon): Some of these cases could also be done directly in YUV space
   //               instead of needing RGB conversion.
-  const bool yuv_is_needed =
-      (type != GlobalParams::GP_LOSSLESS);  // lossy, higher precision than RGB
 
   ArgbBuffer rgb_input(WP2_Argb_32);
   YUVPlane yuv_input;

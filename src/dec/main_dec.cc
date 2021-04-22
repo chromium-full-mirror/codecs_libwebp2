@@ -280,7 +280,8 @@ WP2Status InternalDecode(const DecoderConfig& config,
 
     const bool rgb_output_needed =
         rgb_output_wanted || (gparams.type_ == GlobalParams::GP_LOSSLESS ||
-                              gparams.type_ == GlobalParams::GP_BOTH);
+                              gparams.type_ == GlobalParams::GP_BOTH ||
+                              gparams.type_ == GlobalParams::GP_AV1);
     const bool yuv_output_needed =
         yuv_output_wanted || (gparams.type_ == GlobalParams::GP_LOSSY ||
                               gparams.type_ == GlobalParams::GP_BOTH);

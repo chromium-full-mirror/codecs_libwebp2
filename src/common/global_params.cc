@@ -18,9 +18,12 @@
 // Author: Skal (pascal.massimino@gmail.com)
 //
 
-#include "src/common/constants.h"
 #include "src/common/global_params.h"
+
+#include "src/common/constants.h"
 #include "src/common/lossy/segment.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -31,14 +34,16 @@ WP2Status GlobalParams::Write(uint32_t quality_hint, bool image_has_alpha,
   if (quality_hint == kLosslessQualityHint) {
     assert(type_ == GP_LOSSLESS);
   } else {
-    enc->PutRValue(type_, GP_LAST, "gp_type");
+    enc->PutRValue(type_, image_has_alpha ? GP_AV1 : GP_LAST, "gp_type");
   }
+
   if (image_has_alpha) {
     enc->PutBool(has_alpha_, "has_alpha");
   } else {
     assert(!has_alpha_);
   }
-  if (type_ != GP_LOSSLESS) {   // write lossy
+
+  if (type_ == GP_LOSSY || type_ == GP_BOTH) {
     if (has_alpha_) {
       enc->PutBool(maybe_use_lossy_alpha_, "maybe_use_lossy_alpha");
     } else {
@@ -89,8 +94,11 @@ WP2Status GlobalParams::Write(uint32_t quality_hint, bool image_has_alpha,
       assert(!enable_alpha_filter_);
     }
   }
-  if (type_ != GP_LOSSY) {
+  if (type_ == GP_LOSSLESS || type_ == GP_BOTH) {
     // write lossless
+  }
+  if (type_ == GP_AV1) {
+    // write lossy AV1
   }
 
   return WP2_STATUS_OK;
@@ -103,10 +111,13 @@ WP2Status GlobalParams::Read(uint32_t quality_hint, bool image_has_alpha,
   if (quality_hint == kLosslessQualityHint) {
     type_ = GP_LOSSLESS;
   } else {
-    type_ = (Type)dec->ReadRValue(GP_LAST, "gp_type");
+    type_ =
+        (Type)dec->ReadRValue(image_has_alpha ? GP_AV1 : GP_LAST, "gp_type");
   }
+
   has_alpha_ = image_has_alpha && dec->ReadBool("has_alpha");
-  if (type_ != GP_LOSSLESS) {   // read lossy
+
+  if (type_ == GP_LOSSY || type_ == GP_BOTH) {
     maybe_use_lossy_alpha_ =
         has_alpha_ && dec->ReadBool("maybe_use_lossy_alpha");
 
@@ -157,7 +168,11 @@ WP2Status GlobalParams::Read(uint32_t quality_hint, bool image_has_alpha,
     enable_alpha_filter_ =
         maybe_use_lossy_alpha_ && dec->ReadBool("enable_alpha_filter");
   }
-  if (type_ != GP_LOSSY) {  // read lossless
+  if (type_ == GP_LOSSLESS || type_ == GP_BOTH) {
+    // read lossless
+  }
+  if (type_ == GP_AV1) {
+    // read lossy AV1
   }
   return WP2_STATUS_OK;
 }

@@ -99,7 +99,8 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
   gparams->type_ = DecideGlobalParamsType(config);
 
   gparams->has_alpha_ = image_has_alpha && random->FlipACoin();
-  if (gparams->type_ != GlobalParams::GP_LOSSLESS) {
+  if (gparams->type_ == GlobalParams::GP_LOSSY ||
+      gparams->type_ == GlobalParams::GP_BOTH) {
     gparams->partition_set_ = config.partition_set;
     gparams->partition_snapping_ = config.partition_snapping;
     gparams->explicit_segment_ids_ =
@@ -299,14 +300,16 @@ WP2Status RandomEncodeDecodeTile(uint32_t width, uint32_t height,
   RandomDataSource tile_data(random, &tile);
   ANSDec dec(&tile_data);
   WP2Status status;
-  if (gparams.type_ == GlobalParams::GP_BOTH) {
+  if (gparams.type_ == GlobalParams::GP_BOTH ||
+      gparams.type_ == GlobalParams::GP_AV1) {
     *is_valid = true;
-    return WP2_STATUS_OK;  // Ignore neural decoding.
+    return WP2_STATUS_OK;  // Ignore neural decoding or AV1.
   } else if (gparams.type_ == GlobalParams::GP_LOSSY) {
     WP2_CHECK_STATUS(
         tile.yuv_output.Resize(width, height, kPredWidth, gparams.has_alpha_));
     status = LossyDecode(features, config, &tiles_layout, &dec, &tile);
   } else {
+    assert(gparams.type_ == GlobalParams::GP_LOSSLESS);
     WP2_CHECK_STATUS(tile.rgb_output.Resize(width, height));
     status = LosslessDecode(features, config, gparams, &dec, &tile);
   }

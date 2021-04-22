@@ -28,14 +28,15 @@
 #include "src/common/lossy/rnd_mtx.h"
 #include "src/common/progress_watcher.h"
 #include "src/dec/lossless/losslessi_dec.h"
-#include "src/dec/symbols_dec.h"
 #include "src/dec/residuals_dec_aom.h"
+#include "src/dec/symbols_dec.h"
 #include "src/dec/tile_dec.h"
 #include "src/dsp/dsp.h"
 #include "src/utils/ans.h"
 #include "src/utils/csp.h"
 #include "src/utils/data_source.h"
 #include "src/utils/front_mgr.h"
+#include "src/utils/utils.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 
@@ -60,6 +61,10 @@ WP2Status LosslessDecode(const BitstreamFeatures& features,
 
 WP2Status NeuralDecode(ArgbBuffer* const picture, ANSDec* const dec,
                        const BitstreamFeatures& features);
+
+WP2Status Av1Decode(const BitstreamFeatures& features,
+                    const DecoderConfig& config, const DataView& dec,
+                    Tile* const tile);
 
 //------------------------------------------------------------------------------
 

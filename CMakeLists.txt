@@ -220,6 +220,7 @@ target_compile_definitions(wp2_preview PUBLIC ${WP2_DEFINITIONS})
 # utils library.
 add_library(
   wp2_utils OBJECT
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/av1_common.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/color_precision.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/constants.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/global_params.cc
@@ -323,6 +324,7 @@ add_library(
   # lossy
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/alpha_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/anim_dec.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/av1_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/bypass_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/features_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/filters/alpha_filter.cc
@@ -351,13 +353,14 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/tile_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/tile_dec.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/alpha_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/block_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/block_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/analysis_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_frame.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_rectangle.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/av1_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/block_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/block_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/bypass_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/config_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/distortion_enc.cc

@@ -111,6 +111,7 @@ struct EncTile {
 
   // Output. AssembleToBitstream()+WriteBitstreamTo() to get the encoded bytes.
   ANSEnc enc;
+  Data data;  // Output when ANSEnc is not used (for Av1Encode() only).
   ProgressRange progress;
 };
 
@@ -138,6 +139,7 @@ class TileEncoder : public WorkerBase {
   WP2Status LossyEncode(const VectorNoCtor<Block>& forced_partition,
                         ANSEnc* const enc);
   WP2Status LosslessEncode(ANSEnc* const enc);
+  WP2Status Av1Encode(Data* const enc);
 
   const EncoderConfig* config_ = nullptr;
   bool use_lossless_ = false;

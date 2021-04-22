@@ -35,11 +35,13 @@ bool IsIntertileFilterEnabled(const DecoderConfig& config,
                               const BitstreamFeatures& features,
                               const GlobalParams& gparams,
                               const TilesLayout& tiles_layout) {
-  return (config.enable_deblocking_filter &&
-          gparams.type_ != GlobalParams::GP_LOSSLESS &&
-          DeblockingFilter::GetStrengthFromQuality(features.quality_hint) > 0 &&
-          (tiles_layout.num_tiles_x > 1 || tiles_layout.num_tiles_y > 1)) ||
-         VDMatch(config, "intertile-filter");
+  return (gparams.type_ == GlobalParams::GP_LOSSY ||
+          gparams.type_ == GlobalParams::GP_BOTH) &&
+         ((config.enable_deblocking_filter &&
+           DeblockingFilter::GetStrengthFromQuality(features.quality_hint) >
+               0 &&
+           (tiles_layout.num_tiles_x > 1 || tiles_layout.num_tiles_y > 1)) ||
+          VDMatch(config, "intertile-filter"));
   // TODO(yguyon): There might be tiles that are lossy but output RGB (neural)
   // TODO(yguyon): There might be no pair of adjacent lossy tiles
 }

@@ -50,6 +50,7 @@
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 #if defined(WP2_HAVE_AOM)
 #include "extras/aom_utils.h"
@@ -978,7 +979,7 @@ void Params::DisplayBitTraces() const {
 
 std::vector<std::string> Params::GetHelp() {
   std::vector<std::string> m;
-  // Adding a new shortcut? These are still available: j, p, u
+  // Adding a new shortcut? These are still available: j, p
   m.emplace_back("Keyboard shortcuts:");
   m.emplace_back(
       "  'i' ............... overlay file information ('I' for YUV disto)");
@@ -1034,10 +1035,11 @@ std::vector<std::string> Params::GetHelp() {
 #if defined(WP2_HAVE_AOM)
   m.emplace_back("  'r' ............... show AV1 equivalent in quality factor");
   m.emplace_back("  alt+'r' ........... show AV1 with same file size (slow)");
-#endif
 #if defined(WP2_HAVE_AOM_DBG)
   m.emplace_back("  'R' ............... copy AV1 partition (luma transforms)");
 #endif
+  m.emplace_back("  'u' ............... swap between lossy AV1/WP2");
+#endif  // defined(WP2_HAVE_AOM)
   m.emplace_back("  '`' ............... jump to previously selected menu");
   m.emplace_back("  '+'/'_' ........... go to next/previous file");
   m.emplace_back(std::string("  'l'/'L' ........... "
@@ -1148,9 +1150,9 @@ void Params::PrintInfo() {
 
     if (!view_only_) {
       msg.emplace_back(SPrintf(
-                       "Quality: %3.1f [effort=%d     sns=%5.1f diffusion=%d",
-                       quality_, enc_config_.effort, enc_config_.sns,
-                       enc_config_.error_diffusion));
+          "Quality: %3.1f [effort=%d %s sns=%5.1f diffusion=%d", quality_,
+          enc_config_.effort, enc_config_.use_av1 ? "(AV1)" : "     ",
+          enc_config_.sns, enc_config_.error_diffusion));
       msg.emplace_back(
           SPrintf("              segments=%u/%d(%c) snap=%s]",
                   dinfo_.num_segments, enc_config_.segments,
@@ -1659,7 +1661,7 @@ bool Params::EncodeWebP(bool match_size) {
     return false;
   }
   if (enc_config_.thread_level > 0) ++webp_config.thread_level;
-  webp_config.method = (enc_config_.effort * 6 + 4) / 9;
+  webp_config.method = DivRound(enc_config_.effort * 6, kMaxEffort);
   webp_config.segments = std::min(enc_config_.segments, 4);
   webp_config.sns_strength = (int)std::lround(enc_config_.sns);
   webp_config.pass = 6;
@@ -2645,6 +2647,11 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
       AddInfo("AV1 not available");
     }
     glutPostRedisplay();
+  } else if (key == 'u' || key == 'U') {
+    enc_config_.use_av1 = !enc_config_.use_av1;
+    if (!EncodeAndDecode()) return;
+    SetMessage(SPrintf("Internal lossy codec: %s",
+                       enc_config_.use_av1 ? "AV1" : "WP2"));
   } else if (key == '\\' && !preview_.IsEmpty()) {
     show_ = kPreview;
     glutPostRedisplay();
@@ -2697,7 +2704,7 @@ void Params::HandleKey(unsigned char key, int pos_x, int pos_y) {
     }
     if (!SetVisualDebug(selection)) return;
   } else if (key == 's' || key == 'S') {
-    ModifyR(enc_config_.effort, 10, key == 's');
+    ModifyR(enc_config_.effort, kMaxEffort + 1, key == 's');
     if (!EncodeAndDecode()) return;
     SetMessage(SPrintf("Effort: %d", enc_config_.effort));
   } else if (key == 'o' || key == 'O') {
@@ -3596,10 +3603,11 @@ void Help() {
                                       "from strongest compression to lossless "
                                       "(%1.1f by default)",
                                       EncoderConfig::kDefault.alpha_quality));
-  opt.Add("-effort <int>", SPrintf("compression effort in (0..9) range, "
-                                   "from fastest to slowest/best results "
-                                   "(%d by default)",
-                                   EncoderConfig::kDefault.effort));
+  opt.Add("-effort <int>",
+          SPrintf("compression effort (%d:fast..%d:slower/better), default=%d",
+                  WP2::kMinEffort, WP2::kMaxEffort,
+                  WP2::EncoderConfig::kDefault.effort));
+  opt.Add("-av1", "use lossy AV1 internally instead of lossy WP2");
   opt.Add("-pm <int>",
           SPrintf("partition method (0..%d)", NUM_PARTITION_METHODS - 1));
   opt.Add("-ps <int>",
@@ -3691,6 +3699,8 @@ int main(int argc, char* argv[]) {
           (WP2::Csp)ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-effort") && c + 1 < argc) {
       params.enc_config_.effort = ExUtilGetInt(argv[++c], &parse_error);
+    } else if (!strcmp(argv[c], "-av1")) {
+      params.enc_config_.use_av1 = true;
     } else if (!strcmp(argv[c], "-segments") && c + 1 < argc) {
       params.enc_config_.segments = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-segment_mode") && c + 1 < argc) {

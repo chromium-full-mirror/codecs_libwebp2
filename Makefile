@@ -445,8 +445,9 @@ HDRS_INSTALLED = \
     src/wp2/format_constants.h \
 
 HDRS = \
-    src/common/constants.h \
+    src/common/av1_common.h \
     src/common/color_precision.h \
+    src/common/constants.h \
     src/common/filters/rstr_flt_params.h \
     src/common/lossless/color_cache.h \
     src/common/lossy/block.h \
@@ -851,6 +852,7 @@ DIST_FILES= \
             man/dwp2.1 \
             man/cwp2.1 \
             man/vwp2.1 \
+            src/common/av1_common.h \
             src/common/color_precision.h \
             src/common/constants.h \
             src/common/filters/rstr_flt_params.h \
@@ -896,6 +898,7 @@ DIST_FILES= \
             src/common/vdebug.cc \
             src/dec/alpha_dec.cc \
             src/dec/anim_dec.cc \
+            src/dec/av1_dec.cc \
             src/dec/bypass_dec.cc \
             src/dec/features_dec.cc \
             src/dec/filters/alpha_filter.h \
@@ -969,6 +972,7 @@ DIST_FILES= \
             src/enc/anim/anim_enc.cc \
             src/enc/anim/anim_frame.cc \
             src/enc/anim/anim_rectangle.cc \
+            src/enc/av1_enc.cc \
             src/enc/block_enc.h \
             src/enc/block_enc.cc \
             src/enc/bypass_enc.cc \
@@ -1143,6 +1147,7 @@ DIST_FILES= \
             tests/lossless/test_histogram.cc \
             tests/lossless/test_group4.cc \
             tests/lossless/test_palette.cc \
+            tests/test_av1.cc \
             tests/test_coded_block.cc \
             tests/test_color_precision.cc \
             tests/test_context.cc \

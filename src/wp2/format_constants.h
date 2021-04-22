@@ -54,6 +54,8 @@ static constexpr uint32_t kMaxLossyQuality = 95;
 static constexpr uint32_t kMaxQuality = 100;
 static constexpr uint32_t kQualityHintNumBits = 4;
 static constexpr uint32_t kAlphaQualityRange = kMaxLossyQuality + 2;
+static constexpr int kMinEffort = 0;
+static constexpr int kMaxEffort = 9;
 
 // For animations:
 // ANMF chunk

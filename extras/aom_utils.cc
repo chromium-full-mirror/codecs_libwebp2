@@ -26,6 +26,7 @@
 #include "examples/example_utils.h"
 #include "extras/ccsp_imageio.h"
 #include "imageio/imageio_util.h"
+#include "src/common/av1_common.h"
 #include "src/utils/utils.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
@@ -356,58 +357,20 @@ static std::map<std::string, const char*> kCategories = {
 
 //------------------------------------------------------------------------------
 
-// small class to wrap plain-C destruction call
-template <class T>
-class Cleaner {
- public:
-  Cleaner(T* const obj, void (*dtor)(T*)) : obj_(obj), dtor_(dtor) {}
-  ~Cleaner() { dtor_(obj_); }
-  T* const obj_;
-  void (*dtor_)(T*);
-};
-
-//------------------------------------------------------------------------------
-
 #if defined(WP2_HAVE_AOM)
 
-WP2Status MapAomStatus(aom_codec_err_t aom_status,
-                       aom_codec_ctx_t* const ctx = nullptr) {
-  if (aom_status != AOM_CODEC_OK) {
-    fprintf(stderr, "Error: [%s]\n", aom_codec_err_to_string(aom_status));
-    const char* const details = aom_codec_error_detail(ctx);
-    if (details != nullptr) fprintf(stderr, "Details: [%s]\n", details);
-  }
-  switch (aom_status) {
-    case AOM_CODEC_OK:
-      return WP2_STATUS_OK;
-    case AOM_CODEC_ERROR:
-      return WP2_STATUS_INVALID_CONFIGURATION;  // Don't know what else to use.
-    case AOM_CODEC_MEM_ERROR:
-      return WP2_STATUS_OUT_OF_MEMORY;
-    case AOM_CODEC_ABI_MISMATCH:
-      return WP2_STATUS_VERSION_MISMATCH;
-    case AOM_CODEC_INCAPABLE:
-      return WP2_STATUS_UNSUPPORTED_FEATURE;
-    case AOM_CODEC_UNSUP_BITSTREAM:
-      return WP2_STATUS_BITSTREAM_ERROR;
-    case AOM_CODEC_UNSUP_FEATURE:
-      return WP2_STATUS_UNSUPPORTED_FEATURE;
-    case AOM_CODEC_CORRUPT_FRAME:
-      return WP2_STATUS_BITSTREAM_ERROR;
-    case AOM_CODEC_INVALID_PARAM:
-      return WP2_STATUS_INVALID_PARAMETER;
-    default:
-      return WP2_STATUS_INVALID_CONFIGURATION;  // Don't know what else to use.
-  }
-}
-
-// performs "if (status != AOM_CODEC_OK) return MapAomStatus(status, ctx);"
-#define CHECK_AOM_STATUS(status, ctx) do {      \
-    const aom_codec_err_t __S__ = (status);     \
-    if (__S__ != AOM_CODEC_OK) {                \
-      fprintf(stderr, #status " failed!\n");    \
-      return MapAomStatus(__S__, ctx);          \
-    }                                           \
+// Prints the error and returns it, if any.
+#define CHECK_AOM_STATUS(status, ctx)                                 \
+  do {                                                                \
+    const aom_codec_err_t __S__ = (status);                           \
+    if (__S__ != AOM_CODEC_OK) {                                      \
+      fprintf(stderr, "Error: %s\n", aom_codec_err_to_string(__S__)); \
+      if ((ctx) != nullptr) {                                         \
+        const char* const __D__ = aom_codec_error_detail(ctx);        \
+        if (__D__ != nullptr) fprintf(stderr, "(%s)\n", __D__);       \
+      }                                                               \
+      return MapAomStatus(__S__);                                     \
+    }                                                                 \
   } while (0)
 
 // From twopass_encoder.c / aomenc.c
@@ -466,7 +429,7 @@ WP2Status CreateAV1Img(const ArgbBuffer& ref, aom_image_t* const raw,
 
 //------------------------------------------------------------------------------
 
-// Initializes the 'codec'. Uses 'params', 'pass' and 'stats' to configure it.
+// Initializes the 'codec'.
 WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
                       aom_fixed_buf_t stats, aom_codec_ctx_t* const codec) {
   const aom_codec_iface_t* const itf = aom_codec_av1_cx();
@@ -476,7 +439,7 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   }
 
   aom_codec_enc_cfg_t cfg;
-  CHECK_AOM_STATUS(aom_codec_enc_config_default(itf, &cfg, 0), codec);
+  CHECK_AOM_STATUS(aom_codec_enc_config_default(itf, &cfg, 0), nullptr);
   cfg.g_w = w;
   cfg.g_h = h;
   if (pass == AOM_RC_ONE_PASS) {
@@ -497,8 +460,13 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   cfg.g_pass = pass;
   cfg.rc_twopass_stats_in = stats;
 
-  CHECK_AOM_STATUS(aom_codec_enc_init(codec, itf, &cfg, 0), codec);
+  CHECK_AOM_STATUS(aom_codec_enc_init(codec, itf, &cfg, 0), nullptr);
+  return WP2_STATUS_OK;
+}
 
+// Configures the 'codec'.
+WP2Status ConfigureCodec(const ParamsAV1& params,
+                         aom_codec_ctx_t* const codec) {
   // ~~~ Uncomment to disable various AV1 features ~~~
   // ### Disable palettes.
   // CHECK_AOM_STATUS(
@@ -511,8 +479,8 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   //     aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA, 0), codec);
 
   if (params.disable_transforms) {
-    CHECK_AOM_STATUS(
-        aom_codec_control(codec, AV1E_SET_INTRA_DCT_ONLY, 1), codec);
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_INTRA_DCT_ONLY, 1),
+                     codec);
   }
 
   if (params.quality > 95) {
@@ -526,10 +494,10 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   WP2_CHECK_OK(params.tuning >= 0 || params.tuning <= 3,
                WP2_STATUS_INVALID_CONFIGURATION);
   // we avoid including aomcx.h to get aom_tune_metric (=moving target) directly
-  const int tuning = (params.tuning == 0) ? 0 :  // PSNR
-                     (params.tuning == 2) ? 6 /* AOM_TUNE_VMAF_MAX_GAIN */ :
-                     (params.tuning == 3) ? 8 /* AOM_TUNE_BUTTERAUGLI */ :
-                                            1;   // fallback to default SSIM
+  const int tuning = (params.tuning == 0)   ? AOM_TUNE_PSNR
+                     : (params.tuning == 2) ? AOM_TUNE_VMAF_MAX_GAIN
+                     : (params.tuning == 3) ? AOM_TUNE_BUTTERAUGLI
+                                            : AOM_TUNE_SSIM;
   CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_TUNING, tuning), codec);
 
   // AV1's speed param goes opposite to WP2's
@@ -537,8 +505,8 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_CPUUSED, speed), codec);
   if (params.filter_strength == 0) {
     CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_CDEF, 0), codec);
-    CHECK_AOM_STATUS(
-        aom_codec_control(codec, AV1E_SET_ENABLE_RESTORATION, 0), codec);
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_RESTORATION, 0),
+                     codec);
   }
   return WP2_STATUS_OK;
 }
@@ -551,12 +519,14 @@ WP2Status FirstPassAV1(const ArgbBuffer& ref, const ParamsAV1& params,
                        double* const timing, aom_fixed_buf_t* const stats) {
   aom_image_t raw;
   WP2_CHECK_STATUS(CreateAV1Img(ref, &raw, params.use_yuv444));
-  const auto C1 = Cleaner<aom_image>(&raw, aom_img_free);
+  Cleaner<aom_image_t> img_cleaner(&raw, aom_img_free);
 
   aom_codec_ctx_t codec;
-  // TODO(yguyon): Check possible leaks of itf/cfg/codec
   WP2_CHECK_STATUS(CreateCodec((int)ref.width(), (int)ref.height(), params,
                                AOM_RC_FIRST_PASS, /*stats=*/{NULL, 0}, &codec));
+  Cleaner<aom_codec_ctx_t, aom_codec_err_t> codec_cleaner(&codec,
+                                                          aom_codec_destroy);
+  WP2_CHECK_STATUS(ConfigureCodec(params, &codec));
 
   const double start_time = GetStopwatchTime();
   bool got_stats;
@@ -585,13 +555,16 @@ WP2Status EncodeAV1WithLibaom(const ArgbBuffer& image, const ParamsAV1& params,
 
   aom_image_t raw;
   WP2_CHECK_STATUS(CreateAV1Img(image, &raw, params.use_yuv444));
-  auto C1 = Cleaner<aom_image>(&raw, aom_img_free);
+  Cleaner<aom_image_t> img_cleaner(&raw, aom_img_free);
 
   aom_codec_ctx_t codec;
   // TODO(yguyon): Check possible leaks of itf/cfg/codec
   WP2_CHECK_STATUS(CreateCodec(
       (int)image.width(), (int)image.height(), params,
       (stats.buf != NULL) ? AOM_RC_LAST_PASS : AOM_RC_ONE_PASS, stats, &codec));
+  Cleaner<aom_codec_ctx_t, aom_codec_err_t> codec_cleaner(&codec,
+                                                          aom_codec_destroy);
+  WP2_CHECK_STATUS(ConfigureCodec(params, &codec));
   const double start_time = GetStopwatchTime();
   if (encode_frame(&codec, &raw, 0, kFlags, bitsteam, false)) {
     fprintf(stderr, "!?! first calls to encode_frame() should 'fail'!\n");
@@ -631,7 +604,7 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
   insp_frame_data frame_data;
   ifd_init(&frame_data, ref.width(), ref.height());
   WP2_CHECK_OK(frame_data.mi_grid != NULL, WP2_STATUS_OUT_OF_MEMORY);
-  auto C4 = Cleaner<insp_frame_data>(&frame_data, ifd_clear);
+  Cleaner<insp_frame_data> frame_data_cleaner(&frame_data, ifd_clear);
 
   struct aom_inspect_init inspect = {inspect_cb, &frame_data};
   const bool use_inspect =
@@ -948,7 +921,8 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
   const avifPixelFormat format =
       params.use_yuv444 ? AVIF_PIXEL_FORMAT_YUV444 : AVIF_PIXEL_FORMAT_YUV420;
   avifImage* const image = avifImageCreate(w, h, kDepth, format);
-  const auto C1 = Cleaner<avifImage>(image, avifImageDestroy);
+  WP2_CHECK_ALLOC_OK(image != nullptr);
+  Cleaner<avifImage> image_cleaner(image, avifImageDestroy);
 
   const bool has_alpha = ref.HasTransparency();
   if (has_alpha) {
@@ -976,9 +950,10 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
 
   // Encode.
   avifRWData avif_enc = AVIF_DATA_EMPTY;
-  const auto C3 = Cleaner<avifRWData>(&avif_enc, avifRWDataFree);
+  Cleaner<avifRWData> avif_enc_cleaner(&avif_enc, avifRWDataFree);
   avifEncoder* const encoder = avifEncoderCreate();
-  const auto C4 = Cleaner<avifEncoder>(encoder, avifEncoderDestroy);
+  WP2_CHECK_ALLOC_OK(encoder != nullptr);
+  Cleaner<avifEncoder> encoder_cleaner(encoder, avifEncoderDestroy);
   encoder->maxThreads = params.threads;
   // Scale to go from AVIF_QUANTIZER_BEST_QUALITY to
   // AVIF_QUANTIZER_WORST_QUALITY.

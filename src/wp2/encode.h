@@ -55,6 +55,7 @@ struct EncoderConfig {
   float alpha_quality = 100.f;  // Range: [0 = smallest size .. 100 = lossless]
   int effort = 5;               // Compression rate/speed trade-off.
                                 // Range: [0=faster-bigger .. 9=slower-better]
+  bool use_av1 = false;  // Use lossy AV1 internally instead of lossy WP2.
 
   // Side parameters:
   // Set whether the image will be rotated or mirrored during decoding.

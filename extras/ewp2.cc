@@ -52,7 +52,8 @@ void Help() {
           SPrintf("quality factor (0:small..100:big), default=%1.1f",
                   WP2::EncoderConfig::kDefault.quality));
   opt.Add("-effort <int>",
-          SPrintf("compression effort (0:fast..9:slower/better), default=%d",
+          SPrintf("compression effort (%d:fast..%d:slower/better), default=%d",
+                  WP2::kMinEffort, WP2::kMaxEffort,
                   WP2::EncoderConfig::kDefault.effort));
   opt.Add("-csp <int>", "color space (wp2 only)");
   opt.Add("");

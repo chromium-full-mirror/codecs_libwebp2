@@ -131,8 +131,8 @@ class SwappingCustomDecoder : public ExternalCustomDecoder {
 
 //------------------------------------------------------------------------------
 
-// Returns true if a lossless tile is reached with no error, false otherwise.
-bool HasALosslessTile(DataView input) {
+// Returns true if the decoding can be checked for not too many rows at a time.
+bool HasTrueIncrementalOutput(DataView input) {
   ExternalDataSource data_source(input.bytes, input.size);
   BitstreamFeatures features;
   if (DecodeHeader(&data_source, &features) != WP2_STATUS_OK ||
@@ -153,10 +153,13 @@ bool HasALosslessTile(DataView input) {
         WP2_STATUS_OK) {
       return false;
     }
-    // It would be more accurate to check each tile but false positives are not
-    // an issue in this file and it would be way longer.
-    if (gparams.type_ != GlobalParams::GP_LOSSY) {
-      return true;
+    // It would be more accurate to check each tile for GP_BOTH but false
+    // positives are not an issue in this file and it would be way longer.
+    // TODO(yguyon): Av1 tiles are not incremental yet.
+    if (gparams.type_ == GlobalParams::GP_LOSSLESS ||
+        gparams.type_ == GlobalParams::GP_BOTH ||
+        gparams.type_ == GlobalParams::GP_AV1) {
+      return false;
     }
 
     if (SkipTiles(gparams, &data_source, features, frame.window) !=
@@ -165,7 +168,7 @@ bool HasALosslessTile(DataView input) {
     }
     ++frame_index;
   } while (!frame.is_last);
-  return false;
+  return true;
 }
 
 //------------------------------------------------------------------------------
@@ -184,7 +187,7 @@ class IncrementalDecodingTester {
         stream_idec_(config, &output_),
         unstable_custom_idec_(config, &output_),
         swapping_custom_idec_(config, &output_),
-        has_a_lossless_tile_(HasALosslessTile(input)) {}
+        has_true_incremental_output_(HasTrueIncrementalOutput(input)) {}
 
   WP2Status Decode(std::vector<ArgbBuffer>* const decoded_frames,
                    std::vector<uint32_t>* const decoded_durations_ms) {
@@ -425,10 +428,7 @@ class IncrementalDecodingTester {
               : decoded_area.height - previous_decoded_area_.height;
       // Incremental decoding should not be able to finish more than two rows of
       // blocks in 2 bytes or fewer for lossy and a tile for lossless.
-      if (has_a_lossless_tile_) {
-        CHECK_OR_DIE(num_lines <=
-                     std::min(features->raw_height, features->tile_height));
-      } else {
+      if (has_true_incremental_output_) {
         // We should decode at most kMaxBlockSizePix * 2 at once.
         // kMaxBlockSizePix / 2 is added because of the intertile deblocking
         // which can delay processing of previously decoded rows. Example:
@@ -442,6 +442,9 @@ class IncrementalDecodingTester {
         CHECK_OR_DIE(num_lines <=
                      std::min(features->raw_height,
                               kMaxBlockSizePix * 2 + kMaxBlockSizePix / 2));
+      } else {
+        CHECK_OR_DIE(num_lines <=
+                     std::min(features->raw_height, features->tile_height));
       }
     }
   }
@@ -615,7 +618,7 @@ class IncrementalDecodingTester {
   Rectangle previous_decoded_area_ = {0, 0, 0, 0};
   bool rewinded_ = false;
   uint32_t num_skipped_frames_ = 0;
-  const bool has_a_lossless_tile_;
+  const bool has_true_incremental_output_;
 };
 
 }  // namespace

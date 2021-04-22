@@ -29,6 +29,7 @@
 #include "src/dsp/math.h"
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
+#include "src/utils/utils.h"
 
 namespace WP2 {
 
@@ -86,15 +87,19 @@ WP2Status TileDecoder::Execute() {
     if (tile_->chunk_size == max_num_bytes) {
       // Raw samples are expected instead of the regular ANS decoding.
       WP2_CHECK_STATUS(BypassTileDec());
+    } else if (gparams_->type_ == GlobalParams::GP_AV1) {
+      DataView chunk = {nullptr, tile_->chunk_size};
+      WP2_CHECK_OK(tile_->input->TryReadNext(tile_->chunk_size, &chunk.bytes),
+                   WP2_STATUS_NOT_ENOUGH_DATA);
+      WP2_CHECK_STATUS(Av1Decode(*features_, *config_, chunk, tile_));
     } else {
       ANSDec dec(tile_->input);
       bool is_lossless;
       {
         ANSDebugPrefix prefix(&dec, "GlobalHeader");
-        is_lossless =
-            (gparams_->type_ == GlobalParams::GP_LOSSY) ? false :
-            (gparams_->type_ == GlobalParams::GP_LOSSLESS) ? true :
-            dec.ReadBool("use_lossless");
+        is_lossless = gparams_->type_ == GlobalParams::GP_LOSSLESS ||
+                      (gparams_->type_ == GlobalParams::GP_BOTH &&
+                       dec.ReadBool("use_lossless"));
       }
       WP2_CHECK_STATUS(dec.GetStatus());
 

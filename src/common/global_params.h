@@ -59,7 +59,7 @@ class GlobalParams {
  public:
   // TODO(skal): should we have a GP_NONE for super-small images with default
   //             global params?
-  enum Type { GP_LOSSY = 0, GP_LOSSLESS, GP_BOTH, GP_LAST };
+  enum Type { GP_LOSSY = 0, GP_LOSSLESS, GP_BOTH, GP_AV1, GP_LAST };
   Type type_ = GP_LOSSY;
 
   // True if the frame contains alpha (either lossless or lossy).

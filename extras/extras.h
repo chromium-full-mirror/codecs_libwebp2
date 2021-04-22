@@ -100,7 +100,7 @@ static constexpr uint32_t kRGBToYpUVShift = 9;
 // [0:255]->[16:235/240] range reduction included.
 static constexpr int16_t kRGBToYCbCrMatrix[] = {1052, 2065, 401,   -607, -1192,
                                                 1799, 1799, -1506, -293};
-constexpr uint32_t kRGBToYCbCrShift = 12;
+static constexpr uint32_t kRGBToYCbCrShift = 12;
 
 //------------------------------------------------------------------------------
 // Textual I/O of PreviewData

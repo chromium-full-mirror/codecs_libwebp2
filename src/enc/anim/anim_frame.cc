@@ -320,7 +320,7 @@ WP2Status FrameEncoder::EncodeFrame(const Frame& frame, bool dispose,
 
 WP2Status FrameEncoder::Encode(Writer* const output) {
   const uint32_t max_num_preframes =
-      (kMaxNumPreframes * (uint32_t)config_.effort + 4) / 9;
+      DivRound<uint32_t>(kMaxNumPreframes * config_.effort, kMaxEffort);
 
   // One more for the regular frame following the preframes.
   RectangleGroup different_pixels(max_num_preframes + 1);
@@ -470,9 +470,11 @@ WP2Status SubframeEncoder::EncodeSubframe(const EncoderConfig& config,
   ArgbBuffer rgb_subframe(subframe.rgb_pixels.format());
 
   const GlobalParams::Type type = DecideGlobalParamsType(config);
-  const bool yuv_is_needed = (type != GlobalParams::GP_LOSSLESS);
+  const bool yuv_is_needed =
+      (type == GlobalParams::GP_LOSSY || type == GlobalParams::GP_BOTH);
   const bool rgb_is_needed =
-      (type != GlobalParams::GP_LOSSY ||
+      (type == GlobalParams::GP_LOSSLESS || type == GlobalParams::GP_BOTH ||
+       type == GlobalParams::GP_AV1 ||
        (yuv_is_needed &&
         config.csp_type == Csp::kCustom)  // For CSPTransform::Optimize()
       );

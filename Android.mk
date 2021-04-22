@@ -24,6 +24,7 @@ endif
 enc_srcs := \
   src/enc/alpha_enc.cc \
   src/enc/analysis_enc.cc \
+  src/enc/av1_enc.cc \
   src/enc/block_enc.cc \
   src/enc/bypass_enc.cc \
   src/enc/config_enc.cc \
@@ -83,6 +84,7 @@ dec_srcs := \
   src/dec/bypass_dec.cc \
   src/dec/anim_dec.cc \
   src/dec/alpha_dec.cc \
+  src/dec/av1_dec.cc \
   src/dec/preview/preview_dec.cc \
   src/dec/lossless/losslessi_dec.cc \
   src/dec/lossless/group4_dec.cc \

@@ -380,7 +380,7 @@ WP2Status Task::EncodeWebP(const std::string& out_file,
   CHECK_TRUE(WebPConfigPreset(&config, WEBP_PRESET_DEFAULT, params_.q),
              "Can't initialize WebP. Wrong library version?");
   if (params_.use_mt) ++config.thread_level;
-  config.method = (params_.config.effort * 6 + 4) / 9;
+  config.method = DivRound(params_.config.effort * 6, kMaxEffort);
   config.segments = params_.config.segments;
   config.sns_strength = params_.config.sns;
   config.pass = params_.config.pass;

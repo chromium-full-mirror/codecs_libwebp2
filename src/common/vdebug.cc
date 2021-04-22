@@ -2128,9 +2128,12 @@ WP2Status TileScoreFunc::RegisterScoreForVDebug(
     const char label[], const Block& block, float score) const {
   if (VDMatch(*config_, "encoder/partition/score")) {
     std::string& str = config_->info->selection_info;
-    str += WP2SPrint("\n%s: score %.6f, %4u blocks, %4u-byte tile", label,
-                     score, (uint32_t)blocks_.size(),
-                     enc_tiles_layout_.tiles.front().enc.GetBitstreamSize());
+    str +=
+        WP2SPrint("\n%s: score %.6f, %4u blocks, %4u-byte tile", label, score,
+                  (uint32_t)blocks_.size(),
+                  (enc_tiles_layout_.tiles.front().data.size > 0)
+                      ? enc_tiles_layout_.tiles.front().data.size
+                      : enc_tiles_layout_.tiles.front().enc.GetBitstreamSize());
     if (block.dim() != BLK_LAST) {
       str += WP2SPrint(", on block at %3u,%3u (%2ux%2u)",
                        block.x_pix(), block.y_pix(),

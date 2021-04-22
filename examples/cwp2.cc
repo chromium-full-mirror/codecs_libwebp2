@@ -99,8 +99,10 @@ void HelpLong() {
   opt.Add("-target_size <int>", "target size (in bytes)");
   opt.Add("-target_psnr <float>", "target PSNR (in dB. typically: 42)");
   opt.Add("-effort <int>",
-          SPrintf("compression effort (0:fast..9:slower/better), default=%d",
+          SPrintf("compression effort (%d:fast..%d:slower/better), default=%d",
+                  WP2::kMinEffort, WP2::kMaxEffort,
                   WP2::EncoderConfig::kDefault.effort));
+  opt.Add("-av1", "use lossy AV1 internally instead of lossy WP2");
   opt.Add("-tile_shape <int>",
           SPrintf("tile shape (0=128, 1=256, 2=512, 3=wide, default = %d)",
                   WP2::EncoderConfig::kDefault.tile_shape));
@@ -563,6 +565,8 @@ int main(int argc, char* argv[]) {
     } else if ((!strcmp(argv[c], "-z") || !strcmp(argv[c], "-effort"))) {
       NEED_ARGS(1);
       params.config.effort = ExUtilGetInt(argv[++c], &parse_error);
+    } else if (!strcmp(argv[c], "-av1")) {
+      params.config.use_av1 = true;
     } else if (!strcmp(argv[c], "-tile_shape")) {
       NEED_ARGS(1);
       params.config.tile_shape =
