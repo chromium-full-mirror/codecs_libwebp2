@@ -170,6 +170,7 @@ void AddConfig(EntropyMode mode, bool use_premultiplied,
   uint32_t size = 0;
   if (mode == EntropyMode::kPalette || mode == EntropyMode::kPaletteSpatial) {
     transforms[size++] = TransformType::kColorIndexing;
+    red_and_blue_always_zero = true;
   }
   if (mode == EntropyMode::kSubGreen || mode == EntropyMode::kSpatialSubGreen) {
     transforms[size++] = TransformType::kSubtractGreen;
