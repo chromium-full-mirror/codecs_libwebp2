@@ -37,8 +37,8 @@ struct ParamsAV1 {
   bool use_yuv444 = true;
   // if 0, CDEF and restoration filters are disabled (but deblocking is kept)
   float filter_strength = 50.f;  // in [0..100]
-  // metric to tune for: PSNR=0, SSIM=1, VMAF_NEG=2, BUTTERAUGLI=3
-  int tuning = 1;
+  enum class Tuning { kPsnr, kSsim, kVmaf, kButteraugli };
+  Tuning tuning = Tuning::kPsnr;
   uint32_t bittrace = 0;         // 0=off, 1=bits, 2=bytes
   bool compact_trace = false;    // compact traces into fewer categories
   bool draw_blocks = false;      // for visual debug

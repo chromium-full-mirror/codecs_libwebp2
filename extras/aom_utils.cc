@@ -490,14 +490,12 @@ WP2Status ConfigureCodec(const ParamsAV1& params,
     CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_CQ_LEVEL, level), codec);
   }
 
-  // The only metrics AV1 can be tuned for are PSNR, SSIM or VMAF.
-  WP2_CHECK_OK(params.tuning >= 0 || params.tuning <= 3,
-               WP2_STATUS_INVALID_CONFIGURATION);
   // we avoid including aomcx.h to get aom_tune_metric (=moving target) directly
-  const int tuning = (params.tuning == 0)   ? AOM_TUNE_PSNR
-                     : (params.tuning == 2) ? AOM_TUNE_VMAF_MAX_GAIN
-                     : (params.tuning == 3) ? AOM_TUNE_BUTTERAUGLI
-                                            : AOM_TUNE_SSIM;
+  const int tuning =
+      (params.tuning == ParamsAV1::Tuning::kPsnr)   ? AOM_TUNE_PSNR
+      : (params.tuning == ParamsAV1::Tuning::kSsim) ? AOM_TUNE_SSIM
+      : (params.tuning == ParamsAV1::Tuning::kVmaf) ? AOM_TUNE_VMAF_MAX_GAIN
+                                                    : AOM_TUNE_BUTTERAUGLI;
   CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_TUNING, tuning), codec);
 
   // AV1's speed param goes opposite to WP2's
@@ -1022,6 +1020,7 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
 //------------------------------------------------------------------------------
 
 std::string WP2::ParamsAV1::ToString() const {
+  const char* kTuningStr[] = {"PSNR", "SSIM", "VMAF", "BUTTERAUGLI"};
   std::string str;
   str += WP2SPrint("quality = %f\n", quality);
   str += WP2SPrint("alpha_quality = %f\n", alpha_quality);
@@ -1031,7 +1030,7 @@ std::string WP2::ParamsAV1::ToString() const {
   str += WP2SPrint("pass = %d\n", pass);
   str += WP2SPrint("use_yuv444 = %d\n", use_yuv444);
   str += WP2SPrint("filter_strength = %f\n", filter_strength);
-  str += WP2SPrint("tuning = %d\n", tuning);
+  str += WP2SPrint("tuning = %d\n", kTuningStr[(int)tuning]);
   str += WP2SPrint("bittrace = %d\n", bittrace);
   str += WP2SPrint("compact_trace = %d\n", compact_trace);
   str += WP2SPrint("draw_blocks = %d\n", draw_blocks);

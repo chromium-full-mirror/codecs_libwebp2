@@ -149,13 +149,13 @@ int main(int argc, const char* argv[]) {
     } else if (!strcmp(argv[c], "-tune") && c + 1 < argc) {
       ++c;
       if (!strcmp(argv[c], "psnr") || !strcmp(argv[c], "PSNR")) {
-        params.tuning = 0;
+        params.tuning = WP2::ParamsAV1::Tuning::kPsnr;
       } else if (!strcmp(argv[c], "ssim") || !strcmp(argv[c], "SSIM")) {
-        params.tuning = 1;
+        params.tuning = WP2::ParamsAV1::Tuning::kSsim;
       } else if (!strcmp(argv[c], "vmaf")) {
-        params.tuning = 2;
+        params.tuning = WP2::ParamsAV1::Tuning::kVmaf;
       } else if (!strcmp(argv[c], "butteraugli")) {
-        params.tuning = 3;
+        params.tuning = WP2::ParamsAV1::Tuning::kButteraugli;
       } else {
         fprintf(stderr, "Ignored unhandled -tune '%s'\n", argv[c]);
       }
