@@ -36,19 +36,20 @@ using WP2::ExUtilGetFloat;
 using WP2::ExUtilGetUInt;
 using WP2::ProgramOptions;
 
+// Linearly rescales values in 'pic1' so that 'max' is mapped to 255.
 void RescalePlane(ArgbBuffer* const pic1, int channel, uint32_t max) {
   const uint32_t factor = (max > 0) ? (255u << 16) / max : 0;
   for (uint32_t y = 0; y < pic1->height(); ++y) {
     uint8_t* const ptr = pic1->GetRow8(y) + channel;
     for (uint32_t x = 0; x < pic1->width(); ++x) {
-      ptr[4 * x] = (ptr[4 * x] * factor + (1 << 15)) >> 16;
+      ptr[4 * x] = std::min(255u, (ptr[4 * x] * factor + (1 << 15)) >> 16);
     }
   }
 }
 
 // Return the max absolute difference (and replace pic1 with the max map)
 uint32_t DiffScaleChannel(ArgbBuffer* const pic1, const ArgbBuffer* const pic2,
-                          int channel, bool do_scaling) {
+                          int channel, bool do_scaling, float scaling_factor) {
   uint32_t max = 0;
   for (uint32_t y = 0; y < pic1->height(); ++y) {
     uint8_t* const ptr1 = pic1->GetRow8(y) + channel;
@@ -60,7 +61,11 @@ uint32_t DiffScaleChannel(ArgbBuffer* const pic1, const ArgbBuffer* const pic2,
     }
   }
 
-  if (do_scaling) RescalePlane(pic1, channel, max);
+  if (do_scaling) {
+    RescalePlane(
+        pic1, channel,
+        scaling_factor > 0.f ? std::round(255.f / scaling_factor) : max);
+  }
   return max;
 }
 
@@ -74,7 +79,9 @@ void Help() {
   opt.Add("-exact", "expect a perfect match");
   opt.Add("-min <float>", "check overall distortion is larger than value");
   opt.Add("-o <file>", "save the diff map as a WP2 lossless file");
-  opt.Add("-scale", "scale the difference map to fit [0-255] range");
+  opt.Add("-scale [<float>]",
+          "scale the difference map by the given factor, or to fit [0-255] "
+          "range if no factor is given");
   opt.Add("-gray", "convert difference map to gray in the end");
   opt.Add("-half", "2x downscale before comparison");
   opt.Add("-crop <x> <y> <w> <h>",
@@ -100,6 +107,7 @@ int main(int argc, char* argv[]) {
 
   WP2::MetricType type = WP2::PSNR;
   bool scale = false;
+  float scaling_factor = 0.f;
   bool use_gray = false;
   bool exact = false;
   bool downscale = false;
@@ -120,6 +128,9 @@ int main(int argc, char* argv[]) {
       exact = true;
     } else if (!strcmp(arg, "-scale")) {
       scale = true;
+      if (c + 1 < argc && argv[c + 1][0] >= '0' && argv[c + 1][0] <= '9') {
+        scaling_factor = ExUtilGetUInt(argv[++c], &parse_error);
+      }
     } else if (!strcmp(arg, "-gray")) {
       use_gray = true;
     } else if (!strcmp(arg, "-min") && c + 1 < argc) {
@@ -227,7 +238,8 @@ int main(int argc, char* argv[]) {
   if (output != nullptr) {
     fprintf(stderr, "max differences per channel: ");
     for (int n = 1; n < 4; ++n) {    // skip the alpha channel
-      const int range = DiffScaleChannel(&pic1_rgb, &pic2_rgb, n, scale);
+      const int range =
+          DiffScaleChannel(&pic1_rgb, &pic2_rgb, n, scale, scaling_factor);
       if (range < 0) fprintf(stderr, "\nError computing diff map\n");
       fprintf(stderr, "[%d]", range);
     }
