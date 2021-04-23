@@ -211,17 +211,16 @@ WP2Status Palette::AnalyzeAndCreate(const WP2::ArgbBuffer& pic) {
 }
 
 template <typename T>
-void ApplyT(const T* src, uint32_t src_stride, uint32_t width, uint32_t height,
-            const ColorCacheMap& color_cache, uint32_t max_alpha,
-            bool premultiply, int16_t* dst) {
+void ApplyT(const WP2::ArgbBuffer& pic, const T* src,
+            const ColorCacheMap& color_cache, int16_t* dst) {
   int16_t prev_pix[4] = {(int16_t)~src[0], (int16_t)~src[1], (int16_t)~src[2],
                          (int16_t)~src[3]};
   uint32_t prev_idx = 0;
-  for (uint32_t y = 0; y < height; ++y) {
-    for (uint32_t x = 0; x < width; ++x, dst += 4) {
+  for (uint32_t y = 0; y < pic.height(); ++y) {
+    for (uint32_t x = 0; x < pic.width(); ++x, dst += 4) {
       int16_t pix[4] = {(int16_t)src[4 * x + 0], (int16_t)src[4 * x + 1],
                         (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
-      if (premultiply) {
+      if (!WP2IsPremultiplied(pic.format())) {
         for (uint32_t c = 1; c < 4; ++c) {
           pix[c] = WP2::DivBy255(pix[c] * pix[0]);
         }
@@ -230,12 +229,12 @@ void ApplyT(const T* src, uint32_t src_stride, uint32_t width, uint32_t height,
         if (!color_cache.Contains(pix, &prev_idx)) assert(false);
         ColorCopy(pix, prev_pix);
       }
-      dst[0] = max_alpha;
+      dst[0] = WP2::FormatMax(pic.format(), /*channel=*/0);
       dst[1] = 0;
       dst[2] = prev_idx;
       dst[3] = 0;
     }
-    src = (const T*)((const uint8_t*)src + src_stride);
+    src = (const T*)((const uint8_t*)src + pic.stride());
   }
 }
 
@@ -251,15 +250,10 @@ WP2Status Palette::Apply(const WP2::ArgbBuffer& pic, int16_t* dst) const {
     color_cache.Insert(&colors_[4 * i], i);
   }
 
-  const bool premultiply = !WP2IsPremultiplied(pic.format());
-
-  const uint32_t max_alpha = WP2::FormatMax(pic.format(), /*channel=*/0);
   if (WP2Formatbpc(pic.format()) <= 8) {
-    ApplyT(pic.GetRow8(0), pic.stride(), pic.width(), pic.height(), color_cache,
-           max_alpha, premultiply, dst);
+    ApplyT(pic, pic.GetRow8(0), color_cache, dst);
   } else {
-    ApplyT(pic.GetRow16(0), pic.stride(), pic.width(), pic.height(),
-           color_cache, max_alpha, premultiply, dst);
+    ApplyT(pic, pic.GetRow16(0), color_cache, dst);
   }
 
   return WP2_STATUS_OK;
@@ -636,15 +630,201 @@ WP2Status Palette::FindBestMethod(const WP2::ArgbBuffer& pic,
       WP2_CHECK_STATUS(
           SortLuminance(progress, effort, cost_header, encoder, &params));
       break;
+    case Sorting::kModifiedZeng:
+      WP2_CHECK_STATUS(SortModifiedZeng(pic, progress, effort, cost_header,
+                                        encoder, &params));
+      break;
     case Sorting::kUndefined:
       assert(false);
   }
   return WP2_STATUS_OK;
 }
 
+// Class containing the symmetric matrix of co-occurrences. The diagonal is not
+// used. Less RAM could be used due to the symmetry but we would lose in speed.
+class CoOccurrenceMatrix {
+ public:
+  explicit CoOccurrenceMatrix(uint32_t num_colors) : num_colors_(num_colors) {}
+  WP2Status Allocate() {
+    WP2_CHECK_ALLOC_OK(mat_.resize(num_colors_ * num_colors_));
+    std::fill(mat_.begin(), mat_.end(), 0);
+    return WP2_STATUS_OK;
+  }
+  uint32_t operator()(uint32_t c1, uint32_t c2) const {
+    return mat_[c1 * num_colors_ + c2];
+  }
+  // Update the co-occurrence except if c1 == c2.
+  void Set(uint32_t c1, uint32_t c2) {
+    if (c1 == c2) return;
+    ++mat_[c1 * num_colors_ + c2];
+    ++mat_[c2 * num_colors_ + c1];
+  }
+  void FindMax(uint16_t* c1, uint16_t* c2) {
+    // Find the index that is most frequently located adjacent to other
+    // (different) indexes.
+    uint32_t best_sum = 0;
+    for (uint32_t i = 0; i < num_colors_; ++i) {
+      const uint32_t sum = std::accumulate(
+          &mat_[i * num_colors_], &mat_[i * num_colors_] + num_colors_, 0u);
+      if (sum > best_sum) {
+        best_sum = sum;
+        *c1 = i;
+      }
+    }
+    // Find the index that is most frequently found adjacent to it.
+    const uint32_t* const beg = &mat_[*c1 * num_colors_ + 0];
+    *c2 = std::max_element(beg, beg + num_colors_) - beg;
+    assert(*c1 != *c2);
+  }
+
+ private:
+  WP2::Vector_u32 mat_;
+  uint32_t num_colors_;
+};
+
+template <typename T>
+WP2Status BuildCoOccurrence(const WP2::ArgbBuffer& pic, const T* src,
+                            const ColorCacheMap& color_cache,
+                            CoOccurrenceMatrix* cooccurrence) {
+  WP2::Vector_u16 lines;
+  WP2_CHECK_ALLOC_OK(lines.resize(2 * pic.width()));
+  uint16_t* line_top = &lines[0];
+  uint16_t* line_current = &lines[pic.width()];
+  int16_t prev_pix[4] = {(int16_t)~src[0], (int16_t)~src[1], (int16_t)~src[2],
+                         (int16_t)~src[3]};
+  uint32_t prev_idx = 0;
+  const T* const src_ini = src;
+  (void)src_ini;
+  for (uint32_t y = 0; y < pic.height(); ++y) {
+    for (uint32_t x = 0; x < pic.width(); ++x) {
+      int16_t pix[4] = {(int16_t)src[4 * x + 0], (int16_t)src[4 * x + 1],
+                        (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
+      if (!WP2IsPremultiplied(pic.format())) {
+        for (uint32_t c = 1; c < 4; ++c) {
+          pix[c] = WP2::DivBy255(pix[c] * pix[0]);
+        }
+      }
+      if (!ColorEq(pix, prev_pix)) {
+        if (!color_cache.Contains(pix, &prev_idx)) assert(false);
+        ColorCopy(pix, prev_pix);
+      }
+      line_current[x] = prev_idx;
+      // 4-connectivity is what works best as mentioned in "On the relation
+      // between Memon's and the modified Zeng's palette reordering methods".
+      if (x > 0) cooccurrence->Set(prev_idx, line_current[x - 1]);
+      if (y > 0) cooccurrence->Set(prev_idx, line_top[x]);
+    }
+    std::swap(line_top, line_current);
+    src = (const T*)((const uint8_t*)src + pic.stride());
+  }
+  return WP2_STATUS_OK;
+}
+
+// Implements the modified Zeng method from "A Survey on Palette Reordering
+// Methods for Improving the Compression of Color-Indexed Images" by Armando J.
+// Pinho and António J. R. Neves.
+WP2Status Palette::SortModifiedZeng(const WP2::ArgbBuffer& pic,
+                                    const ProgressRange& progress, int effort,
+                                    float cost_header, Encoder* const encoder,
+                                    InternalParams* const params) {
+  // Fill the cache.
+  ColorCacheMap color_cache;
+  WP2_CHECK_STATUS(color_cache.Allocate(num_colors_));
+  for (uint32_t i = 0; i < num_colors_; ++i) {
+    color_cache.Insert(&colors_[4 * i], i);
+  }
+
+  // Build the co-occurrence matrix.
+  CoOccurrenceMatrix cooccurrence(num_colors_);
+  WP2_CHECK_STATUS(cooccurrence.Allocate());
+  if (WP2Formatbpc(pic.format()) <= 8) {
+    WP2_CHECK_STATUS(
+        BuildCoOccurrence(pic, pic.GetRow8(0), color_cache, &cooccurrence));
+  } else {
+    WP2_CHECK_STATUS(
+        BuildCoOccurrence(pic, pic.GetRow16(0), color_cache, &cooccurrence));
+  }
+
+  // Initialize the mapping list with the two best indices.
+  WP2::Vector_u16 remapping;
+  WP2_CHECK_ALLOC_OK(remapping.resize(num_colors_));
+  cooccurrence.FindMax(&remapping[0], &remapping[1]);
+
+  // Initialize the vector of sums and find the best one.
+  struct Sum {
+    uint16_t index;
+    uint32_t sum;
+  };
+  WP2::VectorNoCtor<Sum> sums;
+  // '-2' for excluding remapping[0] and remapping[1].
+  WP2_CHECK_ALLOC_OK(sums.resize(num_colors_ - 2));
+  Sum* best_sum;
+  if (!sums.empty()) {
+    // Initialize the sums with the first two remappings.
+    best_sum = &sums[0];
+    for (uint16_t i = 0, j = 0; i < num_colors_; ++i) {
+      if (i == remapping[0] || i == remapping[1]) continue;
+      sums[j].index = i;
+      sums[j].sum =
+          cooccurrence(i, remapping[0]) + cooccurrence(i, remapping[1]);
+      if (sums[j].sum > best_sum->sum) best_sum = &sums[j];
+      ++j;
+    }
+  }
+
+  // We need to append and prepend to the list of remapping. To this end, we
+  // actually define the nest start/end of the list as indices in a vector (with
+  // a wrap around when the end is reached).
+  uint32_t first = 0, last = 1;
+  while (!sums.empty()) {
+    const uint16_t best_index = best_sum->index;
+    // Compute delta to know if we need to prepend or append the best index.
+    int32_t delta = 0;
+    const int32_t n = num_colors_ - sums.size();
+    for (uint32_t ind = first, j = 0; (ind + j) % num_colors_ != last + 1;
+         ++j) {
+      const uint16_t l_j = remapping[(ind + j) % num_colors_];
+      delta +=
+          (n - 1 - 2 * (int32_t)j) * (int32_t)cooccurrence(best_index, l_j);
+    }
+    if (delta > 0) {
+      first = (first == 0) ? num_colors_ - 1 : first - 1;
+      remapping[first] = best_index;
+    } else {
+      ++last;
+      remapping[last] = best_index;
+    }
+    // Remove best_sum from sums.
+    *best_sum = sums.back();
+    sums.resize_no_check(sums.size() - 1);
+    // Update all the sums and find the best one.
+    best_sum = &sums[0];
+    for (Sum& sum : sums) {
+      sum.sum += cooccurrence(best_index, sum.index);
+      if (sum.sum > best_sum->sum) best_sum = &sum;
+    }
+  }
+  assert((last + 1) % num_colors_ == first);
+
+  // Re-map the palette.
+  WP2::Vector_s16 colors;
+  WP2_CHECK_ALLOC_OK(colors.resize(4 * num_colors_));
+  for (uint32_t i = 0; i < num_colors_; ++i) {
+    ColorCopy(&colors_[4 * remapping[(first + i) % num_colors_]],
+              &colors[4 * i]);
+  }
+  WP2_CHECK_STATUS(progress.AdvanceBy(0.5));
+
+  // Find the best method to store the palette.
+  ProgressRange try_progress(progress, 0.5);
+  WP2_CHECK_STATUS(
+      TryPalette(cost_header, colors, try_progress, encoder, params));
+
+  return WP2_STATUS_OK;
+}
+
 WP2Status Palette::SortLuminance(const ProgressRange& progress, int effort,
                                  float cost_header,
-
                                  Encoder* const encoder,
                                  InternalParams* const params) {
   sort_type_ = Sorting::kLuminance;

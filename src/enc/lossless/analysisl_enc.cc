@@ -575,6 +575,9 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
           // Try more methods for palette sorting.
           WP2_CHECK_ALLOC_OK(configs->push_back(config));
           configs->back().palette_sorting_type = Palette::Sorting::kLuminance;
+          WP2_CHECK_ALLOC_OK(configs->push_back(config));
+          configs->back().palette_sorting_type =
+              Palette::Sorting::kModifiedZeng;
         }
         break;
       }

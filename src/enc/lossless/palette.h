@@ -40,7 +40,15 @@ class Palette {
   // kMinimalSize: the palette storage size is minimized
   // kLuminance: colors are first sorted by alpha, and then by
   //             luma = 0.299 * R + 0.587 * G + 0.114 * B
-  enum class Sorting { kLexicographic, kMinimalSize, kLuminance, kUndefined };
+  // kUndefined: modified Zeng from the paper "On the relation between Memon's
+  // and the modified Zeng's palette reordering methods".
+  enum class Sorting {
+    kLexicographic,
+    kMinimalSize,
+    kLuminance,
+    kModifiedZeng,
+    kUndefined
+  };
   Palette() : num_colors_(0) {}
   void Init(WP2SampleFormat format, bool has_alpha) {
     format_ = format;
@@ -87,7 +95,11 @@ class Palette {
   WP2Status SortLuminance(const WP2::ProgressRange& progress, int effort,
                           float cost_header, Encoder* const encoder,
                           InternalParams* const params);
-
+  // Sort according to the modified Zeng's method.
+  WP2Status SortModifiedZeng(const WP2::ArgbBuffer& pic,
+                             const WP2::ProgressRange& progress, int effort,
+                             float cost_header, Encoder* const encoder,
+                             InternalParams* const params);
   // try coding a palette 'colors' and if it has a better cost_, set it as the
   // new colors_.
   WP2Status TryPalette(float cost_header, WP2::Vector_s16& colors,
