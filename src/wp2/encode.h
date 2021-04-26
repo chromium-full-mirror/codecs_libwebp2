@@ -21,7 +21,6 @@
 #define WP2_WP2_ENCODE_H_
 
 #include <cassert>
-#include <string>
 
 #include "./base.h"
 #include "./debug.h"
@@ -162,56 +161,6 @@ typedef enum PictureHint {
   HINT_ICON,         // small-sized colorful images
   HINT_TEXT          // text-like
 } PictureHint;
-
-//------------------------------------------------------------------------------
-// Abstract interface. Inherit to write the encoding output somewhere.
-
-class Writer {
- public:
-  virtual ~Writer() = default;
-
-  // Potentially called at the beginning of a sequence of Append(), to signal
-  // the expected 'size' for the incoming new data. This can be used as a hint.
-  // Should return false if an error happened.
-  WP2_NO_DISCARD virtual bool Reserve(size_t size) { return true; }
-  // Will be called when 'data_size' bytes of encoded 'data' are ready.
-  // Can be used to save the output of the encoding.
-  // Should return false if an error happened.
-  WP2_NO_DISCARD virtual bool Append(const void* data, size_t data_size) = 0;
-};
-
-// Writes the encoding output to memory.
-class MemoryWriter : public Writer {
- public:
-  ~MemoryWriter() override { Reset(); }
-  void Reset();  // Releases memory.
-
-  WP2_NO_DISCARD bool Reserve(size_t size) override;
-  WP2_NO_DISCARD bool Append(const void* data, size_t data_size) override;
-
-  uint8_t* mem_ = nullptr;  // Final buffer (of capacity 'max_size' >= 'size').
-  size_t size_ = 0;         // Final size.
-  size_t max_size_ = 0;     // Total capacity.
-};
-
-// Writes the encoding output to a string.
-class StringWriter : public Writer {
- public:
-  explicit StringWriter(std::string* const str) : str_(str) {}
-  WP2_NO_DISCARD bool Reserve(size_t size) override;
-  WP2_NO_DISCARD bool Append(const void* data, size_t data_size) override;
-
- protected:
-  std::string* const str_;
-};
-
-// Counts the bytes in the encoding output.
-class Counter : public Writer {
- public:
-  WP2_NO_DISCARD bool Append(const void* data, size_t data_size) override;
-
-  size_t total_size_ = 0;
-};
 
 //------------------------------------------------------------------------------
 // Main encoding function
