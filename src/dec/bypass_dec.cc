@@ -35,7 +35,8 @@ namespace WP2 {
 WP2Status TileDecoder::BypassTileDec() {
   const uint32_t num_read_bytes_before =
       tile_->input->GetNumDiscardedBytes() + tile_->input->GetNumReadBytes();
-  if (gparams_->type_ == GlobalParams::GP_LOSSLESS) {
+  if (gparams_->type_ == GlobalParams::GP_LOSSLESS ||
+      gparams_->type_ == GlobalParams::GP_AV1) {
     tile_->output_is_yuv = false;
     assert(!tile_->rgb_output.IsEmpty());
     if (features_->rgb_bit_depth == 8) {

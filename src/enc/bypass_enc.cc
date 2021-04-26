@@ -37,7 +37,8 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
   const uint32_t max_num_bytes =
       GetTileMaxNumBytes(rgb_bit_depth, gparams, tile->rect);
 
-  if (gparams.type_ == GlobalParams::GP_LOSSLESS) {
+  if (gparams.type_ == GlobalParams::GP_LOSSLESS ||
+      gparams.type_ == GlobalParams::GP_AV1) {
     // RGB input is expected.
     assert(!tile->rgb_input.IsEmpty());
     if (WP2Formatbpc(tile->rgb_input.format()) <= 8) {
