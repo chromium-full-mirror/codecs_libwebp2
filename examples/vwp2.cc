@@ -507,10 +507,12 @@ class Params {
   // Functions below return true if the click event was handled, false if
   // nothing was done.
   // Handles a click for the given param type.
+#if defined(WP2_BITTRACE)
   bool HandleParamTypeClick(EncoderInfo::ForcedParam::Type type,
                             uint32_t value_range, int button, int state,
                             uint32_t img_x_down, uint32_t img_y_down,
                             int incr = 1, Channel channel = kYChannel);
+#endif
   bool HandleSegmentClick(int button, int state, uint32_t img_x_down,
                           uint32_t img_y_down, int incr = 1);
   bool HandlePredictorClick(int button, int state, uint32_t img_x_down,
@@ -3069,19 +3071,11 @@ void HandleMouseMoveButtonPressed(int x, int y) {
   global_params->HandleMouseMove(x, y, /*button_pressed=*/true);
 }
 
+#if defined(WP2_BITTRACE)
 bool Params::HandleParamTypeClick(EncoderInfo::ForcedParam::Type type,
                                   uint32_t value_range, int button, int state,
                                   uint32_t img_x_down, uint32_t img_y_down,
                                   int incr, Channel channel) {
-  (void)type;
-  (void)button;
-  (void)state;
-  (void)img_x_down;
-  (void)img_y_down;
-  (void)incr;
-  (void)channel;
-
-#if defined(WP2_BITTRACE)
   if (button == GLUT_LEFT_BUTTON || state != GLUT_DOWN) {
     return false;
   }
@@ -3107,10 +3101,10 @@ bool Params::HandleParamTypeClick(EncoderInfo::ForcedParam::Type type,
     force_param_.push_back(forced);
     return true;
   }
-#endif
 
   return false;
 }
+#endif
 
 bool Params::HandleSegmentClick(int button, int state, uint32_t img_x_down,
                                 uint32_t img_y_down, int incr) {

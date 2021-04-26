@@ -219,6 +219,7 @@ ANIM_UTIL_OBJS =
 DEC_OBJS = \
     src/dec/alpha_dec.o \
     src/dec/anim_dec.o \
+    src/dec/av1_dec.o \
     src/dec/bypass_dec.o \
     src/dec/features_dec.o \
     src/dec/filters/alpha_filter.o \
@@ -275,6 +276,7 @@ ENC_OBJS = \
     src/enc/anim/anim_enc.o \
     src/enc/anim/anim_frame.o \
     src/enc/anim/anim_rectangle.o \
+    src/enc/av1_enc.o \
     src/enc/block_enc.o \
     src/enc/bypass_enc.o \
     src/enc/config_enc.o \
@@ -686,7 +688,7 @@ dist: all
 ###############################################################################
 
 CC_TESTS =
-CC_TESTS += test_alloc test_ans test_extras
+CC_TESTS += test_alloc test_ans test_extras test_av1
 CC_TESTS += test_math test_transf test_utils test_front_mgr
 CC_TESTS += test_preview_api test_optim test_csp test_dsp test_vector
 CC_TESTS += test_symbols test_segment test_quant_mtx test_incr_dec test_api
