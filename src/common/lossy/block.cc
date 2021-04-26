@@ -39,18 +39,38 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 // ContextCache
 
+ContextCache::ContextCache() { Reset(); }
+
 const int16_t* ContextCache::GetLarge(const CodedBlockBase& cb, Channel channel,
                                       ContextType context_type) {
-  if (!is_computed_[channel][context_type]) {
-    cb.GetContext(channel, context_type, large_[channel][context_type]);
-    is_computed_[channel][context_type] = true;
+  if (!is_computed_large_[channel][context_type]) {
+    cb.GetContext(channel, /*split_tf=*/false, /*split_x=*/0, /*split_y=*/0,
+                  context_type, large_[channel][context_type]);
+    is_computed_large_[channel][context_type] = true;
   }
   return large_[channel][context_type];
 }
 
+const int16_t* ContextCache::GetSmall(const CodedBlockBase& cb, Channel channel,
+                                      uint32_t tf_i, ContextType context_type) {
+  if (!is_computed_small_[channel][context_type][tf_i]) {
+    assert(cb.GetCodingParams(channel).split_tf);
+    const Rectangle tf_rect = cb.blk().LocalTfRect(/*split_tf=*/true, tf_i);
+    cb.GetContext(channel, /*split_tf=*/true, tf_rect.x, tf_rect.y,
+                  context_type, small_[channel][context_type][tf_i]);
+    is_computed_small_[channel][context_type][tf_i] = true;
+  }
+  return small_[channel][context_type][tf_i];
+}
+
 void ContextCache::Reset() {
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-    for (bool& b : is_computed_[channel]) b = false;
+    for (uint32_t type = 0; type < kNumContextType; ++type) {
+      is_computed_large_[channel][type] = false;
+      for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
+        is_computed_small_[channel][type][tf_i] = false;
+      }
+    }
   }
 }
 
@@ -118,7 +138,18 @@ void CodedBlockBase::ResetContextCache() const {
 const int16_t* CodedBlockBase::GetContext(Channel channel,
                                           ContextType context_type) const {
   assert(context_cache_ != nullptr);
-  return context_cache_->GetLarge(*this, channel, context_type);
+  return GetContext(channel, /*split_tf=*/false, /*tf_i=*/0, context_type);
+}
+
+const int16_t* CodedBlockBase::GetContext(Channel channel, bool split_tf,
+                                          uint32_t tf_i,
+                                          ContextType context_type) const {
+  assert(context_cache_ != nullptr);
+  if (split_tf) {
+    return context_cache_->GetSmall(*this, channel, tf_i, context_type);
+  } else {
+    return context_cache_->GetLarge(*this, channel, context_type);
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -176,42 +207,45 @@ bool CodedBlockBase::HasCoeffs(Channel channel) const {
 
 //------------------------------------------------------------------------------
 
-void CodedBlockBase::PredictBlock(Channel channel, int16_t* out,
+void CodedBlockBase::PredictBlock(Channel channel, uint32_t tf_i, int16_t* out,
                                   uint32_t step) const {
+  assert(tf_i < GetNumTransforms(channel));
   const CodingParams& params = GetCodingParams(channel);
-  params.pred->Predict(*this, channel, out, step);
+  if (tf_i > 0) assert(params.split_tf);
+  const Rectangle tf_rect =
+      blk().LocalTfRect(GetCodingParams(channel).split_tf, tf_i);
+  int16_t* const out_i = out + tf_rect.x + tf_rect.y * step;
+  params.pred->Predict(*this, channel, params.split_tf, tf_i, out_i, step);
 }
 
 //------------------------------------------------------------------------------
 // Simplified all-in-one version for decoder
 
-void CodedBlockBase::Reconstruct(Channel channel) {
+void CodedBlockBase::Reconstruct(Channel channel, uint32_t tf_i) {
+  assert(tf_i < GetNumTransforms(channel));
   const bool reduced_transform =
       ((channel == kUChannel || channel == kVChannel) && is420_);
   Plane16& out = out_.GetChannel(channel);
-  PredictBlock(channel, out.Row(0), out.Step());
+  PredictBlock(channel, tf_i, out.Row(0), out.Step());
 
   const int32_t min = (channel == kAChannel) ? 0 : yuv_min_;
   const int32_t max = (channel == kAChannel) ? kAlphaMax : yuv_max_;
   const CodingParams* const params = GetCodingParams(channel);
-  const BlockSize split_size = GetSplitSize(dim(), params->split_tf);
-  const uint32_t split_w = BlockWidthPix(split_size);
-  const uint32_t split_h = BlockHeightPix(split_size);
-  AddBlockEqFunc add_block_eq = WP2::AddBlockEq[TrfLog2[split_w] - 2];
-  for (uint32_t tf_i = 0, split_y = 0; split_y < h_pix(); split_y += split_h) {
-    for (uint32_t split_x = 0; split_x < w_pix(); split_x += split_w, ++tf_i) {
-      // TODO(skal): if AllZero, we shouldn't be here (+special case for DCOnly)
-      if (use_mtx_ && channel == kYChannel) {
-        const TrfSize tsize = tdim(channel);
-        assert(mtx_set_->IsOk(mtx_[channel], tsize));
-        mtx_set_->AddMatrix(mtx_[channel], tsize, coeffs_[channel][tf_i]);
-      }
-      WP2InvTransform2D(coeffs_[channel][tf_i],  params->tf_x(), params->tf_y(),
-                        split_w, split_h, reduced_transform);
-      add_block_eq(coeffs_[channel][tf_i], split_w,
-                   &out.At(split_x, split_y), out.Step(), min, max, split_h);
-    }
+  const Rectangle tf_rect = blk().LocalTfRect(params->split_tf, tf_i);
+
+  AddBlockEqFunc add_block_eq = WP2::AddBlockEq[TrfLog2[tf_rect.width] - 2];
+
+  // TODO(skal): if AllZero, we shouldn't be here (+special case for DCOnly)
+  if (use_mtx_ && channel == kYChannel) {
+    const TrfSize tsize = tdim(channel);
+    assert(mtx_set_->IsOk(mtx_[channel], tsize));
+    mtx_set_->AddMatrix(mtx_[channel], tsize, coeffs_[channel][tf_i]);
   }
+  WP2InvTransform2D(coeffs_[channel][tf_i], params->tf_x(), params->tf_y(),
+                    tf_rect.width, tf_rect.height, reduced_transform);
+  add_block_eq(coeffs_[channel][tf_i], tf_rect.width,
+               &out.At(tf_rect.x, tf_rect.y), out.Step(), min, max,
+               tf_rect.height);
 }
 
 //------------------------------------------------------------------------------
@@ -266,21 +300,58 @@ void CodedBlockBase::SetLumaUniformPredictor(const Predictors& preds) {
 #define CONTEXT_SRC_AT_UNCLAMPED(X, Y) \
   *(context_src_data + (X) + (Y) * context_src_step)
 
-void CodedBlockBase::GetContext(Channel channel, ContextType context_type,
+void CodedBlockBase::GetContext(Channel channel, bool split_tf,
+                                uint32_t split_x, uint32_t split_y,
+                                ContextType context_type,
                                 int16_t context[]) const {
+  if (!split_tf) assert(split_x == 0 && split_y == 0);
+  const BlockSize dim = GetSplitSize(blk_.dim(), split_tf);
+
   const bool fill_in = (context_type != kContextSmallNoFillIn);
-  const uint32_t w = blk_.w_pix(), h = blk_.h_pix();
+
   const Plane16& context_src = predict_from_.GetChannel(channel);
   if (context_src.IsEmpty()) {
-    std::fill(context, context + kMaxContextSize, 0);
+    const uint32_t length = (split_tf) ? kMaxSubContextSize : kMaxContextSize;
+    std::fill(context, context + length, 0);
     return;
   }
+
+  const uint32_t w = BlockWidthPix(dim), h = BlockHeightPix(dim);
+  assert(split_x % w == 0);
+  assert(split_y % h == 0);
   // absolute position within dst_ picture
-  const uint32_t y_pix = blk_.y_pix();
+  const uint32_t y_pix = blk_.y_pix() + split_y;
   // implement all the neighbouring sample logic:
   const bool have_top = (y_pix > 0);
+
   int8_t y_left_occ, y_right_occ, right_extent;
   GetOccupancy(&y_left_occ, &y_right_occ, &right_extent);
+  if (split_x == 0) {
+    if (y_left_occ >= 0) {
+      y_left_occ = std::max(-1, y_left_occ - (int)(split_y / kMinBlockSizePix));
+    }
+  } else {
+    y_left_occ = BlockHeight[dim];
+  }
+  if (split_x == (blk_.w_pix() - w)) {  // right-most sub block
+    if (y_right_occ >= 0) {
+      y_right_occ =
+          std::max(-1, y_right_occ - (int)(split_y / kMinBlockSizePix));
+    }
+  } else {
+    y_right_occ = 0;
+  }
+  if (have_top) {
+    // Remaining space within the block, to the right of this sub block.
+    const uint32_t remaining_width =
+        blk_.w() - (split_x / w + 1) * BlockWidth[dim];
+    if (split_y == 0) {
+      right_extent += remaining_width;
+    } else {
+      right_extent = remaining_width;
+    }
+  }
+
   // Number of available context pixels on the left and right sides.
   const int left_context_size =
       (std::max(0, (int)y_left_occ) * (int)kMinBlockSizePix);
@@ -293,7 +364,7 @@ void CodedBlockBase::GetContext(Channel channel, ContextType context_type,
   int16_t last = fill_in ? 0 : kMissing;
   // left (bh samples)
   const int16_t* const context_src_data =
-      context_src.IsEmpty() ? nullptr : &context_src.AtUnclamped(0, 0);
+      &context_src.AtUnclamped(split_x, split_y);
   const int context_src_step = context_src.Step();
   const int left_size = ((context_type == kContextExtendLeft) ? 2 * h : h);
   if (left_context_size > 0) {

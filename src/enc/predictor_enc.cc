@@ -62,7 +62,7 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
     float scores[2], res_rate[2], pred_rate[2];
     for (uint32_t c : {kU, kV}) {
       const QuantMtx& quant = segment_.GetQuant(kChannels[c]);
-      cb->Quantize(quant, kChannels[c], reduced_);
+      cb->QuantizeAll(quant, kChannels[c], reduced_);
 
       dist[c] = cb->GetDisto(kChannels[c]);
 
@@ -107,8 +107,10 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
            cb->GetImplicitTf(channel_) == tf);
 
     const QuantMtx& quant = segment_.GetQuant(channel_);
-    cb->TransformAndReconstruct(quant, channel_, reduced_, prediction, res,
-                                tmp);
+    cb->TransformAndReconstruct(quant, channel_, /*tf_i=*/0, reduced_,
+                                prediction, res, tmp);
+    cb->QuantizeAllButFirst(quant, channel_, /*reduced_transform=*/false);
+
     dist_ = cb->GetDisto(channel_);
 
     float res_rate, pred_rate, tf_rate;
@@ -189,8 +191,8 @@ WP2Status Predictors::FindBest(
     uint32_t num_channels, const BlockContext& context, const Segment& segment,
     bool reduced, const Vector<TransformPair>& transforms,
     Counters* const counters, CodedBlock* const cb, float* const best_score,
-    const Predictor** const best_predictor,
-    TransformPair* const best_tf) const {
+    const Predictor** const best_predictor, TransformPair* const best_tf,
+    bool* const best_split) const {
   *best_predictor = nullptr;
   *best_score = std::numeric_limits<float>::max();
   // This function should only be called once for both U and V.
@@ -212,8 +214,9 @@ WP2Status Predictors::FindBest(
   for (const Predictor* const p : preds_no_angle_) {
     cb->SetPredictor(channel_, p);
     if (!is_uv) {
-      cb->PredictBlock(channel_, pred_view.Row(0), pred_view.Step());
-      cb->GetResiduals(channel_, pred_view, &res);
+      cb->PredictBlock(channel_, /*tf_i=*/0, pred_view.Row(0),
+                       pred_view.Step());
+      cb->GetResiduals(channel_, /*tf_i=*/0, pred_view, &res);
     }
     if (p->OverridesTransform(channel_, &overridden_tf)) {
       WP2_CHECK_STATUS(scorer.UpdatePredScore(p, pred_view, overridden_tf,
@@ -258,8 +261,9 @@ WP2Status Predictors::FindBest(
   for (const Predictor* const p : preds_main_angle_) {
     cb->SetPredictor(channel_, p);
     if (!is_uv) {
-      cb->PredictBlock(channel_, pred_view.Row(0), pred_view.Step());
-      cb->GetResiduals(channel_, pred_view, &res);
+      cb->PredictBlock(channel_, /*tf_i=*/0, pred_view.Row(0),
+                       pred_view.Step());
+      cb->GetResiduals(channel_, /*tf_i=*/0, pred_view, &res);
     }
     if (p->OverridesTransform(channel_, &overridden_tf)) {
       WP2_CHECK_STATUS(scorer.UpdatePredScore(p, pred_view, overridden_tf,
@@ -299,8 +303,9 @@ WP2Status Predictors::FindBest(
         if (p->mode() == s.p->mode() && p != s.p) {
           cb->SetPredictor(channel_, p);
           if (!is_uv) {
-            cb->PredictBlock(channel_, pred_view.Row(0), pred_view.Step());
-            cb->GetResiduals(channel_, pred_view, &res);
+            cb->PredictBlock(channel_, /*tf_i=*/0, pred_view.Row(0),
+                             pred_view.Step());
+            cb->GetResiduals(channel_, /*tf_i=*/0, pred_view, &res);
           }
           const bool ovrd_tf = p->OverridesTransform(channel_, &overridden_tf);
           WP2_CHECK_STATUS(scorer.UpdatePredScore(
@@ -315,6 +320,7 @@ WP2Status Predictors::FindBest(
     *best_score = scorer.GetBestScore();
     *best_predictor = scorer.GetBestPredictor();
     *best_tf = scorer.GetBestTf();
+    *best_split = cb->GetCodingParams(channel_)->split_tf;
   }
   return WP2_STATUS_OK;
 }

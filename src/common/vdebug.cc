@@ -96,9 +96,10 @@ void SyntaxReader::ReadAndCompareRawPixels(const Block& block,
     if (pixels.GetChannel(channel).IsEmpty()) continue;
     for (uint32_t y = 0; y < block.h_pix(); ++y) {
       for (uint32_t x = 0; x < block.w_pix(); ++x) {
-        const int32_t px = dec->ReadSUValue(
+        const int16_t expected = dec->ReadSUValue(
             gparams_->transf_.GetYuvDepth().num_bits, kChannelStr[channel]);
-        if (px != pixels.GetChannel(channel).At(x, y)) assert(false);
+        const int16_t actual = pixels.GetChannel(channel).At(x, y);
+        if (expected != actual) assert(false);
       }
     }
   }
@@ -461,22 +462,29 @@ static void OutputPixelValuesWithContext(const DecoderConfig& config,
                                          uint32_t tile_x, uint32_t tile_y,
                                          const CodedBlockBase& cb,
                                          const Plane16& pixels) {
-  if (VDSelected(cb.AsRect(tile_x, tile_y), config)) {
-    // Print pixels with the same formatting as "prediction/modes".
-    std::string& str = config.info->selection_info;
-    str += WP2SPrint("Block at %u, %u px (w %u, h %u)\n",
-                     tile_x + cb.x_pix(), tile_y + cb.y_pix(),
-                     cb.w_pix(), cb.h_pix());
-    str += "\n\n\n\n";  // See DisplayPredictionMode().
-    const int16_t* const context =
-        cb.GetContext(VDChannel(config), kContextSmall);
-    const int16_t* const context_right =
-        cb.GetContext(VDChannel(config), kContextExtendRight);
-    const int16_t* const context_left =
-        cb.GetContext(VDChannel(config), kContextExtendLeft);
-    str += GetContextAndBlockPixelsStr(
-        context, context_right, context_left, cb.w_pix(), cb.h_pix(),
-        pixels.Row(0), pixels.Step());
+  const Channel channel = VDChannel(config);
+  const bool split_tf = cb.GetCodingParams(channel).split_tf;
+  for (uint32_t tf_i = 0; tf_i < cb.GetNumTransforms(channel); ++tf_i) {
+    const Rectangle rect = cb.blk().TfRect(split_tf, tf_i);
+    if (VDSelected(tile_x, tile_y, rect, config)) {
+      // Print pixels with the same formatting as "prediction/modes".
+      std::string& str = config.info->selection_info;
+      str += WP2SPrint("Block at %u, %u px (w %u, h %u) tf %d\n",
+                       tile_x + cb.x_pix(), tile_y + cb.y_pix(), cb.w_pix(),
+                       cb.h_pix(), tf_i);
+      // To align with output from DisplayPredictionMode().
+      str += WP2SPrint("\n\n");
+      const int16_t* const context =
+          cb.GetContext(channel, split_tf, tf_i, kContextSmall);
+      const int16_t* const context_right =
+          cb.GetContext(channel, split_tf, tf_i, kContextExtendRight);
+      const int16_t* const context_left =
+          cb.GetContext(channel, split_tf, tf_i, kContextExtendLeft);
+      str += GetContextAndBlockPixelsStr(
+          context, context_right, context_left, rect.width, rect.height,
+          pixels.Row(rect.y - cb.y_pix()) + (rect.x - cb.x_pix()),
+          pixels.Step());
+    }
   }
 }
 
@@ -546,10 +554,14 @@ static Argb32b CtxtToColor(int16_t context) {
 
 // Draws the context used for the prediction of 'cb'.
 static void DisplayPredContext(const CodedBlockBase& cb, Channel channel,
+                               bool split_tf, uint32_t tf_i,
                                bool draw_red_border,
                                ArgbBuffer* const debug_output) {
-  const uint32_t x = cb.x_pix(), y = cb.y_pix(), w = cb.w_pix(), h = cb.h_pix();
-  const Rectangle rect = cb.AsRect().ClipWith(debug_output->AsRect());
+  const Rectangle raw_rect = cb.blk().TfRect(split_tf, tf_i);
+  const uint32_t x = raw_rect.x, y = raw_rect.y, w = raw_rect.width,
+                 h = raw_rect.height;
+  const Rectangle rect =
+      cb.blk().TfRect(split_tf, tf_i).ClipWith(debug_output->AsRect());
 
   if (draw_red_border) {  // Encircle the left, top, right context lines.
     const uint32_t bx = SafeSub(x, 2u), by = SafeSub(y, 2u);
@@ -563,7 +575,8 @@ static void DisplayPredContext(const CodedBlockBase& cb, Channel channel,
         red);
   }
 
-  const int16_t* const context = cb.GetContext(channel, kContextSmall);
+  const int16_t* const context =
+      cb.GetContext(channel, split_tf, tf_i, kContextSmall);
   if (x >= 1) {
     for (uint32_t j = 0; j < rect.height; ++j) {  // Left
       debug_output->Fill({x - 1, y + j, 1, 1}, CtxtToColor(context[h - j - 1]));
@@ -588,14 +601,15 @@ static void DisplayPredContext(const CodedBlockBase& cb, Channel channel,
   }
 
   // Extended right
-  const int16_t* const tr_context = cb.GetContext(channel, kContextExtendRight);
+  const int16_t* const tr_context =
+      cb.GetContext(channel, split_tf, tf_i, kContextExtendRight);
   const uint32_t tr_size = ContextSize(kContextExtendRight, w, h);
   for (uint32_t i = h + 1 + w + 1, tr_x = x + w + 1; i < tr_size; ++i, ++tr_x) {
     debug_output->Fill({tr_x, y - 1, 1, 1}, CtxtToColor(tr_context[i]));
   }
   // Extended left
   const int16_t* const left_context =
-      cb.GetContext(channel, kContextExtendLeft);
+      cb.GetContext(channel, split_tf, tf_i, kContextExtendLeft);
   for (uint32_t j = h; j < 2 * h; ++j) {
     if (y + j + 1 >= debug_output->height()) break;
     debug_output->Fill({x - 1, y + j, 1, 1},
@@ -613,6 +627,10 @@ void CodedBlock::StorePredictionScore(
   if (!VDMatch(config, "prediction-scores")) return;
   if (VDChannel(config) != channel) return;
 
+  // Check the formula did not change.
+  assert(std::abs(dist + lambda * (res_rate + pred_rate + tf_rate) - score) <
+         0.1f);
+
   ArgbBuffer debug_output;  // Tile view.
   WP2_ASSERT_STATUS(debug_output.SetView(config.info->debug_output, tile_rect));
 
@@ -623,20 +641,16 @@ void CodedBlock::StorePredictionScore(
   if (selected) {
     debug_output.DrawRect(rect, Argb32b{0xff, 0xff, 0x33, 0x33});
 
-    // Check the formula did not change.
-    assert(std::abs(dist + lambda * (res_rate + pred_rate + tf_rate) - score) <
-           0.1f);
-
     // Print at least all better predictors. Skip worse ones if too many.
     std::string& str = config.info->selection_info;
     if (is_best || std::count(str.begin(), str.end(), '\n') < 30) {
       str += WP2SPrint("Score %9.1f = dist %9.1f", score, dist);
       str += WP2SPrint(" + lambda %9.1f * (res %7.4f + pred %7.4f + tf %7.4f)",
                        lambda, res_rate, pred_rate, tf_rate);
-      str += WP2SPrint(" %s (%s - %s/%s x%u) (%s)\n",
-                       is_best ? "best" : "    ", pred.GetName().c_str(),
-                       WP2TransformNames[kTfX[tf]], WP2TransformNames[kTfY[tf]],
-                       GetNumTransforms(channel), kSearchTypeNames[(int)type]);
+      str += WP2SPrint(" %s (%s - %s/%s x%u) (%s)\n", is_best ? "best" : "    ",
+                       pred.GetName().c_str(), WP2TransformNames[kTfX[tf]],
+                       WP2TransformNames[kTfY[tf]], GetNumTransforms(channel),
+                       kSearchTypeNames[(int)type]);
     } else {
       // Print in console instead.
       printf(
@@ -649,8 +663,17 @@ void CodedBlock::StorePredictionScore(
           GetNumTransforms(channel), kSearchTypeNames[(int)type]);
     }
   }
-  DisplayPredContext(*this, channel, /*draw_red_border=*/selected,
-                     &debug_output);
+
+  for (uint32_t tf_i = 0; tf_i < GetNumTransforms(channel); ++tf_i) {
+    const bool split_tf = GetCodingParams(channel).split_tf;
+    const Rectangle raw_tf_rect = blk().TfRect(split_tf, tf_i);
+    const Rectangle tf_rect = raw_tf_rect.ClipWith(debug_output.AsRect());
+    const bool tf_selected =
+        VDSelected(tile_rect.x, tile_rect.y, tf_rect, config);
+
+    DisplayPredContext(*this, channel, split_tf, tf_i,
+                       /*draw_red_border=*/tf_selected, &debug_output);
+  }
 }
 
 static void DrawAnglePredictor(const WP2::Rectangle& rect, float angle_deg,
@@ -677,14 +700,16 @@ static void DisplayPredictionMode(const DecoderConfig& config,
                                   const Rectangle& tile_rect,
                                   const CodedBlockBase& cb, uint32_t num_preds,
                                   const Predictor& p, Channel channel,
-                                  const Rectangle& block_rect, bool selected,
-                                  Plane16* const raw_prediction,
+                                  uint32_t tf_i, const Rectangle& block_rect,
+                                  bool selected, Plane16* const raw_prediction,
                                   ArgbBuffer* const debug_output) {
+  const bool split_tf = cb.GetCodingParams(channel).split_tf;
   if (raw_prediction != nullptr) {
     Plane16 dst_view;
-    WP2_ASSERT_STATUS(dst_view.SetView(*raw_prediction, cb.AsRect()));
+    WP2_ASSERT_STATUS(
+        dst_view.SetView(*raw_prediction, cb.blk().TfRect(split_tf, tf_i)));
     const Predictor& pred = *cb.GetCodingParams(channel).pred;
-    pred.Predict(cb, channel, dst_view.Row(0), dst_view.Step());
+    pred.Predict(cb, channel, split_tf, tf_i, dst_view.Row(0), dst_view.Step());
   } else {
     assert(debug_output != nullptr);
     const uint8_t c = ToPixel8(p.mode(), num_preds);
@@ -698,40 +723,65 @@ static void DisplayPredictionMode(const DecoderConfig& config,
     if (selected) {
       debug_output->DrawRect(block_rect, Argb32b{0xff, 0xff, 0x33, 0x33});
     }
+    // draw split borders
+    if (split_tf) {
+      const BlockSize split_size = GetSplitSize(cb.dim(), true);
+      const uint32_t split_w = BlockWidthPix(split_size);
+      const uint32_t split_h = BlockHeightPix(split_size);
+      for (uint32_t split_y = 0; split_y < cb.h_pix(); split_y += split_h) {
+        for (uint32_t split_x = 0; split_x < cb.w_pix(); split_x += split_w) {
+          debug_output->Fill(
+              {block_rect.x + split_x, block_rect.y + split_y, 1, split_h},
+              Argb32b{0xff, 0x00, 0x30, 0xf0});
+          debug_output->Fill(
+              {block_rect.x + split_x, block_rect.y + split_y, split_w, 1},
+              Argb32b{0xff, 0x00, 0x40, 0xf0});
+        }
+      }
+    }
   }
 
   if (selected) {
     std::string& str = config.info->selection_info;
-    str += WP2SPrint("Prediction block at %u, %u px (w %u, h %u)\n\n",
+    str += WP2SPrint("Prediction block at %u, %u px (w %u, h %u)",
                      block_rect.x + tile_rect.x, block_rect.y + tile_rect.y,
-                     block_rect.width, block_rect.height);
+                     block_rect.width, block_rect.height, tf_i);
+    if (split_tf) {
+      str += WP2SPrint(" tf %d", tf_i);
+    }
+    str += "\n";
 
     str += WP2SPrint(" %u: %s\n", p.mode(), p.GetName().c_str());
 
     if (!VDMatch(config, "short")) {
-      const std::string prediction = p.GetPredStr(cb, channel);
-      str += "\nPrediction:\n" + prediction;
+      const std::string prediction = p.GetPredStr(cb, channel, split_tf, tf_i);
+      str += "Prediction:\n" + prediction;
     }
   }
 }
 
 void CodedBlockBase::StorePredictionModes(
     const DecoderConfig& config, const Rectangle& tile_rect, Channel channel,
-    const Predictors& preds, Plane16* const raw_prediction,
+    uint32_t tf_i, const Predictors& preds, Plane16* const raw_prediction,
     ArgbBuffer* const debug_output) const {
-  const Rectangle r_px =
-      AsRect().ClipWith({0, 0, tile_rect.width, tile_rect.height});
+  const bool split_tf = GetCodingParams(channel).split_tf;
 
-  // Whole block
+  const Rectangle raw_rect = blk().TfRect(split_tf, tf_i);
+  const Rectangle r_px{
+      raw_rect.x, raw_rect.y,
+      std::min(raw_rect.width, tile_rect.width - raw_rect.x),
+      std::min(raw_rect.height, tile_rect.height - raw_rect.y)};
+
   const bool selected = VDSelected(tile_rect.x, tile_rect.y, r_px, config);
 
   const CodingParams& params = GetCodingParams(channel);
   DisplayPredictionMode(config, tile_rect, *this, preds.GetMaxMode(),
-                        *params.pred, channel, r_px, selected, raw_prediction,
-                        debug_output);
+                        *params.pred, channel, tf_i, r_px, selected,
+                        raw_prediction, debug_output);
 
   if (selected && debug_output != nullptr) {
-    DisplayPredContext(*this, channel, /*draw_red_border=*/true, debug_output);
+    DisplayPredContext(*this, channel, split_tf, tf_i, /*draw_red_border=*/true,
+                       debug_output);
   }
 }
 

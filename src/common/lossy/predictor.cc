@@ -90,9 +90,9 @@ std::string GetContextAndBlockPixelsStr(const int16_t context[],
       }
       str += WP2SPrint("| %4d", context[h + 1 + w + 1 + y]);
     } else if (y == h) {
-      str += WP2SPrint("  ^___| %*s", 7 + w * 5 + 6 - 8, " ");
+      str += WP2SPrint("  ^___| %*s", 12 + w * 5 + 6 - 8, " ");
     } else {
-      str += WP2SPrint("%*s", 7 + w * 5 + 6, " ");
+      str += WP2SPrint("%*s", 12 + w * 5 + 6, " ");
     }
     // Display remaining extended right context in small batches on the right.
     if (context_right != nullptr) {
@@ -121,17 +121,21 @@ const int16_t kFakeContext[kContextSize] = {
 // Dummy predictor that always predicts zero.
 class ZeroPredictor : public Predictor {
  public:
-  void Predict(const CodedBlockBase& cb, Channel, int16_t output[],
-               uint32_t step) const override {
-    for (uint32_t y = 0; y < cb.h_pix(); ++y) {
-      std::fill(output + y * step, output + y * step + cb.w_pix(), 0);
+  void Predict(const CodedBlockBase& cb, Channel channel, bool split_tf,
+               uint32_t tf_i, int16_t output[], uint32_t step) const override {
+    const BlockSize split_size = GetSplitSize(cb.dim(), split_tf);
+    const uint32_t split_w = BlockWidthPix(split_size);
+    const uint32_t split_h = BlockHeightPix(split_size);
+
+    for (uint32_t y = 0; y < split_h; ++y) {
+      std::fill(output + y * step, output + y * step + split_w, 0);
     }
   }
 
   std::string GetName() const override { return "zero predictor"; }
   std::string GetFakePredStr() const override { return "zero predictor"; }
-  std::string GetPredStr(const CodedBlockBase& cb,
-                         Channel channel) const override {
+  std::string GetPredStr(const CodedBlockBase& cb, Channel channel,
+                         bool split_tf, uint32_t tf_i) const override {
     return "zero predictor";
   }
 };
@@ -139,9 +143,15 @@ class ZeroPredictor : public Predictor {
 //------------------------------------------------------------------------------
 
 void ContextPredictor::Predict(const CodedBlockBase& cb, Channel channel,
-                               int16_t output[], uint32_t step) const {
-  const int16_t* const context = cb.GetContext(channel, context_type_);
-  Predict(context, cb.w_pix(), cb.h_pix(), output, step);
+                               bool split_tf, uint32_t tf_i, int16_t output[],
+                               uint32_t step) const {
+  if (tf_i > 0) assert(split_tf);
+  const int16_t* const context =
+      cb.GetContext(channel, split_tf, tf_i, context_type_);
+  const BlockSize split_size = GetSplitSize(cb.dim(), split_tf);
+  const uint32_t split_w = BlockWidthPix(split_size);
+  const uint32_t split_h = BlockHeightPix(split_size);
+  Predict(context, split_w, split_h, output, step);
 }
 
 std::string ContextPredictor::GetFakePredStr() const {
@@ -150,16 +160,19 @@ std::string ContextPredictor::GetFakePredStr() const {
 }
 
 std::string ContextPredictor::GetPredStr(const CodedBlockBase& cb,
-                                         Channel channel) const {
-  const int16_t* const context = cb.GetContext(channel, kContextSmall);
+                                         Channel channel, bool split_tf,
+                                         uint32_t tf_i) const {
+  const int16_t* const context =
+      cb.GetContext(channel, split_tf, tf_i, kContextSmall);
   // Always display the top right context.
   const int16_t* const context_right =
-      cb.GetContext(channel, kContextExtendRight);
+      cb.GetContext(channel, split_tf, tf_i, kContextExtendRight);
   const int16_t* const context_left =
-      cb.GetContext(channel, kContextExtendLeft);
+      cb.GetContext(channel, split_tf, tf_i, kContextExtendLeft);
+  const BlockSize split_size = GetSplitSize(cb.dim(), split_tf);
 
   return GetPredStr(context, context_right, context_left, context_type_,
-                    cb.w_pix(), cb.h_pix());
+                    BlockWidthPix(split_size), BlockHeightPix(split_size));
 }
 
 std::string ContextPredictor::GetPredStr(const int16_t context[],
@@ -476,10 +489,11 @@ class AlphaPredictor : public Predictor {
 
   ~AlphaPredictor() override { delete pred_; }
 
-  void Predict(const CodedBlockBase& cb, Channel channel, int16_t output[],
-               uint32_t step) const override {
+  void Predict(const CodedBlockBase& cb, Channel channel, bool split_tf,
+               uint32_t tf_i, int16_t output[], uint32_t step) const override {
+    assert(!split_tf);
     assert(channel == kAChannel);  // Should only be used for alpha.
-    pred_->Predict(cb, channel, output, step);
+    pred_->Predict(cb, channel, /*split_tf=*/false, /*tf_i=*/0, output, step);
     AdjustAlphaPrediction(cb, transform_, output, step);
   }
 
@@ -490,12 +504,13 @@ class AlphaPredictor : public Predictor {
     printf("alpha predictor based on:\n");
     return pred_->GetFakePredStr();
   }
-  std::string GetPredStr(const CodedBlockBase& cb,
-                         Channel channel) const override {
-    std::string str = pred_->GetPredStr(cb, channel);
+  std::string GetPredStr(const CodedBlockBase& cb, Channel channel,
+                         bool split_tf, uint32_t tf_i) const override {
+    assert(!split_tf);
+    std::string str = pred_->GetPredStr(cb, channel, split_tf, tf_i);
     str += "==> adjusted by alpha predictor:\n";
     int16_t output[kMaxBlockSizePix2];
-    Predict(cb, channel, output, cb.w_pix());
+    Predict(cb, channel, /*split_tf=*/false, /*tf_i=*/0, output, cb.w_pix());
     const int16_t* const context = cb.GetContext(channel, kContextSmall);
     str += GetContextAndBlockPixelsStr(context, /*context_right=*/nullptr,
                                        /*context_left=*/nullptr, cb.w_pix(),
@@ -813,9 +828,12 @@ void CflPredictor::DoPredict(const CodedBlockBase& cb, Channel channel,
 }
 
 void CflPredictor::Predict(const CodedBlockBase& cb, Channel channel,
-                           int16_t output[], uint32_t step) const {
+                           bool split_tf, uint32_t tf_i, int16_t output[],
+                           uint32_t step) const {
+  assert(!split_tf);
   assert(channel != kYChannel);
-  DoPredict(cb, channel, 0, 0, cb.w_pix(), cb.h_pix(), output, step);
+  DoPredict(cb, channel, /*x_start=*/0, /*y_start*/ 0, cb.w_pix(), cb.h_pix(),
+            output, step);
 }
 
 std::string CflPredictor::GetName() const {
@@ -831,7 +849,8 @@ void CflPredictor::DisplaySamples(const CodedBlockBase& cb, Channel channel,
 #if defined(WP2_BITTRACE)
   const Plane16& luma = cb.GetContextPlane(kYChannel);
   int16_t output[kMaxBlockSizePix2];
-  Predict(cb, channel, output, kMaxBlockSizePix);
+  Predict(cb, channel, /*split_tf=*/false, /*tf_i=*/0, output,
+          kMaxBlockSizePix);
 
   // Display subset of values to fit screen.
   *str += WP2SPrint("       LUMA          |            chroma\n");
@@ -849,8 +868,9 @@ void CflPredictor::DisplaySamples(const CodedBlockBase& cb, Channel channel,
 #endif
 }
 
-std::string CflPredictor::GetPredStr(const CodedBlockBase& cb,
-                                     Channel channel) const {
+std::string CflPredictor::GetPredStr(const CodedBlockBase& cb, Channel channel,
+                                     bool split_tf, uint32_t tf_i) const {
+  assert(!split_tf);
   int32_t a, b;
   ContextLinearRegression(channel, cb, &a, &b);
   std::string str =
@@ -931,7 +951,9 @@ std::string SignalingCflPredictor::GetName() const {
 }
 
 std::string SignalingCflPredictor::GetPredStr(const CodedBlockBase& cb,
-                                              Channel channel) const {
+                                              Channel channel, bool split_tf,
+                                              uint32_t tf_i) const {
+  assert(!split_tf);
   int32_t predicted_a, a, predicted_b, b;
   ContextLinearRegression(channel, cb, &predicted_a, &predicted_b);
   GetParams(cb, channel, cb.w(), cb.h_pix(), &a, &b);

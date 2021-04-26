@@ -47,19 +47,25 @@ struct Tile;
 // Class that caches contexts for speed-up.
 class ContextCache {
  public:
+  ContextCache();
+
   // Gets the large context for a given block.
   const int16_t* GetLarge(const CodedBlockBase& cb, Channel channel,
                           ContextType context_type);
+  // Gets small context for a sub transform block.
+  // Assumes cb.GetCodingParams(channel).split_tf is true.
+  const int16_t* GetSmall(const CodedBlockBase& cb, Channel channel,
+                          uint32_t tf_i, ContextType context_type);
   // Sets contexts for all parameters as uncomputed.
   void Reset();
 
  protected:
   // Large context per channel, per context type.
   int16_t large_[4][kNumContextType][kMaxContextSize];
-  bool is_computed_[4][kNumContextType] = {{false, false, false, false},
-                                           {false, false, false, false},
-                                           {false, false, false, false},
-                                           {false, false, false, false}};
+  bool is_computed_large_[4][kNumContextType];
+  // Small context per channel, per context type, per sub tf.
+  int16_t small_[4][kNumContextType][kMaxSplitBlocks][kMaxSubContextSize];
+  bool is_computed_small_[4][kNumContextType][kMaxSplitBlocks];
 };
 
 //------------------------------------------------------------------------------
@@ -120,12 +126,14 @@ class CodedBlockBase {
   // prediction) all have the same value for the given channel.
   bool ContextIsConstant(Channel channel) const;
 
-  // Computes the prediction to 'out'.
-  void PredictBlock(Channel channel, int16_t* out, uint32_t step) const;
+  // Computes the prediction to 'out' for the sub block 'tf_i' (if
+  // GetParams(channel).split_tf is true, otherwise tf_i must be 0).
+  void PredictBlock(Channel channel, uint32_t tf_i, int16_t* out,
+                    uint32_t step) const;
 
   // Decoder-only: Predict + Transform + Reconstruct in one minimal step.
   // Upon return, coeffs_[][] contains the transformed coeffs, for info.
-  void Reconstruct(Channel channel);
+  void Reconstruct(Channel channel, uint32_t tf_i);
 
   // Exports debug info during decoding.
   void ToBlockInfo(bool use_aom_coeffs, struct BlockInfo* const blk) const;
@@ -138,6 +146,8 @@ class CodedBlockBase {
 
   // Retrieves boundary samples for the whole block.
   const int16_t* GetContext(Channel channel, ContextType context_type) const;
+  const int16_t* GetContext(Channel channel, bool split_tf, uint32_t tf_i,
+                            ContextType context_type) const;
   void SetContextCache(ContextCache* const context_cache);
   void ResetContextCache() const;
 
@@ -221,8 +231,13 @@ class CodedBlockBase {
   friend ContextCache;
 
  protected:
-  void GetContext(Channel channel, ContextType context_type,
-                  int16_t context[kMaxContextSize]) const;
+  // Returns the prediction context (surrounding pixels) for the block, or for a
+  // sub block if 'split_tf' is true.
+  // 'split_x' and 'split_y' are in pixels, relative to the block itself. They
+  // should be (0, 0) is 'split_tf' is false.
+  void GetContext(Channel channel, bool split_tf, uint32_t split_x,
+                  uint32_t split_y, ContextType context_type,
+                  int16_t context[]) const;
 
  public:
   //////////////// Methods for Visual Debug ////////////////
@@ -237,7 +252,7 @@ class CodedBlockBase {
   // Visual debug: stores prediction modes
   void StorePredictionModes(const WP2::DecoderConfig& config,
                             const Rectangle& tile_rect, Channel channel,
-                            const Predictors& preds,
+                            uint32_t tf_i, const Predictors& preds,
                             Plane16* const raw_prediction,
                             ArgbBuffer* const debug_output) const;
   // Visual debug: append the values of the original pixels as text

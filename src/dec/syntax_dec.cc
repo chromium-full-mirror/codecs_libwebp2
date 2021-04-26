@@ -191,24 +191,14 @@ void SyntaxReader::ReadSplitTransform(Channel channel,
 }
 
 void SyntaxReader::ReadHasCoeffs(Channel channel, CodedBlockBase* const cb) {
-  bool block_has_coeffs = false;
   for (uint32_t tf_i = 0; tf_i < cb->GetNumTransforms(channel); ++tf_i) {
     // TODO(yguyon): If '!is420_' was signaled, deduce 'has_coeffs'.
     // TODO(yguyon): If 'has_lossy_alpha_' was signaled, deduce 'has_coeffs'.
-    bool tf_has_coeffs;
-    if (!block_has_coeffs && cb->GetCodingParams(channel)->split_tf &&
-        tf_i + 1 == cb->GetNumTransforms(channel)) {
-      // At least one transform has at least one non-zero coeff, otherwise
-      // 'split_tf' would be pointless.
-      tf_has_coeffs = true;
-    } else {
-      const uint32_t cluster = (uint32_t)channel;
-      tf_has_coeffs =
-          (bool)sr_.Read(kSymbolHasCoeffs, cluster, "has_coeffs", nullptr);
-    }
+    const uint32_t cluster = (uint32_t)channel;
+    const bool tf_has_coeffs =
+        (bool)sr_.Read(kSymbolHasCoeffs, cluster, "has_coeffs", nullptr);
     // 1 means "at least one coeff is not zero", 0 means "all coeffs are 0".
     cb->num_coeffs_[channel][tf_i] = tf_has_coeffs ? 1 : 0;
-    if (tf_has_coeffs) block_has_coeffs = true;
   }
 }
 

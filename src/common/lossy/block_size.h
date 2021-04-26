@@ -70,6 +70,9 @@ extern const uint32_t kNumBlocks[BLK_LAST];
 // Table for printing block names (debug)
 extern const char* const kDimNames[BLK_LAST + 1];
 
+// Maximum number of sub blocks when splitting a block.
+static constexpr uint32_t kMaxSplitBlocks = 4;
+
 // Returns an arbitrary BlockSize that can be used to split 'size' into squares.
 BlockSize GetSplitSize(BlockSize size, bool split);
 uint32_t GetNumTransformsInBlock(BlockSize size, bool split);
@@ -149,6 +152,24 @@ class Block {
   // (translated) bounding rectangle
   inline Rectangle AsRect(uint32_t offset_x = 0, uint32_t offset_y = 0) const {
     return {offset_x + x_pix_, offset_y + y_pix_, w_pix_, h_pix_};
+  }
+  // Returns a rectangle in pixels corresponding to the the given sub transform
+  // index 'tf_i' if 'split_tf' is true, or to the whole block otherwise.
+  inline Rectangle TfRect(bool split_tf, uint32_t tf_i) const {
+    const Rectangle local_rect = LocalTfRect(split_tf, tf_i);
+    return {x_pix_ + local_rect.x, y_pix_ + local_rect.y, local_rect.width,
+            local_rect.height};
+  }
+  // Returns a rectangle in pixels corresponding to the the given sub transform
+  // index 'tf_i' if 'split_tf' is true, or to the whole block otherwise,
+  // relative to the block itself.
+  inline Rectangle LocalTfRect(bool split_tf, uint32_t tf_i) const {
+    const BlockSize split_size = GetSplitSize(dim(), split_tf);
+    const uint32_t split_cols = w() / BlockWidth[split_size];
+    const uint32_t split_w = BlockWidthPix(split_size);
+    const uint32_t split_h = BlockHeightPix(split_size);
+    return {tf_i % split_cols * split_w, tf_i / split_cols * split_h, split_w,
+            split_h};
   }
 
   inline uint32_t x() const { return x_; }

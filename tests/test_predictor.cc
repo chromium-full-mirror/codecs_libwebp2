@@ -34,26 +34,26 @@ class ContextCacheForTest : public ContextCache {
   void SetContext(Channel channel, const std::vector<int16_t> context) {
     for (uint32_t i = 0; i < kNumContextType; ++i) {
       std::copy(&context[0], &context[kContextSize], large_[channel][i]);
-      is_computed_[channel][i] = true;
+      is_computed_large_[channel][i] = true;
     }
   }
 };
-
-// Test that given a context where all pixels have the same value, all
-// regular predictors predict that value for all pixels (except for rounding
-// errors). The only predictors that don't have this property are the zero
-// predictor (always predicts zero) and CflPredictor. They are not tested here.
 
 WP2Status init(int16_t min, int16_t max, YPredictors* const predictors) {
   return predictors->Fill(min, max);
 }
 
 template <class V>
-void TestConstantContext(const std::vector<BlockSize>& block_sizes) {
+void TestConstantContext(const std::vector<BlockSize>& block_sizes,
+                         bool split_tf) {
   ContextCache context_cache;
   for (BlockSize size : block_sizes) {
     CodedBlock cb;
     cb.SetDimDefault({/*x=*/1, /*y=*/1, size});
+    cb.GetCodingParams(kYChannel)->split_tf = split_tf;
+    const BlockSize dim = GetSplitSize(size, split_tf);
+    const uint32_t w = BlockWidthPix(dim);
+    const uint32_t h = BlockHeightPix(dim);
 
     const int16_t kValue = 42;
 
@@ -67,23 +67,42 @@ void TestConstantContext(const std::vector<BlockSize>& block_sizes) {
     ASSERT_WP2_OK(init(-512, 512, &predictors));
     for (const Predictor* p : predictors) {
       int16_t prediction[kMaxBlockSizePix2];
-      p->Predict(cb, kYChannel, prediction, cb.w_pix());
-      for (uint32_t i = 0; i < cb.w_pix() * cb.h_pix(); ++i) {
-        EXPECT_NEAR(kValue, prediction[i], 1);
+      const uint32_t num_tfs = cb.GetNumTransforms(kYChannel);
+      if (split_tf) {
+        ASSERT_GT(num_tfs, 1u);
+      }
+      for (uint32_t tf_i = 0; tf_i < num_tfs; ++tf_i) {
+        p->Predict(cb, kYChannel, split_tf, tf_i, prediction, w);
+        for (uint32_t i = 0; i < w * h; ++i) {
+          ASSERT_NEAR(kValue, prediction[i], 1);
+        }
       }
     }
   }
 }
 
+// Test that given a context where all pixels have the same value, all
+// regular predictors predict that value for all pixels (except for rounding
+// errors). The only predictors that don't have this property are the zero
+// predictor (always predicts zero) and CflPredictor. They are not tested here.
 TEST(AllPredictors, ConstantContext) {
   WP2MathInit();
   WP2::PredictionInit();
 
-  TestConstantContext<YPredictors>({BLK_8x8, BLK_16x4, BLK_16x32});
+  TestConstantContext<YPredictors>({BLK_8x8, BLK_16x4, BLK_16x32},
+                                   /*split_tf=*/false);
+}
+TEST(AllPredictors, ConstantContextSplitTf) {
+  WP2MathInit();
+  WP2::PredictionInit();
+
+  TestConstantContext<YPredictors>({BLK_8x8, BLK_16x4, BLK_16x32},
+                                   /*split_tf=*/true);
 }
 
 template <class V>
-void TestPredictionRange(const std::vector<BlockSize>& block_sizes) {
+void TestPredictionRange(const std::vector<BlockSize>& block_sizes,
+                         bool split_tf) {
   UniformIntDistribution gen(53251);
 
   // Since this is a random test, we run it multiple times.
@@ -93,6 +112,10 @@ void TestPredictionRange(const std::vector<BlockSize>& block_sizes) {
     for (BlockSize size : block_sizes) {
       CodedBlock cb;
       cb.SetDimDefault({/*x=*/1, /*y=*/1, size});
+      cb.GetCodingParams(kYChannel)->split_tf = split_tf;
+      const BlockSize dim = GetSplitSize(size, split_tf);
+      const uint32_t w = BlockWidthPix(dim);
+      const uint32_t h = BlockHeightPix(dim);
 
       const int16_t max = 1 << gen.Get(2, 10);
       const int16_t min = -(1 << gen.Get(2, 10));
@@ -112,14 +135,22 @@ void TestPredictionRange(const std::vector<BlockSize>& block_sizes) {
 
       for (const Predictor* p : predictors) {
         int16_t prediction[kMaxBlockSizePix2];
-        p->Predict(cb, kYChannel, prediction, cb.w_pix());
 
-        for (uint32_t i = 0; i < cb.w_pix() * cb.h_pix(); ++i) {
-          const int16_t v = prediction[i];
-          EXPECT_GE(v, min) << "Failed for predictor " << p->GetName()
-                            << " block size " << size;
-          EXPECT_LE(v, max) << "Failed for predictor " << p->GetName()
-                            << " block size " << size;
+        const uint32_t num_tfs = cb.GetNumTransforms(kYChannel);
+        if (split_tf) {
+          ASSERT_GT(num_tfs, 1u);
+        }
+        for (uint32_t tf_i = 0; tf_i < num_tfs; ++tf_i) {
+          p->Predict(cb, kYChannel, /*split_tf=*/false, /*tf_i=*/0, prediction,
+                     w);
+
+          for (uint32_t i = 0; i < w * h; ++i) {
+            const int16_t v = prediction[i];
+            EXPECT_GE(v, min) << "Failed for predictor " << p->GetName()
+                              << " block size " << size;
+            EXPECT_LE(v, max) << "Failed for predictor " << p->GetName()
+                              << " block size " << size;
+          }
         }
       }
     }
@@ -131,7 +162,53 @@ TEST(AllPredictors, ValueRange) {
   WP2MathInit();
   WP2::PredictionInit();
 
-  TestPredictionRange<YPredictors>({BLK_8x8, BLK_16x4, BLK_16x32});
+  TestPredictionRange<YPredictors>({BLK_8x8, BLK_16x4, BLK_16x32},
+                                   /*split_tf=*/false);
+}
+
+TEST(AllPredictors, ValueRangeSplitTf) {
+  WP2MathInit();
+  WP2::PredictionInit();
+
+  TestPredictionRange<YPredictors>({BLK_8x8, BLK_16x4, BLK_16x32},
+                                   /*split_tf=*/true);
+}
+
+// Simple test with split_tf true.
+TEST(DCPredictor, SplitTf) {
+  WP2MathInit();
+  WP2::PredictionInit();
+
+  CodedBlock cb;
+  cb.SetDimDefault({/*x=*/0, /*y=*/0, BLK_8x8});
+
+  YUVPlane plane;
+  ASSERT_WP2_OK(plane.Resize(8, 8));
+  plane.Y.Fill({0, 0, 4, 4}, 4);
+  plane.Y.Fill({4, 0, 4, 4}, 8);
+  plane.Y.Fill({0, 4, 4, 4}, 16);
+  plane.Y.Fill({4, 4, 4, 4}, 32);
+  ContextCache context_cache;
+  cb.SetContextInput(plane, &context_cache);
+  const uint32_t step = 4;
+  cb.GetCodingParams(kYChannel)->split_tf = true;
+  YPredictors predictors;
+  ASSERT_WP2_OK(init(-512, 512, &predictors));
+  // We assume the first predictor is DC.
+  const Predictor* p = predictors[0];
+  int16_t prediction[16];
+  p->Predict(cb, kYChannel, /*split_tf=*/true, /*tf_i=*/0, prediction, step);
+  for (uint32_t i = 0; i < 16; ++i) ASSERT_EQ(prediction[i], 0);
+  p->Predict(cb, kYChannel, /*split_tf=*/true, /*tf_i=*/1, prediction, step);
+  // Predicted from sub tf 0.
+  for (uint32_t i = 0; i < 16; ++i) ASSERT_EQ(prediction[i], 4);
+  p->Predict(cb, kYChannel, /*split_tf=*/true, /*tf_i=*/2, prediction, step);
+  // Predicted from sub tf 0.
+  for (uint32_t i = 0; i < 16; ++i) ASSERT_EQ(prediction[i], 4);
+  p->Predict(cb, kYChannel, /*split_tf=*/true, /*tf_i=*/3, prediction, step);
+  // Predicted from sub tf 2 on the left (value 16), tf 0 on the top-left (value
+  // 4) and tf 1 on top (value 8).
+  for (uint32_t i = 0; i < 16; ++i) ASSERT_EQ(prediction[i], 11);
 }
 
 //------------------------------------------------------------------------------
@@ -162,14 +239,16 @@ TEST(ImplicitCflPredictor, SimpleLinearRelationship) {
                                250, 250, missing, missing});  // Right
 
   int16_t prediction[kPredSize];
-  p.Predict(cb, kUChannel, prediction, kPredWidth);
+  p.Predict(cb, kUChannel, /*split_tf=*/false, /*tf_i=*/0, prediction,
+            kPredWidth);
   for (uint32_t i = 0; i < kPredSize; ++i) {
     // 2 * 50 + 50 = 150
     EXPECT_EQ(150, prediction[i]);
   }
 
   plane.Y.Fill(300);
-  p.Predict(cb, kUChannel, prediction, kPredWidth);
+  p.Predict(cb, kUChannel, /*split_tf=*/false, /*tf_i=*/0, prediction,
+            kPredWidth);
   EXPECT_EQ(511, prediction[0]);  // Value is clipped.
 
   plane.Y.Fill(4);
@@ -183,8 +262,10 @@ TEST(ImplicitCflPredictor, SimpleLinearRelationship) {
                             450, 450, 450, 450, 450,       // Top + top right
                             250, 250, missing, missing});  // Right
 
-  p.Predict(cb, kUChannel, prediction, kPredWidth);
-  printf("Info:\n%s\n", p.GetPredStr(cb, kUChannel).c_str());
+  p.Predict(cb, kUChannel, /*split_tf=*/false, /*tf_i=*/0, prediction,
+            kPredWidth);
+  printf("Info:\n%s\n",
+         p.GetPredStr(cb, kUChannel, /*split_tf=*/false, /*tf_i=*/0).c_str());
   for (uint32_t i = 0; i < kPredSize; ++i) {
     // 4 * 4 + 50 = 66    ('a' is saturated)
     EXPECT_EQ(66, prediction[i]);
@@ -220,7 +301,8 @@ TEST(ImplicitCflPredictor, AllMissing) {
 
   // Without context, the prediction should be 0.
   int16_t prediction[kPredSize];
-  p.Predict(cb, kUChannel, prediction, kPredWidth);
+  p.Predict(cb, kUChannel, /*split_tf=*/false, /*tf_i=*/0, prediction,
+            kPredWidth);
   for (uint32_t i = 0; i < kPredSize; ++i) {
     EXPECT_EQ(0, prediction[i]);
   }
@@ -251,8 +333,10 @@ TEST(ImplicitCflPredictor, WithErrors) {
        250, 250 + 5, 250 - 3, 250 + 4});            // Right
 
   int16_t prediction[kPredSize];
-  p.Predict(cb, kUChannel, prediction, kPredWidth);
-  printf("Info:\n%s\n", p.GetPredStr(cb, kUChannel).c_str());
+  p.Predict(cb, kUChannel, /*split_tf=*/false, /*tf_i=*/0, prediction,
+            kPredWidth);
+  printf("Info:\n%s\n",
+         p.GetPredStr(cb, kUChannel, /*split_tf=*/false, /*tf_i=*/0).c_str());
   for (uint32_t i = 0; i < kPredSize; ++i) {
     // 2 * 150 + 51 = 351, with some error.
     EXPECT_NEAR(351, prediction[i], 2);
@@ -286,8 +370,10 @@ TEST(SignalingCflPredictor, Test) {
   cb.cfl_[0] = -27;
 
   int16_t prediction[kPredSize];
-  p.Predict(cb, kUChannel, prediction, kPredWidth);
-  printf("Info:\n%s\n", p.GetPredStr(cb, kUChannel).c_str());
+  p.Predict(cb, kUChannel, /*split_tf=*/false, /*tf_i=*/0, prediction,
+            kPredWidth);
+  printf("Info:\n%s\n",
+         p.GetPredStr(cb, kUChannel, /*split_tf=*/false, /*tf_i=*/0).c_str());
   printf("cfl_[0] = %d\n", cb.cfl_[0]);
   for (uint32_t i = 0; i < kPredSize; ++i) {
     // 1.59 * 150 + 219 ~= 457, with some error.
@@ -466,7 +552,8 @@ TEST(LargePredictors, AlphaPredictors) {
   for (const Predictor* const p : preds) {
     SCOPED_TRACE(SPrintf("predictor %s", p->GetName().c_str()));
     int16_t prediction[16];
-    p->Predict(cb, kAChannel, prediction, cb.w_pix());
+    p->Predict(cb, kAChannel, /*split_tf=*/false, /*tf_i=*/0, prediction,
+               cb.w_pix());
     EXPECT_THAT(prediction,
                 ElementsAre(Ge(100), Ge(100), Ge(230), Ge(230),  // Row 1.
                             Ge(100), Ge(100), Ge(230), Ge(230),  // Row 2.

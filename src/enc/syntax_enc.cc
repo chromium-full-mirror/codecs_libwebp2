@@ -328,20 +328,11 @@ void SyntaxWriter::WriteSplitTransform(const CodedBlock& cb, Channel channel,
 void SyntaxWriter::WriteHasCoeffs(const CodedBlock& cb, Channel channel,
                                   SymbolManager* const sm,
                                   ANSEncBase* const enc) {
-  bool block_has_coeffs = false;
   for (uint32_t tf_i = 0; tf_i < cb.GetNumTransforms(channel); ++tf_i) {
     const bool tf_has_coeffs = (cb.num_coeffs_[channel][tf_i] != 0);
-    if (!block_has_coeffs && cb.GetCodingParams(channel).split_tf &&
-        tf_i + 1 == cb.GetNumTransforms(channel)) {
-      // At least one transform has at least one non-zero coeff, otherwise
-      // 'split_tf' would be pointless.
-      assert(tf_has_coeffs);
-    } else {
-      const uint32_t cluster = (uint32_t)channel;
-      sm->Process(kSymbolHasCoeffs, cluster, tf_has_coeffs ? 1 : 0,
-                  "has_coeffs", enc);
-    }
-    if (tf_has_coeffs) block_has_coeffs = true;
+    const uint32_t cluster = (uint32_t)channel;
+    sm->Process(kSymbolHasCoeffs, cluster, tf_has_coeffs ? 1 : 0, "has_coeffs",
+                enc);
   }
 }
 

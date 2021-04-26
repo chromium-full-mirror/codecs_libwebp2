@@ -270,8 +270,24 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
 #endif
 
     // reconstruct
-    for (Channel channel : {kYChannel, kUChannel, kVChannel}) {
-      cb.Reconstruct(channel);
+    for (Channel c : {kYChannel, kUChannel, kVChannel}) {
+      for (uint32_t tf_i = 0; tf_i < cb.GetNumTransforms(c); ++tf_i) {
+        cb.Reconstruct(c, tf_i);
+
+        if ((VDMatch(config, "prediction/raw") ||
+             VDMatch(config, "prediction/modes")) &&
+            !VDMatch(config, "lossless") && c == VDChannel(config)) {
+          if (VDMatch(config, "prediction/raw")) {
+            cb.StorePredictionModes(config, tile->rect, c, tf_i,
+                                    gparams.GetPredictors(c), &vd_plane,
+                                    nullptr);
+          } else {
+            cb.StorePredictionModes(config, tile->rect, c, tf_i,
+                                    gparams.GetPredictors(c), nullptr,
+                                    &debug_output);
+          }
+        }
+      }
     }
     if (gparams.has_alpha_) {
       reader.alpha_reader().Reconstruct(&cb);
@@ -294,20 +310,14 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     // VisualDebug
-    if (VDMatch(config, "prediction/raw") && !VDMatch(config, "lossless")) {
-      const Channel c = VDChannel(config);
-      if (c != kAChannel || cb.HasLossyAlpha()) {
-        cb.StorePredictionModes(config, tile->rect, c, gparams.GetPredictors(c),
-                                &vd_plane, nullptr);
-      }
-    } else if (VDMatch(config, "chroma-from-luma/prediction")) {
+    if (VDMatch(config, "chroma-from-luma/prediction")) {
       const Channel channel = VDChannel(config);
       const CodedBlockBase::CodingParams saved = *cb.GetCodingParams(channel);
       assert(gparams.uv_preds_[0]->DependsOnLuma());
       cb.SetUVPredictor(gparams.uv_preds_[0]);
-      cb.StorePredictionModes(config, tile->rect, channel,
-                              gparams.GetPredictors(channel),
-                              &vd_plane, nullptr);
+      cb.StorePredictionModes(config, tile->rect, channel, /*tf_i=*/0,
+                              gparams.GetPredictors(channel), &vd_plane,
+                              nullptr);
       *cb.GetCodingParams(channel) = saved;
     } else if (VDMatch(config, "chroma-from-luma/slope") ||
                VDMatch(config, "chroma-from-luma/intercept")) {
@@ -334,13 +344,6 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
       } else if (cb.HasLossyAlpha()) {
         cb.StoreResiduals(config, tile->rect.x, tile->rect.y,
                           gparams.segments_[0].quant_a_, kAChannel, &vd_plane);
-      }
-    } else if (VDMatch(config, "prediction/modes") &&
-               !VDMatch(config, "lossless")) {
-      const Channel c = VDChannel(config);
-      if (c != kAChannel || cb.HasLossyAlpha()) {
-        cb.StorePredictionModes(config, tile->rect, c, gparams.GetPredictors(c),
-                                nullptr, &debug_output);
       }
     } else if (VDMatch(config, "original") && !VDMatch(config, "histogram")) {
       cb.AppendOriginalPixels(config, tile->rect.x, tile->rect.y,

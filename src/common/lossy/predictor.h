@@ -63,10 +63,11 @@ class Predictor : public WP2Allocable {
   virtual ~Predictor() = default;
 
   // Predicts values for the given block, on channel 'channel', for the
-  // whole block.
-  // Stores the result to 'output', incremented by 'step' for each row.
-  virtual void Predict(const CodedBlockBase& cb, Channel channel,
-                       int16_t output[], uint32_t step) const = 0;
+  // whole block if 'split_tf' is false, or for sub block 'tf_i' if 'split_tf'
+  // is true. Stores the result to 'output', incremented by 'step' for each row.
+  virtual void Predict(const CodedBlockBase& cb, Channel channel, bool split_tf,
+                       uint32_t tf_i, int16_t output[],
+                       uint32_t step) const = 0;
 
   // Returns true if it should be processed again everytime luma changes.
   virtual bool DependsOnLuma() const { return false; }
@@ -120,8 +121,8 @@ class Predictor : public WP2Allocable {
   virtual std::string GetName() const = 0;
   virtual std::string GetInfoStr() const { return ""; }
   virtual std::string GetFakePredStr() const = 0;
-  virtual std::string GetPredStr(const CodedBlockBase& cb,
-                                 Channel channel) const = 0;
+  virtual std::string GetPredStr(const CodedBlockBase& cb, Channel channel,
+                                 bool split_tf, uint32_t tf_i) const = 0;
   // This function is only used for debugging and returns info about the
   // predictor if it is an angle predictor.
   virtual void GetAngleInfo(bool* const is_angle_predictor,
@@ -187,7 +188,8 @@ class Predictors {
                      Counters* const counters, CodedBlock* const cb,
                      float* const best_score,
                      const Predictor** const best_predictor,
-                     TransformPair* const best_tf) const;
+                     TransformPair* const best_tf,
+                     bool* const best_split) const;
 
  protected:
   Channel channel_;
@@ -273,12 +275,12 @@ class UVPredictors : public Predictors {
 // Context-based predictor base class.
 class ContextPredictor : public Predictor {
  public:
-  void Predict(const CodedBlockBase& cb, Channel channel, int16_t output[],
-               uint32_t step) const override;
+  void Predict(const CodedBlockBase& cb, Channel channel, bool split_tf,
+               uint32_t tf_i, int16_t output[], uint32_t step) const override;
 
   std::string GetFakePredStr() const override;
-  std::string GetPredStr(const CodedBlockBase& cb,
-                         Channel channel) const override;
+  std::string GetPredStr(const CodedBlockBase& cb, Channel channel,
+                         bool split_tf, uint32_t tf_i) const override;
 
  protected:
   virtual void Predict(const int16_t context[], uint32_t w, uint32_t h,
@@ -300,15 +302,15 @@ class CflPredictor : public Predictor {
  public:
   CflPredictor(int16_t min_value, int16_t max_value);
 
-  void Predict(const CodedBlockBase& cb, Channel channel, int16_t output[],
-               uint32_t step) const override;
+  void Predict(const CodedBlockBase& cb, Channel channel, bool split_tf,
+               uint32_t tf_i, int16_t output[], uint32_t step) const override;
 
   bool DependsOnLuma() const override { return true; }
 
   std::string GetName() const override;
   std::string GetFakePredStr() const override;
-  std::string GetPredStr(const CodedBlockBase& cb,
-                         Channel channel) const override;
+  std::string GetPredStr(const CodedBlockBase& cb, Channel channel,
+                         bool split_tf, uint32_t tf_i) const override;
 
   // Does a simple linear regression based on the context for chroma and luma,
   // assuming chroma = a * luma + b. Returns values in kCfLBits precision.
@@ -351,8 +353,8 @@ class SignalingCflPredictor : public CflPredictor {
   SignalingCflPredictor(int16_t min_value, int16_t max_value);
 
   std::string GetName() const override;
-  std::string GetPredStr(const CodedBlockBase& cb,
-                         Channel channel) const override;
+  std::string GetPredStr(const CodedBlockBase& cb, Channel channel,
+                         bool split_tf, uint32_t tf_i) const override;
 
   bool ComputeParams(CodedBlock* const cb, Channel channel) const override;
   uint32_t WriteParams(const CodedBlockBase& cb, Channel channel,

@@ -119,111 +119,116 @@ uint32_t CodedBlock::GetDisto(Channel channel) const {
                                  p_out.Step(), w_pix(), h_pix());
 }
 
-void CodedBlock::GetResiduals(Channel channel, const Plane16& prediction,
+void CodedBlock::GetResiduals(Channel channel, uint32_t tf_i,
+                              const Plane16& prediction,
                               BlockCoeffs16* const res) const {
   const Plane16& in = in_.GetChannel(channel);
-  const BlockSize split_size =
-      GetSplitSize(dim(), GetCodingParams(channel).split_tf);
-  const uint32_t split_w = BlockWidthPix(split_size);
-  const uint32_t split_h = BlockHeightPix(split_size);
-  SubtractBlockFunc sub_block = WP2::SubtractBlock[TrfLog2[split_w] - 2];
-  uint32_t tf_i = 0;
-  for (uint32_t split_y = 0; split_y < h_pix(); split_y += split_h) {
-    for (uint32_t split_x = 0; split_x < w_pix(); split_x += split_w) {
-      sub_block(&in.At(split_x, split_y), in.Step(),
-                &prediction.At(split_x, split_y), prediction.Step(),
-                (*res)[tf_i], split_w, split_h);
+
+  const Rectangle tf_rect =
+      blk().LocalTfRect(GetCodingParams(channel).split_tf, tf_i);
+  SubtractBlockFunc sub_block = WP2::SubtractBlock[TrfLog2[tf_rect.width] - 2];
+
+  sub_block(&in.At(tf_rect.x, tf_rect.y), in.Step(),
+            &prediction.At(tf_rect.x, tf_rect.y), prediction.Step(),
+            (*res)[tf_i], tf_rect.width, tf_rect.height);
 
 #if defined(WP2_BITTRACE)
-      if (original_res_ != nullptr) {
-        memcpy((*original_res_)[channel][tf_i], &(*res)[tf_i][0],
-               split_w * split_h * sizeof((*res)[tf_i][0]));
-      }
-#endif
-      ++tf_i;
-    }
+  if (original_res_ != nullptr) {
+    memcpy((*original_res_)[channel][tf_i], &(*res)[tf_i][0],
+           tf_rect.width * tf_rect.height * sizeof((*res)[tf_i][0]));
   }
+#endif
 }
 
 void CodedBlock::TransformAndReconstruct(const QuantMtx& quant, Channel channel,
-                                         bool reduced_transform,
+                                         uint32_t tf_i, bool reduced_transform,
                                          const Plane16& prediction,
                                          const BlockCoeffs16* const res,
                                          BlockCoeffs16* const tmp) {
+  assert(tf_i < GetNumTransforms(channel));
   const CodingParams* const params = GetCodingParams(channel);
 
   const BlockSize split_size =
       GetSplitSize(dim(), GetCodingParams(channel)->split_tf);
   const uint32_t split_w = BlockWidthPix(split_size);
   const uint32_t split_h = BlockHeightPix(split_size);
-  for (uint32_t tf_i = 0; tf_i < GetNumTransforms(channel); ++tf_i) {
-    int32_t tf_res[kMaxBlockSizePix2];
-    WP2Transform2D((*res)[tf_i], params->tf_x(), params->tf_y(), split_w,
-                   split_h, tf_res, reduced_transform);
-    if (channel == kUChannel || channel == kVChannel) {
-      assert(params->tf == kDctDct && !params->split_tf);
-      // Note DC is scaled by NumPix(dim) by WP2Transform2D. We don't
-      // normalize it when propagating the error, even though the same value
-      // will have a bigger impact on a smaller block than on a large one.
-      // This is intentional: since we have fewer pixels in a smaller block,
-      // we shift them more. But it would also be possible to normalize by a
-      // factor of NumPix(dim) (multiply dc_error_ by this and devide
-      // dc_error_next by the same factor). This would mean we apply the same
-      // color shift regardless of the block size.
-      tf_res[0] += dc_error_[channel];
-      dc_error_next_[channel] = quant.DCError(tf_res[0], tdim(channel));
-    }
-    quant.Quantize(tf_res, tdim(channel), IsFirstCoeffDC(channel),
-                   coeffs_[channel][tf_i], &num_coeffs_[channel][tf_i],
-                   (*tmp)[tf_i]);
 
-    if (channel == kYChannel && mtx_set_ != nullptr) {
-      mtx_set_->DecideUseRndMtx(this);  // TODO(skal): later: U/V channel?
-    }
+  int32_t tf_res[kMaxBlockSizePix2];
+  WP2Transform2D((*res)[tf_i], params->tf_x(), params->tf_y(), split_w, split_h,
+                 tf_res, reduced_transform);
+  if (channel == kUChannel || channel == kVChannel) {
+    assert(params->tf == kDctDct && !params->split_tf);
+    // Note DC is scaled by NumPix(dim) by WP2Transform2D. We don't
+    // normalize it when propagating the error, even though the same value
+    // will have a bigger impact on a smaller block than on a large one.
+    // This is intentional: since we have fewer pixels in a smaller block,
+    // we shift them more. But it would also be possible to normalize by a
+    // factor of NumPix(dim) (multiply dc_error_ by this and devide
+    // dc_error_next by the same factor). This would mean we apply the same
+    // color shift regardless of the block size.
+    tf_res[0] += dc_error_[channel];
+    dc_error_next_[channel] = quant.DCError(tf_res[0], tdim(channel));
   }
-  Reconstruct(channel, reduced_transform, tmp, prediction);
+  quant.Quantize(tf_res, tdim(channel), IsFirstCoeffDC(channel),
+                 coeffs_[channel][tf_i], &num_coeffs_[channel][tf_i],
+                 (*tmp)[tf_i]);
+
+  if (channel == kYChannel && mtx_set_ != nullptr) {
+    mtx_set_->DecideUseRndMtx(this);  // TODO(skal): later: U/V channel?
+  }
+
+  Reconstruct(channel, tf_i, reduced_transform, tmp, prediction);
 }
 
-void CodedBlock::Reconstruct(Channel channel, bool reduced_transform,
-                             BlockCoeffs16* const res,
+void CodedBlock::Reconstruct(Channel channel, uint32_t tf_i,
+                             bool reduced_transform, BlockCoeffs16* const res,
                              const Plane16& prediction) const {
+  assert(tf_i < GetNumTransforms(channel));
   const CodingParams& params = GetCodingParams(channel);
-  const BlockSize split_size = GetSplitSize(dim(), params.split_tf);
-  const uint32_t split_w = BlockWidthPix(split_size);
-  const uint32_t split_h = BlockHeightPix(split_size);
-  for (uint32_t tf_i = 0; tf_i < GetNumTransforms(channel); ++tf_i) {
-    WP2InvTransform2D((*res)[tf_i], params.tf_x(), params.tf_y(), split_w,
-                      split_h, reduced_transform);
-  }
+  const Rectangle tf_rect = blk().LocalTfRect(params.split_tf, tf_i);
+
+  WP2InvTransform2D((*res)[tf_i], params.tf_x(), params.tf_y(), tf_rect.width,
+                    tf_rect.height, reduced_transform);
 
   Plane16* const out = &out_.GetChannel(channel);
   Plane16 pred_view;
   if (prediction.IsEmpty()) {
     WP2_ASSERT_STATUS(pred_view.SetView(*out));
-    PredictBlock(channel, pred_view.Row(0), pred_view.Step());
+    PredictBlock(channel, tf_i, pred_view.Row(0), pred_view.Step());
   } else {
     WP2_ASSERT_STATUS(pred_view.SetView(prediction));
   }
 
-  AddBlockFunc add_block = WP2::AddBlock[TrfLog2[split_w] - 2];
+  AddBlockFunc add_block = WP2::AddBlock[TrfLog2[tf_rect.width] - 2];
   const int32_t min = (channel == kAChannel) ? 0 : yuv_min_;
   const int32_t max = (channel == kAChannel) ? kAlphaMax : yuv_max_;
-  for (uint32_t tf_i = 0, split_y = 0; split_y < h_pix(); split_y += split_h) {
-    for (uint32_t split_x = 0; split_x < w_pix(); split_x += split_w, ++tf_i) {
-      add_block(&pred_view.At(split_x, split_y), pred_view.Step(), (*res)[tf_i],
-                split_w, min, max, &out->At(split_x, split_y), out->Step(),
-                split_h);
-    }
+
+  add_block(&pred_view.At(tf_rect.x, tf_rect.y), pred_view.Step(), (*res)[tf_i],
+            tf_rect.width, min, max, &out->At(tf_rect.x, tf_rect.y),
+            out->Step(), tf_rect.height);
+}
+
+void CodedBlock::QuantizeAll(const QuantMtx& quant, Channel channel,
+                             bool reduced_transform) {
+  for (uint32_t tf_i = 0; tf_i < GetNumTransforms(channel); ++tf_i) {
+    Quantize(quant, channel, tf_i, reduced_transform);
   }
 }
 
-void CodedBlock::Quantize(const QuantMtx& quant, Channel channel,
+void CodedBlock::QuantizeAllButFirst(const QuantMtx& quant, Channel channel,
+                                     bool reduced_transform) {
+  for (uint32_t tf_i = 1; tf_i < GetNumTransforms(channel); ++tf_i) {
+    Quantize(quant, channel, tf_i, reduced_transform);
+  }
+}
+
+void CodedBlock::Quantize(const QuantMtx& quant, Channel channel, uint32_t tf_i,
                           bool reduced_transform) {
   BlockCoeffs16 res, tmp;
   Plane16* const out = &out_.GetChannel(channel);
-  PredictBlock(channel, out->Row(0), out->Step());
-  GetResiduals(channel, /*prediction=*/*out, &res);
-  TransformAndReconstruct(quant, channel, reduced_transform,
+  PredictBlock(channel, tf_i, out->Row(0), out->Step());
+  GetResiduals(channel, tf_i, /*prediction=*/*out, &res);
+  TransformAndReconstruct(quant, channel, tf_i, reduced_transform,
                           /*prediction=*/*out, &res, &tmp);
 }
 
@@ -331,6 +336,8 @@ WP2Status CodedBlock::DecideChromaSubsampling(
     const EncoderConfig& config, uint32_t tile_pos_x, uint32_t tile_pos_y,
     bool has_alpha, const QuantMtx& quant_u, const QuantMtx& quant_v,
     Counters* const counters) {
+  assert(!GetCodingParams(kUChannel)->split_tf);
+  assert(!GetCodingParams(kVChannel)->split_tf);
   const BlockSize dim = blk_.dim();
 
   const TrfSize full_dim = kFullDim[dim];
@@ -345,10 +352,12 @@ WP2Status CodedBlock::DecideChromaSubsampling(
   int16_t res_u[kMaxBlockSizePix2], res_v[kMaxBlockSizePix2];
   {
     int16_t prediction[kMaxBlockSizePix2];
-    u_params->pred->Predict(*this, kUChannel, prediction, w_pix);
+    u_params->pred->Predict(*this, kUChannel, /*split_tf=*/false, /*tf_i=*/0,
+                            prediction, w_pix);
     sub_block(in_.U.Row(0), in_.U.Step(), prediction, /*preds_step=*/w_pix,
               res_u, /*dst_step=*/w_pix, h_pix);
-    v_params->pred->Predict(*this, kVChannel, prediction, w_pix);
+    v_params->pred->Predict(*this, kVChannel, /*split_tf=*/false, /*tf_i=*/0,
+                            prediction, w_pix);
     sub_block(in_.V.Row(0), in_.V.Step(), prediction, /*preds_step=*/w_pix,
               res_v, /*dst_step=*/w_pix, h_pix);
   }
@@ -470,16 +479,22 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
   const float lambda = lambda_mult_ * quant.lambda;
   bool is_first = true;
 
-  // Predict from mode once and for all.
   int16_t prediction[kMaxBlockSizePix2];
-  const Plane16 prediction_p = PredictInto(channel, prediction);
+  // Predict the first sub tf, as it won't change.
+  PredictBlock(channel, /*tf_i=*/0, prediction, /*step=*/kMaxBlockSizePix);
+  Plane16 prediction_p;
+  WP2_CHECK_STATUS(prediction_p.SetView(prediction, w_pix(), h_pix(),
+                                        /*step=*/kMaxBlockSizePix));
 
   for (const TransformPair tf : transforms) {
     params->tf = tf;
 
     BlockCoeffs16 tmp;
-    GetResiduals(channel, prediction_p, &tmp);  // <- depends on 'params->tf'
-    TransformAndReconstruct(quant, channel, reduced, prediction_p, &tmp, &tmp);
+    // depends on 'params->tf'
+    GetResiduals(channel, /*tf_i=*/0, prediction_p, &tmp);
+    TransformAndReconstruct(quant, channel, /*tf_i=*/0, reduced, prediction_p,
+                            &tmp, &tmp);
+    QuantizeAllButFirst(quant, channel, reduced);
 
     const uint32_t distortion = GetDisto(channel);
     float current_score = distortion;
@@ -515,6 +530,7 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
 void CodedBlock::FindBestPred(const Predictors& preds, Channel channel,
                               uint32_t improvement) {
   assert(preds.size() > 1);  // Otherwise this function should be skipped.
+  assert(!GetCodingParams(channel)->split_tf);
   // kVChannel is tested along kUChannel.
   assert(channel != kVChannel);
   Plane16& out = out_.GetChannel(channel);
@@ -526,12 +542,14 @@ void CodedBlock::FindBestPred(const Predictors& preds, Channel channel,
   const Predictor* best_pred = nullptr;
   for (const Predictor* const p : preds) {
     params->pred = p;
-    p->Predict(*this, channel, out.Row(0), out.Step());
+    p->Predict(*this, channel, /*split_tf=*/false, /*tf_i=*/0, out.Row(0),
+               out.Step());
     uint32_t score1 = GetDisto(channel);
     if (best_pred != nullptr && score1 > best_score) continue;
     uint32_t score2 = 0;
     if (channel == kUChannel) {
-      p->Predict(*this, kVChannel, out_.V.Row(0), out_.V.Step());
+      p->Predict(*this, kVChannel, /*split_tf=*/false, /*tf_i=*/0,
+                 out_.V.Row(0), out_.V.Step());
       score2 = GetDisto(kVChannel);
     }
     // we want the global score to be overall better, but also each
@@ -590,12 +608,32 @@ WP2Status CodedBlock::FindBestPredTf(
     assert(!transforms.empty());
   }
 
+  const bool can_split =
+      (channel == kYChannel && GetSplitSize(dim(), /*split=*/true) != dim());
+  const SplitTf forced_split_tf =
+      can_split ? GetForcedSplitTf(config, tile_rect.x, tile_rect.y)
+                : SplitTf::kUnknown;
+
   float best_score = std::numeric_limits<float>::max();
   TransformPair best_tf = kUnknownTf;
   const Predictor* best_pred = nullptr;
-  WP2_CHECK_STATUS(preds.FindBest(config, tile_rect, num_channels, context,
-                                  segment, reduced, transforms, counters, this,
-                                  &best_score, &best_pred, &best_tf));
+  bool best_split = false;
+
+  if (forced_split_tf != SplitTf::kForcedSplit) {
+    WP2_CHECK_STATUS(preds.FindBest(
+        config, tile_rect, num_channels, context, segment, reduced, transforms,
+        counters, this, &best_score, &best_pred, &best_tf, &best_split));
+    // In super slow mode this could be an 'if' instead of 'else if', to try
+    // both split and unsplit.
+  } else if (can_split && forced_split_tf != SplitTf::kForcedUnsplit) {
+    GetCodingParams(kYChannel)->split_tf = true;
+    WP2_CHECK_STATUS(preds.FindBest(
+        config, tile_rect, num_channels, context, segment, reduced, transforms,
+        counters, this, &best_score, &best_pred, &best_tf, &best_split));
+    GetCodingParams(kYChannel)->split_tf = best_split;
+  }
+  assert(best_pred != nullptr);
+
   SetPredictor(channel, best_pred);
   pred_scores_[channel] = best_score;
   if (channel == kUChannel) {
@@ -620,8 +658,8 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
   }
   const SplitTf forced_split =
       GetForcedSplitTf(config, tile_rect.x, tile_rect.y);
-  if (forced_split == SplitTf::kForcedUnsplit) {
-    params->split_tf = false;
+  if (forced_split != SplitTf::kUnknown) {
+    params->split_tf = (forced_split == SplitTf::kForcedSplit);
     return WP2_STATUS_OK;
   }
 
@@ -630,26 +668,10 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
   const float lambda = lambda_mult_ * quant.lambda;
   bool is_first = true;
 
-  // Predict from mode once and for all.
-  int16_t prediction[kMaxBlockSizePix2];
-  const Plane16 prediction_p = PredictInto(channel, prediction);
-
   for (bool split_tf : {false, true}) {
     params->split_tf = split_tf;
 
-    BlockCoeffs16 tmp;
-    GetResiduals(channel, prediction_p, &tmp);  // <- depends on 'split_tf'
-    TransformAndReconstruct(quant, channel, reduced, prediction_p, &tmp, &tmp);
-
-    if (split_tf) {
-      if (!HasCoeffs(channel)) {
-        continue;  // Split-tf with no coeff is forbidden.
-      } else if (forced_split == SplitTf::kForcedSplit) {
-        // Force split_tf (but only if there are some coeffs).
-        best_split_tf = true;
-        break;
-      }
-    }
+    QuantizeAll(quant, channel, reduced);
 
     const uint32_t distortion = GetDisto(channel);
     float score = distortion;
@@ -746,12 +768,12 @@ WP2Status CodedBlock::OptimizeModesLuma(
                                 transforms, counters));
   }
   WP2_CHECK_STATUS(FindBestSplitTf(config, tile_rect, segment.quant_y_, context,
-                                   kYChannel, num_channels, /*reduced=*/false,
-                                   counters));
+                                   kYChannel, num_channels,
+                                   /*reduced=*/false, counters));
 
   // TODO(yguyon): Remember the params during the last Quantize() call and omit
   //               this one if they are equivalent.
-  Quantize(segment.quant_y_, kYChannel, /*reduced_transform=*/false);
+  QuantizeAll(segment.quant_y_, kYChannel, /*reduced_transform=*/false);
   return WP2_STATUS_OK;
 }
 
@@ -815,8 +837,8 @@ WP2Status CodedBlock::OptimizeModesChroma(
                                              has_alpha, segment.quant_u_,
                                              segment.quant_v_, counters));
   }
-  Quantize(segment.quant_u_, kUChannel, is420_);
-  Quantize(segment.quant_v_, kVChannel, is420_);
+  QuantizeAll(segment.quant_u_, kUChannel, is420_);
+  QuantizeAll(segment.quant_v_, kVChannel, is420_);
   if (diffusion > 0) {
     dc_error_u->Store(mgr, blk(), dc_error_next_[kUChannel]);
     dc_error_v->Store(mgr, blk(), dc_error_next_[kVChannel]);

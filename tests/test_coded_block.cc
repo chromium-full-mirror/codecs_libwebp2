@@ -386,6 +386,62 @@ TYPED_TEST(CodedBlockTest, GetContext_HasRight) {
       Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 6),
       Pix(3, 5), Pix(3, 4));
 
+  // Check sub block context.
+  cb.GetCodingParams(kYChannel)->split_tf = true;
+  EXPECT_THAT_FIRST_ELEMENTS_ARE(
+      cb.GetContext(kYChannel, /*split_tf=*/true, /*tf_i=*/0,
+                    kContextSmallNoFillIn),
+      // Left.
+      Pix(3, 7), Pix(3, 6), Pix(3, 5), Pix(3, 4),
+      // Top left
+      Pix(3, 3),
+      // Top
+      Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),
+      // Top right
+      Pix(8, 3),
+      // Right
+      missing, missing, missing, missing);
+  EXPECT_THAT_FIRST_ELEMENTS_ARE(
+      cb.GetContext(kYChannel, /*split_tf=*/true, /*tf_i=*/1,
+                    kContextSmallNoFillIn),
+      // Left.
+      Pix(7, 7), Pix(7, 6), Pix(7, 5), Pix(7, 4),
+      // Top left
+      Pix(7, 3),
+      // Top
+      Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),
+      // Top right
+      Pix(12, 3),
+      // Right
+      Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7));
+  EXPECT_THAT_FIRST_ELEMENTS_ARE(
+      cb.GetContext(kYChannel, /*split_tf=*/true, /*tf_i=*/2,
+                    kContextSmallNoFillIn),
+      // Left.
+      missing, missing, missing, missing,
+      // Top left
+      Pix(3, 7),
+      // Top
+      Pix(4, 7), Pix(5, 7), Pix(6, 7), Pix(7, 7),
+      // Top right
+      Pix(8, 7),
+      // Right
+      missing, missing, missing, missing);
+  EXPECT_THAT_FIRST_ELEMENTS_ARE(
+      cb.GetContext(kYChannel, /*split_tf=*/true, /*tf_i=*/3,
+                    kContextSmallNoFillIn),
+      // Left.
+      Pix(7, 11), Pix(7, 10), Pix(7, 9), Pix(7, 8),
+      // Top left
+      Pix(7, 7),
+      // Top
+      Pix(8, 7), Pix(9, 7), Pix(10, 7), Pix(11, 7),
+      // Top right
+      Pix(12, 7),
+      // Right
+      missing, missing, missing, missing);
+  cb.GetCodingParams(kYChannel)->split_tf = false;
+
   // Top left block. Left and top contexts are available
   // (from previously decoded blocks 1 and 2).
   SetCoords4x4(/*num_blocks=*/0, /*x=*/1, /*y=*/1, &mgr, &yuv, &cb);

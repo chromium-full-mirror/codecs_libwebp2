@@ -72,7 +72,7 @@ void AlphaReader::Reconstruct(CodedBlockBase* const cb) const {
       ReconstructLossless(*cb, &cb->out_.A);
       break;
     case kBlockAlphaLossy:
-      cb->Reconstruct(kAChannel);
+      cb->Reconstruct(kAChannel, /*tf_i=*/0);
       break;
     case kBlockAlphaFullTransp:
       cb->out_.A.Fill(0);

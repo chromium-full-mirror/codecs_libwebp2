@@ -110,11 +110,11 @@ TEST(TestSyntaxWriter, CopyFrom) {
       cb.SetReconstructedOutput(&out);
       cb.y_context_is_constant_ = false;
 
-      cb.Quantize(gparams.segments_[cb.id_].quant_y_, kYChannel, false);
-      cb.Quantize(gparams.segments_[cb.id_].quant_u_, kUChannel, cb.is420_);
-      cb.Quantize(gparams.segments_[cb.id_].quant_v_, kVChannel, cb.is420_);
+      cb.QuantizeAll(gparams.segments_[cb.id_].quant_y_, kYChannel, false);
+      cb.QuantizeAll(gparams.segments_[cb.id_].quant_u_, kUChannel, cb.is420_);
+      cb.QuantizeAll(gparams.segments_[cb.id_].quant_v_, kVChannel, cb.is420_);
       if (!gparams.a_preds_.empty()) {
-        cb.Quantize(gparams.segments_[cb.id_].quant_a_, kAChannel, false);
+        cb.QuantizeAll(gparams.segments_[cb.id_].quant_a_, kAChannel, false);
       }
 
       // All blocks before 'kCopyAtBlockIndex' are only recorded by

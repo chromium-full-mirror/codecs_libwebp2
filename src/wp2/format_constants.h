@@ -260,6 +260,9 @@ static constexpr uint32_t kContextSize =
 // Maximum context size (for stack reservation).
 static constexpr uint32_t kMaxContextSize =
     ContextSize(kContextExtendRight, kMaxBlockSizePix, kMaxBlockSizePix);
+// Max context size when using sub transforms (split_tf).
+static constexpr uint32_t kMaxSubContextSize = ContextSize(
+    kContextExtendRight, kMaxBlockSizePix / 2, kMaxBlockSizePix / 2);
 static_assert(kMaxContextSize >= ContextSize(kContextSmall, kMaxBlockSizePix,
                                              kMaxBlockSizePix),
               "Wrong kMaxContextSize");
