@@ -722,7 +722,7 @@ WP2Status BuildCoOccurrence(const WP2::ArgbBuffer& pic, const T* src,
 
 // Implements the modified Zeng method from "A Survey on Palette Reordering
 // Methods for Improving the Compression of Color-Indexed Images" by Armando J.
-// Pinho and António J. R. Neves.
+// Pinho and Antonio J. R. Neves.
 WP2Status Palette::SortModifiedZeng(const WP2::ArgbBuffer& pic,
                                     const ProgressRange& progress, int effort,
                                     float cost_header, Encoder* const encoder,
