@@ -1992,7 +1992,9 @@ const ArgbBuffer& Params::GetBuffer() const {
   if (show_ == kAlt2 && !alt2_.IsEmpty()) return alt2_;
   if (show_ == kCompressed) return out_yuv_.IsEmpty() ? out_ : out_yuv_;
   if (VDMatch(dec_config_, "")) return dec_config_.info->debug_output;
-  if (VDMatch(enc_config_, "")) return enc_config_.info->debug_output;
+  if (VDMatch(enc_config_, "") && !view_only_) {
+    return enc_config_.info->debug_output;
+  }
   return out_;
 }
 
