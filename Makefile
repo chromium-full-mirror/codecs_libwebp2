@@ -700,7 +700,7 @@ CC_TESTS += test_directional_filter test_deblocking_filter test_plane
 CC_TESTS += test_header test_custom_csp test_custom_csp_dec test_malloc_fail_at
 CC_TESTS += test_custom_csp_enc test_custom_csp_enc_dec test_dec
 CC_TESTS += test_thread test_pessimization test_formats test_global_params
-CC_TESTS += test_data_source test_data_source_stream test_alpha_filter
+CC_TESTS += test_data test_data_source test_data_source_stream test_alpha_filter
 CC_TESTS += test_anim_rectangle test_block_size test_context test_buffer
 CC_TESTS += test_imageio test_imageio_conversion test_imageio_util
 CC_TESTS += test_simple_enc_dec test_simple_encode test_slow_enc
@@ -1160,6 +1160,7 @@ DIST_FILES= \
             tests/test_custom_csp_enc_dec.cc \
             tests/test_dsp.cc \
             tests/test_dsp_speed.cc \
+            tests/test_data.cc \
             tests/test_data_source.cc \
             tests/test_data_source_stream.cc \
             tests/test_deblocking_filter.cc \

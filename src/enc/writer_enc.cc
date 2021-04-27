@@ -64,12 +64,18 @@ void MemoryWriter::Reset() {
 //------------------------------------------------------------------------------
 
 bool StringWriter::Reserve(size_t size) {
-  if (str_ != nullptr) str_->reserve(str_->size() + size);
+  if (str_ == nullptr) {
+    return false;
+  }
+  str_->reserve(str_->size() + size);
   return true;
 }
 
 bool StringWriter::Append(const void* data, size_t data_size) {
-  if (str_ != nullptr && data_size > 0) {
+  if (str_ == nullptr) {
+    return false;
+  }
+  if (data_size > 0) {
     str_->append((const char*)data, data_size);
   }
   return true;
@@ -77,9 +83,27 @@ bool StringWriter::Append(const void* data, size_t data_size) {
 
 //------------------------------------------------------------------------------
 
+bool DataWriter::Reserve(size_t size) {
+  return (data_ != nullptr &&
+          (size_ + size <= data_->size ||
+           data_->Resize(size_ + size, /*keep_bytes=*/true) == WP2_STATUS_OK));
+}
+
+bool DataWriter::Append(const void* data, size_t data_size) {
+  if (data_ == nullptr || !Reserve(data_size)) {
+    return false;
+  }
+  std::copy((const uint8_t*)data, (const uint8_t*)data + data_size,
+            data_->bytes + size_);
+  size_ += data_size;
+  return true;
+}
+
+//------------------------------------------------------------------------------
+
 bool Counter::Append(const void* data, size_t data_size) {
   (void)data;
-  total_size_ += data_size;
+  size_ += data_size;
   return true;
 }
 

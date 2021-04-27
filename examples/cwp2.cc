@@ -882,8 +882,8 @@ int main(int argc, char* argv[]) {
       WP2_CHECK_STATUS(
           CompressAnimation(in_files, frame_durations, params,
                             nullptr, &rgb_buffer, &counter));
-      out_size = counter.total_size_;
-      counter.total_size_ = 0;
+      out_size = counter.size_;
+      counter.size_ = 0;
     }
 
     if (params.log_level >= WP2::LogLevel::DEFAULT &&
@@ -968,8 +968,8 @@ int main(int argc, char* argv[]) {
       } else {
         WP2_CHECK_STATUS(CompressImage(in_file.c_str(), params, nullptr,
                                        &rgb_buffer, &counter));
-        out_size = counter.total_size_;
-        counter.total_size_ = 0;
+        out_size = counter.size_;
+        counter.size_ = 0;
       }
 
       if (params.log_level >= WP2::LogLevel::DEFAULT &&

@@ -199,7 +199,6 @@ enum class Csp { kYCoCg, kYCbCr, kCustom, kYIQ };
 constexpr uint32_t kNumCspTypes = 4;
 
 //------------------------------------------------------------------------------
-// Data and Metadata container
 
 // Struct owning a chunk of memory which will be freed upon destruction.
 struct Data {
@@ -228,6 +227,7 @@ void swap(Data& a, Data& b);
 
 //------------------------------------------------------------------------------
 
+// Image properties (color profile, XMP and EXIF metadata).
 struct Metadata {
   Metadata() = default;
   Metadata(const Metadata&) = delete;
@@ -248,23 +248,28 @@ struct Metadata {
 void swap(Metadata& a, Metadata& b);
 
 //------------------------------------------------------------------------------
-// Abstract interface. Inherit to write the encoding output somewhere.
 
+// Abstract interface. Inherit to write the bytes somewhere.
 class Writer {
  public:
+  Writer() = default;
+  Writer(Writer&&) = delete;
+  Writer(const Writer&) = delete;
   virtual ~Writer() = default;
+  Writer& operator=(Writer&&) = delete;
+  Writer& operator=(const Writer&) = delete;
 
   // Potentially called at the beginning of a sequence of Append(), to signal
   // the expected 'size' for the incoming new data. This can be used as a hint.
   // Should return false if an error happened.
   WP2_NO_DISCARD virtual bool Reserve(size_t size) { return true; }
-  // Will be called when 'data_size' bytes of encoded 'data' are ready.
-  // Can be used to save the output of the encoding.
+  // Will be called when 'data_size' bytes of 'data' are ready.
+  // Can be used to save the output of the encoding, for example.
   // Should return false if an error happened.
   WP2_NO_DISCARD virtual bool Append(const void* data, size_t data_size) = 0;
 };
 
-// Writes the encoding output to memory.
+// Writes to memory. Handles allocation and dealloaction.
 class MemoryWriter : public Writer {
  public:
   ~MemoryWriter() override { Reset(); }
@@ -278,23 +283,37 @@ class MemoryWriter : public Writer {
   size_t max_size_ = 0;     // Total capacity.
 };
 
-// Writes the encoding output to a string.
+// Writes to a std::string.
 class StringWriter : public Writer {
  public:
   explicit StringWriter(std::string* const str) : str_(str) {}
   WP2_NO_DISCARD bool Reserve(size_t size) override;
   WP2_NO_DISCARD bool Append(const void* data, size_t data_size) override;
 
- protected:
+ private:
   std::string* const str_;
 };
 
-// Counts the bytes in the encoding output.
+// Writes to a Data instance.
+class DataWriter : public Writer {
+ public:
+  explicit DataWriter(Data* const data) : data_(data), size_(0) {}
+
+  WP2_NO_DISCARD bool Reserve(size_t size) override;
+  WP2_NO_DISCARD bool Append(const void* data, size_t data_size) override;
+  size_t size() const { return size_; }  // Number of appended bytes.
+
+ private:
+  Data* const data_;  // Pointer to first byte and total capacity.
+  size_t size_;       // Final size (is not increased by Reserve() calls).
+};
+
+// Counts the bytes.
 class Counter : public Writer {
  public:
   WP2_NO_DISCARD bool Append(const void* data, size_t data_size) override;
 
-  size_t total_size_ = 0;
+  size_t size_ = 0;  // Number of appended bytes.
 };
 
 //------------------------------------------------------------------------------
