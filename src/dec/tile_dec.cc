@@ -240,9 +240,10 @@ uint32_t GetTileMaxNumBytes(uint32_t rgb_bit_depth, const GlobalParams& gparams,
   // Make sure it does not fall back to raw pixel coding in CodeTiles().
   return kMaxChunkSize;
 #else
-  const bool lossless = (gparams.type_ == GlobalParams::GP_LOSSLESS);
+  const bool is_rgb = (gparams.type_ == GlobalParams::GP_LOSSLESS ||
+                       gparams.type_ == GlobalParams::GP_AV1);
   const uint32_t channel_bits =
-      lossless ? rgb_bit_depth : gparams.transf_.GetYuvDepth().num_bits;
+      is_rgb ? rgb_bit_depth : gparams.transf_.GetYuvDepth().num_bits;
   const uint32_t num_pixels = tile_rect.width * tile_rect.height;
   const uint32_t alpha_bits = gparams.has_alpha_ ? kAlphaBits : 0;
   const uint32_t max_num_bits = (alpha_bits + 3 * channel_bits) * num_pixels;
