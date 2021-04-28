@@ -24,6 +24,7 @@
 #include "src/common/constants.h"
 #include "src/common/header_enc_dec.h"
 #include "src/dec/preview/preview_dec.h"
+#include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/data_source.h"
@@ -179,7 +180,6 @@ WP2Status DecodeICC(DataSource* const data_source,
     } else {
       DataView view;
       WP2_CHECK_STATUS(ReadChunk(data_source, &view));
-      WP2_CHECK_OK(view.size >= 1, WP2_STATUS_BITSTREAM_ERROR);
       const uint8_t type = view.bytes[0];
       if (type == 0) {
         WP2_CHECK_STATUS(iccp->CopyFrom(view.bytes + 1, view.size - 1));
@@ -307,6 +307,182 @@ WP2Status SkipMetadata(DataSource* const data_source,
   if (has_xmp) WP2_CHECK_STATUS(SkipChunk(data_source));
   if (has_exif) WP2_CHECK_STATUS(SkipChunk(data_source));
   return WP2_STATUS_OK;
+}
+
+//------------------------------------------------------------------------------
+
+namespace {
+
+constexpr uint32_t kMinChunkSize = 1;
+
+// Reads the size of the next chunk from the 'data_source' and appends the chunk
+// itself to the 'writer' or mark it as read depending on 'append_chunk'.
+WP2Status GetStandardChunk(ExternalDataSource* const data_source,
+                           bool append_chunk, Writer* const writer) {
+  uint32_t chunk_size;
+  WP2_CHECK_STATUS(
+      TryReadVarInt(data_source, kMinChunkSize, kMaxChunkSize, &chunk_size));
+  if (append_chunk) {
+    const uint8_t* chunk_bytes;  // No copy with an ExternalDataSource.
+    WP2_CHECK_OK(data_source->TryReadNext(chunk_size, &chunk_bytes),
+                 WP2_STATUS_NOT_ENOUGH_DATA);
+    WP2_CHECK_OK(writer->Append(chunk_bytes, chunk_size), WP2_STATUS_BAD_WRITE);
+  } else {
+    data_source->MarkNumBytesAsRead(chunk_size);
+  }
+  return WP2_STATUS_OK;
+}
+
+}  // namespace
+
+WP2Status GetChunk(const uint8_t bitstream_data[], size_t bitstream_size,
+                   ChunkType chunk_type, Writer* writer, uint32_t frame_index) {
+  WP2_CHECK_OK(writer != nullptr, WP2_STATUS_NULL_PARAMETER);
+  ExternalDataSource data_source(bitstream_data, bitstream_size);
+
+  // WebP2 header chunk
+  BitstreamFeatures features;
+  WP2_CHECK_STATUS(DecodeHeader(&data_source, &features));
+  if (chunk_type == ChunkType::kHeader) {
+    WP2_CHECK_OK(writer->Append(bitstream_data, data_source.GetNumReadBytes()),
+                 WP2_STATUS_BAD_WRITE);
+    return WP2_STATUS_OK;
+  }
+
+  // Early exit
+  if ((chunk_type == ChunkType::kPreview && !features.has_preview) ||
+      (chunk_type == ChunkType::kIcc && !features.has_icc) ||
+      (chunk_type == ChunkType::kFrame && frame_index > 0 &&
+       !features.is_animation) ||
+      ((chunk_type == ChunkType::kXmp || chunk_type == ChunkType::kExif) &&
+       !features.has_trailing_data)) {
+    return WP2_STATUS_OK;  // Not found.
+  }
+
+  // Preview chunk
+  if (features.has_preview) {
+    const bool append_chunk = (chunk_type == ChunkType::kPreview);
+    WP2_CHECK_STATUS(GetStandardChunk(&data_source, append_chunk, writer));
+    if (append_chunk) return WP2_STATUS_OK;
+  }
+
+  // ICC chunk
+  if (features.has_icc) {
+    uint32_t chunk_size;
+    WP2_CHECK_STATUS(
+        TryReadVarInt(&data_source, kMinChunkSize, kMaxChunkSize, &chunk_size));
+    const uint8_t* chunk_bytes;  // No copy with an ExternalDataSource.
+    WP2_CHECK_OK(data_source.TryReadNext(chunk_size, &chunk_bytes),
+                 WP2_STATUS_NOT_ENOUGH_DATA);
+    if (chunk_type == ChunkType::kIcc) {
+      // Some ICC chunks are stored as is in the bitstream, some are static
+      // memory in the library. It depends on the first byte.
+      const uint8_t type = chunk_bytes[0];
+      if (type == 0) {
+        WP2_CHECK_OK(writer->Append(chunk_bytes + 1, chunk_size - 1),
+                     WP2_STATUS_BAD_WRITE);
+      } else if (type == 1) {
+        WP2_CHECK_OK(writer->Append(kPredefinedICC1, kPredefinedICC1Size),
+                     WP2_STATUS_BAD_WRITE);
+      } else if (type == 2 || type == 3) {
+        // Types 2 and 3 are identical but one byte at kPredefinedICC2Offset.
+        WP2_CHECK_OK(writer->Reserve(kPredefinedICC2Size),
+                     WP2_STATUS_BAD_WRITE);
+        WP2_CHECK_OK(writer->Append(kPredefinedICC2, kPredefinedICC2Offset),
+                     WP2_STATUS_BAD_WRITE);
+        const uint8_t byte = (type == 2) ? 0x00 : 0x01;
+        WP2_CHECK_OK(writer->Append(&byte, 1), WP2_STATUS_BAD_WRITE);
+        WP2_CHECK_OK(
+            writer->Append(kPredefinedICC2 + kPredefinedICC2Offset + 1,
+                           kPredefinedICC2Size - kPredefinedICC2Offset - 1),
+            WP2_STATUS_BAD_WRITE);
+      } else {
+        return WP2_STATUS_BITSTREAM_ERROR;
+      }
+      return WP2_STATUS_OK;
+    }
+  }
+
+  // Final frame chunks (may be composed of consecutive sub- and regular frames)
+  AnimationFrame frame;
+  uint32_t sub_or_regular_frame_index = 0;
+  uint32_t final_frame_index = 0;
+  size_t final_frame_pos = data_source.GetNumReadBytes();
+  do {
+    WP2_CHECK_STATUS(DecodeANMF(DecoderConfig::kDefault, &data_source, features,
+                                sub_or_regular_frame_index, &frame));
+    WP2_CHECK_STATUS(
+        SkipGlobalParamsAndTiles(&data_source, features, frame.window));
+    // The last skipped tile may not be entirely available, make sure it is.
+    WP2_CHECK_OK(data_source.GetNumReadBytes() <= bitstream_size,
+                 WP2_STATUS_NOT_ENOUGH_DATA);
+    if (frame.duration_ms > 0) {  // Regular frame.
+      if (chunk_type == ChunkType::kFrame && frame_index == final_frame_index) {
+        WP2_CHECK_OK(
+            writer->Append(bitstream_data + final_frame_pos,
+                           data_source.GetNumReadBytes() - final_frame_pos),
+            WP2_STATUS_BAD_WRITE);
+        return WP2_STATUS_OK;
+      }
+      ++final_frame_index;
+      final_frame_pos = data_source.GetNumReadBytes();
+    }
+    ++sub_or_regular_frame_index;
+  } while (!frame.is_last);
+
+  if (chunk_type == ChunkType::kFrame) return WP2_STATUS_OK;  // Not found.
+
+  bool has_xmp, has_exif;
+  WP2_CHECK_STATUS(HasMetadata(&data_source, features, &has_xmp, &has_exif));
+  if ((chunk_type == ChunkType::kXmp && !has_xmp) ||
+      (chunk_type == ChunkType::kExif && !has_exif)) {
+    return WP2_STATUS_OK;  // Not found.
+  }
+
+  // XMP chunk
+  if (has_xmp) {
+    const bool append_chunk = (chunk_type == ChunkType::kXmp);
+    WP2_CHECK_STATUS(GetStandardChunk(&data_source, append_chunk, writer));
+    if (append_chunk) return WP2_STATUS_OK;
+  }
+
+  // EXIF chunk
+  if (has_exif) {
+    const bool append_chunk = (chunk_type == ChunkType::kExif);
+    WP2_CHECK_STATUS(GetStandardChunk(&data_source, append_chunk, writer));
+    if (append_chunk) return WP2_STATUS_OK;
+  }
+
+  return WP2_STATUS_INVALID_PARAMETER;  // Bad 'chunk_type', should not happen.
+}
+
+WP2Status GetNumFrames(const uint8_t bitstream_data[], size_t bitstream_size,
+                       size_t* const num_frames) {
+  WP2_CHECK_OK(num_frames != nullptr, WP2_STATUS_NULL_PARAMETER);
+  *num_frames = 0;
+  ExternalDataSource data_source(bitstream_data, bitstream_size);
+  BitstreamFeatures features;
+
+  WP2_CHECK_STATUS(DecodeHeader(&data_source, &features));
+  if (!features.is_animation) {
+    *num_frames = 1;
+    return WP2_STATUS_OK;
+  }
+  WP2_CHECK_STATUS(SkipPreview(&data_source, features));
+  WP2_CHECK_STATUS(DecodeICC(&data_source, features, nullptr));
+
+  AnimationFrame frame;
+  uint32_t sub_or_regular_frame_index = 0;
+  while (true) {  // DecodeANMF() handles the frame_index < kMaxNumFrames check.
+    WP2_CHECK_STATUS(DecodeANMF(DecoderConfig::kDefault, &data_source, features,
+                                sub_or_regular_frame_index, &frame));
+    if (frame.duration_ms > 0) ++*num_frames;
+    if (frame.is_last) return WP2_STATUS_OK;
+
+    WP2_CHECK_STATUS(
+        SkipGlobalParamsAndTiles(&data_source, features, frame.window));
+    ++sub_or_regular_frame_index;
+  }
 }
 
 //------------------------------------------------------------------------------

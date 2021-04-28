@@ -19,6 +19,7 @@
 
 #include "./anim_image_dec.h"
 #include "./imageio_util.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -69,11 +70,15 @@ class ImageReaderWP2 : public ImageReader::Impl {
         status = decoder_.GetStatus();
       } else if (frame_index_ == 0) {
         // Metadata must be extracted during the first ReadFrame() call.
-        // ICCP was already decoded after header.
-        const WP2Status metadata_status =
-            ExtractMetadata(data_, data_size_, /*iccp=*/nullptr,
-                            &buffer_->metadata_.xmp, &buffer_->metadata_.exif);
-        if (metadata_status != WP2_STATUS_OK) status = metadata_status;
+        // ICCP was already decoded after the header.
+        buffer_->metadata_.xmp.Clear();
+        buffer_->metadata_.exif.Clear();
+        DataWriter xmp_writer(&buffer_->metadata_.xmp);
+        status = GetChunk(data_, data_size_, ChunkType::kXmp, &xmp_writer);
+        if (status == WP2_STATUS_OK) {
+          DataWriter exif_writer(&buffer_->metadata_.exif);
+          status = GetChunk(data_, data_size_, ChunkType::kExif, &exif_writer);
+        }
       }
     } else if (decoder_.GetStatus() == WP2_STATUS_OK) {
       // Decoding is done, there is no more frame, ReadFrame() should not have

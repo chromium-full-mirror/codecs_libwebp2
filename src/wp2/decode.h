@@ -61,10 +61,10 @@ struct BitstreamFeatures {
 
  public:
   // Extracts features from the bitstream. Returns:
-  //   . WP2_STATUS_OK when the features are successfully retrieved.
-  //   . WP2_STATUS_NOT_ENOUGH_DATA when more data is needed to retrieve the
+  //   - WP2_STATUS_OK when the features are successfully retrieved.
+  //   - WP2_STATUS_NOT_ENOUGH_DATA when more data is needed to retrieve the
   //     features from the header.
-  //   . Any other error status in case of parsing failure.
+  //   - Any other error status in case of parsing failure.
   WP2_NO_DISCARD WP2Status Read(const uint8_t* data, size_t data_size) {
     return InitInternal(WP2_ABI_VERSION, data, data_size);
   }
@@ -191,16 +191,26 @@ WP2_EXTERN WP2_NO_DISCARD WP2Status ExtractPreview(const uint8_t* data,
                                                    ArgbBuffer* output_buffer);
 
 //------------------------------------------------------------------------------
-// Metadata
+// WebP2 container parsing
 
-// Copies metadata to 'xmp', 'iccp' and 'exif' (if not null) from a whole WP2
-// bitstream stored in 'data', in case only metadata is wanted. Otherwise it's
-// available in ArgbBuffer after a regular Decode().
-// Clears any previous data. Returns WP2_STATUS_OK or an error.
-WP2_EXTERN WP2_NO_DISCARD WP2Status ExtractMetadata(const uint8_t* data,
-                                                    size_t data_size,
-                                                    Data* iccp, Data* xmp,
-                                                    Data* exif);
+// Types of byte chunk that can be found in a WebP2 bitstream, in order:
+enum class ChunkType {kHeader, kPreview, kIcc, kFrame, kXmp, kExif};
+
+// Retrieves the chunk of 'chunk_type' within the 'bitstream_data' and outputs
+// it through the given 'writer'.
+// 'frame_index' (0-based) is ignored unless 'chunk_type' is kFrame.
+// Returns WP2_STATUS_OK, a parsing error or a Writer issue.
+// If the chunk is absent, returns WP2_STATUS_OK without writing anything.
+WP2_NO_DISCARD WP2Status GetChunk(const uint8_t bitstream_data[],
+                                  size_t bitstream_size, ChunkType chunk_type,
+                                  Writer* writer, uint32_t frame_index = 0);
+
+// Parses the whole bitstream to count the number of frames.
+// Returns WP2_STATUS_OK or an error.
+// 'num_frames' is a lower bound in case of corrupted or truncated bitstream.
+WP2_NO_DISCARD WP2Status GetNumFrames(const uint8_t bitstream_data[],
+                                      size_t bitstream_size,
+                                      size_t* const num_frames);
 
 //------------------------------------------------------------------------------
 // Animation and incremental decoding
