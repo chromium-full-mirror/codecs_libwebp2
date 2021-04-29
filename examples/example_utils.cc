@@ -29,6 +29,8 @@
 
 #include "examples/stopwatch.h"
 #include "src/common/color_precision.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
 
 namespace WP2 {
 
@@ -153,29 +155,98 @@ WP2Status CollectBitTraces(const uint8_t* const data, size_t data_size,
 
 //------------------------------------------------------------------------------
 
-std::string PrintSummary(const BitstreamFeatures& bitstream,
+namespace {
+
+// Remembers the location of a chunk in the bitstream or in a hard-coded array.
+class ChunkWatcher : public Writer {
+ public:
+  bool Reserve(size_t) override { return true; }
+  bool Append(const void* data, size_t data_size) override {
+    if (ptr_ == nullptr) ptr_ = (const uint8_t*)data;
+    size_ += data_size;
+    ++num_append_calls_;
+    return true;
+  }
+
+  const uint8_t* ptr_ = nullptr;
+  size_t size_ = 0;
+  uint32_t num_append_calls_ = 0;
+};
+
+// Returns a string containing info about a 'chunk_type' in 'input_data_bytes'.
+std::string PrintChunk(const uint8_t input_data_bytes[],
+                              size_t input_data_size, ChunkType chunk_type,
+                              uint32_t frame_index = 0) {
+  ChunkWatcher chunk;
+  const WP2Status status = GetChunk(input_data_bytes, input_data_size,
+                                    chunk_type, &chunk, frame_index);
+  if (status != WP2_STATUS_OK) {
+    return SPrintf("ERROR (%s)\n", WP2GetStatusMessage(status));
+  } else if (chunk.ptr_ == nullptr) {
+    return "none\n";
+  } else if (chunk.ptr_ >= input_data_bytes &&
+             chunk.ptr_ < input_data_bytes + input_data_size &&
+             chunk.num_append_calls_ == 1) {
+    return SPrintf("%7u bytes at offset %7u\n", chunk.size_,
+                   chunk.ptr_ - input_data_bytes);
+  } else {
+    // Special hard-coded ICC case.
+    return SPrintf("1 byte expanded into %7u bytes\n", chunk.size_);
+  }
+}
+
+}  // namespace
+
+std::string PrintSummary(const uint8_t input_data_bytes[],
                          size_t input_data_size, bool short_output) {
-  const Argb32b prev_col = ToArgb32b(bitstream.preview_color);
-  const uint32_t degrees = (uint32_t)bitstream.orientation * 90;
+  BitstreamFeatures features;
+  WP2Status status = features.Read(input_data_bytes, input_data_size);
+  if (status != WP2_STATUS_OK) {
+    return SPrintf("ERROR: %s (in header)\n", WP2GetStatusMessage(status));
+  }
+
+  const Argb32b prev_col = ToArgb32b(features.preview_color);
+  const uint32_t degrees = (uint32_t)features.orientation * 90;
 
   std::string str;
-  str += SPrintf("Dimension:     %u x %u\n", bitstream.width, bitstream.height);
+  str += SPrintf("Dimension:     %u x %u\n", features.width, features.height);
   if (!short_output) {
-    str += SPrintf("animation:     %s\n",
-                   bitstream.is_animation
-                       ? (bitstream.loop_forever ? "yes (loop forever)"
-                                                 : "yes (play once)")
-                       : "no");
-    str += SPrintf("quality hint:  %u\n", bitstream.quality_hint);
-    str += SPrintf("preview:       %s\n", bitstream.has_preview ? "yes" : "no");
+    str += SPrintf(
+        "animation:     %s\n",
+        features.is_animation
+            ? (features.loop_forever ? "yes (loop forever)" : "yes (play once)")
+            : "no");
+    str += SPrintf("quality hint:  %u\n", features.quality_hint);
     str += SPrintf("preview color: %u, %u, %u\n", prev_col.r, prev_col.g,
                    prev_col.b);
     str += SPrintf("rotated by:    %u degrees clockwise\n", degrees);
-    str += SPrintf("transfer:      %d\n", (int)bitstream.transfer_function);
-    str += SPrintf("ICC:           %s\n", bitstream.has_icc ? "yes" : "no");
-    str += SPrintf("XMP/EXIF:      %s\n",
-                   bitstream.has_trailing_data ? "yes" : "no");
+    str += SPrintf("transfer:      %d\n", (int)features.transfer_function);
     str += SPrintf("file size:     %u\n", (uint32_t)input_data_size);
+
+    str += "\nChunks:\n";
+    str += "  header:      " +
+           PrintChunk(input_data_bytes, input_data_size, ChunkType::kHeader);
+    str += "  preview:     " +
+           PrintChunk(input_data_bytes, input_data_size, ChunkType::kPreview);
+    str += "  ICC:         " +
+           PrintChunk(input_data_bytes, input_data_size, ChunkType::kIcc);
+    size_t num_frames;
+    status = GetNumFrames(input_data_bytes, input_data_size, &num_frames);
+    if (status == WP2_STATUS_OK) {
+      for (uint32_t i = 0; i < (uint32_t)num_frames; ++i) {
+        str +=
+            (features.is_animation ? SPrintf("  frame %5u: ", i + 1)
+                                   : "  pixels:      ") +
+            PrintChunk(input_data_bytes, input_data_size, ChunkType::kFrame, i);
+      }
+    } else {
+      str +=
+          SPrintf("  pixels:      ERROR (%s)\n", WP2GetStatusMessage(status));
+    }
+    str += "  XMP:         " +
+           PrintChunk(input_data_bytes, input_data_size, ChunkType::kXmp);
+    str += "  EXIF:        " +
+           PrintChunk(input_data_bytes, input_data_size, ChunkType::kExif);
   }
   return str;
 }

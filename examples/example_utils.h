@@ -313,7 +313,8 @@ static inline std::string SPrintf(const char* format, ...) {
     }                                                   \
   } while (0)
 
-std::string PrintSummary(const WP2::BitstreamFeatures& bitstream,
+// Returns a string with info about the bitstream in 'input_data_bytes'.
+std::string PrintSummary(const uint8_t input_data_bytes[],
                          size_t input_data_size, bool short_output = false);
 
 //------------------------------------------------------------------------------

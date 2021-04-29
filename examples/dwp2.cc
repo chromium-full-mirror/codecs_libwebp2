@@ -270,12 +270,9 @@ class ImageDecoder : public WP2::WorkerBase {
     WP2::Data data;
     WP2_CHECK_STATUS(WP2::IoUtilReadFile(in_path.c_str(), &data));
 
-    WP2::BitstreamFeatures bitstream;
-    WP2_CHECK_STATUS(bitstream.Read(data.bytes, data.size));
-
     if (settings_.print_info) {
       *standard_out +=
-          WP2::PrintSummary(bitstream, data.size, settings_.short_output);
+          WP2::PrintSummary(data.bytes, data.size, settings_.short_output);
       return WP2_STATUS_OK;
     }
 
@@ -316,6 +313,8 @@ class ImageDecoder : public WP2::WorkerBase {
       WP2_CHECK_STATUS(decoder.GetStatus());
 
       // Output a frame even if it is a still image.
+      WP2::BitstreamFeatures bitstream;
+      WP2_CHECK_STATUS(bitstream.Read(data.bytes, data.size));
       if (!bitstream.is_animation) {
         assert(num_frames == 1);
         const std::string frame_filename =

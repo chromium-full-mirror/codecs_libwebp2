@@ -475,12 +475,8 @@ WP2Status SaveImage(const WP2::MemoryWriter& memory_writer,
   }
 
   if (params.log_level >= WP2::LogLevel::DEFAULT && params.print_info) {
-    WP2::BitstreamFeatures bitstream;
-    CHECK_STATUS(bitstream.Read(memory_writer.mem_, memory_writer.size_),
-                 "FATAL: Roundtrip error!");
-    CHECK_TRUE(bitstream.raw_width == width, "FATAL: invalid width");
-    CHECK_TRUE(bitstream.raw_height == height, "FATAL: invalid height");
-    printf("%s", WP2::PrintSummary(bitstream, memory_writer.size_).c_str());
+    printf("%s",
+           WP2::PrintSummary(memory_writer.mem_, memory_writer.size_).c_str());
   }
   return WP2_STATUS_OK;
 }
