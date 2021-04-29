@@ -180,16 +180,20 @@ WP2Status DecodeICC(DataSource* const data_source,
     } else {
       DataView view;
       WP2_CHECK_STATUS(ReadChunk(data_source, &view));
-      const uint8_t type = view.bytes[0];
-      if (type == 0) {
-        WP2_CHECK_STATUS(iccp->CopyFrom(view.bytes + 1, view.size - 1));
-      } else if (type == 1) {
-        WP2_CHECK_STATUS(iccp->CopyFrom(kPredefinedICC1, kPredefinedICC1Size));
-      } else if (type == 2 || type == 3) {
-        WP2_CHECK_STATUS(iccp->CopyFrom(kPredefinedICC2, kPredefinedICC2Size));
-        iccp->bytes[kPredefinedICC2Offset] = (type == 2) ? 0x00 : 0x01;
+      if (view.size > 1) {
+        WP2_CHECK_STATUS(iccp->CopyFrom(view.bytes, view.size));
       } else {
-        return WP2_STATUS_BITSTREAM_ERROR;
+        const uint8_t type = view.bytes[0];
+        if (type == 1) {
+          WP2_CHECK_STATUS(
+              iccp->CopyFrom(kPredefinedICC1, kPredefinedICC1Size));
+        } else if (type == 2 || type == 3) {
+          WP2_CHECK_STATUS(
+              iccp->CopyFrom(kPredefinedICC2, kPredefinedICC2Size));
+          iccp->bytes[kPredefinedICC2Offset] = (type == 2) ? 0x00 : 0x01;
+        } else {
+          return WP2_STATUS_BITSTREAM_ERROR;
+        }
       }
     }
   }
@@ -376,28 +380,30 @@ WP2Status GetChunk(const uint8_t bitstream_data[], size_t bitstream_size,
                  WP2_STATUS_NOT_ENOUGH_DATA);
     if (chunk_type == ChunkType::kIcc) {
       // Some ICC chunks are stored as is in the bitstream, some are static
-      // memory in the library. It depends on the first byte.
-      const uint8_t type = chunk_bytes[0];
-      if (type == 0) {
-        WP2_CHECK_OK(writer->Append(chunk_bytes + 1, chunk_size - 1),
+      // memory in the library. It depends on the size and first byte.
+      if (chunk_size > 1) {
+        WP2_CHECK_OK(writer->Append(chunk_bytes, chunk_size),
                      WP2_STATUS_BAD_WRITE);
-      } else if (type == 1) {
-        WP2_CHECK_OK(writer->Append(kPredefinedICC1, kPredefinedICC1Size),
-                     WP2_STATUS_BAD_WRITE);
-      } else if (type == 2 || type == 3) {
-        // Types 2 and 3 are identical but one byte at kPredefinedICC2Offset.
-        WP2_CHECK_OK(writer->Reserve(kPredefinedICC2Size),
-                     WP2_STATUS_BAD_WRITE);
-        WP2_CHECK_OK(writer->Append(kPredefinedICC2, kPredefinedICC2Offset),
-                     WP2_STATUS_BAD_WRITE);
-        const uint8_t byte = (type == 2) ? 0x00 : 0x01;
-        WP2_CHECK_OK(writer->Append(&byte, 1), WP2_STATUS_BAD_WRITE);
-        WP2_CHECK_OK(
-            writer->Append(kPredefinedICC2 + kPredefinedICC2Offset + 1,
-                           kPredefinedICC2Size - kPredefinedICC2Offset - 1),
-            WP2_STATUS_BAD_WRITE);
       } else {
-        return WP2_STATUS_BITSTREAM_ERROR;
+        const uint8_t type = chunk_bytes[0];
+        if (type == 1) {
+          WP2_CHECK_OK(writer->Append(kPredefinedICC1, kPredefinedICC1Size),
+                       WP2_STATUS_BAD_WRITE);
+        } else if (type == 2 || type == 3) {
+          // Types 2 and 3 are identical but one byte at kPredefinedICC2Offset.
+          WP2_CHECK_OK(writer->Reserve(kPredefinedICC2Size),
+                       WP2_STATUS_BAD_WRITE);
+          WP2_CHECK_OK(writer->Append(kPredefinedICC2, kPredefinedICC2Offset),
+                       WP2_STATUS_BAD_WRITE);
+          const uint8_t byte = (type == 2) ? 0x00 : 0x01;
+          WP2_CHECK_OK(writer->Append(&byte, 1), WP2_STATUS_BAD_WRITE);
+          WP2_CHECK_OK(
+              writer->Append(kPredefinedICC2 + kPredefinedICC2Offset + 1,
+                             kPredefinedICC2Size - kPredefinedICC2Offset - 1),
+              WP2_STATUS_BAD_WRITE);
+        } else {
+          return WP2_STATUS_BITSTREAM_ERROR;
+        }
       }
       return WP2_STATUS_OK;
     }

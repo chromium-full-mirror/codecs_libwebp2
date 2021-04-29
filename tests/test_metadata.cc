@@ -25,14 +25,14 @@ namespace {
 
 //------------------------------------------------------------------------------
 
-// Encode decode metadata of 1 byte per ICC, EXIF and XMP chunk.
+// Encode decode metadata of minimum size per ICC, EXIF and XMP chunk.
 TEST(MetadataTest, MinChunkSize) {
   ArgbBuffer original, decoded;
   ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath("source1_1x1.png").c_str(),
                           &original));
 
   Metadata& a = original.metadata_;
-  ASSERT_WP2_OK(a.iccp.Resize(1, /*keep_bytes=*/false));
+  ASSERT_WP2_OK(a.iccp.Resize(2, /*keep_bytes=*/false));
   ASSERT_WP2_OK(a.xmp.Resize(1, /*keep_bytes=*/false));
   ASSERT_WP2_OK(a.exif.Resize(1, /*keep_bytes=*/false));
   std::fill(a.iccp.bytes, a.iccp.bytes + a.iccp.size, 42);
@@ -49,6 +49,19 @@ TEST(MetadataTest, MinChunkSize) {
   EXPECT_TRUE(testutil::HasSameData(a.exif, b.exif));
 }
 
+TEST(MetadataTest, IccIsTooSmall) {
+  ArgbBuffer original;
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath("source1_1x1.png").c_str(),
+                          &original));
+
+  Metadata& a = original.metadata_;
+  ASSERT_WP2_OK(a.iccp.Resize(1, /*keep_bytes=*/false));
+  std::fill(a.iccp.bytes, a.iccp.bytes + a.iccp.size, 42);
+
+  MemoryWriter memory_writer;
+  EXPECT_EQ(Encode(original, &memory_writer), WP2_STATUS_INVALID_PARAMETER);
+}
+
 //------------------------------------------------------------------------------
 
 // Encode decode metadata of maximum size per ICC, EXIF and XMP chunk.
@@ -58,8 +71,7 @@ TEST(MetadataTest, MaxChunkSize) {
                           &original));
 
   Metadata& a = original.metadata_;
-  // ICC needs to reserve 1 byte for the ICC type. Hence the '-1':
-  ASSERT_WP2_OK(a.iccp.Resize(kMaxChunkSize - 1, /*keep_bytes=*/false));
+  ASSERT_WP2_OK(a.iccp.Resize(kMaxChunkSize, /*keep_bytes=*/false));
   ASSERT_WP2_OK(a.xmp.Resize(kMaxChunkSize, /*keep_bytes=*/false));
   ASSERT_WP2_OK(a.exif.Resize(kMaxChunkSize, /*keep_bytes=*/false));
   std::fill(a.iccp.bytes, a.iccp.bytes + a.iccp.size, 42);

@@ -359,31 +359,33 @@ WP2Status EncodePreview(const ArgbBuffer& buffer, const EncoderConfig& config,
 
 WP2Status EncodeICC(DataView iccp, Writer* const output) {
   if (iccp.size > 0) {
-    uint8_t type = 0;  // default: verbatim
     if (iccp.size == kPredefinedICC1Size &&
         !memcmp(iccp.bytes, kPredefinedICC1, kPredefinedICC1Size)) {
-      type = 1;
+      // kPredefinedICC1 so only write one byte.
+      uint8_t buffer[2] = {/*size=*/1, /*type=*/1};
+      if (WriteVarInt(1, 1, kMaxChunkSize, buffer) != 1) assert(false);
+      WP2_CHECK_OK(output->Append(buffer, 2), WP2_STATUS_BAD_WRITE);
     } else if (iccp.size == kPredefinedICC2Size &&
                !memcmp(iccp.bytes, kPredefinedICC2, kPredefinedICC2Offset) &&
                !memcmp(iccp.bytes + kPredefinedICC2Offset + 1,
                        kPredefinedICC2 + kPredefinedICC2Offset + 1,
-                       kPredefinedICC2Size - (kPredefinedICC2Offset + 1))) {
-      const uint8_t byte67 = iccp.bytes[kPredefinedICC2Offset];
-      if (byte67 == 0x00  || byte67 == 0x01) {
-        type = (byte67 == 0x00) ? 2 : 3;
-      }
-    }
-    WP2_CHECK_OK(iccp.size <= kMaxChunkSize, WP2_STATUS_INVALID_PARAMETER);
-    uint8_t buf[kMaxVarIntLength + /*type byte=*/1];
-    const uint8_t* data_bytes = iccp.bytes;
-    uint32_t data_size = iccp.size;
-    if (type != 0) data_size = 0;
-    uint32_t buf_size = WriteVarInt(data_size + 1, 1, kMaxChunkSize, buf);
-    buf[buf_size++] = type;
-    WP2_CHECK_OK(output->Append(buf, buf_size), WP2_STATUS_BAD_WRITE);
-    if (data_size > 0) {
+                       kPredefinedICC2Size - (kPredefinedICC2Offset + 1)) &&
+               iccp.bytes[kPredefinedICC2Offset] <= 0x01) {
+      // kPredefinedICC2/3 so only write one byte.
+      const uint8_t type = (iccp.bytes[kPredefinedICC2Offset] == 0x00) ? 2 : 3;
+      uint8_t buffer[2] = {/*size=*/1, type};
+      if (WriteVarInt(1, 1, kMaxChunkSize, buffer) != 1) assert(false);
+      WP2_CHECK_OK(output->Append(buffer, 2), WP2_STATUS_BAD_WRITE);
+    } else {
+      WP2_CHECK_OK(iccp.size > 1, WP2_STATUS_INVALID_PARAMETER);
+      WP2_CHECK_OK(iccp.size <= kMaxChunkSize, WP2_STATUS_INVALID_PARAMETER);
+
+      // Custom ICC so write all bytes.
+      uint8_t buffer[kMaxVarIntLength];
+      uint32_t buffer_size = WriteVarInt(iccp.size, 1, kMaxChunkSize, buffer);
+      WP2_CHECK_OK(output->Append(buffer, buffer_size), WP2_STATUS_BAD_WRITE);
       // TODO(skal): use 0-order ANS coding?
-      WP2_CHECK_OK(output->Append(data_bytes, data_size), WP2_STATUS_BAD_WRITE);
+      WP2_CHECK_OK(output->Append(iccp.bytes, iccp.size), WP2_STATUS_BAD_WRITE);
     }
   }
   return WP2_STATUS_OK;
