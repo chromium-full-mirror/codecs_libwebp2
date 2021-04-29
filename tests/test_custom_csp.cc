@@ -307,7 +307,7 @@ class SpeedTest : public testing::TestWithParam<WP2CPUInfo> {
 
  protected:
   static constexpr uint32_t kIter = 100u;
-  static constexpr uint32_t kNumTest = 10000u / kIter;
+  static constexpr uint32_t kNumTest = 1000u / kIter;
   static constexpr uint32_t kMaxLen = 16384u;
   static constexpr int32_t kMaxAvg = (1u << 10) - 1;
   static constexpr int32_t kMaxYUV = (1u << 10) - 1;
@@ -398,37 +398,37 @@ TEST_P(SpeedTest, YuvToCustom) {
     }
     for (auto i : out) crc = testutil::SillyCRC(crc, i);
   }
-  EXPECT_EQ(crc, 1929850794u);
+  EXPECT_EQ(crc, 2289281721u);
 }
 
 TEST_P(SpeedTest, AyuvToArgb32) {
   UniformIntDistribution random(/*seed=*/48623);
-  EXPECT_EQ(DoTest(WP2AyuvToArgb32, &random), 3017869648u);
+  EXPECT_EQ(DoTest(WP2AyuvToArgb32, &random), 1723592100u);
 }
 
 TEST_P(SpeedTest, AyuvToARGB32) {
   UniformIntDistribution random(/*seed=*/8724);
-  EXPECT_EQ(DoTest(WP2AyuvToARGB32, &random), 3144549024u);
+  EXPECT_EQ(DoTest(WP2AyuvToARGB32, &random), 378733358u);
 }
 
 TEST_P(SpeedTest, AyuvToXRGB32) {
   UniformIntDistribution random(/*seed=*/1532);
-  EXPECT_EQ(DoTest(WP2AyuvToXRGB32, &random), 952933099u);
+  EXPECT_EQ(DoTest(WP2AyuvToXRGB32, &random), 3448598276u);
 }
 
 TEST_P(SpeedTest, YuvToArgb32) {
-  UniformIntDistribution random(/*seed=*/48623);
-  EXPECT_EQ(DoTest(WP2YuvToArgb32, &random), 2953853455u);
+  UniformIntDistribution random(/*seed=*/8645);
+  EXPECT_EQ(DoTest(WP2YuvToArgb32, &random), 81797637u);
 }
 
 TEST_P(SpeedTest, AyuvToArgb38) {
-  UniformIntDistribution random(/*seed=*/48623);
-  EXPECT_EQ(DoTest(WP2AyuvToArgb32, &random), 3017869648u);
+  UniformIntDistribution random(/*seed=*/9);
+  EXPECT_EQ(DoTest(WP2AyuvToArgb32, &random), 1072866599u);
 }
 
 TEST_P(SpeedTest, YuvToArgb38) {
-  UniformIntDistribution random(/*seed=*/48623);
-  EXPECT_EQ(DoTest(WP2YuvToArgb32, &random), 2953853455u);
+  UniformIntDistribution random(/*seed=*/77781);
+  EXPECT_EQ(DoTest(WP2YuvToArgb32, &random), 1019445235u);
 }
 
 INSTANTIATE_TEST_SUITE_P(SpeedTestInstantiation, SpeedTest,

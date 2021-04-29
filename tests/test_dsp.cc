@@ -42,7 +42,7 @@ TEST_P(DspTest, SSETest16sFullBlock) {
   constexpr uint32_t max_h = 128;
   constexpr uint32_t max_w = 128;
   constexpr uint32_t stride1 = max_w + 53, stride2 = max_w + 39;
-  for (uint32_t N = 0; N < 5000; ++N) {
+  for (uint32_t N = 0; N < 1000; ++N) {
     const uint32_t h = 1 + rnd.GetUnsigned(max_w);
     for (uint32_t w = 2; w <= max_w; w += 4) {
       int16_t tmp1[stride1 * max_h], tmp2[stride2 * max_h];
@@ -52,7 +52,7 @@ TEST_P(DspTest, SSETest16sFullBlock) {
           ^ WP2SumSquaredErrorBlock(tmp1, stride1, tmp2, stride2, w, h);
     }
   }
-  EXPECT_EQ(sum, 11322889319853296395llu);
+  EXPECT_EQ(sum, 4978086325689542192llu);
 }
 
 TEST_P(DspTest, SSETest16sHalfBlock) {
@@ -62,7 +62,7 @@ TEST_P(DspTest, SSETest16sHalfBlock) {
   constexpr uint32_t max_h = 128;
   constexpr uint32_t max_w = 128;
   constexpr uint32_t stride1 = max_w + 53, stride2 = max_w + 39;
-  for (uint32_t N = 0; N < 5000; ++N) {
+  for (uint32_t N = 0; N < 2000; ++N) {
     const uint32_t h = (1 + rnd.GetUnsigned(max_w) + 1) & ~1;
     for (uint32_t w = 2; w <= max_w; w += 2 + 2 * rnd.GetUnsigned(6)) {
       int16_t tmp1[stride1 * max_h], tmp2[stride2 * max_h];
@@ -72,7 +72,7 @@ TEST_P(DspTest, SSETest16sHalfBlock) {
           ^ WP2SumSquaredErrorHalfBlock(tmp1, stride1, tmp2, stride2, w, h);
     }
   }
-  EXPECT_EQ(sum, 6894256865328488963u);
+  EXPECT_EQ(sum, 7047682130755693817u);
 }
 
 TEST_P(DspTest, SSETest8u) {
@@ -80,7 +80,7 @@ TEST_P(DspTest, SSETest8u) {
   testutil::PrecalculatedRandom<65536u, uint8_t> rnd(0, 256);
   uint64_t sum = 0;
   constexpr uint32_t max_w = 128;
-  for (uint32_t N = 0; N < 3000000; ++N) {
+  for (uint32_t N = 0; N < 1000000; ++N) {
     const uint32_t w = 1 + rnd.GetUnsigned(max_w);
     uint8_t tmp1[max_w], tmp2[max_w];
     rnd.Fill(tmp1, w);
@@ -88,7 +88,7 @@ TEST_P(DspTest, SSETest8u) {
     sum = ((sum >> 3) + (sum << 2))
         ^ WP2SumSquaredError8u(tmp1, tmp2, w);
   }
-  EXPECT_EQ(sum, 16994877026985094642llu);
+  EXPECT_EQ(sum, 3894653819151780583llu);
 }
 
 TEST_P(DspTest, SSETest4x8u) {
@@ -96,7 +96,7 @@ TEST_P(DspTest, SSETest4x8u) {
   testutil::PrecalculatedRandom<65536u, uint8_t> rnd(0, 256);
   constexpr uint32_t max_w = 128;
   uint64_t sums[4] = { 0 };
-  for (uint32_t N = 0; N < 2000000; ++N) {
+  for (uint32_t N = 0; N < 500000; ++N) {
     const uint32_t w = 1 + rnd.GetUnsigned(max_w);
     uint8_t tmp1[4 * max_w], tmp2[4 * max_w];
     rnd.Fill(tmp1, 4 * w);
@@ -104,7 +104,7 @@ TEST_P(DspTest, SSETest4x8u) {
     WP2SumSquaredError4x8u(tmp1, tmp2, w, sums);
   }
   const uint64_t sum = sums[0] ^ (sums[1] + sums[2] - sums[3]);
-  EXPECT_EQ(sum, 211731994llu);
+  EXPECT_EQ(sum, 863527329llu);
 }
 
 TEST_P(DspTest, SSETest3x8u) {
@@ -112,7 +112,7 @@ TEST_P(DspTest, SSETest3x8u) {
   testutil::PrecalculatedRandom<65536u, uint8_t> rnd(0, 256);
   constexpr uint32_t max_w = 1024;
   uint64_t sums[3] = { 0 };
-  for (uint32_t N = 0; N < 200000; ++N) {
+  for (uint32_t N = 0; N < 50000; ++N) {
     const uint32_t w = 1 + rnd.GetUnsigned(max_w);
     uint8_t tmp1[3 * max_w], tmp2[3 * max_w];
     rnd.Fill(tmp1, 3 * w);
@@ -120,7 +120,7 @@ TEST_P(DspTest, SSETest3x8u) {
     WP2SumSquaredError3x8u(tmp1, tmp2, w, sums);
   }
   const uint64_t sum = sums[0] ^ (sums[1] - sums[2]);
-  EXPECT_EQ(sum, 18446742956550012216llu);
+  EXPECT_EQ(sum, 279651866034llu);
 }
 
 TEST_P(DspTest, SSETest16s) {

@@ -17,42 +17,10 @@
 #include <string>
 
 #include "include/helpers.h"
-#include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {
 namespace {
-
-//------------------------------------------------------------------------------
-// Test a random image with alpha to make sure all configs are dealt with
-// properly.
-
-TEST(EncodeDecodeLosslessTest, Lossless) {
-  EncoderConfig encoder_config = EncoderConfig::kDefault;
-  encoder_config.quality = 100.f;
-  encoder_config.effort = 9;
-  const DecoderConfig decoder_config = DecoderConfig::kDefault;
-
-  ArgbBuffer original(WP2_ARGB_32);
-  EXPECT_EQ(original.Resize(256, 16), WP2_STATUS_OK);
-  testutil::PrecalculatedRandom<65536u, uint8_t> rnd(0, 255);
-
-  rnd.Fill(original.GetRow8(0), original.stride(), original.height(),
-           original.stride());
-
-  MemoryWriter memory_writer;
-  WP2Status status = Encode(original, &memory_writer, encoder_config);
-  EXPECT_EQ(status, WP2_STATUS_OK);
-
-  ArgbBuffer decompressed(WP2_Argb_32);
-  status = Decode(memory_writer.mem_, memory_writer.size_, &decompressed,
-                  decoder_config);
-  EXPECT_EQ(status, WP2_STATUS_OK);
-
-  ArgbBuffer converted_original(decompressed.format());
-  ASSERT_WP2_OK(converted_original.ConvertFrom(original));
-  ASSERT_TRUE(testutil::Compare(converted_original, decompressed, "internal"));
-}
 
 //------------------------------------------------------------------------------
 
