@@ -51,8 +51,8 @@ ChromaSubsampling DecideChromaSubsampling(const EncoderConfig& config,
 }
 
 bool DecideAOMCoeffs(const EncoderConfig& config, const Rectangle& tile_rect) {
-  return (config.quality >= 35) &&
-         (tile_rect.width >= 100 && tile_rect.height >= 100);
+  return (config.quality >= 35) ||
+         (tile_rect.width >= 50 && tile_rect.height >= 50);
 }
 
 WP2Status DecideTransforms(const EncoderConfig& config,
