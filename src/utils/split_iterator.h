@@ -68,9 +68,11 @@ class SplitIteratorBase {
   uint32_t NumSplitPatterns() const;
   // Fills 'sub_blocks' with the various sub-blocks corresponding to the
   // split_pattern 'split_idx' for the current block. 'split_idx' must be
-  // smaller than NumSplitPatterns(). Returns the number of sub-blocks
-  // (between 1 and 4).
-  uint32_t GetSplitPatternBlocks(uint32_t split_idx, Block sub_blocks[4]) const;
+  // smaller than NumSplitPatterns(). Fills 'splittable' with booleans
+  // indicating if each sub block is further splittable.
+  // Returns the number of sub-blocks (between 1 and 4).
+  uint32_t GetSplitPatternBlocks(uint32_t split_idx, Block sub_blocks[4],
+                                 bool splittable[4]) const;
   // Splits the current block using the split_idx'th split pattern. Only valid
   // if CurrentBlock().splittable is true. 'split_idx' must be smaller than
   // NumSplitPatterns(). Updates the current block.
@@ -84,6 +86,10 @@ class SplitIteratorBase {
 
  protected:
   WP2Status CopyInternal(const SplitIteratorBase& other);
+  // Fills 'splittable' with booleans indicating if each sub block is further
+  // splittable.
+  virtual void GetSplittable(const Block sub_blocks[4], uint32_t num_sub_blocks,
+                             bool splittable[4]) const = 0;
 
   // Returns the 'sub_blocks' given a 'block' (size and position) and a
   // 'split_pattern'.
@@ -106,8 +112,13 @@ class SplitIteratorLexico : public SplitIteratorBase {
   void SplitCurrentBlock(uint32_t split_idx) override;
   void NextBlock() override;
 
+ protected:
+  void GetSplittable(const Block sub_blocks[4], uint32_t num_sub_blocks,
+                     bool splittable[4]) const override;
+
  private:
   void SetCurrentBlock(uint32_t bx, uint32_t by);
+  bool IsSplittable(BlockSize dim) const;
 
   // Same as SplitInfo but with just the BlockSize instead of Block (to make it
   // smaller).
@@ -145,8 +156,13 @@ class SplitIteratorRecurse : public SplitIteratorBase {
   void NextBlock() override;
   const SplitInfo& CurrentBlock() const override;
 
+ protected:
+  void GetSplittable(const Block sub_blocks[4], uint32_t num_sub_blocks,
+                     bool splittable[4]) const override;
+
  private:
   void SetCurrentBlockLexico();
+
   Vector<SplitInfo> block_queue_;
 };
 

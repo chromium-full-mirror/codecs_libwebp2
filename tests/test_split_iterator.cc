@@ -34,6 +34,7 @@ TEST_P(TestSplitIterator, Random) {
   const PartitionSet partition_set = std::get<1>(GetParam());
 
   constexpr uint32_t kWidth = 111;
+  constexpr uint32_t kWidthBlocks = SizeBlocks(kWidth);
   constexpr uint32_t kHeight = 52;
   std::unique_ptr<SplitIteratorBase> it(
       (type == IteratorType::kLexico)
@@ -59,19 +60,53 @@ TEST_P(TestSplitIterator, Random) {
   FrontMgrBase front_mgr;
   ASSERT_WP2_OK(front_mgr.InitBase(kWidth, kHeight));
 
+  std::vector<int32_t> splittable_map(kWidth * kHeight, -1);
+
   uint32_t num_blocks = 0;
   while (!it->Done()) {
     const uint32_t num_split_patterns = it->NumSplitPatterns();
     ASSERT_GT(num_split_patterns, 0u);
+
+    const uint32_t idx = it->CurrentBlock().block.x() +
+                         it->CurrentBlock().block.y() * kWidthBlocks;
+    if (splittable_map[idx] != -1) {
+      ASSERT_EQ(splittable_map[idx], it->CurrentBlock().splittable);
+    }
+
     if (it->CurrentBlock().splittable) {
       ASSERT_GE(it->NumSplitPatterns(), 1u);
-      Block sub_blocks[4];
-      const uint32_t num_sub_blocks = it->GetSplitPatternBlocks(0, sub_blocks);
-      ASSERT_GE(num_sub_blocks, 0u);
-      ASSERT_LT(num_sub_blocks, 4u);
-      const uint32_t split_idx =
+
+      const uint32_t chosen_split_idx =
           gen.Get<uint32_t>(0, it->NumSplitPatterns() - 1);
-      it->SplitCurrentBlock(split_idx);
+
+      for (uint32_t split_idx = 0; split_idx < it->NumSplitPatterns();
+           ++split_idx) {
+        Block sub_blocks[4];
+        bool splittable[4];
+        const uint32_t num_sub_blocks =
+            it->GetSplitPatternBlocks(split_idx, sub_blocks, splittable);
+        ASSERT_GE(num_sub_blocks, 0u);
+        ASSERT_LE(num_sub_blocks, 4u);
+
+        if (num_sub_blocks == 1) {
+          EXPECT_FALSE(splittable[0]);
+          EXPECT_EQ(it->CurrentBlock().block.rect(), sub_blocks[0].rect());
+        }
+
+        for (uint32_t i = 0; i < num_sub_blocks; ++i) {
+          EXPECT_TRUE(
+              it->CurrentBlock().block.rect().Contains(sub_blocks[i].rect()));
+        }
+
+        if (split_idx == chosen_split_idx) {
+          for (uint32_t i = 0; i < num_sub_blocks; ++i) {
+            const Block& b = sub_blocks[i];
+            splittable_map[b.x() + b.y() * kWidthBlocks] = splittable[i];
+          }
+        }
+      }
+
+      it->SplitCurrentBlock(chosen_split_idx);
     } else {
       front_mgr.Use(it->CurrentBlock().block);
       it->NextBlock();

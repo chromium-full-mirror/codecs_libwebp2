@@ -143,27 +143,30 @@ WP2Status Partitioner::RegisterForcedBlocks(
   return WP2_STATUS_OK;
 }
 
-bool IsCompatibleWithForcedBlocks(const Block& block, Block* sub_blocks,
+bool IsCompatibleWithForcedBlocks(const Block& block, const Block sub_blocks[4],
+                                  const bool splittable[4],
                                   uint32_t num_sub_blocks,
                                   const VectorNoCtor<Block>& forced_blocks) {
+  if (num_sub_blocks == 1) {
+    assert(!splittable[0]);
+    assert(sub_blocks[0].dim() == block.dim());
+  }
   auto forced_block_it =
       std::lower_bound(forced_blocks.begin(), forced_blocks.end(), block);
-  while (forced_block_it != forced_blocks.end() &&
-         (forced_block_it->y() < block.y() + block.h())) {
-    if (block.rect().Intersects(forced_block_it->rect())) {
-      // Intersects with but does not contain it => not compatible.
-      if (!block.rect().Contains(forced_block_it->rect())) return false;
-      if (num_sub_blocks == 1 && block.dim() != forced_block_it->dim()) {
+  for (; forced_block_it != forced_blocks.end(); ++forced_block_it) {
+    if (forced_block_it->y() >= block.y() + block.h()) break;
+    const Rectangle forced_block = forced_block_it->rect();
+    if (!block.rect().Intersects(forced_block)) continue;
+    // Intersects with but does not contain it => not compatible.
+    if (!block.rect().Contains(forced_block)) return false;
+
+    for (uint32_t i = 0; i < num_sub_blocks; ++i) {
+      if (!sub_blocks[i].rect().Intersects(forced_block)) continue;
+      if (!sub_blocks[i].rect().Contains(forced_block)) return false;
+      if (!splittable[i] && (sub_blocks[i].rect() != forced_block)) {
         return false;
       }
-      for (uint32_t i = 0; i < num_sub_blocks; ++i) {
-        if (sub_blocks[i].rect().Intersects(forced_block_it->rect()) &&
-            !sub_blocks[i].rect().Contains(forced_block_it->rect())) {
-          return false;
-        }
-      }
     }
-    ++forced_block_it;
   }
   return true;
 }

@@ -333,6 +333,7 @@ struct Rectangle {
     return x == other.x && y == other.y &&
            width == other.width && height == other.height;
   }
+  bool operator!=(const Rectangle& other) const { return !(*this == other); }
 
   inline uint64_t GetArea() const { return (uint64_t)width * height; }
   inline bool Contains(uint32_t px, uint32_t py) const {

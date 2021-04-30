@@ -3834,6 +3834,8 @@ int main(int argc, char* argv[]) {
   if (read_initial_partition) {
     CHECK_TRUE(params.ReadAndConvertPartition(/*read_only=*/false),
                "Error: Unable to parse partition file");
+    CHECK_TRUE(params.EncodeAndDecode(),
+               "Error: Unable to encode with partition");
   }
 
   if (alt_name != nullptr) {

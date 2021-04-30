@@ -92,7 +92,9 @@ WP2Status AddForcedBlocks(const EncoderConfig& config,
 
 // Returns true if the given split pattern (given as the whole block + sub
 // blocks) is compatible with the given forced blocks which must be sorted.
-bool IsCompatibleWithForcedBlocks(const Block& block, Block* sub_blocks,
+// 'splittable' indicates if each sub block is further splittable.
+bool IsCompatibleWithForcedBlocks(const Block& block, const Block sub_blocks[4],
+                                  const bool splittable[4],
                                   uint32_t num_sub_blocks,
                                   const VectorNoCtor<Block>& forced_blocks);
 

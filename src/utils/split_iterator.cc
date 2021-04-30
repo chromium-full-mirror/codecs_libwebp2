@@ -78,13 +78,15 @@ uint32_t SplitIteratorBase::NumSplitPatterns() const {
 }
 
 uint32_t SplitIteratorBase::GetSplitPatternBlocks(uint32_t split_idx,
-                                                  Block sub_blocks[4]) const {
+                                                  Block sub_blocks[4],
+                                                  bool splittable[4]) const {
   assert(CurrentBlock().splittable);
   const Block& current_block = CurrentBlock().block;
   assert(split_idx < GetNumSplitPatterns(partition_set_, current_block.dim()));
   const SplitPattern& split_pattern =
       GetSplitPatterns(partition_set_, current_block.dim())[split_idx];
   GetSplitPatternBlocks(current_block, split_pattern, sub_blocks);
+  GetSplittable(sub_blocks, split_pattern.num_blocks, splittable);
   return split_pattern.num_blocks;
 }
 
@@ -121,10 +123,10 @@ void SplitIteratorLexico::SplitCurrentBlock(uint32_t split_idx) {
 
   for (uint32_t i = 0; i < split_pattern.num_blocks; ++i) {
     // TODO(yguyon): Recurse in fewer situations to save CPU.
-    const bool recursive =
-        (split_pattern.num_blocks > 1 && blocks[i].dim() != BLK_4x4);
-    SetSplitInfo(blocks[i], recursive);
-    if (i == 0) current_block_ = {blocks[i], recursive};
+    const bool splittable =
+        (split_pattern.num_blocks > 1 && IsSplittable(blocks[i].dim()));
+    SetSplitInfo(blocks[i], splittable);
+    if (i == 0) current_block_ = {blocks[i], splittable};
   }
 }
 
@@ -149,8 +151,7 @@ void SplitIteratorLexico::SetCurrentBlock(uint32_t bx, uint32_t by) {
     const Block bounds =
         front_mgr_.LargestPossibleBlockAt(bx, by, /*snapped=*/true);
     const BlockSize size = GetFittingBlockSize(partition_set_, bounds.dim());
-    const bool splittable = (GetNumSplitPatterns(partition_set_, size) > 1);
-    current_block_ = {{bx, by, size}, splittable};
+    current_block_ = {{bx, by, size}, IsSplittable(size)};
   } else {
     current_block_ = {{bx, by, split_info.size}, split_info.splittable};
   }
@@ -176,6 +177,22 @@ WP2Status SplitIteratorLexico::CopyFrom(const SplitIteratorLexico& other) {
   return WP2_STATUS_OK;
 }
 
+bool SplitIteratorLexico::IsSplittable(BlockSize dim) const {
+  return (GetNumSplitPatterns(partition_set_, dim) > 1);
+}
+
+void SplitIteratorLexico::GetSplittable(const Block sub_blocks[4],
+                                        uint32_t num_sub_blocks,
+                                        bool splittable[4]) const {
+  if (num_sub_blocks == 1) {
+    splittable[0] = false;
+  } else {
+    for (uint32_t i = 0; i < num_sub_blocks; ++i) {
+      splittable[i] = IsSplittable(sub_blocks[i].dim());
+    }
+  }
+}
+
 //------------------------------------------------------------------------------
 
 WP2Status SplitIteratorRecurse::Init(PartitionSet partition_set, uint32_t width,
@@ -197,13 +214,10 @@ void SplitIteratorRecurse::SplitCurrentBlock(uint32_t idx) {
 
   Block blocks[4];
   GetSplitPatternBlocks(current_block, split_pattern, blocks);
-  // Only recurse when using the 2x2 split.
-  const bool recurse = (split_pattern.num_blocks == 4) &&
-                       (blocks[0].w() == (current_block.w() / 2)) &&
-                       (blocks[0].area() > 1);
+  bool splittable[4];
+  GetSplittable(blocks, split_pattern.num_blocks, splittable);
   for (int32_t i = split_pattern.num_blocks - 1; i >= 0; --i) {
-    const Block& block = blocks[i];
-    block_queue_.push_back_no_resize({block, recurse});
+    block_queue_.push_back_no_resize({blocks[i], splittable[i]});
   }
 }
 
@@ -236,6 +250,18 @@ WP2Status SplitIteratorRecurse::CopyFrom(const SplitIteratorRecurse& other) {
   WP2_CHECK_STATUS(SplitIteratorBase::CopyInternal(other));
   WP2_CHECK_ALLOC_OK(block_queue_.copy_from(other.block_queue_));
   return WP2_STATUS_OK;
+}
+
+void SplitIteratorRecurse::GetSplittable(const Block sub_blocks[4],
+                                         uint32_t num_sub_blocks,
+                                         bool splittable[4]) const {
+  // Only recurse when using the 2x2 split.
+  const bool recurse =
+      (num_sub_blocks == 4) && (sub_blocks[0].x() != sub_blocks[3].x()) &&
+      (sub_blocks[0].y() != sub_blocks[3].y()) && (sub_blocks[0].area() > 1);
+  for (uint32_t i = 0; i < num_sub_blocks; ++i) {
+    splittable[i] = recurse;
+  }
 }
 
 //------------------------------------------------------------------------------

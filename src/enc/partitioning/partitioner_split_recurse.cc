@@ -174,14 +174,15 @@ WP2Status SplitRecursePartitioner::FindBestPattern(
   Vector_u32 best_pattern_idxs_tmp;
   for (uint32_t split_idx = 0; split_idx < num_patterns; ++split_idx) {
     Block sub_blocks[4];
+    bool splittable[4];
     const uint32_t num_sub_blocks =
-        it.GetSplitPatternBlocks(split_idx, sub_blocks);
+        it.GetSplitPatternBlocks(split_idx, sub_blocks, splittable);
 
     // Skip configurations which don't match the forced blocks.
     const Block& block = it.CurrentBlock().block;
     if (!forced_blocks.empty() &&
-        !IsCompatibleWithForcedBlocks(block, sub_blocks, num_sub_blocks,
-                                      forced_blocks)) {
+        !IsCompatibleWithForcedBlocks(block, sub_blocks, splittable,
+                                      num_sub_blocks, forced_blocks)) {
       continue;
     }
 
@@ -214,9 +215,6 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
   std::fill(occupancy_.begin(), occupancy_.end(), false);
   const uint32_t max_num_blocks = num_block_cols_ * num_block_rows_;
   uint32_t max_num_blocks_left = max_num_blocks;
-
-  // Begin with the user-defined blocks, if any (debug).
-  WP2_CHECK_STATUS(RegisterForcedBlocks(*blocks, &max_num_blocks_left));
 
   // Sort forced blocks by position for IsCompatibleWithForcedBlocks.
   VectorNoCtor<Block> forced_blocks;
