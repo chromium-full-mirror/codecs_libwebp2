@@ -27,6 +27,7 @@
 #include "src/common/filters/rstr_flt_params.h"
 #include "src/common/global_params.h"
 #include "src/common/lossy/residuals_aom.h"
+#include "src/common/vdebug.h"
 #include "src/dec/filters/block_map_filter.h"
 #include "src/dec/filters/intertile_filter.h"
 #include "src/dec/filters/intratile_filter.h"

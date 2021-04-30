@@ -19,6 +19,7 @@
 
 #include "src/dec/filters/grain_filter.h"
 
+#include "src/common/vdebug.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/dsp/math.h"
 

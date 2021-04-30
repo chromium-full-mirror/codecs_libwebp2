@@ -19,6 +19,7 @@
 
 #include "src/dec/filters/alpha_filter.h"
 
+#include "src/common/vdebug.h"
 #include "src/dec/wp2_dec_i.h"
 
 namespace WP2 {

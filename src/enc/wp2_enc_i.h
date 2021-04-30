@@ -420,47 +420,6 @@ class SyntaxWriter : public WP2Allocable {
 
 //------------------------------------------------------------------------------
 
-#if !defined(WP2_REDUCE_BINARY_SIZE)
-// Returns true if 'EncoderInfo::visual_debug' in the 'config' exists and
-// contains the 'token'. Tokens are separated by '/'.
-bool VDMatch(const EncoderConfig& config, const char token[]);
-// Returns the channel corresponding to the current debug view. Asserts that
-// the debug view contains the name of a channel ("y", "u", "v" or "a") in its
-// path.
-Channel VDChannel(const EncoderConfig& config);
-// Returns true if the given rectangle is selected in visual debug.
-bool VDSelected(uint32_t tile_x, uint32_t tile_y, const Rectangle& rect,
-                const EncoderConfig& config);
-// Returns the parameter if 'config->info.visual_debug' matches "p="+parameter
-// or 'default_value' otherwise.
-float VDGetParam(const EncoderConfig& config, float default_value);
-
-#else
-inline bool VDMatch(const EncoderConfig& config, const char token[]) {
-  (void)config;
-  (void)token;
-  return true;
-}
-inline Channel VDChannel(const EncoderConfig& config) {
-  (void)config;
-  return kYChannel;
-}
-inline bool VDSelected(uint32_t tile_x, uint32_t tile_y, const Rectangle& rect,
-                       const EncoderConfig& config) {
-  (void)config;
-  (void)tile_x;
-  (void)tile_y;
-  (void)rect;
-  return false;
-}
-inline float VDGetParam(const EncoderConfig& config, float default_value) {
-  (void)config;
-  return default_value;
-}
-#endif  // WP2_REDUCE_BINARY_SIZE
-
-//------------------------------------------------------------------------------
-
 }  // namespace WP2
 
 #endif  /* WP2_WP2_ENC_I_H_ */

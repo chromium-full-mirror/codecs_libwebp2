@@ -27,6 +27,7 @@
 #include "src/common/lossless/color_cache.h"
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
+#include "src/common/vdebug.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/dsp/lossless/decl_dsp.h"
 #include "src/dsp/math.h"

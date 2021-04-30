@@ -21,6 +21,7 @@
 
 #include <cassert>
 
+#include "src/common/vdebug.h"
 #include "src/dec/filters/intertile_filter.h"
 #include "src/dec/filters/intratile_filter.h"
 #include "src/dec/wp2_dec_i.h"

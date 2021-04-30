@@ -294,49 +294,6 @@ class SyntaxReader {
 
 //------------------------------------------------------------------------------
 
-#if !defined(WP2_REDUCE_BINARY_SIZE)
-// Returns true if 'DecoderInfo::visual_debug' in the 'config' exists and
-// contains the 'token'. Tokens are separated by '/'.
-bool VDMatch(const char str[], const char token[]);
-bool VDMatch(const DecoderConfig& config, const char token[]);
-// Returns the channel corresponding to the current debug view. Asserts that
-// the debug view contains the name of a channel ("y", "u", "v" or "a") in its
-// path.
-Channel VDChannel(const DecoderConfig& config);
-// Returns true if the given rectangle is selected in visual debug.
-bool VDSelected(uint32_t tile_x, uint32_t tile_y, const Rectangle& rect,
-                const DecoderConfig& config);
-
-// Handles VisualDebug for "compressed" and "original".
-void ApplyVDebugBeforeAfter(const DecoderConfig& config,
-                            const CSPTransform& csp_tranform,
-                            const Tile& tile,
-                            ArgbBuffer* const debug_output);
-
-void VDDrawUndefinedPattern(ArgbBuffer* const debug_output);
-
-#else
-inline bool VDMatch(const DecoderConfig& config, const char token[]) {
-  (void)config;
-  (void)token;
-  return false;
-}
-inline Channel VDChannel(const DecoderConfig& config) {
-  (void)config;
-  return kYChannel;
-}
-inline bool VDSelected(uint32_t tile_x, uint32_t tile_y, const Rectangle& rect,
-                       const DecoderConfig& config) {
-  (void)config;
-  (void)tile_x;
-  (void)tile_y;
-  (void)rect;
-  return false;
-}
-#endif  // WP2_REDUCE_BINARY_SIZE
-
-//------------------------------------------------------------------------------
-
 }  // namespace WP2
 
 #endif  // WP2_DEC_WP2_DEC_I_H_

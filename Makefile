@@ -898,6 +898,7 @@ DIST_FILES= \
             src/common/symbols.h \
             src/common/symbols.cc \
             src/common/vdebug.cc \
+            src/common/vdebug.h \
             src/dec/alpha_dec.cc \
             src/dec/anim_dec.cc \
             src/dec/av1_dec.cc \

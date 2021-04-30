@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <memory>
 
+#include "src/common/vdebug.h"
 #include "src/dsp/math.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/ans_utils.h"

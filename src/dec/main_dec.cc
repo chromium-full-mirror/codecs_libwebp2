@@ -22,6 +22,7 @@
 
 #include "src/common/color_precision.h"
 #include "src/common/progress_watcher.h"
+#include "src/common/vdebug.h"
 #include "src/dec/filters/intertile_filter.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/utils/data_source.h"

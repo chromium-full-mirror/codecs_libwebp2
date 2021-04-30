@@ -40,7 +40,7 @@
 #include "src/common/color_precision.h"
 #include "src/common/constants.h"
 #include "src/common/lossy/block_size.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/common/vdebug.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/enc/wp2_enc_i.h"

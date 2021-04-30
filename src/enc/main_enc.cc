@@ -23,6 +23,7 @@
 #include "src/common/color_precision.h"
 #include "src/common/constants.h"
 #include "src/common/header_enc_dec.h"
+#include "src/common/vdebug.h"
 #include "src/dec/tile_dec.h"
 #include "src/enc/partitioning/partitioner.h"
 #include "src/enc/preview/preview_enc.h"

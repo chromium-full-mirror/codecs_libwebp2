@@ -17,6 +17,8 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include "src/common/vdebug.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -283,14 +285,15 @@ void VDDrawUndefinedPattern(ArgbBuffer* const debug_output) {
 //------------------------------------------------------------------------------
 
 // Returns true if the 'str' contains the 'token'. Tokens are separated by '/'.
-bool VDMatch(const char str[], const char token[]) {
-  if (str != nullptr && token != nullptr) {
+template <>
+bool VDMatch<const char*>(const char* const& in, const char token[]) {
+  if (in != nullptr && token != nullptr) {
     const uint32_t token_length = std::strlen(token);
     if (token_length == 0) return true;
 
-    for (const char* pos = str; (pos = std::strstr(pos, token)) != nullptr;
+    for (const char* pos = in; (pos = std::strstr(pos, token)) != nullptr;
          pos += token_length) {
-      if ((pos == str || pos[-1] == '/') &&  // Beginning of a token.
+      if ((pos == in || pos[-1] == '/') &&  // Beginning of a token.
           (pos[token_length] == '\0' || pos[token_length] == '/')) {  // End.
         return true;  // A complete token is matched.
       }
@@ -298,13 +301,9 @@ bool VDMatch(const char str[], const char token[]) {
   }
   return false;
 }
-
-static Channel VDChannel(const char visual_debug[]) {
-  if (VDMatch(visual_debug, "y")) return kYChannel;
-  if (VDMatch(visual_debug, "u")) return kUChannel;
-  if (VDMatch(visual_debug, "v")) return kVChannel;
-  assert(VDMatch(visual_debug, "a"));
-  return kAChannel;
+template <>
+bool VDMatch<std::string>(const std::string& in, const char token[]) {
+  return VDMatch<const char*>(in.c_str(), token);
 }
 
 // Returns true if an 'index' exists as a token in 'str' and outputs it.
@@ -334,44 +333,6 @@ static bool VDIndex(const char str[], uint32_t* const index) {
   return false;
 }
 
-// Returns true if the point 'config.info->selection' is in 'rect'.
-template <typename TConfig>
-static bool VDSelected(const Rectangle& rect, const TConfig& config) {
-  return (config.info != nullptr && config.info->selection.width > 0 &&
-          config.info->selection.height > 0 &&
-          config.info->selection.x >= rect.x &&
-          config.info->selection.x < rect.x + rect.width &&
-          config.info->selection.y >= rect.y &&
-          config.info->selection.y < rect.y + rect.height);
-}
-
-// Declared in wp2_dec_i.h.
-bool VDMatch(const DecoderConfig& config, const char token[]) {
-  if (config.info != nullptr) return VDMatch(config.info->visual_debug, token);
-  return false;
-}
-Channel VDChannel(const DecoderConfig& config) {
-  return VDChannel(config.info->visual_debug);
-}
-bool VDSelected(uint32_t tile_x, uint32_t tile_y, const Rectangle& rect,
-                const DecoderConfig& config) {
-  return VDSelected({tile_x + rect.x, tile_y + rect.y, rect.width, rect.height},
-                    config);
-}
-
-// Declared in wp2_enc_i.h.
-bool VDMatch(const EncoderConfig& config, const char token[]) {
-  if (config.info != nullptr) return VDMatch(config.info->visual_debug, token);
-  return false;
-}
-Channel VDChannel(const EncoderConfig& config) {
-  return VDChannel(config.info->visual_debug);
-}
-bool VDSelected(uint32_t tile_x, uint32_t tile_y, const Rectangle& rect,
-                const EncoderConfig& config) {
-  return VDSelected({tile_x + rect.x, tile_y + rect.y, rect.width, rect.height},
-                    config);
-}
 float VDGetParam(const EncoderConfig& config, float default_value) {
   float value;
   return (config.info != nullptr && config.info->visual_debug != nullptr &&

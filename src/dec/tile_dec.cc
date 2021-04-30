@@ -25,6 +25,7 @@
 #include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
+#include "src/common/vdebug.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/dsp/math.h"
 #include "src/wp2/base.h"

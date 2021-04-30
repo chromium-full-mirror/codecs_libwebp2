@@ -19,6 +19,7 @@
 
 #include "src/dec/filters/restoration_filter.h"
 
+#include "src/common/vdebug.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"

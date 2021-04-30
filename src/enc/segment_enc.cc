@@ -24,6 +24,7 @@
 #include "src/common/integral.h"
 #include "src/common/lossy/context.h"
 #include "src/common/lossy/residuals.h"
+#include "src/common/vdebug.h"
 #include "src/enc/analysis.h"
 #include "src/enc/wp2_enc_i.h"
 

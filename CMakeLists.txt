@@ -321,6 +321,7 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/symbols.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/symbols.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/vdebug.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/vdebug.h
   # lossy
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/alpha_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/anim_dec.cc
