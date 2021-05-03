@@ -315,8 +315,7 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
   const ProgressRange lossy_progress(
       &progress, GetFrameProgression(/*frame_index=*/1, /*is_last=*/true));
 
-  SubframeEncoder frame_encode(GetQualityHint(config.quality), has_alpha,
-                               FinalTileShape(config));
+  SubframeEncoder frame_encode(has_alpha, FinalTileShape(config));
   WP2_CHECK_STATUS(frame_encode.EncodeSubframe(
       LosslessConfig(config), lossless_subframe,
       /*is_last=*/false, lossless_progress, output));

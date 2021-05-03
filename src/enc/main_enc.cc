@@ -284,9 +284,8 @@ WP2Status EncodeHeader(const EncoderConfig& config,
     uint8_t header[kHeaderMaxSize];
     BitPacker henc(header, sizeof(header), "image_features/");
 
-    // signature
     henc.PutBits(kSignature, 24, "signature");
-    // infos
+
     henc.PutBits(width - 1, kImageDimNumBits, "width_m1");
     henc.PutBits(height - 1, kImageDimNumBits, "height_m1");
     henc.PutBits((uint32_t)config.decoding_orientation, 3, "orientation");
@@ -294,8 +293,6 @@ WP2Status EncodeHeader(const EncoderConfig& config,
     henc.PutBits(is_anim ? 1 : 0, 1, "is_animation");
 
     henc.PutBits(ToUInt32(preview_color), 12, "preview_color");
-    henc.PutBits(GetQualityHint(config.quality), kQualityHintNumBits,
-                 "quality_hint");
 
     henc.PutBits(HasPreview(config) ? 1 : 0, 1, "has_preview");
     henc.PutBits(has_icc ? 1 : 0, 1, "has_icc");
@@ -306,6 +303,9 @@ WP2Status EncodeHeader(const EncoderConfig& config,
                   "invalid TILE_SHAPE_AUTO value");
     henc.PutBits(FinalTileShape(config), kTileShapeBits, "tile_shape");
     henc.PutBits((rgb_bit_depth == 10) ? 1 : 0, 1, "rgb_bit_depth");
+
+    // Unused bits till the next full aligned byte.
+    henc.PutBits(0xf, 4, "filler");
 
     if (is_anim) {
       henc.PutBits(loop_forever ? 1 : 0, 1, "loop");
@@ -393,10 +393,9 @@ WP2Status EncodeICC(DataView iccp, Writer* const output) {
 }
 
 WP2Status EncodeGLBL(const EncoderConfig& config, const GlobalParams& gparams,
-                     uint32_t quality_hint, bool image_has_alpha,
-                     Writer* const output) {
+                     bool image_has_alpha, Writer* const output) {
   ANSEnc enc;
-  WP2_CHECK_STATUS(gparams.Write(quality_hint, image_has_alpha, &enc));
+  WP2_CHECK_STATUS(gparams.Write(image_has_alpha, &enc));
   WP2_CHECK_STATUS(enc.AssembleToBitstream(/*clear_tokens=*/true));
   Vector_u8 bits;
   WP2_CHECK_STATUS(enc.WriteBitstreamTo(bits));
@@ -407,8 +406,8 @@ WP2Status EncodeGLBL(const EncoderConfig& config, const GlobalParams& gparams,
 WP2Status EncodeTiles(uint32_t width, uint32_t height,
                       const ArgbBuffer& rgb_buffer, const YUVPlane& yuv_buffer,
                       const CSPTransform& transf, const EncoderConfig& config,
-                      uint32_t quality_hint, bool image_has_alpha,
-                      const ProgressRange& progress, Writer* const output) {
+                      bool image_has_alpha, const ProgressRange& progress,
+                      Writer* const output) {
   WP2EncDspInit();
   GlobalParams gparams;
   FeatureMap features;
@@ -418,7 +417,7 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
   ArgbBuffer pre_processed_buffer(buffer->format());
 
   // near-lossless pre-processing
-  constexpr uint32_t kMinNearLosslessDimension = 16;    // minimum dimension
+  constexpr uint32_t kMinNearLosslessDimension = 16;  // minimum dimension
   if (yuv_buffer.IsEmpty() && buffer->width() >= kMinNearLosslessDimension &&
       buffer->height() >= kMinNearLosslessDimension &&
       config.quality > kMaxLossyQuality && config.quality < kMaxQuality) {
@@ -433,8 +432,7 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
   // TODO(skal): analysis and num_mtx_ decision...
   WP2_CHECK_STATUS(gparams.InitRndMtxSet());
 
-  WP2_CHECK_STATUS(
-      EncodeGLBL(config, gparams, quality_hint, image_has_alpha, output));
+  WP2_CHECK_STATUS(EncodeGLBL(config, gparams, image_has_alpha, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));  // GlobalParams
 
   const uint32_t tile_width = TileWidth(FinalTileShape(config), width);
@@ -564,9 +562,9 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
 
   const ProgressRange frames_progress(&progress, kProgressFrames);
   WP2_CHECK_STATUS(frames_progress.AdvanceBy(kOnePercent));  // Simulate ANMF
-  WP2_CHECK_STATUS(EncodeTiles(
-      input.width(), input.height(), input, yuv_input, csp_transform, config,
-      GetQualityHint(config.quality), has_alpha, frames_progress, output));
+  WP2_CHECK_STATUS(EncodeTiles(input.width(), input.height(), input, yuv_input,
+                               csp_transform, config, has_alpha,
+                               frames_progress, output));
 
   WP2_CHECK_STATUS(EncodeMetadata(input.metadata_, output));
   WP2_CHECK_STATUS(progress.Finish());
@@ -686,9 +684,9 @@ WP2Status Encode(uint32_t width, uint32_t height,
 
   const ProgressRange frames_progress(&progress, kProgressFrames);
   WP2_CHECK_STATUS(frames_progress.AdvanceBy(kOnePercent));  // Simulate ANMF
-  WP2_CHECK_STATUS(EncodeTiles(
-      width, height, rgb_input, yuv_input, csp_transform, config,
-      GetQualityHint(config.quality), has_alpha, frames_progress, output));
+  WP2_CHECK_STATUS(EncodeTiles(width, height, rgb_input, yuv_input,
+                               csp_transform, config, has_alpha,
+                               frames_progress, output));
 
   WP2_CHECK_STATUS(EncodeMetadata(metadata, output));
   WP2_CHECK_STATUS(progress.Finish());

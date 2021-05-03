@@ -35,7 +35,6 @@ class GlobalParams;
 
 // Returns true if at least one filter is enabled and needs FilterBlockMap data.
 bool IsFilterBlockMapNeeded(const DecoderConfig& config,
-                            const BitstreamFeatures& features,
                             const GlobalParams& gparams,
                             const TilesLayout& tiles_layout);
 

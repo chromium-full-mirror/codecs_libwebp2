@@ -97,6 +97,7 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
   // TODO(yguyon): Also test fully random GlobalParams.
   gparams->Reset();
   gparams->type_ = DecideGlobalParamsType(config);
+  gparams->quality_hint_ = GetQualityHint(config.quality);
 
   gparams->has_alpha_ = image_has_alpha && random->FlipACoin();
   if (gparams->type_ == GlobalParams::GP_LOSSY ||
@@ -166,8 +167,7 @@ WP2Status RandomEncodeBeforeTile(uint32_t width, uint32_t height,
   GlobalParams gparams;
   WP2_CHECK_STATUS(
       GenerateRandomGlobalParams(config, has_alpha, random, &gparams));
-  WP2_CHECK_STATUS(EncodeGLBL(config, gparams, GetQualityHint(config.quality),
-                              has_alpha, output));
+  WP2_CHECK_STATUS(EncodeGLBL(config, gparams, has_alpha, output));
   return WP2_STATUS_OK;
 }
 

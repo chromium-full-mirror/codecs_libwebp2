@@ -30,14 +30,14 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 bool IsDeblockingFilterEnabled(const DecoderConfig& config,
-                               const BitstreamFeatures& features);
+                               const GlobalParams& gparams);
 
 //------------------------------------------------------------------------------
 
 class DeblockingFilter {
  public:
   DeblockingFilter(const DecoderConfig& config,
-                   const BitstreamFeatures& features,
+                   const GlobalParams& gparams,
                    const FilterBlockMap& blocks);
 
   // Allocates storage.
@@ -81,7 +81,7 @@ class DeblockingFilter {
 
  private:
   const DecoderConfig& config_;
-  const BitstreamFeatures& features_;
+  const GlobalParams& gparams_;
   const FilterBlockMap& blocks_;
   const bool enabled_;
 

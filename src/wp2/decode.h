@@ -48,7 +48,6 @@ struct BitstreamFeatures {
                              // (irrespective of the preview color).
 
   RGB12b preview_color;      // Average color in RGB444 format.
-  uint32_t quality_hint;     // Encoding quality setting.
 
   bool has_icc;              // Indicates the presence of ICC information.
   bool has_trailing_data;    // Trailing data is present (XMP, EXIF, ...).

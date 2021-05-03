@@ -348,8 +348,7 @@ WP2Status InternalDecode(const DecoderConfig& config,
     // Filter the edges of the lossy adjacent tiles.
     if (!yuv_frame.IsEmpty()) {
       IntertileFilter intertile_filter;
-      intertile_filter.Init(config, features, gparams, tiles_layout,
-                            &yuv_frame);
+      intertile_filter.Init(config, gparams, tiles_layout, &yuv_frame);
       intertile_filter.Deblock(frame.window.height);
       assert(intertile_filter.GetNumFilteredRows() == frame.window.height);
     }

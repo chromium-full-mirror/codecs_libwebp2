@@ -15,11 +15,12 @@
 //
 // Test the deblocking filter.
 
-#include <tuple>
 #include <limits>
+#include <tuple>
 
 #include "include/helpers.h"
 #include "include/helpers_filter.h"
+#include "src/common/global_params.h"
 #include "src/dec/filters/deblocking_filter.h"
 #include "src/wp2/format_constants.h"
 
@@ -110,10 +111,9 @@ void Deblock(BitDepth bit_depth, uint32_t quality_hint,
 
   DecoderConfig config = DecoderConfig::kDefault;
   config.enable_deblocking_filter = true;
-  BitstreamFeatures features;
-  features.quality_hint = quality_hint;
-  features.tile_width = features.tile_height = 256;
-  DeblockingFilter deblocking_filter(config, features, blocks);
+  GlobalParams gparams;
+  gparams.quality_hint_ = quality_hint;
+  DeblockingFilter deblocking_filter(config, gparams, blocks);
   ASSERT_WP2_OK(deblocking_filter.Allocate());
 
   uint32_t num_deblocked_rows = 0;

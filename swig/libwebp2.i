@@ -205,7 +205,6 @@ struct BitstreamFeatures {
   uint32_t height;
   int is_animation;
   int has_preview;
-  int quality_hint;
   int has_icc;
   int has_trailing_data;
   bool loop_forever;

@@ -87,8 +87,7 @@ static WP2Status PrepareTiles(const DecoderConfig& config,
 
   if (!discard_frame) {
     if (state->gparams.type_ != GlobalParams::GP_LOSSLESS) {
-      state->intertile_filter.Init(config, features, state->gparams,
-                                   state->tiles_layout,
+      state->intertile_filter.Init(config, state->gparams, state->tiles_layout,
                                    &state->yuv_output_buffer);
     }
     // TODO(maryla): support multiple frames (add the bpps?). This will

@@ -33,11 +33,10 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 bool IsFilterBlockMapNeeded(const DecoderConfig& config,
-                            const BitstreamFeatures& features,
                             const GlobalParams& gparams,
                             const TilesLayout& tiles_layout) {
-  return (IsIntratileFilterEnabled(config, features, gparams) ||
-          IsIntertileFilterEnabled(config, features, gparams, tiles_layout) ||
+  return (IsIntratileFilterEnabled(config, gparams) ||
+          IsIntertileFilterEnabled(config, gparams, tiles_layout) ||
           VDMatch(config, "filter-block-map"));
 }
 

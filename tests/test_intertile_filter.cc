@@ -34,12 +34,10 @@ void Filter(bool enabled, uint32_t quality_hint,
   DecoderConfig config = DecoderConfig::kDefault;
   config.enable_deblocking_filter = enabled;
   IntertileFilter intertile_filter;
-  BitstreamFeatures features;
-  features.quality_hint = quality_hint;
-  features.tile_width = features.tile_height = kTileSize;
   GlobalParams gparams;
+  gparams.quality_hint_ = quality_hint;
   ASSERT_WP2_OK(gparams.InitFixedPredictors());
-  intertile_filter.Init(config, features, gparams, tiles_layout, canvas);
+  intertile_filter.Init(config, gparams, tiles_layout, canvas);
   const Tile& last_tile = tiles_layout.tiles.back();
   const uint32_t height = last_tile.rect.y + last_tile.rect.height;
 

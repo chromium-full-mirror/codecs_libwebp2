@@ -30,7 +30,7 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 bool IsDirectionalFilterEnabled(const DecoderConfig& config,
-                                const BitstreamFeatures& features);
+                                const GlobalParams& gparams);
 
 //------------------------------------------------------------------------------
 
@@ -40,7 +40,7 @@ class DirectionalFilter {
   static constexpr uint32_t kMaxSecStr = (1u << 2) - 1u;  // in AV1 spec.
 
   DirectionalFilter(const DecoderConfig& config,
-                    const BitstreamFeatures& features,
+                    const GlobalParams& gparams,
                     const FilterBlockMap& blocks);
 
   // Allocates storage.
@@ -52,7 +52,7 @@ class DirectionalFilter {
 
  private:
   const DecoderConfig& config_;
-  const BitstreamFeatures& features_;
+  const GlobalParams& gparams_;
   const FilterBlockMap& blocks_;
   const bool enabled_;
 

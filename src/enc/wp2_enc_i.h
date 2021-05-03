@@ -66,16 +66,15 @@ WP2Status EncodeICC(DataView iccp, Writer* const output);
 
 // Writes global parameters 'gparams' to 'output'.
 WP2Status EncodeGLBL(const EncoderConfig& config, const GlobalParams& gparams,
-                     uint32_t quality_hint, bool image_has_alpha,
-                     Writer* const output);
+                     bool image_has_alpha, Writer* const output);
 
 // Compresses an image into tiles based on 'config' and writes them to 'output'.
 // The input is either 'rgb_buffer' or 'yuv_buffer' depending on what is needed.
 WP2Status EncodeTiles(uint32_t width, uint32_t height,
                       const ArgbBuffer& rgb_buffer, const YUVPlane& yuv_buffer,
                       const CSPTransform& transf, const EncoderConfig& config,
-                      uint32_t quality_hint, bool image_has_alpha,
-                      const ProgressRange& progress, Writer* const output);
+                      bool image_has_alpha, const ProgressRange& progress,
+                      Writer* const output);
 
 // Writes 'metadata' to 'output'.
 WP2Status EncodeMetadata(const Metadata& metadata, Writer* const output);

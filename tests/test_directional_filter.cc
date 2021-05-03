@@ -76,9 +76,9 @@ void Filter(BitDepth bit_depth, uint32_t quality_hint, YUVPlane* const pixels) {
 
   DecoderConfig config = DecoderConfig::kDefault;
   config.enable_directional_filter = true;
-  BitstreamFeatures features;
-  features.quality_hint = quality_hint;
-  DirectionalFilter directional_filter(config, features, blocks);
+  GlobalParams gparams;
+  gparams.quality_hint_ = quality_hint;
+  DirectionalFilter directional_filter(config, gparams, blocks);
   ASSERT_WP2_OK(directional_filter.Allocate());
 
   uint32_t num_deblocked_rows = 0;

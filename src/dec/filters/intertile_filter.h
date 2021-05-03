@@ -40,7 +40,6 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 bool IsIntertileFilterEnabled(const DecoderConfig& config,
-                              const BitstreamFeatures& features,
                               const GlobalParams& gparams,
                               const TilesLayout& tiles_layout);
 
@@ -51,9 +50,8 @@ class IntertileFilter {
   // 'config', 'tiles_layout' and 'features' are used to determine whether
   // the filter will be enabled and its strength. 'canvas' should contain the
   // padded compressed YUV samples to be filtered. Calls Clear().
-  void Init(const DecoderConfig& config, const BitstreamFeatures& features,
-            const GlobalParams& gparams, const TilesLayout& tiles_layout,
-            YUVPlane* const canvas);
+  void Init(const DecoderConfig& config, const GlobalParams& gparams,
+            const TilesLayout& tiles_layout, YUVPlane* const canvas);
 
   // Resets the filter. After that, Init() must be called before Deblock().
   void Clear();

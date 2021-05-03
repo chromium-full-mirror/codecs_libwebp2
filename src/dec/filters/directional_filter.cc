@@ -45,9 +45,9 @@ static uint32_t GetStrengthFromQuality(uint32_t quality_hint,
 }
 
 bool IsDirectionalFilterEnabled(const DecoderConfig& config,
-                                const BitstreamFeatures& features) {
+                                const GlobalParams& gparams) {
   const uint32_t strength = GetStrengthFromQuality(
-      features.quality_hint,
+      gparams.quality_hint_,
       std::max(DirectionalFilter::kMaxPriStr, DirectionalFilter::kMaxSecStr));
 
   return ((config.enable_directional_filter && strength > 0) ||
@@ -57,12 +57,12 @@ bool IsDirectionalFilterEnabled(const DecoderConfig& config,
 //------------------------------------------------------------------------------
 
 DirectionalFilter::DirectionalFilter(const DecoderConfig& config,
-                                     const BitstreamFeatures& features,
+                                     const GlobalParams& gparams,
                                      const FilterBlockMap& blocks)
     : config_(config),
-      features_(features),
+      gparams_(gparams),
       blocks_(blocks),
-      enabled_(IsDirectionalFilterEnabled(config, features)) {
+      enabled_(IsDirectionalFilterEnabled(config, gparams)) {
   assert(blocks_.bit_depth_.num_bits >= 8u);  // To match AV1 algorithms.
 }
 
@@ -234,9 +234,9 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
             margin_top ? &top_plane.At(backup_x, 0) : nullptr;
 
         const uint32_t pri_str =
-            GetCdefStr(features_.quality_hint, min_bpp, res_den[c], kMaxPriStr);
+            GetCdefStr(gparams_.quality_hint_, min_bpp, res_den[c], kMaxPriStr);
         const uint32_t sec_str =
-            GetCdefStr(features_.quality_hint, min_bpp, res_den[c], kMaxSecStr);
+            GetCdefStr(gparams_.quality_hint_, min_bpp, res_den[c], kMaxSecStr);
         const uint32_t shifted_pri_str = pri_str << precision_shift;
         const uint32_t shifted_sec_str = sec_str << precision_shift;
 
@@ -259,8 +259,8 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
       if (VDMatch(config_, "directional-filter")) {
         RegisterPixelsForVDebug(
             x, x + width - 1u, y, y + height - 1u,
-            GetCdefStr(features_.quality_hint, min_bpp, res_den[0], kMaxPriStr),
-            GetCdefStr(features_.quality_hint, min_bpp, res_den[0], kMaxSecStr),
+            GetCdefStr(gparams_.quality_hint_, min_bpp, res_den[0], kMaxPriStr),
+            GetCdefStr(gparams_.quality_hint_, min_bpp, res_den[0], kMaxSecStr),
             direction, variance);
       }
 #endif  // WP2_REDUCE_BINARY_SIZE

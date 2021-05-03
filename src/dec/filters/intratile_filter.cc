@@ -27,10 +27,9 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 bool IsIntratileFilterEnabled(const DecoderConfig& config,
-                              const BitstreamFeatures& features,
                               const GlobalParams& gparams) {
-  return (IsDeblockingFilterEnabled(config, features) ||
-          IsDirectionalFilterEnabled(config, features) ||
+  return (IsDeblockingFilterEnabled(config, gparams) ||
+          IsDirectionalFilterEnabled(config, gparams) ||
           IsRestorationFilterEnabled(config) ||
           IsGrainFilterEnabled(config, gparams.segments_) ||
           IsAlphaFilterEnabled(config, gparams));
@@ -43,15 +42,14 @@ static constexpr uint32_t kMaxNumPredRows = 1u;
 //------------------------------------------------------------------------------
 
 IntratileFilter::IntratileFilter(const DecoderConfig& config,
-                                 const BitstreamFeatures& features,
                                  const GlobalParams& gparams,
                                  const FilterBlockMap& blocks,
                                  const RstrFltParams& params)
     : config_(config),
       blocks_(blocks),
-      enabled_(IsIntratileFilterEnabled(config, features, gparams)),
-      deblocking_filter_(config, features, blocks),
-      directional_filter_(config, features, blocks),
+      enabled_(IsIntratileFilterEnabled(config, gparams)),
+      deblocking_filter_(config, gparams, blocks),
+      directional_filter_(config, gparams, blocks),
       restoration_filter_(config, blocks, params),
       alpha_filter_(config, gparams, blocks),
       grain_filter_(config, gparams.segments_, blocks) {

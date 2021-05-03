@@ -25,21 +25,21 @@ namespace {
 WP2Status WriteAndRead(const GlobalParams& params_to_write,
                        GlobalParams* read_params) {
   ANSEnc enc;
-  constexpr int kQualityHint = 8;
   constexpr bool kImageHasAlpha = true;
-  WP2_CHECK_STATUS(params_to_write.Write(kQualityHint, kImageHasAlpha, &enc));
+  WP2_CHECK_STATUS(params_to_write.Write(kImageHasAlpha, &enc));
   WP2_CHECK_STATUS(enc.AssembleToBitstream());
   Vector_u8 bits;
   WP2_CHECK_STATUS(enc.WriteBitstreamTo(bits));
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
-  WP2_CHECK_STATUS(read_params->Read(kQualityHint, kImageHasAlpha, &dec));
+  WP2_CHECK_STATUS(read_params->Read(kImageHasAlpha, &dec));
   WP2_CHECK_OK(read_params->IsOk(), WP2_STATUS_BAD_READ);
   return WP2_STATUS_OK;
 }
 
 TEST(GlobalParmas, ReadWriteUVQUantMultiplier) {
   GlobalParams params;
+  params.quality_hint_ = 8;
   ASSERT_TRUE(params.segments_.resize(3));
   params.u_quant_multiplier_ = kDefaultQuantMultiplier;
   params.v_quant_multiplier_ = kDefaultQuantMultiplier + 2;
@@ -71,6 +71,7 @@ TEST(GlobalParmas, ReadWriteUVQUantMultiplier) {
 
 TEST(GlobalParmas, FixedPredictors) {
   GlobalParams params;
+  params.quality_hint_ = 8;
   ASSERT_TRUE(params.segments_.resize(3));
   params.has_alpha_ = params.maybe_use_lossy_alpha_ = true;
   // Init twice (should not matter).

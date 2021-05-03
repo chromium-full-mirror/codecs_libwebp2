@@ -28,13 +28,18 @@
 
 namespace WP2 {
 
-WP2Status GlobalParams::Write(uint32_t quality_hint, bool image_has_alpha,
-                              ANSEnc* const enc) const {
+WP2Status GlobalParams::Write(bool image_has_alpha, ANSEnc* const enc) const {
   ANSDebugPrefix prefix(enc, "GlobalParams");
-  if (quality_hint == kLosslessQualityHint) {
-    assert(type_ == GP_LOSSLESS);
+
+  enc->PutRValue(type_, image_has_alpha ? GP_AV1 : GP_LAST, "gp_type");
+
+  if (type_ == GP_LOSSLESS) {
+    assert(quality_hint_ == kLosslessQualityHint);
+  } else if (type_ == GP_LOSSY || type_ == GP_BOTH) {
+    enc->PutRValue(quality_hint_, kMaxLossyQualityHint + 1, "quality_hint");
   } else {
-    enc->PutRValue(type_, image_has_alpha ? GP_AV1 : GP_LAST, "gp_type");
+    assert(type_ == GP_AV1);
+    assert(quality_hint_ == kLosslessQualityHint / 2);
   }
 
   if (image_has_alpha) {
@@ -52,8 +57,9 @@ WP2Status GlobalParams::Write(uint32_t quality_hint, bool image_has_alpha,
     WP2_CHECK_STATUS(transf_.Write(enc));  // write inverse matrix
     enc->PutBool(explicit_segment_ids_, "explicit_segment_ids");
     enc->PutRValue(partition_set_, NUM_PARTITION_SETS, "block_size");
-    enc->PutRange(segments_.size(), 1,
-        GetMaxNumSegments(explicit_segment_ids_, quality_hint, partition_set_),
+    enc->PutRange(
+        segments_.size(), 1,
+        GetMaxNumSegments(explicit_segment_ids_, quality_hint_, partition_set_),
         "num_segments_id");
     enc->PutBool(partition_snapping_, "block_size");
     bool use_grain = false;
@@ -105,14 +111,18 @@ WP2Status GlobalParams::Write(uint32_t quality_hint, bool image_has_alpha,
 }
 
 // TODO(skal): use delta-coding instead, for saving more bits
-WP2Status GlobalParams::Read(uint32_t quality_hint, bool image_has_alpha,
-                             ANSDec* const dec) {
+WP2Status GlobalParams::Read(bool image_has_alpha, ANSDec* const dec) {
   ANSDebugPrefix prefix(dec, "GlobalParams");
-  if (quality_hint == kLosslessQualityHint) {
-    type_ = GP_LOSSLESS;
+
+  type_ = (Type)dec->ReadRValue(image_has_alpha ? GP_AV1 : GP_LAST, "gp_type");
+
+  if (type_ == GP_LOSSLESS) {
+    quality_hint_ = kLosslessQualityHint;
+  } else if (type_ == GP_LOSSY || type_ == GP_BOTH) {
+    quality_hint_ = dec->ReadRValue(kMaxLossyQualityHint + 1, "quality_hint");
   } else {
-    type_ =
-        (Type)dec->ReadRValue(image_has_alpha ? GP_AV1 : GP_LAST, "gp_type");
+    assert(type_ == GP_AV1);
+    quality_hint_ = kMaxLossyQualityHint / 2;  // Unused so whatever.
   }
 
   has_alpha_ = image_has_alpha && dec->ReadBool("has_alpha");
@@ -128,7 +138,7 @@ WP2Status GlobalParams::Read(uint32_t quality_hint, bool image_has_alpha,
         (PartitionSet)dec->ReadRValue(NUM_PARTITION_SETS, "block_size");
     const uint32_t num_segments = dec->ReadRange(
         1,
-        GetMaxNumSegments(explicit_segment_ids_, quality_hint, partition_set_),
+        GetMaxNumSegments(explicit_segment_ids_, quality_hint_, partition_set_),
         "num_segments_id");
     WP2_CHECK_ALLOC_OK(segments_.resize(num_segments));
     partition_snapping_ = dec->ReadBool("block_size");
@@ -154,10 +164,8 @@ WP2Status GlobalParams::Read(uint32_t quality_hint, bool image_has_alpha,
     bool read_alpha = maybe_use_lossy_alpha_;
     for (Segment& segment : segments_) {
       segment.SetYUVBounds(transf_.GetYUVMin(), transf_.GetYUVMax());
-      WP2_CHECK_STATUS(segment.ReadHeader(quality_hint,
-                                          u_quant_multiplier_,
-                                          v_quant_multiplier_,
-                                          read_alpha,
+      WP2_CHECK_STATUS(segment.ReadHeader(quality_hint_, u_quant_multiplier_,
+                                          v_quant_multiplier_, read_alpha,
                                           use_grain, dec));
       read_alpha = false;   // only for the first segment
     }

@@ -133,24 +133,19 @@ struct Subframe {
 
 class SubframeEncoder {
  public:
-  // Quality hint is a hint for the decoder (on kQualityHintNumBits bits).
-  // It's usually computed with GetQualityHint(config.quality) but it is
-  // global to the whole animation, while the  EncoderConfig, and therefore
-  // quality setting, can vary per frame. Setting 'image_has_alpha' to false
-  // forbids any alpha sample in the whole animation.
-  // 'tile_shape' is also global to the whole animation and must be a concrete
-  // size, not TILE_SHAPE_AUTO. It is used to sanity check that the tile size
-  // for all subframes match this one.
-  explicit SubframeEncoder(uint32_t quality_hint, bool image_has_alpha,
-                           TileShape tile_shape);
+  // Setting 'image_has_alpha' to false forbids any alpha sample in the whole
+  // animation. 'tile_shape' is also global to the whole animation and must be a
+  // concrete size, not TILE_SHAPE_AUTO. It is used to sanity check that the
+  // tile size for all subframes match this one.
+  SubframeEncoder(bool image_has_alpha, TileShape tile_shape);
 
+  // The  EncoderConfig, and therefore quality setting, can vary per frame.
   WP2Status EncodeSubframe(const EncoderConfig& config,
                            const Subframe& subframe, bool is_last,
                            const ProgressRange& progress,
                            Writer* const output) const;
 
  private:
-  const uint32_t quality_hint_;
   TileShape tile_shape_;
   const bool image_has_alpha_;
 };

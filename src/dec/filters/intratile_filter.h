@@ -35,17 +35,14 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 bool IsIntratileFilterEnabled(const DecoderConfig& config,
-                              const BitstreamFeatures& features,
                               const GlobalParams& gparams);
 
 //------------------------------------------------------------------------------
 
 class IntratileFilter {
  public:
-  IntratileFilter(const DecoderConfig& config,
-                  const BitstreamFeatures& features,
-                  const GlobalParams& gparams, const FilterBlockMap& blocks,
-                  const RstrFltParams& params);
+  IntratileFilter(const DecoderConfig& config, const GlobalParams& gparams,
+                  const FilterBlockMap& blocks, const RstrFltParams& params);
 
   // If this filter is enabled, allocates storage.
   WP2Status Allocate();

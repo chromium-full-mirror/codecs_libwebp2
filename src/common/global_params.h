@@ -49,10 +49,8 @@ static constexpr uint32_t kDefaultQuantMultiplier = 7;  // 0.875
 
 class GlobalParams {
  public:
-  WP2Status Write(uint32_t quality_hint, bool image_has_alpha,
-                  ANSEnc* const enc) const;
-  WP2Status Read(uint32_t quality_hint, bool image_has_alpha,
-                 ANSDec* const dec);
+  WP2Status Write(bool image_has_alpha, ANSEnc* const enc) const;
+  WP2Status Read(bool image_has_alpha, ANSDec* const dec);
 
   void Reset();
 
@@ -61,6 +59,9 @@ class GlobalParams {
   //             global params?
   enum Type { GP_LOSSY = 0, GP_LOSSLESS, GP_BOTH, GP_AV1, GP_LAST };
   Type type_ = GP_LOSSY;
+
+  // A [0:15] mapping of the encoded quality.
+  uint32_t quality_hint_ = 0;
 
   // True if the frame contains alpha (either lossless or lossy).
   // Can only be true if 'BitstreamFeatures::has_alpha' is true as well.

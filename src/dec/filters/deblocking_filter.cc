@@ -19,6 +19,7 @@
 
 #include "src/dec/filters/deblocking_filter.h"
 
+#include "src/common/global_params.h"
 #include "src/common/vdebug.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/dsp/dsp.h"
@@ -63,9 +64,9 @@ uint32_t DeblockingFilter::GetSharpnessFromResidualDensity(uint32_t res_den) {
 //------------------------------------------------------------------------------
 
 bool IsDeblockingFilterEnabled(const DecoderConfig& config,
-                               const BitstreamFeatures& features) {
+                               const GlobalParams& gparams) {
   const uint32_t strength =
-      DeblockingFilter::GetStrengthFromQuality(features.quality_hint);
+      DeblockingFilter::GetStrengthFromQuality(gparams.quality_hint_);
 
   return (config.enable_deblocking_filter && strength > 0) ||
          VDMatch(config, "deblocking-filter");
@@ -74,12 +75,12 @@ bool IsDeblockingFilterEnabled(const DecoderConfig& config,
 //------------------------------------------------------------------------------
 
 DeblockingFilter::DeblockingFilter(const DecoderConfig& config,
-                                   const BitstreamFeatures& features,
+                                   const GlobalParams& gparams,
                                    const FilterBlockMap& blocks)
     : config_(config),
-      features_(features),
+      gparams_(gparams),
       blocks_(blocks),
-      enabled_(IsDeblockingFilterEnabled(config, features)) {
+      enabled_(IsDeblockingFilterEnabled(config, gparams)) {
   assert(blocks_.bit_depth_.num_bits >= 8u);  // To match AV1 algorithms.
 }
 
@@ -173,7 +174,7 @@ uint32_t DeblockingFilter::DeblockHorizontally(uint32_t from_y, uint32_t to_y) {
       assert(q0_x < blocks_.tile_rect_.width);
 
       DeblockEdge(config_, /*intertile=*/false, blocks_.tile_rect_,
-                  blocks_.pixels_->HasAlpha(), features_.quality_hint,
+                  blocks_.pixels_->HasAlpha(), gparams_.quality_hint_,
                   blocks_.bit_depth_.num_bits, blocks_.yuv_min_,
                   blocks_.yuv_max_, row_block_features[left_block_x],
                   row_block_features[right_block_x],
@@ -238,7 +239,7 @@ uint32_t DeblockingFilter::DeblockVertically(uint32_t to_y) {
       }
 
       DeblockEdge(config_, /*intertile=*/false, blocks_.tile_rect_,
-                  blocks_.pixels_->HasAlpha(), features_.quality_hint,
+                  blocks_.pixels_->HasAlpha(), gparams_.quality_hint_,
                   blocks_.bit_depth_.num_bits, blocks_.yuv_min_,
                   blocks_.yuv_max_, *up_block_features, *down_block_features,
                   /*edge_rect=*/{x, q0_y, num_pixel_cols, 0}, blocks_.pixels_);

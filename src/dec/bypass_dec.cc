@@ -178,7 +178,7 @@ WP2Status TileDecoder::BypassTileDecYuv() {
   tile_->block_map.Init(tile_->rect, gparams_->transf_.GetYuvDepth(),
                         gparams_->transf_.GetYUVMin(),
                         gparams_->transf_.GetYUVMax(), &tile_->yuv_output);
-  if (IsFilterBlockMapNeeded(*config_, *features_, *gparams_, *tiles_layout_)) {
+  if (IsFilterBlockMapNeeded(*config_, *gparams_, *tiles_layout_)) {
     WP2_CHECK_STATUS(tile_->block_map.Allocate());
     // Simulate a grid of 4x4 blocks for the IntertileFilter settings.
     // Even though this is lossless it is likely to border a lossy tile which

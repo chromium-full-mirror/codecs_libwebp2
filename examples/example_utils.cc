@@ -216,7 +216,6 @@ std::string PrintSummary(const uint8_t input_data_bytes[],
         features.is_animation
             ? (features.loop_forever ? "yes (loop forever)" : "yes (play once)")
             : "no");
-    str += SPrintf("quality hint:  %u\n", features.quality_hint);
     str += SPrintf("preview color: %u, %u, %u\n", prev_col.r, prev_col.g,
                    prev_col.b);
     str += SPrintf("rotated by:    %u degrees clockwise\n", degrees);

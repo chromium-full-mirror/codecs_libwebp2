@@ -166,6 +166,16 @@ WP2Status GlobalAnalysis(const ArgbBuffer& rgb, const YUVPlane& yuv,
 
   gparams->type_ = DecideGlobalParamsType(config);
 
+  if (gparams->type_ == GlobalParams::GP_LOSSLESS) {
+    gparams->quality_hint_ = kLosslessQualityHint;
+  } else if (gparams->type_ == GlobalParams::GP_LOSSY ||
+             gparams->type_ == GlobalParams::GP_BOTH) {
+    gparams->quality_hint_ = GetQualityHint(config.quality);
+  } else {
+    assert(gparams->type_ == GlobalParams::GP_AV1);
+    gparams->quality_hint_ = kLosslessQualityHint / 2;
+  }
+
   if (gparams->type_ == GlobalParams::GP_LOSSLESS ||
       gparams->type_ == GlobalParams::GP_BOTH) {
     WP2_CHECK_OK(!rgb.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);

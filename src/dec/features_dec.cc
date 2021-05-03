@@ -111,7 +111,6 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
   is_animation = !!dec.ReadBits(1, "is_animation");
 
   preview_color = ToRGB12b(dec.ReadBits(12, "preview_color"));
-  quality_hint = dec.ReadBits(kQualityHintNumBits, "quality_hint");
 
   has_preview = !!dec.ReadBits(1, "has_preview");
   has_icc = !!dec.ReadBits(1, "has_icc");
@@ -124,6 +123,8 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
   tile_width = TileWidth(tile_shape, raw_width);
   tile_height = TileHeight(tile_shape, /*image_width=*/raw_width);
   rgb_bit_depth = (dec.ReadBits(1, "rgb_bit_depth") == 1) ? 10 : 8;
+
+  WP2_CHECK_OK(dec.ReadBits(4, "filler") == 0xf, WP2_STATUS_BITSTREAM_ERROR);
 
   if (is_animation) {
     loop_forever = !!dec.ReadBits(1, "loop");
@@ -228,8 +229,7 @@ WP2Status DecodeGLBL(DataSource* const data_source, const DecoderConfig& config,
   ExternalDataSource src(chunk_glbl.bytes, chunk_glbl.size);
   ANSDec dec(&src);
   gparams->Reset();
-  WP2_CHECK_STATUS(
-      gparams->Read(features.quality_hint, !features.is_opaque, &dec));
+  WP2_CHECK_STATUS(gparams->Read(!features.is_opaque, &dec));
 #if defined(WP2_BITTRACE)
   if (config.info != nullptr) {
     for (const auto& it : dec.GetBitTraces()) {

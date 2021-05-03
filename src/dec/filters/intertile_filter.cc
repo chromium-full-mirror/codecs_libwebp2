@@ -33,13 +33,12 @@ typedef FilterBlockMap::BlockFeatures BlockFeatures;
 //------------------------------------------------------------------------------
 
 bool IsIntertileFilterEnabled(const DecoderConfig& config,
-                              const BitstreamFeatures& features,
                               const GlobalParams& gparams,
                               const TilesLayout& tiles_layout) {
   return (gparams.type_ == GlobalParams::GP_LOSSY ||
           gparams.type_ == GlobalParams::GP_BOTH) &&
          ((config.enable_deblocking_filter &&
-           DeblockingFilter::GetStrengthFromQuality(features.quality_hint) >
+           DeblockingFilter::GetStrengthFromQuality(gparams.quality_hint_) >
                0 &&
            (tiles_layout.num_tiles_x > 1 || tiles_layout.num_tiles_y > 1)) ||
           VDMatch(config, "intertile-filter"));
@@ -50,7 +49,6 @@ bool IsIntertileFilterEnabled(const DecoderConfig& config,
 //------------------------------------------------------------------------------
 
 void IntertileFilter::Init(const DecoderConfig& config,
-                           const BitstreamFeatures& features,
                            const GlobalParams& gparams,
                            const TilesLayout& tiles_layout,
                            YUVPlane* const canvas) {
@@ -70,8 +68,7 @@ void IntertileFilter::Init(const DecoderConfig& config,
   tiles_layout_ = &tiles_layout;
   // Non-padded view.
   WP2_ASSERT_STATUS(canvas_.SetView(*canvas, {0, 0, width, height}));
-  quality_hint_ = features.quality_hint;
-  enabled_ = IsIntertileFilterEnabled(config, features, gparams, tiles_layout);
+  enabled_ = IsIntertileFilterEnabled(config, gparams, tiles_layout);
   if (enabled_) DblkFilterInit();
 }
 
@@ -79,7 +76,6 @@ void IntertileFilter::Clear() {
   enabled_ = false;
   tiles_layout_ = nullptr;
   canvas_.Clear();
-  quality_hint_ = 0;
   num_horizontally_deblocked_rows_ = 0;
   num_vertically_deblocked_rows_ = 0;
 

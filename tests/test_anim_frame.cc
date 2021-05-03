@@ -174,8 +174,7 @@ TEST_P(ParameterizedAnimFrameTest, Blend) {
       /*loop_forever=*/false, kDefaultBackgroundColor, RGB12b{10, 0, 30},
       /*has_icc=*/false, /*has_trailing_data=*/false, &encoded_data));
 
-  SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha,
-                                   config.tile_shape);
+  SubframeEncoder subframe_encoder(has_alpha, config.tile_shape);
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
       config, first_frame, /*is_last=*/false, kProgress, &encoded_data));
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
@@ -255,8 +254,7 @@ TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
       /*loop_forever=*/false, kDefaultBackgroundColor, RGB12b{10, 0, 30},
       /*has_icc=*/false, /*has_trailing_data=*/false, &encoded_data));
 
-  SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha,
-                                   config.tile_shape);
+  SubframeEncoder subframe_encoder(has_alpha, config.tile_shape);
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
       config, first_frame, /*is_last=*/false, kProgress, &encoded_data));
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
@@ -507,8 +505,7 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
       /*preview_color=*/RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
-  SubframeEncoder subframe_encoder(GetQualityHint(config.quality), has_alpha,
-                                   config.tile_shape);
+  SubframeEncoder subframe_encoder(has_alpha, config.tile_shape);
 
   for (uint32_t i = 0; i < subframes.size(); ++i) {
     const bool is_last = (i == num_subframes - 1);

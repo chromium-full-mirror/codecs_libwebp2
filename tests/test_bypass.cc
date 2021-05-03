@@ -90,7 +90,6 @@ TEST_P(BypassTest, MaxChunkSize) {
 
   {  // Decode
     BitstreamFeatures features;
-    features.quality_hint = GetQualityHint(quality);
     features.rgb_bit_depth = WP2Formatbpc(src_format);
     TilesLayout tiles;
     tiles.num_tiles_x = tiles.num_tiles_y = 1;

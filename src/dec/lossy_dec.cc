@@ -92,14 +92,13 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   tile->block_map.Init(tile->rect, gparams.transf_.GetYuvDepth(),
                        gparams.transf_.GetYUVMin(), gparams.transf_.GetYUVMax(),
                        &tile->yuv_output);
-  if (IsFilterBlockMapNeeded(config, features, gparams, *tiles_layout)) {
+  if (IsFilterBlockMapNeeded(config, gparams, *tiles_layout)) {
     WP2_CHECK_STATUS(tile->block_map.Allocate());
   }
 
   RstrFltParams rstr_params(tile->rect.width, tile->rect.height);
   WP2_CHECK_STATUS(ReadRestorationFilterParams(dec, &rstr_params));
-  IntratileFilter filter(config, features, gparams, tile->block_map,
-                         rstr_params);
+  IntratileFilter filter(config, gparams, tile->block_map, rstr_params);
   WP2_CHECK_STATUS(filter.Allocate());
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
