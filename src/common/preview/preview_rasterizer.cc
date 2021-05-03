@@ -157,8 +157,9 @@ static void CalcGradient(const float iM[4], int32_t f0, int32_t f1, int32_t f2,
   grad[0] = Clamp(ToFixedPrec(iM[0] * df1 + iM[1] * df2), -kMaxGrad, kMaxGrad);
   // Color increase per y.
   grad[4] = Clamp(ToFixedPrec(iM[2] * df1 + iM[3] * df2), -kMaxGrad, kMaxGrad);
-  // Top-left color starting point.
-  grad[8] = Clamp(ToFixedPrec(f0) + dy * grad[4], -kMaxGrad, kMaxGrad);
+  // Top-left color starting point (beware, grad[4] can be fairly large).
+  grad[8] = (grad_t)Clamp<int64_t>(ToFixedPrec(f0) + (int64_t)dy * grad[4],
+                                   -kMaxGrad, kMaxGrad);
 }
 
 static void GetGradients(VertexArgb v0, VertexArgb v1, VertexArgb v2,
