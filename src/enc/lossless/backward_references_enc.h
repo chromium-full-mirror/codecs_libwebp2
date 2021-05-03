@@ -153,6 +153,12 @@ class HashChain {
   static constexpr uint8_t kMaxLengthBits = 1 + WP2Log2Floor_k(kMaxLZ77Length);
 
  private:
+  // Updates the hash chain linking a pixel at 'pos' to its predecessor with the
+  // same hash defined by 'pixel_pair'.
+  void UpdateChain(uint32_t pos, const int16_t* const pixel_pair,
+                   WP2::Vector_s32* const hash_to_first_index,
+                   int32_t* const chain);
+
   static constexpr uint8_t kHashBits = 18;
   static constexpr uint32_t kHashSize = (1u << kHashBits);
 };

@@ -65,7 +65,8 @@ static inline int FindMatchLength(const int16_t* const array1,
                                   uint32_t best_len_match, uint32_t max_limit) {
   // Before 'expensive' linear match, check if the two arrays match at the
   // current best length index.
-  if (!ColorEq(&array1[4 * best_len_match], &array2[4 * best_len_match])) {
+  if (best_len_match == max_limit ||
+      !ColorEq(&array1[4 * best_len_match], &array2[4 * best_len_match])) {
     return 0;
   }
 
@@ -205,31 +206,33 @@ static uint32_t GetWindowSizeForHashChain(int effort, uint32_t width) {
   return std::min(max_window_size, WP2::kMaxTilePixels);
 }
 
+void HashChain::UpdateChain(uint32_t pos, const int16_t* const pixel_pair,
+                            WP2::Vector_s32* const hash_to_first_index,
+                            int32_t* const chain) {
+  const uint32_t hash_code = WP2::encoding::HashPixPair(pixel_pair, kHashBits);
+  chain[pos] = (*hash_to_first_index)[hash_code];
+  (*hash_to_first_index)[hash_code] = pos;
+}
+
 WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
                           uint32_t height) {
-  const int size = width * height;
-  const int iter_max = GetMaxItersForSpeed(effort);
-  int pos;
-  // Temporarily use the offset_length_ as a hash chain.
-  auto chain = reinterpret_cast<int32_t*>(offset_length_.data());
-  assert(size > 0);
-  assert(!offset_length_.empty());
-
+  const uint32_t size = width * height;
   if (size <= 2) {
     offset_length_[0] = offset_length_[size - 1] = 0;
     return WP2_STATUS_OK;
   }
+  // Temporarily use the offset_length_ as a hash chain.
+  auto chain = reinterpret_cast<int32_t*>(offset_length_.data());
 
   WP2::Vector_s32 hash_to_first_index;
   WP2_CHECK_ALLOC_OK(hash_to_first_index.resize(kHashSize));
 
   // Set the int32_t array to -1.
-  memset(hash_to_first_index.data(), 0xff,
-         kHashSize * sizeof(*hash_to_first_index.data()));
+  std::memset(hash_to_first_index.data(), 0xff,
+              kHashSize * sizeof(*hash_to_first_index.data()));
   // Fill the chain linking pixels with the same hash.
   bool argb_comp = ColorEq(&argb[0], &argb[4]);
-  for (pos = 0; pos < size - 2;) {
-    uint32_t hash_code;
+  for (uint32_t pos = 0; pos < size - 2;) {
     const bool argb_comp_next =
         ColorEq(&argb[4 * (pos + 1)], &argb[4 * (pos + 2)]);
     if (argb_comp && argb_comp_next) {
@@ -243,7 +246,7 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
       // The last pixel has a different 64 bit hash, as its next pixel does
       // not have the same color, so we just need to get to the last pixel equal
       // to its follower.
-      while (pos + (int)len + 2 < size &&
+      while (pos + len + 2 < size &&
              ColorEq(&argb[4 * (pos + len + 2)], &argb[4 * pos])) {
         ++len;
       }
@@ -252,29 +255,26 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
         // because they are linked to their predecessor and we automatically
         // check that in the main for loop below. Skipping means setting no
         // predecessor in the chain, hence -1.
-        memset(chain + pos, 0xff, (len - kMaxLZ77Length) * sizeof(*chain));
+        std::memset(chain + pos, 0xff, (len - kMaxLZ77Length) * sizeof(*chain));
         pos += len - kMaxLZ77Length;
         len = kMaxLZ77Length;
       }
       // Process the rest of the hash chain.
       while (len) {
         tmp[7] = len--;
-        hash_code = WP2::encoding::HashPixPair(tmp, kHashBits);
-        chain[pos] = hash_to_first_index[hash_code];
-        hash_to_first_index[hash_code] = pos++;
+        UpdateChain(pos, tmp, &hash_to_first_index, chain);
+        ++pos;
       }
       argb_comp = false;
     } else {
       // Just move one pixel forward.
-      hash_code = WP2::encoding::HashPixPair(&argb[4 * pos], kHashBits);
-      chain[pos] = hash_to_first_index[hash_code];
-      hash_to_first_index[hash_code] = pos++;
+      UpdateChain(pos, &argb[4 * pos], &hash_to_first_index, chain);
+      ++pos;
       argb_comp = argb_comp_next;
     }
   }
   // Process the penultimate pixel.
-  chain[pos] = hash_to_first_index[WP2::encoding::HashPixPair(&argb[4 * pos],
-                                                              kHashBits)];
+  UpdateChain(size - 2, &argb[4 * (size - 2)], &hash_to_first_index, chain);
 
   hash_to_first_index.reset();
 
@@ -282,8 +282,9 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
   // pixel and a length. The right-most pixel cannot match anything to the right
   // (hence a best length of 0) and the left-most pixel nothing to the left
   // (hence an offset of 0).
+  const int iter_max = GetMaxItersForSpeed(effort);
   assert(size > 2);
-  offset_length_[0] = offset_length_[size - 1] = 0;
+  offset_length_[size - 1] = 0;
   const uint32_t window_size = GetWindowSizeForHashChain(effort, width);
   for (uint32_t base_position = size - 2; base_position > 0;) {
     const uint32_t max_len = std::min(size - 1 - base_position, kMaxLZ77Length);
@@ -291,13 +292,8 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
     int iter = iter_max;
     uint32_t best_length = 0;
     uint32_t best_distance = 0;
-    int16_t best_argb[4];
     const int min_pos =
         (base_position > window_size) ? base_position - window_size : 0;
-    const uint32_t length_max = std::min(max_len, 256u);
-    uint32_t max_base_position;
-
-    pos = chain[base_position];
     if (effort > 0) {
       uint32_t curr_length;
       // Heuristic: use the comparison with the above line as an initialization.
@@ -318,31 +314,39 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
         best_distance = 1;
       }
       --iter;
-      // Skip the for loop if we already have the maximum.
-      if (best_length == kMaxLZ77Length) pos = min_pos - 1;
     }
-    ColorCopy(&argb_start[4 * best_length], best_argb);
+    // If we can still do better, go for it.
+    if (best_length < max_len) {
+      int16_t argb_end[4];
+      assert(argb_start + 4 * best_length < argb + 4 * size);
+      ColorCopy(&argb_start[4 * best_length], argb_end);
+      for (int pos = chain[base_position]; pos >= min_pos && --iter;
+           pos = chain[pos]) {
+        // Early exit: make sure that the segment starting at pos has at least
+        // a length of best_length + 1 by checking argb[4 * (pos + best_length).
+        assert(argb + 4 * (pos + best_length) < argb + 4 * size);
+        if (!ColorEq(&argb[4 * (pos + best_length)], argb_end)) continue;
 
-    for (; pos >= min_pos && --iter; pos = chain[pos]) {
-      uint32_t curr_length;
-      assert(base_position > (uint32_t)pos);
-
-      if (!ColorEq(&argb[4 * (pos + best_length)], best_argb)) continue;
-
-      const auto start = &argb[4 * pos];
-      const auto p = std::mismatch(start, start + 4 * max_len, argb_start);
-      curr_length = (p.first - start) / 4;
-      if (best_length < curr_length) {
-        best_length = curr_length;
-        best_distance = base_position - pos;
-        ColorCopy(&argb_start[4 * best_length], best_argb);
-        // Stop if we have reached a good enough length.
-        if (best_length >= length_max) break;
+        const int16_t* const start = &argb[4 * pos];
+        assert(start + 4 * max_len <= argb + 4 * size);
+        assert(argb_start + 4 * max_len <= argb + 4 * size);
+        const auto p = std::mismatch(start, start + 4 * max_len, argb_start);
+        const uint32_t curr_length = (p.first - start) / 4;
+        if (best_length < curr_length) {
+          best_length = curr_length;
+          best_distance = base_position - pos;
+          // Stop if we have reached a good enough length. This is totally
+          // empirical.
+          // TODO(vrabaud) change heuristic, use effort.
+          if (best_length >= std::min(max_len, 256u)) break;
+          assert(argb_start + 4 * best_length < argb + 4 * size);
+          ColorCopy(&argb_start[4 * best_length], argb_end);
+        }
       }
     }
     // We have the best match but in case the two intervals continue matching
     // to the left, we have the best matches for the left-extended pixels.
-    max_base_position = base_position;
+    uint32_t max_base_position = base_position;
     while (true) {
       assert(best_length <= kMaxLZ77Length);
       offset_length_[base_position] =
@@ -370,6 +374,7 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
       }
     }
   }
+  offset_length_[0] = 0;
   return WP2_STATUS_OK;
 }
 
