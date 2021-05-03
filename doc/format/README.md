@@ -30,13 +30,13 @@ Orientation                 | 3    | 0°, 90°, 180°, 270° and/or mirror
 Is opaque                   | 1    | If true: no alpha
 Is animation                | 1    | If true: expect ANMF
 Preview color               | 12   | RGB444
-Quality hint                | 4    | Compression rate estimate
 Has preview                 | 1    | If true: preview chunk
 Has ICC profile             | 1    | If true: ICC chunk
 Has XMP and/or EXIF         | 1    | If true: metadata tag
 Default transfer function   | 1    | If false: read custom
 Tile shape                  | 2    | 256x256, 512x512 etc.
 RGB bit depth               | 1    | 0 means 8-bit RGB, 1 means 10-bit RGB
+Filler                      | 4    | Value 0xf
 \[Loop forever\]            | 1    | For animation only
 \[Custom background color\] | 1    | For animation only
 \[\[Background color\]\]    | 38   | For animation and custom bg only
