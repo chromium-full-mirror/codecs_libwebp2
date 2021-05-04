@@ -51,7 +51,6 @@ int main(int, const char*[]) {
   enc_features.width = 1000;
   enc_features.height = 1000;
   enc_features.orientation = 0;
-  enc_features.tile_size = 512;
   enc_features.is_opaque = true;
   enc_features.is_animation = false;
   enc_features.has_preview = true;
@@ -59,6 +58,8 @@ int main(int, const char*[]) {
   enc_features.has_icc = true;
   enc_features.has_xmp = true;
   enc_features.has_exif = true;
+  enc_features.bit_depth = 0;
+  enc_features.tile_size = 512;
   enc_features.loop_forever = true;
   enc_features.background_color = 0xFF000000u;
 

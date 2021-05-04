@@ -172,11 +172,6 @@ void EncodeStillImage(const ImageFeatures& features, const Data& preview,
   header.EncodeUInt(features.width, 1, 1 << kImageDimNumBits);
   header.EncodeUInt(features.height, 1, 1 << kImageDimNumBits);
   header.EncodeUInt(features.orientation, 0, 3);
-  header.EncodeUInt(features.tile_size == 128   ? 0
-                    : features.tile_size == 256 ? 1
-                    : features.tile_size == 512 ? 2
-                                                : 3,
-                    0, 3);
   header.EncodeBool(features.is_opaque);
   header.EncodeBool(features.is_animation);
   header.EncodeUInt(features.preview_color, 0, 1 << 12);
@@ -184,6 +179,11 @@ void EncodeStillImage(const ImageFeatures& features, const Data& preview,
   header.EncodeBool(features.has_icc);
   header.EncodeBool(features.has_xmp);
   header.EncodeBool(features.has_exif);
+  header.EncodeUInt(features.bit_depth, 0, 3);
+  header.EncodeUInt(features.tile_size == 128 ? 0 :
+                    features.tile_size == 256 ? 1 :
+                    features.tile_size == 512 ? 2 : 3,
+                    0, 3);
   if (features.is_animation) {
     header.EncodeBool(features.loop_forever);
     header.EncodeUInt(features.background_color, 0, 4294967295u);
@@ -216,11 +216,6 @@ bool DecodeStillImage(const Data& bitstream, ImageFeatures* features,
   features->width = header.DecodeUInt(1, 1 << kImageDimNumBits);
   features->height = header.DecodeUInt(1, 1 << kImageDimNumBits);
   features->orientation = header.DecodeUInt(0, 3);
-  const uint32_t tile_size = header.DecodeUInt(0, 3);
-  features->tile_size = tile_size == 0   ? 128
-                        : tile_size == 1 ? 256
-                        : tile_size == 2 ? 512
-                                         : 1024;
   features->is_opaque = header.DecodeBool();
   features->is_animation = header.DecodeBool();
   features->preview_color = header.DecodeUInt(0, 1 << 12);
@@ -228,6 +223,11 @@ bool DecodeStillImage(const Data& bitstream, ImageFeatures* features,
   features->has_icc = header.DecodeBool();
   features->has_xmp = header.DecodeBool();
   features->has_exif = header.DecodeBool();
+  features->bit_depth = header.DecodeUInt(0, 3);
+  const uint32_t tile_size = header.DecodeUInt(0, 3);
+  features->tile_size = tile_size == 0 ? 128 :
+                        tile_size == 1 ? 256 :
+                        tile_size == 2 ? 512 : 1024;
   features->loop_forever = features->is_animation ? header.DecodeBool() : false;
   features->background_color =
       features->is_animation ? header.DecodeUInt(0, 4294967295u) : 0;

@@ -39,7 +39,6 @@ struct ImageFeatures {
   uint32_t width;            // Width in pixels.
   uint32_t height;           // Height in pixels.
   uint32_t orientation;      // Rotation applied during decoding.
-  uint32_t tile_size;        // Width and height of tiles in pixels.
 
   bool is_opaque;            // True if no alpha. False has no guarantee.
   bool is_animation;         // True if the image is animated
@@ -51,6 +50,9 @@ struct ImageFeatures {
   bool has_icc;              // Indicates the presence of ICC information.
   bool has_xmp;              // XMP chunk at the end of the bitstream.
   bool has_exif;             // EXIF chunk at the end of the bitstream.
+
+  uint32_t bit_depth;        // 0=8-bit, 1=10-bit, 2=12-bit, 3=undef.
+  uint32_t tile_size;        // Width and height of tiles in pixels.
 
   bool loop_forever;         // Play once if false, forever if true (anim only).
   uint32_t background_color;  // Color to dispose the canvas with (anim only).
