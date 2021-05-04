@@ -76,6 +76,7 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
         }
       }
 
+      bit_packer.Pad();
       WP2_CHECK_OK(bit_packer.Ok(), WP2_STATUS_BAD_WRITE);
 #if !defined(WP2_ENC_DEC_MATCH)
       assert(bit_packer.Used() == max_num_bytes);
@@ -111,6 +112,7 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
       }
     }
 
+    bit_packer.Pad();
     WP2_CHECK_OK(bit_packer.Ok(), WP2_STATUS_BAD_WRITE);
 #if !defined(WP2_ENC_DEC_MATCH)
     assert(bit_packer.Used() == max_num_bytes);

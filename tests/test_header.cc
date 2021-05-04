@@ -184,8 +184,10 @@ TEST(HeaderTest, BitPackerUnpacker) {
     }
 
     if (encoding) {
+      enc.Pad();
       ASSERT_TRUE(enc.Ok()) << "Error encoding header.";
     } else {
+      ASSERT_TRUE(dec.Pad());
       ASSERT_WP2_OK(dec.GetStatus()) << "Error decoding header.";
     }
   }

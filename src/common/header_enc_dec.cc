@@ -116,6 +116,12 @@ Rectangle BitUnpacker::ReadRect(uint32_t canvas_width, uint32_t canvas_height,
   return rect;
 }
 
+bool BitUnpacker::Pad() {
+  const uint32_t bits_to_pad = bit_pos_ & 7;
+  if (bits_to_pad == 0) return true;
+  return (ReadBits(8 - bits_to_pad, "padding") == 0);
+}
+
 bool BitUnpacker::Prefetch(uint32_t num_bits) {
   if (status_ != WP2_STATUS_OK) return false;
   const uint8_t* unused;
@@ -199,9 +205,10 @@ void BitPacker::PutRect(const Rectangle& rect, uint32_t canvas_width,
   PutVarUInt(rect.y, 0, canvas_height - rect.height, label);
 }
 
-uint8_t* BitPacker::Align() {
-  bit_pos_ = (bit_pos_ + 7) & ~7;
-  return buf_ + (bit_pos_ >> 3);
+void BitPacker::Pad() {
+  const uint32_t bits_to_pad = bit_pos_ & 7;
+  if (bits_to_pad == 0) return;
+  PutBits(/*value=*/0, 8 - bits_to_pad, "padding");
 }
 
 void BitPacker::PutBitsInternal(uint32_t value, uint32_t num_bits) {

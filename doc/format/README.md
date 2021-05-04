@@ -20,7 +20,7 @@ Hard-coded 3 bytes with the value 0x6ffff4.
 
 ## Image header
 
-Using bit-packing, the main image header is 7 to 13-byte long:
+Using bit-packing, the main image header is 7 to 12-byte long:
 
 Value                       | Bits |                                       |
 --------------------------- | ---- | -------------------------------------
@@ -33,16 +33,14 @@ Preview color               | 12   | RGB444
 Has preview                 | 1    | If true: preview chunk
 Has ICC profile             | 1    | If true: ICC chunk
 Has XMP and/or EXIF         | 1    | If true: metadata tag
-Default transfer function   | 1    | If false: read custom
-Tile shape                  | 2    | 256x256, 512x512 etc.
 RGB bit depth               | 1    | 0 means 8-bit RGB, 1 means 10-bit RGB
-Filler                      | 4    | Value 0xf
+Tile shape                  | 2    | 256x256, 512x512 etc.
+Default transfer function   | 1    | If false: read custom
+\[Transfer function\]       | 4    | If not default transfer func
 \[Loop forever\]            | 1    | For animation only
 \[Custom background color\] | 1    | For animation only
 \[\[Background color\]\]    | 38   | For animation and custom bg only
-\[\[Filler\]\]              | 6    | For animation and not custom bg only
-\[Transfer function\]       | 4    | If not default transfer func
-\[Filler\]                  | 4    | Value 0x0
+Padding                     |      | Value 0
 
 ## Preview
 

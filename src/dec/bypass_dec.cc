@@ -168,6 +168,7 @@ WP2Status TileDecoder::BypassTileDecRgb10b() {
     WP2_CHECK_STATUS(tile_->row_progress.AdvanceBy(1.));
   }
 
+  WP2_CHECK_OK(bit_unpacker.Pad(), WP2_STATUS_BITSTREAM_ERROR);
   WP2_CHECK_STATUS(bit_unpacker.GetStatus());
   return WP2_STATUS_OK;
 }

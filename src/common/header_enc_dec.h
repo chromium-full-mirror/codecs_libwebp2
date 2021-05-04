@@ -82,6 +82,10 @@ class BitUnpacker {
   Rectangle ReadRect(uint32_t canvas_width, uint32_t canvas_height,
                      WP2_OPT_LABEL);
 
+  // Reads bits until the next aligned byte.
+  // Returns true if there were only zeros.
+  bool Pad();
+
   // Tries to fetch the next 'num_bits' if not already available.
   // Returns true if the next 'num_bits' can be immediately read afterwards.
   bool Prefetch(uint32_t num_bits);
@@ -137,8 +141,8 @@ class BitPacker {
   void PutRect(const Rectangle& rect, uint32_t canvas_width,
                uint32_t canvas_height, WP2_OPT_LABEL);
 
-  // Finish the bitstream by aligning the bitstream position.
-  uint8_t* Align();
+  // Writes binary zeros until the next aligned byte.
+  void Pad();
 
   // Size used so far, in bytes.
   uint32_t Used() const { return (bit_pos_ + 7) >> 3; }

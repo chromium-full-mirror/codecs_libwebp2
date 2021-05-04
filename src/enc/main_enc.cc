@@ -277,64 +277,59 @@ WP2Status EncodeHeader(const EncoderConfig& config,
                WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(CheckPremultiplied(background_color),
                WP2_STATUS_INVALID_PARAMETER);
-  const bool use_bt2020 =
-      (config.transfer_function == WP2_TF_ITU_R_BT2020_10BIT);
 
-  {
-    uint8_t header[kHeaderMaxSize];
-    BitPacker henc(header, sizeof(header), "image_features/");
+  uint8_t header[kHeaderMaxSize];
+  BitPacker henc(header, sizeof(header), "image_features/");
 
-    henc.PutBits(kSignature, 24, "signature");
+  henc.PutBits(kSignature, 24, "signature");
 
-    henc.PutBits(width - 1, kImageDimNumBits, "width_m1");
-    henc.PutBits(height - 1, kImageDimNumBits, "height_m1");
-    henc.PutBits((uint32_t)config.decoding_orientation, 3, "orientation");
-    henc.PutBits(has_alpha ? 1 : 0, 1, "has_alpha");
-    henc.PutBits(is_anim ? 1 : 0, 1, "is_animation");
+  henc.PutBits(width - 1, kImageDimNumBits, "width_m1");
+  henc.PutBits(height - 1, kImageDimNumBits, "height_m1");
+  henc.PutBits((uint32_t)config.decoding_orientation, 3, "orientation");
+  henc.PutBits(has_alpha ? 1 : 0, 1, "has_alpha");
+  henc.PutBits(is_anim ? 1 : 0, 1, "is_animation");
 
-    henc.PutBits(ToUInt32(preview_color), 12, "preview_color");
+  henc.PutBits(ToUInt32(preview_color), 12, "preview_color");
 
-    henc.PutBits(HasPreview(config) ? 1 : 0, 1, "has_preview");
-    henc.PutBits(has_icc ? 1 : 0, 1, "has_icc");
-    henc.PutBits(has_trailing_data ? 1 : 0, 1, "has_trailing_data");
-    henc.PutBits(use_bt2020 ? 1 : 0, 1, "default_transfer_function");
+  henc.PutBits(HasPreview(config) ? 1 : 0, 1, "has_preview");
+  henc.PutBits(has_icc ? 1 : 0, 1, "has_icc");
+  henc.PutBits(has_trailing_data ? 1 : 0, 1, "has_trailing_data");
+  henc.PutBits((rgb_bit_depth == 10) ? 1 : 0, 1, "rgb_bit_depth");
 
-    static_assert(TileShape::TILE_SHAPE_AUTO <= (1 << kTileShapeBits),
-                  "invalid TILE_SHAPE_AUTO value");
-    henc.PutBits(FinalTileShape(config), kTileShapeBits, "tile_shape");
-    henc.PutBits((rgb_bit_depth == 10) ? 1 : 0, 1, "rgb_bit_depth");
+  static_assert(TileShape::TILE_SHAPE_AUTO <= (1 << kTileShapeBits),
+                "invalid TILE_SHAPE_AUTO value");
+  henc.PutBits(FinalTileShape(config), kTileShapeBits, "tile_shape");
 
-    // Unused bits till the next full aligned byte.
-    henc.PutBits(0xf, 4, "filler");
-
-    if (is_anim) {
-      henc.PutBits(loop_forever ? 1 : 0, 1, "loop");
-      const bool custom_background =
-          (background_color.a != kDefaultBackgroundColor.a ||
-           background_color.r != kDefaultBackgroundColor.r ||
-           background_color.g != kDefaultBackgroundColor.g ||
-           background_color.b != kDefaultBackgroundColor.b);
-      henc.PutBits(custom_background ? 1 : 0, 1, "background");
-      if (custom_background) {
-        if (has_alpha) henc.PutBits(background_color.a, 8, "background");
-        henc.PutBits(background_color.r, 10, "background");
-        henc.PutBits(background_color.g, 10, "background");
-        henc.PutBits(background_color.b, 10, "background");
-      } else {
-        henc.PutBits(0x2u, 6, "filler");
-      }
-    }
-    if (!use_bt2020) {
-      henc.PutBits((uint32_t)config.transfer_function - 1, 4,
-                   "transfer_function");
-      henc.PutBits(0x0, 4, "filler");
-    }
-    henc.Align();
-    WP2_CHECK_OK(henc.Ok(), WP2_STATUS_BAD_WRITE);
-
-    assert(henc.Used() >= kHeaderMinSize && henc.Used() <= kHeaderMaxSize);
-    WP2_CHECK_OK(output->Append(header, henc.Used()), WP2_STATUS_BAD_WRITE);
+  if (config.transfer_function == WP2_TF_ITU_R_BT2020_10BIT) {
+    henc.PutBits(/*value=*/1, /*num_bits=*/1, "default_transfer_function");
+  } else {
+    henc.PutBits(/*value=*/0, /*num_bits=*/1, "default_transfer_function");
+    henc.PutBits((uint32_t)config.transfer_function - 1, 4,
+                 "transfer_function");
   }
+
+  if (is_anim) {
+    henc.PutBits(loop_forever ? 1 : 0, 1, "loop");
+    const bool custom_background =
+        (background_color.a != kDefaultBackgroundColor.a ||
+         background_color.r != kDefaultBackgroundColor.r ||
+         background_color.g != kDefaultBackgroundColor.g ||
+         background_color.b != kDefaultBackgroundColor.b);
+    henc.PutBits(custom_background ? 1 : 0, 1, "background");
+    if (custom_background) {
+      if (has_alpha) henc.PutBits(background_color.a, 8, "background");
+      henc.PutBits(background_color.r, 10, "background");
+      henc.PutBits(background_color.g, 10, "background");
+      henc.PutBits(background_color.b, 10, "background");
+    }
+  }
+
+  henc.Pad();  // Unused bits till the next full aligned byte.
+  WP2_CHECK_OK(henc.Ok(), WP2_STATUS_BAD_WRITE);
+
+  assert(henc.Used() >= kHeaderMinSize && henc.Used() <= kHeaderMaxSize);
+  WP2_CHECK_OK(output->Append(header, henc.Used()), WP2_STATUS_BAD_WRITE);
+
   return WP2_STATUS_OK;
 }
 

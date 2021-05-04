@@ -60,7 +60,7 @@ WP2Status WriteANMF(uint32_t image_width, uint32_t image_height,
   enc.PutBits(is_last ? 1 : 0, 1, "is_last");
   enc.PutVarUInt(duration, 0, kMaxFrameDurationMs, "duration");
   enc.PutRect(window, image_width, image_height, "window");
-  enc.Align();
+  enc.Pad();
   assert(enc.Ok());
   assert(enc.Used() >= kANMFMinHeaderSize && enc.Used() <= kANMFMaxHeaderSize);
   WP2_CHECK_OK(output->Append(header, enc.Used()), WP2_STATUS_BAD_WRITE);

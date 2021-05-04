@@ -115,16 +115,18 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
   has_preview = !!dec.ReadBits(1, "has_preview");
   has_icc = !!dec.ReadBits(1, "has_icc");
   has_trailing_data = !!dec.ReadBits(1, "has_trailing_data");
-  transfer_function =
-      dec.ReadBits(1, "default_transfer_function") ? WP2_TF_ITU_R_BT2020_10BIT
-                                                   : WP2_TF_UNSPECIFIED;
+  rgb_bit_depth = (dec.ReadBits(1, "rgb_bit_depth") == 1) ? 10 : 8;
 
   const auto tile_shape = (TileShape)dec.ReadBits(kTileShapeBits, "tile_shape");
   tile_width = TileWidth(tile_shape, raw_width);
   tile_height = TileHeight(tile_shape, /*image_width=*/raw_width);
-  rgb_bit_depth = (dec.ReadBits(1, "rgb_bit_depth") == 1) ? 10 : 8;
 
-  WP2_CHECK_OK(dec.ReadBits(4, "filler") == 0xf, WP2_STATUS_BITSTREAM_ERROR);
+  if (dec.ReadBits(1, "default_transfer_function")) {
+    transfer_function = WP2_TF_ITU_R_BT2020_10BIT;
+  } else {
+    transfer_function =
+        (TransferFunction)(1 + dec.ReadBits(4, "transfer_function"));
+  }
 
   if (is_animation) {
     loop_forever = !!dec.ReadBits(1, "loop");
@@ -139,18 +141,13 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
                    WP2_STATUS_BITSTREAM_ERROR);
     } else {
       background_color = kDefaultBackgroundColor;
-      WP2_CHECK_OK(dec.ReadBits(6, "filler") == 0x2u,
-                   WP2_STATUS_BITSTREAM_ERROR);
     }
   } else {
     loop_forever = true;
     background_color = kDefaultBackgroundColor;
   }
-  if (transfer_function == WP2_TF_UNSPECIFIED) {
-    transfer_function =
-        (TransferFunction)(1 + dec.ReadBits(4, "transfer_function"));
-    WP2_CHECK_OK(dec.ReadBits(4, "filler") == 0x0, WP2_STATUS_BITSTREAM_ERROR);
-  }
+
+  WP2_CHECK_OK(dec.Pad(), WP2_STATUS_BITSTREAM_ERROR);
   WP2_CHECK_STATUS(dec.GetStatus());
 
   header_size = data_source.GetNumReadBytes();
