@@ -41,14 +41,13 @@ TEST_P(ResidualWriterTest, AOM) {
       mgr.Init(ALL_RECTS, /*snapped=*/false, /*width=*/10, /*height=*/10));
   libgav1::AOMResidualWriter writer;  // empty object
   libgav1::AOMResidualReader reader;  // empty object
-  const uint32_t quality_hint = GetQualityHint(std::get<1>(GetParam()));
   const AOMTuple aom_tuple = std::get<0>(GetParam());
   const uint32_t num_iters = std::get<1>(aom_tuple);
   const BlockSize dim = std::get<0>(aom_tuple);
   SymbolsInfo info;
   ASSERT_WP2_OK(info.InitLossy(/*num_segments=*/1, ALL_RECTS,
-                               /*has_alpha=*/false, quality_hint,
-                               /*use_aom_coeffs=*/true, /*use_splits=*/false));
+                               /*has_alpha=*/false, /*use_aom_coeffs=*/true,
+                               /*use_splits=*/false));
   // Create some data.
   const uint32_t bw_pix = BlockWidthPix(dim);
   const uint32_t bh_pix = BlockHeightPix(dim);

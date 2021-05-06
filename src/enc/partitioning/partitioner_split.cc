@@ -98,8 +98,7 @@ WP2Status SplitPartitioner::GetBestPartition(const ProgressRange& progress,
   const GlobalParams& gparams = score_func->gparams();
   WP2_CHECK_STATUS(symbols_info.InitLossy(
       gparams.segments_.size(), gparams.partition_set_,
-      gparams.maybe_use_lossy_alpha_, GetQualityHint(config_->quality),
-      use_aom_coeffs, /*use_splits=*/true));
+      gparams.maybe_use_lossy_alpha_, use_aom_coeffs, /*use_splits=*/true));
   SymbolRecorder symbol_recorder;
   WP2_CHECK_STATUS(symbol_recorder.Allocate(symbols_info, max_num_blocks));
   SymbolCounter symbol_counter(&symbol_recorder);

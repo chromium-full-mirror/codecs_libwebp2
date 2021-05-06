@@ -18,6 +18,7 @@
 
 #include "include/helpers.h"
 #include "include/helpers_filter.h"
+#include "src/common/constants.h"
 #include "src/dec/filters/intertile_filter.h"
 #include "src/utils/random.h"
 
@@ -28,14 +29,14 @@ namespace {
 
 static constexpr uint32_t kTileSize = 128;
 
-void Filter(bool enabled, uint32_t quality_hint,
+void Filter(bool enabled, uint32_t filter_magnitude,
             const TilesLayout& tiles_layout, uint32_t step,
             YUVPlane* const canvas) {
   DecoderConfig config = DecoderConfig::kDefault;
   config.enable_deblocking_filter = enabled;
   IntertileFilter intertile_filter;
   GlobalParams gparams;
-  gparams.quality_hint_ = quality_hint;
+  gparams.yuv_filter_magnitude_ = filter_magnitude;
   ASSERT_WP2_OK(gparams.InitFixedPredictors());
   intertile_filter.Init(config, gparams, tiles_layout, canvas);
   const Tile& last_tile = tiles_layout.tiles.back();
@@ -56,9 +57,9 @@ void Filter(bool enabled, uint32_t quality_hint,
 
 void CreateCanvasAndFilter(uint32_t width, uint32_t height,
                            int32_t noise_strength, bool enable_filter,
-                           uint32_t quality_hint, double res_den,
-                           double min_bpp, uint32_t step,
-                           YUVPlane* const canvas, YUVPlane* const unfiltered) {
+                           float quality, double res_den, double min_bpp,
+                           uint32_t step, YUVPlane* const canvas,
+                           YUVPlane* const unfiltered) {
   ArgbBuffer argb_buffer;  // Unused, for API compliance only.
   TilesLayout tiles_layout;
   ASSERT_WP2_OK(
@@ -74,7 +75,7 @@ void CreateCanvasAndFilter(uint32_t width, uint32_t height,
 
   for (Tile& tile : tiles_layout.tiles) {
     segments.emplace_back(testutil::CreateSegments(
-        quality_hint, /*bit_depth=*/{8, /*is_signed=*/true}));
+        GetQualityHint(quality), /*bit_depth=*/{8, /*is_signed=*/true}));
     yuvs.emplace_back();
     ASSERT_WP2_OK(
         yuvs.back().Resize(tile.yuv_output.Y.w_, tile.yuv_output.Y.h_));
@@ -95,7 +96,9 @@ void CreateCanvasAndFilter(uint32_t width, uint32_t height,
   }
   ASSERT_WP2_OK(unfiltered->Copy(*canvas, /*resize_if_needed=*/true));
 
-  Filter(enable_filter, quality_hint, tiles_layout, step, canvas);
+  const uint32_t filter_magnitude =
+      std::lround((1.f - quality / kMaxLossyQuality) * kMaxYuvFilterMagnitude);
+  Filter(enable_filter, filter_magnitude, tiles_layout, step, canvas);
 }
 
 //------------------------------------------------------------------------------
@@ -111,8 +114,8 @@ TEST_P(IntertileFilterTest, Plain) {
   YUVPlane canvas, unfiltered;
   CreateCanvasAndFilter(/*width=*/3 * kTileSize - 1, /*height=*/kTileSize + 1,
                         /*noise_strength=*/0, /*enable_filter=*/true,
-                        /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/0.,
-                        step_, &canvas, &unfiltered);
+                        /*quality=*/0.f, /*res_den=*/0., /*min_bpp=*/0., step_,
+                        &canvas, &unfiltered);
   ASSERT_TRUE(testutil::AreEqual(canvas, unfiltered));
 }
 
@@ -121,8 +124,8 @@ TEST_P(IntertileFilterTest, DisabledFilter) {
   YUVPlane canvas, unfiltered;
   CreateCanvasAndFilter(/*width=*/3 * kTileSize - 1, /*height=*/kTileSize + 1,
                         /*noise_strength=*/10, /*enable_filter=*/false,
-                        /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/0.,
-                        step_, &canvas, &unfiltered);
+                        /*quality=*/0.f, /*res_den=*/0., /*min_bpp=*/0., step_,
+                        &canvas, &unfiltered);
   ASSERT_TRUE(testutil::AreEqual(canvas, unfiltered));
 }
 
@@ -131,7 +134,7 @@ TEST_P(IntertileFilterTest, HighQuality) {
   YUVPlane canvas, unfiltered;
   CreateCanvasAndFilter(/*width=*/3 * kTileSize - 1, /*height=*/kTileSize + 1,
                         /*noise_strength=*/10, /*enable_filter=*/true,
-                        /*quality_hint=*/kMaxLossyQualityHint, /*res_den=*/0.,
+                        /*quality=*/kMaxLossyQuality, /*res_den=*/0.,
                         /*min_bpp=*/0., step_, &canvas, &unfiltered);
   ASSERT_TRUE(testutil::AreEqual(canvas, unfiltered));
 }
@@ -141,8 +144,8 @@ TEST_P(IntertileFilterTest, HighBpp) {
   YUVPlane canvas, unfiltered;
   CreateCanvasAndFilter(/*width=*/3 * kTileSize - 1, /*height=*/kTileSize + 1,
                         /*noise_strength=*/10, /*enable_filter=*/true,
-                        /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/2.,
-                        step_, &canvas, &unfiltered);
+                        /*quality=*/0.f, /*res_den=*/0., /*min_bpp=*/2., step_,
+                        &canvas, &unfiltered);
   ASSERT_TRUE(testutil::AreEqual(canvas, unfiltered));
 }
 
@@ -151,8 +154,8 @@ TEST_P(IntertileFilterTest, OneTile) {
   YUVPlane canvas, unfiltered;
   CreateCanvasAndFilter(/*width=*/kTileSize, /*height=*/10,
                         /*noise_strength=*/10, /*enable_filter=*/true,
-                        /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/0.,
-                        step_, &canvas, &unfiltered);
+                        /*quality=*/0.f, /*res_den=*/0., /*min_bpp=*/0., step_,
+                        &canvas, &unfiltered);
   ASSERT_TRUE(testutil::AreEqual(canvas, unfiltered));
 }
 
@@ -161,8 +164,8 @@ TEST_P(IntertileFilterTest, TileRow) {
   YUVPlane canvas, unfiltered;
   CreateCanvasAndFilter(/*width=*/3 * kTileSize - 1, /*height=*/10,
                         /*noise_strength=*/10, /*enable_filter=*/true,
-                        /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/0.,
-                        step_, &canvas, &unfiltered);
+                        /*quality=*/0.f, /*res_den=*/0., /*min_bpp=*/0., step_,
+                        &canvas, &unfiltered);
   ASSERT_FALSE(testutil::AreEqual(canvas.Y, unfiltered.Y));
   ASSERT_FALSE(testutil::AreEqual(canvas.U, unfiltered.U));
   ASSERT_FALSE(testutil::AreEqual(canvas.V, unfiltered.V));
@@ -171,8 +174,8 @@ TEST_P(IntertileFilterTest, TileColumn) {
   YUVPlane canvas, unfiltered;
   CreateCanvasAndFilter(/*width=*/10, /*height=*/2 * kTileSize + 1,
                         /*noise_strength=*/10, /*enable_filter=*/true,
-                        /*quality_hint=*/0, /*res_den=*/0., /*min_bpp=*/0.,
-                        step_, &canvas, &unfiltered);
+                        /*quality=*/0.f, /*res_den=*/0., /*min_bpp=*/0., step_,
+                        &canvas, &unfiltered);
   ASSERT_FALSE(testutil::AreEqual(canvas.Y, unfiltered.Y));
   ASSERT_FALSE(testutil::AreEqual(canvas.U, unfiltered.U));
   ASSERT_FALSE(testutil::AreEqual(canvas.V, unfiltered.V));
@@ -186,9 +189,9 @@ TEST_P(IntertileFilterTest, Deterministic) {
   for (uint32_t i = 0; i < steps.size(); ++i) {
     CreateCanvasAndFilter(/*width=*/3 * kTileSize - 1,
                           /*height=*/kTileSize + 100, /*noise_strength=*/10,
-                          /*enable_filter=*/true, /*quality_hint=*/0,
-                          /*res_den=*/0., /*min_bpp=*/0.,
-                          steps[i], &canvas[i], &unfiltered[i]);
+                          /*enable_filter=*/true, /*quality=*/0.f,
+                          /*res_den=*/0., /*min_bpp=*/0., steps[i], &canvas[i],
+                          &unfiltered[i]);
     ASSERT_FALSE(testutil::AreEqual(canvas[i].Y, unfiltered[i].Y));
     ASSERT_FALSE(testutil::AreEqual(canvas[i].U, unfiltered[i].U));
     ASSERT_FALSE(testutil::AreEqual(canvas[i].V, unfiltered[i].V));
@@ -256,9 +259,8 @@ TEST(IntertileFilterTest, Simple) {
     ASSERT_WP2_OK(Decode(memory_writer.mem_, memory_writer.size_, &decompressed,
                          decoder_config));
 
-    ASSERT_WP2_OK(decompressed.GetDistortion(plain_planes, PSNR,
-                                             filter ? psnr_filter_on
-                                                    : psnr_filter_off));
+    ASSERT_WP2_OK(decompressed.GetDistortion(
+        plain_planes, PSNR, filter ? psnr_filter_on : psnr_filter_off));
   }
   // Compared to the plain image, the blurred tiles should be closer than the
   // intact plain tiles.

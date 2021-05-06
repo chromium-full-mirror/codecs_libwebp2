@@ -209,8 +209,7 @@ const SymbolsInfo::ClusterInfo& SymbolsInfo::GetClusterInfo(
 
 WP2Status SymbolsInfo::InitLossy(uint32_t num_segments,
                                  PartitionSet partition_set, bool has_alpha,
-                                 uint32_t quality_hint, bool use_aom_coeffs,
-                                 bool use_splits) {
+                                 bool use_aom_coeffs, bool use_splits) {
   const uint32_t num_channels = (has_alpha ? 4 : 3);
 
   SetInfo(kSymbolModeY, /*min=*/0, /*max=*/kYPredModeNum - 1,

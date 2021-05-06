@@ -38,8 +38,7 @@ TEST_P(ResidualTest, Simple) {
   WP2MathInit();
   SymbolsInfo symbols_info;
   ASSERT_WP2_OK(symbols_info.InitLossy(
-      /*num_segments=*/1, ALL_RECTS,
-      /*has_alpha=*/(num_channels >= 4), GetQualityHint(/*quality=*/75.f),
+      /*num_segments=*/1, ALL_RECTS, /*has_alpha=*/(num_channels >= 4),
       /*use_aom_coeffs=*/false, /*use_splits=*/false));
   SymbolRecorder recorder;
   ASSERT_WP2_OK(recorder.Allocate(symbols_info, /*num_records=*/0));

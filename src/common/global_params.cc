@@ -99,6 +99,9 @@ WP2Status GlobalParams::Write(bool image_has_alpha, ANSEnc* const enc) const {
     } else {
       assert(!enable_alpha_filter_);
     }
+
+    enc->PutRValue(yuv_filter_magnitude_, kMaxYuvFilterMagnitude + 1,
+                   "filter_magnitude");
   }
   if (type_ == GP_LOSSLESS || type_ == GP_BOTH) {
     // write lossless
@@ -175,6 +178,9 @@ WP2Status GlobalParams::Read(bool image_has_alpha, ANSDec* const dec) {
 
     enable_alpha_filter_ =
         maybe_use_lossy_alpha_ && dec->ReadBool("enable_alpha_filter");
+
+    yuv_filter_magnitude_ =
+        dec->ReadRValue(kMaxYuvFilterMagnitude + 1, "filter_magnitude");
   }
   if (type_ == GP_LOSSLESS || type_ == GP_BOTH) {
     // read lossless
@@ -210,15 +216,20 @@ WP2Status GlobalParams::InitRndMtxSet() {
 }
 
 bool GlobalParams::IsOk() const {
+  if (type_ >= GP_LAST) return false;
+  if (quality_hint_ > kLosslessQualityHint) return false;
+
   if (y_preds_.size() > kYPredNum) return false;
   if (uv_preds_.size() > kUVPredNum) return false;
-  if (u_quant_multiplier_ < 1 ||
-      u_quant_multiplier_ > kNumQuantMultiplierValues)
-    return false;
-  if (v_quant_multiplier_ < 1 ||
-      v_quant_multiplier_ > kNumQuantMultiplierValues)
-    return false;
+
+  if (u_quant_multiplier_ < 1) return false;
+  if (u_quant_multiplier_ > kNumQuantMultiplierValues) return false;
+  if (v_quant_multiplier_ < 1) return false;
+  if (v_quant_multiplier_ > kNumQuantMultiplierValues) return false;
+
   if (a_preds_.size() > kAPredNum) return false;
+
+  if (yuv_filter_magnitude_ > kMaxYuvFilterMagnitude) return false;
   return true;
 }
 

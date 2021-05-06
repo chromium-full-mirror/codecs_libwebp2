@@ -33,21 +33,18 @@ namespace WP2 {
 constexpr uint32_t DirectionalFilter::kMaxPriStr;
 constexpr uint32_t DirectionalFilter::kMaxSecStr;
 
-static uint32_t GetStrengthFromQuality(uint32_t quality_hint,
-                                       uint32_t max_strength) {
-  if (quality_hint == kLosslessQualityHint) return 0;
-  assert(quality_hint <= kMaxLossyQualityHint);
+static uint32_t GetStrengthFromMagnitude(uint32_t filter_magnitude,
+                                         uint32_t max_strength) {
   // Full filtering at low/medium qualities, no filtering at high qualities.
-  constexpr uint32_t kThresh = kMaxLossyQualityHint - 1;  // quality ~88
-  return std::min(
-      DivRound(SafeSub(kThresh, quality_hint) * max_strength * 3u, kThresh),
-      max_strength);
+  return std::min(DivRound(filter_magnitude * max_strength * 3u,
+                           kMaxYuvFilterMagnitude),
+                  max_strength);
 }
 
 bool IsDirectionalFilterEnabled(const DecoderConfig& config,
                                 const GlobalParams& gparams) {
-  const uint32_t strength = GetStrengthFromQuality(
-      gparams.quality_hint_,
+  const uint32_t strength = GetStrengthFromMagnitude(
+      gparams.yuv_filter_magnitude_,
       std::max(DirectionalFilter::kMaxPriStr, DirectionalFilter::kMaxSecStr));
 
   return ((config.enable_directional_filter && strength > 0) ||
@@ -102,13 +99,14 @@ static uint32_t GetDamping(Channel channel, uint32_t precision_shift) {
 }
 
 // Converts available stats to an AV1 CDEF primary or secondary strength.
-static uint32_t GetCdefStr(uint32_t quality_hint, uint32_t min_bpp,
+static uint32_t GetCdefStr(uint32_t filter_magnitude, uint32_t min_bpp,
                            uint32_t res_den, uint32_t max_cdef_str) {
   assert(min_bpp <= 255 && res_den <= 255);
   min_bpp = (min_bpp * min_bpp) / 255;
   res_den = (res_den * res_den) / 255;
   // More details (bpp, res) need less filtering.
-  const uint32_t strength = GetStrengthFromQuality(quality_hint, max_cdef_str);
+  const uint32_t strength =
+      GetStrengthFromMagnitude(filter_magnitude, max_cdef_str);
   return ((255 - min_bpp) * (255 - res_den) * strength + 127 * 127) /
          (255 * 255);
 }
@@ -233,10 +231,10 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
         const int16_t* const top =
             margin_top ? &top_plane.At(backup_x, 0) : nullptr;
 
-        const uint32_t pri_str =
-            GetCdefStr(gparams_.quality_hint_, min_bpp, res_den[c], kMaxPriStr);
-        const uint32_t sec_str =
-            GetCdefStr(gparams_.quality_hint_, min_bpp, res_den[c], kMaxSecStr);
+        const uint32_t pri_str = GetCdefStr(gparams_.yuv_filter_magnitude_,
+                                            min_bpp, res_den[c], kMaxPriStr);
+        const uint32_t sec_str = GetCdefStr(gparams_.yuv_filter_magnitude_,
+                                            min_bpp, res_den[c], kMaxSecStr);
         const uint32_t shifted_pri_str = pri_str << precision_shift;
         const uint32_t shifted_sec_str = sec_str << precision_shift;
 
@@ -257,11 +255,12 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
       if (VDMatch(config_, "directional-filter")) {
-        RegisterPixelsForVDebug(
-            x, x + width - 1u, y, y + height - 1u,
-            GetCdefStr(gparams_.quality_hint_, min_bpp, res_den[0], kMaxPriStr),
-            GetCdefStr(gparams_.quality_hint_, min_bpp, res_den[0], kMaxSecStr),
-            direction, variance);
+        RegisterPixelsForVDebug(x, x + width - 1u, y, y + height - 1u,
+                                GetCdefStr(gparams_.yuv_filter_magnitude_,
+                                           min_bpp, res_den[0], kMaxPriStr),
+                                GetCdefStr(gparams_.yuv_filter_magnitude_,
+                                           min_bpp, res_den[0], kMaxSecStr),
+                                direction, variance);
       }
 #endif  // WP2_REDUCE_BINARY_SIZE
 

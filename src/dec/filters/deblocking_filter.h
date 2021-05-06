@@ -56,7 +56,7 @@ class DeblockingFilter {
   // pattern is filtered along the edge (either width or height must be 0).
   static void DeblockEdge(const DecoderConfig& config, bool intertile,
                           const Rectangle& tile_rect, bool has_alpha,
-                          uint32_t quality_hint, uint32_t yuv_num_bits,
+                          uint32_t yuv_filter_magnitude, uint32_t yuv_num_bits,
                           int32_t yuv_min, int32_t yuv_max,
                           const FilterBlockMap::BlockFeatures& p_block,
                           const FilterBlockMap::BlockFeatures& q_block,
@@ -101,9 +101,9 @@ class DeblockingFilter {
 
  public:
   // Estimate the filter parameters to apply from available data.
-  static uint32_t GetStrengthFromQuality(uint32_t quality_hint);
+  static uint32_t GetStrengthFromMagnitude(uint32_t filter_magnitude);
   static uint32_t GetStrengthFromBpp(uint32_t num_bits_per_pixel);
-  static uint32_t GetSharpnessFromQuality(uint32_t quality_hint);
+  static uint32_t GetSharpnessFromMagnitude(uint32_t filter_magnitude);
   static uint32_t GetSharpnessFromResidualDensity(uint32_t res_den);
 
  private:

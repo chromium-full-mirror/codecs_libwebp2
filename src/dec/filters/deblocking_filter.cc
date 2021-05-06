@@ -31,13 +31,10 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
-uint32_t DeblockingFilter::GetStrengthFromQuality(uint32_t quality_hint) {
-  if (quality_hint == kLosslessQualityHint) return 0;
-  assert(quality_hint <= kMaxLossyQualityHint);
-  // Full filtering below mid quality, no filtering at top quality.
+uint32_t DeblockingFilter::GetStrengthFromMagnitude(uint32_t filter_magnitude) {
+  // Full filtering at low qualities, no filtering at highest quality.
   return std::min(
-      DivRound((kMaxLossyQualityHint - quality_hint) * kDblkMaxStrength * 2,
-               kMaxLossyQualityHint),
+      DivRound(filter_magnitude * kDblkMaxStrength * 2, kMaxYuvFilterMagnitude),
       kDblkMaxStrength);
 }
 
@@ -48,9 +45,11 @@ uint32_t DeblockingFilter::GetStrengthFromBpp(uint32_t num_bits_per_pixel) {
                   kDblkMaxStrength);
 }
 
-uint32_t DeblockingFilter::GetSharpnessFromQuality(uint32_t quality_hint) {
-  if (quality_hint == kLosslessQualityHint) return kDblkMaxSharpness;
-  return DivRound(quality_hint * kDblkMaxSharpness, kMaxLossyQualityHint);
+uint32_t DeblockingFilter::GetSharpnessFromMagnitude(
+    uint32_t filter_magnitude) {
+  return DivRound(
+      (kMaxYuvFilterMagnitude - filter_magnitude) * kDblkMaxSharpness,
+      kMaxYuvFilterMagnitude);
 }
 
 uint32_t DeblockingFilter::GetSharpnessFromResidualDensity(uint32_t res_den) {
@@ -65,10 +64,9 @@ uint32_t DeblockingFilter::GetSharpnessFromResidualDensity(uint32_t res_den) {
 
 bool IsDeblockingFilterEnabled(const DecoderConfig& config,
                                const GlobalParams& gparams) {
-  const uint32_t strength =
-      DeblockingFilter::GetStrengthFromQuality(gparams.quality_hint_);
-
-  return (config.enable_deblocking_filter && strength > 0) ||
+  return (config.enable_deblocking_filter &&
+          DeblockingFilter::GetStrengthFromMagnitude(
+              gparams.yuv_filter_magnitude_) > 0) ||
          VDMatch(config, "deblocking-filter");
 }
 
@@ -174,7 +172,7 @@ uint32_t DeblockingFilter::DeblockHorizontally(uint32_t from_y, uint32_t to_y) {
       assert(q0_x < blocks_.tile_rect_.width);
 
       DeblockEdge(config_, /*intertile=*/false, blocks_.tile_rect_,
-                  blocks_.pixels_->HasAlpha(), gparams_.quality_hint_,
+                  blocks_.pixels_->HasAlpha(), gparams_.yuv_filter_magnitude_,
                   blocks_.bit_depth_.num_bits, blocks_.yuv_min_,
                   blocks_.yuv_max_, row_block_features[left_block_x],
                   row_block_features[right_block_x],
@@ -239,7 +237,7 @@ uint32_t DeblockingFilter::DeblockVertically(uint32_t to_y) {
       }
 
       DeblockEdge(config_, /*intertile=*/false, blocks_.tile_rect_,
-                  blocks_.pixels_->HasAlpha(), gparams_.quality_hint_,
+                  blocks_.pixels_->HasAlpha(), gparams_.yuv_filter_magnitude_,
                   blocks_.bit_depth_.num_bits, blocks_.yuv_min_,
                   blocks_.yuv_max_, *up_block_features, *down_block_features,
                   /*edge_rect=*/{x, q0_y, num_pixel_cols, 0}, blocks_.pixels_);
@@ -264,8 +262,9 @@ uint32_t DeblockingFilter::DeblockVertically(uint32_t to_y) {
 
 void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
                                    const Rectangle& tile_rect, bool has_alpha,
-                                   uint32_t quality_hint, uint32_t yuv_num_bits,
-                                   int32_t yuv_min, int32_t yuv_max,
+                                   uint32_t yuv_filter_magnitude,
+                                   uint32_t yuv_num_bits, int32_t yuv_min,
+                                   int32_t yuv_max,
                                    const FilterBlockMap::BlockFeatures& p_block,
                                    const FilterBlockMap::BlockFeatures& q_block,
                                    const Rectangle& edge_rect,
@@ -275,7 +274,7 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
 
   // The strength is determined by the block using the fewest bits per px.
   const uint32_t yuv_strength = std::min(
-      GetStrengthFromQuality(quality_hint),
+      GetStrengthFromMagnitude(yuv_filter_magnitude),
       GetStrengthFromBpp(std::min(p_block.min_bpp, q_block.min_bpp)));
   // TODO(maryla): this should be computed based on alpha_quality and
   //               alpha bpp instead!
@@ -300,9 +299,10 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
       vertical_edge ? edge_rect.height : edge_rect.width;
   assert(half <= kDblkMaxHalf && edge_length <= kMaxBlockSizePix);
 
-  const bool has_lossless_alpha = has_alpha &&
-      (!p_block.has_lossy_alpha || !q_block.has_lossy_alpha);
-  const uint32_t sharpness_from_quality = GetSharpnessFromQuality(quality_hint);
+  const bool has_lossless_alpha =
+      has_alpha && (!p_block.has_lossy_alpha || !q_block.has_lossy_alpha);
+  const uint32_t sharpness_from_quality =
+      GetSharpnessFromMagnitude(yuv_filter_magnitude);
 
   // Store whether each alpha pixel line across the edge was deblocked.
   uint8_t a_halfs[kMaxBlockSizePix];

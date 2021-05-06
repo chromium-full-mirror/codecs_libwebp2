@@ -225,6 +225,10 @@ WP2Status GlobalAnalysis(const ArgbBuffer& rgb, const YUVPlane& yuv,
 
     // No decision for large Y and U/V predictors.
     WP2_CHECK_STATUS(gparams->InitFixedPredictors());
+
+    // The intensity of the filtering is inversely proportional to the quality.
+    gparams->yuv_filter_magnitude_ = std::lround(
+        (1.f - config.quality / kMaxLossyQuality) * kMaxYuvFilterMagnitude);
   }
   return WP2_STATUS_OK;
 }

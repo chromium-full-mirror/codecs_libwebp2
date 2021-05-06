@@ -71,7 +71,6 @@ class IntertileFilter {
   const GlobalParams* gparams_ = nullptr;
   const TilesLayout* tiles_layout_ = nullptr;
   YUVPlane canvas_;  // Non-padded compressed YUV samples.
-  uint32_t quality_hint_ = 0;
   bool enabled_ = false;
 
   uint32_t num_horizontally_deblocked_rows_ = 0;  // Of pixels.

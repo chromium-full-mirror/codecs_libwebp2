@@ -54,8 +54,7 @@ WP2Status SyntaxReader::ReadHeader(const BitstreamFeatures& features,
 
   WP2_CHECK_STATUS(symbols_info_.InitLossy(
       (uint32_t)gparams_->segments_.size(), gparams.partition_set_,
-      gparams_->maybe_use_lossy_alpha_, gparams.quality_hint_, use_aom,
-      use_splits_));
+      gparams_->maybe_use_lossy_alpha_, use_aom, use_splits_));
   const uint32_t num_channels = (gparams_->maybe_use_lossy_alpha_ ? 4 : 3);
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !gparams_->maybe_use_lossy_alpha_) continue;

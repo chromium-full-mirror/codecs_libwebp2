@@ -64,12 +64,12 @@ YUVPlane CreateNoisyWavyPixels(uint32_t width, uint32_t height,
   return pixels;
 }
 
-// Applies the directional filter on 'pixels' with 'filter_strength'.
-void Filter(BitDepth bit_depth, uint32_t quality_hint, YUVPlane* const pixels) {
+// Applies the directional filter on the 'pixels'.
+void Filter(BitDepth bit_depth, float quality, YUVPlane* const pixels) {
   const Vector<Segment> segments =
-      testutil::CreateSegments(quality_hint, bit_depth);
-  const double residual_density = 1. * quality_hint / kMaxLossyQualityHint;
-  const double min_bpp = 4. * quality_hint / kMaxLossyQualityHint;
+      testutil::CreateSegments(GetQualityHint(quality), bit_depth);
+  const double residual_density = quality / kMaxLossyQuality;
+  const double min_bpp = 4. * quality / kMaxLossyQuality;
   FilterBlockMap blocks;
   testutil::CreateBlocks(/*tile_x=*/0, /*tile_y=*/0, segments, residual_density,
                          min_bpp, bit_depth, pixels, &blocks);
@@ -77,7 +77,8 @@ void Filter(BitDepth bit_depth, uint32_t quality_hint, YUVPlane* const pixels) {
   DecoderConfig config = DecoderConfig::kDefault;
   config.enable_directional_filter = true;
   GlobalParams gparams;
-  gparams.quality_hint_ = quality_hint;
+  gparams.yuv_filter_magnitude_ =
+      std::lround((1.f - quality / kMaxLossyQuality) * kMaxYuvFilterMagnitude);
   DirectionalFilter directional_filter(config, gparams, blocks);
   ASSERT_WP2_OK(directional_filter.Allocate());
 
@@ -107,7 +108,7 @@ TEST_P(DirectionalFilterTest, FilteringPlain) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth, /*quality_hint=*/0, &pixels));
+  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth, /*quality=*/0.f, &pixels));
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
@@ -124,7 +125,7 @@ TEST_P(DirectionalFilterTest, MaxFilteringBlocked) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth, /*quality_hint=*/0, &pixels));
+  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth, /*quality=*/0.f, &pixels));
 
   EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
@@ -141,8 +142,7 @@ TEST_P(DirectionalFilterTest, NoFiltering) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(
-      Filter(bit_depth, /*quality_hint=*/kMaxLossyQualityHint, &pixels));
+  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth, kMaxLossyQuality, &pixels));
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));

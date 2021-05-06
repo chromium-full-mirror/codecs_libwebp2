@@ -79,8 +79,7 @@ class SymbolsInfo {
   // 'use_splits' is true if block geometry is encoded through splits, false if
   // encoded through block sizes.
   WP2Status InitLossy(uint32_t num_segments, PartitionSet partition_set,
-                      bool has_alpha, uint32_t quality_hint,
-                      bool use_aom_coeffs, bool use_splits);
+                      bool has_alpha, bool use_aom_coeffs, bool use_splits);
 
   // Whether a symbol is used at all.
   inline bool IsUnused(uint32_t sym) const {

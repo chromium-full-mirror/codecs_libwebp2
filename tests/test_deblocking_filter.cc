@@ -20,6 +20,7 @@
 
 #include "include/helpers.h"
 #include "include/helpers_filter.h"
+#include "src/common/constants.h"
 #include "src/common/global_params.h"
 #include "src/dec/filters/deblocking_filter.h"
 #include "src/wp2/format_constants.h"
@@ -69,8 +70,8 @@ FilterBlockMap CreateAlignedBlocks(const Vector<Segment>& segments,
   assert((pixels->Y.w_ + kMinBlockSizePix - 1u) / kMinBlockSizePix == 8u);
   assert((pixels->Y.h_ + kMinBlockSizePix - 1u) / kMinBlockSizePix == 8u);
   FilterBlockMap blocks;
-  blocks.Init(/*tile_rect=*/{0, 0, pixels->Y.w_, pixels->Y.h_},
-              bit_depth, bit_depth.min(), bit_depth.max(), pixels);
+  blocks.Init(/*tile_rect=*/{0, 0, pixels->Y.w_, pixels->Y.h_}, bit_depth,
+              bit_depth.min(), bit_depth.max(), pixels);
   EXPECT_WP2_OK(blocks.Allocate());
   const uint32_t s = segments.size();
   uint32_t id = 0;  // Segment id
@@ -97,13 +98,12 @@ FilterBlockMap CreateAlignedBlocks(const Vector<Segment>& segments,
   return blocks;
 }
 
-// Applies the deblocking filter on 'pixels' with 'filter_strength'.
-void Deblock(BitDepth bit_depth, uint32_t quality_hint,
-             YUVPlane* const pixels) {
+// Applies the deblocking filter on the 'pixels'.
+void Deblock(BitDepth bit_depth, float quality, YUVPlane* const pixels) {
   const Vector<Segment> segments =
-      testutil::CreateSegments(quality_hint, bit_depth);
-  const double residual_density = 1. * quality_hint / kMaxLossyQualityHint;
-  const double min_bpp = 4. * quality_hint / kMaxLossyQualityHint;
+      testutil::CreateSegments(GetQualityHint(quality), bit_depth);
+  const double residual_density = quality / kMaxLossyQuality;
+  const double min_bpp = 4. * quality / kMaxLossyQuality;
   // The created block edges should match at least some of the boundaries of
   // the areas defined in CreateBlockedPixels().
   const FilterBlockMap blocks = CreateAlignedBlocks(segments, residual_density,
@@ -112,7 +112,8 @@ void Deblock(BitDepth bit_depth, uint32_t quality_hint,
   DecoderConfig config = DecoderConfig::kDefault;
   config.enable_deblocking_filter = true;
   GlobalParams gparams;
-  gparams.quality_hint_ = quality_hint;
+  gparams.yuv_filter_magnitude_ =
+      std::lround((1.f - quality / kMaxLossyQuality) * kMaxYuvFilterMagnitude);
   DeblockingFilter deblocking_filter(config, gparams, blocks);
   ASSERT_WP2_OK(deblocking_filter.Allocate());
 
@@ -140,7 +141,7 @@ TEST_P(DeblockingFilterTest, FilteringPlain) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(bit_depth, /*quality_hint=*/0, &pixels);
+  Deblock(bit_depth, /*quality=*/0.f, &pixels);
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
@@ -155,7 +156,7 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlocked) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(bit_depth, /*quality_hint=*/0, &pixels);
+  Deblock(bit_depth, /*quality=*/0.f, &pixels);
 
   EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
@@ -171,7 +172,7 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithPlainAlpha) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(bit_depth, /*quality_hint=*/0, &pixels);
+  Deblock(bit_depth, /*quality=*/0.f, &pixels);
 
   EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
@@ -190,7 +191,7 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithLowVarianceAlpha) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(bit_depth, /*quality_hint=*/0, &pixels);
+  Deblock(bit_depth, /*quality=*/0.f, &pixels);
 
   EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
@@ -212,7 +213,7 @@ TEST_P(DeblockingFilterTest, MaxFilteringBlockedWithHighVarianceAlpha) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(bit_depth, /*quality_hint=*/0, &pixels);
+  Deblock(bit_depth, /*quality=*/0.f, &pixels);
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
@@ -228,8 +229,7 @@ TEST_P(DeblockingFilterTest, NoFiltering) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  Deblock(bit_depth,
-          /*quality_hint=*/kMaxLossyQualityHint, &pixels);
+  Deblock(bit_depth, kMaxLossyQuality, &pixels);
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));

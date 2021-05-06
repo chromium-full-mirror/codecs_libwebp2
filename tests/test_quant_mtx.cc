@@ -250,10 +250,9 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
   constexpr bool kUseAOMCoeffs = false, kHasAlpha = false;
   constexpr uint32_t kNumChannels = (kHasAlpha ? 4 : 3);
   SymbolsInfo symbols_info;
-  ASSERT_WP2_OK(symbols_info.InitLossy(
-      /*num_segments=*/1, ALL_RECTS, /*has_alpha=*/false,
-      /*quality_hint=*/GetQualityHint(/*quality=*/75.f), kUseAOMCoeffs,
-      /*use_splits=*/false));
+  ASSERT_WP2_OK(symbols_info.InitLossy(/*num_segments=*/1, ALL_RECTS,
+                                       /*has_alpha=*/false, kUseAOMCoeffs,
+                                       /*use_splits=*/false));
   ResidualWriter residual_writer;
   ASSERT_WP2_OK(residual_writer.Init(kUseAOMCoeffs, kHasAlpha));
   ANSEnc enc;

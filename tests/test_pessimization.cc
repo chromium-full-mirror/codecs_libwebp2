@@ -136,6 +136,8 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
     gparams->segments_.front().SetAlphaQuantizationFactor(quant_factor);
 
     WP2_CHECK_STATUS(gparams->InitFixedPredictors());
+
+    gparams->yuv_filter_magnitude_ = random->Get(0u, kMaxYuvFilterMagnitude);
   }
   return WP2_STATUS_OK;
 }

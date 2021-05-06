@@ -95,10 +95,9 @@ TYPED_TEST(CodedBlockTest, FindBestModes) {
   segment.quant_y_.SetLambda();
 
   SymbolsInfo symbols_info;
-  ASSERT_WP2_OK(
-      symbols_info.InitLossy(/*num_segments=*/1, ALL_RECTS, kHasAlpha,
-                             GetQualityHint(EncoderConfig::kDefault.quality),
-                             /*use_aom_coeffs=*/false, /*use_splits=*/false));
+  ASSERT_WP2_OK(symbols_info.InitLossy(/*num_segments=*/1, ALL_RECTS, kHasAlpha,
+                                       /*use_aom_coeffs=*/false,
+                                       /*use_splits=*/false));
   SymbolRecorder recorder;
   symbols_info.SetInfo(kSymbolModeY, /*min=*/0, /*max=*/kAPredModeNum - 1,
                        /*num_clusters=*/1, SymbolsInfo::StorageMethod::kAuto);

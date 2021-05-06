@@ -47,6 +47,8 @@ static constexpr uint32_t kNeutralMultiplier =
     (1 << (kQuantMultiplierBits - 1));
 static constexpr uint32_t kDefaultQuantMultiplier = 7;  // 0.875
 
+static constexpr uint32_t kMaxYuvFilterMagnitude = 15;
+
 class GlobalParams {
  public:
   WP2Status Write(bool image_has_alpha, ANSEnc* const enc) const;
@@ -91,8 +93,11 @@ class GlobalParams {
 
   // True if the image might contain lossy alpha.
   bool maybe_use_lossy_alpha_ = false;
-  bool enable_alpha_filter_ = false;  // For lossy alpha only.
   FeatureMap* features_ = nullptr;  // only used by the encoder
+
+  // Post-processing.
+  uint32_t yuv_filter_magnitude_ = 0;  // In [0:kMaxYuvFilterMagnitude].
+  bool enable_alpha_filter_ = false;   // For lossy alpha only.
 
  public:   // lossless part
   // TODO(skal)

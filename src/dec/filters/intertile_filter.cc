@@ -38,12 +38,13 @@ bool IsIntertileFilterEnabled(const DecoderConfig& config,
   return (gparams.type_ == GlobalParams::GP_LOSSY ||
           gparams.type_ == GlobalParams::GP_BOTH) &&
          ((config.enable_deblocking_filter &&
-           DeblockingFilter::GetStrengthFromQuality(gparams.quality_hint_) >
-               0 &&
+           DeblockingFilter::GetStrengthFromMagnitude(
+               gparams.yuv_filter_magnitude_) > 0 &&
            (tiles_layout.num_tiles_x > 1 || tiles_layout.num_tiles_y > 1)) ||
           VDMatch(config, "intertile-filter"));
-  // TODO(yguyon): There might be tiles that are lossy but output RGB (neural)
-  // TODO(yguyon): There might be no pair of adjacent lossy tiles
+  // Unimportant false positives:
+  // - There might be tiles that are lossy but output RGB (neural).
+  // - There might be no pair of adjacent lossy tiles.
 }
 
 //------------------------------------------------------------------------------
@@ -149,10 +150,10 @@ void IntertileFilter::DeblockHorizontally(uint32_t num_rows) {
 
         const Rectangle edge_rect = {x, q_tile.rect.y + line, 0,
                                      num_same_lines};
-        DeblockingFilter::DeblockEdge(*config_, /*intertile=*/true, frame_rect,
-                                      canvas_.HasAlpha(), quality_hint_,
-                                      num_bits, yuv_min, yuv_max, *p_features,
-                                      *q_features, edge_rect, &canvas_);
+        DeblockingFilter::DeblockEdge(
+            *config_, /*intertile=*/true, frame_rect, canvas_.HasAlpha(),
+            gparams_->yuv_filter_magnitude_, num_bits, yuv_min, yuv_max,
+            *p_features, *q_features, edge_rect, &canvas_);
 
         line += num_same_lines;
         p_features += p_features_step;
@@ -226,8 +227,8 @@ void IntertileFilter::DeblockVertically(uint32_t num_rows) {
           const Rectangle edge_rect = {x + line, edge_y, num_same_lines, 0};
           DeblockingFilter::DeblockEdge(
               *config_, /*intertile=*/true, frame_rect, canvas_.HasAlpha(),
-              quality_hint_, num_bits, yuv_min, yuv_max, *p_features,
-              *q_features, edge_rect, &canvas_);
+              gparams_->yuv_filter_magnitude_, num_bits, yuv_min, yuv_max,
+              *p_features, *q_features, edge_rect, &canvas_);
 
           line += num_same_lines;
           p_features += features_step;

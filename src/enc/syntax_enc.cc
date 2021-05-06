@@ -113,8 +113,7 @@ WP2Status SyntaxWriter::InitPass() {
   SymbolsInfo symbols_info;
   WP2_CHECK_STATUS(symbols_info.InitLossy(
       gparams_->segments_.size(), gparams_->partition_set_,
-      gparams_->maybe_use_lossy_alpha_, GetQualityHint(config_->quality),
-      context_.use_aom(), use_splits_));
+      gparams_->maybe_use_lossy_alpha_, context_.use_aom(), use_splits_));
   symbols_info.SetMinMax(kSymbolModeY, /*min=*/0,
                          /*max=*/gparams_->y_preds_.GetMaxMode());
   if (gparams_->maybe_use_lossy_alpha_) {

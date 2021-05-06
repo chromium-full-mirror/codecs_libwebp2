@@ -49,6 +49,7 @@ TEST(GlobalParmas, ReadWriteUVQUantMultiplier) {
                  params.u_quant_multiplier_, params.v_quant_multiplier_);
     s.FinalizeQuant();
   }
+  params.yuv_filter_magnitude_ = kMaxYuvFilterMagnitude / 2;
   ASSERT_TRUE(params.IsOk());
 
   GlobalParams read_params;
