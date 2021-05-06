@@ -130,6 +130,7 @@ void HelpLong() {
   opt.Add("-segment_mode <mode>",
           "segment id mode (one of 'auto', 'explicit', 'implicit')");
   opt.Add("-quants <floats,...>", "force per-segment quantization factors");
+  opt.Add("-alt_tuning on/off", "adapt config to the image and quality range");
   opt.Add("-pm <int>",
           SPrintf("partition method (0..%d)", WP2::NUM_PARTITION_METHODS - 1));
   opt.Add("-ps <int>",
@@ -575,6 +576,17 @@ int main(int argc, char* argv[]) {
       ExUtilGetFloats(argv[++c],
                       params.config.segment_factors, WP2::kMaxNumSegments,
                       &parse_error);
+    } else if (!strcmp(argv[c], "-alt_tuning")) {
+      NEED_ARGS(1);
+      ++c;
+      if (!strcmp(argv[c], "on")) {
+        params.config.enable_alt_tuning = true;
+      } else if (!strcmp(argv[c], "off")) {
+        params.config.enable_alt_tuning = false;
+      } else {
+        fprintf(stderr, "Unsupported -alt_tuning %s\n", argv[c]);
+        parse_error = true;
+      }
     } else if (!strcmp(argv[c], "-alpha_q")) {
       NEED_ARGS(1);
       params.config.alpha_quality = ExUtilGetFloat(argv[++c], &parse_error);
@@ -647,7 +659,8 @@ int main(int argc, char* argv[]) {
         params.config.segment_id_mode =
             WP2::EncoderConfig::SEGMENT_ID_IMPLICIT;
       } else {
-        CHECK_TRUE(false, "unsupported segment mode '%s'", argv[c]);
+        fprintf(stderr, "Unsupported segment mode %s\n", argv[c]);
+        parse_error = true;
       }
     } else if (!strcmp(argv[c], "-sns")) {
       NEED_ARGS(1);
@@ -718,7 +731,8 @@ int main(int argc, char* argv[]) {
       } else if (!strcmp(argv[c], "text")) {
         params.pic_hint = WP2::HINT_TEXT;
       } else {
-        CHECK_TRUE(false, "Error! Unrecognized picture hint: %s\n", argv[c]);
+        fprintf(stderr, "Error! Unrecognized picture hint: %s\n", argv[c]);
+        parse_error = true;
       }
     } else if (!strcmp(argv[c], "-premult")) {  // debugging option!
       premult = true;

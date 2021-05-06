@@ -294,8 +294,8 @@ inline std::ostream& operator<<(std::ostream& out, const WP2Status& status) {
 }
 
 // Displays EncoderConfig as code that is ready-to-paste, for easy reproduction.
-std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& config);
-std::ostream& operator<<(std::ostream& out, const WP2::DecoderConfig& config);
+std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& c);
+std::ostream& operator<<(std::ostream& out, const WP2::DecoderConfig& c);
 
 //------------------------------------------------------------------------------
 

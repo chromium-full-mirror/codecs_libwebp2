@@ -30,6 +30,7 @@
 #endif
 
 namespace WP2 {
+namespace {
 
 //------------------------------------------------------------------------------
 
@@ -73,6 +74,49 @@ static WP2Status SimplifySegments(Vector<Segment>* const segments) {
 }
 #endif
 
+// Sets 'gparams.segments_[0]' properties, based on 'config' only.
+WP2Status AssignSimpleQuantizations(const EncoderConfig& config,
+                                    GlobalParams& gparams) {
+  assert(gparams.segments_.size() == 1);
+  assert(gparams.u_quant_multiplier_ == kNeutralMultiplier);
+  assert(gparams.v_quant_multiplier_ == kNeutralMultiplier);
+  Segment& segment = gparams.segments_[0];
+
+  // Use the 'config.quality' if not overridden by debug 'segment_factors'.
+  const float quality = (config.segment_factors[0] != 0.f)
+                            ? config.segment_factors[0]
+                            : config.quality;
+  // 'factor' is in [0:1] with 1 being most quantized.
+  const float factor = std::pow(1.f - quality / kMaxLossyQuality, 1.3f);
+  // The pow exponent above is set as the highest one leading to different
+  // 'qfactor' values for the highest qualities (94, 95).
+  const uint32_t qfactor = std::lround(kQFactorMax * factor);
+  // Scaling the chroma DC avoids rainbow artifacts at low qualities.
+  // It is also done as is by the decoder so it cannot be simplified here.
+  const float uv_dc_scale =
+      0.25f + 0.35f * GetQualityHint(config.quality) / kMaxLossyQualityHint;
+  const uint32_t uv_dc = std::lround(qfactor * uv_dc_scale);
+
+  WP2_CHECK_STATUS(segment.AllocateForEncoder());
+  segment.SetYUVBounds(gparams.transf_.GetYUVMin(),
+                       gparams.transf_.GetYUVMax());
+  for (uint32_t i = 0; i < kNumQuantZones; ++i) {
+    segment.quant_steps_[kYChannel][i] = qfactor;
+    segment.quant_steps_[kUChannel][i] = (i == 0) ? uv_dc : qfactor;
+    segment.quant_steps_[kVChannel][i] = (i == 0) ? uv_dc : qfactor;
+  }
+
+  segment.quality_factor_ = qfactor;
+  segment.use_quality_factor_ = true;
+  segment.FinalizeQuant();
+  segment.quant_y_.SetLambda();
+  segment.quant_u_.SetLambda();
+  segment.quant_v_.SetLambda();
+  return WP2_STATUS_OK;
+}
+
+}  // namespace
+
 //------------------------------------------------------------------------------
 // Perceptual: assignment of quantizer steps from the evaluated 'risk'
 
@@ -80,6 +124,10 @@ WP2Status GlobalParams::AssignQuantizations(const EncoderConfig& config) {
   const uint32_t num_segments = segments_.size();
   assert(num_segments <= (uint32_t)config.segments);
   assert(num_segments <= kMaxNumSegments);
+  if (!config.enable_alt_tuning) {
+    WP2_CHECK_STATUS(AssignSimpleQuantizations(config, *this));
+    return WP2_STATUS_OK;
+  }
   uint32_t qualities[kMaxNumSegments];
   const float quant_factor0 =
       kQFactorMax * (kMaxLossyQuality - config.quality) / kMaxLossyQuality;
@@ -202,8 +250,12 @@ WP2Status GlobalAnalysis(const ArgbBuffer& rgb, const YUVPlane& yuv,
         (config.segment_id_mode == WP2::EncoderConfig::SEGMENT_ID_EXPLICIT);
     gparams->use_rnd_mtx_ = config.use_random_matrix;
     gparams->transf_ = transf;
-    gparams->u_quant_multiplier_ = config.u_quant_multiplier;
-    gparams->v_quant_multiplier_ = config.v_quant_multiplier;
+    gparams->u_quant_multiplier_ = config.enable_alt_tuning
+                                       ? config.u_quant_multiplier
+                                       : kNeutralMultiplier;
+    gparams->v_quant_multiplier_ = config.enable_alt_tuning
+                                       ? config.v_quant_multiplier
+                                       : kNeutralMultiplier;
 
     // perform perceptual analysis to extract segments
     WP2_CHECK_STATUS(FindSegments(yuv, config, gparams));

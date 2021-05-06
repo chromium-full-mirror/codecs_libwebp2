@@ -90,6 +90,11 @@ struct EncoderConfig {
   // If non-zero, forces a quantization factor for the corresponding segment.
   float segment_factors[kMaxNumSegments] = { 0.f };
 
+  // Alteration tuning:
+  // If true, some settings are adapted based on the image or quality range.
+  // If false, all settings are smoothly mapped to the quality parameter only.
+  bool enable_alt_tuning = true;
+
   // Size of tiles (width/height) in pixels. Each tile is compressed
   // independently, possibly in parallel.
   TileShape tile_shape = TILE_SHAPE_AUTO;

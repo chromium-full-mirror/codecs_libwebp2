@@ -35,6 +35,11 @@ namespace WP2 {
 ChromaSubsampling DecideChromaSubsampling(const EncoderConfig& config,
                                           bool more_than_one_block) {
   if (!more_than_one_block) return ChromaSubsampling::kSingleBlock;
+  if (!config.enable_alt_tuning) {
+    return (config.uv_mode == EncoderConfig::UVMode444)
+               ? ChromaSubsampling::k444
+               : ChromaSubsampling::k420;
+  }
   switch (config.uv_mode) {
     case EncoderConfig::UVMode444:
       return ChromaSubsampling::k444;
@@ -48,11 +53,10 @@ ChromaSubsampling DecideChromaSubsampling(const EncoderConfig& config,
       assert(config.uv_mode == EncoderConfig::UVModeAdapt);
       return ChromaSubsampling::kAdaptive;
   }
-  assert(false);
 }
 
 bool DecideAOMCoeffs(const EncoderConfig& config, const Rectangle& tile_rect) {
-  return (config.quality >= 35) ||
+  return !config.enable_alt_tuning || (config.quality >= 35) ||
          (tile_rect.width >= 50 && tile_rect.height >= 50);
 }
 

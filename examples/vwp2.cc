@@ -3624,6 +3624,7 @@ void Help() {
   opt.Add("-diffusion <int>", "error diffusion strength (0=off..100)");
   opt.Add("-set_dump_path <file>", "path to the dump file (for 'l'/'L' keys)");
   opt.Add("-quants <floats,...>", "force per-segment quantization factors");
+  opt.Add("-alt_tuning on/off", "adapt config to the image and quality range");
   opt.Add("-nomt", "disable multi-threading");
   opt.Add("-[no]metadata", "include [or ignore] source metadata");
   opt.Add("-d", "decode-only: just show the .wp2 file");
@@ -3711,7 +3712,8 @@ int main(int argc, char* argv[]) {
         params.enc_config_.segment_id_mode =
             WP2::EncoderConfig::SEGMENT_ID_IMPLICIT;
       } else {
-        CHECK_TRUE(false, "unsupported segment mode '%s'", argv[c]);
+        fprintf(stderr, "Unsupported segment mode %s\n", argv[c]);
+        parse_error = true;
       }
     } else if (!strcmp(argv[c], "-pass") && c + 1 < argc) {
       params.enc_config_.pass = ExUtilGetInt(argv[++c], &parse_error);
@@ -3748,6 +3750,16 @@ int main(int argc, char* argv[]) {
     } else if (!strcmp(argv[c], "-quants") && c + 1 < argc) {
       ExUtilGetFloats(argv[++c], params.enc_config_.segment_factors,
                       WP2::kMaxNumSegments, &parse_error);
+    } else if (!strcmp(argv[c], "-alt_tuning") && c + 1 < argc) {
+      ++c;
+      if (!strcmp(argv[c], "on")) {
+        params.enc_config_.enable_alt_tuning = true;
+      } else if (!strcmp(argv[c], "off")) {
+        params.enc_config_.enable_alt_tuning = false;
+      } else {
+        fprintf(stderr, "Unsupported -alt_tuning %s\n", argv[c]);
+        parse_error = true;
+      }
     } else if (!strcmp(argv[c], "-alpha_q") && c + 1 < argc) {
       params.alpha_quality_ = ExUtilGetFloat(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-dblk_filter") ||

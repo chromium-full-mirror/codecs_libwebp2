@@ -476,91 +476,85 @@ void CreatePartition(uint32_t w, uint32_t h, bool snapped,
   }
 }
 
-//------------------------------------------------------------------------------
-
 }  // namespace testutil
 }  // namespace WP2
 
-#define PRINT_SETTING1(var_name)                                             \
-  do {                                                                       \
-    out << std::endl << "config." #var_name " = " << config.var_name << ";"; \
-    if (config.var_name != default_config.var_name) {                        \
-      out << "  // Default is " << default_config.var_name;                  \
-    }                                                                        \
-  } while (0);
+//------------------------------------------------------------------------------
 
-#define PRINT_SETTING2(var_name, var_type)                                  \
-  do {                                                                      \
-    out << std::endl                                                        \
-        << "config." #var_name " = (" #var_type ")" << (int)config.var_name \
-        << ";";                                                             \
-    if (config.var_name != default_config.var_name) {                       \
-      out << "  // Default is " << (int)default_config.var_name;            \
-    }                                                                       \
-  } while (0);
+namespace {
 
-#define PRINT_SETTINGP(var_name, var_type)                         \
-  do {                                                             \
-    out << std::endl << "config." #var_name " = ";                 \
-    if (config.var_name == nullptr) {                              \
-      out << "nullptr;";                                           \
-    } else {                                                       \
-      out << "[\" #var_type \" instance];  // Default is nullptr"; \
-    }                                                              \
-  } while (0);
+template <typename Type>
+void PrintSetting(std::ostream& out, Type setting, Type default_setting,
+                  const char setting_name[],
+                  const char setting_type_name[] = "int") {
+  out << std::endl
+      << "config." << setting_name << " = (" << setting_type_name << ")"
+      << static_cast<int>(setting) << ";";
+  if (setting != default_setting) {
+    out << "  // Default is " << static_cast<int>(default_setting);
+  }
+}
 
-std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& config) {
-  const WP2::EncoderConfig default_config = WP2::EncoderConfig::kDefault;
+}  // namespace
+
+std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& c) {
+  const WP2::EncoderConfig kD = WP2::EncoderConfig::kDefault;
   out << std::endl << "EncoderConfig config = EncoderConfig::kDefault;";
-  PRINT_SETTING1(quality);
-  PRINT_SETTING1(target_size);
-  PRINT_SETTING1(target_psnr);
-  PRINT_SETTING1(alpha_quality);
-  PRINT_SETTING1(effort);
-  PRINT_SETTING2(decoding_orientation, Orientation);
-  PRINT_SETTING2(create_preview, bool);
-  PRINT_SETTING2(transfer_function, TransferFunction);
-  PRINT_SETTING1(pass);
-  PRINT_SETTING2(sns, float);
-  PRINT_SETTING1(error_diffusion);
-  PRINT_SETTING1(segments);
-  PRINT_SETTING2(partition_method, PartitionMethod);
-  PRINT_SETTING2(partition_set, PartitionSet);
-  PRINT_SETTING2(partition_snapping, bool);
-  PRINT_SETTING2(csp_type, Csp);
-  PRINT_SETTING2(uv_mode, EncoderConfig::UVMode);
-  PRINT_SETTING1(preprocessing);
-  PRINT_SETTING1(preprocessing_strength);
-  PRINT_SETTING2(use_random_matrix, bool);
-  PRINT_SETTING2(store_grain, bool);
-  PRINT_SETTING2(use_delta_palette, bool);
-  PRINT_SETTING1(thread_level);
-  PRINT_SETTING2(low_memory, bool);
-  PRINT_SETTING1(use_neural_compression);
-  PRINT_SETTINGP(info, EncoderInfo);
-  out << std::endl;
-  return out;
+  PrintSetting(out, c.quality, kD.quality, "quality");
+  PrintSetting(out, c.target_size, kD.target_size, "target_size");
+  PrintSetting(out, c.target_psnr, kD.target_psnr, "target_psnr");
+  PrintSetting(out, c.alpha_quality, kD.alpha_quality, "alpha_quality");
+  PrintSetting(out, c.effort, kD.effort, "effort");
+  PrintSetting(out, c.decoding_orientation, kD.decoding_orientation,
+               "decoding_orientation", "Orientation");
+  PrintSetting(out, c.create_preview, kD.create_preview, "create_preview",
+               "bool");
+  PrintSetting(out, c.transfer_function, kD.transfer_function,
+               "transfer_function", "TransferFunction");
+  PrintSetting(out, c.pass, kD.pass, "pass");
+  PrintSetting(out, c.sns, kD.sns, "sns", "float");
+  PrintSetting(out, c.error_diffusion, kD.error_diffusion, "error_diffusion");
+  PrintSetting(out, c.segments, kD.segments, "segments");
+  PrintSetting(out, c.partition_method, kD.partition_method, "partition_method",
+               "PartitionMethod");
+  PrintSetting(out, c.partition_set, kD.partition_set, "partition_set",
+               "PartitionSet");
+  PrintSetting(out, c.partition_snapping, kD.partition_snapping,
+               "partition_snapping", "bool");
+  PrintSetting(out, c.csp_type, kD.csp_type, "csp_type", "Csp");
+  PrintSetting(out, c.uv_mode, kD.uv_mode, "uv_mode", "EncoderConfig::UVMode");
+  PrintSetting(out, c.preprocessing, kD.preprocessing, "preprocessing");
+  PrintSetting(out, c.preprocessing_strength, kD.preprocessing_strength,
+               "preprocessing_strength");
+  PrintSetting(out, c.use_random_matrix, kD.use_random_matrix,
+               "use_random_matrix", "bool");
+  PrintSetting(out, c.store_grain, kD.store_grain, "store_grain", "bool");
+  PrintSetting(out, c.use_delta_palette, kD.use_delta_palette,
+               "use_delta_palette", "bool");
+  PrintSetting(out, c.thread_level, kD.thread_level, "thread_level");
+  PrintSetting(out, c.low_memory, kD.low_memory, "low_memory", "bool");
+  PrintSetting(out, c.use_neural_compression, kD.use_neural_compression,
+               "use_neural_compression");
+  return out << std::endl;
 }
 
-std::ostream& operator<<(std::ostream& out, const WP2::DecoderConfig& config) {
-  const WP2::DecoderConfig default_config = WP2::DecoderConfig::kDefault;
+std::ostream& operator<<(std::ostream& out, const WP2::DecoderConfig& c) {
+  const WP2::DecoderConfig kD = WP2::DecoderConfig::kDefault;
   out << std::endl << "DecoderConfig config = DecoderConfig::kDefault;";
-  PRINT_SETTING1(thread_level);
-  PRINT_SETTING2(enable_deblocking_filter, bool);
-  PRINT_SETTING2(enable_directional_filter, bool);
-  PRINT_SETTING2(enable_restoration_filter, bool);
-  PRINT_SETTING2(enable_alpha_filter, bool);
-  PRINT_SETTING1(grain_amplitude);
-  PRINT_SETTING2(incremental_mode, DecoderConfig::IncrementalMode);
-  PRINT_SETTINGP(progress_hook, ProgressHook);
-  PRINT_SETTINGP(info, DecoderInfo);
-  out << std::endl;
-  return out;
+  PrintSetting(out, c.thread_level, kD.thread_level, "thread_level");
+  PrintSetting(out, c.enable_deblocking_filter, kD.enable_deblocking_filter,
+               "enable_deblocking_filter", "bool");
+  PrintSetting(out, c.enable_directional_filter, kD.enable_directional_filter,
+               "enable_directional_filter", "bool");
+  PrintSetting(out, c.enable_restoration_filter, kD.enable_restoration_filter,
+               "enable_restoration_filter", "bool");
+  PrintSetting(out, c.enable_alpha_filter, kD.enable_alpha_filter,
+               "enable_alpha_filter", "bool");
+  PrintSetting(out, c.grain_amplitude, kD.grain_amplitude, "grain_amplitude");
+  PrintSetting(out, c.incremental_mode, kD.incremental_mode, "incremental_mode",
+               "DecoderConfig::IncrementalMode");
+  return out << std::endl;
 }
-
-#undef PRINT_SETTING1
-#undef PRINT_SETTING2
-#undef PRINT_SETTINGP
 
 //------------------------------------------------------------------------------
 // this function is just here to offer a different address than GetCPUInfo,

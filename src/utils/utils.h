@@ -67,13 +67,13 @@ void WP2ErrorLog(const char* const file, int line, WP2Status s,
                  const char* const extra_message = nullptr);
 
 // performs "if (status != WP2_STATUS_OK) return status;"
-#define WP2_CHECK_STATUS(status)              \
-  do {                                        \
-    const WP2Status __S__ = (status);         \
-    if (__S__ != WP2_STATUS_OK) {             \
-      WP2ErrorLog(__FILE__, __LINE__, __S__); \
-      return __S__;                           \
-    }                                         \
+#define WP2_CHECK_STATUS(status)                                 \
+  do {                                                           \
+    const WP2Status wp2_check_status_tmp_var = (status);         \
+    if (wp2_check_status_tmp_var != WP2_STATUS_OK) {             \
+      WP2ErrorLog(__FILE__, __LINE__, wp2_check_status_tmp_var); \
+      return wp2_check_status_tmp_var;                           \
+    }                                                            \
   } while (0)
 
 // performs "if (!cond) return error_status;"

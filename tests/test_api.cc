@@ -80,8 +80,13 @@ TEST(EncodeTest, BadFormat) {
 //------------------------------------------------------------------------------
 // For coverage of helpers.cc.
 
-TEST(EncodeTest, Include) {
+TEST(HelpersTest, PrintEncoderConfig) {
   EncoderConfig config;
+  std::cout << config << std::endl;
+}
+
+TEST(HelpersTest, PrintDecoderConfig) {
+  DecoderConfig config;
   std::cout << config << std::endl;
 }
 

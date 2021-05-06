@@ -233,12 +233,16 @@ WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
     if (histogram[i] != 0) ++num_non_empty_buckets;
   }
 
-  // Cluster the histogram.
-  const uint32_t max_num_segments =
-      std::max(1u, std::min({(uint32_t)config.segments, num_non_empty_buckets,
-                             GetMaxNumSegments(gparams->explicit_segment_ids_,
-                                               GetQualityHint(config.quality),
-                                               config.partition_set)}));
+  uint32_t max_num_segments = 1;
+  if (config.enable_alt_tuning) {
+    // Cluster the histogram.
+    max_num_segments =
+        GetMaxNumSegments(gparams->explicit_segment_ids_,
+                          GetQualityHint(config.quality), config.partition_set);
+    max_num_segments = std::min(max_num_segments, (uint32_t)config.segments);
+    max_num_segments = std::min(max_num_segments, num_non_empty_buckets);
+    max_num_segments = std::max(max_num_segments, 1u);
+  }
 
   // Cluster id for each variance value.
   uint32_t centers[kMaxNumSegments];
