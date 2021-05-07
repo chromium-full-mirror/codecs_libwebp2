@@ -90,6 +90,8 @@ struct TestParams {
   uint32_t stack_size = 50 * 4096u;   // must be a multiple of system's pagesize
   bool disable_filters = false;
   bool disable_transforms = false;  // disable transforms other than dct
+  bool disable_preds = false;       // disable predictors other than DC
+  bool disable_split_tf = false;    // disable split transform
   bool use_sharp_yuv = false;
   MetricType metric = PSNR;
   const char* neural_path = nullptr;
@@ -154,6 +156,8 @@ void PrintHelpAndExit(int return_code) {
   opt.Add("-nofilter",
       "disable all filters during decoding (or all except deblocking for av1)");
   opt.Add("-notransforms", "disable transforms other than DCT");
+  opt.Add("-nopreds", "disable predictors other than DC (wp2 only)");
+  opt.Add("-nosplit_tf", "disable split transforms (wp2 only)");
   opt.Add("-sns <int>", "SNS strength to use (0..100)");
   opt.Add("-[no_]perceptual", "turn perceptual tuning on/off");
   opt.Add("-snap", "snap blocks to power-of-two position");
@@ -286,6 +290,8 @@ WP2Status Task::DoEncodeWP2(const std::string& out_file,
   EncoderInfo einfo;
   einfo.force_partition = params_.force_partition;
   einfo.disable_transforms = params_.disable_transforms;
+  einfo.disable_preds = params_.disable_preds;
+  einfo.disable_split_tf = params_.disable_split_tf;
   params_.config.info = &einfo;
   CHECK_TRUE(params_.config.IsValid(),
              "Error! Invalid configuration. Some parameters are erroneous.");
@@ -926,6 +932,10 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       params.disable_filters = true;
     } else if (!strcmp(argv[c], "-notransforms")) {
       params.disable_transforms = true;
+    } else if (!strcmp(argv[c], "-nopreds")) {
+      params.disable_preds = true;
+    } else if (!strcmp(argv[c], "-nosplit_tf")) {
+      params.disable_split_tf = true;
     } else if (!strcmp(argv[c], "-grain") && c + 1 < argc) {
       params.grain = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-pass") && c + 1 < argc) {

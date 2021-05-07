@@ -82,7 +82,7 @@ for file in ${sources1}; do
 done
 
 for csp in 0 1 2 3; do
-  check_roundtrip "${TESTDATA_DIR}/alpha_ramp.tiff" 47.0 18.8 \
+  check_roundtrip "${TESTDATA_DIR}/alpha_ramp.tiff" 46.0 18.8 \
                   "-csp ${csp}"
   check_roundtrip "${TESTDATA_DIR}/alpha_ramp.tiff" 99.0 99.0 \
                   "-csp ${csp} -q 100"

@@ -653,7 +653,8 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
                                       bool reduced, Counters* const counters) {
   CodingParams* const params = GetCodingParams(channel);
   if (!config.enable_alt_tuning || channel != kYChannel ||
-      GetSplitSize(dim(), /*split=*/true) == dim()) {
+      GetSplitSize(dim(), /*split=*/true) == dim() ||
+      (config.info != nullptr && config.info->disable_split_tf)) {
     assert(!params->split_tf);
     return WP2_STATUS_OK;
   }

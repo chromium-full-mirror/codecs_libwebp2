@@ -210,6 +210,8 @@ WP2Status Predictors::FindBest(
   BlockCoeffs16 res, tmp;
   TransformPair overridden_tf;
 
+  const bool force_dc = (config.info != nullptr) && config.info->disable_preds;
+
   // Test the non-angle predictors.
   for (const Predictor* const p : preds_no_angle_) {
     cb->SetPredictor(channel_, p);
@@ -226,6 +228,16 @@ WP2Status Predictors::FindBest(
         WP2_CHECK_STATUS(
             scorer.UpdatePredScore(p, pred_view, tf, num_tf, &res, &tmp, cb));
       }
+    }
+
+    if (force_dc) {
+      // We assume DC is the first predictor and just stop here.
+      assert(scorer.GetBestPredictor() != nullptr);
+      *best_score = scorer.GetBestScore();
+      *best_predictor = scorer.GetBestPredictor();
+      *best_tf = scorer.GetBestTf();
+      *best_split = cb->GetCodingParams(channel_)->split_tf;
+      return WP2_STATUS_OK;
     }
   }
   const float best_score_no_angle = scorer.GetBestScore();

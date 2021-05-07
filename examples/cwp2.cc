@@ -117,6 +117,9 @@ void HelpLong() {
   opt.Add("-uv_mode <int>", "UV subsampling mode (0=Adapt,1=420,2=444,3=Auto)");
   opt.Add("-pass <int>", "entropy-analysis passes (1..10)");
   opt.Add("-nofilter", "disable all filters during decoding");
+  opt.Add("-notransforms", "disable transforms other than DCT");
+  opt.Add("-nopreds", "disable predictors other than DC");
+  opt.Add("-nosplit_tf", "disable split transforms");
   opt.Add("-preview <file>", "add binary file as preview data directly");
   opt.Add("-create_preview", "add a tiny preview to the bitstream");
   opt.Add("-orientation <int>",
@@ -513,6 +516,7 @@ int main(int argc, char* argv[]) {
   bool input_frames = false;
   bool inplace_output = false;
   Params params = {};
+  WP2::EncoderInfo enc_info;
   bool report_progress = false;
 
   if (argc == 1) {
@@ -689,6 +693,15 @@ int main(int argc, char* argv[]) {
       dec_config.enable_deblocking_filter = false;
       dec_config.enable_directional_filter = false;
       dec_config.enable_restoration_filter = false;
+    } else if (!strcmp(argv[c], "-notransforms")) {
+      enc_info.disable_transforms = true;
+      params.config.info = &enc_info;
+    } else if (!strcmp(argv[c], "-nopreds")) {
+      enc_info.disable_preds = true;
+      params.config.info = &enc_info;
+    } else if (!strcmp(argv[c], "-nosplit_tf")) {
+      enc_info.disable_split_tf = true;
+      params.config.info = &enc_info;
     } else if (!strcmp(argv[c], "-pass")) {
       NEED_ARGS(1);
       params.config.pass = ExUtilGetInt(argv[++c], &parse_error);

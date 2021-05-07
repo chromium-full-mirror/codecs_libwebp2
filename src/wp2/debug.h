@@ -136,6 +136,8 @@ struct EncoderInfo {
   std::string selection_info;  // May contain line breaks.       (output)
 
   bool disable_transforms = false;  // Disable transforms other than DCT.
+  bool disable_preds = false;       // Disable predictors other than DC.
+  bool disable_split_tf = false;    // Disable split transform.
 };
 
 // Structure given to the decoder as an instance in DecoderConfig to access
