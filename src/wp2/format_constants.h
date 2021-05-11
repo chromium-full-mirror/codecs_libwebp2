@@ -84,7 +84,7 @@ static constexpr uint32_t kMaxNumDependentFrames = 16;
 // subdivides 22.5 degrees in (2 * kDirectionalMaxAngleDeltaYA + 1) angles.
 constexpr uint32_t kDirectionalMaxAngleDeltaYA = 3u;
 constexpr uint32_t kDirectionalMaxAngleDeltaUV = 1u;
-constexpr uint32_t kYBasePredNum = 8;
+constexpr uint32_t kYBasePredNum = 9;
 constexpr uint32_t kABasePredNum = 8;
 constexpr uint32_t kUVBasePredNum = 4;
 constexpr uint32_t kAnglePredNum = 10;

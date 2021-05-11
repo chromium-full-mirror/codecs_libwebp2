@@ -99,7 +99,7 @@ TYPED_TEST(CodedBlockTest, FindBestModes) {
                                        /*use_aom_coeffs=*/false,
                                        /*use_splits=*/false));
   SymbolRecorder recorder;
-  symbols_info.SetInfo(kSymbolModeY, /*min=*/0, /*max=*/kAPredModeNum - 1,
+  symbols_info.SetInfo(kSymbolModeY, /*min=*/0, /*max=*/kYPredModeNum - 1,
                        /*num_clusters=*/1, SymbolsInfo::StorageMethod::kAuto);
   ASSERT_WP2_OK(recorder.Allocate(symbols_info, /*num_records=*/0));
   Counters counters;

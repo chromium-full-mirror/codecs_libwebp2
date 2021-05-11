@@ -68,15 +68,21 @@ void TestConstantContext(const std::vector<BlockSize>& block_sizes,
     V predictors;
     ASSERT_WP2_OK(init(-512, 512, &predictors));
     for (const Predictor* p : predictors) {
-      int16_t prediction[kMaxBlockSizePix2];
       const uint32_t num_tfs = cb.GetNumTransforms(kYChannel);
       if (split_tf) {
         ASSERT_GT(num_tfs, 1u);
       }
       for (uint32_t tf_i = 0; tf_i < num_tfs; ++tf_i) {
+        int16_t prediction[kMaxBlockSizePix2];
         p->Predict(cb, kYChannel, split_tf, tf_i, prediction, w);
-        for (uint32_t i = 0; i < w * h; ++i) {
-          ASSERT_NEAR(kValue, prediction[i], 1);
+        if (p->GetPredStr(cb, kYChannel, split_tf, tf_i) == "zero predictor") {
+          for (uint32_t i = 0; i < w * h; ++i) {
+            ASSERT_EQ(prediction[i], 0);
+          }
+        } else {
+          for (uint32_t i = 0; i < w * h; ++i) {
+            ASSERT_NEAR(kValue, prediction[i], 1);
+          }
         }
       }
     }
