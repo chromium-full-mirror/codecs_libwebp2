@@ -104,7 +104,7 @@ class CodedBlock : public CodedBlockBase {
   // score) to the CodingParams of 'channel'. The final predictor must be
   // selected before calling FindBestTf().
   WP2Status FindBestTf(const EncoderConfig& config, const Rectangle& tile_rect,
-                       const QuantMtx& quant, const BlockContext& context,
+                       const Segment& segment, const BlockContext& context,
                        Channel channel, uint32_t num_channels, bool reduced,
                        const Vector<TransformPair>& transforms,
                        Counters* const counters);
@@ -124,7 +124,7 @@ class CodedBlock : public CodedBlockBase {
                            Counters* const counters);
   // Selects whether to 'split_tf' or not based on residuals rate.
   WP2Status FindBestSplitTf(const EncoderConfig& config,
-                            const Rectangle& tile_rect, const QuantMtx& quant,
+                            const Rectangle& tile_rect, const Segment& segment,
                             const BlockContext& context, Channel channel,
                             uint32_t num_channels, bool reduced,
                             Counters* const counters);
@@ -162,7 +162,8 @@ class CodedBlock : public CodedBlockBase {
   // reconstructs the pixels to 'out_' using the 'prediction'.
   // 'tmp' is used for temporary computation. It can be the same as 'res' if
   // the caller doesn't mind losing the data.
-  void TransformAndReconstruct(const QuantMtx& quant, Channel channel,
+  void TransformAndReconstruct(const EncoderConfig& config,
+                               const Segment& segment, Channel channel,
                                uint32_t tf_i, bool reduced_transform,
                                const Plane16& prediction,
                                const BlockCoeffs16* const res,
@@ -172,14 +173,14 @@ class CodedBlock : public CodedBlockBase {
   // 'reduced_transform' is true, 2x downsampling of residuals is performed.
   // Applies to...
   // ... the given sub transform 'tf_i'
-  void Quantize(const QuantMtx& quant, Channel channel, uint32_t tf_i,
-                bool reduced_transform);
+  void Quantize(const EncoderConfig& config, const Segment& segment,
+                Channel channel, uint32_t tf_i, bool reduced_transform);
   // ... all sub transforms
-  void QuantizeAll(const QuantMtx& quant, Channel channel,
-                   bool reduced_transform);
+  void QuantizeAll(const EncoderConfig& config, const Segment& segment,
+                   Channel channel, bool reduced_transform);
   // ... all sub transforms except the first one (noop if there is only one)
-  void QuantizeAllButFirst(const QuantMtx& quant, Channel channel,
-                           bool reduced_transform);
+  void QuantizeAllButFirst(const EncoderConfig& config, const Segment& segment,
+                           Channel channel, bool reduced_transform);
 
   // Reconstructs 'channel' from dequantized residuals 'res' and 'prediction'
   // to 'out_'. 'prediction' can also point to 'out_' or be empty.

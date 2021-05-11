@@ -229,7 +229,7 @@ WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
         /*reduced=*/false, transforms, counters));
   }
   // Quantizes and stores reconstructed pixels in cb->out_.
-  cb->Quantize(segment.quant_a_, kAChannel, /*tf_i=*/0,
+  cb->Quantize(config_, segment, kAChannel, /*tf_i=*/0,
                /*reduced_transform=*/false);
 
   // Update alpha_mode in case the reconstructed pixels are fully opaque or

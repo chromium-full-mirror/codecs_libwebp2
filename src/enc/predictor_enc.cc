@@ -61,8 +61,7 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
     uint32_t dist[2];
     float scores[2], res_rate[2], pred_rate[2];
     for (uint32_t c : {kU, kV}) {
-      const QuantMtx& quant = segment_.GetQuant(kChannels[c]);
-      cb->QuantizeAll(quant, kChannels[c], reduced_);
+      cb->QuantizeAll(config_, segment_, kChannels[c], reduced_);
 
       dist[c] = cb->GetDisto(kChannels[c]);
 
@@ -71,7 +70,8 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
           counters_->residuals_aom(), &res_rate[c]));
       WP2_CHECK_STATUS(cb->PredictorRate(kChannels[c], counters_->predictor(),
                                          &pred_rate[c]));
-      const float lambda = cb->lambda_mult_ * quant.lambda;
+      const float lambda =
+          cb->lambda_mult_ * segment_.GetQuant(kChannels[c]).lambda;
       scores[c] = dist[c] + lambda * (res_rate[c] + pred_rate[c]);
     }
 
@@ -106,10 +106,10 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
     assert(cb->GetImplicitTf(channel_) == kUnknownTf ||
            cb->GetImplicitTf(channel_) == tf);
 
-    const QuantMtx& quant = segment_.GetQuant(channel_);
-    cb->TransformAndReconstruct(quant, channel_, /*tf_i=*/0, reduced_,
-                                prediction, res, tmp);
-    cb->QuantizeAllButFirst(quant, channel_, /*reduced_transform=*/false);
+    cb->TransformAndReconstruct(config_, segment_, channel_, /*tf_i=*/0,
+                                reduced_, prediction, res, tmp);
+    cb->QuantizeAllButFirst(config_, segment_, channel_,
+                            /*reduced_transform=*/false);
 
     dist_ = cb->GetDisto(channel_);
 
@@ -121,7 +121,7 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
         cb->PredictorRate(channel_, counters_->predictor(), &pred_rate));
     WP2_CHECK_STATUS(
         cb->TransformRate(channel_, counters_->transform(), &tf_rate));
-    const float lambda = cb->lambda_mult_ * quant.lambda;
+    const float lambda = cb->lambda_mult_ * segment_.GetQuant(channel_).lambda;
     score_ = dist_ + lambda * (res_rate + pred_rate + tf_rate);
     // Note: some of the steps above could be skipped as soon as the distortion
     // and/or the rate is higher than the current 'best_score_' but angle
