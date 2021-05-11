@@ -313,6 +313,7 @@ ENC_OBJS = \
     src/enc/screen_content/screen_enc.o \
     src/enc/segment_enc.o \
     src/enc/syntax_enc.o \
+    src/enc/trellis.o \
     src/enc/writer_enc.o \
 
 DSP_ENC_OBJS = \
@@ -515,6 +516,7 @@ HDRS = \
     src/enc/residuals_enc_aom.h \
     src/enc/screen_content/screen_enc.h \
     src/enc/symbols_enc.h \
+    src/enc/trellis.h \
     src/enc/wp2_enc_i.h \
     src/utils/ans.h \
     src/utils/ans_utils.h \
@@ -703,7 +705,7 @@ CC_TESTS += test_thread test_pessimization test_formats test_global_params
 CC_TESTS += test_data test_data_source test_data_source_stream test_alpha_filter
 CC_TESTS += test_anim_rectangle test_block_size test_context test_buffer
 CC_TESTS += test_imageio test_imageio_conversion test_imageio_util
-CC_TESTS += test_simple_enc_dec test_simple_encode test_slow_enc
+CC_TESTS += test_simple_enc_dec test_simple_encode test_slow_enc test_trellis
 CC_TESTS += test_partition_score_func test_tile_shapes test_version
 CC_TESTS += test_syntax_writer test_anim_frame test_diffusion test_analysis
 CC_TESTS += test_decoder_api test_restoration_filter test_color_precision
@@ -1026,6 +1028,8 @@ DIST_FILES= \
             src/enc/segment_enc.cc \
             src/enc/symbols_enc.h \
             src/enc/symbols_enc.cc \
+            src/enc/trellis.h \
+            src/enc/trellis.cc \
             src/enc/wp2_enc_i.h \
             src/enc/writer_enc.cc \
             src/utils/ans.h \
@@ -1146,6 +1150,7 @@ DIST_FILES= \
             tests/test_buffer.cc \
             tests/test_bypass.cc \
             tests/test_cmd.sh \
+            tests/test_trellis.cc \
             tests/lossless/test_color_cache.cc \
             tests/lossless/test_histogram.cc \
             tests/lossless/test_group4.cc \

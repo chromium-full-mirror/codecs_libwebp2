@@ -17,8 +17,8 @@
 //
 // Author: Maryla (maryla@google.com)
 
-#ifndef WP2_ENC_TREELIS_H_
-#define WP2_ENC_TREELIS_H_
+#ifndef WP2_ENC_TRELLIS_H_
+#define WP2_ENC_TRELLIS_H_
 
 #include "src/common/lossy/block_size.h"
 
@@ -37,4 +37,4 @@ void DropoutCoeffs(TrfSize tx_size, const uint32_t dropout_num_before,
 
 }  // namespace WP2
 
-#endif  // WP2_ENC_TREELIS_H_
+#endif  // WP2_ENC_TRELLIS_H_
