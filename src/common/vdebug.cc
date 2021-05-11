@@ -178,10 +178,6 @@ void CodedBlock::ToBlockInfo(bool use_aom_coeffs, BlockInfo* const blk) const {
 CodedBlock::SplitTf CodedBlock::GetForcedSplitTf(const EncoderConfig& config,
                                                  uint32_t tile_pos_x,
                                                  uint32_t tile_pos_y) {
-  (void)config;
-  (void)tile_pos_x;
-  (void)tile_pos_y;
-#if !defined(WP2_REDUCE_BINARY_SIZE)
   EncoderInfo* const info = config.info;
   if (info == nullptr) return SplitTf::kUnknown;
 
@@ -194,8 +190,81 @@ CodedBlock::SplitTf CodedBlock::GetForcedSplitTf(const EncoderConfig& config,
 
     return forced.value ? SplitTf::kForcedSplit : SplitTf::kForcedUnsplit;
   }
-#endif  // WP2_REDUCE_BINARY_SIZE
   return SplitTf::kUnknown;
+}
+
+//------------------------------------------------------------------------------
+
+static const int kFontW = 8, kFontH = 8;   // font size
+static constexpr uint64_t kFonts[96] = {  // Bitmap'd 8x8 font packed as u64
+  0x0000000000000000, 0x0008000808080800, 0x0000000000242400,
+  0x00247e24247e2400, 0x107c507c147c1000, 0x0062640810264600,
+  0x005c225408140800, 0x0000000000081000, 0x0020101010102000,
+  0x0004080808080400, 0x0028107c10280000, 0x0010107c10100000,
+  0x0810100000000000, 0x0000007c00000000, 0x0018180000000000,
+  0x0004081020400000, 0x003c464a52623c00, 0x007c101010141800,
+  0x007e023c40423c00, 0x003c424030423c00, 0x00107e1214181000,
+  0x003c42403e027e00, 0x003c42423e023c00, 0x0008081020407e00,
+  0x003c42423c423c00, 0x003c407c42423c00, 0x0008000008000000,
+  0x0408080000080000, 0x0020100810200000, 0x00007c007c000000,
+  0x0008102010080000, 0x0010001020423c00, 0x003c027a6a523c00,
+  0x0042427e42423c00, 0x003e42423e423e00, 0x003c420202423c00,
+  0x001e224242221e00, 0x007e02023e027e00, 0x000202023e027e00,
+  0x003c427202423c00, 0x004242427e424200, 0x007c101010107c00,
+  0x003c424240404000, 0x004222120e122200, 0x007e020202020200,
+  0x004242425a664200, 0x004262524a464200, 0x003c424242423c00,
+  0x0002023e42423e00, 0x003c524a42423c00, 0x0042223e42423e00,
+  0x003c42403c023c00, 0x0008080808087f00, 0x003c424242424200,
+  0x0018244242424200, 0x00245a4242424200, 0x0042241818244200,
+  0x0008080814224100, 0x007e040810207e00, 0x0070101010107000,
+  0x0020100804020000, 0x000e080808080e00, 0x000808082a1c0800,
+  0xff00000000000000, 0x007e04041e443800, 0x003c223c201c0000,
+  0x003c44443c040400, 0x0038040404380000, 0x003c22223c202000,
+  0x003c021e221c0000, 0x0008080818083000, 0x1c203c22223c0000,
+  0x002222221e020200, 0x001c08080c000800, 0x1824202020002000,
+  0x0024140c0c140400, 0x0030080808080800, 0x002a2a2a2a160000,
+  0x00222222221e0000, 0x001c2222221c0000, 0x02021e22221e0000,
+  0x60203c22223c0000, 0x0004040404380000, 0x001e201c021c0000,
+  0x00300808081c0800, 0x001c222222220000, 0x0008141422220000,
+  0x00142a2a2a220000, 0x0022140814220000, 0x1c203c2222220000,
+  0x003e0408103e0000, 0x007010100c107000, 0x0010101010101000,
+  0x000e080830080e00, 0x0000000000142800, 0x3c4299858599423c
+};
+
+static constexpr uint8_t kFontsSize[96] = {
+  5, 4, 6, 7, 7, 7, 7, 5, 6, 4, 7, 7, 5, 7, 5, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+  4, 4, 6, 7, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+  7, 7, 7, 7, 7, 7, 7, 7, 6, 4, 6, 8, 7, 6, 7, 6, 6, 6, 6, 6, 6, 5, 6, 6, 6, 6,
+  6, 6, 6, 7, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 5, 6, 6, 8
+};
+
+void Print(const std::string& msg, int x, int y,
+           Argb32b color, ArgbBuffer* const out) {
+  assert(WP2FormatBpp(out->format()) == 4);
+  const int x_start = x;  // for '\n'
+  for (uint8_t c : msg) {
+    if (c == '\n') {
+      x = x_start;
+      y += kFontH;
+      continue;
+    }
+    // translate to printable character
+    c = ((c >= 32 && c < 96 + 32) ? c : '?') - 32;
+    uint64_t bits = kFonts[c];
+    const int w = kFontsSize[c];
+    const uint64_t mask = (1u << w) - 1;
+    const int max_Y = std::min(y + kFontH, (int)out->height());
+    for (int Y = y; bits && (Y < max_Y); ++Y, bits >>= kFontW) {
+      if (Y >= 0 && (bits & mask)) {
+        for (int i = 0; i < w; ++i) {
+          const int X = x + i;
+          if (X < 0 || X >= (int)out->width()) continue;
+          if (bits & (1u << i)) ToUInt8(color, out->GetRow8(Y) + X * 4);
+        }
+      }
+    }
+    x += w;
+  }
 }
 
 //------------------------------------------------------------------------------

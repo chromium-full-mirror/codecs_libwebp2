@@ -26,6 +26,7 @@
 #include "include/helpers.h"
 #include "include/helpers_filter.h"
 #include "src/wp2/decode.h"
+#include "src/common/vdebug.h"
 
 namespace WP2 {
 namespace {
@@ -549,6 +550,26 @@ TEST(RectangleTest, Contains) {
   EXPECT_TRUE(r1.Contains({6, 2, 9, 7}));
   EXPECT_FALSE(r1.Contains({6, 2, 10, 7}));
 }
+
+//------------------------------------------------------------------------------
+
+#if !defined(WP2_REDUCE_BINARY_SIZE)
+
+TEST(BufferTest, TestPrint) {
+  std::string msg;
+  msg.resize(256);
+  for (int c = 0; c < 256; ++c) msg[c] = c ^ 42;
+
+  ArgbBuffer buf(WP2_Argb_32);
+  for (int s = 1; s <= 8; ++s) {
+    ASSERT_WP2_OK(buf.Resize(256 * s, 100));
+    const int x = s * 7 - 14, y = s * 13 - 27;
+    // just check it doesn't crash:
+    Print(msg, x, y, Argb32b{255, 32, 51, 12}, &buf);
+  }
+}
+
+#endif  // WP2_REDUCE_BINARY_SIZE
 
 //------------------------------------------------------------------------------
 

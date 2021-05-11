@@ -92,6 +92,10 @@ void VDDrawUndefinedPattern(ArgbBuffer* const debug_output);
 // or 'default_value' otherwise.
 float VDGetParam(const EncoderConfig& config, float default_value);
 
+// Prints a string to top-left position (x,y). '\n' are taken into account
+void Print(const std::string& msg, int x, int y,
+           Argb32b color, ArgbBuffer* const out);
+
 #else
 
 template <typename TConfig>
