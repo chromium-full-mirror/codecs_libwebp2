@@ -2600,8 +2600,8 @@ static const WP2::Argb32b kSymbolColors[2][3] = {
 };
 
 WP2Status Decoder::RegisterSymbolForVDebug(
-    int symbol_type, bool is_group4, uint32_t pos, uint32_t length,
-    float cost, WP2::DecoderInfo* const decoder_info) {
+    int symbol_type, bool is_group4, uint32_t pos, uint32_t distance,
+    uint32_t length, float cost, WP2::DecoderInfo* const decoder_info) {
   assert(length > 0);
   if (decoder_info == nullptr) return WP2_STATUS_OK;
   if (!WP2::VDMatch(decoder_info->visual_debug, "bits-per-pixel/overall") &&
@@ -2644,10 +2644,17 @@ WP2Status Decoder::RegisterSymbolForVDebug(
                      decoder_info->selection.x, decoder_info->selection.y,
                      tile_->rect.x + pos % tile_width,
                      tile_->rect.y + pos / tile_width);
-    str += WP2SPrint("Type %s length %d cost %f bpp %f\n",
-                     is_group4 ? kGroup4ModeNames[symbol_type]
-                               : kSymbolTypeNames[symbol_type],
-                     length, cost, cost / length);
+    str += WP2SPrint("Type %s ", is_group4 ? kGroup4ModeNames[symbol_type]
+                                           : kSymbolTypeNames[symbol_type]);
+    if (is_group4) {
+      str += WP2SPrint("length %d ", length);
+    } else if (symbol_type == kSymbolTypeCopy) {
+      str += WP2SPrint("from (%d, %d) length %d ",
+                       tile_->rect.x + (pos - distance) % tile_width,
+                       tile_->rect.y + (pos - distance) / tile_width, length);
+      // Do not display the length for single pixels.
+    }
+    str += WP2SPrint("cost %f bpp %f\n", cost, cost / length);
   }
   return WP2_STATUS_OK;
 }

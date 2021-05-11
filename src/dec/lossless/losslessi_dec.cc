@@ -393,6 +393,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
 #else
     float* const cost_ptr = nullptr;
 #endif
+    uint32_t distance = 0;
     uint32_t length = 0;  // Silence -Werror=maybe-uninitialized
     const auto type =
         (SymbolType) sr->Read(kSymbolType, cluster, "lossless_mode", cost_ptr);
@@ -425,8 +426,8 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
       WP2_CHECK_STATUS(ReadLZ77PrefixCode(kSymbolDist, cluster, /*min=*/0,
                                           max_plane_code, "dist", sr, dec_,
                                           &dist_code, cost_ptr));
-      const uint32_t dist = PlaneCodeToDistance(width, dist_code);
-      WP2_CHECK_OK(pixel_ind >= dist, WP2_STATUS_BITSTREAM_ERROR);
+      distance = PlaneCodeToDistance(width, dist_code);
+      WP2_CHECK_OK(pixel_ind >= distance, WP2_STATUS_BITSTREAM_ERROR);
 
       const uint32_t max_length =
           std::min((uint32_t)((src_end - src) / 4), kMaxLZ77Length);
@@ -437,7 +438,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
                    WP2_STATUS_BITSTREAM_ERROR);
 
       WP2_CHECK_STATUS(dec_->GetStatus());
-      CopyBlock(src, dist, length);
+      CopyBlock(src, distance, length);
       if (!gparams_->has_alpha_) assert(src[0] == WP2::kAlphaMax);
     } else if (type == kSymbolTypeCacheIdx) {
       length = 1;
@@ -456,10 +457,9 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
       WP2_CHECK_OK(false, WP2_STATUS_BITSTREAM_ERROR);  // For error reporting.
     }
     if (get_cost) {
-      WP2_CHECK_REDUCED_STATUS(
-          RegisterSymbolForVDebug(type, /*is_group4=*/false,
-                                  last_pixel_ + i_pixel,
-                                  length, cost, decoder_info));
+      WP2_CHECK_REDUCED_STATUS(RegisterSymbolForVDebug(
+          type, /*is_group4=*/false, last_pixel_ + i_pixel, distance, length,
+          cost, decoder_info));
       if (bits_per_pixel != nullptr) {
         const float bits = cost / length;
         for (uint32_t j = 0; j < length; ++j) {

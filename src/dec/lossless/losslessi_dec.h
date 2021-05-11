@@ -115,9 +115,10 @@ class Decoder {
 
   // Visual debug. 'symbol_type' should either be a SymbolType or a Group4Mode
   // if 'is_group4' is true.
-  WP2Status RegisterSymbolForVDebug(
-      int symbol_type, bool is_group4, uint32_t pos, uint32_t length,
-      float cost, WP2::DecoderInfo* const decoder_info);
+  WP2Status RegisterSymbolForVDebug(int symbol_type, bool is_group4,
+                                    uint32_t pos, uint32_t distance,
+                                    uint32_t length, float cost,
+                                    WP2::DecoderInfo* const decoder_info);
   // Visual debug. 'rows' should contain the raw decoded pixels before inverse
   // transforms are applied. 'decoder_info' can be nullptr (in which case
   // nothing is done).
