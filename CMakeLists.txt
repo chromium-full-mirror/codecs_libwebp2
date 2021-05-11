@@ -414,6 +414,13 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/predictorl_enc.cc)
 target_include_directories(wp2_enc_dec PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(wp2_enc_dec PUBLIC ${WP2_DEFINITIONS})
+if(AOM_BUILD_PATH
+   AND AOM_SRC_PATH)
+  # We do not link to AOM here, only in the main library.
+  target_include_directories(wp2_enc_dec PRIVATE ${AOM_BUILD_PATH}/
+                                                 ${AOM_SRC_PATH}/)
+  target_compile_definitions(wp2_enc_dec PRIVATE WP2_HAVE_AOM)
+endif()
 
 # ##############################################################################
 # the WP2 library eventually.
@@ -430,6 +437,12 @@ if(WP2_USE_THREAD)
   target_link_libraries(webp2 Threads::Threads)
 endif()
 target_compile_definitions(webp2 PUBLIC ${WP2_DEFINITIONS})
+
+if(AOM_BUILD_PATH
+   AND AOM_SRC_PATH)
+  target_link_directories(webp2 PUBLIC ${AOM_BUILD_PATH})
+  target_link_libraries(webp2 libaom.a)
+endif()
 
 # Make sure the OBJECT libraries are built with position independent code (it is
 # not ON by default).
@@ -768,12 +781,10 @@ if(WP2_BUILD_EXTRAS)
      AND WP2_HAVE_WEBP)
     target_link_directories(extras PUBLIC ${AOM_BUILD_PATH})
     target_link_libraries(extras libaom.a)
-    target_include_directories(extras PRIVATE ${AOM_SRC_PATH}/)
+    target_include_directories(extras PRIVATE ${AOM_BUILD_PATH}/
+                                              ${AOM_SRC_PATH}/)
     target_compile_definitions(extras PRIVATE WP2_HAVE_AOM WP2_HAVE_WEBP)
     if(WP2_HAVE_AOM_DBG)
-      if(NOT AOM_SRC_PATH OR NOT AOM_BUILD_PATH)
-        message(FATAL_ERROR "AOM_SRC_PATH and AOM_BUILD_PATH need to be set.")
-      endif()
       target_include_directories(extras SYSTEM PRIVATE ${AOM_SRC_PATH}
                                                        ${AOM_BUILD_PATH})
       target_compile_definitions(extras PUBLIC WP2_HAVE_AOM_DBG)
