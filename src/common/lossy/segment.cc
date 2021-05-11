@@ -179,6 +179,8 @@ WP2Status Segment::ReadHeader(uint32_t quality_hint,
       }
     }
   }
+  // Early check before calling heavier functions.
+  WP2_CHECK_STATUS(dec->GetStatus());
   FinalizeQuant();
   if (read_alpha) FinalizeAlphaQuant();
 
