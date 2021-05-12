@@ -203,9 +203,9 @@ WP2Status WriteHeaders(const WP2::SymbolRecorder& recorder,
                        WP2::SymbolWriter* const sw,
                        float* const cost = nullptr);
 
-// Converts a distance to a code taking into account the proximity to the
+// Converts an offset to a code taking into account the proximity to the
 // current pixel.
-uint32_t DistanceToPlaneCode(uint32_t width, uint32_t dist);
+uint32_t OffsetToPlaneCode(uint32_t width, uint32_t offset);
 
 //------------------------------------------------------------------------------
 // Image transforms in predictor_enc.cc

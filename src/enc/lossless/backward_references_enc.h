@@ -43,8 +43,8 @@ class PixelMode {
  public:
   PixelMode() = default;
 
-  static inline PixelMode CreateCopy(uint32_t distance, uint16_t len) {
-    return {kSymbolTypeCopy, len, distance};
+  static inline PixelMode CreateCopy(uint32_t offset, uint16_t len) {
+    return {kSymbolTypeCopy, len, offset};
   }
 
   static inline PixelMode CreateCacheIdx(uint32_t idx, uint32_t range) {
@@ -61,15 +61,15 @@ class PixelMode {
   // component 0,1,2,3 in order A,R,G,B.
   inline int16_t GetLiteral(int component) const {
     assert(mode_ == kSymbolTypeLiteral);
-    return argb_or_distance_.argb[component];
+    return argb_or_offset_.argb[component];
   }
 
   inline uint32_t GetLength() const { return len_; }
 
   inline uint32_t GetCacheIdx() const {
     assert(mode_ == kSymbolTypeCacheIdx);
-    assert(argb_or_distance_.cache_idx < (1U << kMaxCacheBits));
-    return argb_or_distance_.cache_idx;
+    assert(argb_or_offset_.cache_idx < (1U << kMaxCacheBits));
+    return argb_or_offset_.cache_idx;
   }
 
   inline uint32_t GetCacheIdxRange() const {
@@ -77,26 +77,25 @@ class PixelMode {
     return range_;
   }
 
-  inline uint32_t GetDistance() const {
+  inline uint32_t GetOffset() const {
     assert(mode_ == kSymbolTypeCopy);
-    return argb_or_distance_.distance;
+    return argb_or_offset_.offset;
   }
 
-  inline void SetDistance(uint32_t distance) {
+  inline void SetOffset(uint32_t offset) {
     assert(mode_ == kSymbolTypeCopy);
-    argb_or_distance_.distance = distance;
+    argb_or_offset_.offset = offset;
   }
 
  private:
-  PixelMode(SymbolType mode, uint16_t len, uint32_t distance,
-            uint32_t range = 0)
+  PixelMode(SymbolType mode, uint16_t len, uint32_t offset, uint32_t range = 0)
       : mode_(mode), len_(len), range_(range) {
-    argb_or_distance_.distance = distance;
+    argb_or_offset_.offset = offset;
   }
   PixelMode(SymbolType mode, uint16_t len, const int16_t* const argb)
       : mode_(mode), len_(len), range_(0) {
     for (uint32_t i = 0; i < 4; ++i) {
-      argb_or_distance_.argb[i] = argb[i];
+      argb_or_offset_.argb[i] = argb[i];
     }
   }
 
@@ -104,10 +103,10 @@ class PixelMode {
   uint16_t len_;
   union {
     int16_t argb[4];
-    uint32_t distance;
+    uint32_t offset;
     uint32_t cache_idx;
-  } argb_or_distance_;  // Or index in color cache.
-  uint32_t range_;  // Range of 'argb_or_distance_' (currently used for cache).
+  } argb_or_offset_;  // Or index in color cache.
+  uint32_t range_;    // Range of 'argb_or_offset_' (currently used for cache).
 };
 
 // -----------------------------------------------------------------------------
@@ -115,12 +114,6 @@ class PixelMode {
 
 class HashChain {
  public:
-  HashChain() {
-    constexpr uint8_t kWindowSizeBits = 1 + WP2Log2Floor_k(WP2::kMaxTilePixels);
-    (void)kWindowSizeBits;
-    static_assert(kMaxLengthBits + kWindowSizeBits <= 8 * sizeof(uint64_t),
-                  "Wrong bits");
-  }
   // Must be called first, to set size.
   // This is the maximum size of the hash_chain that can be constructed.
   // Typically this is the pixel count (width x height) for a given image.
@@ -130,27 +123,12 @@ class HashChain {
   WP2Status Fill(int effort, const int16_t* const argb, uint32_t width,
                  uint32_t height);
 
-  inline uint32_t FindOffset(const uint32_t base_position) const {
-    return offset_length_[base_position] >> kMaxLengthBits;
-  }
-
-  inline uint32_t FindLength(const uint32_t base_position) const {
-    return offset_length_[base_position] & ((1U << kMaxLengthBits) - 1);
-  }
-
-  inline void FindCopy(uint32_t base_position, uint32_t* const offset_ptr,
-                       uint32_t* const length_ptr) const {
-    *offset_ptr = FindOffset(base_position);
-    *length_ptr = FindLength(base_position);
-  }
-
-  // The kWindowSizeBits most significant bits contain the offset at which the
-  // best match is found. The lower kMaxLengthBits bits contain the length of
-  // the match.
-  WP2::Vector_u64 offset_length_;
-
-  // We want the max value to be attainable and stored in kMaxLengthBits bits.
-  static constexpr uint8_t kMaxLengthBits = 1 + WP2Log2Floor_k(kMaxLZ77Length);
+  // Contains the offset and length at which the best match is found.
+  struct OffsetLength {
+    uint32_t offset;
+    uint32_t length;
+  };
+  WP2::VectorNoCtor<OffsetLength> offset_length_;
 
  private:
   // Updates the hash chain linking a pixel at 'pos' to its predecessor with the

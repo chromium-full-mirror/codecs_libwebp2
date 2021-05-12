@@ -44,15 +44,15 @@ static const uint8_t plane_to_code_lut[128] = {
   119, 116, 111, 106,  97,  88,  84,  74, 72,  75,  85,  89,  98, 107, 112, 117
 };
 
-uint32_t DistanceToPlaneCode(uint32_t width, uint32_t dist) {
-  const uint32_t yoffset = dist / width;
-  const uint32_t xoffset = dist - yoffset * width;
+uint32_t OffsetToPlaneCode(uint32_t width, uint32_t offset) {
+  const uint32_t yoffset = offset / width;
+  const uint32_t xoffset = offset - yoffset * width;
   if (xoffset <= 8 && yoffset < 8) {
     return plane_to_code_lut[yoffset * 16 + 8 - xoffset];
   } else if (xoffset + 8 > width && yoffset < 7) {
     return plane_to_code_lut[(yoffset + 1) * 16 + 8 + (width - xoffset)];
   }
-  return dist + kCodeToPlaneCodes - 1;
+  return offset + kCodeToPlaneCodes - 1;
 }
 
 // Returns the exact index where array1 and array2 are different. For an index
@@ -218,7 +218,8 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
                           uint32_t height) {
   const uint32_t size = width * height;
   if (size <= 2) {
-    offset_length_[0] = offset_length_[size - 1] = 0;
+    offset_length_[0] = {0, 0};
+    offset_length_[size - 1] = {0, 0};
     return WP2_STATUS_OK;
   }
   // Temporarily use the offset_length_ as a hash chain.
@@ -284,14 +285,14 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
   // (hence an offset of 0).
   const int iter_max = GetMaxItersForSpeed(effort);
   assert(size > 2);
-  offset_length_[size - 1] = 0;
+  offset_length_[size - 1] = {0, 0};
   const uint32_t window_size = GetWindowSizeForHashChain(effort, width);
   for (uint32_t base_position = size - 2; base_position > 0;) {
     const uint32_t max_len = std::min(size - 1 - base_position, kMaxLZ77Length);
     const int16_t* const argb_start = &argb[4 * base_position];
     int iter = iter_max;
     uint32_t best_length = 0;
-    uint32_t best_distance = 0;
+    uint32_t best_offset = 0;
     const int min_pos =
         (base_position > window_size) ? base_position - window_size : 0;
     if (effort > 0) {
@@ -302,7 +303,7 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
                                       best_length, max_len);
         if (curr_length > best_length) {
           best_length = curr_length;
-          best_distance = width;
+          best_offset = width;
         }
         --iter;
       }
@@ -311,7 +312,7 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
           FindMatchLength(argb_start - 4, argb_start, best_length, max_len);
       if (curr_length > best_length) {
         best_length = curr_length;
-        best_distance = 1;
+        best_offset = 1;
       }
       --iter;
     }
@@ -334,7 +335,7 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
         const uint32_t curr_length = (p.first - start) / 4;
         if (best_length < curr_length) {
           best_length = curr_length;
-          best_distance = base_position - pos;
+          best_offset = base_position - pos;
           // Stop if we have reached a good enough length. This is totally
           // empirical.
           // TODO(vrabaud) change heuristic, use effort.
@@ -349,22 +350,21 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
     uint32_t max_base_position = base_position;
     while (true) {
       assert(best_length <= kMaxLZ77Length);
-      offset_length_[base_position] =
-          ((uint64_t)best_distance << kMaxLengthBits) | (uint64_t)best_length;
+      offset_length_[base_position] = {best_offset, best_length};
       --base_position;
       // Stop if we don't have a match or if we are out of bounds.
-      if (best_distance == 0 || base_position == 0) break;
+      if (best_offset == 0 || base_position == 0) break;
       // Stop if we cannot extend the matching intervals to the left.
-      if (base_position < best_distance ||
-          !ColorEq(&argb[4 * (base_position - best_distance)],
+      if (base_position < best_offset ||
+          !ColorEq(&argb[4 * (base_position - best_offset)],
                    &argb[4 * base_position])) {
         break;
       }
       // Stop if we are matching at its limit because there could be a closer
       // matching interval with the same maximum length. Then again, if the
-      // matching interval is as close as possible (best_distance == 1), we will
+      // matching interval is as close as possible (best_offset == 1), we will
       // never find anything better so let's continue.
-      if (best_length == kMaxLZ77Length && best_distance != 1 &&
+      if (best_length == kMaxLZ77Length && best_offset != 1 &&
           base_position + kMaxLZ77Length < max_base_position) {
         break;
       }
@@ -374,7 +374,20 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
       }
     }
   }
-  offset_length_[0] = 0;
+  offset_length_[0] = {0, 0};
+#if 0
+  // Check the found values: this is costly CPU-wise so disabling it.
+  for (uint32_t pos = 0; pos < size; ++pos) {
+    if (offset_length_[pos].offset == 0) {
+      assert(offset_length_[pos].length == 0);
+      continue;
+    }
+    assert(pos >= offset_length_[pos].offset);
+    assert(std::equal(&argb[4 * pos],
+                      &argb[4 * pos] + 4 * offset_length_[pos].length,
+                      &argb[4 * (pos - offset_length_[pos].offset)]));
+  }
+#endif
   return WP2_STATUS_OK;
 }
 
@@ -474,8 +487,7 @@ static WP2Status BackwardReferencesLz77(uint32_t width, uint32_t height,
   refs->Clear();
   for (uint32_t i = 0, i_last_check = 0; i < num_pixels;) {
     // Alternative#1: Code the pixels starting at 'i' using backward reference.
-    uint32_t offset = 0, len = 0;
-    hash_chain.FindCopy(i, &offset, &len);
+    uint32_t len = hash_chain.offset_length_[i].length;
     if (len >= MIN_LENGTH) {
       const int len_ini = len;
       uint32_t max_reach = 0;
@@ -490,7 +502,7 @@ static WP2Status BackwardReferencesLz77(uint32_t width, uint32_t height,
       // while we check if we can use:
       // [i,j) (where j<=i+len) + [j, length of best match at j)
       for (uint32_t j = i_last_check + 1; j <= j_max; ++j) {
-        const uint32_t len_j = hash_chain.FindLength(j);
+        const uint32_t len_j = hash_chain.offset_length_[j].length;
         const uint32_t reach =
             j + (len_j >= MIN_LENGTH ? len_j : 1);  // 1 for single literal.
         if (reach > max_reach) {
@@ -508,7 +520,8 @@ static WP2Status BackwardReferencesLz77(uint32_t width, uint32_t height,
       WP2_CHECK_STATUS(AddSingleLiteral(&argb[4 * i], use_color_cache,
                                         color_cache.get(), refs));
     } else {
-      WP2_CHECK_STATUS(refs->CursorAdd(PixelMode::CreateCopy(offset, len)));
+      WP2_CHECK_STATUS(refs->CursorAdd(
+          PixelMode::CreateCopy(hash_chain.offset_length_[i].offset, len)));
       if (use_color_cache) {
         for (uint32_t j = i; j < i + len; ++j)
           color_cache->Insert(&argb[4 * j], /*index_ptr=*/nullptr);
@@ -523,7 +536,6 @@ static WP2Status BackwardReferencesLz77(uint32_t width, uint32_t height,
 // Compute an LZ77 by forcing matches to happen within a given distance cost.
 // We therefore limit the algorithm to the lowest 32 values in the PlaneCode
 // definition.
-#define WINDOW_OFFSETS_SIZE_MAX 32
 static WP2Status BackwardReferencesLz77Box(uint32_t width, uint32_t height,
                                            const int16_t* const argb,
                                            const CacheConfig& cache_config,
@@ -531,76 +543,70 @@ static WP2Status BackwardReferencesLz77Box(uint32_t width, uint32_t height,
                                            HashChain* hash_chain,
                                            BackwardRefs* const refs) {
   const uint32_t num_pixels = width * height;
-  int window_offsets[WINDOW_OFFSETS_SIZE_MAX] = {0};
-  int window_offsets_new[WINDOW_OFFSETS_SIZE_MAX] = {0};
-  uint32_t window_offsets_size = 0;
-  int window_offsets_new_size = 0;
-  uint32_t best_offset_prev = 0, best_length_prev = 0;
   WP2::Vector_u16 counts_ini;
   WP2_CHECK_ALLOC_OK(counts_ini.resize(width * height));
 
   // counts[i] counts how many times a pixel is repeated starting at position i.
-  {
-    int i = (int)num_pixels - 2;
-    uint16_t* counts = counts_ini.data() + i;
-    counts[1] = 1;
-    for (; i >= 0; --i, --counts) {
-      if (ColorEq(&argb[4 * i], &argb[4 * (i + 1)])) {
-        // Max out the counts to kMaxLength.
-        counts[0] = counts[1] + (counts[1] != kMaxLZ77Length);
-      } else {
-        counts[0] = 1;
-      }
+  counts_ini[num_pixels - 1] = 1;
+  uint16_t* counts = &counts_ini[num_pixels - 2];
+  for (int i = (int)num_pixels - 2; i >= 0; --i, --counts) {
+    if (ColorEq(&argb[4 * i], &argb[4 * (i + 1)])) {
+      // Max out the counts to kMaxLength.
+      counts[0] = counts[1] + (counts[1] != kMaxLZ77Length);
+    } else {
+      counts[0] = 1;
     }
   }
 
   // Figure out the window offsets around a pixel. They are stored in a
   // spiraling order around the pixel as defined by DistanceToPlaneCode.
-  {
-    int x, y;
-    for (y = 0; y <= 6; ++y) {
-      for (x = -6; x <= 6; ++x) {
-        const int offset = y * width + x;
-        int plane_code;
-        // Ignore offsets that bring us after the pixel.
-        if (offset <= 0) continue;
-        plane_code = DistanceToPlaneCode(width, offset);
-        if (plane_code >= WINDOW_OFFSETS_SIZE_MAX) continue;
-        window_offsets[plane_code] = offset;
-      }
+  static constexpr uint32_t kWindowOffsetsSizeMax = 32u;
+  uint32_t window_offsets[kWindowOffsetsSizeMax] = {0};
+  for (int y = 0; y <= 6; ++y) {
+    for (int x = -6; x <= 6; ++x) {
+      const int offset = y * width + x;
+      // Ignore offsets that bring us after the pixel.
+      if (offset <= 0) continue;
+      const uint32_t plane_code = OffsetToPlaneCode(width, offset);
+      if (plane_code >= kWindowOffsetsSizeMax) continue;
+      window_offsets[plane_code] = offset;
     }
-    // For narrow images, not all plane codes are reached, so remove those.
-    for (const auto& offset : window_offsets) {
-      if (offset == 0) continue;
-      window_offsets[window_offsets_size++] = offset;
+  }
+  // For narrow images, not all plane codes are reached, so remove those.
+  uint32_t window_offsets_size = 0;
+  for (const auto& offset : window_offsets) {
+    if (offset == 0) continue;
+    window_offsets[window_offsets_size++] = offset;
+  }
+  // Given a pixel P, find the offsets that reach pixels unreachable from P-1
+  // with any of the offsets in window_offsets[].
+  uint32_t window_offsets_new[kWindowOffsetsSizeMax] = {0};
+  uint32_t window_offsets_new_size = 0;
+  for (uint32_t i = 0; i < window_offsets_size; ++i) {
+    bool is_reachable = false;
+    for (uint32_t j = 0; j < window_offsets_size && !is_reachable; ++j) {
+      is_reachable |= (window_offsets[i] == window_offsets[j] + 1);
     }
-    // Given a pixel P, find the offsets that reach pixels unreachable from P-1
-    // with any of the offsets in window_offsets[].
-    for (uint32_t i = 0; i < window_offsets_size; ++i) {
-      bool is_reachable = false;
-      for (uint32_t j = 0; j < window_offsets_size && !is_reachable; ++j) {
-        is_reachable |= (window_offsets[i] == window_offsets[j] + 1);
-      }
-      if (!is_reachable) {
-        window_offsets_new[window_offsets_new_size] = window_offsets[i];
-        ++window_offsets_new_size;
-      }
+    if (!is_reachable) {
+      window_offsets_new[window_offsets_new_size] = window_offsets[i];
+      ++window_offsets_new_size;
     }
   }
 
-  hash_chain->offset_length_[0] = 0;
+  hash_chain->offset_length_[0] = {0, 0};
+  uint32_t best_offset_prev = 0, best_length_prev = 0;
   for (uint32_t i = 1; i < num_pixels; ++i) {
-    uint32_t best_length = hash_chain_best.FindLength(i);
-    int best_offset;
-    int do_compute = 1;
+    uint32_t best_length = hash_chain_best.offset_length_[i].length;
+    uint32_t best_offset;
+    bool do_compute = true;
 
     if (best_length >= kMaxLZ77Length) {
-      // Do not recompute the best match if we already have a maximal one in the
-      // window.
-      best_offset = hash_chain_best.FindOffset(i);
+      // Do not recompute the best match if we already have a maximal one in
+      // the window.
+      best_offset = hash_chain_best.offset_length_[i].offset;
       for (uint32_t ind = 0; ind < window_offsets_size; ++ind) {
         if (best_offset == window_offsets[ind]) {
-          do_compute = 0;
+          do_compute = false;
           break;
         }
       }
@@ -656,18 +662,16 @@ static WP2Status BackwardReferencesLz77Box(uint32_t width, uint32_t height,
     assert(i + best_length <= num_pixels);
     assert(best_length <= kMaxLZ77Length);
     if (best_length <= MIN_LENGTH) {
-      hash_chain->offset_length_[i] = 0;
+      hash_chain->offset_length_[i] = {0, 0};
       best_offset_prev = 0;
       best_length_prev = 0;
     } else {
-      hash_chain->offset_length_[i] =
-          ((uint64_t)best_offset << hash_chain_best.kMaxLengthBits) |
-          (uint64_t)best_length;
+      hash_chain->offset_length_[i] = {best_offset, best_length};
       best_offset_prev = best_offset;
       best_length_prev = best_length;
     }
   }
-  hash_chain->offset_length_[0] = 0;
+  hash_chain->offset_length_[0] = {0, 0};
 
   return BackwardReferencesLz77(width, height, argb, cache_config, *hash_chain,
                                 refs);

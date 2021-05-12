@@ -55,7 +55,7 @@ static void ConvertPopulationCountTableToBitEstimates(
 // Class storing the cost of each symbol in bits ,based on its count.
 class CostModel : public CountsBuffer<float> {
  public:
-  // 'refs' must not have its distance modified by DistanceToPlaneCode.
+  // 'refs' must not have its offset modified by OffsetToPlaneCode.
   WP2Status Build(uint32_t width, const LosslessSymbolsInfo& info,
                   const BackwardRefs& refs) {
     width_ = width;
@@ -112,8 +112,8 @@ class CostModel : public CountsBuffer<float> {
            counts_[kSymbolLen][prefix_code.prefix] + prefix_code.extra_bits_num;
   }
 
-  inline float GetDistanceCost(uint32_t distance) const {
-    const int32_t code = DistanceToPlaneCode(width_, distance);
+  inline float GetOffsetCost(uint32_t offset) const {
+    const int32_t code = OffsetToPlaneCode(width_, offset);
     WP2::PrefixCode prefix_code(code, kLZZPrefixCodeSize);
     return counts_[kSymbolDist][prefix_code.prefix] +
            prefix_code.extra_bits_num;
@@ -172,7 +172,7 @@ static inline void AddSingleLiteralWithCostModel(
 // To perform backward reference every pixel at 'index' is considered and
 // the cost for the kMaxLZ77Length following pixels computed. Those following
 // pixels at index 'index' + k (k from 0 to kMaxLZ77Length) have a cost of:
-//     cost_ = distance cost at index + GetLengthCost(cost_model, k)
+//     cost_ = offset cost at index + GetLengthCost(cost_model, k)
 // and the minimum value is kept. GetLengthCost(cost_model, k) is cached in an
 // array of size kMaxLZ77Length.
 // Instead of performing kMaxLZ77Length comparisons per pixel, we keep track of
@@ -477,12 +477,11 @@ static inline WP2Status InsertInterval(CostManager* const manager,
 }
 
 // Given a new cost interval defined by its start at position, its length value
-// and distance_cost, add its contributions to the previous intervals and costs.
+// and offset_cost, add its contributions to the previous intervals and costs.
 // If handling the interval or one of its subintervals becomes to heavy, its
 // contribution is added to the costs right away.
 static inline WP2Status PushInterval(CostManager* const manager,
-                                     float distance_cost, int position,
-                                     int len) {
+                                     float offset_cost, int position, int len) {
   size_t i;
   CostInterval* interval = manager->head_;
   CostInterval* interval_next;
@@ -496,9 +495,8 @@ static inline WP2Status PushInterval(CostManager* const manager,
     int j;
     for (j = position + kMinLZ77Length; j < position + len; ++j) {
       const uint32_t k = j - position;
-      float cost_tmp;
       assert(j >= position && k < kMaxLZ77Length);
-      cost_tmp = (float)(distance_cost + manager->cost_cache_[k]);
+      const float cost_tmp = (float)(offset_cost + manager->cost_cache_[k]);
 
       if (manager->costs_[j] > cost_tmp) {
         manager->costs_[j] = cost_tmp;
@@ -518,7 +516,7 @@ static inline WP2Status PushInterval(CostManager* const manager,
     const int end =
         position +
         (cost_cache_intervals[i].end > len ? len : cost_cache_intervals[i].end);
-    const float cost = (float)(distance_cost + cost_cache_intervals[i].cost);
+    const float cost = (float)(offset_cost + cost_cache_intervals[i].cost);
 
     for (; interval != NULL && interval->start < end;
          interval = interval_next) {
@@ -588,8 +586,8 @@ static inline WP2Status PushInterval(CostManager* const manager,
   return WP2_STATUS_OK;
 }
 
-// Optimizes the BackwardReferences based on the distance code.
-static WP2Status BackwardReferencesHashChainDistanceOnly(
+// Optimizes the BackwardReferences based on the offset code.
+static WP2Status BackwardReferencesHashChainOffsetOnly(
     uint32_t width, uint32_t height, const int16_t* const argb,
     const LosslessSymbolsInfo& symbols_info, const HashChain& hash_chain,
     const CacheConfig& cache_config, const BackwardRefs& refs,
@@ -597,7 +595,8 @@ static WP2Status BackwardReferencesHashChainDistanceOnly(
   const uint32_t num_pixels = width * height;
 
   CostModel cost_model;
-  uint32_t offset_prev = -1, len_prev = -1;
+  uint32_t offset_prev = std::numeric_limits<uint32_t>::max();
+  uint32_t len_prev = std::numeric_limits<uint32_t>::max();
   float offset_cost = -1.f;
   int first_offset_is_constant = -1;  // initialized with 'impossible' value
   uint32_t reach = 0;
@@ -623,8 +622,8 @@ static WP2Status BackwardReferencesHashChainDistanceOnly(
 
   for (uint32_t i = 1; i < num_pixels; ++i) {
     const float prev_cost = cost_manager.costs_[i - 1];
-    uint32_t offset, len;
-    hash_chain.FindCopy(i, &offset, &len);
+    const uint32_t offset = hash_chain.offset_length_[i].offset;
+    const uint32_t len = hash_chain.offset_length_[i].length;
 
     // Try adding the pixel as a literal.
     AddSingleLiteralWithCostModel(argb, color_cache.get(), cost_model, i,
@@ -634,7 +633,7 @@ static WP2Status BackwardReferencesHashChainDistanceOnly(
     // If we are dealing with a non-literal.
     if (len >= 2) {
       if (offset != offset_prev) {
-        offset_cost = cost_model.GetDistanceCost(offset);
+        offset_cost = cost_model.GetOffsetCost(offset);
         first_offset_is_constant = 1;
         WP2_CHECK_STATUS(
             PushInterval(&cost_manager, prev_cost + offset_cost, i, len));
@@ -661,18 +660,18 @@ static WP2Status BackwardReferencesHashChainDistanceOnly(
           //                a lower cost.
           // Already consider the pixel at "reach" to add intervals that are
           // better than whatever we add.
-          uint32_t offset_j, len_j = 0;
+          uint32_t len_j = 0;
           uint32_t j;
           assert(len == kMaxLZ77Length || len == num_pixels - i);
           // Figure out the last consecutive pixel within [i, reach + 1] with
           // the same offset.
           for (j = i; j <= reach; ++j) {
-            hash_chain.FindCopy(j + 1, &offset_j, &len_j);
-            if (offset_j != offset) {
-              hash_chain.FindCopy(j, &offset_j, &len_j);
+            if (hash_chain.offset_length_[j + 1].offset != offset) {
+              len_j = hash_chain.offset_length_[j].length;
               break;
             }
           }
+          if (j > reach) len_j = hash_chain.offset_length_[reach + 1].length;
           // Update the cost at j - 1 and j.
           UpdateCostAtIndex(&cost_manager, j - 1, 0);
           UpdateCostAtIndex(&cost_manager, j, 0);
@@ -725,7 +724,7 @@ static WP2Status BackwardReferencesHashChainFollowChosenPath(
     if (seg.mode == kSymbolTypeCopy) {
       // TODO(vrabaud) do not go through here when seg.len_ == 1
       const uint32_t len = seg.len;
-      const uint32_t offset = hash_chain.FindOffset(i);
+      const uint32_t offset = hash_chain.offset_length_[i].offset;
       WP2_CHECK_STATUS(refs->CursorAdd(PixelMode::CreateCopy(offset, len)));
       if (use_color_cache) {
         for (uint32_t k = 0; k < len; ++k) {
@@ -772,7 +771,7 @@ WP2Status BackwardReferencesTraceBackwards(
 
   WP2_CHECK_ALLOC_OK(segments.resize(num_pixels));
 
-  WP2_CHECK_STATUS(BackwardReferencesHashChainDistanceOnly(
+  WP2_CHECK_STATUS(BackwardReferencesHashChainOffsetOnly(
       width, height, argb, symbols_info, hash_chain, cache_config, refs_src,
       segments.data()));
   Segment* chosen_path = nullptr;

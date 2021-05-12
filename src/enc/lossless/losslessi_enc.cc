@@ -256,7 +256,7 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
       case kSymbolTypeCopy: {
         WP2::ANSDebugPrefix prefix(enc, "copy");
         const uint32_t pixel_ind = x + y * width;
-        const uint32_t plane_code = DistanceToPlaneCode(width, v.GetDistance());
+        const uint32_t plane_code = OffsetToPlaneCode(width, v.GetOffset());
         const uint32_t max_plane_code = pixel_ind + kCodeToPlaneCodes - 1;
         WriteLZ77PrefixCode(kSymbolDist, histogram_ix, plane_code,
                             /*min=*/0, max_plane_code, "dist", sw, enc, &cost);
