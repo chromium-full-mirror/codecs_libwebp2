@@ -24,6 +24,7 @@
 #include <array>
 
 #include "src/common/lossy/residuals.h"
+#include "src/common/lossy/transforms.h"
 #include "src/common/symbols.h"
 #include "src/wp2/base.h"
 
@@ -131,11 +132,10 @@ class AOMResidualIO {
 
  public:
   // Lookup used to call the right variant of GetCoeffBase*() based on
-  // the transform class (in [0..2])
-  static CoeffBaseContextFunc
-      GetCoeffsBaseContextFunc(uint32_t tx_class);
-  static CoeffBaseRangeContextFunc
-      GetCoeffBaseRangeContextFunc(uint32_t tx_class);
+  // the transform class.
+  static CoeffBaseContextFunc GetCoeffsBaseContextFunc(TransformClass tx_class);
+  static CoeffBaseRangeContextFunc GetCoeffBaseRangeContextFunc(
+      TransformClass tx_class);
 
  protected:
   static uint32_t GetCoeffBaseContextEob(TrfSize tdim, uint32_t index);

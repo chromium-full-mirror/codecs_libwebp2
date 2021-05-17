@@ -218,9 +218,9 @@ static constexpr CoeffBaseContextFunc kCoeffBaseContextFuncs[] = {
   GetCoeffBaseContextVertical
 };
 
-CoeffBaseContextFunc
-  AOMResidualIO::GetCoeffsBaseContextFunc(uint32_t tx_class) {
-  return kCoeffBaseContextFuncs[tx_class];
+CoeffBaseContextFunc AOMResidualIO::GetCoeffsBaseContextFunc(
+    TransformClass tx_class) {
+  return kCoeffBaseContextFuncs[(uint32_t)tx_class];
 }
 
 // Section 8.3.2 in the spec, under coeff_br.
@@ -272,9 +272,9 @@ static constexpr CoeffBaseRangeContextFunc kCoeffBaseRangeContextFuncs[] = {
   GetCoeffBaseRangeContextVertical
 };
 
-CoeffBaseRangeContextFunc
-  AOMResidualIO::GetCoeffBaseRangeContextFunc(uint32_t tx_class) {
-  return kCoeffBaseRangeContextFuncs[tx_class];
+CoeffBaseRangeContextFunc AOMResidualIO::GetCoeffBaseRangeContextFunc(
+    TransformClass tx_class) {
+  return kCoeffBaseRangeContextFuncs[(uint32_t)tx_class];
 }
 
 // Section 8.3.2 in the spec, under coeff_br.

@@ -31,10 +31,11 @@ namespace libgav1 {
 //------------------------------------------------------------------------------
 // From libgav1/src/tile/tile.cc
 
-int16_t AOMResidualReader::ReadSign(int16_t coeff, uint32_t max_value,
-                                    SymbolReader* const sr) {
+int16_t AOMResidualReader::ReadSignAndRest(int16_t coeff, bool is_dc,
+                                           SymbolReader* const sr) {
   assert(coeff > 0);
   if (coeff >= (int16_t)kQuantizerCoefficientBaseRangeContextClamp) {
+    const uint32_t max_value = is_dc ? kMaxDcValue : kMaxCoeffValue;
     coeff =
         ReadPrefixCode(kQuantizerCoefficientBaseRangeContextClamp, max_value,
                        /*prefix_size=*/0, sr->dec(), "prefix_code");
@@ -42,8 +43,9 @@ int16_t AOMResidualReader::ReadSign(int16_t coeff, uint32_t max_value,
   return (sr->dec()->ReadBool("is_negative") ? -coeff : coeff);
 }
 
-int AOMResidualReader::ReadCoeffBaseRange(
-    uint32_t cdf_context, uint32_t plane_type, SymbolReader* const sr) {
+int AOMResidualReader::ReadCoeffBaseRange(uint32_t cdf_context,
+                                          PlaneType plane_type,
+                                          SymbolReader* const sr) {
   int level = 0;
   for (uint32_t j = 0; j < kCoeffBaseRangeMaxIterations; ++j) {
     const uint32_t coeff_base_range =
@@ -127,6 +129,49 @@ int AOMResidualReader::ReadEOB(TrfSize tdim, PlaneType plane_type,
   return eob;
 }
 
+bool AOMResidualReader::ReadCoeff(uint32_t pos, bool is_eob, uint32_t eob,
+                                  const int16_t dequant[], PlaneType plane_type,
+                                  TrfSize tdim, TransformClass tx_class,
+                                  bool first_is_dc, uint8_t* const levels,
+                                  SymbolReader* const sr,
+                                  int16_t* const coeffs) {
+  const uint32_t tx_width = TrfWidth[tdim];
+  const uint32_t tx_width_log2 = TrfLog2[tx_width];
+
+  const uint32_t base_context =
+      is_eob ? GetCoeffBaseContextEob(tdim, eob - 1)
+             : AOMResidualIO::GetCoeffsBaseContextFunc(tx_class)(
+                   levels, tdim, tx_width_log2, pos);
+  const uint32_t cluster =
+      is_eob ? GetClusterAOM2<kAOMCoeffBaseEOB>(plane_type, base_context)
+             : GetClusterAOM2<kAOMCoeffBase>(plane_type, base_context);
+
+  uint32_t level =
+      sr->Read(is_eob ? kAOMCoeffBaseEOB : kAOMCoeffBase, cluster, "level");
+  if (is_eob) ++level;
+
+  if (level == kNumQuantizerBaseLevels) {
+    const uint32_t cdf_context =
+        is_eob ? GetCoeffBaseRangeContextEob(tx_width_log2, pos)
+               : AOMResidualIO::GetCoeffBaseRangeContextFunc(tx_class)(
+                     levels, tx_width_log2, pos);
+    level += ReadCoeffBaseRange(cdf_context, plane_type, sr);
+  }
+
+  levels[PaddedIndex(pos, tx_width_log2)] =
+      std::min<uint32_t>(level, kQuantizerCoefficientBaseRangeContextClamp);
+
+  coeffs[pos] = level;
+  if (level > 0) {
+    const bool is_dc = (pos == 0 && first_is_dc);
+    coeffs[pos] = ReadSignAndRest(coeffs[pos], is_dc, sr);
+    const uint32_t qpos = (pos % tx_width) + WP2QStride * (pos / tx_width);
+    coeffs[pos] *= dequant[qpos];
+  }
+
+  return (level > 0);
+}
+
 uint32_t AOMResidualReader::ReadCoeffs(
     Channel channel, const int16_t dequant[],
     TrfSize tdim, TransformPair tx_type, bool first_is_dc,
@@ -136,11 +181,10 @@ uint32_t AOMResidualReader::ReadCoeffs(
   const uint32_t padded_tx_width = tx_width + kLevelBufferPadding;
   const uint32_t padded_tx_height = tx_height + kLevelBufferPadding;
   const PlaneType plane_type = GetPlaneType(channel);
-  const uint32_t tx_class = (uint32_t)GetTransformClass(tx_type);
+  const TransformClass tx_class = GetTransformClass(tx_type);
 
   // Read EOB
-  const uint32_t context =
-      (tx_class != (uint32_t)TransformClass::kTwoD) ? 1 : 0;
+  const uint32_t context = (tx_class != TransformClass::kTwoD) ? 1 : 0;
   const int eob = ReadEOB(tdim, plane_type, context, sr);
 
   // If eob == 1, then only the first index will be populated and used. So there
@@ -152,60 +196,14 @@ uint32_t AOMResidualReader::ReadCoeffs(
     std::fill(levels, levels + padded_tx_width * padded_tx_height, 0u);
   }
   const uint16_t* const scan = ResidualIterator::GetZigzag(tdim);
-  const uint32_t tx_width_log2 = TrfLog2[tx_width];
-  // Read the last coefficient.
-  {
-    const uint16_t pos = scan[eob - 1];
-    const uint16_t adjusted_pos = PaddedIndex(pos, tx_width_log2);
-    const uint32_t base_context = GetCoeffBaseContextEob(tdim, eob - 1);
-    const uint32_t cluster =
-        GetClusterAOM2<kAOMCoeffBaseEOB>(plane_type, base_context);
-    uint32_t level = 1 + sr->Read(kAOMCoeffBaseEOB, cluster, "level");
-    if (level == kNumQuantizerBaseLevels) {
-      level += ReadCoeffBaseRange(
-          GetCoeffBaseRangeContextEob(tx_width_log2, pos), plane_type, sr);
-    }
-    coeffs[pos] = level;
-    levels[adjusted_pos] =
-        std::min(level, kQuantizerCoefficientBaseRangeContextClamp);
-  }
 
-  auto get_coeff_base_context_func =
-      AOMResidualIO::GetCoeffsBaseContextFunc(tx_class);
-  auto get_coeff_base_range_context_func =
-      AOMResidualIO::GetCoeffBaseRangeContextFunc(tx_class);
-
-  // Read all the other coefficients.
-  for (int i = eob - 2; i >= 0; --i) {
+  uint32_t num_coeffs = 0;  // Number of non-zero coeffs.
+  for (int i = eob - 1; i >= 0; --i) {
     const uint16_t pos = scan[i];
-    const uint16_t adjusted_pos = PaddedIndex(pos, tx_width_log2);
-    const uint32_t base_context =
-        get_coeff_base_context_func(levels, tdim, tx_width_log2, pos);
-    const uint32_t cluster =
-        GetClusterAOM2<kAOMCoeffBase>(plane_type, base_context);
-    uint32_t level = sr->Read(kAOMCoeffBase, cluster, "level");
-    if (level == kNumQuantizerBaseLevels) {
-      const uint32_t cdf_context = get_coeff_base_range_context_func(
-          levels, tx_width_log2, pos);
-      level += ReadCoeffBaseRange(cdf_context, plane_type, sr);
-    }
-    coeffs[pos] = level;
-    levels[adjusted_pos] =
-        std::min(level, kQuantizerCoefficientBaseRangeContextClamp);
-  }
-  assert(scan[0] == 0);
-  uint32_t num_coeffs = (first_is_dc && coeffs[0]) ? 1 : 0;
-  if (num_coeffs == 1) {
-    coeffs[0] = ReadSign(coeffs[0], kMaxDcValue, sr);
-    coeffs[0] *= dequant[0];
-  }
-
-  for (int i = (first_is_dc ? 1 : 0); i < eob; ++i) {
-    const uint32_t pos = scan[i];
-    if (coeffs[pos]) {
-      coeffs[pos] = ReadSign(coeffs[pos], kMaxCoeffValue, sr);
-      const uint32_t qpos = (pos % tx_width) + WP2QStride * (pos / tx_width);
-      coeffs[pos] *= dequant[qpos];
+    const bool is_eob = (i == eob - 1);
+    // ReadCoeff returns true if the read coeff is non zero.
+    if (ReadCoeff(pos, is_eob, eob, dequant, plane_type, tdim, tx_class,
+                  first_is_dc, levels, sr, coeffs)) {
       ++num_coeffs;
     }
   }

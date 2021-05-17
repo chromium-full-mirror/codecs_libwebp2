@@ -39,14 +39,27 @@ class AOMResidualWriter : public AOMResidualIO {
                           SymbolManager* const sm, ANSEncBase* const enc);
 
  private:
-  static void WriteEOB(
-      int eob, TrfSize tdim, PlaneType plane_type, uint32_t context,
-      SymbolManager* const sm, ANSEncBase* const enc);
-  static void WriteSign(int16_t res, uint32_t max_value,
-                        SymbolManager* const sm, ANSEncBase* const enc);
-  static void WriteCoeffBaseRange(
-      uint32_t level, uint32_t cdf_context, uint32_t plane_type,
-      SymbolManager* const sm, ANSEncBase* const enc);
+  // Writes the position of the end of block.
+  static void WriteEOB(int eob, TrfSize tdim, PlaneType plane_type,
+                       TransformClass tx_class, SymbolManager* const sm,
+                       ANSEncBase* const enc);
+
+  // Writes the coefficient 'res[pos]'. Updates 'levels' for writing following
+  // coeffs. This method should be called in reverse zigzag order.
+  static void WriteCoeff(const int16_t res[], uint32_t pos, bool is_eob,
+                         uint32_t eob, bool first_is_dc, PlaneType plane_type,
+                         TrfSize tdim, TransformClass tx_class,
+                         uint8_t* const levels, SymbolManager* const sm,
+                         ANSEncBase* const enc);
+
+  // Writes the coefficient's sign, and the remaining part that is above
+  // kQuantizerCoefficientBaseRangeContextClamp if needed.
+  static void WriteSignAndRest(int16_t res, bool is_dc, SymbolManager* const sm,
+                               ANSEncBase* const enc);
+
+  static void WriteCoeffBaseRange(uint32_t level, uint32_t cdf_context,
+                                  PlaneType plane_type, SymbolManager* const sm,
+                                  ANSEncBase* const enc);
 };
 
 }  // namespace libgav1

@@ -46,14 +46,26 @@ class AOMResidualReader : public AOMResidualIO {
       SymbolReader* const sr, int16_t* const coeffs);
 
  private:
-  // Reads End-of-Block element.
+  // Reads the position of the end of block.
   static int ReadEOB(TrfSize tdim, PlaneType plane_type, uint32_t context,
                      SymbolReader* const sr);
 
+  // Reads a coefficient and stores it at position 'coeffs[pos]'. Updates
+  // 'levels' for reading following coeffs.
+  // Returns true if the coeff read is not 0.
+  // This method should be called in reverse zigzag order.
+  static bool ReadCoeff(uint32_t pos, bool is_eob, uint32_t eob,
+                        const int16_t dequant[], PlaneType plane_type,
+                        TrfSize tdim, TransformClass tx_class, bool first_is_dc,
+                        uint8_t* const levels, SymbolReader* const sr,
+                        int16_t* const coeffs);
+
   // Part of 5.11.39.
-  static int16_t ReadSign(int16_t coeff, uint32_t max_value,
-                          SymbolReader* const sr);
-  static int ReadCoeffBaseRange(uint32_t cdf_context, uint32_t plane_type,
+  // Writes the coefficient's sign, and the remaining part that is above
+  // kQuantizerCoefficientBaseRangeContextClamp if needed.
+  static int16_t ReadSignAndRest(int16_t coeff, bool is_dc,
+                                 SymbolReader* const sr);
+  static int ReadCoeffBaseRange(uint32_t cdf_context, PlaneType plane_type,
                                 SymbolReader* const sr);
 };
 
