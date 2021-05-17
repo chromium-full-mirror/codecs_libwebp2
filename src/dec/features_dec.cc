@@ -226,7 +226,12 @@ WP2Status DecodeGLBL(DataSource* const data_source, const DecoderConfig& config,
   ExternalDataSource src(chunk_glbl.bytes, chunk_glbl.size);
   ANSDec dec(&src);
   gparams->Reset();
-  WP2_CHECK_STATUS(gparams->Read(!features.is_opaque, &dec));
+  const WP2Status ans_status = gparams->Read(!features.is_opaque, &dec);
+  // The chunk was entirely read so any missing ANS byte is a bitstream error.
+  WP2_CHECK_OK(ans_status != WP2_STATUS_NOT_ENOUGH_DATA,
+               WP2_STATUS_BITSTREAM_ERROR);
+  WP2_CHECK_STATUS(ans_status);
+
 #if defined(WP2_BITTRACE)
   if (config.info != nullptr) {
     for (const auto& it : dec.GetBitTraces()) {
