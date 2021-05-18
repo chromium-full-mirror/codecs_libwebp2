@@ -14,7 +14,7 @@
 // -----------------------------------------------------------------------------
 //
 // Y4M decoding adapted from
-//   chromium.googlesource.com/webm/libvpx/+/refs/heads/master/
+//   chromium.googlesource.com/webm/libvpx
 //
 // Author: Yannis Guyon (yguyon@google.com)
 

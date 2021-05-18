@@ -13,8 +13,8 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 //
-// Wiener filter based on AV1 implementation at
-// https://code.videolan.org/videolan/dav1d/blob/master/src/
+// Wiener filter based on AV1 implementation from
+//   https://code.videolan.org/videolan/dav1d/
 // Attenuates the noise.
 //
 // Author: Yannis Guyon (yguyon@google.com)
