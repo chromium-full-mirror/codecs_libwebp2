@@ -41,12 +41,33 @@ namespace WP2 {
 
 ContextCache::ContextCache() { Reset(); }
 
+bool ContextCache::CheckContextCache(const CodedBlockBase& cb, Channel channel,
+                                     bool split_tf, uint32_t tf_i,
+                                     ContextType context_type) {
+  const Rectangle tf_rect = cb.blk().LocalTfRect(split_tf, tf_i);
+  int16_t context[kMaxContextSize];
+  cb.GetContext(channel, split_tf, tf_rect.x, tf_rect.y, context_type, context);
+  const uint32_t context_size =
+      ContextSize(context_type, tf_rect.width, tf_rect.height);
+  const int16_t* const cache = split_tf ? small_[channel][context_type][tf_i]
+                                        : large_[channel][context_type];
+  const bool matches = (std::memcmp(context, cache, context_size) == 0);
+  // Assert here (in addition to return value) for easy debugging.
+  assert(matches);
+  return matches;
+}
+
 const int16_t* ContextCache::GetLarge(const CodedBlockBase& cb, Channel channel,
                                       ContextType context_type) {
   if (!is_computed_large_[channel][context_type]) {
     cb.GetContext(channel, /*split_tf=*/false, /*split_x=*/0, /*split_y=*/0,
                   context_type, large_[channel][context_type]);
     is_computed_large_[channel][context_type] = true;
+  } else if (check_cache_) {
+    // Assert that the cache actually matches what GetContext would return.
+    // 'assert' here makes sure that the check gets removed in opt mode.
+    assert(CheckContextCache(cb, channel, /*split_tf=*/false, /*tf_i=*/0,
+                             context_type));
   }
   return large_[channel][context_type];
 }
@@ -59,6 +80,11 @@ const int16_t* ContextCache::GetSmall(const CodedBlockBase& cb, Channel channel,
     cb.GetContext(channel, /*split_tf=*/true, tf_rect.x, tf_rect.y,
                   context_type, small_[channel][context_type][tf_i]);
     is_computed_small_[channel][context_type][tf_i] = true;
+  } else if (check_cache_) {
+    // Assert that the cache actually matches what GetContext would return.
+    // 'assert' here makes sure that the check gets removed in opt mode.
+    assert(
+        CheckContextCache(cb, channel, /*split_tf=*/true, tf_i, context_type));
   }
   return small_[channel][context_type][tf_i];
 }

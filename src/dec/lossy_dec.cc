@@ -305,7 +305,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     }
 
 #if defined(WP2_ENC_DEC_DEEP_MATCH)
-    reader.ReadAndCompareRawPixels(cb.blk(), cb.out_, dec);  // Debug
+    reader.ReadAndCompareRawPixels(cb, cb.out_, dec);  // Debug
 #endif
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)

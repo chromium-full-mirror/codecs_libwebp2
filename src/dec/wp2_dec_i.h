@@ -288,7 +288,7 @@ class SyntaxReader {
                     uint32_t tile_y, const Block& block,
                     Plane16* const dst_plane) const;
   // Decodes the 'block' boundaries and the 'pixels'. Check that they match.
-  void ReadAndCompareRawPixels(const Block& block, const YUVPlane& pixels,
+  void ReadAndCompareRawPixels(const CodedBlockBase& cb, const YUVPlane& pixels,
                                ANSDec* const dec);
 };
 

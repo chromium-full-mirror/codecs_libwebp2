@@ -63,28 +63,35 @@
 namespace WP2 {
 
 //------------------------------------------------------------------------------
-// Unused functions at the moment
 
-void SyntaxWriter::PutRawPixels(const Block& block, const YUVPlane& pixels,
-                                ANSEnc* const enc) {
+void SyntaxWriter::PutRawPixels(const CodedBlockBase& cb,
+                                const YUVPlane& pixels, ANSEnc* const enc) {
   assert(gparams_->transf_.GetYuvDepth().is_signed);
+  const Block& block = cb.blk();
   enc->PutRValue(block.x(), SizeBlocks(tile_rect_.width), "DEEP_MATCH_X");
   enc->PutRValue(block.y(), SizeBlocks(tile_rect_.height), "DEEP_MATCH_Y");
   enc->PutRValue(block.w(), kMaxBlockSize + 1, "DEEP_MATCH_W");
   enc->PutRValue(block.h(), kMaxBlockSize + 1, "DEEP_MATCH_H");
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (pixels.GetChannel(channel).IsEmpty()) continue;
-    for (uint32_t y = 0; y < block.h_pix(); ++y) {
-      for (uint32_t x = 0; x < block.w_pix(); ++x) {
-        enc->PutSUValue(pixels.GetChannel(channel).At(x, y),
-                        gparams_->transf_.GetYuvDepth().num_bits,
-                        kChannelStr[channel]);
+    const bool split_tf = enc->PutBool(cb.GetCodingParams(channel).split_tf,
+                                       "DEEP_MATCH_SPLIT_TF");
+    const uint32_t num_transforms =
+        GetNumTransformsInBlock(block.dim(), split_tf);
+    for (uint32_t tf_i = 0; tf_i < num_transforms; ++tf_i) {
+      const Rectangle rect = block.LocalTfRect(split_tf, tf_i);
+      for (uint32_t y = rect.y; y < rect.y + rect.height; ++y) {
+        for (uint32_t x = rect.x; x < rect.x + rect.width; ++x) {
+          enc->PutSUValue(pixels.GetChannel(channel).At(x, y),
+                          gparams_->transf_.GetYuvDepth().num_bits,
+                          kChannelStr[channel]);
+        }
       }
     }
   }
 }
 
-void SyntaxReader::ReadAndCompareRawPixels(const Block& block,
+void SyntaxReader::ReadAndCompareRawPixels(const CodedBlockBase& cb,
                                            const YUVPlane& pixels,
                                            ANSDec* const dec) {
   assert(gparams_->transf_.GetYuvDepth().is_signed);
@@ -92,16 +99,23 @@ void SyntaxReader::ReadAndCompareRawPixels(const Block& block,
   const uint32_t block_y = dec->ReadRValue(SizeBlocks(height_), "DEEP_MATCH_Y");
   const uint32_t block_w = dec->ReadRValue(kMaxBlockSize + 1, "DEEP_MATCH_W");
   const uint32_t block_h = dec->ReadRValue(kMaxBlockSize + 1, "DEEP_MATCH_H");
+  const Block& block = cb.blk();
   if (block_x != block.x() || block_y != block.y()) assert(false);
   if (block_w != block.w() || block_h != block.h()) assert(false);
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (pixels.GetChannel(channel).IsEmpty()) continue;
-    for (uint32_t y = 0; y < block.h_pix(); ++y) {
-      for (uint32_t x = 0; x < block.w_pix(); ++x) {
-        const int16_t expected = dec->ReadSUValue(
-            gparams_->transf_.GetYuvDepth().num_bits, kChannelStr[channel]);
-        const int16_t actual = pixels.GetChannel(channel).At(x, y);
-        if (expected != actual) assert(false);
+    const bool split_tf = dec->ReadBool("DEEP_MATCH_SPLIT_TF");
+    const uint32_t num_transforms =
+        GetNumTransformsInBlock(block.dim(), split_tf);
+    for (uint32_t tf_i = 0; tf_i < num_transforms; ++tf_i) {
+      const Rectangle rect = block.LocalTfRect(split_tf, tf_i);
+      for (uint32_t y = rect.y; y < rect.y + rect.height; ++y) {
+        for (uint32_t x = rect.x; x < rect.x + rect.width; ++x) {
+          const int16_t expected = dec->ReadSUValue(
+              gparams_->transf_.GetYuvDepth().num_bits, kChannelStr[channel]);
+          const int16_t actual = pixels.GetChannel(channel).At(x, y);
+          if (expected != actual) assert(false);
+        }
       }
     }
   }

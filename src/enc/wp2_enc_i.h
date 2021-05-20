@@ -413,7 +413,7 @@ class SyntaxWriter : public WP2Allocable {
   // Estimated residual rate per block, per channel.
   Vector<std::array<float, 3>> residual_rate_;
   // Encodes the 'block' boundaries and the 'pixels'.
-  void PutRawPixels(const Block& block, const YUVPlane& pixels,
+  void PutRawPixels(const CodedBlockBase& cb, const YUVPlane& pixels,
                     ANSEnc* const enc);
 };
 

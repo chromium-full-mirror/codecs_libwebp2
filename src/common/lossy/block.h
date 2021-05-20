@@ -60,6 +60,11 @@ class ContextCache {
   void Reset();
 
  protected:
+  bool CheckContextCache(const CodedBlockBase& cb, Channel channel,
+                         bool split_tf, uint32_t tf_i,
+                         ContextType context_type);
+
+  bool check_cache_ = true;  // Check the cache is valid (in dbg mode only).
   // Large context per channel, per context type.
   int16_t large_[4][kNumContextType][kMaxContextSize];
   bool is_computed_large_[4][kNumContextType];

@@ -570,7 +570,7 @@ WP2Status SyntaxWriter::WriteBlock(const CodedBlock& cb, uint32_t block_index,
   if (cb.HasLossyAlpha()) assert(gparams_->has_alpha_);
 
 #if defined(WP2_ENC_DEC_DEEP_MATCH)
-  PutRawPixels(cb.blk(), cb.out_, enc);  // Debug
+  PutRawPixels(cb, cb.out_, enc);  // Debug
 #endif
   return WP2_STATUS_OK;
 }

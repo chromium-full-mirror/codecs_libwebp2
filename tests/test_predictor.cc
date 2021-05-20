@@ -31,6 +31,8 @@ using testing::Ge;
 
 class ContextCacheForTest : public ContextCache {
  public:
+  ContextCacheForTest() { check_cache_ = false; }
+
   void SetContext(Channel channel, const std::vector<int16_t> context) {
     for (uint32_t i = 0; i < kNumContextType; ++i) {
       std::copy(&context[0], &context[kContextSize], large_[channel][i]);
