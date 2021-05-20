@@ -404,15 +404,16 @@ WP2Status EncodeHelperImage(WP2::ANSEncBase* const enc,
 
 WP2Status Encoder::EncodeImageInternal(
     const CrunchConfig& config, const ProgressRange& progress,
-    const LosslessSymbolsInfo& symbols_info_init, WP2::ANSEnc* const enc,
-    WP2::ANSDictionaries* const dicts, EncodeInfo* const encode_info) {
+    const LosslessSymbolsInfo& symbols_info_init, float* const cost_best,
+    WP2::ANSEnc* const enc_init, EncodeInfo* const encode_info,
+    WP2::ANSDictionaries* const dicts_init) {
   // First, check whether we use Group4 or anything else.
   const TransformType* const end =
       config.transforms + kPossibleTransformCombinationSize;
   if (std::find(config.transforms, end, TransformType::kGroup4) != end) {
-    WP2_CHECK_STATUS(Group4Encode(argb_buffer_, palette_.Size(),
-                                  config.group4_use_move_to_front,
-                                  config_.effort, progress, enc, encode_info));
+    WP2_CHECK_STATUS(Group4Encode(
+        argb_buffer_, palette_.Size(), config.group4_use_move_to_front,
+        config_.effort, progress, enc_init, encode_info));
     return WP2_STATUS_OK;
   }
 
@@ -434,11 +435,8 @@ WP2Status Encoder::EncodeImageInternal(
   const uint32_t histogram_height = SubSampleSize(height, histogram_bits);
   const uint32_t num_segments_max = histogram_width * histogram_height;
   HistogramSet histogram_image;
-  WP2::ANSEnc enc_best;
-  WP2::ANSDictionaries dicts_best;
-  WP2::ANSEnc enc_init;
-  WP2::ANSDictionaries dicts_init;
-  float best_cost = std::numeric_limits<float>::max();
+  WP2::ANSEnc enc_best_tmp, enc_tmp;
+  WP2::ANSDictionaries dicts_tmp;
   WP2::SymbolWriter sw;
 
   assert(width * height >= 1 && num_segments_max >= 1);
@@ -462,11 +460,6 @@ WP2Status Encoder::EncodeImageInternal(
   WP2_CHECK_STATUS(
       symbol_recorder_one_segment.Allocate(symbols_info, /*num_records=*/0));
 
-  // Calculate backward references from ARGB image.
-  WP2_CHECK_STATUS(enc_init.Clone(*enc));
-  WP2_CHECK_STATUS(dicts_init.CopyFrom(*dicts));
-  WP2_CHECK_STATUS(enc_best.Clone(*enc));
-  WP2_CHECK_STATUS(dicts_best.CopyFrom(*dicts));
   // Label image where only the green channel is filled.
   WP2::Vector_s16 segments;
   WP2_CHECK_ALLOC_OK(segments.resize(4 * num_segments_max));
@@ -481,6 +474,20 @@ WP2Status Encoder::EncodeImageInternal(
     const ProgressRange symbol_stats_progress(idx_progress, 0.2);
     const ProgressRange header_progress(idx_progress, 0.2);
     const ProgressRange literals_progress(idx_progress, 0.2);
+
+    // Reset the bit writer or take the input one if we are at the last
+    // configuration.
+    WP2::ANSDictionaries* dicts;
+    WP2::ANSEnc* enc;
+    if (lz77s_idx + 1 < config.lz77s_types_to_try_size) {
+      WP2_CHECK_STATUS(enc_tmp.Clone(*enc_init));
+      enc = &enc_tmp;
+      WP2_CHECK_STATUS(dicts_tmp.CopyFrom(*dicts_init));
+      dicts = &dicts_tmp;
+    } else {
+      enc = enc_init;
+      dicts = dicts_init;
+    }
 
     BackwardRefsPool::RefsPtr refs_best =
         BackwardRefsPool::GetEmptyBackwardRefs();
@@ -571,23 +578,17 @@ WP2Status Encoder::EncodeImageInternal(
                                  &current_encode_info));
 
     // Keep track of the smallest image so far.
-    if (enc->GetCost(*dicts) < best_cost) {
-      best_cost = enc->GetCost(*dicts);
-      WP2::swap(*enc, enc_best);
-      WP2::swap(*dicts, dicts_best);
+    const float cost_tmp = enc->GetCost(*dicts);
+    if (cost_tmp < *cost_best) {
+      *cost_best = cost_tmp;
+      WP2::swap(*enc, enc_best_tmp);
       if (encode_info != nullptr) {
         swap(*encode_info, current_encode_info);
       }
     }
-    // Reset the bit writer for the following iteration if any.
-    if (lz77s_idx + 1 < config.lz77s_types_to_try_size) {
-      WP2_CHECK_STATUS(enc->Clone(enc_init));
-      dicts->DeepClear();
-      WP2_CHECK_STATUS(dicts->CopyFrom(dicts_init));
-    }
   }
-  WP2::swap(*enc, enc_best);
-  WP2::swap(*dicts, dicts_best);
+  // enc_best can be empty if we have not found anything better.
+  WP2::swap(*enc_init, enc_best_tmp);
 
   return WP2_STATUS_OK;
 }
@@ -1041,6 +1042,7 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
   const uint32_t width = encoder.pic_.width();
   const uint32_t height = encoder.pic_.height();
   uint32_t best_size = std::numeric_limits<uint32_t>::max();
+  float best_cost = std::numeric_limits<float>::max();
   WP2::ANSEnc enc, enc_best;
   bool use_previous_transforms = false;
 
@@ -1082,8 +1084,10 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
     }
 
     WP2_CHECK_STATUS(encoder.EncodeImageInternal(config, encode_progress,
-                                                 symbols_info, &enc, &dicts,
-                                                 &current_encode_info));
+                                                 symbols_info, &best_cost, &enc,
+                                                 &current_encode_info, &dicts));
+    // If enc has been emptied, nothing better could be found.
+    if (enc.NumTokens() == 0) continue;
 
     // If we are better than what we already have.
     WP2_CHECK_STATUS(enc.AssembleToBitstream());

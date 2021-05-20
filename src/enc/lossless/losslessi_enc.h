@@ -82,12 +82,18 @@ class Encoder {
                                     WP2::ANSEnc* const enc,
                                     WP2::ANSDictionaries* const dicts);
   // Encodes the image for a given configuration.
+  // 'enc_best' and 'dicts_init' contain the encoded info so far.
+  // 'cost_best' is the cost in bits the final encoding must beat. If a better
+  // cost is found, it is updated and 'enc_best' contains the best encoding.
+  // Otherwise, 'enc_best' is set to empty.
+  // 'dicts_init' is used as temporary data and modified.
   WP2Status EncodeImageInternal(const CrunchConfig& config,
                                 const WP2::ProgressRange& progress,
                                 const LosslessSymbolsInfo& symbols_info_init,
-                                WP2::ANSEnc* const enc,
-                                WP2::ANSDictionaries* const dicts,
-                                EncodeInfo* const encode_info);
+                                float* const cost_best,
+                                WP2::ANSEnc* const enc_best,
+                                EncodeInfo* const encode_info,
+                                WP2::ANSDictionaries* const dicts_init);
 
   const WP2::EncoderConfig& config_;  // user configuration and parameters
   const WP2::ArgbBuffer& pic_;        // input picture (tile view)
