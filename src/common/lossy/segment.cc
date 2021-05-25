@@ -280,10 +280,14 @@ void Segment::SetQuality(uint32_t quality_hint, uint32_t quality_factor,
   const float qf =
       1.f * std::min(quality_hint, kMaxLossyQualityHint) / kMaxLossyQualityHint;
   const float uv_dc_scale = kMinScale + (kMaxScale - kMinScale) * qf;
-  const float kUVScales[kNumQuantZones] = {uv_dc_scale, 1.0, 1.0, 1.0};
+  const float kYScales[] = {1.f, 1.f, 1.f, 1.f, 1.f};
+  STATIC_ASSERT_ARRAY_SIZE(kYScales, kNumQuantZones);
+  // uv_dc_scale is applied to DC and the first row/column of the quant matrix.
+  const float kUVScales[] = {uv_dc_scale, uv_dc_scale, 1.f, 1.f, 1.f};
+  STATIC_ASSERT_ARRAY_SIZE(kUVScales, kNumQuantZones);
 
   for (uint32_t i = 0; i < kNumQuantZones; ++i) {
-    quant_steps_[kYChannel][i] = InterpolateQuant(q_y, 1.0f);
+    quant_steps_[kYChannel][i] = InterpolateQuant(q_y, kYScales[i]);
     quant_steps_[kUChannel][i] = InterpolateQuant(q_u, kUVScales[i]);
     quant_steps_[kVChannel][i] = InterpolateQuant(q_v, kUVScales[i]);
   }

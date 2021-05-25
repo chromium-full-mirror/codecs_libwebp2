@@ -32,7 +32,7 @@ class RndMtxSet;
 //------------------------------------------------------------------------------
 // Quantization
 
-static constexpr uint32_t kNumQuantZones = 4;
+static constexpr uint32_t kNumQuantZones = 5;
 
 struct QuantMtx {
  public:

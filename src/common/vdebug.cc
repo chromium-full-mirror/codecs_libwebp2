@@ -1097,8 +1097,8 @@ void Block::Draw(YUVPlane* const yuv) const {
 //------------------------------------------------------------------------------
 
 static std::string PrintQuantSteps(const uint16_t steps[4], const char name[]) {
-  return WP2SPrint(" %s quant_steps:   %d %d %d %d\n",
-                   name, steps[0], steps[1], steps[2], steps[3]);
+  return WP2SPrint(" %s quant_steps, DC: %d AC: %d %d %d %d\n", name, steps[0],
+                   steps[1], steps[2], steps[3], steps[4]);
 }
 
 static std::string PrintSegmentInfo(const Segment& segment, bool is_alpha) {

@@ -40,7 +40,8 @@ TEST_F(QuantMtxTest, DCError) {
     for (uint16_t quant : {128, 200, 50, 10, 1}) {
       SCOPED_TRACE(SPrintf("quant step: %d", quant));
       ASSERT_WP2_OK(mtx.AllocateForEncoder());
-      const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
+      const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant,
+                                               quant};
       mtx.Init(/*max_residual=*/1000, /*q_scale=*/1, quants);
       for (int32_t dc : {1000, 0, -1000}) {
         const int32_t dc_error = mtx.DCError(dc, trf);
@@ -64,7 +65,8 @@ TEST_F(QuantMtxTest, DCErrorRoundTrip) {
       SCOPED_TRACE(SPrintf("quant: %d", quant));
       QuantMtx mtx;
       ASSERT_WP2_OK(mtx.AllocateForEncoder());
-      const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
+      const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant,
+                                               quant};
       mtx.Init(kMaxResidual, /*q_scale=*/1, quants);
       int32_t residuals[kMaxBlockSizePix2] = {0};
       int32_t range = kMaxResidual / num_coeffs * scale;
@@ -143,7 +145,8 @@ TEST_P(QuantMtxTestCpuInfo, DcQuantizedDynamicRange) {
         for (uint16_t quant : {0u, 29u, 36u, 123u, 177u,
                                203u, (uint32_t)kQFactorMax}) {
           SCOPED_TRACE(SPrintf("quant: %d", quant));
-          const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant};
+          const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant,
+                                                   quant};
           mtx.Init(kMaxResidual, /*q_scale=*/1, quants);
           int16_t coeffs[kMaxCoeffs];
           int16_t dequantized[kMaxCoeffs];
@@ -319,7 +322,8 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
       for (auto& s : segments) ASSERT_WP2_OK(s.AllocateForEncoder());
 
       // Quantize!
-      const uint16_t quants[kNumQuantZones] = { quant, quant, quant, quant };
+      const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant,
+                                               quant};
       segments[0].quant_y_.Init(/*max_residual=*/(1 << kYuvMaxPrec),
                                 /*q_scale=*/1, quants);
       segments[0].quant_u_.Init(/*max_residual=*/(1 << kYuvMaxPrec),

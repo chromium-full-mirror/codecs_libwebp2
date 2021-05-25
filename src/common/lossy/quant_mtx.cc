@@ -28,8 +28,9 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
-// idx at which we use the next quant parameter (for both x and y directions)
-static constexpr uint32_t kZones[kNumQuantZones] = { 1, 4, 16, 32 };
+// Index at which we use the next quant parameter (for both x and y directions).
+// The first zone is for DC only.
+static constexpr uint32_t kZones[kNumQuantZones] = {0, 1, 4, 16, 32};
 
 // Linearly interpolate values[] at point 'n' in interval [s, e]
 // TODO(skal): use fixed-point precision
@@ -210,6 +211,7 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
     // last segment is flat
     for (; s < kMaxBlockSizePix; ++s) qramp[s] = last;
   }
+  const uint32_t q_dc = steps[0];
 
   // Compute quantization params for the big 32x32 unique matrix
   const bool for_encoding = !iquants.empty();
@@ -218,12 +220,16 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
     const uint32_t qy = qramp[j];
     for (uint32_t i = j; i < 32; ++i) {
       const uint32_t qx = qramp[i];
-      const uint32_t q_idx = FindIdx((qx + qy + 1) >> 1, q_scale);
+      const uint32_t q_xy =
+          (i == 0 && j == 0) ? q_dc : ((qx + qy + 1) >> 1);
+      const uint32_t q_idx = FindIdx(q_xy, q_scale);
       // Matrix is symmetric.
       const uint32_t idx1 = i + j * WP2QStride;
       const uint32_t idx2 = j + i * WP2QStride;
       if (for_encoding) {
         iquants[idx1] = iquants[idx2] = iQs[q_idx];
+        // Rounding bias. A value of (1<<WP2QBits)/2 will result in normal
+        // rounding. A smaller value will bias towards 0.
         bias[idx1] = bias[idx2] = (1u << WP2QBits) / 3;
       }
       dequants[idx1] = dequants[idx2] = (int16_t)Qs[q_idx];
@@ -244,7 +250,7 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
 void QuantMtx::SetLambda() {
   // this expression was fit over the sampling of several images encoded at
   // fixed quality (=quant_steps[1]) with varying lambda.
-  lambda = 300. * std::pow(Qs[quant_steps[1]] / 50., 1.5);
+  lambda = 300. * std::pow(Qs[quant_steps[2]] / 50., 1.5);
   assert(lambda > 0.);
 }
 

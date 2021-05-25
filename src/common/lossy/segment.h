@@ -106,7 +106,7 @@ class Segment {
   // block dimensions.
   uint32_t GetMaxAbsDC(Channel channel) const;
 
-  uint16_t quant_steps_[4][kNumQuantZones] = {{0}, {0}, {0}, {0}};  // Y/U/V/A
+  uint16_t quant_steps_[4][kNumQuantZones] = {{0}};  // Y/U/V/A
   bool use_quality_factor_ = true;
   uint16_t quality_factor_ = kQualityToQFactor(75.f);
   uint16_t a_quality_factor_ = kQualityToQFactor(75.f);
