@@ -38,15 +38,15 @@ void AOMResidualWriter::WriteSignAndRest(int16_t res, bool is_dc,
   enc->PutBool(res < 0, "is_negative");
 }
 
-void AOMResidualWriter::WriteCoeff(const int16_t res[], uint32_t pos,
-                                   bool is_eob, uint32_t eob, bool first_is_dc,
+void AOMResidualWriter::WriteCoeff(int16_t res, uint32_t pos, bool is_eob,
+                                   uint32_t eob, bool first_is_dc,
                                    PlaneType plane_type, TrfSize tdim,
                                    TransformClass tx_class,
-                                   uint8_t* const levels,
+                                   const uint8_t* const levels,
                                    SymbolManager* const sm,
                                    ANSEncBase* const enc) {
   const uint32_t tx_width_log2 = TrfLog2[TrfWidth[tdim]];
-  const uint32_t level = std::abs(res[pos]);
+  const uint32_t level = std::abs(res);
   const uint32_t base_level = std::min(level, kNumQuantizerBaseLevels);
 
   const uint32_t base_context =
@@ -69,11 +69,8 @@ void AOMResidualWriter::WriteCoeff(const int16_t res[], uint32_t pos,
   }
   if (base_level > 0) {
     const bool is_dc = (pos == 0) && first_is_dc;
-    WriteSignAndRest(res[pos], is_dc, sm, enc);
+    WriteSignAndRest(res, is_dc, sm, enc);
   }
-
-  levels[PaddedIndex(pos, tx_width_log2)] =
-      std::min<uint32_t>(level, kQuantizerCoefficientBaseRangeContextClamp);
 }
 
 void AOMResidualWriter::WriteCoeffBaseRange(uint32_t level,
@@ -187,8 +184,9 @@ void AOMResidualWriter::WriteCoeffs(
   for (int i = eob - 1; i >= 0; --i) {
     const uint16_t pos = scan[i];
     const bool is_eob = (i == eob - 1);
-    WriteCoeff(res, pos, is_eob, eob, first_is_dc, plane_type, tdim, tx_class,
-               levels, sm, enc);
+    WriteCoeff(res[pos], pos, is_eob, eob, first_is_dc, plane_type, tdim,
+               tx_class, levels, sm, enc);
+    UpdateLevels(res[pos], pos, tdim, levels);
   }
 }
 

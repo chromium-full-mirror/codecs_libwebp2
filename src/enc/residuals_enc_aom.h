@@ -38,20 +38,19 @@ class AOMResidualWriter : public AOMResidualIO {
                           TransformPair tx_type, bool first_is_dc,
                           SymbolManager* const sm, ANSEncBase* const enc);
 
- private:
   // Writes the position of the end of block.
   static void WriteEOB(int eob, TrfSize tdim, PlaneType plane_type,
                        TransformClass tx_class, SymbolManager* const sm,
                        ANSEncBase* const enc);
 
-  // Writes the coefficient 'res[pos]'. Updates 'levels' for writing following
+  // Writes the coefficient 'res'. Updates 'levels' for writing following
   // coeffs. This method should be called in reverse zigzag order.
-  static void WriteCoeff(const int16_t res[], uint32_t pos, bool is_eob,
-                         uint32_t eob, bool first_is_dc, PlaneType plane_type,
-                         TrfSize tdim, TransformClass tx_class,
-                         uint8_t* const levels, SymbolManager* const sm,
-                         ANSEncBase* const enc);
+  static void WriteCoeff(int16_t res, uint32_t pos, bool is_eob, uint32_t eob,
+                         bool first_is_dc, PlaneType plane_type, TrfSize tdim,
+                         TransformClass tx_class, const uint8_t* const levels,
+                         SymbolManager* const sm, ANSEncBase* const enc);
 
+ private:
   // Writes the coefficient's sign, and the remaining part that is above
   // kQuantizerCoefficientBaseRangeContextClamp if needed.
   static void WriteSignAndRest(int16_t res, bool is_dc, SymbolManager* const sm,

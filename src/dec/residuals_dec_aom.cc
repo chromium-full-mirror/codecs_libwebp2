@@ -158,8 +158,7 @@ bool AOMResidualReader::ReadCoeff(uint32_t pos, bool is_eob, uint32_t eob,
     level += ReadCoeffBaseRange(cdf_context, plane_type, sr);
   }
 
-  levels[PaddedIndex(pos, tx_width_log2)] =
-      std::min<uint32_t>(level, kQuantizerCoefficientBaseRangeContextClamp);
+  UpdateLevels(level, pos, tdim, levels);
 
   coeffs[pos] = level;
   if (level > 0) {

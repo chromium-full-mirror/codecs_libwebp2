@@ -289,5 +289,12 @@ uint32_t AOMResidualIO::GetCoeffBaseRangeContextEob(uint32_t tx_width_log2,
   return ((row | column) < 2) ? 7 : 14;
 }
 
+void AOMResidualIO::UpdateLevels(int32_t res, uint32_t pos, TrfSize tdim,
+                                 uint8_t* const levels) {
+  const uint32_t tx_width_log2 = TrfLog2[TrfWidth[tdim]];
+  levels[PaddedIndex(pos, tx_width_log2)] = std::min<uint32_t>(
+      std::abs(res), kQuantizerCoefficientBaseRangeContextClamp);
+}
+
 }  // namespace libgav1
 }  // namespace WP2

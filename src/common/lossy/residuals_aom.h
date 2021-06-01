@@ -136,6 +136,8 @@ class AOMResidualIO {
   static CoeffBaseContextFunc GetCoeffsBaseContextFunc(TransformClass tx_class);
   static CoeffBaseRangeContextFunc GetCoeffBaseRangeContextFunc(
       TransformClass tx_class);
+  static void UpdateLevels(int32_t res, uint32_t pos, TrfSize tdim,
+                           uint8_t* const levels);
 
  protected:
   static uint32_t GetCoeffBaseContextEob(TrfSize tdim, uint32_t index);
