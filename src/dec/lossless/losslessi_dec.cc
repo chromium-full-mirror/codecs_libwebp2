@@ -63,14 +63,14 @@ static inline WP2Status ReadLZ77PrefixCode(
     uint32_t sym, uint32_t cluster, uint32_t min, uint32_t max, WP2_OPT_LABEL,
     WP2::SymbolReader* const sr, WP2::ANSDec* const dec, uint32_t* const result,
     float* const cost) {
-  const WP2::PrefixCode prefix_code_max(max - min, kLZZPrefixCodeSize);
+  const WP2::PrefixCode prefix_code_max(max - min, kLZ77PrefixCodeSize);
 
   // Read information about the prefix code representation.
   int32_t prefix;
   WP2_CHECK_STATUS(sr->ReadWithMax(sym, cluster, prefix_code_max.prefix, label,
                                    &prefix, cost));
   const uint32_t extra_bits_num =
-      WP2::PrefixCode::NumExtraBits(prefix, kLZZPrefixCodeSize);
+      WP2::PrefixCode::NumExtraBits(prefix, kLZ77PrefixCodeSize);
 
   // Figure out the rest of the prefix code representation.
   uint32_t extra_bits_value = 0;
@@ -80,7 +80,7 @@ static inline WP2Status ReadLZ77PrefixCode(
   } else if (prefix == (int32_t)prefix_code_max.prefix) {
     // In case we are in the upper part of the prefix code representation.
     const uint32_t new_range =
-        max - min + 1 - WP2::PrefixCode::Merge(prefix, kLZZPrefixCodeSize, 0);
+        max - min + 1 - WP2::PrefixCode::Merge(prefix, kLZ77PrefixCodeSize, 0);
     if (new_range <= WP2::kANSMaxRange) {
       extra_bits_value = dec->ReadRValue(new_range, label_bits.c_str());
       if (cost != nullptr) *cost += WP2Log2(new_range);
@@ -103,7 +103,7 @@ static inline WP2Status ReadLZ77PrefixCode(
     }
     if (cost != nullptr) *cost += extra_bits_num;
   }
-  *result = min + WP2::PrefixCode::Merge(prefix, kLZZPrefixCodeSize,
+  *result = min + WP2::PrefixCode::Merge(prefix, kLZ77PrefixCodeSize,
                                          extra_bits_value);
   return WP2_STATUS_OK;
 }
@@ -429,13 +429,19 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
       distance = PlaneCodeToDistance(width, dist_code);
       WP2_CHECK_OK(pixel_ind >= distance, WP2_STATUS_BITSTREAM_ERROR);
 
-      const uint32_t max_length =
-          std::min((uint32_t)((src_end - src) / 4), kMaxLZ77Length);
-      WP2_CHECK_STATUS(ReadLZ77PrefixCode(kSymbolLen, cluster,
-                                          /*min=*/kMinLZ77Length, max_length,
-                                          "len", sr, dec_, &length, cost_ptr));
-      WP2_CHECK_OK(src_end - src >= (ptrdiff_t)(4 * length),
-                   WP2_STATUS_BITSTREAM_ERROR);
+      length = 0;
+      do {
+        // Read in chunks of size kLZ77LengthEscape.
+        const uint32_t min_length = (length == 0) ? kLZ77LengthMin : 0u;
+        const uint32_t max_length = std::min(
+            (uint32_t)((src_end - (src + 4 * length)) / 4), kLZ77LengthEscape);
+        uint32_t length_tmp;
+        WP2_CHECK_STATUS(ReadLZ77PrefixCode(kSymbolLen, cluster, min_length,
+                                            max_length, "len", sr, dec_,
+                                            &length_tmp, cost_ptr));
+        length += length_tmp;
+        if (length_tmp != kLZ77LengthEscape) break;
+      } while (true);
 
       WP2_CHECK_STATUS(dec_->GetStatus());
       CopyBlock(src, distance, length);

@@ -21,6 +21,7 @@
 //
 
 #include <cassert>
+#include <limits>
 
 #include "src/common/lossless/color_cache.h"
 #include "src/dsp/lossless/encl_dsp.h"
@@ -107,14 +108,14 @@ class CostModel : public CountsBuffer<float> {
   }
 
   inline float GetLengthCost(uint32_t length) const {
-    WP2::PrefixCode prefix_code(length - kMinLZ77Length, kLZZPrefixCodeSize);
+    WP2::PrefixCode prefix_code(length - kLZ77LengthMin, kLZ77PrefixCodeSize);
     return counts_[kSymbolType][kSymbolTypeCopy] +
            counts_[kSymbolLen][prefix_code.prefix] + prefix_code.extra_bits_num;
   }
 
   inline float GetOffsetCost(uint32_t offset) const {
     const int32_t code = OffsetToPlaneCode(width_, offset);
-    WP2::PrefixCode prefix_code(code, kLZZPrefixCodeSize);
+    WP2::PrefixCode prefix_code(code, kLZ77PrefixCodeSize);
     return counts_[kSymbolDist][prefix_code.prefix] +
            prefix_code.extra_bits_num;
   }
@@ -129,7 +130,7 @@ class CostModel : public CountsBuffer<float> {
 
 // Describes how a segment of pixels of length 'len' is represented (copy ...)
 struct Segment {
-  uint16_t len;
+  uint32_t len;
   SymbolType mode;
 };
 
@@ -286,13 +287,13 @@ bool CostManager::Init(Segment* const segments, uint32_t num_pixels,
   segments_ = segments;
 
   const uint32_t cost_cache_size =
-      WP2::Clamp(num_pixels, kMinLZ77Length + 1, kMaxLZ77Length);
+      WP2::Clamp(num_pixels, kLZ77LengthMin + 1, kLZ77LengthEscape);
   if (!cost_cache_.resize(cost_cache_size)) return false;
 
   // Fill in the cost_cache_.
   cache_intervals_size_ = 1;
-  cost_cache_[kMinLZ77Length] = cost_model.GetLengthCost(kMinLZ77Length);
-  for (uint32_t i = kMinLZ77Length + 1; i < cost_cache_size; ++i) {
+  cost_cache_[kLZ77LengthMin] = cost_model.GetLengthCost(kLZ77LengthMin);
+  for (uint32_t i = kLZ77LengthMin + 1; i < cost_cache_size; ++i) {
     cost_cache_[i] = cost_model.GetLengthCost(i);
     // Get the number of bound intervals.
     if (cost_cache_[i] != cost_cache_[i - 1]) {
@@ -304,7 +305,7 @@ bool CostManager::Init(Segment* const segments, uint32_t num_pixels,
   // The worst case scenario with a cost model would be if every length has a
   // different cost, hence kMaxLZ77Length but that is impossible with the
   // current implementation that spirals around a pixel.
-  assert(cache_intervals_size_ <= kMaxLZ77Length);
+  assert(cache_intervals_size_ <= kLZ77LengthEscape);
   if (!cache_intervals_.resize(cache_intervals_size_)) {
     Reset();
     return false;
@@ -318,8 +319,8 @@ bool CostManager::Init(Segment* const segments, uint32_t num_pixels,
     // difference is found, a new interval is created and bounded.
     cur->start = 0;
     cur->end = 1;
-    cur->cost = cost_cache_[kMinLZ77Length];
-    for (uint32_t i = kMinLZ77Length + 1; i < cost_cache_size; ++i) {
+    cur->cost = cost_cache_[kLZ77LengthMin];
+    for (uint32_t i = kLZ77LengthMin + 1; i < cost_cache_size; ++i) {
       const float cost_val = cost_cache_[i];
       if (cost_val != cur->cost) {
         ++cur;
@@ -329,6 +330,8 @@ bool CostManager::Init(Segment* const segments, uint32_t num_pixels,
       }
       cur->end = i + 1;
     }
+    // Assume the last interval goes to infinity so that the cost is the same.
+    cur->end = std::numeric_limits<decltype(cur->end)>::max();
   }
 
   if (!costs_.resize(num_pixels)) {
@@ -336,7 +339,7 @@ bool CostManager::Init(Segment* const segments, uint32_t num_pixels,
     return false;
   }
   // Set the initial costs_ high for every pixel as we will keep the minimum.
-  std::fill(costs_.begin(), costs_.end(), 1e38f);
+  std::fill(costs_.begin(), costs_.end(), std::numeric_limits<float>::max());
 
   return true;
 }
@@ -346,12 +349,12 @@ bool CostManager::Init(Segment* const segments, uint32_t num_pixels,
 static inline void UpdateCost(CostManager* const manager, int i, int position,
                               float cost) {
   const uint32_t k = i - position;
-  assert(i >= position && k < kMaxLZ77Length);
+  assert(i >= position);
 
   if (manager->costs_[i] > cost) {
     manager->costs_[i] = cost;
     // Force the mode to be a copy.
-    manager->segments_[i].len = (uint16_t)(k + 1);
+    manager->segments_[i].len = k + 1;
     manager->segments_[i].mode = kSymbolTypeCopy;
   }
 }
@@ -399,7 +402,7 @@ static inline void PopInterval(CostManager* const manager,
 // If 'do_clean_intervals' is set to something different than 0, intervals that
 // end before 'i' will be popped.
 static inline void UpdateCostAtIndex(CostManager* const manager, int i,
-                                          int do_clean_intervals) {
+                                     bool do_clean_intervals) {
   CostInterval* current = manager->head_;
 
   while (current != NULL && current->start <= i) {
@@ -420,8 +423,8 @@ static inline void UpdateCostAtIndex(CostManager* const manager, int i,
 // it was orphaned (which can be NULL), set it at the right place in the list
 // of intervals using the start_ ordering and the previous interval as a hint.
 static inline void PositionOrphanInterval(CostManager* const manager,
-                                               CostInterval* const current,
-                                               CostInterval* previous) {
+                                          CostInterval* const current,
+                                          CostInterval* previous) {
   assert(current != NULL);
 
   if (previous == NULL) previous = manager->head_;
@@ -493,15 +496,15 @@ static inline WP2Status PushInterval(CostManager* const manager,
 
   if (len < kSkipDistance) {
     int j;
-    for (j = position + kMinLZ77Length; j < position + len; ++j) {
+    for (j = position + kLZ77LengthMin; j < position + len; ++j) {
       const uint32_t k = j - position;
-      assert(j >= position && k < kMaxLZ77Length);
-      const float cost_tmp = (float)(offset_cost + manager->cost_cache_[k]);
+      assert(j >= position);
+      const float cost_tmp = offset_cost + manager->cost_cache_[k];
 
       if (manager->costs_[j] > cost_tmp) {
         manager->costs_[j] = cost_tmp;
         // Force the mode to be a copy.
-        manager->segments_[j].len = (uint16_t)(k + 1);
+        manager->segments_[j].len = k + 1;
         manager->segments_[j].mode = kSymbolTypeCopy;
       }
     }
@@ -652,8 +655,8 @@ static WP2Status BackwardReferencesHashChainOffsetOnly(
         }
 
         if (i + len - 1 > reach) {
-          // We can only be go further with the same offset if the previous
-          // length was maxed, hence len_prev == len == kMaxLZ77Length.
+          // We can only go further with the same offset if the previous length
+          // was maxed.
           // TODO(vrabaud): bump i to the end right away (insert cache and
           //                update cost).
           // TODO(vrabaud): check if one of the points in between does not have
@@ -662,7 +665,7 @@ static WP2Status BackwardReferencesHashChainOffsetOnly(
           // better than whatever we add.
           uint32_t len_j = 0;
           uint32_t j;
-          assert(len == kMaxLZ77Length || len == num_pixels - i);
+          assert(len == num_pixels - i);
           // Figure out the last consecutive pixel within [i, reach + 1] with
           // the same offset.
           for (j = i; j <= reach; ++j) {
@@ -673,8 +676,8 @@ static WP2Status BackwardReferencesHashChainOffsetOnly(
           }
           if (j > reach) len_j = hash_chain.offset_length_[reach + 1].length;
           // Update the cost at j - 1 and j.
-          UpdateCostAtIndex(&cost_manager, j - 1, 0);
-          UpdateCostAtIndex(&cost_manager, j, 0);
+          UpdateCostAtIndex(&cost_manager, j - 1, /*do_clean_intervals=*/false);
+          UpdateCostAtIndex(&cost_manager, j, /*do_clean_intervals=*/false);
 
           WP2_CHECK_STATUS(
               PushInterval(&cost_manager,
@@ -684,7 +687,7 @@ static WP2Status BackwardReferencesHashChainOffsetOnly(
       }
     }
 
-    UpdateCostAtIndex(&cost_manager, i, 1);
+    UpdateCostAtIndex(&cost_manager, i, /*do_clean_intervals=*/true);
     offset_prev = offset;
     len_prev = len;
   }

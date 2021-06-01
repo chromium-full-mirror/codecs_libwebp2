@@ -316,11 +316,14 @@ static constexpr uint32_t kSmallPaletteLimit = 3;
 // part of a dictionary.
 static constexpr uint32_t kCodeToPlaneCodes = 120u;
 
-// Maximum length and distance (included) used in LZ77.
-// WebP had (1<<12)-1 for length and (1<<20)-120 for distance.
+// This constant is just to make the code understandable (like kMaxAlpha and
+// 255). Having a bigger value actually does not help.
+static constexpr uint32_t kLZ77LengthMin = 1u;
+static_assert(kLZ77LengthMin == 1u, "kLZ77LengthMin must be 1.");
+// Escape code for the LZ77 length.
 // Any value can be used, it does not have to be a power of two.
-static constexpr uint32_t kMaxLZ77Length = (1u << 14);
-static constexpr uint32_t kLZZPrefixCodeSize = 1;
+static constexpr uint32_t kLZ77LengthEscape = (1u << 14);
+static constexpr uint32_t kLZ77PrefixCodeSize = 1;
 
 // Min and max number of sampling bits for histograms.
 static constexpr uint32_t kHistogramBitsMin = 2;

@@ -43,7 +43,7 @@ class PixelMode {
  public:
   PixelMode() = default;
 
-  static inline PixelMode CreateCopy(uint32_t offset, uint16_t len) {
+  static inline PixelMode CreateCopy(uint32_t offset, uint32_t len) {
     return {kSymbolTypeCopy, len, offset};
   }
 
@@ -88,7 +88,7 @@ class PixelMode {
   }
 
  private:
-  PixelMode(SymbolType mode, uint16_t len, uint32_t offset, uint32_t range = 0)
+  PixelMode(SymbolType mode, uint32_t len, uint32_t offset, uint32_t range = 0)
       : mode_(mode), len_(len), range_(range) {
     argb_or_offset_.offset = offset;
   }
@@ -100,7 +100,7 @@ class PixelMode {
   }
 
   SymbolType mode_;
-  uint16_t len_;
+  uint32_t len_;
   union {
     int16_t argb[4];
     uint32_t offset;

@@ -91,7 +91,7 @@ class Encoder {
                                 const WP2::ProgressRange& progress,
                                 const LosslessSymbolsInfo& symbols_info_init,
                                 float* const cost_best,
-                                WP2::ANSEnc* const enc_best,
+                                WP2::ANSEnc* const enc_init,
                                 EncodeInfo* const encode_info,
                                 WP2::ANSDictionaries* const dicts_init);
 

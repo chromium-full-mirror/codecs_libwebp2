@@ -251,15 +251,6 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
              ColorEq(&argb[4 * (pos + len + 2)], &argb[4 * pos])) {
         ++len;
       }
-      if (len > kMaxLZ77Length) {
-        // Skip the pixels that match for distance=1 and length>kMaxLZ77Length
-        // because they are linked to their predecessor and we automatically
-        // check that in the main for loop below. Skipping means setting no
-        // predecessor in the chain, hence -1.
-        std::memset(chain + pos, 0xff, (len - kMaxLZ77Length) * sizeof(*chain));
-        pos += len - kMaxLZ77Length;
-        len = kMaxLZ77Length;
-      }
       // Process the rest of the hash chain.
       while (len) {
         tmp[7] = len--;
@@ -288,7 +279,7 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
   offset_length_[size - 1] = {0, 0};
   const uint32_t window_size = GetWindowSizeForHashChain(effort, width);
   for (uint32_t base_position = size - 2; base_position > 0;) {
-    const uint32_t max_len = std::min(size - 1 - base_position, kMaxLZ77Length);
+    const uint32_t max_len = size - 1 - base_position;
     const int16_t* const argb_start = &argb[4 * base_position];
     int iter = iter_max;
     uint32_t best_length = 0;
@@ -347,9 +338,7 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
     }
     // We have the best match but in case the two intervals continue matching
     // to the left, we have the best matches for the left-extended pixels.
-    uint32_t max_base_position = base_position;
     while (true) {
-      assert(best_length <= kMaxLZ77Length);
       offset_length_[base_position] = {best_offset, best_length};
       --base_position;
       // Stop if we don't have a match or if we are out of bounds.
@@ -360,18 +349,7 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
                    &argb[4 * base_position])) {
         break;
       }
-      // Stop if we are matching at its limit because there could be a closer
-      // matching interval with the same maximum length. Then again, if the
-      // matching interval is as close as possible (best_offset == 1), we will
-      // never find anything better so let's continue.
-      if (best_length == kMaxLZ77Length && best_offset != 1 &&
-          base_position + kMaxLZ77Length < max_base_position) {
-        break;
-      }
-      if (best_length < kMaxLZ77Length) {
-        ++best_length;
-        max_base_position = base_position;
-      }
+      ++best_length;
     }
   }
   offset_length_[0] = {0, 0};
@@ -426,7 +404,7 @@ static WP2Status BackwardReferencesRle(uint32_t width, uint32_t height,
   WP2_CHECK_STATUS(
       AddSingleLiteral(&argb[0], use_color_cache, color_cache.get(), refs));
   for (uint32_t i = 1; i < num_pixels;) {
-    const uint32_t max_len = std::min(num_pixels - i, kMaxLZ77Length);
+    const uint32_t max_len = num_pixels - i;
     const uint32_t rle_len =
         FindMatchLength(&argb[4 * i], &argb[4 * (i - 1)], 0, max_len);
     const uint32_t prev_row_len =
@@ -551,8 +529,7 @@ static WP2Status BackwardReferencesLz77Box(uint32_t width, uint32_t height,
   uint16_t* counts = &counts_ini[num_pixels - 2];
   for (int i = (int)num_pixels - 2; i >= 0; --i, --counts) {
     if (ColorEq(&argb[4 * i], &argb[4 * (i + 1)])) {
-      // Max out the counts to kMaxLength.
-      counts[0] = counts[1] + (counts[1] != kMaxLZ77Length);
+      counts[0] = counts[1] + 1;
     } else {
       counts[0] = 1;
     }
@@ -598,69 +575,45 @@ static WP2Status BackwardReferencesLz77Box(uint32_t width, uint32_t height,
   for (uint32_t i = 1; i < num_pixels; ++i) {
     uint32_t best_length = hash_chain_best.offset_length_[i].length;
     uint32_t best_offset;
-    bool do_compute = true;
-
-    if (best_length >= kMaxLZ77Length) {
-      // Do not recompute the best match if we already have a maximal one in
-      // the window.
-      best_offset = hash_chain_best.offset_length_[i].offset;
-      for (uint32_t ind = 0; ind < window_offsets_size; ++ind) {
-        if (best_offset == window_offsets[ind]) {
-          do_compute = false;
+    // Figure out if we should use the offset/length from the previous pixel
+    // as an initial guess and therefore only inspect the offsets in
+    // window_offsets_new[].
+    const bool use_prev = (best_length_prev > 1);
+    const uint32_t num_ind =
+        use_prev ? window_offsets_new_size : window_offsets_size;
+    best_length = use_prev ? best_length_prev - 1 : 0;
+    best_offset = use_prev ? best_offset_prev : 0;
+    // Find the longest match in a window around the pixel.
+    for (uint32_t ind = 0; ind < num_ind; ++ind) {
+      uint32_t curr_length = 0;
+      uint32_t j = i;
+      int j_offset =
+          use_prev ? i - window_offsets_new[ind] : i - window_offsets[ind];
+      if (j_offset < 0 || !ColorEq(&argb[4 * j_offset], &argb[4 * i])) {
+        continue;
+      }
+      // The longest match is the sum of how many times each pixel is
+      // repeated.
+      do {
+        const int counts_j_offset = counts_ini[j_offset];
+        const int counts_j = counts_ini[j];
+        if (counts_j_offset != counts_j) {
+          curr_length +=
+              (counts_j_offset < counts_j) ? counts_j_offset : counts_j;
           break;
         }
-      }
-    }
-    if (do_compute) {
-      // Figure out if we should use the offset/length from the previous pixel
-      // as an initial guess and therefore only inspect the offsets in
-      // window_offsets_new[].
-      const bool use_prev =
-          (best_length_prev > 1) && (best_length_prev < kMaxLZ77Length);
-      const uint32_t num_ind =
-          use_prev ? window_offsets_new_size : window_offsets_size;
-      best_length = use_prev ? best_length_prev - 1 : 0;
-      best_offset = use_prev ? best_offset_prev : 0;
-      // Find the longest match in a window around the pixel.
-      for (uint32_t ind = 0; ind < num_ind; ++ind) {
-        uint32_t curr_length = 0;
-        uint32_t j = i;
-        int j_offset =
-            use_prev ? i - window_offsets_new[ind] : i - window_offsets[ind];
-        if (j_offset < 0 || !ColorEq(&argb[4 * j_offset], &argb[4 * i])) {
-          continue;
-        }
-        // The longest match is the sum of how many times each pixel is
-        // repeated.
-        do {
-          const int counts_j_offset = counts_ini[j_offset];
-          const int counts_j = counts_ini[j];
-          if (counts_j_offset != counts_j) {
-            curr_length +=
-                (counts_j_offset < counts_j) ? counts_j_offset : counts_j;
-            break;
-          }
-          // The same color is repeated counts_pos times at j_offset and j.
-          curr_length += counts_j_offset;
-          j_offset += counts_j_offset;
-          j += counts_j_offset;
-        } while (curr_length <= kMaxLZ77Length && j < num_pixels &&
-                 ColorEq(&argb[4 * j_offset], &argb[4 * j]));
-        if (best_length < curr_length) {
-          best_offset =
-              use_prev ? window_offsets_new[ind] : window_offsets[ind];
-          if (curr_length >= kMaxLZ77Length) {
-            best_length = kMaxLZ77Length;
-            break;
-          } else {
-            best_length = curr_length;
-          }
-        }
+        // The same color is repeated counts_pos times at j_offset and j.
+        curr_length += counts_j_offset;
+        j_offset += counts_j_offset;
+        j += counts_j_offset;
+      } while (j < num_pixels && ColorEq(&argb[4 * j_offset], &argb[4 * j]));
+      if (best_length < curr_length) {
+        best_offset = use_prev ? window_offsets_new[ind] : window_offsets[ind];
+        best_length = curr_length;
       }
     }
 
     assert(i + best_length <= num_pixels);
-    assert(best_length <= kMaxLZ77Length);
     if (best_length <= MIN_LENGTH) {
       hash_chain->offset_length_[i] = {0, 0};
       best_offset_prev = 0;

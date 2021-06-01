@@ -56,8 +56,8 @@ void WriteLZ77PrefixCode(uint32_t sym, uint32_t cluster, int32_t value,
                          WP2::SymbolManager* const sw,
                          WP2::ANSEncBase* const enc, float* const cost) {
   // Write information about the prefix code representation.
-  const WP2::PrefixCode prefix_code(value - min, kLZZPrefixCodeSize);
-  const WP2::PrefixCode prefix_code_max(max - min, kLZZPrefixCodeSize);
+  const WP2::PrefixCode prefix_code(value - min, kLZ77PrefixCodeSize);
+  const WP2::PrefixCode prefix_code_max(max - min, kLZ77PrefixCodeSize);
   sw->ProcessWithCost(sym, cluster, prefix_code.prefix, prefix_code_max.prefix,
                       label, enc, cost);
 
@@ -68,7 +68,7 @@ void WriteLZ77PrefixCode(uint32_t sym, uint32_t cluster, int32_t value,
   if (prefix_code.prefix == prefix_code_max.prefix) {
     const uint32_t new_range =
         max - min + 1 -
-        WP2::PrefixCode::Merge(prefix_code.prefix, kLZZPrefixCodeSize, 0);
+        WP2::PrefixCode::Merge(prefix_code.prefix, kLZ77PrefixCodeSize, 0);
     if (new_range <= WP2::kANSMaxRange) {
       enc->PutRValue(prefix_code.extra_bits_value, new_range,
                      label_bits.c_str());
@@ -260,10 +260,25 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
         const uint32_t max_plane_code = pixel_ind + kCodeToPlaneCodes - 1;
         WriteLZ77PrefixCode(kSymbolDist, histogram_ix, plane_code,
                             /*min=*/0, max_plane_code, "dist", sw, enc, &cost);
-        const uint32_t max_length =
-            std::min(width * height - pixel_ind, kMaxLZ77Length);
-        WriteLZ77PrefixCode(kSymbolLen, histogram_ix, v.GetLength(),
-                            kMinLZ77Length, max_length, "len", sw, enc, &cost);
+        uint32_t length_left = v.GetLength();
+        uint32_t length_written = 0u;
+        do {
+          // Write in chunks of size at most kLZ77LengthEscape.
+          // The first chunk has a size of at least kMinLZ77Length (otherwise
+          // 0).
+          const uint32_t min_length =
+              (length_written == 0) ? kLZ77LengthMin : 0u;
+          const uint32_t max_length = std::min(
+              width * height - (pixel_ind + length_written), kLZ77LengthEscape);
+          const uint32_t length_to_write = (length_left > kLZ77LengthEscape)
+                                               ? kLZ77LengthEscape
+                                               : length_left;
+          WriteLZ77PrefixCode(kSymbolLen, histogram_ix, length_to_write,
+                              min_length, max_length, "len", sw, enc, &cost);
+          if (length_to_write < kLZ77LengthEscape) break;
+          length_left -= length_to_write;
+          length_written += length_to_write;
+        } while (true);
         break;
       }
       default:

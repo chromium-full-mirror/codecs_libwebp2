@@ -432,19 +432,23 @@ void LosslessSymbolsInfo::InitNonARGB(uint32_t num_pixels) {
     SetUnused(kSymbolDist);
     SetUnused(kSymbolLen);
   } else {
-    // Length is at most num_pixels - 1 as it has to fit in the image.
-    // By format definition, it is also <= kMaxLZ77Length.
-    const uint32_t max_length = std::min(kMaxLZ77Length, num_pixels - 1);
     constexpr StorageMethod storage_method = StorageMethod::kAuto;
     constexpr uint32_t num_clusters = 1u;
     // Distance is at most num_pixels - 1 but we have to add
     // kCodeToPlaneCodes - 1 to convert to code.
     WP2::PrefixCode prefix_code_max(num_pixels - 1 + kCodeToPlaneCodes - 1,
-                                    kLZZPrefixCodeSize);
+                                    kLZ77PrefixCodeSize);
     SetInfo(kSymbolDist, /*min=*/0, prefix_code_max.prefix, num_clusters,
             storage_method);
+    // Length is at most num_pixels - 1 as it has to fit in the image.
+    // By format definition, it is also <= kLZ77LengthEscape.
+    const uint32_t max_length = std::min(kLZ77LengthEscape, num_pixels - 1);
+    // If we have a chance to escape, we might have a length of 0 as the size of
+    // a second chunk.
+    const uint32_t min_length =
+        (max_length < kLZ77LengthEscape) ? kLZ77LengthMin : 0u;
     prefix_code_max =
-        WP2::PrefixCode(max_length - kMinLZ77Length, kLZZPrefixCodeSize);
+        WP2::PrefixCode(max_length - min_length, kLZ77PrefixCodeSize);
     SetInfo(kSymbolLen, /*min=*/0, prefix_code_max.prefix, num_clusters,
             storage_method);
   }

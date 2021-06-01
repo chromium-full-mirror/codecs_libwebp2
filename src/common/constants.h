@@ -153,11 +153,6 @@ static inline uint32_t MaxPaletteSize(uint32_t num_pixels) {
 static_assert(2 * kMaxPaletteSize < WP2::kANSMaxRange,
               "Max palette size is too big.");
 
-// This constant is just to make the code understandable (like kMaxAlpha and
-// 255). Having a bigger value actually does not help.
-static constexpr uint32_t kMinLZ77Length = 1u;
-static_assert(kMinLZ77Length == 1u, "kMinLZ77Length must be 1.");
-
 // Prefix code size when writing the ARGB ranges.
 constexpr uint32_t kARGBRangePrefixSize = 1;
 
