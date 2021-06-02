@@ -42,7 +42,6 @@ static uint32_t Interpolate(const uint16_t values[],
 
 WP2Status QuantMtx::AllocateForEncoder() {
   WP2_CHECK_ALLOC_OK(iquants.resize(kDataSize));
-  WP2_CHECK_ALLOC_OK(bias.resize(kDataSize));
   return WP2_STATUS_OK;
 }
 
@@ -228,9 +227,6 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
       const uint32_t idx2 = j + i * WP2QStride;
       if (for_encoding) {
         iquants[idx1] = iquants[idx2] = iQs[q_idx];
-        // Rounding bias. A value of (1<<WP2QBits)/2 will result in normal
-        // rounding. A smaller value will bias towards 0.
-        bias[idx1] = bias[idx2] = (1u << WP2QBits) / 3;
       }
       dequants[idx1] = dequants[idx2] = (int16_t)Qs[q_idx];
       if (idx1 == 0) IQ0 = iQs[q_idx];  // save dc inv-quant
@@ -258,8 +254,8 @@ void QuantMtx::Quantize(const int32_t residuals[], TrfSize dim,
                         bool first_is_dc, int16_t coeffs[],
                         uint32_t* const num_coeffs,
                         int16_t dequantized_coeffs[]) const {
-  WP2Quantize(iquants.data(), bias.data(),
-              residuals, coeffs, TrfWidth[dim], TrfHeight[dim]);
+  WP2Quantize(iquants.data(), kBias, residuals, coeffs, TrfWidth[dim],
+              TrfHeight[dim]);
   uint32_t last_nz = kNumCoeffs[dim];
   while (last_nz > 0 && coeffs[last_nz - 1] == 0) --last_nz;
   *num_coeffs = last_nz;
@@ -294,8 +290,7 @@ void QuantMtx::Quantize(const int32_t residuals[], TrfSize dim,
 
 int16_t QuantMtx::DCError(int32_t DC, TrfSize dim) const {
   const uint32_t iq = iquants[0];
-  const uint32_t b = bias[0];
-  int16_t v = WP2Quantize16b(std::abs(DC), iq, b);
+  int16_t v = WP2Quantize16b(std::abs(DC), iq, kBias);
   v = std::min(v, (int16_t)max_abs_res_dc[dim]) * dequants[0];
   if (DC < 0) v = -v;
   return DC - v;

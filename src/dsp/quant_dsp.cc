@@ -26,17 +26,16 @@
 
 namespace {
 
-void Quantize_C(const uint32_t iq[], const uint32_t bias[],
-                const int32_t res[], int16_t coeffs[], uint32_t W, uint32_t H) {
+void Quantize_C(const uint32_t iq[], uint32_t bias, const int32_t res[],
+                int16_t coeffs[], uint32_t W, uint32_t H) {
   for (uint32_t y = 0; y < H; ++y) {
     for (uint32_t x = 0; x < W; ++x) {
-      coeffs[x] = (res[x] < 0) ? -WP2Quantize16b(-res[x], iq[x], bias[x])
-                               :  WP2Quantize16b( res[x], iq[x], bias[x]);
+      coeffs[x] = (res[x] < 0) ? -WP2Quantize16b(-res[x], iq[x], bias)
+                               :  WP2Quantize16b( res[x], iq[x], bias);
     }
     coeffs += W;
     res += W;
     iq += WP2QStride;
-    bias += WP2QStride;
   }
 }
 
@@ -58,16 +57,14 @@ void Dequantize_C(const int16_t in[], const int16_t dequants[], int16_t out[],
 //------------------------------------------------------------------------------
 // SSE version
 
-void Quantize_SSE(const uint32_t iq[], const uint32_t bias[],
-                  const int32_t res[], int16_t coeffs[],
-                  uint32_t W, uint32_t H) {
+void Quantize_SSE(const uint32_t iq[], uint32_t bias, const int32_t res[],
+                  int16_t coeffs[], uint32_t W, uint32_t H) {
+  const __m128i BIAS = _mm_set1_epi32(bias);
   for (uint32_t y = 0; y < H; ++y) {
     if (W > 4) {
       for (uint32_t x = 0; x < W; x += 8) {
         const __m128i IQ0 = _mm_loadu_si128((const __m128i*)&iq[x + 0]);
         const __m128i IQ1 = _mm_loadu_si128((const __m128i*)&iq[x + 4]);
-        const __m128i BIAS0 = _mm_loadu_si128((const __m128i*)&bias[x + 0]);
-        const __m128i BIAS1 = _mm_loadu_si128((const __m128i*)&bias[x + 4]);
         const __m128i r0 = _mm_loadu_si128((const __m128i*)&res[x + 0]);
         const __m128i r1 = _mm_loadu_si128((const __m128i*)&res[x + 4]);
         const __m128i abs_r0 = _mm_abs_epi32(r0);
@@ -75,8 +72,8 @@ void Quantize_SSE(const uint32_t iq[], const uint32_t bias[],
         // |res| * iq + bias
         const __m128i A0 = _mm_mullo_epi32(abs_r0, IQ0);
         const __m128i A1 = _mm_mullo_epi32(abs_r1, IQ1);
-        const __m128i B0 = _mm_add_epi32(A0, BIAS0);
-        const __m128i B1 = _mm_add_epi32(A1, BIAS1);
+        const __m128i B0 = _mm_add_epi32(A0, BIAS);
+        const __m128i B1 = _mm_add_epi32(A1, BIAS);
         // >> WP2QBits
         const __m128i C0 = _mm_srli_epi32(B0, WP2QBits);
         const __m128i C1 = _mm_srli_epi32(B1, WP2QBits);
@@ -88,12 +85,11 @@ void Quantize_SSE(const uint32_t iq[], const uint32_t bias[],
       }
     } else {
       const __m128i IQ0 = _mm_loadu_si128((const __m128i*)iq);
-      const __m128i BIAS0 = _mm_loadu_si128((const __m128i*)bias);
       const __m128i r0 = _mm_loadu_si128((const __m128i*)res);
       const __m128i abs_r0 = _mm_abs_epi32(r0);
       // |res| * iq + bias
       const __m128i A0 = _mm_mullo_epi32(abs_r0, IQ0);
-      const __m128i B0 = _mm_add_epi32(A0, BIAS0);
+      const __m128i B0 = _mm_add_epi32(A0, BIAS);
       // >> WP2QBits
       const __m128i C0 = _mm_srli_epi32(B0, WP2QBits);
       // coeffs[] = sign ? -B : B;
@@ -144,18 +140,14 @@ WP2_TSAN_IGNORE_FUNCTION void QuantizeInitSSE() {
 
 }  // namespace
 
-
-void (*WP2Quantize)(const uint32_t iq[], const uint32_t bias[],
-                    const int32_t res[], int16_t coeffs[],
-                    uint32_t W, uint32_t H) = nullptr;
+void (*WP2Quantize)(const uint32_t iq[], uint32_t bias, const int32_t res[],
+                    int16_t coeffs[], uint32_t W, uint32_t H) = nullptr;
 void (*WP2Dequantize)(const int16_t in[], const int16_t dequants[],
                       int16_t out[],
                       uint32_t W, uint32_t H, uint32_t len) = nullptr;
 
 static volatile WP2CPUInfo quantize_last_cpuinfo_used =
     (WP2CPUInfo)&quantize_last_cpuinfo_used;
-
-extern void WP2QuantizeInitSSE();
 
 WP2_TSAN_IGNORE_FUNCTION void WP2QuantizeInit() {
   if (quantize_last_cpuinfo_used == WP2GetCPUInfo) return;

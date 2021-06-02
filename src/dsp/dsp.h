@@ -179,12 +179,12 @@ static inline int16_t WP2Quantize16b(uint32_t v, uint32_t iq, uint32_t bias) {
 static constexpr uint32_t WP2QStride = 32u;
 static_assert(WP2QStride >= WP2::kMaxBlockSizePix, "WP2QMaxW stride too short");
 
-// Quantize: coeffs[] = (res[] * iq[] + bias[]) >> WP2Bits (with sign handling).
-// iq[], bias[], res[] and coeffs[] are assumed to be pointing to at
+// Quantize: coeffs[] = (res[] * iq[] + bias) >> WP2Bits (with sign handling).
+// iq[], res[] and coeffs[] are assumed to be pointing to at
 // least 8 elements (uint32_t or int16_t) of memory underneath.
-extern void (*WP2Quantize)(const uint32_t iq[], const uint32_t bias[],
-                           const int32_t res[], int16_t coeffs[],
-                           uint32_t W, uint32_t H);
+extern void (*WP2Quantize)(const uint32_t iq[], uint32_t bias,
+                           const int32_t res[], int16_t coeffs[], uint32_t W,
+                           uint32_t H);
 // Performs unclamped out[] = in[] * dequants[] for i in [0..len), and pad the
 // rest of out[] with 0s. It's assumed that in[] is padded with 0s for i >= len.
 // It is the caller's responsability to ensure the in[] * dequants[] will not

@@ -72,18 +72,21 @@ struct QuantMtx {
   float lambda;  // used for rate-distortion optimization
 
  protected:
+  // Rounding bias. A value of (1<<WP2QBits)/2 will result in normal
+  // rounding. A smaller value will bias towards 0.
+  static constexpr uint32_t kBias = (1u << WP2QBits) / 3;
+
   uint16_t quant_steps[kNumQuantZones] = {0};   // quant id for each zones
 
   // quantization and dequantization factors for converting between transform
   // coefficients and coded levels:
-  //   level[] = (coeff[] * iquant[] + bias[]) >> WP2QBits
+  //   level[] = (coeff[] * iquant[] + bias) >> WP2QBits
   //   coeffs[] = level[] * dequant[]
   // quant[] incorporates the transform scaling constant sqrt(W * H / 4).
   static constexpr uint32_t kDataSize = WP2QStride * WP2QStride;
   int16_t dequants[kDataSize];   // 15bits (always > 0)
   // for encoder:
   Vector_u32 iquants;
-  Vector_u32 bias;
   // ranges of quantized DC residuals, for each transform
   uint16_t max_abs_res_dc[TRF_LAST];
 };

@@ -177,9 +177,9 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
   for (uint32_t i = 0; i < kBufferSize + kMaxBlockSizePix2; ++i) {
     buf[i] = (int32_t)(i % (2 * kMaxResidual + 1)) - kMaxResidual;
   }
-  uint32_t bias[2 * kMaxCoeffs], iq[2 * kMaxCoeffs];
+  uint32_t iq[2 * kMaxCoeffs];
   int16_t dq[2 * kMaxCoeffs];
-  for (uint32_t i = 0; i < 2 * kMaxCoeffs; ++i) bias[i] = i % (1 << WP2QBits);
+  const uint32_t bias = (1 << WP2QBits) / 2;
   for (uint32_t i = 0; i < 2 * kMaxCoeffs; ++i) {
     const uint32_t Q = (i * 17 + 4) % 1024;   // 1024=max quant-step value
     iq[i] = (1u << WP2QBits) / (Q + 1);
@@ -200,8 +200,8 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
       for (uint32_t i = 0; i < len; ++i) out0[i] = buf[(num % kBufferSize) + i];
       for (uint32_t i = len; i < bsize; ++i) out0[i] = 0;
       for (uint32_t k = 0; k < kLoop; ++k) {   // timing loop
-        WP2Quantize(&iq[num % kMaxCoeffs], &bias[num % kMaxCoeffs],
-                    out0, out1, TrfWidth[tdim], TrfHeight[tdim]);
+        WP2Quantize(&iq[num % kMaxCoeffs], bias, out0, out1, TrfWidth[tdim],
+                    TrfHeight[tdim]);
         WP2Dequantize(out1, &dq[num % kMaxCoeffs], out2,
                       TrfWidth[tdim], TrfHeight[tdim], len);
       }
@@ -216,8 +216,8 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
       }
     }
   }
-  EXPECT_EQ(crc1, 2948834497u);
-  EXPECT_EQ(crc2, 1683281745u);
+  EXPECT_EQ(crc1, 2473385545u);
+  EXPECT_EQ(crc2, 1824121491u);
 }
 
 INSTANTIATE_TEST_SUITE_P(QuantMtxTest1Instantiation, QuantMtxTestCpuInfo,
