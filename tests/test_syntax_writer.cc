@@ -73,15 +73,18 @@ TEST(TestSyntaxWriter, CopyFrom) {
   float cost, cost_dicts;
   uint32_t num_tokens;
   Vector_u8 buffer;
+  BlockContext block_context;
+  constexpr bool kUseAomCoeffs = true;
+  ASSERT_WP2_OK(block_context.Init(kUseAomCoeffs));
 
   {
     SyntaxWriter syntax_writer;
     ANSDictionaries dicts;
 
-    ASSERT_WP2_OK(syntax_writer.Init(
-        &dicts, config, gparams, yuv, ChromaSubsampling::k420, tile_rect,
-        (uint32_t)kBlocks.size(), /*use_aom_coeffs=*/true, /*use_splits=*/false,
-        ProgressRange()));
+    ASSERT_WP2_OK(syntax_writer.Init(&dicts, config, gparams, yuv,
+                                     ChromaSubsampling::k420, tile_rect,
+                                     (uint32_t)kBlocks.size(), kUseAomCoeffs,
+                                     /*use_splits=*/false, ProgressRange()));
     ASSERT_WP2_OK(syntax_writer.InitPass());
 
     // Encode a bunch of blocks.
@@ -110,11 +113,15 @@ TEST(TestSyntaxWriter, CopyFrom) {
       cb.SetReconstructedOutput(&out);
       cb.y_context_is_constant_ = false;
 
-      cb.QuantizeAll(config, gparams.segments_[cb.id_], kYChannel, false);
-      cb.QuantizeAll(config, gparams.segments_[cb.id_], kUChannel, cb.is420_);
-      cb.QuantizeAll(config, gparams.segments_[cb.id_], kVChannel, cb.is420_);
+      cb.QuantizeAll(config, block_context, gparams.segments_[cb.id_],
+                     kYChannel, false, syntax_writer.counters());
+      cb.QuantizeAll(config, block_context, gparams.segments_[cb.id_],
+                     kUChannel, cb.is420_, syntax_writer.counters());
+      cb.QuantizeAll(config, block_context, gparams.segments_[cb.id_],
+                     kVChannel, cb.is420_, syntax_writer.counters());
       if (!gparams.a_preds_.empty()) {
-        cb.QuantizeAll(config, gparams.segments_[cb.id_], kAChannel, false);
+        cb.QuantizeAll(config, block_context, gparams.segments_[cb.id_],
+                       kAChannel, false, syntax_writer.counters());
       }
 
       // All blocks before 'kCopyAtBlockIndex' are only recorded by

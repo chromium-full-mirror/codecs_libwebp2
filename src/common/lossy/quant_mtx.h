@@ -51,10 +51,11 @@ struct QuantMtx {
 
   // Quantizes or dequantizes.
   // If 'first_is_dc', 'coeffs[0]' will be treated differently.
+  // If 'use_bias' is true, rounding will be biased towards 0.
   // The dequantized result is returned in 'dequantized_coeffs'.
   void Quantize(const int32_t residuals[], TrfSize dim, bool first_is_dc,
                 int16_t coeffs[], uint32_t* const num_coeffs,
-                int16_t dequantized_coeffs[]) const;
+                int16_t dequantized_coeffs[], bool use_bias = true) const;
   // Returns the dequantization matrix (used by decoder only).
   const int16_t* Dequant() const { return dequants; }
 
@@ -75,6 +76,7 @@ struct QuantMtx {
   // Rounding bias. A value of (1<<WP2QBits)/2 will result in normal
   // rounding. A smaller value will bias towards 0.
   static constexpr uint32_t kBias = (1u << WP2QBits) / 3;
+  static constexpr uint32_t kNoBias = (1u << WP2QBits) / 2;
 
   uint16_t quant_steps[kNumQuantZones] = {0};   // quant id for each zones
 

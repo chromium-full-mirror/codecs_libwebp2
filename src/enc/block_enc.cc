@@ -142,12 +142,15 @@ void CodedBlock::GetResiduals(Channel channel, uint32_t tf_i,
 }
 
 void CodedBlock::TransformAndReconstruct(
-    const EncoderConfig& config, const Segment& segment, Channel channel,
-    uint32_t tf_i, bool reduced_transform, const Plane16& prediction,
-    const BlockCoeffs16* const res, BlockCoeffs16* const tmp) {
+    const EncoderConfig& config, const BlockContext& context,
+    const Segment& segment, Channel channel, uint32_t tf_i,
+    bool reduced_transform, const Plane16& prediction,
+    const BlockCoeffs16* const res, BlockCoeffs16* const tmp,
+    Counters* const counters) {
   assert(tf_i < GetNumTransforms(channel));
   const CodingParams* const params = GetCodingParams(channel);
   const QuantMtx& quant = segment.GetQuant(channel);
+  BlockCoeffs16& dequantized = *tmp;
 
   const BlockSize split_size =
       GetSplitSize(dim(), GetCodingParams(channel)->split_tf);
@@ -170,21 +173,37 @@ void CodedBlock::TransformAndReconstruct(
     tf_res[0] += dc_error_[channel];
     dc_error_next_[channel] = quant.DCError(tf_res[0], tdim(channel));
   }
+  // Use some kind of coeff optimization (rd-opt based on av1 coeffs, or simple
+  // dropout).
+  const bool use_coeff_optim =
+      (params->tf != kIdentityIdentity && config.effort >= 7);
+  const bool use_av1_coeff_optim = (use_coeff_optim && context.use_aom() &&
+                                    channel == kYChannel && config.effort >= 8);
+  // Av1CoeffOptimization works better if quantization uses simple rounding
+  // instead of biasing towards 0.
+  const bool use_bias = !use_av1_coeff_optim;
   quant.Quantize(tf_res, tdim(channel), IsFirstCoeffDC(channel),
                  coeffs_[channel][tf_i], &num_coeffs_[channel][tf_i],
-                 (*tmp)[tf_i]);
+                 dequantized[tf_i], use_bias);
 
-  if (params->tf != kIdentityIdentity && config.effort >= 7) {
-    DropoutCoeffs(tdim(channel), segment.quality_factor_,
-                  coeffs_[channel][tf_i], &num_coeffs_[channel][tf_i],
-                  (*tmp)[tf_i]);
+  if (use_coeff_optim) {
+    if (use_av1_coeff_optim) {
+      Av1CoeffOptimization(
+          channel, params->tf, tdim(channel), quant, IsFirstCoeffDC(channel),
+          tf_res, coeffs_[channel][tf_i], &num_coeffs_[channel][tf_i],
+          dequantized[tf_i], counters->residuals_aom(), /*rate_cost=*/nullptr);
+    } else {
+      DropoutCoeffs(tdim(channel), segment.quality_factor_,
+                    coeffs_[channel][tf_i], &num_coeffs_[channel][tf_i],
+                    dequantized[tf_i]);
+    }
   }
 
   if (channel == kYChannel && mtx_set_ != nullptr) {
     mtx_set_->DecideUseRndMtx(this);  // TODO(skal): later: U/V channel?
   }
 
-  Reconstruct(channel, tf_i, reduced_transform, tmp, prediction);
+  Reconstruct(channel, tf_i, reduced_transform, &dequantized, prediction);
 }
 
 void CodedBlock::Reconstruct(Channel channel, uint32_t tf_i,
@@ -216,30 +235,37 @@ void CodedBlock::Reconstruct(Channel channel, uint32_t tf_i,
 }
 
 void CodedBlock::QuantizeAll(const EncoderConfig& config,
+                             const BlockContext& context,
                              const Segment& segment, Channel channel,
-                             bool reduced_transform) {
+                             bool reduced_transform, Counters* const counters) {
   for (uint32_t tf_i = 0; tf_i < GetNumTransforms(channel); ++tf_i) {
-    Quantize(config, segment, channel, tf_i, reduced_transform);
+    Quantize(config, context, segment, channel, tf_i, reduced_transform,
+             counters);
   }
 }
 
 void CodedBlock::QuantizeAllButFirst(const EncoderConfig& config,
+                                     const BlockContext& context,
                                      const Segment& segment, Channel channel,
-                                     bool reduced_transform) {
+                                     bool reduced_transform,
+                                     Counters* const counters) {
   for (uint32_t tf_i = 1; tf_i < GetNumTransforms(channel); ++tf_i) {
-    Quantize(config, segment, channel, tf_i, reduced_transform);
+    Quantize(config, context, segment, channel, tf_i, reduced_transform,
+             counters);
   }
 }
 
-void CodedBlock::Quantize(const EncoderConfig& config, const Segment& segment,
+void CodedBlock::Quantize(const EncoderConfig& config,
+                          const BlockContext& context, const Segment& segment,
                           Channel channel, uint32_t tf_i,
-                          bool reduced_transform) {
+                          bool reduced_transform, Counters* const counters) {
   BlockCoeffs16 res, tmp;
   Plane16* const out = &out_.GetChannel(channel);
   PredictBlock(channel, tf_i, out->Row(0), out->Step());
   GetResiduals(channel, tf_i, /*prediction=*/*out, &res);
-  TransformAndReconstruct(config, segment, channel, tf_i, reduced_transform,
-                          /*prediction=*/*out, &res, &tmp);
+  TransformAndReconstruct(config, context, segment, channel, tf_i,
+                          reduced_transform,
+                          /*prediction=*/*out, &res, &tmp, counters);
 }
 
 //------------------------------------------------------------------------------
@@ -502,9 +528,9 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
     BlockCoeffs16 tmp;
     // depends on 'params->tf'
     GetResiduals(channel, /*tf_i=*/0, prediction_p, &tmp);
-    TransformAndReconstruct(config, segment, channel, /*tf_i=*/0, reduced,
-                            prediction_p, &tmp, &tmp);
-    QuantizeAllButFirst(config, segment, channel, reduced);
+    TransformAndReconstruct(config, context, segment, channel, /*tf_i=*/0,
+                            reduced, prediction_p, &tmp, &tmp, counters);
+    QuantizeAllButFirst(config, context, segment, channel, reduced, counters);
 
     const uint32_t distortion = GetDisto(channel);
     float current_score = distortion;
@@ -683,7 +709,7 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
   for (bool split_tf : {false, true}) {
     params->split_tf = split_tf;
 
-    QuantizeAll(config, segment, channel, reduced);
+    QuantizeAll(config, context, segment, channel, reduced, counters);
 
     const uint32_t distortion = GetDisto(channel);
     float score = distortion;
@@ -785,7 +811,8 @@ WP2Status CodedBlock::OptimizeModesLuma(
 
   // TODO(yguyon): Remember the params during the last Quantize() call and omit
   //               this one if they are equivalent.
-  QuantizeAll(config, segment, kYChannel, /*reduced_transform=*/false);
+  QuantizeAll(config, context, segment, kYChannel, /*reduced_transform=*/false,
+              counters);
   return WP2_STATUS_OK;
 }
 
@@ -849,8 +876,8 @@ WP2Status CodedBlock::OptimizeModesChroma(
                                              has_alpha, segment.quant_u_,
                                              segment.quant_v_, counters));
   }
-  QuantizeAll(config, segment, kUChannel, is420_);
-  QuantizeAll(config, segment, kVChannel, is420_);
+  QuantizeAll(config, context, segment, kUChannel, is420_, counters);
+  QuantizeAll(config, context, segment, kVChannel, is420_, counters);
   if (diffusion > 0) {
     dc_error_u->Store(mgr, blk(), dc_error_next_[kUChannel]);
     dc_error_v->Store(mgr, blk(), dc_error_next_[kVChannel]);

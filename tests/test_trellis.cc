@@ -234,6 +234,26 @@ TEST(DropoutTest, ComplexTest) {
 
 class Av1CoeffOptimizationTest : public testing::TestWithParam<int> {};
 
+static const uint32_t kMaxResidual = 512;
+
+void FillRandomResiduals(TrfSize tdim, uint32_t seed,
+                         int32_t residuals[kMaxBlockSizePix2]) {
+  std::fill(residuals, residuals + kMaxBlockSizePix2, 0);
+  const uint16_t* const scan = ResidualIterator::GetZigzag(tdim);
+
+  UniformIntDistribution rand(seed);
+  const uint32_t max_coeffs = kNumCoeffs[tdim];
+  // Random coeffs.
+  for (uint32_t i = 0; i < max_coeffs; ++i) {
+    // Random eob.
+    if (i > (max_coeffs * 0.75) && rand.FlipACoin()) break;
+    // Make coeffs smaller and smaller.
+    const int max =
+        std::max<int>(kMaxResidual * (1.f - ((float)i / max_coeffs)), 3);
+    residuals[scan[i]] = rand.Get(-max, max);
+  }
+}
+
 TEST_P(Av1CoeffOptimizationTest, RandomTest) {
   WP2QuantizeInit();
   ANSInit();
@@ -247,25 +267,12 @@ TEST_P(Av1CoeffOptimizationTest, RandomTest) {
   QuantMtx quant;
   quant.lambda = 1000;
   const uint16_t quant_steps[] = {20, 50, 50, 50, 50};
-  const int max_residual = 512;
   ASSERT_WP2_OK(quant.AllocateForEncoder());
-  quant.Init(max_residual, /*q_scale=*/1.f, quant_steps);
+  quant.Init(kMaxResidual, /*q_scale=*/1.f, quant_steps);
   const bool first_is_dc = true;
-  int32_t residuals[kMaxBlockSizePix2] = {0};
+  int32_t residuals[kMaxBlockSizePix2];
 
-  const uint16_t* const scan = ResidualIterator::GetZigzag(tdim);
-
-  UniformIntDistribution rand(seed);
-  const uint32_t max_coeffs = kNumCoeffs[tdim];
-  // Random coeffs.
-  for (uint32_t i = 0; i < max_coeffs; ++i) {
-    // Random eob.
-    if (i > (max_coeffs * 0.75) && rand.FlipACoin()) break;
-    // Make coeffs smaller and smaller.
-    const int max =
-        std::max<int>(max_residual * (1.f - ((float)i / max_coeffs)), 3);
-    residuals[scan[i]] = rand.Get(-max, max);
-  }
+  FillRandomResiduals(tdim, seed, residuals);
 
   int16_t coeffs[kMaxBlockSizePix2];
   int16_t dequantized_coeffs[kMaxBlockSizePix2];
@@ -292,17 +299,19 @@ TEST_P(Av1CoeffOptimizationTest, RandomTest) {
                        counters.residuals_aom(), &rate_cost);
 
   // Check updated num_coeffs value is valid.
-  uint32_t new_num_coeffs = max_coeffs;
+  uint32_t new_num_coeffs = kNumCoeffs[tdim];
   while (new_num_coeffs > 0 && coeffs[new_num_coeffs - 1] == 0) {
     --new_num_coeffs;
   }
   EXPECT_EQ(new_num_coeffs, num_coeffs);
 
+  const uint16_t* const scan = ResidualIterator::GetZigzag(tdim);
+
   // Check coeffs have only been lowered by one, or set to 0 if before the new
   // eob.
   uint32_t seen_eob = false;
   uint32_t num_changed = 0;
-  for (int32_t i = max_coeffs - 1; i >= 0; --i) {
+  for (int32_t i = kNumCoeffs[tdim] - 1; i >= 0; --i) {
     const uint32_t pos = scan[i];
     int16_t before = coeffs_copy[pos];
     int16_t after = coeffs[pos];

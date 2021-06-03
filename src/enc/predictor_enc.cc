@@ -61,7 +61,8 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
     uint32_t dist[2];
     float scores[2], res_rate[2], pred_rate[2];
     for (uint32_t c : {kU, kV}) {
-      cb->QuantizeAll(config_, segment_, kChannels[c], reduced_);
+      cb->QuantizeAll(config_, context_, segment_, kChannels[c], reduced_,
+                      counters_);
 
       dist[c] = cb->GetDisto(kChannels[c]);
 
@@ -105,10 +106,11 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
     assert(cb->GetImplicitTf(channel_) == kUnknownTf ||
            cb->GetImplicitTf(channel_) == tf);
 
-    cb->TransformAndReconstruct(config_, segment_, channel_, /*tf_i=*/0,
-                                reduced_, prediction, res, tmp);
-    cb->QuantizeAllButFirst(config_, segment_, channel_,
-                            /*reduced_transform=*/false);
+    cb->TransformAndReconstruct(config_, context_, segment_, channel_,
+                                /*tf_i=*/0, reduced_, prediction, res, tmp,
+                                counters_);
+    cb->QuantizeAllButFirst(config_, context_, segment_, channel_,
+                            /*reduced_transform=*/false, counters_);
 
     dist_ = cb->GetDisto(channel_);
 

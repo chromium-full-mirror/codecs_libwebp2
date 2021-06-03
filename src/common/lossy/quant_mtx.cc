@@ -253,9 +253,9 @@ void QuantMtx::SetLambda() {
 void QuantMtx::Quantize(const int32_t residuals[], TrfSize dim,
                         bool first_is_dc, int16_t coeffs[],
                         uint32_t* const num_coeffs,
-                        int16_t dequantized_coeffs[]) const {
-  WP2Quantize(iquants.data(), kBias, residuals, coeffs, TrfWidth[dim],
-              TrfHeight[dim]);
+                        int16_t dequantized_coeffs[], bool use_bias) const {
+  WP2Quantize(iquants.data(), use_bias ? kBias : kNoBias, residuals, coeffs,
+              TrfWidth[dim], TrfHeight[dim]);
   uint32_t last_nz = kNumCoeffs[dim];
   while (last_nz > 0 && coeffs[last_nz - 1] == 0) --last_nz;
   *num_coeffs = last_nz;

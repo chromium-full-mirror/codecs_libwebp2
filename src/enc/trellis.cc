@@ -518,7 +518,8 @@ void Av1CoeffOptimization(Channel channel, TransformPair tx_type, TrfSize tdim,
   uint8_t levels[libgav1::kMaxTxBufferDim * libgav1::kMaxTxBufferDim];
   if (eob > 1) InitLevels(coeffs, width, height, levels);
 
-  const float lambda = quant.lambda * 0.5;  // Empirical value.
+  const float lambda =
+      std::pow(quant.lambda * 0.15f, 1.2f);  // Empirical value.
 
   const float eob_cost = GetEobCost(eob, plane_type, tdim, tx_class, counter);
   // Accumulated rate of storing coeffs.

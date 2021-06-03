@@ -163,24 +163,30 @@ class CodedBlock : public CodedBlockBase {
   // 'tmp' is used for temporary computation. It can be the same as 'res' if
   // the caller doesn't mind losing the data.
   void TransformAndReconstruct(const EncoderConfig& config,
+                               const BlockContext& context,
                                const Segment& segment, Channel channel,
                                uint32_t tf_i, bool reduced_transform,
                                const Plane16& prediction,
                                const BlockCoeffs16* const res,
-                               BlockCoeffs16* const tmp);
+                               BlockCoeffs16* const tmp,
+                               Counters* const counters);
 
   // Predicts, quantizes and reconstructs channel 'channel'. If
   // 'reduced_transform' is true, 2x downsampling of residuals is performed.
   // Applies to...
   // ... the given sub transform 'tf_i'
-  void Quantize(const EncoderConfig& config, const Segment& segment,
-                Channel channel, uint32_t tf_i, bool reduced_transform);
+  void Quantize(const EncoderConfig& config, const BlockContext& context,
+                const Segment& segment, Channel channel, uint32_t tf_i,
+                bool reduced_transform, Counters* const counters);
   // ... all sub transforms
-  void QuantizeAll(const EncoderConfig& config, const Segment& segment,
-                   Channel channel, bool reduced_transform);
+  void QuantizeAll(const EncoderConfig& config, const BlockContext& context,
+                   const Segment& segment, Channel channel,
+                   bool reduced_transform, Counters* const counters);
   // ... all sub transforms except the first one (noop if there is only one)
-  void QuantizeAllButFirst(const EncoderConfig& config, const Segment& segment,
-                           Channel channel, bool reduced_transform);
+  void QuantizeAllButFirst(const EncoderConfig& config,
+                           const BlockContext& context, const Segment& segment,
+                           Channel channel, bool reduced_transform,
+                           Counters* const counters);
 
   // Reconstructs 'channel' from dequantized residuals 'res' and 'prediction'
   // to 'out_'. 'prediction' can also point to 'out_' or be empty.
