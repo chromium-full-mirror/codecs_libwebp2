@@ -18,7 +18,7 @@
 //  ./av1enc input [-o output.png] [-d bitstream.av1] [-q xx ...]
 //
 // The -setenv option allows AV1 behavior modifications and comparisons.
-// By example the following code can be added anywhere
+// For example the following code can be added anywhere
 // (such as in third_party/libaom/git_root/av1/decoder/decodeframe.c):
 //     if (getenv("STUFF_ON")) { /* do stuff */ }
 // And then this tool can be called:

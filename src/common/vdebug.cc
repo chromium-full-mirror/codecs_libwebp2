@@ -162,7 +162,8 @@ void CodedBlockBase::ToBlockInfo(bool use_aom_coeffs,
   blk->uv_pred = GetCodingParams(kUChannel).pred->mode();
   std::memset(blk->coeffs, 0, sizeof(blk->coeffs));
   std::fill(blk->split_tf, blk->split_tf + 4, false);
-  std::fill(blk->encoding_method[0], blk->encoding_method[0] + 4 * 4, -1);
+  std::fill(&blk->encoding_method[0][0], &blk->encoding_method[0][0] + 4 * 4,
+            -1);
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !HasLossyAlpha()) continue;
     blk->split_tf[c] = GetCodingParams(c).split_tf;

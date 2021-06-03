@@ -97,8 +97,7 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
   // Computes the score and dist of the given predictor 'p' and transform 'tf'
   // applied to 'cb'.
   WP2Status UpdateYAPredScore(const Predictor& p, const Plane16& prediction,
-                              TransformPair tf, uint32_t num_transforms,
-                              const BlockCoeffs16* const res,
+                              TransformPair tf, const BlockCoeffs16* const res,
                               BlockCoeffs16* const tmp, CodedBlock* const cb) {
     assert(channel_ == kYChannel || channel_ == kAChannel);
     CodedBlock::CodingParams* const params = cb->GetCodingParams(channel_);
@@ -141,14 +140,12 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
   // Computes the score of the predictior 'p' and stores its score, dist etc. if
   // it is the best.
   WP2Status UpdatePredScore(const Predictor* const p, const Plane16& prediction,
-                            TransformPair tf, uint32_t num_tf,
-                            const BlockCoeffs16* const res,
+                            TransformPair tf, const BlockCoeffs16* const res,
                             BlockCoeffs16* const tmp, CodedBlock* const cb) {
     if (channel_ == kUChannel) {
       WP2_CHECK_STATUS(UpdateUVPredScore(*p, cb));
     } else {
-      WP2_CHECK_STATUS(
-          UpdateYAPredScore(*p, prediction, tf, num_tf, res, tmp, cb));
+      WP2_CHECK_STATUS(UpdateYAPredScore(*p, prediction, tf, res, tmp, cb));
     }
     if (score_ < best_score_) {
       best_score_ = score_;
@@ -198,7 +195,6 @@ WP2Status Predictors::FindBest(
   // This function should only be called once for both U and V.
   assert(channel_ != kVChannel);
   const bool is_uv = (channel_ == kUChannel);
-  const uint32_t num_tf = std::max((uint32_t)transforms.size(), 1u);
   PredictorScorer scorer(
       config, tile_rect, context, segment, channel_, num_channels, reduced,
       counters, *best_score);
@@ -221,12 +217,12 @@ WP2Status Predictors::FindBest(
       cb->GetResiduals(channel_, /*tf_i=*/0, pred_view, &res);
     }
     if (p->OverridesTransform(channel_, &overridden_tf)) {
-      WP2_CHECK_STATUS(scorer.UpdatePredScore(p, pred_view, overridden_tf,
-                                              /*num_tf=*/1, &res, &tmp, cb));
+      WP2_CHECK_STATUS(
+          scorer.UpdatePredScore(p, pred_view, overridden_tf, &res, &tmp, cb));
     } else {
       for (TransformPair tf : transforms) {
         WP2_CHECK_STATUS(
-            scorer.UpdatePredScore(p, pred_view, tf, num_tf, &res, &tmp, cb));
+            scorer.UpdatePredScore(p, pred_view, tf, &res, &tmp, cb));
       }
     }
 
@@ -278,15 +274,15 @@ WP2Status Predictors::FindBest(
       cb->GetResiduals(channel_, /*tf_i=*/0, pred_view, &res);
     }
     if (p->OverridesTransform(channel_, &overridden_tf)) {
-      WP2_CHECK_STATUS(scorer.UpdatePredScore(p, pred_view, overridden_tf,
-                                              /*num_tf=*/1, &res, &tmp, cb));
+      WP2_CHECK_STATUS(
+          scorer.UpdatePredScore(p, pred_view, overridden_tf, &res, &tmp, cb));
 
       *(end++) = {scorer.GetLastScore(), scorer.GetLastDist(), p,
                   overridden_tf};
     } else {
       for (TransformPair tf : transforms) {
         WP2_CHECK_STATUS(
-            scorer.UpdatePredScore(p, pred_view, tf, num_tf, &res, &tmp, cb));
+            scorer.UpdatePredScore(p, pred_view, tf, &res, &tmp, cb));
         *(end++) = {scorer.GetLastScore(), scorer.GetLastDist(), p, tf};
       }
     }
@@ -319,9 +315,8 @@ WP2Status Predictors::FindBest(
                              pred_view.Step());
             cb->GetResiduals(channel_, /*tf_i=*/0, pred_view, &res);
           }
-          const bool ovrd_tf = p->OverridesTransform(channel_, &overridden_tf);
-          WP2_CHECK_STATUS(scorer.UpdatePredScore(
-              p, pred_view, s.tf, ovrd_tf ? 1 : num_tf, &res, &tmp, cb));
+          WP2_CHECK_STATUS(
+              scorer.UpdatePredScore(p, pred_view, s.tf, &res, &tmp, cb));
         }
       }
     }
