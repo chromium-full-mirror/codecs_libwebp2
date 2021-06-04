@@ -58,6 +58,11 @@ struct QuantMtx {
                 int16_t dequantized_coeffs[], bool use_bias = true) const;
   // Returns the dequantization matrix (used by decoder only).
   const int16_t* Dequant() const { return dequants; }
+  // Returns the dequantization value for the coeff at position 'pos' for a
+  // transform of width 'tx_width'.
+  int16_t Dequant(uint32_t pos, uint32_t tx_width) const {
+    return dequants[QuantIdx(pos, tx_width)];
+  }
 
   // Computes the quantization error on DC.
   // Note that DC, and hence the DC error, is scaled by sqrt(dim/2) by
@@ -67,10 +72,18 @@ struct QuantMtx {
 
   uint32_t GetMaxAbsResDC(TrfSize tdim) const { return max_abs_res_dc[tdim]; }
 
+  // Returns the index of the quant/dequant value corresponding to the coeff
+  // at position 'pos' for a transform of width 'tx_width'.
+  static uint32_t QuantIdx(uint32_t pos, uint32_t tx_width) {
+    return (pos % tx_width) + WP2QStride * (pos / tx_width);
+  }
+
   void Print() const;  // debug
 
  public:
   float lambda;  // used for rate-distortion optimization
+  // used for rate-distortion in trellis-like coeff optimization
+  float lambda_trellis;
 
  protected:
   // Rounding bias. A value of (1<<WP2QBits)/2 will result in normal

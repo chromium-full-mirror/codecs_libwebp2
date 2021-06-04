@@ -245,8 +245,9 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
 
 void QuantMtx::SetLambda() {
   // this expression was fit over the sampling of several images encoded at
-  // fixed quality (=quant_steps[1]) with varying lambda.
+  // fixed quality (=quant_steps[2]) with varying lambda.
   lambda = 300. * std::pow(Qs[quant_steps[2]] / 50., 1.5);
+  lambda_trellis = std::pow(Qs[quant_steps[2]], 1.95) * 0.08;
   assert(lambda > 0.);
 }
 

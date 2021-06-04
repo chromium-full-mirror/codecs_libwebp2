@@ -216,8 +216,8 @@ void UpdateCoeffGeneral(uint32_t i, uint32_t eob, libgav1::PlaneType plane_type,
                         uint8_t* const levels, float* accu_rate,
                         int64_t* accu_disto_minus_disto0,
                         SymbolCounter* const counter) {
-  const int16_t dequant = quant.Dequant()[scan[i]];
   const uint16_t pos = scan[i];
+  const int16_t dequant = quant.Dequant(pos, TrfWidth[tdim]);
   const int16_t coeff = coeffs[pos];
   assert(eob > 0);
   const bool is_last = (i == (eob - 1));
@@ -274,10 +274,10 @@ void UpdateCoeffMiddle(int i, int eob, libgav1::PlaneType plane_type,
                        const int32_t* const residuals, int16_t* const coeffs,
                        int16_t* const dequantized_coeffs, uint8_t* const levels,
                        float* accu_rate, SymbolCounter* const counter) {
-  const int16_t dequant = quant.Dequant()[scan[i]];
   assert(i != eob - 1);
   assert(i > 0);
   const uint16_t pos = scan[i];
+  const int16_t dequant = quant.Dequant(pos, TrfWidth[tdim]);
   const int16_t coeff = coeffs[pos];
   if (coeff == 0) {
     *accu_rate += GetCoeffCost(/*is_last=*/false, eob, pos, coeff, plane_type,
@@ -334,9 +334,9 @@ void UpdateCoeffEob(uint32_t i, libgav1::PlaneType plane_type, TrfSize tdim,
                     uint32_t* const nz_pos, uint32_t* eob, float* accu_rate,
                     int64_t* accu_disto_minus_disto0,
                     SymbolCounter* const counter) {
-  const int16_t dequant = quant.Dequant()[scan[i]];
   assert(i + 1 != *eob);
   const uint16_t pos = scan[i];
+  const int16_t dequant = quant.Dequant(pos, TrfWidth[tdim]);
   const int16_t coeff = coeffs[pos];
   if (coeff == 0) {
     *accu_rate += GetCoeffCost(/*is_last=*/false, *eob, pos, coeff, plane_type,
@@ -518,8 +518,7 @@ void Av1CoeffOptimization(Channel channel, TransformPair tx_type, TrfSize tdim,
   uint8_t levels[libgav1::kMaxTxBufferDim * libgav1::kMaxTxBufferDim];
   if (eob > 1) InitLevels(coeffs, width, height, levels);
 
-  const float lambda =
-      std::pow(quant.lambda * 0.15f, 1.2f);  // Empirical value.
+  const float lambda = quant.lambda_trellis;
 
   const float eob_cost = GetEobCost(eob, plane_type, tdim, tx_class, counter);
   // Accumulated rate of storing coeffs.

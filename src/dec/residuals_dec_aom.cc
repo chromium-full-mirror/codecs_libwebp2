@@ -164,7 +164,7 @@ bool AOMResidualReader::ReadCoeff(uint32_t pos, bool is_eob, uint32_t eob,
   if (level > 0) {
     const bool is_dc = (pos == 0 && first_is_dc);
     coeffs[pos] = ReadSignAndRest(coeffs[pos], is_dc, sr);
-    const uint32_t qpos = (pos % tx_width) + WP2QStride * (pos / tx_width);
+    const uint32_t qpos = QuantMtx::QuantIdx(pos, tx_width);
     coeffs[pos] *= dequant[qpos];
   }
 

@@ -58,7 +58,7 @@ void BM_Av1CoeffOptimization(benchmark::State& state) {
   const TransformPair tx_type = kDctDct;
   const TrfSize tdim = TRF_16x16;
   QuantMtx quant;
-  quant.lambda = 1000;
+  quant.lambda_trellis = 1000.f;
   const uint16_t quant_steps[] = {20, 50, 50, 50, 50};
   ASSERT_WP2_OK(quant.AllocateForEncoder());
   quant.Init(kMaxResidual, /*q_scale=*/1.f, quant_steps);
