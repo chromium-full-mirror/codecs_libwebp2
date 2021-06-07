@@ -59,7 +59,7 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
     constexpr Channel kChannels[] = {kUChannel, kVChannel};
 
     uint32_t dist[2];
-    float scores[2], res_rate[2], pred_rate[2];
+    float scores[2], res_rate[2], pred_rate[2], tf_rate[2];
     for (uint32_t c : {kU, kV}) {
       cb->QuantizeAll(config_, context_, segment_, kChannels[c], reduced_,
                       counters_);
@@ -71,9 +71,11 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
           counters_->residuals_aom(), &res_rate[c]));
       WP2_CHECK_STATUS(cb->PredictorRate(kChannels[c], counters_->predictor(),
                                          &pred_rate[c]));
+      WP2_CHECK_STATUS(
+          cb->TransformRate(kChannels[c], counters_->transform(), &tf_rate[c]));
       const float lambda =
           cb->lambda_mult_ * segment_.GetQuant(kChannels[c]).lambda;
-      scores[c] = dist[c] + lambda * (res_rate[c] + pred_rate[c]);
+      scores[c] = dist[c] + lambda * (res_rate[c] + pred_rate[c] + tf_rate[c]);
     }
 
     score_ = scores[kU] + scores[kV];
@@ -86,7 +88,7 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
       cb->StorePredictionScore(config_, tile_rect_, kChannels[c], p,
                                cb->GetCodingParams(kChannels[c])->tf, dist[c],
                                cb->lambda_mult_ * quant.lambda, res_rate[c],
-                               pred_rate[c], /*tf_rate=*/0.f, scores[c],
+                               pred_rate[c], tf_rate[c], scores[c],
                                /*is_best=*/(score_ < best_score_),
                                CodedBlock::SearchType::kPredAndTransform);
     }
