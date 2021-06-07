@@ -25,6 +25,7 @@
 #include "src/utils/front_mgr.h"
 #include "src/utils/utils.h"
 #include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -159,7 +160,7 @@ WP2Status SyntaxReader::ReadPredModes(CodedBlockBase* const cb) {
     if (channel == kAChannel && !cb->HasLossyAlpha()) continue;
     const Predictors& preds = gparams_->GetPredictors(channel);
     if (channel == kYChannel && cb->y_context_is_constant_) {
-      cb->SetLumaUniformPredictor(preds);
+      cb->GetCodingParams(kYChannel)->pred = preds[0];
     } else {
       const uint32_t mode =
           (channel == kYChannel) ? sr_.Read(kSymbolModeY, "y") :
@@ -173,7 +174,7 @@ WP2Status SyntaxReader::ReadPredModes(CodedBlockBase* const cb) {
         // U and V channel have a different param in cfl_[].
         preds.GetPred(mode)->ReadParams(cb, kVChannel, &sr_, dec_);
       }
-      cb->SetPredictor(channel, preds.GetPred(mode, sub_mode));
+      cb->GetCodingParams(channel)->pred = preds.GetPred(mode, sub_mode);
     }
   }
   return WP2_STATUS_OK;
@@ -203,10 +204,10 @@ void SyntaxReader::ReadHasCoeffs(Channel channel, CodedBlockBase* const cb) {
 
 void SyntaxReader::ReadTransform(Channel channel, CodedBlockBase* const cb) {
   CodedBlockBase::CodingParams* params = cb->GetCodingParams(channel);
-  const TransformPair implicit_tf = cb->GetImplicitTf(channel);
-  if (implicit_tf != kUnknownTf) {
-    // The transform is already known, no need to signal it.
-    params->tf = implicit_tf;
+  if (channel == kUChannel || channel == kAChannel) {
+    params->tf = kDctDct;
+  } else if (channel == kVChannel) {
+    assert(params->tf == kDctDct);
   } else if (cb->HasCoeffs(channel)) {
     params->tf = (TransformPair)sr_.Read(kSymbolTransform, "transform");
   } else {

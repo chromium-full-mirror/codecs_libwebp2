@@ -223,23 +223,16 @@ class CodedBlock : public CodedBlockBase {
                          uint32_t num_channels, SymbolCounter* const counter,
                          SymbolCounter* const aom_counter, float* rate) const;
 
-  // Pseudo-Visual debug: force the split_tf of the block.
-  enum class SplitTf {
-    kForcedUnsplit,
-    kForcedSplit,
-    kUnknown,
-  };
-  SplitTf GetForcedSplitTf(const EncoderConfig& config, uint32_t tile_pos_x,
-                           uint32_t tile_pos_y);
-  // Pseudo-Visual debug: force the transform of the block.
+  // Pseudo-Visual debug: force the split_tf, tf or pred of the block.
+  enum class SplitTf { kForcedUnsplit, kForcedSplit, kUnknown };
+  SplitTf GetForcedSplitTf(const EncoderConfig& config,
+                           const Rectangle& tile_rect) const;
   TransformPair GetForcedTransform(const EncoderConfig& config,
-                                   uint32_t tile_pos_x, uint32_t tile_pos_y);
-
-  // Force the predictors from the EncoderConfig (if any). Returns true if
-  // this block's predictor was forced.
-  bool SetForcedPredictor(const Predictors& preds, const EncoderConfig& config,
-                          uint32_t tile_pos_x, uint32_t tile_pos_y,
-                          Channel channel);
+                                   const Rectangle& tile_rect) const;
+  const Predictor* GetForcedPredictor(const EncoderConfig& config,
+                                      const Rectangle& tile_rect,
+                                      const Predictors& preds,
+                                      Channel channel) const;
 
  public:
   //////////////// Methods for Visual Debug ////////////////

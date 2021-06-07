@@ -72,18 +72,6 @@ class Predictor : public WP2Allocable {
   // Returns true if it should be processed again everytime luma changes.
   virtual bool DependsOnLuma() const { return false; }
 
-  // Returns true if the transform is set by this predictor.
-  virtual bool OverridesTransform(Channel channel,
-                                  TransformPair* const tf) const {
-    if (channel == kUChannel || channel == kVChannel) {
-      // When overriding this function for UV, use Mode_To_Txfm from the AV1
-      // specs.
-      if (tf != nullptr) *tf = kDctDct;
-      return true;
-    }
-    return false;
-  }
-
   // The three following methods are for predictors that signal some
   // parameters in the bitstream.
 

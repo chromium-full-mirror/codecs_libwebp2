@@ -197,16 +197,6 @@ CodedBlockBase::CodingParams* CodedBlockBase::GetCodingParams(Channel channel) {
   return &params_[CodingParamsIndex(channel)];
 }
 
-TransformPair CodedBlockBase::GetImplicitTf(Channel channel) const {
-  // TODO(maryla) check if it is still needed.
-  if (channel == kAChannel) return kDctDct;
-  TransformPair tf;
-  if (GetCodingParams(channel).pred->OverridesTransform(channel, &tf)) {
-    return tf;
-  }
-  return kUnknownTf;
-}
-
 //------------------------------------------------------------------------------
 
 uint32_t CodedBlockBase::GetNumTransforms(Channel channel) const {
@@ -238,8 +228,7 @@ void CodedBlockBase::PredictBlock(Channel channel, uint32_t tf_i, int16_t* out,
   assert(tf_i < GetNumTransforms(channel));
   const CodingParams& params = GetCodingParams(channel);
   if (tf_i > 0) assert(params.split_tf);
-  const Rectangle tf_rect =
-      blk().LocalTfRect(GetCodingParams(channel).split_tf, tf_i);
+  const Rectangle tf_rect = blk().LocalTfRect(params.split_tf, tf_i);
   int16_t* const out_i = out + tf_rect.x + tf_rect.y * step;
   params.pred->Predict(*this, channel, params.split_tf, tf_i, out_i, step);
 }
@@ -292,32 +281,6 @@ bool CodedBlockBase::ContextIsConstant(Channel channel) const {
 
 bool CodedBlockBase::HasLossyAlpha() const {
   return (alpha_mode_ == kBlockAlphaLossy);
-}
-
-//------------------------------------------------------------------------------
-
-void CodedBlockBase::SetUVPredictor(const Predictor* const pred) {
-  CodedBlockBase::CodingParams* const params = GetCodingParams(kUChannel);
-  params->pred = pred;
-  if (pred->OverridesTransform(kUChannel, &params->tf)) {
-    assert(params->tf != kUnknownTf);
-  } else {
-    assert(false);  // The transform should always be overridden for U and V.
-  }
-}
-
-void CodedBlockBase::SetPredictor(Channel channel,
-                                  const Predictor* const pred) {
-  if (channel == kUChannel || channel == kVChannel) {
-    SetUVPredictor(pred);
-  } else {
-    CodingParams* const params = GetCodingParams(channel);
-    params->pred = pred;
-  }
-}
-
-void CodedBlockBase::SetLumaUniformPredictor(const Predictors& preds) {
-  SetPredictor(kYChannel, preds[0]);
 }
 
 //------------------------------------------------------------------------------

@@ -204,18 +204,19 @@ WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
   }
 
   constexpr uint32_t kNumChannels = 4;  // Otherwise we would not be here.
-  const bool forced_predictor = cb->SetForcedPredictor(
-      gparams_->a_preds_, config_, tile_rect_.x, tile_rect_.y, kAChannel);
 
   const APredictors& preds = gparams_->a_preds_;
   const Segment& segment = gparams_->segments_[0];
-  cb->GetCodingParams(kAChannel)->tf = kDctDct;
+  CodedBlockBase::CodingParams& params = *cb->GetCodingParams(kAChannel);
+  params.tf = kDctDct;
 
-  if (forced_predictor) {
+  if ((params.pred = cb->GetForcedPredictor(config_, tile_rect_, preds,
+                                            kAChannel)) != nullptr) {
     // Predictor is set by EncoderConfig::info (debug).
+    cb->pred_scores_[kAChannel] = 1.f;
   } else if (config_.effort == 1) {
     // Select the first predictor to save time.
-    cb->SetPredictor(kAChannel, preds[0]);
+    params.pred = preds[0];
     cb->pred_scores_[kAChannel] = 1.f;
   } else if (config_.effort == 2) {
     // Quickly select the best predictor.

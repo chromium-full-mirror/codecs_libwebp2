@@ -120,13 +120,6 @@ class CodedBlockBase {
   void SetContextInput(const YUVPlane& in,
                        ContextCache* const context_cache = nullptr);
 
-  // Sets the U/V predictor for the whole block.
-  void SetUVPredictor(const Predictor* const pred);
-  // Sets the predictor for a given 'channel' of the whole block.
-  void SetPredictor(Channel channel, const Predictor* const pred);
-  // To be called when LumaContextIsUniform().
-  void SetLumaUniformPredictor(const Predictors& preds);
-
   // Returns true if the context of the block (neighboring pixels used for
   // prediction) all have the same value for the given channel.
   bool ContextIsConstant(Channel channel) const;
@@ -192,10 +185,6 @@ class CodedBlockBase {
 
   // Returns true if there is at least one non zero coeff in the block.
   bool HasCoeffs(Channel channel) const;
-
-  // Returns the transform if it is predetermined (e.g. by the predictor) and
-  // does not need to be signaled. Otherwise returns 'kUnknownTf'.
-  TransformPair GetImplicitTf(Channel channel) const;
 
   // Accessors and setters (padded).
   uint32_t x() const { return blk_.x(); }

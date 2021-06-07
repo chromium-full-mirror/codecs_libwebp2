@@ -190,22 +190,65 @@ void CodedBlock::ToBlockInfo(bool use_aom_coeffs, BlockInfo* const blk) const {
 
 #endif  // WP2_BITTRACE
 
-CodedBlock::SplitTf CodedBlock::GetForcedSplitTf(const EncoderConfig& config,
-                                                 uint32_t tile_pos_x,
-                                                 uint32_t tile_pos_y) {
+CodedBlock::SplitTf CodedBlock::GetForcedSplitTf(
+    const EncoderConfig& config, const Rectangle& tile_rect) const {
   EncoderInfo* const info = config.info;
   if (info == nullptr) return SplitTf::kUnknown;
+  if (info->disable_split_tf) return SplitTf::kForcedUnsplit;
 
   for (const auto& forced : info->force_param) {
     if (forced.type != EncoderInfo::ForcedParam::Type::kSplitTf) continue;
-    if (forced.x != (x_pix() + tile_pos_x) ||
-        forced.y != (y_pix() + tile_pos_y)) {
+    if (forced.x != (x_pix() + tile_rect.x) ||
+        forced.y != (y_pix() + tile_rect.y)) {
       continue;
     }
 
     return forced.value ? SplitTf::kForcedSplit : SplitTf::kForcedUnsplit;
   }
   return SplitTf::kUnknown;
+}
+
+TransformPair CodedBlock::GetForcedTransform(const EncoderConfig& config,
+                                             const Rectangle& tile_rect) const {
+  EncoderInfo* const info = config.info;
+  if (info == nullptr) return kUnknownTf;
+  if (info->disable_transforms) return kDctDct;
+
+  for (const auto& forced : info->force_param) {
+    if (forced.type != EncoderInfo::ForcedParam::Type::kTransform) continue;
+    if (forced.x != (x_pix() + tile_rect.x) ||
+        forced.y != (y_pix() + tile_rect.y)) {
+      continue;
+    }
+
+    if (forced.value >= kNumTransformPairs) return kUnknownTf;
+    return (TransformPair)forced.value;
+  }
+  return kUnknownTf;
+}
+
+const Predictor* CodedBlock::GetForcedPredictor(const EncoderConfig& config,
+                                                const Rectangle& tile_rect,
+                                                const Predictors& preds,
+                                                Channel channel) const {
+  EncoderInfo* const info = config.info;
+  if (info == nullptr) return nullptr;
+  if (info->disable_preds) return preds[0];
+
+  for (const auto& forced : info->force_param) {
+    if (forced.type != EncoderInfo::ForcedParam::Type::kPredictor) continue;
+    if (forced.channel != channel ||
+        forced.x != (x_pix() + tile_rect.x) ||
+        forced.y != (y_pix() + tile_rect.y)) {
+      continue;
+    }
+
+    assert(!preds.empty());
+    const Predictor* const pred =
+        preds[std::min(forced.value, (uint32_t)(preds.size() - 1))];
+    return pred;
+  }
+  return nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -3071,5 +3114,30 @@ WP2Status Decoder::HeaderVDebug() {
 }
 
 }  // namespace WP2L
+
+#else
+
+//------------------------------------------------------------------------------
+// Code defined to compile:
+
+namespace WP2 {
+
+CodedBlock::SplitTf CodedBlock::GetForcedSplitTf(const EncoderConfig&, uint32_t,
+                                                 uint32_t) const {
+  return SplitTf::kUnknown;
+}
+
+TransformPair CodedBlock::GetForcedTransform(const EncoderConfig&, uint32_t,
+                                             uint32_t) const {
+  return kUnknownTf;
+}
+
+const Predictor* CodedBlock::GetForcedPredictor(const EncoderConfig&, uint32_t,
+                                                uint32_t, const Predictors&,
+                                                Channel) const {
+  return nullptr;
+}
+
+}  // namespace WP2
 
 #endif  // WP2_REDUCE_BINARY_SIZE

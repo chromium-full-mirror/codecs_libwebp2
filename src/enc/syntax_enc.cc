@@ -339,10 +339,8 @@ void SyntaxWriter::WriteTransform(const CodedBlock& cb, Channel channel,
                                   SymbolManager* const sm,
                                   ANSEncBase* const enc) {
   const CodedBlock::CodingParams& params = cb.GetCodingParams(channel);
-  const TransformPair implicit_tf = cb.GetImplicitTf(channel);
-  if (implicit_tf != kUnknownTf) {
-    // The transform is already known.
-    assert(params.tf == implicit_tf);
+  if (channel == kUChannel || channel == kVChannel || channel == kAChannel) {
+    assert(params.tf == kDctDct);
   } else if (cb.HasCoeffs(channel)) {
     // TODO(maryla): try more ways to signal the transform which might be
     //               correlated to block size.

@@ -103,10 +103,10 @@ TEST(TestSyntaxWriter, CopyFrom) {
       cb.id_ = AssignSegmentId(config, gparams, tile_rect, block);
       cb.SetRange(gparams.transf_.GetYUVMin(), gparams.transf_.GetYUVMax());
       cb.SetDim(block, mgr);
-      cb.SetPredictor(kYChannel, gparams.y_preds_[0]);
-      cb.SetUVPredictor(gparams.uv_preds_[0]);
+      cb.GetCodingParams(kYChannel)->pred = gparams.y_preds_[0];
+      cb.GetCodingParams(kUChannel)->pred = gparams.uv_preds_[0];
       if (!gparams.a_preds_.empty()) {
-        cb.SetPredictor(kAChannel, gparams.a_preds_[0]);
+        cb.GetCodingParams(kAChannel)->pred = gparams.a_preds_[0];
       }
       cb.SetSrcInput(yuv);
       cb.SetContextInput(out, &context_cache);

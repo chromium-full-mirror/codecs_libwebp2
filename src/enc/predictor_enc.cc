@@ -103,8 +103,6 @@ class PredictorScorer {    // Side-Struct computing some predictor scores.
     assert(channel_ == kYChannel || channel_ == kAChannel);
     CodedBlock::CodingParams* const params = cb->GetCodingParams(channel_);
     params->tf = tf;
-    assert(cb->GetImplicitTf(channel_) == kUnknownTf ||
-           cb->GetImplicitTf(channel_) == tf);
 
     cb->TransformAndReconstruct(config_, context_, segment_, channel_,
                                 /*tf_i=*/0, reduced_, prediction, res, tmp,
@@ -206,26 +204,20 @@ WP2Status Predictors::FindBest(
   WP2_CHECK_STATUS(pred_view.SetView(prediction, kMaxBlockSizePix,
                                      kMaxBlockSizePix, kMaxBlockSizePix));
   BlockCoeffs16 res, tmp;
-  TransformPair overridden_tf;
 
   const bool force_dc = (config.info != nullptr) && config.info->disable_preds;
 
   // Test the non-angle predictors.
   for (const Predictor* const p : preds_no_angle_) {
-    cb->SetPredictor(channel_, p);
+    cb->GetCodingParams(channel_)->pred = p;
     if (!is_uv) {
       cb->PredictBlock(channel_, /*tf_i=*/0, pred_view.Row(0),
                        pred_view.Step());
       cb->GetResiduals(channel_, /*tf_i=*/0, pred_view, &res);
     }
-    if (p->OverridesTransform(channel_, &overridden_tf)) {
+    for (TransformPair tf : transforms) {
       WP2_CHECK_STATUS(
-          scorer.UpdatePredScore(p, pred_view, overridden_tf, &res, &tmp, cb));
-    } else {
-      for (TransformPair tf : transforms) {
-        WP2_CHECK_STATUS(
-            scorer.UpdatePredScore(p, pred_view, tf, &res, &tmp, cb));
-      }
+          scorer.UpdatePredScore(p, pred_view, tf, &res, &tmp, cb));
     }
 
     if (force_dc) {
@@ -269,24 +261,16 @@ WP2Status Predictors::FindBest(
   AngleScore* end = beg;
 
   for (const Predictor* const p : preds_main_angle_) {
-    cb->SetPredictor(channel_, p);
+    cb->GetCodingParams(channel_)->pred = p;
     if (!is_uv) {
       cb->PredictBlock(channel_, /*tf_i=*/0, pred_view.Row(0),
                        pred_view.Step());
       cb->GetResiduals(channel_, /*tf_i=*/0, pred_view, &res);
     }
-    if (p->OverridesTransform(channel_, &overridden_tf)) {
+    for (TransformPair tf : transforms) {
       WP2_CHECK_STATUS(
-          scorer.UpdatePredScore(p, pred_view, overridden_tf, &res, &tmp, cb));
-
-      *(end++) = {scorer.GetLastScore(), scorer.GetLastDist(), p,
-                  overridden_tf};
-    } else {
-      for (TransformPair tf : transforms) {
-        WP2_CHECK_STATUS(
-            scorer.UpdatePredScore(p, pred_view, tf, &res, &tmp, cb));
-        *(end++) = {scorer.GetLastScore(), scorer.GetLastDist(), p, tf};
-      }
+          scorer.UpdatePredScore(p, pred_view, tf, &res, &tmp, cb));
+      *(end++) = {scorer.GetLastScore(), scorer.GetLastDist(), p, tf};
     }
   }
   assert(angle_score_size == end - beg && angle_score_size >= 1);
@@ -311,7 +295,7 @@ WP2Status Predictors::FindBest(
       // Refine the angle predictor.
       for (const Predictor* const p : preds_) {
         if (p->mode() == s.p->mode() && p != s.p) {
-          cb->SetPredictor(channel_, p);
+          cb->GetCodingParams(channel_)->pred = p;
           if (!is_uv) {
             cb->PredictBlock(channel_, /*tf_i=*/0, pred_view.Row(0),
                              pred_view.Step());

@@ -296,8 +296,8 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
     cb.SetRange(yuv_min, yuv_max);
     cb.SetDim(/*block=*/{/*x=*/0, /*y=*/0, /*dim=*/block_size}, mgr);
     cb.y_context_is_constant_ = false;
-    cb.SetPredictor(kYChannel, params.y_preds_[BPRED_DC_L]);
-    cb.SetUVPredictor(params.uv_preds_[0]);
+    cb.GetCodingParams(kYChannel)->pred = params.y_preds_[BPRED_DC_L];
+    cb.GetCodingParams(kUChannel)->pred = params.uv_preds_[0];
 
     ASSERT_WP2_OK(buffer.Resize(rect.width, rect.height));
     buffer.Fill({0xFFu, 0xFFu, 0xFFu, 0xFFu});

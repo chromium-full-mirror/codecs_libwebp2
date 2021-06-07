@@ -37,6 +37,7 @@
 #include "src/utils/front_mgr.h"
 #include "src/utils/utils.h"
 #include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -314,7 +315,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
       const Channel channel = VDChannel(config);
       const CodedBlockBase::CodingParams saved = *cb.GetCodingParams(channel);
       assert(gparams.uv_preds_[0]->DependsOnLuma());
-      cb.SetUVPredictor(gparams.uv_preds_[0]);
+      cb.GetCodingParams(kUChannel)->pred = gparams.uv_preds_[0];
       cb.StorePredictionModes(config, tile->rect, channel, /*tf_i=*/0,
                               gparams.GetPredictors(channel), &vd_plane,
                               nullptr);

@@ -22,11 +22,13 @@
 #include <algorithm>
 #include <cassert>
 
+#include "src/common/lossy/block.h"
 #include "src/common/symbols.h"
 #include "src/enc/trellis.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/front_mgr.h"
 #include "src/utils/utils.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -438,61 +440,6 @@ WP2Status CodedBlock::DecideChromaSubsampling(
 
 //------------------------------------------------------------------------------
 
-// TODO(skal): move to vdebug_enc.cc
-TransformPair CodedBlock::GetForcedTransform(const EncoderConfig& config,
-                                             uint32_t tile_pos_x,
-                                             uint32_t tile_pos_y) {
-  (void)config;
-  (void)tile_pos_x;
-  (void)tile_pos_y;
-#if !defined(WP2_REDUCE_BINARY_SIZE)
-  EncoderInfo* const info = config.info;
-  if (info == nullptr) return kUnknownTf;
-
-  for (const auto& forced : info->force_param) {
-    if (forced.type != EncoderInfo::ForcedParam::Type::kTransform) continue;
-    if (forced.x != (x_pix() + tile_pos_x) ||
-        forced.y != (y_pix() + tile_pos_y)) {
-      continue;
-    }
-
-    if (forced.value >= kNumTransformPairs) return kUnknownTf;
-    return (TransformPair)forced.value;
-  }
-#endif  // WP2_REDUCE_BINARY_SIZE
-  return kUnknownTf;
-}
-
-//------------------------------------------------------------------------------
-
-bool CodedBlock::SetForcedPredictor(const Predictors& preds,
-                                    const EncoderConfig& config,
-                                    uint32_t tile_pos_x, uint32_t tile_pos_y,
-                                    Channel channel) {
-  EncoderInfo* const info = config.info;
-  if (info == nullptr) return false;
-
-  for (const auto& forced : info->force_param) {
-    if (forced.type != EncoderInfo::ForcedParam::Type::kPredictor) continue;
-    if (forced.channel != channel ||
-        forced.x != (x_pix() + tile_pos_x) ||
-        forced.y != (y_pix() + tile_pos_y)) {
-      continue;
-    }
-
-    assert(!preds.empty());
-    const Predictor* const pred =
-        preds[std::min(forced.value, (uint32_t)(preds.size() - 1))];
-    SetPredictor(channel, pred);
-    pred_scores_[(channel == kVChannel) ? kUChannel : channel] = 1.f;
-    return true;
-  }
-
-  return false;
-}
-
-//------------------------------------------------------------------------------
-
 WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
                                  const Rectangle& tile_rect,
                                  const Segment& segment,
@@ -503,9 +450,7 @@ WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
   assert(!transforms.empty());
   CodingParams* const params = GetCodingParams(channel);
 
-  params->tf = GetImplicitTf(channel);
-  if (params->tf != kUnknownTf) return WP2_STATUS_OK;
-  params->tf = GetForcedTransform(config, tile_rect.x, tile_rect.y);
+  params->tf = GetForcedTransform(config, tile_rect);
   if (params->tf != kUnknownTf) return WP2_STATUS_OK;
   params->tf = transforms.front();
   if (transforms.size() == 1) return WP2_STATUS_OK;
@@ -637,23 +582,20 @@ WP2Status CodedBlock::FindBestPredTf(
     bool reduced, const Vector<TransformPair>& transforms,
     Counters* const counters) {
   assert(channel == kYChannel || channel == kUChannel || channel == kAChannel);
-  if (channel == kUChannel) {
-    is420_ = reduced;  // Final is420 will be decided later but is needed now.
-    assert(transforms.empty());  // Empty because UV tfs are defined by preds.
-  } else {
-    assert(!transforms.empty());
-  }
+  assert(!transforms.empty());
+  // Final is420 will be decided later but is needed now.
+  if (channel == kUChannel) is420_ = reduced;
 
   const bool can_split =
       (channel == kYChannel && GetSplitSize(dim(), /*split=*/true) != dim());
   const SplitTf forced_split_tf =
-      can_split ? GetForcedSplitTf(config, tile_rect.x, tile_rect.y)
-                : SplitTf::kUnknown;
+      can_split ? GetForcedSplitTf(config, tile_rect) : SplitTf::kUnknown;
 
   float best_score = std::numeric_limits<float>::max();
   TransformPair best_tf = kUnknownTf;
   const Predictor* best_pred = nullptr;
   bool best_split = false;
+  CodedBlockBase::CodingParams& params = *GetCodingParams(channel);
 
   if (forced_split_tf != SplitTf::kForcedSplit) {
     WP2_CHECK_STATUS(preds.FindBest(
@@ -662,21 +604,21 @@ WP2Status CodedBlock::FindBestPredTf(
     // In super slow mode this could be an 'if' instead of 'else if', to try
     // both split and unsplit.
   } else if (can_split && forced_split_tf != SplitTf::kForcedUnsplit) {
-    GetCodingParams(kYChannel)->split_tf = true;
+    params.split_tf = true;
     WP2_CHECK_STATUS(preds.FindBest(
         config, tile_rect, num_channels, context, segment, reduced, transforms,
         counters, this, &best_score, &best_pred, &best_tf, &best_split));
-    GetCodingParams(kYChannel)->split_tf = best_split;
+    params.split_tf = best_split;
   }
   assert(best_pred != nullptr);
 
-  SetPredictor(channel, best_pred);
+  params.pred = best_pred;
   pred_scores_[channel] = best_score;
   if (channel == kUChannel) {
     pred_scores_[kVChannel] = pred_scores_[kUChannel];
-    assert(GetCodingParams(channel)->tf == best_tf);
+    assert(params.tf == best_tf);
   } else {
-    GetCodingParams(channel)->tf = best_tf;
+    params.tf = best_tf;
   }
   return WP2_STATUS_OK;
 }
@@ -694,8 +636,7 @@ WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
     assert(!params->split_tf);
     return WP2_STATUS_OK;
   }
-  const SplitTf forced_split =
-      GetForcedSplitTf(config, tile_rect.x, tile_rect.y);
+  const SplitTf forced_split = GetForcedSplitTf(config, tile_rect);
   if (forced_split != SplitTf::kUnknown) {
     params->split_tf = (forced_split == SplitTf::kForcedSplit);
     return WP2_STATUS_OK;
@@ -758,6 +699,7 @@ WP2Status CodedBlock::OptimizeModesLuma(
   const uint32_t num_channels = (has_alpha ? 4 : 3);
   GetCodingParams(kYChannel)->split_tf = false;
   bool found_best_tf = false;
+  CodedBlockBase::CodingParams& params = *GetCodingParams(kYChannel);
   if (y_context_is_constant_) {
     // If the context is constant, all luma predictors will predict the same
     // values (plus or minus 1, because of rounding errors), so we just force
@@ -765,14 +707,14 @@ WP2Status CodedBlock::OptimizeModesLuma(
     // the same for UV and alpha because the chroma from luma predictor doesn't
     // have this property, but we could send a single bit saying whether the
     // predictor is cfl or "other".
-    SetLumaUniformPredictor(preds);
+    params.pred = preds[0];
     pred_scores_[kYChannel] = 1.f;
-  } else if (SetForcedPredictor(preds, config, tile_rect.x, tile_rect.y,
-                                kYChannel)) {
+  } else if ((params.pred = GetForcedPredictor(config, tile_rect, preds,
+                                               kYChannel)) != nullptr) {
     // Predictor is set by EncoderConfig::info (debug).
   } else if (config.effort == 0) {
     // Select the first predictor to save time.
-    SetPredictor(kYChannel, preds[0]);
+    params.pred = preds[0];
     pred_scores_[kYChannel] = 1.f;
   } else if (config.effort == 1) {
     // Quickly select the best predictor and then choose the best transform.
@@ -780,8 +722,7 @@ WP2Status CodedBlock::OptimizeModesLuma(
         200 + std::lround((256 - 200) * config.quality / kMaxLossyQuality);
     FindBestPred(preds, kYChannel, improvement);
   } else {
-    const TransformPair forced_tf =
-        GetForcedTransform(config, tile_rect.x, tile_rect.y);
+    const TransformPair forced_tf = GetForcedTransform(config, tile_rect);
     const bool tf_is_forced = (forced_tf != kUnknownTf);
     Vector<TransformPair> forced_tf_vector;
     if (tf_is_forced) {
@@ -836,11 +777,13 @@ WP2Status CodedBlock::OptimizeModesChroma(
         config.uv_mode == EncoderConfig::UVMode420) ||
        chroma_subsampling == ChromaSubsampling::k420);
 
-  if (SetForcedPredictor(preds, config, tile_rect.x, tile_rect.y, kUChannel)) {
+  CodedBlockBase::CodingParams& params = *GetCodingParams(kUChannel);
+  if ((params.pred = GetForcedPredictor(config, tile_rect, preds, kUChannel)) !=
+      nullptr) {
     // Predictor is set by EncoderConfig::info (debug).
   } else if (config.effort == 0 || preds.size() == 1) {
     // Select the first predictor to save time.
-    SetUVPredictor(preds[0]);
+    params.pred = preds[0];
     pred_scores_[kUChannel] = pred_scores_[kVChannel] = 1.f;
   } else if (config.effort == 1) {
     // Quickly select the best predictor.
@@ -849,8 +792,8 @@ WP2Status CodedBlock::OptimizeModesChroma(
     FindBestPred(preds, kUChannel, improvement);
   } else {
     const uint32_t num_channels = (has_alpha ? 4 : 3);
-    // Empty because UV transforms are defined by predictors.
-    const Vector<TransformPair> transforms;
+    Vector<TransformPair> transforms;
+    WP2_CHECK_ALLOC_OK(transforms.push_back(kDctDct));
     // Spend time to select the best predictor.
     WP2_CHECK_STATUS(FindBestPredTf(config, tile_rect, preds, segment, context,
                                     kUChannel, num_channels, reduced,
