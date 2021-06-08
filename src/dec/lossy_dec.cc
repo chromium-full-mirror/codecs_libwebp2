@@ -278,13 +278,12 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
         if ((VDMatch(config, "prediction/raw") ||
              VDMatch(config, "prediction/modes")) &&
             !VDMatch(config, "lossless") && c == VDChannel(config)) {
+          const Predictors& preds = gparams.GetPredictors(c);
           if (VDMatch(config, "prediction/raw")) {
-            cb.StorePredictionModes(config, tile->rect, c, tf_i,
-                                    gparams.GetPredictors(c), &vd_plane,
-                                    nullptr);
+            cb.StorePredictionModes(config, tile->rect, c, tf_i, preds,
+                                    &vd_plane, nullptr);
           } else {
-            cb.StorePredictionModes(config, tile->rect, c, tf_i,
-                                    gparams.GetPredictors(c), nullptr,
+            cb.StorePredictionModes(config, tile->rect, c, tf_i, preds, nullptr,
                                     &debug_output);
           }
         }
@@ -301,6 +300,12 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
             vd_block_view.Copy(cb.out_.A, /*resize_if_needed=*/false));
       } else if (VDMatch(config, "a/is_lossy")) {
         vd_block_view.Fill(cb.HasLossyAlpha() ? 255 : 0);
+      } else if (VDMatch(config, "a/prediction/raw") && cb.HasLossyAlpha()) {
+        cb.StorePredictionModes(config, tile->rect, kAChannel, /*tf_i=*/0,
+                                gparams.a_preds_, &vd_plane, nullptr);
+      } else if (VDMatch(config, "a/prediction/modes") && cb.HasLossyAlpha()) {
+        cb.StorePredictionModes(config, tile->rect, kAChannel, /*tf_i=*/0,
+                                gparams.a_preds_, nullptr, &debug_output);
       }
 #endif  // WP2_REDUCE_BINARY_SIZE
     }
