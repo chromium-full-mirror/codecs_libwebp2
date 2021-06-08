@@ -210,6 +210,12 @@ WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
   CodedBlockBase::CodingParams& params = *cb->GetCodingParams(kAChannel);
   params.tf = kDctDct;
 
+  for (const Predictor* const pred : preds) {
+    if (!pred->ComputeParams(cb, kAChannel)) {
+      // TODO(skal): deal with useless preds
+    }
+  }
+
   if ((params.pred = cb->GetForcedPredictor(config_, tile_rect_, preds,
                                             kAChannel)) != nullptr) {
     // Predictor is set by EncoderConfig::info (debug).
