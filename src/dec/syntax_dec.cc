@@ -113,7 +113,10 @@ WP2Status SyntaxReader::LoadDictionaries() {
                /*max=*/gparams_->uv_preds_.GetMaxMode());
   WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolModeUV, num_blocks_, "mode"));
 
-  WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolCflSlope, 2 * num_blocks_, "cfl"));
+  const uint32_t num_channels_using_cfl =
+      gparams_->maybe_use_lossy_alpha_ ? 3 : 2;
+  WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolCflSlope,
+                                  num_channels_using_cfl * num_blocks_, "cfl"));
 
   WP2_CHECK_STATUS(sr_.ReadHeader(kSymbolBlockSize, num_blocks_, "block_size"));
 

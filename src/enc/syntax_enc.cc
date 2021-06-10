@@ -206,8 +206,11 @@ WP2Status SyntaxWriter::WriteHeader(ANSEncBase* const enc) {
       kSymbolModeUV, num_blocks_, symbol_recorder_, "mode", enc, dicts_));
 
   // TODO(maryla): not necessary if the SignalingCflPredictor isn't used.
+  const uint32_t num_channels_using_cfl =
+      gparams_->maybe_use_lossy_alpha_ ? 3 : 2;
   WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
-      kSymbolCflSlope, 2 * num_blocks_, symbol_recorder_, "cfl", enc, dicts_));
+      kSymbolCflSlope, num_channels_using_cfl * num_blocks_, symbol_recorder_,
+      "cfl", enc, dicts_));
 
   WP2_CHECK_STATUS(symbol_writer_.WriteHeader(kSymbolBlockSize, num_blocks_,
                                               symbol_recorder_, "block_size",
