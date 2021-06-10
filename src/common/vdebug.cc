@@ -802,10 +802,8 @@ static void DisplayPredictionMode(const DecoderConfig& config,
     assert(debug_output != nullptr);
     const uint8_t c = ToPixel8(p.mode(), num_preds);
     debug_output->Fill(block_rect, Argb32b{255, c, c, c});
-    bool is_angle_predictor;
     float angle;
-    p.GetAngleInfo(&is_angle_predictor, &angle);
-    if (is_angle_predictor) {
+    if (p.IsAngle(&angle)) {
       DrawAnglePredictor(block_rect, angle, debug_output);
     }
     if (selected) {

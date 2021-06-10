@@ -71,7 +71,8 @@ class AreaScoreFunc : public BlockScoreFunc {
  protected:
   // Returns the distortion and the bitstream size of encoding 'area_blocks'.
   WP2Status GetDistoRate(Vector<CodedBlock>* const area_blocks,
-                         float* const disto, float* const rate) const;
+                         BlockScorer* const scorer, float* const disto,
+                         float* const rate) const;
 
   // Setup a new zone to focus on for partitioning.
   // 'area_x' and 'area_y' are coordinates in pixels within the tile.

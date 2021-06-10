@@ -294,17 +294,17 @@ INSTANTIATE_TEST_SUITE_P(ProgressPrecisionTestInstantiation,
 
 TEST(ProgressionTest, GetFrameProgression) {
   for (uint32_t num_frames : {1u, 2u, 5u, kMaxNumFrames}) {
-    float progress = kProgressBeforeFrames;
+    double progress = kProgressBeforeFrames;
     for (uint32_t i = 0; i < num_frames; ++i) {
       const bool is_last = (i + 1 == num_frames);
       progress += GetFrameProgression(i, is_last);
     }
     progress += kProgressEnd;
-    EXPECT_NEAR(progress, 1.f, 0.00001f);
+    EXPECT_NEAR(progress, 1., 0.00001);
   }
 
-  ASSERT_NEAR(kProgressBeforeFrames + kProgressFrames, 1.f - kProgressEnd,
-              0.00001f);
+  ASSERT_NEAR(kProgressBeforeFrames + kProgressFrames, 1. - kProgressEnd,
+              0.00001);
 }
 
 //------------------------------------------------------------------------------

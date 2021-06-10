@@ -33,7 +33,6 @@ enc_srcs := \
   src/enc/lossy_enc.cc \
   src/enc/main_enc.cc \
   src/enc/nearlossless_enc.cc \
-  src/enc/predictor_enc.cc \
   src/enc/residuals_enc.cc \
   src/enc/residuals_enc_aom.cc \
   src/enc/segment_enc.cc \

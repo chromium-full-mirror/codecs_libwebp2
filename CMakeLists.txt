@@ -383,7 +383,6 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partitioner_split.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partitioner_split_recurse.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/partitioning/partitioner_top_left.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/predictor_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/residuals_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/residuals_enc_aom.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/residuals_enc_aom.h

@@ -31,6 +31,7 @@
 #include "src/enc/analysis.h"
 #include "src/enc/partitioning/partitioner.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -50,7 +51,9 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
   const ChromaSubsampling chroma_subsampling =
       DecideChromaSubsampling(*config_, /*more_than_one_block=*/true);
   const bool use_aom_coeffs = DecideAOMCoeffs(*config_, tile_rect_);
-  WP2_CHECK_STATUS(DecideTransforms(config, &transforms_, &transforms_subset_));
+  WP2_CHECK_STATUS(
+      DecideModes(config, gparams, &y_modes_, &uv_modes_, &a_modes_));
+  WP2_CHECK_STATUS(scorer_.Init(config, gparams, tile_rect));
 
   // Store the reconstructed pixels of the temporary and final blocks.
   WP2_CHECK_STATUS(
@@ -79,11 +82,26 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
   return WP2_STATUS_OK;
 }
 
+static WP2Status CopyBlockModes(const BlockModes& from, BlockModes* const to) {
+  WP2_CHECK_ALLOC_OK(
+      to->splits_tried_during_preds.copy_from(from.splits_tried_during_preds));
+  WP2_CHECK_ALLOC_OK(
+      to->splits_tried_after_preds.copy_from(from.splits_tried_after_preds));
+  WP2_CHECK_ALLOC_OK(to->main_preds.copy_from(from.main_preds));
+  WP2_CHECK_ALLOC_OK(to->sub_preds.copy_from(from.sub_preds));
+  WP2_CHECK_ALLOC_OK(
+      to->tf_tried_during_preds.copy_from(from.tf_tried_during_preds));
+  WP2_CHECK_ALLOC_OK(
+      to->tf_tried_after_preds.copy_from(from.tf_tried_after_preds));
+  return WP2_STATUS_OK;
+}
+
 WP2Status BlockScoreFunc::CopyFrom(const BlockScoreFunc& other) {
   WP2_CHECK_STATUS(PartitionScoreFunc::CopyInternal(other));
+  WP2_CHECK_STATUS(CopyBlockModes(other.y_modes_, &y_modes_));
+  WP2_CHECK_STATUS(CopyBlockModes(other.uv_modes_, &uv_modes_));
+  WP2_CHECK_STATUS(CopyBlockModes(other.a_modes_, &a_modes_));
   use_splits_ = other.use_splits_;
-  WP2_CHECK_ALLOC_OK(transforms_.copy_from(other.transforms_));
-  WP2_CHECK_ALLOC_OK(transforms_subset_.copy_from((other.transforms_subset_)));
   WP2_CHECK_STATUS(buffer_.Copy(other.buffer_, /*resize_if_needed=*/true));
   WP2_CHECK_STATUS(front_mgr_.CopyInternal(other.front_mgr_));
   WP2_CHECK_STATUS(dicts_.CopyFrom(other.dicts_));
@@ -92,6 +110,7 @@ WP2Status BlockScoreFunc::CopyFrom(const BlockScoreFunc& other) {
     WP2_CHECK_STATUS(dc_error_u_.CopyFrom(other.dc_error_u_));
     WP2_CHECK_STATUS(dc_error_v_.CopyFrom(other.dc_error_v_));
   }
+  WP2_CHECK_STATUS(scorer_.Init(*config_, *gparams_, tile_rect_));
   return WP2_STATUS_OK;
 }
 
@@ -125,8 +144,9 @@ WP2Status BlockScoreFunc::ComputeScore(const Block blocks[4],
 
     // Encode the block.
     tmp_cb_.SetDim(block, front_mgr_);
-    WP2_CHECK_STATUS(EncodeBlock(front_mgr_, &tmp_cb_, &tmp_syntax_writer_,
-                                 &tmp_dc_error_u_, &tmp_dc_error_v_, &buffer_));
+    WP2_CHECK_STATUS(EncodeBlock(front_mgr_, &tmp_syntax_writer_,
+                                 &tmp_dc_error_u_, &tmp_dc_error_v_, &tmp_cb_,
+                                 &scorer_, &buffer_));
 
     // Write the bits.
     ANSEnc enc;
@@ -182,18 +202,19 @@ WP2Status BlockScoreFunc::Use(const Block& block) {
   assert(front_mgr_.GetOccupancy(block.x()) == block.y());
   tmp_cb_.SetDim(block, front_mgr_);
   // Write the final pixels for future context and rate computation.
-  WP2_CHECK_STATUS(EncodeBlock(front_mgr_, &tmp_cb_, &syntax_writer_,
-                               &dc_error_u_, &dc_error_v_, &buffer_));
+  WP2_CHECK_STATUS(EncodeBlock(front_mgr_, &syntax_writer_, &dc_error_u_,
+                               &dc_error_v_, &tmp_cb_, &scorer_, &buffer_));
   front_mgr_.Use(tmp_cb_.blk());
   return WP2_STATUS_OK;
 }
 
 WP2Status BlockScoreFunc::FindBestBlockParams(const FrontMgrBase& front_mgr,
                                               const BlockContext& block_context,
-                                              SyntaxWriter* const writer,
+                                              SyntaxWriter* const syntax_writer,
                                               DCDiffusionMap* const dc_error_u,
                                               DCDiffusionMap* const dc_error_v,
-                                              CodedBlock* const cb) const {
+                                              CodedBlock* const cb,
+                                              BlockScorer* const scorer) const {
   const Rectangle padded_tile_rect = {tile_rect_.x, tile_rect_.y,
                                       src_->GetWidth(), src_->GetHeight()};
   cb->id_ = AssignSegmentId(*config_, *gparams_, padded_tile_rect, cb->blk());
@@ -205,19 +226,18 @@ WP2Status BlockScoreFunc::FindBestBlockParams(const FrontMgrBase& front_mgr,
   cb->ResetContextCache();
   cb->y_context_is_constant_ = cb->ContextIsConstant(kYChannel);
 
-  WP2_CHECK_STATUS(cb->OptimizeModesLuma(
-      *config_, tile_rect_, gparams_->maybe_use_lossy_alpha_,
-      gparams_->y_preds_, segment, writer->context(), transforms_,
-      transforms_subset_, writer->counters()));
+  WP2_CHECK_STATUS(OptimizeModes(
+      *config_, tile_rect_, kYChannel, gparams_->y_preds_, segment, y_modes_,
+      syntax_writer->context(), cb, syntax_writer->counters(), scorer));
 
-  WP2_CHECK_STATUS(cb->OptimizeModesChroma(
+  WP2_CHECK_STATUS(OptimizeModesChroma(
       *config_, tile_rect_, gparams_->maybe_use_lossy_alpha_, front_mgr,
-      gparams_->uv_preds_, segment, writer->context(),
-      writer->chroma_subsampling(), dc_error_u, dc_error_v,
-      writer->counters()));
+      gparams_->uv_preds_, segment, syntax_writer->chroma_subsampling(),
+      uv_modes_, syntax_writer->context(), cb, syntax_writer->counters(),
+      dc_error_u, dc_error_v, scorer));
 
   if (with_alpha_) {
-    WP2_CHECK_STATUS(writer->DecideAlpha(cb));
+    WP2_CHECK_STATUS(syntax_writer->DecideAlpha(cb, a_modes_, scorer));
     if (!cb->HasLossyAlpha()) {
       // Consider no loss by copying original samples to the buffer.
       WP2_CHECK_STATUS(cb->out_.A.Copy(cb->in_.A, /*resize_if_needed=*/false));
@@ -227,10 +247,11 @@ WP2Status BlockScoreFunc::FindBestBlockParams(const FrontMgrBase& front_mgr,
 }
 
 WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrBase& front_mgr,
-                                      CodedBlock* const cb,
                                       SyntaxWriter* const syntax_writer,
                                       DCDiffusionMap* const dc_error_u,
                                       DCDiffusionMap* const dc_error_v,
+                                      CodedBlock* const cb,
+                                      BlockScorer* const scorer,
                                       YUVPlane* const buffer) const {
   assert(front_mgr.GetOccupancy(cb->x()) == cb->y());
 
@@ -242,7 +263,7 @@ WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrBase& front_mgr,
 
   // This is the slowest part: finding the best transform, predictor etc.
   WP2_CHECK_STATUS(FindBestBlockParams(front_mgr, context_, syntax_writer,
-                                       dc_error_u, dc_error_v, cb));
+                                       dc_error_u, dc_error_v, cb, scorer));
   // CodedBlock::Quantize() should be called already.
   WP2_CHECK_STATUS(syntax_writer->FindBestEncodingMethods(cb));
   if (!use_splits_) {

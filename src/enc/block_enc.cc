@@ -23,6 +23,8 @@
 #include <cassert>
 
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/predictor.h"
+#include "src/common/lossy/transforms.h"
 #include "src/common/symbols.h"
 #include "src/enc/trellis.h"
 #include "src/enc/wp2_enc_i.h"
@@ -234,6 +236,10 @@ void CodedBlock::Reconstruct(Channel channel, uint32_t tf_i,
   add_block(&pred_view.At(tf_rect.x, tf_rect.y), pred_view.Step(), (*res)[tf_i],
             tf_rect.width, min, max, &out->At(tf_rect.x, tf_rect.y),
             out->Step(), tf_rect.height);
+
+  if (params.split_tf && tf_i < 3) {
+    context_cache_->Reset(/*only_small_right_or_bot_contexts=*/true);
+  }
 }
 
 void CodedBlock::QuantizeAll(const EncoderConfig& config,
@@ -440,119 +446,6 @@ WP2Status CodedBlock::DecideChromaSubsampling(
 
 //------------------------------------------------------------------------------
 
-WP2Status CodedBlock::FindBestTf(const EncoderConfig& config,
-                                 const Rectangle& tile_rect,
-                                 const Segment& segment,
-                                 const BlockContext& context, Channel channel,
-                                 uint32_t num_channels, bool reduced,
-                                 const Vector<TransformPair>& transforms,
-                                 Counters* const counters) {
-  assert(!transforms.empty());
-  CodingParams* const params = GetCodingParams(channel);
-
-  params->tf = GetForcedTransform(config, tile_rect);
-  if (params->tf != kUnknownTf) return WP2_STATUS_OK;
-  params->tf = transforms.front();
-  if (transforms.size() == 1) return WP2_STATUS_OK;
-
-  TransformPair best_tf = transforms.front();
-  float best_score = 0.f;
-  const float lambda = lambda_mult_ * segment.GetQuant(channel).lambda;
-  bool is_first = true;
-
-  int16_t prediction[kMaxBlockSizePix2];
-  // Predict the first sub tf, as it won't change.
-  PredictBlock(channel, /*tf_i=*/0, prediction, /*step=*/kMaxBlockSizePix);
-  Plane16 prediction_p;
-  WP2_CHECK_STATUS(prediction_p.SetView(prediction, w_pix(), h_pix(),
-                                        /*step=*/kMaxBlockSizePix));
-
-  for (const TransformPair tf : transforms) {
-    params->tf = tf;
-
-    BlockCoeffs16 tmp;
-    // depends on 'params->tf'
-    GetResiduals(channel, /*tf_i=*/0, prediction_p, &tmp);
-    TransformAndReconstruct(config, context, segment, channel, /*tf_i=*/0,
-                            reduced, prediction_p, &tmp, &tmp, counters);
-    QuantizeAllButFirst(config, context, segment, channel, reduced, counters);
-
-    const uint32_t distortion = GetDisto(channel);
-    float current_score = distortion;
-    if (!is_first && current_score >= best_score) continue;   // early-out
-
-    float tf_rate, res_rate;
-    WP2_CHECK_STATUS(ResidualRate(context, channel, num_channels,
-                                  counters->residuals(),
-                                  counters->residuals_aom(), &res_rate));
-    current_score += lambda * res_rate;
-    if (!is_first && current_score >= best_score) continue;   // early-out
-
-    WP2_CHECK_STATUS(TransformRate(channel, counters->transform(), &tf_rate));
-    current_score += lambda * tf_rate;
-    const bool is_best = (is_first || current_score < best_score);
-    if (is_best) {
-      best_tf = tf;
-      best_score = current_score;
-    }
-    is_first = false;
-
-#if !defined(WP2_REDUCE_BINARY_SIZE)
-    StorePredictionScore(config, tile_rect, channel, *params->pred, tf,
-                         distortion, lambda, res_rate, /*pred_rate=*/0, tf_rate,
-                         current_score, is_best, SearchType::kTransform);
-#endif  // WP2_REDUCE_BINARY_SIZE
-  }
-
-  params->tf = best_tf;
-  return WP2_STATUS_OK;
-}
-
-void CodedBlock::FindBestPred(const Predictors& preds, Channel channel,
-                              uint32_t improvement) {
-  assert(preds.size() > 1);  // Otherwise this function should be skipped.
-  assert(!GetCodingParams(channel)->split_tf);
-  // kVChannel is tested along kUChannel.
-  assert(channel != kVChannel);
-  Plane16& out = out_.GetChannel(channel);
-  CodingParams* const params = GetCodingParams(channel);
-
-  uint32_t best_score = 0;
-  uint32_t best_score1 = 0;
-  uint32_t best_score2 = 0;
-  const Predictor* best_pred = nullptr;
-  for (const Predictor* const p : preds) {
-    params->pred = p;
-    p->Predict(*this, channel, /*split_tf=*/false, /*tf_i=*/0, out.Row(0),
-               out.Step());
-    uint32_t score1 = GetDisto(channel);
-    if (best_pred != nullptr && score1 > best_score) continue;
-    uint32_t score2 = 0;
-    if (channel == kUChannel) {
-      p->Predict(*this, kVChannel, /*split_tf=*/false, /*tf_i=*/0,
-                 out_.V.Row(0), out_.V.Step());
-      score2 = GetDisto(kVChannel);
-    }
-    // we want the global score to be overall better, but also each
-    // individual U/V scores to be improved by at least 'improvement'.
-    bool is_better = (score1 + score2 < best_score) && (score1 < best_score1);
-    if (channel == kUChannel) is_better = is_better && (score2 < best_score2);
-    if (best_pred == nullptr || is_better) {
-      best_score1 = (score1 * improvement) >> 8;
-      best_score2 = (score2 * improvement) >> 8;
-      best_score = score1 + score2;
-      best_pred = p;
-    }
-  }
-  params->pred = best_pred;
-  if (channel == kUChannel) {
-    pred_scores_[kUChannel] = best_score1;
-    pred_scores_[kVChannel] = best_score2;
-  } else {
-    pred_scores_[channel] = best_score;
-  }
-}
-
 WP2Status CodedBlock::PredictorRate(Channel channel,
                                     SymbolCounter* const counter,
                                     float* const rate) const {
@@ -575,255 +468,370 @@ WP2Status CodedBlock::TransformRate(Channel channel,
   return WP2_STATUS_OK;
 }
 
-WP2Status CodedBlock::FindBestPredTf(
-    const EncoderConfig& config, const Rectangle& tile_rect,
-    const Predictors& preds, const Segment& segment,
-    const BlockContext& context, Channel channel, uint32_t num_channels,
-    bool reduced, const Vector<TransformPair>& transforms,
-    Counters* const counters) {
-  assert(channel == kYChannel || channel == kUChannel || channel == kAChannel);
-  assert(!transforms.empty());
-  // Final is420 will be decided later but is needed now.
-  if (channel == kUChannel) is420_ = reduced;
+//------------------------------------------------------------------------------
 
+WP2Status BlockScorer::Init(const EncoderConfig& config,
+                            const GlobalParams& gparams, Rectangle tile_rect) {
+  config_ = &config;
+  gparams_ = &gparams;
+  tile_rect_ = tile_rect;
+
+  WP2_CHECK_ALLOC_OK(pred_mode_map_.resize(
+      std::max({kYPredModeNum, kUVPredModeNum, kAPredModeNum})));
+  return WP2_STATUS_OK;
+}
+
+void BlockScorer::Set(const BlockContext& context, CodedBlock* cb,
+                      Counters* counters) {
+  cb_ = cb;
+  context_ = &context;
+  counters_ = counters;
+
+  cached_predictor_ = nullptr;
+  last_params_ = CodedBlock::CodingParams();
+
+  best_combination_ = BlockScore();
+  best_combination_no_angle_ = BlockScore();
+  best_combinations_angle_.clear();
+}
+
+WP2Status BlockScorer::ComputeScore() {
+  CodedBlock::CodingParams& params = *cb_->GetCodingParams(channels_.front());
   const bool can_split =
-      (channel == kYChannel && GetSplitSize(dim(), /*split=*/true) != dim());
-  const SplitTf forced_split_tf =
-      can_split ? GetForcedSplitTf(config, tile_rect) : SplitTf::kUnknown;
+      (channels_.front() == kYChannel &&
+       GetSplitSize(cb_->dim(), /*split=*/true) != cb_->dim());
+  const CodedBlock::SplitTf forced_split =
+      can_split ? cb_->GetForcedSplitTf(*config_, tile_rect_)
+                : CodedBlock::SplitTf::kUnknown;
 
-  float best_score = std::numeric_limits<float>::max();
-  TransformPair best_tf = kUnknownTf;
-  const Predictor* best_pred = nullptr;
-  bool best_split = false;
-  CodedBlockBase::CodingParams& params = *GetCodingParams(channel);
-
-  if (forced_split_tf != SplitTf::kForcedSplit) {
-    WP2_CHECK_STATUS(preds.FindBest(
-        config, tile_rect, num_channels, context, segment, reduced, transforms,
-        counters, this, &best_score, &best_pred, &best_tf, &best_split));
-    // In super slow mode this could be an 'if' instead of 'else if', to try
-    // both split and unsplit.
-  } else if (can_split && forced_split_tf != SplitTf::kForcedUnsplit) {
-    params.split_tf = true;
-    WP2_CHECK_STATUS(preds.FindBest(
-        config, tile_rect, num_channels, context, segment, reduced, transforms,
-        counters, this, &best_score, &best_pred, &best_tf, &best_split));
-    params.split_tf = best_split;
-  }
-  assert(best_pred != nullptr);
-
-  params.pred = best_pred;
-  pred_scores_[channel] = best_score;
-  if (channel == kUChannel) {
-    pred_scores_[kVChannel] = pred_scores_[kUChannel];
-    assert(params.tf == best_tf);
+  if (forced_split != CodedBlock::SplitTf::kUnknown) {
+    // Set by EncoderConfig::info (debug).
+    params.split_tf = (forced_split == CodedBlock::SplitTf::kForcedSplit);
+    WP2_CHECK_STATUS(ComputeScoreForEachChannel(/*forced=*/true));
   } else {
-    params.tf = best_tf;
-  }
-  return WP2_STATUS_OK;
-}
-
-WP2Status CodedBlock::FindBestSplitTf(const EncoderConfig& config,
-                                      const Rectangle& tile_rect,
-                                      const Segment& segment,
-                                      const BlockContext& context,
-                                      Channel channel, uint32_t num_channels,
-                                      bool reduced, Counters* const counters) {
-  CodingParams* const params = GetCodingParams(channel);
-  if (!config.enable_alt_tuning || channel != kYChannel ||
-      GetSplitSize(dim(), /*split=*/true) == dim() ||
-      (config.info != nullptr && config.info->disable_split_tf)) {
-    assert(!params->split_tf);
-    return WP2_STATUS_OK;
-  }
-  const SplitTf forced_split = GetForcedSplitTf(config, tile_rect);
-  if (forced_split != SplitTf::kUnknown) {
-    params->split_tf = (forced_split == SplitTf::kForcedSplit);
-    return WP2_STATUS_OK;
-  }
-
-  bool best_split_tf = false;  // avoids -Werror=maybe-uninitialized
-  float best_score = 0.f;
-  const float lambda = lambda_mult_ * segment.GetQuant(channel).lambda;
-  bool is_first = true;
-
-  for (bool split_tf : {false, true}) {
-    params->split_tf = split_tf;
-
-    QuantizeAll(config, context, segment, channel, reduced, counters);
-
-    const uint32_t distortion = GetDisto(channel);
-    float score = distortion;
-    if (!is_first && score >= best_score) continue;   // early-out
-
-    float tf_rate, res_rate;
-    WP2_CHECK_STATUS(ResidualRate(context, channel, num_channels,
-                                  counters->residuals(),
-                                  counters->residuals_aom(), &res_rate));
-    score += lambda * res_rate;
-    if (!is_first && score >= best_score) continue;   // early-out
-
-    WP2_CHECK_STATUS(TransformRate(channel, counters->transform(), &tf_rate));
-    score += lambda * tf_rate;
-
-    const bool is_best = (is_first || score < best_score);
-    if (is_best) {
-      best_split_tf = split_tf;
-      best_score = score;
+    for (const bool split_tf : splits_) {
+      if (split_tf && !can_split) continue;
+      params.split_tf = split_tf;
+      WP2_CHECK_STATUS(ComputeScoreForEachPredictor(/*forced=*/false));
     }
-    is_first = false;
-
-#if !defined(WP2_REDUCE_BINARY_SIZE)
-    StorePredictionScore(config, tile_rect, channel, *params->pred, params->tf,
-                         distortion, lambda, res_rate, /*pred_rate=*/0, tf_rate,
-                         score, is_best, SearchType::kSplit);
-#endif  // WP2_REDUCE_BINARY_SIZE
   }
 
-  params->split_tf = best_split_tf;
+  assert(best_combination_.params.pred != nullptr);
   return WP2_STATUS_OK;
 }
 
-WP2Status CodedBlock::OptimizeModesLuma(
-    const EncoderConfig& config, const Rectangle& tile_rect, bool has_alpha,
-    const Predictors& preds, const Segment& segment,
-    const BlockContext& context, const Vector<TransformPair>& transforms,
-    const Vector<TransformPair>& transforms_subset, Counters* const counters) {
-  assert(preds.size() > 1);
-  for (const Predictor* const pred : preds) {
-    if (!pred->ComputeParams(this, kYChannel)) {
+WP2Status BlockScorer::ComputeScoreForEachPredictor(bool forced) {
+  const Predictors& preds = gparams_->GetPredictors(channels_.front());
+  CodedBlock::CodingParams& params = *cb_->GetCodingParams(channels_.front());
+  const Predictor* const forced_pred =
+      cb_->GetForcedPredictor(*config_, tile_rect_, preds, channels_.front());
+
+  if (channels_.front() == kYChannel && cb_->y_context_is_constant_) {
+    // If the context is constant, all luma predictors will predict the same
+    // values (plus or minus 1, because of rounding errors), so we just force
+    // the predictor to 0 and we do not write it to the bitstream. We cannot
+    // do the same for UV and alpha because the chroma from luma predictor
+    // does not have this property, but we could send a single bit saying
+    // whether the predictor is cfl or "other".
+    params.pred = preds.GetPred(0);  // Assumes it is the DC predictor.
+    WP2_CHECK_STATUS(ComputeScoreForEachTransform(forced));
+  } else if (forced_pred != nullptr) {
+    // Predictor is set by EncoderConfig::info (debug).
+    params.pred = forced_pred;
+    WP2_CHECK_STATUS(ComputeScoreForEachTransform(/*forced=*/true));
+  } else {
+    for (const Predictor* pred : predictors_) {
+      params.pred = pred;
+      WP2_CHECK_STATUS(ComputeScoreForEachTransform(forced));
+    }
+  }
+  return WP2_STATUS_OK;
+}
+
+WP2Status BlockScorer::ComputeScoreForEachTransform(bool forced) {
+  CodedBlock::CodingParams& params = *cb_->GetCodingParams(channels_.front());
+  for (Channel c : channels_) {
+    if (!params.pred->ComputeParams(cb_, c)) {
       // TODO(skal): deal with useless preds
     }
   }
+  const TransformPair forced_tf = cb_->GetForcedTransform(*config_, tile_rect_);
 
-  const uint32_t num_channels = (has_alpha ? 4 : 3);
-  GetCodingParams(kYChannel)->split_tf = false;
-  bool found_best_tf = false;
-  CodedBlockBase::CodingParams& params = *GetCodingParams(kYChannel);
-  if (y_context_is_constant_) {
-    // If the context is constant, all luma predictors will predict the same
-    // values (plus or minus 1, because of rounding errors), so we just force
-    // the predictor to 0 and we don't write it to the bitstream. We can't do
-    // the same for UV and alpha because the chroma from luma predictor doesn't
-    // have this property, but we could send a single bit saying whether the
-    // predictor is cfl or "other".
-    params.pred = preds[0];
-    pred_scores_[kYChannel] = 1.f;
-  } else if ((params.pred = GetForcedPredictor(config, tile_rect, preds,
-                                               kYChannel)) != nullptr) {
-    // Predictor is set by EncoderConfig::info (debug).
-  } else if (config.effort == 0) {
-    // Select the first predictor to save time.
-    params.pred = preds[0];
-    pred_scores_[kYChannel] = 1.f;
-  } else if (config.effort == 1) {
-    // Quickly select the best predictor and then choose the best transform.
-    const uint32_t improvement =
-        200 + std::lround((256 - 200) * config.quality / kMaxLossyQuality);
-    FindBestPred(preds, kYChannel, improvement);
+  if (forced_tf != kUnknownTf) {
+    // Transform is set by EncoderConfig::info (debug).
+    params.tf = forced_tf;
+    WP2_CHECK_STATUS(ComputeScoreForEachChannel(/*forced=*/true));
   } else {
-    const TransformPair forced_tf = GetForcedTransform(config, tile_rect);
-    const bool tf_is_forced = (forced_tf != kUnknownTf);
-    Vector<TransformPair> forced_tf_vector;
-    if (tf_is_forced) {
-      WP2_CHECK_ALLOC_OK(forced_tf_vector.resize(1));
-      forced_tf_vector[0] = forced_tf;
-    }
-    const Vector<TransformPair>* const transforms_to_try =
-        tf_is_forced ? &forced_tf_vector : &transforms_subset;
-    // Select the best predictor+transform pair and then choose the best
-    // transform if there are more to try.
-    WP2_CHECK_STATUS(FindBestPredTf(config, tile_rect, preds, segment, context,
-                                    kYChannel, num_channels, /*reduced=*/false,
-                                    *transforms_to_try, counters));
-    if (tf_is_forced || transforms.size() == transforms_subset.size()) {
-      found_best_tf = true;
+    for (const TransformPair tf : transforms_) {
+      params.tf = tf;
+      WP2_CHECK_STATUS(ComputeScoreForEachChannel(forced));
     }
   }
-  if (!found_best_tf) {
-    // TODO(yguyon): Do not recompute scores of 'transforms_subset'
-    WP2_CHECK_STATUS(FindBestTf(config, tile_rect, segment, context, kYChannel,
-                                num_channels, /*reduced=*/false, transforms,
-                                counters));
-  }
-  WP2_CHECK_STATUS(FindBestSplitTf(config, tile_rect, segment, context,
-                                   kYChannel, num_channels,
-                                   /*reduced=*/false, counters));
-
-  // TODO(yguyon): Remember the params during the last Quantize() call and omit
-  //               this one if they are equivalent.
-  QuantizeAll(config, context, segment, kYChannel, /*reduced_transform=*/false,
-              counters);
   return WP2_STATUS_OK;
 }
 
-WP2Status CodedBlock::OptimizeModesChroma(
+WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
+  BlockScore combination;
+  combination.params = *cb_->GetCodingParams(channels_.front());
+  if (!forced) {
+    // Each unique combination should be tried only once.
+    assert(combination.params != last_params_);
+    assert(combination.params != best_combination_.params);
+  }
+
+  // Recompute the prediction of the top left sub-block if needed.
+  // TODO(yguyon): See if the prediction of !split can be reused for split.
+  const bool recompute_top_left_residuals =
+      (cached_predictor_ != combination.params.pred ||
+       cached_split_tf_ != combination.params.split_tf);
+  const uint32_t num_channels = (gparams_->maybe_use_lossy_alpha_ ? 4 : 3);
+  const bool reduced_tf = (channels_.front() == kUChannel && cb_->is420_);
+
+  // Per channel:
+  uint32_t disto[2];  // Distortion (sum of squared errors).
+  float pred_rate[2], res_rate[2], tf_rate[2];  // Estimated cost in bits.
+  float score[2];  // Aggregated distortion and rates. Lower means better.
+  for (Channel c : channels_) {
+    const uint32_t ci = (c == kUChannel) ? 1 : 0;  // 'c' index in 'channels_'.
+
+    Plane16 prediction;
+    WP2_ASSERT_STATUS(prediction.SetView(prediction_cache_[ci][0],
+                                         kMaxBlockSizePix, kMaxBlockSizePix,
+                                         kMaxBlockSizePix));
+    BlockCoeffs16& residuals_cache = residuals_cache_[ci];
+    if (recompute_top_left_residuals) {
+      cb_->PredictBlock(c, /*tf_i=*/0, prediction.Row(0), prediction.Step());
+      cb_->GetResiduals(c, /*tf_i=*/0, prediction, &residuals_cache);
+
+      if (c == channels_.back()) {  // Remember what is cached for all channels.
+        cached_split_tf_ = combination.params.split_tf;
+        cached_predictor_ = combination.params.pred;
+      }
+    }
+    BlockCoeffs16 residuals, reconstructed;  // Temporary buffers.
+    // At least one of {pred, tf} changed, so always reconstruct the top left
+    // sub-block...
+    cb_->TransformAndReconstruct(*config_, *context_, *segment_, c, /*tf_i=*/0,
+                                 reduced_tf, prediction, &residuals_cache,
+                                 &reconstructed, counters_);
+
+    // ... and predict / reconstruct the other sub-blocks (that depend on
+    // the results of top left one), if any.
+    for (uint32_t tf_i = 1; tf_i < cb_->GetNumTransforms(c); ++tf_i) {
+      cb_->PredictBlock(c, tf_i, prediction.Row(0), prediction.Step());
+      cb_->GetResiduals(c, tf_i, prediction, &residuals);
+      cb_->TransformAndReconstruct(*config_, *context_, *segment_, c, tf_i,
+                                   reduced_tf, prediction, &residuals,
+                                   &reconstructed, counters_);
+    }
+    if (c == channels_.back()) {  // Remember what is cached for all channels.
+      last_params_ = combination.params;
+    }
+
+    // Compute distortion.
+    disto[ci] = cb_->GetDisto(c);
+    // TODO(yguyon): In some cases, this combination could be discarded right
+    //               now because disto[ci] > best_combination_.score
+
+    // Estimate the cost of this configuration.
+    // Note: some rates may be skipped if all combinations lead to the same
+    //       partial cost, but it is simpler as is and BlockScorer might be
+    //       called again with different configurations.
+    WP2_CHECK_STATUS(
+        cb_->PredictorRate(c, counters_->predictor(), &pred_rate[ci]));
+    WP2_CHECK_STATUS(
+        cb_->ResidualRate(*context_, c, num_channels, counters_->residuals(),
+                          counters_->residuals_aom(), &res_rate[ci]));
+    WP2_CHECK_STATUS(
+        cb_->TransformRate(c, counters_->transform(), &tf_rate[ci]));
+    const float lambda = cb_->lambda_mult_ * segment_->GetQuant(c).lambda;
+    score[ci] =
+        disto[ci] + lambda * (pred_rate[ci] + res_rate[ci] + tf_rate[ci]);
+
+    combination.score += score[ci];
+    combination.disto += disto[ci];
+  }
+
+  const bool is_best = (best_combination_.params.pred == nullptr ||
+                        combination < best_combination_);
+  if (is_best) {
+    best_combination_ = combination;
+  }
+
+  if (combination.params.pred->IsAngle(nullptr)) {
+    WP2_CHECK_ALLOC_OK(best_combinations_angle_.push_back(combination));
+  } else if (best_combination_no_angle_.params.pred == nullptr ||
+             combination < best_combination_no_angle_) {
+    best_combination_no_angle_ = combination;
+  }
+
+#if !defined(WP2_REDUCE_BINARY_SIZE)
+  // Store scores for debug.
+  for (Channel c : channels_) {
+    const uint32_t ci = (c == kUChannel) ? 1 : 0;
+    cb_->StorePredictionScore(
+        *config_, tile_rect_, c, *cb_->GetCodingParams(c)->pred,
+        cb_->GetCodingParams(c)->tf, disto[ci],
+        cb_->lambda_mult_ * segment_->GetQuant(c).lambda, res_rate[ci],
+        pred_rate[ci], tf_rate[ci], score[ci], is_best,
+        CodedBlock::SearchType::kPredAndTransform);
+  }
+#endif  // WP2_REDUCE_BINARY_SIZE
+
+  return WP2_STATUS_OK;
+}
+
+const VectorNoCtor<bool>& BlockScorer::RefinePredictors() {
+  // Set all predictors to "should-not-be-refined".
+  std::fill(pred_mode_map_.begin(), pred_mode_map_.end(), false);
+  // Only angle predictors are refined and returned.
+  if (best_combinations_angle_.empty()) return pred_mode_map_;
+
+  // Choose to refine all the main angle predictors within a percentage of the
+  // lowest score. This helps refine the predictors with similar scores.
+  std::sort(best_combinations_angle_.begin(), best_combinations_angle_.end());
+  const float min_score = best_combinations_angle_.front().score;  // Best.
+  const float max_score = best_combinations_angle_.back().score;   // Worst.
+  const float fraction = config_->effort / 9.f;  // Max effort includes all.
+  const float min_allowed_score =
+      min_score * (1.f - fraction) + max_score * fraction + 1.f;
+  assert(config_->effort != 9 || max_score <= min_allowed_score);
+
+  for (const BlockScore& main_angle : best_combinations_angle_) {
+    if (main_angle.score <= best_combination_no_angle_.score ||
+        main_angle.disto <= best_combination_no_angle_.disto ||
+        main_angle.score <= min_allowed_score) {
+      assert(main_angle.params.pred->mode() < pred_mode_map_.size());
+      pred_mode_map_[main_angle.params.pred->mode()] = true;
+    }
+  }
+  return pred_mode_map_;
+}
+
+const BlockScore& BlockScorer::GetBestCombination() const {
+  return best_combination_;
+}
+
+void BlockScorer::ReconstructBestCombination() {
+  assert(best_combination_.params.pred != nullptr);
+  if (best_combination_.params != last_params_) {
+    *cb_->GetCodingParams(channels_.front()) = best_combination_.params;
+    for (Channel c : channels_) {
+      const bool is420 = ((c == kUChannel || c == kVChannel) && cb_->is420_);
+      cb_->QuantizeAll(*config_, *context_, *segment_, c, is420, counters_);
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
+
+WP2Status OptimizeModes(const EncoderConfig& config, const Rectangle& tile_rect,
+                        Channel channel, const Predictors& preds,
+                        const Segment& segment, const BlockModes& m,
+                        const BlockContext& context, CodedBlock* const cb,
+                        Counters* const counters, BlockScorer* const scorer) {
+  scorer->Set(context, cb, counters);
+
+  // Either luma, chroma or alpha.
+  WP2_CHECK_ALLOC_OK(scorer->channels_.resize((channel == kUChannel) ? 2 : 1));
+  scorer->channels_.front() = channel;
+  if (channel == kUChannel) scorer->channels_.back() = kVChannel;
+  scorer->segment_ = &segment;
+
+  // First round of combinations.
+  WP2_CHECK_ALLOC_OK(scorer->splits_.copy_from(m.splits_tried_during_preds));
+  WP2_CHECK_ALLOC_OK(scorer->predictors_.copy_from(m.main_preds));
+  WP2_CHECK_ALLOC_OK(scorer->transforms_.copy_from(m.tf_tried_during_preds));
+  WP2_CHECK_STATUS(scorer->ComputeScore());
+
+  // Find all sub-angle predictors sharing the same mode (~angle) as the
+  // best main-angle predictors.
+  scorer->predictors_.clear();
+  const VectorNoCtor<bool>& pred_mode_map = scorer->RefinePredictors();
+  for (const Predictor* const sub_pred : m.sub_preds) {
+    assert(sub_pred->IsAngle(nullptr));
+    assert(std::find(m.main_preds.begin(), m.main_preds.end(), sub_pred) ==
+           m.main_preds.end());
+    if (pred_mode_map[sub_pred->mode()]) {
+      assert(std::find(scorer->predictors_.begin(), scorer->predictors_.end(),
+                       sub_pred) == scorer->predictors_.end());
+      WP2_CHECK_ALLOC_OK(scorer->predictors_.push_back(sub_pred));
+    }
+  }
+  if (!scorer->predictors_.empty()) {
+    WP2_CHECK_STATUS(scorer->ComputeScore());
+  }
+
+  // Keep only the best predictor from now on.
+  WP2_CHECK_ALLOC_OK(scorer->predictors_.resize(1));
+  scorer->predictors_.front() = scorer->GetBestCombination().params.pred;
+
+  // Try other transforms.
+  if (!m.tf_tried_after_preds.empty()) {
+    WP2_CHECK_ALLOC_OK(scorer->splits_.resize(1));
+    scorer->splits_.front() = scorer->GetBestCombination().params.split_tf;
+    WP2_CHECK_ALLOC_OK(scorer->transforms_.copy_from(m.tf_tried_after_preds));
+    WP2_CHECK_STATUS(scorer->ComputeScore());
+  }
+
+  // Try other split_tf.
+  if (!m.splits_tried_after_preds.empty()) {
+    WP2_CHECK_ALLOC_OK(scorer->transforms_.resize(1));
+    scorer->transforms_.front() = scorer->GetBestCombination().params.tf;
+    WP2_CHECK_ALLOC_OK(scorer->splits_.copy_from(m.splits_tried_after_preds));
+    WP2_CHECK_STATUS(scorer->ComputeScore());
+  }
+
+  scorer->ReconstructBestCombination();
+  return WP2_STATUS_OK;
+}
+
+WP2Status OptimizeModesChroma(
     const EncoderConfig& config, const Rectangle& tile_rect, bool has_alpha,
-    const FrontMgrBase& mgr, const UVPredictors& preds, const Segment& segment,
-    const BlockContext& context, ChromaSubsampling chroma_subsampling,
+    const FrontMgrBase& mgr, const Predictors& preds, const Segment& segment,
+    ChromaSubsampling chroma_subsampling, const BlockModes& modes,
+    const BlockContext& context, CodedBlock* const cb, Counters* const counters,
     DCDiffusionMap* const dc_error_u, DCDiffusionMap* const dc_error_v,
-    Counters* const counters) {
+    BlockScorer* const scorer) {
   const uint32_t diffusion =
       DCDiffusionMap::GetDiffusion(config.error_diffusion);
-  for (const Predictor* const pred : preds) {
-    // TODO(skal): deal with useless preds
-    pred->ComputeParams(this, kUChannel);
-    pred->ComputeParams(this, kVChannel);
-  }
-  // Decide if we reduce chroma for finding the best predictors. The
-  // logic is based on what is done a few lines after.
-  const bool reduced =
+  const bool is420_for_sure =
       ((chroma_subsampling == ChromaSubsampling::kSingleBlock &&
         config.uv_mode == EncoderConfig::UVMode420) ||
        chroma_subsampling == ChromaSubsampling::k420);
+  const bool is444_for_sure =
+      ((chroma_subsampling == ChromaSubsampling::kSingleBlock &&
+        config.uv_mode == EncoderConfig::UVMode444) ||
+       chroma_subsampling == ChromaSubsampling::k444);
 
-  CodedBlockBase::CodingParams& params = *GetCodingParams(kUChannel);
-  if ((params.pred = GetForcedPredictor(config, tile_rect, preds, kUChannel)) !=
-      nullptr) {
-    // Predictor is set by EncoderConfig::info (debug).
-  } else if (config.effort == 0 || preds.size() == 1) {
-    // Select the first predictor to save time.
-    params.pred = preds[0];
-    pred_scores_[kUChannel] = pred_scores_[kVChannel] = 1.f;
-  } else if (config.effort == 1) {
-    // Quickly select the best predictor.
-    const uint32_t improvement =
-        100 + std::lround((256 - 100) * config.quality / kMaxLossyQuality);
-    FindBestPred(preds, kUChannel, improvement);
-  } else {
-    const uint32_t num_channels = (has_alpha ? 4 : 3);
-    Vector<TransformPair> transforms;
-    WP2_CHECK_ALLOC_OK(transforms.push_back(kDctDct));
-    // Spend time to select the best predictor.
-    WP2_CHECK_STATUS(FindBestPredTf(config, tile_rect, preds, segment, context,
-                                    kUChannel, num_channels, reduced,
-                                    transforms, counters));
-  }
-
+  cb->is420_ = is420_for_sure;  // Must be set to something now even if unsure.
+  WP2_CHECK_STATUS(OptimizeModes(config, tile_rect, kUChannel, preds, segment,
+                                 modes, context, cb, counters, scorer));
   if (diffusion > 0) {  // Add error diffusion
-    dc_error_[kUChannel] = dc_error_u->Get(blk(), diffusion);
-    dc_error_[kVChannel] = dc_error_v->Get(blk(), diffusion);
+    cb->dc_error_[kUChannel] = dc_error_u->Get(cb->blk(), diffusion);
+    cb->dc_error_[kVChannel] = dc_error_v->Get(cb->blk(), diffusion);
   }
 
+  // Choose the final value of 'cb->is420_'.
   // TODO(skal): decide based on coded luma too?
-  if (reduced) {
-    is420_ = true;
-  } else if ((chroma_subsampling == ChromaSubsampling::kSingleBlock &&
-              config.uv_mode == EncoderConfig::UVMode444) ||
-             chroma_subsampling == ChromaSubsampling::k444) {
-    is420_ = false;
+  if (is420_for_sure) {
+    cb->is420_ = true;
+  } else if (is444_for_sure) {
+    cb->is420_ = false;
   } else {
     assert(chroma_subsampling == ChromaSubsampling::kSingleBlock ||
            chroma_subsampling == ChromaSubsampling::kAdaptive);
-    WP2_CHECK_STATUS(DecideChromaSubsampling(config, tile_rect.x, tile_rect.y,
-                                             has_alpha, segment.quant_u_,
-                                             segment.quant_v_, counters));
+    WP2_CHECK_STATUS(cb->DecideChromaSubsampling(
+        config, tile_rect.x, tile_rect.y, has_alpha,
+        segment.quant_u_, segment.quant_v_, counters));
   }
-  QuantizeAll(config, context, segment, kUChannel, is420_, counters);
-  QuantizeAll(config, context, segment, kVChannel, is420_, counters);
+  if (diffusion > 0 || (!is420_for_sure && !is444_for_sure)) {
+    cb->QuantizeAll(config, context, segment, kUChannel, cb->is420_, counters);
+    cb->QuantizeAll(config, context, segment, kVChannel, cb->is420_, counters);
+  }
   if (diffusion > 0) {
-    dc_error_u->Store(mgr, blk(), dc_error_next_[kUChannel]);
-    dc_error_v->Store(mgr, blk(), dc_error_next_[kVChannel]);
+    dc_error_u->Store(mgr, cb->blk(), cb->dc_error_next_[kUChannel]);
+    dc_error_v->Store(mgr, cb->blk(), cb->dc_error_next_[kVChannel]);
   }
   return WP2_STATUS_OK;
 }

@@ -305,8 +305,9 @@ void SyntaxWriter::WritePredictors(const CodedBlock& cb, Channel channel,
     sm->Process(kSymbolModeY, params.pred->mode(), "y", enc);
   } else if (channel == kUChannel) {
     sm->Process(kSymbolModeUV, params.pred->mode(), "uv", enc);
+  } else if (channel == kVChannel) {
     // kVChannel is not written as it is the same as kUChannel.
-  } else if (channel == kAChannel) {
+  } else {
     sm->Process(kSymbolModeA, params.pred->mode(), "a", enc);
   }
   /* sub_mode = */params.pred->WriteParams(cb, channel, sm, enc);
@@ -443,8 +444,11 @@ WP2Status SyntaxWriter::FindBestEncodingMethods(CodedBlock* const cb) {
   return WP2_STATUS_OK;
 }
 
-WP2Status SyntaxWriter::DecideAlpha(CodedBlock* const cb) {
-  return alpha_writer_.DecideAlpha(cb, residual_writer_, &counters_);
+WP2Status SyntaxWriter::DecideAlpha(CodedBlock* const cb,
+                                    const BlockModes& modes,
+                                    BlockScorer* const scorer) {
+  return alpha_writer_.DecideAlpha(cb, modes, residual_writer_, &counters_,
+                                   scorer);
 }
 
 WP2Status SyntaxWriter::RecordAlpha(const CodedBlock& cb) {

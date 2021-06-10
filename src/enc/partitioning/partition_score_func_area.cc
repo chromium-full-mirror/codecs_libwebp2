@@ -69,7 +69,9 @@ WP2Status AreaScoreFunc::Init(const EncoderConfig& config,
   const ChromaSubsampling chroma_subsampling =
       DecideChromaSubsampling(*config_, /*more_than_one_block=*/true);
   const bool use_aom_coeffs = DecideAOMCoeffs(*config_, tile_rect_);
-  WP2_CHECK_STATUS(DecideTransforms(config, &transforms_, &transforms_subset_));
+  WP2_CHECK_STATUS(
+      DecideModes(config, gparams, &y_modes_, &uv_modes_, &a_modes_));
+  WP2_CHECK_STATUS(scorer_.Init(config, gparams, tile_rect));
 
   // Retrieve the default partition (multipass) to have a reference.
   {
@@ -150,7 +152,8 @@ WP2Status AreaScoreFunc::GetAreaDefaultScore(VectorNoCtor<Block>* const blocks,
   Vector<CodedBlock> partition;
   WP2_CHECK_STATUS(GetAreaDefaultPartition(&partition));
   assert(!partition.empty());
-  WP2_CHECK_STATUS(GetDistoRate(&partition, &default_disto_, &default_rate_));
+  WP2_CHECK_STATUS(
+      GetDistoRate(&partition, &scorer_, &default_disto_, &default_rate_));
   // Compute the score with itself as reference, to be easily comparable.
   *score = GetRelativeScore(*config_, default_disto_, default_rate_,
                             default_disto_, default_rate_);
@@ -191,7 +194,7 @@ WP2Status AreaScoreFunc::GetAreaGridScore(BlockSize block_size,
 
   assert(default_disto_ >= 0.f && default_rate_ >= 0.f);
   float disto = 0.f, rate = 0.f;
-  WP2_CHECK_STATUS(GetDistoRate(&partition, &disto, &rate));
+  WP2_CHECK_STATUS(GetDistoRate(&partition, &scorer_, &disto, &rate));
   *score =
       GetRelativeScore(*config_, default_disto_, default_rate_, disto, rate);
 
@@ -201,6 +204,7 @@ WP2Status AreaScoreFunc::GetAreaGridScore(BlockSize block_size,
 }
 
 WP2Status AreaScoreFunc::GetDistoRate(Vector<CodedBlock>* const area_blocks,
+                                      BlockScorer* const scorer,
                                       float* const disto,
                                       float* const rate) const {
   *rate = *disto = 0.f;
@@ -227,8 +231,8 @@ WP2Status AreaScoreFunc::GetDistoRate(Vector<CodedBlock>* const area_blocks,
              cb.y() == front_mgr.GetMaxPossibleBlock().y() &&
              front_mgr.GetMaxPossibleBlock().rect().Contains(cb.blk().rect()));
       cb.SetDim(cb.blk(), front_mgr);
-      WP2_CHECK_STATUS(EncodeBlock(front_mgr, &cb, &syntax_writer, &dc_error_u,
-                                   &dc_error_v, &buffer_));
+      WP2_CHECK_STATUS(EncodeBlock(front_mgr, &syntax_writer, &dc_error_u,
+                                   &dc_error_v, &cb, scorer, &buffer_));
       WP2_CHECK_ALLOC_OK(
           front_mgr.UseSize(cb.dim(), /*block=*/nullptr, /*use_block=*/true));
     }
@@ -294,8 +298,8 @@ WP2Status AreaScoreFunc::Use(const Block& block) {
   cb.SetDim(block, area_front_mgr_);
   assert(cb.blk() == block);
   // Write the final pixels for future context and rate computation.
-  WP2_CHECK_STATUS(EncodeBlock(area_front_mgr_, &cb, &syntax_writer_,
-                               &dc_error_u_, &dc_error_v_, &buffer_));
+  WP2_CHECK_STATUS(EncodeBlock(area_front_mgr_, &syntax_writer_, &dc_error_u_,
+                               &dc_error_v_, &cb, &scorer_, &buffer_));
   WP2_CHECK_ALLOC_OK(
       area_front_mgr_.UseSize(cb.dim(), /*block=*/nullptr, /*use_block=*/true));
   if (area_front_mgr_.Done()) {
@@ -358,8 +362,8 @@ WP2Status SubAreaScoreFunc::ComputeScore(const Block& block,
     assert(!default_partition.empty() &&
            default_partition.front().dim() != BLK_LAST);
     // TODO(yguyon): Also include the 'area_used_blocks_' into the disto/rate
-    WP2_CHECK_STATUS(GetDistoRate(&default_partition, &default_block_disto_,
-                                  &default_block_rate_));
+    WP2_CHECK_STATUS(GetDistoRate(&default_partition, &scorer_,
+                                  &default_block_disto_, &default_block_rate_));
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     const float default_score =
         GetRelativeScore(*config_, default_block_disto_, default_block_rate_,
@@ -395,7 +399,8 @@ WP2Status SubAreaScoreFunc::ComputeScore(const Block& block,
     WP2_CHECK_STATUS(GetAreaRemainingDefaultPartition(remaining_blocks_progress,
                                                       &area_remaining_blocks));
 
-    WP2_CHECK_STATUS(GetDistoRate(&area_remaining_blocks, &disto, &rate));
+    WP2_CHECK_STATUS(
+        GetDistoRate(&area_remaining_blocks, &scorer_, &disto, &rate));
     *score = GetRelativeScore(*config_, default_block_disto_,
                               default_block_rate_, disto, rate);
     WP2_CHECK_REDUCED_STATUS(

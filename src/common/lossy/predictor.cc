@@ -335,10 +335,9 @@ class AnglePredictor : public ContextPredictor {
     return (uint8_t)idx;
   }
 
-  void GetAngleInfo(bool* const is_angle_predictor,
-                    float* const angle) const override {
-    *is_angle_predictor = true;
-    *angle = 22.5f + 22.5f * ((int)angle_idx_ - 3) / 7.f;
+  bool IsAngle(float* const angle) const override {
+    if (angle != nullptr) *angle = 22.5f + 22.5f * ((int)angle_idx_ - 3) / 7.f;
+    return true;
   }
 
   uint32_t WriteParams(const CodedBlockBase& cb, Channel channel,
@@ -365,10 +364,8 @@ class AnglePredictor : public ContextPredictor {
   }
 
   std::string GetName() const override {
-    bool is_angle_predictor;
     float angle;
-    GetAngleInfo(&is_angle_predictor, &angle);
-    assert(is_angle_predictor);
+    if (!IsAngle(&angle)) assert(false);
     const int angle_deg = std::round(angle);
     return "angle predictor (" + std::to_string(angle_deg) +
            " degrees, idx=" + std::to_string((int)angle_idx_) + ")";
@@ -533,6 +530,9 @@ class AlphaPredictor : public Predictor {
     return pred_->ReadParams(cb, channel, sm, dec);
   }
   bool DependsOnLuma() const override { return true; }
+  bool IsAngle(float* const angle) const override {
+    return pred_->IsAngle(angle);
+  }
 
  protected:
   Predictor* const pred_;

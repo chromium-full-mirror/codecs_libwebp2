@@ -132,11 +132,11 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass, BlockSize block_size,
     return WP2_STATUS_OK;
   }
 
-  struct BlockScore {
+  struct Result {
     Block blk;
     float score;
   };
-  VectorNoCtor<BlockScore> block_scores;
+  VectorNoCtor<Result> results;
   multi_score_func_->SetPass(pass);
 
   const uint32_t incr_x = (restrict_to == Grid::Snapped) ? block.w() : 1;
@@ -170,7 +170,7 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass, BlockSize block_size,
                   SelectBlock(pass, block, max_num_blocks_left, out));
             } else {
               // Keep the scores of the passing blocks in memory.
-              WP2_CHECK_ALLOC_OK(block_scores.push_back({block, score}));
+              WP2_CHECK_ALLOC_OK(results.push_back({block, score}));
             }
           }
         } else {
@@ -185,14 +185,14 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass, BlockSize block_size,
   if (restrict_to != Grid::Snapped) {
     // Select blocks with best (=lowest) score first.
     // stable_sort() is used for its determinism.
-    std::stable_sort(block_scores.begin(), block_scores.end(),
-                     [](const BlockScore& l, const BlockScore& r) {
+    std::stable_sort(results.begin(), results.end(),
+                     [](const Result& l, const Result& r) {
                        return l.score < r.score;
                      });
 
-    for (const BlockScore& bs : block_scores) {
-      if (IsOccupied(bs.blk)) continue;  // 'occupancy_' might have changed.
-      WP2_CHECK_STATUS(SelectBlock(pass, bs.blk, max_num_blocks_left, out));
+    for (const Result& result : results) {
+      if (IsOccupied(result.blk)) continue;  // 'occupancy_' might have changed.
+      WP2_CHECK_STATUS(SelectBlock(pass, result.blk, max_num_blocks_left, out));
     }
   }
 

@@ -90,7 +90,7 @@ done
 
 check_roundtrip "${TESTDATA_DIR}/source3_222x167.jpg" 31.0 22.0 "-pass 3"
 
-check_roundtrip "${TESTDATA_DIR}/source1_64x48.png" 32.0 22.0 "-alpha_q 80"
+check_roundtrip "${TESTDATA_DIR}/source1_64x48.png" 31.9 21.5 "-alpha_q 80"
 
 ${DWP2} -info "${TMP_WP2}"
 

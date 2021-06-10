@@ -104,6 +104,8 @@ class Predictor : public WP2Allocable {
   // predictors.
   void SetMode(uint32_t mode) { mode_ = mode; }
   virtual uint32_t mode() const { return mode_; }
+  // Returns true if this predictor is an angle predictor.
+  virtual bool IsAngle(float* const angle) const { return false; }
 
   // Debugging methods.
   virtual std::string GetName() const = 0;
@@ -111,13 +113,6 @@ class Predictor : public WP2Allocable {
   virtual std::string GetFakePredStr() const = 0;
   virtual std::string GetPredStr(const CodedBlockBase& cb, Channel channel,
                                  bool split_tf, uint32_t tf_i) const = 0;
-  // This function is only used for debugging and returns info about the
-  // predictor if it is an angle predictor.
-  virtual void GetAngleInfo(bool* const is_angle_predictor,
-                            float* const angle) const {
-    *is_angle_predictor = false;
-    *angle = std::numeric_limits<float>::max();
-  }
 
   static constexpr uint32_t kInvalidMode = std::numeric_limits<uint32_t>::max();
 
@@ -161,24 +156,6 @@ class Predictors {
   // Get the maximum mode (inclusive) contained in a predictor vector.
   uint32_t GetMaxMode() const;
 
-  // Encoder: Finds the best predictor for a block 'cb'. This predictor has to
-  // give a score better than the current one 'best_score'.
-  // This is effort dependent: it looks at all non-angle predictors, and for
-  // angle predictors, it looks at the main angles but only refine some of them
-  // depending on the effort.
-  // For Y/A channel, best_score needs to be given and the function will try to
-  // find a better score. If found, best_factor will be replaced and
-  // best_predictor set.
-  WP2Status FindBest(const EncoderConfig& config, const Rectangle& tile_rect,
-                     uint32_t num_channels, const BlockContext& context,
-                     const Segment& segment, bool reduced,
-                     const Vector<TransformPair>& transforms,
-                     Counters* const counters, CodedBlock* const cb,
-                     float* const best_score,
-                     const Predictor** const best_predictor,
-                     TransformPair* const best_tf,
-                     bool* const best_split) const;
-
  protected:
   Channel channel_;
 
@@ -211,7 +188,6 @@ class Predictors {
   WP2Status FillImpl(const Pred* const mapping, uint32_t num_modes,
                      int16_t min_value, int16_t max_value,
                      const CSPTransform* const transform);
-
 
  private:
   // Takes care of recording a freshly allocated predictor 'pred'.

@@ -307,7 +307,6 @@ ENC_OBJS = \
     src/enc/partitioning/partitioner_split.o \
     src/enc/partitioning/partitioner_split_recurse.o \
     src/enc/partitioning/partitioner_top_left.o \
-    src/enc/predictor_enc.o \
     src/enc/residuals_enc.o \
     src/enc/residuals_enc_aom.o \
     src/enc/screen_content/screen_enc.o \
@@ -1012,7 +1011,6 @@ DIST_FILES= \
             src/enc/partitioning/partitioner_split_recurse.cc \
             src/enc/partitioning/partitioner_top_left.h \
             src/enc/partitioning/partitioner_top_left.cc \
-            src/enc/predictor_enc.cc \
             src/enc/syntax_enc.cc \
             src/enc/preview/preview_analysis.cc \
             src/enc/preview/preview_color.cc \

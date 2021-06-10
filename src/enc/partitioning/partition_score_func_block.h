@@ -71,13 +71,15 @@ class BlockScoreFunc : public PartitionScoreFunc {
                                 SyntaxWriter* const syntax_writer,
                                 DCDiffusionMap* const dc_error_u,
                                 DCDiffusionMap* const dc_error_v,
-                                CodedBlock* const cb) const;
+                                CodedBlock* const cb,
+                                BlockScorer* const scorer) const;
   // Finds the best encoding parameters then encodes and records 'cb'.
   // Advances the 'front_mgr'.
-  WP2Status EncodeBlock(const FrontMgrBase& front_mgr, CodedBlock* const cb,
+  WP2Status EncodeBlock(const FrontMgrBase& front_mgr,
                         SyntaxWriter* const syntax_writer,
                         DCDiffusionMap* const dc_error_u,
-                        DCDiffusionMap* const dc_error_v,
+                        DCDiffusionMap* const dc_error_v, CodedBlock* const cb,
+                        BlockScorer* const scorer,
                         YUVPlane* const buffer) const;
   // Writes 'cb' to 'enc'. Advances the 'front_mgr'.
   WP2Status WriteBlock(const FrontMgrBase& front_mgr, const CodedBlock& cb,
@@ -85,7 +87,7 @@ class BlockScoreFunc : public PartitionScoreFunc {
                        ANSEnc* const enc) const;
 
   // Defined by 'config_' and not modified outside Init().
-  Vector<TransformPair> transforms_, transforms_subset_;
+  BlockModes y_modes_, uv_modes_, a_modes_;
 
   bool use_splits_;
 
@@ -96,6 +98,7 @@ class BlockScoreFunc : public PartitionScoreFunc {
   ANSDictionaries dicts_;
   SyntaxWriter syntax_writer_;
   DCDiffusionMap dc_error_u_, dc_error_v_;
+  BlockScorer scorer_;
 
   // Temporary instances.
   CodedBlock tmp_cb_;

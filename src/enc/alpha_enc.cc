@@ -118,13 +118,16 @@ WP2Status AlphaWriter::WriteHeader(uint32_t num_coeffs_max,
 }
 
 WP2Status AlphaWriter::DecideAlpha(CodedBlock* const cb,
+                                   const BlockModes& modes,
                                    const ResidualWriter& residual_writer,
-                                   Counters* const counters) {
+                                   Counters* const counters,
+                                   BlockScorer* const scorer) {
   if (alpha_mode_ == kAlphaModeLossless) {
     cb->alpha_mode_ = kBlockAlphaLossless;
   } else {
-    WP2_CHECK_STATUS(ProcessLossy(
-        cb, residual_writer, lossless_encode_info_.bits_per_pixel, counters));
+    WP2_CHECK_STATUS(ProcessLossy(cb, modes, residual_writer,
+                                  lossless_encode_info_.bits_per_pixel,
+                                  counters, scorer));
   }
 
   return WP2_STATUS_OK;
@@ -192,9 +195,11 @@ BlockAlphaMode AlphaWriter::GetBlockAlphaMode(const CodedBlock& cb,
 }
 
 WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
+                                    const BlockModes& modes,
                                     const ResidualWriter& residual_writer,
                                     const Vector_f& bits_per_pixel,
-                                    Counters* const counters) {
+                                    Counters* const counters,
+                                    BlockScorer* const scorer) {
   cb->alpha_mode_ = GetBlockAlphaMode(*cb, cb->in_.A);
   if (cb->alpha_mode_ != kBlockAlphaLossy) {
     assert(cb->alpha_mode_ == kBlockAlphaFullOpaque ||
@@ -203,41 +208,9 @@ WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
     return WP2_STATUS_OK;
   }
 
-  constexpr uint32_t kNumChannels = 4;  // Otherwise we would not be here.
-
-  const APredictors& preds = gparams_->a_preds_;
-  const Segment& segment = gparams_->segments_[0];
-  CodedBlockBase::CodingParams& params = *cb->GetCodingParams(kAChannel);
-  params.tf = kDctDct;
-
-  for (const Predictor* const pred : preds) {
-    if (!pred->ComputeParams(cb, kAChannel)) {
-      // TODO(skal): deal with useless preds
-    }
-  }
-
-  if ((params.pred = cb->GetForcedPredictor(config_, tile_rect_, preds,
-                                            kAChannel)) != nullptr) {
-    // Predictor is set by EncoderConfig::info (debug).
-    cb->pred_scores_[kAChannel] = 1.f;
-  } else if (config_.effort == 1) {
-    // Select the first predictor to save time.
-    params.pred = preds[0];
-    cb->pred_scores_[kAChannel] = 1.f;
-  } else if (config_.effort == 2) {
-    // Quickly select the best predictor.
-    cb->FindBestPred(preds, kAChannel);
-  } else {
-    Vector<TransformPair> transforms;
-    WP2_CHECK_ALLOC_OK(transforms.push_back(kDctDct));
-    // Spend more time to select the best predictor.
-    WP2_CHECK_STATUS(cb->FindBestPredTf(
-        config_, tile_rect_, preds, segment, *context_, kAChannel, kNumChannels,
-        /*reduced=*/false, transforms, counters));
-  }
-  // Quantizes and stores reconstructed pixels in cb->out_.
-  cb->Quantize(config_, *context_, segment, kAChannel, /*tf_i=*/0,
-               /*reduced_transform=*/false, counters);
+  WP2_CHECK_STATUS(WP2::OptimizeModes(
+      config_, tile_rect_, kAChannel, gparams_->a_preds_,
+      gparams_->segments_[0], modes, *context_, cb, counters, scorer));
 
   // Update alpha_mode in case the reconstructed pixels are fully opaque or
   // fully transparent, even if the input pixels are not.
@@ -248,7 +221,7 @@ WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
     WP2_CHECK_STATUS(residual_writer.FindBestEncodingMethod(
         cb->tdim(kAChannel), cb->coeffs_[kAChannel][tf_i],
         cb->num_coeffs_[kAChannel][tf_i], cb->IsFirstCoeffDC(kAChannel),
-        kAChannel, kNumChannels, counters->residuals(),
+        kAChannel, /*num_channels=*/4, counters->residuals(),
         &cb->method_[kAChannel][tf_i]));
   }
 

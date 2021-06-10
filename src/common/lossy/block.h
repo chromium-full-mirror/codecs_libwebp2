@@ -57,7 +57,7 @@ class ContextCache {
   const int16_t* GetSmall(const CodedBlockBase& cb, Channel channel,
                           uint32_t tf_i, ContextType context_type);
   // Sets contexts for all parameters as uncomputed.
-  void Reset();
+  void Reset(bool only_small_right_or_bot_contexts = false);
 
  protected:
   bool CheckContextCache(const CodedBlockBase& cb, Channel channel,
@@ -157,17 +157,21 @@ class CodedBlockBase {
 
   // Coding parameters for a given channel.
   struct CodingParams {
+    // Operators.
+    bool operator==(const CodingParams& other) const;
+    bool operator!=(const CodingParams& other) const;
+
+    // Returns the frequency domain transform for the horizontal axis.
+    WP2TransformType tf_x() const { return kTfX[tf]; }
+    // Returns the frequency domain transform for the vertical axis.
+    WP2TransformType tf_y() const { return kTfY[tf]; }
+
     // Predictor.
     const Predictor* pred = nullptr;
     // Frequency domain transform.
     TransformPair tf = kDctDct;
     // Whether to split the block into smaller transforms or not.
     bool split_tf = false;
-
-    // Returns the frequency domain transform for the horizontal axis.
-    WP2TransformType tf_x() const { return kTfX[tf]; }
-    // Returns the frequency domain transform for the vertical axis.
-    WP2TransformType tf_y() const { return kTfY[tf]; }
   };
 
   const CodingParams& GetCodingParams(Channel channel) const;

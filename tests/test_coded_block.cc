@@ -15,6 +15,7 @@
 // Test CodedBlock.
 
 #include "include/helpers.h"
+#include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/transforms.h"
@@ -47,15 +48,13 @@ class CodedBlockTest : public testing::Test {
 
 TYPED_TEST_SUITE(CodedBlockTest, FrontMgrs);
 
-TYPED_TEST(CodedBlockTest, FindBestModes) {
+TYPED_TEST(CodedBlockTest, OptimizeModes) {
   WP2::ANSInit();
   WP2MathInit();
   WP2PSNRInit();
   WP2TransformInit();
   WP2::PredictionInit();
 
-  constexpr uint32_t kHasAlpha = false;
-  constexpr uint32_t kNumChannels = (kHasAlpha ? 4 : 3);
   const uint32_t height = kPredHeight * 2;
   const uint32_t width = kPredWidth * 2;
   const Rectangle tile_rect = {0, 0, width, height};
@@ -85,19 +84,20 @@ TYPED_TEST(CodedBlockTest, FindBestModes) {
   ASSERT_TRUE(fake_map.resize(width * height));
   for (auto& m : fake_map) m = 0;
 
-  YPredictors predictors;
-  ASSERT_WP2_OK(predictors.Fill(/*min_value=*/-512, /*max_value=*/511));
+  GlobalParams gparams;  // Fill only what is needed by BlockScorer.
+  ASSERT_WP2_OK(gparams.y_preds_.Fill(/*min_value=*/-512, /*max_value=*/511));
 
-  Segment segment;
+  ASSERT_TRUE(gparams.segments_.resize(1));
+  Segment& segment = gparams.segments_.front();
   ASSERT_WP2_OK(segment.AllocateForEncoder());
   const uint16_t quants[kNumQuantZones] = {128, 128, 128, 128, 128};
   segment.quant_y_.Init(/*max_residual=*/1024, /*q_scale=*/1, quants);
   segment.quant_y_.SetLambda();
 
   SymbolsInfo symbols_info;
-  ASSERT_WP2_OK(symbols_info.InitLossy(/*num_segments=*/1, ALL_RECTS, kHasAlpha,
-                                       /*use_aom_coeffs=*/false,
-                                       /*use_splits=*/false));
+  ASSERT_WP2_OK(
+      symbols_info.InitLossy(/*num_segments=*/1, ALL_RECTS, /*has_alpha=*/false,
+                             /*use_aom_coeffs=*/false, /*use_splits=*/false));
   SymbolRecorder recorder;
   symbols_info.SetInfo(kSymbolModeY, /*min=*/0, /*max=*/kYPredModeNum - 1,
                        /*num_clusters=*/1, SymbolsInfo::StorageMethod::kAuto);
@@ -105,14 +105,18 @@ TYPED_TEST(CodedBlockTest, FindBestModes) {
   Counters counters;
   ASSERT_WP2_OK(counters.Init(/*effort=*/5, recorder));
 
-  Vector<TransformPair> transforms;
-  ASSERT_TRUE(transforms.push_back(kDctDct));
-
   BlockContext context;
-  WP2_ASSERT_STATUS(context.Init(/*use_aom=*/false));
-  ASSERT_WP2_OK(cb.FindBestPredTf(
-      EncoderConfig::kDefault, tile_rect, predictors, segment, context,
-      kYChannel, kNumChannels, /*reduced=*/false, transforms, &counters));
+  ASSERT_WP2_OK(context.Init(/*use_aom=*/false));
+
+  BlockModes y_modes, uv_modes, a_modes;
+  ASSERT_WP2_OK(DecideModes(EncoderConfig::kDefault, gparams, &y_modes,
+                            &uv_modes, &a_modes));
+
+  BlockScorer scorer;
+  ASSERT_WP2_OK(scorer.Init(EncoderConfig::kDefault, gparams, tile_rect));
+  ASSERT_WP2_OK(OptimizeModes(EncoderConfig::kDefault, tile_rect, kYChannel,
+                              gparams.y_preds_, segment, y_modes, context, &cb,
+                              &counters, &scorer));
 }
 
 // Turns two coordinates into a number.

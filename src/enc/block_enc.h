@@ -20,7 +20,9 @@
 #ifndef WP2_ENC_BLOCK_ENC_H_
 #define WP2_ENC_BLOCK_ENC_H_
 
+#include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/predictor.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {
@@ -100,59 +102,12 @@ class CodedBlock : public CodedBlockBase {
   // Position and size must be set prior to calling these.
   void SetSrcInput(const YUVPlane& in);  // Used by GetDisto().
 
-  // Assigns the best of the 'transforms' (based on full pred+tf+quant+recons
-  // score) to the CodingParams of 'channel'. The final predictor must be
-  // selected before calling FindBestTf().
-  WP2Status FindBestTf(const EncoderConfig& config, const Rectangle& tile_rect,
-                       const Segment& segment, const BlockContext& context,
-                       Channel channel, uint32_t num_channels, bool reduced,
-                       const Vector<TransformPair>& transforms,
-                       Counters* const counters);
-
-  // Assigns the best of the 'preds' (based on pred score only) to the
-  // CodingParams of 'channel'. 'improvement' controls how much the best
-  // score so far must be bestened during the search, on the range [0..256].
-  void FindBestPred(const Predictors& preds, Channel channel,
-                    uint32_t improvement = 256);
-  // Assigns the best pair of 'preds/transforms' (based on full
-  // pred+tf+quant+recons score) to the CodingParams of 'channel'.
-  WP2Status FindBestPredTf(const EncoderConfig& config,
-                           const Rectangle& tile_rect, const Predictors& preds,
-                           const Segment& segment, const BlockContext& context,
-                           Channel channel, uint32_t num_channels, bool reduced,
-                           const Vector<TransformPair>& transforms,
-                           Counters* const counters);
-  // Selects whether to 'split_tf' or not based on residuals rate.
-  WP2Status FindBestSplitTf(const EncoderConfig& config,
-                            const Rectangle& tile_rect, const Segment& segment,
-                            const BlockContext& context, Channel channel,
-                            uint32_t num_channels, bool reduced,
-                            Counters* const counters);
-  // Calls FindBestPred/Tf() depending on 'config.effort' and 'context' then
-  // Quantize(). All 'transforms' will be tested but only 'transforms_subset'
-  // will be tried for each of the 'preds'.
-  WP2Status OptimizeModesLuma(const EncoderConfig& config,
-                              const Rectangle& tile_rect, bool has_alpha,
-                              const Predictors& preds, const Segment& segment,
-                              const BlockContext& context,
-                              const Vector<TransformPair>& transforms,
-                              const Vector<TransformPair>& transforms_subset,
-                              Counters* const counters);
-
   // Decides whether to use yuv420 based on coeffs_[kUChannel or kVChannel].
   WP2Status DecideChromaSubsampling(const EncoderConfig& config,
                                     uint32_t tile_pos_x, uint32_t tile_pos_y,
                                     bool has_alpha, const QuantMtx& quant_u,
                                     const QuantMtx& quant_v,
                                     Counters* const counters);
-
-  // Calls FindBestUVModes() and DecideChromaSubsampling() then Quantize().
-  WP2Status OptimizeModesChroma(
-    const EncoderConfig& config, const Rectangle& tile_rect, bool has_alpha,
-    const FrontMgrBase& mgr, const UVPredictors& preds, const Segment& segment,
-    const BlockContext& context, ChromaSubsampling chroma_subsampling,
-    DCDiffusionMap* const dc_error_u, DCDiffusionMap* const dc_error_v,
-    Counters* const counters);
 
   // Subtracts the 'prediction' from 'in_' and stores the residuals in 'res'.
   void GetResiduals(Channel channel, uint32_t tf_i, const Plane16& prediction,
@@ -319,6 +274,113 @@ class CodedBlock : public CodedBlockBase {
   // distortion for the block: should be assigned to highly textured blocks.
   float lambda_mult_ = 1.f;
 };
+
+//------------------------------------------------------------------------------
+
+// Pred/tf/split score struct.
+struct BlockScore {
+  bool operator<(const BlockScore& s) const { return (score < s.score); }
+
+  float score = 0.f;   // Lower score means better score.
+  uint32_t disto = 0;  // Squared error sum.
+  CodedBlock::CodingParams params;
+};
+
+// Pred/tf/split score computation.
+class BlockScorer {
+ public:
+  // Initializes the object for the whole tile.
+  WP2Status Init(const EncoderConfig& config, const GlobalParams& gparams,
+                 Rectangle tile_rect);
+  // Sets the block to be encoded with the various configuration combinations.
+  // Forgets the best combinations found so far and resets the cached residuals.
+  void Set(const BlockContext& context, CodedBlock* cb, Counters* counters);
+
+  // Computes the scores and the distortions of the block for each combination
+  // of the configurations below.
+  // Can be called several times in a row as long as the configurations differ.
+  WP2Status ComputeScore();
+
+  // Access results.
+  const BlockScore& GetBestCombination() const;
+  // Computes and returns predictor modes mapped to whether they should be
+  // refined or not, based on the scores of the previous ComputeScore() calls.
+  const VectorNoCtor<bool>& RefinePredictors();
+
+  // Sets the block to the best combination found and reconstruct it.
+  void ReconstructBestCombination();
+
+  // Configurations. Each must be set prior to calling ComputeScore().
+  Vector<Channel> channels_;             // Y, A or U+V.
+  Vector<bool> splits_;                  // False, true or false+true.
+  Vector<const Predictor*> predictors_;  // List of predictors to try.
+  Vector<TransformPair> transforms_;     // List of transforms to try.
+  const Segment* segment_;               // Segment must be known in advance.
+
+ private:
+  WP2Status ComputeScoreForEachPredictor(bool forced);
+  WP2Status ComputeScoreForEachTransform(bool forced);
+  WP2Status ComputeScoreForEachChannel(bool forced);
+
+  // Const settings common to the whole tile.
+  const EncoderConfig* config_;
+  const GlobalParams* gparams_;
+  Rectangle tile_rect_;
+
+  // Block.
+  CodedBlock* cb_;
+  const BlockContext* context_;
+  Counters* counters_;
+
+  // Cached results to avoid computing the same residuals twice during different
+  // configuration combinations of the same block and channel.
+  const Predictor* cached_predictor_;  // Predictor used to generate the
+                                       // 'prediction_cache_'. Null if not yet.
+  bool cached_split_tf_;  // Param when the 'prediction_cache_' was generated.
+                          // Only valid if 'cached_predictor_' is not null.
+  BlockCoeffs16 prediction_cache_[2];  // Cached top left sub-block prediction.
+  BlockCoeffs16 residuals_cache_[2];   // Residuals of 'prediction_cache_'.
+
+  CodedBlock::CodingParams last_params_;  // Last reconstructed samples.
+
+  // Best combination found so far for 'cb_'.
+  BlockScore best_combination_;
+  BlockScore best_combination_no_angle_;  // Same but only among no-angle preds.
+  VectorNoCtor<BlockScore> best_combinations_angle_;  // Best angle preds.
+
+  VectorNoCtor<bool> pred_mode_map_;  // Mode index to "should-be-refined".
+                                      // Stored here to avoid reallocations.
+};
+
+//------------------------------------------------------------------------------
+
+// Used to store the configurations of BlockScorer for one channel.
+struct BlockModes {
+  Vector<bool> splits_tried_during_preds;
+  Vector<bool> splits_tried_after_preds;
+  Vector<const Predictor*> main_preds;
+  Vector<const Predictor*> sub_preds;
+  Vector<TransformPair> tf_tried_during_preds;
+  Vector<TransformPair> tf_tried_after_preds;
+};
+
+// Finds the best BlockModes combination. Then reconstructs the samples with it.
+WP2Status OptimizeModes(const EncoderConfig& config, const Rectangle& tile_rect,
+                        Channel channel, const Predictors& preds,
+                        const Segment& segment, const BlockModes& m,
+                        const BlockContext& context, CodedBlock* const cb,
+                        Counters* const counters, BlockScorer* const scorer);
+
+// Calls OptimizeModes() and DecideChromaSubsampling() then QuantizeAll().
+WP2Status OptimizeModesChroma(
+    const EncoderConfig& config, const Rectangle& tile_rect, bool has_alpha,
+    const FrontMgrBase& mgr, const Predictors& preds, const Segment& segment,
+    ChromaSubsampling chroma_subsampling, const BlockModes& modes,
+    const BlockContext& context, CodedBlock* const cb, Counters* const counters,
+    DCDiffusionMap* const dc_error_u, DCDiffusionMap* const dc_error_v,
+    BlockScorer* const scorer);
+
+//------------------------------------------------------------------------------
 
 }    // namespace WP2
 

@@ -94,9 +94,9 @@ PartitionMethod FinalPartitionMethod(const EncoderConfig& config,
 ChromaSubsampling DecideChromaSubsampling(const EncoderConfig& config,
                                           bool more_than_one_block);
 bool DecideAOMCoeffs(const EncoderConfig& config, const Rectangle& tile_rect);
-WP2Status DecideTransforms(const EncoderConfig& config,
-                           Vector<TransformPair>* const transforms,
-                           Vector<TransformPair>* const transforms_subset);
+WP2Status DecideModes(const EncoderConfig& config, const GlobalParams& gparams,
+                      BlockModes* const y_modes, BlockModes* const uv_modes,
+                      BlockModes* const a_modes = nullptr);
 
 //------------------------------------------------------------------------------
 
@@ -252,9 +252,9 @@ class AlphaWriter {
 
   // Decides cb->alpha_mode_. If lossy is used,
   // coefficients will be quantized and an encoding method decided.
-  WP2Status DecideAlpha(CodedBlock* const cb,
+  WP2Status DecideAlpha(CodedBlock* const cb, const BlockModes& modes,
                         const ResidualWriter& residual_writer,
-                        Counters* const counters);
+                        Counters* const counters, BlockScorer* const scorer);
 
   WP2Status ResetRecord();
   WP2Status Record(const CodedBlock& cb);
@@ -273,10 +273,10 @@ class AlphaWriter {
   // Decides whether to use lossy residuals or plain black/white for a given
   // block. If using residuals, encoding params (predictors/transform) and
   // residuals are computed.
-  WP2Status ProcessLossy(CodedBlock* const cb,
+  WP2Status ProcessLossy(CodedBlock* const cb, const BlockModes& modes,
                          const ResidualWriter& residual_writer,
                          const Vector_f& bits_per_pixel,
-                         Counters* const counters);
+                         Counters* const counters, BlockScorer* const scorer);
 
   BlockAlphaMode GetBlockAlphaMode(const CodedBlock& cb,
                                    const Plane16& alpha) const;
@@ -362,7 +362,8 @@ class SyntaxWriter : public WP2Allocable {
   WP2Status FindBestEncodingMethods(CodedBlock* const cb);
 
   // Decide alpha mode and encoding params if needed
-  WP2Status DecideAlpha(CodedBlock* const cb);
+  WP2Status DecideAlpha(CodedBlock* const cb, const BlockModes& modes,
+                        BlockScorer* const scorer);
   WP2Status RecordAlpha(const CodedBlock& cb);
 
   // Fills 'segment_ids_' with default values taken from 'gparams_'.

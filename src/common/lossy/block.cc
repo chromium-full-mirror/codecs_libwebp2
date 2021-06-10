@@ -89,11 +89,18 @@ const int16_t* ContextCache::GetSmall(const CodedBlockBase& cb, Channel channel,
   return small_[channel][context_type][tf_i];
 }
 
-void ContextCache::Reset() {
+void ContextCache::Reset(bool only_small_right_or_bot_contexts) {
+  if (!only_small_right_or_bot_contexts) {
+    for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+      for (uint32_t type = 0; type < kNumContextType; ++type) {
+        is_computed_large_[channel][type] = false;
+        is_computed_small_[channel][type][0] = false;
+      }
+    }
+  }
   for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     for (uint32_t type = 0; type < kNumContextType; ++type) {
-      is_computed_large_[channel][type] = false;
-      for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
+      for (uint32_t tf_i = 1; tf_i < 4; ++tf_i) {
         is_computed_small_[channel][type][tf_i] = false;
       }
     }
@@ -179,6 +186,13 @@ const int16_t* CodedBlockBase::GetContext(Channel channel, bool split_tf,
 }
 
 //------------------------------------------------------------------------------
+
+bool CodedBlockBase::CodingParams::operator==(const CodingParams& other) const {
+  return (pred == other.pred && tf == other.tf && split_tf == other.split_tf);
+}
+bool CodedBlockBase::CodingParams::operator!=(const CodingParams& other) const {
+  return !operator==(other);
+}
 
 static int CodingParamsIndex(Channel channel) {
   if (channel == kYChannel) return 0;

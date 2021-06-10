@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <memory>
 
+#include "src/common/global_params.h"
 #include "src/common/vdebug.h"
 #include "src/dsp/math.h"
 #include "src/enc/wp2_enc_i.h"
@@ -60,49 +61,100 @@ bool DecideAOMCoeffs(const EncoderConfig& config, const Rectangle& tile_rect) {
          (tile_rect.width >= 50 && tile_rect.height >= 50);
 }
 
-WP2Status DecideTransforms(const EncoderConfig& config,
-                           Vector<TransformPair>* const transforms,
-                           Vector<TransformPair>* const transforms_subset) {
-  if (config.info != nullptr && config.info->disable_transforms) {
-    WP2_CHECK_ALLOC_OK(transforms->reserve(1));
-    transforms->push_back_no_resize(kDctDct);
-    WP2_CHECK_ALLOC_OK(transforms_subset->copy_from(*transforms));
+namespace {
+
+WP2Status DecideLumaSplits(const EncoderConfig& config,
+                           BlockModes* const modes) {
+  WP2_CHECK_ALLOC_OK(modes->splits_tried_during_preds.push_back(false));
+  if (config.effort >= 8) {
+    WP2_CHECK_ALLOC_OK(modes->splits_tried_during_preds.push_back(true));
+  } else if (config.effort >= 5) {
+    WP2_CHECK_ALLOC_OK(modes->splits_tried_after_preds.push_back(true));
+  }
+  return WP2_STATUS_OK;
+}
+
+WP2Status DecidePreds(const EncoderConfig& config, const Predictors& preds,
+                      int min_main_preds_effort, int min_sub_preds_effort,
+                      BlockModes* const modes) {
+  if (config.effort < min_main_preds_effort) {
+    WP2_CHECK_ALLOC_OK(modes->main_preds.push_back(preds.GetPred(0)));
     return WP2_STATUS_OK;
   }
 
-  WP2_CHECK_ALLOC_OK(transforms->reserve(kNumTransformPairs));
-  transforms->push_back_no_resize(kDctDct);
-  if (config.effort >= 3) {
-    transforms->push_back_no_resize(kAdstAdst);
-    if (config.effort >= 4) {
-      transforms->push_back_no_resize(kDctAdst);
-      transforms->push_back_no_resize(kAdstDct);
-      if (config.effort >= 5) {
-        transforms->push_back_no_resize(kIdentityIdentity);
-        if (config.effort >= 6) {
-          transforms->push_back_no_resize(kDctIdentity);
-          transforms->push_back_no_resize(kIdentityDct);
-        }
-      }
+  WP2_CHECK_ALLOC_OK(modes->main_preds.reserve(kYBasePredNum + kAnglePredNum));
+  WP2_CHECK_ALLOC_OK(modes->sub_preds.reserve(kAnglePredNum *
+                                              kDirectionalMaxAngleDeltaYA * 2));
+
+  for (const Predictor* pred : preds) {
+    if (pred == preds.GetPred(pred->mode())) {
+      modes->main_preds.push_back_no_resize(pred);
+    } else if (config.effort >= min_sub_preds_effort) {
+      modes->sub_preds.push_back_no_resize(pred);
     }
   }
-  // This is used to find a predictor faster
-  // (= not testing every transform with each predictor).
-  WP2_CHECK_ALLOC_OK(transforms_subset->reserve(transforms->size()));
-  transforms_subset->push_back_no_resize(kDctDct);
+  return WP2_STATUS_OK;
+}
+
+WP2Status DecideLumaTransforms(const EncoderConfig& config,
+                               BlockModes* const modes) {
+  // Not testing every transform with each predictor is faster.
+  WP2_CHECK_ALLOC_OK(modes->tf_tried_during_preds.reserve(kNumTransformPairs));
+  WP2_CHECK_ALLOC_OK(modes->tf_tried_after_preds.reserve(kNumTransformPairs));
+  modes->tf_tried_during_preds.push_back_no_resize(kDctDct);
   if (config.effort >= 6) {
-    transforms_subset->push_back_no_resize(kAdstAdst);
-    if (config.effort >= 7) {
-      transforms_subset->push_back_no_resize(kDctAdst);
-      transforms_subset->push_back_no_resize(kAdstDct);
-      if (config.effort >= 8) {
-        transforms_subset->push_back_no_resize(kIdentityIdentity);
-        if (config.effort >= 9) {
-          transforms_subset->push_back_no_resize(kDctIdentity);
-          transforms_subset->push_back_no_resize(kIdentityDct);
-        }
-      }
-    }
+    modes->tf_tried_during_preds.push_back_no_resize(kAdstAdst);
+  } else if (config.effort >= 3) {
+    modes->tf_tried_after_preds.push_back_no_resize(kAdstAdst);
+  }
+  if (config.effort >= 7) {
+    modes->tf_tried_during_preds.push_back_no_resize(kDctAdst);
+    modes->tf_tried_during_preds.push_back_no_resize(kAdstDct);
+  } else if (config.effort >= 4) {
+    modes->tf_tried_after_preds.push_back_no_resize(kDctAdst);
+    modes->tf_tried_after_preds.push_back_no_resize(kAdstDct);
+  }
+  if (config.effort >= 8) {
+    modes->tf_tried_during_preds.push_back_no_resize(kIdentityIdentity);
+  } else if (config.effort >= 5) {
+    modes->tf_tried_after_preds.push_back_no_resize(kIdentityIdentity);
+  }
+  if (config.effort >= 9) {
+    modes->tf_tried_during_preds.push_back_no_resize(kDctIdentity);
+    modes->tf_tried_during_preds.push_back_no_resize(kIdentityDct);
+  } else if (config.effort >= 6) {
+    modes->tf_tried_after_preds.push_back_no_resize(kDctIdentity);
+    modes->tf_tried_after_preds.push_back_no_resize(kIdentityDct);
+  }
+  return WP2_STATUS_OK;
+}
+
+}  // namespace
+
+WP2Status DecideModes(const EncoderConfig& config, const GlobalParams& gparams,
+                      BlockModes* const y_modes, BlockModes* const uv_modes,
+                      BlockModes* const a_modes) {
+  // At which effort all main- or sub-predictors start to be tested.
+  constexpr uint32_t kMinMainPredsEffort = 1, kMinSubPredsEffort = 2;
+
+  // Luma
+  WP2_CHECK_STATUS(DecideLumaSplits(config, y_modes));
+  WP2_CHECK_STATUS(DecidePreds(config, gparams.y_preds_, kMinMainPredsEffort,
+                               kMinSubPredsEffort, y_modes));
+  WP2_CHECK_STATUS(DecideLumaTransforms(config, y_modes));
+
+  // Chroma
+  WP2_CHECK_ALLOC_OK(uv_modes->splits_tried_during_preds.push_back(false));
+  WP2_CHECK_STATUS(DecidePreds(config, gparams.uv_preds_, kMinMainPredsEffort,
+                               kMinSubPredsEffort, uv_modes));
+  WP2_CHECK_ALLOC_OK(uv_modes->tf_tried_during_preds.push_back(kDctDct));
+
+  // Alpha
+  if (gparams.maybe_use_lossy_alpha_) {
+    WP2_CHECK_ALLOC_OK(a_modes->splits_tried_during_preds.push_back(false));
+    WP2_CHECK_STATUS(DecidePreds(config, gparams.a_preds_, kMinMainPredsEffort,
+                                 kMinSubPredsEffort, a_modes));
+    WP2_CHECK_ALLOC_OK(a_modes->tf_tried_during_preds.push_back(kDctDct));
   }
   return WP2_STATUS_OK;
 }
@@ -238,8 +290,11 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   }
 #endif  // WP2_REDUCE_BINARY_SIZE
 
-  Vector<TransformPair> transforms, transforms_subset;
-  WP2_CHECK_STATUS(DecideTransforms(*config_, &transforms, &transforms_subset));
+  BlockModes y_modes, uv_modes, a_modes;
+  WP2_CHECK_STATUS(
+      DecideModes(*config_, gparams, &y_modes, &uv_modes, &a_modes));
+  BlockScorer scorer;
+  WP2_CHECK_STATUS(scorer.Init(*config_, gparams, tile_rect));
 
   for (uint32_t pass = 0; pass < num_passes; ++pass) {
     const ProgressRange pass_progress(passes_progress, 1. / num_passes);
@@ -264,21 +319,21 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       cb.ResetContextCache();
       cb.y_context_is_constant_ = cb.ContextIsConstant(kYChannel);
 
-      WP2_CHECK_STATUS(cb.OptimizeModesLuma(
-          *config_, tile_rect, gparams.maybe_use_lossy_alpha_, gparams.y_preds_,
-          segment, writer.context(), transforms, transforms_subset,
-          writer.counters()));
+      WP2_CHECK_STATUS(OptimizeModes(
+          *config_, tile_rect, kYChannel, gparams.y_preds_, segment, y_modes,
+          writer.context(), &cb, writer.counters(), &scorer));
 
       // If the U/V planes don't depend on luma, we only need to process them
       // during the first pass.
       if (pass == 0 || chroma_depends_on_luma) {
-        WP2_CHECK_STATUS(cb.OptimizeModesChroma(
+        WP2_CHECK_STATUS(OptimizeModesChroma(
             *config_, tile_rect, gparams.maybe_use_lossy_alpha_, mgr,
-            gparams.uv_preds_, segment, writer.context(), chroma_subsampling,
-            &dc_error_u, &dc_error_v, writer.counters()));
+            gparams.uv_preds_, segment, chroma_subsampling, uv_modes,
+            writer.context(), &cb, writer.counters(), &dc_error_u, &dc_error_v,
+            &scorer));
       }
       if (gparams.has_alpha_) {
-        WP2_CHECK_STATUS(writer.DecideAlpha(&cb));
+        WP2_CHECK_STATUS(writer.DecideAlpha(&cb, a_modes, &scorer));
         WP2_CHECK_STATUS(writer.RecordAlpha(cb));
       }
 
