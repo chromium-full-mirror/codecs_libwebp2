@@ -20,8 +20,10 @@
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/transforms.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/random.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {
@@ -702,7 +704,7 @@ TEST(GetDistoTest, BlockSizeDoesNotMatter) {
       }
     }
 
-    uint32_t total_sub_disto = 0;
+    uint64_t total_sub_disto = 0;
     for (uint32_t y = 0; y < kNumSubY; ++y) {
       for (uint32_t x = 0; x < kNumSubX; ++x) {
         CodedBlock sub_cb;
@@ -718,6 +720,31 @@ TEST(GetDistoTest, BlockSizeDoesNotMatter) {
     EXPECT_EQ(total_sub_disto, cb.GetDisto(channel));
   }
 }
+
+//------------------------------------------------------------------------------
+
+// Verify the expected maximum distortion. Note that YUV limits may not be
+// enforced until conversion to RGB so this maximum could be higher in practice.
+TEST(GetDistoTest, MaxDisto) {
+  WP2PSNRInit();
+  CodedBlock cb;
+  cb.SetDimDefault(Block(0, 0, BLK_32x32));
+
+  CSPTransform csp;
+  YUVPlane original, decoded;
+  ASSERT_WP2_OK(original.Resize(cb.w_pix(), cb.h_pix()));
+  ASSERT_WP2_OK(decoded.Resize(cb.w_pix(), cb.h_pix()));
+  original.Fill(Ayuv38b{0, csp.GetYUVMin(), csp.GetYUVMin(), csp.GetYUVMin()});
+  decoded.Fill(Ayuv38b{0, csp.GetYUVMax(), csp.GetYUVMax(), csp.GetYUVMax()});
+  cb.SetSrcInput(original);
+  cb.SetReconstructedOutput(&decoded);
+
+  EXPECT_EQ(cb.GetDisto(kYChannel), (uint64_t)cb.w_pix() * cb.h_pix() *
+                                        (csp.GetYUVMax() - csp.GetYUVMin()) *
+                                        (csp.GetYUVMax() - csp.GetYUVMin()));
+}
+
+//------------------------------------------------------------------------------
 
 }  // namespace
 }  // namespace WP2

@@ -116,7 +116,7 @@ void CodedBlock::ExtractFrom(const YUVPlane& yuv, Channel channel) const {
   WP2_ASSERT_STATUS(dst.Copy(src, /*resize_if_needed=*/false));
 }
 
-uint32_t CodedBlock::GetDisto(Channel channel) const {
+uint64_t CodedBlock::GetDisto(Channel channel) const {
   const Plane16& p_in = in_.GetChannel(channel);
   const Plane16& p_out = out_.GetChannel(channel);
   // TODO(skal): experiment calling WP2SumSquaredErrorHalfBlock for U/V channel
@@ -588,7 +588,7 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
   const bool reduced_tf = (channels_.front() == kUChannel && cb_->is420_);
 
   // Per channel:
-  uint32_t disto[2];  // Distortion (sum of squared errors).
+  uint64_t disto[2];  // Distortion (sum of squared errors).
   float pred_rate[2], res_rate[2], tf_rate[2];  // Estimated cost in bits.
   float score[2];  // Aggregated distortion and rates. Lower means better.
   for (Channel c : channels_) {

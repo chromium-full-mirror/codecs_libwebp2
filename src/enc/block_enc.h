@@ -156,7 +156,7 @@ class CodedBlock : public CodedBlockBase {
 
   // Returns the sum of square error between 'p_in_' and 'p_out_' for the pixels
   // inside the block (padded).
-  uint32_t GetDisto(Channel channel) const;
+  uint64_t GetDisto(Channel channel) const;
 
   // Pixel transfer. 'yuv' is the full plane, not the block's sub-view.
   // No bound-check or clipping is performed.
@@ -282,7 +282,7 @@ struct BlockScore {
   bool operator<(const BlockScore& s) const { return (score < s.score); }
 
   float score = 0.f;   // Lower score means better score.
-  uint32_t disto = 0;  // Squared error sum.
+  uint64_t disto = 0;  // Squared error sum.
   CodedBlock::CodingParams params;
 };
 
