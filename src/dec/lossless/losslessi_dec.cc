@@ -435,7 +435,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
         const uint32_t min_length = (length == 0) ? kLZ77LengthMin : 0u;
         const uint32_t max_length = std::min(
             (uint32_t)((src_end - (src + 4 * length)) / 4), kLZ77LengthEscape);
-        uint32_t length_tmp;
+        uint32_t length_tmp = 0;
         WP2_CHECK_STATUS(ReadLZ77PrefixCode(kSymbolLen, cluster, min_length,
                                             max_length, "len", sr, dec_,
                                             &length_tmp, cost_ptr));
