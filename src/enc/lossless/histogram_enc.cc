@@ -649,11 +649,11 @@ static WP2Status HistogramCombineGreedy(HistogramSet* const image_histo,
     for (uint32_t i : queue.ValidIndices()) {
       if (i != idx1) {
         WP2_CHECK_STATUS(queue.Push(idx1, i, /*threshold=*/0.));
+        // The number of loops is not trivial to compute so the ProgressHook is
+        // called for interruptability but there is no advancement.
+        WP2_CHECK_STATUS(progress.AdvanceBy(0.));
       }
     }
-    // The number of loops is not trivial to compute so the ProgressHook is
-    // called but there is no advancement.
-    WP2_CHECK_STATUS(progress.AdvanceBy(0.));
   }
   // Remove histograms that have been merged.
   WP2_CHECK_STATUS(queue.RemoveInvalidHistograms());
