@@ -662,7 +662,6 @@ if(WP2_BUILD_EXAMPLES)
 
   if(OPENGL_FOUND
      AND GLUT_FOUND
-     AND GLUT_Xmu_LIBRARY
      AND NOT WP2_BUILD_WP2_JS)
     add_executable(vwp2 ${CMAKE_CURRENT_SOURCE_DIR}/examples/vwp2.cc)
     target_include_directories(vwp2 PRIVATE ${OPENGL_INCLUDE_DIR}
