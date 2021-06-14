@@ -76,22 +76,23 @@ void BM_Av1CoeffOptimization(benchmark::State& state) {
   int16_t coeffs_copy[kMaxBlockSizePix2];
   std::copy(coeffs, coeffs + kMaxBlockSizePix2, coeffs_copy);
 
+  constexpr bool kUseAomCoeffs = true;
   SymbolsInfo symbols_info;
-  ASSERT_WP2_OK(
-      symbols_info.InitLossy(/*num_segments=*/2, PartitionSet::SOME_RECTS,
-                             /*has_alpha=*/false, /*use_aom_coeffs=*/true,
-                             /*use_splits=*/false));
+  ASSERT_WP2_OK(symbols_info.InitLossy(/*num_segments=*/2,
+                                       PartitionSet::SOME_RECTS,
+                                       /*has_alpha=*/false, kUseAomCoeffs,
+                                       /*use_splits=*/false));
   SymbolRecorder recorder;
   ASSERT_WP2_OK(recorder.Allocate(symbols_info, /*num_records=*/0));
   Counters counters;
-  ASSERT_WP2_OK(counters.Init(/*effort=*/5, recorder));
+  ASSERT_WP2_OK(counters.Init(/*effort=*/5, kUseAomCoeffs, recorder));
 
   for (const auto& _ : state) {
     (void)_;  // The content of this loop is benchmarked.
     float rate_cost;
     Av1CoeffOptimization(channel, tx_type, tdim, quant, first_is_dc, residuals,
                          coeffs, &num_coeffs, dequantized_coeffs,
-                         counters.residuals_aom(), &rate_cost);
+                         counters.residuals(), &rate_cost);
   }
 }
 BENCHMARK(BM_Av1CoeffOptimization)->DenseRange(0, 10);

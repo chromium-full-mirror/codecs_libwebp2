@@ -140,7 +140,8 @@ WP2Status SyntaxWriter::InitPass() {
     WP2_CHECK_STATUS(symbol_recorder_.MakeBackup());
   }
   ++pass_number_;
-  WP2_CHECK_STATUS(counters_.Init(config_->effort, symbol_recorder_));
+  WP2_CHECK_STATUS(
+      counters_.Init(config_->effort, context_.use_aom(), symbol_recorder_));
   context_.Reset();
   WP2_CHECK_STATUS(ResetRecord());
   return WP2_STATUS_OK;
@@ -491,8 +492,7 @@ WP2Status SyntaxWriter::Record(const CodedBlock& cb) {
     if (kDebugPrintRate) {
       float rate;
       WP2_CHECK_STATUS(cb.ResidualRate(context_, channel, num_channels,
-                                       counters_.residuals(),
-                                       counters_.residuals_aom(), &rate));
+                                       counters_.residuals(), &rate));
       residual_rate_[recorded_blocks_][channel] = rate;
     }
 

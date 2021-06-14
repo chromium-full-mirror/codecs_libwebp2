@@ -37,8 +37,10 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 // Counters
 
-WP2Status Counters::Init(uint32_t effort, const SymbolRecorder& recorder) {
+WP2Status Counters::Init(uint32_t effort, bool use_aom_residuals,
+                         const SymbolRecorder& recorder) {
   effort_ = effort;
+  use_aom_residuals_ = use_aom_residuals;
   recorder_ = &recorder;
 
   transform_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
@@ -57,45 +59,37 @@ WP2Status Counters::Init(uint32_t effort, const SymbolRecorder& recorder) {
                               UpdatingSymbolCounter(recorder_));
     WP2_CHECK_ALLOC_OK(residuals_slow_ != nullptr);
     residuals_ = residuals_slow_.get();
-    residuals_aom_slow_.reset(new (WP2Allocable::nothrow)
-                                  UpdatingSymbolCounter(recorder_));
-    WP2_CHECK_ALLOC_OK(residuals_aom_slow_ != nullptr);
-    residuals_aom_ = residuals_aom_slow_.get();
   } else {
     residuals_fast_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
     WP2_CHECK_ALLOC_OK(residuals_fast_ != nullptr);
     residuals_ = residuals_fast_.get();
-    residuals_aom_fast_.reset(new (WP2Allocable::nothrow)
-                                  SymbolCounter(recorder_));
-    WP2_CHECK_ALLOC_OK(residuals_aom_fast_ != nullptr);
-    residuals_aom_ = residuals_aom_fast_.get();
   }
-  WP2_CHECK_STATUS(residuals()->Allocate(
-      {kSymbolDC, kSymbolResidualUseBounds, kSymbolResidualBound1IsX,
-       kSymbolResidualUseBound2, kSymbolResidualIsZero, kSymbolResidualIsOne,
-       kSymbolResidualIsTwo, kSymbolResidualEndOfBlock,
-       kSymbolResidualHasOnlyOnesLeft}));
-  WP2_CHECK_STATUS(residuals_aom()->Allocate(
-      {kSymbolTransform, kAOMEOBPT4, kAOMEOBPT8, kAOMEOBPT16, kAOMEOBPT32,
-       kAOMEOBPT64, kAOMEOBPT128, kAOMEOBPT256, kAOMEOBPT512, kAOMEOBPT1024,
-       kAOMEOBExtra, kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange}));
+  if (use_aom_residuals) {
+    WP2_CHECK_STATUS(residuals()->Allocate(
+        {kSymbolTransform, kAOMEOBPT4, kAOMEOBPT8, kAOMEOBPT16, kAOMEOBPT32,
+         kAOMEOBPT64, kAOMEOBPT128, kAOMEOBPT256, kAOMEOBPT512, kAOMEOBPT1024,
+         kAOMEOBExtra, kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange}));
+  } else {
+    WP2_CHECK_STATUS(residuals()->Allocate(
+        {kSymbolDC, kSymbolResidualUseBounds, kSymbolResidualBound1IsX,
+         kSymbolResidualUseBound2, kSymbolResidualIsZero, kSymbolResidualIsOne,
+         kSymbolResidualIsTwo, kSymbolResidualEndOfBlock,
+         kSymbolResidualHasOnlyOnesLeft}));
+  }
   return WP2_STATUS_OK;
 }
 
 WP2Status Counters::CopyFrom(const Counters& other,
                              const SymbolRecorder& recorder) {
   if (&recorder != recorder_) {
-    WP2_CHECK_STATUS(Init(other.effort_, recorder));
+    WP2_CHECK_STATUS(Init(other.effort_, other.use_aom_residuals_, recorder));
   } else {
     // Init() was already called.
     assert(transform_ != nullptr && residuals_ != nullptr &&
-           residuals_aom_ != nullptr && predictor_ != nullptr);
+           predictor_ != nullptr);
   }
   if (residuals_slow_ != nullptr) {
     WP2_CHECK_STATUS(residuals_slow_->CopyFrom(*other.residuals_slow_));
-  }
-  if (residuals_aom_slow_ != nullptr) {
-    WP2_CHECK_STATUS(residuals_aom_slow_->CopyFrom(*other.residuals_aom_slow_));
   }
   return WP2_STATUS_OK;
 }
@@ -195,7 +189,7 @@ void CodedBlock::TransformAndReconstruct(
       Av1CoeffOptimization(
           channel, params->tf, tdim(channel), quant, IsFirstCoeffDC(channel),
           tf_res, coeffs_[channel][tf_i], &num_coeffs_[channel][tf_i],
-          dequantized[tf_i], counters->residuals_aom(), /*rate_cost=*/nullptr);
+          dequantized[tf_i], counters->residuals(), /*rate_cost=*/nullptr);
     } else {
       DropoutCoeffs(tdim(channel), segment.quality_factor_,
                     coeffs_[channel][tf_i], &num_coeffs_[channel][tf_i],
@@ -281,13 +275,9 @@ void CodedBlock::Quantize(const EncoderConfig& config,
 WP2Status CodedBlock::ResidualRate(const BlockContext& context, Channel channel,
                                    uint32_t num_channels,
                                    SymbolCounter* const counter,
-                                   SymbolCounter* const aom_counter,
                                    float* rate) const {
-  const bool is_uv = (channel == kUChannel || channel == kVChannel);
-  // TODO(vrabaud) Using AOM context for U/V is worse for now...
-  if (context.use_aom() && !is_uv) {
-    WP2_CHECK_STATUS(ResidualWriter::GetRateAOM(*this, channel,
-                                                aom_counter, rate));
+  if (context.use_aom()) {
+    WP2_CHECK_STATUS(ResidualWriter::GetRateAOM(*this, channel, counter, rate));
   } else {
     // Whether to use the more accurate but a lot more expensive rate.
     // Even this one is not perfect because the cost depends on global
@@ -333,7 +323,8 @@ static uint32_t RoundTripDisto(CodedBlock* const cb, const QuantMtx& quant,
 // Computes the rate-distortion score for the U and V channels.
 // 'res_u' and 'res_v' should be in frequency space. 'orig_u' and 'orig_v' are
 // the original spatial residuals to compare against for distortion.
-static WP2Status UVScore(const EncoderConfig& config, uint32_t tile_pos_x,
+static WP2Status UVScore(const BlockContext& context,
+                         const EncoderConfig& config, uint32_t tile_pos_x,
                          uint32_t tile_pos_y, bool has_alpha,
                          const QuantMtx& quant_u, const QuantMtx& quant_v,
                          const int16_t orig_u[kMaxBlockSizePix2],
@@ -363,12 +354,10 @@ static WP2Status UVScore(const EncoderConfig& config, uint32_t tile_pos_x,
   }
   const uint32_t num_channels = (has_alpha ? 4 : 3);
   float rate_u, rate_v;
-  WP2_CHECK_STATUS(ResidualWriter::GetPseudoRate(
-      kUChannel, num_channels, dim, tmp_coeffs_u, tmp_num_coeffs_u,
-      cb->IsFirstCoeffDC(kUChannel), counter, &rate_u));
-  WP2_CHECK_STATUS(ResidualWriter::GetPseudoRate(
-      kVChannel, num_channels, dim, tmp_coeffs_v, tmp_num_coeffs_v,
-      cb->IsFirstCoeffDC(kVChannel), counter, &rate_v));
+  WP2_CHECK_STATUS(
+      cb->ResidualRate(context, kUChannel, num_channels, counter, &rate_u));
+  WP2_CHECK_STATUS(
+      cb->ResidualRate(context, kVChannel, num_channels, counter, &rate_v));
   *score = disto + lambda_u * rate_u + lambda_v * rate_v;
   WP2_CHECK_REDUCED_STATUS(
       cb->Store420Scores(config, tile_pos_x, tile_pos_y, lambda_u, lambda_v,
@@ -377,8 +366,9 @@ static WP2Status UVScore(const EncoderConfig& config, uint32_t tile_pos_x,
 }
 
 WP2Status CodedBlock::DecideChromaSubsampling(
-    const EncoderConfig& config, uint32_t tile_pos_x, uint32_t tile_pos_y,
-    bool has_alpha, const QuantMtx& quant_u, const QuantMtx& quant_v,
+    const EncoderConfig& config, const BlockContext& context,
+    uint32_t tile_pos_x, uint32_t tile_pos_y, bool has_alpha,
+    const QuantMtx& quant_u, const QuantMtx& quant_v,
     Counters* const counters) {
   assert(!GetCodingParams(kUChannel)->split_tf);
   assert(!GetCodingParams(kVChannel)->split_tf);
@@ -417,7 +407,7 @@ WP2Status CodedBlock::DecideChromaSubsampling(
                  tmp_v);
 
   float score444;
-  WP2_CHECK_STATUS(UVScore(config, tile_pos_x, tile_pos_y, has_alpha,
+  WP2_CHECK_STATUS(UVScore(context, config, tile_pos_x, tile_pos_y, has_alpha,
                            quant_u, quant_v, orig_u, orig_v, tmp_u, tmp_v,
                            full_dim, /*reduced=*/false, counters->residuals(),
                            this, &score444));
@@ -432,7 +422,7 @@ WP2Status CodedBlock::DecideChromaSubsampling(
   WP2ReduceCoeffs(tmp_u, w_pix, h_pix, tmp_v);
   WP2ReduceCoeffs(tmp_u, w_pix, h_pix, tmp_v);
   float score420;
-  WP2_CHECK_STATUS(UVScore(config, tile_pos_x, tile_pos_y, has_alpha,
+  WP2_CHECK_STATUS(UVScore(context, config, tile_pos_x, tile_pos_y, has_alpha,
                            quant_u, quant_v, orig_u, orig_v, tmp_u, tmp_v,
                            half_dim, /*reduced=*/true, counters->residuals(),
                            this, &score420));
@@ -639,9 +629,8 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
     //       called again with different configurations.
     WP2_CHECK_STATUS(
         cb_->PredictorRate(c, counters_->predictor(), &pred_rate[ci]));
-    WP2_CHECK_STATUS(
-        cb_->ResidualRate(*context_, c, num_channels, counters_->residuals(),
-                          counters_->residuals_aom(), &res_rate[ci]));
+    WP2_CHECK_STATUS(cb_->ResidualRate(*context_, c, num_channels,
+                                       counters_->residuals(), &res_rate[ci]));
     WP2_CHECK_STATUS(
         cb_->TransformRate(c, counters_->transform(), &tf_rate[ci]));
     const float lambda = cb_->lambda_mult_ * segment_->GetQuant(c).lambda;
@@ -822,8 +811,8 @@ WP2Status OptimizeModesChroma(
     assert(chroma_subsampling == ChromaSubsampling::kSingleBlock ||
            chroma_subsampling == ChromaSubsampling::kAdaptive);
     WP2_CHECK_STATUS(cb->DecideChromaSubsampling(
-        config, tile_rect.x, tile_rect.y, has_alpha,
-        segment.quant_u_, segment.quant_v_, counters));
+        config, context, tile_rect.x, tile_rect.y, has_alpha, segment.quant_u_,
+        segment.quant_v_, counters));
   }
   if (diffusion > 0 || (!is420_for_sure && !is444_for_sure)) {
     cb->QuantizeAll(config, context, segment, kUChannel, cb->is420_, counters);

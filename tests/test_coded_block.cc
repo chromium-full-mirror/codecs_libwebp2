@@ -96,16 +96,17 @@ TYPED_TEST(CodedBlockTest, OptimizeModes) {
   segment.quant_y_.Init(/*max_residual=*/1024, /*q_scale=*/1, quants);
   segment.quant_y_.SetLambda();
 
+  constexpr bool kNoAomCoeffs = false;
   SymbolsInfo symbols_info;
-  ASSERT_WP2_OK(
-      symbols_info.InitLossy(/*num_segments=*/1, ALL_RECTS, /*has_alpha=*/false,
-                             /*use_aom_coeffs=*/false, /*use_splits=*/false));
+  ASSERT_WP2_OK(symbols_info.InitLossy(/*num_segments=*/1, ALL_RECTS,
+                                       /*has_alpha=*/false, kNoAomCoeffs,
+                                       /*use_splits=*/false));
   SymbolRecorder recorder;
   symbols_info.SetInfo(kSymbolModeY, /*min=*/0, /*max=*/kYPredModeNum - 1,
                        /*num_clusters=*/1, SymbolsInfo::StorageMethod::kAuto);
   ASSERT_WP2_OK(recorder.Allocate(symbols_info, /*num_records=*/0));
   Counters counters;
-  ASSERT_WP2_OK(counters.Init(/*effort=*/5, recorder));
+  ASSERT_WP2_OK(counters.Init(/*effort=*/5, kNoAomCoeffs, recorder));
 
   BlockContext context;
   ASSERT_WP2_OK(context.Init(/*use_aom=*/false));

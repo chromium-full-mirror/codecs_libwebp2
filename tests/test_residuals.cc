@@ -36,14 +36,15 @@ TEST_P(ResidualTest, Simple) {
   const bool first_coeff_is_dc = std::get<3>(GetParam());
 
   WP2MathInit();
+  constexpr bool kNoAomCoeffs = false;
   SymbolsInfo symbols_info;
   ASSERT_WP2_OK(symbols_info.InitLossy(
       /*num_segments=*/1, ALL_RECTS, /*has_alpha=*/(num_channels >= 4),
-      /*use_aom_coeffs=*/false, /*use_splits=*/false));
+      kNoAomCoeffs, /*use_splits=*/false));
   SymbolRecorder recorder;
   ASSERT_WP2_OK(recorder.Allocate(symbols_info, /*num_records=*/0));
   Counters counters;
-  ASSERT_WP2_OK(counters.Init(/*effort=*/5, recorder));
+  ASSERT_WP2_OK(counters.Init(/*effort=*/5, kNoAomCoeffs, recorder));
 
   constexpr uint32_t kNumTests = 5;
   constexpr uint32_t kMaxNumCoeffs = kMaxBlockSizePix2;

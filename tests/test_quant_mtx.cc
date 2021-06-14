@@ -250,14 +250,14 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
   config.partition_snapping = params.partition_snapping_ = true;
 
   ANSDictionaries dicts;
-  constexpr bool kUseAOMCoeffs = false, kHasAlpha = false;
+  constexpr bool kNoAomCoeffs = false, kHasAlpha = false;
   constexpr uint32_t kNumChannels = (kHasAlpha ? 4 : 3);
   SymbolsInfo symbols_info;
   ASSERT_WP2_OK(symbols_info.InitLossy(/*num_segments=*/1, ALL_RECTS,
-                                       /*has_alpha=*/false, kUseAOMCoeffs,
+                                       /*has_alpha=*/false, kNoAomCoeffs,
                                        /*use_splits=*/false));
   ResidualWriter residual_writer;
-  ASSERT_WP2_OK(residual_writer.Init(kUseAOMCoeffs, kHasAlpha));
+  ASSERT_WP2_OK(residual_writer.Init(kNoAomCoeffs, kHasAlpha));
   ANSEnc enc;
   std::unique_ptr<WP2::SymbolWriter>
       sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
@@ -350,13 +350,13 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
         SymbolRecorder recorder;
         ASSERT_WP2_OK(recorder.Allocate(symbols_info, /*num_records=*/0));
         Counters counters;
-        ASSERT_WP2_OK(counters.Init(/*effort=*/5, recorder));
+        ASSERT_WP2_OK(counters.Init(/*effort=*/5, kNoAomCoeffs, recorder));
 
         // Check the coeffs can be successfully written by SyntaxWriter.
         SyntaxWriter syntax_writer;
         ASSERT_WP2_OK(syntax_writer.Init(
             &dicts, config, params, yuv, ChromaSubsampling::k420, rect,
-            (uint32_t)cblocks.size(), kUseAOMCoeffs, /*use_splits=*/false,
+            (uint32_t)cblocks.size(), kNoAomCoeffs, /*use_splits=*/false,
             ProgressRange()));
         ASSERT_WP2_OK(syntax_writer.InitPass());
 

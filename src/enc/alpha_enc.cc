@@ -215,16 +215,6 @@ WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
   // Update alpha_mode in case the reconstructed pixels are fully opaque or
   // fully transparent, even if the input pixels are not.
   cb->alpha_mode_ = GetBlockAlphaMode(*cb, cb->out_.A);
-  if (cb->alpha_mode_ != kBlockAlphaLossy) return WP2_STATUS_OK;
-
-  for (uint32_t tf_i = 0; tf_i < cb->GetNumTransforms(kAChannel); ++tf_i) {
-    WP2_CHECK_STATUS(residual_writer.FindBestEncodingMethod(
-        cb->tdim(kAChannel), cb->coeffs_[kAChannel][tf_i],
-        cb->num_coeffs_[kAChannel][tf_i], cb->IsFirstCoeffDC(kAChannel),
-        kAChannel, /*num_channels=*/4, counters->residuals(),
-        &cb->method_[kAChannel][tf_i]));
-  }
-
   return WP2_STATUS_OK;
 }
 
