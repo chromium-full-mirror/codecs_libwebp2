@@ -2098,7 +2098,6 @@ WP2Status Partitioner::RegisterOrderForVDebug(
         } else if (VDMatch(*config_, "all")) {
           const Argb32b kPassColor[] = {{255, 141, 202, 175},
                                         {255, 140, 73, 192},
-                                        {255, 141, 208, 85},
                                         {255, 205, 104, 150},
                                         {255, 133, 148, 196}};
           STATIC_ASSERT_ARRAY_SIZE(kPassColor,
@@ -2301,14 +2300,13 @@ WP2Status MultiPassPartitioner::RegisterPassForVDebug(
     uint32_t num_chosen_blocks) const {
   if (!VDMatch(*config_, "encoder/partition/pass")) return WP2_STATUS_OK;
   if (!VDSelected(tile_rect_, *config_)) return WP2_STATUS_OK;
-  const char* const kPassStr[] = {"FlatLumaAlpha", "NarrowStdDev",
-                                  "GoodQuantDCT", "Direction", "Any"};
+  const char* const kPassStr[] = {"FlatLumaAlpha", "NarrowStdDev", "Direction",
+                                  "Any"};
   STATIC_ASSERT_ARRAY_SIZE(kPassStr, (int)MultiScoreFunc::Pass::Any + 1);
   std::string& str = config_->info->selection_info;
-  str += WP2SPrint("Pass: %2u - %s - %2ux%2u - %4u blocks\n",
-                   pass_index_, kPassStr[(int)pass],
-                   BlockWidthPix(block_size), BlockHeightPix(block_size),
-                   num_chosen_blocks);
+  str += WP2SPrint("Pass: %2u - %s - %2ux%2u - %4u blocks\n", pass_index_,
+                   kPassStr[(int)pass], BlockWidthPix(block_size),
+                   BlockHeightPix(block_size), num_chosen_blocks);
   return WP2_STATUS_OK;
 }
 
@@ -2323,8 +2321,6 @@ void MultiScoreFunc::DrawValueThresholdColor(
     value = GetLumaAlphaGradient(block) / GetLumaAlphaGradientThreshold(block);
   } else if (VDMatch(*config_, "narrow-std-dev")) {
     value = GetStdDevRange(block) / GetStdDevRangeThreshold(block);
-  } else if (VDMatch(*config_, "quant-dct")) {
-    value = GetQuantDCT(block) / GetQuantDCTThreshold(block);
   } else if (VDMatch(*config_, "direction")) {
     value = GetDirection(block) / GetDirectionThreshold(block);
   } else {
@@ -2347,47 +2343,6 @@ void MultiScoreFunc::DrawValueThresholdColor(
       }
     }
   }
-}
-
-// Displays the lossy luma.
-WP2Status MultiScoreFunc::DrawLossyLuma(const Block& block,
-                                        const Rectangle& block_rect,
-                                        bool draw_side,
-                                        ArgbBuffer* const debug_output) const {
-  Plane16 p;
-  WP2_CHECK_STATUS(p.Resize(block.w_pix(), block.h_pix()));
-  int16_t coeffs[kMaxBlockSizePix2];
-  QuantizeCoeffs(kYChannel, block, coeffs);
-  std::copy(coeffs, coeffs + block.w_pix() * block.h_pix(), p.Row(0));
-  ArgbBuffer block_debug_output;
-  WP2_CHECK_STATUS(block_debug_output.SetView(*debug_output, block_rect));
-  WP2_CHECK_STATUS(p.ToGray(&block_debug_output, kYuvMaxBitDepth));
-
-  if (draw_side) {
-    // If there is enough space, also display the original luma.
-    if (block.x_pix() >= block.w_pix()) {
-      GetCoeffs(kYChannel, block, coeffs);
-      std::copy(coeffs, coeffs + block.w_pix() * block.h_pix(), p.Row(0));
-      WP2_CHECK_STATUS(block_debug_output.SetView(
-          *debug_output, {block.x_pix() - block.w_pix(), block.y_pix(),
-                          block.w_pix(), block.h_pix()}));
-      WP2_CHECK_STATUS(p.ToGray(&block_debug_output, kYuvMaxBitDepth));
-    }
-
-    // If there is enough space, also display the quantized luma for the
-    // sub-blocks, for comparison during the merging pass.
-    if (VDMatch(*config_, "merge-flat") &&
-        block.x_pix() + 2 * block.w_pix() <= debug_output->width() &&
-        block.y_pix() + block.h_pix() <= debug_output->height()) {
-      QuantizeCoeffs(kYChannel, block, BLK_8x8, coeffs);
-      std::copy(coeffs, coeffs + block.w_pix() * block.h_pix(), p.Row(0));
-      WP2_CHECK_STATUS(block_debug_output.SetView(
-          *debug_output, {block.x_pix() + block.w_pix(), block.y_pix(),
-                          block.w_pix(), block.h_pix()}));
-      WP2_CHECK_STATUS(p.ToGray(&block_debug_output, kYuvMaxBitDepth));
-    }
-  }
-  return WP2_STATUS_OK;
 }
 
 // Displays the selected block border and info.
@@ -2421,9 +2376,6 @@ WP2Status MultiScoreFunc::DrawSelection(const Block& block,
   str += WP2SPrint("Std dev:     %5.3f = %5.2f / %5.2f\n",
                    GetStdDevRange(block) / GetStdDevRangeThreshold(block),
                    GetStdDevRange(block), GetStdDevRangeThreshold(block));
-  str += WP2SPrint("Quant DCT:   %5.3f = %5.2f / %5.2f\n",
-                   GetQuantDCT(block) / GetQuantDCTThreshold(block),
-                   GetQuantDCT(block), GetQuantDCTThreshold(block));
   str += WP2SPrint("Direction:   %5.3f = %6.1f / %6.1f\n",
                    GetDirection(block) / GetDirectionThreshold(block),
                    GetDirection(block), GetDirectionThreshold(block));
@@ -2461,21 +2413,6 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
   WP2_CHECK_STATUS(
       debug_output.SetView(config_->info->debug_output, tile_rect_));
 
-  // Image processing output.
-  if (VDMatch(*config_, "spread-5x5")) {
-    WP2_CHECK_STATUS(spread_.Y.ToGray(&debug_output, kYuvMaxBitDepth));
-    if (VDSelected(0, 0, tile_rect_, *config_)) {
-      const uint32_t x = config_->info->selection.x - tile_rect_.x;
-      const uint32_t y = config_->info->selection.y - tile_rect_.y;
-      debug_output.DrawRect({x, y, 1, 1}, Argb32b{255, 255, 0, 0});
-      std::string& str = config_->info->selection_info;
-      str += WP2SPrint("\nspread-5x5 at %4u, %4u: %4d\n",
-                       config_->info->selection.x,
-                       config_->info->selection.y, spread_.Y.At(x, y));
-    }
-    return WP2_STATUS_OK;
-  }
-
   // Display the general orientation of all 4x4 blocks in the grid.
   if (VDMatch(*config_, "direction-4x4")) {
     // Display the luma source as background.
@@ -2509,15 +2446,15 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
   // Original luma.
   WP2_CHECK_STATUS(src_->Y.ToGray(&debug_output, kYuvMaxBitDepth));
 
-  // clang-format off
-  Block block(0, 0, VDMatch(*config_, "32x32") ? BLK_32x32 :
-                    VDMatch(*config_, "16x16") ? BLK_16x16 :
-                    VDMatch(*config_, "8x8")   ? BLK_8x8   : BLK_4x4);
-  // clang-format on
-  const bool snapped =
-      (VDMatch(*config_, "raw-quant-dct") || config_->partition_snapping);
-  const uint32_t cell_width = snapped ? block.w_pix() : kMinBlockSizePix;
-  const uint32_t cell_height = snapped ? block.h_pix() : kMinBlockSizePix;
+  Block block(0, 0,
+              VDMatch(*config_, "32x32")   ? BLK_32x32
+              : VDMatch(*config_, "16x16") ? BLK_16x16
+              : VDMatch(*config_, "8x8")   ? BLK_8x8
+                                           : BLK_4x4);
+  const uint32_t cell_width =
+      config_->partition_snapping ? block.w_pix() : kMinBlockSizePix;
+  const uint32_t cell_height =
+      config_->partition_snapping ? block.h_pix() : kMinBlockSizePix;
   Block selected_block = Block();
 
   // Display all blocks.
@@ -2527,20 +2464,10 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
          x += cell_width) {
       block.SetXY(x / kMinBlockSizePix, y / kMinBlockSizePix);
       const Rectangle cell_rect =
-        Rectangle(block.x_pix(), block.y_pix(),
-                  cell_width, cell_height).ClipWith(debug_output.AsRect());
-      const Rectangle block_rect =
-          block.AsRect().ClipWith(debug_output.AsRect());
-      if (VDMatch(*config_, "raw-quant-dct")) {
-        WP2_CHECK_STATUS(DrawLossyLuma(block, block_rect, /*draw_side=*/false,
-                                       &debug_output));
-      } else {
-        DrawValueThresholdColor(cell_width, cell_height, block, &debug_output);
-      }
-      if (VDSelected(
-              tile_rect_.x, tile_rect_.y,
-              VDMatch(*config_, "raw-quant-dct") ? block_rect : cell_rect,
-              *config_)) {
+          Rectangle(block.x_pix(), block.y_pix(), cell_width, cell_height)
+              .ClipWith(debug_output.AsRect());
+      DrawValueThresholdColor(cell_width, cell_height, block, &debug_output);
+      if (VDSelected(tile_rect_.x, tile_rect_.y, cell_rect, *config_)) {
         selected_block = block;
       }
     }
@@ -2550,11 +2477,6 @@ WP2Status MultiScoreFunc::DrawVDebug() const {
   if (selected_block.dim() != BLK_LAST) {
     const Rectangle block_rect =
         selected_block.AsRect().ClipWith(debug_output.AsRect());
-
-    if (VDMatch(*config_, "quant-dct") || VDMatch(*config_, "merge-flat")) {
-      WP2_CHECK_STATUS(DrawLossyLuma(selected_block, block_rect,
-                                     /*draw_side=*/true, &debug_output));
-    }
     WP2_CHECK_STATUS(DrawSelection(selected_block, block_rect, &debug_output));
   }
   return WP2_STATUS_OK;

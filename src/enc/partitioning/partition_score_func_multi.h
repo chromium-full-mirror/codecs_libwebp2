@@ -43,12 +43,10 @@ namespace WP2 {
 class MultiScoreFunc : public PartitionScoreFunc {
  public:
   static constexpr float kMinScore = 0.5f;  // Blocks below that are discarded.
-  static constexpr int kMinEffortForGoodQuantDCT = 4;
 
   enum class Pass {  // The following passes select blocks with:
     LumaAlphaGradient,  // gradient-like original luma and alpha values
     NarrowStdDev,  // a narrow range of orig luma/alpha std dev per 4x4 block
-    GoodQuantDCT,  // low loss when luma->DCT->quantized->dequantized->luma
     Direction,         // a common direction with a high enough certainty
     Any,               // no criterion (used for filling what's left)
   };
@@ -65,26 +63,12 @@ class MultiScoreFunc : public PartitionScoreFunc {
                          float* const score) override;
 
  protected:
-  // Helper functions.
-  void GetCoeffs(Channel channel, const Block& block,
-                 int16_t coeffs[kMaxBlockSizePix2]) const;
-  void QuantizeCoeffs(Channel channel, const Block& block,
-                      int16_t coeffs[kMaxBlockSizePix2]) const;
-  void QuantizeCoeffs(Channel channel, const Block& block,
-                      BlockSize sub_block_size,
-                      int16_t coeffs[kMaxBlockSizePix2],
-                      int32_t* const max_range = nullptr) const;
-  float GetQuantDCT(const Block& block, Channel channel) const;
-
   // Passes. Values below threshold are selected.
   float GetLumaAlphaGradient(const Block& block) const;
   float GetLumaAlphaGradientThreshold(const Block& block) const;
 
   float GetStdDevRange(const Block& block) const;
   float GetStdDevRangeThreshold(const Block& block) const;
-
-  float GetQuantDCT(const Block& block) const;
-  float GetQuantDCTThreshold(const Block& block) const;
 
   float GetDirection(const Block& block) const;
   float GetDirectionThreshold(const Block& block) const;
@@ -94,7 +78,6 @@ class MultiScoreFunc : public PartitionScoreFunc {
 
   // Results of image processing done on the original planes.
   YUVPlane min_, max_;  // Minimum and maximum original values per block.
-  YUVPlane spread_;     // Range of surrounding values.
   Integral stddev_;     // Contains quantized luma std dev of the block grid.
   Integral a_stddev_;   // Contains std dev for the alpha plane (if any).
 
@@ -108,8 +91,6 @@ class MultiScoreFunc : public PartitionScoreFunc {
   void DrawValueThresholdColor(uint32_t cell_width, uint32_t cell_height,
                                const Block& block,
                                ArgbBuffer* const debug_output) const;
-  WP2Status DrawLossyLuma(const Block& block, const Rectangle& block_rect,
-                          bool draw_side, ArgbBuffer* const debug_output) const;
   WP2Status DrawSelection(const Block& block, const Rectangle& block_rect,
                           ArgbBuffer* const debug_output) const;
   WP2Status DrawVDebug() const;

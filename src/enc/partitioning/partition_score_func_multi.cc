@@ -57,50 +57,7 @@ static void GetMinMax(const Plane16& src, Plane16& min, Plane16& max) {
   }
 }
 
-// Range of original YUV values in a kKernelSize window around each pixel.
-// The higher the value, the more heterogenous the area is.
-static void GetSpread(const Plane16& src, Plane16* const dst) {
-  const int32_t w = src.w_, h = src.h_;
-  int16_t* p_dst = dst->Row(0);
-  const uint32_t dst_step = dst->Step();
-  const int16_t* p_src = src.Row(0);
-  const uint32_t src_step = src.Step();
-  for (int32_t y = 0; y < h; ++y) {
-    int16_t min, max;
-    if (y < kMaxDist || y >= h - kMaxDist) {
-      const int32_t min_sub_y = std::max(-kMaxDist, -y);
-      const int32_t max_sub_y = std::min(kMaxDist, h - 1 - y);
-      const int16_t* const row = &src.At(0, y + min_sub_y);
-      for (int32_t x = 0; x < w; ++x) {
-        const int32_t min_sub_x = std::max(-kMaxDist, -x);
-        const int32_t max_sub_x = std::min(kMaxDist, w - 1 - x);
-        GetBlockMinMaxGeneric(row + x + min_sub_x, src_step,
-                              max_sub_x + 1 - min_sub_x,
-                              max_sub_y + 1 - min_sub_y, &min, &max);
-        p_dst[x] = (int16_t)ClampToSigned(max - min, kYuvMaxPrec + 1u);
-      }
-    } else {
-      const int16_t* const row = p_src - src_step * kMaxDist;
-      for (int32_t x = 0; x < w; ++x) {
-        if (x < kMaxDist || x - kMaxDist + 8 > w) {
-          const int32_t min_sub_x = std::max(-kMaxDist, -x);
-          const int32_t max_sub_x = std::min(kMaxDist, w - 1 - x);
-          GetBlockMinMaxGeneric(row + x + min_sub_x, src_step,
-                                max_sub_x + 1 - min_sub_x, kKernelSize,
-                                &min, &max);
-        } else {
-          GetBlockMinMax_5x5(row + x - kMaxDist, src_step, &min, &max);
-        }
-        p_dst[x] = (int16_t)ClampToSigned(max - min, kYuvMaxPrec + 1u);
-      }
-    }
-    p_dst += dst_step;
-    p_src += src_step;
-  }
-}
-
 constexpr float MultiScoreFunc::kMinScore;
-constexpr int MultiScoreFunc::kMinEffortForGoodQuantDCT;
 
 WP2Status MultiScoreFunc::Init(const EncoderConfig& config,
                                const Rectangle& tile_rect, const YUVPlane& yuv,
@@ -123,16 +80,6 @@ WP2Status MultiScoreFunc::Init(const EncoderConfig& config,
     assert(src_plane.w_ % kMinBlockSizePix == 0 &&
            src_plane.h_ % kMinBlockSizePix == 0);
     GetMinMax(src_plane, min_.GetChannel(channel), max_.GetChannel(channel));
-  }
-
-  if (config_->effort >= kMinEffortForGoodQuantDCT) {
-    // Image processing.
-    WP2_CHECK_STATUS(spread_.Resize(src_->GetWidth(), src_->GetHeight(),
-                                    /*pad=*/1, with_alpha_));
-    for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
-      if (channel == kAChannel && !with_alpha_) continue;
-      GetSpread(src_->GetChannel(channel), &spread_.GetChannel(channel));
-    }
   }
 
   // Per-block standard deviation.
@@ -187,10 +134,6 @@ WP2Status MultiScoreFunc::ComputeScore(const Block& block,
       value = GetStdDevRange(block);
       threshold = GetStdDevRangeThreshold(block);
       break;
-    case Pass::GoodQuantDCT:
-      value = GetQuantDCT(block);
-      threshold = GetQuantDCTThreshold(block);
-      break;
     case Pass::Direction:
       value = GetDirection(block);
       threshold = GetDirectionThreshold(block);
@@ -212,78 +155,6 @@ WP2Status MultiScoreFunc::ComputeScore(const Block& block,
   WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug(block, *score));
   WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;
-}
-
-//------------------------------------------------------------------------------
-
-void MultiScoreFunc::GetCoeffs(Channel channel, const Block& block,
-                               int16_t coeffs[kMaxBlockSizePix2]) const {
-  const Plane16& plane = src_->GetChannel(channel);
-  // Copy luma pixels.
-  int16_t* dst_row = coeffs;
-  const int16_t* src_row = &plane.At(block.x_pix(), block.y_pix());
-  for (uint32_t y = 0; y < block.h_pix(); ++y) {
-    for (uint32_t x = 0; x < block.w_pix(); ++x) {
-      dst_row[x] = src_row[x];
-    }
-    dst_row += block.w_pix();
-    src_row += plane.Step();
-  }
-}
-
-void MultiScoreFunc::QuantizeCoeffs(Channel channel, const Block& block,
-                                    int16_t coeffs[kMaxBlockSizePix2]) const {
-  GetCoeffs(channel, block, coeffs);
-
-  // Transform them.
-  int32_t out[kMaxBlockSizePix2];
-  WP2Transform2D(coeffs, kDct, kDct, block.w_pix(), block.h_pix(), out,
-                 /*reduced=*/false);
-
-  // Find the segment of the block.
-  const Rectangle padded_tile_rect = {tile_rect_.x, tile_rect_.y,
-                                      src_->GetWidth(), src_->GetHeight()};
-  const uint8_t segment_id = (channel == kAChannel) ? 0 :
-      AssignSegmentId(*config_, *gparams_, padded_tile_rect, block);
-  const QuantMtx& quant_mtx =
-      gparams_->segments_[segment_id].GetQuant(channel);
-
-  // Quantize and dequantize coefficients.
-  const TrfSize tdim = GetTransform(block.dim());
-  uint32_t num_coeffs;
-  quant_mtx.Quantize(out, tdim, /*first_is_dc=*/true, coeffs,
-                     &num_coeffs, coeffs);
-  // Inverse transform them back and compare the result.
-  WP2InvTransform2D(coeffs, kDct, kDct, block.w_pix(), block.h_pix(),
-                    /*reduced=*/false);
-}
-
-void MultiScoreFunc::QuantizeCoeffs(Channel channel, const Block& block,
-                                    BlockSize sub_block_size,
-                                    int16_t coeffs[kMaxBlockSizePix2],
-                                    int32_t* const max_range) const {
-  if (max_range != nullptr) *max_range = 0;
-  Block sub_block(block.x(), block.y(), sub_block_size);
-  while (sub_block.y() + sub_block.h() <= block.y() + block.h()) {
-    int16_t sub_coeffs[kMaxBlockSizePix2];
-    QuantizeCoeffs(channel, sub_block, sub_coeffs);
-    int16_t min = sub_coeffs[0], max = sub_coeffs[0];
-    const uint32_t y = sub_block.y_pix() - block.y_pix();
-    const uint32_t x = sub_block.x_pix() - block.x_pix();
-    for (uint32_t sub_y = 0; sub_y < sub_block.h_pix(); ++sub_y) {
-      for (uint32_t sub_x = 0; sub_x < sub_block.w_pix(); ++sub_x) {
-        const int16_t sub_coeff = sub_coeffs[sub_y * sub_block.w_pix() + sub_x];
-        min = std::min(min, sub_coeff);
-        max = std::max(max, sub_coeff);
-        coeffs[(y + sub_y) * block.w_pix() + (x + sub_x)] = sub_coeff;
-      }
-    }
-    if (max_range != nullptr) *max_range = std::max(*max_range, max - min);
-    sub_block.SetXY(sub_block.x() + sub_block.w(), sub_block.y());
-    if (sub_block.x() + sub_block.w() > block.x() + block.w()) {
-      sub_block.SetXY(block.x(), sub_block.y() + sub_block.h());
-    }
-  }
 }
 
 //------------------------------------------------------------------------------
@@ -394,53 +265,6 @@ float MultiScoreFunc::GetStdDevRangeThreshold(const Block& block) const {
   // be for a block to be accepted. Accept bigger blocks during partitioning at
   // low qualities, and seek smaller blocks at high qualities.
   return MapQuality(*config_, 0.50f, 0.12f);
-}
-
-//------------------------------------------------------------------------------
-
-// Returns the average difference between the original luma coefficients and the
-// quantized ones, weighted per pixel by the 'spread_' in order to give more
-// importance to flat areas (penalize distant ripples more than noise on edges).
-float MultiScoreFunc::GetQuantDCT(const Block& block, Channel channel) const {
-  int16_t coeffs[kMaxBlockSizePix2];
-  QuantizeCoeffs(channel, block, coeffs);
-
-  float avg_diff = 0.f;
-  int16_t* dst_row = coeffs;
-  const int16_t* src_row =
-      &src_->GetChannel(channel).At(block.x_pix(), block.y_pix());
-  const int16_t* spread_row =
-      &spread_.GetChannel(channel).At(block.x_pix(), block.y_pix());
-  for (uint32_t y = 0; y < block.h_pix(); ++y) {
-    for (uint32_t x = 0; x < block.w_pix(); ++x) {
-      const int32_t diff = std::abs(dst_row[x] - src_row[x]);
-      avg_diff += diff / Clamp(spread_row[x] / 20.f, 0.1f, 10.f);
-    }
-    dst_row += block.w_pix();
-    src_row += src_->GetChannel(channel).Step();
-    spread_row += spread_.GetChannel(channel).Step();
-  }
-  avg_diff /= (block.w_pix() * block.h_pix());
-  return avg_diff;
-}
-
-float MultiScoreFunc::GetQuantDCT(const Block& block) const {
-  // Take chroma and alpha into account just enough to discard bad layouts (for
-  // example an entirely black image with alpha patterns).
-  // TODO(yguyon): Check ADST too
-  constexpr float kScale[] = {1.f, 0.1f, 0.1f, 0.1f};
-  return std::max({GetQuantDCT(block, kYChannel) * kScale[kYChannel],
-                   GetQuantDCT(block, kUChannel) * kScale[kUChannel],
-                   GetQuantDCT(block, kVChannel) * kScale[kVChannel],
-                   with_alpha_
-                       ? GetQuantDCT(block, kAChannel) * kScale[kAChannel]
-                       : 0.f});
-}
-
-float MultiScoreFunc::GetQuantDCTThreshold(const Block& block) const {
-  // This metric is only useful at low qualities, for large blocks that would
-  // still look fine with an aggressive quantization.
-  return MapQuality(*config_, 4.00f, -0.75f);
 }
 
 //------------------------------------------------------------------------------

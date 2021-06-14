@@ -59,12 +59,6 @@ WP2Status MultiPassPartitioner::GetBestPartition(
                                Grid::Snapped, pass_progress,
                                &max_num_blocks_left, blocks));
   }
-  if (config_->enable_alt_tuning &&
-      config_->effort >= MultiScoreFunc::kMinEffortForGoodQuantDCT) {
-    // Blocks having a DCT that still gives a good result when quantized.
-    WP2_CHECK_STATUS(GetBlocks(Pass::GoodQuantDCT, BLK_32x32, Grid::Snapped,
-                               pass_progress, &max_num_blocks_left, blocks));
-  }
 
   // Pick a few not-too-small blocks that are following a luma edge.
   for (const BlockSize* block_size =
