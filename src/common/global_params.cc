@@ -57,10 +57,7 @@ WP2Status GlobalParams::Write(bool image_has_alpha, ANSEnc* const enc) const {
     WP2_CHECK_STATUS(transf_.Write(enc));  // write inverse matrix
     enc->PutBool(explicit_segment_ids_, "explicit_segment_ids");
     enc->PutRValue(partition_set_, NUM_PARTITION_SETS, "block_size");
-    enc->PutRange(
-        segments_.size(), 1,
-        GetMaxNumSegments(explicit_segment_ids_, quality_hint_, partition_set_),
-        "num_segments_id");
+    enc->PutRange(segments_.size(), 1, kMaxNumSegments, "num_segments_id");
     enc->PutBool(partition_snapping_, "block_size");
     bool use_grain = false;
     for (const Segment& s : segments_) {
@@ -139,10 +136,8 @@ WP2Status GlobalParams::Read(bool image_has_alpha, ANSDec* const dec) {
     // segments
     partition_set_ =
         (PartitionSet)dec->ReadRValue(NUM_PARTITION_SETS, "block_size");
-    const uint32_t num_segments = dec->ReadRange(
-        1,
-        GetMaxNumSegments(explicit_segment_ids_, quality_hint_, partition_set_),
-        "num_segments_id");
+    const uint32_t num_segments =
+        dec->ReadRange(1, kMaxNumSegments, "num_segments_id");
     WP2_CHECK_ALLOC_OK(segments_.resize(num_segments));
     partition_snapping_ = dec->ReadBool("block_size");
 

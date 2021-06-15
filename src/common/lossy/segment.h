@@ -38,12 +38,6 @@ class SymbolReader;
 class GlobalParams;
 
 //------------------------------------------------------------------------------
-
-// Maximum number of segments.
-uint32_t GetMaxNumSegments(bool explicit_segment_ids, uint32_t quality_hint,
-                           PartitionSet set);
-
-//------------------------------------------------------------------------------
 // Grain
 
 class GrainParams {

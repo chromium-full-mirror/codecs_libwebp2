@@ -112,11 +112,7 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
     gparams->use_rnd_mtx_ = config.use_random_matrix;
     WP2_CHECK_STATUS(gparams->transf_.Init(config.csp_type));
 
-    const uint32_t num_segments = random->Get(
-        1u, std::min((uint32_t)config.segments,
-                     GetMaxNumSegments(gparams->explicit_segment_ids_,
-                                       GetQualityHint(config.quality),
-                                       config.partition_set)));
+    const uint32_t num_segments = random->Get(1, config.segments);
     WP2_CHECK_ALLOC_OK(gparams->segments_.resize(num_segments));
     for (uint32_t i = 0; i < num_segments; ++i) {
       gparams->segments_[i].risk_ = random->Get(0, 127) / 127.f;

@@ -54,14 +54,11 @@ WP2Status SyntaxWriter::Init(ANSDictionaries* const dicts,
   WP2_CHECK_STATUS(residual_writer_.Init(context_.use_aom(),
                                          gparams_->maybe_use_lossy_alpha_));
 
-  const uint32_t num_segments =
-      std::min((uint32_t)gparams_->segments_.size(),
-               GetMaxNumSegments(gparams_->explicit_segment_ids_,
-                                 GetQualityHint(config_->quality),
-                                 config_->partition_set));
+  assert(gparams_->segments_.size() <= kMaxNumSegments);
   // Deal with segment ids.
-  WP2_CHECK_STATUS(segment_ids_.InitWrite(
-      num_segments, gparams_->explicit_segment_ids_, tile_rect.width));
+  WP2_CHECK_STATUS(segment_ids_.InitWrite(gparams_->segments_.size(),
+                                          gparams_->explicit_segment_ids_,
+                                          tile_rect.width));
 
   if (gparams_->has_alpha_) {
     WP2_CHECK_STATUS(alpha_writer_.Init(*config_, gparams, context_, yuv,

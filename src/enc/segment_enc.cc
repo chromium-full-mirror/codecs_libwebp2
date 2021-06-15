@@ -27,6 +27,7 @@
 #include "src/common/vdebug.h"
 #include "src/enc/analysis.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/wp2/format_constants.h"
 
 // #define LOG_NOISE   // uncomment to print noise measurements
 
@@ -232,16 +233,16 @@ WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
   for (uint32_t i = 0; i < FeatureMap::kHistogramSize; ++i) {
     if (histogram[i] != 0) ++num_non_empty_buckets;
   }
+  num_non_empty_buckets = std::max(num_non_empty_buckets, 1u);
 
   uint32_t max_num_segments = 1;
   if (config.enable_alt_tuning) {
     // Cluster the histogram.
     max_num_segments =
-        GetMaxNumSegments(gparams->explicit_segment_ids_,
-                          GetQualityHint(config.quality), config.partition_set);
+        1u + DivRound<uint32_t>((kMaxNumSegments - 1) * config.quality,
+                                kMaxLossyQuality);
     max_num_segments = std::min(max_num_segments, (uint32_t)config.segments);
     max_num_segments = std::min(max_num_segments, num_non_empty_buckets);
-    max_num_segments = std::max(max_num_segments, 1u);
   }
 
   // Cluster id for each variance value.

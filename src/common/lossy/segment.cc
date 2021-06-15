@@ -29,24 +29,6 @@
 namespace WP2 {
 
 //------------------------------------------------------------------------------
-
-uint32_t GetMaxNumSegments(bool explicit_segment_ids, uint32_t quality_hint,
-                           PartitionSet set) {
-  assert(quality_hint <= kMaxLossyQualityHint);
-  const uint32_t max_num_segments =
-      (explicit_segment_ids ? kMaxNumSegments : kMaxNumSegments / 2);
-  // Use fewer segments as quality decreases.
-  const uint32_t res = 1u + DivRound((max_num_segments - 1) * quality_hint,
-                                     kMaxLossyQualityHint);
-  // TODO(vrabaud) Try for other partition sets, only tested on the default one.
-  if (set == SOME_RECTS) {
-    return std::max(2u, res);
-  } else {
-    return res;
-  }
-}
-
-//------------------------------------------------------------------------------
 // Grain read/write
 
 static constexpr uint32_t kMaxNoiseStrength = 100;
