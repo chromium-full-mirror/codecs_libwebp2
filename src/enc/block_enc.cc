@@ -497,7 +497,7 @@ WP2Status BlockScorer::ComputeScore() {
   if (forced_split != CodedBlock::SplitTf::kUnknown) {
     // Set by EncoderConfig::info (debug).
     params.split_tf = (forced_split == CodedBlock::SplitTf::kForcedSplit);
-    WP2_CHECK_STATUS(ComputeScoreForEachChannel(/*forced=*/true));
+    WP2_CHECK_STATUS(ComputeScoreForEachPredictor(/*forced=*/true));
   } else {
     for (const bool split_tf : splits_) {
       if (split_tf && !can_split) continue;

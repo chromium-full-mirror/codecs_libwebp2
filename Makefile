@@ -709,7 +709,7 @@ CC_TESTS += test_partition_score_func test_tile_shapes test_version
 CC_TESTS += test_syntax_writer test_anim_frame test_diffusion test_analysis
 CC_TESTS += test_decoder_api test_restoration_filter test_color_precision
 CC_TESTS += test_dsp_speed test_metadata test_bypass test_screen test_anim_skip
-CC_TESTS += test_split_iterator test_slow_lossless_enc test_no_alt_tuning
+CC_TESTS += test_split_iterator test_slow_lossless_enc test_debug_options
 # lossless tests:
 CC_TESTS += lossless/test_color_cache lossless/test_palette
 CC_TESTS += lossless/test_group4 lossless/test_histogram
@@ -1197,7 +1197,7 @@ DIST_FILES= \
             tests/test_malloc_fail_at.cc \
             tests/test_memory.sh \
             tests/test_metadata.cc \
-            tests/test_no_alt_tuning.cc \
+            tests/test_debug_options.cc \
             tests/test_optim.cc \
             tests/test_orientation.cc \
             tests/test_partitions.cc \
