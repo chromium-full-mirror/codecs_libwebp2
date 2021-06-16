@@ -100,8 +100,7 @@ FilterBlockMap CreateAlignedBlocks(const Vector<Segment>& segments,
 
 // Applies the deblocking filter on the 'pixels'.
 void Deblock(BitDepth bit_depth, float quality, YUVPlane* const pixels) {
-  const Vector<Segment> segments =
-      testutil::CreateSegments(GetQualityHint(quality), bit_depth);
+  const Vector<Segment> segments = testutil::CreateSegments(quality, bit_depth);
   const double residual_density = quality / kMaxLossyQuality;
   const double min_bpp = 4. * quality / kMaxLossyQuality;
   // The created block edges should match at least some of the boundaries of

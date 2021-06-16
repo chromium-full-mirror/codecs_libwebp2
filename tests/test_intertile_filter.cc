@@ -75,7 +75,7 @@ void CreateCanvasAndFilter(uint32_t width, uint32_t height,
 
   for (Tile& tile : tiles_layout.tiles) {
     segments.emplace_back(testutil::CreateSegments(
-        GetQualityHint(quality), /*bit_depth=*/{8, /*is_signed=*/true}));
+        quality, /*bit_depth=*/{8, /*is_signed=*/true}));
     yuvs.emplace_back();
     ASSERT_WP2_OK(
         yuvs.back().Resize(tile.yuv_output.Y.w_, tile.yuv_output.Y.h_));

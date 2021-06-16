@@ -62,10 +62,9 @@ class GrainParams {
 class Segment {
  public:
   // I/O for header
-  WP2Status WriteHeader(ANSEnc* const enc,
-                        bool write_alpha, bool write_grain) const;
-  WP2Status ReadHeader(uint32_t quality_hint,
-                       uint32_t u_quant_multiplier, uint32_t v_quant_multiplier,
+  WP2Status WriteHeader(ANSEnc* const enc, bool write_alpha,
+                        bool write_grain) const;
+  WP2Status ReadHeader(uint32_t u_quant_multiplier, uint32_t v_quant_multiplier,
                        bool read_alpha, bool read_grain, ANSDec* const dec);
 
   // I/O for Encoding methods.
@@ -110,11 +109,11 @@ class Segment {
   // This must be called before FinalizeQuant().
   void SetYUVBounds(int16_t yuv_min, int16_t yuv_max);
 
-  // Fills quant_steps_[][] with flat values based on 'quality_hint' and
-  // 'quality_factor' in [0,kQFactorMax]. Note 'quality_factor' is backwards:
-  // the higher it is, the more the image is compressed.
-  void SetQuality(uint32_t quality_hint, uint32_t quality_factor,
-                  uint32_t u_quant_multiplier, uint32_t v_quant_multiplier);
+  // Fills quant_steps_[][] with flat values based on 'quality_factor' in
+  // [0,kQFactorMax]. Note 'quality_factor' is backwards: the higher it is, the
+  // more the image is compressed.
+  void SetQuality(uint32_t quality_factor, uint32_t u_quant_multiplier,
+                  uint32_t v_quant_multiplier);
   // Same, for kAChannel. Must be called *after* SetQuality().
   void SetAlphaQuality(uint32_t quality_factor);
 
@@ -135,7 +134,7 @@ class Segment {
   // 'qfactor' should be in [0, kFactorMax] range.
   // The alpha quantization factor will be set to default value.
   void SetQuantizationFactor(const CSPTransform& transform,
-                             uint32_t quality_hint, uint32_t u_quant_multiplier,
+                             uint32_t u_quant_multiplier,
                              uint32_t v_quant_multiplier, uint32_t qfactor);
   // Same, but for alpha channel. Must be called *after* SetQuantizationFactor()
   void SetAlphaQuantizationFactor(uint32_t qfactor);

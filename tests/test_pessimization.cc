@@ -18,6 +18,7 @@
 
 #include <cstdio>
 #include <limits>
+#include <string>
 #include <tuple>
 
 #include "imageio/image_dec.h"
@@ -97,7 +98,6 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
   // TODO(yguyon): Also test fully random GlobalParams.
   gparams->Reset();
   gparams->type_ = DecideGlobalParamsType(config);
-  gparams->quality_hint_ = GetQualityHint(config.quality);
 
   gparams->has_alpha_ = image_has_alpha && random->FlipACoin();
   if (gparams->type_ == GlobalParams::GP_LOSSY ||
@@ -118,8 +118,7 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
       gparams->segments_[i].risk_ = random->Get(0, 127) / 127.f;
       gparams->segments_[i].risk_class_ = i;
       gparams->segments_[i].SetQuantizationFactor(
-          gparams->transf_, GetQualityHint(config.quality),
-          kDefaultQuantMultiplier, kDefaultQuantMultiplier,
+          gparams->transf_, kDefaultQuantMultiplier, kDefaultQuantMultiplier,
           /*qfactor=*/random->Get(1, 128) / 1.28f);
       gparams->segments_[i].use_grain_ = false;  // Nah.
     }

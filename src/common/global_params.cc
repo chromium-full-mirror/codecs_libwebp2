@@ -33,15 +33,6 @@ WP2Status GlobalParams::Write(bool image_has_alpha, ANSEnc* const enc) const {
 
   enc->PutRValue(type_, image_has_alpha ? GP_AV1 : GP_LAST, "gp_type");
 
-  if (type_ == GP_LOSSLESS) {
-    assert(quality_hint_ == kLosslessQualityHint);
-  } else if (type_ == GP_LOSSY || type_ == GP_BOTH) {
-    enc->PutRValue(quality_hint_, kMaxLossyQualityHint + 1, "quality_hint");
-  } else {
-    assert(type_ == GP_AV1);
-    assert(quality_hint_ == kLosslessQualityHint / 2);
-  }
-
   if (image_has_alpha) {
     enc->PutBool(has_alpha_, "has_alpha");
   } else {
@@ -116,15 +107,6 @@ WP2Status GlobalParams::Read(bool image_has_alpha, ANSDec* const dec) {
 
   type_ = (Type)dec->ReadRValue(image_has_alpha ? GP_AV1 : GP_LAST, "gp_type");
 
-  if (type_ == GP_LOSSLESS) {
-    quality_hint_ = kLosslessQualityHint;
-  } else if (type_ == GP_LOSSY || type_ == GP_BOTH) {
-    quality_hint_ = dec->ReadRValue(kMaxLossyQualityHint + 1, "quality_hint");
-  } else {
-    assert(type_ == GP_AV1);
-    quality_hint_ = kMaxLossyQualityHint / 2;  // Unused so whatever.
-  }
-
   has_alpha_ = image_has_alpha && dec->ReadBool("has_alpha");
 
   if (type_ == GP_LOSSY || type_ == GP_BOTH) {
@@ -162,7 +144,7 @@ WP2Status GlobalParams::Read(bool image_has_alpha, ANSDec* const dec) {
     bool read_alpha = maybe_use_lossy_alpha_;
     for (Segment& segment : segments_) {
       segment.SetYUVBounds(transf_.GetYUVMin(), transf_.GetYUVMax());
-      WP2_CHECK_STATUS(segment.ReadHeader(quality_hint_, u_quant_multiplier_,
+      WP2_CHECK_STATUS(segment.ReadHeader(u_quant_multiplier_,
                                           v_quant_multiplier_, read_alpha,
                                           use_grain, dec));
       read_alpha = false;   // only for the first segment
@@ -212,7 +194,6 @@ WP2Status GlobalParams::InitRndMtxSet() {
 
 bool GlobalParams::IsOk() const {
   if (type_ >= GP_LAST) return false;
-  if (quality_hint_ > kLosslessQualityHint) return false;
 
   if (y_preds_.size() > kYPredNum) return false;
   if (uv_preds_.size() > kUVPredNum) return false;

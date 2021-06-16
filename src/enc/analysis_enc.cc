@@ -18,6 +18,8 @@
 // Author: Skal (pascal.massimino@gmail.com)
 //
 
+#include <algorithm>
+
 #include "src/dsp/dsp.h"
 #include "src/enc/analysis.h"
 #include "src/enc/wp2_enc_i.h"
@@ -89,25 +91,13 @@ WP2Status AssignSimpleQuantizations(const EncoderConfig& config,
   // 'factor' is in [0:1] with 1 being most quantized.
   const float factor = std::pow(1.f - quality / kMaxLossyQuality, 1.3f);
   // The pow exponent above is set as the highest one leading to different
-  // 'qfactor' values for the highest qualities (94, 95).
-  const uint32_t qfactor = std::lround(kQFactorMax * factor);
-  // Scaling the chroma DC avoids rainbow artifacts at low qualities.
-  // It is also done as is by the decoder so it cannot be simplified here.
-  const float uv_dc_scale =
-      0.25f + 0.35f * GetQualityHint(config.quality) / kMaxLossyQualityHint;
-  const uint32_t uv_dc = std::lround(qfactor * uv_dc_scale);
+  // 'quality_factor' values for the highest qualities (94, 95).
+  const uint32_t quality_factor = std::lround(kQFactorMax * factor);
 
   WP2_CHECK_STATUS(segment.AllocateForEncoder());
   segment.SetYUVBounds(gparams.transf_.GetYUVMin(),
                        gparams.transf_.GetYUVMax());
-  for (uint32_t i = 0; i < kNumQuantZones; ++i) {
-    segment.quant_steps_[kYChannel][i] = qfactor;
-    segment.quant_steps_[kUChannel][i] = (i == 0) ? uv_dc : qfactor;
-    segment.quant_steps_[kVChannel][i] = (i == 0) ? uv_dc : qfactor;
-  }
-
-  segment.quality_factor_ = qfactor;
-  segment.use_quality_factor_ = true;
+  segment.SetQuality(quality_factor, kNeutralMultiplier, kNeutralMultiplier);
   segment.FinalizeQuant();
   segment.quant_y_.SetLambda();
   segment.quant_u_.SetLambda();
@@ -155,9 +145,8 @@ WP2Status GlobalParams::AssignQuantizations(const EncoderConfig& config) {
   }
   for (uint32_t idx = 0; idx < num_segments; ++idx) {
     WP2_CHECK_STATUS(segments_[idx].AllocateForEncoder());
-    segments_[idx].SetQuantizationFactor(
-        transf_, GetQualityHint(config.quality), u_quant_multiplier_,
-        v_quant_multiplier_, qualities[idx]);
+    segments_[idx].SetQuantizationFactor(transf_, u_quant_multiplier_,
+                                         v_quant_multiplier_, qualities[idx]);
   }
   return WP2_STATUS_OK;
 }
@@ -213,16 +202,6 @@ WP2Status GlobalAnalysis(const ArgbBuffer& rgb, const YUVPlane& yuv,
   WP2_CHECK_OK(!rgb.IsEmpty() || !yuv.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
 
   gparams->type_ = DecideGlobalParamsType(config);
-
-  if (gparams->type_ == GlobalParams::GP_LOSSLESS) {
-    gparams->quality_hint_ = kLosslessQualityHint;
-  } else if (gparams->type_ == GlobalParams::GP_LOSSY ||
-             gparams->type_ == GlobalParams::GP_BOTH) {
-    gparams->quality_hint_ = GetQualityHint(config.quality);
-  } else {
-    assert(gparams->type_ == GlobalParams::GP_AV1);
-    gparams->quality_hint_ = kLosslessQualityHint / 2;
-  }
 
   if (gparams->type_ == GlobalParams::GP_LOSSLESS ||
       gparams->type_ == GlobalParams::GP_BOTH) {

@@ -46,11 +46,10 @@ YUVPlane CreateNoisyPixels(uint32_t width, uint32_t height,
 
 // Applies the restoration filter on 'pixels' with 'filter_strength'.
 void Filter(BitDepth bit_depth, const int8_t tap_weights[kWieFltTapDist],
-            uint32_t quality_hint, YUVPlane* const pixels) {
-  const Vector<Segment> segments =
-      testutil::CreateSegments(quality_hint, bit_depth);
-  const double residual_density = 1. * quality_hint / kMaxLossyQualityHint;
-  const double min_bpp = 4. * quality_hint / kMaxLossyQualityHint;
+            float quality, YUVPlane* const pixels) {
+  const Vector<Segment> segments = testutil::CreateSegments(quality, bit_depth);
+  const double residual_density = 1. * quality / kMaxLossyQuality;
+  const double min_bpp = 4. * quality / kMaxLossyQuality;
   FilterBlockMap blocks;
   testutil::CreateBlocks(/*tile_x=*/0, /*tile_y=*/0, segments, residual_density,
                          min_bpp, bit_depth, pixels, &blocks);
@@ -91,8 +90,8 @@ TEST_P(RestorationFilterTest, FilteringPlain) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth, kDefaultTapWeights,
-                                 /*quality_hint=*/0, &pixels));
+  ASSERT_NO_FATAL_FAILURE(
+      Filter(bit_depth, kDefaultTapWeights, /*quality=*/0.f, &pixels));
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
@@ -109,9 +108,8 @@ TEST_P(RestorationFilterTest, MaxFilteringBlocked) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth,
-                                 kDefaultTapWeights,
-                                 /*quality_hint=*/0, &pixels));
+  ASSERT_NO_FATAL_FAILURE(
+      Filter(bit_depth, kDefaultTapWeights, /*quality=*/0.f, &pixels));
 
   EXPECT_FALSE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_FALSE(testutil::AreEqual(pixels.U, reference.U));
@@ -128,9 +126,8 @@ TEST_P(RestorationFilterTest, NoFiltering) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(
-      Filter(bit_depth, kDefaultTapWeights,
-             /*quality_hint=*/kMaxLossyQualityHint, &pixels));
+  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth, kDefaultTapWeights,
+                                 /*quality=*/kMaxLossyQuality, &pixels));
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));
@@ -147,9 +144,8 @@ TEST_P(RestorationFilterTest, Identity) {
   YUVPlane reference;
   ASSERT_WP2_OK(reference.Copy(pixels, /*resize_if_needed=*/true));
 
-  ASSERT_NO_FATAL_FAILURE(Filter(bit_depth,
-                                 kIdentityTapWeights,
-                                 /*quality_hint=*/0, &pixels));
+  ASSERT_NO_FATAL_FAILURE(
+      Filter(bit_depth, kIdentityTapWeights, /*quality=*/0.f, &pixels));
 
   EXPECT_TRUE(testutil::AreEqual(pixels.Y, reference.Y));
   EXPECT_TRUE(testutil::AreEqual(pixels.U, reference.U));

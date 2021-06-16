@@ -39,14 +39,13 @@ WP2Status WriteAndRead(const GlobalParams& params_to_write,
 
 TEST(GlobalParmas, ReadWriteUVQUantMultiplier) {
   GlobalParams params;
-  params.quality_hint_ = 8;
   ASSERT_TRUE(params.segments_.resize(3));
   params.u_quant_multiplier_ = kDefaultQuantMultiplier;
   params.v_quant_multiplier_ = kDefaultQuantMultiplier + 2;
   for (Segment& s : params.segments_) {
     s.SetYUVBounds(-512, 512);
-    s.SetQuality(kMaxLossyQualityHint / 2, /*quality_factor=*/10,
-                 params.u_quant_multiplier_, params.v_quant_multiplier_);
+    s.SetQuality(/*quality_factor=*/10, params.u_quant_multiplier_,
+                 params.v_quant_multiplier_);
     s.FinalizeQuant();
   }
   params.yuv_filter_magnitude_ = kMaxYuvFilterMagnitude / 2;
@@ -72,7 +71,6 @@ TEST(GlobalParmas, ReadWriteUVQUantMultiplier) {
 
 TEST(GlobalParmas, FixedPredictors) {
   GlobalParams params;
-  params.quality_hint_ = 8;
   ASSERT_TRUE(params.segments_.resize(3));
   params.has_alpha_ = params.maybe_use_lossy_alpha_ = true;
   // Init twice (should not matter).

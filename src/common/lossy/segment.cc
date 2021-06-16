@@ -19,12 +19,16 @@
 
 #include "src/common/lossy/segment.h"
 
+#include <algorithm>
+
 #include "src/common/constants.h"
 #include "src/common/lossy/block.h"
 #include "src/dec/symbols_dec.h"
+#include "src/dsp/math.h"
 #include "src/enc/symbols_enc.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/utils.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -136,17 +140,14 @@ void Segment::StoreEncodingMethods(const CodedBlockBase& cb,
 //------------------------------------------------------------------------------
 // Segment reading
 
-WP2Status Segment::ReadHeader(uint32_t quality_hint,
-                              uint32_t u_quant_multiplier,
-                              uint32_t v_quant_multiplier,
-                              bool read_alpha, bool read_grain,
-                              ANSDec* const dec) {
+WP2Status Segment::ReadHeader(uint32_t u_quant_multiplier,
+                              uint32_t v_quant_multiplier, bool read_alpha,
+                              bool read_grain, ANSDec* const dec) {
   const bool use_quality_factor = dec->ReadBool("quant-factor");
   if (use_quality_factor) {
     const uint32_t quality_factor =
         dec->ReadRValue(kQFactorMax + 1, "quant-factor");
-    SetQuality(quality_hint, quality_factor,
-               u_quant_multiplier, v_quant_multiplier);
+    SetQuality(quality_factor, u_quant_multiplier, v_quant_multiplier);
     if (read_alpha) {
       const uint32_t a_quality_factor =
           dec->ReadRValue(kQFactorMax + 1, "quant-factor");
@@ -240,39 +241,45 @@ bool Segment::IsMergeableWith(const Segment& other) const {
 
 //------------------------------------------------------------------------------
 
-static uint32_t InterpolateQuant(int32_t qf, float mult) {
-  const int32_t q = std::lround(qf * mult);
-  return (uint32_t)Clamp(q, 0, (int32_t)kQFactorMax);
+namespace {
+
+uint32_t GetChromaACQuant(int32_t quality_factor, int32_t quant_multiplier) {
+  return (uint32_t)Clamp<int32_t>(
+      quality_factor + quant_multiplier - (int32_t)kNeutralMultiplier, 0,
+      kQFactorMax);
 }
 
-void Segment::SetQuality(uint32_t quality_hint, uint32_t quality_factor,
-                         uint32_t u_quant_multiplier,
+uint32_t GetChromaDCQuant(int32_t quality_factor, int32_t quant_multiplier) {
+  const uint32_t q = GetChromaACQuant(quality_factor, quant_multiplier);
+  // Quantize DC less than AC for UV, especially at lower qualities.
+  // Values are found empirically.
+  return RightShiftRound(34210 + 34210 * q - 76 * q * q, 16);
+}
+
+}  // namespace
+
+void Segment::SetQuality(uint32_t quality_factor, uint32_t u_quant_multiplier,
                          uint32_t v_quant_multiplier) {
   // The following ad-hoc formulae maps the [0-kQFactorMax] range of quality
   // factor to approximately 0.05 bpp - 3 bpp usable range. Note that
   // quality_factor 0 is the highest quality (= smaller quant-step).
   quality_factor = std::min(quality_factor, (uint32_t)kQFactorMax);
-  const int32_t q_y = quality_factor;
-  const int32_t q_u = quality_factor + u_quant_multiplier - kNeutralMultiplier;
-  const int32_t q_v = quality_factor + v_quant_multiplier - kNeutralMultiplier;
-  // Quantize DC less than AC for UV, especially at lower qualities.
-  // TODO(skal): this is normative, remove the floats
-  constexpr float kMinScale = 0.25f;
-  constexpr float kMaxScale = 0.60f;
-  const float qf =
-      1.f * std::min(quality_hint, kMaxLossyQualityHint) / kMaxLossyQualityHint;
-  const float uv_dc_scale = kMinScale + (kMaxScale - kMinScale) * qf;
-  const float kYScales[] = {1.f, 1.f, 1.f, 1.f, 1.f};
-  STATIC_ASSERT_ARRAY_SIZE(kYScales, kNumQuantZones);
-  // uv_dc_scale is applied to DC and the first row/column of the quant matrix.
-  const float kUVScales[] = {uv_dc_scale, uv_dc_scale, 1.f, 1.f, 1.f};
-  STATIC_ASSERT_ARRAY_SIZE(kUVScales, kNumQuantZones);
 
-  for (uint32_t i = 0; i < kNumQuantZones; ++i) {
-    quant_steps_[kYChannel][i] = InterpolateQuant(q_y, kYScales[i]);
-    quant_steps_[kUChannel][i] = InterpolateQuant(q_u, kUVScales[i]);
-    quant_steps_[kVChannel][i] = InterpolateQuant(q_v, kUVScales[i]);
+  // DC
+  quant_steps_[kYChannel][0] = quality_factor;
+  quant_steps_[kUChannel][0] =
+      GetChromaDCQuant(quality_factor, u_quant_multiplier);
+  quant_steps_[kVChannel][0] =
+      GetChromaDCQuant(quality_factor, v_quant_multiplier);
+  // AC
+  for (uint32_t zone = 1; zone < kNumQuantZones; ++zone) {
+    quant_steps_[kYChannel][zone] = quality_factor;
+    quant_steps_[kUChannel][zone] =
+        GetChromaACQuant(quality_factor, u_quant_multiplier);
+    quant_steps_[kVChannel][zone] =
+        GetChromaACQuant(quality_factor, v_quant_multiplier);
   }
+
   quality_factor_ = quality_factor;
   use_quality_factor_ = true;
 }
@@ -281,7 +288,7 @@ void Segment::SetAlphaQuality(uint32_t quality_factor) {
   assert(use_quality_factor_);
   a_quality_factor_ = std::min(quality_factor, (uint32_t)kQFactorMax);
   for (uint32_t i = 0; i < kNumQuantZones; ++i) {
-    quant_steps_[kAChannel][i] = InterpolateQuant(a_quality_factor_, 0.5f);
+    quant_steps_[kAChannel][i] = quality_factor / 2;
   }
 }
 
@@ -336,12 +343,11 @@ void Segment::FinalizeAlphaQuant() {
 }
 
 void Segment::SetQuantizationFactor(const CSPTransform& transform,
-                                    uint32_t quality_hint,
                                     uint32_t u_quant_multiplier,
                                     uint32_t v_quant_multiplier,
                                     uint32_t qfactor) {
   SetYUVBounds(transform.GetYUVMin(), transform.GetYUVMax());
-  SetQuality(quality_hint, qfactor, u_quant_multiplier, v_quant_multiplier);
+  SetQuality(qfactor, u_quant_multiplier, v_quant_multiplier);
   FinalizeQuant();
   quant_y_.SetLambda();
   quant_u_.SetLambda();

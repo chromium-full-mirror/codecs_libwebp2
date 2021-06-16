@@ -66,8 +66,7 @@ YUVPlane CreateNoisyWavyPixels(uint32_t width, uint32_t height,
 
 // Applies the directional filter on the 'pixels'.
 void Filter(BitDepth bit_depth, float quality, YUVPlane* const pixels) {
-  const Vector<Segment> segments =
-      testutil::CreateSegments(GetQualityHint(quality), bit_depth);
+  const Vector<Segment> segments = testutil::CreateSegments(quality, bit_depth);
   const double residual_density = quality / kMaxLossyQuality;
   const double min_bpp = 4. * quality / kMaxLossyQuality;
   FilterBlockMap blocks;

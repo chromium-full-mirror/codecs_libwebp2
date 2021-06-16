@@ -62,9 +62,6 @@ class GlobalParams {
   enum Type { GP_LOSSY = 0, GP_LOSSLESS, GP_BOTH, GP_AV1, GP_LAST };
   Type type_ = GP_LOSSY;
 
-  // A [0:15] mapping of the encoded quality.
-  uint32_t quality_hint_ = 0;
-
   // True if the frame contains alpha (either lossless or lossy).
   // Can only be true if 'BitstreamFeatures::has_alpha' is true as well.
   bool has_alpha_ = false;

@@ -15,6 +15,7 @@
 
 #include "tests/include/helpers_filter.h"
 
+#include <algorithm>
 #include <cstdlib>
 
 #include "./helpers.h"
@@ -91,19 +92,12 @@ bool AreEqual(const ArgbBuffer& a, const ArgbBuffer& b) {
 
 //------------------------------------------------------------------------------
 
-static constexpr uint32_t GetApproxQualityFactor(uint32_t quality_hint) {
-  return kQualityToQFactor((quality_hint != kLosslessQualityHint)
-                               ? (float)(quality_hint * kMaxLossyQuality) /
-                                     kMaxLossyQualityHint
-                               : (float)kMaxQuality);
-}
-
-Vector<Segment> CreateSegments(uint32_t quality_hint, BitDepth bit_depth) {
+Vector<Segment> CreateSegments(float quality, BitDepth bit_depth) {
   Vector<Segment> segments;
   if (!segments.resize(1)) abort();
   segments[0].SetYUVBounds(bit_depth.min(), bit_depth.max());
-  segments[0].SetQuality(quality_hint, GetApproxQualityFactor(quality_hint),
-                         kDefaultQuantMultiplier, kDefaultQuantMultiplier);
+  segments[0].SetQuality(kQualityToQFactor(quality), kDefaultQuantMultiplier,
+                         kDefaultQuantMultiplier);
   return segments;
 }
 

@@ -20,7 +20,7 @@
 #ifndef WP2_COMMON_CONSTANTS_H_
 #define WP2_COMMON_CONSTANTS_H_
 
-#include <cmath>
+#include <algorithm>
 
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"
@@ -32,15 +32,6 @@
 // Lossy and common constants.
 
 namespace WP2 {
-
-static constexpr uint32_t kLosslessQualityHint = (1 << kQualityHintNumBits) - 1;
-static constexpr uint32_t kMaxLossyQualityHint = kLosslessQualityHint - 1;
-static constexpr uint32_t GetQualityHint(float quality) {
-  return (quality <= kMaxLossyQuality)
-             ? DivRound<uint32_t>(quality * kMaxLossyQualityHint,
-                                  kMaxLossyQuality)
-             : kLosslessQualityHint;
-}
 
 // Maximum number of bytes used by a variable-length integer.
 static constexpr uint32_t kMaxVarIntLength = 4;

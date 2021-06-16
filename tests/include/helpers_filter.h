@@ -47,8 +47,8 @@ bool AreEqual(const ArgbBuffer& a, const ArgbBuffer& b);
 
 //------------------------------------------------------------------------------
 
-// Creates as many segments as 'qualities' with YUV bounds in [min, max_value].
-Vector<Segment> CreateSegments(uint32_t quality_hint, BitDepth bit_depth);
+// Creates one segment.
+Vector<Segment> CreateSegments(float quality, BitDepth bit_depth);
 
 // Helper for 'blocks->RegisterBlock()' with a CodedBlock mockup.
 void RegisterBlock(uint16_t x, uint16_t y, BlockSize dim, uint32_t segment_id,

@@ -35,23 +35,23 @@ TEST(ClusterHistogramTest, Simple) {
   uint32_t max_clusters = 1;
   uint32_t num_clusters;
   uint32_t center_positions[kMaxNumSegments];
-  num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
-                                  center_positions);
+  num_clusters =
+      ClusterHistogram(histogram, 10, max_clusters, result, center_positions);
   EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
   EXPECT_EQ(max_clusters, num_clusters);
   EXPECT_EQ(5u, center_positions[0]);
 
   max_clusters = 2;
-  num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
-                                  center_positions);
+  num_clusters =
+      ClusterHistogram(histogram, 10, max_clusters, result, center_positions);
   EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 0, 1, 1, 1, 1, 1));
   EXPECT_EQ(max_clusters, num_clusters);
   EXPECT_EQ(2u, center_positions[0]);
   EXPECT_EQ(7u, center_positions[1]);
 
   max_clusters = 3;
-  num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
-                                  center_positions);
+  num_clusters =
+      ClusterHistogram(histogram, 10, max_clusters, result, center_positions);
   EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1, 2, 2));
   EXPECT_EQ(max_clusters, num_clusters);
   EXPECT_EQ(1u, center_positions[0]);
@@ -59,10 +59,10 @@ TEST(ClusterHistogramTest, Simple) {
   EXPECT_EQ(8u, center_positions[2]);
 
   max_clusters = 4;
-  num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
-                                  center_positions);
+  num_clusters =
+      ClusterHistogram(histogram, 10, max_clusters, result, center_positions);
   EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 1, 1, 1, 1, 2, 2));
-  EXPECT_EQ(max_clusters - 1, num_clusters);   // can't really split in 4!
+  EXPECT_EQ(max_clusters - 1, num_clusters);  // can't really split in 4!
   EXPECT_EQ(1u, center_positions[0]);
   EXPECT_EQ(6u, center_positions[1]);
   EXPECT_EQ(8u, center_positions[2]);
@@ -75,26 +75,26 @@ TEST(ClusterHistogramTest, FewNonZeroValues) {
   uint32_t max_clusters = 2;
   uint32_t num_clusters;
   uint32_t center_positions[kMaxNumSegments];
-  num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
-                                  center_positions);
+  num_clusters =
+      ClusterHistogram(histogram, 10, max_clusters, result, center_positions);
   EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 0, 1, 1, 1, 1, 1));
   EXPECT_EQ(max_clusters, num_clusters);
   EXPECT_EQ(0u, center_positions[0]);
   EXPECT_EQ(8u, center_positions[1]);
 
   max_clusters = 3;
-  num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
-                                  center_positions);
+  num_clusters =
+      ClusterHistogram(histogram, 10, max_clusters, result, center_positions);
   EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 0, 1, 1, 1, 1, 1));
-  EXPECT_EQ(max_clusters - 1, num_clusters);   // can't really split in 3
+  EXPECT_EQ(max_clusters - 1, num_clusters);  // can't really split in 3
   EXPECT_EQ(0u, center_positions[0]);
   EXPECT_EQ(8u, center_positions[1]);
 
   max_clusters = 4;
-  num_clusters = ClusterHistogram(histogram, 10, max_clusters, result,
-                                  center_positions);
+  num_clusters =
+      ClusterHistogram(histogram, 10, max_clusters, result, center_positions);
   EXPECT_THAT(result, ElementsAre(0, 0, 0, 0, 0, 1, 1, 1, 1, 1));
-  EXPECT_EQ(max_clusters - 2, num_clusters);   // one less cluster than expected
+  EXPECT_EQ(max_clusters - 2, num_clusters);  // one less cluster than expected
   EXPECT_EQ(0u, center_positions[0]);
   EXPECT_EQ(8u, center_positions[1]);
 }
@@ -167,8 +167,8 @@ TEST(TestSegment, TinyImage) {
 TEST(TestSegment, Quantization) {
   Segment segment;
   segment.SetYUVBounds(-500, 500);
-  segment.SetQuality(GetQualityHint(60.f), kQualityToQFactor(60.f),
-                     kNeutralMultiplier / 2, kNeutralMultiplier * 2);
+  segment.SetQuality(kQualityToQFactor(60.f), kNeutralMultiplier / 2,
+                     kNeutralMultiplier * 2);
   segment.FinalizeQuant();
   const uint32_t quantized_range1 = segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
   const uint32_t u_quantized_range1 =
@@ -195,8 +195,8 @@ TEST(TestSegment, Quantization) {
   const uint32_t uncentered_range = segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
   EXPECT_NEAR(uncentered_range, quantized_range3, 1);
 
-  segment.SetQuality(GetQualityHint(20.f), kQualityToQFactor(20.f),
-                     kDefaultQuantMultiplier, kDefaultQuantMultiplier);
+  segment.SetQuality(kQualityToQFactor(20.f), kDefaultQuantMultiplier,
+                     kDefaultQuantMultiplier);
   segment.FinalizeQuant();
   const uint32_t lower_quality_factor_range =
       segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
@@ -208,15 +208,14 @@ TEST(TestSegment, Quantization) {
 TEST(TestSegment, UVQuantMultiplier) {
   Segment segment;
   segment.SetYUVBounds(-500, 500);
-  segment.SetQuality(GetQualityHint(50.f), kQualityToQFactor(50.f),
+  segment.SetQuality(kQualityToQFactor(50.f),
                      /*u_quant_multiplier=*/kNeutralMultiplier,
                      /*v_quant_multiplier=*/kNeutralMultiplier);
   segment.FinalizeQuant();
   EXPECT_EQ(segment.quant_steps_[kUChannel][3],
             segment.quant_steps_[kVChannel][3]);
 
-  segment.SetQuality(GetQualityHint(50.f), kQualityToQFactor(50.f),
-                     /*u_quant_multiplier=*/1,
+  segment.SetQuality(kQualityToQFactor(50.f), /*u_quant_multiplier=*/1,
                      /*v_quant_multiplier=*/(1 << kQuantMultiplierBits));
   segment.FinalizeQuant();
   EXPECT_LE(segment.quant_steps_[kUChannel][3],
@@ -226,14 +225,14 @@ TEST(TestSegment, UVQuantMultiplier) {
 TEST(TestSegment, IsMergeableWith) {
   Segment segment1;
   segment1.SetYUVBounds(-512, 512);
-  segment1.SetQuality(GetQualityHint(42.f), kQualityToQFactor(42.f),
-                      kDefaultQuantMultiplier, kDefaultQuantMultiplier);
+  segment1.SetQuality(kQualityToQFactor(42.f), kDefaultQuantMultiplier,
+                      kDefaultQuantMultiplier);
   segment1.FinalizeQuant();
 
   Segment segment2;
   segment2.SetYUVBounds(-512, 512);
-  segment2.SetQuality(GetQualityHint(42.f), kQualityToQFactor(42.f),
-                      kDefaultQuantMultiplier, kDefaultQuantMultiplier);
+  segment2.SetQuality(kQualityToQFactor(42.f), kDefaultQuantMultiplier,
+                      kDefaultQuantMultiplier);
   segment2.FinalizeQuant();
 
   // Segments are the same.
@@ -241,14 +240,14 @@ TEST(TestSegment, IsMergeableWith) {
   EXPECT_TRUE(segment2.IsMergeableWith(segment1));
 
   // Set a different quality. Segments are now different.
-  segment2.SetQuality(GetQualityHint(43.f), kQualityToQFactor(43.f),
-                      kDefaultQuantMultiplier, kDefaultQuantMultiplier);
+  segment2.SetQuality(kQualityToQFactor(43.f), kDefaultQuantMultiplier,
+                      kDefaultQuantMultiplier);
   EXPECT_FALSE(segment1.IsMergeableWith(segment2));
   EXPECT_FALSE(segment2.IsMergeableWith(segment1));
 
   // Revert quality and change the bounds. Segments are also different.
-  segment2.SetQuality(GetQualityHint(42.f), kQualityToQFactor(42.f),
-                      kDefaultQuantMultiplier, kDefaultQuantMultiplier);
+  segment2.SetQuality(kQualityToQFactor(42.f), kDefaultQuantMultiplier,
+                      kDefaultQuantMultiplier);
   segment2.SetYUVBounds(-1024, 1024);
   EXPECT_FALSE(segment1.IsMergeableWith(segment2));
 }
@@ -258,8 +257,7 @@ TEST(TestSegment, MinQuant) {
   // Largest possible input range.
   segment.SetYUVBounds(-(1 << kYuvMaxPrec), (1 << kYuvMaxPrec) - 1);
   // Lowest possible quantization.
-  segment.SetQuality(kMaxLossyQualityHint, /*quality_factor=*/0,
-                     /*u_quant_multiplier=*/0,
+  segment.SetQuality(/*quality_factor=*/0, /*u_quant_multiplier=*/0,
                      /*v_quant_multiplier=*/0);
   segment.FinalizeQuant();
   // Make sure the max dc value is STRICTLY lower than kMaxDcValue which means
