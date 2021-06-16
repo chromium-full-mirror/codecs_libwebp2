@@ -465,12 +465,20 @@ WP2Status ANSAdaptiveBits::CopyFrom(const ANSAdaptiveBits& dicts) {
 //------------------------------------------------------------------------------
 // ANSAdaptiveSymbols
 
-bool ANSAdaptiveSymbols::Add(uint32_t max_symbol, bool resize_if_needed) {
+WP2Status ANSAdaptiveSymbols::Add(uint32_t max_symbol,
+                                  const uint16_t* const cdf, uint16_t max_proba,
+                                  bool resize_if_needed) {
   assert(max_symbol <= APROBA_MAX_SYMBOL);
   ANSAdaptiveSymbol s;
-  s.InitFromUniform(max_symbol);
+  if (cdf == nullptr) {
+    // If no CDF has been set, assume a uniform distribution.
+    s.InitFromUniform(max_symbol);
+  } else {
+    WP2_CHECK_STATUS(s.InitFromCDF(cdf, max_symbol, max_proba));
+  }
   s.SetAdaptationSpeed(ANSAdaptiveSymbol::Method::kAOM);
-  return push_back(s, resize_if_needed);
+  WP2_CHECK_ALLOC_OK(push_back(s, resize_if_needed));
+  return WP2_STATUS_OK;
 }
 
 WP2Status ANSAdaptiveSymbols::CopyFrom(const ANSAdaptiveSymbols& dicts) {

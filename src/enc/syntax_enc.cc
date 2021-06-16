@@ -140,7 +140,7 @@ WP2Status SyntaxWriter::InitPass() {
   WP2_CHECK_STATUS(
       counters_.Init(config_->effort, context_.use_aom(), symbol_recorder_));
   context_.Reset();
-  WP2_CHECK_STATUS(ResetRecord());
+  if (recorded_blocks_ > 0) WP2_CHECK_STATUS(ResetRecord());
   return WP2_STATUS_OK;
 }
 
@@ -388,6 +388,52 @@ WP2Status SyntaxWriter::WriteBlocks(const Vector<CodedBlock>& cblocks,
       ++block_idx;
     }
   }
+
+  if (kDebugPrintRate) {
+    float total_estimated = 0.f;
+    float total_actual = 0.f;
+    float total_difference = 0.f;
+    float max_difference = 0.f;
+    uint32_t num_non_zero = 0;
+    for (uint32_t i = 0; i < cblocks.size(); ++i) {
+      const CodedBlock& cb = cblocks[i];
+      for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+        if (c == kAChannel && !cb.HasLossyAlpha()) continue;
+
+        const float estimated_rate = residual_rate_[i][c];
+        const float actual_rate = residual_rate_[i][4 + c];
+        total_estimated += estimated_rate;
+        total_actual += actual_rate;
+
+        if (actual_rate == 0 && estimated_rate == 0) continue;
+
+        fprintf(stderr,
+                "block (%3d %3d) channel %d rate: estimated %6.2f vs real "
+                "%6.2f, %+4.2f",
+                cb.x(), cb.y(), c, estimated_rate, actual_rate,
+                actual_rate - estimated_rate);
+
+        if (estimated_rate != 0) {
+          ++num_non_zero;
+          const float relative_difference = actual_rate / estimated_rate - 1.f;
+          const float abs_difference = std::abs(relative_difference);
+          total_difference += abs_difference;
+          if (abs_difference > max_difference) max_difference = abs_difference;
+          fprintf(stderr, "  %+.2f%%\n", relative_difference * 100.f);
+        } else {
+          fprintf(stderr, "\n");
+        }
+      }
+    }
+    fprintf(
+        stderr,
+        "Total residual rate estimated %.2f vs real %.2f, "
+        "%+.2f%%, average difference (for non zero rates) %.2f%% max %.2f%%\n",
+        total_estimated, total_actual,
+        (total_estimated / total_actual - 1.f) * 100.f,
+        total_difference / num_non_zero * 100, max_difference * 100);
+  }
+
   return enc->GetStatus();
 }
 
@@ -527,7 +573,7 @@ WP2Status SyntaxWriter::RecordSplit(const SplitIteratorBase& mgr,
 
 WP2Status SyntaxWriter::ResetRecord() {
   recorded_blocks_ = 0;
-  symbol_recorder_.ResetRecord(/*reset_backup=*/false);
+  WP2_CHECK_STATUS(symbol_recorder_.ResetRecord(/*reset_backup=*/false));
   if (gparams_->has_alpha_) {
     WP2_CHECK_STATUS(alpha_writer_.ResetRecord());
   }
@@ -552,17 +598,9 @@ WP2Status SyntaxWriter::WriteBlock(const CodedBlock& cb, uint32_t block_index,
     WP2_CHECK_STATUS(residual_writer_.WriteCoeffs(cb, c, enc, &symbol_writer_));
     if (kDebugPrintRate) {
       const float cost = enc->GetCost();
-      const float cost_diff = cost - previous_cost;
+      const float actual_rate = cost - previous_cost;
+      residual_rate_[block_index][4 + c] = actual_rate;
       previous_cost = cost;
-
-      const float rate = residual_rate_[block_index][c];
-      if (cost_diff != 0 || rate != 0) {
-        fprintf(stderr,
-                "residual rate block %d %d channel %d\n%.2f vs real %.2f, "
-                "%+.2f%%\n",
-                cb.x(), cb.y(), c, rate, cost_diff,
-                (rate / cost_diff - 1.f) * 100.f);
-      }
     }
   }
 

@@ -106,7 +106,7 @@ class SymbolRecorder : public SymbolManager {
   WP2Status MakeBackup();
 
   // Resets stats.
-  void ResetRecord(bool reset_backup);
+  WP2Status ResetRecord(bool reset_backup);
 
   const ANSDictionary& GetRecordedDict(uint32_t sym, uint32_t cluster) const;
   const Vector_u8& GetRecordedValues(uint32_t sym, uint32_t cluster) const;

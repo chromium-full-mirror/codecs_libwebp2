@@ -411,8 +411,9 @@ class SyntaxWriter : public WP2Allocable {
   // Set to true to print debug information for checking accuracy of estimated
   // rates (bit costs).
   static const bool kDebugPrintRate = false;
-  // Estimated residual rate per block, per channel.
-  Vector<std::array<float, 3>> residual_rate_;
+  // For each block, estimated residual rate per channel followed by actual rate
+  // per channel.
+  Vector<std::array<float, 8>> residual_rate_;
   // Encodes the 'block' boundaries and the 'pixels'.
   void PutRawPixels(const CodedBlockBase& cb, const YUVPlane& pixels,
                     ANSEnc* const enc);

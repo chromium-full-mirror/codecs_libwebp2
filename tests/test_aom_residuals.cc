@@ -100,7 +100,7 @@ TEST_P(ResidualWriterTest, AOM) {
 
           // Record data to get stats.
           if (do_reset) {
-            recorder.ResetRecord(/*reset_backup=*/true);
+            ASSERT_WP2_OK(recorder.ResetRecord(/*reset_backup=*/true));
           }
           if (!all_zero) {
             ANSEncNoop enc_noop;

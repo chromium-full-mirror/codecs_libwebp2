@@ -145,7 +145,8 @@ class ANSAdaptiveBits : public VectorNoCtor<ANSBinSymbol> {
 // Class containing several ANSAdaptiveSymbol pointers.
 class ANSAdaptiveSymbols : public VectorNoCtor<ANSAdaptiveSymbol> {
  public:
-  WP2_NO_DISCARD bool Add(uint32_t max_symbol, bool resize_if_needed = true);
+  WP2Status Add(uint32_t max_symbol, const uint16_t* const cdf,
+                uint16_t max_proba, bool resize_if_needed = true);
   WP2Status CopyFrom(const ANSAdaptiveSymbols& dicts);
 };
 

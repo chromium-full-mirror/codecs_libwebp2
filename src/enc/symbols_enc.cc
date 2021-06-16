@@ -36,13 +36,16 @@ WP2Status SymbolRecorder::MakeBackup() {
   return WP2_STATUS_OK;
 }
 
-void SymbolRecorder::ResetRecord(bool reset_backup) {
+WP2Status SymbolRecorder::ResetRecord(bool reset_backup) {
   // Save the stats to the previous pass dicts.
   if (reset_backup) {
     for (auto& d : dicts_previous_pass_) d->ResetCounts();
   }
+
+  // Reset dictionaries.
   for (ANSDictionary* const d : dicts_) d->ResetCounts();
 
+  // Reset adaptive bits.
   uint32_t i = 0;
   for (uint32_t sym = 0; sym < symbols_info_.Size(); ++sym) {
     if (symbols_info_.Method(sym) != SymbolsInfo::StorageMethod::kAdaptiveBit) {
@@ -57,10 +60,35 @@ void SymbolRecorder::ResetRecord(bool reset_backup) {
   }
   assert(i == a_bits_.size());
 
-  for (ANSAdaptiveSymbol& sym : a_symbols_) {
-    sym.InitFromUniform(sym.NumSymbols());
+  // Reset adaptive symbols.
+  i = 0;
+  for (uint32_t sym = 0; sym < symbols_info_.Size(); ++sym) {
+    if (symbols_info_.Method(sym) != SymbolsInfo::StorageMethod::kAdaptiveSym &&
+        symbols_info_.Method(sym) !=
+            SymbolsInfo::StorageMethod::kAdaptiveWithAutoSpeed) {
+      continue;
+    }
+    for (uint32_t cluster = 0; cluster < symbols_info_.NumClusters(sym);
+         ++cluster) {
+      const uint16_t* cdf;
+      uint16_t max_proba;
+      symbols_info_.GetInitialCDF(sym, cluster, &cdf, &max_proba);
+      ANSAdaptiveSymbol& a_symbol = a_symbols_[i];
+      if (cdf == nullptr) {
+        a_symbol.InitFromUniform(a_symbol.NumSymbols());
+      } else {
+        WP2_CHECK_STATUS(a_symbol.InitFromCDF(
+            cdf, symbols_info_.Range(sym, cluster), max_proba));
+      }
+      a_symbol.SetAdaptationSpeed(ANSAdaptiveSymbol::Method::kAOM);
+      ++i;
+    }
   }
+  assert(i == a_symbols_.size());
+
   for (Vector_u8& v : values_) v.clear();
+
+  return WP2_STATUS_OK;
 }
 
 WP2Status SymbolRecorder::CopyFrom(const SymbolRecorder& other) {
@@ -168,7 +196,12 @@ WP2Status SymbolRecorder::Allocate(const SymbolsInfo& symbols_info,
         index_[sym] = a_symbols_.size();
         for (uint32_t cluster = 0; cluster < num_clusters; ++cluster) {
           const uint32_t range = symbols_info_.Range(sym, cluster);
-          if (range > 0) WP2_CHECK_ALLOC_OK(a_symbols_.Add(range));
+          if (range > 0) {
+            const uint16_t* cdf;
+            uint16_t max_proba;
+            symbols_info_.GetInitialCDF(sym, cluster, &cdf, &max_proba);
+            WP2_CHECK_STATUS(a_symbols_.Add(range, cdf, max_proba));
+          }
         }
         break;
       }
@@ -181,7 +214,10 @@ WP2Status SymbolRecorder::Allocate(const SymbolsInfo& symbols_info,
         for (uint32_t cluster = 0; cluster < num_clusters; ++cluster) {
           const uint32_t range = symbols_info_.Range(sym, cluster);
           if (range > 0) {
-            WP2_CHECK_ALLOC_OK(a_symbols_.Add(range));
+            const uint16_t* cdf;
+            uint16_t max_proba;
+            symbols_info_.GetInitialCDF(sym, cluster, &cdf, &max_proba);
+            WP2_CHECK_STATUS(a_symbols_.Add(range, cdf, max_proba));
             WP2_CHECK_ALLOC_OK(
                 values_[values_index_[sym] + cluster].reserve(num_records));
           }

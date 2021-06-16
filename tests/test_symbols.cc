@@ -703,6 +703,7 @@ class TestSymbolCounter : public testing::TestWithParam<SymbolCounterType> {};
 TEST_P(TestSymbolCounter, SymbolCounter) {
   const SymbolCounterType type = GetParam();
 
+  WP2MathInit();
   ANSInit();
   static constexpr uint32_t kNumSymbol = 10000u;
   static constexpr int32_t kMinSymbol = -5;
@@ -721,10 +722,10 @@ TEST_P(TestSymbolCounter, SymbolCounter) {
     // Adaptive bit.
     info.SetInfo(/*sym=*/info.Size(), /*min=*/0, /*max=*/1, /*num_clusters=*/4,
                  StorageMethod::kAdaptiveBit);
-    EXPECT_WP2_OK(
-        info.SetStartingProba(/*sym=*/3, /*cluster=*/2, /*p0=*/3, /*p1=*/7));
-    EXPECT_WP2_OK(
-        info.SetStartingProba(/*sym=*/3, /*cluster=*/3, /*p0=*/100, /*p1=*/1));
+    EXPECT_WP2_OK(info.SetStartingProba(/*sym=*/info.Size() - 1, /*cluster=*/2,
+                                        /*p0=*/3, /*p1=*/7));
+    EXPECT_WP2_OK(info.SetStartingProba(/*sym=*/info.Size() - 1, /*cluster=*/3,
+                                        /*p0=*/100, /*p1=*/1));
     // Adaptive symbol.
     info.SetInfo(/*sym=*/info.Size(), /*min=*/0, /*max=*/9, /*num_clusters=*/3,
                  StorageMethod::kAdaptiveSym);
@@ -767,7 +768,7 @@ TEST_P(TestSymbolCounter, SymbolCounter) {
   }
   const float real_cost = enc.GetCost() - header_cost;
 
-  recorder.ResetRecord(/*reset_backup=*/true);
+  ASSERT_WP2_OK(recorder.ResetRecord(/*reset_backup=*/true));
   ANSEncCounter enc_counter;
   std::unique_ptr<SymbolCounter> symbol_counter =
       CreateSymbolCounter(type, recorder);
@@ -776,7 +777,90 @@ TEST_P(TestSymbolCounter, SymbolCounter) {
     symbol_counter->Process(sym.s, sym.cluster, sym.value, "sym", &enc_counter);
   }
 
-  EXPECT_NEAR(enc_counter.GetCost(), real_cost, 22);
+  // A small inaccuracy is expected because of "auto" symbols, whose exact cost
+  // is not known in advance.
+  EXPECT_NEAR(enc_counter.GetCost(), real_cost, 2);
+}
+
+// Checks that we can perfectly predict the cost of adaptive bits/symbols.
+TEST_P(TestSymbolCounter, AdaptiveSymbols) {
+  const SymbolCounterType type = GetParam();
+
+  WP2MathInit();
+  ANSInit();
+  UniformIntDistribution random(/*seed=*/0);
+
+  // Generate the data.
+  SymbolsInfoTest info;
+
+  // Adaptive bit.
+  info.SetInfo(/*sym=*/info.Size(), /*min=*/0, /*max=*/1, /*num_clusters=*/4,
+               StorageMethod::kAdaptiveBit);
+  EXPECT_WP2_OK(info.SetStartingProba(/*sym=*/info.Size() - 1, /*cluster=*/2,
+                                      /*p0=*/3, /*p1=*/7));
+  EXPECT_WP2_OK(info.SetStartingProba(/*sym=*/info.Size() - 1, /*cluster=*/3,
+                                      /*p0=*/100, /*p1=*/1));
+  // Adaptive symbol.
+  info.SetInfo(/*sym=*/info.Size(), /*min=*/0, /*max=*/9, /*num_clusters=*/3,
+               StorageMethod::kAdaptiveSym);
+  // Add starting probas for one of the clusters.
+  constexpr uint16_t kCDF[10] = {0,    2000, 2200, 2300, 4000,
+                                 4020, 4600, 5000, 6000, 6500};
+  constexpr uint16_t kMaxProba = 8000;
+  EXPECT_WP2_OK(info.SetInitialCDF(/*sym=*/info.Size() - 1, /*cluster=*/1, kCDF,
+                                   kMaxProba));
+
+  // Test that binary symbols are not only kAdaptiveBit but can also be
+  // kAdaptiveSym.
+  info.SetInfo(/*sym=*/info.Size(), /*min=*/0, /*max=*/1, /*num_clusters=*/2,
+               StorageMethod::kAdaptiveSym);
+
+  const uint32_t num_symbol_types = info.Size();
+  DataGenerator generator(info, &random);
+
+  std::vector<DataGenerator::Symbol> symbols;
+
+  // The fast symbol counter does not update adaptive bit/symbols, therefore it
+  // is only accurate for the first instance of each symbol. So we only
+  // generate one value per symbol.
+  const uint32_t num_symbol = (type == kFast) ? 1 : 100u;
+
+  SymbolRecorder recorder;
+  ASSERT_WP2_OK(recorder.Allocate(info, num_symbol));
+
+  for (uint32_t s = 0; s < num_symbol_types; ++s) {
+    generator.AddData(s, num_symbol, DataGenerator::kHint::kDict, &recorder,
+                      &symbols);
+  }
+  Shuffle(symbols.begin(), symbols.end(), 0);
+
+  // Create the symbol writer and write the header.
+  std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
+                                            WP2::SymbolWriter);
+  ASSERT_TRUE(sw != nullptr);
+  ANSEnc enc;
+  ANSDictionaries dicts;
+  uint32_t max_nnz = 0;
+  generator.WriteHeader(info, recorder, &max_nnz, &dicts, &enc, sw.get());
+  const float header_cost = enc.GetCost();
+
+  // Write the symbols.
+  for (const DataGenerator::Symbol& sym : symbols) {
+    sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
+  }
+  const float real_cost = enc.GetCost() - header_cost;
+
+  ASSERT_WP2_OK(recorder.ResetRecord(/*reset_backup=*/true));
+  ANSEncCounter enc_counter;
+  std::unique_ptr<SymbolCounter> symbol_counter =
+      CreateSymbolCounter(type, recorder);
+  ASSERT_WP2_OK(symbol_counter->Allocate(/*syms=*/{0, 1, 2}));
+
+  for (const DataGenerator::Symbol& sym : symbols) {
+    symbol_counter->Process(sym.s, sym.cluster, sym.value, "sym", &enc_counter);
+  }
+
+  EXPECT_NEAR(enc_counter.GetCost(), real_cost, 0.01f);
 }
 
 TEST_P(TestSymbolCounter, SymbolCounter_Dictionary) {
@@ -825,7 +909,7 @@ TEST_P(TestSymbolCounter, SymbolCounter_Dictionary) {
   ASSERT_WP2_OK(recorder.MakeBackup());
   float costs[2];
   for (uint32_t reset_backup : {false, true}) {
-    recorder.ResetRecord(reset_backup);
+    ASSERT_WP2_OK(recorder.ResetRecord(reset_backup));
     counter.Reset();
     for (uint8_t i : data) {
       symbol_counter->Process(/*sym=*/0, i, "test", &counter);
@@ -890,7 +974,7 @@ TEST_P(TestSymbolCounter, SymbolCounter_Midway) {
   uint32_t max_nnz = 0;
   generator.WriteHeader(info, recorder, &max_nnz, &dicts, &enc, sw.get());
 
-  recorder.ResetRecord(/*reset_backup=*/true);
+  ASSERT_WP2_OK(recorder.ResetRecord(/*reset_backup=*/true));
 
   // Write and record half of the symbols.
   const uint32_t half = symbols.size() / 2;
@@ -1003,7 +1087,7 @@ TEST(SymbolsTest, SimplePrefixCode) {
 }
 
 INSTANTIATE_TEST_SUITE_P(TestSymbolCounterInstanciation, TestSymbolCounter,
-                         testing::Values(kFast, kUpdating));
+                         testing::Values(kUpdating));
 
 //------------------------------------------------------------------------------
 

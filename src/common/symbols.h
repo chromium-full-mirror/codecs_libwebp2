@@ -438,17 +438,11 @@ class SymbolIO {
     const uint32_t range = symbols_info_.Range(sym, cluster);
     stat->range = range;
     stat->param.a_symbol_index = a_symbols_.size();
-    WP2_CHECK_ALLOC_OK(a_symbols_.Add(range));
     const uint16_t* cdf;
     uint16_t max_proba;
     symbols_info_.GetInitialCDF(sym, cluster, &cdf, &max_proba);
+    WP2_CHECK_STATUS(a_symbols_.Add(range, cdf, max_proba));
     auto& asym = a_symbols_[stat->param.a_symbol_index];
-    if (cdf == nullptr) {
-      // If no CDF has been set, assume a uniform distribution.
-      asym.InitFromUniform(range);
-    } else {
-      WP2_CHECK_STATUS(asym.InitFromCDF(cdf, range, max_proba));
-    }
     asym.SetAdaptationSpeed(method, speed);
     return WP2_STATUS_OK;
   }
