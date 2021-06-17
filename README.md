@@ -86,11 +86,11 @@ $ cmake .. -LH
 
 ### Compiling with Android NDK
 
-The latest NDK for Android can be retrieved from the
-Android [download page](https://developer.android.com/ndk/downloads).
+The latest NDK for Android can be retrieved from the Android
+[download page](https://developer.android.com/ndk/downloads).
 
-Assuming the variable NDK_ROOT is positioned correctly to point
-to the NDK's directory, the Android binaries can be built with:
+Assuming the variable NDK_ROOT is positioned correctly to point to the NDK's
+directory, the Android binaries can be built with:
 
 ```shell
 $ mkdir build && cd build
@@ -401,6 +401,76 @@ issues, making sure to include:
 *   Use uint32_t for sizes, width, height, loop indices, etc.
 
 *   Most functions should return a WP2Status
+
+### File layout
+
+*   **CMakeLists.txt** and **cmake/\*** are used to build the project with
+    CMake.
+
+*   **doc/\*** contains the container and format specifications.
+
+*   **examples/\*** and **extras/\*** contain executables and tools.
+
+    *   **cwp2.cc** and **dwp2.cc** are the main entry points to the library.
+
+*   **imageio/\*** contains image-reading and image-writing functions. Several
+    formats are handled such as PNG, WebP etc.
+
+*   **presubmit/\*** contains the continuous integration testing scripts (run by
+    [Jenkins](https://build.webmproject.org/jenkins/view/webp/job/libwebp2__test/)
+    when a patch of
+    [libwebp2](https://chromium.googlesource.com/codecs/libwebp2) is sent to
+    [Gerrit](https://chromium-review.googlesource.com/q/project:codecs%252Flibwebp2)).
+
+*   **swig/\*** contains the [SWIG](http://www.swig.org/) wrapper for Python and
+    **wp2_js/\*** contains the Javascript interface.
+
+*   **src/\*** contains the core library.
+
+    *   **src/wp2/\*** contains the public API headers. Consult **encode.h** and
+        **decode.h** to interact with libwebp2.
+
+    *   **src/enc/\*** contains the encoder-related sources.
+
+        *   **src/enc/main_enc.cc** contains the encoder entry point.
+
+    *   **src/dec/\*** contains the decoder-related sources.
+
+        *   **src/dec/main_dec.cc** contains the still image decoding entry
+            functions.
+
+        *   **src/dec/incr/decoder_stages.cc** contains the incremental and
+            animation **Decoder** class implementation.
+
+    *   **src/common/\*** and **src/utils/\*** contain the files that are used
+        by both encode and decode functions.
+
+        *   **src/common/header_enc_dec.h** is used to code image-wise
+            **BitstreamFeatures**.
+
+        *   **src/common/global_params.h** contains the frame-wise
+            **GlobalParams**.
+
+        *   **src/enc/tile_enc.h** and **src/dec/tile_dec.h** contain the
+            tile-wise coding functions.
+
+    *   **src/dsp/\*** contains the low-level, platform-optimized algorithms.
+
+*   **tests/\*** contains the tests:
+
+    *   **test_simple_enc_dec.cc** and **test_decoder_api.cc** are simple
+        examples to start with.
+
+    *   **tests/include/\*** and **tests/tools/\*** contain the helper headers
+        and tools for testing.
+
+    *   **tests/testdata/\*** contains some sample images used by the tests.
+
+    *   **tests/bench/\*** contains the performance-measuring tools. Requires
+        [Google Benchmark](https://github.com/google/benchmark).
+
+    *   **tests/fuzz/\*** contains the fuzzing tools. See
+        [OSS-Fuzz](https://github.com/google/oss-fuzz) for more information.
 
 ### Google Test Integration
 
