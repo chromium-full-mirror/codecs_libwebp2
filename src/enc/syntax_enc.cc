@@ -21,10 +21,11 @@
 #include <cstdio>
 #include <memory>
 
+#include "src/common/lossy/transforms.h"
+#include "src/enc/analysis.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/utils.h"
 #include "src/wp2/format_constants.h"
-#include "src/common/lossy/transforms.h"
 
 namespace WP2 {
 

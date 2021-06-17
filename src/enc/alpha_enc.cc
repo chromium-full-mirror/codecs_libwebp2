@@ -17,6 +17,9 @@
 //
 // Author: Maryla (maryla@google.com)
 
+#include <algorithm>
+
+#include "src/enc/analysis.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/wp2/format_constants.h"

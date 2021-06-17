@@ -20,7 +20,7 @@
 #include "src/common/header_enc_dec.h"
 #include "src/dec/tile_dec.h"
 #include "src/dsp/math.h"
-#include "src/enc/wp2_enc_i.h"
+#include "src/enc/tile_enc.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/encode.h"

@@ -17,6 +17,7 @@
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
 #include "src/common/global_params.h"
+#include "src/enc/analysis.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/ans.h"
 #include "src/utils/vector.h"

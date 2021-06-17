@@ -17,10 +17,10 @@
 
 #include <cassert>
 
-#include "src/enc/wp2_enc_i.h"
+#include "src/common/av1_common.h"
+#include "src/enc/tile_enc.h"
 #include "src/utils/plane.h"
 #include "src/utils/utils.h"
-#include "src/common/av1_common.h"
 
 #if defined(WP2_HAVE_AOM)
 

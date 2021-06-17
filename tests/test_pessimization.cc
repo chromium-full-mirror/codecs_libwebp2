@@ -27,6 +27,7 @@
 #include "src/common/header_enc_dec.h"
 #include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/enc/analysis.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/data_source.h"
 #include "src/utils/random.h"

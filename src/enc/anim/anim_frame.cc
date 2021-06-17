@@ -19,9 +19,11 @@
 
 #include <cassert>
 
-#include "./anim_enc.h"
 #include "src/common/constants.h"
 #include "src/common/header_enc_dec.h"
+#include "src/enc/analysis.h"
+#include "src/enc/anim/anim_enc.h"
+#include "src/enc/tile_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/wp2/format_constants.h"
 

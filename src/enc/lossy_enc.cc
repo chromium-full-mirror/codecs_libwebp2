@@ -17,13 +17,14 @@
 //
 
 #include <algorithm>
-#include <cmath>
 #include <cstdio>
 #include <memory>
+#include <string>
 
 #include "src/common/global_params.h"
 #include "src/common/vdebug.h"
-#include "src/dsp/math.h"
+#include "src/enc/analysis.h"
+#include "src/enc/tile_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/csp.h"

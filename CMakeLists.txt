@@ -361,7 +361,6 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/anim/anim_rectangle.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/av1_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/block_enc.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/trellis.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/block_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/bypass_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/config_enc.cc
@@ -392,6 +391,9 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/syntax_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/symbols_enc.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/tile_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/tile_enc.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/trellis.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/writer_enc.cc
   # lossless
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/color_cache.cc

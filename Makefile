@@ -312,6 +312,7 @@ ENC_OBJS = \
     src/enc/screen_content/screen_enc.o \
     src/enc/segment_enc.o \
     src/enc/syntax_enc.o \
+    src/enc/tile_enc.o \
     src/enc/trellis.o \
     src/enc/writer_enc.o \
 
@@ -515,6 +516,7 @@ HDRS = \
     src/enc/residuals_enc_aom.h \
     src/enc/screen_content/screen_enc.h \
     src/enc/symbols_enc.h \
+    src/enc/tile_enc.h \
     src/enc/trellis.h \
     src/enc/wp2_enc_i.h \
     src/utils/ans.h \
@@ -1026,6 +1028,8 @@ DIST_FILES= \
             src/enc/segment_enc.cc \
             src/enc/symbols_enc.h \
             src/enc/symbols_enc.cc \
+            src/enc/tile_enc.h \
+            src/enc/tile_enc.cc \
             src/enc/trellis.h \
             src/enc/trellis.cc \
             src/enc/wp2_enc_i.h \

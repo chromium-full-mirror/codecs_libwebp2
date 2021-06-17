@@ -16,8 +16,12 @@
 // WP2 residual encoding.
 //
 
+#include <algorithm>
+#include <cmath>
 #include <limits>
+#include <string>
 
+#include "src/enc/residuals_enc_aom.h"
 #include "src/enc/wp2_enc_i.h"
 
 namespace WP2 {

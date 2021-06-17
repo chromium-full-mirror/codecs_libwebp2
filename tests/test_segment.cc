@@ -19,6 +19,7 @@
 #include "include/helpers.h"
 #include "src/common/constants.h"
 #include "src/common/lossy/block.h"
+#include "src/enc/analysis.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/plane.h"
 #include "src/wp2/encode.h"

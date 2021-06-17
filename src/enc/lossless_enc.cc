@@ -17,7 +17,7 @@
 //
 
 #include "src/enc/lossless/losslessi_enc.h"
-#include "src/enc/wp2_enc_i.h"
+#include "src/enc/tile_enc.h"
 
 namespace WP2 {
 

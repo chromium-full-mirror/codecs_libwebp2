@@ -19,6 +19,7 @@
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
 #include "src/common/global_params.h"
+#include "src/enc/analysis.h"
 #include "src/enc/partitioning/partition_score_func_block.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"

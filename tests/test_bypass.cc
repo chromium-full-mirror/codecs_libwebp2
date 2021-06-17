@@ -18,7 +18,7 @@
 #include "src/common/global_params.h"
 #include "src/dec/tile_dec.h"
 #include "src/enc/analysis.h"
-#include "src/enc/wp2_enc_i.h"
+#include "src/enc/tile_enc.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/wp2/base.h"

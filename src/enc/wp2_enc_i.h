@@ -20,26 +20,20 @@
 #ifndef WP2_WP2_ENC_I_H_
 #define WP2_WP2_ENC_I_H_
 
-#include <memory>
+#include <array>
 
 #include "src/common/global_params.h"
 #include "src/common/lossy/block_size_io.h"
 #include "src/common/lossy/context.h"
-#include "src/common/lossy/predictor.h"
 #include "src/common/lossy/residuals.h"
-#include "src/common/lossy/rnd_mtx.h"
 #include "src/common/progress_watcher.h"
-#include "src/dsp/dsp.h"
-#include "src/enc/analysis.h"
 #include "src/enc/block_enc.h"
 #include "src/enc/lossless/losslessi_enc.h"
-#include "src/enc/residuals_enc_aom.h"
 #include "src/enc/symbols_enc.h"
 #include "src/utils/ans.h"
 #include "src/utils/front_mgr.h"
 #include "src/utils/plane.h"
-#include "src/utils/thread_utils.h"
-#include "src/utils/wiener.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {
@@ -68,14 +62,6 @@ WP2Status EncodeICC(DataView iccp, Writer* const output);
 WP2Status EncodeGLBL(const EncoderConfig& config, const GlobalParams& gparams,
                      bool image_has_alpha, Writer* const output);
 
-// Compresses an image into tiles based on 'config' and writes them to 'output'.
-// The input is either 'rgb_buffer' or 'yuv_buffer' depending on what is needed.
-WP2Status EncodeTiles(uint32_t width, uint32_t height,
-                      const ArgbBuffer& rgb_buffer, const YUVPlane& yuv_buffer,
-                      const CSPTransform& transf, const EncoderConfig& config,
-                      bool image_has_alpha, const ProgressRange& progress,
-                      Writer* const output);
-
 // Writes 'metadata' to 'output'.
 WP2Status EncodeMetadata(const Metadata& metadata, Writer* const output);
 
@@ -99,59 +85,6 @@ WP2Status DecideModes(const EncoderConfig& config, const GlobalParams& gparams,
                       BlockModes* const a_modes = nullptr);
 
 //------------------------------------------------------------------------------
-
-struct EncTile {
-  // Tile position and dimensions within the frame in pixels, not padded.
-  Rectangle rect;
-
-  // Views of this tile.
-  ArgbBuffer rgb_input;  // Not padded.
-  YUVPlane yuv_input;    // Padded.
-
-  // Output. AssembleToBitstream()+WriteBitstreamTo() to get the encoded bytes.
-  ANSEnc enc;
-  Data data;  // Output when ANSEnc is not used (for Av1Encode() only).
-  ProgressRange progress;
-};
-
-struct EncTilesLayout {
-  uint32_t num_tiles_x = 0;
-  uint32_t num_tiles_y = 0;
-  uint32_t tile_width = 0;
-  uint32_t tile_height = 0;
-  Vector<EncTile> tiles;
-  uint32_t first_unassigned_tile_index = 0;  // Next tile to assign a worker to.
-  ThreadLock assignment_lock;                // In case of concurrency.
-
-  // Frame's global parameters (externally owned).
-  const GlobalParams* gparams = nullptr;
-};
-
-class TileEncoder : public WorkerBase {
- public:
-  // Assigns the next 'tile_' to this worker if possible.
-  WP2Status AssignNextTile();
-  // As long as 'tile_' is not null, decode it and AssignNextTile().
-  WP2Status Execute() override;
-
-  // Compresses the tile into 'enc'.
-  WP2Status LossyEncode(const VectorNoCtor<Block>& forced_partition,
-                        ANSEnc* const enc);
-  WP2Status LosslessEncode(ANSEnc* const enc);
-  WP2Status Av1Encode(Data* const enc);
-
-  const EncoderConfig* config_ = nullptr;
-  bool use_lossless_ = false;
-  EncTilesLayout* tiles_layout_ = nullptr;  // Used to get next assignable tile.
-  EncTile* tile_ = nullptr;                 // Currently assigned tile.
-
-  // Debug output.
-  EncoderInfo* info_ = nullptr;
-};
-
-// Encodes pixels as row-ordered raw samples.
-WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
-                        Writer* const output);
 
 WP2Status NeuralEncode(const ArgbBuffer& buffer, const EncoderConfig& config,
                        ANSEnc* const enc);
