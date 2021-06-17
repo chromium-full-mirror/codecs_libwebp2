@@ -80,8 +80,8 @@ static WP2Status SimplifySegments(Vector<Segment>* const segments) {
 WP2Status AssignSimpleQuantizations(const EncoderConfig& config,
                                     GlobalParams& gparams) {
   assert(gparams.segments_.size() == 1);
-  assert(gparams.u_quant_multiplier_ == kNeutralMultiplier);
-  assert(gparams.v_quant_multiplier_ == kNeutralMultiplier);
+  assert(gparams.u_quant_offset_ == kNeutralQuantOffset);
+  assert(gparams.v_quant_offset_ == kNeutralQuantOffset);
   Segment& segment = gparams.segments_[0];
 
   // Use the 'config.quality' if not overridden by debug 'segment_factors'.
@@ -97,7 +97,7 @@ WP2Status AssignSimpleQuantizations(const EncoderConfig& config,
   WP2_CHECK_STATUS(segment.AllocateForEncoder());
   segment.SetYUVBounds(gparams.transf_.GetYUVMin(),
                        gparams.transf_.GetYUVMax());
-  segment.SetQuality(quality_factor, kNeutralMultiplier, kNeutralMultiplier);
+  segment.SetQuality(quality_factor, kNeutralQuantOffset, kNeutralQuantOffset);
   segment.FinalizeQuant();
   segment.quant_y_.SetLambda();
   segment.quant_u_.SetLambda();
@@ -145,8 +145,8 @@ WP2Status GlobalParams::AssignQuantizations(const EncoderConfig& config) {
   }
   for (uint32_t idx = 0; idx < num_segments; ++idx) {
     WP2_CHECK_STATUS(segments_[idx].AllocateForEncoder());
-    segments_[idx].SetQuantizationFactor(transf_, u_quant_multiplier_,
-                                         v_quant_multiplier_, qualities[idx]);
+    segments_[idx].SetQuantizationFactor(transf_, u_quant_offset_,
+                                         v_quant_offset_, qualities[idx]);
   }
   return WP2_STATUS_OK;
 }
@@ -229,12 +229,10 @@ WP2Status GlobalAnalysis(const ArgbBuffer& rgb, const YUVPlane& yuv,
         (config.segment_id_mode == WP2::EncoderConfig::SEGMENT_ID_EXPLICIT);
     gparams->use_rnd_mtx_ = config.use_random_matrix;
     gparams->transf_ = transf;
-    gparams->u_quant_multiplier_ = config.enable_alt_tuning
-                                       ? config.u_quant_multiplier
-                                       : kNeutralMultiplier;
-    gparams->v_quant_multiplier_ = config.enable_alt_tuning
-                                       ? config.v_quant_multiplier
-                                       : kNeutralMultiplier;
+    gparams->u_quant_offset_ =
+        config.enable_alt_tuning ? config.u_quant_offset : kNeutralQuantOffset;
+    gparams->v_quant_offset_ =
+        config.enable_alt_tuning ? config.v_quant_offset : kNeutralQuantOffset;
 
     // perform perceptual analysis to extract segments
     WP2_CHECK_STATUS(FindSegments(yuv, config, gparams));

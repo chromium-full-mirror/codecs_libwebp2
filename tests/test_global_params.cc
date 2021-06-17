@@ -40,12 +40,12 @@ WP2Status WriteAndRead(const GlobalParams& params_to_write,
 TEST(GlobalParmas, ReadWriteUVQUantMultiplier) {
   GlobalParams params;
   ASSERT_TRUE(params.segments_.resize(3));
-  params.u_quant_multiplier_ = kDefaultQuantMultiplier;
-  params.v_quant_multiplier_ = kDefaultQuantMultiplier + 2;
+  params.u_quant_offset_ = kDefaultQuantOffset;
+  params.v_quant_offset_ = kDefaultQuantOffset + 2;
   for (Segment& s : params.segments_) {
     s.SetYUVBounds(-512, 512);
-    s.SetQuality(/*quality_factor=*/10, params.u_quant_multiplier_,
-                 params.v_quant_multiplier_);
+    s.SetQuality(/*quality_factor=*/10, params.u_quant_offset_,
+                 params.v_quant_offset_);
     s.FinalizeQuant();
   }
   params.yuv_filter_magnitude_ = kMaxYuvFilterMagnitude / 2;
@@ -53,20 +53,20 @@ TEST(GlobalParmas, ReadWriteUVQUantMultiplier) {
 
   GlobalParams read_params;
   ASSERT_WP2_OK(WriteAndRead(params, &read_params));
-  EXPECT_EQ(read_params.u_quant_multiplier_, kDefaultQuantMultiplier);
-  EXPECT_EQ(read_params.v_quant_multiplier_, kDefaultQuantMultiplier + 2);
+  EXPECT_EQ(read_params.u_quant_offset_, kDefaultQuantOffset);
+  EXPECT_EQ(read_params.v_quant_offset_, kDefaultQuantOffset + 2);
 
-  params.u_quant_multiplier_ = kDefaultQuantMultiplier;
-  params.v_quant_multiplier_ = kDefaultQuantMultiplier - 3;
+  params.u_quant_offset_ = kDefaultQuantOffset;
+  params.v_quant_offset_ = kDefaultQuantOffset - 3;
   ASSERT_WP2_OK(WriteAndRead(params, &read_params));
-  EXPECT_EQ(read_params.u_quant_multiplier_, kDefaultQuantMultiplier);
-  EXPECT_EQ(read_params.v_quant_multiplier_, kDefaultQuantMultiplier - 3);
+  EXPECT_EQ(read_params.u_quant_offset_, kDefaultQuantOffset);
+  EXPECT_EQ(read_params.v_quant_offset_, kDefaultQuantOffset - 3);
 
-  params.u_quant_multiplier_ = kDefaultQuantMultiplier - 2;
-  params.v_quant_multiplier_ = kDefaultQuantMultiplier + 1;
+  params.u_quant_offset_ = kDefaultQuantOffset - 2;
+  params.v_quant_offset_ = kDefaultQuantOffset + 1;
   ASSERT_WP2_OK(WriteAndRead(params, &read_params));
-  EXPECT_EQ(read_params.u_quant_multiplier_, kDefaultQuantMultiplier - 2);
-  EXPECT_EQ(read_params.v_quant_multiplier_, kDefaultQuantMultiplier + 1);
+  EXPECT_EQ(read_params.u_quant_offset_, kDefaultQuantOffset - 2);
+  EXPECT_EQ(read_params.v_quant_offset_, kDefaultQuantOffset + 1);
 }
 
 TEST(GlobalParmas, FixedPredictors) {

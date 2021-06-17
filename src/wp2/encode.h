@@ -142,9 +142,9 @@ struct EncoderConfig {
                                         // graphdefs structure:
                                         // base/qq/[en|de]coder.pbbin
 
-  // TODO(maryla): remove from public API. Should match kDefaultQuantMultiplier.
-  int u_quant_multiplier = 7;  // 0.875
-  int v_quant_multiplier = 7;
+  // TODO(maryla): remove from public API. Should match kDefaultQuantOffset.
+  int u_quant_offset = 7;
+  int v_quant_offset = 7;
 
   // Inherit ProgressHook and reference the instance here to get notified of
   // progress and/or to abort encoding.

@@ -38,14 +38,10 @@ struct DecoderConfig;
 //------------------------------------------------------------------------------
 // Global parameter
 
-// Quant multiplier allows adjusting U/V quantization compared to Y.
-// With 4 bits we allow multipliers between 1/8 and 2 in increments of 1/8.
-static constexpr uint32_t kQuantMultiplierBits = 4;
-static constexpr uint32_t kNumQuantMultiplierValues = 1 << kQuantMultiplierBits;
-// This value means multiply by 1 basically.
-static constexpr uint32_t kNeutralMultiplier =
-    (1 << (kQuantMultiplierBits - 1));
-static constexpr uint32_t kDefaultQuantMultiplier = 7;  // 0.875
+// Quant offset allows adjusting U/V quantization compared to Y.
+static constexpr uint32_t kMinQuantOffset = 1, kMaxQuantOffset = 16;
+static constexpr uint32_t kNeutralQuantOffset = 8;  // Same quantization.
+static constexpr uint32_t kDefaultQuantOffset = 7;  // Slightly less quantized.
 
 static constexpr uint32_t kMaxYuvFilterMagnitude = 15;
 
@@ -79,9 +75,9 @@ class GlobalParams {
   bool use_rnd_mtx_ = false;
   RndMtxSet mtx_set_;
 
-  // UV quantization multipliers. [1 .. 16]
-  uint32_t u_quant_multiplier_ = kDefaultQuantMultiplier;
-  uint32_t v_quant_multiplier_ = kDefaultQuantMultiplier;
+  // Chroma quantization offsets.
+  uint32_t u_quant_offset_ = kDefaultQuantOffset;
+  uint32_t v_quant_offset_ = kDefaultQuantOffset;
 
   YPredictors y_preds_;
   UVPredictors uv_preds_;

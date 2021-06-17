@@ -118,7 +118,7 @@ WP2Status GenerateRandomGlobalParams(const EncoderConfig& config,
       gparams->segments_[i].risk_ = random->Get(0, 127) / 127.f;
       gparams->segments_[i].risk_class_ = i;
       gparams->segments_[i].SetQuantizationFactor(
-          gparams->transf_, kDefaultQuantMultiplier, kDefaultQuantMultiplier,
+          gparams->transf_, kDefaultQuantOffset, kDefaultQuantOffset,
           /*qfactor=*/random->Get(1, 128) / 1.28f);
       gparams->segments_[i].use_grain_ = false;  // Nah.
     }

@@ -96,8 +96,8 @@ Vector<Segment> CreateSegments(float quality, BitDepth bit_depth) {
   Vector<Segment> segments;
   if (!segments.resize(1)) abort();
   segments[0].SetYUVBounds(bit_depth.min(), bit_depth.max());
-  segments[0].SetQuality(kQualityToQFactor(quality), kDefaultQuantMultiplier,
-                         kDefaultQuantMultiplier);
+  segments[0].SetQuality(kQualityToQFactor(quality), kDefaultQuantOffset,
+                         kDefaultQuantOffset);
   return segments;
 }
 

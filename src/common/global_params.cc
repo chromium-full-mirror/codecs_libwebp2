@@ -57,21 +57,20 @@ WP2Status GlobalParams::Write(bool image_has_alpha, ANSEnc* const enc) const {
     }
     enc->PutBool(use_grain, "grain");
 
-    const bool has_uv_quant_multiplier =
-        (u_quant_multiplier_ != kDefaultQuantMultiplier) ||
-        (v_quant_multiplier_ != kDefaultQuantMultiplier);
-    enc->PutBool(has_uv_quant_multiplier, "uv_quant_multiplier");
-    if (has_uv_quant_multiplier) {
-      enc->PutRange(u_quant_multiplier_, 1, kNumQuantMultiplierValues,
-                    "uv_quant_multiplier");
-      if (u_quant_multiplier_ == kDefaultQuantMultiplier) {
-        enc->PutRange((v_quant_multiplier_ > kDefaultQuantMultiplier)
-                          ? (v_quant_multiplier_ - 1)
-                          : v_quant_multiplier_,
-                      1, kNumQuantMultiplierValues - 1, "uv_quant_multiplier");
+    const bool put_uv_quant_offset = (u_quant_offset_ != kDefaultQuantOffset) ||
+                                     (v_quant_offset_ != kDefaultQuantOffset);
+    enc->PutBool(put_uv_quant_offset, "uv_quant_offset");
+    if (put_uv_quant_offset) {
+      enc->PutRange(u_quant_offset_, kMinQuantOffset, kMaxQuantOffset,
+                    "uv_quant_offset");
+      if (u_quant_offset_ == kDefaultQuantOffset) {
+        enc->PutRange((v_quant_offset_ > kDefaultQuantOffset)
+                          ? (v_quant_offset_ - 1)
+                          : v_quant_offset_,
+                      kMinQuantOffset, kMaxQuantOffset - 1, "uv_quant_offset");
       } else {
-        enc->PutRange(v_quant_multiplier_, 1, kNumQuantMultiplierValues,
-                      "uv_quant_multiplier");
+        enc->PutRange(v_quant_offset_, kMinQuantOffset, kMaxQuantOffset,
+                      "uv_quant_offset");
       }
     }
     bool write_alpha = maybe_use_lossy_alpha_;
@@ -125,28 +124,25 @@ WP2Status GlobalParams::Read(bool image_has_alpha, ANSDec* const dec) {
 
     const bool use_grain = dec->ReadBool("grain");
 
-    const bool has_uv_quant_multiplier = dec->ReadBool("uv_quant_multiplier");
-    if (has_uv_quant_multiplier) {
-      u_quant_multiplier_ =
-          dec->ReadRange(1, kNumQuantMultiplierValues, "uv_quant_multiplier");
-      if (u_quant_multiplier_ == kDefaultQuantMultiplier) {
-        v_quant_multiplier_ = dec->ReadRange(1, kNumQuantMultiplierValues - 1,
-                                             "uv_quant_multiplier");
-        if (v_quant_multiplier_ >= kDefaultQuantMultiplier) {
-          ++v_quant_multiplier_;
-        }
+    const bool read_uv_quant_offset = dec->ReadBool("uv_quant_offset");
+    if (read_uv_quant_offset) {
+      u_quant_offset_ =
+          dec->ReadRange(kMinQuantOffset, kMaxQuantOffset, "uv_quant_offset");
+      if (u_quant_offset_ == kDefaultQuantOffset) {
+        v_quant_offset_ = dec->ReadRange(kMinQuantOffset, kMaxQuantOffset - 1,
+                                         "uv_quant_offset");
+        if (v_quant_offset_ >= kDefaultQuantOffset) ++v_quant_offset_;
       } else {
-        v_quant_multiplier_ =
-            dec->ReadRange(1, kNumQuantMultiplierValues, "uv_quant_multiplier");
+        v_quant_offset_ =
+            dec->ReadRange(kMinQuantOffset, kMaxQuantOffset, "uv_quant_offset");
       }
     }
 
     bool read_alpha = maybe_use_lossy_alpha_;
     for (Segment& segment : segments_) {
       segment.SetYUVBounds(transf_.GetYUVMin(), transf_.GetYUVMax());
-      WP2_CHECK_STATUS(segment.ReadHeader(u_quant_multiplier_,
-                                          v_quant_multiplier_, read_alpha,
-                                          use_grain, dec));
+      WP2_CHECK_STATUS(segment.ReadHeader(u_quant_offset_, v_quant_offset_,
+                                          read_alpha, use_grain, dec));
       read_alpha = false;   // only for the first segment
     }
     use_rnd_mtx_ = dec->ReadBool("rnd_mtx");
@@ -198,10 +194,10 @@ bool GlobalParams::IsOk() const {
   if (y_preds_.size() > kYPredNum) return false;
   if (uv_preds_.size() > kUVPredNum) return false;
 
-  if (u_quant_multiplier_ < 1) return false;
-  if (u_quant_multiplier_ > kNumQuantMultiplierValues) return false;
-  if (v_quant_multiplier_ < 1) return false;
-  if (v_quant_multiplier_ > kNumQuantMultiplierValues) return false;
+  if (u_quant_offset_ < kMinQuantOffset) return false;
+  if (u_quant_offset_ > kMaxQuantOffset) return false;
+  if (v_quant_offset_ < kMinQuantOffset) return false;
+  if (v_quant_offset_ > kMaxQuantOffset) return false;
 
   if (a_preds_.size() > kAPredNum) return false;
 
@@ -236,8 +232,8 @@ void GlobalParams::Reset() {
   use_rnd_mtx_ = false;
   mtx_set_.Reset();
   features_ = nullptr;
-  u_quant_multiplier_ = kDefaultQuantMultiplier;
-  v_quant_multiplier_ = kDefaultQuantMultiplier;
+  u_quant_offset_ = kDefaultQuantOffset;
+  v_quant_offset_ = kDefaultQuantOffset;
 }
 
 }    // namespace WP2

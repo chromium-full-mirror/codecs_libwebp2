@@ -167,8 +167,8 @@ TEST(TestSegment, TinyImage) {
 TEST(TestSegment, Quantization) {
   Segment segment;
   segment.SetYUVBounds(-500, 500);
-  segment.SetQuality(kQualityToQFactor(60.f), kNeutralMultiplier / 2,
-                     kNeutralMultiplier * 2);
+  segment.SetQuality(kQualityToQFactor(60.f), kNeutralQuantOffset / 2,
+                     kNeutralQuantOffset * 2);
   segment.FinalizeQuant();
   const uint32_t quantized_range1 = segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
   const uint32_t u_quantized_range1 =
@@ -195,8 +195,8 @@ TEST(TestSegment, Quantization) {
   const uint32_t uncentered_range = segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
   EXPECT_NEAR(uncentered_range, quantized_range3, 1);
 
-  segment.SetQuality(kQualityToQFactor(20.f), kDefaultQuantMultiplier,
-                     kDefaultQuantMultiplier);
+  segment.SetQuality(kQualityToQFactor(20.f), kDefaultQuantOffset,
+                     kDefaultQuantOffset);
   segment.FinalizeQuant();
   const uint32_t lower_quality_factor_range =
       segment.quant_y_.GetMaxAbsResDC(TRF_16x16);
@@ -205,18 +205,19 @@ TEST(TestSegment, Quantization) {
   EXPECT_GT(lower_quality_factor_range, quantized_range3);
 }
 
-TEST(TestSegment, UVQuantMultiplier) {
+TEST(TestSegment, UVQuantOffset) {
   Segment segment;
   segment.SetYUVBounds(-500, 500);
   segment.SetQuality(kQualityToQFactor(50.f),
-                     /*u_quant_multiplier=*/kNeutralMultiplier,
-                     /*v_quant_multiplier=*/kNeutralMultiplier);
+                     /*u_quant_offset=*/kNeutralQuantOffset,
+                     /*v_quant_offset=*/kNeutralQuantOffset);
   segment.FinalizeQuant();
   EXPECT_EQ(segment.quant_steps_[kUChannel][3],
             segment.quant_steps_[kVChannel][3]);
 
-  segment.SetQuality(kQualityToQFactor(50.f), /*u_quant_multiplier=*/1,
-                     /*v_quant_multiplier=*/(1 << kQuantMultiplierBits));
+  segment.SetQuality(kQualityToQFactor(50.f),
+                     /*u_quant_offset=*/kMinQuantOffset,
+                     /*v_quant_offset=*/kMaxQuantOffset);
   segment.FinalizeQuant();
   EXPECT_LE(segment.quant_steps_[kUChannel][3],
             segment.quant_steps_[kVChannel][3]);
@@ -225,14 +226,14 @@ TEST(TestSegment, UVQuantMultiplier) {
 TEST(TestSegment, IsMergeableWith) {
   Segment segment1;
   segment1.SetYUVBounds(-512, 512);
-  segment1.SetQuality(kQualityToQFactor(42.f), kDefaultQuantMultiplier,
-                      kDefaultQuantMultiplier);
+  segment1.SetQuality(kQualityToQFactor(42.f), kDefaultQuantOffset,
+                      kDefaultQuantOffset);
   segment1.FinalizeQuant();
 
   Segment segment2;
   segment2.SetYUVBounds(-512, 512);
-  segment2.SetQuality(kQualityToQFactor(42.f), kDefaultQuantMultiplier,
-                      kDefaultQuantMultiplier);
+  segment2.SetQuality(kQualityToQFactor(42.f), kDefaultQuantOffset,
+                      kDefaultQuantOffset);
   segment2.FinalizeQuant();
 
   // Segments are the same.
@@ -240,14 +241,14 @@ TEST(TestSegment, IsMergeableWith) {
   EXPECT_TRUE(segment2.IsMergeableWith(segment1));
 
   // Set a different quality. Segments are now different.
-  segment2.SetQuality(kQualityToQFactor(43.f), kDefaultQuantMultiplier,
-                      kDefaultQuantMultiplier);
+  segment2.SetQuality(kQualityToQFactor(43.f), kDefaultQuantOffset,
+                      kDefaultQuantOffset);
   EXPECT_FALSE(segment1.IsMergeableWith(segment2));
   EXPECT_FALSE(segment2.IsMergeableWith(segment1));
 
   // Revert quality and change the bounds. Segments are also different.
-  segment2.SetQuality(kQualityToQFactor(42.f), kDefaultQuantMultiplier,
-                      kDefaultQuantMultiplier);
+  segment2.SetQuality(kQualityToQFactor(42.f), kDefaultQuantOffset,
+                      kDefaultQuantOffset);
   segment2.SetYUVBounds(-1024, 1024);
   EXPECT_FALSE(segment1.IsMergeableWith(segment2));
 }
@@ -257,8 +258,8 @@ TEST(TestSegment, MinQuant) {
   // Largest possible input range.
   segment.SetYUVBounds(-(1 << kYuvMaxPrec), (1 << kYuvMaxPrec) - 1);
   // Lowest possible quantization.
-  segment.SetQuality(/*quality_factor=*/0, /*u_quant_multiplier=*/0,
-                     /*v_quant_multiplier=*/0);
+  segment.SetQuality(/*quality_factor=*/0, /*u_quant_offset=*/0,
+                     /*v_quant_offset=*/0);
   segment.FinalizeQuant();
   // Make sure the max dc value is STRICTLY lower than kMaxDcValue which means
   // it wasn't capped. If this test fails, it probably means kMaxDcValue is too

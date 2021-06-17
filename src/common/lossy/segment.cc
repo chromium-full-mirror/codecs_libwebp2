@@ -140,14 +140,14 @@ void Segment::StoreEncodingMethods(const CodedBlockBase& cb,
 //------------------------------------------------------------------------------
 // Segment reading
 
-WP2Status Segment::ReadHeader(uint32_t u_quant_multiplier,
-                              uint32_t v_quant_multiplier, bool read_alpha,
-                              bool read_grain, ANSDec* const dec) {
+WP2Status Segment::ReadHeader(uint32_t u_quant_offset, uint32_t v_quant_offset,
+                              bool read_alpha, bool read_grain,
+                              ANSDec* const dec) {
   const bool use_quality_factor = dec->ReadBool("quant-factor");
   if (use_quality_factor) {
     const uint32_t quality_factor =
         dec->ReadRValue(kQFactorMax + 1, "quant-factor");
-    SetQuality(quality_factor, u_quant_multiplier, v_quant_multiplier);
+    SetQuality(quality_factor, u_quant_offset, v_quant_offset);
     if (read_alpha) {
       const uint32_t a_quality_factor =
           dec->ReadRValue(kQFactorMax + 1, "quant-factor");
@@ -243,14 +243,14 @@ bool Segment::IsMergeableWith(const Segment& other) const {
 
 namespace {
 
-uint32_t GetChromaACQuant(int32_t quality_factor, int32_t quant_multiplier) {
+uint32_t GetChromaACQuant(int32_t quality_factor, int32_t quant_offset) {
   return (uint32_t)Clamp<int32_t>(
-      quality_factor + quant_multiplier - (int32_t)kNeutralMultiplier, 0,
+      quality_factor + quant_offset - (int32_t)kNeutralQuantOffset, 0,
       kQFactorMax);
 }
 
-uint32_t GetChromaDCQuant(int32_t quality_factor, int32_t quant_multiplier) {
-  const uint32_t q = GetChromaACQuant(quality_factor, quant_multiplier);
+uint32_t GetChromaDCQuant(int32_t quality_factor, int32_t quant_offset) {
+  const uint32_t q = GetChromaACQuant(quality_factor, quant_offset);
   // Quantize DC less than AC for UV, especially at lower qualities.
   // Values are found empirically.
   return RightShiftRound(34210 + 34210 * q - 76 * q * q, 16);
@@ -258,8 +258,8 @@ uint32_t GetChromaDCQuant(int32_t quality_factor, int32_t quant_multiplier) {
 
 }  // namespace
 
-void Segment::SetQuality(uint32_t quality_factor, uint32_t u_quant_multiplier,
-                         uint32_t v_quant_multiplier) {
+void Segment::SetQuality(uint32_t quality_factor, uint32_t u_quant_offset,
+                         uint32_t v_quant_offset) {
   // The following ad-hoc formulae maps the [0-kQFactorMax] range of quality
   // factor to approximately 0.05 bpp - 3 bpp usable range. Note that
   // quality_factor 0 is the highest quality (= smaller quant-step).
@@ -267,17 +267,15 @@ void Segment::SetQuality(uint32_t quality_factor, uint32_t u_quant_multiplier,
 
   // DC
   quant_steps_[kYChannel][0] = quality_factor;
-  quant_steps_[kUChannel][0] =
-      GetChromaDCQuant(quality_factor, u_quant_multiplier);
-  quant_steps_[kVChannel][0] =
-      GetChromaDCQuant(quality_factor, v_quant_multiplier);
+  quant_steps_[kUChannel][0] = GetChromaDCQuant(quality_factor, u_quant_offset);
+  quant_steps_[kVChannel][0] = GetChromaDCQuant(quality_factor, v_quant_offset);
   // AC
   for (uint32_t zone = 1; zone < kNumQuantZones; ++zone) {
     quant_steps_[kYChannel][zone] = quality_factor;
     quant_steps_[kUChannel][zone] =
-        GetChromaACQuant(quality_factor, u_quant_multiplier);
+        GetChromaACQuant(quality_factor, u_quant_offset);
     quant_steps_[kVChannel][zone] =
-        GetChromaACQuant(quality_factor, v_quant_multiplier);
+        GetChromaACQuant(quality_factor, v_quant_offset);
   }
 
   quality_factor_ = quality_factor;
@@ -343,11 +341,10 @@ void Segment::FinalizeAlphaQuant() {
 }
 
 void Segment::SetQuantizationFactor(const CSPTransform& transform,
-                                    uint32_t u_quant_multiplier,
-                                    uint32_t v_quant_multiplier,
-                                    uint32_t qfactor) {
+                                    uint32_t u_quant_offset,
+                                    uint32_t v_quant_offset, uint32_t qfactor) {
   SetYUVBounds(transform.GetYUVMin(), transform.GetYUVMax());
-  SetQuality(qfactor, u_quant_multiplier, v_quant_multiplier);
+  SetQuality(qfactor, u_quant_offset, v_quant_offset);
   FinalizeQuant();
   quant_y_.SetLambda();
   quant_u_.SetLambda();
