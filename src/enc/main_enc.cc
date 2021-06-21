@@ -216,9 +216,12 @@ WP2Status EncodeGLBL(const EncoderConfig& config, const GlobalParams& gparams,
   ANSEnc enc;
   WP2_CHECK_STATUS(gparams.Write(image_has_alpha, &enc));
   WP2_CHECK_STATUS(enc.AssembleToBitstream(/*clear_tokens=*/true));
-  Vector_u8 bits;
-  WP2_CHECK_STATUS(enc.WriteBitstreamTo(bits));
-  WP2_CHECK_STATUS(WriteChunk({bits.data(), bits.size()}, output));
+
+  uint8_t buf[kMaxVarIntLength];
+  const uint32_t buf_size =
+      WriteVarInt(enc.GetBitstreamSize(), 1, kMaxChunkSize, buf);
+  WP2_CHECK_OK(output->Append(buf, buf_size), WP2_STATUS_BAD_WRITE);
+  WP2_CHECK_STATUS(enc.WriteBitstreamTo(*output));
   return WP2_STATUS_OK;
 }
 
