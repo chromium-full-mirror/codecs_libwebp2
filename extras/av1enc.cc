@@ -80,6 +80,13 @@ void Help() {
   opt.Add("-tune <metric>", "choose metric for tuning. "
                             "One of: psnr, ssim, vmaf, butteraugli");
   opt.Add("-notransforms", "disable transforms other than DCT");
+  opt.Add("-nopreds",
+          "disable predictors other than DC (and some angles for now)");
+  opt.Add("-nopalette", "disable palette");
+  opt.Add("-noblock_copy", "disable block copy");
+  opt.Add("-notrellis", "disable trellis (uses dropout instead)");
+  opt.Add("-force_block_size <int>",
+          "forces a square block size (4, 8, 16, 32, 64, 128");
   opt.AddMetricOptions();
 #if defined(WP2_HAVE_AOM_DBG)
   opt.Add("-bt / -BT", "report bit use (if compiled)");
@@ -146,6 +153,16 @@ int main(int argc, const char* argv[]) {
       params.use_yuv444 = true;
     } else if (!strcmp(argv[c], "-notransforms")) {
       params.disable_transforms = true;
+    } else if (!strcmp(argv[c], "-nopreds")) {
+      params.disable_predictors = true;
+    } else if (!strcmp(argv[c], "-nopalette")) {
+      params.disable_palette = true;
+    } else if (!strcmp(argv[c], "-noblock_copy")) {
+      params.disable_block_copy = true;
+    } else if (!strcmp(argv[c], "-notrellis")) {
+      params.disable_trellis = true;
+    } else if (!strcmp(argv[c], "-force_block_size") && c + 1 < argc) {
+      params.force_block_size = atoi(argv[++c]);  // NOLINT
     } else if (!strcmp(argv[c], "-tune") && c + 1 < argc) {
       ++c;
       if (!strcmp(argv[c], "psnr") || !strcmp(argv[c], "PSNR")) {

@@ -92,6 +92,10 @@ struct TestParams {
   bool disable_transforms = false;  // disable transforms other than dct
   bool disable_preds = false;       // disable predictors other than DC
   bool disable_split_tf = false;    // disable split transform
+  bool disable_palette = false;     // disable palette (av1 only)
+  bool disable_block_copy = false;  // disable block copy (av1 only)
+  // disable trellis (uses dropout instead) (av1 only)
+  bool disable_trellis = false;
   bool use_sharp_yuv = false;
   MetricType metric = PSNR;
   const char* neural_path = nullptr;
@@ -158,6 +162,9 @@ void PrintHelpAndExit(int return_code) {
   opt.Add("-notransforms", "disable transforms other than DCT");
   opt.Add("-nopreds", "disable predictors other than DC (wp2 only)");
   opt.Add("-nosplit_tf", "disable split transforms (wp2 only)");
+  opt.Add("-nopalette", "disable palette (av1 only)");
+  opt.Add("-noblock_copy", "disable block copy (av1 only)");
+  opt.Add("-notrellis", "disable trellis (uses dropout instead) (av1 only)");
   opt.Add("-sns <int>", "SNS strength to use (0..100)");
   opt.Add("-[no_]perceptual", "turn perceptual tuning on/off");
   opt.Add("-snap", "snap blocks to power-of-two position");
@@ -435,6 +442,27 @@ WP2Status Task::DoEncodeAV1(const std::string& out_file, bool use_avif,
     p.filter_strength = 0;
   }
   p.disable_transforms = params_.disable_transforms;
+  p.disable_predictors = params_.disable_preds;
+  p.disable_block_copy = params_.disable_block_copy;
+  p.disable_palette = params_.disable_palette;
+  p.disable_trellis = params_.disable_trellis;
+
+  switch (params_.config.partition_method) {
+    case ALL_4X4_PARTITIONING:
+      p.force_block_size = 4;
+      break;
+    case ALL_8X8_PARTITIONING:
+      p.force_block_size = 8;
+      break;
+    case ALL_16X16_PARTITIONING:
+      p.force_block_size = 16;
+      break;
+    case ALL_32X32_PARTITIONING:
+      p.force_block_size = 32;
+      break;
+    default:
+      break;
+  }
 
   std::string out;
   double timing[2];
@@ -936,6 +964,12 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       params.disable_preds = true;
     } else if (!strcmp(argv[c], "-nosplit_tf")) {
       params.disable_split_tf = true;
+    } else if (!strcmp(argv[c], "-nopalette")) {
+      params.disable_palette = true;
+    } else if (!strcmp(argv[c], "-noblock_copy")) {
+      params.disable_block_copy = true;
+    } else if (!strcmp(argv[c], "-notrellis")) {
+      params.disable_trellis = true;
     } else if (!strcmp(argv[c], "-grain") && c + 1 < argc) {
       params.grain = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-pass") && c + 1 < argc) {

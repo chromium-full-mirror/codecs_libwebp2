@@ -46,7 +46,16 @@ struct ParamsAV1 {
   const char* draw_mi_data = nullptr;
   bool draw_mi_number = false;  // draw value of mi data as red square (9 bits)
   bool use_libgav1_decoder = false;  // use libaom decoder if false
+
+  // libaom only options
   bool disable_transforms = false;   // disable tf other than DCT (av1 only)
+  // disable predictors other than DC (and some directional predictors for now)
+  bool disable_predictors = false;
+  bool disable_palette = false;     // disable palette predictor
+  bool disable_block_copy = false;  // disable intra block copy
+  bool disable_trellis = false;     // disable trellis (uses dropout instead)
+  // force a given square block size (4, 8, 16, 32, 64, 128)
+  uint32_t force_block_size = 0;
 
   std::string ToString() const;  // informative: prints the fields as a string
 };

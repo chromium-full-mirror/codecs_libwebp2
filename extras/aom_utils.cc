@@ -467,19 +467,49 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
 // Configures the 'codec'.
 WP2Status ConfigureCodec(const ParamsAV1& params,
                          aom_codec_ctx_t* const codec) {
-  // ~~~ Uncomment to disable various AV1 features ~~~
-  // ### Disable palettes.
-  // CHECK_AOM_STATUS(
-  //     aom_codec_control(codec, AV1E_SET_ENABLE_PALETTE, 0), codec);
-  // ### Disable intra block copy.
-  // CHECK_AOM_STATUS(
-  //     aom_codec_control(codec, AV1E_SET_ENABLE_INTRABC, 0), codec);
-  // ### Disable "filter" predictors.
-  // CHECK_AOM_STATUS(
-  //     aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA, 0), codec);
-
   if (params.disable_transforms) {
     CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_INTRA_DCT_ONLY, 1),
+                     codec);
+  }
+  if (params.disable_palette) {
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_PALETTE, 0),
+                     codec);
+  }
+  if (params.disable_block_copy) {
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_INTRABC, 0),
+                     codec);
+  }
+  if (params.disable_trellis) {
+    CHECK_AOM_STATUS(
+        aom_codec_control(codec, AV1E_SET_DISABLE_TRELLIS_QUANT, 1), codec);
+  }
+
+  if (params.disable_predictors) {
+    // TODO(maryla): replace with AV1E_SET_ENABLE_DIRECTIONAL_INTRA when
+    // available
+    CHECK_AOM_STATUS(
+        aom_codec_control(codec, AV1E_SET_ENABLE_DIAGONAL_INTRA, 0), codec);
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_FILTER_INTRA, 0),
+                     codec);
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_SMOOTH_INTRA, 0),
+                     codec);
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_PAETH_INTRA, 0),
+                     codec);
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_CFL_INTRA, 0),
+                     codec);
+  }
+
+  if (params.force_block_size > 0) {
+    WP2_CHECK_OK(
+        params.force_block_size == 4 || params.force_block_size == 8 ||
+            params.force_block_size == 16 || params.force_block_size == 32 ||
+            params.force_block_size == 64 || params.force_block_size == 128,
+        WP2_STATUS_INVALID_PARAMETER);
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_MAX_PARTITION_SIZE,
+                                       params.force_block_size),
+                     codec);
+    CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_MIN_PARTITION_SIZE,
+                                       params.force_block_size),
                      codec);
   }
 
