@@ -608,6 +608,26 @@ WP2Status YUVPlane::CompositeUnder(const YUVPlane& foreground,
   return Composite(*this, foreground, transform, this);
 }
 
+bool YUVPlane::IsMonochrome() const {
+  const int16_t* u_row = U.Row(0);
+  const int16_t* v_row = V.Row(0);
+  const size_t u_step = U.step_;
+  const size_t v_step = V.step_;
+  for (uint32_t y = 0; y < U.h_; ++y) {
+    if (std::find_if(u_row, u_row + U.w_, [](int16_t v) { return v != 0; }) !=
+        u_row + U.w_) {
+      return false;
+    }
+    if (std::find_if(v_row, v_row + V.w_, [](int16_t v) { return v != 0; }) !=
+        v_row + V.w_) {
+      return false;
+    }
+    u_row += u_step;
+    v_row += v_step;
+  }
+  return true;
+}
+
 //------------------------------------------------------------------------------
 
 void swap(YUVPlane& a, YUVPlane& b) {

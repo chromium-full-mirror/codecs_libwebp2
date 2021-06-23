@@ -53,17 +53,25 @@ WP2Status CreateImage(const ArgbBuffer& rgb, aom_image_t* const img) {
                &ycbcr.Y.At(x, y), &ycbcr.U.At(x, y), &ycbcr.V.At(x, y));
     }
   }
+  const bool is_monochrome = ycbcr.IsMonochrome();
+  const aom_img_fmt_t aom_format =
+      (is_monochrome ? AOM_IMG_FMT_I420 : AOM_IMG_FMT_I444);
 
-  WP2_CHECK_ALLOC_OK(aom_img_alloc(img, AOM_IMG_FMT_I444, ycbcr.GetWidth(),
+  WP2_CHECK_ALLOC_OK(aom_img_alloc(img, aom_format, ycbcr.GetWidth(),
                                    ycbcr.GetHeight(), /*align=*/16) != NULL);
   ycbcr.Y.To(img->planes[AOM_PLANE_Y], img->stride[AOM_PLANE_Y], 16);
-  ycbcr.U.To(img->planes[AOM_PLANE_U], img->stride[AOM_PLANE_U], 128);
-  ycbcr.V.To(img->planes[AOM_PLANE_V], img->stride[AOM_PLANE_V], 128);
+  if (is_monochrome) {
+    img->monochrome = 1;
+  } else {
+    ycbcr.U.To(img->planes[AOM_PLANE_U], img->stride[AOM_PLANE_U], 128);
+    ycbcr.V.To(img->planes[AOM_PLANE_V], img->stride[AOM_PLANE_V], 128);
+  }
   return WP2_STATUS_OK;
 }
 
 // Initializes the 'codec'.
-WP2Status CreateCodec(uint32_t w, uint32_t h, const EncoderConfig& config,
+WP2Status CreateCodec(uint32_t w, uint32_t h, bool is_monochrome,
+                      const EncoderConfig& config,
                       aom_codec_ctx_t* const codec) {
   const aom_codec_iface_t* const itf = aom_codec_av1_cx();
   WP2_CHECK_OK(itf != nullptr, WP2_STATUS_VERSION_MISMATCH);
@@ -78,11 +86,12 @@ WP2Status CreateCodec(uint32_t w, uint32_t h, const EncoderConfig& config,
   cfg.g_bit_depth = AOM_BITS_8;
   cfg.g_usage =
       (config.effort == 0) ? AOM_USAGE_REALTIME : AOM_USAGE_GOOD_QUALITY;
-  cfg.g_profile = 1;  // yuv444 is 1, 0 otherwise.
+  cfg.g_profile = (is_monochrome ? 0 : 1);  // yuv444 is 1, 0 otherwise.
   cfg.g_threads = 0;  // One thread per tile.
   cfg.rc_end_usage = AOM_Q;
   cfg.g_pass = AOM_RC_ONE_PASS;
   cfg.rc_twopass_stats_in = {NULL, 0};
+  cfg.monochrome = is_monochrome;
 
   WP2_CHECK_STATUS(MapAomStatus(aom_codec_enc_init(codec, itf, &cfg, 0)));
   return WP2_STATUS_OK;
@@ -119,7 +128,8 @@ WP2Status TileEncoder::Av1Encode(Data* const enc) {
   // Codec instanciation
   aom_codec_ctx_t codec;
   WP2_CHECK_STATUS(CreateCodec(tile_->rgb_input.width(),
-                               tile_->rgb_input.height(), *config_, &codec));
+                               tile_->rgb_input.height(), img.monochrome,
+                               *config_, &codec));
   Cleaner<aom_codec_ctx_t, aom_codec_err_t> codec_cleaner(&codec,
                                                           aom_codec_destroy);
 

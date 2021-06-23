@@ -580,6 +580,9 @@ class YUVPlane {
   WP2Status GetDistortion(const YUVPlane& ref, BitDepth bit_depth,
                           MetricType metric_type, float result[5]) const;
 
+  // Returns true if the U and V planes contain only zeros.
+  bool IsMonochrome() const;
+
   // TODO(maryla): the A plane could be a Plane8.
   Plane16 Y, U, V, A;  // NOLINT
 };

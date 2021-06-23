@@ -403,11 +403,15 @@ WP2Status wp2_get_frame_stats(aom_codec_ctx_t* ctx, const aom_image_t* img,
 
 // Converts 'ref' image into AV1 struct 'raw'.
 WP2Status CreateAV1Img(const ArgbBuffer& ref, aom_image_t* const raw,
-                       bool use_yuv444 = false) {
+                       bool use_yuv444) {
   YUVPlane yuv;
   WP2_CHECK_STATUS(ToYCbCr(ref, /*ycbcr_bit_depth=*/{8, /*is_signed=*/false},
                            use_yuv444 ? nullptr : &SamplingTaps::kDownSharp,
                            &yuv));
+  const bool is_monochrome = yuv.IsMonochrome();
+  if (is_monochrome) {
+    use_yuv444 = false;
+  }
 
   const int w = ref.width();
   const int h = ref.height();
@@ -418,8 +422,12 @@ WP2Status CreateAV1Img(const ArgbBuffer& ref, aom_image_t* const raw,
   }
   // Match y4m format with luma in [16:235] range.
   yuv.Y.To(raw->planes[AOM_PLANE_Y], raw->stride[AOM_PLANE_Y], 16);
-  yuv.U.To(raw->planes[AOM_PLANE_U], raw->stride[AOM_PLANE_U], 128);
-  yuv.V.To(raw->planes[AOM_PLANE_V], raw->stride[AOM_PLANE_V], 128);
+  if (is_monochrome) {
+    raw->monochrome = 1;
+  } else {
+    yuv.U.To(raw->planes[AOM_PLANE_U], raw->stride[AOM_PLANE_U], 128);
+    yuv.V.To(raw->planes[AOM_PLANE_V], raw->stride[AOM_PLANE_V], 128);
+  }
   if (ref.HasTransparency()) {
     fprintf(stderr, "# WARNING! Alpha channel is discarded with AV1!!\n");
   }
@@ -430,8 +438,9 @@ WP2Status CreateAV1Img(const ArgbBuffer& ref, aom_image_t* const raw,
 //------------------------------------------------------------------------------
 
 // Initializes the 'codec'.
-WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
-                      aom_fixed_buf_t stats, aom_codec_ctx_t* const codec) {
+WP2Status CreateCodec(int w, int h, bool is_monochrome, const ParamsAV1& params,
+                      aom_enc_pass pass, aom_fixed_buf_t stats,
+                      aom_codec_ctx_t* const codec) {
   const aom_codec_iface_t* const itf = aom_codec_av1_cx();
   if (itf == NULL) {
     fprintf(stderr, "aom_codec_av1_cx() failed!\n");
@@ -454,11 +463,12 @@ WP2Status CreateCodec(int w, int h, const ParamsAV1& params, aom_enc_pass pass,
   cfg.g_bit_depth = AOM_BITS_8;
   cfg.g_usage =
       (params.effort == 0) ? AOM_USAGE_REALTIME : AOM_USAGE_GOOD_QUALITY;
-  cfg.g_profile = (params.use_yuv444 ? 1 : 0);
+  cfg.g_profile = ((params.use_yuv444 && !is_monochrome) ? 1 : 0);
   cfg.g_threads = params.threads;
   cfg.rc_end_usage = AOM_Q;
   cfg.g_pass = pass;
   cfg.rc_twopass_stats_in = stats;
+  cfg.monochrome = is_monochrome;
 
   CHECK_AOM_STATUS(aom_codec_enc_init(codec, itf, &cfg, 0), nullptr);
   return WP2_STATUS_OK;
@@ -550,8 +560,9 @@ WP2Status FirstPassAV1(const ArgbBuffer& ref, const ParamsAV1& params,
   Cleaner<aom_image_t> img_cleaner(&raw, aom_img_free);
 
   aom_codec_ctx_t codec;
-  WP2_CHECK_STATUS(CreateCodec((int)ref.width(), (int)ref.height(), params,
-                               AOM_RC_FIRST_PASS, /*stats=*/{NULL, 0}, &codec));
+  WP2_CHECK_STATUS(CreateCodec((int)ref.width(), (int)ref.height(),
+                               raw.monochrome, params, AOM_RC_FIRST_PASS,
+                               /*stats=*/{NULL, 0}, &codec));
   Cleaner<aom_codec_ctx_t, aom_codec_err_t> codec_cleaner(&codec,
                                                           aom_codec_destroy);
   WP2_CHECK_STATUS(ConfigureCodec(params, &codec));
@@ -588,7 +599,7 @@ WP2Status EncodeAV1WithLibaom(const ArgbBuffer& image, const ParamsAV1& params,
   aom_codec_ctx_t codec;
   // TODO(yguyon): Check possible leaks of itf/cfg/codec
   WP2_CHECK_STATUS(CreateCodec(
-      (int)image.width(), (int)image.height(), params,
+      (int)image.width(), (int)image.height(), raw.monochrome, params,
       (stats.buf != NULL) ? AOM_RC_LAST_PASS : AOM_RC_ONE_PASS, stats, &codec));
   Cleaner<aom_codec_ctx_t, aom_codec_err_t> codec_cleaner(&codec,
                                                           aom_codec_destroy);
@@ -942,12 +953,14 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
   WP2_CHECK_STATUS(
       ToYCbCr(ref, /*ycbcr_bit_depth=*/{8, /*is_signed=*/false},
               params.use_yuv444 ? nullptr : &SamplingTaps::kDownSharp, &yuv));
+  const bool is_monochrome = yuv.IsMonochrome();
 
   const uint32_t w = ref.width();
   const uint32_t h = ref.height();
   constexpr int kDepth = 8;
-  const avifPixelFormat format =
-      params.use_yuv444 ? AVIF_PIXEL_FORMAT_YUV444 : AVIF_PIXEL_FORMAT_YUV420;
+  const avifPixelFormat format = is_monochrome       ? AVIF_PIXEL_FORMAT_YUV400
+                                 : params.use_yuv444 ? AVIF_PIXEL_FORMAT_YUV444
+                                                     : AVIF_PIXEL_FORMAT_YUV420;
   avifImage* const image = avifImageCreate(w, h, kDepth, format);
   WP2_CHECK_ALLOC_OK(image != nullptr);
   Cleaner<avifImage> image_cleaner(image, avifImageDestroy);
@@ -961,8 +974,12 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
 
   // import into yuv
   yuv.Y.To(image->yuvPlanes[AVIF_CHAN_Y], image->yuvRowBytes[AVIF_CHAN_Y]);
-  yuv.U.To(image->yuvPlanes[AVIF_CHAN_U], image->yuvRowBytes[AVIF_CHAN_U], 128);
-  yuv.V.To(image->yuvPlanes[AVIF_CHAN_V], image->yuvRowBytes[AVIF_CHAN_V], 128);
+  if (!is_monochrome) {
+    yuv.U.To(image->yuvPlanes[AVIF_CHAN_U], image->yuvRowBytes[AVIF_CHAN_U],
+             128);
+    yuv.V.To(image->yuvPlanes[AVIF_CHAN_V], image->yuvRowBytes[AVIF_CHAN_V],
+             128);
+  }
   if (has_alpha) {
     WP2_CHECK_STATUS(yuv.A.Resize(w, h));
     for (uint32_t y = 0; y < ref.height(); ++y) {
@@ -1015,10 +1032,15 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
     // re-use 'yuv' plane
     yuv.Y.From(avif_dec->yuvPlanes[AVIF_CHAN_Y],
                avif_dec->yuvRowBytes[AVIF_CHAN_Y]);
-    yuv.U.From(avif_dec->yuvPlanes[AVIF_CHAN_U],
-               avif_dec->yuvRowBytes[AVIF_CHAN_U], -128);
-    yuv.V.From(avif_dec->yuvPlanes[AVIF_CHAN_V],
-               avif_dec->yuvRowBytes[AVIF_CHAN_V], -128);
+    if (avif_dec->yuvFormat == AVIF_PIXEL_FORMAT_YUV400) {
+      yuv.U.Fill(0);
+      yuv.V.Fill(0);
+    } else {
+      yuv.U.From(avif_dec->yuvPlanes[AVIF_CHAN_U],
+                 avif_dec->yuvRowBytes[AVIF_CHAN_U], -128);
+      yuv.V.From(avif_dec->yuvPlanes[AVIF_CHAN_V],
+                 avif_dec->yuvRowBytes[AVIF_CHAN_V], -128);
+    }
     if (has_alpha) {
       yuv.A.From(avif_dec->alphaPlane, avif_dec->alphaRowBytes);
     }
