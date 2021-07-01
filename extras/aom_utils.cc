@@ -215,37 +215,109 @@ void DrawMiData(const insp_frame_data& data, const std::string& mi_data_name,
   }
 }
 
-void DrawQuant(const insp_frame_data& data, int channel,
+// Map from "qindex" to DC quantization value.
+constexpr uint32_t kQIndexRange = 256;
+constexpr int16_t kDcQuant[] = {
+    4,   8,    8,    9,    10,   11,   12,   12,   13,   14,  15,  16,  17,
+    18,  19,   19,   20,   21,   22,   23,   24,   25,   26,  26,  27,  28,
+    29,  30,   31,   32,   32,   33,   34,   35,   36,   37,  38,  38,  39,
+    40,  41,   42,   43,   43,   44,   45,   46,   47,   48,  48,  49,  50,
+    51,  52,   53,   53,   54,   55,   56,   57,   57,   58,  59,  60,  61,
+    62,  62,   63,   64,   65,   66,   66,   67,   68,   69,  70,  70,  71,
+    72,  73,   74,   74,   75,   76,   77,   78,   78,   79,  80,  81,  81,
+    82,  83,   84,   85,   85,   87,   88,   90,   92,   93,  95,  96,  98,
+    99,  101,  102,  104,  105,  107,  108,  110,  111,  113, 114, 116, 117,
+    118, 120,  121,  123,  125,  127,  129,  131,  134,  136, 138, 140, 142,
+    144, 146,  148,  150,  152,  154,  156,  158,  161,  164, 166, 169, 172,
+    174, 177,  180,  182,  185,  187,  190,  192,  195,  199, 202, 205, 208,
+    211, 214,  217,  220,  223,  226,  230,  233,  237,  240, 243, 247, 250,
+    253, 257,  261,  265,  269,  272,  276,  280,  284,  288, 292, 296, 300,
+    304, 309,  313,  317,  322,  326,  330,  335,  340,  344, 349, 354, 359,
+    364, 369,  374,  379,  384,  389,  395,  400,  406,  411, 417, 423, 429,
+    435, 441,  447,  454,  461,  467,  475,  482,  489,  497, 505, 513, 522,
+    530, 539,  549,  559,  569,  579,  590,  602,  614,  626, 640, 654, 668,
+    684, 700,  717,  736,  755,  775,  796,  819,  843,  869, 896, 925, 955,
+    988, 1022, 1058, 1098, 1139, 1184, 1232, 1282, 1336,
+};
+STATIC_ASSERT_ARRAY_SIZE(kDcQuant, kQIndexRange);
+constexpr int16_t kMaxDcQuant = 1336;
+
+// Map from "qindex" to AC quantization value.
+constexpr int16_t kAcQuant[] = {
+    4,    8,    9,    10,   11,   12,   13,   14,   15,   16,   17,   18,
+    19,   20,   21,   22,   23,   24,   25,   26,   27,   28,   29,   30,
+    31,   32,   33,   34,   35,   36,   37,   38,   39,   40,   41,   42,
+    43,   44,   45,   46,   47,   48,   49,   50,   51,   52,   53,   54,
+    55,   56,   57,   58,   59,   60,   61,   62,   63,   64,   65,   66,
+    67,   68,   69,   70,   71,   72,   73,   74,   75,   76,   77,   78,
+    79,   80,   81,   82,   83,   84,   85,   86,   87,   88,   89,   90,
+    91,   92,   93,   94,   95,   96,   97,   98,   99,   100,  101,  102,
+    104,  106,  108,  110,  112,  114,  116,  118,  120,  122,  124,  126,
+    128,  130,  132,  134,  136,  138,  140,  142,  144,  146,  148,  150,
+    152,  155,  158,  161,  164,  167,  170,  173,  176,  179,  182,  185,
+    188,  191,  194,  197,  200,  203,  207,  211,  215,  219,  223,  227,
+    231,  235,  239,  243,  247,  251,  255,  260,  265,  270,  275,  280,
+    285,  290,  295,  300,  305,  311,  317,  323,  329,  335,  341,  347,
+    353,  359,  366,  373,  380,  387,  394,  401,  408,  416,  424,  432,
+    440,  448,  456,  465,  474,  483,  492,  501,  510,  520,  530,  540,
+    550,  560,  571,  582,  593,  604,  615,  627,  639,  651,  663,  676,
+    689,  702,  715,  729,  743,  757,  771,  786,  801,  816,  832,  848,
+    864,  881,  898,  915,  933,  951,  969,  988,  1007, 1026, 1046, 1066,
+    1087, 1108, 1129, 1151, 1173, 1196, 1219, 1243, 1267, 1292, 1317, 1343,
+    1369, 1396, 1423, 1451, 1479, 1508, 1537, 1567, 1597, 1628, 1660, 1692,
+    1725, 1759, 1793, 1828,
+};
+STATIC_ASSERT_ARRAY_SIZE(kAcQuant, kQIndexRange);
+constexpr int16_t kMaxAcQuant = 1828;
+
+constexpr uint32_t kMaxSegments = 8;
+
+// Returns the qindex corresponding to a given quant value. The quant value
+// is assumed to appear in kDcQuant or kAcQuant (depending on is_dc).
+uint32_t GetQIndex(int16_t quant, bool is_dc) {
+  const int16_t* const lookup = (is_dc ? kDcQuant : kAcQuant);
+  for (uint32_t i = 0; i < kQIndexRange; ++i) {
+    if (lookup[i] == quant) return i;
+  }
+  assert(false);
+  return 0;
+}
+
+void DrawQuant(const insp_frame_data& data, int channel, bool is_dc,
                ArgbBuffer* const out) {
   const uint32_t num_cols = data.mi_cols;
   const uint32_t num_rows = data.mi_rows;
   assert(out != nullptr);
 
+  // Base quant values per segment. These values do not include the deltaq
+  // adjustment per superblock.
+  const int16_t(*dequant)[2] = (channel == 0)   ? &data.y_dequant[0]
+                               : (channel == 1) ? &data.u_dequant[0]
+                                                : &data.v_dequant[0];
+  const int16_t max_quant = (is_dc ? kMaxDcQuant : kMaxAcQuant);
+
+  // Deltaq (i.e. qindex offset) per segment.
+  int16_t segment_deltaq[kMaxSegments] = {0};
+  for (uint32_t i = 0; i < kMaxSegments; ++i) {
+    const int16_t segment_quant = dequant[i][is_dc ? 0 : 1];
+    if (segment_quant == 0) continue;  // This segment is not used.
+    segment_deltaq[i] = GetQIndex(segment_quant, is_dc) - data.base_qindex;
+  }
+
   for (uint32_t r = 0; r < num_rows && r * 4 < out->height(); ++r) {
     for (uint32_t c = 0; c < num_cols && c * 4 < out->width(); ++c) {
       const insp_mi_data& mi = data.mi_grid[r * num_cols + c];
-      const int16_t segment = GetMiData(mi, "segment_id");
-      int16_t quant = (channel == 0)   ? data.y_dequant[segment][0]
-                      : (channel == 1) ? data.u_dequant[segment][0]
-                                       : data.v_dequant[segment][0];
-      // Raw quant values are multiplied by 4. We shift them back to
-      // make them comparable with those used by wp2.
-      quant /= 4;
+      // Base qindex for the current superblock.
+      const int16_t sb_qindex = GetMiData(mi, "current_qindex");
+      const int16_t deltaq = segment_deltaq[GetMiData(mi, "segment_id")];
+      // Final qindex that includes the delta from the current segment.
+      const int16_t qindex =
+          Clamp<int16_t>(sb_qindex + deltaq, 0, kQIndexRange - 1);
+      const int16_t quant = (is_dc ? kDcQuant[qindex] : kAcQuant[qindex]);
 
-      // Cap quant at roughly the same as kMaxQuantStep.
-      constexpr int16_t kCap = 8192;
-      const float normalized_quant = std::min(quant, kCap) / (float)kCap;
-      // Same conversion as in vdebug.cc
-      constexpr float kGamma = 2.2f;
-      const float red = std::pow(normalized_quant, 1.f / kGamma);
-      const float green = std::pow((1.f - normalized_quant), 1.f / kGamma);
-      // Max out saturation.
-      const float mult = std::min(1.f / red, 1.f / green);
-      Argb32b color;
-      color.r = std::min((int32_t)(red * mult * 0xff), 0xff);
-      color.g = std::min((int32_t)(green * mult * 0xff), 0xff);
-      color.b = 0;
-      color.a = 0xff;
+      const float normalized_quant = (float)quant / max_quant;
+      const uint8_t gray = Clamp(normalized_quant * 255.f, 0.f, 255.f);
+      const Argb32b color{255, gray, gray, gray};
       out->Fill({c * 4, r * 4, 4, 4}, color);
     }
   }
@@ -715,8 +787,12 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
 #if defined(CONFIG_INSPECTION) && CONFIG_INSPECTION
   if (use_inspect) {
     if (params.draw_mi_data != nullptr) {
-      if (std::strcmp(params.draw_mi_data, "quant") == 0) {
-        DrawQuant(frame_data, /*channel=*/0, decoded);
+      if (std::strcmp(params.draw_mi_data, "quanty") == 0) {
+        DrawQuant(frame_data, /*channel=*/0, /*is_dc=*/true, decoded);
+      } else if (std::strcmp(params.draw_mi_data, "quantu") == 0) {
+        DrawQuant(frame_data, /*channel=*/1, /*is_dc=*/true, decoded);
+      } else if (std::strcmp(params.draw_mi_data, "quantv") == 0) {
+        DrawQuant(frame_data, /*channel=*/2, /*is_dc=*/true, decoded);
       } else {
         DrawMiData(frame_data, params.draw_mi_data, params.draw_mi_number,
                    decoded);

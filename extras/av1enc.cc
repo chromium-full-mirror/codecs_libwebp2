@@ -97,7 +97,7 @@ void Help() {
   opt.Add("-T", "dump luma transforms layout in /tmp/partition.txt");
   opt.Add("-mi_data [var_name]", "draw insp_mi_data (.var_name)");
   opt.Add("-mi_number", "draw mi value as a red square");
-  opt.Add("-quant", "draw/print quantization");
+  opt.Add("-quant [y|u|v]", "draw/print quantization for the given channel");
 #if !defined(_WIN32)
   opt.Add("-setenv <name> [value]",
           "set environment variable (one encoding per -setenv)");
@@ -213,9 +213,19 @@ int main(int argc, const char* argv[]) {
       }
     } else if (!strcmp(argv[c], "-mi_number")) {
       params.draw_mi_number = true;
-    } else if (!strcmp(argv[c], "-quant")) {
+    } else if (!strcmp(argv[c], "-quant") && c + 1 < argc) {
+      ++c;
       print_quant = true;
-      mi_data_names.emplace_back("quant");
+      if (!strcmp(argv[c], "y")) {
+        mi_data_names.emplace_back("quanty");
+      } else if (!strcmp(argv[c], "u")) {
+        mi_data_names.emplace_back("quantu");
+      } else if (!strcmp(argv[c], "v")) {
+        mi_data_names.emplace_back("quantv");
+      } else {
+        fprintf(stderr, "Unknown channel '%s'. Must be one of: y, u, v\n",
+                argv[c]);
+      }
 #if !defined(_WIN32)
     } else if (!strcmp(argv[c], "-setenv") && c + 1 < argc) {
       const bool has_value = (c + 2 < argc && argv[c + 2][0] != '-');
@@ -249,6 +259,7 @@ int main(int argc, const char* argv[]) {
   }
   if (input_path.empty()) {
     fprintf(stderr, "Missing input filename!\n");
+    Help();
     return 255;
   }
   if (decoded_path_from_input) {
