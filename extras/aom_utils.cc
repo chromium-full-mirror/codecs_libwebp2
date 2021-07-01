@@ -618,6 +618,11 @@ WP2Status ConfigureCodec(const ParamsAV1& params,
     CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_ENABLE_RESTORATION, 0),
                      codec);
   }
+
+  for (const auto& kv : params.extra_options) {
+    CHECK_AOM_STATUS(aom_codec_control(codec, kv.first, kv.second), codec);
+  }
+
   return WP2_STATUS_OK;
 }
 

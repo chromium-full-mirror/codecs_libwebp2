@@ -20,6 +20,7 @@
 #ifndef WP2_EXTRAS_AOM_UTILS_H_
 #define WP2_EXTRAS_AOM_UTILS_H_
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,7 @@ struct ParamsAV1 {
   bool use_yuv444 = true;
   // if 0, CDEF and restoration filters are disabled (but deblocking is kept)
   float filter_strength = 50.f;  // in [0..100]
+  std::map<int, int> extra_options;  // extra options for libaom
   enum class Tuning { kPsnr, kSsim, kVmaf, kButteraugli };
   Tuning tuning = Tuning::kPsnr;
   uint32_t bittrace = 0;         // 0=off, 1=bits, 2=bytes
