@@ -228,8 +228,10 @@ WP2Status GetDistortionDiff(const std::string& file_name,
                             const DecoderConfig& decoder_config,
                             float disto_diff[5], MetricType metric = PSNR);
 
-// Simple one-liner for debugging; avoids the inclusion of image_enc.h.
-void DumpImage(const ArgbBuffer& image, const std::string& file_path);
+// Simple one-liners for debugging; avoids the inclusion of image_enc.h etc.
+void DumpImage(const ArgbBuffer& image, const std::string& file_path,
+               Rectangle rect = Rectangle());
+void DumpData(const void* data, size_t data_size, const std::string& file_path);
 
 //------------------------------------------------------------------------------
 

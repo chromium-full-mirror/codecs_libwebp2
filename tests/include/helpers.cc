@@ -16,6 +16,8 @@
 #include "./helpers.h"
 
 #include <cassert>
+#include <fstream>
+#include <iostream>
 
 #include "examples/example_utils.h"
 #include "imageio/anim_image_dec.h"
@@ -408,8 +410,22 @@ WP2Status GetDistortionDiff(const std::string& file_name,
   return WP2_STATUS_OK;
 }
 
-void DumpImage(const ArgbBuffer& image, const std::string& file_path) {
-  WP2_ASSERT_STATUS(SaveImage(image, file_path.c_str(), /*overwrite=*/true));
+void DumpImage(const ArgbBuffer& image, const std::string& file_path,
+               Rectangle rect) {
+  ArgbBuffer buffer(WP2_Argb_32);
+  if (image.format() == buffer.format()) {
+    WP2_ASSERT_STATUS(buffer.SetView(image));
+  } else {
+    WP2_ASSERT_STATUS(buffer.ConvertFrom(image));
+  }
+  if (rect.GetArea() != 0) WP2_ASSERT_STATUS(buffer.SetView(buffer, rect));
+  WP2_ASSERT_STATUS(SaveImage(buffer, file_path.c_str(), /*overwrite=*/true));
+}
+
+void DumpData(const void* data, size_t data_size,
+              const std::string& file_path) {
+  std::ofstream file(file_path.c_str(), std::ios::binary);
+  file.write(reinterpret_cast<const char*>(data), data_size);
 }
 
 //------------------------------------------------------------------------------

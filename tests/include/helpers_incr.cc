@@ -426,26 +426,17 @@ class IncrementalDecodingTester {
           (features->raw_width != features->width)
               ? decoded_area.width - previous_decoded_area_.width
               : decoded_area.height - previous_decoded_area_.height;
-      // Incremental decoding should not be able to finish more than two rows of
-      // blocks in 2 bytes or fewer for lossy and a tile for lossless.
-      if (has_true_incremental_output_) {
-        // We should decode at most kMaxBlockSizePix * 2 at once.
-        // kMaxBlockSizePix / 2 is added because of the intertile deblocking
-        // which can delay processing of previously decoded rows. Example:
-        // decoded_rows: 128    processed_rows: 128
-        // decoded_rows: 192    processed_rows: 192
-        // (192 - 128 = 64 newly processed rows)
-        // decoded_rows: 256    processed_rows: 240
-        // (240 - 192 = 48 newly processed rows, other waiting for deblocking)
-        // decoded_rows: 320    processed_rows: 320
-        // (320 - 240 = 80 newly processed rows)
-        CHECK_OR_DIE(num_lines <=
-                     std::min(features->raw_height,
-                              kMaxBlockSizePix * 2 + kMaxBlockSizePix / 2));
-      } else {
-        CHECK_OR_DIE(num_lines <=
-                     std::min(features->raw_height, features->tile_height));
+      // Incremental decoding should not be able to finish more than three rows
+      // of blocks in 2 bytes or fewer for lossy and a tile for lossless.
+      const uint32_t max_num_lines =
+          std::min(features->raw_height, has_true_incremental_output_
+                                             ? kMaxBlockSizePix * 3
+                                             : features->tile_height);
+      if (num_lines > max_num_lines) {
+        DumpImage(output_, "/tmp/dump.png", decoded_area);
+        DumpData(input_.bytes, input_.size, "/tmp/dump.wp2");
       }
+      CHECK_OR_DIE(num_lines <= max_num_lines);
     }
   }
 
