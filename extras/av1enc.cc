@@ -384,7 +384,7 @@ int main(int argc, const char* argv[]) {
       const std::string param(argv[++c]);
       std::string option_name;
       int option_value;
-      const int pos = param.find('=');
+      const size_t pos = param.find('=');
       if (pos == std::string::npos) {  // Assume value is 1.
         option_name = param;
         option_value = 1;
