@@ -61,143 +61,6 @@ const char* const kAllMiDataNames[]{
     "motion_mode",   "intrabc",          "palette",        "uv_palette"};
 #endif
 
-// Mapping from aom option names to aome_enc_control_id enum values.
-constexpr std::pair<const char*, int> kAomOptions[] = {
-    {"use-reference", 7},
-    {"roi-map", 8},
-    {"activemap", 9},
-    {"scalemode", 11},
-    {"spatial-layer-id", 12},
-    {"cpuused", 13},
-    {"enableautoaltref", 14},
-    {"sharpness", 16},
-    {"static-threshold", 17},
-    {"get-last-quantizer", 19},
-    {"get-last-quantizer-64", 20},
-    {"arnr-maxframes", 21},
-    {"arnr-strength", 22},
-    {"tuning", 24},
-    {"cq-level", 25},
-    {"max-intra-bitrate-pct", 26},
-    {"number-spatial-layers", 27},
-    {"max-inter-bitrate-pct", 28},
-    {"gf-cbr-boost-pct", 29},
-    {"lossless", 31},
-    {"row-mt", 32},
-    {"tile-columns", 33},
-    {"tile-rows", 34},
-    {"enable-tpl-model", 35},
-    {"enable-keyframe-filtering", 36},
-    {"frame-parallel-decoding", 37},
-    {"error-resilient-mode", 38},
-    {"s-frame-mode", 39},
-    {"aq-mode", 40},
-    {"frame-periodic-boost", 41},
-    {"noise-sensitivity", 42},
-    {"tune-content", 43},
-    {"cdf-update-mode", 44},
-    {"color-primaries", 45},
-    {"transfer-characteristics", 46},
-    {"matrix-coefficients", 47},
-    {"chroma-sample-position", 48},
-    {"min-gf-interval", 49},
-    {"max-gf-interval", 50},
-    {"get-activemap", 51},
-    {"color-range", 52},
-    {"render-size", 53},
-    {"target-seq-level-idx", 54},
-    {"get-seq-level-idx", 55},
-    {"superblock-size", 56},
-    {"enableautobwdref", 57},
-    {"enable-cdef", 58},
-    {"enable-restoration", 59},
-    {"force-video-mode", 60},
-    {"enable-obmc", 61},
-    {"disable-trellis-quant", 62},
-    {"enable-qm", 63},
-    {"qm-min", 64},
-    {"qm-max", 65},
-    {"qm-y", 66},
-    {"qm-u", 67},
-    {"qm-v", 68},
-    {"num-tg", 70},
-    {"mtu", 71},
-    {"enable-rect-partitions", 73},
-    {"enable-ab-partitions", 74},
-    {"enable-1to4-partitions", 75},
-    {"min-partition-size", 76},
-    {"max-partition-size", 77},
-    {"enable-intra-edge-filter", 78},
-    {"enable-order-hint", 79},
-    {"enable-tx64", 80},
-    {"enable-flip-idtx", 81},
-    {"enable-rect-tx", 82},
-    {"enable-dist-wtd-comp", 83},
-    {"enable-ref-frame-mvs", 84},
-    {"allow-ref-frame-mvs", 85},
-    {"enable-dual-filter", 86},
-    {"enable-chroma-deltaq", 87},
-    {"enable-masked-comp", 88},
-    {"enable-onesided-comp", 89},
-    {"enable-interintra-comp", 90},
-    {"enable-smooth-interintra", 91},
-    {"enable-diff-wtd-comp", 92},
-    {"enable-interinter-wedge", 93},
-    {"enable-interintra-wedge", 94},
-    {"enable-global-motion", 95},
-    {"enable-warped-motion", 96},
-    {"allow-warped-motion", 97},
-    {"enable-filter-intra", 98},
-    {"enable-smooth-intra", 99},
-    {"enable-paeth-intra", 100},
-    {"enable-cfl-intra", 101},
-    {"enable-superres", 102},
-    {"enable-overlay", 103},
-    {"enable-palette", 104},
-    {"enable-intrabc", 105},
-    {"enable-angle-delta", 106},
-    {"deltaq-mode", 107},
-    {"deltalf-mode", 108},
-    {"single-tile-decoding", 109},
-    {"enable-motion-vector-unit-test", 110},
-    {"timing-info-type", 111},
-    {"film-grain-test-vector", 112},
-    {"film-grain-table", 113},
-    {"denoise-noise-level", 114},
-    {"denoise-block-size", 115},
-    {"chroma-subsampling-x", 116},
-    {"chroma-subsampling-y", 117},
-    {"reduced-tx-type-set", 118},
-    {"intra-dct-only", 119},
-    {"inter-dct-only", 120},
-    {"intra-default-tx-only", 121},
-    {"quant-b-adapt", 122},
-    {"gf-max-pyramid-height", 123},
-    {"max-reference-frames", 124},
-    {"reduced-reference-set", 125},
-    {"coeff-cost-upd-freq", 126},
-    {"mode-cost-upd-freq", 127},
-    {"mv-cost-upd-freq", 128},
-    {"tier-mask", 129},
-    {"min-cr", 130},
-    {"svc-layer-id", 131},
-    {"svc-params", 132},
-    {"svc-ref-frame-config", 133},
-    {"vmaf-model-path", 134},
-    {"enable-ext-tile-debug", 135},
-    {"enable-sb-multipass-unit-test", 136},
-    {"gf-min-pyramid-height", 137},
-    {"vbr-corpus-complexity-lap", 138},
-    {"get-baseline-gf-interval", 139},
-    {"enable-dnl-denoising", 140},
-    {"enable-diagonal-intra", 141},
-    {"dv-cost-upd-freq", 142},
-    {"partition-info-path", 143},
-    {"external-partition", 144},
-    {"enable-directional-intra", 145},
-    {"enable-tx-size-search", 146},
-};
-
 //------------------------------------------------------------------------------
 
 void Help() {
@@ -244,7 +107,7 @@ void Help() {
   opt.Add("-O", "same as -o [in_file]_dec.png");
   opt.Add("-d <file path>", "path to encoded AV1 image");
   opt.Add("-D", "same as -d [in_file].av1");
-  opt.Add("-a option=value", "extra options for libaom");
+  opt.Add("-a option=value", "extra option for libaom");
   opt.Add("-quiet", "minimal output");
   opt.Add("-avif", "write as AVIF");
   opt.Add("-libgav1", "use libgav1 decoder");
@@ -382,33 +245,11 @@ int main(int argc, const char* argv[]) {
       params.pass = atoi(argv[++c]);  // NOLINT
     } else if (!strcmp(argv[c], "-a") && c + 1 < argc) {
       const std::string param(argv[++c]);
-      std::string option_name;
+      int option_enum;
       int option_value;
-      const size_t pos = param.find('=');
-      if (pos == std::string::npos) {  // Assume value is 1.
-        option_name = param;
-        option_value = 1;
-      } else {
-        option_name = param.substr(0, pos);
-        option_value = atoi(param.substr(pos + 1, std::string::npos).c_str());
+      if (WP2::ParseLibaomOption(param, &option_enum, &option_value)) {
+        params.extra_options[option_enum] = option_value;
       }
-      int option_enum = -1;
-      for (const auto& pair : kAomOptions) {
-        if (!strcmp(option_name.c_str(), pair.first)) {
-          option_enum = pair.second;
-          break;
-        }
-      }
-      if (option_enum == -1) {
-        fprintf(stderr, "Ignored unknown AOM option '%s'. Must be one of:\n",
-                option_name.c_str());
-        for (const auto& pair : kAomOptions) {
-          fprintf(stderr, "%s ", pair.first);
-        }
-        fprintf(stderr, "\n");
-        continue;
-      }
-      params.extra_options[option_enum] = option_value;
     } else if (!strcmp(argv[c], "-quiet")) {
       quiet = true;
     } else if (!strcmp(argv[c], "-avif")) {

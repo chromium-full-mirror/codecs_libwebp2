@@ -96,6 +96,7 @@ struct TestParams {
   bool disable_block_copy = false;  // disable block copy (av1 only)
   // disable trellis (uses dropout instead) (av1 only)
   bool disable_trellis = false;
+  std::map<int, int> aom_extra_options;  // extra options for libaom
   bool use_sharp_yuv = false;
   MetricType metric = PSNR;
   const char* neural_path = nullptr;
@@ -165,6 +166,7 @@ void PrintHelpAndExit(int return_code) {
   opt.Add("-nopalette", "disable palette (av1 only)");
   opt.Add("-noblock_copy", "disable block copy (av1 only)");
   opt.Add("-notrellis", "disable trellis (uses dropout instead) (av1 only)");
+  opt.Add("-a option=value", "extra option for libaom");
   opt.Add("-sns <int>", "SNS strength to use (0..100)");
   opt.Add("-[no_]perceptual", "turn perceptual tuning on/off");
   opt.Add("-snap", "snap blocks to power-of-two position");
@@ -446,6 +448,7 @@ WP2Status Task::DoEncodeAV1(const std::string& out_file, bool use_avif,
   p.disable_block_copy = params_.disable_block_copy;
   p.disable_palette = params_.disable_palette;
   p.disable_trellis = params_.disable_trellis;
+  p.extra_options = params_.aom_extra_options;
 
   switch (params_.config.partition_method) {
     case ALL_4X4_PARTITIONING:
@@ -970,6 +973,13 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
       params.disable_block_copy = true;
     } else if (!strcmp(argv[c], "-notrellis")) {
       params.disable_trellis = true;
+    } else if (!strcmp(argv[c], "-a") && c + 1 < argc) {
+      const std::string param(argv[++c]);
+      int option_enum;
+      int option_value;
+      if (WP2::ParseLibaomOption(param, &option_enum, &option_value)) {
+        params.aom_extra_options[option_enum] = option_value;
+      }
     } else if (!strcmp(argv[c], "-grain") && c + 1 < argc) {
       params.grain = ExUtilGetInt(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-pass") && c + 1 < argc) {

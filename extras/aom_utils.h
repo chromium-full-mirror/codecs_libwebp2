@@ -80,6 +80,15 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
                        ArgbBuffer* const decoded, std::string* const out,
                        double timing[2] = nullptr);
 
+// Parses an option of libaom of the from "option-name=value", e.g. "aq-mode=1".
+// Sets 'option_enum' to the corresponding enum value for use with
+// 'aom_codec_control', and 'option_value' to the provided value.
+// Returns true on success, false and prints a message to stderr on error
+// (unknown option).
+WP2_NO_DISCARD bool ParseLibaomOption(const std::string& str,
+                                      int* const option_enum,
+                                      int* const option_value);
+
 }  // namespace WP2
 
 #endif  // WP2_EXTRAS_AOM_UTILS_H_
