@@ -194,6 +194,7 @@ class IncrementalDecodingTester {
     Decoder& idec = GetDecoder();
     size_t available_input_size = 0;
     uint32_t current_action_index = 0;
+    bool decoded_a_full_frame = false;
 
     // Start, continue, rewind decoding as long as there is something to do.
     while (available_input_size < input_.size ||
@@ -205,8 +206,9 @@ class IncrementalDecodingTester {
           std::min(available_input_size + incr_size_step_, input_.size);
 
       // Rewind or skip frames as planned.
-      ApplyActions(&available_input_size, &previous_input_size,
-                   &current_action_index, decoded_frames, decoded_durations_ms);
+      ApplyActions(decoded_a_full_frame, &available_input_size,
+                   &previous_input_size, &current_action_index, decoded_frames,
+                   decoded_durations_ms);
 
       // Update the input.
       if (setup_.decoder_type == DecoderType::kArray) {
@@ -223,7 +225,7 @@ class IncrementalDecodingTester {
 
       // Decode all available bytes until a non-skipped frame is ready.
       uint32_t duration_ms = 0;
-      const bool decoded_a_full_frame = idec.ReadFrame(&duration_ms);
+      decoded_a_full_frame = idec.ReadFrame(&duration_ms);
       WP2_CHECK_OK(!idec.Failed(), idec.GetStatus());
 
       if (setup_.decoder_type == DecoderType::kUnstableCustom) {
@@ -276,7 +278,8 @@ class IncrementalDecodingTester {
 
  private:
   // Rewind and/or skip frames according to the test 'setup_'.
-  void ApplyActions(size_t* const available_input_size,
+  void ApplyActions(bool decoded_a_full_frame,
+                    size_t* const available_input_size,
                     size_t* const previous_input_size,
                     uint32_t* const current_action_index,
                     std::vector<ArgbBuffer>* const decoded_frames,
@@ -304,16 +307,20 @@ class IncrementalDecodingTester {
         if (decoded_durations_ms != nullptr) decoded_durations_ms->clear();
         rewinded_ = true;
         num_skipped_frames_ = 0;
+        decoded_a_full_frame = false;
       } else if (action.type == DecoderAction::Type::kSkip) {
         const uint32_t num_frames_to_skip = action.value;
         GetDecoder().SkipNumNextFrames(num_frames_to_skip);
-        if (num_frames_to_skip > 0) {
+        // The first skipped frame just after a decoded frame is that same frame
+        // so it does not count.
+        if (num_frames_to_skip >= (decoded_a_full_frame ? 2 : 1)) {
           frame_index_ = std::min(frame_index_ + action.value, kMaxNumFrames);
           previous_frame_index_ = kMaxNumFrames;
           previous_decoded_area_ = Rectangle(0, 0, 0, 0);
           incremental_output_.Deallocate();
           num_skipped_frames_ += num_frames_to_skip;
         }
+        if (num_frames_to_skip >= 1) decoded_a_full_frame = false;
       }
       ++*current_action_index;
     }
