@@ -23,20 +23,21 @@
 
 namespace {
 
+constexpr uint32_t kContainerCodecRaw = 0x5;
+
 bool operator==(const container::Data& a, const container::Data& b) {
   return (a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin()));
 }
 
-bool operator==(const container::ImageFeatures& a,
-                const container::ImageFeatures& b) {
+bool operator==(const container::Image& a, const container::Image& b) {
   return (a.width == b.width && a.height == b.height &&
-      a.orientation == b.orientation && a.tile_size == b.tile_size &&
-      a.is_opaque == b.is_opaque && a.is_animation == b.is_animation &&
-      a.has_preview == b.has_preview &&
-      a.preview_color == b.preview_color && a.has_icc == b.has_icc &&
-      a.has_xmp == b.has_xmp && a.has_exif == b.has_exif &&
-      (!a.is_animation || (a.loop_forever == b.loop_forever &&
-          a.background_color == b.background_color)));
+          a.orientation == b.orientation && a.format == b.format &&
+          a.is_opaque == b.is_opaque && a.preview_color == b.preview_color &&
+          a.icc == b.icc && a.xmp == b.xmp && a.exif == b.exif &&
+          a.is_animation == b.is_animation &&
+          (!a.is_animation || (a.loop_forever == b.loop_forever &&
+                               a.background_color == b.background_color)) &&
+          a.pixels == b.pixels);
 }
 
 }  // namespace
@@ -47,57 +48,50 @@ int main(int, const char*[]) {
   std::mt19937 random;
 
   // Demo image settings.
-  container::ImageFeatures enc_features;
-  enc_features.width = 1000;
-  enc_features.height = 1000;
-  enc_features.orientation = 0;
-  enc_features.is_opaque = true;
-  enc_features.is_animation = false;
-  enc_features.has_preview = true;
-  enc_features.preview_color = 0xFFF;
-  enc_features.has_icc = true;
-  enc_features.has_xmp = true;
-  enc_features.has_exif = true;
-  enc_features.bit_depth = 0;
-  enc_features.tile_size = 512;
-  enc_features.loop_forever = true;
-  enc_features.background_color = 0xFF000000u;
+  container::Image input;
+  input.width = 1000;
+  input.height = 1000;
+  input.orientation = container::Orientation::kOriginal;
+  input.format = container::Format::kARGB8;
+  input.is_opaque = true;
+  input.preview_color = 0x0;
+  input.is_animation = false;
+  input.loop_forever = true;
+  input.background_color = 0xFF000000u;
 
   // Random preview and metadata. The content does not matter.
-  container::Data enc_preview, enc_icc, enc_xmp, enc_exif, enc_pixels;
-  for (container::Data* data : {&enc_preview, &enc_icc, &enc_xmp, &enc_exif}) {
+  for (container::Data* data : {&input.icc, &input.xmp, &input.exif}) {
     data->resize(1 + random() % 2048);
     for (uint8_t& byte : *data) byte = random() % 255;
   }
 
-  // Random pixel values. The content does not matter; it could be YUV or ARGB,
-  // for example.
-  enc_pixels.resize(enc_features.width * enc_features.height *
-                    (enc_features.is_opaque ? 3 : 4));
-  for (uint8_t& byte : enc_pixels) byte = random() % 255;
+  // Random pixel values. The content does not matter.
+  input.pixels.resize(input.width * input.height * (input.is_opaque ? 3 : 4));
+  for (uint8_t& byte : input.pixels) byte = random() % 255;
 
   // Encode.
-  container::Data bitstream;
-  container::EncodeStillImage(enc_features, enc_preview, enc_icc, enc_xmp,
-                              enc_exif, enc_pixels, &bitstream);
+  container::Data codec_bytes, bitstream;
+  container::EncodeRawPixels(input, codec_bytes);
+  container::WrapContainer(input, container::EncoderConfig(),
+                           kContainerCodecRaw, codec_bytes.data(),
+                           codec_bytes.size(), bitstream);
 
   // Decode.
-  container::ImageFeatures dec_features;
-  container::Data dec_preview, dec_icc, dec_xmp, dec_exif, dec_pixels;
-  if (!container::DecodeStillImage(bitstream, &dec_features, &dec_preview,
-                                   &dec_icc, &dec_xmp, &dec_exif,
-                                   &dec_pixels)) {
+  container::Image output;
+  uint32_t codec;
+  size_t offset_till_codec_bytes, num_codec_bytes;
+  if (!container::UnwrapContainer(bitstream.data(), bitstream.size(), output,
+                                  codec, offset_till_codec_bytes,
+                                  num_codec_bytes) ||
+      codec != kContainerCodecRaw ||
+      !container::DecodeRawPixels(bitstream.data() + offset_till_codec_bytes,
+                                  num_codec_bytes, output)) {
     fprintf(stderr, "Failure\n");
     return 1;
   }
 
   // Compare.
-  assert(enc_features == dec_features);
-  assert(enc_preview == dec_preview);
-  assert(enc_icc == dec_icc);
-  assert(enc_xmp == dec_xmp);
-  assert(enc_exif == dec_exif);
-  assert(enc_pixels == dec_pixels);
+  assert(input == output);
 
   printf("Success\n");
   return 0;

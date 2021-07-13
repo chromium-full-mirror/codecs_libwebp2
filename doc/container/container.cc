@@ -15,10 +15,11 @@
 #include "./container.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cmath>
+#include <iostream>
 
 namespace container {
+namespace {
 
 static_assert(kMaxChunkSize - 1u <= kMaxVarInt,
               "The maximum chunk size cannot be represented with var ints.");
@@ -130,128 +131,145 @@ void ReadChunk(const uint8_t bitstream[], uint32_t* bitstream_pos,
   *bitstream_pos += chunk_size;
 }
 
+}  // namespace
+
 //------------------------------------------------------------------------------
 // The content of these functions can be replaced by actual image compression
 // algorithms. Currently it is just raw 8b pixel packing, with or without alpha.
 
-Data EncodeTile(const ImageFeatures& f, const uint8_t pixels[], uint32_t tile_x,
-                uint32_t tile_y) {
-  Data tile_bytes;
-  const uint32_t tile_height = std::min(f.tile_size, f.height - tile_y);
-  const uint32_t tile_width = std::min(f.tile_size, f.width - tile_x);
-  const uint32_t mult = f.is_opaque ? 3 : 4;
-  for (uint32_t y = 0; y < tile_height; ++y) {
-    const uint8_t* src_row = &pixels[((tile_y + y) * f.width + tile_x) * mult];
-    tile_bytes.insert(tile_bytes.end(), src_row, src_row + tile_width * mult);
+void EncodeRawPixels(const Image& image, Data& data) {
+  // TODO(yguyon): Implement if (image.is_animation)
+  if (image.format == Format::kARGB8) {
+    data.insert(data.end(), image.pixels.begin(), image.pixels.end());
+  } else {
+    abort();  // TODO(yguyon): Implement
   }
-  return tile_bytes;
 }
 
-void DecodeTile(const ImageFeatures& f, uint32_t tile_x, uint32_t tile_y,
-                const Data& tile_bytes, uint8_t pixels[]) {
-  const uint32_t tile_height = std::min(f.tile_size, f.height - tile_y);
-  const uint32_t tile_width = std::min(f.tile_size, f.width - tile_x);
-  const uint32_t mult = f.is_opaque ? 3 : 4;
-  for (uint32_t y = 0, bitstream_pos = 0; y < tile_height; ++y) {
-    const uint8_t* src_row = tile_bytes.data() + bitstream_pos;
-    uint8_t* dst_row = &pixels[((tile_y + y) * f.width + tile_x) * mult];
-    std::copy(src_row, src_row + tile_width * mult, dst_row);
-    bitstream_pos += tile_width * mult;
+bool DecodeRawPixels(const uint8_t data[], size_t data_size, Image& image) {
+  // TODO(yguyon): Implement if (image.is_animation)
+  if (image.format == Format::kARGB8) {
+    if (data_size != image.width * image.height * (image.is_opaque ? 3 : 4)) {
+      return false;
+    }
+    image.pixels.resize(data_size);
+    std::copy(data, data + data_size, image.pixels.data());
+  } else {
+    abort();  // TODO(yguyon): Implement
+  }
+  return true;
+}
+
+//------------------------------------------------------------------------------
+
+void WrapContainer(const Image& image, const EncoderConfig& config,
+                   uint32_t codec, const uint8_t codec_bytes[],
+                   size_t num_codec_bytes, Data& data) {
+  data.clear();
+
+  BitPacker header;
+  header.EncodeUInt(kContainerTag, 0, (1 << kContainerTagNumBits) - 1);
+  header.EncodeUInt(codec, 0, (1 << kContainerCodecNumBits) - 1);
+  header.EncodeUInt(image.width, 1, 1 << kImageDimNumBits);
+  header.EncodeUInt(image.height, 1, 1 << kImageDimNumBits);
+  header.EncodeUInt(static_cast<uint32_t>(image.orientation), 0, 7);
+  header.EncodeUInt((image.format == Format::kARGB8)    ? 0
+                    : (image.format == Format::kAYUV10) ? 1
+                                                        : 3,
+                    0, 3);
+  header.EncodeBool(image.is_opaque);
+  header.EncodeUInt(image.preview_color, 0, (1 << 12) - 1);
+  header.EncodeBool(config.create_preview);
+  header.EncodeBool(!image.icc.empty());
+  header.EncodeBool(!image.xmp.empty());
+  header.EncodeBool(!image.exif.empty());
+  header.EncodeBool(image.is_animation);
+  if (image.is_animation) {
+    header.EncodeBool(image.loop_forever);
+    header.EncodeUInt(image.background_color, 0u, 4294967295u);
+  }
+  header.Write(&data);
+
+  if (config.create_preview) {
+    abort();  // TODO(yguyon): Implement
+  }
+  if (!image.icc.empty()) {
+    WriteChunk(image.icc, &data);
+  }
+
+  WriteChunk(Data(codec_bytes, codec_bytes + num_codec_bytes), &data);
+
+  if (!image.xmp.empty()) {
+    WriteChunk(image.xmp, &data);
+  }
+  if (!image.exif.empty()) {
+    WriteChunk(image.exif, &data);
   }
 }
 
 //------------------------------------------------------------------------------
 
-void EncodeStillImage(const ImageFeatures& features, const Data& preview,
-                      const Data& icc, const Data& xmp, const Data& exif,
-                      const Data& pixels, Data* bitstream) {
-  bitstream->clear();
+namespace {
 
-  BitPacker header;
-  header.EncodeUInt(kTag, 0, (1 << (kTagNumBytes * 8)) - 1);
-  header.EncodeUInt(features.width, 1, 1 << kImageDimNumBits);
-  header.EncodeUInt(features.height, 1, 1 << kImageDimNumBits);
-  header.EncodeUInt(features.orientation, 0, 3);
-  header.EncodeBool(features.is_opaque);
-  header.EncodeBool(features.is_animation);
-  header.EncodeUInt(features.preview_color, 0, 1 << 12);
-  header.EncodeBool(features.has_preview);
-  header.EncodeBool(features.has_icc);
-  header.EncodeBool(features.has_xmp);
-  header.EncodeBool(features.has_exif);
-  header.EncodeUInt(features.bit_depth, 0, 3);
-  header.EncodeUInt(features.tile_size == 128 ? 0 :
-                    features.tile_size == 256 ? 1 :
-                    features.tile_size == 512 ? 2 : 3,
-                    0, 3);
-  if (features.is_animation) {
-    header.EncodeBool(features.loop_forever);
-    header.EncodeUInt(features.background_color, 0, 4294967295u);
-  }
-  header.Write(bitstream);
+// Extracts 'num_read_bytes' from 'data' into 'image' features.
+bool UnwrapContainerHeader(const uint8_t data[], size_t data_size, Image& image,
+                           uint32_t& codec, bool& has_preview, bool& has_icc,
+                           bool& has_xmp, bool& has_exif,
+                           uint32_t& num_read_bytes) {
+  BitUnpacker header(data, data_size);
+  const uint32_t tag = header.DecodeUInt(0, (1 << kContainerTagNumBits) - 1);
+  codec = header.DecodeUInt(0, (1 << kContainerCodecNumBits) - 1);
+  if (tag != kContainerTag) return false;
 
-  if (features.has_preview) WriteChunk(preview, bitstream);
-  if (features.has_icc) WriteChunk(icc, bitstream);
-
-  for (uint32_t tile_y = 0; tile_y < features.height;
-       tile_y += features.tile_size) {
-    for (uint32_t tile_x = 0; tile_x < features.width;
-         tile_x += features.tile_size) {
-      const Data tile_bytes =
-          EncodeTile(features, pixels.data(), tile_x, tile_y);
-      WriteChunk(tile_bytes, bitstream);
-    }
-  }
-
-  if (features.has_xmp) WriteChunk(xmp, bitstream);
-  if (features.has_exif) WriteChunk(exif, bitstream);
+  image.width = header.DecodeUInt(1, 1 << kImageDimNumBits);
+  image.height = header.DecodeUInt(1, 1 << kImageDimNumBits);
+  image.orientation = static_cast<Orientation>(header.DecodeUInt(0, 7));
+  const uint32_t format = header.DecodeUInt(0, 3);
+  image.format = (format == 0)   ? Format::kARGB8
+                 : (format == 1) ? Format::kAYUV10
+                                 : Format::kUnknown;
+  image.is_opaque = header.DecodeBool();
+  image.preview_color = header.DecodeUInt(0, (1 << 12) - 1);
+  has_preview = header.DecodeBool();
+  has_icc = header.DecodeBool();
+  has_xmp = header.DecodeBool();
+  has_exif = header.DecodeBool();
+  image.is_animation = header.DecodeBool();
+  image.loop_forever = image.is_animation ? header.DecodeBool() : false;
+  image.background_color =
+      image.is_animation ? header.DecodeUInt(0u, 4294967295u) : 0;
+  num_read_bytes = header.GetNumReadBytes();
+  return header.Ok();
 }
 
-bool DecodeStillImage(const Data& bitstream, ImageFeatures* features,
-                      Data* preview, Data* icc, Data* xmp, Data* exif,
-                      Data* pixels) {
-  BitUnpacker header(bitstream.data(), bitstream.size());
-  const uint32_t tag = header.DecodeUInt(0, (1 << (kTagNumBytes * 8)) - 1);
-  if (tag != kTag) return false;
-  features->width = header.DecodeUInt(1, 1 << kImageDimNumBits);
-  features->height = header.DecodeUInt(1, 1 << kImageDimNumBits);
-  features->orientation = header.DecodeUInt(0, 3);
-  features->is_opaque = header.DecodeBool();
-  features->is_animation = header.DecodeBool();
-  features->preview_color = header.DecodeUInt(0, 1 << 12);
-  features->has_preview = header.DecodeBool();
-  features->has_icc = header.DecodeBool();
-  features->has_xmp = header.DecodeBool();
-  features->has_exif = header.DecodeBool();
-  features->bit_depth = header.DecodeUInt(0, 3);
-  const uint32_t tile_size = header.DecodeUInt(0, 3);
-  features->tile_size = tile_size == 0 ? 128 :
-                        tile_size == 1 ? 256 :
-                        tile_size == 2 ? 512 : 1024;
-  features->loop_forever = features->is_animation ? header.DecodeBool() : false;
-  features->background_color =
-      features->is_animation ? header.DecodeUInt(0, 4294967295u) : 0;
-  if (!header.Ok()) return false;
-  uint32_t pos = header.GetNumReadBytes();
+}  // namespace
 
-  if (features->has_preview) ReadChunk(bitstream.data(), &pos, preview);
-  if (features->has_icc) ReadChunk(bitstream.data(), &pos, icc);
+bool UnwrapContainer(const uint8_t data[], size_t data_size, Image& image,
+                     uint32_t& codec, size_t& offset_till_codec_bytes,
+                     size_t& num_codec_bytes) {
+  image = Image();
 
-  pixels->resize(features->width * features->height *
-                 (features->is_opaque ? 3 : 4));
-  for (uint32_t tile_y = 0; tile_y < features->height;
-       tile_y += features->tile_size) {
-    for (uint32_t tile_x = 0; tile_x < features->width;
-         tile_x += features->tile_size) {
-      Data tile_bytes;
-      ReadChunk(bitstream.data(), &pos, &tile_bytes);
-      DecodeTile(*features, tile_x, tile_y, tile_bytes, pixels->data());
-    }
+  bool has_preview, has_icc, has_xmp, has_exif;
+  uint32_t data_pos;
+  if (!UnwrapContainerHeader(data, data_size, image, codec, has_preview,
+                             has_icc, has_xmp, has_exif, data_pos)) {
+    return false;
   }
 
-  if (features->has_xmp) ReadChunk(bitstream.data(), &pos, xmp);
-  if (features->has_exif) ReadChunk(bitstream.data(), &pos, exif);
+  Data preview;
+  if (has_preview) ReadChunk(data, &data_pos, &preview);
+  if (has_icc) ReadChunk(data, &data_pos, &image.icc);
 
+  const uint32_t chunk_size = DecodeVarInt(1, kMaxChunkSize, data, &data_pos);
+  if (data_pos + chunk_size > data_size) {
+    return false;
+  }
+  offset_till_codec_bytes = data_pos;
+  num_codec_bytes = chunk_size;
+  data_pos += chunk_size;
+
+  if (has_xmp) ReadChunk(data, &data_pos, &image.xmp);
+  if (has_exif) ReadChunk(data, &data_pos, &image.exif);
   return true;
 }
 
