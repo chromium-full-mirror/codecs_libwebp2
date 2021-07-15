@@ -43,10 +43,10 @@ parity.
 
 Side-by-side codec comparisons can be found at:
 
+-   [2021-07-13](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_07_13/index.html#crepuscular-rays-at-sunset-near-waterberg-plateau&AVIF-AOM=s&WEBP2=s&subset1)
 -   [2021-07-01](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_07_01/index.html#grimburgwalamsterdam&AVIF-AOM=s&WEBP2=s&subset1)
 -   [2021-06-08](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_06_08/index.html#meg-20110701-japan-expo-02&AVIF-AOM=s&WEBP2=s&subset1)
 -   [2021-04-20](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_04_20/index.html#mural-in-northeast-pavillion-thomas-jefferson-building-by-elmer-e-garnsey-11670u-edit&AVIF-AOM=s&WEBP2=s&subset1)
--   [2021-03-16](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_03_16/index.html#production-of-b-24-bombers-and-c-87-transports2&AVIF-AOM=s&WEBP2=s&subset1)
 
 ## Building
 
