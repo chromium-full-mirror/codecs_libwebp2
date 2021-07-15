@@ -14,15 +14,43 @@
 
 cmake_minimum_required(VERSION 3.10)
 
+# ##############################################################################
+# Project
+
 project(Container VERSION 1.0)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-add_library(container_lib container.cc)
+# ##############################################################################
+# Library
 
-enable_testing()
-add_executable(container_test test.cc)
-target_link_libraries(container_test container_lib)
-add_test(NAME container_test
-         COMMAND ${CMAKE_CURRENT_BINARY_DIR}/container_test)
+add_library(container_lib container.cc bit_packing.cc)
+
+# ##############################################################################
+# Tests
+
+# GoogleTest for easy-to-read tests. It requires pthread.
+find_package(GTest)
+find_package(Threads)
+
+if(GTEST_FOUND AND Threads_FOUND)
+  # Test helper library
+  add_library(testutil_lib testutil.cc)
+  target_link_libraries(
+    testutil_lib
+    PUBLIC container_lib
+    INTERFACE ${GTEST_BOTH_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+  target_include_directories(testutil_lib PUBLIC ${GTEST_INCLUDE_DIRS})
+  enable_testing()
+
+  add_executable(container_test container_test.cc)
+  target_link_libraries(container_test PRIVATE testutil_lib)
+  target_include_directories(container_test PRIVATE ${GTEST_INCLUDE_DIRS})
+  add_test(
+    NAME container_test
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/container_test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+else()
+  message(WARNING "GoogleTest or Threads is missing, tests are disabled.")
+endif()
