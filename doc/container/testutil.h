@@ -15,11 +15,7 @@
 #ifndef CONTAINER_TESTUTIL_H_
 #define CONTAINER_TESTUTIL_H_
 
-/* copybara:strip_begin(Googletest include paths) */
-#include "testing/base/public/gunit.h"
-/* copybara:strip_end_and_replace
 #include "gtest/gtest.h"
-*/
 
 #include "./container.h"
 
