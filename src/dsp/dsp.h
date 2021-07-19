@@ -696,11 +696,11 @@ typedef void (*WP2SSIMGetFunc)(const void* src1, size_t step1,
 // Same as above but handles the canvas edges, where the square does not fit.
 // 'center_x,y' are the coordinates of the center of the square and
 // 'width,height' are the dimensions of the whole canvas.
-typedef void (*WP2SSIMGetClippedFunc)(const void* src1, size_t step1,
-                                      const void* src2, size_t step2,
-                                      uint32_t center_x, uint32_t center_y,
-                                      uint32_t width, uint32_t height,
-                                      WP2DistoStats* const stats);
+typedef WP2DistoStats (*WP2SSIMGetClippedFunc)(const void* src1, size_t step1,
+                                               const void* src2, size_t step2,
+                                               uint32_t center_x,
+                                               uint32_t center_y,
+                                               uint32_t width, uint32_t height);
 
 extern WP2SSIMGetFunc WP2SSIMGet4x8u;  // 4 channels, unsigned 8-bit depth.
 extern WP2SSIMGetFunc WP2SSIMGet8u;    // Single channel, unsigned 8-bit depth.

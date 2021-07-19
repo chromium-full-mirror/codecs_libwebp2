@@ -79,15 +79,15 @@ double AccumulateSSIM(WP2SSIMGetFunc get, WP2SSIMGetClippedFunc get_clipped,
   double sum = 0.;
   for (y = 0; y < h0; ++y) {
     for (x = 0; x < w; ++x) {
-      WP2DistoStats stats;
-      get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
+      WP2DistoStats stats =
+          get_clipped(src, src_step, ref, ref_step, x, y, w, h);
       sum += calculation(bit_depth.num_bits, stats);
     }
   }
   for (; y < h1; ++y) {
     for (x = 0; x < w0; ++x) {
-      WP2DistoStats stats;
-      get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
+      WP2DistoStats stats =
+          get_clipped(src, src_step, ref, ref_step, x, y, w, h);
       sum += calculation(bit_depth.num_bits, stats);
     }
     const size_t y_src_off = (y - kWP2SSIMKernel) * src_step;
@@ -100,15 +100,15 @@ double AccumulateSSIM(WP2SSIMGetFunc get, WP2SSIMGetClippedFunc get_clipped,
       sum += calculation(bit_depth.num_bits, stats);
     }
     for (; x < w; ++x) {
-      WP2DistoStats stats;
-      get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
+      WP2DistoStats stats =
+          get_clipped(src, src_step, ref, ref_step, x, y, w, h);
       sum += calculation(bit_depth.num_bits, stats);
     }
   }
   for (; y < h; ++y) {
     for (x = 0; x < w; ++x) {
-      WP2DistoStats stats;
-      get_clipped(src, src_step, ref, ref_step, x, y, w, h, &stats);
+      WP2DistoStats stats =
+          get_clipped(src, src_step, ref, ref_step, x, y, w, h);
       sum += calculation(bit_depth.num_bits, stats);
     }
   }
@@ -586,9 +586,9 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     const uint8_t* const ptr2 = ref.GetRow8(0);
     if (metric_type == SSIM) {
       for (uint32_t c = 0; c < 4; ++c) {
-        WP2DistoStats stats;
-        WP2SSIMGetClipped4x8u(ptr1 + c, stride(), ptr2 + c, ref.stride(), x, y,
-                              width(), height(), &stats);
+        WP2DistoStats stats =
+            WP2SSIMGetClipped4x8u(ptr1 + c, stride(), ptr2 + c, ref.stride(), x,
+                                  y, width(), height());
         total += WP2SSIMCalculation(/*bit_depth=*/8, stats);
       }
       total = GetLogSSIM(total, 4.);

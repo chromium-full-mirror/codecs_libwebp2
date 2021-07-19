@@ -87,9 +87,9 @@ double WP2CsSSIMCalculation(uint32_t bit_depth, const WP2DistoStats& stats) {
 namespace {
 
 template <class T, uint32_t channel_step>
-void SSIMGetClipped_C(const void* src1, size_t step1,
-                      const void* src2, size_t step2, uint32_t xo, uint32_t yo,
-                      uint32_t W, uint32_t H, WP2DistoStats* const stats) {
+WP2DistoStats SSIMGetClipped_C(const void* src1, size_t step1, const void* src2,
+                               size_t step2, uint32_t xo, uint32_t yo,
+                               uint32_t W, uint32_t H) {
   const uint32_t ymin = (yo < kWP2SSIMKernel) ? 0 : yo - kWP2SSIMKernel;
   const uint32_t ymax = (yo + kWP2SSIMKernel > H - 1) ? H - 1
                                                       : yo + kWP2SSIMKernel;
@@ -98,22 +98,24 @@ void SSIMGetClipped_C(const void* src1, size_t step1,
                                                       : xo + kWP2SSIMKernel;
   src1 = (const T*)src1 + ymin * step1;
   src2 = (const T*)src2 + ymin * step2;
+  WP2DistoStats stats;
   for (uint32_t y = ymin; y <= ymax; ++y) {
     for (uint32_t x = xmin; x <= xmax; ++x) {
       const int32_t w =
           kWeight[kWP2SSIMKernel + x - xo] * kWeight[kWP2SSIMKernel + y - yo];
       const int32_t s1 = ((const T*)src1)[channel_step * x];
       const int32_t s2 = ((const T*)src2)[channel_step * x];
-      stats->w += w;
-      stats->xm += w * s1;
-      stats->ym += w * s2;
-      stats->xxm += w * s1 * s1;
-      stats->xym += w * s1 * s2;
-      stats->yym += w * s2 * s2;
+      stats.w += w;
+      stats.xm += w * s1;
+      stats.ym += w * s2;
+      stats.xxm += w * s1 * s1;
+      stats.xym += w * s1 * s2;
+      stats.yym += w * s2 * s2;
     }
     src1 = (const T*)src1 + step1;
     src2 = (const T*)src2 + step2;
   }
+  return stats;
 }
 
 template <class T, uint32_t channel_step>
