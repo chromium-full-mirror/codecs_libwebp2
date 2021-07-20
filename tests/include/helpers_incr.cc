@@ -560,7 +560,8 @@ class IncrementalDecodingTester {
     size_t offset, length;
     CHECK_OR_DIE(
         GetDecoder().TryGetFrameLocation(frame_index_, &offset, &length));
-    if (previous_input_size + 1 == available_input_size) {
+    if (previous_input_size + 1 == available_input_size &&
+        incr_size_step_ == 1) {
       // A frame was just decoded during a byte-by-byte incremental decoding.
       CHECK_OR_DIE(available_input_size == offset + length);
     } else {
