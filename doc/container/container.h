@@ -32,11 +32,6 @@ static constexpr uint32_t kContainerCodecAv1 = 0x9;
 static constexpr uint32_t kContainerCodecWp2 = 0x6;
 static constexpr uint32_t kImageDimNumBits = 14;  // Maximum width, height.
 
-// Maximum number of bytes used by a variable-length integer.
-static constexpr uint32_t kMaxVarIntLength = 4;
-// Maximum value expressible with a variable-length integer (included).
-static constexpr uint32_t kMaxVarInt =
-    (1u << (7 * (kMaxVarIntLength - 1) + 8)) - 1u;  // 29 bits
 // Maximum (inclusive) size of a data chunk.
 static constexpr uint32_t kMaxChunkSize = 1u << 29;  // ~500 MB
 

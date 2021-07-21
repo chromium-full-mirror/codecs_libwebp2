@@ -51,6 +51,14 @@ if(GTEST_FOUND AND Threads_FOUND)
     NAME container_test
     COMMAND ${CMAKE_CURRENT_BINARY_DIR}/container_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+  add_executable(bit_packing_test bit_packing_test.cc)
+  target_link_libraries(bit_packing_test PRIVATE testutil_lib)
+  target_include_directories(bit_packing_test PRIVATE ${GTEST_INCLUDE_DIRS})
+  add_test(
+    NAME bit_packing_test
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/bit_packing_test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 else()
   message(WARNING "GoogleTest or Threads is missing, tests are disabled.")
 endif()

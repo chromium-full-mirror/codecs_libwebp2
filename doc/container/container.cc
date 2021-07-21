@@ -15,8 +15,10 @@
 #include "./container.h"
 
 #include <algorithm>
-#include <cmath>
+#include <cassert>
 #include <iostream>
+
+#include "./bit_packing.h"
 
 namespace container {
 namespace {
@@ -25,110 +27,39 @@ static_assert(kMaxChunkSize - 1u <= kMaxVarInt,
               "The maximum chunk size cannot be represented with var ints.");
 
 //------------------------------------------------------------------------------
-// Helper classes to write or read bit-packed values.
 
-class BitPacker {
- public:
-  void EncodeBool(bool value) {
-    if ((current_bit_ & 7) == 0) bytes_.push_back(0);
-    if (value) bytes_[current_bit_ >> 3] |= (1 << (current_bit_ & 7));
-    ++current_bit_;
-  }
-  void EncodeUInt(uint32_t value, uint32_t min, uint32_t max) {
-    assert(value >= min && value <= max);
-    const uint32_t num_bits = std::lround(std::ceil(std::log2(1. + max - min)));
-    value -= min;
-    for (uint32_t i = 0; i < num_bits; ++i) EncodeBool((value >> i) & 1);
-  }
-  void Write(Data* bitstream) {
-    bitstream->insert(bitstream->end(), bytes_.begin(), bytes_.end());
-  }
-
- private:
-  Data bytes_;
-  size_t current_bit_ = 0;
-};
-
-class BitUnpacker {
- public:
-  BitUnpacker(const uint8_t bytes[], size_t num_bytes)
-      : bytes_(bytes), num_bytes_(num_bytes) {}
-  bool DecodeBool() {
-    if (current_bit_ * 8 >= num_bytes_) return !(error_ = true);
-    const bool value =
-        (bytes_[current_bit_ >> 3] & (1 << (current_bit_ & 7))) != 0;
-    ++current_bit_;
-    return value;
-  }
-  uint32_t DecodeUInt(uint32_t min, uint32_t max) {
-    assert(min <= max);
-    const uint32_t num_bits = std::lround(std::ceil(std::log2(1. + max - min)));
-    uint32_t v = 0;
-    for (uint32_t i = 0; i < num_bits; ++i) v |= (DecodeBool() ? (1 << i) : 0);
-    return min + v;
-  }
-  bool Ok() { return !error_; }
-  size_t GetNumReadBytes() { return (current_bit_ + 7) >> 3; }
-
- private:
-  const uint8_t* bytes_;
-  const size_t num_bytes_;
-  size_t current_bit_ = 0;
-  bool error_ = false;
-};
-
-//------------------------------------------------------------------------------
-// Helper functions to write or read variable-length integers.
-// These use one bit per byte to signal whether another byte is needed, up to 4.
-
-void EncodeVarInt(uint32_t value, uint32_t min_value, uint32_t max_value,
-                  Data* bitstream) {
-  assert(min_value <= value && value <= max_value);
-  value -= min_value;
-  max_value -= min_value;
-  assert(max_value <= kMaxVarInt);
-  if (max_value == 0) return;
-  while (value > 0x7F && max_value > 0xFF) {
-    bitstream->push_back((value & 0x7F) | 0x80);
-    value >>= 7;
-    max_value >>= 7;
-  }
-  bitstream->push_back(value);
+// Writes the bytes of a 'chunk', after writing its size as a variable int.
+void WriteChunk(const uint8_t chunk[], size_t chunk_size, Data& data) {
+  EncodeVarInt(chunk_size, 1, kMaxChunkSize, data);
+  data.insert(data.end(), chunk, chunk + chunk_size);
 }
 
-uint32_t DecodeVarInt(uint32_t min_value, uint32_t max_value,
-                      const uint8_t bitstream[],
-                      uint32_t* const bitstream_pos) {
-  assert(min_value <= max_value && max_value - min_value <= kMaxVarInt);
-  uint32_t value = 0, max_remaining_value = max_value - min_value;
-  bool read_next_byte = (max_remaining_value > 0);
-  for (uint32_t i = 0; read_next_byte; ++i, ++*bitstream_pos) {
-    const uint8_t byte = bitstream[*bitstream_pos];
-    read_next_byte = (max_remaining_value > 0xFF && (byte & 0x80));
-    // If there is a next byte, use only 7 bits in current 'byte'.
-    value |= static_cast<uint32_t>(read_next_byte ? (byte & 0x7F) : byte)
-             << (7 * i);
-    max_remaining_value >>= 7;
+// Reads the bytes of a 'chunk', after reading its size as a variable int.
+// Advances 'data_pos' accordingly.
+bool ReadChunk(const uint8_t data[], size_t data_size, uint32_t& data_pos,
+               Data& chunk) {
+  uint32_t chunk_size;
+  if (!DecodeVarInt(1, kMaxChunkSize, data, data_size, data_pos, chunk_size) ||
+      data_pos + chunk_size > data_size) {
+    return false;
   }
-  value += min_value;
-  return std::min(value, max_value);
+  assert(chunk.empty());
+  chunk.reserve(chunk_size);
+  chunk.insert(chunk.end(), data + data_pos, data + data_pos + chunk_size);
+
+  data_pos += chunk_size;
+  return true;
 }
 
-// Writes the bytes of a 'chunk', after writing its size as a VarInt.
-void WriteChunk(const Data& chunk, Data* bitstream) {
-  EncodeVarInt(chunk.size(), 1, kMaxChunkSize, bitstream);
-  bitstream->insert(bitstream->end(), chunk.begin(), chunk.end());
-}
-
-// Reads the bytes of a 'chunk', after reading its size as a VarInt.
-void ReadChunk(const uint8_t bitstream[], uint32_t* bitstream_pos,
-               Data* chunk) {
-  const uint32_t chunk_size =
-      DecodeVarInt(1, kMaxChunkSize, bitstream, bitstream_pos);
-  chunk->resize(chunk_size);
-  std::copy(bitstream + *bitstream_pos, bitstream + *bitstream_pos + chunk_size,
-            chunk->data());
-  *bitstream_pos += chunk_size;
+// Same as ReadChunk() but without copying bytes.
+bool SkipChunk(const uint8_t data[], size_t data_size, uint32_t& data_pos) {
+  uint32_t chunk_size;
+  if (!DecodeVarInt(1, kMaxChunkSize, data, data_size, data_pos, chunk_size) ||
+      data_pos + chunk_size > data_size) {
+    return false;
+  }
+  data_pos += chunk_size;
+  return true;
 }
 
 }  // namespace
@@ -152,8 +83,9 @@ bool DecodeRawPixels(const uint8_t data[], size_t data_size, Image& image) {
     if (data_size != image.width * image.height * (image.is_opaque ? 3 : 4)) {
       return false;
     }
-    image.pixels.resize(data_size);
-    std::copy(data, data + data_size, image.pixels.data());
+    assert(image.pixels.empty());
+    image.pixels.reserve(data_size);
+    image.pixels.insert(image.pixels.end(), data, data + data_size);
   } else {
     abort();  // TODO(yguyon): Implement
   }
@@ -188,22 +120,25 @@ void WrapContainer(const Image& image, const EncoderConfig& config,
     header.EncodeBool(image.loop_forever);
     header.EncodeUInt(image.background_color, 0u, 4294967295u);
   }
-  header.Write(&data);
+
+  data.reserve(header.GetNumBytes());
+  data.insert(data.end(), header.GetBytes(),
+              header.GetBytes() + header.GetNumBytes());
 
   if (config.create_preview) {
     abort();  // TODO(yguyon): Implement
   }
   if (!image.icc.empty()) {
-    WriteChunk(image.icc, &data);
+    WriteChunk(image.icc.data(), image.icc.size(), data);
   }
 
-  WriteChunk(Data(codec_bytes, codec_bytes + num_codec_bytes), &data);
+  WriteChunk(codec_bytes, num_codec_bytes, data);
 
   if (!image.xmp.empty()) {
-    WriteChunk(image.xmp, &data);
+    WriteChunk(image.xmp.data(), image.xmp.size(), data);
   }
   if (!image.exif.empty()) {
-    WriteChunk(image.exif, &data);
+    WriteChunk(image.exif.data(), image.exif.size(), data);
   }
 }
 
@@ -217,8 +152,8 @@ bool UnwrapContainerHeader(const uint8_t data[], size_t data_size, Image& image,
                            bool& has_xmp, bool& has_exif,
                            uint32_t& num_read_bytes) {
   BitUnpacker header(data, data_size);
-  const uint32_t tag = header.DecodeUInt(0, (1 << kContainerTagNumBits) - 1);
-  codec = header.DecodeUInt(0, (1 << kContainerCodecNumBits) - 1);
+  const uint32_t tag = header.DecodeUInt(kContainerTagNumBits);
+  codec = header.DecodeUInt(kContainerCodecNumBits);
   if (tag != kContainerTag) return false;
 
   image.width = header.DecodeUInt(1, 1 << kImageDimNumBits);
@@ -229,7 +164,7 @@ bool UnwrapContainerHeader(const uint8_t data[], size_t data_size, Image& image,
                  : (format == 1) ? Format::kAYUV10
                                  : Format::kUnknown;
   image.is_opaque = header.DecodeBool();
-  image.preview_color = header.DecodeUInt(0, (1 << 12) - 1);
+  image.preview_color = header.DecodeUInt(/*num_bits=*/12);
   has_preview = header.DecodeBool();
   has_icc = header.DecodeBool();
   has_xmp = header.DecodeBool();
@@ -237,7 +172,7 @@ bool UnwrapContainerHeader(const uint8_t data[], size_t data_size, Image& image,
   image.is_animation = header.DecodeBool();
   image.loop_forever = image.is_animation ? header.DecodeBool() : false;
   image.background_color =
-      image.is_animation ? header.DecodeUInt(0u, 4294967295u) : 0;
+      image.is_animation ? header.DecodeUInt(/*num_bits=*/32) : 0;
   num_read_bytes = header.GetNumReadBytes();
   return header.Ok();
 }
@@ -256,20 +191,24 @@ bool UnwrapContainer(const uint8_t data[], size_t data_size, Image& image,
     return false;
   }
 
-  Data preview;
-  if (has_preview) ReadChunk(data, &data_pos, &preview);
-  if (has_icc) ReadChunk(data, &data_pos, &image.icc);
+  if ((has_preview && !SkipChunk(data, data_size, data_pos)) ||
+      (has_icc && !ReadChunk(data, data_size, data_pos, image.icc))) {
+    return false;
+  }
 
-  const uint32_t chunk_size = DecodeVarInt(1, kMaxChunkSize, data, &data_pos);
-  if (data_pos + chunk_size > data_size) {
+  uint32_t chunk_size;
+  if (!DecodeVarInt(1, kMaxChunkSize, data, data_size, data_pos, chunk_size) ||
+      data_pos + chunk_size > data_size) {
     return false;
   }
   offset_till_codec_bytes = data_pos;
   num_codec_bytes = chunk_size;
   data_pos += chunk_size;
 
-  if (has_xmp) ReadChunk(data, &data_pos, &image.xmp);
-  if (has_exif) ReadChunk(data, &data_pos, &image.exif);
+  if ((has_xmp && !ReadChunk(data, data_size, data_pos, image.xmp)) ||
+      (has_exif && !ReadChunk(data, data_size, data_pos, image.exif))) {
+    return false;
+  }
   return true;
 }
 
