@@ -42,7 +42,6 @@ struct Slope {
 //------------------------------------------------------------------------------
 
 static constexpr uint32_t kMaxCertainty = 3;
-static constexpr int32_t kKernelSize = 5, kMaxDist = kKernelSize / 2;
 
 static void GetMinMax(const Plane16& src, Plane16& min, Plane16& max) {
   assert(min.w_ == max.w_ && min.h_ == max.h_);

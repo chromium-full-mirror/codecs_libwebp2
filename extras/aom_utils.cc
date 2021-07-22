@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <string>
 
 #include "examples/example_utils.h"
 #include "extras/ccsp_imageio.h"
@@ -1153,7 +1154,7 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
 //------------------------------------------------------------------------------
 
 // Mapping from aom option names to aome_enc_control_id enum values.
-constexpr std::pair<const char*, int> kAomOptions[] = {
+static const std::pair<const char*, int> kAomOptions[] = {
     {"use-reference", 7},
     {"roi-map", 8},
     {"activemap", 9},
