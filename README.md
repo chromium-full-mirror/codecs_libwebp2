@@ -59,7 +59,7 @@ On a Debian-like system the following should install everything you need for a
 minimal build:
 
 ```shell
-$ sudo apt-get install build-essential cmake
+$ sudo apt install build-essential cmake
 ```
 
 ### Compiling
@@ -469,9 +469,19 @@ issues, making sure to include:
     *   **tests/fuzz/\*** contains the fuzzing tools. See
         [OSS-Fuzz](https://github.com/google/oss-fuzz) for more information.
 
-### Google Test Integration
+### Testing
 
-A part of testing support is built using Google Test. To enable it the
+#### Dependencies
+
+The following dependencies are needed for some tests to pass:
+
+```shell
+$ sudo apt install libpng-dev libjpeg-dev libtiff-dev libgif-dev libwebp-dev
+```
+
+#### Google Test Integration
+
+Most tests have a dependency on the GoogleTest library. To run them all, the
 `WP2_ENABLE_TESTS` cmake variable must be turned on at cmake generation time (ON
 by default), and the `GTEST_SOURCE_DIR` cmake variable must be set to the path
 of the Google Test source directory (../googletest by default):
@@ -481,11 +491,28 @@ $ git clone https://github.com/google/googletest.git path/to/googletest
 $ cmake path/to/wp2 -DWP2_ENABLE_TESTS=ON -DGTEST_SOURCE_DIR=path/to/googletest
 ```
 
+Alternatively you may install the library instead. CMake should then be able to
+find it automatically afterwards:
+
+```shell
+$ sudo apt install libgtest-dev
+```
+
+#### Running the tests
+
 To run the tests you can use ctest after the build:
 
 ```shell
 $ make
 $ ctest
+```
+
+Or run them one by one from the `tests` source folder, so that the `testdata`
+folder is accessible:
+
+```shell
+$ cd ../tests
+$ ../build/tests/test_simple_encode
 ```
 
 ## Discussion
