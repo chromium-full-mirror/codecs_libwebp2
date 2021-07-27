@@ -14,7 +14,9 @@
 
 #include "./testutil.h"
 
+#include <fstream>
 #include <random>
+#include <string>
 
 #include "./container.h"
 
@@ -75,6 +77,26 @@ Image GenerateRandomImage() {
 }
 
 // -----------------------------------------------------------------------------
+
+Data LoadFile(const char file_name[]) {
+  const std::string dir_path =
+      "images/";
+
+  std::ifstream file(dir_path + file_name, std::ios::binary | std::ios::ate);
+  if (!file) {
+    return Data();
+  }
+
+  const auto file_size = file.tellg();
+  Data bytes(file_size * sizeof(char));
+
+  file.seekg(0);  // Rewind.
+  if (!file.read(reinterpret_cast<char*>(bytes.data()), file_size)) {
+    return Data();
+  }
+
+  return bytes;
+}
 
 }  // namespace testutil
 }  // namespace container

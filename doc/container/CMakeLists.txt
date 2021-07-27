@@ -25,7 +25,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 # ##############################################################################
 # Library
 
-add_library(container_lib container.cc bit_packing.cc)
+add_library(container_lib container.cc bit_packing.cc avif.cc)
 
 # ##############################################################################
 # Tests
@@ -58,6 +58,14 @@ if(GTEST_FOUND AND Threads_FOUND)
   add_test(
     NAME bit_packing_test
     COMMAND ${CMAKE_CURRENT_BINARY_DIR}/bit_packing_test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+  add_executable(avif_test avif_test.cc)
+  target_link_libraries(avif_test PRIVATE testutil_lib)
+  target_include_directories(avif_test PRIVATE ${GTEST_INCLUDE_DIRS})
+  add_test(
+    NAME avif_test
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/avif_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 else()
   message(WARNING "GoogleTest or Threads is missing, tests are disabled.")

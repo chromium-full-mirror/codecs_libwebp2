@@ -15,6 +15,7 @@
 #ifndef CONTAINER_TESTUTIL_H_
 #define CONTAINER_TESTUTIL_H_
 
+#include "gtest/gmock.h"
 #include "gtest/gtest.h"
 
 #include "./container.h"
@@ -29,6 +30,9 @@ void VerifyEqual(const Image& a, const Image& b);
 
 // Returns an image for testing.
 Image GenerateRandomImage();
+
+// Reads the file at 'file_path' and returns its content.
+Data LoadFile(const char file_name[]);
 
 // -----------------------------------------------------------------------------
 
