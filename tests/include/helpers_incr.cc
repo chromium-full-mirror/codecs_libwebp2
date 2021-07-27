@@ -500,7 +500,7 @@ class IncrementalDecodingTester {
 
     // To correctly compare the bool output of ReadFrame(), the next expected
     // frame must be the same, so skip what is needed.
-    cmp_idec.SkipNumNextFrames(frame_index_);
+    cmp_idec.SkipNumNextFrames(std::max(frame_index_, num_skipped_frames_));
 
     uint32_t cmp_duration_ms = 0;
     bool cmp_decoded_a_full_frame = cmp_idec.ReadFrame(&cmp_duration_ms);
