@@ -80,6 +80,10 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
                        ArgbBuffer* const decoded, std::string* const out,
                        double timing[2] = nullptr);
 
+// Decodes an AV1 (obu) bitstream.
+WP2Status DecodeAV1WithLibaom(const std::string& bitstream,
+                              ArgbBuffer* const decoded);
+
 // Parses an option of libaom of the from "option-name=value", e.g. "aq-mode=1".
 // Sets 'option_enum' to the corresponding enum value for use with
 // 'aom_codec_control', and 'option_value' to the provided value.
@@ -89,7 +93,7 @@ WP2_NO_DISCARD bool ParseLibaomOption(const std::string& str,
                                       int* const option_enum,
                                       int* const option_value);
 
-// Returns an "ivf" container header for an av1 file.
+// Returns an "ivf" container header for an AV1 (obu) bitstream.
 std::string IvfStillImageHeader(uint32_t width, uint32_t height,
                                 uint32_t bitstream_size);
 

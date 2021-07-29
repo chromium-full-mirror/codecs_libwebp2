@@ -18,10 +18,12 @@
 #ifndef WP2_COMMON_AV1_COMMON_H_
 #define WP2_COMMON_AV1_COMMON_H_
 
-#if defined(WP2_HAVE_AOM)
 
 #include "src/wp2/base.h"
+
+#if defined(WP2_HAVE_AOM)
 #include "aom/aom_codec.h"
+#endif
 
 namespace WP2 {
 
@@ -45,6 +47,7 @@ class Cleaner {
   ReturnedType (*dtor_)(TypeToDestruct*);
 };
 
+#if defined(WP2_HAVE_AOM)
 // Maps AV1 error codes to WP2 enums.
 static WP2Status MapAomStatus(aom_codec_err_t aom_status) {
   switch (aom_status) {
@@ -70,11 +73,11 @@ static WP2Status MapAomStatus(aom_codec_err_t aom_status) {
       return WP2_STATUS_LAST;
   }
 }
+#endif  // defined(WP2_HAVE_AOM)
 
 //------------------------------------------------------------------------------
 
 }  // namespace WP2
 
-#endif  // defined(WP2_HAVE_AOM)
 
 #endif  // WP2_COMMON_AV1_COMMON_H_

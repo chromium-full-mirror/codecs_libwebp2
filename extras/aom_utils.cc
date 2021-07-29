@@ -695,7 +695,9 @@ WP2Status EncodeAV1WithLibaom(const ArgbBuffer& image, const ParamsAV1& params,
   return WP2_STATUS_OK;
 }
 
-// Decodes 'bitstream' into 'decoded'.
+// Decodes 'bitstream' into 'decoded'. 'ref' is only needed when debug
+// information (blocks, transforms, quant) is requested, in order to get the
+// width/height.
 WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
                               const std::string bitstream,
                               ArgbBuffer* const decoded, double* const timing,
@@ -743,7 +745,7 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
   bool ok = false;
   while ((img = aom_codec_get_frame(&codec, &iter)) != NULL) {
     YUVPlane yuv;
-    WP2_CHECK_STATUS(yuv.Resize(ref.width(), ref.height(), /*pad=*/1,
+    WP2_CHECK_STATUS(yuv.Resize(img->d_w, img->d_h, /*pad=*/1,
                                 /*has_alpha=*/false, !params.use_yuv444));
     yuv.Y.From(img->planes[AOM_PLANE_Y], img->stride[AOM_PLANE_Y], -16);
     yuv.U.From(img->planes[AOM_PLANE_U], img->stride[AOM_PLANE_U], -128);
@@ -990,22 +992,26 @@ WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
   }
 }
 
+WP2Status DecodeAV1WithLibaom(const std::string& bitstream,
+                              ArgbBuffer* const decoded) {
+  return DecodeAV1WithLibaom(ArgbBuffer(), ParamsAV1(), bitstream, decoded,
+                             /*timing=*/nullptr, /*blocks=*/nullptr,
+                             /*transforms=*/nullptr, /*quant=*/nullptr);
+}
+
 #else
 
-WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
-                      ArgbBuffer* const decoded, std::string* const out,
-                      double timing[], std::vector<Rectangle>* const blocks,
-                      std::vector<Rectangle>* const transforms,
-                      QuantAV1* const quant) {
-  (void)ref;
-  (void)params;
-  (void)decoded;
-  (void)out;
-  (void)timing;
-  (void)blocks;
-  (void)transforms;
-  (void)quant;
+WP2Status CompressAV1(const ArgbBuffer&, const ParamsAV1&, ArgbBuffer* const,
+                      std::string* const, double[],
+                      std::vector<Rectangle>* const,
+                      std::vector<Rectangle>* const, QuantAV1* const) {
   fprintf(stderr, "CompressAV1: AOM support not enabled at compile time.\n");
+  return WP2_STATUS_UNSUPPORTED_FEATURE;
+}
+
+WP2Status DecodeAV1WithLibaom(const std::string&, ArgbBuffer* const) {
+  fprintf(stderr,
+          "DecodeAV1WithLibaom: AOM support not enabled at compile time.\n");
   return WP2_STATUS_UNSUPPORTED_FEATURE;
 }
 
