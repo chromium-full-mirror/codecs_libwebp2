@@ -110,6 +110,7 @@ void Help() {
   opt.Add("-a option=value", "extra option for libaom");
   opt.Add("-quiet", "minimal output");
   opt.Add("-avif", "write as AVIF");
+  opt.Add("-ivf", "write as ivf file (incompatible with --avif)");
   opt.Add("-libgav1", "use libgav1 decoder");
   opt.Add("-h", "this help");
   opt.Print();
@@ -135,6 +136,7 @@ int main(int argc, const char* argv[]) {
   bool print_quant = false;
   bool quiet = false;
   bool use_avif = false;
+  bool use_ivf = false;
   for (int c = 1; c < argc; ++c) {
     if (!strcmp(argv[c], "-d") && c + 1 < argc) {
       encoded_path = argv[++c];
@@ -254,6 +256,8 @@ int main(int argc, const char* argv[]) {
       quiet = true;
     } else if (!strcmp(argv[c], "-avif")) {
       use_avif = true;
+    } else if (!strcmp(argv[c], "-ivf")) {
+      use_ivf = true;
     } else if (!strcmp(argv[c], "-libgav1")) {
       params.use_libgav1_decoder = true;
     } else if (!strcmp(argv[c], "-h")) {
@@ -268,6 +272,10 @@ int main(int argc, const char* argv[]) {
   if (input_path.empty()) {
     fprintf(stderr, "Missing input filename!\n");
     Help();
+    return 255;
+  }
+  if (use_avif && use_ivf) {
+    fprintf(stderr, "--ivf and --avif are incompatible\n");
     return 255;
   }
   if (decoded_path_from_input) {
@@ -350,6 +358,12 @@ int main(int argc, const char* argv[]) {
           printf("\tV quant, DC: %d AC: %d\n", quant.v_dequant[s][0],
                  quant.v_dequant[s][1]);
         }
+      }
+
+      if (use_ivf) {
+        bits =
+            WP2::IvfStillImageHeader(ref.width(), ref.height(), bits.size()) +
+            bits;
       }
 
       // Don't display the distortion if there is debug info in the image.

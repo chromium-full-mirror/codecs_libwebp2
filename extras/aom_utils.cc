@@ -662,13 +662,13 @@ WP2Status FirstPassAV1(const ArgbBuffer& ref, const ParamsAV1& params,
 
 //------------------------------------------------------------------------------
 
-// Encodes 'image' into 'bitsteam'.
+// Encodes 'image' into 'bitstream'.
 WP2Status EncodeAV1WithLibaom(const ArgbBuffer& image, const ParamsAV1& params,
                               aom_fixed_buf_t stats,
-                              std::string* const bitsteam,
+                              std::string* const bitstream,
                               double* const timing) {
-  WP2_CHECK_OK(bitsteam != nullptr, WP2_STATUS_NULL_PARAMETER);
-  bitsteam->clear();
+  WP2_CHECK_OK(bitstream != nullptr, WP2_STATUS_NULL_PARAMETER);
+  bitstream->clear();
 
   aom_image_t raw;
   WP2_CHECK_STATUS(CreateAV1Img(image, &raw, params.use_yuv444));
@@ -683,11 +683,11 @@ WP2Status EncodeAV1WithLibaom(const ArgbBuffer& image, const ParamsAV1& params,
                                                           aom_codec_destroy);
   WP2_CHECK_STATUS(ConfigureCodec(params, &codec));
   const double start_time = GetStopwatchTime();
-  if (encode_frame(&codec, &raw, 0, kFlags, bitsteam, false)) {
+  if (encode_frame(&codec, &raw, 0, kFlags, bitstream, false)) {
     fprintf(stderr, "!?! first calls to encode_frame() should 'fail'!\n");
     return WP2_STATUS_BITSTREAM_ERROR;
   }
-  while (encode_frame(&codec, NULL, -1, 0, bitsteam)) { /* flush encoder */
+  while (encode_frame(&codec, NULL, -1, 0, bitstream)) { /* flush encoder */
   }
   if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
   CHECK_AOM_STATUS(aom_codec_destroy(&codec), nullptr);
@@ -1318,6 +1318,75 @@ bool ParseLibaomOption(const std::string& str, int* const option_enum,
     return false;
   }
   return true;
+}
+
+//------------------------------------------------------------------------------
+// IVF
+
+namespace {
+
+static void WriteLittleEndian16(uint16_t v, char* output) {
+  uint8_t* mem = (uint8_t*)output;
+
+  mem[0] = (uint8_t)((v >> 0) & 0xff);
+  mem[1] = (uint8_t)((v >> 8) & 0xff);
+}
+
+static void WriteLittleEndian32(uint32_t v, char* output) {
+  uint8_t* mem = (uint8_t*)output;
+
+  mem[0] = (uint8_t)((v >> 0) & 0xff);
+  mem[1] = (uint8_t)((v >> 8) & 0xff);
+  mem[2] = (uint8_t)((v >> 16) & 0xff);
+  mem[3] = (uint8_t)((v >> 24) & 0xff);
+}
+
+// Ivf file header.
+// See https://wiki.multimedia.cx/index.php/IVF
+std::string IvfFileHeader(uint32_t width, uint32_t height,
+                          uint32_t timebase_denum, uint32_t timebase_num,
+                          uint32_t fourcc, uint32_t num_frames) {
+  std::string header;
+  header.resize(32);
+  header[0] = 'D';
+  header[1] = 'K';
+  header[2] = 'I';
+  header[3] = 'F';
+  WriteLittleEndian16(0, &header[0] + 4);                // version
+  WriteLittleEndian16(32, &header[0] + 6);               // header size
+  WriteLittleEndian32(fourcc, &header[0] + 8);           // codec fourcc
+  WriteLittleEndian16(width, &header[0] + 12);           // width in pixels
+  WriteLittleEndian16(height, &header[0] + 14);          // height in pixels
+  WriteLittleEndian32(timebase_denum, &header[0] + 16);  // timebase denominator
+  WriteLittleEndian32(timebase_num, &header[0] + 20);    // timebase numerator
+  WriteLittleEndian32(num_frames, &header[0] + 24);  // number of frames in file
+  WriteLittleEndian32(0, &header[0] + 28);           // unused
+  return header;
+}
+
+// Ivf frame header.
+// See https://wiki.multimedia.cx/index.php/IVF
+// 'timestamp' is a 64-bit presentation timestamp in unit timebase, where
+// timebase = timebase_num/timebase_denum (in file header).
+// 'frame_size' is the frame data size in bytes.
+std::string IvfFrameHeader(uint64_t timestamp, uint32_t frame_size) {
+  std::string header;
+  header.resize(12);
+  WriteLittleEndian32(frame_size, &header[0]);
+  WriteLittleEndian32((uint32_t)(timestamp & 0xFFFFFFFF), &header[0] + 4);
+  WriteLittleEndian32((uint32_t)(timestamp >> 32), &header[0] + 8);
+  return header;
+}
+
+constexpr int kAv1Fourcc = 0x31305641;
+
+}  // namespace
+
+std::string IvfStillImageHeader(uint32_t width, uint32_t height,
+                                uint32_t bitstream_size) {
+  return IvfFileHeader(width, height, /*timebase_denum=*/1, /*timebase_num=*/0,
+                       kAv1Fourcc, /*num_frames=*/0) +
+         IvfFrameHeader(/*timestamp=*/0, bitstream_size);
 }
 
 //------------------------------------------------------------------------------

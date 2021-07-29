@@ -89,6 +89,10 @@ WP2_NO_DISCARD bool ParseLibaomOption(const std::string& str,
                                       int* const option_enum,
                                       int* const option_value);
 
+// Returns an "ivf" container header for an av1 file.
+std::string IvfStillImageHeader(uint32_t width, uint32_t height,
+                                uint32_t bitstream_size);
+
 }  // namespace WP2
 
 #endif  // WP2_EXTRAS_AOM_UTILS_H_
