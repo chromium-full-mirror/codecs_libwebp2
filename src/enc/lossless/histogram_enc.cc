@@ -622,12 +622,15 @@ void HistoQueue::MaybeUpdateHead(HistogramPair* const pair) {
 
 // Combines histograms by continuously choosing the one with the highest cost
 // reduction.
-// Returns true on success, false otherwise.
 static WP2Status HistogramCombineGreedy(HistogramSet* const image_histo,
                                         SegmentImgWrapper* const segments,
                                         PopulationAnalyzer* const analyzer,
                                         const WP2::ProgressRange& progress) {
   const uint32_t image_histo_size = image_histo->histograms_.size();
+
+  // The number of loops is not trivial to compute so the ProgressHook is called
+  // for interruptability but there is no advancement.
+  WP2::ProgressScale loop_progress(progress, 0.);
 
   // Priority queue of histogram pairs.
   HistoQueue queue;
@@ -637,27 +640,25 @@ static WP2Status HistogramCombineGreedy(HistogramSet* const image_histo,
   for (uint32_t i = 0; i < image_histo_size; ++i) {
     for (uint32_t j = i + 1; j < image_histo_size; ++j) {
       WP2_CHECK_STATUS(queue.Push(i, j, 0.));
+      WP2_CHECK_STATUS(loop_progress.AdvanceBy(0.));
     }
   }
-  WP2_CHECK_STATUS(progress.AdvanceBy(0.5));
 
   while (queue.ValidIndices().size() > 1 && !queue.empty()) {
     const uint32_t idx1 = queue.front().idx1;
     queue.MergeFront(segments);
 
-     // Push new pairs formed with combined histogram to the queue.
+    // Push new pairs formed with combined histogram to the queue.
     for (uint32_t i : queue.ValidIndices()) {
       if (i != idx1) {
         WP2_CHECK_STATUS(queue.Push(idx1, i, /*threshold=*/0.));
-        // The number of loops is not trivial to compute so the ProgressHook is
-        // called for interruptability but there is no advancement.
-        WP2_CHECK_STATUS(progress.AdvanceBy(0.));
+        WP2_CHECK_STATUS(loop_progress.AdvanceBy(0.));
       }
     }
   }
   // Remove histograms that have been merged.
   WP2_CHECK_STATUS(queue.RemoveInvalidHistograms());
-  WP2_CHECK_STATUS(progress.AdvanceBy(0.5));
+  WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;
 }
 
