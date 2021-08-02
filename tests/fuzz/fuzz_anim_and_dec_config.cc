@@ -19,6 +19,7 @@
 
 #include <vector>
 
+#include "src/dsp/math.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 #include "tests/fuzz/fuzz_utils.h"
@@ -72,13 +73,22 @@ class FuzzedParametersSetup : public FuzzedParameters {
 };
 
 void LimitSetupForBigImages(const Data& bitstream,
-                             IncrementalDecodingTestSetup* const setup) {
+                            IncrementalDecodingTestSetup* const setup) {
   WP2::BitstreamFeatures features;
   if (features.Read(bitstream.bytes, bitstream.size) == WP2_STATUS_OK) {
-    if (features.width * features.height <= (1u << 20)) {
-      // Small image, leave as is.
-    } else {
+    const uint32_t num_decodings =
+        WP2::DivCeil(bitstream.size, setup->incr_size_step);
+    // The threshold was found empirically.
+    const uint32_t max_num_pixels =
+        std::max(1u << 10, (1u << 25) / num_decodings);
+    if (features.width * features.height > max_num_pixels) {
+      // Too many pixels and/or too many decodings so modify the 'setup' to
+      // avoid timeouts by disabling tests that use heavy memset()/memcpy()
+      // which slow sanitizers down considerably:
       setup->compare_with_single_chunk = false;
+      if (setup->decoder_type == DecoderType::kSwappingCustom) {
+        setup->decoder_type = DecoderType::kArray;
+      }
     }
   }
 }
