@@ -19,22 +19,22 @@ set -e
 
 if [ "$#" -ge 1 ]; then
   # eval so that the passed in directory can contain variables.
-  BINARY_DIR=$(eval echo ${1})
+  BINARY_DIR="$(eval echo "$1")"
 else
   # assume "tests" is the current directory
   BINARY_DIR=..
 fi
 if [ "$#" -ge 2 ]; then
-  TESTDATA_DIR=$(eval echo ${2})
+  TESTDATA_DIR="$(eval echo "$2")"
 else
   TESTDATA_DIR=./testdata
 fi
 
-CWP2=${BINARY_DIR}/cwp2
-DWP2=${BINARY_DIR}/dwp2
-GET_DISTO=${BINARY_DIR}/get_disto
+CWP2="${BINARY_DIR}/cwp2"
+DWP2="${BINARY_DIR}/dwp2"
+GET_DISTO="${BINARY_DIR}/get_disto"
 
-SRC_FILE=${TESTDATA_DIR}/logo.png
+SRC_FILE="${TESTDATA_DIR}/logo.png"
 TMP_WP2=/tmp/test_memory.wp2
 TMP_PPM=/tmp/test_memory.ppm
 TMP_PNG=/tmp/test_memory.png
@@ -46,27 +46,27 @@ echo "*** testing cwp2"
 for effort in 2 3 4 5 6; do
   for fail_at in $(seq 1 50); do
     opts="${SRC_FILE} -effort ${effort} -mem_fail ${fail_at}"
-    ${CWP2} "${opts}" -q 75 &> /dev/null
-    ${CWP2} "${opts}" -q 100 &> /dev/null
+    "${CWP2}" "${opts}" -q 75 > /dev/null 2>&1
+    "${CWP2}" "${opts}" -q 100 > /dev/null 2>&1
   done
 done
 
 # test dwp2
 echo "*** testing dwp2"
-${CWP2} -o ${TMP_WP2} "${SRC_FILE}" -q 75
+"${CWP2}" -o "${TMP_WP2}" "${SRC_FILE}" -q 75
 for fail_at in $(seq 1 50); do
-  ${DWP2} "${TMP_WP2}" -mem_fail ${fail_at} &> /dev/null
+  "${DWP2}" "${TMP_WP2}" -mem_fail "${fail_at}" > /dev/null 2>&1
 done
 
 # test get_disto
 echo "*** testing get_disto"
-${DWP2} "${TMP_WP2}" -o "${TMP_PNG}"
+"${DWP2}" "${TMP_WP2}" -o "${TMP_PNG}"
 for fail_at in $(seq 1 50); do
-  ${GET_DISTO} "${SRC_FILE}" "${TMP_PNG}" \
-    -mem_fail ${fail_at} &> /dev/null
+  "${GET_DISTO}" "${SRC_FILE}" "${TMP_PNG}" \
+    -mem_fail "${fail_at}" > /dev/null 2>&1
 done
 
-rm -f ${TMP_WP2} ${TMP_PPM} ${TMP_PNG}
+rm -f "${TMP_WP2}" "${TMP_PPM}" "${TMP_PNG}"
 
 set -e
 

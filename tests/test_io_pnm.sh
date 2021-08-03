@@ -19,30 +19,30 @@ set -ex
 
 if [ "$#" -ge 1 ]; then
   # eval so that the passed in directory can contain variables.
-  BINARY_DIR=$(eval echo ${1})
+  BINARY_DIR="$(eval echo "$1")"
 else
   # assume "tests" is the current directory
   BINARY_DIR=..
 fi
 if [ "$#" -ge 2 ]; then
-  TESTDATA_DIR=$(eval echo ${2})
+  TESTDATA_DIR="$(eval echo "$2")"
 else
   TESTDATA_DIR=./testdata
 fi
-TESTDATA_DIR=${TESTDATA_DIR}/specific
+TESTDATA_DIR="${TESTDATA_DIR}/specific"
 
-CWP2=${BINARY_DIR}/cwp2
-GET_DISTO=${BINARY_DIR}/get_disto
+CWP2="${BINARY_DIR}/cwp2"
+GET_DISTO="${BINARY_DIR}/get_disto"
 
 TMP_WP2=/tmp/test_io_pnm.wp2
 
 # check exotic PNM files
 do_check_psnr() {
-  local file=$1
+  file="$1"
   shift
-  local min_psnr=$1
+  min_psnr="$1"
   shift
-  ${GET_DISTO} -min "${min_psnr}" "${TMP_WP2}" "${TESTDATA_DIR}/${file}" "$@"
+  "${GET_DISTO}" -min "${min_psnr}" "${TMP_WP2}" "${TESTDATA_DIR}/${file}" "$@"
 }
 
 for v in 37 255 1001 65535; do
@@ -52,17 +52,17 @@ for v in 37 255 1001 65535; do
   fi
   opt="-q 100 -quiet"
 
-  ${CWP2} "${TESTDATA_DIR}/bug449_${v}.pgm" ${opt} -o "${TMP_WP2}"
-  do_check_psnr bug449_ref_gray.png ${min_psnr}
+  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}.pgm" ${opt} -o "${TMP_WP2}"
+  do_check_psnr bug449_ref_gray.png "${min_psnr}"
 
-  ${CWP2} "${TESTDATA_DIR}/bug449_${v}_g.pam" ${opt} -o "${TMP_WP2}"
-  do_check_psnr bug449_ref_gray_alpha.png ${min_psnr}
+  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}_g.pam" ${opt} -o "${TMP_WP2}"
+  do_check_psnr bug449_ref_gray_alpha.png "${min_psnr}"
 
-  ${CWP2} "${TESTDATA_DIR}/bug449_${v}.ppm" ${opt} -o "${TMP_WP2}"
-  do_check_psnr bug449_ref_noalpha.png ${min_psnr}
+  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}.ppm" ${opt} -o "${TMP_WP2}"
+  do_check_psnr bug449_ref_noalpha.png "${min_psnr}"
 
-  ${CWP2} "${TESTDATA_DIR}/bug449_${v}.pam" ${opt} -o "${TMP_WP2}"
-  do_check_psnr bug449_ref.png ${min_psnr}
+  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}.pam" ${opt} -o "${TMP_WP2}"
+  do_check_psnr bug449_ref.png "${min_psnr}"
 done
 
 echo "ALL OK"

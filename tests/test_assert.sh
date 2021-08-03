@@ -20,13 +20,13 @@ set -ex
 
 if [ "$#" -ge 1 ]; then
   # eval so that the passed in directory can contain variables.
-  BINARY_DIR=$(eval echo ${1})
+  BINARY_DIR="$(eval echo "$1")"
 else
   # assume "tests" is the current directory
   BINARY_DIR=.
 fi
 
-ASSERT_BIN=${BINARY_DIR}/test_assert_bin
+ASSERT_BIN="${BINARY_DIR}/test_assert_bin"
 
 if [ ! -f "${ASSERT_BIN}" ]; then
   echo "${ASSERT_BIN} not found."
@@ -34,7 +34,7 @@ if [ ! -f "${ASSERT_BIN}" ]; then
 fi
 
 # Check if we have assert support.
-if ${ASSERT_BIN} 0 > /dev/null 2> /dev/null; then
+if "${ASSERT_BIN}" 0 > /dev/null 2> /dev/null; then
   echo "No assert support."
   exit 0
 fi
@@ -45,7 +45,7 @@ for i in $(
 ); do
   printf "Case %s ... " "${i}"
   # Check that the binary does not crash.
-  if ${ASSERT_BIN} "${i}" > /dev/null 2> /dev/null; then
+  if "${ASSERT_BIN}" "${i}" > /dev/null 2> /dev/null; then
     echo "PASSED."
     # If it does not crash, i has to be < 0.
     if [ "${i}" -gt 0 ]; then

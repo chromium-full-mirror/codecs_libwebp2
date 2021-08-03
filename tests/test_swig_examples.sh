@@ -22,17 +22,17 @@ set -ex
 
 if [ "$#" -ge 1 ]; then
   # 'eval' so that the passed in directory can contain variables.
-  BINARY_DIR=$(eval echo ${1})
+  BINARY_DIR="$(eval echo "$1")"
 else
   BINARY_DIR=../swig/examples
 fi
 if [ "$#" -ge 2 ]; then
-  GET_DISTO_DIR=$(eval echo ${2})
+  GET_DISTO_DIR="$(eval echo "$2")"
 else
   GET_DISTO_DIR=../swig/examples
 fi
 if [ "$#" -ge 3 ]; then
-  TESTDATA_DIR=$(eval echo ${3})
+  TESTDATA_DIR="$(eval echo "$3")"
 else
   TESTDATA_DIR=./testdata
 fi
@@ -46,21 +46,21 @@ SRC_FILE2="${TESTDATA_DIR}/animation1.webp"
 TMP_FILE="/tmp/test_swig_examples.wp2"
 DST_FILE="/tmp/test_swig_examples.png"
 FRAMES_FOLDER="/tmp/test_swig_examples/"
-mkdir -p ${FRAMES_FOLDER}
+mkdir -p "${FRAMES_FOLDER}"
 
 ${CWP2} --version
 ${DWP2} --version
 
 # Image
-${CWP2} ${SRC_FILE0} -o ${TMP_FILE} -s 0
-${DWP2} ${TMP_FILE} -o ${DST_FILE}
-${GET_DISTO} ${SRC_FILE0} ${DST_FILE}
+${CWP2} "${SRC_FILE0}" -o "${TMP_FILE}" -s 0
+${DWP2} "${TMP_FILE}" -o "${DST_FILE}"
+"${GET_DISTO}" "${SRC_FILE0}" "${DST_FILE}"
 
 # Animation
-${CWP2} --frames ${SRC_FILE0} 1000 ${SRC_FILE1} 1000 -o ${TMP_FILE} -s 0
-${DWP2} ${TMP_FILE} -o ${DST_FILE} -f ${FRAMES_FOLDER}
-${GET_DISTO} ${SRC_FILE0} "${FRAMES_FOLDER}/frame0_1000ms.png"
-${GET_DISTO} ${SRC_FILE1} "${FRAMES_FOLDER}/frame1_1000ms.png"
+${CWP2} --frames "${SRC_FILE0}" 1000 "${SRC_FILE1}" 1000 -o "${TMP_FILE}" -s 0
+${DWP2} "${TMP_FILE}" -o "${DST_FILE}" -f "${FRAMES_FOLDER}"
+"${GET_DISTO}" "${SRC_FILE0}" "${FRAMES_FOLDER}/frame0_1000ms.png"
+"${GET_DISTO}" "${SRC_FILE1}" "${FRAMES_FOLDER}/frame1_1000ms.png"
 
-${CWP2} ${SRC_FILE2} -o ${TMP_FILE} -s 0
-${DWP2} ${TMP_FILE} -o ${DST_FILE} -f ${FRAMES_FOLDER}
+${CWP2} "${SRC_FILE2}" -o "${TMP_FILE}" -s 0
+${DWP2} "${TMP_FILE}" -o "${DST_FILE}" -f "${FRAMES_FOLDER}"
