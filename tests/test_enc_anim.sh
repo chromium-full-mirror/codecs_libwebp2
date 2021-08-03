@@ -42,8 +42,8 @@ mkdir -p "${DST_DIR}"
 echo "-f test"
 ${CWP2} \
   -f "${TESTDATA_DIR}/source0.pgm" 50 \
-     "${TESTDATA_DIR}/source1.png" 75 \
-     "${TESTDATA_DIR}/source2.tiff" 100 \
+  "${TESTDATA_DIR}/source1.png" 75 \
+  "${TESTDATA_DIR}/source2.tiff" 100 \
   -o "${DST_DIR}/anim.wp2" -effort 0 -progress
 
 echo "-frames test"
@@ -69,9 +69,9 @@ ${CWP2} -f "${TESTDATA_DIR}/source3_222x167.jpg" 50 -effort 0
 
 echo "decode still image as an animation"
 ${CWP2} "${TESTDATA_DIR}/source3_222x167.jpg" \
-        -o "${DST_DIR}/still.wp2" -effort 0
+  -o "${DST_DIR}/still.wp2" -effort 0
 ${DWP2} "${DST_DIR}/still.wp2" -o "${DST_DIR}/" -frames -force -BT -v \
-        -dblk_filter -drct_filter -rstr_filter
+  -dblk_filter -drct_filter -rstr_filter
 
 echo "test file paths that begin with a dash"
 cp -f "${TESTDATA_DIR}/source0.pgm" "${DST_DIR}/-source0.pgm"

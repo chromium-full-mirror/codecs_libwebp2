@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 # check ICC (and metadata from command-line)
 
 set -e
@@ -49,36 +48,36 @@ TMP_WP2_A2=/tmp/test_icc_anim_2.wp2
 
 ${CWP2} ${SRC_FILE} -o ${TMP_WP2_1}
 ${CWP2} ${SRC_FILE} -o ${TMP_WP2_2} -nometadata
-diff ${TMP_WP2_1} ${TMP_WP2_2} && die  # file *should* differ
+diff ${TMP_WP2_1} ${TMP_WP2_2} && die # file *should* differ
 
 # Same but as an animation:
 ${CWP2} -f ${SRC_FILE} 1 ${TMP_WP2_1} 1 -o ${TMP_WP2_A1} -effort 0
 ${CWP2} -f ${SRC_FILE} 1 ${TMP_WP2_1} 1 -o ${TMP_WP2_A2} -effort 0 -nometadata
-diff ${TMP_WP2_A1} ${TMP_WP2_A2} && die  # file *should* differ
+diff ${TMP_WP2_A1} ${TMP_WP2_A2} && die # file *should* differ
 # -f flag and animated input have different pipelines:
 ${CWP2} ${TMP_WP2_A1} -o ${TMP_WP2_A2}
 ${CWP2} ${TMP_WP2_A1} -o ${TMP_WP2_A1} -nometadata
-diff ${TMP_WP2_A1} ${TMP_WP2_A2} && die  # file *should* differ
+diff ${TMP_WP2_A1} ${TMP_WP2_A2} && die # file *should* differ
 
 echo "*** test replace metadata"
 for type in iccp xmp exif; do
   echo "  type=${type}"
   ${CWP2} ${SRC_FILE} -o ${TMP_WP2_2} -metadata ${type} \
-                      ${ICC_DIR}/ICC_524_type1.bin
-  diff ${TMP_WP2_1} ${TMP_WP2_2} && die  # file *should* differ
+    ${ICC_DIR}/ICC_524_type1.bin
+  diff ${TMP_WP2_1} ${TMP_WP2_2} && die # file *should* differ
 done
 
 echo "*** test predefined ICC"
 # these predefined ICC profile only cost 2 bytes of storage
 ${CWP2} ${SRC_FILE} -o ${TMP_WP2_1} -nometadata
-base_size=`${filesize} ${TMP_WP2_1}`
+base_size=$(${filesize} ${TMP_WP2_1})
 for bin_file in ICC_524_type1.bin ICC_3144_type2.bin ICC_3144_type3.bin; do
   ${CWP2} ${SRC_FILE} -o ${TMP_WP2_2} -metadata iccp ${ICC_DIR}/${bin_file}
-  size=`${filesize} ${TMP_WP2_2}`
+  size=$(${filesize} ${TMP_WP2_2})
   diff=$((${size} - ${base_size}))
   if [[ $diff != 2 ]]; then
     echo "difference between file size should be '2'. Got $size and $base_size."
-    exit 1;
+    exit 1
   fi
 done
 

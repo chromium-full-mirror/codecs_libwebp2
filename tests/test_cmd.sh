@@ -59,14 +59,14 @@ ${VWP2} -h
 ${VWP2} -q 30 -nomt -noasm
 ${VWP2} -quants 30,64,12,64,13,432,12,125,32 -nomt -noasm -mem_traffic
 ${VWP2} -info -d -alt /tmp -ps 3 -effort 3 -segments 1 -pass 2 \
-        -nometadata -bt 2 -q 50 -set_block 1 2 6 9 -h
+  -nometadata -bt 2 -q 50 -set_block 1 2 6 9 -h
 
 ${GET_DISTO} -version
 ${GET_DISTO} -h
 
 # test -d option
 ${CWP2} -o ${TMP_FILE} ${SRC_FILE3} -effort 1 -d ${TMP_FILE2} \
-        -bt -create_preview -mem_info
+  -bt -create_preview -mem_info
 ${DWP2} ${TMP_FILE} -o ${TMP_FILE3} -histos -count_blocks -short -mem_info
 ${GET_DISTO} ${TMP_FILE2} ${TMP_FILE3} -exact
 
@@ -76,22 +76,22 @@ ${CWP2} ${TMP_FILE3} -preview ${TMP_FILE}
 
 # lossy vdebug test
 ${CWP2} -o ${TMP_FILE} ${SRC_FILE1} -crop 30 31 1 20 -effort 0 -diffusion 50 \
-        -quants "60,43, 23, 23,54 ,23" -BT -histos -tile_shape 3
-for vdebug in `seq -1 33`; do
+  -quants "60,43, 23, 23,54 ,23" -BT -histos -tile_shape 3
+for vdebug in $(seq -1 33); do
   ${DWP2} ${TMP_FILE} -mt -vdebug ${vdebug} &> /dev/null
 done
 
 # lossless vdebug test
 ${CWP2} -o ${TMP_FILE} ${SRC_FILE1} -crop 30 31 1 20 -effort 0 -q 99 -sns 30 -v
-for vdebug in `seq -1 20`; do
+for vdebug in $(seq -1 20); do
   ${DWP2} ${TMP_FILE} -vdebug ${vdebug} &> /dev/null
 done
 
 # grain test
 ${CWP2} -o ${TMP_FILE} ${SRC_FILE1} -crop 30 31 200 200 -effort 0 \
-        -grain -noasm -segment_mode auto -perceptual -progress
+  -grain -noasm -segment_mode auto -perceptual -progress
 ${GET_DISTO} ${TMP_FILE} ${SRC_FILE1} -scale -crop_source 30 31 200 200 \
-             -prefix "this is a test" -suffix "good"
+  -prefix "this is a test" -suffix "good"
 
 for grain in 0 37 78 100; do
   ${DWP2} ${TMP_FILE} -grain ${grain} &> /dev/null
@@ -134,10 +134,10 @@ ${CWP2} -preview /tmp
 ${CWP2} -preview
 ${CWP2} -mem_limit
 ${CWP2} -mem_fail
-${CWP2} ${TMP_FILE2} ${TMP_FILE3} -preview ${TMP_FILE}  # multiple input
+${CWP2} ${TMP_FILE2} ${TMP_FILE3} -preview ${TMP_FILE} # multiple input
 ${CWP2} ${TMP_FILE2} -mem_fail 0
 ${CWP2} -
-${CWP2} -grain    # missing input file name
+${CWP2} -grain # missing input file name
 
 ${DWP2}
 ${DWP2} -bad_option

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 # tests for image formats I/O
 
 set -ex
@@ -47,7 +46,7 @@ do_check_psnr() {
 }
 
 for v in 37 255 1001 65535; do
-  min_psnr=41  # low quality only for max_value = 37
+  min_psnr=41 # low quality only for max_value = 37
   if [ "x${v}" != "x37" ]; then
     min_psnr=99
   fi

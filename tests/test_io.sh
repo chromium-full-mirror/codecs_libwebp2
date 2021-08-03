@@ -13,12 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 # tests for image formats I/O
 
 set -ex
 
-quiet="yes"  # change to 'no' if needed
+quiet="yes" # change to 'no' if needed
 
 if [ "$#" -ge 1 ]; then
   # eval so that the passed in directory can contain variables.
@@ -67,7 +66,7 @@ check_roundtrip() {
     do_cmd ${DWP2} -quiet -v "${TMP_WP2}" -${fmt} -o "${TMP_IMG}.${fmt}"
     if [ "x${fmt}" != "xppm" ]; then
       ${GET_DISTO} "${TMP_IMG}.${fmt}" "${1}" -min ${min_psnr}
-    else  # ppm doesn't handle alpha, so psnr is non-sense
+    else # ppm doesn't handle alpha, so psnr is non-sense
       ${GET_DISTO} "${TMP_IMG}.${fmt}" "${1}" -min 2
     fi
     ${GET_DISTO} "${TMP_WP2}" "${1}" -min ${min_psnr}
@@ -83,9 +82,9 @@ done
 
 for csp in 0 1 2 3; do
   check_roundtrip "${TESTDATA_DIR}/alpha_ramp.tiff" 46.0 18.8 \
-                  "-csp ${csp}"
+    "-csp ${csp}"
   check_roundtrip "${TESTDATA_DIR}/alpha_ramp.tiff" 99.0 99.0 \
-                  "-csp ${csp} -q 100"
+    "-csp ${csp} -q 100"
 done
 
 check_roundtrip "${TESTDATA_DIR}/source3_222x167.jpg" 31.0 22.0 "-pass 3"

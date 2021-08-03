@@ -34,16 +34,18 @@ if [ ! -f "${ASSERT_BIN}" ]; then
 fi
 
 # Check if we have assert support.
-if ${ASSERT_BIN} 0 >/dev/null 2>/dev/null; then
+if ${ASSERT_BIN} 0 > /dev/null 2> /dev/null; then
   echo "No assert support."
   exit 0
 fi
 
-for i in $(seq -4 -1; seq 1 8)
-do
+for i in $(
+  seq -4 -1
+  seq 1 8
+); do
   printf "Case %s ... " "${i}"
   # Check that the binary does not crash.
-  if ${ASSERT_BIN} "${i}" >/dev/null 2>/dev/null; then
+  if ${ASSERT_BIN} "${i}" > /dev/null 2> /dev/null; then
     echo "PASSED."
     # If it does not crash, i has to be < 0.
     if [ "${i}" -gt 0 ]; then

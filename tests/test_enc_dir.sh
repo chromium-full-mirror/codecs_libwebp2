@@ -57,39 +57,39 @@ ${DWP2} ${DST_DIR} -r -o ${DST_DIR} -mt 4 -force
 
 echo "several input files test"
 ${CWP2} "${TESTDATA_DIR}/source1.png" "${TESTDATA_DIR}/source3.jpg" \
-        -o ${DST_DIR} -force -effort 0
+  -o ${DST_DIR} -force -effort 0
 ${DWP2} "${DST_DIR}/source1.wp2" "${DST_DIR}/source3.wp2" \
-        -o ${DST_DIR} -pam -force -progress
+  -o ${DST_DIR} -pam -force -progress
 
 echo "inplace test"
 ${CWP2} "${DST_DIR}/source1.pam" "${DST_DIR}/source3.pam" \
-        -inplace -force -effort 0
+  -inplace -force -effort 0
 ${DWP2} "${DST_DIR}/source1.wp2" "${DST_DIR}/source3.wp2" \
-        -inplace -force
+  -inplace -force
 
-set +e  # Negative tests.
+set +e # Negative tests.
 
 echo "Negative tests"
 ${DWP2} "${DST_DIR}/source1.png" "${DST_DIR}/source3.png" && die
 ${CWP2} "${TESTDATA_DIR}/source1.png" "${TESTDATA_DIR}/source3.jpg" \
-        -o "${DST_DIR}/not_a_directory.wp2" && die
+  -o "${DST_DIR}/not_a_directory.wp2" && die
 ${DWP2} "${DST_DIR}/source1.wp2" "${DST_DIR}/source3.wp2" \
-        -o "${DST_DIR}/not_a_directory.png" && die
+  -o "${DST_DIR}/not_a_directory.png" && die
 ${DWP2} "${DST_DIR}/source1.wp2" -mt 4294967295 && die
 ${DWP2} "${DST_DIR}/source3.wp2" -mt -1 && die
 
 echo "test -d option with multiple files"
 ${CWP2} "${TESTDATA_DIR}/source1_64x48.png" "${TESTDATA_DIR}/source1.png" \
-        -o "${TMP_TESTDATA_DIR}" -d "${DST_DIR}/tmp.webp" && die
-${CWP2} "${TESTDATA_DIR}/source1_64x48.png"  -d "${DST_DIR}/" && die
+  -o "${TMP_TESTDATA_DIR}" -d "${DST_DIR}/tmp.webp" && die
+${CWP2} "${TESTDATA_DIR}/source1_64x48.png" -d "${DST_DIR}/" && die
 
 echo "test good/bad files mix"
 printf "%b" '\xf4\xff\x6f\xff\xff\xff\xff\xff\xff\xff\xff\xff' \
-    > "${DST_DIR}/bad.wp2"
+  > "${DST_DIR}/bad.wp2"
 ${DWP2} "${DST_DIR}/source1.wp2" "${DST_DIR}/bad.wp2" \
-        -o ${DST_DIR} -pam -force -mt && die
+  -o ${DST_DIR} -pam -force -mt && die
 ${DWP2} "${DST_DIR}/bad.wp2" "${DST_DIR}/source3.wp2" \
-        -o ${DST_DIR} -pam -mt -force && die
+  -o ${DST_DIR} -pam -mt -force && die
 ${DWP2} ${DST_DIR} -r -o ${DST_DIR} -force -mt 1 && die
 
 # Clean up

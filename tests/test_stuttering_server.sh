@@ -40,13 +40,14 @@ PORT=8080
 
 # Option '--test' makes the binary exit after the first transfer.
 ${STUTTERING_SERVER} --ip "localhost" --port ${PORT} --folder "${SRC_FOLDER}" \
-                     --test & SERVER_PID="$!"
+  --test &
+SERVER_PID="$!"
 # Make sure the server is killed when this test exits.
 trap "kill -0 ${SERVER_PID} && kill -s KILL ${SERVER_PID}" \
-     0 HUP INT QUIT ABRT KILL TERM
-sleep 10  # Wait for server to come alive.
+  0 HUP INT QUIT ABRT KILL TERM
+sleep 10 # Wait for server to come alive.
 wget -O "${DST_FOLDER}/${SRC_FILE}" \
-     "http://localhost:${PORT}/${SRC_FILE}?bytes=512&ms=100"
+  "http://localhost:${PORT}/${SRC_FILE}?bytes=512&ms=100"
 # Verify dest file is the same as src file.
 cmp "${SRC_FOLDER}/${SRC_FILE}" "${DST_FOLDER}/${SRC_FILE}"
 

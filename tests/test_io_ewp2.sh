@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 # tests for encoding / decoding extra formats
 
 set -ex
@@ -38,12 +37,12 @@ TMP_WEBP=/tmp/test_io_ewp2.webp
 
 # Convert y4m to y4m losslessly
 ${EWP2} "${TESTDATA_DIR}/ccsp/source3_C444p8.y4m" \
-        -o "${TMP_Y4M}" -y4m_depth 8 -y4m_444 \
-        -psnr "${TESTDATA_DIR}/ccsp/source3_C444p8.y4m" 99.0
+  -o "${TMP_Y4M}" -y4m_depth 8 -y4m_444 \
+  -psnr "${TESTDATA_DIR}/ccsp/source3_C444p8.y4m" 99.0
 
 ${EWP2} "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" \
-        -o "${TMP_Y4M}" -y4m_depth 12 -y4m_420 -sampling nearest \
-        -psnr "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" 99.0
+  -o "${TMP_Y4M}" -y4m_depth 12 -y4m_420 -sampling nearest \
+  -psnr "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" 99.0
 
 # No output
 ${EWP2} "${TMP_Y4M}" -psnr "${TMP_Y4M}" 99.0 -size
@@ -52,8 +51,8 @@ ${EWP2} "${TMP_Y4M}" -psnr "${TMP_Y4M}" 99.0 -size -v -rm A
 
 # Some loss during up/downsampling
 ${EWP2} "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" \
-        -o "${TMP_Y4M}" -y4m_depth 12 -y4m_420 -sampling smooth \
-        -psnr "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" 50.0
+  -o "${TMP_Y4M}" -y4m_depth 12 -y4m_420 -sampling smooth \
+  -psnr "${TESTDATA_DIR}/ccsp/source3_C420p12.y4m" 50.0
 
 # Encode/decode WebP from JPG
 ${EWP2} "${TESTDATA_DIR}/source3.jpg" -o "${TMP_WEBP}" -q 100 -effort 2
