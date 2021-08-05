@@ -782,15 +782,32 @@ static void DrawAnglePredictor(const WP2::Rectangle& rect, float angle_deg,
   }
 }
 
+static constexpr Argb32b kNonAnglePredictorColors[] = {
+    {0xff, 0x30, 0xf0, 0xd0},  // Teal
+    {0xff, 0x3d, 0x70, 0xf0},  // Blue
+    {0xff, 0xb3, 0x30, 0xf0},  // Purple
+    {0xff, 0xe4, 0x30, 0xf0},  // Pink
+    {0xff, 0xf0, 0x30, 0x50},  // Red
+    {0xff, 0xf0, 0x8c, 0x4d},  // Orange
+    {0xff, 0xf0, 0xd0, 0x30},  // Yellow
+    {0xff, 0x20, 0xf0, 0x60},  // Green
+    {0xff, 0x20, 0x6b, 0x00},  // Dark green
+};
+// If this fails, add some more colors to the array above.
+static_assert(WP2_ARRAY_SIZE(kNonAnglePredictorColors) >= kYBasePredNum,
+              "Not enough colors");
+static_assert(WP2_ARRAY_SIZE(kNonAnglePredictorColors) >= kABasePredNum,
+              "Not enough colors");
+static_assert(WP2_ARRAY_SIZE(kNonAnglePredictorColors) >= kUVBasePredNum,
+              "Not enough colors");
+
 // Prints the selected block prediction to 'config.info->selection_info' and
 // fills either the 'raw_prediction' (values) or the 'debug_output' (mode).
-static void DisplayPredictionMode(const DecoderConfig& config,
-                                  const Rectangle& tile_rect,
-                                  const CodedBlockBase& cb, uint32_t num_preds,
-                                  const Predictor& p, Channel channel,
-                                  uint32_t tf_i, const Rectangle& block_rect,
-                                  bool selected, Plane16* const raw_prediction,
-                                  ArgbBuffer* const debug_output) {
+static void DisplayPredictionMode(
+    const DecoderConfig& config, const Rectangle& tile_rect,
+    const CodedBlockBase& cb, const Predictors& preds, const Predictor& p,
+    Channel channel, uint32_t tf_i, const Rectangle& block_rect, bool selected,
+    Plane16* const raw_prediction, ArgbBuffer* const debug_output) {
   const bool split_tf = cb.GetCodingParams(channel).split_tf;
   if (raw_prediction != nullptr) {
     Plane16 dst_view;
@@ -800,11 +817,28 @@ static void DisplayPredictionMode(const DecoderConfig& config,
     pred.Predict(cb, channel, split_tf, tf_i, dst_view.Row(0), dst_view.Step());
   } else {
     assert(debug_output != nullptr);
-    const uint8_t c = ToPixel8(p.mode(), num_preds);
-    debug_output->Fill(block_rect, Argb32b{255, c, c, c});
     float angle;
     if (p.IsAngle(&angle)) {
+      // Map angle to light gray value in [128; 255]
+      const uint8_t gray = ToPixel8(p.mode(), kAnglePredNum) / 2 + 128;
+      debug_output->Fill(block_rect, Argb32b{0xff, gray, gray, gray});
       DrawAnglePredictor(block_rect, angle, debug_output);
+    } else {
+      // Find this index of this predictor out of the non-angle predictors.
+      uint32_t i = 0;
+      bool found = false;
+      for (const Predictor* pred : preds) {
+        if (pred->IsAngle(nullptr)) continue;
+        if (pred->mode() == p.mode()) {
+          found = true;
+          break;
+        }
+        ++i;
+      }
+      (void)found;
+      assert(found);
+      assert(i < WP2_ARRAY_SIZE(kNonAnglePredictorColors));
+      debug_output->Fill(block_rect, kNonAnglePredictorColors[i]);
     }
     if (selected) {
       debug_output->DrawRect(block_rect, Argb32b{0xff, 0xff, 0x33, 0x33});
@@ -816,12 +850,13 @@ static void DisplayPredictionMode(const DecoderConfig& config,
       const uint32_t split_h = BlockHeightPix(split_size);
       for (uint32_t split_y = 0; split_y < cb.h_pix(); split_y += split_h) {
         for (uint32_t split_x = 0; split_x < cb.w_pix(); split_x += split_w) {
+          constexpr Argb32b kBlack = Argb32b{0xff, 0x00, 0x00, 0x00};
           debug_output->Fill(
               {block_rect.x + split_x, block_rect.y + split_y, 1, split_h},
-              Argb32b{0xff, 0x00, 0x30, 0xf0});
+              kBlack);
           debug_output->Fill(
               {block_rect.x + split_x, block_rect.y + split_y, split_w, 1},
-              Argb32b{0xff, 0x00, 0x40, 0xf0});
+              kBlack);
         }
       }
     }
@@ -861,9 +896,8 @@ void CodedBlockBase::StorePredictionModes(
   const bool selected = VDSelected(tile_rect.x, tile_rect.y, r_px, config);
 
   const CodingParams& params = GetCodingParams(channel);
-  DisplayPredictionMode(config, tile_rect, *this, preds.GetMaxMode(),
-                        *params.pred, channel, tf_i, r_px, selected,
-                        raw_prediction, debug_output);
+  DisplayPredictionMode(config, tile_rect, *this, preds, *params.pred, channel,
+                        tf_i, r_px, selected, raw_prediction, debug_output);
 
   if (selected && debug_output != nullptr) {
     DisplayPredContext(*this, channel, split_tf, tf_i, /*draw_red_border=*/true,
