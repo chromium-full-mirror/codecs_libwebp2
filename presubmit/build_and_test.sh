@@ -14,32 +14,60 @@
 # limitations under the License.
 # ------------------------------------------------------------------------------
 
-# Fail on any error.
-set -e
-# Display commands being run.
-set -x
+# Fail on any error and display commands being run.
+set -xe
 
+# Get the absolute path of the parent directory of this script.
+readonly LIBWEBP2_ROOT="$(realpath "$(dirname "$0")/..")"
+readonly WORKSPACE=${WORKSPACE:-"$(mktemp -t webp2.build.XXXX -d)"}
+readonly GOOGLETEST_REPO="https://github.com/google/googletest.git"
+readonly BUILD_DIR="${WORKSPACE}/build"
 SECONDS=0
 
-rm -rf build
-mkdir build
-cd build
+#######################################
+# Ensure GoogleTest repository is setup
+#
+# Globals:
+#  GOOGLETEST_REPO googletest repository url
+#  WORKSPACE directory where the build is done
+#######################################
+ensure_googletest() {
+  local googletest_dir
+  googletest_dir="${WORKSPACE}/googletest"
 
+  if [[ ! -d "${googletest_dir}" ]] \
+    || ! git -C "${googletest_dir}" pull --rebase; then
+    rm -rf "${googletest_dir}"
+    git clone --depth 1 "${GOOGLETEST_REPO}" "${googletest_dir}"
+  fi
+
+  opts+=("-DGTEST_SOURCE_DIR=${googletest_dir}")
+}
+
+rm -rf "${BUILD_DIR}"
+mkdir -p "${BUILD_DIR}"
+opts=(
+  "-DWP2_ENABLE_TESTS=ON"
+  "-DWP2_BUILD_EXAMPLES=ON"
+  "-DWP2_BUILD_EXTRAS=ON")
+ensure_googletest
+
+pushd "${BUILD_DIR}"
 # CMake release
-cmake -D CMAKE_BUILD_TYPE=RelWithDebInfo -D WP2_ENABLE_TESTS=ON \
-  -D WP2_BUILD_EXAMPLES=ON -D WP2_BUILD_EXTRAS=ON -D WP2_BUILD_SWIG_PY=ON ..
+cmake "${LIBWEBP2_ROOT}" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DWP2_BUILD_SWIG_PY=ON "${opts[@]}"
 make -j 8
 ctest --output-on-failure -j 8
 
 rm -rf ./*
 
 # CMake debug
-cmake -D CMAKE_BUILD_TYPE=Debug -D WP2_ENABLE_TESTS=ON \
-  -D WP2_BUILD_EXAMPLES=ON -D WP2_BUILD_EXTRAS=ON ..
+cmake "${LIBWEBP2_ROOT}" -DCMAKE_BUILD_TYPE=Debug "${opts[@]}"
 make -j 8
 # ctest --output-on-failure -j 8  # Tests take too much time to run in Debug.
 
 rm -rf ./*
+popd  # BUILD_DIR
 
 duration=${SECONDS}
 echo "Build and tests took ${duration} seconds."
