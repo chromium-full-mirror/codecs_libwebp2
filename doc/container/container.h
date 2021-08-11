@@ -104,6 +104,11 @@ bool UnwrapContainer(const uint8_t data[], size_t data_size, Image& image,
 
 //------------------------------------------------------------------------------
 
+// Displays the features of the image encoded in 'data' to standard output.
+void PrintContainerHeader(const uint8_t data[], size_t data_size);
+
+//------------------------------------------------------------------------------
+
 }  // namespace container
 
 #endif  // CONTAINER_CONTAINER_H_
