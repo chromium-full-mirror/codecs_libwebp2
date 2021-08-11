@@ -318,10 +318,19 @@ float ANSDictionary::SymbolCost(uint32_t symbol, uint32_t max_symbol) const {
 float ANSDictionary::Cost() const {
   // TODO(vrabaud) cache the following results if the dictionary has not
   // changed.
+  const uint32_t total = IsQuantized() ? total_quantized_ : total_;
+  if (total == 0) {
+    return 0.f;
+  }
+  const float log2_total = WP2Log2(total);
+
   float cost = 0.;
   for (uint32_t i = 0; i < max_symbol_; ++i) {
-    // TODO(skal): WP2Log2(total_) is computed each time. Optimize.
-    cost += counts_[i] * SymbolCost(i);
+    const float c = IsQuantized() ? quantized_counts_[i] : counts_[i];
+    if (c == 0) {
+      continue;
+    }
+    cost += counts_[i] * (log2_total - WP2Log2(c));
   }
   return cost;
 }
