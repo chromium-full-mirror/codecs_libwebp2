@@ -16,18 +16,13 @@
 
 #include <algorithm>
 #include <cassert>
-#include <iostream>
+#include <sstream>
+#include <string>
 
 #include "./bit_packing.h"
 
 namespace container {
 namespace {
-
-// Returns the length of a C array.
-template <class T, size_t N>
-constexpr std::size_t array_size(const T (&array)[N]) {
-  return N;
-}
 
 static_assert(kMaxChunkSize - 1u <= kMaxVarInt,
               "The maximum chunk size cannot be represented with var ints.");
@@ -220,7 +215,7 @@ bool UnwrapContainer(const uint8_t data[], size_t data_size, Image& image,
 
 //------------------------------------------------------------------------------
 
-void PrintContainerHeader(const uint8_t data[], size_t data_size) {
+std::string ContainerHeaderToStr(const uint8_t data[], size_t data_size) {
   static const char* kOrientationStr[] = {"Original",
                                           "FlipLeftToRight",
                                           "180",
@@ -232,40 +227,43 @@ void PrintContainerHeader(const uint8_t data[], size_t data_size) {
   static const char* kFormatStr[] = {"ARGB8", "AYUV10", "Unknown"};
   static const char* kBoolStr[] = {"false", "true"};
 
+  std::stringstream ss;
+
   Image image;
   uint32_t codec;
   bool has_preview, has_icc, has_xmp, has_exif;
   uint32_t num_read_bytes;
   if (!UnwrapContainerHeader(data, data_size, image, codec, has_preview,
                              has_icc, has_xmp, has_exif, num_read_bytes)) {
-    std::cout << "Bad container header" << std::endl;
-    return;
+    ss << "Bad container header" << std::endl;
+    return ss.str();
   }
   const int orientation = static_cast<int>(image.orientation);
   const int format = static_cast<int>(image.format);
   if (orientation < 0 || orientation >= array_size(kOrientationStr) ||
       format < 0 || format >= array_size(kFormatStr)) {
-    std::cout << "Bad container header value" << std::endl;
-    return;
+    ss << "Bad container header value" << std::endl;
+    return ss.str();
   }
 
-  std::cout << "Container header (" << num_read_bytes << " bytes, codec "
-            << codec << ")" << std::endl
-            << "  width " << image.width << std::endl
-            << "  height " << image.height << std::endl
-            << "  orientation " << kOrientationStr[orientation] << std::endl
-            << "  format " << kFormatStr[format] << std::endl
-            << "  is_opaque " << kBoolStr[image.is_opaque] << std::endl
-            << "  preview_color " << image.preview_color << std::endl
-            << "  has_preview " << kBoolStr[has_preview] << std::endl
-            << "  has_icc " << kBoolStr[has_icc] << std::endl
-            << "  has_xmp " << kBoolStr[has_xmp] << std::endl
-            << "  has_exif " << kBoolStr[has_exif] << std::endl
-            << "  is_animation " << kBoolStr[image.is_animation] << std::endl;
+  ss << "Container header (" << num_read_bytes << " bytes, codec " << codec
+     << ")" << std::endl
+     << "  width " << image.width << std::endl
+     << "  height " << image.height << std::endl
+     << "  orientation " << kOrientationStr[orientation] << std::endl
+     << "  format " << kFormatStr[format] << std::endl
+     << "  is_opaque " << kBoolStr[image.is_opaque] << std::endl
+     << "  preview_color " << image.preview_color << std::endl
+     << "  has_preview " << kBoolStr[has_preview] << std::endl
+     << "  has_icc " << kBoolStr[has_icc] << std::endl
+     << "  has_xmp " << kBoolStr[has_xmp] << std::endl
+     << "  has_exif " << kBoolStr[has_exif] << std::endl
+     << "  is_animation " << kBoolStr[image.is_animation] << std::endl;
   if (image.is_animation) {
-    std::cout << "  loop_forever " << kBoolStr[image.loop_forever] << std::endl
-              << "  background_color " << image.background_color << std::endl;
+    ss << "  loop_forever " << kBoolStr[image.loop_forever] << std::endl
+       << "  background_color " << image.background_color << std::endl;
   }
+  return ss.str();
 }
 
 //------------------------------------------------------------------------------

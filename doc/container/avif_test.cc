@@ -71,12 +71,12 @@ TEST(ContainerTest, WrapUnwrapRawPixels) {
 
 //------------------------------------------------------------------------------
 
-TEST(ContainerTest, PrintBmffBoxes) {
+TEST(ContainerTest, BmffBoxesToStr) {
   const Data input_avif = testutil::LoadFile("1x1.avif");
   ASSERT_FALSE(input_avif.empty());
 
   CaptureTestStdout();
-  PrintBmffBoxes(input_avif.data(), input_avif.size());
+  BmffBoxesToStr(input_avif.data(), input_avif.size());
 
   EXPECT_THAT(GetCapturedTestStdout(), Not(AnyOf(IsEmpty(), HasSubstr("Bad"))));
 }

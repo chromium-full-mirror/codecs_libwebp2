@@ -14,7 +14,11 @@
 
 #include "./av1_obu.h"
 
+#include <algorithm>
+#include <bitset>
 #include <cstdint>
+#include <sstream>
+#include <string>
 
 #include "./bit_packing.h"
 
@@ -150,6 +154,57 @@ bool UnwrapOBUSequenceHeader(const uint8_t data[], size_t data_size,
 
   /*film_grain_params_present=*/obu.DecodeBool();
   return obu.Ok();
+}
+
+//------------------------------------------------------------------------------
+
+std::string ObuUnitsToStr(const uint8_t data[], size_t data_size) {
+  static const char* kObuTypeStr[] = {"Reserved OBU",
+                                      "OBU_SEQUENCE_HEADER",
+                                      "OBU_TEMPORAL_DELIMITER",
+                                      "OBU_FRAME_HEADER",
+                                      "OBU_TILE_GROUP",
+                                      "OBU_METADATA",
+                                      "OBU_FRAME",
+                                      "OBU_REDUNDANT_FRAME_HEADER",
+                                      "OBU_TILE_LIST",
+                                      "Reserved OBU",
+                                      "Reserved OBU",
+                                      "Reserved OBU",
+                                      "Reserved OBU",
+                                      "Reserved OBU",
+                                      "Reserved OBU",
+                                      "OBU_PADDING"};
+  static_assert(array_size(kObuTypeStr) == (1 << 4),
+                "kObuTypeStr should match 4-bit long values.");
+
+  std::stringstream ss;
+
+  size_t position = 0;
+  while (position < data_size) {
+    uint8_t obu_type;
+    size_t obu_header_size, obu_payload_size;
+    if (!UnwrapOBU(data + position, data_size - position, obu_type,
+                   obu_header_size, obu_payload_size)) {
+      ss << "  Bad OBU header at " << position << " ("
+         << static_cast<int>(data[position]) << ")" << std::endl;
+      return ss.str();
+    }
+    ss << "  " << kObuTypeStr[obu_type] << " (" << obu_header_size << "+"
+       << obu_payload_size << " bytes)" << std::endl;
+    position += obu_header_size;
+
+    // Display the first few bytes as binary digits.
+    ss << "   ";
+    for (uint32_t i = 0; i < std::min(obu_payload_size, (size_t)10); ++i) {
+      ss << ' ' << std::bitset<8>(data[position + i]);
+    }
+    if (obu_payload_size > 10) ss << " ...";  // Indicate missing bits.
+    ss << std::endl;
+
+    position += obu_payload_size;
+  }
+  return ss.str();
 }
 
 //------------------------------------------------------------------------------

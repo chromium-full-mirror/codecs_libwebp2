@@ -16,11 +16,18 @@
 #define CONTAINER_CONTAINER_H_
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace container {
 
 typedef std::vector<uint8_t> Data;  // Chunk of bytes.
+
+// Returns the length of a C array. std::size() exists in C++17 but it is C++11.
+template <class T, size_t N>
+constexpr std::size_t array_size(const T (&array)[N]) {
+  return N;
+}
 
 //------------------------------------------------------------------------------
 // Format constants.
@@ -104,8 +111,8 @@ bool UnwrapContainer(const uint8_t data[], size_t data_size, Image& image,
 
 //------------------------------------------------------------------------------
 
-// Displays the features of the image encoded in 'data' to standard output.
-void PrintContainerHeader(const uint8_t data[], size_t data_size);
+// Returns a string containing the features of the image encoded in 'data'.
+std::string ContainerHeaderToStr(const uint8_t data[], size_t data_size);
 
 //------------------------------------------------------------------------------
 

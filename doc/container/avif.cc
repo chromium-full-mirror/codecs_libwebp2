@@ -16,7 +16,8 @@
 
 #include <algorithm>
 #include <cassert>
-#include <iostream>
+#include <sstream>
+#include <string>
 
 #include "./av1_obu.h"
 #include "./bit_packing.h"
@@ -416,53 +417,54 @@ bool UnwrapAvif(const uint8_t data[], size_t data_size, Image& image,
 
 namespace {
 
-// Parses the 'data' and displays any ISOBMFF box to stdout.
-void PrintBmffBoxes(const uint8_t data[], size_t data_size, uint32_t indent) {
+// Parses the 'data' and returns a string containing all ISOBMFF box.
+std::string BmffBoxesToStr(const uint8_t data[], size_t data_size,
+                           uint32_t indent) {
+  std::stringstream ss;
   for (size_t position = 0; position + 4 <= data_size;) {
-    for (uint32_t i = 0; i < indent; ++i) std::cout << "  ";
+    for (uint32_t i = 0; i < indent; ++i) ss << "  ";
 
     const size_t box_size = ReadBigEndian(data + position, sizeof(uint32_t));
     if (box_size < 8 || position + box_size > data_size) {
-      std::cout << "Bad box size (" << box_size << " bytes)" << std::endl;
+      ss << "Bad box size (" << box_size << " bytes)" << std::endl;
       break;
     }
     const uint8_t* const fourcc = data + position + 4;
     const char* const box = reinterpret_cast<const char*>(fourcc);
-    std::cout << "Box " << box[0] << box[1] << box[2] << box[3] << " ("
-              << box_size << " bytes at offset " << position << ")"
-              << std::endl;
+    ss << "Box " << box[0] << box[1] << box[2] << box[3] << " (" << box_size
+       << " bytes at offset " << position << ")" << std::endl;
 
     if (box_size > 8) {
       if (EqualFourCC(fourcc, "meta") && box_size > 12) {
-        for (uint32_t i = 0; i < indent + 1; ++i) std::cout << "  ";
-        std::cout << "Version " << static_cast<uint32_t>(data[position + 8])
-                  << ", flags " << static_cast<uint32_t>(data[position + 9])
-                  << static_cast<uint32_t>(data[position + 10])
-                  << static_cast<uint32_t>(data[position + 11]) << std::endl;
-        PrintBmffBoxes(data + position + 12, box_size - 12, indent + 1);
+        for (uint32_t i = 0; i < indent + 1; ++i) ss << "  ";
+        ss << "Version " << static_cast<uint32_t>(data[position + 8])
+           << ", flags " << static_cast<uint32_t>(data[position + 9])
+           << static_cast<uint32_t>(data[position + 10])
+           << static_cast<uint32_t>(data[position + 11]) << std::endl;
+        ss << BmffBoxesToStr(data + position + 12, box_size - 12, indent + 1);
       } else if (EqualFourCC(fourcc, "iprp") || EqualFourCC(fourcc, "ipco")) {
-        PrintBmffBoxes(data + position + 8, box_size - 8, indent + 1);
+        ss << BmffBoxesToStr(data + position + 8, box_size - 8, indent + 1);
       } else {
-        for (uint32_t i = 0; i <= indent; ++i) std::cout << "  ";
+        for (uint32_t i = 0; i <= indent; ++i) ss << "  ";
         // Display the first few dozens of characters.
         for (uint32_t i = 0; i < std::min(box_size - 8, (size_t)72); ++i) {
           const char c = reinterpret_cast<const char*>(data + position + 8)[i];
           // Display a printable character or an interrogation mark.
-          std::cout << ((c >= ' ' && c <= '~') ? c : '?');
+          ss << ((c >= ' ' && c <= '~') ? c : '?');
         }
-        if (box_size - 8 > 72)
-          std::cout << "...";  // Indicate missing characters.
-        std::cout << std::endl;
+        if (box_size - 8 > 72) ss << "...";  // Indicate missing characters.
+        ss << std::endl;
       }
     }
     position += box_size;
   }
+  return ss.str();
 }
 
 }  // namespace
 
-void PrintBmffBoxes(const uint8_t data[], size_t data_size) {
-  PrintBmffBoxes(data, data_size, /*indent=*/1);
+std::string BmffBoxesToStr(const uint8_t data[], size_t data_size) {
+  return BmffBoxesToStr(data, data_size, /*indent=*/1);
 }
 
 //------------------------------------------------------------------------------

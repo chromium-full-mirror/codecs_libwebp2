@@ -17,6 +17,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace container {
 
@@ -39,6 +40,11 @@ struct SequenceHeader {
 // Returns false in case of parsing error.
 bool UnwrapOBUSequenceHeader(const uint8_t data[], size_t data_size,
                              SequenceHeader& header);
+
+//------------------------------------------------------------------------------
+
+// Returns a string containing the OBU layout of an AV1 payload.
+std::string ObuUnitsToStr(const uint8_t data[], size_t data_size);
 
 //------------------------------------------------------------------------------
 

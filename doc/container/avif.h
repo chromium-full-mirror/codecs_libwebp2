@@ -17,6 +17,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 #include "./container.h"
 
@@ -38,8 +39,8 @@ bool UnwrapAvif(const uint8_t data[], size_t data_size, Image& image,
 
 //------------------------------------------------------------------------------
 
-// Displays the layout of an ISO Base Media File Format file to standard output.
-void PrintBmffBoxes(const uint8_t data[], size_t data_size);
+// Returns a string containing the layout of an ISO Base Media File Format file.
+std::string BmffBoxesToStr(const uint8_t data[], size_t data_size);
 
 //------------------------------------------------------------------------------
 

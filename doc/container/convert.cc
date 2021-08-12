@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "./av1_obu.h"
 #include "./avif.h"
 #include "./container.h"
 
@@ -174,14 +175,20 @@ int main(int argc, const char* argv[]) {
     std::cout << "Minimal image container input (" << input.size() << " bytes)"
               << std::endl;
     if (params.print_info) {
-      container::PrintContainerHeader(input_data, input.size());
+      std::cout << container::ContainerHeaderToStr(input_data, input.size());
     }
   } else {
     assert(input_is_avif);
     std::cout << "AVIF input (" << input.size() << " bytes)" << std::endl;
     if (params.print_info) {
-      container::PrintBmffBoxes(input_data, input.size());
+      std::cout << container::BmffBoxesToStr(input_data, input.size());
     }
+  }
+
+  if (params.print_info && codec == container::kContainerCodecAv1) {
+    std::cout << "OBU input (" << num_codec_bytes << " bytes)" << std::endl;
+    std::cout << container::ObuUnitsToStr(input_data + offset_till_codec_bytes,
+                                          num_codec_bytes);
   }
 
   // Wrap the encoded pixels to the destination format.
