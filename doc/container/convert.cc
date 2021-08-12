@@ -51,7 +51,7 @@ bool EndsWith(const std::string& str, const std::string& token) {
 
 //------------------------------------------------------------------------------
 
-enum class Format { kContainer, kAvif, kDeduceFromExtension };
+enum class Format { kContainer, kAvif, kObu, kDeduceFromExtension };
 
 struct Params {
   std::string input_path;
@@ -126,6 +126,8 @@ bool ProcessArguments(Params& params, std::vector<char>& input,
       params.output_format = Format::kContainer;
     } else if (EndsWith(params.output_path, ".avif")) {
       params.output_format = Format::kAvif;
+    } else if (EndsWith(params.output_path, ".obu")) {
+      params.output_format = Format::kObu;
     } else {
       std::cerr << "Error: Unable to deduce a supported output format from "
                    "the extension of "
@@ -203,6 +205,13 @@ int main(int argc, const char* argv[]) {
       std::cerr << "Error: Unable to create AVIF file from input" << std::endl;
       return 1;
     }
+  } else if (params.output_format == Format::kObu) {
+    if (codec != container::kContainerCodecAv1) {
+      std::cerr << "Error: Unable to get OBU from non-AV1 input" << std::endl;
+      return 1;
+    }
+    const uint8_t* const obu_data = input_data + offset_till_codec_bytes;
+    output_data = container::Data(obu_data, obu_data + num_codec_bytes);
   }
 
   // Write the file.

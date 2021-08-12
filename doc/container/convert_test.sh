@@ -19,6 +19,7 @@ CONVERT=${BINARY_DIR}/convert
 TMP_PIC1=/tmp/convert_test1.pic
 TMP_PIC2=/tmp/convert_test2.pic
 TMP_AVIF=/tmp/convert_test.avif
+TMP_OBU=/tmp/convert_test.obu
 
 # Print help
 ${CONVERT} -h
@@ -31,7 +32,12 @@ for SRC_AVIF in ${TESTDATA_DIR}/*.avif; do
   cmp ${TMP_PIC1} ${TMP_PIC2}
 done
 
+# OBU
+for SRC_AVIF in ${TESTDATA_DIR}/*.avif; do
+  ${CONVERT} ${SRC_AVIF} -o ${TMP_OBU}
+done
+
 # Clean-up
-rm -f ${TMP_PIC} ${TMP_AVIF}
+rm -f ${TMP_PIC1} ${TMP_PIC2} ${TMP_AVIF} ${TMP_OBU}
 
 echo "PASS"
