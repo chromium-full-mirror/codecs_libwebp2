@@ -31,6 +31,7 @@
 #include "src/utils/plane.h"
 #include "src/utils/random.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 
@@ -65,6 +66,13 @@ extern void WP2DspReset();
 
 namespace WP2 {
 namespace testutil {
+
+//------------------------------------------------------------------------------
+
+void VerifyEqual(const Argb32b& x, const Argb32b& y);
+
+Argb32b GetPixel32b(const ArgbBuffer& buffer, const uint32_t x,
+                    const uint32_t y);
 
 //------------------------------------------------------------------------------
 

@@ -35,6 +35,21 @@ namespace testutil {
 
 //------------------------------------------------------------------------------
 
+void VerifyEqual(const Argb32b& x, const Argb32b& y) {
+  EXPECT_EQ(x.a, y.a);
+  EXPECT_EQ(x.r, y.r);
+  EXPECT_EQ(x.g, y.g);
+  EXPECT_EQ(x.b, y.b);
+}
+
+Argb32b GetPixel32b(const ArgbBuffer& buffer, const uint32_t x,
+                    const uint32_t y) {
+  const uint8_t* const pixel = buffer.GetRow8(y) + x * 4;
+  return {pixel[0], pixel[1], pixel[2], pixel[3]};
+}
+
+//------------------------------------------------------------------------------
+
 std::string GetTestDataPath(const std::string& file_name) {
   return "testdata/" + file_name;
 }
