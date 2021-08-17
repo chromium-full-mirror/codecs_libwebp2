@@ -84,7 +84,15 @@ All remaining data is stored sequentially in regular chunks, whether it is a
 preview, a tile, XMP etc. A chunk is preceded by its size encoded as a
 variable-length integer, limiting it to ~500 megabytes.
 
-## Build and test
+## Library API
+
+Work in progress. See [container.h](./container.h).
+
+`WrapContainer()` and `UnwrapContainer()` functions can be used to encapsulate
+encoded pixels in any format into a minimal image container. `EncodeRawPixels()`
+and `DecodeRawPixels()` are just a convenient demo for a generic "codec".
+
+### Build and test
 
 ```shell
 mkdir ../container_build && \
@@ -93,3 +101,47 @@ cmake -DCMAKE_BUILD_TYPE=Debug ../container && \
 make && \
 ctest .
 ```
+
+## Conversion from/to AVIF
+
+AVIF is a MIAF/ISOBMFF wrapper around an OBU bitstream, which is itself usually
+made of a sequence header, a frame header and an AV1 tile group.
+
+Stripping everything but the AV1 tile group and the necessary fields in the
+sequence and frame headers would produce lighter web image files:
+
+-   Easy to parse and write,
+-   No redundant field that could be contradictory and/or invalid (image
+    dimensions stored in MIAF, sequence header and frame header),
+-   Fewer features means low vulnerability,
+-   Smaller files, especially for tiny images or icons.
+
+### Convert tool
+
+Work in progress.
+
+1.  Start with an AVIF file (`avifenc img.png -o img.avif -c aom`).
+
+2.  Convert from AVIF:
+
+    ```shell
+    ./convert img.avif -o img.pic
+    ```
+
+3.  Convert back to AVIF:
+
+    ```shell
+    ./convert img.pic -o img.avif
+    ```
+
+### OBU layout
+
+Taken from https://aomediacodec.github.io/av1-spec.
+
+Comparison between a minimal header (left) and a Sequence Header OBU (right):
+
+[images/ObuSequenceHeader.png]
+
+Frame header OBU:
+
+[images/ObuFrameHeader.png]

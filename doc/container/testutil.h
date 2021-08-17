@@ -15,7 +15,6 @@
 #ifndef CONTAINER_TESTUTIL_H_
 #define CONTAINER_TESTUTIL_H_
 
-#include "gtest/gmock.h"
 #include "gtest/gtest.h"
 
 #include "./container.h"

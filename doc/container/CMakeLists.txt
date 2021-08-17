@@ -22,13 +22,32 @@ project(Container VERSION 1.0)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+option(BUILD_CONVERT_TOOL "Build the convert command line tool." ON)
+
 # ##############################################################################
 # Library
 
-add_library(container_lib container.cc bit_packing.cc avif.cc)
+add_library(container_lib av1_obu.cc avif.cc bit_packing.cc container.cc)
+
+# ##############################################################################
+# Tool
+
+if(BUILD_CONVERT_TOOL)
+  add_executable(convert convert.cc)
+  target_link_libraries(convert container_lib)
+endif()
 
 # ##############################################################################
 # Tests
+
+if(BUILD_CONVERT_TOOL)
+  enable_testing()
+  add_test(
+    NAME convert_test
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/convert_test.sh
+            ${CMAKE_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/images
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+endif()
 
 # GoogleTest for easy-to-read tests. It requires pthread.
 find_package(GTest)
@@ -67,6 +86,14 @@ if(GTEST_FOUND AND Threads_FOUND)
     NAME avif_test
     COMMAND ${CMAKE_CURRENT_BINARY_DIR}/avif_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+  add_executable(av1_obu_test av1_obu_test.cc)
+  target_link_libraries(av1_obu_test PRIVATE testutil_lib)
+  target_include_directories(av1_obu_test PRIVATE ${GTEST_INCLUDE_DIRS})
+  add_test(
+    NAME av1_obu_test
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/av1_obu_test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 else()
-  message(WARNING "GoogleTest or Threads is missing, tests are disabled.")
+  message(WARNING "GoogleTest or Threads is missing, most tests are disabled.")
 endif()

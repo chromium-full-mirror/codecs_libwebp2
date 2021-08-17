@@ -14,14 +14,16 @@
 
 #include "./container.h"
 
-#include "./testutil.h"
+#include <string>
 
-//------------------------------------------------------------------------------
+#include "./testutil.h"
 
 namespace container {
 namespace {
 
 constexpr uint32_t kContainerCodecRaw = 0x5;
+
+//------------------------------------------------------------------------------
 
 TEST(ContainerTest, WrapUnwrapRawPixels) {
   const Image input = testutil::GenerateRandomImage();
@@ -45,6 +47,26 @@ TEST(ContainerTest, WrapUnwrapRawPixels) {
 
   ASSERT_NO_FATAL_FAILURE(testutil::VerifyEqual(input, output));
 }
+
+//------------------------------------------------------------------------------
+
+TEST(ContainerTest, ContainerHeaderToStr) {
+  const Image input = testutil::GenerateRandomImage();
+
+  // Encode.
+  Data codec_bytes, bitstream;
+  EncodeRawPixels(input, codec_bytes);
+  WrapContainer(input, container::EncoderConfig(), kContainerCodecRaw,
+                codec_bytes.data(), codec_bytes.size(), bitstream);
+
+  const std::string output_str =
+      ContainerHeaderToStr(bitstream.data(), bitstream.size());
+
+  EXPECT_FALSE(output_str.empty());
+  EXPECT_EQ(output_str.find("Bad"), std::string::npos);
+}
+
+//------------------------------------------------------------------------------
 
 }  // namespace
 }  // namespace container

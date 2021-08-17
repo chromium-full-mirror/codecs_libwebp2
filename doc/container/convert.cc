@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <cassert>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <string>

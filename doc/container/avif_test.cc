@@ -15,25 +15,17 @@
 #include "./avif.h"
 
 #include <algorithm>
-#include <cassert>
-#include <fstream>
-#include <iostream>
 #include <string>
 
 #include "./container.h"
 #include "./testutil.h"
-
-using testing::AnyOf;
-using testing::HasSubstr;
-using testing::IsEmpty;
-using testing::Not;
 
 namespace container {
 namespace {
 
 //------------------------------------------------------------------------------
 
-TEST(ContainerTest, WrapUnwrapRawPixels) {
+TEST(AvifTest, UnwrapWrapUnwrapAvif) {
   const Data input_avif = testutil::LoadFile("1x1.avif");
   ASSERT_FALSE(input_avif.empty());
 
@@ -71,14 +63,15 @@ TEST(ContainerTest, WrapUnwrapRawPixels) {
 
 //------------------------------------------------------------------------------
 
-TEST(ContainerTest, BmffBoxesToStr) {
+TEST(AvifTest, BmffBoxesToStr) {
   const Data input_avif = testutil::LoadFile("1x1.avif");
   ASSERT_FALSE(input_avif.empty());
 
-  CaptureTestStdout();
-  BmffBoxesToStr(input_avif.data(), input_avif.size());
+  const std::string output_str =
+      BmffBoxesToStr(input_avif.data(), input_avif.size());
 
-  EXPECT_THAT(GetCapturedTestStdout(), Not(AnyOf(IsEmpty(), HasSubstr("Bad"))));
+  EXPECT_FALSE(output_str.empty());
+  EXPECT_EQ(output_str.find("Bad"), std::string::npos);
 }
 
 //------------------------------------------------------------------------------
