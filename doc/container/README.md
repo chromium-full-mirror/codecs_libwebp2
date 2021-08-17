@@ -140,8 +140,8 @@ Taken from https://aomediacodec.github.io/av1-spec.
 
 Comparison between a minimal header (left) and a Sequence Header OBU (right):
 
-[images/ObuSequenceHeader.png]
+![Minimal vs sequence header fields](images/ObuSequenceHeader.png)
 
 Frame header OBU:
 
-[images/ObuFrameHeader.png]
+![Frame header fields](images/ObuFrameHeader.png)
