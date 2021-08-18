@@ -98,7 +98,7 @@ enum BasePredictor {
   BPRED_SMOOTH_V,
   BPRED_TM,
   BPRED_GRADIENT,
-  BPRED_LAST = kYBasePredNum
+  BPRED_LAST
 };
 
 // Algorithm used for image partitioning.
