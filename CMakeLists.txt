@@ -609,6 +609,17 @@ endif()
 
 # ##############################################################################
 
+execute_process(COMMAND git rev-parse --short HEAD
+                RESULT_VARIABLE GIT_HASH_RESULT
+                OUTPUT_VARIABLE GIT_HASH
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+if (${GIT_HASH_RESULT} STREQUAL "0")
+  message(STATUS "using [${GIT_HASH}] as git hash")
+  set(WP2_HAVE_GIT_VERSION TRUE)
+else()
+  set(WP2_HAVE_GIT_VERSION FALSE)
+endif()
+
 # Build the executables if asked for.
 if(WP2_BUILD_EXAMPLES)
   # utils
@@ -624,6 +635,10 @@ if(WP2_BUILD_EXAMPLES)
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/example_utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/stopwatch.h)
   target_link_libraries(example_utils imageio webp2)
+  if(WP2_HAVE_GIT_VERSION)
+    target_compile_definitions(example_utils
+                               PUBLIC WP2_GIT_VERSION=\"${GIT_HASH}\")
+  endif()
   if(WP2_DEFINITIONS)
     target_compile_definitions(example_utils PUBLIC ${WP2_DEFINITIONS})
   endif()

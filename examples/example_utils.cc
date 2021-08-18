@@ -34,6 +34,12 @@
 
 namespace WP2 {
 
+#if defined(WP2_GIT_VERSION)
+const char* const GitVersion = WP2_GIT_VERSION;
+#else
+const char* const GitVersion = "0";
+#endif
+
 //------------------------------------------------------------------------------
 
 // Prints the distortion stored in 'values'.
@@ -481,6 +487,7 @@ void ProgramOptions::AddSystemOptionSection() {
   Add("-noasm", "disable all assembly optimizations");
 #endif
   Add("-version", "print version number and exit");
+  Add("-git", "print git hash if available");
   Add("-h / -help", "this help");
   Add("");
 }
@@ -534,8 +541,13 @@ bool ProgramOptions::ParseSystemOptions(const char* const arg,
   *must_stop = false;
   if (!strcmp(arg, "-version")) {
     const auto version = (uint32_t)WP2GetVersion();
-    printf("WebP2 version: %d.%d.%d\n", (version >> 16u) & 0xffu,
-           (version >> 8u) & 0xffu, (version >> 0u) & 0xffu);
+    printf("WebP2 version: %d.%d.%d [%s]\n", (version >> 16u) & 0xffu,
+           (version >> 8u) & 0xffu, (version >> 0u) & 0xffu,
+           GitVersion);
+    *must_stop = true;
+    return true;
+  } else if (!strcmp(arg, "-git")) {
+    printf("%s\n", GitVersion);
     *must_stop = true;
     return true;
   } else if (!strcmp(arg, "-noasm")) {

@@ -28,7 +28,6 @@ GTEST_FLAGS  = -I$(GTEST_DIR)/googletest/include
 GTEST_FLAGS += -I$(GTEST_DIR)/googlemock/include
 GTEST_LIBS = -L$(GTEST_DIR)/lib -lgtest -lgtest_main
 
-
 # OPENGL setup
 EXTRA_FLAGS += -DWP2_HAVE_OPENGL
 ifeq ($(strip $(shell uname)), Darwin)
@@ -93,6 +92,12 @@ EXTRA_FLAGS += -Wshadow
 EXTRA_FLAGS += -Wformat-security
 # EXTRA_FLAGS += -Wvla
 
+# fetch git hash
+GIT_HASH = $(shell git rev-parse --short HEAD)
+ifneq ($(GIT_HASH),)
+  EXTRA_FLAGS += -DWP2_GIT_VERSION=\"$(GIT_HASH)\"
+endif
+
 # SSE4.2-specific flags. If unsure about your compiler's defines, try:
 #    $(CC) -dM -E - < /dev/null | grep SSE
 ifeq ($(HAVE_SSE), 1)
@@ -105,7 +110,6 @@ ifeq ($(HAVE_AVX2), 1)
 EXTRA_FLAGS += -DWP2_HAVE_AVX2 -DWP2_HAVE_SSE
 src/dsp/deblocking_filter_dsp.o: EXTRA_FLAGS += -mavx2
 endif
-
 
 # NEON-specific flags:
 # EXTRA_FLAGS += -march=armv7-a -mfloat-abi=hard -mfpu=neon -mtune=cortex-a8

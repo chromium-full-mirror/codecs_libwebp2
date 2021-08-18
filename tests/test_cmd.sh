@@ -46,6 +46,7 @@ TMP_FILE3=/tmp/cmd_test3.png
 
 "${CWP2}"
 "${CWP2}" -version
+"${CWP2}" -git
 "${CWP2}" -mem_traffic -h
 "${CWP2}" "${SRC_FILE3}"
 "${CWP2}" -- - < "${SRC_FILE3}"

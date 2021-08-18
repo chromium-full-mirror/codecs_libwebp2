@@ -44,6 +44,9 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
+// Contains the hash of HEAD git version, or '0' if not available.
+extern const char* const GitVersion;
+
 // Parse numerical values (and update *error in case of error).
 int ExUtilGetInt(const char* const v, bool* const error, int base = 0);
 uint32_t ExUtilGetUInt(const char* const v, bool* const error, int base = 0);
