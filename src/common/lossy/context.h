@@ -187,48 +187,6 @@ class SegmentIdPredictor {
 };
 
 //------------------------------------------------------------------------------
-// DC value contexting
-
-// This class is used for predicting and storing the DC value
-class DCPredictor {
- public:
-  typedef struct {
-    int16_t DCs[3];  // NOLINT (caps in var name)
-  } DCValues;  // stores 3 dc values
-
-  DCPredictor() = default;
-
-  // Will allocate the internal working map_[]
-  WP2Status InitMap(uint32_t width, uint32_t height);
-
-  WP2Status InitWrite(ANSDictionaries* const dicts, uint32_t prefix_bits);
-  void ResetRecord() {}
-  void Record(const CodedBlockBase& cb, const DCValues& DCs,
-              SymbolRecorder* const recorder);
-  WP2Status WriteHeader(uint32_t cluster, uint32_t max_count,
-                        const SymbolRecorder& recorder, ANSEncBase* const enc,
-                        ANSDictionaries* const dicts, SymbolWriter* const sw);
-  void Write(const CodedBlockBase& cb, const DCValues& DCs,
-             ANSEncBase* const enc, SymbolManager* const sm);
-
-  WP2Status InitRead(uint32_t cluster, SymbolReader* const sr,
-                     uint32_t prefix_bits, uint32_t max_count);
-  void Read(ANSDec* const dec, SymbolReader* const sr, const CodedBlockBase& cb,
-            DCValues* const DCs);
-
- private:
-  uint32_t prefix_bits_;
-  VectorNoCtor<DCValues> map_;     // dc map, initialized by InitMap()
-  ContextImpl<DCValues> dc_ctxt_;  // initialized during InitMap() call
-  uint16_t GetPrefix(int16_t dc) const;
-  ANSCodes dc_;  // reading
-  ANSBinSymbol is_zero_;
-
- private:
-  void GetDCPrediction(const CodedBlockBase& cb, DCValues* const values);
-};
-
-//------------------------------------------------------------------------------
 // Alpha mode predictor.
 
 class AlphaModePredictor {

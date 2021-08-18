@@ -193,12 +193,10 @@ std::string ContextPredictor::GetPredStr(const int16_t context[],
 //------------------------------------------------------------------------------
 
 // The DC predictor sets all pixels to the average of top and/or left context.
-// TODO(vrabaud) remove Large in the name once the other DCPredictor class from
-//               context is removed.
-class LargeDCPredictor : public ContextPredictor {
+class DCPredictor : public ContextPredictor {
  public:
   enum Type { kAll, kLeft, kTop };
-  explicit LargeDCPredictor(Type type) : type_(type) {}
+  explicit DCPredictor(Type type) : type_(type) {}
 
   std::string GetName() const override {
     const char* const kTypeStr[]{"all", "left", "top"};
@@ -598,16 +596,13 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
 
     switch (p) {
       case Pred::kDcAll:
-        pred = new (WP2Allocable::nothrow)
-            LargeDCPredictor(LargeDCPredictor::kAll);
+        pred = new (WP2Allocable::nothrow) DCPredictor(DCPredictor::kAll);
         break;
       case Pred::kDcLeft:
-        pred = new (WP2Allocable::nothrow)
-            LargeDCPredictor(LargeDCPredictor::kLeft);
+        pred = new (WP2Allocable::nothrow) DCPredictor(DCPredictor::kLeft);
         break;
       case Pred::kDcTop:
-        pred = new (WP2Allocable::nothrow)
-            LargeDCPredictor(LargeDCPredictor::kTop);
+        pred = new (WP2Allocable::nothrow) DCPredictor(DCPredictor::kTop);
         break;
       case Pred::kSmooth2D:
         pred = new (WP2Allocable::nothrow)
