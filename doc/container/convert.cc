@@ -38,6 +38,8 @@ void Help() {
             << " --container ....... Outputs minimal image container"
             << std::endl
             << " --avif ............ Outputs AVIF" << std::endl
+            << " --strip-obu ....... Trims input OBU sequence/frame headers"
+            << std::endl
             << " --info ............ Prints details" << std::endl
             << " -h" << std::endl
             << " --help ............ Prints this" << std::endl;
@@ -52,12 +54,18 @@ bool EndsWith(const std::string& str, const std::string& token) {
 
 //------------------------------------------------------------------------------
 
-enum class Format { kContainer, kAvif, kObu, kDeduceFromExtension };
+enum class Format {
+  kContainer,
+  kAvif,
+  kObu,
+  kDeduceFromExtension
+};
 
 struct Params {
   std::string input_path;
   std::string output_path;
   Format output_format = Format::kDeduceFromExtension;
+  bool strip_obu = false;
   container::EncoderConfig config;
   bool print_info = false;
 };
@@ -76,6 +84,8 @@ bool ParseArguments(int argc, const char* argv[], Params& params,
       params.output_format = Format::kContainer;
     } else if (!std::strcmp(argv[c], "--avif")) {
       params.output_format = Format::kAvif;
+    } else if (!std::strcmp(argv[c], "--strip-obu")) {
+      params.strip_obu = true;
     } else if (!std::strcmp(argv[c], "--info")) {
       params.print_info = true;
     } else if (!std::strcmp(argv[c], "-h") || !std::strcmp(argv[c], "--help")) {
@@ -156,7 +166,8 @@ int main(int argc, const char* argv[]) {
 
   container::Image image;  // Used to store the image features, not the pixels.
   uint32_t codec = 0;      // Input pixels format.
-  size_t offset_till_codec_bytes, num_codec_bytes;  // Encoded input pixels.
+  size_t offset_till_codec_bytes, num_codec_bytes;   // Encoded input pixels.
+  container::SequenceHeaderObu sequence_header_obu;  // In case of OBU input.
 
   // Try reading the input as both formats.
   const bool input_is_container =
@@ -166,9 +177,22 @@ int main(int argc, const char* argv[]) {
       !input_is_container &&
       container::UnwrapAvif(input_data, input.size(), image,
                             offset_till_codec_bytes, num_codec_bytes);
-  if (input_is_avif) codec = container::kContainerCodecAv1;
+  const bool input_is_obu = !input_is_container && !input_is_avif &&
+                            container::UnwrapObuSequenceHeader(
+                                input_data, input.size(), sequence_header_obu);
+  if (input_is_avif) {
+    codec = container::kContainerCodecObu;
+  } else if (input_is_obu) {
+    codec = container::kContainerCodecObu;
+    offset_till_codec_bytes = 0;
+    num_codec_bytes = input.size();
 
-  if (!input_is_container && !input_is_avif) {
+    image.width = sequence_header_obu.width;
+    image.height = sequence_header_obu.height;
+    image.is_opaque = true;  // TODO(yguyon): Handle transparency
+  }
+
+  if (!input_is_container && !input_is_avif && !input_is_obu) {
     std::cerr << "Error: Unsupported input or output" << std::endl;
     return 1;
   }
@@ -180,39 +204,96 @@ int main(int argc, const char* argv[]) {
     if (params.print_info) {
       std::cout << container::ContainerHeaderToStr(input_data, input.size());
     }
-  } else {
-    assert(input_is_avif);
+  } else if (input_is_avif) {
     std::cout << "AVIF input (" << input.size() << " bytes)" << std::endl;
     if (params.print_info) {
       std::cout << container::BmffBoxesToStr(input_data, input.size());
     }
   }
 
-  if (params.print_info && codec == container::kContainerCodecAv1) {
+  if (codec == container::kContainerCodecObu) {
     std::cout << "OBU input (" << num_codec_bytes << " bytes)" << std::endl;
+  }
+  if (params.print_info && codec == container::kContainerCodecObu) {
     std::cout << container::ObuUnitsToStr(input_data + offset_till_codec_bytes,
                                           num_codec_bytes);
+  }
+
+  container::ObuFeatures features;
+
+  // Load stripped OBU.
+  if (input_is_container && codec == container::kContainerCodecAv1) {
+    std::cerr << "Error: Unimplemented" << std::endl;
+    return 1;
+  }
+
+  // Strip the OBU.
+  if (params.strip_obu && codec == container::kContainerCodecObu) {
+    size_t offset_till_tiles_bytes, num_tiles_bytes;
+    std::string log;
+    const bool success = container::UnwrapObu(
+        input_data + offset_till_codec_bytes, num_codec_bytes, image.width,
+        image.height, features, offset_till_tiles_bytes, num_tiles_bytes, log);
+
+    if (params.print_info) std::cout << log;
+    if (!success) {
+      std::cerr << "Error: Unable to strip OBU input" << std::endl;
+      return 1;
+    }
+
+    // Replace the codec bytes by the tile group bytes and the 'features'.
+    codec = container::kContainerCodecAv1;
+    offset_till_codec_bytes += offset_till_tiles_bytes;
+    num_codec_bytes = num_tiles_bytes;
+  }
+
+  container::Data reconstructed_obu;
+  const uint8_t* final_codec_bytes = input_data + offset_till_codec_bytes;
+  size_t num_final_codec_bytes = num_codec_bytes;
+
+  // Restore the OBU. Only kContainer output supports stripped OBU.
+  if ((!params.strip_obu || params.output_format != Format::kContainer) &&
+      codec == container::kContainerCodecAv1) {
+    std::string log;
+    const bool success =
+        container::WrapObu(image.width, image.height, features,
+                           input_data + offset_till_codec_bytes,
+                           num_codec_bytes, reconstructed_obu, log);
+
+    if (params.print_info) std::cout << log;
+    if (!success) {
+      std::cerr << "Error: Unable to reconstruct OBU" << std::endl;
+      return 1;
+    }
+
+    codec = container::kContainerCodecObu;
+    final_codec_bytes = reconstructed_obu.data();
+    num_final_codec_bytes = reconstructed_obu.size();
   }
 
   // Wrap the encoded pixels to the destination format.
   container::Data output_data;
   if (params.output_format == Format::kContainer) {
-    container::WrapContainer(image, params.config, codec,
-                             input_data + offset_till_codec_bytes,
-                             num_codec_bytes, output_data);
+    if (codec == container::kContainerCodecAv1) {
+      std::cerr << "Error: Unimplemented" << std::endl;
+      return 1;
+    } else {
+      container::WrapContainer(image, params.config, codec, final_codec_bytes,
+                               num_final_codec_bytes, output_data);
+    }
   } else if (params.output_format == Format::kAvif) {
-    if (!container::WrapAvif(image, input_data + offset_till_codec_bytes,
-                             num_codec_bytes, output_data)) {
+    if (!container::WrapAvif(image, final_codec_bytes, num_final_codec_bytes,
+                             output_data)) {
       std::cerr << "Error: Unable to create AVIF file from input" << std::endl;
       return 1;
     }
   } else if (params.output_format == Format::kObu) {
-    if (codec != container::kContainerCodecAv1) {
+    if (codec != container::kContainerCodecObu) {
       std::cerr << "Error: Unable to get OBU from non-AV1 input" << std::endl;
       return 1;
     }
-    const uint8_t* const obu_data = input_data + offset_till_codec_bytes;
-    output_data = container::Data(obu_data, obu_data + num_codec_bytes);
+    output_data = container::Data(final_codec_bytes,
+                                  final_codec_bytes + num_final_codec_bytes);
   }
 
   // Write the file.

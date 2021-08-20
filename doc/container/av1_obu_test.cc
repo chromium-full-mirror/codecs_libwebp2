@@ -23,35 +23,82 @@
 namespace container {
 namespace {
 
-Data GetAv1Obu(const char avif_file_name[]) {
-  const Data input_avif = testutil::LoadFile(avif_file_name);
-  Image unwrapped_input_avif;
-  size_t offset_till_input_obu, input_obu_size;
-  if (UnwrapAvif(input_avif.data(), input_avif.size(), unwrapped_input_avif,
-                 offset_till_input_obu, input_obu_size)) {
-    return Data(input_avif.data() + offset_till_input_obu,
-                input_avif.data() + offset_till_input_obu + input_obu_size);
-  }
-  return Data();
+//------------------------------------------------------------------------------
+
+TEST(ObuTest, UnwrapObuSequenceHeader) {
+  const Data avif = testutil::LoadFile("1x1.avif");
+  ASSERT_FALSE(avif.empty());
+
+  Image unwrapped_avif;
+  size_t offset_till_obu, obu_size;
+  ASSERT_TRUE(UnwrapAvif(avif.data(), avif.size(), unwrapped_avif,
+                         offset_till_obu, obu_size));
+
+  SequenceHeaderObu unwrapped_obu;
+  ASSERT_TRUE(UnwrapObuSequenceHeader(avif.data() + offset_till_obu, obu_size,
+                                      unwrapped_obu));
+  ASSERT_EQ(unwrapped_obu.width, unwrapped_avif.width);
+  ASSERT_EQ(unwrapped_obu.height, unwrapped_avif.height);
 }
 
 //------------------------------------------------------------------------------
 
-TEST(ObuTest, UnwrapOBUSequenceHeader) {
-  const Data av1_obu = GetAv1Obu("1x1.avif");
-  ASSERT_FALSE(av1_obu.empty());
+TEST(ObuTest, UnwrapWrapUnwrap) {
+  const Data avif = testutil::LoadFile("1x1.avif");
+  ASSERT_FALSE(avif.empty());
+  Image unwrapped_avif;
+  size_t offset_till_obu, obu_size;
+  ASSERT_TRUE(UnwrapAvif(avif.data(), avif.size(), unwrapped_avif,
+                         offset_till_obu, obu_size));
 
-  SequenceHeader header;
-  ASSERT_TRUE(UnwrapOBUSequenceHeader(av1_obu.data(), av1_obu.size(), header));
+  // Unwrap the OBU part that was just extracted from the AVIF bitstream.
+  ObuFeatures features;
+  std::memset(&features, 0, sizeof(features));  // For memcmp correctness.
+  size_t offset_till_tiles_bytes, num_tiles_bytes;
+  std::string log;
+  ASSERT_TRUE(UnwrapObu(avif.data() + offset_till_obu, obu_size,
+                        unwrapped_avif.width, unwrapped_avif.height, features,
+                        offset_till_tiles_bytes, num_tiles_bytes, log)) << log;
+
+  Data final_obu;
+  ASSERT_TRUE(WrapObu(unwrapped_avif.width, unwrapped_avif.height, features,
+                      avif.data() + offset_till_tiles_bytes, num_tiles_bytes,
+                      final_obu, log)) << log;
+
+  // Unwrap again to see if all 'features' match.
+  ObuFeatures comparison_features;
+  std::memset(&comparison_features, 0, sizeof(comparison_features));
+  ASSERT_TRUE(UnwrapObu(avif.data() + offset_till_obu, obu_size,
+                        unwrapped_avif.width, unwrapped_avif.height,
+                        comparison_features, offset_till_tiles_bytes,
+                        num_tiles_bytes, log)) << log;
+  EXPECT_EQ(std::memcmp(&features, &comparison_features, sizeof(features)), 0);
+
+  // Wrap again to check the byte-wise equality of the OBU parts.
+  Data comparison_obu;
+  ASSERT_TRUE(WrapObu(unwrapped_avif.width, unwrapped_avif.height, features,
+                      avif.data() + offset_till_tiles_bytes, num_tiles_bytes,
+                      comparison_obu, log)) << log;
+  EXPECT_TRUE(
+      std::equal(final_obu.begin(), final_obu.end(), comparison_obu.begin()));
+
+  EXPECT_FALSE(log.empty());
+  EXPECT_EQ(log.find("Bad"), std::string::npos);
 }
 
 //------------------------------------------------------------------------------
 
 TEST(ObuTest, ObuUnitsToStr) {
-  const Data av1_obu = GetAv1Obu("1x1.avif");
-  ASSERT_FALSE(av1_obu.empty());
+  const Data avif = testutil::LoadFile("1x1.avif");
+  ASSERT_FALSE(avif.empty());
 
-  const std::string output_str = ObuUnitsToStr(av1_obu.data(), av1_obu.size());
+  Image unwrapped_avif;
+  size_t offset_till_obu, obu_size;
+  ASSERT_TRUE(UnwrapAvif(avif.data(), avif.size(), unwrapped_avif,
+                         offset_till_obu, obu_size));
+
+  const std::string output_str =
+      ObuUnitsToStr(avif.data() + offset_till_obu, obu_size);
 
   EXPECT_FALSE(output_str.empty());
   EXPECT_EQ(output_str.find("Bad"), std::string::npos);

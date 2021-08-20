@@ -30,6 +30,18 @@ uint32_t GetNumBitsNeeded(uint32_t value) {
   return index;
 }
 
+uint32_t Log2Floor(uint64_t n) {
+  return (n < 2)     ? 0
+         : (n < 4)   ? 1
+         : (n < 8)   ? 2
+         : (n < 16)  ? 3
+         : (n < 32)  ? 4
+         : (n < 64)  ? 5
+         : (n < 128) ? 6
+         : (n < 256) ? 7
+                     : (8u + Log2Floor(n >> 8));
+}
+
 }  // namespace
 
 //------------------------------------------------------------------------------
@@ -125,6 +137,180 @@ uint32_t BitUnpacker::DecodeUInt(uint32_t num_bits) {
 uint32_t BitUnpacker::DecodeUInt(uint32_t min, uint32_t max) {
   assert(min <= max);
   return min + DecodeUInt(GetNumBitsNeeded(max - min));
+}
+
+//------------------------------------------------------------------------------
+
+void BitCoder::Code(const std::string& name, bool& field) {
+  uint32_t value = field ? 1 : 0;
+  Code(name, /*num_bits=*/1, value);
+  field = (value == 1);
+}
+
+void BitCoder::Force(const std::string& name, bool value) {
+  Force(name, /*num_bits=*/1, value ? 1 : 0);
+}
+
+void BitCoder::Set(const std::string& name, bool& field, bool value) {
+  uint32_t uint_field = field ? 1 : 0;
+  Set(name, uint_field, value ? 1 : 0);
+  field = (uint_field == 1);
+}
+
+void BitCoder::CodeDelta(const std::string& name, uint32_t num_bits,
+                         uint32_t& field) {
+  bool delta_coded = (field != 0);
+  Code(name, delta_coded);
+  if (delta_coded) {
+    Code(name, num_bits, field);
+  }
+}
+
+//------------------------------------------------------------------------------
+
+void BitWriter::Code(const std::string& name, uint32_t num_bits,
+                     uint32_t& field) {
+  if (!Ok()) return;
+
+  log_ << name << " = " << field << " (uint" << num_bits << ")\n";
+  if (field < (1u << num_bits)) {
+    bit_packer_.EncodeUInt(field, num_bits);
+  } else {
+    log_ << "/!\\ Bad value, out of bounds\n";
+    error_ = true;
+  }
+}
+
+void BitWriter::Force(const std::string& name, uint32_t num_bits,
+                      uint32_t value) {
+  if (!Ok()) return;
+
+  log_ << name << " = " << value << " (uint" << num_bits << ", forced)\n";
+  if (value < (1u << num_bits)) {
+    bit_packer_.EncodeUInt(value, num_bits);
+  } else {
+    log_ << "/!\\ Bad value, out of bounds\n";
+    error_ = true;
+  }
+}
+
+void BitWriter::Set(const std::string& name, uint32_t& field, uint32_t value) {
+  if (!Ok()) return;
+
+  log_ << name << " = " << field << " (set)\n";
+  if (field != value) {
+    log_ << "/!\\ Bad value, expected " << value << "\n";
+    error_ = true;
+  }
+}
+
+void BitWriter::CodeOnesTillEqual(const std::string& name, uint32_t& field,
+                                  uint32_t min, uint32_t max) {
+  if (!Ok()) return;
+
+  log_ << name << " = " << field << " (min " << min << ", max " << max << ")\n";
+  if (field >= min && field <= max) {
+    for (uint32_t i = min; i < max; ++i) {
+      bit_packer_.EncodeBool(i != field);
+      if (i == field) break;
+    }
+  } else {
+    log_ << "/!\\ Bad value, out of bounds\n";
+    error_ = true;
+  }
+}
+
+void BitWriter::NonSymmetric(const std::string& name, uint32_t& field,
+                             uint32_t max) {
+  if (!Ok()) return;
+
+  const uint32_t w = GetNumBitsNeeded(max + 1);
+  const uint32_t m = (1 << w) - (max + 1);
+  log_ << name << " = " << field << " (max " << max << ", "
+       << ((field < m) ? w - 1 : w) << " bits)\n";
+  if (field <= max) {
+    if (field < m) {
+      bit_packer_.EncodeUInt(field, /*num_bits=*/w - 1);
+    } else {
+      bit_packer_.EncodeUInt(((field & ~0x1) + m) >> 1, /*num_bits=*/w - 1);
+      bit_packer_.EncodeBool(field & 0x1);
+    }
+  } else {
+    log_ << "/!\\ Bad value, out of bounds\n";
+    error_ = true;
+  }
+}
+
+void BitWriter::AppendBytes(const std::string& name, const uint8_t bytes[],
+                            size_t num_bytes) {
+  if (!Ok()) return;
+
+  log_ << name << " = [" << num_bytes << " bytes]\n";
+  for (size_t i = 0; i < num_bytes; ++i) {
+    bit_packer_.EncodeUInt(bytes[i], /*num_bits=*/8);
+  }
+}
+
+//------------------------------------------------------------------------------
+
+void BitReader::Code(const std::string& name, uint32_t num_bits,
+                     uint32_t& field) {
+  if (!Ok()) {
+    field = 0;
+  } else {
+    field = bit_unpacker_.DecodeUInt(num_bits);
+    log_ << name << " = " << field << " (uint" << num_bits << ")\n";
+  }
+}
+
+void BitReader::Force(const std::string& name, uint32_t num_bits,
+                      uint32_t value) {
+  if (!Ok()) return;
+
+  uint32_t decoded_value = bit_unpacker_.DecodeUInt(num_bits);
+  log_ << name << " = " << decoded_value << " (uint" << num_bits
+       << ", forced)\n";
+  if (value != decoded_value) {
+    log_ << "/!\\ Bad value, expected " << value << "\n";
+    error_ = true;
+  }
+}
+
+void BitReader::Set(const std::string& name, uint32_t& field, uint32_t value) {
+  if (!Ok()) return;
+
+  log_ << name << " = " << field << " (set)\n";
+  field = value;
+}
+
+void BitReader::CodeOnesTillEqual(const std::string& name, uint32_t& field,
+                                  uint32_t min, uint32_t max) {
+  if (!Ok()) {
+    field = 0;
+  } else {
+    for (field = min; field < max; ++field) {
+      if (!bit_unpacker_.DecodeBool()) break;
+    }
+    log_ << name << " = " << field << " (min " << min << ", max " << max
+         << ")\n";
+  }
+}
+
+void BitReader::NonSymmetric(const std::string& name, uint32_t& field,
+                             uint32_t max) {
+  if (!Ok()) {
+    field = 0;
+  } else {
+    // See "AV1 Bitstream & Decoding Process Specification - 4.10.6."
+    const uint32_t w = GetNumBitsNeeded(max + 1);
+    const uint32_t m = (1 << w) - (max + 1);
+    field = bit_unpacker_.DecodeUInt(/*num_bits=*/w - 1);
+    if (field >= m) {
+      field = (field << 1) - m + (bit_unpacker_.DecodeBool() ? 1 : 0);
+    }
+    log_ << name << " = " << field << " (max " << max << ", "
+         << ((field < m) ? w - 1 : w) << " bits)\n";
+  }
 }
 
 //------------------------------------------------------------------------------

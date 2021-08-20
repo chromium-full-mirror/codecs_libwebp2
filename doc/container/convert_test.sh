@@ -19,12 +19,13 @@ CONVERT=${BINARY_DIR}/convert
 TMP_PIC1=/tmp/convert_test1.pic
 TMP_PIC2=/tmp/convert_test2.pic
 TMP_AVIF=/tmp/convert_test.avif
-TMP_OBU=/tmp/convert_test.obu
+TMP_OBU1=/tmp/convert_test1.obu
+TMP_OBU2=/tmp/convert_test2.obu
 
 # Print help
 ${CONVERT} -h
 
-# Simple back-and-forth
+# Simple back-and-forth with generic Container
 for SRC_AVIF in ${TESTDATA_DIR}/*.avif; do
   ${CONVERT} ${SRC_AVIF} --info -o ${TMP_PIC1}
   ${CONVERT} ${TMP_PIC1} --info -o ${TMP_AVIF}
@@ -32,12 +33,23 @@ for SRC_AVIF in ${TESTDATA_DIR}/*.avif; do
   cmp ${TMP_PIC1} ${TMP_PIC2}
 done
 
-# OBU
+# Simple back-and-forth with OBU
 for SRC_AVIF in ${TESTDATA_DIR}/*.avif; do
-  ${CONVERT} ${SRC_AVIF} -o ${TMP_OBU}
+  ${CONVERT} ${SRC_AVIF} --info -o ${TMP_OBU1}
+  ${CONVERT} ${TMP_OBU1} --info -o ${TMP_AVIF}
+  ${CONVERT} ${TMP_AVIF} --info -o ${TMP_OBU2}
+  cmp ${TMP_OBU1} ${TMP_OBU2}
+done
+
+# Simple back-and-forth with stripped OBU
+for SRC_AVIF in ${TESTDATA_DIR}/*.avif; do
+  ${CONVERT} ${SRC_AVIF} --strip-obu --info -o ${TMP_OBU1}
+  ${CONVERT} ${TMP_OBU1} --strip-obu --info -o ${TMP_AVIF}
+  ${CONVERT} ${TMP_AVIF} --strip-obu --info -o ${TMP_OBU2}
+  cmp ${TMP_OBU1} ${TMP_OBU2}
 done
 
 # Clean-up
-rm -f ${TMP_PIC1} ${TMP_PIC2} ${TMP_AVIF} ${TMP_OBU}
+rm -f ${TMP_PIC1} ${TMP_PIC2} ${TMP_AVIF} ${TMP_OBU1} ${TMP_OBU2}
 
 echo "PASS"

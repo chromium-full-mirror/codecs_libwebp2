@@ -35,9 +35,10 @@ constexpr std::size_t array_size(const T (&array)[N]) {
 static constexpr uint32_t kContainerTagNumBits = 20;
 static constexpr uint32_t kContainerTag = 0xEF4FF;
 static constexpr uint32_t kContainerCodecNumBits = 4;
-static constexpr uint32_t kContainerCodecAv1 = 0x9;
-static constexpr uint32_t kContainerCodecWp2 = 0x6;
-static constexpr uint32_t kImageDimNumBits = 14;  // Maximum width, height.
+static constexpr uint32_t kContainerCodecObu = 0x8;  // Full av1-obu bitstream
+static constexpr uint32_t kContainerCodecAv1 = 0x9;  // av1-obu tile group only
+static constexpr uint32_t kContainerCodecWp2 = 0x6;  // WebP2 (unimplemented)
+static constexpr uint32_t kImageDimNumBits = 14;  // Maximum log2 width, height.
 
 // Maximum (inclusive) size of a data chunk.
 static constexpr uint32_t kMaxChunkSize = 1u << 29;  // ~500 MB

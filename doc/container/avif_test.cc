@@ -25,7 +25,7 @@ namespace {
 
 //------------------------------------------------------------------------------
 
-TEST(AvifTest, UnwrapWrapUnwrapAvif) {
+TEST(AvifTest, UnwrapWrapUnwrap) {
   const Data input_avif = testutil::LoadFile("1x1.avif");
   ASSERT_FALSE(input_avif.empty());
 

@@ -17,6 +17,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <sstream>
+#include <string>
 
 #include "./container.h"
 
@@ -64,12 +66,103 @@ class BitUnpacker {
   size_t GetNumReadBytes() const { return num_read_bytes_; }
 
  private:
-  const uint8_t* const bytes_;
-  const size_t num_bytes_;
+  const uint8_t* bytes_;
+  size_t num_bytes_;
   size_t num_read_bytes_ = 0;  // Number of read 'bytes_', partial one included.
   size_t next_bit_mask_ = 0;   // Mask applied to the trailing byte of 'bytes_'
                                // to get the next bit to be read.
   bool error_ = false;
+};
+
+//------------------------------------------------------------------------------
+
+// Interface for writing and reading fields bit-wise.
+class BitCoder {
+ public:
+  virtual ~BitCoder() = default;
+
+  // Encodes field with 'name' or decodes its value into 'field' using
+  // 'num_bits'.
+  virtual void Code(const std::string& name, uint32_t num_bits,
+                    uint32_t& field) = 0;
+  // Same but exact 'value' is expected at decoding.
+  virtual void Force(const std::string& name, uint32_t num_bits,
+                     uint32_t value) = 0;
+  // Does not encode nor decode but makes sure the 'field' is set to 'value' at
+  // writing or sets it at reading.
+  virtual void Set(const std::string& name, uint32_t& field,
+                   uint32_t value) = 0;
+
+  // Bool versions.
+  void Code(const std::string& name, bool& field);
+  void Force(const std::string& name, bool value);
+  void Set(const std::string& name, bool& field, bool value);
+
+  // Special versions.
+  // Code whether 'field' is non-zero, and then, only if so, its value.
+  void CodeDelta(const std::string& name, uint32_t num_bits, uint32_t& field);
+  // Code "true" as long as incrementing 'min' is below 'value', then 1 "false".
+  virtual void CodeOnesTillEqual(const std::string& name, uint32_t& field,
+                                 uint32_t min, uint32_t max) = 0;
+  // Code 'value' using one fewer bit depending on 'max'.
+  virtual void NonSymmetric(const std::string& name, uint32_t& field,
+                            uint32_t max) = 0;
+};
+
+class BitWriter : public BitCoder {
+ public:
+  explicit BitWriter(Data& output) : output_(output) {}
+
+  void Code(const std::string& name, uint32_t num_bits,
+            uint32_t& field) override;
+  void Force(const std::string& name, uint32_t num_bits,
+             uint32_t value) override;
+  void Set(const std::string& name, uint32_t& field, uint32_t value) override;
+
+  void CodeOnesTillEqual(const std::string& name, uint32_t& field, uint32_t min,
+                         uint32_t max) override;
+  void NonSymmetric(const std::string& name, uint32_t& field,
+                    uint32_t max) override;
+
+  void AppendBytes(const std::string& name, const uint8_t bytes[],
+                   size_t num_bytes);
+
+  bool Ok() const { return !error_; }
+  size_t GetNumBytes() const { return bit_packer_.GetNumBytes(); }
+  size_t GetNumBits() const { return bit_packer_.GetNumBits(); }
+  std::string GetLog() const { return log_.str(); }
+
+ protected:
+  BitPacker bit_packer_;
+  Data& output_;
+  bool error_ = false;
+  std::stringstream log_;
+};
+
+class BitReader : public BitCoder {
+ public:
+  BitReader(const uint8_t bytes[], size_t num_bytes)
+      : bit_unpacker_(bytes, num_bytes) {}
+
+  void Code(const std::string& name, uint32_t num_bits,
+            uint32_t& field) override;
+  void Force(const std::string& name, uint32_t num_bits,
+             uint32_t value) override;
+  void Set(const std::string& name, uint32_t& field, uint32_t value) override;
+
+  void CodeOnesTillEqual(const std::string& name, uint32_t& field, uint32_t min,
+                         uint32_t max) override;
+  void NonSymmetric(const std::string& name, uint32_t& field,
+                    uint32_t max) override;
+
+  bool Ok() const { return !error_ && bit_unpacker_.Ok(); }
+  size_t GetNumBytes() const { return bit_unpacker_.GetNumReadBytes(); }
+  std::string GetLog() const { return log_.str(); }
+
+ protected:
+  BitUnpacker bit_unpacker_;
+  bool error_ = false;
+  std::stringstream log_;
 };
 
 //------------------------------------------------------------------------------

@@ -139,8 +139,8 @@ bool WrapAvif(const Image& image, const uint8_t codec_bytes[],
               size_t num_codec_bytes, Data& data) {
   // Decode the necessary information from the Sequence Header. AVIF requires
   // some of these fields to match between the MIAF container and AV1-OBU.
-  SequenceHeader header;
-  if (!UnwrapOBUSequenceHeader(codec_bytes, num_codec_bytes, header)) {
+  SequenceHeaderObu header;
+  if (!UnwrapObuSequenceHeader(codec_bytes, num_codec_bytes, header)) {
     return false;
   }
 
@@ -411,7 +411,7 @@ bool UnwrapAvif(const uint8_t data[], size_t data_size, Image& image,
 
   image.orientation = kOrientationMapping[angle][mirror];
   image.is_opaque = true;  // TODO(yguyon): Handle alpha
-  return true;             // No trailing garbage allowed.
+  return true;
 }
 
 //------------------------------------------------------------------------------
