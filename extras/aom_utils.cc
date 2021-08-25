@@ -683,10 +683,7 @@ WP2Status EncodeAV1WithLibaom(const ArgbBuffer& image, const ParamsAV1& params,
                                                           aom_codec_destroy);
   WP2_CHECK_STATUS(ConfigureCodec(params, &codec));
   const double start_time = GetStopwatchTime();
-  if (encode_frame(&codec, &raw, 0, kFlags, bitstream, false)) {
-    fprintf(stderr, "!?! first calls to encode_frame() should 'fail'!\n");
-    return WP2_STATUS_BITSTREAM_ERROR;
-  }
+  encode_frame(&codec, &raw, 0, kFlags, bitstream, false);
   while (encode_frame(&codec, NULL, -1, 0, bitstream)) { /* flush encoder */
   }
   if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
