@@ -30,18 +30,6 @@ uint32_t GetNumBitsNeeded(uint32_t value) {
   return index;
 }
 
-uint32_t Log2Floor(uint64_t n) {
-  return (n < 2)     ? 0
-         : (n < 4)   ? 1
-         : (n < 8)   ? 2
-         : (n < 16)  ? 3
-         : (n < 32)  ? 4
-         : (n < 64)  ? 5
-         : (n < 128) ? 6
-         : (n < 256) ? 7
-                     : (8u + Log2Floor(n >> 8));
-}
-
 }  // namespace
 
 //------------------------------------------------------------------------------
@@ -163,10 +151,18 @@ void BitCoder::CodeDelta(const std::string& name, uint32_t num_bits,
   Code(name, delta_coded);
   if (delta_coded) {
     Code(name, num_bits, field);
+  } else {
+    field = 0;  // Set() would be cleaner but it logs.
   }
 }
 
 //------------------------------------------------------------------------------
+
+BitWriter::~BitWriter() {
+  if (!Ok()) return;
+  output_.insert(output_.end(), bit_packer_.GetBytes(),
+                 bit_packer_.GetBytes() + bit_packer_.GetNumBytes());
+}
 
 void BitWriter::Code(const std::string& name, uint32_t num_bits,
                      uint32_t& field) {
@@ -279,8 +275,8 @@ void BitReader::Force(const std::string& name, uint32_t num_bits,
 void BitReader::Set(const std::string& name, uint32_t& field, uint32_t value) {
   if (!Ok()) return;
 
-  log_ << name << " = " << field << " (set)\n";
   field = value;
+  log_ << name << " = " << field << " (set)\n";
 }
 
 void BitReader::CodeOnesTillEqual(const std::string& name, uint32_t& field,

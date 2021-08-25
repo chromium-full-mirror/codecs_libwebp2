@@ -165,7 +165,10 @@ int main(int argc, const char* argv[]) {
       reinterpret_cast<const uint8_t*>(input.data());
 
   container::Image image;  // Used to store the image features, not the pixels.
-  uint32_t codec = 0;      // Input pixels format.
+  uint32_t codec = 0;      // Input pixels format:
+                           //   kContainerCodecObu
+                           //   kContainerCodecAv1 (stripped OBU)
+                           //   kContainerCodecWp2
   size_t offset_till_codec_bytes, num_codec_bytes;   // Encoded input pixels.
   container::SequenceHeaderObu sequence_header_obu;  // In case of OBU input.
 
@@ -221,23 +224,25 @@ int main(int argc, const char* argv[]) {
 
   container::ObuFeatures features;
 
-  // Load stripped OBU.
-  if (input_is_container && codec == container::kContainerCodecAv1) {
-    std::cerr << "Error: Unimplemented" << std::endl;
-    return 1;
-  }
-
   // Strip the OBU.
-  if (params.strip_obu && codec == container::kContainerCodecObu) {
+  if (codec == container::kContainerCodecAv1 ||
+      (params.strip_obu && codec == container::kContainerCodecObu)) {
     size_t offset_till_tiles_bytes, num_tiles_bytes;
     std::string log;
-    const bool success = container::UnwrapObu(
-        input_data + offset_till_codec_bytes, num_codec_bytes, image.width,
-        image.height, features, offset_till_tiles_bytes, num_tiles_bytes, log);
+    const bool success =
+        (codec == container::kContainerCodecAv1)
+            ? container::UnwrapStrippedObu(
+                  input_data + offset_till_codec_bytes, num_codec_bytes,
+                  image.width, image.height, features, offset_till_tiles_bytes,
+                  num_tiles_bytes, log)
+            : container::UnwrapObu(input_data + offset_till_codec_bytes,
+                                   num_codec_bytes, image.width, image.height,
+                                   features, offset_till_tiles_bytes,
+                                   num_tiles_bytes, log);
 
     if (params.print_info) std::cout << log;
     if (!success) {
-      std::cerr << "Error: Unable to strip OBU input" << std::endl;
+      std::cerr << "Error: Unable to unwrap OBU input" << std::endl;
       return 1;
     }
 
@@ -248,25 +253,35 @@ int main(int argc, const char* argv[]) {
   }
 
   container::Data reconstructed_obu;
+  std::string reconstructed_obu_log;
   const uint8_t* final_codec_bytes = input_data + offset_till_codec_bytes;
   size_t num_final_codec_bytes = num_codec_bytes;
 
-  // Restore the OBU. Only kContainer output supports stripped OBU.
-  if ((!params.strip_obu || params.output_format != Format::kContainer) &&
+  if (params.output_format != Format::kDeduceFromExtension &&
       codec == container::kContainerCodecAv1) {
-    std::string log;
-    const bool success =
-        container::WrapObu(image.width, image.height, features,
-                           input_data + offset_till_codec_bytes,
-                           num_codec_bytes, reconstructed_obu, log);
+    reconstructed_obu_log = "\n";  // Visually split the text.
 
-    if (params.print_info) std::cout << log;
+    // Restore the OBU. Only kContainer output supports stripped OBU.
+    const bool strip_obu =
+        (params.strip_obu && params.output_format == Format::kContainer);
+    const bool success =
+        strip_obu ? container::WrapStrippedObu(
+                        image.width, image.height, features,
+                        input_data + offset_till_codec_bytes, num_codec_bytes,
+                        reconstructed_obu, reconstructed_obu_log)
+                  : container::WrapObu(image.width, image.height, features,
+                                       input_data + offset_till_codec_bytes,
+                                       num_codec_bytes, reconstructed_obu,
+                                       reconstructed_obu_log);
+
     if (!success) {
+      if (params.print_info) std::cout << reconstructed_obu_log;
       std::cerr << "Error: Unable to reconstruct OBU" << std::endl;
       return 1;
     }
 
-    codec = container::kContainerCodecObu;
+    codec = strip_obu ? container::kContainerCodecAv1
+                      : container::kContainerCodecObu;
     final_codec_bytes = reconstructed_obu.data();
     num_final_codec_bytes = reconstructed_obu.size();
   }
@@ -274,18 +289,29 @@ int main(int argc, const char* argv[]) {
   // Wrap the encoded pixels to the destination format.
   container::Data output_data;
   if (params.output_format == Format::kContainer) {
-    if (codec == container::kContainerCodecAv1) {
-      std::cerr << "Error: Unimplemented" << std::endl;
-      return 1;
-    } else {
-      container::WrapContainer(image, params.config, codec, final_codec_bytes,
-                               num_final_codec_bytes, output_data);
+    container::WrapContainer(image, params.config, codec, final_codec_bytes,
+                             num_final_codec_bytes, output_data);
+    std::cout << std::endl
+              << "Minimal image container output (" << output_data.size()
+              << " bytes)" << std::endl;
+    if (params.print_info) {
+      std::cout << container::ContainerHeaderToStr(output_data.data(),
+                                                   output_data.size())
+                << reconstructed_obu_log;
     }
   } else if (params.output_format == Format::kAvif) {
     if (!container::WrapAvif(image, final_codec_bytes, num_final_codec_bytes,
                              output_data)) {
       std::cerr << "Error: Unable to create AVIF file from input" << std::endl;
       return 1;
+    }
+    std::cout << std::endl
+              << "AVIF output (" << output_data.size() << " bytes)"
+              << std::endl;
+    if (params.print_info) {
+      std::cout << container::BmffBoxesToStr(output_data.data(),
+                                             output_data.size())
+                << reconstructed_obu_log;
     }
   } else if (params.output_format == Format::kObu) {
     if (codec != container::kContainerCodecObu) {
@@ -294,6 +320,12 @@ int main(int argc, const char* argv[]) {
     }
     output_data = container::Data(final_codec_bytes,
                                   final_codec_bytes + num_final_codec_bytes);
+    std::cout << std::endl
+              << "OBU output (" << output_data.size() << " bytes)"
+              << std::endl;
+    if (params.print_info) {
+      std::cout << reconstructed_obu_log;
+    }
   }
 
   // Write the file.

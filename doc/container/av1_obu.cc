@@ -432,6 +432,8 @@ void CodeFrameHeaderObu(uint32_t width, uint32_t height, ObuFeatures& f,
 
   if (f.allow_screen_content_tools) {
     obu.Code("allow_intrabc", f.allow_intrabc);
+  } else {
+    obu.Set("allow_intrabc", f.allow_intrabc, false);
   }
 
   CodeTileInfo(width, height, f, obu);
@@ -623,8 +625,6 @@ class ObuWriter : public BitWriter {
     // Write the size of the payload, that was unknown until now.
     // See "AV1 Bitstream & Decoding Process Specification - 5.3.1."
     WriteLeb128(bit_packer_.GetNumBytes(), output_);
-    output_.insert(output_.end(), bit_packer_.GetBytes(),
-                   bit_packer_.GetBytes() + bit_packer_.GetNumBytes());
   }
 };
 
@@ -743,6 +743,92 @@ bool UnwrapObu(const uint8_t data[], size_t data_size, uint32_t width,
     log += "/!\\ No tile group data found\n";
     return false;
   }
+  return true;
+}
+
+//------------------------------------------------------------------------------
+// Stripped OBU: OBU sequence fields without OBU headers nor fields with a known
+//               or forced value.
+
+namespace {
+
+class StrippedObuWriter : public BitWriter {
+ public:
+  using BitWriter::BitWriter;
+
+  // Do not write forced fields, because their value is known.
+  void Force(const std::string& name, uint32_t num_bits,
+             uint32_t value) override {
+    uint32_t field = value;
+    Set(name, field, value);  // For logging.
+  }
+};
+
+class StrippedObuReader : public BitReader {
+ public:
+  using BitReader::BitReader;
+
+  // Do not read forced fields, because their value is known.
+  void Force(const std::string& name, uint32_t num_bits,
+             uint32_t value) override {
+    uint32_t field = value;
+    Set(name, field, value);  // For logging.
+  }
+};
+
+}  // namespace
+
+bool WrapStrippedObu(uint32_t width, uint32_t height,
+                     const ObuFeatures& features, const uint8_t tiles_bytes[],
+                     size_t num_tiles_bytes, Data& data, std::string& log) {
+  data.clear();
+  ObuFeatures f;  // Copy 'features' for safety and to avoid a const_cast().
+  std::memcpy(&f, &features, sizeof(f));  // Because of memcmp() below.
+
+  {
+    StrippedObuWriter stripped_obu(data);
+    CodeSequenceHeaderObu(width, height, f, stripped_obu);
+    CodeFrameHeaderObu(width, height, f, stripped_obu);
+    CodeByteAlignment(stripped_obu);  // TODO(yguyon): Check it at unwrapping
+    log += stripped_obu.GetLog();
+    if (!stripped_obu.Ok()) return false;
+  }
+
+  {
+    // TODO(yguyon): Maybe the minimum can be more than 1 byte
+    EncodeVarInt(num_tiles_bytes, /*min=*/1u, kMaxVarInt, data);
+    data.insert(data.end(), tiles_bytes, tiles_bytes + num_tiles_bytes);
+  }
+
+  // Make sure the features were not modified by mistake.
+  assert(std::memcmp(&f, &features, sizeof(f)) == 0);
+  return true;
+}
+
+bool UnwrapStrippedObu(const uint8_t data[], size_t data_size, uint32_t width,
+                       uint32_t height, ObuFeatures& features,
+                       size_t& offset_till_tiles_bytes, size_t& num_tiles_bytes,
+                       std::string& log) {
+  StrippedObuReader stripped_obu(data, data_size);
+  CodeSequenceHeaderObu(width, height, features, stripped_obu);
+  CodeFrameHeaderObu(width, height, features, stripped_obu);
+  log += stripped_obu.GetLog();
+  if (!stripped_obu.Ok()) return false;
+
+  uint32_t data_pos = stripped_obu.GetNumBytes();
+  uint32_t num_bytes;
+  if (!DecodeVarInt(/*min=*/1u, kMaxVarInt, data, data_size, data_pos,
+                    num_bytes)) {
+    log += "Bad payload size (corrupted or truncated bitstream)\n";
+    return false;
+  } else if (data_pos + num_bytes != data_size) {
+    log += "Bad payload size (corrupted or truncated bitstream, expected " +
+           std::to_string(data_size - data_pos) + " instead of " +
+           std::to_string(num_bytes) + ")\n";
+    return false;
+  }
+  offset_till_tiles_bytes = data_pos;
+  num_tiles_bytes = num_bytes;
   return true;
 }
 

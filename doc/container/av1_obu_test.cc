@@ -58,29 +58,89 @@ TEST(ObuTest, UnwrapWrapUnwrap) {
   std::string log;
   ASSERT_TRUE(UnwrapObu(avif.data() + offset_till_obu, obu_size,
                         unwrapped_avif.width, unwrapped_avif.height, features,
-                        offset_till_tiles_bytes, num_tiles_bytes, log)) << log;
+                        offset_till_tiles_bytes, num_tiles_bytes, log))
+      << log;
 
   Data final_obu;
   ASSERT_TRUE(WrapObu(unwrapped_avif.width, unwrapped_avif.height, features,
                       avif.data() + offset_till_tiles_bytes, num_tiles_bytes,
-                      final_obu, log)) << log;
+                      final_obu, log))
+      << log;
 
   // Unwrap again to see if all 'features' match.
   ObuFeatures comparison_features;
   std::memset(&comparison_features, 0, sizeof(comparison_features));
-  ASSERT_TRUE(UnwrapObu(avif.data() + offset_till_obu, obu_size,
+  size_t final_offset_till_tiles_bytes, final_num_tiles_bytes;
+  ASSERT_TRUE(UnwrapObu(final_obu.data(), final_obu.size(),
                         unwrapped_avif.width, unwrapped_avif.height,
-                        comparison_features, offset_till_tiles_bytes,
-                        num_tiles_bytes, log)) << log;
+                        comparison_features, final_offset_till_tiles_bytes,
+                        final_num_tiles_bytes, log))
+      << log;
   EXPECT_EQ(std::memcmp(&features, &comparison_features, sizeof(features)), 0);
+  EXPECT_EQ(num_tiles_bytes, final_num_tiles_bytes);
 
   // Wrap again to check the byte-wise equality of the OBU parts.
   Data comparison_obu;
-  ASSERT_TRUE(WrapObu(unwrapped_avif.width, unwrapped_avif.height, features,
-                      avif.data() + offset_till_tiles_bytes, num_tiles_bytes,
-                      comparison_obu, log)) << log;
+  ASSERT_TRUE(WrapObu(unwrapped_avif.width, unwrapped_avif.height,
+                      comparison_features,
+                      final_obu.data() + final_offset_till_tiles_bytes,
+                      final_num_tiles_bytes, comparison_obu, log))
+      << log;
   EXPECT_TRUE(
       std::equal(final_obu.begin(), final_obu.end(), comparison_obu.begin()));
+
+  EXPECT_FALSE(log.empty());
+  EXPECT_EQ(log.find("Bad"), std::string::npos);
+}
+
+//------------------------------------------------------------------------------
+
+TEST(StrippedObuTest, UnwrapWrapUnwrap) {
+  const Data avif = testutil::LoadFile("1x1.avif");
+  ASSERT_FALSE(avif.empty());
+  Image unwrapped_avif;
+  size_t offset_till_obu, obu_size;
+  ASSERT_TRUE(UnwrapAvif(avif.data(), avif.size(), unwrapped_avif,
+                         offset_till_obu, obu_size));
+
+  // Unwrap the OBU part that was just extracted from the AVIF bitstream.
+  ObuFeatures features;
+  std::memset(&features, 0, sizeof(features));  // For memcmp correctness.
+  size_t offset_till_tiles_bytes, num_tiles_bytes;
+  std::string log;
+  ASSERT_TRUE(UnwrapObu(avif.data() + offset_till_obu, obu_size,
+                        unwrapped_avif.width, unwrapped_avif.height, features,
+                        offset_till_tiles_bytes, num_tiles_bytes, log))
+      << log;
+
+  Data stripped_obu;
+  ASSERT_TRUE(WrapStrippedObu(unwrapped_avif.width, unwrapped_avif.height,
+                              features, avif.data() + offset_till_tiles_bytes,
+                              num_tiles_bytes, stripped_obu, log))
+      << log;
+
+  // Unwrap again to see if all 'features' match.
+  ObuFeatures comparison_features;
+  std::memset(&comparison_features, 0, sizeof(comparison_features));
+  size_t final_offset_till_tiles_bytes, final_num_tiles_bytes;
+  ASSERT_TRUE(UnwrapStrippedObu(
+      stripped_obu.data(), stripped_obu.size(), unwrapped_avif.width,
+      unwrapped_avif.height, comparison_features, final_offset_till_tiles_bytes,
+      final_num_tiles_bytes, log))
+      << log;
+  EXPECT_EQ(std::memcmp(&features, &comparison_features, sizeof(features)), 0);
+  EXPECT_LE(num_tiles_bytes, final_num_tiles_bytes);
+
+  // Wrap again to check the byte-wise equality of the OBU parts.
+  Data comparison_obu;
+  ASSERT_TRUE(WrapObu(unwrapped_avif.width, unwrapped_avif.height,
+                      comparison_features,
+                      stripped_obu.data() + final_offset_till_tiles_bytes,
+                      final_num_tiles_bytes, comparison_obu, log))
+      << log;
+  // Official OBU and stripped OBU bitstreams should differ.
+  EXPECT_FALSE(std::equal(stripped_obu.begin(), stripped_obu.end(),
+                         comparison_obu.begin()));
 
   EXPECT_FALSE(log.empty());
   EXPECT_EQ(log.find("Bad"), std::string::npos);

@@ -156,6 +156,20 @@ bool UnwrapObu(const uint8_t data[], size_t data_size, uint32_t width,
 
 //------------------------------------------------------------------------------
 
+// Same as WrapObu() but does not produce a valid OBU sequence. It just
+// serializes the 'features' necessary for unwrapping and discards the rest.
+bool WrapStrippedObu(uint32_t width, uint32_t height,
+                     const ObuFeatures& features, const uint8_t tiles_bytes[],
+                     size_t num_tiles_bytes, Data& data, std::string& log);
+
+// Same as UnwrapObu() but takes WrapStrippedObu() output as input.
+bool UnwrapStrippedObu(const uint8_t data[], size_t data_size, uint32_t width,
+                       uint32_t height, ObuFeatures& features,
+                       size_t& offset_till_tiles_bytes, size_t& num_tiles_bytes,
+                       std::string& log);
+
+//------------------------------------------------------------------------------
+
 // Returns a string containing the OBU layout of an AV1 payload (OBU sequence).
 std::string ObuUnitsToStr(const uint8_t data[], size_t data_size);
 

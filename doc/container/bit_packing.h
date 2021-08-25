@@ -112,6 +112,7 @@ class BitCoder {
 class BitWriter : public BitCoder {
  public:
   explicit BitWriter(Data& output) : output_(output) {}
+  ~BitWriter() override;
 
   void Code(const std::string& name, uint32_t num_bits,
             uint32_t& field) override;

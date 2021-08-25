@@ -25,11 +25,19 @@ TMP_OBU2=/tmp/convert_test2.obu
 # Print help
 ${CONVERT} -h
 
-# Simple back-and-forth with generic Container
+# Simple back-and-forth with OBU inside generic Container
 for SRC_AVIF in ${TESTDATA_DIR}/*.avif; do
   ${CONVERT} ${SRC_AVIF} --info -o ${TMP_PIC1}
   ${CONVERT} ${TMP_PIC1} --info -o ${TMP_AVIF}
   ${CONVERT} ${TMP_AVIF} --info -o ${TMP_PIC2}
+  cmp ${TMP_PIC1} ${TMP_PIC2}
+done
+
+# Simple back-and-forth with stripped OBU inside generic Container
+for SRC_AVIF in ${TESTDATA_DIR}/*.avif; do
+  ${CONVERT} ${SRC_AVIF} --info --strip-obu -o ${TMP_PIC1}
+  ${CONVERT} ${TMP_PIC1} --info --strip-obu -o ${TMP_AVIF}
+  ${CONVERT} ${TMP_AVIF} --info --strip-obu -o ${TMP_PIC2}
   cmp ${TMP_PIC1} ${TMP_PIC2}
 done
 
