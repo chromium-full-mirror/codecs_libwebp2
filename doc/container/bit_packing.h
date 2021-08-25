@@ -64,6 +64,7 @@ class BitUnpacker {
   // Access to the decoder status.
   bool Ok() const { return !error_; }
   size_t GetNumReadBytes() const { return num_read_bytes_; }
+  size_t GetNumReadBits() const;
 
  private:
   const uint8_t* bytes_;
@@ -107,6 +108,11 @@ class BitCoder {
   // Code 'value' using one fewer bit depending on 'max'.
   virtual void NonSymmetric(const std::string& name, uint32_t& field,
                             uint32_t max) = 0;
+
+  virtual bool Ok() const = 0;
+  virtual size_t GetNumBytes() const = 0;
+  virtual size_t GetNumBits() const = 0;
+  virtual std::string GetLog() const = 0;
 };
 
 class BitWriter : public BitCoder {
@@ -128,10 +134,10 @@ class BitWriter : public BitCoder {
   void AppendBytes(const std::string& name, const uint8_t bytes[],
                    size_t num_bytes);
 
-  bool Ok() const { return !error_; }
-  size_t GetNumBytes() const { return bit_packer_.GetNumBytes(); }
-  size_t GetNumBits() const { return bit_packer_.GetNumBits(); }
-  std::string GetLog() const { return log_.str(); }
+  bool Ok() const override { return !error_; }
+  size_t GetNumBytes() const override { return bit_packer_.GetNumBytes(); }
+  size_t GetNumBits() const override { return bit_packer_.GetNumBits(); }
+  std::string GetLog() const override { return log_.str(); }
 
  protected:
   BitPacker bit_packer_;
@@ -156,9 +162,12 @@ class BitReader : public BitCoder {
   void NonSymmetric(const std::string& name, uint32_t& field,
                     uint32_t max) override;
 
-  bool Ok() const { return !error_ && bit_unpacker_.Ok(); }
-  size_t GetNumBytes() const { return bit_unpacker_.GetNumReadBytes(); }
-  std::string GetLog() const { return log_.str(); }
+  bool Ok() const override { return !error_ && bit_unpacker_.Ok(); }
+  size_t GetNumBytes() const override {
+    return bit_unpacker_.GetNumReadBytes();
+  }
+  size_t GetNumBits() const override { return bit_unpacker_.GetNumReadBits(); }
+  std::string GetLog() const override { return log_.str(); }
 
  protected:
   BitUnpacker bit_unpacker_;

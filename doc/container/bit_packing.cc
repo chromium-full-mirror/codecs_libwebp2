@@ -127,6 +127,11 @@ uint32_t BitUnpacker::DecodeUInt(uint32_t min, uint32_t max) {
   return min + DecodeUInt(GetNumBitsNeeded(max - min));
 }
 
+size_t BitUnpacker::GetNumReadBits() const {
+  return num_read_bytes_ * 8 -
+         GetNumBitsNeeded(static_cast<uint32_t>(next_bit_mask_));
+}
+
 //------------------------------------------------------------------------------
 
 void BitCoder::Code(const std::string& name, bool& field) {
@@ -228,8 +233,8 @@ void BitWriter::NonSymmetric(const std::string& name, uint32_t& field,
     if (field < m) {
       bit_packer_.EncodeUInt(field, /*num_bits=*/w - 1);
     } else {
-      bit_packer_.EncodeUInt(((field & ~0x1) + m) >> 1, /*num_bits=*/w - 1);
-      bit_packer_.EncodeBool(field & 0x1);
+      bit_packer_.EncodeUInt(m + ((field - m) >> 1), /*num_bits=*/w - 1);
+      bit_packer_.EncodeBool((field - m) & 0x1);
     }
   } else {
     log_ << "/!\\ Bad value, out of bounds\n";
@@ -297,7 +302,7 @@ void BitReader::NonSymmetric(const std::string& name, uint32_t& field,
   if (!Ok()) {
     field = 0;
   } else {
-    // See "AV1 Bitstream & Decoding Process Specification - 4.10.6."
+    // See "AV1 Bitstream & Decoding Process Specification - 4.10.7."
     const uint32_t w = GetNumBitsNeeded(max + 1);
     const uint32_t m = (1 << w) - (max + 1);
     field = bit_unpacker_.DecodeUInt(/*num_bits=*/w - 1);

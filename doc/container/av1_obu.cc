@@ -427,6 +427,10 @@ void CodeFrameHeaderObu(uint32_t width, uint32_t height, ObuFeatures& f,
   obu.Code("disable_cdf_update", f.disable_cdf_update);
   obu.Code("allow_screen_content_tools", f.allow_screen_content_tools);
 
+  if (f.allow_screen_content_tools) {
+    obu.Force("force_integer_mv", false);
+  }
+
   // See "AV1 Bitstream & Decoding Process Specification - 5.9.5."
   CodeSuperresParams(f, obu);
 
@@ -468,7 +472,7 @@ void CodeFrameHeaderObu(uint32_t width, uint32_t height, ObuFeatures& f,
   obu.Code("reduced_tx_set", f.reduced_tx_set);
 }
 
-void CodeByteAlignment(BitWriter& obu) {
+void CodeByteAlignment(BitCoder& obu) {
   // See "AV1 Bitstream & Decoding Process Specification - 5.3.5."
   const uint32_t unaligned_bits = obu.GetNumBits() % 8;
   if (unaligned_bits > 0) {
@@ -715,6 +719,7 @@ bool UnwrapObu(const uint8_t data[], size_t data_size, uint32_t width,
       }
       ObuReader frame_header(data + position, obu_payload_size);
       CodeFrameHeaderObu(width, height, features, frame_header);
+      if (obu_type == /*OBU_FRAME=*/6) CodeByteAlignment(frame_header);
       log += frame_header.GetLog();
       if (!frame_header.Ok()) return false;
       position_in_obu += frame_header.GetNumBytes();
@@ -786,18 +791,23 @@ bool WrapStrippedObu(uint32_t width, uint32_t height,
   std::memcpy(&f, &features, sizeof(f));  // Because of memcmp() below.
 
   {
+    log += "\nSTRIPPED_OBU\n";
     StrippedObuWriter stripped_obu(data);
     CodeSequenceHeaderObu(width, height, f, stripped_obu);
     CodeFrameHeaderObu(width, height, f, stripped_obu);
-    CodeByteAlignment(stripped_obu);  // TODO(yguyon): Check it at unwrapping
+    CodeByteAlignment(stripped_obu);
     log += stripped_obu.GetLog();
     if (!stripped_obu.Ok()) return false;
   }
 
   {
+    const size_t data_size_before_varint = data.size();
     // TODO(yguyon): Maybe the minimum can be more than 1 byte
     EncodeVarInt(num_tiles_bytes, /*min=*/1u, kMaxVarInt, data);
+    const size_t varint_size = data.size() - data_size_before_varint;
     data.insert(data.end(), tiles_bytes, tiles_bytes + num_tiles_bytes);
+    log += std::to_string(varint_size) + " + " +
+           std::to_string(num_tiles_bytes) + " bytes of OBU_TILE_GROUP\n";
   }
 
   // Make sure the features were not modified by mistake.
@@ -809,9 +819,11 @@ bool UnwrapStrippedObu(const uint8_t data[], size_t data_size, uint32_t width,
                        uint32_t height, ObuFeatures& features,
                        size_t& offset_till_tiles_bytes, size_t& num_tiles_bytes,
                        std::string& log) {
+  log += "\nSTRIPPED_OBU\n";
   StrippedObuReader stripped_obu(data, data_size);
   CodeSequenceHeaderObu(width, height, features, stripped_obu);
   CodeFrameHeaderObu(width, height, features, stripped_obu);
+  CodeByteAlignment(stripped_obu);
   log += stripped_obu.GetLog();
   if (!stripped_obu.Ok()) return false;
 
@@ -829,6 +841,8 @@ bool UnwrapStrippedObu(const uint8_t data[], size_t data_size, uint32_t width,
   }
   offset_till_tiles_bytes = data_pos;
   num_tiles_bytes = num_bytes;
+  log += std::to_string(offset_till_tiles_bytes - stripped_obu.GetNumBytes()) +
+         " + " + std::to_string(num_tiles_bytes) + " bytes of OBU_TILE_GROUP\n";
   return true;
 }
 

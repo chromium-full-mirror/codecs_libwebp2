@@ -216,10 +216,10 @@ int main(int argc, const char* argv[]) {
 
   if (codec == container::kContainerCodecObu) {
     std::cout << "OBU input (" << num_codec_bytes << " bytes)" << std::endl;
-  }
-  if (params.print_info && codec == container::kContainerCodecObu) {
-    std::cout << container::ObuUnitsToStr(input_data + offset_till_codec_bytes,
-                                          num_codec_bytes);
+    if (params.print_info) {
+      std::cout << container::ObuUnitsToStr(
+          input_data + offset_till_codec_bytes, num_codec_bytes);
+    }
   }
 
   container::ObuFeatures features;
@@ -259,8 +259,6 @@ int main(int argc, const char* argv[]) {
 
   if (params.output_format != Format::kDeduceFromExtension &&
       codec == container::kContainerCodecAv1) {
-    reconstructed_obu_log = "\n";  // Visually split the text.
-
     // Restore the OBU. Only kContainer output supports stripped OBU.
     const bool strip_obu =
         (params.strip_obu && params.output_format == Format::kContainer);
@@ -284,6 +282,15 @@ int main(int argc, const char* argv[]) {
                       : container::kContainerCodecObu;
     final_codec_bytes = reconstructed_obu.data();
     num_final_codec_bytes = reconstructed_obu.size();
+  }
+
+  if (codec == container::kContainerCodecObu) {
+    std::string log =
+        "OBU output (" + std::to_string(num_final_codec_bytes) + " bytes)\n";
+    if (params.print_info) {
+      log += container::ObuUnitsToStr(final_codec_bytes, num_final_codec_bytes);
+    }
+    reconstructed_obu_log = log + reconstructed_obu_log;
   }
 
   // Wrap the encoded pixels to the destination format.

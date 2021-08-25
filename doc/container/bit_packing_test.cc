@@ -37,15 +37,20 @@ TEST(BitPackingTest, PackUnpack) {
   ASSERT_EQ(packer.GetNumBits(), 1 + 1 + 5 + 1 + 32 + 0 + 32);
 
   BitUnpacker unpacker(packer.GetBytes(), packer.GetNumBytes());
+  ASSERT_EQ(unpacker.GetNumReadBits(), 0);
   ASSERT_FALSE(unpacker.DecodeBool());
   ASSERT_TRUE(unpacker.DecodeBool());
+  ASSERT_EQ(unpacker.GetNumReadBits(), 2);
   ASSERT_EQ(unpacker.DecodeUInt(/*num_bits=*/5), 5);
+  ASSERT_EQ(unpacker.GetNumReadBits(), 7);
   ASSERT_EQ(unpacker.DecodeUInt(/*min=*/0, /*max=*/1), 1);
   ASSERT_EQ(unpacker.DecodeUInt(/*min=*/0, /*max=*/kMax), 5);
+  ASSERT_EQ(unpacker.GetNumReadBits(), 40);
   ASSERT_EQ(unpacker.DecodeUInt(/*min=*/kMax, /*max=*/kMax), kMax);
   ASSERT_EQ(unpacker.DecodeUInt(/*num_bits=*/32), kMax);
   ASSERT_TRUE(unpacker.Ok());
   ASSERT_EQ(unpacker.GetNumReadBytes(), packer.GetNumBytes());
+  ASSERT_EQ(unpacker.GetNumReadBits(), packer.GetNumBits());
 }
 
 TEST(BitPackingTest, PackUnpackNotEnoughBytes) {
@@ -57,6 +62,7 @@ TEST(BitPackingTest, PackUnpackNotEnoughBytes) {
   ASSERT_EQ(unpacker.DecodeUInt(/*num_bits=*/10), 0);
   ASSERT_FALSE(unpacker.Ok());
   ASSERT_EQ(unpacker.GetNumReadBytes(), 1);
+  ASSERT_EQ(unpacker.GetNumReadBits(), 8);
 }
 
 //------------------------------------------------------------------------------
