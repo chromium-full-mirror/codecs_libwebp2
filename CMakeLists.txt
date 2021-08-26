@@ -78,6 +78,11 @@ set(WP2_DEP_LIBRARIES)
 set(WP2_DEP_INCLUDE_DIRS)
 set(WP2_DEFINITIONS)
 
+if(CMAKE_BINARY_DIR STREQUAL CMAKE_SOURCE_DIR)
+  # cmake -G "Unix Makefiles" overwrites Makefile so forbid it at root.
+  message(FATAL_ERROR "Building at source root is forbidden.")
+endif()
+
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE
       "Release"
