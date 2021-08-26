@@ -177,13 +177,13 @@ bool WrapAvif(const Image& image, const uint8_t codec_bytes[],
     {  // ISO/IEC 14496-12 - 8.4.3.2 Handler Reference Box Syntax
       BoxWriter hdlr("hdlr", data);  // HandlerBox, mandatory because "mif1"
       hdlr.WriteFullBoxHeader();
-      hdlr.Write<uint32_t>(0);                         // pre_defined
-      hdlr.WriteStr("pict");                           // handler_type
-      hdlr.Write<uint32_t>(0);                         // reserved
-      hdlr.Write<uint32_t>(0);                         // reserved
-      hdlr.Write<uint32_t>(0);                         // reserved
-      hdlr.WriteStr("libaguette", /*append_0=*/true);  // name (of the library
-                                                       // used for encoding)
+      hdlr.Write<uint32_t>(0);               // pre_defined
+      hdlr.WriteStr("pict");                 // handler_type
+      hdlr.Write<uint32_t>(0);               // reserved
+      hdlr.Write<uint32_t>(0);               // reserved
+      hdlr.Write<uint32_t>(0);               // reserved
+      hdlr.WriteStr("", /*append_0=*/true);  // name of the library used for
+                                             // encoding (unknown)
     }
 
     {  // ISO/IEC 14496-12 - 8.11.4.2 Primary Item Box Syntax
