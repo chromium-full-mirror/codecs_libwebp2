@@ -16,7 +16,9 @@
 
 #include <algorithm>
 #include <bitset>
+#include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <sstream>
 #include <string>
 

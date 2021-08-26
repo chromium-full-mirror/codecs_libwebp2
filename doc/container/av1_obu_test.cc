@@ -14,6 +14,7 @@
 
 #include "./av1_obu.h"
 
+#include <cstring>
 #include <string>
 
 #include "./avif.h"
