@@ -49,7 +49,7 @@ TEST(PartitionScoreFuncTest, BlockScoreFunc) {
 
   const Rectangle tile_rect = yuv.AsRect();
   const Block kBlocks[] = {{0, 0, BLK_4x4}, {1, 0, BLK_4x8}, {0, 1, BLK_4x4}};
-  constexpr uint32_t kNumBlocks = WP2_ARRAY_SIZE(kBlocks);
+  constexpr uint32_t kNumBlocks = ArraySize(kBlocks);
   float score;
 
   BlockScoreFunc score_func(/*use_splits=*/false);

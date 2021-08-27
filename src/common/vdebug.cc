@@ -794,11 +794,11 @@ static constexpr Argb32b kNonAnglePredictorColors[] = {
     {0xff, 0x20, 0x6b, 0x00},  // Dark green
 };
 // If this fails, add some more colors to the array above.
-static_assert(WP2_ARRAY_SIZE(kNonAnglePredictorColors) >= kYBasePredNum,
+static_assert(ArraySize(kNonAnglePredictorColors) >= kYBasePredNum,
               "Not enough colors");
-static_assert(WP2_ARRAY_SIZE(kNonAnglePredictorColors) >= kABasePredNum,
+static_assert(ArraySize(kNonAnglePredictorColors) >= kABasePredNum,
               "Not enough colors");
-static_assert(WP2_ARRAY_SIZE(kNonAnglePredictorColors) >= kUVBasePredNum,
+static_assert(ArraySize(kNonAnglePredictorColors) >= kUVBasePredNum,
               "Not enough colors");
 
 // Prints the selected block prediction to 'config.info->selection_info' and
@@ -837,7 +837,7 @@ static void DisplayPredictionMode(
       }
       (void)found;
       assert(found);
-      assert(i < WP2_ARRAY_SIZE(kNonAnglePredictorColors));
+      assert(i < ArraySize(kNonAnglePredictorColors));
       debug_output->Fill(block_rect, kNonAnglePredictorColors[i]);
     }
     if (selected) {

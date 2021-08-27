@@ -29,10 +29,10 @@
 #include <cstddef>
 #include <cstring>
 #include <initializer_list>
-#include <type_traits>
+#include <new>
+#include <string>
 #include <utility>
 #include <vector>
-#include <string>
 
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
@@ -226,11 +226,15 @@ void SetArray(T* array, const std::initializer_list<T>& values) {
   for (const T& value : values) *(array++) = value;
 }
 
-#define WP2_ARRAY_SIZE(array)  \
-  (sizeof(array) /sizeof(std::remove_all_extents<decltype(array)>::type))
+// Returns the length of a C array.
+// Drop-in replacement for std::size() which is only available in C++17.
+template <class ElementType, size_t FirstDimension>
+constexpr std::size_t ArraySize(const ElementType (&)[FirstDimension]) {
+  return FirstDimension;
+}
 
-#define STATIC_ASSERT_ARRAY_SIZE(array, size)                           \
-  static_assert(WP2_ARRAY_SIZE(array) == (size),                        \
+#define STATIC_ASSERT_ARRAY_SIZE(array, size)                       \
+  static_assert(WP2::ArraySize(array) == static_cast<size_t>(size), \
                 "Expected " #array " to contain " #size " elements")
 
 // Same as std::strstr() but considers 'str[count]' to be the null-character.

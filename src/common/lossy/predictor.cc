@@ -672,7 +672,7 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
     WP2_CHECK_ALLOC_OK(preds_no_angle_.push_back(pred));
   }
   assert(i <= GetMaxMode() + 1);
-  for (; i < WP2_ARRAY_SIZE(main_modes_); ++i) {
+  for (; i < ArraySize(main_modes_); ++i) {
     main_modes_[i] = 0;   // safety
   }
 
