@@ -610,10 +610,33 @@ bool UnwrapObuSequenceHeader(const uint8_t data[], size_t data_size,
 
 namespace {
 
+// Whether the OBU with 'obu_type' needs trailing bits.
+// See "AV1 Bitstream & Decoding Process Specification - 5.3.1."
+bool HasTrailingBits(uint32_t obu_type, size_t payload_size) {
+  return (payload_size > 0 && obu_type != /*OBU_TILE_GROUP=*/4 &&
+          obu_type != /*OBU_TILE_LIST=*/8 && obu_type != /*OBU_FRAME=*/6);
+}
+
+// Trailing bits appended to an OBU payload. A bit set to one then zeroes.
+// There seems to be at least one bit but no high bound in the specification.
+// See "AV1 Bitstream & Decoding Process Specification - 5.3.4."
+uint32_t GetNumTrailingBits(const uint8_t payload[], size_t payload_size) {
+  uint32_t num_trailing_bits = 1;
+  while (payload_size > 0) {
+    for (uint32_t mask : {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80}) {
+      if (payload[payload_size - 1] & mask) return num_trailing_bits;
+      ++num_trailing_bits;
+    }
+    --payload_size;
+  }
+  return 0;  // Found no bit set to 1. Invalid input.
+}
+
 // Uses the dtor to finalize the encoding of the header.
 class ObuWriter : public BitWriter {
  public:
-  ObuWriter(uint32_t obu_type, Data& output) : BitWriter(output) {
+  ObuWriter(uint32_t obu_type, Data& output)
+      : BitWriter(output), obu_type_(obu_type) {
     // See "AV1 Bitstream & Decoding Process Specification - 5.3.2."
     CodeObuHeader(obu_type, *this);
 
@@ -622,9 +645,10 @@ class ObuWriter : public BitWriter {
     bit_packer_ = BitPacker();  // Reset for accurate payload size.
   }
   ~ObuWriter() override {
-    // See "AV1 Bitstream & Decoding Process Specification - 5.3.4."
-    if (bit_packer_.GetNumBits() % 8 != 0) {  // Padding till next whole byte.
+    if (HasTrailingBits(obu_type_, bit_packer_.GetNumBytes())) {
+      // See "AV1 Bitstream & Decoding Process Specification - 5.3.4."
       bit_packer_.EncodeBool(true);
+      // Padding till next whole byte.
       while (bit_packer_.GetNumBits() % 8 != 0) bit_packer_.EncodeBool(false);
     }
 
@@ -632,6 +656,9 @@ class ObuWriter : public BitWriter {
     // See "AV1 Bitstream & Decoding Process Specification - 5.3.1."
     WriteLeb128(bit_packer_.GetNumBytes(), output_);
   }
+
+ protected:
+  const uint32_t obu_type_;
 };
 
 using ObuReader = BitReader;
@@ -685,9 +712,9 @@ bool UnwrapObu(const uint8_t data[], size_t data_size, uint32_t width,
   size_t position = 0;  // In bytes within 'data' (OBU sequence).
   uint8_t obu_type = 0;
   while (position < data_size) {
-    size_t obu_header_size, obu_payload_size;
+    size_t obu_header_size, obu_payload_size_with_trailing_bits;
     if (!ParseObuHeader(data + position, data_size - position, obu_type,
-                        obu_header_size, obu_payload_size)) {
+                        obu_header_size, obu_payload_size_with_trailing_bits)) {
       return false;
     }
     position += obu_header_size;
@@ -695,6 +722,19 @@ bool UnwrapObu(const uint8_t data[], size_t data_size, uint32_t width,
     log += "\n";
     log += kObuTypeStr[obu_type];
     log += "\n";
+
+    // See "AV1 Bitstream & Decoding Process Specification - 5.3.1."
+    uint32_t num_trailing_bits = 0;
+    if (HasTrailingBits(obu_type, obu_payload_size_with_trailing_bits)) {
+      num_trailing_bits = GetNumTrailingBits(
+          data + position, obu_payload_size_with_trailing_bits);
+      if (num_trailing_bits == 0) {
+        log += "/!\\ No trailing bit set to one found\n";
+        return false;
+      }
+    }
+    const size_t obu_payload_size =
+        obu_payload_size_with_trailing_bits - (num_trailing_bits / 8);
 
     size_t position_in_obu = 0;  // In bytes within 'data+position' (OBU unit).
     bool parsed_obu = false;
@@ -743,8 +783,11 @@ bool UnwrapObu(const uint8_t data[], size_t data_size, uint32_t width,
       log += std::to_string(num_tiles_bytes) + " bytes of OBU_TILE_GROUP\n";
       parsed_obu = true;
     }
+    if (parsed_obu && num_trailing_bits > 0) {
+      log += std::to_string(num_trailing_bits) + " trailing bits\n";
+    }
     if (!parsed_obu) log += "Skipped\n";
-    position += obu_payload_size;
+    position += obu_payload_size_with_trailing_bits;
   }
   if (!saw_tile_group) {
     log += "/!\\ No tile group data found\n";
