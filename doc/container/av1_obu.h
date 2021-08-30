@@ -65,8 +65,6 @@ struct ObuFeatures {
   bool enable_cdef;
   bool enable_restoration;
   // Color config
-  bool high_bitdepth;
-  bool twelve_bit;
   bool color_description_present_flag;
   uint32_t color_primaries;           // 8 bits
   uint32_t transfer_characteristics;  // 8 bits
@@ -141,7 +139,7 @@ struct ObuFeatures {
 // 'tiles_bytes' must be a valid OBU tile group payload (no OBU header).
 // Written fields are also displayed in the 'log', along with any error.
 // Returns false in case of error.
-bool WrapObu(uint32_t width, uint32_t height, const ObuFeatures& features,
+bool WrapObu(const Image& image, const ObuFeatures& features,
              const uint8_t tiles_bytes[], size_t num_tiles_bytes, Data& data,
              std::string& log);
 
@@ -149,22 +147,21 @@ bool WrapObu(uint32_t width, uint32_t height, const ObuFeatures& features,
 // pixels into OBU 'features' and locates the 'tile_bytes' within.
 // Read fields are also displayed in the 'log', along with any error.
 // Does not decode the pixels. Returns false in case of error.
-bool UnwrapObu(const uint8_t data[], size_t data_size, uint32_t width,
-               uint32_t height, ObuFeatures& features,
-               size_t& offset_till_tiles_bytes, size_t& num_tiles_bytes,
-               std::string& log);
+bool UnwrapObu(const uint8_t data[], size_t data_size, const Image& image,
+               ObuFeatures& features, size_t& offset_till_tiles_bytes,
+               size_t& num_tiles_bytes, std::string& log);
 
 //------------------------------------------------------------------------------
 
 // Same as WrapObu() but does not produce a valid OBU sequence. It just
 // serializes the 'features' necessary for unwrapping and discards the rest.
-bool WrapStrippedObu(uint32_t width, uint32_t height,
-                     const ObuFeatures& features, const uint8_t tiles_bytes[],
-                     size_t num_tiles_bytes, Data& data, std::string& log);
+bool WrapStrippedObu(const Image& image, const ObuFeatures& features,
+                     const uint8_t tiles_bytes[], size_t num_tiles_bytes,
+                     Data& data, std::string& log);
 
 // Same as UnwrapObu() but takes WrapStrippedObu() output as input.
-bool UnwrapStrippedObu(const uint8_t data[], size_t data_size, uint32_t width,
-                       uint32_t height, ObuFeatures& features,
+bool UnwrapStrippedObu(const uint8_t data[], size_t data_size,
+                       const Image& image, ObuFeatures& features,
                        size_t& offset_till_tiles_bytes, size_t& num_tiles_bytes,
                        std::string& log);
 

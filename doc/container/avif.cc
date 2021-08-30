@@ -282,11 +282,12 @@ bool WrapAvif(const Image& image, const uint8_t codec_bytes[],
           ++num_properties;
         }
 
-        if (image.format != Format::kUnknown) {
+        {
           BoxWriter pixi("pixi", data);  // PixelInformationProperty
           pixi.WriteFullBoxHeader();
           pixi.Write<uint8_t>(3);  // Number of channels.
-          const uint8_t bit_depth = (image.format == Format::kARGB8) ? 8 : 10;
+          const uint8_t bit_depth =
+              header.high_bitdepth ? header.twelve_bit ? 12 : 10 : 8;
           pixi.Write<uint8_t>(bit_depth);
           pixi.Write<uint8_t>(bit_depth);
           pixi.Write<uint8_t>(bit_depth);
@@ -371,10 +372,12 @@ bool ParseBoxes(const uint8_t data[], size_t data_size, Image& image,
       if (content_size < 1 + num_channels) return false;
       for (uint32_t i = 0; i < num_channels; ++i) {
         const uint8_t bit_depth = ReadBigEndian(content + 1 + i);
-        if (bit_depth == ReadBigEndian(content + 1) && bit_depth == 8) {
-          image.format = Format::kARGB8;
-        } else if (bit_depth == ReadBigEndian(content + 1) && bit_depth == 10) {
-          image.format = Format::kAYUV10;
+        if (bit_depth == ReadBigEndian(content + 1)) {
+          // Good enough mapping for now.
+          image.format = (bit_depth == 8)    ? Format::kARGB8
+                         : (bit_depth == 10) ? Format::kAYUV10
+                         : (bit_depth == 12) ? Format::kAYUV12
+                                             : Format::kUnknown;
         } else {
           return false;
         }

@@ -191,6 +191,11 @@ int main(int argc, const char* argv[]) {
 
     image.width = sequence_header_obu.width;
     image.height = sequence_header_obu.height;
+    image.format = sequence_header_obu.high_bitdepth
+                       ? sequence_header_obu.twelve_bit
+                             ? container::Format::kAYUV12
+                             : container::Format::kAYUV10
+                       : container::Format::kARGB8;
     image.is_opaque = true;  // TODO(yguyon): Handle transparency
   }
 
@@ -231,13 +236,11 @@ int main(int argc, const char* argv[]) {
     const bool success =
         (codec == container::kContainerCodecAv1)
             ? container::UnwrapStrippedObu(
-                  input_data + offset_till_codec_bytes, num_codec_bytes,
-                  image.width, image.height, features, offset_till_tiles_bytes,
-                  num_tiles_bytes, log)
-            : container::UnwrapObu(input_data + offset_till_codec_bytes,
-                                   num_codec_bytes, image.width, image.height,
-                                   features, offset_till_tiles_bytes,
-                                   num_tiles_bytes, log);
+                  input_data + offset_till_codec_bytes, num_codec_bytes, image,
+                  features, offset_till_tiles_bytes, num_tiles_bytes, log)
+            : container::UnwrapObu(
+                  input_data + offset_till_codec_bytes, num_codec_bytes, image,
+                  features, offset_till_tiles_bytes, num_tiles_bytes, log);
 
     if (params.print_info) std::cout << log;
     if (!success) {
@@ -262,14 +265,13 @@ int main(int argc, const char* argv[]) {
     const bool strip_obu =
         (params.strip_obu && params.output_format == Format::kContainer);
     const bool success =
-        strip_obu ? container::WrapStrippedObu(
-                        image.width, image.height, features,
-                        input_data + offset_till_codec_bytes, num_codec_bytes,
-                        reconstructed_obu, reconstructed_obu_log)
-                  : container::WrapObu(image.width, image.height, features,
-                                       input_data + offset_till_codec_bytes,
-                                       num_codec_bytes, reconstructed_obu,
-                                       reconstructed_obu_log);
+        strip_obu
+            ? container::WrapStrippedObu(
+                  image, features, input_data + offset_till_codec_bytes,
+                  num_codec_bytes, reconstructed_obu, reconstructed_obu_log)
+            : container::WrapObu(
+                  image, features, input_data + offset_till_codec_bytes,
+                  num_codec_bytes, reconstructed_obu, reconstructed_obu_log);
 
     if (!success) {
       if (params.print_info) std::cout << reconstructed_obu_log;

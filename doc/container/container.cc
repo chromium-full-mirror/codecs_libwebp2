@@ -108,6 +108,7 @@ void WrapContainer(const Image& image, const EncoderConfig& config,
   header.EncodeUInt(static_cast<uint32_t>(image.orientation), 0, 7);
   header.EncodeUInt((image.format == Format::kARGB8)    ? 0
                     : (image.format == Format::kAYUV10) ? 1
+                    : (image.format == Format::kAYUV12) ? 2
                                                         : 3,
                     0, 3);
   header.EncodeBool(image.is_opaque);
@@ -163,6 +164,7 @@ bool UnwrapContainerHeader(const uint8_t data[], size_t data_size, Image& image,
   const uint32_t format = header.DecodeUInt(0, 3);
   image.format = (format == 0)   ? Format::kARGB8
                  : (format == 1) ? Format::kAYUV10
+                 : (format == 2) ? Format::kAYUV12
                                  : Format::kUnknown;
   image.is_opaque = header.DecodeBool();
   image.preview_color = header.DecodeUInt(/*num_bits=*/12);

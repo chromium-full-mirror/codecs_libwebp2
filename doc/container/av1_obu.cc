@@ -100,13 +100,14 @@ void CodeObuHeader(uint32_t obu_type, BitCoder& obu) {
   // Next is payload size followed by payload.
 }
 
-void CodeColorConfig(ObuFeatures& f, BitCoder& obu) {
+void CodeColorConfig(bool high_bitdepth, bool twelve_bit, ObuFeatures& f,
+                     BitCoder& obu) {
   // See "AV1 Bitstream & Decoding Process Specification - 5.5.2."
-  obu.Code("high_bitdepth", f.high_bitdepth);
-  if (f.seq_profile == 2 && f.high_bitdepth) {
-    obu.Code("twelve_bit", f.twelve_bit);
+  obu.Force("high_bitdepth", high_bitdepth);
+  if (f.seq_profile == 2 && high_bitdepth) {
+    obu.Force("twelve_bit", twelve_bit);
   } else {
-    obu.Set("twelve_bit", f.twelve_bit, false);
+    assert(!twelve_bit);
   }
   if (f.seq_profile == 1) {
     // mono_chrome set to false
@@ -133,7 +134,7 @@ void CodeColorConfig(ObuFeatures& f, BitCoder& obu) {
     obu.Set("subsampling_x", f.subsampling_x, 0);
     obu.Set("subsampling_y", f.subsampling_y, 0);
   } else {
-    if (f.twelve_bit) {
+    if (twelve_bit) {
       obu.Code("subsampling_x", /*num_bits=*/1, f.subsampling_x);
       if (f.subsampling_x) {
         obu.Code("subsampling_y", /*num_bits=*/1, f.subsampling_y);
@@ -152,8 +153,8 @@ void CodeColorConfig(ObuFeatures& f, BitCoder& obu) {
   obu.Code("separate_uv_delta_q", f.separate_uv_delta_q);
 }
 
-void CodeSequenceHeaderObu(uint32_t width, uint32_t height, ObuFeatures& f,
-                           BitCoder& obu) {
+void CodeSequenceHeaderObu(uint32_t width, uint32_t height, bool high_bitdepth,
+                           bool twelve_bit, ObuFeatures& f, BitCoder& obu) {
   // See "AV1 Bitstream & Decoding Process Specification - 5.5.1."
   obu.Code("seq_profile", /*num_bits=*/3, f.seq_profile);
   obu.Force("still_picture", true);
@@ -175,7 +176,7 @@ void CodeSequenceHeaderObu(uint32_t width, uint32_t height, ObuFeatures& f,
   obu.Code("enable_cdef", f.enable_cdef);
   obu.Code("enable_restoration", f.enable_restoration);
 
-  CodeColorConfig(f, obu);
+  CodeColorConfig(high_bitdepth, twelve_bit, f, obu);
 
   obu.Force("film_grain_params_present", false);
 }
@@ -667,7 +668,7 @@ using ObuReader = BitReader;
 
 //------------------------------------------------------------------------------
 
-bool WrapObu(uint32_t width, uint32_t height, const ObuFeatures& features,
+bool WrapObu(const Image& image, const ObuFeatures& features,
              const uint8_t tiles_bytes[], size_t num_tiles_bytes, Data& data,
              std::string& log) {
   data.clear();
@@ -677,7 +678,10 @@ bool WrapObu(uint32_t width, uint32_t height, const ObuFeatures& features,
   {
     log += "\nOBU_SEQUENCE_HEADER\n";
     ObuWriter sequence_header(/*obu_type=*/1, data);
-    CodeSequenceHeaderObu(width, height, f, sequence_header);
+    CodeSequenceHeaderObu(image.width, image.height,
+                          /*high_bitdepth=*/(image.format != Format::kARGB8),
+                          /*twelve_bit=*/(image.format == Format::kAYUV12), f,
+                          sequence_header);
     log += sequence_header.GetLog();
     if (!sequence_header.Ok()) return false;
   }
@@ -688,7 +692,7 @@ bool WrapObu(uint32_t width, uint32_t height, const ObuFeatures& features,
     // See "AV1 Bitstream & Decoding Process Specification - 5.10."
     log += "\nOBU_FRAME\n";
     ObuWriter frame_header(/*obu_type=*/6, data);
-    CodeFrameHeaderObu(width, height, f, frame_header);
+    CodeFrameHeaderObu(image.width, image.height, f, frame_header);
     CodeByteAlignment(frame_header);
     frame_header.AppendBytes("OBU_TILE_GROUP", tiles_bytes, num_tiles_bytes);
     log += frame_header.GetLog();
@@ -700,10 +704,9 @@ bool WrapObu(uint32_t width, uint32_t height, const ObuFeatures& features,
   return true;
 }
 
-bool UnwrapObu(const uint8_t data[], size_t data_size, uint32_t width,
-               uint32_t height, ObuFeatures& features,
-               size_t& offset_till_tiles_bytes, size_t& num_tiles_bytes,
-               std::string& log) {
+bool UnwrapObu(const uint8_t data[], size_t data_size, const Image& image,
+               ObuFeatures& features, size_t& offset_till_tiles_bytes,
+               size_t& num_tiles_bytes, std::string& log) {
   features = {};
   bool saw_sequence_header = false;
   bool saw_frame_header = false;
@@ -743,7 +746,10 @@ bool UnwrapObu(const uint8_t data[], size_t data_size, uint32_t width,
     if (obu_type == /*OBU_SEQUENCE_HEADER=*/1) {
       saw_sequence_header = true;
       ObuReader sequence_header(data + position, obu_payload_size);
-      CodeSequenceHeaderObu(width, height, features, sequence_header);
+      CodeSequenceHeaderObu(image.width, image.height,
+                            /*high_bitdepth=*/(image.format != Format::kARGB8),
+                            /*twelve_bit=*/(image.format == Format::kAYUV12),
+                            features, sequence_header);
       log += sequence_header.GetLog();
       if (!sequence_header.Ok()) return false;
       position_in_obu += sequence_header.GetNumBytes();
@@ -760,7 +766,7 @@ bool UnwrapObu(const uint8_t data[], size_t data_size, uint32_t width,
         return false;
       }
       ObuReader frame_header(data + position, obu_payload_size);
-      CodeFrameHeaderObu(width, height, features, frame_header);
+      CodeFrameHeaderObu(image.width, image.height, features, frame_header);
       if (obu_type == /*OBU_FRAME=*/6) CodeByteAlignment(frame_header);
       log += frame_header.GetLog();
       if (!frame_header.Ok()) return false;
@@ -828,9 +834,9 @@ class StrippedObuReader : public BitReader {
 
 }  // namespace
 
-bool WrapStrippedObu(uint32_t width, uint32_t height,
-                     const ObuFeatures& features, const uint8_t tiles_bytes[],
-                     size_t num_tiles_bytes, Data& data, std::string& log) {
+bool WrapStrippedObu(const Image& image, const ObuFeatures& features,
+                     const uint8_t tiles_bytes[], size_t num_tiles_bytes,
+                     Data& data, std::string& log) {
   data.clear();
   ObuFeatures f;  // Copy 'features' for safety and to avoid a const_cast().
   std::memcpy(&f, &features, sizeof(f));  // Because of memcmp() below.
@@ -838,8 +844,11 @@ bool WrapStrippedObu(uint32_t width, uint32_t height,
   {
     log += "\nSTRIPPED_OBU\n";
     StrippedObuWriter stripped_obu(data);
-    CodeSequenceHeaderObu(width, height, f, stripped_obu);
-    CodeFrameHeaderObu(width, height, f, stripped_obu);
+    CodeSequenceHeaderObu(image.width, image.height,
+                          /*high_bitdepth=*/(image.format != Format::kARGB8),
+                          /*twelve_bit=*/(image.format == Format::kAYUV12), f,
+                          stripped_obu);
+    CodeFrameHeaderObu(image.width, image.height, f, stripped_obu);
     CodeByteAlignment(stripped_obu);
     log += stripped_obu.GetLog();
     if (!stripped_obu.Ok()) return false;
@@ -860,14 +869,17 @@ bool WrapStrippedObu(uint32_t width, uint32_t height,
   return true;
 }
 
-bool UnwrapStrippedObu(const uint8_t data[], size_t data_size, uint32_t width,
-                       uint32_t height, ObuFeatures& features,
+bool UnwrapStrippedObu(const uint8_t data[], size_t data_size,
+                       const Image& image, ObuFeatures& features,
                        size_t& offset_till_tiles_bytes, size_t& num_tiles_bytes,
                        std::string& log) {
   log += "\nSTRIPPED_OBU\n";
   StrippedObuReader stripped_obu(data, data_size);
-  CodeSequenceHeaderObu(width, height, features, stripped_obu);
-  CodeFrameHeaderObu(width, height, features, stripped_obu);
+  CodeSequenceHeaderObu(image.width, image.height,
+                        /*high_bitdepth=*/(image.format != Format::kARGB8),
+                        /*twelve_bit=*/(image.format == Format::kAYUV12),
+                        features, stripped_obu);
+  CodeFrameHeaderObu(image.width, image.height, features, stripped_obu);
   CodeByteAlignment(stripped_obu);
   log += stripped_obu.GetLog();
   if (!stripped_obu.Ok()) return false;
