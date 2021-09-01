@@ -332,7 +332,6 @@ class SyntaxWriter : public WP2Allocable {
 
   const GlobalParams* gparams_;
 
-  SegmentIdPredictor segment_ids_;
   BlockContext context_;
 
   SymbolWriter symbol_writer_;
