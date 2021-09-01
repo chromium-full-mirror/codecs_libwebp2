@@ -77,7 +77,6 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
   }
 
   // Initialize the cache.
-  WP2_CHECK_STATUS(context_.Init(use_aom_coeffs));
   WP2_CHECK_STATUS(progress.AdvanceBy(0.5));
   return WP2_STATUS_OK;
 }
@@ -209,7 +208,6 @@ WP2Status BlockScoreFunc::Use(const Block& block) {
 }
 
 WP2Status BlockScoreFunc::FindBestBlockParams(const FrontMgrBase& front_mgr,
-                                              const BlockContext& block_context,
                                               SyntaxWriter* const syntax_writer,
                                               DCDiffusionMap* const dc_error_u,
                                               DCDiffusionMap* const dc_error_v,
@@ -262,8 +260,8 @@ WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrBase& front_mgr,
   cb->SetReconstructedOutput(buffer);
 
   // This is the slowest part: finding the best transform, predictor etc.
-  WP2_CHECK_STATUS(FindBestBlockParams(front_mgr, context_, syntax_writer,
-                                       dc_error_u, dc_error_v, cb, scorer));
+  WP2_CHECK_STATUS(FindBestBlockParams(front_mgr, syntax_writer, dc_error_u,
+                                       dc_error_v, cb, scorer));
   // CodedBlock::Quantize() should be called already.
   WP2_CHECK_STATUS(syntax_writer->FindBestEncodingMethods(cb));
   if (!use_splits_) {

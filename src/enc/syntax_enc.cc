@@ -50,16 +50,13 @@ WP2Status SyntaxWriter::Init(ANSDictionaries* const dicts,
   num_transforms_ = std::min(
       num_blocks * 4, SizeBlocks(yuv.GetWidth()) * SizeBlocks(yuv.GetHeight()));
   // Deal with context.
-  WP2_CHECK_STATUS(context_.Init(use_aom_coeffs));
+  WP2_CHECK_STATUS(context_.Init(use_aom_coeffs, gparams_->segments_.size(),
+                                 gparams_->explicit_segment_ids_,
+                                 tile_rect.width));
 
   WP2_CHECK_STATUS(residual_writer_.Init(context_.use_aom(),
                                          gparams_->maybe_use_lossy_alpha_));
 
-  assert(gparams_->segments_.size() <= kMaxNumSegments);
-  // Deal with segment ids.
-  WP2_CHECK_STATUS(segment_ids_.InitWrite(gparams_->segments_.size(),
-                                          gparams_->explicit_segment_ids_,
-                                          tile_rect.width));
 
   if (gparams_->has_alpha_) {
     WP2_CHECK_STATUS(alpha_writer_.Init(*config_, gparams, context_, yuv,
@@ -96,7 +93,6 @@ WP2Status SyntaxWriter::CopyFrom(const SyntaxWriter& other,
   gparams_ = other.gparams_;
   use_splits_ = other.use_splits_;
 
-  WP2_CHECK_STATUS(segment_ids_.CopyFrom(other.segment_ids_));
   WP2_CHECK_STATUS(
       symbol_writer_.CopyFrom(other.symbol_writer_, *dicts_, *other.dicts_));
   WP2_CHECK_STATUS(symbol_recorder_.CopyFrom(other.symbol_recorder_));
@@ -223,7 +219,7 @@ WP2Status SyntaxWriter::WriteHeader(ANSEncBase* const enc) {
   // We should always have a UV block.
   assert(num_coeffs_max_uv > 0);
 
-  WP2_CHECK_STATUS(segment_ids_.WriteHeader(enc));
+  WP2_CHECK_STATUS(context_.segment_id_predictor().WriteHeader(enc));
 
   if (gparams_->has_alpha_) {
     WP2_CHECK_STATUS(alpha_writer_.WriteHeader(num_coeffs_max, enc));
@@ -251,7 +247,7 @@ WP2Status SyntaxWriter::WriteHeader(ANSEncBase* const enc) {
 void SyntaxWriter::WriteBlockBeforeCoeffs(const CodedBlock& cb,
                                           SymbolManager* const sm,
                                           ANSEncBase* const enc) {
-  segment_ids_.WriteId(cb, sm, enc);
+  context_.segment_id_predictor().WriteId(cb, sm, enc);
 
   if (gparams_->has_alpha_) {
     alpha_writer_.WriteBlockBeforeCoeffs(cb, sm, enc);
@@ -516,7 +512,7 @@ WP2Status SyntaxWriter::SetInitialSegmentIds() {
     for (uint32_t x = 0; x < SizeBlocks(padded_tile_rect.width); ++x) {
       cb.SetXY(mgr, x, y);
       cb.id_ = AssignSegmentId(*config_, *gparams_, padded_tile_rect, cb.blk());
-      segment_ids_.InitInitialSegmentId(cb, cb.id_);
+      context_.segment_id_predictor().InitInitialSegmentId(cb, cb.id_);
       mgr.Use4x4();
     }
   }

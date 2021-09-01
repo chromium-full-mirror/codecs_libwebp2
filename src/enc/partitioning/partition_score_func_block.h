@@ -67,7 +67,6 @@ class BlockScoreFunc : public PartitionScoreFunc {
  protected:
   // Tries some or all transform/predictor pairs and keeps the best one in 'cb'.
   WP2Status FindBestBlockParams(const FrontMgrBase& front_mgr,
-                                const BlockContext& block_context,
                                 SyntaxWriter* const syntax_writer,
                                 DCDiffusionMap* const dc_error_u,
                                 DCDiffusionMap* const dc_error_v,
@@ -105,7 +104,6 @@ class BlockScoreFunc : public PartitionScoreFunc {
   ANSDictionaries tmp_dicts_;
   SyntaxWriter tmp_syntax_writer_;
   DCDiffusionMap tmp_dc_error_u_, tmp_dc_error_v_;
-  BlockContext context_;
 
  private:
   WP2Status RegisterScoreForVDebug(const Block blocks[], uint32_t num_blocks,

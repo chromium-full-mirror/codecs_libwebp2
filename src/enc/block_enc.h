@@ -24,6 +24,7 @@
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/predictor.h"
 #include "src/wp2/encode.h"
+#include "src/common/lossy/context.h"
 
 namespace WP2 {
 
@@ -39,19 +40,26 @@ class SymbolRecorder;
 class BlockContext {
  public:
   // 'use_aom' defines the usage of AOM residuals.
-  WP2Status Init(bool use_aom) {
+  WP2Status Init(bool use_aom, uint32_t num_segments, bool explicit_segment_ids,
+                 uint32_t width) {
     use_aom_ = use_aom;
+    WP2_CHECK_STATUS(segment_id_predictor_.InitWrite(
+        num_segments, explicit_segment_ids, width));
     return WP2_STATUS_OK;
   }
   WP2Status CopyFrom(const BlockContext& other) {
     use_aom_ = other.use_aom_;
+    WP2_CHECK_STATUS(
+        segment_id_predictor_.CopyFrom(other.segment_id_predictor_));
     return WP2_STATUS_OK;
   }
   void Reset() {}
   bool use_aom() const { return use_aom_; }
+  SegmentIdPredictor& segment_id_predictor() { return segment_id_predictor_; }
 
  private:
   bool use_aom_ = false;
+  SegmentIdPredictor segment_id_predictor_;
 };
 
 //------------------------------------------------------------------------------

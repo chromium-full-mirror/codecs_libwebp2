@@ -109,7 +109,8 @@ TYPED_TEST(CodedBlockTest, OptimizeModes) {
   ASSERT_WP2_OK(counters.Init(/*effort=*/5, kNoAomCoeffs, recorder));
 
   BlockContext context;
-  ASSERT_WP2_OK(context.Init(/*use_aom=*/false));
+  ASSERT_WP2_OK(context.Init(/*use_aom=*/false, gparams.segments_.size(),
+                             gparams.explicit_segment_ids_, width));
 
   BlockModes y_modes, uv_modes, a_modes;
   ASSERT_WP2_OK(DecideModes(EncoderConfig::kDefault, gparams, &y_modes,
