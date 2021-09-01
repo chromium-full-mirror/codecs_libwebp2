@@ -682,7 +682,15 @@ if(WP2_BUILD_EXAMPLES)
     find_package(GLUT)
   endif()
 
-  if(OPENGL_FOUND
+  # Disable vwp2 with < 3.9 to avoid an issue with the GLUT module:
+  #  CMake Error: The following variables are used in this project, but they
+  #  are set to NOTFOUND.
+  #  Please set them or make sure they are set and tested correctly in the
+  #  CMake files:
+  #  GLUT_Xmu_LIBRARY (ADVANCED)
+  #    linked by target "vwp2"
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.9"
+     AND OPENGL_FOUND
      AND GLUT_FOUND
      AND NOT WP2_BUILD_WP2_JS)
     add_executable(vwp2 ${CMAKE_CURRENT_SOURCE_DIR}/examples/vwp2.cc)
@@ -729,6 +737,9 @@ if(WP2_BUILD_EXAMPLES)
       target_compile_options(vwp2 PUBLIC "-Wno-deprecated-declarations")
     endif()
   else() # Build empty vwp2 for test_cmd.
+    if(CMAKE_VERSION VERSION_LESS "3.9")
+      message(WARNING "vwp2 disabled. Please upgrade cmake to 3.9+.")
+    endif()
     add_executable(vwp2 ${CMAKE_CURRENT_SOURCE_DIR}/examples/vwp2.cc)
     target_link_libraries(vwp2 webp2 imageio example_utils)
   endif()
