@@ -333,18 +333,15 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
 
       int16_t dequantized[kMaxCoeffs];  // unused
       for (bool first_coeff_is_dc : {true, false}) {
-        segments[0].quant_y_.Quantize(residuals, tdim, first_coeff_is_dc,
-                                      cb.coeffs_[kYChannel][tf_i],
-                                      &cb.num_coeffs_[kYChannel][tf_i],
-                                      dequantized);
-        segments[0].quant_u_.Quantize(residuals, tdim, first_coeff_is_dc,
-                                      cb.coeffs_[kUChannel][tf_i],
-                                      &cb.num_coeffs_[kUChannel][tf_i],
-                                      dequantized);
-        segments[0].quant_v_.Quantize(residuals, tdim, first_coeff_is_dc,
-                                      cb.coeffs_[kVChannel][tf_i],
-                                      &cb.num_coeffs_[kVChannel][tf_i],
-                                      dequantized);
+        segments[0].quant_y_.Quantize(
+            residuals, tdim, first_coeff_is_dc, cb.coeffs_[kYChannel][tf_i],
+            &cb.num_coeffs_[kYChannel][tf_i], dequantized);
+        segments[0].quant_u_.Quantize(
+            residuals, tdim, first_coeff_is_dc, cb.coeffs_[kUChannel][tf_i],
+            &cb.num_coeffs_[kUChannel][tf_i], dequantized);
+        segments[0].quant_v_.Quantize(
+            residuals, tdim, first_coeff_is_dc, cb.coeffs_[kVChannel][tf_i],
+            &cb.num_coeffs_[kVChannel][tf_i], dequantized);
 
         mgr.Clear();
         SymbolRecorder recorder;
