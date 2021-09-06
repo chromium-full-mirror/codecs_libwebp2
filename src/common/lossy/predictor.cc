@@ -573,6 +573,63 @@ Predictor* Predictors::RecordPredictor(
   return pred;
 }
 
+Predictor* MakeNonAnglePredictor(const Predictors::Pred predictor_type,
+                                 int16_t min_value, int16_t max_value) {
+  switch (predictor_type) {
+    case Predictors::Pred::kDcAll:
+      return new (WP2Allocable::nothrow) DCPredictor(DCPredictor::kAll);
+    case Predictors::Pred::kDcLeft:
+      return new (WP2Allocable::nothrow) DCPredictor(DCPredictor::kLeft);
+    case Predictors::Pred::kDcTop:
+      return new (WP2Allocable::nothrow) DCPredictor(DCPredictor::kTop);
+    case Predictors::Pred::kSmooth2D:
+      return new (WP2Allocable::nothrow)
+          SmoothPredictor(SmoothPredictor::SmoothType::k2DSmooth);
+    case Predictors::Pred::kSmoothVertical:
+      return new (WP2Allocable::nothrow)
+          SmoothPredictor(SmoothPredictor::SmoothType::kVerticalSmooth);
+    case Predictors::Pred::kSmoothHorizontal:
+      return new (WP2Allocable::nothrow)
+          SmoothPredictor(SmoothPredictor::SmoothType::kHorizontalSmooth);
+    case Predictors::Pred::kTrueMotion:
+      return new (WP2Allocable::nothrow) TMPredictor(min_value, max_value);
+    case Predictors::Pred::kGradient:
+      return new (WP2Allocable::nothrow)
+          GradientPredictor(min_value, max_value);
+    case Predictors::Pred::kCfl:
+      return new (WP2Allocable::nothrow) CflPredictor(min_value, max_value);
+    case Predictors::Pred::kSignalingCfl:
+      return new (WP2Allocable::nothrow)
+          SignalingCflPredictor(min_value, max_value);
+    case Predictors::Pred::kZero:
+      return new (WP2Allocable::nothrow) ZeroPredictor();
+    default:
+      // It will fail if you try to make an angle predictor with this function.
+      assert(false);
+  }
+  return nullptr;
+}
+
+namespace {
+bool IsAnglePredictor(const Predictors::Pred predictor_type) {
+  switch (predictor_type) {
+    case Predictors::Pred::kAngle23:
+    case Predictors::Pred::kAngle45:
+    case Predictors::Pred::kAngle67:
+    case Predictors::Pred::kAngle90:
+    case Predictors::Pred::kAngle113:
+    case Predictors::Pred::kAngle135:
+    case Predictors::Pred::kAngle157:
+    case Predictors::Pred::kAngle180:
+    case Predictors::Pred::kAngle203:
+    case Predictors::Pred::kAngle225:
+      return true;
+    default:
+      return false;
+  }
+}
+}  // namespace
+
 WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
                                int16_t min_value, int16_t max_value,
                                const CSPTransform* const transform) {
@@ -592,88 +649,36 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
     Pred p = mapping[i];
     WP2::Predictor* pred = nullptr;
 
-    main_modes_[i] = preds_.size();   // for fast lookup in GetPred()
+    main_modes_[i] = preds_.size();  // for fast lookup in GetPred()
 
-    switch (p) {
-      case Pred::kDcAll:
-        pred = new (WP2Allocable::nothrow) DCPredictor(DCPredictor::kAll);
-        break;
-      case Pred::kDcLeft:
-        pred = new (WP2Allocable::nothrow) DCPredictor(DCPredictor::kLeft);
-        break;
-      case Pred::kDcTop:
-        pred = new (WP2Allocable::nothrow) DCPredictor(DCPredictor::kTop);
-        break;
-      case Pred::kSmooth2D:
+    if (IsAnglePredictor(p)) {
+      for (int32_t sub_mode = 0; sub_mode <= 2 * max_delta; ++sub_mode) {
+        // we map the sub-mode to a delta-angle around the main angle.
+        // It mostly affects the RD-opt search order, since the coding
+        // will be the same in the bitstream (we're using a Range).
+        const int32_t angle_step =
+            (sub_mode & 1) ? -((sub_mode + 1) >> 1) : (sub_mode >> 1);
+        // We assume they're in the same order in ContextPredictor and in
+        // AnglePredictor::Type
         pred = new (WP2Allocable::nothrow)
-            SmoothPredictor(SmoothPredictor::SmoothType::k2DSmooth);
-        break;
-      case Pred::kSmoothVertical:
-        pred = new (WP2Allocable::nothrow)
-            SmoothPredictor(SmoothPredictor::SmoothType::kVerticalSmooth);
-        break;
-      case Pred::kSmoothHorizontal:
-        pred = new (WP2Allocable::nothrow)
-            SmoothPredictor(SmoothPredictor::SmoothType::kHorizontalSmooth);
-        break;
-      case Pred::kTrueMotion:
-        pred = new (WP2Allocable::nothrow) TMPredictor(min_value, max_value);
-        break;
-      case Pred::kGradient:
-        pred =
-            new (WP2Allocable::nothrow) GradientPredictor(min_value, max_value);
-        break;
-      case Pred::kAngle23:
-      case Pred::kAngle45:
-      case Pred::kAngle67:
-      case Pred::kAngle90:
-      case Pred::kAngle113:
-      case Pred::kAngle135:
-      case Pred::kAngle157:
-      case Pred::kAngle180:
-      case Pred::kAngle203:
-      case Pred::kAngle225:
-        for (int32_t sub_mode = 0; sub_mode <= 2 * max_delta; ++sub_mode) {
-          // we map the sub-mode to a delta-angle around the main angle.
-          // It mostly affects the RD-opt search order, since the coding
-          // will be the same in the bitstream (we're using a Range).
-          const int32_t angle_step =
-              (sub_mode & 1) ? -((sub_mode + 1) >> 1) : (sub_mode >> 1);
-          // We assume they're in the same order in ContextPredictor and in
-          // AnglePredictor::Type
-          pred = new (WP2Allocable::nothrow)
-              AnglePredictor((AnglePredictor::Type)angle_type, channel_,
-                             sub_mode, angle_step, min_value, max_value);
-          pred = RecordPredictor(pred, i, transform);
-          WP2_CHECK_ALLOC_OK(pred != nullptr);
-          // Store the main angle.
-          if (angle_step == 0) preds_main_angle_[angle_type] = pred;
-        }
-        ++angle_type;
-        continue;   // done with angle preds
-      case Pred::kCfl:
-        pred = new (WP2Allocable::nothrow) CflPredictor(min_value, max_value);
-        break;
-      case Pred::kSignalingCfl:
-        pred = new (WP2Allocable::nothrow)
-            SignalingCflPredictor(min_value, max_value);
-        break;
-      case Pred::kZero:
-        pred = new (WP2Allocable::nothrow) ZeroPredictor();
-        break;
-      default:
-        assert(false);
-        break;
+            AnglePredictor((AnglePredictor::Type)angle_type, channel_, sub_mode,
+                           angle_step, min_value, max_value);
+        pred = RecordPredictor(pred, i, transform);
+        WP2_CHECK_ALLOC_OK(pred != nullptr);
+        // Store the main angle.
+        if (angle_step == 0) preds_main_angle_[angle_type] = pred;
+      }
+      ++angle_type;
+    } else {
+      pred = MakeNonAnglePredictor(p, min_value, max_value);
+      pred = RecordPredictor(pred, i, transform);
+      WP2_CHECK_ALLOC_OK(pred != nullptr);
+      WP2_CHECK_ALLOC_OK(preds_no_angle_.push_back(pred));
     }
-
-    // non-angle predictor set-up:
-    pred = RecordPredictor(pred, i, transform);
-    WP2_CHECK_ALLOC_OK(pred != nullptr);
-    WP2_CHECK_ALLOC_OK(preds_no_angle_.push_back(pred));
   }
   assert(i <= GetMaxMode() + 1);
   for (; i < ArraySize(main_modes_); ++i) {
-    main_modes_[i] = 0;   // safety
+    main_modes_[i] = 0;  // safety
   }
 
   return WP2_STATUS_OK;
@@ -682,13 +687,25 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
 //------------------------------------------------------------------------------
 
 WP2Status YPredictors::Fill(int16_t min_value, int16_t max_value) {
-  constexpr Pred kYPreds[] = {
-      Pred::kDcAll,      Pred::kDcLeft,         Pred::kDcTop,      Pred::kZero,
-      Pred::kSmooth2D,   Pred::kSmoothVertical, Pred::kSmoothHorizontal,
-      Pred::kTrueMotion, Pred::kGradient,       Pred::kAngle23,
-      Pred::kAngle45,    Pred::kAngle67,        Pred::kAngle90,
-      Pred::kAngle113,   Pred::kAngle135,       Pred::kAngle157,
-      Pred::kAngle180,   Pred::kAngle203,       Pred::kAngle225};
+  constexpr Pred kYPreds[] = {Pred::kDcAll,
+                              Pred::kDcLeft,
+                              Pred::kDcTop,
+                              Pred::kZero,
+                              Pred::kSmooth2D,
+                              Pred::kSmoothVertical,
+                              Pred::kSmoothHorizontal,
+                              Pred::kTrueMotion,
+                              Pred::kGradient,
+                              Pred::kAngle23,
+                              Pred::kAngle45,
+                              Pred::kAngle67,
+                              Pred::kAngle90,
+                              Pred::kAngle113,
+                              Pred::kAngle135,
+                              Pred::kAngle157,
+                              Pred::kAngle180,
+                              Pred::kAngle203,
+                              Pred::kAngle225};
 
   STATIC_ASSERT_ARRAY_SIZE(kYPreds, kYPredModeNum);
   WP2_CHECK_STATUS(FillImpl(kYPreds, kYPredModeNum, min_value, max_value,
@@ -767,7 +784,7 @@ void CflPredictor::LinearRegression(const int16_t* const luma,
     A = DivRound(LeftShift(num, kCflFracBits), den);  // fits in 64b precision
     B -= DivRound<int64_t>((int64_t)A * l_sum, num_values);
   }
-  B += (1 << kCflFracBits >> 1);   // include rounding constant
+  B += (1 << kCflFracBits >> 1);  // include rounding constant
 
   // Tighten the scaling/offset value to avoid obvious overflows.
   // Warning! alpha-from-chroma heavily relies on saturating to [0..255],

@@ -14,6 +14,8 @@
 
 // Unit tests for predictors.
 
+#include <memory>
+
 #include "examples/example_utils.h"
 #include "imageio/image_enc.h"
 #include "include/helpers.h"
@@ -200,10 +202,9 @@ TEST(DCPredictor, SplitTf) {
   cb.SetContextInput(plane, &context_cache);
   const uint32_t step = 4;
   cb.GetCodingParams(kYChannel)->split_tf = true;
-  YPredictors predictors;
-  ASSERT_WP2_OK(init(-512, 512, &predictors));
-  // We assume the first predictor is DC.
-  const Predictor* p = predictors[0];
+  std::unique_ptr<Predictor> p(
+      MakeNonAnglePredictor(Predictors::Pred::kDcAll, 0, 0));
+
   int16_t prediction[16];
   p->Predict(cb, kYChannel, /*split_tf=*/true, /*tf_i=*/0, prediction, step);
   for (uint32_t i = 0; i < 16; ++i) ASSERT_EQ(prediction[i], 0);

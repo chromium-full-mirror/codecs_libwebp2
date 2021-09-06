@@ -156,9 +156,6 @@ class Predictors {
   // Get the maximum mode (inclusive) contained in a predictor vector.
   uint32_t GetMaxMode() const;
 
- protected:
-  Channel channel_;
-
   enum class Pred {
     kDcAll,
     kDcLeft,
@@ -183,6 +180,9 @@ class Predictors {
     kZero,
     kNum,
   };
+
+ protected:
+  Channel channel_;
 
   // Fills the different angle and non-angle predictors.
   WP2Status FillImpl(const Pred* const mapping, uint32_t num_modes,
@@ -233,6 +233,11 @@ class UVPredictors : public Predictors {
   // Fills the object with the non-angle and angle predictors.
   WP2Status Fill(int16_t min_value, int16_t max_value);
 };
+
+// Returns a pointer to Predictor. The caller has to take an ownership of the
+// pointer. Returns null if allocation fails.
+Predictor* MakeNonAnglePredictor(const Predictors::Pred predictor_type,
+                                 int16_t min_value, int16_t max_value);
 
 //------------------------------------------------------------------------------
 
