@@ -39,21 +39,20 @@ WP2Status SaveImage(const ArgbBuffer& buffer, const char* const file_path,
     WP2_CHECK_OK(file_size == nullptr, WP2_STATUS_INVALID_PARAMETER);
   }
 
+  if (format == FileFormat::AUTO) {
+    format = use_stdout ? FileFormat::PNG : GetFormatFromExtension(file_path);
+  }
+
 #ifdef HAVE_WINCODEC_H
-  if (format != PNG) {
-#else
-  {
+  if (format != PNG)
 #endif
+  {
     const char* const mode = (overwrite ? "wb" : "wxb");
     fout =
         use_stdout ? IoUtilSetBinaryMode(stdout) : std::fopen(file_path, mode);
     WP2_CHECK_OK(fout != nullptr, (!use_stdout && FileExists(file_path))
                                       ? WP2_STATUS_BAD_WRITE
                                       : WP2_STATUS_INVALID_PARAMETER);
-  }
-
-  if (format == FileFormat::AUTO) {
-    format = use_stdout ? FileFormat::PNG : GetFormatFromExtension(file_path);
   }
 
   WP2Status status;
@@ -74,8 +73,10 @@ WP2Status SaveImage(const ArgbBuffer& buffer, const char* const file_path,
     status = WP2_STATUS_UNSUPPORTED_FEATURE;
   }
 
-  if (fout != nullptr && file_size != nullptr) *file_size = std::ftell(fout);
-  if (fout != nullptr && fout != stdout) std::fclose(fout);
+  if (fout != nullptr) {
+    if (file_size != nullptr) *file_size = std::ftell(fout);
+    if (fout != stdout) std::fclose(fout);
+  }
   return status;
 }
 

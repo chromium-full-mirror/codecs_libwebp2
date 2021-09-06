@@ -185,11 +185,8 @@ WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout,
   volatile png_bytep row = (png_bytep)buffer.GetRow(0);
   Vector_u8 ARGB;
   WP2_CHECK_ALLOC_OK(ARGB.resize(width * (has_alpha ? 4u : 3u)));
-  const uint32_t stride = buffer.stride();
   volatile png_structp png;
   volatile png_infop info;
-  png_uint_32 y;
-  WP2Status status;
 
   png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr,
                                 PNGErrorFunction, nullptr);
@@ -202,8 +199,7 @@ WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout,
   }
   if (setjmp(png_jmpbuf(png))) {
     png_destroy_write_struct((png_structpp)&png, (png_infopp)&info);
-    status = WP2_STATUS_BAD_WRITE;
-    goto End;
+    return WP2_STATUS_BAD_WRITE;
   }
   png_init_io(png, fout);
   png_set_IHDR(png, info, width, height, 8,
@@ -213,20 +209,16 @@ WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout,
   png_write_info(png, info);
 
   WP2ArgbConverterInit();
-
-  for (y = 0; y < height; ++y) {
+  for (png_uint_32 y = 0; y < height; ++y) {
     WP2ArgbConvertTo[has_alpha ? WP2_RGBA_32 : WP2_RGB_24](row, width,
                                                            ARGB.data());
     png_bytep ptr[1] = {ARGB.data()};
     png_write_rows(png, ptr, 1);
-    row += stride;
+    row += buffer.stride();
   }
   png_write_end(png, info);
-  status = WP2_STATUS_OK;
-
- End:
   png_destroy_write_struct((png_structpp)&png, (png_infopp)&info);
-  return status;
+  return WP2_STATUS_OK;
 }
 
 #else  // !HAVE_WINCODEC_H && !WP2_HAVE_PNG
