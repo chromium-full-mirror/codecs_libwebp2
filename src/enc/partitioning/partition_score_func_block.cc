@@ -216,7 +216,6 @@ WP2Status BlockScoreFunc::FindBestBlockParams(const FrontMgrBase& front_mgr,
   const Rectangle padded_tile_rect = {tile_rect_.x, tile_rect_.y,
                                       src_->GetWidth(), src_->GetHeight()};
   cb->id_ = AssignSegmentId(*config_, *gparams_, padded_tile_rect, cb->blk());
-  const Segment& segment = gparams_->segments_.at(cb->id_);
   cb->mtx_set_ = gparams_->use_rnd_mtx_ ? &gparams_->mtx_set_ : nullptr;
   cb->is420_ = false;  // Set in OptimizeModesChroma() but might trigger the
                        // undefined-behavior-sanitizer in OptimizeModesLuma().
@@ -225,14 +224,14 @@ WP2Status BlockScoreFunc::FindBestBlockParams(const FrontMgrBase& front_mgr,
   cb->y_context_is_constant_ = cb->ContextIsConstant(kYChannel);
 
   WP2_CHECK_STATUS(OptimizeModes(
-      *config_, tile_rect_, kYChannel, gparams_->y_preds_, segment, y_modes_,
+      *config_, tile_rect_, kYChannel, gparams_->y_preds_, y_modes_,
       syntax_writer->context(), cb, syntax_writer->counters(), scorer));
 
   WP2_CHECK_STATUS(OptimizeModesChroma(
       *config_, tile_rect_, gparams_->maybe_use_lossy_alpha_, front_mgr,
-      gparams_->uv_preds_, segment, syntax_writer->chroma_subsampling(),
-      uv_modes_, syntax_writer->context(), cb, syntax_writer->counters(),
-      dc_error_u, dc_error_v, scorer));
+      gparams_->uv_preds_, syntax_writer->chroma_subsampling(), uv_modes_,
+      syntax_writer->context(), cb, syntax_writer->counters(), dc_error_u,
+      dc_error_v, scorer));
 
   if (with_alpha_) {
     WP2_CHECK_STATUS(syntax_writer->DecideAlpha(cb, a_modes_, scorer));

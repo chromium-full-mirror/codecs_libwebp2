@@ -710,14 +710,15 @@ static constexpr const char* kSearchTypeNames[] = {"tf", "pred&tf", "split"};
 void CodedBlock::StorePredictionScore(
     const EncoderConfig& config, const Rectangle& tile_rect, Channel channel,
     const Predictor& pred, TransformPair tf, float dist, float lambda,
-    float res_rate, float pred_rate, float tf_rate, float score, bool is_best,
-    SearchType type) const {
+    float pred_rate, float tf_rate, float segment_id_rate, float res_rate,
+    float score, bool is_best, SearchType type) const {
   if (!VDMatch(config, "prediction-scores")) return;
   if (VDChannel(config) != channel) return;
 
   // Check the formula did not change.
-  assert(std::abs(dist + lambda * (res_rate + pred_rate + tf_rate) - score) <
-         0.1f);
+  assert(std::abs(dist +
+                  lambda * (pred_rate + tf_rate + segment_id_rate + res_rate) -
+                  score) < 0.1f);
 
   ArgbBuffer debug_output;  // Tile view.
   WP2_ASSERT_STATUS(debug_output.SetView(config.info->debug_output, tile_rect));
@@ -733,8 +734,9 @@ void CodedBlock::StorePredictionScore(
     std::string& str = config.info->selection_info;
     if (is_best || std::count(str.begin(), str.end(), '\n') < 30) {
       str += WP2SPrint("Score %9.1f = dist %9.1f", score, dist);
-      str += WP2SPrint(" + lambda %9.1f * (res %7.4f + pred %7.4f + tf %7.4f)",
-                       lambda, res_rate, pred_rate, tf_rate);
+      str += WP2SPrint(
+          " + lambda %9.1f * (pred %7.4f + tf %7.4f + segid %7.4f + res %7.4f)",
+          lambda, pred_rate, tf_rate, segment_id_rate, res_rate);
       str += WP2SPrint(" %s (%s - %s/%s x%u) (%s)\n", is_best ? "best" : "    ",
                        pred.GetName().c_str(), WP2TransformNames[kTfX[tf]],
                        WP2TransformNames[kTfY[tf]], GetNumTransforms(channel),
@@ -742,13 +744,14 @@ void CodedBlock::StorePredictionScore(
     } else {
       // Print in console instead.
       printf(
-          "Block at (%d %d) Score %9.1f = dist %9.1f + lambda %9.1f * (res "
-          "%7.4f + pred %7.4f + "
-          "tf %7.4f)  %s (%s - %s/%s x%u) (%s)\n",
-          x_pix(), y_pix(), score, dist, lambda, res_rate, pred_rate, tf_rate,
-          is_best ? "best" : "    ", pred.GetName().c_str(),
-          WP2TransformNames[kTfX[tf]], WP2TransformNames[kTfY[tf]],
-          GetNumTransforms(channel), kSearchTypeNames[(int)type]);
+          "Block at (%d %d) Score %9.1f = dist %9.1f + lambda %9.1f * (pred "
+          "%7.4f + tf %7.4f + segid %7.4f + res %7.4f)  %s (%s - %s/%s x%u) "
+          "(%s)\n",
+          x_pix(), y_pix(), score, dist, lambda, pred_rate, tf_rate,
+          segment_id_rate, res_rate, is_best ? "best" : "    ",
+          pred.GetName().c_str(), WP2TransformNames[kTfX[tf]],
+          WP2TransformNames[kTfY[tf]], GetNumTransforms(channel),
+          kSearchTypeNames[(int)type]);
     }
   }
 

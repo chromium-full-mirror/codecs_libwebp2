@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <memory>
+#include <numeric>
 #include <string>
 
 #include "src/common/global_params.h"
@@ -130,6 +131,23 @@ WP2Status DecideLumaTransforms(const EncoderConfig& config,
   return WP2_STATUS_OK;
 }
 
+WP2Status DecideLumaSegments(const EncoderConfig& config,
+                             const Vector<Segment>& segments,
+                             BlockModes* const modes) {
+  if (config.effort >= 9) {
+    WP2_CHECK_ALLOC_OK(
+        modes->segment_ids_tried_during_preds.resize(segments.size()));
+    std::iota(modes->segment_ids_tried_during_preds.begin(),
+              modes->segment_ids_tried_during_preds.end(), 0);
+  } else if (config.effort >= 5) {
+    WP2_CHECK_ALLOC_OK(
+        modes->segment_ids_tried_after_preds.resize(segments.size()));
+    std::iota(modes->segment_ids_tried_after_preds.begin(),
+              modes->segment_ids_tried_after_preds.end(), 0);
+  }
+  return WP2_STATUS_OK;
+}
+
 }  // namespace
 
 WP2Status DecideModes(const EncoderConfig& config, const GlobalParams& gparams,
@@ -143,6 +161,7 @@ WP2Status DecideModes(const EncoderConfig& config, const GlobalParams& gparams,
   WP2_CHECK_STATUS(DecidePreds(config, gparams.y_preds_, kMinMainPredsEffort,
                                kMinSubPredsEffort, y_modes));
   WP2_CHECK_STATUS(DecideLumaTransforms(config, y_modes));
+  WP2_CHECK_STATUS(DecideLumaSegments(config, gparams.segments_, y_modes));
 
   // Chroma
   WP2_CHECK_ALLOC_OK(uv_modes->splits_tried_during_preds.push_back(false));
@@ -191,7 +210,6 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
   // shortcuts
   const Rectangle padded_rect = {tile_rect.x, tile_rect.y,
                                  yuv_buffer.GetWidth(), yuv_buffer.GetHeight()};
-  const Vector<Segment>& segments = gparams.segments_;
   const CSPTransform& transf = gparams.transf_;
 
   // First, extract partitioning.
@@ -315,13 +333,11 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       cb.original_res_ = &block_info.original_res;
 #endif
 
-      const Segment& segment = segments[cb.id_];
-
       cb.ResetContextCache();
       cb.y_context_is_constant_ = cb.ContextIsConstant(kYChannel);
 
       WP2_CHECK_STATUS(OptimizeModes(
-          *config_, tile_rect, kYChannel, gparams.y_preds_, segment, y_modes,
+          *config_, tile_rect, kYChannel, gparams.y_preds_, y_modes,
           writer.context(), &cb, writer.counters(), &scorer));
 
       // If the U/V planes don't depend on luma, we only need to process them
@@ -329,9 +345,8 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       if (pass == 0 || chroma_depends_on_luma) {
         WP2_CHECK_STATUS(OptimizeModesChroma(
             *config_, tile_rect, gparams.maybe_use_lossy_alpha_, mgr,
-            gparams.uv_preds_, segment, chroma_subsampling, uv_modes,
-            writer.context(), &cb, writer.counters(), &dc_error_u, &dc_error_v,
-            &scorer));
+            gparams.uv_preds_, chroma_subsampling, uv_modes, writer.context(),
+            &cb, writer.counters(), &dc_error_u, &dc_error_v, &scorer));
       }
       if (gparams.has_alpha_) {
         WP2_CHECK_STATUS(writer.DecideAlpha(&cb, a_modes, &scorer));

@@ -127,7 +127,7 @@ class BlockContextPredictor {
 
   void WriteValue(const CodedBlockBase& cb, uint8_t value,
                   SymbolManager* const sm, ANSEncBase* const enc,
-                  WP2_OPT_LABEL);
+                  WP2_OPT_LABEL) const;
   uint8_t ReadValue(const CodedBlockBase& cb, SymbolReader* const sr,
                     WP2_OPT_LABEL);
   // Updates the context for writing/reading values for following blocks.
@@ -152,7 +152,7 @@ class BlockContextPredictor {
 //------------------------------------------------------------------------------
 // Segment id contexting
 
-// This class is used for predicting and storing segment-id
+// This class is used for predicting and storing segment-id.
 class SegmentIdPredictor {
  public:
   SegmentIdPredictor() = default;
@@ -162,19 +162,20 @@ class SegmentIdPredictor {
   // Deep copy.
   WP2Status CopyFrom(const SegmentIdPredictor& other);
 
-  // Called first
+  // Called first.
   WP2Status InitWrite(uint32_t num_segments, bool explicit_segment_ids,
                       uint32_t width);
   // Called before the writing pass.
-  WP2Status WriteHeader(ANSEncBase* const enc);
-  // Write and update.
+  WP2Status WriteHeader(ANSEncBase* const enc) const;
+  // Called for each block.
   void WriteId(const CodedBlockBase& cb, SymbolManager* const sm,
-               ANSEncBase* const enc);
+               ANSEncBase* const enc) const;
+  void RecordId(const CodedBlockBase& cb);
 
-  // Initialize the reader
+  // Initializes the reader.
   WP2Status ReadHeader(ANSDec* const dec, uint32_t num_segments,
                        bool explicit_segment_ids, uint32_t width);
-  // Read and update cb->id_
+  // Reads and records cb->id_. Called for each block.
   void ReadId(SymbolReader* const sr, CodedBlockBase* const cb);
 
   static uint8_t GetIdFromSize(uint32_t num_segments, BlockSize block_size);

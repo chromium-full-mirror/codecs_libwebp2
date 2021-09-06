@@ -119,7 +119,7 @@ TYPED_TEST(CodedBlockTest, OptimizeModes) {
   BlockScorer scorer;
   ASSERT_WP2_OK(scorer.Init(EncoderConfig::kDefault, gparams, tile_rect));
   ASSERT_WP2_OK(OptimizeModes(EncoderConfig::kDefault, tile_rect, kYChannel,
-                              gparams.y_preds_, segment, y_modes, context, &cb,
+                              gparams.y_preds_, y_modes, context, &cb,
                               &counters, &scorer));
 }
 

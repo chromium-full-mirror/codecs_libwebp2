@@ -62,7 +62,8 @@ WP2Status BlockContextPredictor::CopyFrom(const BlockContextPredictor& other) {
 
 void BlockContextPredictor::WriteValue(const CodedBlockBase& cb, uint8_t value,
                                        SymbolManager* const sm,
-                                       ANSEncBase* const enc, WP2_OPT_LABEL) {
+                                       ANSEncBase* const enc,
+                                       WP2_OPT_LABEL) const {
   sm->Process(symbol_, GetSlot(cb, value), label, enc);
 }
 
@@ -125,27 +126,29 @@ WP2Status SegmentIdPredictor::CopyFrom(const SegmentIdPredictor& other) {
 WP2Status SegmentIdPredictor::InitWrite(uint32_t num_segments,
                                         bool explicit_segment_ids,
                                         uint32_t width) {
+  assert(num_segments <= kMaxNumSegments);
   WP2_CHECK_STATUS(predictor_.Init(kSymbolSegmentId, num_segments, width));
   num_segments_ = num_segments;
   explicit_segment_ids_ = explicit_segment_ids;
   return WP2_STATUS_OK;
 }
 
-WP2Status SegmentIdPredictor::WriteHeader(ANSEncBase* const enc) {
+WP2Status SegmentIdPredictor::WriteHeader(ANSEncBase* const enc) const {
   return WP2_STATUS_OK;
 }
 
 void SegmentIdPredictor::WriteId(const CodedBlockBase& cb,
                                  SymbolManager* const sm,
-                                 ANSEncBase* const enc) {
+                                 ANSEncBase* const enc) const {
   if (explicit_segment_ids_ && !cb.blk().IsSmall()) {
     predictor_.WriteValue(cb, cb.id_, sm, enc, "segment_id");
   } else {
     assert(cb.id_ == GetIdFromSize(num_segments_, cb.dim()));
   }
-  // The following is still needed, even if RecordId() did it already: the
-  // map in segment_id_ctx_ is only partially stored.
-  predictor_.SetValue(cb, cb.id_);  // Fill the segment ids.
+}
+
+void SegmentIdPredictor::RecordId(const CodedBlockBase& cb) {
+  predictor_.SetValue(cb, cb.id_);  // Fill the segment id map.
 }
 
 //------------------------------------------------------------------------------

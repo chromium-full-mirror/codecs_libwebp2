@@ -43,15 +43,19 @@ WP2Status Counters::Init(uint32_t effort, bool use_aom_residuals,
   use_aom_residuals_ = use_aom_residuals;
   recorder_ = &recorder;
 
+  predictor_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
+  WP2_CHECK_ALLOC_OK(predictor_ != nullptr);
+  WP2_CHECK_STATUS(
+      predictor_->Allocate({kSymbolModeY, kSymbolModeUV, kSymbolModeA}));
+
   transform_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
   WP2_CHECK_ALLOC_OK(transform_ != nullptr);
   WP2_CHECK_STATUS(transform_->Allocate(
       {kSymbolHasCoeffs, kSymbolTransform, kSymbolSplitTransform}));
 
-  predictor_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
-  WP2_CHECK_ALLOC_OK(predictor_ != nullptr);
-  WP2_CHECK_STATUS(
-      predictor_->Allocate({kSymbolModeY, kSymbolModeUV, kSymbolModeA}));
+  segment_id_.reset(new (WP2Allocable::nothrow) SymbolCounter(recorder_));
+  WP2_CHECK_ALLOC_OK(segment_id_ != nullptr);
+  WP2_CHECK_STATUS(segment_id_->Allocate({kSymbolSegmentId}));
 
   if (effort >= kSlowCounterEffortThreshold) {
     // Using the UpdatingSymbolCounter slows down encoding by ~9%
@@ -449,11 +453,21 @@ WP2Status CodedBlock::PredictorRate(Channel channel,
 WP2Status CodedBlock::TransformRate(Channel channel,
                                     SymbolCounter* const counter,
                                     float* const rate) const {
-  ANSEncCounter enc;
   counter->Clear();
+  ANSEncCounter enc;
   SyntaxWriter::WriteSplitTransform(*this, channel, counter, &enc);
   SyntaxWriter::WriteHasCoeffs(*this, channel, counter, &enc);
   SyntaxWriter::WriteTransform(*this, channel, counter, &enc);
+  *rate = enc.GetCost();
+  return WP2_STATUS_OK;
+}
+
+WP2Status CodedBlock::SegmentIdRate(const BlockContext& context,
+                                    SymbolCounter* const counter,
+                                    float* rate) const {
+  counter->Clear();
+  ANSEncCounter enc;
+  context.segment_id_predictor().WriteId(*this, counter, &enc);
   *rate = enc.GetCost();
   return WP2_STATUS_OK;
 }
@@ -476,9 +490,18 @@ void BlockScorer::Set(const BlockContext& context, CodedBlock* cb,
   cb_ = cb;
   context_ = &context;
   counters_ = counters;
+  // Use the segment given by AssignSegmentId() to compute the lambdas because
+  // we may end up comparing several 'segment_ids_' which would lead to
+  // different score computation formulas otherwise.
+  for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+    const Segment& segment =
+        gparams_->segments_[(channel == kAChannel) ? 0 : cb_->id_];
+    lambdas_[channel] = cb_->lambda_mult_ * segment.GetQuant(channel).lambda;
+  }
 
   cached_predictor_ = nullptr;
   last_params_ = CodedBlock::CodingParams();
+  last_segment_id_ = 0;
 
   best_combination_ = BlockScore();
   best_combination_no_angle_ = BlockScore();
@@ -550,10 +573,23 @@ WP2Status BlockScorer::ComputeScoreForEachTransform(bool forced) {
   if (forced_tf != kUnknownTf) {
     // Transform is set by EncoderConfig::info (debug).
     params.tf = forced_tf;
-    WP2_CHECK_STATUS(ComputeScoreForEachChannel(/*forced=*/true));
+    WP2_CHECK_STATUS(ComputeScoreForEachSegment(/*forced=*/true));
   } else {
     for (const TransformPair tf : transforms_) {
       params.tf = tf;
+      WP2_CHECK_STATUS(ComputeScoreForEachSegment(forced));
+    }
+  }
+  return WP2_STATUS_OK;
+}
+
+WP2Status BlockScorer::ComputeScoreForEachSegment(bool forced) {
+  if (segment_ids_.empty()) {
+    // Just use the 'cb_->id_' value which was set by AssignSegmentId().
+    WP2_CHECK_STATUS(ComputeScoreForEachChannel(forced));
+  } else {
+    for (uint8_t segment_id : segment_ids_) {
+      cb_->id_ = segment_id;
       WP2_CHECK_STATUS(ComputeScoreForEachChannel(forced));
     }
   }
@@ -563,10 +599,13 @@ WP2Status BlockScorer::ComputeScoreForEachTransform(bool forced) {
 WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
   BlockScore combination;
   combination.params = *cb_->GetCodingParams(channels_.front());
+  combination.segment_id = cb_->id_;
   if (!forced) {
     // Each unique combination should be tried only once.
-    assert(combination.params != last_params_);
-    assert(combination.params != best_combination_.params);
+    assert(combination.params != last_params_ ||
+           combination.segment_id != last_segment_id_);
+    assert(combination.params != best_combination_.params ||
+           combination.segment_id != best_combination_.segment_id);
   }
 
   // Recompute the prediction of the top left sub-block if needed.
@@ -576,10 +615,12 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
        cached_split_tf_ != combination.params.split_tf);
   const uint32_t num_channels = (gparams_->maybe_use_lossy_alpha_ ? 4 : 3);
   const bool reduced_tf = (channels_.front() == kUChannel && cb_->is420_);
+  const Segment& segment =
+      gparams_->segments_[(channels_.front() == kAChannel) ? 0 : cb_->id_];
 
   // Per channel:
   uint64_t disto[2];  // Distortion (sum of squared errors).
-  float pred_rate[2], res_rate[2], tf_rate[2];  // Estimated cost in bits.
+  float pred_rate[2], tf_rate[2], segment_id_rate, res_rate[2];  // Bit cost.
   float score[2];  // Aggregated distortion and rates. Lower means better.
   for (Channel c : channels_) {
     const uint32_t ci = (c == kUChannel) ? 1 : 0;  // 'c' index in 'channels_'.
@@ -601,7 +642,7 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
     BlockCoeffs16 residuals, reconstructed;  // Temporary buffers.
     // At least one of {pred, tf} changed, so always reconstruct the top left
     // sub-block...
-    cb_->TransformAndReconstruct(*config_, *context_, *segment_, c, /*tf_i=*/0,
+    cb_->TransformAndReconstruct(*config_, *context_, segment, c, /*tf_i=*/0,
                                  reduced_tf, prediction, &residuals_cache,
                                  &reconstructed, counters_);
 
@@ -610,12 +651,13 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
     for (uint32_t tf_i = 1; tf_i < cb_->GetNumTransforms(c); ++tf_i) {
       cb_->PredictBlock(c, tf_i, prediction.Row(0), prediction.Step());
       cb_->GetResiduals(c, tf_i, prediction, &residuals);
-      cb_->TransformAndReconstruct(*config_, *context_, *segment_, c, tf_i,
+      cb_->TransformAndReconstruct(*config_, *context_, segment, c, tf_i,
                                    reduced_tf, prediction, &residuals,
                                    &reconstructed, counters_);
     }
     if (c == channels_.back()) {  // Remember what is cached for all channels.
       last_params_ = combination.params;
+      last_segment_id_ = combination.segment_id;
     }
 
     // Compute distortion.
@@ -629,13 +671,20 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
     //       called again with different configurations.
     WP2_CHECK_STATUS(
         cb_->PredictorRate(c, counters_->predictor(), &pred_rate[ci]));
-    WP2_CHECK_STATUS(cb_->ResidualRate(*context_, c, num_channels,
-                                       counters_->residuals(), &res_rate[ci]));
     WP2_CHECK_STATUS(
         cb_->TransformRate(c, counters_->transform(), &tf_rate[ci]));
-    const float lambda = cb_->lambda_mult_ * segment_->GetQuant(c).lambda;
-    score[ci] =
-        disto[ci] + lambda * (pred_rate[ci] + res_rate[ci] + tf_rate[ci]);
+    if (c == kYChannel) {
+      // Segment ID is decided for luma only and signaled once per block.
+      WP2_CHECK_STATUS(cb_->SegmentIdRate(*context_, counters_->segment_id(),
+                                          &segment_id_rate));
+    } else {
+      segment_id_rate = 0.f;
+      assert(segment_ids_.empty());
+    }
+    WP2_CHECK_STATUS(cb_->ResidualRate(*context_, c, num_channels,
+                                       counters_->residuals(), &res_rate[ci]));
+    score[ci] = disto[ci] + lambdas_[c] * (pred_rate[ci] + tf_rate[ci] +
+                                           segment_id_rate + res_rate[ci]);
 
     combination.score += score[ci];
     combination.disto += disto[ci];
@@ -661,8 +710,8 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
     cb_->StorePredictionScore(
         *config_, tile_rect_, c, *cb_->GetCodingParams(c)->pred,
         cb_->GetCodingParams(c)->tf, disto[ci],
-        cb_->lambda_mult_ * segment_->GetQuant(c).lambda, res_rate[ci],
-        pred_rate[ci], tf_rate[ci], score[ci], is_best,
+        cb_->lambda_mult_ * segment.GetQuant(c).lambda, pred_rate[ci],
+        tf_rate[ci], segment_id_rate, res_rate[ci], score[ci], is_best,
         CodedBlock::SearchType::kPredAndTransform);
   }
 #endif  // WP2_REDUCE_BINARY_SIZE
@@ -703,11 +752,15 @@ const BlockScore& BlockScorer::GetBestCombination() const {
 
 void BlockScorer::ReconstructBestCombination() {
   assert(best_combination_.params.pred != nullptr);
-  if (best_combination_.params != last_params_) {
+  if (best_combination_.params != last_params_ ||
+      best_combination_.segment_id != last_segment_id_) {
     *cb_->GetCodingParams(channels_.front()) = best_combination_.params;
+    cb_->id_ = best_combination_.segment_id;
+    const Segment& segment =
+        gparams_->segments_[(channels_.front() == kAChannel) ? 0 : cb_->id_];
     for (Channel c : channels_) {
       const bool is420 = ((c == kUChannel || c == kVChannel) && cb_->is420_);
-      cb_->QuantizeAll(*config_, *context_, *segment_, c, is420, counters_);
+      cb_->QuantizeAll(*config_, *context_, segment, c, is420, counters_);
     }
   }
 }
@@ -716,21 +769,27 @@ void BlockScorer::ReconstructBestCombination() {
 
 WP2Status OptimizeModes(const EncoderConfig& config, const Rectangle& tile_rect,
                         Channel channel, const Predictors& preds,
-                        const Segment& segment, const BlockModes& m,
-                        const BlockContext& context, CodedBlock* const cb,
-                        Counters* const counters, BlockScorer* const scorer) {
+                        const BlockModes& m, const BlockContext& context,
+                        CodedBlock* const cb, Counters* const counters,
+                        BlockScorer* const scorer) {
   scorer->Set(context, cb, counters);
 
   // Either luma, chroma or alpha.
   WP2_CHECK_ALLOC_OK(scorer->channels_.resize((channel == kUChannel) ? 2 : 1));
   scorer->channels_.front() = channel;
   if (channel == kUChannel) scorer->channels_.back() = kVChannel;
-  scorer->segment_ = &segment;
+  const bool explicit_segment_id =
+      scorer->GetGlobalParams().explicit_segment_ids_ && !cb->blk().IsSmall();
 
   // First round of combinations.
   WP2_CHECK_ALLOC_OK(scorer->splits_.copy_from(m.splits_tried_during_preds));
   WP2_CHECK_ALLOC_OK(scorer->predictors_.copy_from(m.main_preds));
   WP2_CHECK_ALLOC_OK(scorer->transforms_.copy_from(m.tf_tried_during_preds));
+  scorer->segment_ids_.clear();
+  if (explicit_segment_id) {
+    WP2_CHECK_ALLOC_OK(
+        scorer->segment_ids_.copy_from(m.segment_ids_tried_during_preds));
+  }
   WP2_CHECK_STATUS(scorer->ComputeScore());
 
   // Find all sub-angle predictors sharing the same mode (~angle) as the
@@ -751,22 +810,47 @@ WP2Status OptimizeModes(const EncoderConfig& config, const Rectangle& tile_rect,
     WP2_CHECK_STATUS(scorer->ComputeScore());
   }
 
-  // Keep only the best predictor from now on.
+  // Keep only the best of each from now on and try the others one by one.
+  WP2_CHECK_ALLOC_OK(scorer->splits_.resize(1));
+  scorer->splits_.front() = scorer->GetBestCombination().params.split_tf;
   WP2_CHECK_ALLOC_OK(scorer->predictors_.resize(1));
   scorer->predictors_.front() = scorer->GetBestCombination().params.pred;
+  if (scorer->segment_ids_.empty()) {
+    // Keep AssignSegmentId() value.
+    assert(cb->id_ == scorer->GetBestCombination().segment_id);
+  } else {
+    WP2_CHECK_ALLOC_OK(scorer->segment_ids_.resize(1));
+    scorer->segment_ids_.front() = scorer->GetBestCombination().segment_id;
+  }
 
   // Try other transforms.
   if (!m.tf_tried_after_preds.empty()) {
-    WP2_CHECK_ALLOC_OK(scorer->splits_.resize(1));
-    scorer->splits_.front() = scorer->GetBestCombination().params.split_tf;
     WP2_CHECK_ALLOC_OK(scorer->transforms_.copy_from(m.tf_tried_after_preds));
     WP2_CHECK_STATUS(scorer->ComputeScore());
+    // Keep only the best transform from now on.
+    WP2_CHECK_ALLOC_OK(scorer->transforms_.resize(1));
+    scorer->transforms_.front() = scorer->GetBestCombination().params.tf;
+  }
+
+  // Try other segments.
+  scorer->segment_ids_.clear();
+  for (uint8_t segment_id : m.segment_ids_tried_after_preds) {
+    // AssignSegmentId() could have returned a segment present in
+    // 'm.segment_ids_tried_after_preds' so make sure there is no overlap.
+    if (explicit_segment_id &&
+        segment_id != scorer->GetBestCombination().segment_id) {
+      WP2_CHECK_ALLOC_OK(scorer->segment_ids_.push_back(segment_id));
+    }
+  }
+  if (!scorer->segment_ids_.empty()) {
+    WP2_CHECK_STATUS(scorer->ComputeScore());
+    // Keep only the best segment from now on.
+    WP2_CHECK_ALLOC_OK(scorer->segment_ids_.resize(1));
+    scorer->segment_ids_.front() = scorer->GetBestCombination().segment_id;
   }
 
   // Try other split_tf.
   if (!m.splits_tried_after_preds.empty()) {
-    WP2_CHECK_ALLOC_OK(scorer->transforms_.resize(1));
-    scorer->transforms_.front() = scorer->GetBestCombination().params.tf;
     WP2_CHECK_ALLOC_OK(scorer->splits_.copy_from(m.splits_tried_after_preds));
     WP2_CHECK_STATUS(scorer->ComputeScore());
   }
@@ -777,7 +861,7 @@ WP2Status OptimizeModes(const EncoderConfig& config, const Rectangle& tile_rect,
 
 WP2Status OptimizeModesChroma(
     const EncoderConfig& config, const Rectangle& tile_rect, bool has_alpha,
-    const FrontMgrBase& mgr, const Predictors& preds, const Segment& segment,
+    const FrontMgrBase& mgr, const Predictors& preds,
     ChromaSubsampling chroma_subsampling, const BlockModes& modes,
     const BlockContext& context, CodedBlock* const cb, Counters* const counters,
     DCDiffusionMap* const dc_error_u, DCDiffusionMap* const dc_error_v,
@@ -792,10 +876,11 @@ WP2Status OptimizeModesChroma(
       ((chroma_subsampling == ChromaSubsampling::kSingleBlock &&
         config.uv_mode == EncoderConfig::UVMode444) ||
        chroma_subsampling == ChromaSubsampling::k444);
+  const Segment& segment = scorer->GetGlobalParams().segments_[cb->id_];
 
   cb->is420_ = is420_for_sure;  // Must be set to something now even if unsure.
-  WP2_CHECK_STATUS(OptimizeModes(config, tile_rect, kUChannel, preds, segment,
-                                 modes, context, cb, counters, scorer));
+  WP2_CHECK_STATUS(OptimizeModes(config, tile_rect, kUChannel, preds, modes,
+                                 context, cb, counters, scorer));
   if (diffusion > 0) {  // Add error diffusion
     cb->dc_error_[kUChannel] = dc_error_u->Get(cb->blk(), diffusion);
     cb->dc_error_[kVChannel] = dc_error_v->Get(cb->blk(), diffusion);

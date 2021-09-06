@@ -248,6 +248,7 @@ void SyntaxWriter::WriteBlockBeforeCoeffs(const CodedBlock& cb,
                                           SymbolManager* const sm,
                                           ANSEncBase* const enc) {
   context_.segment_id_predictor().WriteId(cb, sm, enc);
+  context_.segment_id_predictor().RecordId(cb);
 
   if (gparams_->has_alpha_) {
     alpha_writer_.WriteBlockBeforeCoeffs(cb, sm, enc);

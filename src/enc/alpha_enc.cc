@@ -211,9 +211,9 @@ WP2Status AlphaWriter::ProcessLossy(CodedBlock* const cb,
     return WP2_STATUS_OK;
   }
 
-  WP2_CHECK_STATUS(WP2::OptimizeModes(
-      config_, tile_rect_, kAChannel, gparams_->a_preds_,
-      gparams_->segments_[0], modes, *context_, cb, counters, scorer));
+  WP2_CHECK_STATUS(WP2::OptimizeModes(config_, tile_rect_, kAChannel,
+                                      gparams_->a_preds_, modes, *context_, cb,
+                                      counters, scorer));
 
   // Update alpha_mode in case the reconstructed pixels are fully opaque or
   // fully transparent, even if the input pixels are not.

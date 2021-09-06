@@ -56,6 +56,9 @@ class BlockContext {
   void Reset() {}
   bool use_aom() const { return use_aom_; }
   SegmentIdPredictor& segment_id_predictor() { return segment_id_predictor_; }
+  const SegmentIdPredictor& segment_id_predictor() const {
+    return segment_id_predictor_;
+  }
 
  private:
   bool use_aom_ = false;
@@ -72,19 +75,19 @@ class Counters : public WP2Allocable {
                  const SymbolRecorder& recorder);
   WP2Status CopyFrom(const Counters& other, const SymbolRecorder& recorder);
   const SymbolRecorder* recorder() const { return recorder_; }
-  // Returns a pointer to the counter with symbols related to transforms.
-  SymbolCounter* transform() { return transform_.get(); }
-  // Returns a pointer to the counter with symbols related to predictors.
+  // Returns a pointer to the counter with symbols related to:
   SymbolCounter* predictor() { return predictor_.get(); }
-  // Returns a pointer to the counter with symbols related to residuals.
+  SymbolCounter* transform() { return transform_.get(); }
+  SymbolCounter* segment_id() { return segment_id_.get(); }
   SymbolCounter* residuals() { return residuals_; }
 
  private:
   static constexpr uint32_t kSlowCounterEffortThreshold = 5;
   uint32_t effort_;
   bool use_aom_residuals_;
-  std::unique_ptr<SymbolCounter> transform_;
   std::unique_ptr<SymbolCounter> predictor_;
+  std::unique_ptr<SymbolCounter> transform_;
+  std::unique_ptr<SymbolCounter> segment_id_;
   // Either the fast or slow version is used depending on 'effort'.
   std::unique_ptr<SymbolCounter> residuals_fast_;
   std::unique_ptr<UpdatingSymbolCounter> residuals_slow_;
@@ -179,6 +182,11 @@ class CodedBlock : public CodedBlockBase {
                           SymbolCounter* const counter,
                           float* const rate) const;
 
+  // Returns an estimation of the number of bits necessary to encode the
+  // segment id.
+  WP2Status SegmentIdRate(const BlockContext& context,
+                          SymbolCounter* const counter, float* rate) const;
+
   // Estimated cost in bits of storing residuals for the given channel.
   WP2Status ResidualRate(const BlockContext& context, Channel channel,
                          uint32_t num_channels, SymbolCounter* const counter,
@@ -213,9 +221,9 @@ class CodedBlock : public CodedBlockBase {
   void StorePredictionScore(const EncoderConfig& config,
                             const Rectangle& tile_rect, Channel channel,
                             const Predictor& pred, TransformPair tf, float dist,
-                            float lambda, float res_rate, float pred_rate,
-                            float tf_rate, float score, bool is_best,
-                            SearchType type) const;
+                            float lambda, float pred_rate, float tf_rate,
+                            float segment_id_rate, float res_rate, float score,
+                            bool is_best, SearchType type) const;
 
   // Visual debug: stores information around the chroma subsampling decision.
   WP2Status Store420Scores(const EncoderConfig& config, uint32_t pos_x,
@@ -290,6 +298,7 @@ struct BlockScore {
   float score = 0.f;   // Lower score means better score.
   uint64_t disto = 0;  // Squared error sum.
   CodedBlock::CodingParams params;
+  uint8_t segment_id = 0;
 };
 
 // Pred/tf/split score computation.
@@ -316,16 +325,20 @@ class BlockScorer {
   // Sets the block to the best combination found and reconstruct it.
   void ReconstructBestCombination();
 
+  // For convenience.
+  const GlobalParams& GetGlobalParams() const { return *gparams_; }
+
   // Configurations. Each must be set prior to calling ComputeScore().
   Vector<Channel> channels_;             // Y, A or U+V.
   Vector<bool> splits_;                  // False, true or false+true.
   Vector<const Predictor*> predictors_;  // List of predictors to try.
   Vector<TransformPair> transforms_;     // List of transforms to try.
-  const Segment* segment_;               // Segment must be known in advance.
+  Vector<uint8_t> segment_ids_;          // List of segment ids to try.
 
  private:
   WP2Status ComputeScoreForEachPredictor(bool forced);
   WP2Status ComputeScoreForEachTransform(bool forced);
+  WP2Status ComputeScoreForEachSegment(bool forced);
   WP2Status ComputeScoreForEachChannel(bool forced);
 
   // Const settings common to the whole tile.
@@ -337,6 +350,7 @@ class BlockScorer {
   CodedBlock* cb_;
   const BlockContext* context_;
   Counters* counters_;
+  float lambdas_[4];  // Bit cost multipliers for scoring of Y, U, V, A.
 
   // Cached results to avoid computing the same residuals twice during different
   // configuration combinations of the same block and channel.
@@ -348,6 +362,7 @@ class BlockScorer {
   BlockCoeffs16 residuals_cache_[2];   // Residuals of 'prediction_cache_'.
 
   CodedBlock::CodingParams last_params_;  // Last reconstructed samples.
+  uint8_t last_segment_id_;
 
   // Best combination found so far for 'cb_'.
   BlockScore best_combination_;
@@ -368,19 +383,21 @@ struct BlockModes {
   Vector<const Predictor*> sub_preds;
   Vector<TransformPair> tf_tried_during_preds;
   Vector<TransformPair> tf_tried_after_preds;
+  Vector<uint8_t> segment_ids_tried_during_preds;  // When empty, keep the value
+  Vector<uint8_t> segment_ids_tried_after_preds;   // of CodedBlock::id_ as is.
 };
 
 // Finds the best BlockModes combination. Then reconstructs the samples with it.
 WP2Status OptimizeModes(const EncoderConfig& config, const Rectangle& tile_rect,
                         Channel channel, const Predictors& preds,
-                        const Segment& segment, const BlockModes& m,
-                        const BlockContext& context, CodedBlock* const cb,
-                        Counters* const counters, BlockScorer* const scorer);
+                        const BlockModes& m, const BlockContext& context,
+                        CodedBlock* const cb, Counters* const counters,
+                        BlockScorer* const scorer);
 
 // Calls OptimizeModes() and DecideChromaSubsampling() then QuantizeAll().
 WP2Status OptimizeModesChroma(
     const EncoderConfig& config, const Rectangle& tile_rect, bool has_alpha,
-    const FrontMgrBase& mgr, const Predictors& preds, const Segment& segment,
+    const FrontMgrBase& mgr, const Predictors& preds,
     ChromaSubsampling chroma_subsampling, const BlockModes& modes,
     const BlockContext& context, CodedBlock* const cb, Counters* const counters,
     DCDiffusionMap* const dc_error_u, DCDiffusionMap* const dc_error_v,
