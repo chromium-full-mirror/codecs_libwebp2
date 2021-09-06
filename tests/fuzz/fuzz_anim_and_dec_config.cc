@@ -19,6 +19,7 @@
 
 #include <vector>
 
+#include "src/dec/tile_dec.h"
 #include "src/dsp/math.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
@@ -75,20 +76,21 @@ class FuzzedParametersSetup : public FuzzedParameters {
 void LimitSetupForBigImages(const Data& bitstream,
                             IncrementalDecodingTestSetup* const setup) {
   WP2::BitstreamFeatures features;
-  if (features.Read(bitstream.bytes, bitstream.size) == WP2_STATUS_OK) {
-    const uint32_t num_decodings =
-        WP2::DivCeil(bitstream.size, setup->incr_size_step);
-    // The threshold was found empirically.
-    const uint32_t max_num_pixels =
-        std::max(1u << 10, (1u << 25) / num_decodings);
-    if (features.width * features.height > max_num_pixels) {
-      // Too many pixels and/or too many decodings so modify the 'setup' to
-      // avoid timeouts by disabling tests that use heavy memset()/memcpy()
-      // which slow sanitizers down considerably:
-      setup->compare_with_single_chunk = false;
-      if (setup->decoder_type == DecoderType::kSwappingCustom) {
-        setup->decoder_type = DecoderType::kArray;
-      }
+  if (features.Read(bitstream.bytes, bitstream.size) != WP2_STATUS_OK) return;
+
+  // Too many tiles and/or too many decodings generate timeouts because heavy
+  // memset()/memcpy() usage slows sanitizers down considerably.
+  const uint32_t num_tiles =
+      WP2::GetNumTiles(features.raw_width, features.raw_height,
+                       features.tile_width, features.tile_height);
+  const uint32_t num_decodings =
+      WP2::DivCeil(bitstream.size, setup->incr_size_step);
+  // The threshold was found empirically.
+  const uint32_t max_num_tiles = WP2::DivCeil(512u, num_decodings);
+  if (num_tiles > max_num_tiles) {
+    setup->compare_with_single_chunk = false;
+    if (setup->decoder_type == DecoderType::kSwappingCustom) {
+      setup->decoder_type = DecoderType::kArray;
     }
   }
 }
