@@ -799,9 +799,10 @@ void CflPredictor::LinearRegression(const int16_t* const luma,
   *b = ClampToSigned(B, kCflBBits);
 }
 
-void CflPredictor::ContextLinearRegression(
-    Channel channel, const CodedBlockBase& cb,
-    int32_t* const a, int32_t* const b) const {
+void CflPredictor::ContextLinearRegression(Channel channel,
+                                           const CodedBlockBase& cb,
+                                           int32_t* const a,
+                                           int32_t* const b) const {
   const int16_t* const luma_context =
       cb.GetContext(kYChannel, kContextSmallNoFillIn);
   const int16_t* const chroma_context =
@@ -811,9 +812,9 @@ void CflPredictor::ContextLinearRegression(
   LinearRegression(luma_context, chroma_context, context_size, a, b);
 }
 
-void CflPredictor::BlockLinearRegression(
-    Channel channel, const CodedBlock& cb,
-    int32_t* const a, int32_t* const b) const {
+void CflPredictor::BlockLinearRegression(Channel channel, const CodedBlock& cb,
+                                         int32_t* const a,
+                                         int32_t* const b) const {
   const Plane16& luma_plane = cb.out_.GetChannel(kYChannel);
   const Plane16& chroma_plane = cb.in_.GetChannel(channel);
   int16_t luma[kMaxBlockSizePix2], chroma[kMaxBlockSizePix2];
