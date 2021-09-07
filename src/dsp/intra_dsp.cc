@@ -24,6 +24,7 @@
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/utils.h"
+#include "src/wp2/format_constants.h"
 
 namespace {
 
@@ -55,6 +56,51 @@ void DC_T_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t min_value,
             int16_t max_value, int16_t* dst, size_t step) {
   const int32_t sum = std::accumulate(ctx + bh + 1, ctx + bh + 1 + bw, 0);
   FillBlock(WP2::DivRound(sum, (int32_t)bw), bw, bh, dst, step);
+}
+
+int16_t calc_median(int16_t* ctx_to_find_median, const int32_t size) {
+  int16_t* median_position = ctx_to_find_median + size / 2;
+  std::nth_element(ctx_to_find_median, median_position,
+                   ctx_to_find_median + size);
+  if (size & 1) {
+    return *median_position;
+  }
+
+  // ctx_to_find_median has an even size
+  const int16_t left_median =
+      *std::max_element(ctx_to_find_median, median_position - 1);
+  const int16_t right_median = *median_position;
+
+  return (left_median + right_median) / 2;
+}
+
+void MEDIAN_DC_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t, int16_t,
+                 int16_t* dst, size_t step) {
+  const int32_t size = bh + 1 + bw;
+  // TODO(maciekdragula): instead of using temporary ctx_to_find_median array,
+  // try use dst instead as it will be fill in later.
+  int16_t ctx_to_find_median[WP2::kMaxContextSize];
+  std::copy(ctx, ctx + size, ctx_to_find_median);
+  const int16_t median = calc_median(ctx_to_find_median, size);
+  FillBlock(median, bw, bh, dst, step);
+}
+
+void MEDIAN_DC_L_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t,
+                   int16_t, int16_t* dst, size_t step) {
+  const int32_t size = bh;
+  int16_t ctx_to_find_median[WP2::kMaxContextSize];
+  std::copy(ctx, ctx + size, ctx_to_find_median);
+  const int16_t median = calc_median(ctx_to_find_median, size);
+  FillBlock(median, bw, bh, dst, step);
+}
+
+void MEDIAN_DC_T_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t,
+                   int16_t, int16_t* dst, size_t step) {
+  const int32_t size = bw;
+  int16_t ctx_to_find_median[WP2::kMaxContextSize];
+  std::copy(ctx + bh + 1, ctx + bh + 1 + size, ctx_to_find_median);
+  const int16_t median = calc_median(ctx_to_find_median, size);
+  FillBlock(median, bw, bh, dst, step);
 }
 
 //------------------------------------------------------------------------------
@@ -749,6 +795,9 @@ WP2_TSAN_IGNORE_FUNCTION void PredictionInit() {
   BasePredictors[BPRED_DC] = DC_C;
   BasePredictors[BPRED_DC_L] = DC_L_C;
   BasePredictors[BPRED_DC_T] = DC_T_C;
+  BasePredictors[BPRED_MEDIAN_DC] = MEDIAN_DC_C;
+  BasePredictors[BPRED_MEDIAN_DC_L] = MEDIAN_DC_L_C;
+  BasePredictors[BPRED_MEDIAN_DC_T] = MEDIAN_DC_T_C;
   BasePredictors[BPRED_SMOOTH] = Smooth_C;
   BasePredictors[BPRED_SMOOTH_H] = Smooth_H_C;
   BasePredictors[BPRED_SMOOTH_V] = Smooth_V_C;

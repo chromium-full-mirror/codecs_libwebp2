@@ -220,6 +220,36 @@ class DCPredictor : public ContextPredictor {
 
 //------------------------------------------------------------------------------
 
+// The MedianDC predictor sets all pixels to the median of top and/or left
+// context.
+class MedianDCPredictor : public ContextPredictor {
+ public:
+  enum Type { kAll, kLeft, kTop };
+  explicit MedianDCPredictor(Type type) : type_(type) {}
+
+  std::string GetName() const override {
+    const char* const kTypeStr[]{"MedianDC predictor (median of all context)",
+                                 "MedianDC predictor (median of left context)",
+                                 "MedianDC predictor (median of top context)"};
+    return kTypeStr[type_];
+  }
+
+ protected:
+  void Predict(const int16_t context[], uint32_t w, uint32_t h,
+               int16_t output[], uint32_t step) const override {
+    // MedianDC predictors will never predict values outside of the input range
+    // so we don't need to pass in accurate min/max bounds.
+    constexpr int16_t kMin = std::numeric_limits<int16_t>::min();
+    constexpr int16_t kMax = std::numeric_limits<int16_t>::max();
+    BasePredictors[BPRED_MEDIAN_DC + type_](context, w, h, kMin, kMax, output,
+                                            step);
+  }
+
+  const Type type_;
+};
+
+//------------------------------------------------------------------------------
+
 // TrueMotion predictor.
 class TMPredictor : public ContextPredictor {
  public:
@@ -581,6 +611,15 @@ Predictor* MakeNonAnglePredictor(const Predictors::Pred predictor_type,
       return new (WP2Allocable::nothrow) DCPredictor(DCPredictor::kLeft);
     case Predictors::Pred::kDcTop:
       return new (WP2Allocable::nothrow) DCPredictor(DCPredictor::kTop);
+    case Predictors::Pred::kMedianDcAll:
+      return new (WP2Allocable::nothrow)
+          MedianDCPredictor(MedianDCPredictor::kAll);
+    case Predictors::Pred::kMedianDcLeft:
+      return new (WP2Allocable::nothrow)
+          MedianDCPredictor(MedianDCPredictor::kLeft);
+    case Predictors::Pred::kMedianDcTop:
+      return new (WP2Allocable::nothrow)
+          MedianDCPredictor(MedianDCPredictor::kTop);
     case Predictors::Pred::kSmooth2D:
       return new (WP2Allocable::nothrow)
           SmoothPredictor(SmoothPredictor::SmoothType::k2DSmooth);

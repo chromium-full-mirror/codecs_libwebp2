@@ -91,8 +91,11 @@ constexpr uint32_t kAnglePredNum = 10;
 
 enum BasePredictor {
   BPRED_DC = 0,
-  BPRED_DC_L,  // dc-left
-  BPRED_DC_T,  // dc-top
+  BPRED_DC_L,         // dc-left
+  BPRED_DC_T,         // dc-top
+  BPRED_MEDIAN_DC,    // median-dc-all
+  BPRED_MEDIAN_DC_L,  // median-dc-left
+  BPRED_MEDIAN_DC_T,  // median-dc-top
   BPRED_SMOOTH,
   BPRED_SMOOTH_H,
   BPRED_SMOOTH_V,
