@@ -199,11 +199,10 @@ class DCPredictor : public ContextPredictor {
   explicit DCPredictor(Type type) : type_(type) {}
 
   std::string GetName() const override {
-    const char* const kTypeStr[]{"all", "left", "top"};
-    std::string name = "DC predictor (avg of ";
-    name += kTypeStr[type_];
-    name += " context)";
-    return name;
+    const char* const kTypeStr[]{"DC predictor (avg of all context)",
+                                 "DC predictor (avg of left context)",
+                                 "DC predictor (avg of top context)"};
+    return kTypeStr[type_];
   }
 
  protected:
