@@ -130,14 +130,14 @@ TEST(TestSyntaxWriter, CopyFrom) {
         ASSERT_WP2_OK(syntax_writer_copy.CopyFrom(syntax_writer, &dicts_copy));
       }
 
-      ASSERT_WP2_OK(syntax_writer.FindBestEncodingMethods(&cb));
-      ASSERT_WP2_OK(syntax_writer.Record(cb));
-      ASSERT_WP2_OK(syntax_writer.RecordSize(mgr, cb.dim()));
+      syntax_writer.FindBestEncodingMethods(&cb);
+      syntax_writer.Record(cb);
+      syntax_writer.RecordSize(mgr, cb.dim());
 
       if (i >= kCopyAtBlockIndex) {
-        ASSERT_WP2_OK(syntax_writer_copy.FindBestEncodingMethods(&cb));
-        ASSERT_WP2_OK(syntax_writer_copy.Record(cb));
-        ASSERT_WP2_OK(syntax_writer_copy.RecordSize(mgr, cb.dim()));
+        syntax_writer_copy.FindBestEncodingMethods(&cb);
+        syntax_writer_copy.Record(cb);
+        syntax_writer_copy.RecordSize(mgr, cb.dim());
       }
 
       ASSERT_TRUE(mgr.UseSize(block.dim(), &block));

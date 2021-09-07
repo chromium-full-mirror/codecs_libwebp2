@@ -470,7 +470,7 @@ WP2Status SyntaxWriter::WriteBlocksUseSplits(const Vector<CodedBlock>& cblocks,
 
 //------------------------------------------------------------------------------
 
-WP2Status SyntaxWriter::FindBestEncodingMethods(CodedBlock* const cb) {
+void SyntaxWriter::FindBestEncodingMethods(CodedBlock* const cb) {
   const uint32_t num_channels = (gparams_->maybe_use_lossy_alpha_ ? 4 : 3);
   for (auto c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !cb->HasLossyAlpha()) continue;
@@ -479,14 +479,13 @@ WP2Status SyntaxWriter::FindBestEncodingMethods(CodedBlock* const cb) {
         ResidualWriter::SetGeometry(cb->num_coeffs_[c][tf_i],
                                     &cb->method_[c][tf_i]);
       } else {
-        WP2_CHECK_STATUS(residual_writer_.FindBestEncodingMethod(
+        residual_writer_.FindBestEncodingMethod(
             cb->tdim(c), cb->coeffs_[c][tf_i], cb->num_coeffs_[c][tf_i],
             cb->IsFirstCoeffDC(c), c, num_channels, counters_.residuals(),
-            &cb->method_[c][tf_i]));
+            &cb->method_[c][tf_i]);
       }
     }
   }
-  return WP2_STATUS_OK;
 }
 
 WP2Status SyntaxWriter::DecideAlpha(CodedBlock* const cb,
@@ -522,7 +521,7 @@ WP2Status SyntaxWriter::SetInitialSegmentIds() {
 
 //------------------------------------------------------------------------------
 
-WP2Status SyntaxWriter::Record(const CodedBlock& cb) {
+void SyntaxWriter::Record(const CodedBlock& cb) {
   assert(recorded_blocks_ < num_blocks_);
 
   RecordBlockHeader(cb);
@@ -531,34 +530,27 @@ WP2Status SyntaxWriter::Record(const CodedBlock& cb) {
     if (channel == kAChannel && !cb.HasLossyAlpha()) continue;
 
     if (kDebugPrintRate) {
-      float rate;
-      WP2_CHECK_STATUS(cb.ResidualRate(context_, channel, num_channels,
-                                       counters_.residuals(), &rate));
-      residual_rate_[recorded_blocks_][channel] = rate;
+      residual_rate_[recorded_blocks_][channel] = cb.ResidualRate(
+          context_, channel, num_channels, counters_.residuals());
     }
 
-    WP2_CHECK_STATUS(residual_writer_.RecordCoeffs(
-        cb, channel, &symbol_recorder_));
+    residual_writer_.RecordCoeffs(cb, channel, &symbol_recorder_);
   }
 
   ++recorded_blocks_;
-
-  return WP2_STATUS_OK;
 }
 
-WP2Status SyntaxWriter::RecordSize(const FrontMgrDoubleOrderBase& mgr,
-                                   BlockSize dim) {
-  return RecordSize(dim, mgr.GetMaxPossibleBlock().dim(),
-                    mgr.GetPartitionSet());
+void SyntaxWriter::RecordSize(const FrontMgrDoubleOrderBase& mgr,
+                              BlockSize dim) {
+  RecordSize(dim, mgr.GetMaxPossibleBlock().dim(), mgr.GetPartitionSet());
 }
 
-WP2Status SyntaxWriter::RecordSize(BlockSize dim, BlockSize max_possible_size,
-                                   PartitionSet partition_set) {
+void SyntaxWriter::RecordSize(BlockSize dim, BlockSize max_possible_size,
+                              PartitionSet partition_set) {
   assert(!use_splits_);
   ANSEncNoop enc;
   WriteBlockSize(dim, max_possible_size, partition_set, &symbol_recorder_,
                  &enc);
-  return WP2_STATUS_OK;
 }
 
 WP2Status SyntaxWriter::RecordSplit(const SplitIteratorBase& mgr,
@@ -593,7 +585,7 @@ WP2Status SyntaxWriter::WriteBlock(const CodedBlock& cb, uint32_t block_index,
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
     if (c == kAChannel && !cb.HasLossyAlpha()) continue;
 
-    WP2_CHECK_STATUS(residual_writer_.WriteCoeffs(cb, c, enc, &symbol_writer_));
+    residual_writer_.WriteCoeffs(cb, c, enc, &symbol_writer_);
     if (kDebugPrintRate) {
       const float cost = enc->GetCost();
       const float actual_rate = cost - previous_cost;

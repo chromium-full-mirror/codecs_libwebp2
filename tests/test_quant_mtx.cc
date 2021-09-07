@@ -362,15 +362,14 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
         // syntax_writer.Init() will populate symbols_info (kSymbolDC) with
         // the max DC values from segment::GetMaxAbsDC
         const TrfSize dim = GetTransform(cb.dim());
-        float pseudo_rate;
-        ASSERT_WP2_OK(ResidualWriter::GetPseudoRate(
+        ResidualWriter::GetPseudoRate(
             kYChannel, kNumChannels, dim, cb.coeffs_[kYChannel][tf_i],
             cb.num_coeffs_[kYChannel][tf_i], cb.IsFirstCoeffDC(kYChannel),
-            counters.residuals(), &pseudo_rate));
+            counters.residuals());
 
-        ASSERT_WP2_OK(syntax_writer.FindBestEncodingMethods(&cb));
-        ASSERT_WP2_OK(syntax_writer.Record(cb));
-        ASSERT_WP2_OK(syntax_writer.RecordSize(mgr, cb.dim()));
+        syntax_writer.FindBestEncodingMethods(&cb);
+        syntax_writer.Record(cb);
+        syntax_writer.RecordSize(mgr, cb.dim());
         ASSERT_WP2_OK(syntax_writer.WriteHeader(&enc));
         Vector_u16 size_order_indices;
         ASSERT_TRUE(size_order_indices.resize(cblocks.size()));

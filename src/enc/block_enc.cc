@@ -276,35 +276,29 @@ void CodedBlock::Quantize(const EncoderConfig& config,
 
 //------------------------------------------------------------------------------
 
-WP2Status CodedBlock::ResidualRate(const BlockContext& context, Channel channel,
-                                   uint32_t num_channels,
-                                   SymbolCounter* const counter,
-                                   float* rate) const {
+float CodedBlock::ResidualRate(const BlockContext& context, Channel channel,
+                               uint32_t num_channels,
+                               SymbolCounter* const counter) const {
   if (context.use_aom()) {
-    WP2_CHECK_STATUS(ResidualWriter::GetRateAOM(*this, channel, counter, rate));
-  } else {
-    // Whether to use the more accurate but a lot more expensive rate.
-    // Even this one is not perfect because the cost depends on global
-    // distributions which are not known at this time.
-    static constexpr bool kUseExpensiveRate = false;
-    *rate = 0.f;
-    for (uint32_t tf_i = 0; tf_i < GetNumTransforms(channel); ++tf_i) {
-      float tf_rate;
-      if (kUseExpensiveRate) {
-        WP2_CHECK_STATUS(ResidualWriter::GetRate(
-            channel, num_channels, tdim(channel), coeffs_[channel][tf_i],
-            num_coeffs_[channel][tf_i], IsFirstCoeffDC(channel), counter,
-            &tf_rate));
-      } else {
-        WP2_CHECK_STATUS(ResidualWriter::GetPseudoRate(
-            channel, num_channels, tdim(channel), coeffs_[channel][tf_i],
-            num_coeffs_[channel][tf_i], IsFirstCoeffDC(channel), counter,
-            &tf_rate));
-      }
-      *rate += tf_rate;
+    return ResidualWriter::GetRateAOM(*this, channel, counter);
+  }
+  // Whether to use the more accurate but a lot more expensive rate.
+  // Even this one is not perfect because the cost depends on global
+  // distributions which are not known at this time.
+  static constexpr bool kUseExpensiveRate = false;
+  float rate = 0.f;
+  for (uint32_t tf_i = 0; tf_i < GetNumTransforms(channel); ++tf_i) {
+    if (kUseExpensiveRate) {
+      rate += ResidualWriter::GetRate(
+          channel, num_channels, tdim(channel), coeffs_[channel][tf_i],
+          num_coeffs_[channel][tf_i], IsFirstCoeffDC(channel), counter);
+    } else {
+      rate += ResidualWriter::GetPseudoRate(
+          channel, num_channels, tdim(channel), coeffs_[channel][tf_i],
+          num_coeffs_[channel][tf_i], IsFirstCoeffDC(channel), counter);
     }
   }
-  return WP2_STATUS_OK;
+  return rate;
 }
 
 // Quantizes 'coeffs', then dequantizes, detransforms them and computes
@@ -357,15 +351,14 @@ static WP2Status UVScore(const BlockContext& context,
     return WP2_STATUS_OK;
   }
   const uint32_t num_channels = (has_alpha ? 4 : 3);
-  float rate_u, rate_v;
-  WP2_CHECK_STATUS(
-      cb->ResidualRate(context, kUChannel, num_channels, counter, &rate_u));
-  WP2_CHECK_STATUS(
-      cb->ResidualRate(context, kVChannel, num_channels, counter, &rate_v));
+  const float rate_u =
+      cb->ResidualRate(context, kUChannel, num_channels, counter);
+  const float rate_v =
+      cb->ResidualRate(context, kVChannel, num_channels, counter);
   *score = disto + lambda_u * rate_u + lambda_v * rate_v;
-  WP2_CHECK_REDUCED_STATUS(
-      cb->Store420Scores(config, tile_pos_x, tile_pos_y, lambda_u, lambda_v,
-                         reduced, disto, rate_u, rate_v));
+  WP2_CHECK_REDUCED_STATUS(cb->Store420Scores(config, tile_pos_x, tile_pos_y,
+                                              lambda_u, lambda_v, reduced,
+                                              disto, rate_u, rate_v));
   return WP2_STATUS_OK;
 }
 
@@ -440,36 +433,30 @@ WP2Status CodedBlock::DecideChromaSubsampling(
 
 //------------------------------------------------------------------------------
 
-WP2Status CodedBlock::PredictorRate(Channel channel,
-                                    SymbolCounter* const counter,
-                                    float* const rate) const {
+float CodedBlock::PredictorRate(Channel channel,
+                                SymbolCounter* const counter) const {
   counter->Clear();
   ANSEncCounter enc;
   SyntaxWriter::WritePredictors(*this, channel, counter, &enc);
-  *rate = enc.GetCost();
-  return WP2_STATUS_OK;
+  return enc.GetCost();
 }
 
-WP2Status CodedBlock::TransformRate(Channel channel,
-                                    SymbolCounter* const counter,
-                                    float* const rate) const {
+float CodedBlock::TransformRate(Channel channel,
+                                SymbolCounter* const counter) const {
   counter->Clear();
   ANSEncCounter enc;
   SyntaxWriter::WriteSplitTransform(*this, channel, counter, &enc);
   SyntaxWriter::WriteHasCoeffs(*this, channel, counter, &enc);
   SyntaxWriter::WriteTransform(*this, channel, counter, &enc);
-  *rate = enc.GetCost();
-  return WP2_STATUS_OK;
+  return enc.GetCost();
 }
 
-WP2Status CodedBlock::SegmentIdRate(const BlockContext& context,
-                                    SymbolCounter* const counter,
-                                    float* rate) const {
+float CodedBlock::SegmentIdRate(const BlockContext& context,
+                                SymbolCounter* const counter) const {
   counter->Clear();
   ANSEncCounter enc;
   context.segment_id_predictor().WriteId(*this, counter, &enc);
-  *rate = enc.GetCost();
-  return WP2_STATUS_OK;
+  return enc.GetCost();
 }
 
 //------------------------------------------------------------------------------
@@ -618,10 +605,17 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
   const Segment& segment =
       gparams_->segments_[(channels_.front() == kAChannel) ? 0 : cb_->id_];
 
-  // Per channel:
-  uint64_t disto[2];  // Distortion (sum of squared errors).
-  float pred_rate[2], tf_rate[2], segment_id_rate, res_rate[2];  // Bit cost.
-  float score[2];  // Aggregated distortion and rates. Lower means better.
+  // Distortion (sum of squared errors).
+  uint64_t disto[2] = {0, 0};  // Per channel.
+  // Estimated costs in bits.
+  float pred_rate[2] = {0.f, 0.f};  // Per channel.
+  float tf_rate[2] = {0.f, 0.f};    // Per channel.
+  float segment_id_rate = 0.f;      // Per block (only for luma channel).
+  float res_rate[2] = {0.f, 0.f};   // Per channel.
+  // Aggregated distortion and rates. Lower means better.
+  float score[2] = {0.f, 0.f};  // Per channel.
+  // Note: the values above are initialized only to prevent compiler warnings.
+
   for (Channel c : channels_) {
     const uint32_t ci = (c == kUChannel) ? 1 : 0;  // 'c' index in 'channels_'.
 
@@ -669,20 +663,17 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
     // Note: some rates may be skipped if all combinations lead to the same
     //       partial cost, but it is simpler as is and BlockScorer might be
     //       called again with different configurations.
-    WP2_CHECK_STATUS(
-        cb_->PredictorRate(c, counters_->predictor(), &pred_rate[ci]));
-    WP2_CHECK_STATUS(
-        cb_->TransformRate(c, counters_->transform(), &tf_rate[ci]));
+    pred_rate[ci] = cb_->PredictorRate(c, counters_->predictor());
+    tf_rate[ci] = cb_->TransformRate(c, counters_->transform());
     if (c == kYChannel) {
       // Segment ID is decided for luma only and signaled once per block.
-      WP2_CHECK_STATUS(cb_->SegmentIdRate(*context_, counters_->segment_id(),
-                                          &segment_id_rate));
+      segment_id_rate = cb_->SegmentIdRate(*context_, counters_->segment_id());
     } else {
       segment_id_rate = 0.f;
       assert(segment_ids_.empty());
     }
-    WP2_CHECK_STATUS(cb_->ResidualRate(*context_, c, num_channels,
-                                       counters_->residuals(), &res_rate[ci]));
+    res_rate[ci] =
+        cb_->ResidualRate(*context_, c, num_channels, counters_->residuals());
     score[ci] = disto[ci] + lambdas_[c] * (pred_rate[ci] + tf_rate[ci] +
                                            segment_id_rate + res_rate[ci]);
 

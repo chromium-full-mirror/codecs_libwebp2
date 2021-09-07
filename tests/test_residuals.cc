@@ -65,9 +65,9 @@ TEST_P(ResidualTest, Simple) {
     float rate;
     if (use_pseudo_rate) {
       EncodingMethod encoding_method;
-      ASSERT_WP2_OK(ResidualWriter::GetRate(
+      rate = ResidualWriter::GetRate(
           channel, num_channels, tf_size, kResiduals[i], num_coeffs,
-          first_coeff_is_dc, counters.residuals(), &rate, &encoding_method));
+          first_coeff_is_dc, counters.residuals(), &encoding_method);
       if (num_coeffs == 0) {
         EXPECT_EQ(encoding_method, EncodingMethod::kAllZero);
       } else if (num_coeffs == 1 && first_coeff_is_dc) {
@@ -78,9 +78,9 @@ TEST_P(ResidualTest, Simple) {
                                    testing::Eq(EncodingMethod::kMethod1)));
       }
     } else {
-      ASSERT_WP2_OK(ResidualWriter::GetPseudoRate(
+      rate = ResidualWriter::GetPseudoRate(
           channel, num_channels, tf_size, kResiduals[i], num_coeffs,
-          first_coeff_is_dc, counters.residuals(), &rate));
+          first_coeff_is_dc, counters.residuals());
     }
 
     if (num_coeffs == 0) {

@@ -173,24 +173,20 @@ class CodedBlock : public CodedBlockBase {
 
   // Returns an estimation of the number of bits necessary to encode the
   // predictor modes.
-  WP2Status PredictorRate(Channel channel, SymbolCounter* const counter,
-                          float* const rate) const;
+  float PredictorRate(Channel channel, SymbolCounter* const counter) const;
 
   // Returns an estimation of the number of bits necessary to encode the
   // transform.
-  WP2Status TransformRate(Channel channel,
-                          SymbolCounter* const counter,
-                          float* const rate) const;
+  float TransformRate(Channel channel, SymbolCounter* const counter) const;
 
   // Returns an estimation of the number of bits necessary to encode the
   // segment id.
-  WP2Status SegmentIdRate(const BlockContext& context,
-                          SymbolCounter* const counter, float* rate) const;
+  float SegmentIdRate(const BlockContext& context,
+                      SymbolCounter* const counter) const;
 
   // Estimated cost in bits of storing residuals for the given channel.
-  WP2Status ResidualRate(const BlockContext& context, Channel channel,
-                         uint32_t num_channels, SymbolCounter* const counter,
-                         float* rate) const;
+  float ResidualRate(const BlockContext& context, Channel channel,
+                     uint32_t num_channels, SymbolCounter* const counter) const;
 
   // Pseudo-Visual debug: force the split_tf, tf or pred of the block.
   enum class SplitTf { kForcedUnsplit, kForcedSplit, kUnknown };

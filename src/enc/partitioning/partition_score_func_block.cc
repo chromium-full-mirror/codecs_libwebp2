@@ -262,14 +262,14 @@ WP2Status BlockScoreFunc::EncodeBlock(const FrontMgrBase& front_mgr,
   WP2_CHECK_STATUS(FindBestBlockParams(front_mgr, syntax_writer, dc_error_u,
                                        dc_error_v, cb, scorer));
   // CodedBlock::Quantize() should be called already.
-  WP2_CHECK_STATUS(syntax_writer->FindBestEncodingMethods(cb));
+  syntax_writer->FindBestEncodingMethods(cb);
   if (!use_splits_) {
     const Block max_possible_block = front_mgr.LargestPossibleBlockAt(
         cb->x(), cb->y(), config_->partition_snapping);
-    WP2_CHECK_STATUS(syntax_writer->RecordSize(
-        cb->dim(), max_possible_block.dim(), config_->partition_set));
+    syntax_writer->RecordSize(cb->dim(), max_possible_block.dim(),
+                              config_->partition_set);
   }
-  WP2_CHECK_STATUS(syntax_writer->Record(*cb));
+  syntax_writer->Record(*cb);
   if (with_alpha_) {
     WP2_CHECK_STATUS(syntax_writer->RecordAlpha(*cb));
   }

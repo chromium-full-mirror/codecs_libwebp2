@@ -376,7 +376,7 @@ void ResidualWriter::StoreCoeffs(const int16_t* const coeffs,
   }
 }
 
-WP2Status ResidualWriter::FindBestEncodingMethod(
+void ResidualWriter::FindBestEncodingMethod(
     TrfSize tdim, const int16_t* const coeffs, uint32_t num_coeffs,
     bool first_is_dc, Channel channel, uint32_t num_channels,
     SymbolCounter* const counter, EncodingMethod* const encoding_method,
@@ -386,7 +386,7 @@ WP2Status ResidualWriter::FindBestEncodingMethod(
     *encoding_method =
         (num_coeffs == 0) ? EncodingMethod::kAllZero : EncodingMethod::kDCOnly;
     if (cost != nullptr) *cost = 0.f;
-    return WP2_STATUS_OK;
+    return;
   }
 
   // Compute the best of the methods, and decide.
@@ -407,20 +407,19 @@ WP2Status ResidualWriter::FindBestEncodingMethod(
   if (cost != nullptr) {
     *cost = cost_best;
   }
-  return WP2_STATUS_OK;
 }
 
-WP2Status ResidualWriter::RecordCoeffs(const CodedBlock& cb, Channel channel,
-                                       SymbolRecorder* const recorder) {
+void ResidualWriter::RecordCoeffs(const CodedBlock& cb, Channel channel,
+                                  SymbolRecorder* const recorder) const {
   // Using a counter because it updates adaptive bits, which we do want.
   // TODO(maryla): be more consistant with using counter vs noop.
   ANSEncCounter enc;
-  return WriteCoeffs(cb, channel, &enc, recorder);
+  WriteCoeffs(cb, channel, &enc, recorder);
 }
 
-WP2Status ResidualWriter::WriteCoeffs(const CodedBlock& cb, Channel channel,
-                                      ANSEncBase* enc,
-                                      SymbolManager* const sm) {
+void ResidualWriter::WriteCoeffs(const CodedBlock& cb, Channel channel,
+                                 ANSEncBase* enc,
+                                 SymbolManager* const sm) const {
   const ANSDebugPrefix prefix(enc, (channel == kYChannel) ? "Y" :
                                    (channel == kAChannel) ? "A" : "UV");
 
@@ -464,20 +463,17 @@ WP2Status ResidualWriter::WriteCoeffs(const CodedBlock& cb, Channel channel,
       ++tf_i;
     }
   }
-  return WP2_STATUS_OK;
 }
 
-WP2Status ResidualWriter::GetRate(Channel channel, uint32_t num_channels,
-                                  TrfSize tdim, const int16_t* const coeffs,
-                                  uint32_t num_coeffs, bool first_is_dc,
-                                  SymbolCounter* const counter,
-                                  float* const rate,
-                                  EncodingMethod* const encoding_method) {
+float ResidualWriter::GetRate(Channel channel, uint32_t num_channels,
+                              TrfSize tdim, const int16_t* const coeffs,
+                              uint32_t num_coeffs, bool first_is_dc,
+                              SymbolCounter* const counter,
+                              EncodingMethod* const encoding_method) {
   EncodingMethod method;
   float residual_cost;
-  WP2_CHECK_STATUS(FindBestEncodingMethod(tdim, coeffs, num_coeffs, first_is_dc,
-                                          channel, num_channels, counter,
-                                          &method, &residual_cost));
+  FindBestEncodingMethod(tdim, coeffs, num_coeffs, first_is_dc, channel,
+                         num_channels, counter, &method, &residual_cost);
   if (!first_is_dc) assert(method != EncodingMethod::kDCOnly);
   if (encoding_method != nullptr) *encoding_method = method;
 
@@ -490,13 +486,11 @@ WP2Status ResidualWriter::GetRate(Channel channel, uint32_t num_channels,
     dc = enc.GetCost();
   }
 
-  *rate = residual_cost + dc;
-  return WP2_STATUS_OK;
+  return residual_cost + dc;
 }
 
-WP2Status ResidualWriter::GetRateAOM(const CodedBlock& cb, Channel channel,
-                                     SymbolCounter* const counter,
-                                     float* const rate) {
+float ResidualWriter::GetRateAOM(const CodedBlock& cb, Channel channel,
+                                 SymbolCounter* const counter) {
   counter->Clear();
   ANSEncCounter enc;
 
@@ -508,26 +502,23 @@ WP2Status ResidualWriter::GetRateAOM(const CodedBlock& cb, Channel channel,
   for (uint32_t split_y = 0; split_y < cb.h_pix(); split_y += split_h) {
     for (uint32_t split_x = 0; split_x < cb.w_pix(); split_x += split_w) {
       libgav1::AOMResidualWriter::WriteCoeffs(
-        cb.coeffs_[channel][tf_i], channel, cb.tdim(channel),
-        coding_params.tf, cb.IsFirstCoeffDC(channel), counter, &enc);
+          cb.coeffs_[channel][tf_i], channel, cb.tdim(channel),
+          coding_params.tf, cb.IsFirstCoeffDC(channel), counter, &enc);
       ++tf_i;
     }
   }
 
-  *rate = enc.GetCost();
-  return WP2_STATUS_OK;
+  return enc.GetCost();
 }
 
-WP2Status ResidualWriter::GetPseudoRate(Channel channel, uint32_t num_channels,
-                                        TrfSize tdim,
-                                        const int16_t* const coeffs,
-                                        uint32_t num_coeffs, bool first_is_dc,
-                                        SymbolCounter* const counter,
-                                        float* const pseudo_rate) {
-  *pseudo_rate = 0;
+float ResidualWriter::GetPseudoRate(Channel channel, uint32_t num_channels,
+                                    TrfSize tdim, const int16_t* const coeffs,
+                                    uint32_t num_coeffs, bool first_is_dc,
+                                    SymbolCounter* const counter) {
+  float pseudo_rate = 0;
 
   // Return right away if there are no elements (kAllZero).
-  if (num_coeffs == 0) return WP2_STATUS_OK;
+  if (num_coeffs == 0) return pseudo_rate;
 
   if (first_is_dc) {
     // Add cost of storing DC.
@@ -539,10 +530,10 @@ WP2Status ResidualWriter::GetPseudoRate(Channel channel, uint32_t num_channels,
                    /*prefix_size=*/0)
             .extra_bits_num;
     // We assume prefix coding for DC and store DC as in StoreDC.
-    *pseudo_rate +=
+    pseudo_rate +=
         WP2Log2(kChannelBits) /* prefix */ + extra_bits_num /* abs_val */;
 
-    if (num_coeffs == 1) return WP2_STATUS_OK;
+    if (num_coeffs == 1) return pseudo_rate;
   }
 
   counter->Clear();
@@ -567,10 +558,10 @@ WP2Status ResidualWriter::GetPseudoRate(Channel channel, uint32_t num_channels,
   const float is_not_zeros_costs_8_2 =
       num_zeros_streaks * std::log2(p) + num_non_zeros * std::log2(1.f - p);
 
-  *pseudo_rate +=
+  pseudo_rate +=
       std::min(residual_cost,
                residual_cost - is_not_zeros_costs_2_8 + is_not_zeros_costs_8_2);
-  return WP2_STATUS_OK;
+  return pseudo_rate;
 }
 
 }  // namespace WP2

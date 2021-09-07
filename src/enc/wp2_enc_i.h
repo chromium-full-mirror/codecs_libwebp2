@@ -103,15 +103,16 @@ class ResidualWriter : public ResidualIO {
   // Finds the best encoding method for the given 'num_coeffs'.
   // If 'cost' is not nullptr, it is set to the cost of storing the residuals
   // with this method (coefficients only, not including dictionaries).
-  static WP2Status FindBestEncodingMethod(
-      TrfSize dim, const int16_t* const coeffs, uint32_t num_coeffs,
-      bool first_is_dc, Channel channel, uint32_t num_channels,
-      SymbolCounter* const counter, EncodingMethod* const encoding_method,
-      float* const cost = nullptr);
+  static void FindBestEncodingMethod(TrfSize dim, const int16_t* const coeffs,
+                                     uint32_t num_coeffs, bool first_is_dc,
+                                     Channel channel, uint32_t num_channels,
+                                     SymbolCounter* const counter,
+                                     EncodingMethod* const encoding_method,
+                                     float* const cost = nullptr);
 
   // Records residuals from 'cb'.
-  WP2Status RecordCoeffs(const CodedBlock& cb, Channel channel,
-                         SymbolRecorder* const recorder);
+  void RecordCoeffs(const CodedBlock& cb, Channel channel,
+                    SymbolRecorder* const recorder) const;
 
   // Writes the data (e.g. dictionaries) needed to interpret the symbols that
   // will later be written one by one.
@@ -122,28 +123,26 @@ class ResidualWriter : public ResidualIO {
                         SymbolWriter* const sw);
 
   // Writes residuals from 'cb'.
-  WP2Status WriteCoeffs(const CodedBlock& cb, Channel channel,
-                          ANSEncBase* enc, SymbolManager* const sm);
+  void WriteCoeffs(const CodedBlock& cb, Channel channel, ANSEncBase* enc,
+                   SymbolManager* const sm) const;
 
   // Returns a (very) crude estimation of the number of bits needed to code
   // the residuals.
   // The logic for storing the residuals is the same as WriteCoeffs
   // except symbol statistics and adaptive symbols do not use global statistics
   // but fixed ones.
-  static WP2Status GetPseudoRate(Channel channel, uint32_t num_channels,
-                                 TrfSize dim, const int16_t* const coeffs,
-                                 uint32_t num_coeffs, bool first_is_dc,
-                                 SymbolCounter* const counter,
-                                 float* const pseudo_rate);
+  static float GetPseudoRate(Channel channel, uint32_t num_channels,
+                             TrfSize dim, const int16_t* const coeffs,
+                             uint32_t num_coeffs, bool first_is_dc,
+                             SymbolCounter* const counter);
   // Returns a slightly less crude estimation of the number of bits needed to
   // code the residuals. Much slower than the pseudo rate above.
-  static WP2Status GetRate(Channel channel, uint32_t num_channels, TrfSize dim,
-                           const int16_t* const coeffs, uint32_t num_coeffs,
-                           bool first_is_dc, SymbolCounter* const counter,
-                           float* const rate,
-                           EncodingMethod* const encoding_method = nullptr);
-  static WP2Status GetRateAOM(const CodedBlock& cb, Channel channel,
-                              SymbolCounter* const counter, float* const rate);
+  static float GetRate(Channel channel, uint32_t num_channels, TrfSize dim,
+                       const int16_t* const coeffs, uint32_t num_coeffs,
+                       bool first_is_dc, SymbolCounter* const counter,
+                       EncodingMethod* const encoding_method = nullptr);
+  static float GetRateAOM(const CodedBlock& cb, Channel channel,
+                          SymbolCounter* const counter);
 
  private:
   // Calls WriteHeader on SymbolWriter for symbols that do depend on a
@@ -251,11 +250,11 @@ class SyntaxWriter : public WP2Allocable {
   // at the beginning of every pass.
   WP2Status InitPass();
   // Records the block's content, except for size and alpha.
-  WP2Status Record(const CodedBlock& cb);
+  void Record(const CodedBlock& cb);
   // Records the block's size.
-  WP2Status RecordSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim);
-  WP2Status RecordSize(BlockSize dim, BlockSize max_possible_size,
-                       PartitionSet partition_set);
+  void RecordSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim);
+  void RecordSize(BlockSize dim, BlockSize max_possible_size,
+                  PartitionSet partition_set);
   // Records the block's split.
   WP2Status RecordSplit(const SplitIteratorBase& mgr, uint32_t split_idx);
   // Writes the headers (frozen dictionaries, etc.).
@@ -292,7 +291,7 @@ class SyntaxWriter : public WP2Allocable {
   const BlockContext& context() const { return context_; }
 
   // Finds the best encoding method for the given coeffs
-  WP2Status FindBestEncodingMethods(CodedBlock* const cb);
+  void FindBestEncodingMethods(CodedBlock* const cb);
 
   // Decide alpha mode and encoding params if needed
   WP2Status DecideAlpha(CodedBlock* const cb, const BlockModes& modes,

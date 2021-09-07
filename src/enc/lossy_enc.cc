@@ -415,8 +415,8 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       }
 #endif  // WP2_REDUCE_BINARY_SIZE
 
-      WP2_CHECK_STATUS(writer.FindBestEncodingMethods(&cb));
-      WP2_CHECK_STATUS(writer.Record(cb));
+      writer.FindBestEncodingMethods(&cb);
+      writer.Record(cb);
       mgr.Use(cb.blk());
 
       if (cb.blk().x_pix() + cb.blk().w_pix() >= tile_rect.width) {
@@ -444,7 +444,7 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
       mgr.Clear();
       for (uint16_t ind : size_order_indices) {
         const auto& block = blocks[ind];
-        WP2_CHECK_STATUS(writer.RecordSize(mgr, block.dim()));
+        writer.RecordSize(mgr, block.dim());
         Block block_tmp;
         WP2_CHECK_ALLOC_OK(mgr.UseSize(block.dim(), &block_tmp));
         assert(block == block_tmp);
