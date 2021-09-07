@@ -210,9 +210,9 @@ class DCPredictor : public ContextPredictor {
                int16_t output[], uint32_t step) const override {
     // DC predictors will never predict values outside of the input range so we
     // don't need to pass in accurate min/max bounds.
-    const int16_t min = std::numeric_limits<int16_t>::min();
-    const int16_t max = std::numeric_limits<int16_t>::max();
-    BasePredictors[BPRED_DC + type_](context, w, h, min, max, output, step);
+    constexpr int16_t kMin = std::numeric_limits<int16_t>::min();
+    constexpr int16_t kMax = std::numeric_limits<int16_t>::max();
+    BasePredictors[BPRED_DC + type_](context, w, h, kMin, kMax, output, step);
   }
 
   const Type type_;
@@ -297,14 +297,14 @@ class SmoothPredictor : public ContextPredictor {
                int16_t output[], uint32_t step) const override {
     // Smooth predictors will never predict values outside of the input range so
     // we don't need to pass in accurate min/max bounds.
-    const int16_t min = std::numeric_limits<int16_t>::min();
-    const int16_t max = std::numeric_limits<int16_t>::max();
+    constexpr int16_t kMin = std::numeric_limits<int16_t>::min();
+    constexpr int16_t kMax = std::numeric_limits<int16_t>::max();
     const BasePredictor p = (type_ == SmoothType::k2DSmooth)
                                 ? BPRED_SMOOTH
                                 : (type_ == SmoothType::kVerticalSmooth)
                                       ? BPRED_SMOOTH_V
                                       : BPRED_SMOOTH_H;
-    BasePredictors[p](context, w, h, min, max, output, step);
+    BasePredictors[p](context, w, h, kMin, kMax, output, step);
   }
 
   const SmoothType type_;

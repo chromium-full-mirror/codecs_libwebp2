@@ -38,22 +38,22 @@ inline void FillBlock(int16_t value, uint32_t bw, uint32_t bh,
   }
 }
 
-void DC_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t min_value,
-          int16_t max_value, int16_t* dst, size_t step) {
+void DC_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t, int16_t,
+          int16_t* dst, size_t step) {
   // Only smooth over the left, top-left and top contexts.
   const int32_t size = bh + 1 + bw;
   const int32_t sum = std::accumulate(ctx, ctx + size, 0);
   FillBlock(WP2::DivRound(sum, size), bw, bh, dst, step);
 }
 
-void DC_L_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t min_value,
-            int16_t max_value, int16_t* dst, size_t step) {
+void DC_L_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t, int16_t,
+            int16_t* dst, size_t step) {
   const int32_t sum = std::accumulate(ctx, ctx + bh, 0);
   FillBlock(WP2::DivRound(sum, (int32_t)bh), bw, bh, dst, step);
 }
 
-void DC_T_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t min_value,
-            int16_t max_value, int16_t* dst, size_t step) {
+void DC_T_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t, int16_t,
+            int16_t* dst, size_t step) {
   const int32_t sum = std::accumulate(ctx + bh + 1, ctx + bh + 1 + bw, 0);
   FillBlock(WP2::DivRound(sum, (int32_t)bw), bw, bh, dst, step);
 }
@@ -119,8 +119,8 @@ constexpr int32_t kSmoothShift = 8;
 
 const int16_t* GetWeights(uint32_t d) { return &kSmoothWeights[d]; }
 
-void Smooth_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t min_value,
-              int16_t max_value, int16_t* dst, size_t step) {
+void Smooth_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t, int16_t,
+              int16_t* dst, size_t step) {
   const int16_t* const wLR = GetWeights(bw);  // left / right weights
   const int16_t* const wAB = GetWeights(bh);  // above / below weights
   const int16_t below = ctx[0];
@@ -137,8 +137,8 @@ void Smooth_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t min_value,
   }
 }
 
-void Smooth_H_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t min_value,
-                int16_t max_value, int16_t* dst, size_t step) {
+void Smooth_H_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t, int16_t,
+                int16_t* dst, size_t step) {
   const int16_t* const wLR = GetWeights(bw);  // left / right weights
   for (uint32_t j = 0; j < bh; ++j) {
     const int16_t left = ctx[bh - 1 - j];
@@ -151,8 +151,8 @@ void Smooth_H_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t min_value,
   }
 }
 
-void Smooth_V_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t min_value,
-                int16_t max_value, int16_t* dst, size_t step) {
+void Smooth_V_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t, int16_t,
+                int16_t* dst, size_t step) {
   const int16_t* const wAB = GetWeights(bh);  // above / below weights
   const int16_t below = ctx[0];
   for (uint32_t j = 0; j < bh; ++j) {
@@ -202,9 +202,8 @@ static inline int16_t PaethPredictOnePixel(int16_t left, int16_t top,
              : (p_top <= p_top_left) ? top : top_left;
 }
 
-void BasePaethPredictor(const int16_t* ctx, uint32_t bw, uint32_t bh,
-                        int16_t min_value, int16_t max_value, int16_t* dst,
-                        size_t step) {
+void BasePaethPredictor(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t,
+                        int16_t, int16_t* dst, size_t step) {
   const int16_t top_left = ctx[bh];
   for (uint32_t y = 0; y < bh; ++y) {
     const int16_t left = ctx[bh - 1 - y];
