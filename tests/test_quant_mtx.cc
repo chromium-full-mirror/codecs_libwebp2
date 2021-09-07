@@ -259,8 +259,8 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
   ResidualWriter residual_writer;
   ASSERT_WP2_OK(residual_writer.Init(kNoAomCoeffs, kHasAlpha));
   ANSEnc enc;
-  std::unique_ptr<WP2::SymbolWriter>
-      sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
+  std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
+                                            WP2::SymbolWriter);
   ASSERT_TRUE(sw != nullptr);
 
   ASSERT_WP2_OK(sw->Init(symbols_info, /*effort=*/5));
@@ -283,7 +283,7 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
     SCOPED_TRACE(SPrintf("block size: %d", block_size));
     Vector<CodedBlock> cblocks;
     EXPECT_TRUE(cblocks.resize(1));
-    CodedBlock &cb = cblocks[0];
+    CodedBlock& cb = cblocks[0];
     cb.is420_ = false;
     cb.id_ = 0;  // Segment id.
 
