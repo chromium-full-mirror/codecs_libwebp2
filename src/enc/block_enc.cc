@@ -461,6 +461,49 @@ float CodedBlock::SegmentIdRate(const BlockContext& context,
 
 //------------------------------------------------------------------------------
 
+namespace {
+
+// Returns the index of 'channel' in one of the following sets:
+//   {luma Y}, {chroma U, chroma V} or {alpha}
+uint32_t GetChannelIndex(Channel channel) {
+  return (channel == kVChannel) ? 1 : 0;
+}
+
+}  // namespace
+
+float BlockRates::GetScore() const {
+  return distortion +
+         lambda * ((predictor_rate.is_defined ? predictor_rate.rate : 0.f) +
+                   (transform_rate.is_defined ? transform_rate.rate : 0.f) +
+                   (segment_id_rate.is_defined ? segment_id_rate.rate : 0.f) +
+                   (residuals_rate.is_defined ? residuals_rate.rate : 0.f));
+}
+
+bool BlockRates::HasSameScoreFormulaAs(const BlockRates& other) const {
+  return predictor_rate.is_defined == other.predictor_rate.is_defined &&
+         transform_rate.is_defined == other.transform_rate.is_defined &&
+         segment_id_rate.is_defined == other.segment_id_rate.is_defined &&
+         residuals_rate.is_defined == other.residuals_rate.is_defined &&
+         lambda == other.lambda;
+}
+
+float BlockScore::GetScore() const {
+  return results[0].GetScore() + results[1].GetScore();
+}
+
+float BlockScore::GetDistortion() const {
+  return results[0].distortion + results[1].distortion;
+}
+
+bool BlockScore::IsBetterThan(const BlockScore& other) const {
+  // Make sure the scores are comparable.
+  assert(results[0].HasSameScoreFormulaAs(other.results[0]));
+  assert(results[1].HasSameScoreFormulaAs(other.results[1]));
+  return (GetScore() < other.GetScore());
+}
+
+//------------------------------------------------------------------------------
+
 WP2Status BlockScorer::Init(const EncoderConfig& config,
                             const GlobalParams& gparams, Rectangle tile_rect) {
   config_ = &config;
@@ -605,19 +648,10 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
   const Segment& segment =
       gparams_->segments_[(channels_.front() == kAChannel) ? 0 : cb_->id_];
 
-  // Distortion (sum of squared errors).
-  uint64_t disto[2] = {0, 0};  // Per channel.
-  // Estimated costs in bits.
-  float pred_rate[2] = {0.f, 0.f};  // Per channel.
-  float tf_rate[2] = {0.f, 0.f};    // Per channel.
-  float segment_id_rate = 0.f;      // Per block (only for luma channel).
-  float res_rate[2] = {0.f, 0.f};   // Per channel.
-  // Aggregated distortion and rates. Lower means better.
-  float score[2] = {0.f, 0.f};  // Per channel.
-  // Note: the values above are initialized only to prevent compiler warnings.
-
   for (Channel c : channels_) {
-    const uint32_t ci = (c == kUChannel) ? 1 : 0;  // 'c' index in 'channels_'.
+    const uint32_t ci = GetChannelIndex(c);
+    BlockRates& results = combination.results[ci];
+    results.lambda = lambdas_[c];
 
     Plane16 prediction;
     WP2_ASSERT_STATUS(prediction.SetView(prediction_cache_[ci][0],
@@ -655,34 +689,32 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
     }
 
     // Compute distortion.
-    disto[ci] = cb_->GetDisto(c);
+    results.distortion = cb_->GetDisto(c);
     // TODO(yguyon): In some cases, this combination could be discarded right
     //               now because disto[ci] > best_combination_.score
 
     // Estimate the cost of this configuration.
-    // Note: some rates may be skipped if all combinations lead to the same
-    //       partial cost, but it is simpler as is and BlockScorer might be
-    //       called again with different configurations.
-    pred_rate[ci] = cb_->PredictorRate(c, counters_->predictor());
-    tf_rate[ci] = cb_->TransformRate(c, counters_->transform());
+    // TODO(yguyon): some rates may be skipped if all combinations lead to the
+    //               same partial cost.
+    results.predictor_rate = {/*is_defined=*/true,
+                              cb_->PredictorRate(c, counters_->predictor())};
+    results.transform_rate = {/*is_defined=*/true,
+                              cb_->TransformRate(c, counters_->transform())};
     if (c == kYChannel) {
       // Segment ID is decided for luma only and signaled once per block.
-      segment_id_rate = cb_->SegmentIdRate(*context_, counters_->segment_id());
+      results.segment_id_rate = {
+          /*is_defined=*/true,
+          cb_->SegmentIdRate(*context_, counters_->segment_id())};
     } else {
-      segment_id_rate = 0.f;
-      assert(segment_ids_.empty());
+      assert(segment_ids_.empty() && !results.segment_id_rate.is_defined);
     }
-    res_rate[ci] =
-        cb_->ResidualRate(*context_, c, num_channels, counters_->residuals());
-    score[ci] = disto[ci] + lambdas_[c] * (pred_rate[ci] + tf_rate[ci] +
-                                           segment_id_rate + res_rate[ci]);
-
-    combination.score += score[ci];
-    combination.disto += disto[ci];
+    results.residuals_rate = {
+        /*is_defined=*/true,
+        cb_->ResidualRate(*context_, c, num_channels, counters_->residuals())};
   }
 
   const bool is_best = (best_combination_.params.pred == nullptr ||
-                        combination < best_combination_);
+                        combination.IsBetterThan(best_combination_));
   if (is_best) {
     best_combination_ = combination;
   }
@@ -690,20 +722,16 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
   if (combination.params.pred->IsAngle(nullptr)) {
     WP2_CHECK_ALLOC_OK(best_combinations_angle_.push_back(combination));
   } else if (best_combination_no_angle_.params.pred == nullptr ||
-             combination < best_combination_no_angle_) {
+             combination.IsBetterThan(best_combination_no_angle_)) {
     best_combination_no_angle_ = combination;
   }
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
   // Store scores for debug.
   for (Channel c : channels_) {
-    const uint32_t ci = (c == kUChannel) ? 1 : 0;
-    cb_->StorePredictionScore(
-        *config_, tile_rect_, c, *cb_->GetCodingParams(c)->pred,
-        cb_->GetCodingParams(c)->tf, disto[ci],
-        cb_->lambda_mult_ * segment.GetQuant(c).lambda, pred_rate[ci],
-        tf_rate[ci], segment_id_rate, res_rate[ci], score[ci], is_best,
-        CodedBlock::SearchType::kPredAndTransform);
+    cb_->StorePredictionScore(*config_, tile_rect_, c, *combination.params.pred,
+                              combination.params.tf, combination.segment_id,
+                              combination.results[GetChannelIndex(c)], is_best);
   }
 #endif  // WP2_REDUCE_BINARY_SIZE
 
@@ -719,17 +747,18 @@ const VectorNoCtor<bool>& BlockScorer::RefinePredictors() {
   // Choose to refine all the main angle predictors within a percentage of the
   // lowest score. This helps refine the predictors with similar scores.
   std::sort(best_combinations_angle_.begin(), best_combinations_angle_.end());
-  const float min_score = best_combinations_angle_.front().score;  // Best.
-  const float max_score = best_combinations_angle_.back().score;   // Worst.
+  const float min_score = best_combinations_angle_.front().GetScore();  // Best.
+  const float max_score = best_combinations_angle_.back().GetScore();  // Worst.
   const float fraction = config_->effort / 9.f;  // Max effort includes all.
   const float min_allowed_score =
       min_score * (1.f - fraction) + max_score * fraction + 1.f;
   assert(config_->effort != 9 || max_score <= min_allowed_score);
 
   for (const BlockScore& main_angle : best_combinations_angle_) {
-    if (main_angle.score <= best_combination_no_angle_.score ||
-        main_angle.disto <= best_combination_no_angle_.disto ||
-        main_angle.score <= min_allowed_score) {
+    if (!best_combination_no_angle_.IsBetterThan(main_angle) ||
+        main_angle.GetDistortion() <=
+            best_combination_no_angle_.GetDistortion() ||
+        main_angle.GetScore() <= min_allowed_score) {
       assert(main_angle.params.pred->mode() < pred_mode_map_.size());
       pred_mode_map_[main_angle.params.pred->mode()] = true;
     }

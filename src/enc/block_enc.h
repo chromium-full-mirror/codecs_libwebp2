@@ -34,9 +34,9 @@ class UpdatingSymbolCounter;
 class SymbolRecorder;
 
 //------------------------------------------------------------------------------
+
 // Context passed around and updated once we know the right parameters for each
 // block. Currently quite empty but can be removed or extended when needed.
-
 class BlockContext {
  public:
   // 'use_aom' defines the usage of AOM residuals.
@@ -63,6 +63,32 @@ class BlockContext {
  private:
   bool use_aom_ = false;
   SegmentIdPredictor segment_id_predictor_;
+};
+
+//------------------------------------------------------------------------------
+
+// Cost in bits for a given block, channel and symbol set, if estimated.
+struct BlockRate {
+  bool is_defined;
+  float rate;  // Valid only if 'is_defined' is true.
+};
+
+// All the measures and estimations necessary to compute the score of a block
+// for a given channel.
+struct BlockRates {
+  // Computes the aggregated score given by the distortion and the available
+  // estimated bit costs.
+  float GetScore() const;
+
+  // Returns true if this uses the same '*_rate' and 'lambda' as 'other'.
+  bool HasSameScoreFormulaAs(const BlockRates& other) const;
+
+  uint64_t distortion = 0;  // Squared error sum.
+  BlockRate predictor_rate = {false, 0.f};
+  BlockRate transform_rate = {false, 0.f};
+  BlockRate segment_id_rate = {false, 0.f};
+  BlockRate residuals_rate = {false, 0.f};
+  float lambda = 0.f;  // Bit cost multiplier for scoring.
 };
 
 //------------------------------------------------------------------------------
@@ -209,17 +235,11 @@ class CodedBlock : public CodedBlockBase {
       int16_t original_res[kMaxNumTransformsPerBlock][kMaxBlockSizePix2],
       Plane16* const dst_plane) const;
   // Visual debug: stores prediction scores
-  enum class SearchType {
-    kTransform,
-    kPredAndTransform,
-    kSplit,
-  };
   void StorePredictionScore(const EncoderConfig& config,
                             const Rectangle& tile_rect, Channel channel,
-                            const Predictor& pred, TransformPair tf, float dist,
-                            float lambda, float pred_rate, float tf_rate,
-                            float segment_id_rate, float res_rate, float score,
-                            bool is_best, SearchType type) const;
+                            const Predictor& pred, TransformPair tf,
+                            uint32_t segment_id, const BlockRates& results,
+                            bool is_best) const;
 
   // Visual debug: stores information around the chroma subsampling decision.
   WP2Status Store420Scores(const EncoderConfig& config, uint32_t pos_x,
@@ -289,12 +309,21 @@ class CodedBlock : public CodedBlockBase {
 
 // Pred/tf/split score struct.
 struct BlockScore {
-  bool operator<(const BlockScore& s) const { return (score < s.score); }
+  // For sorting.
+  bool operator<(const BlockScore& other) const { return IsBetterThan(other); }
 
-  float score = 0.f;   // Lower score means better score.
-  uint64_t disto = 0;  // Squared error sum.
+  // Sums all channels.
+  float GetScore() const;
+  float GetDistortion() const;
+  // Returns true if 'other' has a better (=lower) score than this.
+  bool IsBetterThan(const BlockScore& other) const;
+
+  // Encoding settings.
   CodedBlock::CodingParams params;
   uint8_t segment_id = 0;
+
+  // Result for {luma Y, none}, {chroma U, chroma V} or {alpha, none}:
+  BlockRates results[2];
 };
 
 // Pred/tf/split score computation.
