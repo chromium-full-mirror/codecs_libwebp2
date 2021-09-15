@@ -725,19 +725,19 @@ void CodedBlock::StorePredictionScore(const EncoderConfig& config,
     debug_output.DrawRect(rect, Argb32b{0xff, 0xff, 0x33, 0x33});
 
     std::string line =
-        WP2SPrint("Score %9.1f = dist %9.1f + lambda %9.1f * (",
+        WP2SPrint("Score %9.1f = dist %9u + lambda %9.1f * (",
                   results.GetScore(), results.distortion, results.lambda);
     if (results.predictor_rate.is_defined) {
-      line += WP2SPrint("pred %7.4f + ", results.predictor_rate);
+      line += WP2SPrint("pred %7.4f + ", results.predictor_rate.rate);
     }
     if (results.transform_rate.is_defined) {
-      line += WP2SPrint("tf %7.4f + ", results.transform_rate);
+      line += WP2SPrint("tf %7.4f + ", results.transform_rate.rate);
     }
     if (results.segment_id_rate.is_defined) {
-      line += WP2SPrint("segid %7.4f + ", results.segment_id_rate);
+      line += WP2SPrint("segid %7.4f + ", results.segment_id_rate.rate);
     }
     if (results.residuals_rate.is_defined) {
-      line += WP2SPrint("res %7.4f", results.residuals_rate);
+      line += WP2SPrint("res %7.4f", results.residuals_rate.rate);
     }
     line += WP2SPrint(") - %s (%s - %s/%s x%u - %u)", is_best ? "best" : "    ",
                       pred.GetName().c_str(), WP2TransformNames[kTfX[tf]],
