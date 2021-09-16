@@ -742,6 +742,13 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
     } else {
       assert(segment_ids_.empty() && !results.segment_id_rate.is_defined);
     }
+
+    // The 'residuals_rate' is the costliest to estimate.
+    // Compute it last and only if needed.
+    if (CanBeSkipped(combination)) {
+      skipped = true;
+      break;
+    }
     results.residuals_rate = {
         /*is_defined=*/true,
         cb_->ResidualRate(*context_, c, num_channels, counters_->residuals())};
