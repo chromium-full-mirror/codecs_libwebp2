@@ -487,6 +487,14 @@ bool BlockRates::HasSameScoreFormulaAs(const BlockRates& other) const {
          lambda == other.lambda;
 }
 
+bool BlockRates::HasScoreFormulaSubsetOf(const BlockRates& other) const {
+  return (!predictor_rate.is_defined || other.predictor_rate.is_defined) &&
+         (!transform_rate.is_defined || other.transform_rate.is_defined) &&
+         (!segment_id_rate.is_defined || other.segment_id_rate.is_defined) &&
+         (!residuals_rate.is_defined || other.residuals_rate.is_defined) &&
+         (lambda == 0.f || lambda == other.lambda);
+}
+
 float BlockScore::GetScore() const {
   return results[0].GetScore() + results[1].GetScore();
 }
@@ -499,6 +507,14 @@ bool BlockScore::IsBetterThan(const BlockScore& other) const {
   // Make sure the scores are comparable.
   assert(results[0].HasSameScoreFormulaAs(other.results[0]));
   assert(results[1].HasSameScoreFormulaAs(other.results[1]));
+  return (GetScore() < other.GetScore());
+}
+
+bool BlockScore::MightBeBetterThan(const BlockScore& other) const {
+  // The overall GetScore() can only increase when more rates are defined so a
+  // partial comparison is valid, as long as 'other' does not change after.
+  assert(results[0].HasScoreFormulaSubsetOf(other.results[0]));
+  assert(results[1].HasScoreFormulaSubsetOf(other.results[1]));
   return (GetScore() < other.GetScore());
 }
 
@@ -531,14 +547,19 @@ void BlockScorer::Set(const BlockContext& context, CodedBlock* cb,
 
   cached_predictor_ = nullptr;
   last_params_ = CodedBlock::CodingParams();
-  last_segment_id_ = 0;
 
   best_combination_ = BlockScore();
-  best_combination_no_angle_ = BlockScore();
-  best_combinations_angle_.clear();
 }
 
 WP2Status BlockScorer::ComputeScore() {
+  WP2_CHECK_STATUS(ComputeScore(/*refine=*/false));
+  return WP2_STATUS_OK;
+}
+
+WP2Status BlockScorer::ComputeScore(bool refine) {
+  best_combination_no_angle_ = BlockScore();
+  best_combinations_angle_.clear();
+
   CodedBlock::CodingParams& params = *cb_->GetCodingParams(channels_.front());
   const bool can_split =
       (channels_.front() == kYChannel &&
@@ -550,12 +571,12 @@ WP2Status BlockScorer::ComputeScore() {
   if (forced_split != CodedBlock::SplitTf::kUnknown) {
     // Set by EncoderConfig::info (debug).
     params.split_tf = (forced_split == CodedBlock::SplitTf::kForcedSplit);
-    WP2_CHECK_STATUS(ComputeScoreForEachPredictor(/*forced=*/true));
+    WP2_CHECK_STATUS(ComputeScoreForEachPredictor(refine, /*forced=*/true));
   } else {
     for (const bool split_tf : splits_) {
       if (split_tf && !can_split) continue;
       params.split_tf = split_tf;
-      WP2_CHECK_STATUS(ComputeScoreForEachPredictor(/*forced=*/false));
+      WP2_CHECK_STATUS(ComputeScoreForEachPredictor(refine, /*forced=*/false));
     }
   }
 
@@ -563,7 +584,7 @@ WP2Status BlockScorer::ComputeScore() {
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScorer::ComputeScoreForEachPredictor(bool forced) {
+WP2Status BlockScorer::ComputeScoreForEachPredictor(bool refine, bool forced) {
   const Predictors& preds = gparams_->GetPredictors(channels_.front());
   CodedBlock::CodingParams& params = *cb_->GetCodingParams(channels_.front());
   const Predictor* const forced_pred =
@@ -577,21 +598,21 @@ WP2Status BlockScorer::ComputeScoreForEachPredictor(bool forced) {
     // does not have this property, but we could send a single bit saying
     // whether the predictor is cfl or "other".
     params.pred = preds.GetPred(0);  // Assumes it is the DC predictor.
-    WP2_CHECK_STATUS(ComputeScoreForEachTransform(forced));
+    WP2_CHECK_STATUS(ComputeScoreForEachTransform(refine, forced));
   } else if (forced_pred != nullptr) {
     // Predictor is set by EncoderConfig::info (debug).
     params.pred = forced_pred;
-    WP2_CHECK_STATUS(ComputeScoreForEachTransform(/*forced=*/true));
+    WP2_CHECK_STATUS(ComputeScoreForEachTransform(refine, /*forced=*/true));
   } else {
     for (const Predictor* pred : predictors_) {
       params.pred = pred;
-      WP2_CHECK_STATUS(ComputeScoreForEachTransform(forced));
+      WP2_CHECK_STATUS(ComputeScoreForEachTransform(refine, forced));
     }
   }
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScorer::ComputeScoreForEachTransform(bool forced) {
+WP2Status BlockScorer::ComputeScoreForEachTransform(bool refine, bool forced) {
   CodedBlock::CodingParams& params = *cb_->GetCodingParams(channels_.front());
   for (Channel c : channels_) {
     if (!params.pred->ComputeParams(cb_, c)) {
@@ -603,30 +624,30 @@ WP2Status BlockScorer::ComputeScoreForEachTransform(bool forced) {
   if (forced_tf != kUnknownTf) {
     // Transform is set by EncoderConfig::info (debug).
     params.tf = forced_tf;
-    WP2_CHECK_STATUS(ComputeScoreForEachSegment(/*forced=*/true));
+    WP2_CHECK_STATUS(ComputeScoreForEachSegment(refine, /*forced=*/true));
   } else {
     for (const TransformPair tf : transforms_) {
       params.tf = tf;
-      WP2_CHECK_STATUS(ComputeScoreForEachSegment(forced));
+      WP2_CHECK_STATUS(ComputeScoreForEachSegment(refine, forced));
     }
   }
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScorer::ComputeScoreForEachSegment(bool forced) {
+WP2Status BlockScorer::ComputeScoreForEachSegment(bool refine, bool forced) {
   if (segment_ids_.empty()) {
     // Just use the 'cb_->id_' value which was set by AssignSegmentId().
-    WP2_CHECK_STATUS(ComputeScoreForEachChannel(forced));
+    WP2_CHECK_STATUS(ComputeScoreForEachChannel(refine, forced));
   } else {
     for (uint8_t segment_id : segment_ids_) {
       cb_->id_ = segment_id;
-      WP2_CHECK_STATUS(ComputeScoreForEachChannel(forced));
+      WP2_CHECK_STATUS(ComputeScoreForEachChannel(refine, forced));
     }
   }
   return WP2_STATUS_OK;
 }
 
-WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
+WP2Status BlockScorer::ComputeScoreForEachChannel(bool refine, bool forced) {
   BlockScore combination;
   combination.params = *cb_->GetCodingParams(channels_.front());
   combination.segment_id = cb_->id_;
@@ -647,6 +668,7 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
   const bool reduced_tf = (channels_.front() == kUChannel && cb_->is420_);
   const Segment& segment =
       gparams_->segments_[(channels_.front() == kAChannel) ? 0 : cb_->id_];
+  bool skipped = false;
 
   for (Channel c : channels_) {
     const uint32_t ci = GetChannelIndex(c);
@@ -663,16 +685,19 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
       cb_->GetResiduals(c, /*tf_i=*/0, prediction, &residuals_cache);
 
       if (c == channels_.back()) {  // Remember what is cached for all channels.
-        cached_split_tf_ = combination.params.split_tf;
         cached_predictor_ = combination.params.pred;
+        cached_split_tf_ = combination.params.split_tf;
+      } else {
+        cached_predictor_ = nullptr;  // Modified but incomplete.
       }
     }
     BlockCoeffs16 residuals, reconstructed;  // Temporary buffers.
-    // At least one of {pred, tf} changed, so always reconstruct the top left
-    // sub-block...
+    // At least one of {pred, tf, segment} changed, so always reconstruct the
+    // top left sub-block...
     cb_->TransformAndReconstruct(*config_, *context_, segment, c, /*tf_i=*/0,
                                  reduced_tf, prediction, &residuals_cache,
                                  &reconstructed, counters_);
+    // TODO(yguyon): Transform output may be cached if only the segment changed.
 
     // ... and predict / reconstruct the other sub-blocks (that depend on
     // the results of top left one), if any.
@@ -686,12 +711,28 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
     if (c == channels_.back()) {  // Remember what is cached for all channels.
       last_params_ = combination.params;
       last_segment_id_ = combination.segment_id;
+    } else {
+      last_params_ = CodedBlock::CodingParams();  // Modified but incomplete.
     }
 
     // Compute distortion.
     results.distortion = cb_->GetDisto(c);
-    // TODO(yguyon): In some cases, this combination could be discarded right
-    //               now because disto[ci] > best_combination_.score
+
+    // If the distortion is too high for this 'combination' to ever be the best,
+    // and if there is no need to refine it later, discard it immediately to
+    // avoid estimating unnecessary bit costs.
+    if (refine) {
+      if (!combination.params.pred->IsAngle(nullptr) &&
+          best_combination_no_angle_.IsDefined() &&
+          !combination.MightBeBetterThan(best_combination_no_angle_)) {
+        skipped = true;
+        break;
+      }
+    } else if (best_combination_.IsDefined() &&
+               !combination.MightBeBetterThan(best_combination_)) {
+      skipped = true;
+      break;
+    }
 
     // Estimate the cost of this configuration.
     // TODO(yguyon): some rates may be skipped if all combinations lead to the
@@ -713,17 +754,22 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
         cb_->ResidualRate(*context_, c, num_channels, counters_->residuals())};
   }
 
-  const bool is_best = (best_combination_.params.pred == nullptr ||
-                        combination.IsBetterThan(best_combination_));
+  const bool is_best =
+      !skipped && (!best_combination_.IsDefined() ||
+                   combination.IsBetterThan(best_combination_));
   if (is_best) {
     best_combination_ = combination;
   }
 
-  if (combination.params.pred->IsAngle(nullptr)) {
-    WP2_CHECK_ALLOC_OK(best_combinations_angle_.push_back(combination));
-  } else if (best_combination_no_angle_.params.pred == nullptr ||
-             combination.IsBetterThan(best_combination_no_angle_)) {
-    best_combination_no_angle_ = combination;
+  if (refine) {
+    if (combination.params.pred->IsAngle(nullptr)) {
+      assert(!skipped);
+      WP2_CHECK_ALLOC_OK(best_combinations_angle_.push_back(combination));
+    } else if (!skipped &&
+               (!best_combination_no_angle_.IsDefined() ||
+                combination.IsBetterThan(best_combination_no_angle_))) {
+      best_combination_no_angle_ = combination;
+    }
   }
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
@@ -738,11 +784,15 @@ WP2Status BlockScorer::ComputeScoreForEachChannel(bool forced) {
   return WP2_STATUS_OK;
 }
 
-const VectorNoCtor<bool>& BlockScorer::RefinePredictors() {
+WP2Status BlockScorer::ComputeScoreAndRefinePredictors(
+    const VectorNoCtor<bool>*& pred_mode_map) {
+  WP2_CHECK_STATUS(ComputeScore(/*refine=*/true));
+
   // Set all predictors to "should-not-be-refined".
   std::fill(pred_mode_map_.begin(), pred_mode_map_.end(), false);
+  pred_mode_map = &pred_mode_map_;
   // Only angle predictors are refined and returned.
-  if (best_combinations_angle_.empty()) return pred_mode_map_;
+  if (best_combinations_angle_.empty()) return WP2_STATUS_OK;
 
   // Choose to refine all the main angle predictors within a percentage of the
   // lowest score. This helps refine the predictors with similar scores.
@@ -763,7 +813,7 @@ const VectorNoCtor<bool>& BlockScorer::RefinePredictors() {
       pred_mode_map_[main_angle.params.pred->mode()] = true;
     }
   }
-  return pred_mode_map_;
+  return WP2_STATUS_OK;
 }
 
 const BlockScore& BlockScorer::GetBestCombination() const {
@@ -771,7 +821,7 @@ const BlockScore& BlockScorer::GetBestCombination() const {
 }
 
 void BlockScorer::ReconstructBestCombination() {
-  assert(best_combination_.params.pred != nullptr);
+  assert(best_combination_.IsDefined());
   if (best_combination_.params != last_params_ ||
       best_combination_.segment_id != last_segment_id_) {
     *cb_->GetCodingParams(channels_.front()) = best_combination_.params;
@@ -810,24 +860,29 @@ WP2Status OptimizeModes(const EncoderConfig& config, const Rectangle& tile_rect,
     WP2_CHECK_ALLOC_OK(
         scorer->segment_ids_.copy_from(m.segment_ids_tried_during_preds));
   }
-  WP2_CHECK_STATUS(scorer->ComputeScore());
 
-  // Find all sub-angle predictors sharing the same mode (~angle) as the
-  // best main-angle predictors.
-  scorer->predictors_.clear();
-  const VectorNoCtor<bool>& pred_mode_map = scorer->RefinePredictors();
-  for (const Predictor* const sub_pred : m.sub_preds) {
-    assert(sub_pred->IsAngle(nullptr));
-    assert(std::find(m.main_preds.begin(), m.main_preds.end(), sub_pred) ==
-           m.main_preds.end());
-    if (pred_mode_map[sub_pred->mode()]) {
-      assert(std::find(scorer->predictors_.begin(), scorer->predictors_.end(),
-                       sub_pred) == scorer->predictors_.end());
-      WP2_CHECK_ALLOC_OK(scorer->predictors_.push_back(sub_pred));
-    }
-  }
-  if (!scorer->predictors_.empty()) {
+  if (m.sub_preds.empty()) {
     WP2_CHECK_STATUS(scorer->ComputeScore());
+  } else {
+    const VectorNoCtor<bool>* pred_mode_map = nullptr;
+    WP2_CHECK_STATUS(scorer->ComputeScoreAndRefinePredictors(pred_mode_map));
+
+    // Find all sub-angle predictors sharing the same mode (~angle) as the
+    // best main-angle predictors.
+    scorer->predictors_.clear();
+    for (const Predictor* const sub_pred : m.sub_preds) {
+      assert(sub_pred->IsAngle(nullptr));
+      assert(std::find(m.main_preds.begin(), m.main_preds.end(), sub_pred) ==
+             m.main_preds.end());
+      if (pred_mode_map->at(sub_pred->mode())) {
+        assert(std::find(scorer->predictors_.begin(), scorer->predictors_.end(),
+                         sub_pred) == scorer->predictors_.end());
+        WP2_CHECK_ALLOC_OK(scorer->predictors_.push_back(sub_pred));
+      }
+    }
+    if (!scorer->predictors_.empty()) {
+      WP2_CHECK_STATUS(scorer->ComputeScore());
+    }
   }
 
   // Keep only the best of each from now on and try the others one by one.

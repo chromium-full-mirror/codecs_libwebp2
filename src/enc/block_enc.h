@@ -82,6 +82,8 @@ struct BlockRates {
 
   // Returns true if this uses the same '*_rate' and 'lambda' as 'other'.
   bool HasSameScoreFormulaAs(const BlockRates& other) const;
+  // Returns true if this uses at most the same '*_rate' as 'other'.
+  bool HasScoreFormulaSubsetOf(const BlockRates& other) const;
 
   uint64_t distortion = 0;  // Squared error sum.
   BlockRate predictor_rate = {false, 0.f};
@@ -312,11 +314,15 @@ struct BlockScore {
   // For sorting.
   bool operator<(const BlockScore& other) const { return IsBetterThan(other); }
 
+  bool IsDefined() const { return params.pred != nullptr; }
   // Sums all channels.
   float GetScore() const;
   float GetDistortion() const;
   // Returns true if 'other' has a better (=lower) score than this.
   bool IsBetterThan(const BlockScore& other) const;
+  // Same as above but has weaker assertions to compare partial results.
+  // 'other' must be final.
+  bool MightBeBetterThan(const BlockScore& other) const;
 
   // Encoding settings.
   CodedBlock::CodingParams params;
@@ -340,12 +346,13 @@ class BlockScorer {
   // of the configurations below.
   // Can be called several times in a row as long as the configurations differ.
   WP2Status ComputeScore();
+  // Same as ComputeScore(), but also computes and returns predictor modes
+  // mapped to whether they should be refined or not.
+  WP2Status ComputeScoreAndRefinePredictors(
+      const VectorNoCtor<bool>*& pred_mode_map);
 
   // Access results.
   const BlockScore& GetBestCombination() const;
-  // Computes and returns predictor modes mapped to whether they should be
-  // refined or not, based on the scores of the previous ComputeScore() calls.
-  const VectorNoCtor<bool>& RefinePredictors();
 
   // Sets the block to the best combination found and reconstruct it.
   void ReconstructBestCombination();
@@ -361,10 +368,13 @@ class BlockScorer {
   Vector<uint8_t> segment_ids_;          // List of segment ids to try.
 
  private:
-  WP2Status ComputeScoreForEachPredictor(bool forced);
-  WP2Status ComputeScoreForEachTransform(bool forced);
-  WP2Status ComputeScoreForEachSegment(bool forced);
-  WP2Status ComputeScoreForEachChannel(bool forced);
+  // If 'refine', keep 'best_combination_no_angle_', 'best_combinations_angle_'.
+  WP2Status ComputeScore(bool refine);
+  // 'forced' indicates some encoding param is set to a given value.
+  WP2Status ComputeScoreForEachPredictor(bool refine, bool forced);
+  WP2Status ComputeScoreForEachTransform(bool refine, bool forced);
+  WP2Status ComputeScoreForEachSegment(bool refine, bool forced);
+  WP2Status ComputeScoreForEachChannel(bool refine, bool forced);
 
   // Const settings common to the whole tile.
   const EncoderConfig* config_;
@@ -387,7 +397,7 @@ class BlockScorer {
   BlockCoeffs16 residuals_cache_[2];   // Residuals of 'prediction_cache_'.
 
   CodedBlock::CodingParams last_params_;  // Last reconstructed samples.
-  uint8_t last_segment_id_;
+  uint8_t last_segment_id_;  // Only valid if 'last_params_' != CodingParams().
 
   // Best combination found so far for 'cb_'.
   BlockScore best_combination_;
