@@ -345,11 +345,9 @@ class BlockScorer {
   // Computes the scores and the distortions of the block for each combination
   // of the configurations below.
   // Can be called several times in a row as long as the configurations differ.
-  WP2Status ComputeScore();
-  // Same as ComputeScore(), but also computes and returns predictor modes
-  // mapped to whether they should be refined or not.
-  WP2Status ComputeScoreAndRefinePredictors(
-      const VectorNoCtor<bool>*& pred_mode_map);
+  // If 'refined_preds' is not null, it will be filled with "true" for each
+  // refined predictor mode.
+  WP2Status ComputeScore(const VectorNoCtor<bool>** refined_preds = nullptr);
 
   // Access results.
   const BlockScore& GetBestCombination() const;
@@ -368,13 +366,18 @@ class BlockScorer {
   Vector<uint8_t> segment_ids_;          // List of segment ids to try.
 
  private:
-  // If 'refine', keep 'best_combination_no_angle_', 'best_combinations_angle_'.
-  WP2Status ComputeScore(bool refine);
   // 'forced' indicates some encoding param is set to a given value.
-  WP2Status ComputeScoreForEachPredictor(bool refine, bool forced);
-  WP2Status ComputeScoreForEachTransform(bool refine, bool forced);
-  WP2Status ComputeScoreForEachSegment(bool refine, bool forced);
-  WP2Status ComputeScoreForEachChannel(bool refine, bool forced);
+  WP2Status ComputeScoreForEachPredictor(bool forced);
+  WP2Status ComputeScoreForEachTransform(bool forced);
+  WP2Status ComputeScoreForEachSegment(bool forced);
+  WP2Status ComputeScoreForEachChannel(bool forced);
+
+  // Depending on the 'config_', find which sub-predictors might give good
+  // results based on the scores of the 'best_combinations_angle_'.
+  void RefineBestAnglePredictors();
+
+  // Returns true if the 'combination' can be skipped with no side effect.
+  bool CanBeSkipped(const BlockScore& combination) const;
 
   // Const settings common to the whole tile.
   const EncoderConfig* config_;
@@ -403,8 +406,10 @@ class BlockScorer {
   BlockScore best_combination_;
   BlockScore best_combination_no_angle_;  // Same but only among no-angle preds.
   VectorNoCtor<BlockScore> best_combinations_angle_;  // Best angle preds.
+  bool refine_;  // If false, do not bother keeping 'best_combination_no_angle_'
+                 // nor 'best_combinations_angle_'.
 
-  VectorNoCtor<bool> pred_mode_map_;  // Mode index to "should-be-refined".
+  VectorNoCtor<bool> refined_preds_;  // Mode index to "should-be-evaluated".
                                       // Stored here to avoid reallocations.
 };
 
