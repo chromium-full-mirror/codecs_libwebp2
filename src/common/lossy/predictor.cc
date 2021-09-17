@@ -725,24 +725,15 @@ WP2Status Predictors::FillImpl(const Pred* const mapping, uint32_t num_modes,
 //------------------------------------------------------------------------------
 
 WP2Status YPredictors::Fill(int16_t min_value, int16_t max_value) {
-  constexpr Pred kYPreds[] = {Pred::kDcAll,
-                              Pred::kDcLeft,
-                              Pred::kDcTop,
-                              Pred::kZero,
-                              Pred::kSmooth2D,
-                              Pred::kSmoothVertical,
-                              Pred::kSmoothHorizontal,
-                              Pred::kTrueMotion,
-                              Pred::kGradient,
-                              Pred::kAngle23,
-                              Pred::kAngle45,
-                              Pred::kAngle67,
-                              Pred::kAngle90,
-                              Pred::kAngle113,
-                              Pred::kAngle135,
-                              Pred::kAngle157,
-                              Pred::kAngle180,
-                              Pred::kAngle203,
+  constexpr Pred kYPreds[] = {Pred::kMedianDcAll,      Pred::kMedianDcLeft,
+                              Pred::kMedianDcTop,      Pred::kZero,
+                              Pred::kSmooth2D,         Pred::kSmoothVertical,
+                              Pred::kSmoothHorizontal, Pred::kTrueMotion,
+                              Pred::kGradient,         Pred::kAngle23,
+                              Pred::kAngle45,          Pred::kAngle67,
+                              Pred::kAngle90,          Pred::kAngle113,
+                              Pred::kAngle135,         Pred::kAngle157,
+                              Pred::kAngle180,         Pred::kAngle203,
                               Pred::kAngle225};
 
   STATIC_ASSERT_ARRAY_SIZE(kYPreds, kYPredModeNum);
@@ -755,7 +746,7 @@ WP2Status YPredictors::Fill(int16_t min_value, int16_t max_value) {
 
 WP2Status APredictors::Fill(int16_t min_value, int16_t max_value,
                             const CSPTransform* const transform) {
-  constexpr Pred kAPreds[] = {Pred::kDcAll,          Pred::kSmooth2D,
+  constexpr Pred kAPreds[] = {Pred::kMedianDcAll,    Pred::kSmooth2D,
                               Pred::kSmoothVertical, Pred::kSmoothHorizontal,
                               Pred::kTrueMotion,     Pred::kAngle23,
                               Pred::kAngle45,        Pred::kAngle67,
@@ -776,10 +767,10 @@ WP2Status APredictors::Fill(int16_t min_value, int16_t max_value,
 
 WP2Status UVPredictors::Fill(int16_t min_value, int16_t max_value) {
   constexpr Pred kUVPreds[] = {
-      Pred::kDcAll,    Pred::kCfl,      Pred::kSignalingCfl, Pred::kSmooth2D,
-      Pred::kAngle23,  Pred::kAngle45,  Pred::kAngle67,      Pred::kAngle90,
-      Pred::kAngle113, Pred::kAngle135, Pred::kAngle157,     Pred::kAngle180,
-      Pred::kAngle203, Pred::kAngle225};
+      Pred::kMedianDcAll, Pred::kCfl,      Pred::kSignalingCfl, Pred::kSmooth2D,
+      Pred::kAngle23,     Pred::kAngle45,  Pred::kAngle67,      Pred::kAngle90,
+      Pred::kAngle113,    Pred::kAngle135, Pred::kAngle157,     Pred::kAngle180,
+      Pred::kAngle203,    Pred::kAngle225};
 
   STATIC_ASSERT_ARRAY_SIZE(kUVPreds, kUVPredModeNum);
   WP2_CHECK_STATUS(FillImpl(kUVPreds, kUVPredModeNum, min_value, max_value,
