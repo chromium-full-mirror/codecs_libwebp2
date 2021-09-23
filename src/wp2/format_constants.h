@@ -90,7 +90,7 @@ constexpr uint32_t kUVBasePredNum = 4;
 constexpr uint32_t kAnglePredNum = 10;
 
 enum BasePredictor {
-  BPRED_DC = 0,
+  BPRED_DC,
   BPRED_DC_L,         // dc-left
   BPRED_DC_T,         // dc-top
   BPRED_MEDIAN_DC,    // median-dc-all
@@ -100,7 +100,6 @@ enum BasePredictor {
   BPRED_SMOOTH_H,
   BPRED_SMOOTH_V,
   BPRED_TM,
-  BPRED_GRADIENT,
   BPRED_LAST
 };
 

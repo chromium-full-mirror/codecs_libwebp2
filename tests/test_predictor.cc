@@ -407,8 +407,7 @@ TEST(LargePredictors, UniformTest) {
     for (uint32_t n = 0; n < kNumTests; ++n) {
       const int16_t r = gen.Get(min, max);
       for (uint32_t i = 0; i < ctx_size; ++i) ctx[i] = r;
-      for (BasePredictor d : {BPRED_DC, BPRED_DC_L, BPRED_DC_T, BPRED_SMOOTH,
-                              BPRED_SMOOTH_H, BPRED_SMOOTH_V, BPRED_TM}) {
+      for (uint32_t d = BPRED_DC; d < BPRED_LAST; ++d) {
         int16_t prediction[kMaxBlockSizePix * step];
         BasePredictors[d](ctx, w, h, min, max, prediction, step);
         for (uint32_t j = 0; j < h; ++j) {
