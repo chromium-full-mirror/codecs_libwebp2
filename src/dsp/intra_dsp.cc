@@ -58,7 +58,7 @@ void DC_T_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t, int16_t,
   FillBlock(WP2::DivRound(sum, (int32_t)bw), bw, bh, dst, step);
 }
 
-int16_t calc_median(int16_t* ctx_to_find_median, const int32_t size) {
+int16_t CalcMedian(int16_t* ctx_to_find_median, const int32_t size) {
   int16_t* median_position = ctx_to_find_median + size / 2;
   std::nth_element(ctx_to_find_median, median_position,
                    ctx_to_find_median + size);
@@ -81,7 +81,7 @@ void MEDIAN_DC_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t, int16_t,
   // try use dst instead as it will be fill in later.
   int16_t ctx_to_find_median[WP2::kMaxContextSize];
   std::copy(ctx, ctx + size, ctx_to_find_median);
-  const int16_t median = calc_median(ctx_to_find_median, size);
+  const int16_t median = CalcMedian(ctx_to_find_median, size);
   FillBlock(median, bw, bh, dst, step);
 }
 
@@ -90,7 +90,7 @@ void MEDIAN_DC_L_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t,
   const int32_t size = bh;
   int16_t ctx_to_find_median[WP2::kMaxContextSize];
   std::copy(ctx, ctx + size, ctx_to_find_median);
-  const int16_t median = calc_median(ctx_to_find_median, size);
+  const int16_t median = CalcMedian(ctx_to_find_median, size);
   FillBlock(median, bw, bh, dst, step);
 }
 
@@ -99,7 +99,7 @@ void MEDIAN_DC_T_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t,
   const int32_t size = bw;
   int16_t ctx_to_find_median[WP2::kMaxContextSize];
   std::copy(ctx + bh + 1, ctx + bh + 1 + size, ctx_to_find_median);
-  const int16_t median = calc_median(ctx_to_find_median, size);
+  const int16_t median = CalcMedian(ctx_to_find_median, size);
   FillBlock(median, bw, bh, dst, step);
 }
 
