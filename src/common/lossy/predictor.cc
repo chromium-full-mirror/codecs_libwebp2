@@ -250,6 +250,38 @@ class MedianDCPredictor : public ContextPredictor {
 
 //------------------------------------------------------------------------------
 
+// The DoubleDcPredictor sets all pixels to the mean of top and/or left
+// context first. Then for some pixels it calculates a linear combination of
+// precalculated value and the pixel above or on the left in the context. The
+// predictor is based on AV2's Intra Bi-Predictor.
+class DoubleDcPredictor : public ContextPredictor {
+ public:
+  enum Type { kAll, kLeft, kTop };
+  explicit DoubleDcPredictor(Type type) : type_(type) {}
+
+  std::string GetName() const override {
+    const char* const kTypeStr[]{"DoubleDc predictor (all context)",
+                                 "DoubleDc predictor (left context)",
+                                 "DoubleDc predictor (top context)"};
+    return kTypeStr[type_];
+  }
+
+ protected:
+  void Predict(const int16_t context[], uint32_t w, uint32_t h,
+               int16_t output[], uint32_t step) const override {
+    // DoubleDc predictors will never predict values outside of the input range
+    // so we don't need to pass in accurate min/max bounds.
+    constexpr int16_t kMin = std::numeric_limits<int16_t>::min();
+    constexpr int16_t kMax = std::numeric_limits<int16_t>::max();
+    BasePredictors[BPRED_DOUBLE_DC + type_](context, w, h, kMin, kMax, output,
+                                            step);
+  }
+
+  const Type type_;
+};
+
+//------------------------------------------------------------------------------
+
 // TrueMotion predictor.
 class TMPredictor : public ContextPredictor {
  public:
@@ -620,6 +652,15 @@ Predictor* MakeNonAnglePredictor(const Predictors::Pred predictor_type,
     case Predictors::Pred::kMedianDcTop:
       return new (WP2Allocable::nothrow)
           MedianDCPredictor(MedianDCPredictor::kTop);
+    case Predictors::Pred::kDoubleDcAll:
+      return new (WP2Allocable::nothrow)
+          DoubleDcPredictor(DoubleDcPredictor::kAll);
+    case Predictors::Pred::kDoubleDcLeft:
+      return new (WP2Allocable::nothrow)
+          DoubleDcPredictor(DoubleDcPredictor::kLeft);
+    case Predictors::Pred::kDoubleDcTop:
+      return new (WP2Allocable::nothrow)
+          DoubleDcPredictor(DoubleDcPredictor::kTop);
     case Predictors::Pred::kSmooth2D:
       return new (WP2Allocable::nothrow)
           SmoothPredictor(SmoothPredictor::SmoothType::k2DSmooth);

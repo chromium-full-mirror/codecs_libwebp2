@@ -14,15 +14,14 @@
 
 // Unit tests for predictors.
 
-#include <memory>
-
 #include "examples/example_utils.h"
 #include "imageio/image_enc.h"
 #include "include/helpers.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/predictor.h"
-#include "src/enc/block_enc.h"
 #include "src/dsp/math.h"
+#include "src/enc/block_enc.h"
+#include "src/utils/plane.h"
 #include "src/utils/random.h"
 
 namespace WP2 {
@@ -593,5 +592,281 @@ TEST(LargePredictors, PrintSimpleAngleTable) {
   printf("};\n");
 }
 
+// Checks if DoubleDc predicts correctly pixels from plain color context.
+TEST(DoubleDcPredictor, PlainColorContext) {
+  WP2MathInit();
+  WP2::PredictionInit();
+
+  CodedBlock cb;
+  cb.SetDimDefault({/*x=*/0, /*y=*/0, /*dim=*/BLK_4x4});
+
+  YUVPlane plane;
+  ASSERT_WP2_OK(plane.Resize(4, 4, /*pad=*/1, /*has_alpha=*/true));
+
+  ContextCacheForTest cache;
+  cb.SetContextInput(plane, &cache);
+
+  const int16_t kColor = 176;
+
+  for (Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+    cache.SetContext(channel, {kColor, kColor, kColor, kColor,  // Left
+                               kColor,  // Upper left corner
+                               kColor, kColor, kColor, kColor,  // Top
+                               kColor,  // Upper right corner
+                               kColor, kColor, kColor, kColor});  // Right
+
+    const uint32_t step = plane.GetChannel(channel).Step();
+
+    for (Predictors::Pred predictor_type :
+         {Predictors::Pred::kDoubleDcAll, Predictors::Pred::kDoubleDcLeft,
+          Predictors::Pred::kDoubleDcTop}) {
+      std::unique_ptr<Predictor> p(MakeNonAnglePredictor(predictor_type, 0, 0));
+
+      int16_t prediction[16];
+      p->Predict(cb, channel, /*split_tf=*/false, /*tf_i=*/0, prediction, step);
+      for (uint32_t i = 0; i < 16; ++i) {
+        ASSERT_EQ(prediction[i], kColor);
+      }
+    }
+  }
+}
+
+// Checks if DoubleDc predicts correctly pixels from plain color context
+// preserving channel independence.
+TEST(DoubleDcPredictor, PlainColorContextPerChannel) {
+  WP2MathInit();
+  WP2::PredictionInit();
+
+  CodedBlock cb;
+  cb.SetDimDefault({/*x=*/0, /*y=*/0, /*dim=*/BLK_4x4});
+
+  YUVPlane plane;
+  ASSERT_WP2_OK(plane.Resize(4, 4, /*pad=*/1, /*has_alpha=*/true));
+  const uint32_t step = 4;
+
+  ContextCacheForTest cache;
+  cb.SetContextInput(plane, &cache);
+
+  const int16_t kVerifiedColor = 78;
+  const int16_t kOtherColor = 209;
+
+  for (const Channel verified_channel :
+       {kYChannel, kUChannel, kVChannel, kAChannel}) {
+    cache.SetContext(verified_channel,
+                     {kVerifiedColor, kVerifiedColor, kVerifiedColor,
+                      kVerifiedColor,  // Left
+                      kVerifiedColor,  // Upper left corner
+                      kVerifiedColor, kVerifiedColor, kVerifiedColor,
+                      kVerifiedColor,  // Top
+                      kVerifiedColor,  // Upper right corner
+                      kVerifiedColor, kVerifiedColor, kVerifiedColor,
+                      kVerifiedColor});  // Right
+    for (const Channel other_channel :
+         {kYChannel, kUChannel, kVChannel, kAChannel}) {
+      if (verified_channel == other_channel) {
+        continue;
+      }
+      plane.GetChannel(other_channel).Fill(kOtherColor);
+      cache.SetContext(
+          other_channel,
+          {kOtherColor, kOtherColor, kOtherColor, kOtherColor,  // Left
+           kOtherColor,  // Upper left corner
+           kOtherColor, kOtherColor, kOtherColor, kOtherColor,  // Top
+           kOtherColor,  // Upper right corner
+           kOtherColor, kOtherColor, kOtherColor, kOtherColor});  // Right
+    }
+
+    for (Predictors::Pred predictor_type :
+         {Predictors::Pred::kDoubleDcAll, Predictors::Pred::kDoubleDcLeft,
+          Predictors::Pred::kDoubleDcTop}) {
+      std::unique_ptr<Predictor> p(MakeNonAnglePredictor(predictor_type, 0, 0));
+
+      int16_t prediction[16];
+      p->Predict(cb, verified_channel, /*split_tf=*/false, /*tf_i=*/0,
+                 prediction, step);
+      for (uint32_t i = 0; i < 16; ++i) {
+        ASSERT_EQ(prediction[i], kVerifiedColor);
+      }
+    }
+  }
+}
+
+// Checks if DoubleDc correctly predicts pixels when the left context and top
+// context have different colors. It tests DoubleDc only in top and left mode.
+// We expect that the output of DoubleDcTop is independent from left context and
+// vice versa.
+TEST(DoubleDcPredictor, LeftAndTopContextDifferentColors) {
+  WP2MathInit();
+  WP2::PredictionInit();
+
+  CodedBlock cb;
+  cb.SetDimDefault({/*x=*/0, /*y=*/0, /*dim=*/BLK_4x4});
+
+  YUVPlane plane;
+  ASSERT_WP2_OK(plane.Resize(4, 4, /*pad=*/1, /*has_alpha=*/true));
+
+  ContextCacheForTest cache;
+  cb.SetContextInput(plane, &cache);
+
+  const int16_t kLeftColor = 67;
+  const int16_t kTopColor = 14;
+
+  std::unique_ptr<Predictor> p_left(
+      MakeNonAnglePredictor(Predictors::Pred::kDoubleDcLeft, 0, 0));
+
+  std::unique_ptr<Predictor> p_top(
+      MakeNonAnglePredictor(Predictors::Pred::kDoubleDcTop, 0, 0));
+
+  for (const Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+    cache.SetContext(
+        channel, {kLeftColor, kLeftColor, kLeftColor, kLeftColor,  // Left
+                  kLeftColor,  // Upper left corner
+                  kTopColor, kTopColor, kTopColor, kTopColor,  // Top
+                  kLeftColor,  // Upper right corner
+                  kLeftColor, kLeftColor, kLeftColor, kLeftColor});  // Right
+
+    const uint32_t step = plane.GetChannel(channel).Step();
+
+    int16_t prediction[16];
+
+    // DoubleDcLeft
+    p_left->Predict(cb, channel, /*split_tf=*/false, /*tf_i=*/0, prediction,
+                    step);
+    for (uint32_t i = 0; i < 16; ++i) {
+      ASSERT_EQ(prediction[i], kLeftColor);
+    }
+
+    // DoubleDcTop
+    p_top->Predict(cb, channel, /*split_tf=*/false, /*tf_i=*/0, prediction,
+                   step);
+    for (uint32_t i = 0; i < 16; ++i) {
+      ASSERT_EQ(prediction[i], kTopColor);
+    }
+  }
+}
+
+// Checks if the area in the block predicted by DoubleDc remains constant where
+// only DC is applied.
+TEST(DoubleDcPredictor, ConstantDCArea) {
+  WP2MathInit();
+  WP2::PredictionInit();
+
+  CodedBlock cb;
+  cb.SetDimDefault({/*x=*/0, /*y=*/0, /*dim=*/BLK_4x4});
+
+  YUVPlane plane;
+  const uint16_t kBw = 4;
+  const uint16_t kBh = 4;
+  ASSERT_WP2_OK(plane.Resize(kBw, kBh, /*pad=*/1, /*has_alpha=*/true));
+
+  ContextCacheForTest cache;
+  cb.SetContextInput(plane, &cache);
+
+  for (const Channel channel : {kYChannel, kUChannel, kVChannel, kAChannel}) {
+    // Colors chosen by hand.
+    cache.SetContext(channel, {123, 64, 1, 213,      // Left
+                               218,                  // Upper left corner
+                               32, 8, 144, 89,       // Top
+                               101,                  // Upper right corner
+                               227, 154, 253, 15});  // Right
+    const uint32_t step = plane.GetChannel(channel).Step();
+
+    for (Predictors::Pred predictor_type :
+         {Predictors::Pred::kDoubleDcAll, Predictors::Pred::kDoubleDcLeft,
+          Predictors::Pred::kDoubleDcTop}) {
+      std::unique_ptr<Predictor> p(MakeNonAnglePredictor(predictor_type, 0, 0));
+
+      int16_t prediction[16];
+      p->Predict(cb, channel, /*split_tf=*/false, /*tf_i=*/0, prediction, step);
+
+      uint16_t constant_area_width = 0;
+      int16_t* constant_area = nullptr;
+
+      switch (predictor_type) {
+        case Predictors::Pred::kDoubleDcAll:
+          constant_area_width = 3;
+          constant_area = prediction + 5;
+          break;
+        case Predictors::Pred::kDoubleDcLeft:
+          constant_area_width = 3;
+          constant_area = prediction + 1;
+          break;
+        case Predictors::Pred::kDoubleDcTop:
+          constant_area_width = 4;
+          constant_area = prediction + 4;
+          break;
+        default:
+          assert(false);
+      }
+
+      const int16_t constant_area_color = prediction[15];
+
+      while (constant_area < prediction + 16) {
+        for (uint16_t i = 0; i < constant_area_width; i++) {
+          ASSERT_EQ(constant_area[i], constant_area_color);
+        }
+        constant_area += kBw;
+      }
+    }
+  }
+}
+
+// Hand designed test
+TEST(DoubleDcPredictor, HandDesinged) {
+  WP2MathInit();
+  WP2::PredictionInit();
+
+  CodedBlock cb;
+  cb.SetDimDefault({/*x=*/0, /*y=*/0, /*dim=*/BLK_4x4});
+
+  YUVPlane plane;
+  ASSERT_WP2_OK(plane.Resize(4, 4, /*pad=*/1, /*has_alpha=*/true));
+
+  ContextCacheForTest cache;
+  cb.SetContextInput(plane, &cache);
+
+  for (const Channel channel :
+       {kYChannel, /*kUChannel, kVChannel, kAChannel*/}) {
+    // Colors chosen by hand.
+    cache.SetContext(channel, {123, 64, 1, -213,      // Left
+                               218,                   // Upper left corner
+                               32, 8, -144, 89,       // Top
+                               101,                   // Upper right corner
+                               227, 154, 253, -15});  // Right
+    const uint32_t step = plane.GetChannel(channel).Step();
+    for (Predictors::Pred predictor_type :
+         {Predictors::Pred::kDoubleDcAll, Predictors::Pred::kDoubleDcLeft,
+          Predictors::Pred::kDoubleDcTop}) {
+      std::unique_ptr<Predictor> p(MakeNonAnglePredictor(predictor_type, 0, 0));
+
+      int16_t prediction[16];
+      p->Predict(cb, channel, /*split_tf=*/false, /*tf_i=*/0, prediction, step);
+
+      std::vector<int16_t> expected_output(16);
+
+      // Result computed by hand.
+      switch (predictor_type) {
+        case Predictors::Pred::kDoubleDcAll:
+          expected_output = {-36, 17, -21, 37, 15, 20, 20, 20,
+                             31,  20, 20,  20, 46, 20, 20, 20};
+          break;
+        case Predictors::Pred::kDoubleDcLeft:
+          expected_output = {-58, -6, -6, -6, -4, -6, -6, -6,
+                             12,  -6, -6, -6, 26, -6, -6, -6};
+          break;
+        case Predictors::Pred::kDoubleDcTop:
+          expected_output = {5,  -1, -39, 19, -4, -4, -4, -4,
+                             -4, -4, -4,  -4, -4, -4, -4, -4};
+          break;
+        default:
+          assert(false);
+      }
+
+      for (uint32_t i = 0; i < 16; ++i) {
+        ASSERT_EQ(prediction[i], expected_output[i]);
+      }
+    }
+  }
+}
 }  // namespace
 }  // namespace WP2

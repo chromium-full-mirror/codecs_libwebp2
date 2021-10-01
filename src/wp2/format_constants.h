@@ -96,6 +96,9 @@ enum BasePredictor {
   BPRED_MEDIAN_DC,    // median-dc-all
   BPRED_MEDIAN_DC_L,  // median-dc-left
   BPRED_MEDIAN_DC_T,  // median-dc-top
+  BPRED_DOUBLE_DC,    // double-dc-all
+  BPRED_DOUBLE_DC_L,  // double-dc-left
+  BPRED_DOUBLE_DC_T,  // double-dc-top
   BPRED_SMOOTH,
   BPRED_SMOOTH_H,
   BPRED_SMOOTH_V,

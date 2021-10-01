@@ -105,6 +105,76 @@ void MEDIAN_DC_T_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t,
 
 //------------------------------------------------------------------------------
 
+const uint8_t kDoubleDcWeights[5][16] = {
+    {192, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {171, 213, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {154, 179, 205, 230, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {142, 156, 171, 185, 199, 213, 228, 242, 0, 0, 0, 0, 0, 0, 0, 0},
+    {136, 143, 151, 158, 166, 173, 181, 188, 196, 203, 211, 218, 226, 233, 241,
+     248}};
+const uint8_t kSizeToWeightsIndex[9] = {0, 1, 2, 0, 3, 0, 0, 0, 4};
+
+void ComputeDoubleDcTop(const int16_t* ctx, const uint32_t bw,
+                        const uint32_t bh, int16_t* dst, const size_t step) {
+  const uint8_t weights_index = kSizeToWeightsIndex[bh >> 3];
+  const uint8_t* weights = kDoubleDcWeights[weights_index];
+  // We calculate DoubleDc only for first bh / 4 rows.
+  const uint32_t len = bh >> 2;
+  for (uint32_t r = 0; r < len; r++) {
+    for (uint32_t c = 0; c < bw; c++) {
+      // Pixel belonging to the context ctx above the column c.
+      const int16_t pixel_above = ctx[bh + c + 1];
+      dst[c] = WP2::RightShiftRound(
+          pixel_above * (256 - weights[r]) + dst[c] * weights[r], 8);
+    }
+    dst += step;
+  }
+}
+
+void ComputeDoubleDcLeft(const int16_t* ctx, const uint32_t bw,
+                         const uint32_t bh, int16_t* dst, const size_t step) {
+  const uint8_t weights_index = kSizeToWeightsIndex[bw >> 3];
+  const uint8_t* weights = kDoubleDcWeights[weights_index];
+  // We calculate DoubleDc only for first bw / 4 columns.
+  const uint32_t len = bw >> 2;
+  for (uint32_t r = 0; r < bh; r++) {
+    // Pixel belonging to context ctx on the left from row r.
+    const int16_t left_pixel = ctx[bh - r - 1];
+    for (uint32_t c = 0; c < len; c++) {
+      dst[c] = WP2::RightShiftRound(
+          left_pixel * (256 - weights[c]) + dst[c] * weights[c], 8);
+    }
+    dst += step;
+  }
+}
+
+void DOUBLE_DC_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t, int16_t,
+                 int16_t* dst, size_t step) {
+  // Precalculate output.
+  DC_C(ctx, bw, bh, 0, 0, dst, step);
+
+  ComputeDoubleDcTop(ctx, bw, bh, dst, step);
+  ComputeDoubleDcLeft(ctx, bw, bh, dst, step);
+}
+
+void DOUBLE_DC_L_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t,
+                   int16_t, int16_t* dst, size_t step) {
+  // Precalculate output.
+  DC_L_C(ctx, bw, bh, 0, 0, dst, step);
+
+  ComputeDoubleDcLeft(ctx, bw, bh, dst, step);
+}
+
+void DOUBLE_DC_T_C(const int16_t* ctx, uint32_t bw, uint32_t bh, int16_t,
+                   int16_t, int16_t* dst, size_t step) {
+  // precalculate output
+  DC_T_C(ctx, bw, bh, 0, 0, dst, step);
+
+  ComputeDoubleDcTop(ctx, bw, bh, dst, step);
+}
+
+//------------------------------------------------------------------------------
+
 // The Sm_Weights_Tx_* in AV1.
 static constexpr int16_t kSmoothWeights[] = {
   0, 0, 0, 0,   // <- dummy entries to make the offsets easy
@@ -797,6 +867,9 @@ WP2_TSAN_IGNORE_FUNCTION void PredictionInit() {
   BasePredictors[BPRED_MEDIAN_DC] = MEDIAN_DC_C;
   BasePredictors[BPRED_MEDIAN_DC_L] = MEDIAN_DC_L_C;
   BasePredictors[BPRED_MEDIAN_DC_T] = MEDIAN_DC_T_C;
+  BasePredictors[BPRED_DOUBLE_DC] = DOUBLE_DC_C;
+  BasePredictors[BPRED_DOUBLE_DC_L] = DOUBLE_DC_L_C;
+  BasePredictors[BPRED_DOUBLE_DC_T] = DOUBLE_DC_T_C;
   BasePredictors[BPRED_SMOOTH] = Smooth_C;
   BasePredictors[BPRED_SMOOTH_H] = Smooth_H_C;
   BasePredictors[BPRED_SMOOTH_V] = Smooth_V_C;
