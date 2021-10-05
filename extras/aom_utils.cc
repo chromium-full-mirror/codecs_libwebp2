@@ -1131,7 +1131,7 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
     }
     WP2_CHECK_STATUS(ToRGBA(yuv, &SamplingTaps::kUpSmooth, decoded));
   } else {
-    fprintf(stderr, "ERROR: Failed to encode: %s\n",
+    fprintf(stderr, "ERROR: Failed to decode: %s\n",
             avifResultToString(decodeResult));
   }
 
