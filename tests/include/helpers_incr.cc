@@ -435,12 +435,23 @@ class IncrementalDecodingTester {
           (features->raw_width != features->width)
               ? decoded_area.width - previous_decoded_area_.width
               : decoded_area.height - previous_decoded_area_.height;
-      // Incremental decoding should not be able to finish more than three rows
+      // Incremental decoding should not be able to finish more than two rows
       // of blocks in 2 bytes or fewer for lossy and a tile for lossless.
-      const uint32_t max_num_lines =
+      uint32_t max_num_lines =
           std::min(features->raw_height, has_true_incremental_output_
-                                             ? kMaxBlockSizePix * 3
+                                             ? kMaxBlockSizePix * 2
                                              : features->tile_height);
+      // Filters are applied sequentially and each needs a few rows untouched by
+      // the previous one, delaying the pixel availability until the last row.
+      if (config_.enable_deblocking_filter || config_.enable_alpha_filter) {
+        max_num_lines += kMaxBlockSizePix;
+      }
+      if (config_.enable_directional_filter) {
+        max_num_lines += kDrctFltSize + kDrctFltTapDist;
+      }
+      if (config_.enable_restoration_filter) {
+        max_num_lines += kWieFltHeight;
+      }
       if (num_lines > max_num_lines) {
         DumpImage(output_, "/tmp/dump.png", decoded_area);
         DumpData(input_.bytes, input_.size, "/tmp/dump.wp2");
