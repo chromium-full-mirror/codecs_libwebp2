@@ -26,6 +26,8 @@ Encode images into wp2 format.
 """
 
 import argparse
+import sys
+
 import libwebp2 as wp2
 
 
@@ -76,13 +78,13 @@ def main():
 
     print('libwebp2 version:     ', format_version(wp2.WP2GetVersion(), 3))
     print('libwebp2 ABI version: ', format_version(wp2.WP2GetABIVersion(), 2))
-    exit(0)
+    sys.exit(0)
 
   # ----------------------------------------------------------------------------
 
   if not wp2.WP2CheckVersion():
     print('error: version mismatch')
-    exit(1)
+    sys.exit(1)
 
   # ----------------------------------------------------------------------------
 
@@ -91,7 +93,7 @@ def main():
   config.effort = args.effort
   if not config.IsValid():
     print('error: invalid configuration')
-    exit(1)
+    sys.exit(1)
   memory_writer = wp2.MemoryWriter()
 
   # ----------------------------------------------------------------------------
@@ -99,10 +101,10 @@ def main():
   if args.frames:
     if args.input:
       print('error: \'input\' argument must not be specified with --frames')
-      exit(1)
+      sys.exit(1)
     if (len(args.frames) % 2) != 0:
       print('error: --frames requires an even number of values')
-      exit(1)
+      sys.exit(1)
     num_frames = len(args.frames) // 2
     animation_encoder = wp2.AnimationEncoder()
     for f in range(num_frames):
@@ -115,7 +117,7 @@ def main():
   else:
     if not args.input:
       print('error: the following arguments are required: input')
-      exit(1)
+      sys.exit(1)
     original_image = wp2.ArgbBuffer()
     image_reader = wp2.ImageReader(args.input, original_image)
     [_, is_last, duration_ms] = image_reader.ReadFrame()
@@ -132,8 +134,8 @@ def main():
   # ----------------------------------------------------------------------------
 
   if args.output:
-    wp2.IoUtilWriteFile(memory_writer.mem_, memory_writer.size_,
-                        args.output, True)
+    wp2.IoUtilWriteFile(memory_writer.mem_, memory_writer.size_, args.output,
+                        True)
 
   # ----------------------------------------------------------------------------
 

@@ -26,6 +26,8 @@ Decode wp2 format images.
 
 import argparse
 import os
+import sys
+
 import libwebp2 as wp2
 
 
@@ -61,13 +63,13 @@ def main():
 
     print('libwebp2 version:     ' + format_version(wp2.WP2GetVersion(), 3))
     print('libwebp2 ABI version: ' + format_version(wp2.WP2GetABIVersion(), 2))
-    exit(0)
+    sys.exit(0)
 
   # ----------------------------------------------------------------------------
 
   if not args.input:
     print('error: the following arguments are required: input')
-    exit(1)
+    sys.exit(1)
 
   buffer_argb = wp2.ArgbBuffer()
   wp2.ReadImage(args.input, buffer_argb)

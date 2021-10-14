@@ -30,11 +30,13 @@ Display a wp2 image from a given path or URL.
 
 import argparse
 import datetime
+import sys
+
+import libwebp2 as wp2
 from PIL import Image
 from PIL import ImageTk
 import requests
 import tkinter
-import libwebp2 as wp2
 
 # ------------------------------------------------------------------------------
 
@@ -152,7 +154,8 @@ class Viewer(object):
 
       info = '{} bytes, {}x{}'.format(
           len(self._input_bytes),
-          self._decoder.GetPixels().width, self._decoder.GetPixels().height)
+          self._decoder.GetPixels().width,
+          self._decoder.GetPixels().height)
       self._info_label.configure(text=info)
 
       has_alpha = features.has_alpha if features is not None else False
@@ -178,10 +181,10 @@ class Viewer(object):
       self._request = requests.get(self._file_name, stream=True)
       if self._request.status_code != 200:
         print('error: status=', self._request.status_code)
-        exit(1)
+        sys.exit(1)
       elif self._request.headers['Content-type'] != 'image/wp2':
         print('error: Content-type=', self._request.headers['Content-type'])
-        exit(1)
+        sys.exit(1)
       self._chunk_generator = self._request.iter_content(
           chunk_size=None, decode_unicode=False)
       self._window.after(self._incr_dec_step_ms, self._receive_chunk)
@@ -220,7 +223,7 @@ def main():
 
     print('libwebp2 version:     ' + format_version(wp2.WP2GetVersion(), 3))
     print('libwebp2 ABI version: ' + format_version(wp2.WP2GetABIVersion(), 2))
-    exit(0)
+    sys.exit(0)
 
   viewer = Viewer(args.input)
   viewer.loop()
