@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Copyright 2020 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,18 +50,18 @@ for v in 37 255 1001 65535; do
   if [ "x${v}" != "x37" ]; then
     min_psnr=99
   fi
-  opt="-q 100 -quiet"
+  opt=("-q" 100 "-quiet")
 
-  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}.pgm" ${opt} -o "${TMP_WP2}"
+  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}.pgm" "${opt[@]}" -o "${TMP_WP2}"
   do_check_psnr bug449_ref_gray.png "${min_psnr}"
 
-  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}_g.pam" ${opt} -o "${TMP_WP2}"
+  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}_g.pam" "${opt[@]}" -o "${TMP_WP2}"
   do_check_psnr bug449_ref_gray_alpha.png "${min_psnr}"
 
-  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}.ppm" ${opt} -o "${TMP_WP2}"
+  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}.ppm" "${opt[@]}" -o "${TMP_WP2}"
   do_check_psnr bug449_ref_noalpha.png "${min_psnr}"
 
-  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}.pam" ${opt} -o "${TMP_WP2}"
+  "${CWP2}" "${TESTDATA_DIR}/bug449_${v}.pam" "${opt[@]}" -o "${TMP_WP2}"
   do_check_psnr bug449_ref.png "${min_psnr}"
 done
 

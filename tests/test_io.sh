@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Copyright 2020 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,7 +46,7 @@ sources1="source0.ppm alpha_ramp.tiff source4.webp"
 
 do_cmd() {
   cmd=$*
-  if [ "x${quiet}" = "xno" ]; then
+  if [[ "${quiet}" = "no" ]]; then
     echo "running: ${cmd}"
     ${cmd}
   else
