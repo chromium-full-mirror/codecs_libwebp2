@@ -568,12 +568,13 @@ class IncrementalDecodingTester {
                    WP2_STATUS_BITSTREAM_ERROR);
     }
 
+    // A frame was just decoded. Verify its location in the bitstream is valid.
+    // If a single new byte was made available (no rewind), the frame must
+    // exactly end at the current number of available bytes.
     size_t offset, length;
     CHECK_OR_DIE(
         GetDecoder().TryGetFrameLocation(frame_index_, &offset, &length));
-    if (previous_input_size + 1 == available_input_size &&
-        incr_size_step_ == 1) {
-      // A frame was just decoded during a byte-by-byte incremental decoding.
+    if (incr_size_step_ == 1 && !rewinded_) {
       CHECK_OR_DIE(available_input_size == offset + length);
     } else {
       CHECK_OR_DIE(available_input_size >= offset + length);
