@@ -48,19 +48,18 @@ class SplitRecursePartitioner : public Partitioner {
                              Vector_u32* const splits) override;
 
  private:
-  //  Tries all split patterns for the block it.CurrentBlock() and appends
-  // the split indices to 'best_pattern_idxs'.
-  WP2Status FindBestPattern(const VectorNoCtor<Block>& forced_blocks,
-                            const SplitIteratorDefault& it,
-                            BlockScoreFunc* const score_func,
-                            SymbolCounter* const symbol_counter,
-                            ANSEncCounter* const counter, float extra_rate,
-                            uint32_t recursion_level, bool selected,
-                            Vector_u32* const best_pattern_idxs,
-                            float* const best_score) const;
+  // Tries all split patterns for the block it.CurrentBlock() and appends the
+  // split indices to 'best_pattern_idxs'.
+  WP2Status FindBestPattern(
+      const ProgressRange& progress, const VectorNoCtor<Block>& forced_blocks,
+      const SplitIteratorDefault& it, BlockScoreFunc* const score_func,
+      SymbolCounter* const symbol_counter, ANSEncCounter* const counter,
+      float extra_rate, uint32_t recursion_level, bool selected,
+      Vector_u32* const best_pattern_idxs, float* const best_score) const;
 
   // Recursively computes the score for the given split pattern.
-  WP2Status ComputeScore(const VectorNoCtor<Block>& forced_blocks,
+  WP2Status ComputeScore(const ProgressRange& progress,
+                         const VectorNoCtor<Block>& forced_blocks,
                          const SplitIteratorDefault& it, uint32_t split_idx,
                          Block sub_blocks[4], uint32_t num_sub_blocks,
                          BlockScoreFunc* const score_func,

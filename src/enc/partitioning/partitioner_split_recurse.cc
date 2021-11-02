@@ -55,11 +55,11 @@ static float GetSplitCost(const SplitIteratorDefault& it, uint32_t split_idx,
 }
 
 WP2Status SplitRecursePartitioner::ComputeScore(
-    const VectorNoCtor<Block>& forced_blocks, const SplitIteratorDefault& it,
-    uint32_t split_idx, Block sub_blocks[4], uint32_t num_sub_blocks,
-    BlockScoreFunc* const score_func, SymbolCounter* const symbol_counter,
-    ANSEncCounter* const counter, float best_score, float extra_rate,
-    uint32_t recursion_level, bool selected,
+    const ProgressRange& progress, const VectorNoCtor<Block>& forced_blocks,
+    const SplitIteratorDefault& it, uint32_t split_idx, Block sub_blocks[4],
+    uint32_t num_sub_blocks, BlockScoreFunc* const score_func,
+    SymbolCounter* const symbol_counter, ANSEncCounter* const counter,
+    float best_score, float extra_rate, uint32_t recursion_level, bool selected,
     Vector_u32* const best_pattern_idxs, float* score) const {
   assert(it.CurrentBlock().splittable);
 
@@ -89,6 +89,7 @@ WP2Status SplitRecursePartitioner::ComputeScore(
     WP2_CHECK_STATUS(score_func->ComputeScore(sub_blocks, num_sub_blocks,
                                               new_extra_rate, best_score,
                                               selected, score));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.));
     return WP2_STATUS_OK;
   }
 
@@ -102,6 +103,7 @@ WP2Status SplitRecursePartitioner::ComputeScore(
   float total_score = 0;
   float scores[4];
   for (uint32_t i = 0; i < num_sub_blocks; ++i) {
+    const ProgressScale sub_block_progress(progress, 1. / num_sub_blocks);
     const Block& sub_block = sub_blocks[i];
     assert(it_copy.CurrentBlock().block == sub_block);
     const float block_extra_rate =
@@ -109,9 +111,9 @@ WP2Status SplitRecursePartitioner::ComputeScore(
     if (it_copy.CurrentBlock().splittable) {
       const uint32_t pattern_idxs_size = best_pattern_idxs->size();
       WP2_CHECK_STATUS(FindBestPattern(
-          forced_blocks, it_copy, &score_func_copy, symbol_counter, counter,
-          block_extra_rate, recursion_level + 1, selected, best_pattern_idxs,
-          &scores[i]));
+          sub_block_progress, forced_blocks, it_copy, &score_func_copy,
+          symbol_counter, counter, block_extra_rate, recursion_level + 1,
+          selected, best_pattern_idxs, &scores[i]));
       assert(best_pattern_idxs->size() > pattern_idxs_size);
 
       // If this is not the last sub-block, update the score func with the
@@ -143,6 +145,7 @@ WP2Status SplitRecursePartitioner::ComputeScore(
         WP2_CHECK_STATUS(score_func_copy.Use(it_copy.CurrentBlock().block));
         it_copy.NextBlock();
       }
+      WP2_CHECK_STATUS(sub_block_progress.AdvanceBy(1.));
     }
     // The scoring function returns an inverted score. Un-inverted to compute
     // th average.
@@ -159,11 +162,11 @@ WP2Status SplitRecursePartitioner::ComputeScore(
 }
 
 WP2Status SplitRecursePartitioner::FindBestPattern(
-    const VectorNoCtor<Block>& forced_blocks, const SplitIteratorDefault& it,
-    BlockScoreFunc* const score_func, SymbolCounter* const symbol_counter,
-    ANSEncCounter* const counter, float extra_rate, uint32_t recursion_level,
-    bool selected, Vector_u32* const best_pattern_idxs,
-    float* const best_score) const {
+    const ProgressRange& progress, const VectorNoCtor<Block>& forced_blocks,
+    const SplitIteratorDefault& it, BlockScoreFunc* const score_func,
+    SymbolCounter* const symbol_counter, ANSEncCounter* const counter,
+    float extra_rate, uint32_t recursion_level, bool selected,
+    Vector_u32* const best_pattern_idxs, float* const best_score) const {
   *best_score = 0.f;
 
   const uint32_t num_patterns = it.NumSplitPatterns();
@@ -173,6 +176,7 @@ WP2Status SplitRecursePartitioner::FindBestPattern(
   // recursively.
   Vector_u32 best_pattern_idxs_tmp;
   for (uint32_t split_idx = 0; split_idx < num_patterns; ++split_idx) {
+    ProgressScale split_progress(progress, 1. / num_patterns);
     Block sub_blocks[4];
     bool splittable[4];
     const uint32_t num_sub_blocks =
@@ -183,15 +187,16 @@ WP2Status SplitRecursePartitioner::FindBestPattern(
     if (!forced_blocks.empty() &&
         !IsCompatibleWithForcedBlocks(block, sub_blocks, splittable,
                                       num_sub_blocks, forced_blocks)) {
+      WP2_CHECK_STATUS(split_progress.AdvanceBy(1.));
       continue;
     }
 
     float score;
     Vector_u32 pattern_idxs_tmp;
     WP2_CHECK_STATUS(ComputeScore(
-        forced_blocks, it, split_idx, sub_blocks, num_sub_blocks, score_func,
-        symbol_counter, counter, *best_score, extra_rate, recursion_level,
-        selected, &pattern_idxs_tmp, &score));
+        split_progress, forced_blocks, it, split_idx, sub_blocks,
+        num_sub_blocks, score_func, symbol_counter, counter, *best_score,
+        extra_rate, recursion_level, selected, &pattern_idxs_tmp, &score));
 
     if (split_idx == 0 || score > *best_score) {
       best_pattern_idx = split_idx;
@@ -251,9 +256,9 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
       const bool selected = VDebugBlockSelected(outer_block.block);
       float best_score;
       WP2_CHECK_STATUS(FindBestPattern(
-          forced_blocks, it, score_func, &symbol_counter, &counter,
-          /*extra_rate=*/0, /*recursion_level=*/0, selected, &best_pattern_idxs,
-          &best_score));
+          ProgressRange(progress, 0.), forced_blocks, it, score_func,
+          &symbol_counter, &counter, /*extra_rate=*/0, /*recursion_level=*/0,
+          selected, &best_pattern_idxs, &best_score));
       assert(!best_pattern_idxs.empty());
     }
 
