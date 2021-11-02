@@ -58,6 +58,8 @@ class ProgressRange {
  public:
   // Sets the 'watcher' to be notified when AdvanceBy() is called.
   // The 'range' represents the portion of the progress booked by this instance.
+  // The final sum of all aggregated progress ranges must be exactly 1.
+  // A local 'range' can be 0 if difficult to compute or to know in advance.
   ProgressRange(ProgressWatcher* const watcher, double range);
   // Sub-range. Can be recursive.
   ProgressRange(const ProgressRange& parent, double range);
