@@ -53,7 +53,8 @@ WP2Status AreaScoreFunc::Init(const EncoderConfig& config,
                               const ProgressRange& progress) {
   const ProgressRange init_progress(progress, 0.1);
   const ProgressRange score_func_init_progress(progress, 0.1);
-  const ProgressRange default_partition_progress(progress, 0.8);
+  const ProgressRange default_partition_progress(progress, 0.7);
+  const ProgressRange syntax_writer_progress(progress, 0.1);
   WP2_CHECK_STATUS(
       PartitionScoreFunc::Init(config, tile_rect, yuv, gparams, init_progress));
 
@@ -96,7 +97,7 @@ WP2Status AreaScoreFunc::Init(const EncoderConfig& config,
   WP2_CHECK_STATUS(syntax_writer_.Init(
       &dicts_, *config_, *gparams_, yuv, chroma_subsampling, tile_rect,
       num_block_cols_ * num_block_rows_, use_aom_coeffs, /*use_splits=*/false,
-      ProgressRange()));
+      syntax_writer_progress));
   WP2_CHECK_STATUS(syntax_writer_.SetInitialSegmentIds());
   WP2_CHECK_STATUS(syntax_writer_.InitPass());
 
