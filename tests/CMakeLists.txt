@@ -272,6 +272,7 @@ if(GTEST_FOUND AND NOT WP2_BUILD_WP2_JS)
   add_wp2_test(test_trellis 1)
   add_wp2_test(test_utils 1)
   add_wp2_test(test_uv_mode 4)
+  add_wp2_test(test_varint 1)
   add_wp2_test(test_vector 1)
 
   add_wp2_test(lossless/test_color_cache 1)

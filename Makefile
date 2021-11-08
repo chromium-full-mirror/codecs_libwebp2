@@ -716,7 +716,7 @@ CC_TESTS += test_syntax_writer test_anim_frame test_diffusion test_analysis
 CC_TESTS += test_decoder_api test_restoration_filter test_color_precision
 CC_TESTS += test_dsp_speed test_metadata test_bypass test_screen test_anim_skip
 CC_TESTS += test_split_iterator test_slow_lossless_enc test_debug_options
-CC_TESTS += test_average_color
+CC_TESTS += test_average_color test_varint
 # lossless tests:
 CC_TESTS += lossless/test_color_cache lossless/test_palette
 CC_TESTS += lossless/test_group4 lossless/test_histogram
@@ -1240,6 +1240,7 @@ DIST_FILES= \
             tests/test_transf.cc \
             tests/test_utils.cc \
             tests/test_uv_mode.cc \
+            tests/test_varint.cc \
             tests/test_vector.cc \
             tests/test_version.cc \
             tests/testdata \
