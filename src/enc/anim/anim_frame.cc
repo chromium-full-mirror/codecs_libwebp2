@@ -44,6 +44,8 @@ bool AllFramesAreOpaque(const Vector<Frame>& frames) {
 static_assert(GetMaxVarIntLength(0, kMaxFrameDurationMs) <
                   GetMaxVarIntLength(0, kMaxFrameDurationMs + 1),
               "kMaxFrameDurationMs is not optimized to fit in a varint");
+static_assert((uint64_t)kMaxNumFrames * kMaxFrameDurationMs < (1u << 31),
+              "The animation's total duration should fit in 31 bits");
 
 WP2Status WriteANMF(uint32_t image_width, uint32_t image_height,
                     uint32_t duration, const Rectangle& window, bool dispose,

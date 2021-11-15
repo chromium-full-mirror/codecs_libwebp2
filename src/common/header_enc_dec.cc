@@ -14,6 +14,9 @@
 // -----------------------------------------------------------------------------
 //
 // Bitstream/chunk header reader and writer.
+// It is based on https://en.wikipedia.org/wiki/LEB128#Unsigned_LEB128
+// with the removed pessimization described at
+// https://en.wikipedia.org/wiki/Variable-length_quantity#Removing_redundancy
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
@@ -40,11 +43,15 @@ WP2Status TryReadVarInt(DataSource* const data_source, uint32_t min_value,
     WP2_CHECK_OK(data_source->TryGetNext(num_bytes, &bytes),
                  WP2_STATUS_NOT_ENOUGH_DATA);
 
-    const uint8_t byte = bytes[i];  // Current byte. Next byte is 'bytes[i+1]'.
-    read_next_byte = (max_remaining_value > 0xFF && (byte & 0x80));
-    // If there is a next byte, use only 7 bits in current 'byte'.
-    *value |= (uint32_t)(read_next_byte ? (byte & 0x7F) : byte) << (7 * i);
+    // One bit is reserved to know if the next byte should be read, unless the
+    // remaining value fits in this byte.
+    read_next_byte = (max_remaining_value > 0xFF && (bytes[i] & 0x80));
+    // If 'read_next_byte', at least 1 remains, meaning storing 0 is pointless,
+    // so add 1 to the next byte. The following is equivalent to keeping 7 bits
+    // of this byte and adding 1 to the next byte.
+    *value += (uint32_t)bytes[i] << (7 * i);
     max_remaining_value >>= 7;
+    if (read_next_byte) --max_remaining_value;
   }
   *value += min_value;
   WP2_CHECK_OK(*value <= max_value, WP2_STATUS_BITSTREAM_ERROR);
@@ -64,7 +71,9 @@ uint32_t WriteVarInt(uint32_t value, uint32_t min_value, uint32_t max_value,
   while (value > 0x7F && max_value > 0xFF) {
     dst[num_used_bytes++] = (value & 0x7F) | 0x80;
     value >>= 7;
+    --value;  // 'value' is known to be > 0, so avoid literally encoding a 0.
     max_value >>= 7;
+    --max_value;
   }
   dst[num_used_bytes++] = value;
   return num_used_bytes;

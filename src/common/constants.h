@@ -37,7 +37,7 @@ namespace WP2 {
 static constexpr uint32_t kMaxVarIntLength = 4;
 // Maximum value expressible with a variable-length integer (included).
 static constexpr uint32_t kMaxVarInt =
-    (1u << (7 * (kMaxVarIntLength - 1) + 8)) - 1u;  // 29 bits so ~500 MB
+    0x7Fu + (0x80u << 7) + (0x80u << 14) + (0x100u << 21);  // ~514 MB
 static_assert(kMaxChunkSize - 1u <= kMaxVarInt,
               "The maximum chunk size cannot be represented with var ints.");
 

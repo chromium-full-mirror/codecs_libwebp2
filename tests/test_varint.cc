@@ -24,13 +24,12 @@ namespace {
 //------------------------------------------------------------------------------
 
 TEST(VarIntTest, Zero) {
-  uint8_t dst[kMaxVarIntLength];
-  uint32_t decoded_value;
-
   // 0 bit written, 0 bit read.
+  uint8_t dst[kMaxVarIntLength];
   ASSERT_EQ(WriteVarInt(/*value=*/0, /*min_value=*/0, /*max_value=*/0, dst),
             0u);
   ExternalDataSource data_source(dst, 0);
+  uint32_t decoded_value;
   ASSERT_WP2_OK(TryReadVarInt(&data_source, /*min_value=*/0, /*max_value=*/0,
                               &decoded_value));
   ASSERT_EQ(decoded_value, 0u);
@@ -38,8 +37,8 @@ TEST(VarIntTest, Zero) {
 }
 
 TEST(VarIntTest, NumberOfEncodedBytes) {
-  uint8_t dst[kMaxVarIntLength];
   constexpr uint32_t kMin = 0;
+  uint8_t dst[kMaxVarIntLength];
   ASSERT_EQ(WriteVarInt(/*value=*/0, kMin, /*max_value=*/1, dst), 1u);
   ASSERT_EQ(WriteVarInt(/*value=*/1, kMin, /*max_value=*/1, dst), 1u);
   ASSERT_EQ(WriteVarInt(/*value=*/127, kMin, /*max_value=*/255, dst), 1u);
@@ -52,11 +51,10 @@ TEST(VarIntTest, NumberOfEncodedBytes) {
 
 TEST(VarIntTest, EncodedGreaterValueThanMaxDecoded) {
   uint8_t dst[kMaxVarIntLength];
-  uint32_t decoded_value;
-
   const uint32_t num_bytes =
       WriteVarInt(/*value=*/200, /*min_value=*/10, /*max_value=*/202, dst);
   ExternalDataSource data_source(dst, num_bytes);
+  uint32_t decoded_value;
   ASSERT_EQ(TryReadVarInt(&data_source, /*min_value=*/10, /*max_value=*/198,
                           &decoded_value),
             WP2_STATUS_BITSTREAM_ERROR);
@@ -65,9 +63,6 @@ TEST(VarIntTest, EncodedGreaterValueThanMaxDecoded) {
 //------------------------------------------------------------------------------
 
 TEST(VarIntTest, EncodeDecode) {
-  uint8_t dst[kMaxVarIntLength];
-  uint32_t decoded_value;
-
   // clang-format off
   const uint32_t kValues[] =
       {0, 1, 2, 3, 5, 8, 126, 127, 128, 129, 254, 255, 256, 257, 260768,
@@ -81,26 +76,52 @@ TEST(VarIntTest, EncodeDecode) {
       for (size_t value : kValues) {
         if (value < min_value || value > max_value) break;
 
+        uint8_t dst[kMaxVarIntLength];
         const uint32_t num_bytes =
             WriteVarInt(value, min_value, max_value, dst);
         ASSERT_GE(num_bytes, (min_value == max_value) ? 0u : 1u);
         ASSERT_LE(num_bytes, GetMaxVarIntLength(min_value, max_value));
 
-        {
-          ExternalDataSource data_source(dst, num_bytes);
-          ASSERT_WP2_OK(TryReadVarInt(&data_source, min_value, max_value,
-                                      &decoded_value));
-          ASSERT_EQ(decoded_value, value);
-        }
+        ExternalDataSource data_source(dst, num_bytes);
+        uint32_t decoded_value;
+        ASSERT_WP2_OK(
+            TryReadVarInt(&data_source, min_value, max_value, &decoded_value));
+        ASSERT_EQ(decoded_value, value);
+
         for (uint32_t not_enough = 0; not_enough < num_bytes; ++not_enough) {
-          ExternalDataSource data_source(dst, not_enough);
-          ASSERT_EQ(
-              TryReadVarInt(&data_source, min_value, max_value, &decoded_value),
-              WP2_STATUS_NOT_ENOUGH_DATA);
+          ExternalDataSource shorter_data_source(dst, not_enough);
+          ASSERT_EQ(TryReadVarInt(&shorter_data_source, min_value, max_value,
+                                  &decoded_value),
+                    WP2_STATUS_NOT_ENOUGH_DATA);
         }
       }
     }
   }
+}
+
+//------------------------------------------------------------------------------
+
+// Makes sure variable integer encoding is bijective and monotonic.
+// DISABLED because it is slow.
+TEST(DISABLED_VarIntTest, Pessimization) {
+  uint32_t num_values = 0;
+  for (uint64_t buffer = 0; buffer <= std::numeric_limits<uint32_t>::max();
+       ++buffer) {
+    // Skip invalid values (more bytes defined than read).
+    if (buffer & ~0xFFu) buffer |= 0x80u;
+    if (buffer & ~0xFFFFu) buffer |= 0x8000u;
+    if (buffer & ~0xFFFFFFu) buffer |= 0x800000u;
+
+    // Map 'buffer' to a raw byte buffer.
+    ExternalDataSource data_source(reinterpret_cast<uint8_t *>(&buffer),
+                                   sizeof(buffer));
+    uint32_t decoded_value;
+    ASSERT_WP2_OK(TryReadVarInt(&data_source, /*min_value=*/0, kMaxVarInt,
+                                &decoded_value));
+    ASSERT_EQ(decoded_value, num_values);
+    ++num_values;
+  }
+  ASSERT_EQ(num_values, kMaxVarInt + 1);
 }
 
 //------------------------------------------------------------------------------

@@ -46,11 +46,12 @@ uint32_t WriteVarInt(uint32_t value, uint32_t min_value, uint32_t max_value,
                      uint8_t dst[]);
 
 // Returns the maximum number of bytes used by an integer of variable length,
-// given 'min/max_value' and any given value.
+// given 'min/max_value'.
 constexpr uint32_t GetMaxVarIntLength(uint32_t min_value, uint32_t max_value) {
-  return (min_value >= max_value) ? 0 :
-         (min_value + 255 >= max_value) ? 1 :
-         (1 + GetMaxVarIntLength(0, (max_value - min_value) >> 7));
+  return (min_value >= max_value) ? 0
+         : (max_value - min_value <= 0xFFu)
+             ? 1
+             : (1 + GetMaxVarIntLength(0, ((max_value - min_value) >> 7) - 1));
 }
 
 //------------------------------------------------------------------------------
