@@ -413,7 +413,7 @@ bool UnwrapAvif(const uint8_t data[], size_t data_size, Image& image,
   offset_till_codec_bytes = codec_bytes - data;
 
   image.orientation = kOrientationMapping[angle][mirror];
-  image.is_opaque = true;  // TODO(yguyon): Handle alpha
+  image.has_alpha = false;  // TODO(yguyon): Handle alpha
   return true;
 }
 

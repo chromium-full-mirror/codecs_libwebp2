@@ -39,6 +39,8 @@ static constexpr uint32_t kContainerCodecObu = 0x8;  // Full av1-obu bitstream
 static constexpr uint32_t kContainerCodecAv1 = 0x9;  // av1-obu tile group only
 static constexpr uint32_t kContainerCodecWp2 = 0x6;  // WebP2 (unimplemented)
 static constexpr uint32_t kImageDimNumBits = 14;  // Maximum log2 width, height.
+static constexpr uint32_t kContainerHeaderNumBits = 80;       // 10 bytes
+static constexpr uint32_t kContainerHeaderPaddingValue = 15;  // 4 bits
 
 // Maximum (inclusive) size of a data chunk.
 static constexpr uint32_t kMaxChunkSize = 1u << 29;  // ~500 MB
@@ -67,7 +69,7 @@ struct Image {
   Orientation orientation = Orientation::kOriginal;  // To be applied.
 
   Format format = Format::kARGB8;  // Describes 'pixels'.
-  bool is_opaque = false;          // True if no alpha. False has no guarantee.
+  bool has_alpha = false;          // The image is opaque if false.
   uint32_t preview_color = 0;      // Average color. RGB444 format.
 
   Data icc;   // Color profile chunk. Empty if none.
@@ -77,7 +79,6 @@ struct Image {
   bool is_animation = false;  // True if the image is animated (unsupported).
   // For 'is_animation=true' only:
   bool loop_forever = false;      // Play once if false, forever if true.
-  uint32_t background_color = 0;  // ARGB8888 color to dispose the canvas with.
 
   Data pixels;  // Raw samples in 'format'. 'orientation' is not applied.
 };

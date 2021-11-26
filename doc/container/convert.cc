@@ -196,7 +196,7 @@ int main(int argc, const char* argv[]) {
                              ? container::Format::kAYUV12
                              : container::Format::kAYUV10
                        : container::Format::kARGB8;
-    image.is_opaque = true;  // TODO(yguyon): Handle transparency
+    image.has_alpha = false;  // TODO(yguyon): Handle transparency
   }
 
   if (!input_is_container && !input_is_avif && !input_is_obu) {

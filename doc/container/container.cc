@@ -81,7 +81,7 @@ void EncodeRawPixels(const Image& image, Data& data) {
 bool DecodeRawPixels(const uint8_t data[], size_t data_size, Image& image) {
   // TODO(yguyon): Implement if (image.is_animation)
   if (image.format == Format::kARGB8) {
-    if (data_size != image.width * image.height * (image.is_opaque ? 3 : 4)) {
+    if (data_size != image.width * image.height * (image.has_alpha ? 4 : 3)) {
       return false;
     }
     assert(image.pixels.empty());
@@ -106,32 +106,30 @@ void WrapContainer(const Image& image, const EncoderConfig& config,
   header.EncodeUInt(image.width, 1, 1 << kImageDimNumBits);
   header.EncodeUInt(image.height, 1, 1 << kImageDimNumBits);
   header.EncodeUInt(static_cast<uint32_t>(image.orientation), 0, 7);
-  header.EncodeUInt((image.format == Format::kARGB8)    ? 0
-                    : (image.format == Format::kAYUV10) ? 1
-                    : (image.format == Format::kAYUV12) ? 2
-                                                        : 3,
-                    0, 3);
-  header.EncodeBool(image.is_opaque);
+  header.EncodeBool(image.has_alpha);
+  header.EncodeBool(image.is_animation);
+  header.EncodeBool(image.is_animation ? image.loop_forever : false);
   header.EncodeUInt(image.preview_color, 0, (1 << 12) - 1);
   header.EncodeBool(config.create_preview);
   header.EncodeBool(!image.icc.empty());
   header.EncodeBool(!image.xmp.empty());
   header.EncodeBool(!image.exif.empty());
-  header.EncodeBool(image.is_animation);
-  if (image.is_animation) {
-    header.EncodeBool(image.loop_forever);
-    header.EncodeUInt(image.background_color, 0u, 4294967295u);
-  }
-
+  header.EncodeUInt((image.format == Format::kARGB8)    ? 0
+                    : (image.format == Format::kAYUV10) ? 1
+                    : (image.format == Format::kAYUV12) ? 2
+                                                        : 3,
+                    0, 3);
+  header.EncodeUInt(kContainerHeaderPaddingValue, 0, 15);
+  assert(header.GetNumBits() == kContainerHeaderNumBits);
   data.reserve(header.GetNumBytes());
   data.insert(data.end(), header.GetBytes(),
               header.GetBytes() + header.GetNumBytes());
 
-  if (config.create_preview) {
-    abort();  // TODO(yguyon): Implement
-  }
   if (!image.icc.empty()) {
     WriteChunk(image.icc.data(), image.icc.size(), data);
+  }
+  if (config.create_preview) {
+    abort();  // TODO(yguyon): Implement
   }
 
   WriteChunk(codec_bytes, num_codec_bytes, data);
@@ -161,21 +159,21 @@ bool UnwrapContainerHeader(const uint8_t data[], size_t data_size, Image& image,
   image.width = header.DecodeUInt(1, 1 << kImageDimNumBits);
   image.height = header.DecodeUInt(1, 1 << kImageDimNumBits);
   image.orientation = static_cast<Orientation>(header.DecodeUInt(0, 7));
-  const uint32_t format = header.DecodeUInt(0, 3);
-  image.format = (format == 0)   ? Format::kARGB8
-                 : (format == 1) ? Format::kAYUV10
-                 : (format == 2) ? Format::kAYUV12
-                                 : Format::kUnknown;
-  image.is_opaque = header.DecodeBool();
+  image.has_alpha = header.DecodeBool();
+  image.is_animation = header.DecodeBool();
+  image.loop_forever = header.DecodeBool() && image.is_animation;
   image.preview_color = header.DecodeUInt(/*num_bits=*/12);
   has_preview = header.DecodeBool();
   has_icc = header.DecodeBool();
   has_xmp = header.DecodeBool();
   has_exif = header.DecodeBool();
-  image.is_animation = header.DecodeBool();
-  image.loop_forever = image.is_animation ? header.DecodeBool() : false;
-  image.background_color =
-      image.is_animation ? header.DecodeUInt(/*num_bits=*/32) : 0;
+  const uint32_t format = header.DecodeUInt(0, 3);
+  image.format = (format == 0)   ? Format::kARGB8
+                 : (format == 1) ? Format::kAYUV10
+                 : (format == 2) ? Format::kAYUV12
+                                 : Format::kUnknown;
+  if (header.DecodeUInt(0, 15) != kContainerHeaderPaddingValue) return false;
+  assert(header.GetNumReadBits() == kContainerHeaderNumBits);
   num_read_bytes = header.GetNumReadBytes();
   return header.Ok();
 }
@@ -194,8 +192,8 @@ bool UnwrapContainer(const uint8_t data[], size_t data_size, Image& image,
     return false;
   }
 
-  if ((has_preview && !SkipChunk(data, data_size, data_pos)) ||
-      (has_icc && !ReadChunk(data, data_size, data_pos, image.icc))) {
+  if ((has_icc && !ReadChunk(data, data_size, data_pos, image.icc)) ||
+      (has_preview && !SkipChunk(data, data_size, data_pos))) {
     return false;
   }
 
@@ -226,7 +224,7 @@ std::string ContainerHeaderToStr(const uint8_t data[], size_t data_size) {
                                           "90Clockwise",
                                           "FlipTopLeftToBotRgt",
                                           "270Clockwise"};
-  static const char* kFormatStr[] = {"ARGB8", "AYUV10", "Unknown"};
+  static const char* kFormatStr[] = {"ARGB8", "AYUV10", "AYUV12", "Unknown"};
   static const char* kBoolStr[] = {"false", "true"};
 
   std::stringstream ss;
@@ -253,18 +251,15 @@ std::string ContainerHeaderToStr(const uint8_t data[], size_t data_size) {
      << "  width " << image.width << std::endl
      << "  height " << image.height << std::endl
      << "  orientation " << kOrientationStr[orientation] << std::endl
-     << "  format " << kFormatStr[format] << std::endl
-     << "  is_opaque " << kBoolStr[image.is_opaque] << std::endl
+     << "  has_alpha " << kBoolStr[image.has_alpha] << std::endl
+     << "  is_animation " << kBoolStr[image.is_animation] << std::endl
+     << "  loop_forever " << kBoolStr[image.loop_forever] << std::endl
      << "  preview_color " << image.preview_color << std::endl
      << "  has_preview " << kBoolStr[has_preview] << std::endl
      << "  has_icc " << kBoolStr[has_icc] << std::endl
      << "  has_xmp " << kBoolStr[has_xmp] << std::endl
      << "  has_exif " << kBoolStr[has_exif] << std::endl
-     << "  is_animation " << kBoolStr[image.is_animation] << std::endl;
-  if (image.is_animation) {
-    ss << "  loop_forever " << kBoolStr[image.loop_forever] << std::endl
-       << "  background_color " << image.background_color << std::endl;
-  }
+     << "  format " << kFormatStr[format] << std::endl;
   return ss.str();
 }
 

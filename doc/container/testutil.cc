@@ -32,17 +32,16 @@ void VerifyEqual(const Image& a, const Image& b) {
   EXPECT_EQ(a.width, b.width);
   EXPECT_EQ(a.height, b.height);
   EXPECT_EQ(a.orientation, b.orientation);
-  EXPECT_EQ(a.format, b.format);
-  EXPECT_EQ(a.is_opaque, b.is_opaque);
+  EXPECT_EQ(a.has_alpha, b.has_alpha);
+  EXPECT_EQ(a.is_animation, b.is_animation);
+  if (a.is_animation && b.is_animation) {
+    EXPECT_EQ(a.loop_forever, b.loop_forever);
+  }
   EXPECT_EQ(a.preview_color, b.preview_color);
   EXPECT_EQ(a.icc, b.icc);
   EXPECT_EQ(a.xmp, b.xmp);
   EXPECT_EQ(a.exif, b.exif);
-  EXPECT_EQ(a.is_animation, b.is_animation);
-  if (a.is_animation && b.is_animation) {
-    EXPECT_EQ(a.loop_forever, b.loop_forever);
-    EXPECT_EQ(a.background_color, b.background_color);
-  }
+  EXPECT_EQ(a.format, b.format);
   EXPECT_EQ(a.pixels, b.pixels);
 }
 
@@ -56,12 +55,11 @@ Image GenerateRandomImage() {
   input.width = 1000;
   input.height = 1000;
   input.orientation = Orientation::kOriginal;
-  input.format = Format::kARGB8;
-  input.is_opaque = true;
-  input.preview_color = 0x0;
+  input.has_alpha = false;
   input.is_animation = false;
   input.loop_forever = true;
-  input.background_color = 0xFF000000u;
+  input.preview_color = 0x0;
+  input.format = Format::kARGB8;
 
   // Random metadata. The content does not matter.
   for (Data* data : {&input.icc, &input.xmp, &input.exif}) {
@@ -70,7 +68,7 @@ Image GenerateRandomImage() {
   }
 
   // Random pixel values. The content does not matter.
-  input.pixels.resize(input.width * input.height * (input.is_opaque ? 3 : 4));
+  input.pixels.resize(input.width * input.height * (input.has_alpha ? 4 : 3));
   for (uint8_t& byte : input.pixels) byte = random() % 255;
 
   return input;
