@@ -182,7 +182,7 @@ class BitReader : public BitCoder {
 static constexpr uint32_t kMaxVarIntLength = 4;
 // Maximum value expressible with a variable-length integer (included).
 static constexpr uint32_t kMaxVarInt =
-    (1u << (7 * (kMaxVarIntLength - 1) + 8)) - 1u;  // 29 bits
+    0x7Fu + (0x80u << 7) + (0x80u << 14) + (0x100u << 21);  // ~514 MB
 
 void EncodeVarInt(uint32_t value, uint32_t min, uint32_t max, Data& data);
 

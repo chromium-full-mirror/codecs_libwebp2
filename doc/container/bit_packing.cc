@@ -33,6 +33,10 @@ uint32_t GetNumBitsNeeded(uint32_t value) {
 }  // namespace
 
 //------------------------------------------------------------------------------
+// Variable-length integer
+// It is based on https://en.wikipedia.org/wiki/LEB128#Unsigned_LEB128
+// with the removed pessimization described at
+// https://en.wikipedia.org/wiki/Variable-length_quantity#Removing_redundancy
 
 void EncodeVarInt(uint32_t value, uint32_t min, uint32_t max, Data& data) {
   assert(min <= value && value <= max);
@@ -44,7 +48,9 @@ void EncodeVarInt(uint32_t value, uint32_t min, uint32_t max, Data& data) {
     // Use one bit per byte to signal whether another byte is needed.
     data.push_back((value & 0x7F) | 0x80);
     value >>= 7;
+    --value;  // 'value' is known to be > 0, so avoid literally encoding a 0.
     max >>= 7;
+    --max;
   }
   data.push_back(value);
 }
@@ -59,12 +65,15 @@ bool DecodeVarInt(uint32_t min, uint32_t max, const uint8_t data[],
     if (data_pos >= data_size) {
       return false;
     }
-    const uint8_t byte = data[data_pos];
-    read_next_byte = (max_remaining_value > 0xFF && (byte & 0x80));
-    // If there is a next byte, use only 7 bits in current 'byte'.
-    value |= static_cast<uint32_t>(read_next_byte ? (byte & 0x7F) : byte)
-             << (7 * i);
+    // One bit is reserved to know if the next byte should be read, unless the
+    // remaining value fits in this byte.
+    read_next_byte = (max_remaining_value > 0xFF && (data[data_pos] & 0x80));
+    // If 'read_next_byte', at least 1 remains, meaning storing 0 is pointless,
+    // so add 1 to the next byte. The following is equivalent to keeping 7 bits
+    // of this byte and adding 1 to the next byte.
+    value += (uint32_t)data[data_pos] << (7 * i);
     max_remaining_value >>= 7;
+    if (read_next_byte) --max_remaining_value;
   }
   value += min;
   return (value <= max);
