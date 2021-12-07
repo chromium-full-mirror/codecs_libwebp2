@@ -17,14 +17,14 @@
 
 set -ex
 
-if [ "$#" -ge 1 ]; then
+if [[ "$#" -ge 1 ]]; then
   # eval so that the passed in directory can contain variables.
   BINARY_DIR="$(eval echo "$1")"
 else
   # assume "tests" is the current directory
   BINARY_DIR=..
 fi
-if [ "$#" -ge 2 ]; then
+if [[ "$#" -ge 2 ]]; then
   TESTDATA_DIR="$(eval echo "$2")"
 else
   TESTDATA_DIR=./testdata
@@ -47,7 +47,7 @@ do_check_psnr() {
 
 for v in 37 255 1001 65535; do
   min_psnr=41 # low quality only for max_value = 37
-  if [ "x${v}" != "x37" ]; then
+  if [[ "x${v}" != "x37" ]]; then
     min_psnr=99
   fi
   opt=("-q" 100 "-quiet")

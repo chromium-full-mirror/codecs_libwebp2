@@ -17,14 +17,14 @@
 
 set -e
 
-if [ "$#" -ge 1 ]; then
+if [[ "$#" -ge 1 ]]; then
   # eval so that the passed in directory can contain variables.
   BINARY_DIR="$(eval echo "$1")"
 else
   # assume "tests" is the current directory
   BINARY_DIR=..
 fi
-if [ "$#" -ge 2 ]; then
+if [[ "$#" -ge 2 ]]; then
   TESTDATA_DIR="$(eval echo "$2")"
 else
   TESTDATA_DIR=./testdata

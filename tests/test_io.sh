@@ -19,14 +19,14 @@ set -ex
 
 quiet="yes" # change to 'no' if needed
 
-if [ "$#" -ge 1 ]; then
+if [[ "$#" -ge 1 ]]; then
   # eval so that the passed in directory can contain variables.
   BINARY_DIR="$(eval echo "$1")"
 else
   # assume "tests" is the current directory
   BINARY_DIR=..
 fi
-if [ "$#" -ge 2 ]; then
+if [[ "$#" -ge 2 ]]; then
   TESTDATA_DIR="$(eval echo "$2")"
 else
   TESTDATA_DIR=./testdata
@@ -65,7 +65,7 @@ check_roundtrip() {
   "${GET_DISTO}" "${TMP_PGM1}" "${TMP_PGM2}" -exact
   for fmt in ${formats_to_test}; do
     do_cmd "${DWP2}" -quiet -v "${TMP_WP2}" "-${fmt}" -o "${TMP_IMG}.${fmt}"
-    if [ "x${fmt}" != "xppm" ]; then
+    if [[ "x${fmt}" != "xppm" ]]; then
       "${GET_DISTO}" "${TMP_IMG}.${fmt}" "$1" -min "${min_psnr}"
     else # ppm doesn't handle alpha, so psnr is non-sense
       "${GET_DISTO}" "${TMP_IMG}.${fmt}" "$1" -min 2

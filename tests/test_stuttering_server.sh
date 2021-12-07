@@ -18,13 +18,13 @@
 
 set -ex
 
-if [ "$#" -ge 1 ]; then
+if [[ "$#" -ge 1 ]]; then
   # 'eval' so that the passed in directory can contain variables.
   BINARY_DIR="$(eval echo "$1")"
 else
   BINARY_DIR=./tools
 fi
-if [ "$#" -ge 2 ]; then
+if [[ "$#" -ge 2 ]]; then
   TESTDATA_DIR="$(eval echo "$2")"
 else
   TESTDATA_DIR=./testdata
