@@ -18,7 +18,8 @@
 set -xe
 
 # Get the absolute path of the parent directory of this script.
-readonly LIBWEBP2_ROOT="$(realpath "$(dirname "$0")/..")"
+LIBWEBP2_ROOT="$(realpath "$(dirname "$0")/..")"
+readonly LIBWEBP2_ROOT
 readonly WORKSPACE=${WORKSPACE:-"$(mktemp -t webp2.build.XXXX -d)"}
 readonly GOOGLETEST_REPO="https://github.com/google/googletest.git"
 readonly BUILD_DIR="${WORKSPACE}/build"
