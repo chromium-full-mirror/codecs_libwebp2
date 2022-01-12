@@ -94,10 +94,14 @@ static WP2Status FillBorders(const BitstreamFeatures& features,
 
   WP2_CHECK_OK((rgb_output != nullptr) != (yuv_output != nullptr),
                WP2_STATUS_INVALID_PARAMETER);
-  const uint32_t width =
-      (rgb_output != nullptr) ? rgb_output->width() : yuv_output->GetWidth();
-  const uint32_t height =
-      (rgb_output != nullptr) ? rgb_output->height() : yuv_output->GetHeight();
+  uint32_t width, height;
+  if (rgb_output != nullptr) {
+    width = rgb_output->width();
+    height = rgb_output->height();
+  } else {
+    width = yuv_output->GetWidth();
+    height = yuv_output->GetHeight();
+  }
   const Rectangle& window = frame.window;
   assert(window.x + window.width <= width);
   assert(window.y + window.height <= height);
