@@ -56,6 +56,9 @@ class ImageReaderBMP : public ImageReader::Impl {
     const uint32_t offset = ReadLE32(data_ + 10);
     const uint32_t width  = ReadLE32(data_ + 18);
     const uint32_t height = ReadLE32(data_ + 22);
+    WP2_CHECK_OK(height <= kMaxBufferDimension ||
+                 height >= (uint32_t)-kMaxBufferDimension,
+                 WP2_STATUS_BAD_DIMENSION);
     const bool top_down = ((int32_t)height < 0);
     const uint32_t real_height = top_down ? -(int32_t)height : height;
     WP2_CHECK_STATUS(CheckDimensions(width, real_height));
