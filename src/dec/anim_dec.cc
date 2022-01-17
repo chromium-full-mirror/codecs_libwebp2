@@ -92,16 +92,17 @@ static WP2Status FillBorders(const BitstreamFeatures& features,
                              YUVPlane* const yuv_output) {
   if (!frame.dispose) return WP2_STATUS_OK;
 
-  WP2_CHECK_OK((rgb_output != nullptr) != (yuv_output != nullptr),
-               WP2_STATUS_INVALID_PARAMETER);
   uint32_t width, height;
   if (rgb_output != nullptr) {
+    WP2_CHECK_OK(yuv_output == nullptr, WP2_STATUS_INVALID_PARAMETER);
     width = rgb_output->width();
     height = rgb_output->height();
   } else {
+    WP2_CHECK_OK(yuv_output != nullptr, WP2_STATUS_INVALID_PARAMETER);
     width = yuv_output->GetWidth();
     height = yuv_output->GetHeight();
   }
+
   const Rectangle& window = frame.window;
   assert(window.x + window.width <= width);
   assert(window.y + window.height <= height);
@@ -123,7 +124,7 @@ static WP2Status FillBorders(const BitstreamFeatures& features,
       rgb_output->Fill(rgt, features.background_color);
     }
   } else {
-    assert(csp_transform != nullptr);
+    WP2_CHECK_OK(csp_transform != nullptr, WP2_STATUS_INVALID_PARAMETER);
     const Ayuv38b color =
         csp_transform->ToYuv(ToArgb32b(features.background_color));
 

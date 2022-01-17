@@ -197,6 +197,7 @@ class ANSEncBase {
   // range [0, APROBA_MAX_SYMBOL). Returns the symbol.
   uint32_t PutASymbol(uint32_t symbol, ANSAdaptiveSymbol* const asym,
                       WP2_OPT_LABEL) {
+    assert(asym != nullptr);
     PutSymbol(symbol, *asym, label);
     asym->Update(symbol);
     return symbol;
