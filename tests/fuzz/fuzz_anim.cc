@@ -84,9 +84,8 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
           !Compare(original_frames[i], decoded_unoriented, "anim",
                    expected_distortion)) {
         // Uncomment to save the original and decoded frames as PNG files.
-        // testing::SaveBeforeAfter(
-        //     original_frames[i], decoded_unoriented,
-        //     "/tmp/comparison_" + std::to_string(i));
+        // SaveBeforeAfter(original_frames[i], decoded_unoriented,
+        //                 "/tmp/comparison_" + std::to_string(i));
         abort();
       }
     }

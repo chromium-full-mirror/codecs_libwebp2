@@ -186,9 +186,16 @@ float GetExpectedDistortion(float quality, float alpha_quality, int effort) {
 }
 
 float GetExpectedDistortion(const EncoderConfig& encoder_config) {
-  return GetExpectedDistortion(encoder_config.quality,
-                               encoder_config.alpha_quality,
-                               encoder_config.effort);
+  const float expected_distortion = GetExpectedDistortion(
+      encoder_config.quality, encoder_config.alpha_quality,
+      encoder_config.effort);
+  // The following settings may have a dramatic impact on the distortion.
+  if (!std::equal(encoder_config.segment_factors,
+                  encoder_config.segment_factors + kMaxNumSegments,
+                  EncoderConfig::kDefault.segment_factors)) {
+    return std::max(0.f, expected_distortion - 5.f);
+  }
+  return expected_distortion;
 }
 
 namespace {
@@ -516,11 +523,19 @@ namespace {
 
 template <typename Type>
 void PrintSetting(std::ostream& out, Type setting, Type default_setting,
-                  const char setting_name[],
-                  const char setting_type_name[] = "int") {
-  out << std::endl
-      << "config." << setting_name << " = (" << setting_type_name << ")"
-      << static_cast<int>(setting) << ";";
+                  const std::string& setting_name,
+                  const std::string& setting_type_name = "int") {
+  out << std::endl << "config." << setting_name << " = ";
+  if (setting_type_name == "int") {
+    out << static_cast<int>(setting) << ";";
+  } else if (setting_type_name == "float") {
+    out << static_cast<float>(setting) << ";";
+  } else if (setting_type_name == "bool") {
+    out << (static_cast<bool>(setting) ? "true" : "false") << ";";
+  } else {
+    out << "(WP2::" << setting_type_name << ")" << static_cast<int>(setting)
+        << ";";
+  }
   if (setting != default_setting) {
     out << "  // Default is " << static_cast<int>(default_setting);
   }
@@ -530,12 +545,14 @@ void PrintSetting(std::ostream& out, Type setting, Type default_setting,
 
 std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& c) {
   const WP2::EncoderConfig kD = WP2::EncoderConfig::kDefault;
-  out << std::endl << "EncoderConfig config = EncoderConfig::kDefault;";
-  PrintSetting(out, c.quality, kD.quality, "quality");
+  out << std::endl << "WP2::EncoderConfig config;";
+  PrintSetting(out, c.quality, kD.quality, "quality", "float");
   PrintSetting(out, c.target_size, kD.target_size, "target_size");
-  PrintSetting(out, c.target_psnr, kD.target_psnr, "target_psnr");
-  PrintSetting(out, c.alpha_quality, kD.alpha_quality, "alpha_quality");
+  PrintSetting(out, c.target_psnr, kD.target_psnr, "target_psnr", "float");
+  PrintSetting(out, c.alpha_quality, kD.alpha_quality, "alpha_quality",
+               "float");
   PrintSetting(out, c.effort, kD.effort, "effort");
+  PrintSetting(out, c.use_av1, kD.use_av1, "use_av1", "bool");
   PrintSetting(out, c.decoding_orientation, kD.decoding_orientation,
                "decoding_orientation", "Orientation");
   PrintSetting(out, c.create_preview, kD.create_preview, "create_preview",
@@ -546,6 +563,16 @@ std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& c) {
   PrintSetting(out, c.sns, kD.sns, "sns", "float");
   PrintSetting(out, c.error_diffusion, kD.error_diffusion, "error_diffusion");
   PrintSetting(out, c.segments, kD.segments, "segments");
+  PrintSetting(out, c.segment_id_mode, kD.segment_id_mode, "segment_id_mode",
+               "EncoderConfig::SegmentIdMode");
+  for (uint32_t i = 0;
+       i < sizeof(c.segment_factors) / sizeof(c.segment_factors[0]); ++i) {
+    PrintSetting(out, c.segment_factors[i], kD.segment_factors[i],
+                 "segment_factors[" + std::to_string(i) + "]", "float");
+  }
+  PrintSetting(out, c.enable_alt_tuning, kD.enable_alt_tuning,
+               "enable_alt_tuning", "bool");
+  PrintSetting(out, c.tile_shape, kD.tile_shape, "tile_shape", "TileShape");
   PrintSetting(out, c.partition_method, kD.partition_method, "partition_method",
                "PartitionMethod");
   PrintSetting(out, c.partition_set, kD.partition_set, "partition_set",
@@ -560,6 +587,8 @@ std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& c) {
   PrintSetting(out, c.use_random_matrix, kD.use_random_matrix,
                "use_random_matrix", "bool");
   PrintSetting(out, c.store_grain, kD.store_grain, "store_grain", "bool");
+  PrintSetting(out, c.tune_perceptual, kD.tune_perceptual, "tune_perceptual",
+               "bool");
   PrintSetting(out, c.use_delta_palette, kD.use_delta_palette,
                "use_delta_palette", "bool");
   PrintSetting(out, c.thread_level, kD.thread_level, "thread_level");
