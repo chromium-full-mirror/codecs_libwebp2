@@ -126,8 +126,10 @@ WP2Status ToYCbCr(const ArgbBuffer& rgb, BitDepth ycbcr_bit_depth,
                   const SamplingTaps* const downsample, YUVPlane* const ycbcr);
 
 // Expects 'buffer' in MPEG-2 YCbCr color space.
-WP2Status WriteY4M(const YUVPlane& buffer, BitDepth bit_depth,
-                   FILE* const fout);
+// If write_header is false, only the raw buffer is written. This is sometimes
+// referred to a .yuv file.
+WP2Status WriteY4M(const YUVPlane& buffer, BitDepth bit_depth, FILE* const fout,
+                   bool write_header = true);
 
 //------------------------------------------------------------------------------
 

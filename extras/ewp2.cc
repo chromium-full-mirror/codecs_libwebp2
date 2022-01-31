@@ -44,8 +44,12 @@ namespace {
 
 void Help() {
   ProgramOptions opt;
+  opt.Add("To and from .y4m tool.");
   opt.Add("Usage:");
   opt.Add("  ewp2 in_file [-o out_file] [options]");
+  opt.Add(
+      "If out_file has a .yuv extension, no y4m header is added and the "
+      "chroma sampling is 4:2:0.");
   opt.Add("");
   opt.Add("Options valid if 'out_file' has the .wp2 or .webp extension:");
   opt.Add("-q <float>",
@@ -267,8 +271,7 @@ int main(int argc, char* argv[]) {
 
   if (verbose) printf("Decoding '%s'\n", in_path.c_str());
 
-  if (in_format == FileFormat::WP2 && (out_format == FileFormat::Y4M_444 ||
-                                       out_format == FileFormat::Y4M_420)) {
+  if (in_format == FileFormat::WP2 && IsCustomColorSpace(out_format)) {
     // Bypass conversion to and from RGB by decoding directly into YCbCr.
     WP2::BitstreamFeatures features;
     CHECK_STATUS(features.Read(in_data.bytes, in_data.size),
@@ -318,7 +321,8 @@ int main(int argc, char* argv[]) {
       CHECK_TRUE(fout != nullptr, "Error! Failed to write file '%s'.",
                  out_path.c_str());
       const WP2Status status =
-          WP2::WriteY4M(ccsp_buffer, y4m_enc_bit_depth, fout);
+          WP2::WriteY4M(ccsp_buffer, y4m_enc_bit_depth, fout,
+                        /*write_header=*/(out_format != FileFormat::YUV_420));
       if (file_size_ptr != nullptr) *file_size_ptr = std::ftell(fout);
       if (fout != stdout) fclose(fout);  // Close file even if error.
       CHECK_STATUS(status, "Error! Failed to write image '%s'.",

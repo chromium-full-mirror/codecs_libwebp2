@@ -248,17 +248,18 @@ WP2Status SaveImage(const YUVPlane& buffer, const CSPMtx& ccsp_to_rgb,
                                     : WP2_STATUS_INVALID_PARAMETER);
 
   WP2Status status;
-  if (format == FileFormat::Y4M_420 || format == FileFormat::Y4M_444) {
+  if (IsCustomColorSpace(format)) {
     if (!metadata.IsEmpty()) {
       status = WP2_STATUS_INVALID_CONFIGURATION;
     } else {
       const SamplingTaps* const downsampling =
-          (format == FileFormat::Y4M_420) ? &filter : nullptr;
+          IsChromaSubsampled(format) ? &filter : nullptr;
       YUVPlane ycbcr;
       status =
           ToYCbCr(buffer, ccsp_to_rgb, file_num_bits, downsampling, &ycbcr);
       if (status == WP2_STATUS_OK) {
-        status = WriteY4M(ycbcr, file_num_bits, fout);
+        status = WriteY4M(ycbcr, file_num_bits, fout,
+                          /*write_header=*/(format != FileFormat::YUV_420));
         if (file_size != nullptr) *file_size = std::ftell(fout);
       }
     }

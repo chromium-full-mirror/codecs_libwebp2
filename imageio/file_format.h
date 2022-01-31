@@ -33,10 +33,11 @@ enum class FileFormat {
   GIF,
   BMP,
   PAM,
-  PGM,      // Y/U/V(/A) planes side-by-side
+  PGM,  // Y/U/V(/A) planes side-by-side
   PPM,
   Y4M_420,  // Subsampled chroma (Cb and Cr planes are half width, half height).
   Y4M_444,  // Full resolution for all Y, Cb and Cr planes. No alpha.
+  YUV_420,  // Raw: y4m 420 with no header.
   AUTO,  // Detect format automatically (by parsing file extension or header).
   UNSUPPORTED
 };

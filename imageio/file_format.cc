@@ -28,8 +28,9 @@ namespace WP2 {
 
 const char* GetFileFormatStr(FileFormat file_format) {
   static constexpr const char* const kFileFormatStr[] = {
-      "PNG", "JPEG", "WEBP", "WP2",     "TIFF",    "GIF",  "BMP",
-      "PAM", "PGM",  "PPM",  "Y4M_420", "Y4M_444", "AUTO", "UNSUPPORTED"};
+      "PNG",     "JPEG",    "WEBP",    "WP2",  "TIFF",
+      "GIF",     "BMP",     "PAM",     "PGM",  "PPM",
+      "Y4M_420", "Y4M_444", "YUV_420", "AUTO", "UNSUPPORTED"};
   STATIC_ASSERT_ARRAY_SIZE(kFileFormatStr, (int)FileFormat::UNSUPPORTED + 1);
   return kFileFormatStr[(int)file_format];
 }
@@ -56,6 +57,7 @@ constexpr struct FormatExtension {
     {FileFormat::WP2, "wp2"},
     {FileFormat::Y4M_420, "y4m"},
     {FileFormat::Y4M_444, "y4m"},
+    {FileFormat::YUV_420, "yuv"},
 };
 
 bool IsExtension(const char* const str,
@@ -96,11 +98,13 @@ const char* GetExtensionFromFormat(FileFormat format) {
 
 bool IsCustomColorSpace(FileFormat file_format) {
   return (file_format == FileFormat::Y4M_420 ||
-          file_format == FileFormat::Y4M_444);
+          file_format == FileFormat::Y4M_444 ||
+          file_format == FileFormat::YUV_420);
 }
 
 bool IsChromaSubsampled(FileFormat file_format) {
-  return (file_format == FileFormat::Y4M_420);
+  return (file_format == FileFormat::Y4M_420 ||
+          file_format == FileFormat::YUV_420);
 }
 
 }  // namespace WP2

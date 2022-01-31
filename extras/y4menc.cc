@@ -95,8 +95,8 @@ WP2Status ToYCbCr(const ArgbBuffer& rgb, BitDepth ycbcr_bit_depth,
 
 //------------------------------------------------------------------------------
 
-WP2Status WriteY4M(const YUVPlane& buffer, BitDepth bit_depth,
-                   FILE* const fout) {
+WP2Status WriteY4M(const YUVPlane& buffer, BitDepth bit_depth, FILE* const fout,
+                   bool write_header) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!buffer.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK((bit_depth.num_bits >= CCSPImageReader::kMinBitDepth &&
@@ -104,15 +104,22 @@ WP2Status WriteY4M(const YUVPlane& buffer, BitDepth bit_depth,
                WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(!bit_depth.is_signed, WP2_STATUS_INVALID_PARAMETER);
 
-  const char* const color_space_tag = buffer.IsDownsampled() ? "C420" : "C444";
-  constexpr const char* const kBitDepthTag[] = {"", "p9", "p10", "p11", "p12"};
-  STATIC_ASSERT_ARRAY_SIZE(kBitDepthTag, CCSPImageReader::kMaxBitDepth -
-                                             CCSPImageReader::kMinBitDepth + 1);
-  const char* const bit_depth_tag =
-      kBitDepthTag[bit_depth.num_bits - CCSPImageReader::kMinBitDepth];
+  if (write_header) {
+    const char* const color_space_tag =
+        buffer.IsDownsampled() ? "C420" : "C444";
+    constexpr const char* const kBitDepthTag[] = {"", "p9", "p10", "p11",
+                                                  "p12"};
+    STATIC_ASSERT_ARRAY_SIZE(
+        kBitDepthTag,
+        CCSPImageReader::kMaxBitDepth - CCSPImageReader::kMinBitDepth + 1);
+    const char* const bit_depth_tag =
+        kBitDepthTag[bit_depth.num_bits - CCSPImageReader::kMinBitDepth];
 
-  fprintf(fout, "YUV4MPEG2 W%u H%u F25:1 Ip A1:1 %s%s\nFRAME\n", buffer.Y.w_,
-          buffer.Y.h_, color_space_tag, bit_depth_tag);
+    fprintf(fout, "YUV4MPEG2 W%u H%u F25:1 Ip A1:1 %s%s\nFRAME\n", buffer.Y.w_,
+            buffer.Y.h_, color_space_tag, bit_depth_tag);
+  } else {
+    WP2_CHECK_OK(buffer.IsDownsampled(), WP2_STATUS_INVALID_PARAMETER);
+  }
 
   // 'buffer' should be in YCbCr color space from unsigned alpha-premultiplied
   // RGB samples, with meaningful values of Y in [16:235] and Cb, Cr in

@@ -32,6 +32,7 @@ fi
 
 EWP2=${BINARY_DIR}/ewp2
 TMP_Y4M=/tmp/test_enc_ewp2.y4m
+TMP_YUV=/tmp/test_enc_ewp2.yuv
 TMP_WP2=/tmp/test_enc_ewp2.wp2
 
 # Encode/decode wp2 from/to 4:4:4 with 12 bits
@@ -47,6 +48,9 @@ ${EWP2} "${TMP_WP2}" -o "${TMP_Y4M}" -y4m_depth 8 -y4m_420 -sampling nearest \
   -psnr "${TESTDATA_DIR}/ccsp/source3_64x48_C420p8.y4m" 55.0
 ${EWP2} "${TMP_WP2}" -o "${TMP_Y4M}" -y4m_depth 8 -y4m_420 -sampling nearest \
   -ssim "${TESTDATA_DIR}/ccsp/source3_64x48_C420p8.y4m" 35.0
+
+# Encode to raw .yuv
+${EWP2} "${TMP_WP2}" -o "${TMP_YUV}"
 
 echo "TEST OK"
 exit 0
