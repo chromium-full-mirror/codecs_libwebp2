@@ -86,7 +86,7 @@ void LimitSetupForBigImages(const Data& bitstream,
   const uint32_t num_decodings =
       WP2::DivCeil(bitstream.size, setup->incr_size_step);
   // The threshold was found empirically.
-  const uint32_t max_num_tiles = WP2::DivCeil(512u, num_decodings);
+  const uint32_t max_num_tiles = WP2::DivRound(1024u, num_decodings);
   if (num_tiles > max_num_tiles) {
     setup->compare_with_single_chunk = false;
     if (setup->decoder_type == DecoderType::kSwappingCustom) {
