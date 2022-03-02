@@ -431,10 +431,12 @@ class IncrementalDecodingTester {
         features != nullptr && !features->is_animation &&
         config_.incremental_mode ==
             DecoderConfig::IncrementalMode::PARTIAL_TILE_CONTEXT) {
+      // Consider the "raw height" and not the final, maybe rotated, height.
+      const bool is_sideways = (OrientateWidth(features->orientation,
+                                               /*width=*/1, /*height=*/2) == 2);
       const uint32_t num_lines =
-          (features->raw_width != features->width)
-              ? decoded_area.width - previous_decoded_area_.width
-              : decoded_area.height - previous_decoded_area_.height;
+          is_sideways ? decoded_area.width - previous_decoded_area_.width
+                      : decoded_area.height - previous_decoded_area_.height;
       // Incremental decoding should not be able to finish more than two rows
       // of blocks in 2 bytes or fewer for lossy and a tile for lossless.
       uint32_t max_num_lines =
