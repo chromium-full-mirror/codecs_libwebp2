@@ -68,7 +68,7 @@ int16_t CalcMedian(int16_t* ctx_to_find_median, const int32_t size) {
 
   // ctx_to_find_median has an even size
   const int16_t left_median =
-      *std::max_element(ctx_to_find_median, median_position - 1);
+      *std::max_element(ctx_to_find_median, median_position);
   const int16_t right_median = *median_position;
 
   return (left_median + right_median) / 2;
