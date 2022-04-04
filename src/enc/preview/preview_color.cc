@@ -61,7 +61,7 @@ class ColorAccumulator {
     for (int c = 0; c < 4; ++c) {
       if (sum_[c] != other.sum_[c]) return (sum_[c] > other.sum_[c]);
     }
-    return ((uintptr_t)this < (uintptr_t)&other);  // last resort
+    return false;
   }
 
  private:
