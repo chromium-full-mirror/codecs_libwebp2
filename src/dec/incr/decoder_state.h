@@ -67,7 +67,7 @@ struct Decoder::State : public WP2Allocable {
       : data_source(input), progress(config.progress_hook) {}
 
  public:
-  virtual ~State() = default;
+  virtual ~State();
 
   static constexpr size_t kUnknown = 0;
 
@@ -129,6 +129,9 @@ struct Decoder::State : public WP2Allocable {
   Vector<TileDecoder> workers;        // Max one per tile.
   DataSource* data_source = nullptr;  // Main input, buffer can change.
 
+  // Used to decode parts of a tile, if not null.
+  std::unique_ptr<PartialTileDecoder> partial_tile_decoder;
+
   // Temp buffer to store the non-oriented Argb32 output.
   ArgbBuffer raw_output_buffer = ArgbBuffer(WP2_Argb_32);
   // Whether we must use a temporary buffer for this whole animation
@@ -155,9 +158,6 @@ struct Decoder::State : public WP2Allocable {
   // Discarded frames will not have their (all or remaining) pixels decoded.
   // A skipped frame is discarded if not needed for the next non-skipped frame.
   uint32_t discard_frames_before_index = 0;
-
-  // Used to decode parts of a tile, if not null. Must be destroyed first.
-  std::unique_ptr<PartialTileDecoder> partial_tile_decoder;
 
   // Decoding advancement.
   ProgressWatcher progress;  // Can generate WP2_STATUS_USER_ABORT.

@@ -23,6 +23,11 @@
 
 namespace WP2 {
 
+Decoder::State::~State() {
+  // It must be destroyed first because it may use other members of State.
+  partial_tile_decoder.reset();
+}
+
 //------------------------------------------------------------------------------
 
 void Decoder::State::Rewind() {
