@@ -163,7 +163,7 @@ void GenerateRandomEnc(uint32_t n_elements,
         assert(false);
     }
   }
-  if (has_symbols) {
+  if (has_symbols && dicts != nullptr) {
     EXPECT_WP2_OK(dicts->ToCodingTable());
   }
   for (uint32_t i = size_ini; i < tokens->size(); ++i) {
@@ -182,7 +182,7 @@ void GenerateRandomEnc(uint32_t n_elements,
         break;
       }
       case Token::ASymbol: {
-        enc->PutASymbol(tok.second, asymbol, "asymbol");
+        if (asymbol != nullptr) enc->PutASymbol(tok.second, asymbol, "asymbol");
         break;
       }
       case Token::Symbol: {

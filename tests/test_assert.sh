@@ -41,7 +41,7 @@ fi
 
 for i in $(
   seq -4 -1
-  seq 1 8
+  seq 1 7
 ); do
   printf "Case %s ... " "${i}"
   # Check that the binary does not crash.

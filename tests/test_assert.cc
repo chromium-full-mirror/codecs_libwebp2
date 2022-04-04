@@ -75,17 +75,13 @@ int main(int argc, const char* argv[]) {
       enc.PutUValue(1 << IO_BITS, IO_BITS + 1, "uvalue");
       break;
     case 5:
-      // Dict has to be valid.
-      enc.PutASymbol(0, (WP2::ANSAdaptiveSymbol*)nullptr, "id");
-      break;
-    case 6:
       // Proba should not be bigger than 1.
       enc.PutBit(1, 2, 1, "bit");
       break;
-    case 7:
+    case 6:
       enc.PutUValue(1, 0, "zero");
       break;
-    case 8:
+    case 7:
       enc.PutUValue(1, WP2::kANSMaxUniformBits + 1, "zero");
       break;
     default:
