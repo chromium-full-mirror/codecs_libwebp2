@@ -212,7 +212,7 @@ class ImageReaderTIFF : public ImageReader::Impl {
       }
       return WP2_STATUS_BITSTREAM_ERROR;
     }
-    if (samples_per_px < 3 || samples_per_px > 4) {
+    if (!(samples_per_px == 1 || samples_per_px == 3 || samples_per_px == 4)) {
       if (log_level_ >= LogLevel::DEFAULT) {
         fprintf(stderr, "Error! Unsupported TIFF samples-per-pixel %u\n",
                 samples_per_px);
