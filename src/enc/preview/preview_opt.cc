@@ -239,7 +239,7 @@ WP2Status PreviewDataEnc::RemoveColor(UniformIntDistribution* const rnd) {
 WP2Status PreviewData::RemoveDuplicateVertices() {
   if (vertices_.empty()) return WP2_STATUS_OK;
   // Sort by 'y' then by 'x' for easier duplicate check.
-  std::sort(vertices_.begin(), vertices_.end());
+  std::stable_sort(vertices_.begin(), vertices_.end());
 
   uint32_t last = 0;
   for (uint32_t i = 1; i < vertices_.size(); ++i) {
