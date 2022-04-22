@@ -96,7 +96,7 @@ int32_t BitUnpacker::ReadSBits(uint32_t num_bits, WP2_OPT_LABEL) {
 }
 
 uint32_t BitUnpacker::ReadVarUInt(uint32_t min_value, uint32_t max_value,
-                                WP2_OPT_LABEL) {
+                                  WP2_OPT_LABEL) {
   assert(min_value <= max_value);
   if (status_ != WP2_STATUS_OK) return 0;
   if (min_value == max_value) {
@@ -114,7 +114,7 @@ uint32_t BitUnpacker::ReadVarUInt(uint32_t min_value, uint32_t max_value,
 }
 
 Rectangle BitUnpacker::ReadRect(uint32_t canvas_width, uint32_t canvas_height,
-                              WP2_OPT_LABEL) {
+                                WP2_OPT_LABEL) {
   assert(canvas_width > 0 && canvas_height > 0);
   // Read reversed width and height first, as these tend to be near 'canvas_*'.
   Rectangle rect;

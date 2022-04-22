@@ -87,7 +87,6 @@ void Help() {
   opt.Add("-crop <x> <y> <w> <h>",
           "Crop picture with given rectangle. Alternatively, one can use "
           "-crop_source to only crop the reference file (second argument).");
-  opt.Add("-gray", "use grayscale for difference map (-scale)");
   opt.Add("-ref <string>", "specify reference file for bpp calculation");
   opt.Add("-prefix <string>", "add a prefix label");
   opt.Add("-suffix <string>", "add a suffix label");
