@@ -298,9 +298,9 @@ class ImageReaderPNG : public ImageReader::Impl {
     tmp_rgb_ = nullptr;
     had_malloc_error_ = false;
 
-    png_error_ptr error_function =
+    volatile png_error_ptr error_function =
         (log_level_ >= LogLevel::DEFAULT) ? ErrorFunction : ErrorFunctionNoLog;
-    png_structp const png =
+    volatile png_structp const png =
         png_create_read_struct_2(PNG_LIBPNG_VER_STRING, NULL, error_function,
                                  NULL, (png_voidp)&had_malloc_error_,
                                  MallocFunction, FreeFunction);
