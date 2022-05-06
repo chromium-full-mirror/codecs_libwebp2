@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <string>
 
 #include "imageio/image_dec.h"
@@ -27,6 +28,7 @@
 #include "imageio/imageio_util.h"
 #include "include/helpers.h"
 #include "src/utils/plane.h"
+#include "src/utils/random.h"
 #include "src/utils/wiener.h"
 #include "src/wp2/base.h"
 
@@ -35,8 +37,11 @@
 namespace WP2 {
 namespace {
 
-int16_t GetRand(int min, int max) {
-  return (min < max) ? (int16_t)(min + (random() % (max - min))) : (int16_t)0;
+int16_t GetRand(int min, int max, UniformIntDistribution& r) {
+  return (min < max)
+           ? (int16_t)(min + (r.Get(0, std::numeric_limits<int32_t>::max()) %
+                              (max - min)))
+           : (int16_t)0;
 }
 
 void FindBestUpsampling(const Plane16& src, const Plane16& ref, float scale,
@@ -105,32 +110,33 @@ void Upsample(const Plane16& uv, int16_t w[4], Plane16* const dst) {
 // test for recovering pure gradients (w/ noise)
 
 template <int kNum> void DoTestGradient() {
+  UniformIntDistribution r;
   for (int n = 0; n < 100; ++n) {
     const int16_t max_range = (int16_t)sqrt(32768. / (kNum + 1));
-    const int16_t range = GetRand(2, max_range);
+    const int16_t range = GetRand(2, max_range, r);
     EXPECT_LT(range * range * (kNum + 1), 32768)
          << "range overflows 16b signed calculations!";
 
     int16_t alpha[kNum + 1];
-    for (size_t i = 0; i < kNum; ++i) alpha[i] = GetRand(-range, range);
+    for (size_t i = 0; i < kNum; ++i) alpha[i] = GetRand(-range, range, r);
 
     // average component:
-    alpha[kNum] = GetRand(-range * range, range * range);
+    alpha[kNum] = GetRand(-range * range, range * range, r);
 
-    const int16_t noise_range = GetRand(0, range / 4);  // add some noise
-    const size_t num_samples = (size_t)(100 + GetRand(0, 500));
+    const int16_t noise_range = GetRand(0, range / 4, r);  // add some noise
+    const size_t num_samples = (size_t)(100 + GetRand(0, 500, r));
 
     WienerOptimizer<kNum, 1> opt;
     for (size_t m = 0; m < num_samples; ++m) {
       int16_t context[kNum];
-      for (size_t i = 0; i < kNum; ++i) context[i] = GetRand(-range, range);
+      for (size_t i = 0; i < kNum; ++i) context[i] = GetRand(-range, range, r);
       int16_t value[1] = {0};
       // gradient component
       for (size_t i = 0; i < kNum; ++i) value[0] += context[i] * alpha[i];
       // DC component
       value[0] += alpha[kNum];
       // add noise
-      value[0] += GetRand(-noise_range, noise_range);
+      value[0] += GetRand(-noise_range, noise_range, r);
       opt.AddSample(context, value);
     }
 
