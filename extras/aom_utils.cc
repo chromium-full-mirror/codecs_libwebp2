@@ -971,7 +971,7 @@ WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
 
 WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
                       ArgbBuffer* const decoded, std::string* const out,
-                      double timing[], std::vector<Rectangle>* const blocks,
+                      double timing[2], std::vector<Rectangle>* const blocks,
                       std::vector<Rectangle>* const transforms,
                       QuantAV1* const quant) {
   if (params.pass < 2) {
@@ -999,7 +999,7 @@ WP2Status DecodeAV1WithLibaom(const std::string& bitstream,
 #else
 
 WP2Status CompressAV1(const ArgbBuffer&, const ParamsAV1&, ArgbBuffer* const,
-                      std::string* const, double[],
+                      std::string* const, double[2],
                       std::vector<Rectangle>* const,
                       std::vector<Rectangle>* const, QuantAV1* const) {
   fprintf(stderr, "CompressAV1: AOM support not enabled at compile time.\n");
