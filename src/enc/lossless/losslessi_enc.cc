@@ -422,13 +422,21 @@ WP2Status Encoder::EncodeImageInternal(
     const LosslessSymbolsInfo& symbols_info_init, float* const cost_best,
     WP2::ANSEnc* const enc_init, EncodeInfo* const encode_info,
     WP2::ANSDictionaries* const dicts_init) {
-  // First, check whether we use Group4 or anything else.
+  // First, check whether Group4 is used or anything else.
   const TransformType* const end =
       config.transforms + kPossibleTransformCombinationSize;
   if (std::find(config.transforms, end, TransformType::kGroup4) != end) {
     WP2_CHECK_STATUS(Group4Encode(
         argb_buffer_, palette_.Size(), config.group4_use_move_to_front,
         config_.effort, progress, enc_init, encode_info));
+    return WP2_STATUS_OK;
+  }
+
+  // Check if LZW is used.
+  if (std::find(config.transforms, end, TransformType::kLZW) != end) {
+    WP2_CHECK_STATUS(LZWEncode(argb_buffer_, palette_, config_.effort, enc_init,
+                               encode_info));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.));
     return WP2_STATUS_OK;
   }
 
@@ -793,11 +801,11 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
     const CrunchConfig& config, const CrunchConfig* const config_prev,
     const ProgressRange progress, LosslessSymbolsInfo* const symbols_info,
     WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts,
-    bool* const is_group4) {
+    EncodingAlgorithm* const encoding_algorithm) {
   // We only need to copy the original image if we are not building upon a
   // previous transformed image.
   bool need_copy = (config_prev == nullptr);
-  *is_group4 = false;
+  *encoding_algorithm = EncodingAlgorithm::kClassical;
 
   // Get the number of transforms and previous transforms.
   const uint32_t num_transforms = config.GetNumTransforms();
@@ -846,7 +854,23 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
         } else {
           assert(!config.group4_use_move_to_front);
         }
-        *is_group4 = true;
+        *encoding_algorithm = EncodingAlgorithm::kGroup4;
+        return WP2_STATUS_OK;
+      }
+      case TransformType::kLZW: {
+        WP2_CHECK_STATUS(MakeInputImageCopy(config));
+        // LZW cannot be used with other transforms.
+        assert(num_transforms == 1);
+        assert(palette_.Size() >= 2);
+        WP2_CHECK_STATUS(palette_.Write(progress_local, enc, dicts, this));
+        // 'lzw_capacity' must be at least (number of colors + 1)
+        // since being equal would produce an useless cache for segments.
+        const uint32_t lzw_capacity =
+            std::max(kLZWCapacity, palette_.Size() + 1);
+        assert(lzw_capacity <= kLZWCapacityMax);
+        enc->PutRange(lzw_capacity, palette_.Size() + 1, kLZWCapacityMax,
+                      "capacity");
+        *encoding_algorithm = EncodingAlgorithm::kLZW;
         return WP2_STATUS_OK;
       }
       case TransformType::kYCoCgR:
@@ -918,23 +942,27 @@ WP2Status Encoder::ApplyAndWriteTransforms(
                                        std::numeric_limits<uint32_t>::max()));
     WP2::swap(cached_transforms_dict_, *dicts);
   }
-  bool is_group4;
+  EncodingAlgorithm encoding_algorithm;
   if (cache_data) {
     // First store to cached_transforms_core_ for future use.
     cached_transforms_enc_.Reset();
     cached_transforms_enc_.CopyDebugPrefix(*enc);
-    WP2_CHECK_STATUS(
-        DoApplyAndWriteTransforms(config, config_prev, progress, symbols_info,
-                                  &cached_transforms_enc_, dicts, &is_group4));
+    WP2_CHECK_STATUS(DoApplyAndWriteTransforms(
+        config, config_prev, progress, symbols_info, &cached_transforms_enc_,
+        dicts, &encoding_algorithm));
     WP2_CHECK_STATUS(cached_transforms_dict_.CopyFrom(*dicts));
     // Then append cached_transforms_core_ to the output encoder.
     WP2_CHECK_STATUS(enc->AppendTokens(cached_transforms_enc_, 0,
                                        std::numeric_limits<uint32_t>::max()));
   } else {
-    WP2_CHECK_STATUS(DoApplyAndWriteTransforms(
-        config, config_prev, progress, symbols_info, enc, dicts, &is_group4));
+    WP2_CHECK_STATUS(DoApplyAndWriteTransforms(config, config_prev, progress,
+                                               symbols_info, enc, dicts,
+                                               &encoding_algorithm));
   }
-  if (is_group4) return WP2_STATUS_OK;
+  if (encoding_algorithm == EncodingAlgorithm::kGroup4 ||
+      encoding_algorithm == EncodingAlgorithm::kLZW) {
+    return WP2_STATUS_OK;
+  }
 
   if (has_alpha_) {
     if (WP2IsPremultiplied(pic_.format())) {
@@ -1080,7 +1108,8 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
     // configuration has the same first transforms.
     bool cache_transforms = false;
     if (i_config + 1 < crunch_configs.size() &&
-        config.transforms[0] != TransformType::kGroup4) {
+        config.transforms[0] != TransformType::kGroup4 &&
+        config.transforms[0] != TransformType::kLZW) {
       cache_transforms = config.ShouldBeCachedFor(crunch_configs[i_config + 1]);
     }
     WP2_CHECK_STATUS(encoder.ApplyAndWriteTransforms(

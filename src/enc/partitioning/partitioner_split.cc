@@ -174,6 +174,7 @@ WP2Status SplitPartitioner::GetBestPartition(const ProgressRange& progress,
       assert((Occupy(block), true));
       assert(max_num_blocks_left >= block.w() * block.h());
       max_num_blocks_left -= block.w() * block.h();
+      (void)max_num_blocks_left;
       assert(block.dim() != BLK_LAST);
 
       WP2_CHECK_STATUS(progress.AdvanceBy(1. * block.area() / max_num_blocks));

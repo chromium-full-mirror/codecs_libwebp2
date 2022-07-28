@@ -14,8 +14,13 @@
 
 // Unit tests for predictors.
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <memory>
+#include <vector>
+
 #include "examples/example_utils.h"
-#include "imageio/image_enc.h"
 #include "include/helpers.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/predictor.h"
@@ -34,9 +39,10 @@ class ContextCacheForTest : public ContextCache {
  public:
   ContextCacheForTest() { check_cache_ = false; }
 
-  void SetContext(Channel channel, const std::vector<int16_t> context) {
+  void SetContext(Channel channel,
+                  const std::array<int16_t, kContextSize>& context) {
     for (uint32_t i = 0; i < kNumContextType; ++i) {
-      std::copy(&context[0], &context[kContextSize], large_[channel][i]);
+      std::copy(context.begin(), context.end(), large_[channel][i]);
       is_computed_large_[channel][i] = true;
     }
   }

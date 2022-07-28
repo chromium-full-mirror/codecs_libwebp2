@@ -205,7 +205,6 @@ WP2Status PreviewFromText(const std::string& in, PreviewData* preview) {
                WP2_STATUS_BAD_READ);
   WP2_CHECK_OK(!s.eof(), WP2_STATUS_BAD_READ);
 
-  bool has_alpha = false;
   WP2_CHECK_ALLOC_OK(preview->palette_.resize(nb_colors));
   for (auto& c : preview->palette_) {
     WP2_CHECK_OK(!s.eof(), WP2_STATUS_BAD_READ);
@@ -215,7 +214,6 @@ WP2Status PreviewFromText(const std::string& in, PreviewData* preview) {
     c.co = Clamp(co, 0, 63);
     c.cg = Clamp(cg, 0, 63);
     c.a = (a != 0) ? 1 : 0;
-    has_alpha |= (c.a == 0);
   }
   const uint32_t min_num_vertices =
       std::max(kPreviewMinNumVertices, std::max(nb_colors, 4u) - 4u);

@@ -25,6 +25,7 @@
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -117,7 +118,7 @@ void SegmentationBlockVDebug(const EncoderConfig& config, const CodedBlock& cb,
 // 'centers[]' is the position of each cluster center.
 uint32_t ClusterHistogram(const uint32_t histogram[], uint32_t histogram_size,
                           uint32_t max_clusters, uint32_t clusters[],
-                          uint32_t centers[]);
+                          uint32_t centers[kMaxNumSegments]);
 
 //------------------------------------------------------------------------------
 // Near-lossless

@@ -78,7 +78,7 @@ Image GenerateRandomImage() {
 
 Data LoadFile(const char file_name[]) {
   const std::string dir_path =
-      "images/";
+        "images/";
 
   std::ifstream file(dir_path + file_name, std::ios::binary | std::ios::ate);
   if (!file) {

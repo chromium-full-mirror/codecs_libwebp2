@@ -32,9 +32,10 @@ namespace {
 // Predictors
 
 // Sum of each component, mod 256.
-WP2_UBSAN_IGNORE_UNSIGNED_OVERFLOW inline void AddPixels(
-    const int16_t* const a, bool has_alpha, const int16_t* const b,
-    int16_t* const out) {
+WP2_UBSAN_IGNORE_UNSIGNED_OVERFLOW inline void AddPixels(const int16_t* const a,
+                                                         bool has_alpha,
+                                                         const int16_t* const b,
+                                                         int16_t* const out) {
   out[0] = has_alpha ? a[0] + b[0] : WP2::kAlphaMax;
   for (uint32_t i = 1; i < 4; ++i) out[i] = a[i] + b[i];
 }
@@ -273,7 +274,7 @@ void ColorSpaceInverseTransform_C(const Transform* const transform, int y_start,
 
   while (y < y_end) {
     const int16_t* pred = pred_row;
-    Multipliers m = { 0, 0, 0 };
+    Multipliers m = {0, 0, 0};
     const int16_t* const src_safe_end = src + 4 * safe_width;
     const int16_t* const src_end = src + 4 * width;
     while (src < src_safe_end) {
@@ -431,6 +432,9 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
     case TransformType::kGroup4:
     case TransformType::kColorIndexing:
       ColorIndexInverseTransform_C(transform, row_start, row_end, in, out);
+      break;
+    case TransformType::kLZW:
+      std::copy(in, in + 4 * (row_end - row_start) * width, out);
       break;
     default:
       assert(false);

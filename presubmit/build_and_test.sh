@@ -36,10 +36,14 @@ ensure_googletest() {
   local googletest_dir
   googletest_dir="${WORKSPACE}/googletest"
 
-  if [[ ! -d "${googletest_dir}" ]] \
-    || ! git -C "${googletest_dir}" pull --rebase; then
+  if [[ ! -d "${googletest_dir}" ]] || \
+     [[ "$(git -C ${googletest_dir} rev-parse --short HEAD)" != "58d77fa" ]]
+  then
     rm -rf "${googletest_dir}"
-    git clone --depth 1 "${GOOGLETEST_REPO}" "${googletest_dir}"
+    # 1.12.1 is the last release to support C++11.
+    # Future releases will require at least C++14.
+    git clone -b release-1.12.1 --depth 1 \
+      "${GOOGLETEST_REPO}" "${googletest_dir}"
   fi
 
   opts+=("-DGTEST_SOURCE_DIR=${googletest_dir}")

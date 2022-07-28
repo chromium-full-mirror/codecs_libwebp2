@@ -32,11 +32,11 @@ import argparse
 import datetime
 import sys
 
-import libwebp2 as wp2
 from PIL import Image
 from PIL import ImageTk
 import requests
 import tkinter
+import libwebp2 as wp2
 
 # ------------------------------------------------------------------------------
 

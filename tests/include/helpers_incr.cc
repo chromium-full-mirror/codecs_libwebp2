@@ -437,11 +437,11 @@ class IncrementalDecodingTester {
       const uint32_t num_lines =
           is_sideways ? decoded_area.width - previous_decoded_area_.width
                       : decoded_area.height - previous_decoded_area_.height;
-      // Incremental decoding should not be able to finish more than two rows
+      // Incremental decoding should not be able to finish more than three rows
       // of blocks in 2 bytes or fewer for lossy and a tile for lossless.
       uint32_t max_num_lines =
           std::min(features->raw_height, has_true_incremental_output_
-                                             ? kMaxBlockSizePix * 2
+                                             ? kMaxBlockSizePix * 3
                                              : features->tile_height);
       // Filters are applied sequentially and each needs a few rows untouched by
       // the previous one, delaying the pixel availability until the last row.

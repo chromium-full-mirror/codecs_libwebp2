@@ -42,7 +42,7 @@
 #include "extras/aom_utils.h"
 
 #ifdef WP2_HAVE_SJPEG
-#include "sjpeg.h"  // NOLINT (include directory)
+#include "sjpeg.h"
 #endif
 
 namespace WP2 {

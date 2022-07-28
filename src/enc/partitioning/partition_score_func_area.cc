@@ -188,6 +188,7 @@ WP2Status AreaScoreFunc::GetAreaGridScore(BlockSize block_size,
     partition.back().SetDimDefault(block);
     WP2_CHECK_ALLOC_OK(blocks->push_back(block));
     num_block_units += block.area();
+    (void)num_block_units;
   }
   assert(num_block_units == SizeBlocks(area_.width) * SizeBlocks(area_.height));
 

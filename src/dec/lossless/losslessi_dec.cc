@@ -41,19 +41,16 @@ namespace WP2L {
 // -----------------------------------------------------------------------------
 
 static const uint8_t kCodeToPlane[kCodeToPlaneCodes] = {
-  0x18, 0x07, 0x17, 0x19, 0x28, 0x06, 0x27, 0x29, 0x16, 0x1a,
-  0x26, 0x2a, 0x38, 0x05, 0x37, 0x39, 0x15, 0x1b, 0x36, 0x3a,
-  0x25, 0x2b, 0x48, 0x04, 0x47, 0x49, 0x14, 0x1c, 0x35, 0x3b,
-  0x46, 0x4a, 0x24, 0x2c, 0x58, 0x45, 0x4b, 0x34, 0x3c, 0x03,
-  0x57, 0x59, 0x13, 0x1d, 0x56, 0x5a, 0x23, 0x2d, 0x44, 0x4c,
-  0x55, 0x5b, 0x33, 0x3d, 0x68, 0x02, 0x67, 0x69, 0x12, 0x1e,
-  0x66, 0x6a, 0x22, 0x2e, 0x54, 0x5c, 0x43, 0x4d, 0x65, 0x6b,
-  0x32, 0x3e, 0x78, 0x01, 0x77, 0x79, 0x53, 0x5d, 0x11, 0x1f,
-  0x64, 0x6c, 0x42, 0x4e, 0x76, 0x7a, 0x21, 0x2f, 0x75, 0x7b,
-  0x31, 0x3f, 0x63, 0x6d, 0x52, 0x5e, 0x00, 0x74, 0x7c, 0x41,
-  0x4f, 0x10, 0x20, 0x62, 0x6e, 0x30, 0x73, 0x7d, 0x51, 0x5f,
-  0x40, 0x72, 0x7e, 0x61, 0x6f, 0x50, 0x71, 0x7f, 0x60, 0x70
-};
+    0x18, 0x07, 0x17, 0x19, 0x28, 0x06, 0x27, 0x29, 0x16, 0x1a, 0x26, 0x2a,
+    0x38, 0x05, 0x37, 0x39, 0x15, 0x1b, 0x36, 0x3a, 0x25, 0x2b, 0x48, 0x04,
+    0x47, 0x49, 0x14, 0x1c, 0x35, 0x3b, 0x46, 0x4a, 0x24, 0x2c, 0x58, 0x45,
+    0x4b, 0x34, 0x3c, 0x03, 0x57, 0x59, 0x13, 0x1d, 0x56, 0x5a, 0x23, 0x2d,
+    0x44, 0x4c, 0x55, 0x5b, 0x33, 0x3d, 0x68, 0x02, 0x67, 0x69, 0x12, 0x1e,
+    0x66, 0x6a, 0x22, 0x2e, 0x54, 0x5c, 0x43, 0x4d, 0x65, 0x6b, 0x32, 0x3e,
+    0x78, 0x01, 0x77, 0x79, 0x53, 0x5d, 0x11, 0x1f, 0x64, 0x6c, 0x42, 0x4e,
+    0x76, 0x7a, 0x21, 0x2f, 0x75, 0x7b, 0x31, 0x3f, 0x63, 0x6d, 0x52, 0x5e,
+    0x00, 0x74, 0x7c, 0x41, 0x4f, 0x10, 0x20, 0x62, 0x6e, 0x30, 0x73, 0x7d,
+    0x51, 0x5f, 0x40, 0x72, 0x7e, 0x61, 0x6f, 0x50, 0x71, 0x7f, 0x60, 0x70};
 
 //------------------------------------------------------------------------------
 
@@ -300,7 +297,7 @@ WP2Status Decoder::ProcessRows(uint32_t row) {
   const int16_t* const rows =
       pixels_.data() + 4 * tile_->rect.width * last_row_;
 
-  if (row > last_row_) {    // Emit output.
+  if (row > last_row_) {  // Emit output.
     WP2::ArgbBuffer* const buf = &tile_->rgb_output;
     const uint32_t num_rows = row - last_row_;
     // We can't process more than kNumARGBCacheRows at a time (that's the size
@@ -396,7 +393,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
     uint32_t distance = 0;
     uint32_t length = 0;  // Silence -Werror=maybe-uninitialized
     const auto type =
-        (SymbolType) sr->Read(kSymbolType, cluster, "lossless_mode", cost_ptr);
+        (SymbolType)sr->Read(kSymbolType, cluster, "lossless_mode", cost_ptr);
     WP2_CHECK_STATUS(dec_->GetStatus());
     if (type == kSymbolTypeLiteral) {
       WP2::ANSDebugPrefix prefix(dec_, "literal");
@@ -532,8 +529,10 @@ WP2Status Decoder::DecodeImageData(uint32_t width, uint32_t height,
   WP2_CHECK_ALLOC_OK(pixels_.resize(4 * (uint64_t)width * height));
 
   int16_t* src;
-  if (use_group4_) {
+  if (encoding_algorithm_ == EncodingAlgorithm::kGroup4) {
     WP2_CHECK_STATUS(DecodeGroup4(width, last_row, bits_per_pixel, &src));
+  } else if (encoding_algorithm_ == EncodingAlgorithm::kLZW) {
+    WP2_CHECK_STATUS(DecodeLZW(width, last_row, &src));
   } else {
     WP2_CHECK_STATUS(DecodeAndProcess(width, last_row, /*do_process=*/true,
                                       &pixels_, bits_per_pixel, config_.info,
@@ -697,8 +696,8 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
             const int16_t alpha = transform->data_[4 * i + 0];
             if (c > 0 && channel > alpha) channel = alpha;
           }
-          channel = WP2::Clamp<int32_t>(channel +
-              (is_positive[c][i - 1] ? diffs[i - 1] : -diffs[i - 1]),
+          channel = WP2::Clamp<int32_t>(
+              channel + (is_positive[c][i - 1] ? diffs[i - 1] : -diffs[i - 1]),
               0, channel_max);
           transform->data_[4 * i + c] = channel;
         }
@@ -839,11 +838,26 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       }
       break;
     }
+    case TransformType::kLZW: {
+      WP2_CHECK_STATUS(ReadPalette(transform));
+
+      const uint32_t lzw_capacity =
+          dec_->ReadRange(num_colors_ + 1, kLZWCapacityMax, "capacity");
+      WP2_CHECK_ALLOC_OK(lzw_segments_.reserve(lzw_capacity + 1));
+
+      const WP2::Vector_s16& palette = transforms_[0].data_;
+      lzw_segments_.resize_no_check(num_colors_ + 1);
+      lzw_segments_[0] = {nullptr, 0};  // reserved for clear code
+      for (uint32_t index = 0; index < num_colors_; ++index) {
+        lzw_segments_[index + 1] = {&palette[4 * index], 1};
+      }
+      break;
+    }
     case TransformType::kSubtractGreen:
     case TransformType::kYCoCgR:
       break;
     default:
-      assert(false);    // can't happen
+      assert(false);  // can't happen
       break;
   }
 
@@ -918,7 +932,7 @@ WP2Status Decoder::DecodeHeader() {
   const WP2::ANSDebugPrefix prefix1(dec_, "GlobalHeader");
 
   // Read the transforms.
-  use_group4_ = false;
+  encoding_algorithm_ = EncodingAlgorithm::kClassical;
   dec_->AddDebugPrefix("transforms");
   const uint32_t index =
       dec_->ReadRValue(kPossibleTransformCombinationsNum, "index");
@@ -938,7 +952,13 @@ WP2Status Decoder::DecodeHeader() {
     WP2_CHECK_STATUS(ReadTransform(tile_->rect.width, tile_->rect.height, type,
                                    &transforms_[i]));
     if (type == TransformType::kGroup4) {
-      use_group4_ = true;
+      encoding_algorithm_ = EncodingAlgorithm::kGroup4;
+      // Make sure it is the only used transform.
+      assert(num_transforms == 1);
+      dec_->PopDebugPrefix();
+      return WP2_STATUS_OK;
+    } else if (type == TransformType::kLZW) {
+      encoding_algorithm_ = EncodingAlgorithm::kLZW;
       // Make sure it is the only used transform.
       assert(num_transforms == 1);
       dec_->PopDebugPrefix();

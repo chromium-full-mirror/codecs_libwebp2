@@ -20,13 +20,13 @@
 #ifndef WP2_DEC_LOSSLESS_LOSSLESSI_DEC_H_
 #define WP2_DEC_LOSSLESS_LOSSLESSI_DEC_H_
 
-#include "src/common/constants.h"
 #include "src/common/lossless/color_cache.h"
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/dec/symbols_dec.h"
 #include "src/dec/tile_dec.h"
 #include "src/utils/ans.h"
+#include "src/utils/hash_map.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
@@ -106,6 +106,9 @@ class Decoder {
   // Decodes a sub-image encoded with the Group 4 algorithm.
   WP2Status DecodeGroup4(uint32_t width, uint32_t last_row,
                          WP2::Planef* const bits_per_pixel, int16_t** src_out);
+  // Decodes a sub-image encoded with the LZW algorithm.
+  WP2Status DecodeLZW(uint32_t width, uint32_t last_row, int16_t** src_out);
+
   // Decodes an image, once the pre-processing has been done.
   WP2Status DecodeImageData(uint32_t width, uint32_t height, uint32_t last_row,
                             WP2::Planef* const bits_per_pixel);
@@ -159,7 +162,7 @@ class Decoder {
   Metadata hdr_;
 
   Transform transforms_[kPossibleTransformCombinationSize];
-  bool use_group4_ = false;
+  EncodingAlgorithm encoding_algorithm_ = EncodingAlgorithm::kClassical;
   uint16_t group4_first_color_ = 0;  // starting color for group4 compression
   MoveToFrontCache mtf_;
   uint32_t num_colors_ = 0;
@@ -171,8 +174,10 @@ class Decoder {
   const WP2::GlobalParams* gparams_ = nullptr;
   // Whether pixels mut be premultiplied with the alpha value before emitting.
   bool premultiply_ = false;
+  WP2::Vector<ColorSegment> lzw_segments_;  // LZW segments
+  ColorSegment lzw_last_seg_;               // last decoded segment
 };
 
 }  // namespace WP2L
 
-#endif  /* WP2_DEC_LOSSLESS_LOSSLESSI_DEC_H_ */
+#endif /* WP2_DEC_LOSSLESS_LOSSLESSI_DEC_H_ */

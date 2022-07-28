@@ -278,6 +278,8 @@ if(GTEST_FOUND AND NOT WP2_BUILD_WP2_JS)
   add_wp2_test(lossless/test_color_cache 1)
   add_wp2_test(lossless/test_group4 1)
   add_wp2_test(lossless/test_histogram 1)
+  add_wp2_test(lossless/test_lzw 1)
+  add_wp2_test(lossless/test_lzw_hash_map 1)
   add_wp2_test(lossless/test_palette 1)
 
   if(WP2_BUILD_EXTRAS)

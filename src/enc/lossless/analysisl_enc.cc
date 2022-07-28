@@ -454,8 +454,8 @@ static int GetHistoBits(int effort, bool use_palette, int width, int height) {
   // value of 5, it matches the old default value of 3.
   uint32_t histo_bits = (use_palette ? 9. : 7.) - effort * 6. / 9.;
   while (true) {
-    const uint32_t huff_image_size = SubSampleSize(width, histo_bits) *
-                                     SubSampleSize(height, histo_bits);
+    const uint32_t huff_image_size =
+        SubSampleSize(width, histo_bits) * SubSampleSize(height, histo_bits);
     if (huff_image_size <= kMaxHistogramImageSize) break;
     ++histo_bits;
   }
@@ -496,6 +496,12 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   // Do not use a palette when there is only one color as ANS will optimize it
   // anyway.
   const bool can_use_palette = (encoder->palette_.Size() > 1);
+
+  // Try LZW within the same palette size range condition as Group4.
+  if (encoder->palette_.Size() >= 2 && encoder->palette_.Size() < 256) {
+    WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
+    configs->back().transforms = FindTransformTypes(TransformType::kLZW);
+  }
 
   // Do not use Group4 for big palettes for CPU reasons and also because it is
   // less likely that Group4 will work.

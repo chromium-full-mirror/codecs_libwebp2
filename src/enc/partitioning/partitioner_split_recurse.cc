@@ -291,6 +291,7 @@ WP2Status SplitRecursePartitioner::GetBestPartition(
         assert((Occupy(block), true));
         assert(max_num_blocks_left >= block.w() * block.h());
         max_num_blocks_left -= block.w() * block.h();
+        (void)max_num_blocks_left;
         assert(block.dim() != BLK_LAST);
 
         WP2_CHECK_STATUS(

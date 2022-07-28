@@ -103,7 +103,7 @@ static WP2Status InsertEdge(const Edge& new_edge, Vector<Edge>& edges) {
 }
 
 //------------------------------------------------------------------------------
-// Bowyer–Watson algorithm
+// Bowyer-Watson algorithm
 // (faster than Lawson's flipping one if you can save the circles per-triangle)
 
 WP2Status Triangulation::Insert(const Vector<VertexIndexedColor>& vertices,

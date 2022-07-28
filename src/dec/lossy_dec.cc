@@ -185,7 +185,9 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   }
 #endif
 
+#if defined(WP2_BITTRACE)
   uint32_t block_idx = 0;
+#endif
   while ((dec->GetStatus() == WP2_STATUS_OK) && !mgr->Done()) {
     Block block;
     if (reader.use_splits()) {
@@ -433,7 +435,9 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
       WP2_CHECK_STATUS(cb.Draw(config, *tile, gparams, &debug_output));
     }
 #endif  // WP2_REDUCE_BINARY_SIZE
+#if defined(WP2_BITTRACE)
     ++block_idx;
+#endif
   }
 
   WP2_CHECK_STATUS(dec->GetStatus());

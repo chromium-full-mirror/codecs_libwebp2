@@ -24,6 +24,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"
@@ -396,7 +397,7 @@ void ReadVectorImpl(ANSDec* dec, size_t nnz, uint32_t val_upper, T& v) {
       }
     }
   }
-  std::fill(&v[k], v.end(), 0);
+  if (k < v.size()) std::fill(&v[k], v.end(), 0);
 }
 
 //------------------------------------------------------------------------------

@@ -254,7 +254,10 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/data_source_stream.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/front_mgr.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/front_mgr.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/hash.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/hash.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/hash_map.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/hash_map.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/memory.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/orientation.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/orientation.h
@@ -410,6 +413,7 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/group4_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/losslessi_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/losslessi_dec.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/lzw_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/analysisl_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/backward_references_cost_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/backward_references_enc.cc
@@ -419,6 +423,7 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/histogram_enc.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/losslessi_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/losslessi_enc.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/lzw_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/palette.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/palette.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/predictorl_enc.cc)

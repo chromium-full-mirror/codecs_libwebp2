@@ -36,7 +36,7 @@ namespace WP2 {
 class SymbolManager;
 class SymbolRecorder;
 class SymbolWriter;
-}
+}  // namespace WP2
 
 namespace WP2L {
 
@@ -104,20 +104,19 @@ class Encoder {
   Palette palette_;
 
   // Some 'scratch' (potentially large) objects.
-  BackwardRefsPool ref_pool_;   // Backward Refs array for temporaries.
-  HashChain hash_chain_;        // HashChain data for constructing
-                                // backward references.
+  BackwardRefsPool ref_pool_;  // Backward Refs array for temporaries.
+  HashChain hash_chain_;       // HashChain data for constructing
+                               // backward references.
  private:
   // Applies and writes the transforms one by one and nothing else.
   // If 'config_prev' is not nullptr, its transforms are supposed to be the
   // first transforms of 'config' and are skipped.
-  WP2Status DoApplyAndWriteTransforms(const CrunchConfig& config,
-                                      const CrunchConfig* const config_prev,
-                                      const WP2::ProgressRange progress,
-                                      LosslessSymbolsInfo* const symbols_info,
-                                      WP2::ANSEnc* const enc,
-                                      WP2::ANSDictionaries* const dicts,
-                                      bool* const is_group4);
+  WP2Status DoApplyAndWriteTransforms(
+      const CrunchConfig& config, const CrunchConfig* const config_prev,
+      const WP2::ProgressRange progress,
+      LosslessSymbolsInfo* const symbols_info, WP2::ANSEnc* const enc,
+      WP2::ANSDictionaries* const dicts,
+      EncodingAlgorithm* const encoding_algorithm);
   // Implementations of the different transforms.
   void ApplyYCoCgR();
   void ApplySubtractGreen();
@@ -287,8 +286,17 @@ WP2Status Group4Encode(const Buffer_s16& buffer, uint32_t num_colors,
                        WP2::ANSEncBase* const enc,
                        EncodeInfo* const encode_info);
 
+//------------------------------------------------------------------------------
+// LZW.
+
+// Encodes an image 'input_buffer' to 'enc'.
+// The 'palette' is the set of all unique colors from the 'input_buffer'.
+WP2Status LZWEncode(const Buffer_s16& input_buffer, const Palette& palette,
+                    int effort, WP2::ANSEncBase* const enc,
+                    EncodeInfo* const encode_info);
+
 }  // namespace WP2L
 
 //------------------------------------------------------------------------------
 
-#endif  /* WP2_ENC_LOSSLESS_LOSSLESSI_ENC_H_ */
+#endif /* WP2_ENC_LOSSLESS_LOSSLESSI_ENC_H_ */

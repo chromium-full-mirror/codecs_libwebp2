@@ -171,7 +171,6 @@ void ResidualWriter::StoreCoeffs(const int16_t* const coeffs,
 
   // Figure out the number of zeros we would save by storing the boundaries of
   // the residuals.
-  uint32_t num_zeros_x = 0, num_zeros_y = 0;
   uint32_t last_zigzag_ind = 0;
   {
     // Find the last index in zigzag order.
@@ -191,8 +190,7 @@ void ResidualWriter::StoreCoeffs(const int16_t* const coeffs,
     }
     for (; zigzag_ind <= last_zigzag_ind; ++iter, ++zigzag_ind) {
       if (coeffs[iter.Index()] == 0) {
-        if (iter.x() > max_x) ++num_zeros_x;
-        if (iter.y() > max_y) ++num_zeros_y;
+        continue;
       } else if (zigzag_ind == last_zigzag_ind) {
         break;
       }

@@ -27,7 +27,7 @@ int main(int argc, const char* argv[]) {
 
   WP2Status status;
   WP2::ArgbBuffer src;
-  status = WP2::ReadImage("testdata/source0.ppm", &src);
+    status = WP2::ReadImage("testdata/source0.ppm", &src);
   if (status != WP2_STATUS_OK) {
     fprintf(stderr, "ReadImage failed: %i\n", status);
     return 1;

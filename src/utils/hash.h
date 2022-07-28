@@ -87,7 +87,6 @@ static inline uint32_t HashPixPair(const int16_t argb[8], uint32_t hash_bits) {
   return internal::FinalizeHash(h7, hash_bits);
 }
 }  // namespace encoding
-
 namespace decoding {
 static inline uint32_t HashPix(const int16_t* const argb, uint32_t hash_bits) {
   const uint8_t s[8] = {SPLIT(0), SPLIT(1), SPLIT(2), SPLIT(3)};
@@ -96,6 +95,10 @@ static inline uint32_t HashPix(const int16_t* const argb, uint32_t hash_bits) {
   const uint64_t h3 = internal::HashCombine(h1, h2);
   return internal::FinalizeHash(h3, hash_bits);
 }
+
+// Defines a 'hash_bits'-bit hash value of num_pixels pixels.
+uint32_t HashPixN(const int16_t* const argb, uint32_t num_pixels,
+                  uint32_t hash_bits);
 }  // namespace decoding
 
 #undef SPLIT

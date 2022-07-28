@@ -277,7 +277,7 @@ static constexpr uint32_t kMaxFreqBits = 14;
 // Natural photo prefer slower adaptation (speed ~= 2..4)
 // Web pictures prefer 3..6
 static constexpr uint32_t kAdaptationSpeeds[] = {
-    500, 800, 1000, 1300, 1800, 3000, 5000, 65535  /* <~unique symbol */
+    500, 800, 1000, 1300, 1800, 3000, 5000, 65535 /* <~unique symbol */
 };
 static constexpr uint32_t kNumAdaptationSpeeds =
     sizeof(kAdaptationSpeeds) / sizeof(kAdaptationSpeeds[0]);
@@ -346,6 +346,9 @@ static constexpr uint32_t kTransformBitsMax = 6;
 // Window size to consider the vertical mode in Group4 compression.
 static constexpr uint32_t kGroup4Window = 3;
 
+// LZW constants.
+static constexpr uint32_t kLZWCapacityMax = 10000u;
+
 // Precision of the cross color transform.
 static constexpr uint32_t kColorTransformBits = 5;
 // TODO(vrabaud) Play with those values. kRedToBlueMax could be 128, it is just
@@ -362,6 +365,7 @@ enum class TransformType {
   kSubtractGreen,
   kColorIndexing,
   kGroup4,
+  kLZW,
   kNum
 };
 // Possible image transform combinations that can be applied.
@@ -373,6 +377,7 @@ static constexpr TransformType
         {TransformType::kNum, TransformType::kNum, TransformType::kNum},
         // Only one.
         {TransformType::kGroup4, TransformType::kNum, TransformType::kNum},
+        {TransformType::kLZW, TransformType::kNum, TransformType::kNum},
         {TransformType::kSubtractGreen, TransformType::kNum,
          TransformType::kNum},
         {TransformType::kColorIndexing, TransformType::kNum,
@@ -396,4 +401,4 @@ static constexpr uint32_t kPossibleTransformCombinationsNum =
 
 }  // namespace WP2L
 
-#endif  /* WP2_WP2_FORMAT_CONSTANTS_H_ */
+#endif /* WP2_WP2_FORMAT_CONSTANTS_H_ */
