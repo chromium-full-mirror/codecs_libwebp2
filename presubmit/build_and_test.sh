@@ -36,9 +36,9 @@ ensure_googletest() {
   local googletest_dir
   googletest_dir="${WORKSPACE}/googletest"
 
-  if [[ ! -d "${googletest_dir}" ]] || \
-     [[ "$(git -C ${googletest_dir} rev-parse --short HEAD)" != "58d77fa" ]]
-  then
+  if [[ ! -d "${googletest_dir}" ]] \
+    || [[ "$(git -C ${googletest_dir} rev-parse --short HEAD)" != \
+          "58d77fa" ]]; then
     rm -rf "${googletest_dir}"
     # 1.12.1 is the last release to support C++11.
     # Future releases will require at least C++14.
