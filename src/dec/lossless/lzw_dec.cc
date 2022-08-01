@@ -42,16 +42,18 @@ void PushSegmentToVector(const ColorSegment& seg, const int16_t* const src_end,
 }
 
 // Initializes code table for the first pixel or when clear cache signal.
-void InitializeLZW(uint32_t num_colors, const int16_t* const src_end,
-                   WP2::Vector<ColorSegment>* const segments,
-                   WP2::ANSDec* const dec, ColorSegment* const seg,
-                   int16_t** src) {
+WP2Status InitializeLZW(uint32_t num_colors, const int16_t* const src_end,
+                        WP2::Vector<ColorSegment>* const segments,
+                        WP2::ANSDec* const dec, ColorSegment* const seg,
+                        int16_t** src) {
   segments->resize_no_check(num_colors + 1);
   // Exclude the possibility of receiving clear code.
   static_assert(kClearCode == 0, "kClearCode must be 0.");
   const int32_t cur_code = dec->ReadRange(1, num_colors, "code");
+  WP2_CHECK_STATUS(dec->GetStatus());
   *seg = {*src, 1};
   PushSegmentToVector((*segments)[cur_code], src_end, src);
+  return WP2_STATUS_OK;
 }
 }  // namespace
 
@@ -70,7 +72,8 @@ WP2Status Decoder::DecodeLZW(uint32_t width, uint32_t last_row,
 
   if (last_pixel_ == 0) {
     // Initialize output as the first code segment.
-    InitializeLZW(num_colors_, src_end, &lzw_segments_, dec_, &prev_seg, &src);
+    WP2_CHECK_STATUS(InitializeLZW(num_colors_, src_end, &lzw_segments_, dec_,
+                                   &prev_seg, &src));
   } else {
     prev_seg = lzw_last_seg_;
   }
@@ -81,14 +84,16 @@ WP2Status Decoder::DecodeLZW(uint32_t width, uint32_t last_row,
       // Segments must be restarted.
       // Next code is necessarily of a simple single color segment.
       // Behaviour should be similar to starting code.
-      InitializeLZW(num_colors_, src_end, &lzw_segments_, dec_, &cur_seg, &src);
+      WP2_CHECK_STATUS(InitializeLZW(num_colors_, src_end, &lzw_segments_, dec_,
+                                     &cur_seg, &src));
     } else {
       // The range can go up to segments size (inclusive),
       // since code read might be of a new code.
       const int32_t cur_code = dec_->ReadRange(0, lzw_segments_.size(), "code");
+      WP2_CHECK_STATUS(dec_->GetStatus());
       if (cur_code == kClearCode) {
-        InitializeLZW(num_colors_, src_end, &lzw_segments_, dec_, &cur_seg,
-                      &src);
+        WP2_CHECK_STATUS(InitializeLZW(num_colors_, src_end, &lzw_segments_,
+                                       dec_, &cur_seg, &src));
       } else if (cur_code == static_cast<int32_t>(lzw_segments_.size())) {
         // New code.
         lzw_segments_.push_back_no_resize({src, prev_seg.num_pixels + 1});
@@ -114,7 +119,6 @@ WP2Status Decoder::DecodeLZW(uint32_t width, uint32_t last_row,
     prev_seg = cur_seg;
   }
   lzw_last_seg_ = prev_seg;
-  WP2_CHECK_STATUS(dec_->GetStatus());
   if (src_out != nullptr) *src_out = src;
   return WP2_STATUS_OK;
 }
