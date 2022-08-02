@@ -18,8 +18,8 @@
 // Author: Felipe Mourad Pereira (mouradfelipe@google.com)
 
 #include <algorithm>
+#include <cmath>
 
-#include "src/common/symbols.h"
 #include "src/dec/lossless/losslessi_dec.h"
 #include "src/utils/hash_map.h"
 #include "src/utils/utils.h"
@@ -58,9 +58,9 @@ WP2Status InitializeLZW(uint32_t num_colors, const int16_t* const src_end,
 }  // namespace
 
 WP2Status Decoder::DecodeLZW(uint32_t width, uint32_t last_row,
+                             WP2::Planef* const bits_per_pixel,
                              int16_t** src_out) {
   uint32_t row = last_pixel_ / width;
-
   int16_t* const data = pixels_.data();
   int16_t* src = data + 4 * last_pixel_;
   const int16_t* const src_last =
@@ -74,26 +74,36 @@ WP2Status Decoder::DecodeLZW(uint32_t width, uint32_t last_row,
     // Initialize output as the first code segment.
     WP2_CHECK_STATUS(InitializeLZW(num_colors_, src_end, &lzw_segments_, dec_,
                                    &prev_seg, &src));
+    const float bits =
+        std::log2(num_colors_);  // equals to cost since only 1 pixel
+    WP2_CHECK_REDUCED_STATUS(RegisterSymbolForVDebug(
+        /*symbol_type=*/0, /*pos=*/0, /*distance=*/0u,
+        /*length=*/1, bits, config_.info));
+    if (bits_per_pixel != nullptr) bits_per_pixel->Row(0)[0] = bits;
   } else {
     prev_seg = lzw_last_seg_;
   }
 
   while (src < src_last) {
     ColorSegment cur_seg;
+    float cost = 0;
     if (lzw_segments_.size() == lzw_segments_.capacity()) {
       // Segments must be restarted.
       // Next code is necessarily of a simple single color segment.
       // Behaviour should be similar to starting code.
       WP2_CHECK_STATUS(InitializeLZW(num_colors_, src_end, &lzw_segments_, dec_,
                                      &cur_seg, &src));
+      cost = std::log2(num_colors_);
     } else {
       // The range can go up to segments size (inclusive),
       // since code read might be of a new code.
       const int32_t cur_code = dec_->ReadRange(0, lzw_segments_.size(), "code");
       WP2_CHECK_STATUS(dec_->GetStatus());
+      cost = std::log2(lzw_segments_.size() + 1);
       if (cur_code == kClearCode) {
         WP2_CHECK_STATUS(InitializeLZW(num_colors_, src_end, &lzw_segments_,
                                        dec_, &cur_seg, &src));
+        cost += std::log2(num_colors_);
       } else if (cur_code == static_cast<int32_t>(lzw_segments_.size())) {
         // New code.
         lzw_segments_.push_back_no_resize({src, prev_seg.num_pixels + 1});
@@ -114,6 +124,19 @@ WP2Status Decoder::DecodeLZW(uint32_t width, uint32_t last_row,
       ++row;
       if (row <= last_row) {
         WP2_CHECK_STATUS(ProcessRows(row));
+      }
+    }
+    if ((bits_per_pixel != nullptr || config_.info != nullptr)) {
+      const uint32_t first_pixel_pos = (src - data) / 4 - cur_seg.num_pixels;
+      WP2_CHECK_REDUCED_STATUS(RegisterSymbolForVDebug(
+          /*symbol_type=*/0, first_pixel_pos, /*distance=*/0u,
+          cur_seg.num_pixels, cost, config_.info));
+      if (bits_per_pixel != nullptr) {
+        const float bits = cost / cur_seg.num_pixels;
+        for (uint32_t j = 0; j < cur_seg.num_pixels; ++j) {
+          const uint32_t pixel = first_pixel_pos + j;
+          bits_per_pixel->Row(pixel / width)[pixel % width] = bits;
+        }
       }
     }
     prev_seg = cur_seg;

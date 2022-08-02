@@ -137,7 +137,7 @@ enum class EncodingAlgorithm { kClassical, kGroup4, kLZW };
 
 // TODO(mouradfelipe): change location of LZW capacity definition.
 // For now, it is defined as a value taken from the gifsicle GIF optimizer.
-static constexpr uint32_t kLZWCapacity = 4090u;
+static constexpr uint32_t kLZWCapacity = 3963;
 
 // Gives the maximum possible palette size for a given image size.
 static inline uint32_t MaxPaletteSize(uint32_t num_pixels) {

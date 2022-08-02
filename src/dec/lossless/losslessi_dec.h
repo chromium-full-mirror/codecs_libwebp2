@@ -107,7 +107,8 @@ class Decoder {
   WP2Status DecodeGroup4(uint32_t width, uint32_t last_row,
                          WP2::Planef* const bits_per_pixel, int16_t** src_out);
   // Decodes a sub-image encoded with the LZW algorithm.
-  WP2Status DecodeLZW(uint32_t width, uint32_t last_row, int16_t** src_out);
+  WP2Status DecodeLZW(uint32_t width, uint32_t last_row,
+                      WP2::Planef* const bits_per_pixel, int16_t** src_out);
 
   // Decodes an image, once the pre-processing has been done.
   WP2Status DecodeImageData(uint32_t width, uint32_t height, uint32_t last_row,
@@ -116,11 +117,11 @@ class Decoder {
   WP2Status ReadTransform(uint32_t width, uint32_t height, TransformType type,
                           Transform* const transform);
 
-  // Visual debug. 'symbol_type' should either be a SymbolType or a Group4Mode
-  // if 'is_group4' is true.
-  WP2Status RegisterSymbolForVDebug(int symbol_type, bool is_group4,
-                                    uint32_t pos, uint32_t distance,
-                                    uint32_t length, float cost,
+  // Visual debug. 'symbol_type' can be a SymbolType for classical algorithm,
+  // a Group4Mode for Group4 algorithm, or 0 for LZW algorithm.
+  WP2Status RegisterSymbolForVDebug(int symbol_type, uint32_t pos,
+                                    uint32_t distance, uint32_t length,
+                                    float cost,
                                     WP2::DecoderInfo* const decoder_info);
   // Visual debug. 'rows' should contain the raw decoded pixels before inverse
   // transforms are applied. 'decoder_info' can be nullptr (in which case

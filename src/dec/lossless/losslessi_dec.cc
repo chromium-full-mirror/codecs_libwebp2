@@ -461,8 +461,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
     }
     if (get_cost) {
       WP2_CHECK_REDUCED_STATUS(RegisterSymbolForVDebug(
-          type, /*is_group4=*/false, last_pixel_ + i_pixel, distance, length,
-          cost, decoder_info));
+          type, last_pixel_ + i_pixel, distance, length, cost, decoder_info));
       if (bits_per_pixel != nullptr) {
         const float bits = cost / length;
         for (uint32_t j = 0; j < length; ++j) {
@@ -532,7 +531,7 @@ WP2Status Decoder::DecodeImageData(uint32_t width, uint32_t height,
   if (encoding_algorithm_ == EncodingAlgorithm::kGroup4) {
     WP2_CHECK_STATUS(DecodeGroup4(width, last_row, bits_per_pixel, &src));
   } else if (encoding_algorithm_ == EncodingAlgorithm::kLZW) {
-    WP2_CHECK_STATUS(DecodeLZW(width, last_row, &src));
+    WP2_CHECK_STATUS(DecodeLZW(width, last_row, bits_per_pixel, &src));
   } else {
     WP2_CHECK_STATUS(DecodeAndProcess(width, last_row, /*do_process=*/true,
                                       &pixels_, bits_per_pixel, config_.info,

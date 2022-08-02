@@ -2662,14 +2662,16 @@ static const char* const kSymbolTypeNames[] = {"Literal", "Copy", "Cache"};
 STATIC_ASSERT_ARRAY_SIZE(kSymbolTypeNames, kSymbolTypeNum);
 static const char* const kGroup4ModeNames[] = {
     "Group4 Vertical", "Group4 Horizontal", "Group4 Pass"};
-static const WP2::Argb32b kSymbolColors[2][3] = {
-    {{255, 255, 0, 0}, {255, 0, 255, 0}, {255, 0, 0, 255}},       // SymbolType
-    {{255, 255, 255, 0}, {255, 0, 255, 255}, {255, 255, 0, 255}}  // Group4
+static const char* const kLZWTypeName = "LZW";
+static const WP2::Argb32b kSymbolColors[3][3] = {
+    {{255, 255, 0, 0}, {255, 0, 255, 0}, {255, 0, 0, 255}},        // SymbolType
+    {{255, 255, 255, 0}, {255, 0, 255, 255}, {255, 255, 0, 255}},  // Group4
+    {{255, 255, 128, 64}}                                          // LZW
 };
 
 WP2Status Decoder::RegisterSymbolForVDebug(
-    int symbol_type, bool is_group4, uint32_t pos, uint32_t distance,
-    uint32_t length, float cost, WP2::DecoderInfo* const decoder_info) {
+    int symbol_type, uint32_t pos, uint32_t distance, uint32_t length,
+    float cost, WP2::DecoderInfo* const decoder_info) {
   assert(length > 0);
   if (decoder_info == nullptr) return WP2_STATUS_OK;
   if (!WP2::VDMatch(decoder_info->visual_debug, "bits-per-pixel/overall") &&
@@ -2683,23 +2685,38 @@ WP2Status Decoder::RegisterSymbolForVDebug(
     if (pos == 0 && VDSelected(tile_->rect, config_)) {
       std::string& str = decoder_info->selection_info;
       str += WP2SPrint("Tile at (%d, %d)\n", tile_->rect.x, tile_->rect.y);
-      // TODO(mouradfelipe): include LZW display.
       if (encoding_algorithm_ == EncodingAlgorithm::kGroup4) {
         str += "Group 4\n";
         str += WP2SPrint("Move-to-front cache: %s\n",
                          mtf_.enabled() ? "enabled" : "disabled");
-      } else {
+      } else if (encoding_algorithm_ == EncodingAlgorithm::kLZW) {
+        str += "LZW\n";
+        str += WP2SPrint("Number of colors: %d\n", num_colors_);
+      } else if (encoding_algorithm_ == EncodingAlgorithm::kClassical) {
         uint32_t cache_bits = hdr_.cache_config_.cache_bits;
         if (cache_bits > 0) {
           str += WP2SPrint("Color cache: %d bits\n", cache_bits);
         } else {
           str += "No color cache\n";
         }
+      } else {
+        return WP2_STATUS_INVALID_PARAMETER;
       }
     }
-
-    Fill(pos, length, tile_->rect, kSymbolColors[is_group4][symbol_type],
-         &decoder_info->debug_output);
+    if (encoding_algorithm_ == EncodingAlgorithm::kLZW) {
+      // Display only the first pixel of a segment.
+      Fill(pos, 1, tile_->rect,
+           kSymbolColors[static_cast<int>(encoding_algorithm_)][symbol_type],
+           &decoder_info->debug_output);
+      if (length > 1) {
+        Fill(pos + 1, length - 1, tile_->rect, {255, 0, 0, 0},
+             &decoder_info->debug_output);
+      }
+    } else {
+      Fill(pos, length, tile_->rect,
+           kSymbolColors[static_cast<int>(encoding_algorithm_)][symbol_type],
+           &decoder_info->debug_output);
+    }
   }
 
   if (VDSelectedLossless(pos, length, *decoder_info, tile_->rect)) {
@@ -2713,15 +2730,21 @@ WP2Status Decoder::RegisterSymbolForVDebug(
                      decoder_info->selection.x, decoder_info->selection.y,
                      tile_->rect.x + pos % tile_width,
                      tile_->rect.y + pos / tile_width);
-    str += WP2SPrint("Type %s ", is_group4 ? kGroup4ModeNames[symbol_type]
-                                           : kSymbolTypeNames[symbol_type]);
-    if (is_group4) {
+    str += WP2SPrint("Type %s ",
+                     (encoding_algorithm_ == EncodingAlgorithm::kGroup4)
+                         ? kGroup4ModeNames[symbol_type]
+                     : (encoding_algorithm_ == EncodingAlgorithm::kLZW)
+                         ? kLZWTypeName
+                         : kSymbolTypeNames[symbol_type]);
+    if (encoding_algorithm_ == EncodingAlgorithm::kGroup4) {
       str += WP2SPrint("length %d ", length);
     } else if (symbol_type == kSymbolTypeCopy) {
       str += WP2SPrint("from (%d, %d) length %d ",
                        tile_->rect.x + (pos - distance) % tile_width,
                        tile_->rect.y + (pos - distance) / tile_width, length);
       // Do not display the length for single pixels.
+    } else if (encoding_algorithm_ == EncodingAlgorithm::kLZW) {
+      str += WP2SPrint("segment length %d\n", length);
     }
     str += WP2SPrint("cost %f bpp %f\n", cost, cost / length);
   }

@@ -20,7 +20,6 @@
 
 #include <algorithm>
 
-#include "src/common/symbols.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/utils/hash_map.h"
 #include "src/utils/utils.h"
@@ -28,16 +27,21 @@
 namespace WP2L {
 
 namespace {
-void ProcessCode(uint32_t code, uint32_t max_code,
-                 bool* const has_just_cleared_cache,
-                 WP2::ANSEncBase* const enc) {
+void ProcessCode(uint32_t start_pixel, uint32_t end_pixel, uint32_t code,
+                 uint32_t max_range, bool* const has_just_cleared_cache,
+                 WP2::ANSEncBase* const enc, EncodeInfo* const encode_info) {
+  uint32_t min_range = 0;
   if (*has_just_cleared_cache) {
     // Exclude the possibility of sending clear code right after clearing cache.
     static_assert(kClearCode == 0, "kClearCode must be 0.");
-    enc->PutRange(code, 1, max_code, "code");
     *has_just_cleared_cache = false;
-  } else {
-    enc->PutRange(code, 0, max_code, "code");
+    min_range = 1;
+  }
+  enc->PutRange(code, min_range, max_range, "code");
+  if (encode_info != nullptr && !encode_info->bits_per_pixel.empty()) {
+    std::fill(encode_info->bits_per_pixel.begin() + start_pixel,
+              encode_info->bits_per_pixel.begin() + end_pixel,
+              (log2(max_range - min_range + 1)) / (end_pixel - start_pixel));
   }
 }
 
@@ -69,7 +73,7 @@ WP2Status Impl(const int16_t* const argb, uint32_t width, uint32_t height,
   WP2_CHECK_OK(segment_map.HasKey(lzw_buf, seg_index),
                WP2_STATUS_INVALID_PARAMETER);
   uint32_t prev_buff_index = seg_index;
-
+  uint32_t prev_buff_num_pixels = 1;
   const uint32_t total_pixels = width * height;
   int32_t last_written_row = -1;
   bool new_line = false;
@@ -77,8 +81,9 @@ WP2Status Impl(const int16_t* const argb, uint32_t width, uint32_t height,
     ++lzw_buf.num_pixels;
     // Check if lzw_buf is inside code table already.
     if (!segment_map.HasKey(lzw_buf, seg_index)) {
-      ProcessCode(prev_buff_index, segment_map.MaxCode(),
-                  &has_just_cleared_cache, enc);
+      ProcessCode(pixel_index - prev_buff_num_pixels, pixel_index,
+                  prev_buff_index, segment_map.MaxCode(),
+                  &has_just_cleared_cache, enc, encode_info);
       if (last_written_row + 1 < static_cast<int32_t>(pixel_index / width)) {
         new_line = true;
       }
@@ -94,27 +99,20 @@ WP2Status Impl(const int16_t* const argb, uint32_t width, uint32_t height,
                    WP2_STATUS_INVALID_PARAMETER);
     }
     prev_buff_index = seg_index;
+    prev_buff_num_pixels = lzw_buf.num_pixels;
 
-    if (encode_info != nullptr) {
-      if (!encode_info->bits_per_pixel.empty()) {
-        // TODO(mouradfelipe) Write the proper values
-      }
-      if (!encode_info->line_tokens.empty() && new_line) {
-        UpdateLineTokens(pixel_index / width, *enc, &last_written_row,
-                         encode_info);
-        new_line = false;
-      }
+    if (encode_info != nullptr && !encode_info->line_tokens.empty() &&
+        new_line) {
+      UpdateLineTokens(pixel_index / width, *enc, &last_written_row,
+                       encode_info);
+      new_line = false;
     }
-  }
-  // TODO(mouradfelipe) Write the proper values
-  if (encode_info != nullptr && !encode_info->bits_per_pixel.empty()) {
-    std::fill(encode_info->bits_per_pixel.begin(),
-              encode_info->bits_per_pixel.end(), 1.f);
   }
 
   // Put remaining from lzw_buf inside code stream.
-  ProcessCode(prev_buff_index, segment_map.MaxCode(), &has_just_cleared_cache,
-              enc);
+  ProcessCode(total_pixels - prev_buff_num_pixels, total_pixels,
+              prev_buff_index, segment_map.MaxCode(), &has_just_cleared_cache,
+              enc, encode_info);
   if (encode_info != nullptr && !encode_info->line_tokens.empty()) {
     UpdateLineTokens(height, *enc, &last_written_row, encode_info);
   }
@@ -125,8 +123,7 @@ WP2Status Impl(const int16_t* const argb, uint32_t width, uint32_t height,
 WP2Status LZWEncode(const Buffer_s16& input_buffer, const Palette& palette,
                     int effort, WP2::ANSEncBase* const enc,
                     EncodeInfo* const encode_info) {
-  const uint32_t capacity =
-      std::max(kLZWCapacity, static_cast<uint32_t>(palette.Size()));
+  const uint32_t capacity = palette.Size() + kLZWCapacity;
   const uint32_t width = input_buffer.width, height = input_buffer.height;
   const int16_t* const argb = input_buffer.data;
 

@@ -863,10 +863,8 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
         assert(num_transforms == 1);
         assert(palette_.Size() >= 2);
         WP2_CHECK_STATUS(palette_.Write(progress_local, enc, dicts, this));
-        // 'lzw_capacity' must be at least (number of colors + 1)
-        // since being equal would produce an useless cache for segments.
-        const uint32_t lzw_capacity =
-            std::max(kLZWCapacity, palette_.Size() + 1);
+        // 'lzw_capacity' must be at least number of colors.
+        const uint32_t lzw_capacity = palette_.Size() + kLZWCapacity;
         assert(lzw_capacity <= kLZWCapacityMax);
         enc->PutRange(lzw_capacity, palette_.Size() + 1, kLZWCapacityMax,
                       "capacity");
