@@ -31,7 +31,7 @@ TEST(LosslessHistogram, HistoQueue) {
   WP2::UniformIntDistribution generator(seed);
   LosslessSymbolsInfo symbols_info;
   symbols_info.Init(/*num_pixels=*/1000, /*has_alpha=*/true, WP2_Argb_32);
-  symbols_info.SetCacheRange(1 << 10);
+  symbols_info.SetCacheRange(1 << 10, /*has_segment_cache=*/false);
 
   PopulationAnalyzer analyzer(kNumHistos);
   ASSERT_WP2_OK(analyzer.Allocate(symbols_info));

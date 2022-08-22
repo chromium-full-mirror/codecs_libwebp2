@@ -2658,13 +2658,17 @@ static void Fill(uint32_t pos, uint32_t length, const WP2::Rectangle& tile_rect,
   out->Fill({tile_rect.x, end_y, (pos + length) % tile_width, 1}, color);
 }
 
-static const char* const kSymbolTypeNames[] = {"Literal", "Copy", "Cache"};
+static const char* const kSymbolTypeNames[] = {"Literal", "Copy", "ColorCache",
+                                               "SegmentCache"};
 STATIC_ASSERT_ARRAY_SIZE(kSymbolTypeNames, kSymbolTypeNum);
 static const char* const kGroup4ModeNames[] = {
     "Group4 Vertical", "Group4 Horizontal", "Group4 Pass"};
 static const char* const kLZWTypeName = "LZW";
-static const WP2::Argb32b kSymbolColors[3][3] = {
-    {{255, 255, 0, 0}, {255, 0, 255, 0}, {255, 0, 0, 255}},        // SymbolType
+static const WP2::Argb32b kSymbolColors[3][4] = {
+    {{255, 255, 0, 0},
+     {255, 0, 255, 0},
+     {255, 0, 0, 255},
+     {255, 128, 64, 200}},                                         // SymbolType
     {{255, 255, 255, 0}, {255, 0, 255, 255}, {255, 255, 0, 255}},  // Group4
     {{255, 255, 128, 64}}                                          // LZW
 };

@@ -293,20 +293,22 @@ TEST(SymbolsInfo, LossessSymbolsInfo) {
   WP2L::LosslessSymbolsInfo info;
   info.Init(/*num_pixels=*/1000, /*has_alpha=*/true, WP2_Argb_32);
   info.SetNumClusters(3);
-  info.SetCacheRange(1 << 2);
+  info.SetCacheRange(1 << 2, /*has_segment_cache=*/false);
   EXPECT_EQ(info.Range(WP2L::kSymbolA, /*cluster=*/0), (uint32_t)(1 << 8));
   EXPECT_EQ(info.NumClusters(WP2L::kSymbolA), 3u);
 
-  EXPECT_EQ(info.Range(WP2L::kSymbolCache, /*cluster=*/0), (uint32_t)(1 << 2));
-  EXPECT_EQ(info.NumClusters(WP2L::kSymbolCache), 3u);
+  EXPECT_EQ(info.Range(WP2L::kSymbolColorCache, /*cluster=*/0),
+            (uint32_t)(1 << 2));
+  EXPECT_EQ(info.NumClusters(WP2L::kSymbolColorCache), 3u);
 
-  info.SetCacheRange(1 << 4);
-  EXPECT_EQ(info.Range(WP2L::kSymbolCache, /*cluster=*/0), (uint32_t)(1 << 4));
-  EXPECT_EQ(info.NumClusters(WP2L::kSymbolCache), 3u);
+  info.SetCacheRange(1 << 4, /*has_segment_cache=*/false);
+  EXPECT_EQ(info.Range(WP2L::kSymbolColorCache, /*cluster=*/0),
+            (uint32_t)(1 << 4));
+  EXPECT_EQ(info.NumClusters(WP2L::kSymbolColorCache), 3u);
 
   info.SetNumClusters(2);
   EXPECT_EQ(info.NumClusters(WP2L::kSymbolA), 2u);
-  EXPECT_EQ(info.NumClusters(WP2L::kSymbolCache), 2u);
+  EXPECT_EQ(info.NumClusters(WP2L::kSymbolColorCache), 2u);
 }
 
 // Helper function for the following two tests.

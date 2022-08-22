@@ -74,9 +74,11 @@ enum class CacheType {
   kFifo,
 };
 
+// Color cache and segment cache configs.
 struct CacheConfig {
-  CacheType type;
-  uint32_t cache_bits;
+  CacheType type;          // color cache
+  uint32_t cache_bits;     // color cache
+  bool use_segment_cache;  // segment cache
 };
 
 // A generic color cache.

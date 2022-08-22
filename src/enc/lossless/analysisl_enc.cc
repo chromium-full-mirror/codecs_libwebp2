@@ -501,6 +501,8 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   if (encoder->palette_.Size() >= 2 && encoder->palette_.Size() < 256) {
     WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
     configs->back().transforms = FindTransformTypes(TransformType::kLZW);
+    configs->back().use_premultiplied =
+        (encoder->has_alpha_ && !WP2IsPremultiplied(encoder->pic_.format()));
   }
 
   // Do not use Group4 for big palettes for CPU reasons and also because it is

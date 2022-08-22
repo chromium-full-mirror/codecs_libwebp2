@@ -107,4 +107,44 @@ WP2Status SegmentMap::FindOrAdd(const ColorSegment& segment, uint32_t& index) {
   segments_.push_back_no_resize(segment);
   return WP2_STATUS_OK;
 }
+
+//------------------------------------------------------------------------------
+// SegmentCache.
+
+WP2Status SegmentCache::Allocate(uint32_t num_bits) {
+  num_bits_ = num_bits;
+  const uint64_t hash_size = (1 << num_bits_);
+  WP2_CHECK_ALLOC_OK(segments_.resize(hash_size));
+  return WP2_STATUS_OK;
+}
+
+bool SegmentCache::HasKey(const ColorSegment& segment,
+                          uint32_t* const index) const {
+  assert(segment.num_pixels != 0);
+  const uint32_t hash =
+      decoding::HashPixN(segment.data, segment.num_pixels, num_bits_);
+  if (segments_[hash] == segment) {
+    if (index != nullptr) *index = hash;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool SegmentCache::Insert(const ColorSegment& segment, uint32_t* const index) {
+  const uint32_t hash =
+      decoding::HashPixN(segment.data, segment.num_pixels, num_bits_);
+  if (index != nullptr) *index = hash;
+  if (segments_[hash] == segment) {
+    return false;
+  } else {
+    segments_[hash] = segment;
+    return true;
+  }
+}
+
+void SegmentCache::Lookup(uint32_t index, ColorSegment* const segment) const {
+  assert((index >> num_bits_) == 0u);
+  *segment = segments_[index];
+}
 }  // namespace WP2

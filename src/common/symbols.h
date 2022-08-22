@@ -108,18 +108,18 @@ class SymbolsInfo {
 
   uint32_t StartingProbaP0(uint32_t sym, uint32_t cluster) const {
     assert(Method(sym) == StorageMethod::kAdaptiveBit &&
-        Range(sym, cluster) == 2);
+           Range(sym, cluster) == 2);
     return GetClusterInfo(sym, cluster).p0;
   }
 
   uint32_t StartingProbaP1(uint32_t sym, uint32_t cluster) const {
     assert(Method(sym) == StorageMethod::kAdaptiveBit &&
-        Range(sym, cluster) == 2);
+           Range(sym, cluster) == 2);
     return GetClusterInfo(sym, cluster).p1;
   }
 
   void GetInitialCDF(uint32_t sym, uint32_t cluster, const uint16_t** const cdf,
-                  uint16_t* const max_proba) const;
+                     uint16_t* const max_proba) const;
   WP2Status SetInitialCDF(uint32_t sym, uint32_t cluster,
                           const uint16_t* const cdf, uint16_t max_proba);
 
@@ -218,9 +218,7 @@ class SymbolsInfo {
     bool MinMaxIsValid(int new_min, int new_max) const;
   };
 
-  inline SymbolInfo* GetSymbolInfo(uint32_t sym) {
-    return &symbols_info_[sym];
-  }
+  inline SymbolInfo* GetSymbolInfo(uint32_t sym) { return &symbols_info_[sym]; }
 
   inline const SymbolInfo& GetSymbolInfo(uint32_t sym) const {
     return symbols_info_[sym];
@@ -415,8 +413,8 @@ class SymbolIO {
   }
 
   // Sets up the given symbol as an adaptive bit.
-  WP2Status AddAdaptiveBit(uint32_t sym, uint32_t cluster,
-                           uint32_t p0 = 1, uint32_t p1 = 1) {
+  WP2Status AddAdaptiveBit(uint32_t sym, uint32_t cluster, uint32_t p0 = 1,
+                           uint32_t p1 = 1) {
     Stat* const stat = GetStats(sym, cluster);
     stat->type = Stat::Type::kAdaptiveBit;
     stat->is_symmetric = false;
@@ -556,11 +554,10 @@ constexpr Symbol kSymbolsForCoeffsPerTf[] = {
     kSymbolDC, kSymbolResidualUseBounds, kSymbolResidualBound1IsX,
     kSymbolResidualUseBound2};
 constexpr Symbol kSymbolsForAOMCoeffs[] = {
-    kAOMEOBPT4,   kAOMEOBPT8,
-    kAOMEOBPT16,  kAOMEOBPT32,      kAOMEOBPT64,
-    kAOMEOBPT128, kAOMEOBPT256,     kAOMEOBPT512,  kAOMEOBPT1024,
-    kAOMEOBExtra, kAOMCoeffBaseEOB, kAOMCoeffBase, kAOMCoeffBaseRange
-};
+    kAOMEOBPT4,        kAOMEOBPT8,   kAOMEOBPT16,      kAOMEOBPT32,
+    kAOMEOBPT64,       kAOMEOBPT128, kAOMEOBPT256,     kAOMEOBPT512,
+    kAOMEOBPT1024,     kAOMEOBExtra, kAOMCoeffBaseEOB, kAOMCoeffBase,
+    kAOMCoeffBaseRange};
 
 enum SymbolCount {
   kSymbolCountZero = 0,
@@ -569,11 +566,7 @@ enum SymbolCount {
   kSymbolCountLast
 };
 
-enum AlphaMode {
-  kAlphaModeLossless = 0,
-  kAlphaModeLossy,
-  kAlphaModeNum
-};
+enum AlphaMode { kAlphaModeLossless = 0, kAlphaModeLossy, kAlphaModeNum };
 
 enum BlockAlphaMode {
   kBlockAlphaFullTransp,  // All pixels have an alpha of 0.
@@ -599,14 +592,16 @@ enum Symbol {
   kSymbolR,
   kSymbolG,
   kSymbolB,
-  kSymbolCache,
+  kSymbolColorCache,
+  kSymbolSegmentCache,
   kSymbolDist,
   kSymbolLen,
   kSymbolSubMode,
   kSymbolNum
 };
 static const char* const kSymbolNames[] = {
-    "type", "a", "r", "g", "b", "cache", "dist", "len", "sub_mode"};
+    "type",          "a",    "r",   "g",       "b", "color_cache",
+    "segment_cache", "dist", "len", "sub_mode"};
 STATIC_ASSERT_ARRAY_SIZE(kSymbolNames, kSymbolNum);
 
 // Group 4 symbols.
@@ -633,10 +628,12 @@ void InitGroup4(uint32_t width, uint32_t num_colors,
 static_assert(kSymbolNum <= WP2::kSymbolNumMax, "kSymbolNumMax too small");
 
 enum SymbolType {
-  kSymbolTypeLiteral,   // literal value
-  kSymbolTypeCopy,      // copy from (distance, length)
-  kSymbolTypeCacheIdx,  // index in the color cache
-  kSymbolTypeNum
+  kSymbolTypeLiteral,          // literal value
+  kSymbolTypeCopy,             // copy from (distance, length)
+  kSymbolTypeColorCacheIdx,    // index in the color cache
+  kSymbolTypeSegmentCacheIdx,  // index in the segment cache
+  kSymbolTypeNum,
+  kSymbolTypeDiscarded  // discarded symbol due to segment cache
 };
 
 // Returns whether a symbol will be potentially used, depending on type.
@@ -668,7 +665,9 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
   // Changes the number of clusters for all symbols.
   void SetNumClusters(uint32_t num_clusters);
 
-  void SetCacheRange(uint32_t cache_range);
+  // Sets the range of the color cache and segment cache (if used).
+  void SetCacheRange(uint32_t cache_range, bool has_segment_cache);
+
   WP2SampleFormat SampleFormat() const { return sample_format_; }
 
   // Returns whether alpha is used and whether it is a label image (ARB unused).

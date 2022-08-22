@@ -103,8 +103,8 @@ class CostModel : public CountsBuffer<float> {
   }
 
   inline float GetCacheCost(uint32_t idx) const {
-    return counts_[kSymbolType][kSymbolTypeCacheIdx] +
-           counts_[kSymbolCache][idx];
+    return counts_[kSymbolType][kSymbolTypeColorCacheIdx] +
+           counts_[kSymbolColorCache][idx];
   }
 
   inline float GetLengthCost(uint32_t length) const {
@@ -149,7 +149,7 @@ static inline void AddSingleLiteralWithCostModel(
       cost[idx] = (float)cost_val;
       // Only one is inserted.
       segments[idx].len = 1;
-      segments[idx].mode = kSymbolTypeCacheIdx;
+      segments[idx].mode = kSymbolTypeColorCacheIdx;
     }
   } else {
     const float mul1 = 0.82f;
@@ -735,14 +735,14 @@ static WP2Status BackwardReferencesHashChainFollowChosenPath(
         }
       }
       i += len;
-    } else if (seg.mode == kSymbolTypeCacheIdx) {
+    } else if (seg.mode == kSymbolTypeColorCacheIdx) {
       uint32_t tag;
       if (!color_cache->Contains(&argb[4 * i], &tag)) {
         *check_histogram = false;
         break;
       }
       WP2_CHECK_STATUS(refs->CursorAdd(
-          PixelMode::CreateCacheIdx(tag, color_cache->IndexRange())));
+          PixelMode::CreateColorCacheIdx(tag, color_cache->IndexRange())));
       color_cache->Insert(&argb[4 * i], /*index_ptr=*/nullptr);
       ++i;
     } else {

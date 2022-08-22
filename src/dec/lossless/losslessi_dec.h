@@ -53,6 +53,7 @@ class Metadata {
   LosslessSymbolsInfo symbols_info_;
   CacheConfig cache_config_;
   ColorCachePtr color_cache_;
+  WP2::SegmentCache segment_cache_;
 
   uint32_t histogram_mask_;
   int histogram_subsample_bits_;

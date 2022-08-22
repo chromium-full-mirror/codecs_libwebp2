@@ -216,6 +216,8 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
   float cost;
   float* const cost_ptr = get_cost ? &cost : nullptr;
   for (RefsCursor c(refs); c.Ok(); c.Next()) {
+    const PixelMode& v = *c.cur_pos_;
+    if (v.GetMode() == kSymbolTypeDiscarded) continue;
     cost = 0.;
     if (histo_bits != 0u) {
       if ((tile_x != (x & tile_mask)) || (tile_y != (y & tile_mask))) {
@@ -226,7 +228,6 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
         histogram_ix = (segments == nullptr) ? ind : segments[4 * ind + 2];
       }
     }
-    const PixelMode& v = *c.cur_pos_;
     sw->ProcessWithCost(kSymbolType, histogram_ix, v.GetMode(), "lossless_mode",
                         enc, cost_ptr);
     switch (v.GetMode()) {
@@ -246,11 +247,18 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
                             cost_ptr);
         break;
       }
-      case kSymbolTypeCacheIdx: {
-        const uint32_t code = v.GetCacheIdx();
-        sw->ProcessWithCost(kSymbolCache, histogram_ix, code,
-                            v.GetCacheIdxRange() - 1, "cache_idx", enc,
-                            cost_ptr);
+      case kSymbolTypeColorCacheIdx: {
+        const uint32_t code = v.GetColorCacheIdx();
+        sw->ProcessWithCost(kSymbolColorCache, histogram_ix, code,
+                            v.GetColorCacheIdxRange() - 1, "color_cache_idx",
+                            enc, cost_ptr);
+        break;
+      }
+      case kSymbolTypeSegmentCacheIdx: {
+        const uint32_t code = v.GetSegmentCacheIdx();
+        sw->ProcessWithCost(kSymbolSegmentCache, histogram_ix, code,
+                            v.GetSegmentCacheIdxRange() - 1,
+                            "segment_cache_idx", enc, cost_ptr);
         break;
       }
       case kSymbolTypeCopy: {
@@ -445,12 +453,13 @@ WP2Status Encoder::EncodeImageInternal(
   const bool use_palette =
       (std::find(config.transforms, end, TransformType::kColorIndexing) != end);
   const uint32_t width = argb_buffer_.width, height = argb_buffer_.height;
-  const bool cache_is_disabled = (width * height == 1);
+  const bool color_cache_is_disabled = (width * height == 1);
+  const bool segment_cache_is_disabled = (width * height < 3);
   const uint32_t cache_bits_max =
-      cache_is_disabled ? 0
-      : use_palette     ? std::min(1u + (uint32_t)WP2Log2Floor(palette_.Size()),
-                               kMaxCacheBits)
-                        : kMaxCacheBits;
+      color_cache_is_disabled ? 0
+      : use_palette ? std::min(1u + (uint32_t)WP2Log2Floor(palette_.Size()),
+                               kMaxColorCacheBits)
+                    : kMaxColorCacheBits;
 
   const int16_t* const argb = argb_buffer_.data;
   const uint32_t histogram_bits = config.histo_bits;
@@ -472,10 +481,10 @@ WP2Status Encoder::EncodeImageInternal(
   uint32_t max_range = 0;
   for (uint32_t i = 0; i <= cache_bits_max; ++i) {
     const CacheConfig cache_config_tmp = {
-        (i > 0) ? CacheType::kHash : CacheType::kNone, i};
+        (i > 0) ? CacheType::kHash : CacheType::kNone, i, false};
     max_range = std::max(max_range, GetColorCacheRange(cache_config_tmp));
   }
-  symbols_info.SetCacheRange(max_range);
+  symbols_info.SetCacheRange(max_range, /*has_segment_cache=*/max_range != 0);
   symbols_info.SetNumClusters(1);
   // Create a SymbolRecorder that can record the maximum number of cache
   // symbols.
@@ -520,7 +529,8 @@ WP2Status Encoder::EncodeImageInternal(
         config.lz77s_types_to_try[lz77s_idx], cache_bits_max, hash_chain_,
         symbols_info, &symbol_recorder_one_segment, &cache_config, &ref_pool_,
         &refs_best));
-    symbols_info.SetCacheRange(GetColorCacheRange(cache_config));
+    symbols_info.SetCacheRange(GetColorCacheRange(cache_config),
+                               cache_config.use_segment_cache);
     WP2_CHECK_ALLOC_OK(
         histogram_image.Allocate(num_segments_max, symbols_info));
 
@@ -532,11 +542,16 @@ WP2Status Encoder::EncodeImageInternal(
     // Write the global header
     enc->AddDebugPrefix("GlobalHeader");
     // Color Cache parameters.
-    if (!cache_is_disabled &&
+    if (!color_cache_is_disabled &&
         enc->PutBool(cache_config.type != CacheType::kNone, "color_cache")) {
       assert(cache_config.cache_bits > 0);
-      enc->PutRange(cache_config.cache_bits, 1, kMaxCacheBits,
+      enc->PutRange(cache_config.cache_bits, 1, kMaxColorCacheBits,
                     "color_cache_bits");
+    }
+
+    // Segment Cache parameters.
+    if (!segment_cache_is_disabled && cache_config.type != CacheType::kNone) {
+      enc->PutBool(cache_config.use_segment_cache, "segment_cache");
     }
 
     // Find the maximum subsampling that would result in >= 2 histograms.
@@ -917,7 +932,7 @@ WP2Status Encoder::ApplyAndWriteTransforms(
     LosslessSymbolsInfo* const symbols_info, WP2::ANSEnc* const enc,
     WP2::ANSDictionaries* const dicts) {
   WP2_CHECK_STATUS(symbols_info->CopyFrom(symbols_info_));
-  symbols_info->SetCacheRange(0);
+  symbols_info->SetCacheRange(0, /*has_segment_cache=*/false);
 
   const WP2::ANSDebugPrefix prefix1(enc, "GlobalHeader");
   const WP2::ANSDebugPrefix prefix2(enc, "transforms");

@@ -48,6 +48,7 @@ static inline uint64_t HashPixImpl(const uint8_t* const color) {
 }
 
 static inline uint32_t FinalizeHash(uint64_t hash, uint32_t hash_bits) {
+  assert(hash_bits > 0);  // uint32_t >> 32 is undefined
   // Note that masking with 0xffffffffu is for preventing an
   // 'unsigned int overflow' warning. Doesn't impact the compiled code.
   return (uint32_t)(hash & 0xffffffffu) >> (32 - hash_bits);

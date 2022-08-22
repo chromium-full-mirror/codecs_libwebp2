@@ -24,6 +24,7 @@
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/symbols_enc.h"
 #include "src/utils/hash.h"
+#include "src/utils/hash_map.h"
 
 namespace WP2L {
 
@@ -380,7 +381,7 @@ static inline WP2Status AddSingleLiteral(const int16_t* const pixel,
     if (color_cache->Insert(pixel, &cache_index)) {
       v = PixelMode::CreateLiteral(pixel);
     } else {
-      v = PixelMode::CreateCacheIdx(cache_index, index_range);
+      v = PixelMode::CreateColorCacheIdx(cache_index, index_range);
     }
   } else {
     v = PixelMode::CreateLiteral(pixel);
@@ -650,10 +651,11 @@ static WP2Status CalculateBestCacheConfig(
   if (effort <= 3 || cache_bits_max == 0) {
     cache_config->type = CacheType::kNone;
     cache_config->cache_bits = 0;
+    cache_config->use_segment_cache = false;
     return WP2_STATUS_OK;
   }
 
-  assert(cache_bits_max > 0 && cache_bits_max <= kMaxCacheBits);
+  assert(cache_bits_max > 0 && cache_bits_max <= kMaxColorCacheBits);
 
   // Allocate data.
   float cost_min = std::numeric_limits<float>::max();
@@ -663,10 +665,11 @@ static WP2Status CalculateBestCacheConfig(
 
     // TODO(maryla): try other types.
     const CacheConfig cache_config_tmp = {
-        (i > 0) ? CacheType::kHash : CacheType::kNone, i};
+        (i > 0) ? CacheType::kHash : CacheType::kNone, i, i > 0};
 
     // Update the refs to deal with a cache of size 'i' bits.
-    symbols_info->SetCacheRange(GetColorCacheRange(cache_config_tmp));
+    symbols_info->SetCacheRange(GetColorCacheRange(cache_config_tmp),
+                                cache_config_tmp.use_segment_cache);
     if (i > 0) {
       WP2_CHECK_STATUS(refs_tmp->CopyFrom(refs_in));
       WP2_CHECK_STATUS(
@@ -704,25 +707,62 @@ WP2Status BackwardRefsWithLocalCache(const int16_t* const argb,
   ColorCachePtr color_cache;
   WP2_CHECK_STATUS(color_cache.Init(cache_config));
 
+  WP2::SegmentCache segment_cache;
+  if (cache_config.use_segment_cache) {
+    WP2_CHECK_STATUS(segment_cache.Allocate(kMaxSegmentCacheBits));
+  }
+  // Track if token can be replaced by segment cache index.
+  // Only consider 2-pixel segments for now.
+  STATIC_ASSERT_ARRAY_SIZE(kSegmentSizes, 1);
+  static_assert(kSegmentSizes[0] == 2);
   uint32_t pixel_index = 0;
   RefsCursor c(*refs);
   while (c.Ok()) {
     PixelMode* const v = c.cur_pos_;
+    c.Next();
+    PixelMode* const v_next = c.cur_pos_;
     switch (v->GetMode()) {
       case kSymbolTypeLiteral: {
         uint32_t ix;
-        if (color_cache->Contains(&argb[4 * pixel_index], &ix)) {
-          // color_cache contains argb_literal
-          *v = PixelMode::CreateCacheIdx(ix, color_cache->IndexRange());
+        if (cache_config.use_segment_cache && v_next != nullptr &&
+            v_next->GetMode() == kSymbolTypeLiteral &&
+            segment_cache.HasKey({&argb[4 * pixel_index], 2}, &ix)) {
+          // segment_cache contains pixel segment starting in current pixel.
+          *v = PixelMode::CreateSegmentCacheIdx(2, ix,
+                                                segment_cache.IndexRange());
+          *v_next = PixelMode::CreateDiscarded();
+        } else if (color_cache->Contains(&argb[4 * pixel_index], &ix)) {
+          // color_cache contains argb_literal.
+          *v = PixelMode::CreateColorCacheIdx(ix, color_cache->IndexRange());
         }
         color_cache->Insert(&argb[4 * pixel_index], /*index_ptr=*/nullptr);
+        if (cache_config.use_segment_cache && pixel_index > 0) {
+          segment_cache.Insert({&argb[4 * (pixel_index - 1)], 2},
+                               /*index=*/nullptr);
+        }
         ++pixel_index;
         break;
       }
       case kSymbolTypeCopy: {
         for (uint32_t k = 0; k < v->GetLength(); ++k) {
-          color_cache->Insert(&argb[4 * pixel_index++], /*index_ptr=*/nullptr);
+          if (cache_config.use_segment_cache && pixel_index + k > 0) {
+            segment_cache.Insert({&argb[4 * (pixel_index + k - 1)], 2},
+                                 /*index=*/nullptr);
+          }
+          color_cache->Insert(&argb[4 * (pixel_index + k)],
+                              /*index_ptr=*/nullptr);
         }
+        pixel_index += v->GetLength();
+        break;
+      }
+      case kSymbolTypeDiscarded: {
+        // Pixel was merged into a segment on a previous pixel.
+        // Just update the caches.
+        assert(cache_config.use_segment_cache);
+        segment_cache.Insert({&argb[4 * (pixel_index - 1)], 2},
+                             /*index=*/nullptr);
+        color_cache->Insert(&argb[4 * pixel_index], /*index_ptr=*/nullptr);
+        ++pixel_index;
         break;
       }
       default:
@@ -730,7 +770,6 @@ WP2Status BackwardRefsWithLocalCache(const int16_t* const argb,
         // indexes.
         assert(false);
     }
-    c.Next();
   }
   return WP2_STATUS_OK;
 }
@@ -741,8 +780,9 @@ static WP2Status GetBackwardReferencesLowEffort(
     BackwardRefsPool::RefsPtr* const refs) {
   refs->reset();
   auto refs_lz77 = ref_pool->GetFreeBackwardRefs();
-  WP2_CHECK_STATUS(BackwardReferencesLz77(
-      width, height, argb, {CacheType::kNone, 0}, hash_chain, &*refs_lz77));
+  WP2_CHECK_STATUS(BackwardReferencesLz77(width, height, argb,
+                                          {CacheType::kNone, 0, false},
+                                          hash_chain, &*refs_lz77));
   *refs = std::move(refs_lz77);
   return WP2_STATUS_OK;
 }
@@ -803,7 +843,7 @@ static WP2Status GetBackwardReferencesImpl(
     lz77_types_to_try |= kLZ77None;
   }
 
-  const CacheConfig kNoCache{CacheType::kNone, 0};
+  const CacheConfig kNoCache{CacheType::kNone, 0, false};
 
   for (int lz77_type = 1; lz77_types_to_try;
        lz77_types_to_try &= ~lz77_type, lz77_type <<= 1) {
@@ -841,7 +881,8 @@ static WP2Status GetBackwardReferencesImpl(
     WP2_CHECK_STATUS(CalculateBestCacheConfig(
         width, height, argb, num_pixels, effort, *refs_tmp, ref_pool,
         cache_bits_max, &symbols_info_tmp, symbol_recorder, &cache_config_tmp));
-    symbols_info_tmp.SetCacheRange(GetColorCacheRange(cache_config_tmp));
+    symbols_info_tmp.SetCacheRange(GetColorCacheRange(cache_config_tmp),
+                                   cache_config_tmp.use_segment_cache);
     if (cache_config_tmp.type != CacheType::kNone) {
       WP2_CHECK_STATUS(
           BackwardRefsWithLocalCache(argb, cache_config_tmp, refs_tmp_ptr));
@@ -897,6 +938,7 @@ WP2Status GetBackwardReferences(
   if (effort == 0) {
     cache_config->type = CacheType::kNone;
     cache_config->cache_bits = 0;
+    cache_config->use_segment_cache = false;
     return GetBackwardReferencesLowEffort(width, height, argb, hash_chain,
                                           ref_pool, refs);
   } else {

@@ -41,7 +41,7 @@ constexpr uint32_t kClearCode = 0;
 namespace WP2 {
 
 // SegmentMap maps segment of pixels (key) to an index in an internal vector
-// (value).
+// (value). Used for LZW compression algorithm.
 class SegmentMap {
  public:
   explicit SegmentMap(uint32_t num_segments);
@@ -58,7 +58,7 @@ class SegmentMap {
   // and returns index of corresponding segment in segment vector.
   WP2Status FindOrAdd(const ColorSegment& segment, uint32_t& index);
 
-  // Searches for segment in the cache and return its index in segment vector.
+  // Searches for segment in the cache and returns its index in segment vector.
   // Returns false if segment is not found in cache.
   bool HasKey(const ColorSegment& segment, uint32_t& index) const;
 
@@ -74,6 +74,29 @@ class SegmentMap {
   Vector<uint32_t> hash_map_;
 
   uint32_t num_colors_;  // number of unique colors in the image
+};
+
+// SegmentCache stores segments similarly to SegmentMap, but overwrites the
+// previous value when a hash collision happens.
+class SegmentCache {
+ public:
+  WP2Status Allocate(uint32_t num_bits);
+
+  // Searches for segment in the cache. Returns index in cache if found.
+  bool HasKey(const ColorSegment& segment, uint32_t* const index) const;
+
+  // Inserts segment in the cache. Returns false if segment is already in
+  // the cache. Returns segment index in cache.
+  bool Insert(const ColorSegment& segment, uint32_t* const index);
+
+  // Returns a segment from a given cache index.
+  void Lookup(uint32_t index, ColorSegment* const segment) const;
+
+  uint32_t IndexRange() const { return segments_.size(); }
+
+ private:
+  uint32_t num_bits_;
+  Vector<ColorSegment> segments_;
 };
 }  // namespace WP2
 

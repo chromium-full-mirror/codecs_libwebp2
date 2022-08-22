@@ -47,9 +47,19 @@ class PixelMode {
     return {kSymbolTypeCopy, len, offset};
   }
 
-  static inline PixelMode CreateCacheIdx(uint32_t idx, uint32_t range) {
-    assert(idx < (1 << kMaxCacheBits));
-    return {kSymbolTypeCacheIdx, 1, idx, range};
+  static inline PixelMode CreateColorCacheIdx(uint32_t idx, uint32_t range) {
+    assert(idx < (1 << kMaxColorCacheBits));
+    return {kSymbolTypeColorCacheIdx, 1, idx, range};
+  }
+
+  static inline PixelMode CreateSegmentCacheIdx(uint32_t len, uint32_t idx,
+                                                uint32_t range) {
+    assert(idx < (1 << kMaxSegmentCacheBits));
+    return {kSymbolTypeSegmentCacheIdx, len, idx, range};
+  }
+
+  static inline PixelMode CreateDiscarded() {
+    return {kSymbolTypeDiscarded, 0, 0, 0};
   }
 
   static inline PixelMode CreateLiteral(const int16_t* const argb) {
@@ -66,14 +76,25 @@ class PixelMode {
 
   inline uint32_t GetLength() const { return len_; }
 
-  inline uint32_t GetCacheIdx() const {
-    assert(mode_ == kSymbolTypeCacheIdx);
-    assert(argb_or_offset_.cache_idx < (1U << kMaxCacheBits));
+  inline uint32_t GetColorCacheIdx() const {
+    assert(mode_ == kSymbolTypeColorCacheIdx);
+    assert(argb_or_offset_.cache_idx < (1U << kMaxColorCacheBits));
     return argb_or_offset_.cache_idx;
   }
 
-  inline uint32_t GetCacheIdxRange() const {
-    assert(mode_ == kSymbolTypeCacheIdx);
+  inline uint32_t GetSegmentCacheIdx() const {
+    assert(mode_ == kSymbolTypeSegmentCacheIdx);
+    assert(argb_or_offset_.cache_idx < (1U << kMaxSegmentCacheBits));
+    return argb_or_offset_.cache_idx;
+  }
+
+  inline uint32_t GetColorCacheIdxRange() const {
+    assert(mode_ == kSymbolTypeColorCacheIdx);
+    return range_;
+  }
+
+  inline uint32_t GetSegmentCacheIdxRange() const {
+    assert(mode_ == kSymbolTypeSegmentCacheIdx);
     return range_;
   }
 
@@ -105,7 +126,7 @@ class PixelMode {
     int16_t argb[4];
     uint32_t offset;
     uint32_t cache_idx;
-  } argb_or_offset_;  // Or index in color cache.
+  } argb_or_offset_;  // Or index in color cache or index in segment cache.
   uint32_t range_;    // Range of 'argb_or_offset_' (currently used for cache).
 };
 

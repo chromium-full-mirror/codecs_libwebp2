@@ -307,7 +307,9 @@ namespace WP2L {
 // We cannot use too big a value because of ANS limitations and this value gives
 // good enough results.
 static constexpr uint32_t kMaxPaletteSize = (1u << 12);
-static constexpr uint32_t kMaxCacheBits = 10;
+static constexpr uint32_t kMaxColorCacheBits = 10;
+static constexpr uint32_t kMaxSegmentCacheBits = 12;
+static constexpr uint32_t kSegmentSizes[] = {2};
 // Small palettes are stored verbatim.
 static constexpr uint32_t kSmallPaletteLimit = 3;
 

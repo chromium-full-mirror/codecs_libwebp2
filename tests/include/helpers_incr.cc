@@ -314,9 +314,9 @@ class IncrementalDecodingTester {
         if (num_frames_to_skip >= 1) {
           // The first skipped frame just after a decoded frame is that same
           // frame so it does not count.
-          if (!decoded_a_full_frame || num_frames_to_skip >= 2) {
-            frame_index_ = std::min(frame_index_ + action.value, kMaxNumFrames);
-          }
+          frame_index_ = std::min(frame_index_ + num_frames_to_skip -
+                                      (decoded_a_full_frame ? 1 : 0),
+                                  kMaxNumFrames);
           previous_frame_index_ = kMaxNumFrames;
           previous_decoded_area_ = Rectangle(0, 0, 0, 0);
           incremental_output_.Deallocate();

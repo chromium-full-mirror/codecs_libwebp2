@@ -452,7 +452,7 @@ void LosslessSymbolsInfo::InitNonARGB(uint32_t num_pixels) {
     SetInfo(kSymbolLen, /*min=*/0, prefix_code_max.prefix, num_clusters,
             storage_method);
   }
-  SetCacheRange(0);
+  SetCacheRange(0, /*has_segment_cache=*/false);
 }
 
 void LosslessSymbolsInfo::InitAsLabelImage(uint32_t num_pixels,
@@ -510,19 +510,32 @@ void LosslessSymbolsInfo::SetNumClusters(uint32_t num_clusters) {
   for (uint32_t sym = 0; sym < Size(); ++sym) SetClusters(sym, num_clusters);
 }
 
-void LosslessSymbolsInfo::SetCacheRange(uint32_t cache_range) {
+void LosslessSymbolsInfo::SetCacheRange(uint32_t cache_range,
+                                        bool has_segment_cache) {
   const uint32_t num_clusters = NumClusters(kSymbolType);
   if (cache_range == 0) {
-    // Do not consider kSymbolCache if the cache is unused.
+    // Do not consider kSymbolColorCache or kSymbolSegmentCache if the cache is
+    // unused.
     SetInfo(kSymbolType, /*min=*/0, /*max=*/IsUnused(kSymbolDist) ? 0 : 1,
             num_clusters, StorageMethod::kAuto);
-    SetUnused(kSymbolCache);
+    SetUnused(kSymbolColorCache);
+    SetUnused(kSymbolSegmentCache);
+    assert(!has_segment_cache);
   } else {
     assert(num_pixels_ > 1);
-    SetInfo(kSymbolType, /*min=*/0, /*max=*/kSymbolTypeNum - 1, num_clusters,
+    SetInfo(kSymbolColorCache, /*min=*/0, /*max=*/cache_range - 1, num_clusters,
             StorageMethod::kAuto);
-    SetInfo(kSymbolCache, /*min=*/0, /*max=*/cache_range - 1, num_clusters,
-            StorageMethod::kAuto);
+    if (has_segment_cache) {
+      SetInfo(kSymbolType, /*min=*/0, /*max=*/kSymbolTypeNum - 1, num_clusters,
+              StorageMethod::kAuto);
+      SetInfo(kSymbolSegmentCache, /*min=*/0,
+              /*max=*/(1 << kMaxSegmentCacheBits) - 1, num_clusters,
+              StorageMethod::kAuto);
+    } else {
+      SetInfo(kSymbolType, /*min=*/0, /*max=*/kSymbolTypeNum - 2, num_clusters,
+              StorageMethod::kAuto);
+      SetUnused(kSymbolSegmentCache);
+    }
   }
 }
 
@@ -536,8 +549,10 @@ bool IsSymbolUsed(const Symbol sym, const bool is_maybe_used[kSymbolTypeNum]) {
     case kSymbolG:
     case kSymbolB:
       return is_maybe_used[kSymbolTypeLiteral];
-    case kSymbolCache:
-      return is_maybe_used[kSymbolTypeCacheIdx];
+    case kSymbolColorCache:
+      return is_maybe_used[kSymbolTypeColorCacheIdx];
+    case kSymbolSegmentCache:
+      return is_maybe_used[kSymbolTypeSegmentCacheIdx];
     case kSymbolDist:
     case kSymbolLen:
       return is_maybe_used[kSymbolTypeCopy];

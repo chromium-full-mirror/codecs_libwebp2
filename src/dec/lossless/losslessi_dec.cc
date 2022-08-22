@@ -28,10 +28,10 @@
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/common/vdebug.h"
-#include "src/dec/wp2_dec_i.h"
 #include "src/dsp/lossless/decl_dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/ans_utils.h"
+#include "src/utils/hash_map.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
 #include "src/wp2/format_constants.h"
@@ -360,14 +360,19 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
   uint32_t row = last_pixel_ / width;
   uint32_t col = last_pixel_ % width;
   int16_t* src = data + 4 * last_pixel_;
-  const int16_t* last_cached = src;
+  const int16_t* last_cached_color = src;
+  const int16_t* last_cached_segment = src;
   const int16_t* const src_end = &data_vec->back() + 1;  // End of data
   int16_t* const src_last =
       data + 4 * width * last_row;  // Last pixel to decode
+  WP2::SymbolReader* const sr = &hdr_.sr_;
+  WP2::SegmentCache* const segment_cache =
+      (do_process && !sr->symbols_info().IsUnused(kSymbolSegmentCache))
+          ? &hdr_.segment_cache_
+          : nullptr;
   ColorCache* const color_cache =
       do_process ? hdr_.color_cache_.get() : nullptr;
   const uint32_t mask = hdr_.histogram_mask_;
-  WP2::SymbolReader* const sr = &hdr_.sr_;
 
   uint32_t cluster =
       (src < src_last)
@@ -443,18 +448,48 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
       WP2_CHECK_STATUS(dec_->GetStatus());
       CopyBlock(src, distance, length);
       if (!gparams_->has_alpha_) assert(src[0] == WP2::kAlphaMax);
-    } else if (type == kSymbolTypeCacheIdx) {
+    } else if (type == kSymbolTypeColorCacheIdx) {
       length = 1;
       assert(color_cache != nullptr);
-      while (last_cached < src) {
-        color_cache->Insert(last_cached, /*index_ptr=*/nullptr);
-        last_cached += 4;
+      while (last_cached_color < src) {
+        color_cache->Insert(last_cached_color, /*index_ptr=*/nullptr);
+        last_cached_color += 4;
       }
       int32_t cache_index;
-      WP2_CHECK_STATUS(sr->ReadWithMax(kSymbolCache, cluster,
-                                       color_cache->IndexRange() - 1,
-                                       "cache_idx", &cache_index, cost_ptr));
+      WP2_CHECK_STATUS(sr->ReadWithMax(
+          kSymbolColorCache, cluster, color_cache->IndexRange() - 1,
+          "color_cache_idx", &cache_index, cost_ptr));
       color_cache->Lookup(cache_index, src);
+      if (!gparams_->has_alpha_) assert(src[0] == WP2::kAlphaMax);
+    } else if (type == kSymbolTypeSegmentCacheIdx) {
+      assert(segment_cache != nullptr);
+      STATIC_ASSERT_ARRAY_SIZE(kSegmentSizes, 1);
+      static_assert(kSegmentSizes[0] == 2);
+      for (uint32_t segment_size : kSegmentSizes) {
+        uint32_t shift =
+            std::min(static_cast<uint32_t>(last_cached_segment - data),
+                     4 * (segment_size - 1));
+        const int16_t* start_seg = last_cached_segment - shift;
+        const int16_t* end_seg = start_seg + 4 * (segment_size - 1);
+        ColorSegment seg;  // 'seg' comprehends [start_seg, end_seg]
+        while (end_seg < src) {
+          seg = {start_seg, segment_size};
+          segment_cache->Insert(seg, /*index=*/nullptr);
+          start_seg += 4;
+          end_seg += 4;
+        }
+      }
+      last_cached_segment = src;
+      int32_t cache_index;
+      ColorSegment seg;
+      WP2_CHECK_STATUS(sr->ReadWithMax(
+          kSymbolSegmentCache, cluster, segment_cache->IndexRange() - 1,
+          "segment_cache_idx", &cache_index, cost_ptr));
+      segment_cache->Lookup(cache_index, &seg);
+      WP2_CHECK_OK(seg.data != nullptr, WP2_STATUS_BITSTREAM_ERROR);
+      length =
+          std::min(seg.num_pixels, static_cast<uint32_t>(src_end - src) / 4);
+      std::copy(seg.data, seg.data + 4 * length, src);
       if (!gparams_->has_alpha_) assert(src[0] == WP2::kAlphaMax);
     } else {                                            // Not reached
       WP2_CHECK_OK(false, WP2_STATUS_BITSTREAM_ERROR);  // For error reporting.
@@ -486,18 +521,42 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
     // Only update when changing tile. Note we could use this test:
     // if "((((prev_col ^ col) | prev_row ^ row)) > mask)" -> tile changed
     // but that's actually slower and needs storing the previous col/row.
-    if ((type == kSymbolTypeCopy || (col & mask) == 0) && src < src_end) {
+    if ((type == kSymbolTypeSegmentCacheIdx || type == kSymbolTypeCopy ||
+         (col & mask) == 0) &&
+        src < src_end) {
       cluster = GetMetaIndex(hdr_.histogram_image_, hdr_.histogram_xsize_,
                              hdr_.histogram_subsample_bits_, col, row);
     }
+    if (src < src_end) {
+      assert(static_cast<int>(cluster) ==
+             GetMetaIndex(hdr_.histogram_image_, hdr_.histogram_xsize_,
+                          hdr_.histogram_subsample_bits_, col, row));
+    }
   }
 
-  // Finish filling the color cache.
+  // Finish filling color cache and segment cache.
   if (color_cache != nullptr) {
-    while (last_cached < src) {
-      color_cache->Insert(last_cached, /*index_ptr=*/nullptr);
-      last_cached += 4;
+    while (last_cached_color < src) {
+      color_cache->Insert(last_cached_color, /*index_ptr=*/nullptr);
+      last_cached_color += 4;
     }
+  }
+  if (segment_cache != nullptr) {
+    for (uint32_t segment_size : kSegmentSizes) {
+      uint32_t shift =
+          std::min(static_cast<uint32_t>(last_cached_segment - data),
+                   4 * (segment_size - 1));
+      const int16_t* start_seg = last_cached_segment - shift;
+      const int16_t* end_seg = start_seg + 4 * (segment_size - 1);
+      ColorSegment seg;  // 'seg' comprehends [start_seg, end_seg]
+      while (end_seg < src) {
+        seg = {start_seg, segment_size};
+        segment_cache->Insert(seg, /*index=*/nullptr);
+        start_seg += 4;
+        end_seg += 4;
+      }
+    }
+    last_cached_segment = src;
   }
 
   WP2_CHECK_STATUS(dec_->GetStatus());
@@ -1004,15 +1063,24 @@ WP2Status Decoder::DecodeHeader() {
 
   dec_->PopDebugPrefix();
 
-  // Color cache
   hdr_.cache_config_.type = CacheType::kNone;
   hdr_.cache_config_.cache_bits = 0;
   // Color cache is disabled for 1x1 images.
   if (tile_->rect.GetArea() > 1 && dec_->ReadBool("color_cache")) {
     hdr_.cache_config_.type = CacheType::kHash;
     hdr_.cache_config_.cache_bits =
-        dec_->ReadRange(1, kMaxCacheBits, "color_cache_bits");
+        dec_->ReadRange(1, kMaxColorCacheBits, "color_cache_bits");
     WP2_CHECK_STATUS(hdr_.color_cache_.Init(hdr_.cache_config_));
+  }
+  WP2_CHECK_STATUS(dec_->GetStatus());
+
+  bool has_segment_cache = false;
+  // Segment cache should only be enabled for images with area greater than 2
+  // and when color cache is set.
+  if (tile_->rect.GetArea() > 2 &&
+      hdr_.cache_config_.type != CacheType::kNone) {
+    has_segment_cache = dec_->ReadBool("segment_cache");
+    WP2_CHECK_STATUS(hdr_.segment_cache_.Allocate(kMaxSegmentCacheBits));
   }
   WP2_CHECK_STATUS(dec_->GetStatus());
 
@@ -1057,10 +1125,12 @@ WP2Status Decoder::DecodeHeader() {
   }
   WP2_CHECK_STATUS(dec_->GetStatus());
 
-  // Finish setting up the color-cache
+  // Finish setting up the color cache and segment cache.
   if (hdr_.cache_config_.type != CacheType::kNone) {
-    hdr_.symbols_info_.SetCacheRange(GetColorCacheRange(hdr_.cache_config_));
+    hdr_.symbols_info_.SetCacheRange(GetColorCacheRange(hdr_.cache_config_),
+                                     has_segment_cache);
   }
+
   // Read the ANS probabilities.
   LosslessSymbolsInfo symbols_info;
   WP2_CHECK_STATUS(symbols_info.CopyFrom(hdr_.symbols_info_));
