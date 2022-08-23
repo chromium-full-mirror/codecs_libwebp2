@@ -464,7 +464,7 @@ WP2Status Decoder::DecodeAndProcess(uint32_t width, uint32_t last_row,
     } else if (type == kSymbolTypeSegmentCacheIdx) {
       assert(segment_cache != nullptr);
       STATIC_ASSERT_ARRAY_SIZE(kSegmentSizes, 1);
-      static_assert(kSegmentSizes[0] == 2);
+      static_assert(kSegmentSizes[0] == 2, "Unsupported feature");
       for (uint32_t segment_size : kSegmentSizes) {
         uint32_t shift =
             std::min(static_cast<uint32_t>(last_cached_segment - data),

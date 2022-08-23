@@ -714,7 +714,7 @@ WP2Status BackwardRefsWithLocalCache(const int16_t* const argb,
   // Track if token can be replaced by segment cache index.
   // Only consider 2-pixel segments for now.
   STATIC_ASSERT_ARRAY_SIZE(kSegmentSizes, 1);
-  static_assert(kSegmentSizes[0] == 2);
+  static_assert(kSegmentSizes[0] == 2, "Unsupported feature");
   uint32_t pixel_index = 0;
   RefsCursor c(*refs);
   while (c.Ok()) {
