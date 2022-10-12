@@ -1,9 +1,8 @@
 # WebP 2
 
-WebP 2 is the successor of the WebP image format, currently in development. It
-is not ready for general use, and the format is not finalized so changes to the
-library can break compatibility with images encoded with previous versions. \
-USE AT YOU OWN RISK!
+WebP 2 is an experimental image codec based on WebP. WebP 2 will not be released
+as an image format but is used as a playground for image compression
+experiments.
 
 This package contains the library that can be used in other programs to encode
 or decode Webp 2 images, as well as command line tools.
@@ -18,8 +17,7 @@ The WebP 2 experimental codec is mostly pushing the features of WebP further in
 terms of compression efficiency. The new features (like 10b HDR support) are
 kept minimal. The axis of experimentation are:
 
-*   more efficient lossy compression (~30% better than WebP, as close to AVIF as
-    possible)
+*   more efficient lossy compression (~30% better than WebP)
 *   better visual degradation at very low bitrate
 *   improved lossless compression
 *   improved transparency compression
@@ -43,9 +41,9 @@ parity.
 
 Side-by-side codec comparisons can be found at:
 
+-   [2022-10-04](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2022_10_04/index.html#eaglefairy-hst-big*1:1&AVIF-AOM=s&WEBP2=s&subset1)
 -   [2021-12-15](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_12_15/index.html#ohashi0806shield*1:1&AVIF-AOM=t&WEBP2=t&subset1)
 -   [2021-08-10](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_08_10/index.html#crepuscular-rays-at-sunset-near-waterberg-plateau&AVIF-AOM=s&WEBP2=s&subset1)
--   [2021-06-08](https://storage.googleapis.com/demos.webmproject.org/webp/cmp/2021_06_08/index.html#meg-20110701-japan-expo-02&AVIF-AOM=s&WEBP2=s&subset1)
 
 ## Building
 
