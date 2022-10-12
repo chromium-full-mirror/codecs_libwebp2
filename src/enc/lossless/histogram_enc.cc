@@ -695,6 +695,8 @@ static WP2Status HistogramCombineStochastic(
     // valid_size / 2 was chosen empirically. Less means faster but worse
     // compression.
     const uint32_t num_tries = valid_size / 2;
+    const WP2::ProgressScale try_progress(iter_progress,
+                                          1. / std::max(1u, num_tries));
     for (uint32_t j = 0; j < num_tries; ++j) {
       float curr_cost;
       // Choose two different histograms at random and try to combine them.
@@ -710,10 +712,13 @@ static WP2Status HistogramCombineStochastic(
       if (curr_cost < min_diff) {  // found a better pair?
         best_cost = curr_cost;
         // Empty the queue if we reached full capacity.
-        if (queue.full()) break;
+        if (queue.full()) {
+          WP2_CHECK_STATUS(try_progress.AdvanceBy(num_tries - j));
+          break;
+        }
       }
+      WP2_CHECK_STATUS(try_progress.AdvanceBy(1.));
     }
-    WP2_CHECK_STATUS(iter_progress.AdvanceBy(1.));
     if (queue.empty()) continue;
 
     // Merge the two best histograms.
