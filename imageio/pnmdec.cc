@@ -23,6 +23,10 @@
 #include "./imageio_util.h"
 #include "src/utils/utils.h"
 
+#if defined(_MSC_VER) && _MSC_VER < 1900
+#define snprintf _snprintf
+#endif
+
 namespace {
 
 enum PNMFlags {
@@ -127,9 +131,8 @@ WP2Status ReadPAMFields(PNMInfo* const info, size_t* const data_pos,
     } else {
       if (log_level >= WP2::LogLevel::DEFAULT) {
         static const char kEllipsis[] = " ...";
-        if (out_size > 20) {
-          sprintf(out + 20 - strlen(kEllipsis), kEllipsis);  // NOLINT
-        }
+        const size_t kLen = strlen(kEllipsis) + 1;  // +1 = trailing \0
+        if (out_size > 20) snprintf(out + 20 - kLen, kLen, kEllipsis);
         fprintf(stderr, "PAM header error: unrecognized entry [%s]\n", out);
       }
       return WP2_STATUS_BITSTREAM_ERROR;
