@@ -444,7 +444,7 @@ class IncrementalDecodingTester {
         // Arbitrary formula. There is no theoritical maximum threshold but in
         // practice it is unlikely to go beyond this one.
         const uint32_t max_num_block_rows_in_two_bytes =
-            std::max(1u, kMaxBlockSizePix / features->width);
+            std::max(1u, kMinBlockSizePix * kMaxBlockSizePix / features->width);
         max_num_lines = kMaxBlockSizePix * max_num_block_rows_in_two_bytes;
       } else {
         max_num_lines = features->tile_height;
