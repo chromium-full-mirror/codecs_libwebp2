@@ -244,6 +244,7 @@ DEC_OBJS = \
     src/dec/incr/decoder_tiles.o \
     src/dec/lossless/group4_dec.o \
     src/dec/lossless/losslessi_dec.o \
+    src/dec/lossless/lzw_dec.o \
     src/dec/lossless_dec.o \
     src/dec/lossy_dec.o \
     src/dec/main_dec.o \
@@ -290,6 +291,7 @@ ENC_OBJS = \
     src/enc/lossless/backward_references_enc.o \
     src/enc/lossless/group4_enc.o \
     src/enc/lossless/histogram_enc.o \
+    src/enc/lossless/lzw_enc.o \
     src/enc/lossless/palette.o \
     src/enc/lossless/predictorl_enc.o \
     src/enc/lossless/losslessi_enc.o \
@@ -385,6 +387,8 @@ UTILS_DEC_OBJS = \
     src/utils/argb_buffer.o \
     src/utils/csp.o \
     src/utils/data.o \
+    src/utils/hash.o \
+    src/utils/hash_map.o \
     src/utils/context_switch.o \
     src/utils/data_source.o \
     src/utils/data_source_context.o \
