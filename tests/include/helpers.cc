@@ -437,10 +437,13 @@ void DumpImage(const ArgbBuffer& image, const std::string& file_path,
   ArgbBuffer buffer(WP2_Argb_32);
   if (image.format() == buffer.format()) {
     WP2_ASSERT_STATUS(buffer.SetView(image));
+    if (rect.GetArea() != 0) WP2_ASSERT_STATUS(buffer.SetView(buffer, rect));
   } else {
-    WP2_ASSERT_STATUS(buffer.ConvertFrom(image));
+    ArgbBuffer cropped_image(image.format());
+    WP2_ASSERT_STATUS(cropped_image.SetView(
+        image, rect.GetArea() != 0 ? rect : image.AsRect()));
+    WP2_ASSERT_STATUS(buffer.ConvertFrom(cropped_image));
   }
-  if (rect.GetArea() != 0) WP2_ASSERT_STATUS(buffer.SetView(buffer, rect));
   WP2_ASSERT_STATUS(SaveImage(buffer, file_path.c_str(), /*overwrite=*/true));
 }
 

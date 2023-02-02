@@ -378,7 +378,7 @@ class IncrementalDecodingTester {
       if (i > 0) {
         size_t previous_offset, previous_length;
         CHECK_OR_DIE(idec.TryGetFrameLocation(i - 1, &previous_offset,
-                                                  &previous_length));
+                                              &previous_length));
         CHECK_OR_DIE(offset == previous_offset + previous_length);
       }
     }
@@ -443,8 +443,9 @@ class IncrementalDecodingTester {
       if (has_true_incremental_output_) {
         // Arbitrary formula. There is no theoritical maximum threshold but in
         // practice it is unlikely to go beyond this one.
-        const uint32_t max_num_block_rows_in_two_bytes =
-            std::max(1u, kMinBlockSizePix * kMaxBlockSizePix / features->width);
+        const uint32_t max_num_block_rows_in_two_bytes = std::max(
+            1u, kMinBlockSizePix * kMaxBlockSizePix /
+                    (is_sideways ? features->height : features->width));
         max_num_lines = kMaxBlockSizePix * max_num_block_rows_in_two_bytes;
       } else {
         max_num_lines = features->tile_height;
