@@ -34,10 +34,12 @@
 namespace WP2 {
 namespace testutil {
 
-// Limit read image size to avoid out-of-memory issues.
+// Limit read image size to avoid out-of-memory and timeout issues.
 // Hint:  kMaxNumPixels * kMaxBytesPerPixel (4) * kMaxNumFullCanvasAlloc (3)
 //        should be below kMaxFuzzMemory (2 GB).
-constexpr size_t kMaxNumPixels = 1u << 26;
+// Hint:  Fuzzed inputs of a few megapixels tend to take longer than
+//        kEncodingMaxNumSeconds to decode when sanitizers are enabled.
+constexpr size_t kMaxNumPixels = 1u << 22;
 
 // Limit encoding duration to avoid timeout issues (< 90 seconds).
 constexpr double kEncodingMaxNumSeconds = 60.;

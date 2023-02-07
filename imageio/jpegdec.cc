@@ -419,7 +419,9 @@ class ImageReaderJPEG : public ImageReader::Impl {
   // setjmp() and longjmp() and needs to be freed afterwards.
   WP2Status ReadCanvas(volatile jpeg_decompress_struct* const dinfo,
                        uint8_t* volatile* const tmp_rgb) {
-    jpeg_start_decompress((j_decompress_ptr)dinfo);
+    // Use jpeg_calc_output_dimensions() to obtain the image dimensions before
+    // calling jpeg_start_decompress() which can be slow.
+    jpeg_calc_output_dimensions((j_decompress_ptr)dinfo);
 
     WP2_CHECK_OK(dinfo->output_components == kNumOutputComponents,
                  WP2_STATUS_UNSUPPORTED_FEATURE);
@@ -440,6 +442,8 @@ class ImageReaderJPEG : public ImageReader::Impl {
     WP2_CHECK_ALLOC_OK(*tmp_rgb != nullptr);
     JSAMPROW buffer[1];
     buffer[0] = (JSAMPLE*)*tmp_rgb;
+
+    jpeg_start_decompress((j_decompress_ptr)dinfo);
 
     while (dinfo->output_scanline < dinfo->output_height) {
       const uint32_t row = dinfo->output_scanline;
