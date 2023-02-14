@@ -18,7 +18,10 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
+#include <string>
+#include <vector>
 
 #include "src/common/color_precision.h"
 #include "src/common/progress_watcher.h"
@@ -441,7 +444,9 @@ WP2Status Decode(const uint8_t* data, size_t data_size, ArgbBuffer* output,
                  const DecoderConfig& config) {
   WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
   const WP2SampleFormat format_default =
-      (WP2Formatbpc(output->format()) <= 8) ? WP2_Argb_32 : WP2_Argb_38;
+      (WP2Formatbpc(output->format()) <= 8)
+          ? (config.exact ? WP2_ARGB_32 : WP2_Argb_32)
+          : WP2_Argb_38;
   ArgbBuffer tmp_output(format_default);
   ArgbBuffer* real_output = nullptr;
 

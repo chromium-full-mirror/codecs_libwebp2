@@ -205,7 +205,7 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
     WP2_CHECK_ALLOC_OK(configs->reserve(1));
     for (EntropyMode mode :
          {EntropyMode::kPalette, EntropyMode::kPaletteSpatial}) {
-      AddConfig(mode, /*use_premultiplied=*/true,
+      AddConfig(mode, /*use_premultiplied=*/!encoder.config_.exact,
                 /*red_and_blue_always_zero=*/true, /*entropy=*/0.f, effort,
                 configs);
     }
@@ -496,13 +496,15 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   // Do not use a palette when there is only one color as ANS will optimize it
   // anyway.
   const bool can_use_palette = (encoder->palette_.Size() > 1);
+  const bool can_premultiply =
+      (!encoder->config_.exact && encoder->has_alpha_ &&
+       !WP2IsPremultiplied(encoder->pic_.format()));
 
   // Try LZW within the same palette size range condition as Group4.
   if (encoder->palette_.Size() >= 2 && encoder->palette_.Size() < 256) {
     WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
     configs->back().transforms = FindTransformTypes(TransformType::kLZW);
-    configs->back().use_premultiplied =
-        (encoder->has_alpha_ && !WP2IsPremultiplied(encoder->pic_.format()));
+    configs->back().use_premultiplied = can_premultiply;
   }
 
   // Do not use Group4 for big palettes for CPU reasons and also because it is
@@ -531,8 +533,6 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
       // AnalyzeEntropy is somewhat slow. 'red_and_blue_always_zero' is unused
       // for effort == 0.
       configs->clear();
-      const bool can_premultiply =
-          (encoder->has_alpha_ && !WP2IsPremultiplied(encoder->pic_.format()));
       AddConfig(can_use_palette ? EntropyMode::kPalette
                                 : EntropyMode::kSpatialSubGreen,
                 can_premultiply, /*red_and_blue_always_zero=*/false,
@@ -575,15 +575,14 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   // Use the minimal-size method for palette storage by default.
   uint32_t configs_size = configs->size();
   for (uint32_t i = 0; i < configs_size; ++i) {
-    CrunchConfig& config = (*configs)[i];
     for (uint32_t t = 0; t < kPossibleTransformCombinationSize; ++t) {
-      if (config.transforms[t] == TransformType::kColorIndexing) {
-        config.palette_sorting_type = Palette::Sorting::kMinimalSize;
+      if ((*configs)[i].transforms[t] == TransformType::kColorIndexing) {
+        (*configs)[i].palette_sorting_type = Palette::Sorting::kMinimalSize;
         if (effort == 9) {
           // Try more methods for palette sorting.
-          WP2_CHECK_ALLOC_OK(configs->push_back(config));
+          WP2_CHECK_ALLOC_OK(configs->push_back((*configs)[i]));
           configs->back().palette_sorting_type = Palette::Sorting::kLuminance;
-          WP2_CHECK_ALLOC_OK(configs->push_back(config));
+          WP2_CHECK_ALLOC_OK(configs->push_back((*configs)[i]));
           configs->back().palette_sorting_type =
               Palette::Sorting::kModifiedZeng;
         }

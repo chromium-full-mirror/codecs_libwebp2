@@ -168,8 +168,8 @@ WP2Status WriteSubModes(const int16_t* const modes, bool needs_shift,
 // predictions.
 static inline void GetResidual(int width, int16_t* const upper_row,
                                int16_t* const current_row, bool has_alpha,
-                               const Predictor& pred, int x_start, int x_end,
-                               int y, int16_t* const out) {
+                               bool exact, const Predictor& pred, int x_start,
+                               int x_end, int y, int16_t* const out) {
   PredictorNonClampedFunc pred_non_clamped = nullptr;
   PredictorClampedFunc pred_clamped = nullptr;
   PredictorAngleFunc pred_angle = nullptr;
@@ -219,7 +219,7 @@ static inline void GetResidual(int width, int16_t* const upper_row,
       }
     }
     SubPixels(&current_row[4 * x], has_alpha, predict, residual);
-    if (current_row[4 * x] == 0) {
+    if (current_row[4 * x] == 0 && !exact) {
       // If alpha is 0, cleanup RGB. We can choose the RGB values of the
       // residual for best compression. The prediction of alpha itself can be
       // non-zero and must be kept though. We choose RGB of the residual to be
@@ -247,7 +247,7 @@ static inline void GetResidual(int width, int16_t* const upper_row,
 
 // Returns best predictor and updates the accumulated histogram.
 static void GetBestPredictorForTile(
-    int tile_x, int tile_y, uint32_t bits, bool use_sub_modes,
+    int tile_x, int tile_y, uint32_t bits, bool exact, bool use_sub_modes,
     const int16_t min_values[4], const int16_t max_values[4],
     const Buffer_s16& buffer, const int16_t* const modes,
     int16_t* const argb_scratch, ChannelVector accumulated[2],
@@ -351,8 +351,8 @@ static void GetBestPredictorForTile(
                         4 * (max_x + have_left + (y + 1 < height)),
                     &current_row[4 * context_start_x]);
 
-          GetResidual(width, upper_row, current_row, buffer.has_alpha, pred,
-                      start_x, start_x + max_x, y, residuals);
+          GetResidual(width, upper_row, current_row, buffer.has_alpha, exact,
+                      pred, start_x, start_x + max_x, y, residuals);
           UpdateHisto(residuals, max_x, &histo_argb);
         }
         float cur_diff =
@@ -378,7 +378,8 @@ static void GetBestPredictorForTile(
 }
 
 // Converts pixels of the image to residuals with respect to predictions.
-static void CopyImageWithPrediction(int bits, const int16_t min_values[4],
+static void CopyImageWithPrediction(int bits, bool exact,
+                                    const int16_t min_values[4],
                                     const int16_t max_values[4],
                                     const int16_t* const modes, int effort,
                                     const WP2::Vector_s8& sub_modes,
@@ -404,8 +405,8 @@ static void CopyImageWithPrediction(int bits, const int16_t min_values[4],
           /*sub_mode_in=*/sub_modes.empty() ? 0 : sub_modes[ind + 2],
           min_values, max_values);
 
-      GetResidual(width, upper_row, current_row, buffer->has_alpha, pred, x,
-                  x_end, y, buffer->GetPosition(x, y));
+      GetResidual(width, upper_row, current_row, buffer->has_alpha, exact, pred,
+                  x, x_end, y, buffer->GetPosition(x, y));
       x = x_end;
     }
   }
@@ -413,7 +414,7 @@ static void CopyImageWithPrediction(int bits, const int16_t min_values[4],
 
 // Finds the best predictor for each tile, and converts the image to residuals
 // with respect to predictions.
-WP2Status CreateResidualImage(uint32_t bits, bool can_use_sub_modes,
+WP2Status CreateResidualImage(uint32_t bits, bool exact, bool can_use_sub_modes,
                               const int16_t min_values[4],
                               const int16_t max_values[4], int effort,
                               Buffer_s16* const buffer,
@@ -454,9 +455,10 @@ WP2Status CreateResidualImage(uint32_t bits, bool can_use_sub_modes,
                         max_values);
     for (uint32_t tile_y = 0; tile_y < height; ++tile_y) {
       for (uint32_t tile_x = 0; tile_x < width; ++tile_x) {
-        GetBestPredictorForTile(
-            tile_x, tile_y, bits, can_use_sub_modes, min_values, max_values,
-            *buffer, modes, argb_scratch, histo, tmp_histo, &pred, &pred_wsub);
+        GetBestPredictorForTile(tile_x, tile_y, bits, exact, can_use_sub_modes,
+                                min_values, max_values, *buffer, modes,
+                                argb_scratch, histo, tmp_histo, &pred,
+                                &pred_wsub);
         const uint32_t ind = 4 * (tile_y * width + tile_x);
         for (uint32_t c : {0, 1, 3}) modes[ind + c] = 0;
         // Store the modes in the green channel.
@@ -501,7 +503,7 @@ WP2Status CreateResidualImage(uint32_t bits, bool can_use_sub_modes,
     }
   }
 
-  CopyImageWithPrediction(bits, min_values, max_values, modes, effort,
+  CopyImageWithPrediction(bits, exact, min_values, max_values, modes, effort,
                           *sub_modes, argb_scratch, buffer);
   return WP2_STATUS_OK;
 }

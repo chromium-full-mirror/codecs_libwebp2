@@ -181,8 +181,7 @@ WP2Status CodeTiles(EncTilesLayout* const tiles_layout,
   }
   WP2_CHECK_STATUS(status);
   for (EncTile& tile : tiles_layout->tiles) {
-    const uint32_t rgb_bit_depth =
-        (tile.rgb_input.format() == WP2_Argb_38) ? 10 : 8;
+    const uint32_t rgb_bit_depth = WP2Formatbpc(tile.rgb_input.format());
     const uint32_t max_num_bytes =
         GetTileMaxNumBytes(rgb_bit_depth, *tiles_layout->gparams, tile.rect);
     assert((tile.enc.GetBitstreamSize() == 0) ^ (tile.data.size == 0));

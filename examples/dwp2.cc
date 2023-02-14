@@ -17,6 +17,7 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -30,7 +31,6 @@
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
-#include "src/common/color_precision.h"
 #include "src/utils/thread_utils.h"
 
 namespace {
@@ -89,6 +89,7 @@ void Help() {
   opt.Add("-force",
           "overwrite destination if it exists (default=off unless out_file is "
           "explicit)");
+  opt.Add("-exact", "No premultiplication is done in lossless.");
   opt.Add("-info", "just print bitstream info and exit");
   opt.Add("-v", "verbose (e.g. print encoding/decoding times)");
   opt.Add("-progress", "display decoding progression");
@@ -265,7 +266,8 @@ class ImageDecoder : public WP2::WorkerBase {
       const std::string& in_path, std::string* const standard_out,
       std::string* const standard_err,
       WP2::ProgressHook* const progress_hook) {
-    WP2::ArgbBuffer output_buffer(WP2_Argb_32);
+    WP2::ArgbBuffer output_buffer(settings_.config.exact ? WP2_ARGB_32
+                                                         : WP2_Argb_32);
 
     WP2::Data data;
     WP2_CHECK_STATUS(WP2::IoUtilReadFile(in_path.c_str(), &data));
@@ -473,6 +475,8 @@ int main(int argc, char* argv[]) {
       settings.output_frames_to_directory = true;
     } else if (!strcmp(argv[c], "-force")) {
       settings.allow_overwrite = true;
+    } else if (!strcmp(argv[c], "-exact")) {
+      settings.config.exact = true;
     } else if (!strcmp(argv[c], "-info")) {
       settings.print_info = true;
     } else if (!strcmp(argv[c], "-vdebug") && c + 1 < argc) {

@@ -96,6 +96,7 @@ void HelpLong() {
   opt.Add("-alpha_q <float>",
           SPrintf("alpha quality factor (0:small..100:big), default=%1.1f",
                   WP2::EncoderConfig::kDefault.alpha_quality));
+  opt.Add("-exact", "No premultiplication is done in lossless.");
   opt.Add("-target_size <int>", "target size (in bytes)");
   opt.Add("-target_psnr <float>", "target PSNR (in dB. typically: 42)");
   opt.Add("-effort <int>",
@@ -594,6 +595,8 @@ int main(int argc, char* argv[]) {
     } else if (!strcmp(argv[c], "-alpha_q")) {
       NEED_ARGS(1);
       params.config.alpha_quality = ExUtilGetFloat(argv[++c], &parse_error);
+    } else if (!strcmp(argv[c], "-exact")) {
+      params.config.exact = true;
     } else if (!strcmp(argv[c], "-csp")) {
       NEED_ARGS(1);
       params.config.csp_type = (WP2::Csp)ExUtilGetInt(argv[++c], &parse_error);

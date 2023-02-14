@@ -14,6 +14,9 @@
 
 // Test Palette class.
 
+#include <algorithm>
+#include <tuple>
+
 #include "src/common/color_precision.h"
 #include "src/dec/lossless/losslessi_dec.h"
 #include "src/dsp/lossless/decl_dsp.h"
@@ -72,7 +75,7 @@ TEST_P(PaletteTest, RoundTrip) {
   // Create palette.
   WP2L::Palette palette;
   const bool has_alpha = buffer.HasTransparency();
-  palette.Init(buffer.format(), has_alpha);
+  palette.Init(buffer.format(), has_alpha, /*exact=*/false);
   ASSERT_WP2_OK(palette.AnalyzeAndCreate(buffer));
   // There could be fewer colors if we never chose some of them but it's pretty
   // unlikely so check for equality.

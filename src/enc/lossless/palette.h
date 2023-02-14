@@ -21,11 +21,9 @@
 #define WP2_ENC_LOSSLESS_PALETTE_H_
 
 #include "src/common/progress_watcher.h"
-#include "src/utils/ans.h"
 #include "src/utils/ans_enc.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
-#include "src/wp2/format_constants.h"
 
 namespace WP2L {
 
@@ -50,9 +48,10 @@ class Palette {
     kUndefined
   };
   Palette() : num_colors_(0) {}
-  void Init(WP2SampleFormat format, bool has_alpha) {
+  void Init(WP2SampleFormat format, bool has_alpha, bool exact) {
     format_ = format;
     has_alpha_ = has_alpha;
+    exact_ = exact;
   }
   // Populates the palette with colors from the given 'pic'.
   // If the unique color count is more than kMaxPaletteSize (or if there is only
@@ -110,6 +109,7 @@ class Palette {
  private:
   WP2SampleFormat format_;
   bool has_alpha_ = false;
+  bool exact_ = false;
   bool is_grayscale_ = false;
   WP2::Vector_s16 colors_;
   uint32_t num_colors_ = 0;        // 0 = palette is disabled

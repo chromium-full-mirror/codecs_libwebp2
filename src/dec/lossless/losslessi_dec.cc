@@ -185,7 +185,7 @@ WP2Status Decoder::ReadANSStats(uint32_t width, uint32_t height,
 // Emit rows without any scaling.
 template <typename T>
 uint32_t EmitRows(const int16_t* row_in, uint32_t mb_w, uint32_t mb_h,
-                  bool has_alpha, bool premultiply, T* const out,
+                  bool has_alpha, bool exact, bool premultiply, T* const out,
                   uint32_t out_stride) {
   int lines = mb_h;
   T* row_out = out;
@@ -195,12 +195,14 @@ uint32_t EmitRows(const int16_t* row_in, uint32_t mb_w, uint32_t mb_h,
       const uint8_t alpha = (uint8_t)row_in[0];
       if (!has_alpha) assert(alpha == WP2::kAlphaMax);
       row_out[i] = alpha;
-      if (alpha > 0) {
+      if (exact || (alpha > 0 && !premultiply)) {
         for (int j = 1; j <= 3; ++j) {
-          row_out[i + j] = premultiply
-                               ? static_cast<T>(WP2::DivBy255(
-                                     static_cast<uint32_t>(row_in[j]) * alpha))
-                               : static_cast<T>(row_in[j]);
+          row_out[i + j] = static_cast<T>(row_in[j]);
+        }
+      } else if (alpha > 0 && premultiply) {
+        for (int j = 1; j <= 3; ++j) {
+          row_out[i + j] = static_cast<T>(
+              WP2::DivBy255(static_cast<uint32_t>(row_in[j]) * alpha));
         }
       } else {
         // To optimize encoding, the encoder can store arbitrary rgb values when
@@ -310,13 +312,13 @@ WP2Status Decoder::ProcessRows(uint32_t row) {
 
     uint32_t num_rows_out;
     if (WP2Formatbpc(buf->format()) <= 8) {
-      num_rows_out =
-          EmitRows(rows_data, buf->width(), num_rows, gparams_->has_alpha_,
-                   premultiply_, buf->GetRow8(last_out_row_), buf->stride());
+      num_rows_out = EmitRows(rows_data, buf->width(), num_rows,
+                              gparams_->has_alpha_, config_.exact, premultiply_,
+                              buf->GetRow8(last_out_row_), buf->stride());
     } else {
-      num_rows_out =
-          EmitRows(rows_data, buf->width(), num_rows, gparams_->has_alpha_,
-                   premultiply_, buf->GetRow16(last_out_row_), buf->stride());
+      num_rows_out = EmitRows(rows_data, buf->width(), num_rows,
+                              gparams_->has_alpha_, config_.exact, premultiply_,
+                              buf->GetRow16(last_out_row_), buf->stride());
     }
     // Update 'last_out_row_'.
     last_out_row_ += num_rows_out;
@@ -614,7 +616,8 @@ WP2Status Decoder::DecodeImageData(uint32_t width, uint32_t height,
 
 static WP2Status ReadPaletteVerbatim(uint32_t num_colors,
                                      WP2SampleFormat format, bool has_alpha,
-                                     bool is_grayscale, WP2::ANSDec* const dec,
+                                     bool exact, bool is_grayscale,
+                                     WP2::ANSDec* const dec,
                                      Transform* const transform) {
   WP2_CHECK_ALLOC_OK(transform->data_.resize(4 * num_colors));
   uint32_t channel_max[4];
@@ -625,23 +628,19 @@ static WP2Status ReadPaletteVerbatim(uint32_t num_colors,
     if (has_alpha) {
       transform->data_[4 * i + 0] =
           dec->ReadRValue(channel_max[0] + 1, "color_verbatim");
-      for (uint32_t c = 1; c < 4; ++c) {
-        const uint32_t max = WP2::DivRound(
-            (uint32_t)(channel_max[c] * transform->data_[4 * i + 0]),
-            channel_max[0]);
-        transform->data_[4 * i + c] =
-            (is_grayscale && c > 1)
-                ? transform->data_[4 * i + 1]
-                : dec->ReadRValue(max + 1, "color_verbatim");
-      }
     } else {
       transform->data_[4 * i + 0] = channel_max[0];
-      for (uint32_t c = 1; c < 4; ++c) {
-        transform->data_[4 * i + c] =
-            (is_grayscale && c > 1)
-                ? transform->data_[4 * i + 1]
-                : dec->ReadRValue(channel_max[c] + 1, "color_verbatim");
-      }
+    }
+    for (uint32_t c = 1; c < 4; ++c) {
+      const uint32_t max =
+          (has_alpha && !exact)
+              ? WP2::DivRound(
+                    (uint32_t)(channel_max[c] * transform->data_[4 * i + 0]),
+                    channel_max[0])
+              : channel_max[c];
+      transform->data_[4 * i + c] =
+          (is_grayscale && c > 1) ? transform->data_[4 * i + 1]
+                                  : dec->ReadRValue(max + 1, "color_verbatim");
     }
   }
   return dec->GetStatus();
@@ -662,7 +661,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
   if (num_colors_ <= kSmallPaletteLimit) {
     WP2_CHECK_STATUS(ReadPaletteVerbatim(
         num_colors_, hdr_.symbols_info_.SampleFormat(), gparams_->has_alpha_,
-        is_grayscale, dec_, transform));
+        config_.exact, is_grayscale, dec_, transform));
     dec_->PopDebugPrefix();
     return WP2_STATUS_OK;
   }
@@ -713,7 +712,9 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
         }
         const int16_t alpha = data[4 * i + 0];
         int16_t channel_prev = data[4 * (i - 1) + c];
-        if (c > 0 && channel_prev > alpha) channel_prev = alpha;
+        if (c > 0 && channel_prev > alpha && !config_.exact) {
+          channel_prev = alpha;
+        }
         const auto channel_diff = data[4 * i + c];
         if (is_positive[c][i - 1]) {
           data[4 * i + c] = channel_prev + channel_diff;
@@ -739,7 +740,8 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
       }
       const bool use_vector = dec_->ReadBool("use_vector");
       // Read the first channel.
-      const uint32_t max_first = (c == 0) ? channel_max : transform->data_[0];
+      const uint32_t max_first =
+          (c == 0 || config_.exact) ? channel_max : transform->data_[0];
       int16_t channel = dec_->ReadRValue(max_first + 1, "first_channel");
       transform->data_[c] = channel;
 
@@ -752,7 +754,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
         for (uint32_t i = 1; i < num_colors_; ++i) {
           if (gparams_->has_alpha_) {
             const int16_t alpha = transform->data_[4 * i + 0];
-            if (c > 0 && channel > alpha) channel = alpha;
+            if (c > 0 && channel > alpha && !config_.exact) channel = alpha;
           }
           channel = WP2::Clamp<int32_t>(
               channel + (is_positive[c][i - 1] ? diffs[i - 1] : -diffs[i - 1]),
@@ -763,11 +765,15 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
         for (uint32_t i = 1; i < num_colors_; ++i) {
           const int16_t alpha = transform->data_[4 * i + 0];
           assert(alpha >= 0 && alpha <= (int16_t)alpha_max);
-          if (gparams_->has_alpha_ && c > 0 && channel > alpha) channel = alpha;
+          if (gparams_->has_alpha_ && c > 0 && channel > alpha &&
+              !config_.exact) {
+            channel = alpha;
+          }
           if (is_positive[c][i - 1]) {
             const uint32_t max =
-                (c == 0) ? channel_max
-                         : WP2::DivRound(channel_max * alpha, alpha_max);
+                (c == 0 || config_.exact)
+                    ? channel_max
+                    : WP2::DivRound(channel_max * alpha, alpha_max);
             channel += dec_->ReadRValue(max + 1 - channel, "store_diff");
           } else {
             channel -= dec_->ReadRValue(channel + 1, "store_diff");
@@ -1026,6 +1032,7 @@ WP2Status Decoder::DecodeHeader() {
         RegisterTransformForVDebug(transforms_[i], config_.info));
   }
   premultiply_ = (gparams_->has_alpha_ ? dec_->ReadBool("premultiply") : false);
+  if (config_.exact) premultiply_ = false;
 
   // Modify the main image ranges if we only use the palette.
   if (num_transforms == 1 && transforms[0] == TransformType::kColorIndexing) {

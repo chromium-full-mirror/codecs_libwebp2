@@ -229,7 +229,7 @@ WP2Status WriteSubModes(const int16_t* const modes, bool needs_shift,
 // 'can_use_sub_modes' indicates whether sub-modes are allowed by the transform
 // and should be tried to find the best predictors.
 // If sub-modes are used, 'sub_modes' is not empty and contains the sub-modes.
-WP2Status CreateResidualImage(uint32_t bits, bool can_use_sub_modes,
+WP2Status CreateResidualImage(uint32_t bits, bool exact, bool can_use_sub_modes,
                               const int16_t min_values[4],
                               const int16_t max_values[4], int effort,
                               Buffer_s16* const buffer,

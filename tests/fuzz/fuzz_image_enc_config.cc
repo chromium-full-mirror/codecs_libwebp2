@@ -18,6 +18,7 @@
 // Author: Yannis Guyon (yguyon@google.com)
 
 #include <iostream>
+#include <ostream>
 #include <string>
 
 #include "imageio/image_dec.h"
@@ -34,7 +35,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   if (!params.ExtractSource(&file_name, &file_data, &file_size)) abort();
 
   // Read a randomly chosen valid image file.
-  WP2::ArgbBuffer original;
+  const bool exact = params.ExtractBool();
+  WP2::ArgbBuffer original(exact ? WP2_ARGB_32 : WP2_Argb_32);
   const WP2Status read_status =
       WP2::ReadImage(file_data, file_size, &original, WP2::FileFormat::AUTO,
                      WP2::LogLevel::QUIET);
@@ -47,6 +49,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Extract a random config.
   WP2::EncoderConfig config;
   params.ExtractConfig(&config);
+  config.exact = exact;
 
   // Make sure the encoding stops before the fuzzer timeout.
   WP2::testutil::ProgressTimeout progress(

@@ -177,7 +177,8 @@ void PNGAPI PNGErrorFunction(png_structp png, png_const_charp dummy) {
 WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout,
                    const char*, bool, bool, size_t*) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(buffer.format() == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
+  WP2_CHECK_OK(buffer.format() == WP2_Argb_32 || buffer.format() == WP2_ARGB_32,
+               WP2_STATUS_UNSUPPORTED_FEATURE);
 
   const uint32_t width = buffer.width();
   const uint32_t height = buffer.height();
@@ -210,8 +211,14 @@ WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout,
 
   WP2ArgbConverterInit();
   for (png_uint_32 y = 0; y < height; ++y) {
-    WP2ArgbConvertTo[has_alpha ? WP2_RGBA_32 : WP2_RGB_24](row, width,
-                                                           ARGB.data());
+    if (buffer.format() == WP2_Argb_32) {
+      WP2ArgbConvertTo[has_alpha ? WP2_RGBA_32 : WP2_RGB_24](row, width,
+                                                             ARGB.data());
+    } else {
+      assert(buffer.format() == WP2_ARGB_32);
+      WP2ARGBConvertTo[has_alpha ? WP2_RGBA_32 : WP2_RGB_24](row, width,
+                                                             ARGB.data());
+    }
     png_bytep ptr[1] = {ARGB.data()};
     png_write_rows(png, ptr, 1);
     row += buffer.stride();

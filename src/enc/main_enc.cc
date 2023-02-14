@@ -301,7 +301,7 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
 
   WP2_CHECK_STATUS(SetupEncoderInfo(input.width(), input.height(), config));
 
-  const uint32_t rgb_bit_depth = (input.format() == WP2_Argb_38) ? 10 : 8;
+  const uint32_t rgb_bit_depth = WP2Formatbpc(input.format());
   const RGB12b preview_color = GetPreviewColor(input);
   const bool has_alpha = input.HasTransparency();
   const bool has_icc = (input.metadata_.iccp.size > 0);
@@ -406,7 +406,7 @@ WP2Status Encode(uint32_t width, uint32_t height,
   // TODO(yguyon): Some of these cases could also be done directly in YUV space
   //               instead of needing RGB conversion.
 
-  ArgbBuffer rgb_input(WP2_Argb_32);
+  ArgbBuffer rgb_input(config.exact ? WP2_ARGB_32 : WP2_Argb_32);
   YUVPlane yuv_input;
   CSPTransform csp_transform;
   if (rgb_is_needed) {
@@ -435,7 +435,7 @@ WP2Status Encode(uint32_t width, uint32_t height,
     WP2_CHECK_STATUS(yuv_input.FillPad(width, height));
   }
 
-  const uint32_t rgb_bit_depth = (rgb_input.format() == WP2_Argb_38) ? 10 : 8;
+  const uint32_t rgb_bit_depth = WP2Formatbpc(rgb_input.format());
   const RGB12b preview_color =
       yuv_input.IsEmpty() ? GetPreviewColor(rgb_input)
                           : GetPreviewColor(yuv_input, csp_transform);

@@ -17,6 +17,8 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
+#include <cstring>
+
 #include "src/common/global_params.h"
 #include "src/common/header_enc_dec.h"
 #include "src/common/lossy/block.h"
@@ -87,7 +89,8 @@ WP2Status TileDecoder::BypassTileDecRgb8b() {
     DataSource::DataHandle handle;
     WP2_CHECK_OK(tile_->input->TryReadNext(bytes_per_row, &handle),
                  WP2_STATUS_NOT_ENOUGH_DATA);
-    if (tile_->rgb_output.format() == WP2_Argb_32) {
+    if (tile_->rgb_output.format() == WP2_Argb_32 ||
+        tile_->rgb_output.format() == WP2_ARGB_32) {
       uint8_t* const row = tile_->rgb_output.GetRow8(y);
       if (gparams_->has_alpha_) {
         std::memcpy(row, handle.GetBytes(), handle.GetSize());

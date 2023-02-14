@@ -22,10 +22,10 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <limits>
 #include <memory>
 #include <string>
 
-#include "src/common/color_precision.h"
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/dsp/lossless/encl_dsp.h"
@@ -34,8 +34,6 @@
 #include "src/enc/symbols_enc.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
-#include "src/utils/plane.h"
-#include "src/utils/vector.h"
 
 namespace WP2L {
 
@@ -651,9 +649,10 @@ WP2Status Encoder::ApplyPredictFilter(
     bool can_use_sub_modes, const ProgressRange& progress, uint32_t pred_bits,
     WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts) {
   WP2::Vector_s8 sub_modes;
-  WP2_CHECK_STATUS(CreateResidualImage(
-      pred_bits, can_use_sub_modes, min_values, max_values, config_.effort,
-      &argb_buffer_, argb_scratch_, transform_data_, &sub_modes));
+  WP2_CHECK_STATUS(
+      CreateResidualImage(pred_bits, config_.exact, can_use_sub_modes,
+                          min_values, max_values, config_.effort, &argb_buffer_,
+                          argb_scratch_, transform_data_, &sub_modes));
 
   const WP2::ANSDebugPrefix prefix(enc, "predictor");
   enc->PutRange(pred_bits, kTransformBitsMin, kTransformBitsMax,
@@ -776,7 +775,7 @@ WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
     int16_t* const dst_row = argb_buffer_.GetRow(y);
     if (WP2Formatbpc(pic_.format()) <= 8) {
       const uint8_t* const src_row = pic_.GetRow8(y);
-      if (can_premultiply) {
+      if (can_premultiply && !config_.exact) {
         for (uint32_t x = 0; x < width; ++x) {
           const uint8_t a = src_row[4 * x + 0];
           if (a == 0) {
@@ -1067,7 +1066,7 @@ Encoder::Encoder(const WP2::EncoderConfig& config,
 WP2Status Encoder::Allocate() {
   const uint32_t num_pixels = pic_.width() * pic_.height();
   WP2_CHECK_ALLOC_OK(hash_chain_.Allocate(num_pixels));
-  palette_.Init(symbols_info_.SampleFormat(), has_alpha_);
+  palette_.Init(symbols_info_.SampleFormat(), has_alpha_, config_.exact);
   ref_pool_.Init(num_pixels);
 
   return WP2_STATUS_OK;

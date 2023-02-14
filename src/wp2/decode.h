@@ -120,6 +120,9 @@ struct DecoderConfig {
   DecoderInfo* info = nullptr;   // if not null, report internal stats and info
 
   static const DecoderConfig kDefault;
+
+  // Do not pre-multiply the output (for lossless only).
+  bool exact = false;
 };
 
 // This function decodes the bitstream into 'output_buffer' as Argb samples.

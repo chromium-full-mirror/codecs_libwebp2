@@ -150,7 +150,8 @@ TEST(LZWHashMap, InsertColors) {
   ArgbBuffer simple_rgb_buf;
   ASSERT_WP2_OK(BuildArgbBuffer(simple_rgb_buf));
   WP2L::Palette palette;
-  palette.Init(WP2SampleFormat::WP2_Argb_32, true);
+  palette.Init(WP2SampleFormat::WP2_Argb_32, /*has_alpha=*/true,
+               /*exact=*/false);
   ASSERT_WP2_OK(palette.AnalyzeAndCreate(simple_rgb_buf));
 
   constexpr uint32_t size = 10;

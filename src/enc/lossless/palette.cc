@@ -25,7 +25,6 @@
 
 #include "src/common/color_precision.h"
 #include "src/common/lossless/color_cache.h"
-#include "src/dsp/lossless/encl_dsp.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/utils/ans_utils.h"
 #include "src/wp2/format_constants.h"
@@ -139,12 +138,12 @@ static WP2Status SortColors(decltype(LexicographicComparison) comparator,
 }
 
 template <typename T>
-uint32_t CountColors(const WP2::ArgbBuffer& pic, const T* src,
+uint32_t CountColors(const WP2::ArgbBuffer& pic, const T* src, bool exact,
                      ColorCacheMap* const color_cache,
                      const uint32_t max_palette_size) {
   assert(pic.format() == WP2_Argb_32 || pic.format() == WP2_Argb_38 ||
          pic.format() == WP2_ARGB_32);
-  const bool premultiply = !WP2IsPremultiplied(pic.format());
+  const bool premultiply = !exact && !WP2IsPremultiplied(pic.format());
   uint32_t num_colors = 0;
   // so we're sure that last_pix != argb[0]
   int16_t prev_pix[4] = {(int16_t)~src[0], 0, 0, 0};
@@ -188,11 +187,11 @@ WP2Status Palette::AnalyzeAndCreate(const WP2::ArgbBuffer& pic) {
   WP2_CHECK_STATUS(color_cache.Allocate(max_palette_size_));
 
   if (WP2Formatbpc(pic.format()) <= 8) {
-    num_colors_ =
-        CountColors(pic, pic.GetRow8(0), &color_cache, max_palette_size_);
+    num_colors_ = CountColors(pic, pic.GetRow8(0), exact_, &color_cache,
+                              max_palette_size_);
   } else {
-    num_colors_ =
-        CountColors(pic, pic.GetRow16(0), &color_cache, max_palette_size_);
+    num_colors_ = CountColors(pic, pic.GetRow16(0), exact_, &color_cache,
+                              max_palette_size_);
   }
 
   if (num_colors_ <= 1 || num_colors_ > max_palette_size_) {
@@ -212,7 +211,7 @@ WP2Status Palette::AnalyzeAndCreate(const WP2::ArgbBuffer& pic) {
 
 template <typename T>
 void ApplyT(const WP2::ArgbBuffer& pic, const T* src,
-            const ColorCacheMap& color_cache, int16_t* dst) {
+            const ColorCacheMap& color_cache, bool exact, int16_t* dst) {
   int16_t prev_pix[4] = {(int16_t)~src[0], (int16_t)~src[1], (int16_t)~src[2],
                          (int16_t)~src[3]};
   uint32_t prev_idx = 0;
@@ -220,7 +219,7 @@ void ApplyT(const WP2::ArgbBuffer& pic, const T* src,
     for (uint32_t x = 0; x < pic.width(); ++x, dst += 4) {
       int16_t pix[4] = {(int16_t)src[4 * x + 0], (int16_t)src[4 * x + 1],
                         (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
-      if (!WP2IsPremultiplied(pic.format())) {
+      if (!exact && !WP2IsPremultiplied(pic.format())) {
         for (uint32_t c = 1; c < 4; ++c) {
           pix[c] = WP2::DivBy255(pix[c] * pix[0]);
         }
@@ -251,9 +250,9 @@ WP2Status Palette::Apply(const WP2::ArgbBuffer& pic, int16_t* dst) const {
   }
 
   if (WP2Formatbpc(pic.format()) <= 8) {
-    ApplyT(pic, pic.GetRow8(0), color_cache, dst);
+    ApplyT(pic, pic.GetRow8(0), color_cache, exact_, dst);
   } else {
-    ApplyT(pic, pic.GetRow16(0), color_cache, dst);
+    ApplyT(pic, pic.GetRow16(0), color_cache, exact_, dst);
   }
 
   return WP2_STATUS_OK;
@@ -275,24 +274,25 @@ bool Palette::IsGrayScale() const {
 
 class InternalParams {
  public:
-  InternalParams(WP2SampleFormat format, bool has_alpha, uint32_t channel_max,
-                 uint32_t num_channels, const WP2::Vector_s16& colors);
+  InternalParams(WP2SampleFormat format, bool has_alpha, bool exact,
+                 uint32_t channel_max, uint32_t num_channels,
+                 const WP2::Vector_s16& colors);
   // Allocates the needed space for analysis.
   WP2Status Init(const int16_t colors[]);
   // Stores the signs.
-  WP2Status StoreSigns(WP2::ANSEncBase* const bw);
+  WP2Status StoreSigns(WP2::ANSEncBase* bw);
   // Used for List method. It modifies stats_.
-  WP2Status WriteAsList(WP2::ANSEncBase* const enc);
+  WP2Status WriteAsList(WP2::ANSEncBase* enc);
   // Used for Image method.
   WP2Status WriteAsImage(const ProgressRange& progress,
-                         WP2::ANSDictionaries* const dict,
-                         Encoder* const encoder,
-                         WP2::ANSEncBase* const enc) const;
-  WP2Status WriteVerbatim(WP2::ANSEncBase* const enc) const;
+                         WP2::ANSDictionaries* dict, Encoder* encoder,
+                         WP2::ANSEncBase* enc) const;
+  WP2Status WriteVerbatim(WP2::ANSEncBase* enc) const;
 
  public:
   WP2SampleFormat format_;
   bool has_alpha_;
+  bool exact_;
   uint32_t channel_max_;
   uint32_t num_channels_;
   uint32_t num_colors_;
@@ -356,16 +356,14 @@ WP2Status InternalParams::WriteVerbatim(WP2::ANSEncBase* const enc) const {
   for (uint32_t i = 0; i < num_colors_; ++i) {
     if (has_alpha_) {
       enc->PutRValue(colors_[4 * i + 0], channel_max[0] + 1, "color_verbatim");
-      for (uint32_t c = 1; c < num_channels_; ++c) {
-        const uint32_t max = WP2::DivRound(
-            (uint32_t)(channel_max[c] * colors_[4 * i + 0]), channel_max[0]);
-        enc->PutRValue(colors_[4 * i + c], max + 1, "color_verbatim");
-      }
-    } else {
-      for (uint32_t c = 1; c < num_channels_; ++c) {
-        enc->PutRValue(colors_[4 * i + c], channel_max[c] + 1,
-                       "color_verbatim");
-      }
+    }
+    for (uint32_t c = 1; c < num_channels_; ++c) {
+      const uint32_t max =
+          (has_alpha_ && !exact_)
+              ? WP2::DivRound((uint32_t)(channel_max[c] * colors_[4 * i + 0]),
+                              channel_max[0])
+              : channel_max[c];
+      enc->PutRValue(colors_[4 * i + c], max + 1, "color_verbatim");
     }
   }
   WP2_CHECK_STATUS(enc->GetStatus());
@@ -384,7 +382,7 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
     const uint16_t channel_max = WP2::FormatMax(format_, c);
     const WP2::Vector_u16& diffs = channel_diffs_[c];
     uint16_t alpha_value = has_alpha_ ? channel_diffs_[0][0] : channel_max;
-    uint16_t prev_channel = diffs[0];
+    uint16_t channel_prev = diffs[0];
     // Compute the cost when storing everything as ranges.
     float cost_range = WP2Log2(channel_max + 1);
     for (uint32_t i = 1; i < num_colors_; ++i) {
@@ -393,21 +391,22 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
       if (has_alpha_) {
         alpha_value += is_stored_as_above_[0][i] ?  channel_diffs_[0][i]
                                                  : -channel_diffs_[0][i];
-        if (c > 0 && prev_channel > alpha_value) {
-          prev_channel = alpha_value;
+        if (c > 0 && channel_prev > alpha_value && !exact_) {
+          channel_prev = alpha_value;
         }
       }
       if (is_stored_as_above_[c][i]) {
-        const uint32_t max =
-            (c == 0) ? channel_max : WP2::DivBy255(channel_max * alpha_value);
-        cost_range += WP2Log2(max + 1 - prev_channel);
-        assert(prev_channel <= max);
-        assert((int)prev_channel + (int)diffs[i] <= (int)channel_max);
-        prev_channel += diffs[i];
+        const uint32_t max = (c == 0 || exact_)
+                                 ? channel_max
+                                 : WP2::DivBy255(channel_max * alpha_value);
+        cost_range += WP2Log2(max + 1 - channel_prev);
+        assert(channel_prev <= max);
+        assert((int)channel_prev + (int)diffs[i] <= (int)channel_max);
+        channel_prev += diffs[i];
       } else {
-        cost_range += WP2Log2(prev_channel + 1);
-        assert(diffs[i] <= prev_channel);
-        prev_channel -= diffs[i];
+        cost_range += WP2Log2(channel_prev + 1);
+        assert(diffs[i] <= channel_prev);
+        channel_prev -= diffs[i];
       }
     }
     // Try using StoreVector in case values are monotonic.
@@ -417,7 +416,8 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
     // Pick the best of the two solutions.
     const bool use_vector = cost_store_vector < cost_range;
     enc->PutBool(use_vector, "use_vector");
-    const uint32_t max_first = (c == 0) ? channel_max : channel_diffs_[0][0];
+    const uint32_t max_first =
+        (c == 0 || exact_) ? channel_max : channel_diffs_[0][0];
     enc->PutRValue(diffs[0], max_first + 1, "first_channel");
     if (use_vector) {
       enc->AddDebugPrefix("transform_index_vals");
@@ -426,22 +426,25 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
     } else {
       // Store everything else as ranges.
       alpha_value = has_alpha_ ? channel_diffs_[0][0] : channel_max;
-      prev_channel = diffs[0];
+      channel_prev = diffs[0];
       for (uint32_t i = 1; i < num_colors_; ++i) {
         if (has_alpha_) {
           alpha_value += (is_stored_as_above_[0][i]) ?  channel_diffs_[0][i]
                                                      : -channel_diffs_[0][i];
-          if (c > 0 && prev_channel > alpha_value) prev_channel = alpha_value;
+          if (c > 0 && channel_prev > alpha_value && !exact_) {
+            channel_prev = alpha_value;
+          }
         }
         if (is_stored_as_above_[c][i]) {
-          const uint32_t max =
-              (c == 0) ? channel_max : WP2::DivBy255(channel_max * alpha_value);
-          enc->PutRValue(diffs[i], (uint32_t)(max + 1 - prev_channel),
+          const uint32_t max = (c == 0 || exact_)
+                                   ? channel_max
+                                   : WP2::DivBy255(channel_max * alpha_value);
+          enc->PutRValue(diffs[i], (uint32_t)(max + 1 - channel_prev),
                          "store_diff");
-          prev_channel += diffs[i];
+          channel_prev += diffs[i];
         } else {
-          enc->PutRValue(diffs[i], prev_channel + 1, "store_diff");
-          prev_channel -= diffs[i];
+          enc->PutRValue(diffs[i], channel_prev + 1, "store_diff");
+          channel_prev -= diffs[i];
         }
       }
     }
@@ -476,10 +479,12 @@ WP2Status InternalParams::WriteAsImage(const ProgressRange& progress,
 }
 
 InternalParams::InternalParams(WP2SampleFormat format, bool has_alpha,
-                               uint32_t channel_max, uint32_t num_channels,
+                               bool exact, uint32_t channel_max,
+                               uint32_t num_channels,
                                const WP2::Vector_s16& colors)
     : format_(format),
       has_alpha_(has_alpha),
+      exact_(exact),
       channel_max_(channel_max),
       num_channels_(num_channels),
       num_colors_(colors.size() / 4),
@@ -503,7 +508,7 @@ WP2Status InternalParams::Init(const int16_t colors[]) {
     for (uint32_t i = 1; i < num_colors_; ++i) {
       if (has_alpha_) {
         const auto alpha = colors[4 * i + 0];
-        if (c > 0 && channel_prev > alpha) channel_prev = alpha;
+        if (c > 0 && channel_prev > alpha && !exact_) channel_prev = alpha;
       }
       const int16_t channel = colors[4 * i + c];
       const int diff = (int)channel - (int)channel_prev;
@@ -600,7 +605,7 @@ WP2Status Palette::FindBestMethod(const WP2::ArgbBuffer& pic,
   const uint16_t channel_max = encoder->symbols_info_.GetMaxRange(kSymbolR) - 1;
   const uint32_t num_channels = (is_grayscale_ ? 2 : 4);
 
-  InternalParams params(format_, has_alpha_, channel_max, num_channels,
+  InternalParams params(format_, has_alpha_, exact_, channel_max, num_channels,
                         colors_);
 
   if (num_colors_ <= kSmallPaletteLimit) {
@@ -684,7 +689,7 @@ class CoOccurrenceMatrix {
 
 template <typename T>
 WP2Status BuildCoOccurrence(const WP2::ArgbBuffer& pic, const T* src,
-                            const ColorCacheMap& color_cache,
+                            const ColorCacheMap& color_cache, bool exact,
                             CoOccurrenceMatrix* cooccurrence) {
   WP2::Vector_u16 lines;
   WP2_CHECK_ALLOC_OK(lines.resize(2 * pic.width()));
@@ -699,7 +704,7 @@ WP2Status BuildCoOccurrence(const WP2::ArgbBuffer& pic, const T* src,
     for (uint32_t x = 0; x < pic.width(); ++x) {
       int16_t pix[4] = {(int16_t)src[4 * x + 0], (int16_t)src[4 * x + 1],
                         (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
-      if (!WP2IsPremultiplied(pic.format())) {
+      if (!exact && !WP2IsPremultiplied(pic.format())) {
         for (uint32_t c = 1; c < 4; ++c) {
           pix[c] = WP2::DivBy255(pix[c] * pix[0]);
         }
@@ -738,11 +743,11 @@ WP2Status Palette::SortModifiedZeng(const WP2::ArgbBuffer& pic,
   CoOccurrenceMatrix cooccurrence(num_colors_);
   WP2_CHECK_STATUS(cooccurrence.Allocate());
   if (WP2Formatbpc(pic.format()) <= 8) {
-    WP2_CHECK_STATUS(
-        BuildCoOccurrence(pic, pic.GetRow8(0), color_cache, &cooccurrence));
+    WP2_CHECK_STATUS(BuildCoOccurrence(pic, pic.GetRow8(0), color_cache, exact_,
+                                       &cooccurrence));
   } else {
-    WP2_CHECK_STATUS(
-        BuildCoOccurrence(pic, pic.GetRow16(0), color_cache, &cooccurrence));
+    WP2_CHECK_STATUS(BuildCoOccurrence(pic, pic.GetRow16(0), color_cache,
+                                       exact_, &cooccurrence));
   }
 
   // Initialize the mapping list with the two best indices.
@@ -773,7 +778,7 @@ WP2Status Palette::SortModifiedZeng(const WP2::ArgbBuffer& pic,
   }
 
   // We need to append and prepend to the list of remapping. To this end, we
-  // actually define the nest start/end of the list as indices in a vector (with
+  // actually define the next start/end of the list as indices in a vector (with
   // a wrap around when the end is reached).
   uint32_t first = 0, last = 1;
   while (!sums.empty()) {
@@ -935,7 +940,7 @@ WP2Status Palette::Write(const ProgressRange& progress,
 
   const uint32_t num_channels = (is_grayscale_ ? 2 : 4);
   const uint16_t channel_max = encoder->symbols_info_.GetMaxRange(kSymbolR) - 1;
-  InternalParams params(format_, has_alpha_, channel_max, num_channels,
+  InternalParams params(format_, has_alpha_, exact_, channel_max, num_channels,
                         colors_);
 
   if (method_ == PaletteStorageMethod::kMethodVerbatim) {
