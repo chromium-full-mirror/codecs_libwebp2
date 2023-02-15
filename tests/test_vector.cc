@@ -26,6 +26,7 @@ const int kMagic = 38, kMagic2 = 113;
 class Foo {
  public:
   Foo(int x = kMagic) : x_(x) {}       // NOLINT (explicitly no 'explicit')
+  ~Foo() { x_ = -1; }
   operator int() const { return x_; }  // NOLINT (explicitly no 'explicit')
 
  private:
@@ -68,38 +69,71 @@ TEST(VectorTest, Constructor) {
   DoTestCtor(0.);
 }
 
-template<typename T> void DoTestPushBack(const T& vector_type) {
-  (void)vector_type;
+template <typename VectorType>
+void DoTestPushBack() {
+  // Avoid compilers complaining about comparison of integer expressions of
+  // different signedness.
+  const auto magic = static_cast<typename VectorType::value_type>(kMagic);
+  const auto magic2 = static_cast<typename VectorType::value_type>(kMagic2);
 
-  T v;
+  VectorType v;
   EXPECT_TRUE(v.reserve(8));
   EXPECT_EQ(v.size(), 0u);
   EXPECT_EQ(v.capacity(), 8u);
 
   EXPECT_TRUE(v.push_back(kMagic));
   EXPECT_EQ(v.size(), 1u);
-  EXPECT_EQ((int)v[0], kMagic);
+  EXPECT_EQ(v[0], magic);
 
   EXPECT_TRUE(v.push_back(kMagic2));
   EXPECT_EQ(v.size(), 2u);
-  EXPECT_EQ((int)v[0], kMagic);
-  EXPECT_EQ((int)v[1], kMagic2);
+  EXPECT_EQ(v[0], magic);
+  EXPECT_EQ(v[1], magic2);
 
-  EXPECT_TRUE(v.resize(1));   // down-size back to 1
+  EXPECT_TRUE(v.resize(1));  // down-size back to 1
   EXPECT_EQ(v.size(), 1u);
-  EXPECT_EQ((int)v[0], kMagic);
+  EXPECT_EQ(v[0], magic);
 
-  v.resize_no_check(7);   // up-size quietly
+  v.resize_no_check(7);  // up-size quietly
   EXPECT_EQ(v.size(), 7u);
-  EXPECT_EQ((int)v[1], kMagic2);
+
+  v.clear();
+  EXPECT_TRUE(v.push_back(kMagic2));
+  for (int i = 0; i < 100; ++i) {
+    EXPECT_TRUE(v.push_back(v[0]));
+    EXPECT_EQ(v[i + 1], magic2);
+  }
+
+  v.clear();
+  EXPECT_TRUE(v.shrink_to_fit());
+  EXPECT_TRUE(v.push_back(kMagic));
+  EXPECT_TRUE(v.push_back(kMagic2));
+  for (int i = 0; i < 100; ++i) {
+    EXPECT_TRUE(v.append(&v[0], 2));
+    EXPECT_EQ(v[v.size() - 2], v[0]);
+    EXPECT_EQ(v[v.size() - 1], v[1]);
+  }
+
+  v.clear();
+  EXPECT_TRUE(v.shrink_to_fit());
+  for (int i = 0; i < 100; ++i) {
+    EXPECT_TRUE(v.push_back(kMagic));
+    EXPECT_TRUE(v.push_back(kMagic2));
+  }
+  const size_t size = v.size();
+  EXPECT_TRUE(v.copy_from(v));
+  for (size_t i = 0; i < size; i += 2) {
+    EXPECT_EQ(v[i], magic);
+    EXPECT_EQ(v[i + 1], magic2);
+  }
 }
 
 TEST(VectorTest, PushBack) {
-  DoTestPushBack(Vector_u8());
-  DoTestPushBack(Vector_s16());
-  DoTestPushBack(Vector_u32());
-  DoTestPushBack(VectorNoCtor<float>());
-  DoTestPushBack(Vector<Foo>());
+  DoTestPushBack<Vector_u8>();
+  DoTestPushBack<Vector_s16>();
+  DoTestPushBack<Vector_u32>();
+  DoTestPushBack<VectorNoCtor<float>>();
+  DoTestPushBack<Vector<Foo>>();
 }
 
 // Copy constructor and assignment are deleted, but move constructor and

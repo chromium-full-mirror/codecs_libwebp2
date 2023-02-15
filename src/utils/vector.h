@@ -62,6 +62,7 @@ static inline size_t NextCapacity(size_t value) {
 template <typename T>
 class VectorBase {
  public:
+  typedef T value_type;
   typedef T* iterator;
   typedef const T* const_iterator;
 
@@ -76,30 +77,15 @@ class VectorBase {
   // Reallocates just enough memory if needed so that 'new_cap' items can fit.
   WP2_NO_DISCARD bool reserve(size_t new_cap) {
     if (capacity_ < new_cap) {
-      // Not using realloc() because only 'num_items_' need to be moved.
       T* const new_items = (T*)WP2Malloc(new_cap, sizeof(T));
       if (new_items == nullptr) return false;
-      if (num_items_ > 0) {
-        if (std::is_trivially_copyable<T>::value &&
-            std::is_trivially_destructible<T>::value) {
-          std::memcpy((void*)new_items, (const void*)items_,
-                      num_items_ * sizeof(T));
-        } else {
-          for (size_t i = 0; i < num_items_; ++i) {
-            new (&new_items[i]) T(std::move(items_[i]));
-            items_[i].~T();
-          }
-        }
-      }
-      WP2Free(items_);
-      items_ = new_items;
-      capacity_ = new_cap;
+      move_items(new_cap, new_items);
     }
     return true;
   }
 
   // Reallocates less memory so that only the existing items can fit.
-  bool shrink_to_fit() {
+  WP2_NO_DISCARD bool shrink_to_fit() {
     if (capacity_ == num_items_) return true;
     if (num_items_ == 0) {
       WP2Free(items_);
@@ -122,12 +108,16 @@ class VectorBase {
 
   // Constructs a new item by copy ctor. May reallocate if 'resize_if_needed'.
   WP2_NO_DISCARD bool push_back(const T& value, bool resize_if_needed = true) {
-    if (num_items_ >= capacity_ &&
-        (!resize_if_needed ||
-         !reserve(Internal::NextCapacity(num_items_ + 1)))) {
-      return false;
+    if (num_items_ < capacity_) {
+      new (&items_[num_items_]) T(value);
+    } else {
+      if (!resize_if_needed) return false;
+      const size_t new_cap = Internal::NextCapacity(num_items_ + 1);
+      T* const new_items = (T*)WP2Malloc(new_cap, sizeof(T));
+      if (new_items == nullptr) return false;
+      new (&new_items[num_items_]) T(value);
+      move_items(new_cap, new_items);
     }
-    new (&items_[num_items_]) T(value);
     ++num_items_;
     return true;
   }
@@ -179,10 +169,17 @@ class VectorBase {
   }
 
   // Appends 'size' elements by copy. Returns false on error.
-  bool append(const T data[], size_t size) {
+  WP2_NO_DISCARD bool append(const T data[], size_t size) {
     if (size == 0) return true;
-    if (!reserve(Internal::NextCapacity(num_items_ + size))) return false;
-    std::copy(data, data + size, &items_[num_items_]);
+    const size_t new_cap = Internal::NextCapacity(num_items_ + size);
+    if (new_cap <= capacity_) {
+      std::copy(data, data + size, &items_[num_items_]);
+    } else {
+      T* const new_items = (T*)WP2Malloc(new_cap, sizeof(T));
+      if (new_items == nullptr) return false;
+      std::copy(data, data + size, &new_items[num_items_]);
+      move_items(new_cap, new_items);
+    }
     num_items_ += size;
     return true;
   }
@@ -223,7 +220,8 @@ class VectorBase {
     swap(capacity_, b.capacity_);
     swap(num_items_, b.num_items_);
   }
-  bool copy_from(const VectorBase& src) {
+  WP2_NO_DISCARD bool copy_from(const VectorBase& src) {
+    if (src.items_ == items_) return true;
     clear();
     if (!reserve(src.capacity())) return false;
     for (const auto& elmt : src) {
@@ -236,6 +234,27 @@ class VectorBase {
   T* items_ = nullptr;
   size_t capacity_ = 0;
   size_t num_items_ = 0;
+
+ private:
+  // Moves data from items_ into new_items, and have new_items be the new
+  // items_.
+  void move_items(size_t new_cap, T* new_items) {
+    if (num_items_ > 0) {
+      if (std::is_trivially_copyable<T>::value &&
+          std::is_trivially_destructible<T>::value) {
+        std::memcpy((void*)new_items, (const void*)items_,
+                    num_items_ * sizeof(T));
+      } else {
+        for (size_t i = 0; i < num_items_; ++i) {
+          new (&new_items[i]) T(std::move(items_[i]));
+          items_[i].~T();
+        }
+      }
+    }
+    WP2Free(items_);
+    items_ = new_items;
+    capacity_ = new_cap;
+  }
 };
 
 }  // namespace Internal
