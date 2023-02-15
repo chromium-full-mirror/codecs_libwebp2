@@ -1454,11 +1454,13 @@ bool Params::EncodeAndDecode() {
 
 namespace {
 void ClearForcedSegments(std::vector<EncoderInfo::ForcedParam>* params) {
-  std::remove_if(params->begin(), params->end(),
-                 [](const EncoderInfo::ForcedParam& forced) {
-                   return forced.type ==
-                          EncoderInfo::ForcedParam::Type::kSegment;
-                 });
+  params->erase(
+      std::remove_if(params->begin(), params->end(),
+                     [](const EncoderInfo::ForcedParam& forced) {
+                       return forced.type ==
+                              EncoderInfo::ForcedParam::Type::kSegment;
+                     }),
+      params->end());
 }
 }  // namespace
 
