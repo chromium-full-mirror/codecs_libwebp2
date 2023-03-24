@@ -23,6 +23,8 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <limits>
 
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"
@@ -1004,10 +1006,6 @@ bool ExtractEigenMtx(double cov[3][3], double out[9]) {
   // final dispatch
   for (uint32_t j = 0; j < 3; ++j) {
     for (uint32_t i = 0; i < 3; ++i) out[3 * i + j] = ev[j][i];
-    if (false) {
-      printf("# lambda-%d: [%.3f %.3f %.3f]  %.3f\n",
-             j, ev[j][0], ev[j][1], ev[j][2], lambdas[j]);
-    }
   }
   return true;
 }
@@ -1073,7 +1071,7 @@ WP2Status CSPTransform::Optimize(const ArgbBuffer& image) {
                WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(!image.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
   const bool is_premultiplied = (image.format() == WP2_Argb_32);
-  if (is_premultiplied) WP2ArgbConverterInit();
+  if (!is_premultiplied) WP2ArgbConverterInit();
   const uint8_t* const argb = image.GetRow8(0);
   const uint32_t w = image.width();
   const uint32_t h = image.height();
