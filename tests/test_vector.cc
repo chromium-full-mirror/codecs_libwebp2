@@ -232,5 +232,10 @@ TEST(VectorTest, Copy) {
   DoTestCopy(Vector<Foo>());
 }
 
+TEST(VectorTest, Destructor) {
+  struct TestClass : public WP2Allocable {};
+  Vector<TestClass> test;
+}
+
 }  // namespace
 }  // namespace WP2

@@ -70,7 +70,7 @@ class VectorBase {
   VectorBase(const VectorBase&) = delete;
   VectorBase(VectorBase&& other) noexcept { TrivialMoveCtor(this, &other); }
   ~VectorBase() {
-    clear();
+    for (iterator it = begin(); it != end(); ++it) it->~T();
     WP2Free(items_);
   }
 
