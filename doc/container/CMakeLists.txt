@@ -19,7 +19,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(Container VERSION 1.0)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 option(BUILD_CONVERT_TOOL "Build the convert command line tool." ON)

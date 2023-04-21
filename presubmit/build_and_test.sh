@@ -40,9 +40,7 @@ ensure_googletest() {
     || [[ "$(git -C ${googletest_dir} rev-parse --short HEAD)" != \
           "58d77fa" ]]; then
     rm -rf "${googletest_dir}"
-    # 1.12.1 is the last release to support C++11.
-    # Future releases will require at least C++14.
-    git clone -b release-1.12.1 --depth 1 \
+    git clone -b v1.13.0 --depth 1 \
       "${GOOGLETEST_REPO}" "${googletest_dir}"
   fi
 

@@ -129,7 +129,7 @@ EXTRA_C_FLAGS += -Wextra -Wold-style-definition
 EXTRA_C_FLAGS += -Wmissing-prototypes
 
 EXTRA_CXX_FLAGS = $(EXTRA_FLAGS)
-EXTRA_CXX_FLAGS += -std=c++11
+EXTRA_CXX_FLAGS += -std=c++14
 
 #### Nothing should normally be changed below this line ####
 
