@@ -34,9 +34,9 @@ WP2Status ProgressWatcher::Set(double progress) {
   WP2_CHECK_STATUS(thread_lock_.Acquire());
   if (progress == 0.) aborted_ = false;  // Rewinded.
   if (!aborted_) {
-    assert(progress >= 0. && progress <= 1.);
-    progress_ = progress;
-    if (hook_ != nullptr) aborted_ = !hook_->OnUpdate(progress_);
+    WP2_CHECK_OK(progress >= 0. && progress <= 1., WP2_STATUS_INVALID_PARAMETER);
+    progress_ = (uint64_t)(progress * kProgressPrecision);
+    if (hook_ != nullptr) aborted_ = !hook_->OnUpdate(GetProgress());
   }
   thread_lock_.Release();
   return aborted_ ? WP2_STATUS_USER_ABORT : WP2_STATUS_OK;
@@ -53,15 +53,17 @@ WP2Status ProgressWatcher::Finish() {
 }
 
 WP2Status ProgressWatcher::AdvanceBy(double step) {
-  WP2_CHECK_STATUS(thread_lock_.Acquire());
   if (!aborted_) {
-    progress_ += step;
-    assert(progress_ >= 0. && progress_ <= 1.);
-    if (hook_ != nullptr) aborted_ = !hook_->OnUpdate(progress_);
+    const uint64_t cur_progress = progress_.fetch_add((uint64_t)(step * kProgressPrecision));
+    WP2_CHECK_OK(progress_ >= 0 && progress_ <= kProgressPrecision,
+                 WP2_STATUS_INVALID_PARAMETER);
+    if (hook_ != nullptr) {
+      WP2_CHECK_STATUS(thread_lock_.Acquire());
+      aborted_ = !hook_->OnUpdate((double)(cur_progress / kProgressPrecision));
+      thread_lock_.Release();
+    }
   }
-  const bool aborted = aborted_;  // Prevent threaded data race.
-  thread_lock_.Release();
-  return aborted ? WP2_STATUS_USER_ABORT : WP2_STATUS_OK;
+  return aborted_ ? WP2_STATUS_USER_ABORT : WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------
