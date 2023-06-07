@@ -425,6 +425,9 @@ WP2Status TileEncoder::LossyEncode(const VectorNoCtor<Block>& forced_partition,
         const uint32_t block_height =
             std::min(cb.blk().h_pix(), tile_rect.height - cb.y_pix());
         WP2_CHECK_STATUS(row_progress.AdvanceBy(block_height));
+      } else {
+        // No progress advancement but check if the user cancelled the encoding.
+        WP2_CHECK_STATUS(row_progress.AdvanceBy(0.0));
       }
     }
 
