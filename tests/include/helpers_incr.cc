@@ -21,6 +21,7 @@
 
 #include "./helpers.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/dsp/math.h"
 #include "src/utils/orientation.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
@@ -444,8 +445,8 @@ class IncrementalDecodingTester {
         // Arbitrary formula. There is no theoritical maximum threshold but in
         // practice it is unlikely to go beyond this one.
         const uint32_t max_num_block_rows_in_two_bytes = std::max(
-            1u, kMinBlockSizePix * kMaxBlockSizePix /
-                    (is_sideways ? features->height : features->width));
+            1u, DivCeil(kMinBlockSizePix * kMaxBlockSizePix,
+                        is_sideways ? features->height : features->width));
         max_num_lines = kMaxBlockSizePix * max_num_block_rows_in_two_bytes;
       } else {
         max_num_lines = features->tile_height;
