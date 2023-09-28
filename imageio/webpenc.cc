@@ -17,8 +17,10 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
-#include <cstdio>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <memory>
 
 #ifdef HAVE_CONFIG_H
 #include "wp2/config.h"
@@ -28,6 +30,7 @@
 #include "./imageio_util.h"
 #include "src/dsp/math.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 #ifdef WP2_HAVE_WEBP
 #include "webp/encode.h"
@@ -51,12 +54,13 @@ WP2Status CompressWebP(const ArgbBuffer& buffer, const WebPConfig& config,
   WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(WebPValidateConfig(&config), WP2_STATUS_INVALID_CONFIGURATION);
   // Convert WP2::ArgbBuffer to WebPPicture
-  WebPPicture picture;
+  WebPPicture picture = {};
+  std::unique_ptr<WebPPicture, decltype(&WebPPictureFree)> picture_releaser(
+      &picture, WebPPictureFree);
   WP2_CHECK_STATUS(ConvertToWebPPicture(buffer, &picture));
   picture.writer = WriterFunc;
   picture.custom_ptr = reinterpret_cast<void*>(output);
   WP2_CHECK_OK(WebPEncode(&config, &picture), WP2_STATUS_INVALID_PARAMETER);
-  WebPPictureFree(&picture);
   return WP2_STATUS_OK;
 }
 
