@@ -386,17 +386,8 @@ class ImageReaderPNG : public ImageReader::Impl {
       png_set_gray_to_rgb(png);
     }
 
-    bool has_alpha = !!(color_type & PNG_COLOR_MASK_ALPHA);
     if (png_get_valid(png, head_info, PNG_INFO_tRNS)) {
-      // sometimes the tRNS chunk is misplaced and libpng behaves as
-      // if there's no transparency. See pngrutil.c:1084
-      png_bytep trans = nullptr;
-      int num_trans = 0;
-      if (!png_get_tRNS(png, head_info, &trans, &num_trans, nullptr)) {
-        num_trans = 0;
-      }
-      has_alpha = (num_trans > 0);
-      if (has_alpha) png_set_tRNS_to_alpha(png);
+      png_set_tRNS_to_alpha(png);
     }
 
     // Apply gamma correction if needed.
@@ -409,7 +400,11 @@ class ImageReaderPNG : public ImageReader::Impl {
     const int num_passes = png_set_interlace_handling(png);
     png_read_update_info(png, head_info);
 
-    const uint32_t depth = (has_alpha ? 4 : 3) * sizeof(*tmp_rgb_);
+    const uint32_t num_channels = png_get_channels(png, head_info);
+    if (num_channels != 3 && num_channels != 4) {
+      return WP2_STATUS_BITSTREAM_ERROR;
+    }
+    const uint32_t depth = num_channels * sizeof(*tmp_rgb_);
     size_t stride = 0;
     WP2_CHECK_STATUS(MultFitsIn(width, depth, &stride));
     // Make sure whole size fits in size_t.
@@ -426,8 +421,8 @@ class ImageReaderPNG : public ImageReader::Impl {
       for (uint32_t y = 0; y < height; ++y) {
         png_read_row(png, row, NULL);
         if (p == num_passes - 1) {
-          WP2_CHECK_STATUS(
-              buffer_->ImportRow(has_alpha ? WP2_RGBA_32 : WP2_RGB_24, y, row));
+          WP2_CHECK_STATUS(buffer_->ImportRow(
+              (num_channels == 4) ? WP2_RGBA_32 : WP2_RGB_24, y, row));
         }
         if (num_passes > 1) row += stride;
       }
