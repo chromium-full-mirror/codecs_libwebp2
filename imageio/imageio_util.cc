@@ -25,12 +25,18 @@
 #include <cstdio>
 #endif
 #include <algorithm>
+#include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <string>
 
 #include "src/dsp/dsp.h"
-#include "src/dsp/math.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+
+#if defined(WP2_HAVE_WEBP)
+#include "webp/encode.h"
+#endif
 
 namespace WP2 {
 
@@ -241,13 +247,17 @@ WP2Status ConvertToWebPPicture(const WP2::ArgbBuffer& in,
   out->width = in.width();
   out->height = in.height();
   WP2_CHECK_OK(WebPPictureAlloc(out), WP2_STATUS_OUT_OF_MEMORY);
+  WP2_CHECK_OK(in.format() == WP2_Argb_32 || in.format() == WP2_ARGB_32,
+               WP2_STATUS_UNSUPPORTED_FEATURE);
   // TODO(skal): sharp-yuv conversion ?
   // Convert from Argb_32 to WebP's ARGB
   WP2ArgbConverterInit();
+  const WP2ArgbConverterF* convert_to =
+      in.format() == WP2_Argb_32 ? WP2ArgbConvertTo : WP2ARGBConvertTo;
   for (int y = 0; y < out->height; ++y) {
     // BGRA order for conversion from uint8_t[4] to uint32_t[1] endianness.
-    WP2ArgbConvertTo[WP2_BGRA_32](in.GetRow8(y), out->width,
-                                  (uint8_t*)(out->argb + y * out->argb_stride));
+    convert_to[WP2_BGRA_32](in.GetRow8(y), out->width,
+                            (uint8_t*)(out->argb + y * out->argb_stride));
   }
   if (use_yuv) {
     WP2_CHECK_OK(WebPPictureSharpARGBToYUVA(out), WP2_STATUS_OUT_OF_MEMORY);
