@@ -21,9 +21,10 @@
 #define WP2_EXTRAS_EXTRAS_H_
 
 #include <string>
+
 #include "src/wp2/base.h"
 
-#define WP2_EXTRAS_ABI_VERSION 0x0001    // MAJOR(8b) + MINOR(8b)
+#define WP2_EXTRAS_ABI_VERSION 0x0001  // MAJOR(8b) + MINOR(8b)
 
 // Returns the version number of the extras library, packed in hexadecimal using
 // 8bits for each of major/minor/revision. E.g: v2.5.7 is 0x020507.
@@ -34,8 +35,8 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 // Buffer rescaling
 
-WP2_EXTERN WP2Status ArgbBufferRescale(ArgbBuffer* buffer,
-                                       uint32_t width, uint32_t height);
+WP2_EXTERN WP2Status ArgbBufferRescale(ArgbBuffer* buffer, uint32_t width,
+                                       uint32_t height);
 
 //------------------------------------------------------------------------------
 // Matrices that can be used as is with Encode() from encode.h.
@@ -120,6 +121,6 @@ std::string PrintPreview(const PreviewData& data, bool reduced = true);
 
 //------------------------------------------------------------------------------
 
-}    // namespace WP2
+}  // namespace WP2
 
-#endif  /* WP2_EXTRAS_EXTRAS_H_ */
+#endif /* WP2_EXTRAS_EXTRAS_H_ */

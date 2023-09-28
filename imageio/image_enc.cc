@@ -27,8 +27,7 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 WP2Status SaveImage(const ArgbBuffer& buffer, const char* const file_path,
-                    bool overwrite, FileFormat format,
-                    size_t* const file_size,
+                    bool overwrite, FileFormat format, size_t* const file_size,
                     const CSPTransform& transform) {
   WP2_CHECK_OK(file_path != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!buffer.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);

@@ -196,8 +196,8 @@ TEST_P(DecodeCustomCspTest, Comparison) {
       const float expected_disto =
           (quality <= kMaxLossyQuality) ? (is_opaque ? 55.f : 45.f) : 85.f;
       EXPECT_TRUE(testutil::Compare(ref_yuv, non_padded_yuv,
-                                    csp_transform.GetYuvDepth(),
-                                    src_file_name, expected_disto))
+                                    csp_transform.GetYuvDepth(), src_file_name,
+                                    expected_disto))
           << "quality : " << quality;
       break;
     }
@@ -255,31 +255,28 @@ static const struct BufferParam {
   uint32_t b_step, b_buffer_size;
   uint32_t a_step, a_buffer_size;
   WP2Status expected_status;
-} kBufferParams[] = {
-    { "0-sized buffers are nullptr.",
-      "source1_1x1.png", 0, 0, 0, 0, 0, 0, 0, 0, WP2_STATUS_NULL_PARAMETER },
-    { "allowed steps.",
-      "source1_1x1.png", 2, 4, 2, 4, 1, 2, 3, 6, WP2_STATUS_OK },
-    { "Odd buffer sizes are allowed.",
-      "source1_1x1.png", 2, 5, 2, 5, 2, 7, 4, 9, WP2_STATUS_OK },
-    { "buffer size are ok (reference).",
-      "source1_1x1.png", 8, 16, 8, 16, 10, 20, 8, 16, WP2_STATUS_OK },
-    { "Smaller C0-buffer size than stride.", "source1_1x1.png",
-      8, 15, 8, 16, 10, 20, 8, 16, WP2_STATUS_BAD_DIMENSION },
-    { "Smaller C1-buffer size than stride.", "source1_1x1.png",
-      8, 16, 8, 15, 10, 20, 8, 16, WP2_STATUS_BAD_DIMENSION },
-    { "Smaller C2-buffer size than stride.", "source1_1x1.png",
-      8, 16, 8, 16, 10, 19, 8, 16, WP2_STATUS_BAD_DIMENSION },
-    { "Smaller A-buffer size than stride.", "source1_1x1.png",
-      8, 16, 8, 16, 10, 20, 8, 15, WP2_STATUS_BAD_DIMENSION },
-    { "Buffer is too small.",
-      "source1_32x32.png", 32, 2048, 32, 2046, 32, 2048, 0, 0,
-      WP2_STATUS_BAD_DIMENSION },
-    { "Buffer is fine.",
-      "source1_32x32.png", 32, 2048, 32, 2048, 32, 2048, 0, 0, WP2_STATUS_OK },
-    { "Buffer is fine.",
-      "source1_32x32.png", 33, 4000, 35, 3000, 34, 2887, 0, 0, WP2_STATUS_OK }
-};
+} kBufferParams[] = {{"0-sized buffers are nullptr.", "source1_1x1.png", 0, 0,
+                      0, 0, 0, 0, 0, 0, WP2_STATUS_NULL_PARAMETER},
+                     {"allowed steps.", "source1_1x1.png", 2, 4, 2, 4, 1, 2, 3,
+                      6, WP2_STATUS_OK},
+                     {"Odd buffer sizes are allowed.", "source1_1x1.png", 2, 5,
+                      2, 5, 2, 7, 4, 9, WP2_STATUS_OK},
+                     {"buffer size are ok (reference).", "source1_1x1.png", 8,
+                      16, 8, 16, 10, 20, 8, 16, WP2_STATUS_OK},
+                     {"Smaller C0-buffer size than stride.", "source1_1x1.png",
+                      8, 15, 8, 16, 10, 20, 8, 16, WP2_STATUS_BAD_DIMENSION},
+                     {"Smaller C1-buffer size than stride.", "source1_1x1.png",
+                      8, 16, 8, 15, 10, 20, 8, 16, WP2_STATUS_BAD_DIMENSION},
+                     {"Smaller C2-buffer size than stride.", "source1_1x1.png",
+                      8, 16, 8, 16, 10, 19, 8, 16, WP2_STATUS_BAD_DIMENSION},
+                     {"Smaller A-buffer size than stride.", "source1_1x1.png",
+                      8, 16, 8, 16, 10, 20, 8, 15, WP2_STATUS_BAD_DIMENSION},
+                     {"Buffer is too small.", "source1_32x32.png", 32, 2048, 32,
+                      2046, 32, 2048, 0, 0, WP2_STATUS_BAD_DIMENSION},
+                     {"Buffer is fine.", "source1_32x32.png", 32, 2048, 32,
+                      2048, 32, 2048, 0, 0, WP2_STATUS_OK},
+                     {"Buffer is fine.", "source1_32x32.png", 33, 4000, 35,
+                      3000, 34, 2887, 0, 0, WP2_STATUS_OK}};
 
 class StrideBufferSizeTest : public testing::TestWithParam<BufferParam> {};
 
@@ -300,11 +297,11 @@ TEST_P(StrideBufferSizeTest, Combination) {
   int16_t* const a_buffer = reinterpret_cast<int16_t*>(a.bytes);
 
   ASSERT_EQ(Decode(data.mem_, data.size_, kRGBToRGB8Matrix, kRGBToRGB8Shift,
-                   r_buffer, p.r_step, p.r_buffer_size,
-                   g_buffer, p.g_step, p.g_buffer_size,
-                   b_buffer, p.b_step, p.b_buffer_size,
+                   r_buffer, p.r_step, p.r_buffer_size, g_buffer, p.g_step,
+                   p.g_buffer_size, b_buffer, p.b_step, p.b_buffer_size,
                    a_buffer, p.a_step, p.a_buffer_size),
-            p.expected_status) << p.label;
+            p.expected_status)
+      << p.label;
 }
 
 INSTANTIATE_TEST_SUITE_P(StrideBufferSizeTestInstantiation,

@@ -27,8 +27,8 @@
 
 #include "./file_format.h"
 #include "./imageio_util.h"
-#include "src/utils/utils.h"
 #include "src/utils/plane.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
@@ -60,8 +60,7 @@ class ImageReader {
               size_t max_num_pixels = kMaxBufferArea);
 
   // 'data' must not change till the last ReadFrame() call. Clears 'buffer'.
-  ImageReader(const std::string& data,
-              ArgbBuffer* const buffer,
+  ImageReader(const std::string& data, ArgbBuffer* const buffer,
               FileFormat data_format = FileFormat::AUTO,
               LogLevel log_level = LogLevel::DEFAULT,
               size_t max_num_pixels = kMaxBufferArea);
@@ -81,9 +80,8 @@ class ImageReader {
   // Class to inherit for each format.
   class Impl : public WP2Allocable {
    public:
-    Impl(ArgbBuffer* buffer,
-         const uint8_t* data, size_t data_size, LogLevel log_level,
-         size_t max_num_pixels)
+    Impl(ArgbBuffer* buffer, const uint8_t* data, size_t data_size,
+         LogLevel log_level, size_t max_num_pixels)
         : data_(data),
           data_size_(data_size),
           buffer_(buffer),
@@ -99,14 +97,14 @@ class ImageReader {
 
     uint32_t GetLoopCount() const { return loop_count_; }
 
-    WP2Status CheckData() const;   // verify data_ and buffer_ fields
+    WP2Status CheckData() const;  // verify data_ and buffer_ fields
 
    protected:
     WP2Status CheckDimensions(uint32_t width, uint32_t height) const;
 
     const uint8_t* const data_;
     const size_t data_size_;
-    ArgbBuffer* const buffer_;   // user-supplied output
+    ArgbBuffer* const buffer_;  // user-supplied output
     uint32_t loop_count_ = kInfiniteLoopCount;
     const LogLevel log_level_;
     const size_t max_num_pixels_;

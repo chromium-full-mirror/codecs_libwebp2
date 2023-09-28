@@ -28,16 +28,13 @@
 static inline double GetStopwatchTime() {
   LARGE_INTEGER watch;
   LARGE_INTEGER freq;
-  if (!QueryPerformanceCounter(&watch))
-    return 0.0;
-  if (!QueryPerformanceFrequency(&freq))
-    return 0.0;
-  if (freq.QuadPart == 0)
-    return 0.0;
+  if (!QueryPerformanceCounter(&watch)) return 0.0;
+  if (!QueryPerformanceFrequency(&freq)) return 0.0;
+  if (freq.QuadPart == 0) return 0.0;
   return watch.QuadPart / (double)(freq.QuadPart);
 }
 
-#else    /* !_WIN32 */
+#else /* !_WIN32 */
 #include <sys/time.h>
 
 static inline double GetStopwatchTime() {
@@ -48,6 +45,6 @@ static inline double GetStopwatchTime() {
   return sec + usec / 1000000.0;
 }
 
-#endif   /* _WIN32 */
+#endif /* _WIN32 */
 
-#endif  /* WP2_EXAMPLES_STOPWATCH_H_ */
+#endif /* WP2_EXAMPLES_STOPWATCH_H_ */

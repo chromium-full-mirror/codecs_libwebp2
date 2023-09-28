@@ -174,11 +174,10 @@ TEST_P(TestFrontMgr, CopyFrom) {
 
     for (uint16_t i : size_order_indices) {
       if (num_blocks_before_cloning == 0) {
-        ASSERT_WP2_OK((front_mgr_type == kLexico)
-                          ? mgr_lex_clone.CopyFrom(mgr_lex)
-                          : (front_mgr_type == kMax)
-                                ? mgr_max_clone.CopyFrom(mgr_max)
-                                : mgr_area_clone.CopyFrom(mgr_area));
+        ASSERT_WP2_OK(
+            (front_mgr_type == kLexico) ? mgr_lex_clone.CopyFrom(mgr_lex)
+            : (front_mgr_type == kMax)  ? mgr_max_clone.CopyFrom(mgr_max)
+                                        : mgr_area_clone.CopyFrom(mgr_area));
       }
 
       const Block& block = blocks[i];

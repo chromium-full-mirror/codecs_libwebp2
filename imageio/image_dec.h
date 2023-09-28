@@ -52,6 +52,6 @@ WP2Status ReadImage(const char* const file_path, ArgbBuffer* buffer,
                     FileFormat format = FileFormat::AUTO,
                     LogLevel log_level = LogLevel::DEFAULT);
 
-}    // namespace WP2
+}  // namespace WP2
 
 #endif  // WP2_IMAGEIO_IMAGE_DEC_H_

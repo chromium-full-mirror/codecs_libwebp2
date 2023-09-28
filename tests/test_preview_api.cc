@@ -226,7 +226,7 @@ TEST(PreviewTest, PreviewData) {
   config.preview_size = 123;
   config.preview = nullptr;
   EXPECT_EQ(Encode(original_image, &writer, config),
-                   WP2_STATUS_INVALID_CONFIGURATION);
+            WP2_STATUS_INVALID_CONFIGURATION);
 
   const char kPreviewdata[] = "this is a nice thumbnail!";
   config.preview = (const uint8_t*)kPreviewdata;

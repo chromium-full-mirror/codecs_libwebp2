@@ -63,8 +63,18 @@ inline void DrawRandomBit(uint32_t N, UniformIntDistribution* const random,
 }
 
 struct Token {
-  enum Type { Bit, Bool, ASymbol, Symbol, Range, MinMax, Uniform, Signed, ABit,
-             None };
+  enum Type {
+    Bit,
+    Bool,
+    ASymbol,
+    Symbol,
+    Range,
+    MinMax,
+    Uniform,
+    Signed,
+    ABit,
+    None
+  };
   explicit Token(Type token_type = None, uint32_t token_first = 0,
                  uint32_t token_second = 0, uint32_t token_third = 0)
       : type(token_type),
@@ -300,6 +310,7 @@ class TestANS : public testing::Test {
     WP2MathInit();
     ANSInit();
   }
+
  public:
   static constexpr uint32_t kMaxRange = 1 << kANSMaxRangeBits;
 };
@@ -339,7 +350,7 @@ TEST_F(TestANS, Test2) {
   UniformIntDistribution random(kBaseSeed);
   const uint32_t kMaxSymbol = 256;
   ANSCodes codes;
-  EXPECT_TRUE(codes.resize(31));   // will be resized later
+  EXPECT_TRUE(codes.resize(31));  // will be resized later
 
   for (uint32_t type : {0, 1, 2}) {
     ANSEnc enc;
@@ -404,8 +415,8 @@ TEST_F(TestANS, Test2) {
     EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
     ExternalDataSource data_source(bits.data(), bits.size());
     ANSDec dec(&data_source);
-    ASSERT_WP2_OK(ANSCountsToSpreadTable(&counts[0], kMaxSymbol,
-                                         ANS_TAB_SIZE, codes));
+    ASSERT_WP2_OK(
+        ANSCountsToSpreadTable(&counts[0], kMaxSymbol, ANS_TAB_SIZE, codes));
     for (uint32_t i = 0; i < kNumSymbols; ++i) {
       const uint32_t s = dec.ReadSymbol(codes.data(), ANS_LOG_TAB_SIZE, "id");
       EXPECT_EQ(s, symbols[i]) << "Error case " << type << " at position " << i;
@@ -492,8 +503,8 @@ TEST_F(TestANS, Test3) {
       EXPECT_TRUE(
           std::equal(sub_vector, sub_vector + vector_size, &vector_read[0]));
     }
-    ASSERT_WP2_OK(ANSCountsToSpreadTable(&counts[0], kMaxSymbol,
-                                         ANS_TAB_SIZE, codes));
+    ASSERT_WP2_OK(
+        ANSCountsToSpreadTable(&counts[0], kMaxSymbol, ANS_TAB_SIZE, codes));
   }
 
   // Decode the buffer and make sure it matches the input
@@ -561,8 +572,8 @@ TEST_P(TestANSCostEstimation, Simple) {
       EXPECT_WP2_OK(enc0.AssembleToBitstream());
       Vector_u8 bits0;
       EXPECT_WP2_OK(enc0.WriteBitstreamTo(bits0));
-      size = (int)(8 * bits0.size());       // store for later comparison
-      if (info.type != Token::Symbol) {     // omit the dictionary case for now
+      size = (int)(8 * bits0.size());    // store for later comparison
+      if (info.type != Token::Symbol) {  // omit the dictionary case for now
         ANSBinSymbol new_bin_symbol;
         ANSAdaptiveSymbol new_asymbol;
         new_asymbol.SetAdaptationSpeed(ANSAdaptiveSymbol::Method::kAOM);
@@ -754,7 +765,7 @@ TEST_F(TestANS, Test6c) {
   ANSEnc encoder;
   std::vector<Token> tokens;
   tokens.reserve(kMaxRange * (kMaxRange - 1) / 2 -
-                  (min_tested_range - 1) * (min_tested_range - 2) / 2);
+                 (min_tested_range - 1) * (min_tested_range - 2) / 2);
   for (uint16_t range = min_tested_range; range < kMaxRange; ++range) {
     for (uint16_t value = range / 2; value < range; ++value) {
       encoder.PutRValue(value, range, "R_value");
@@ -805,8 +816,8 @@ void GetCodesFromTokens(const std::vector<uint32_t>& max_symbols,
 
   codes.resize(n_dicts);
   for (uint32_t i = 0; i < n_dicts; ++i) {
-    EXPECT_WP2_OK(ANSCountsToSpreadTable(
-        &counts[i][0], max_symbols[i], ANS_TAB_SIZE, codes[i]));
+    EXPECT_WP2_OK(ANSCountsToSpreadTable(&counts[i][0], max_symbols[i],
+                                         ANS_TAB_SIZE, codes[i]));
   }
 }
 
@@ -942,8 +953,8 @@ TEST_P(TestANSBitCounts, Simple) {
   const double error = (bits.size() - bit_count / 8.) / bits.size();
   if (kVerbose) {
     printf("%s: %d elemt. Bits: actual: %d, reported: %.2lf (%.2lf%% off)\n",
-           info.name.c_str(), (int)tokens.size(),
-           (int)bits.size() * 8, bit_count, error * 100.f);
+           info.name.c_str(), (int)tokens.size(), (int)bits.size() * 8,
+           bit_count, error * 100.f);
   }
   EXPECT_LE(std::abs(error), ANSDec::kBitCountAccuracy);
 #endif
@@ -1129,8 +1140,8 @@ TEST_P(TestANSAdaptiveSymbol, VsDictionary) {
 
   if (kVerbose || err1 > kTolerance[lspeed] || err2 > kTolerance2) {
     printf("#%d symbols, expected bits=%.1f ", len, total);
-    printf("final bits1 = %.1f bits2=%.1f [speed=%d lspeed=%d %.3f]\n",
-           size1, size2, speed, lspeed, err1);
+    printf("final bits1 = %.1f bits2=%.1f [speed=%d lspeed=%d %.3f]\n", size1,
+           size2, speed, lspeed, err1);
   }
 
   // Write one symbol with sym and the next with asym.
@@ -1159,8 +1170,8 @@ TEST_P(TestANSAdaptiveSymbol, VsDictionary) {
 
   if (kVerbose || err > kTolerance3) {
     printf("#%d symbols, expected cost=%.1f ", len, cost);
-    printf("final bits = %.1f [speed=%d lspeed=%d %.3f]\n",
-           size, speed, lspeed, err);
+    printf("final bits = %.1f [speed=%d lspeed=%d %.3f]\n", size, speed, lspeed,
+           err);
   }
 #endif  // WP2_ENC_DEC_MATCH
 }

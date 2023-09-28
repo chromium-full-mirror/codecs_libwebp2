@@ -118,8 +118,7 @@ WP2Status MultFitsIn(ValueType value, MultType mult,
 
 #if defined(WP2_HAVE_WEBP)
 WP2Status ConvertToWebPPicture(const WP2::ArgbBuffer& in,
-                               WebPPicture* const out,
-                               bool use_yuv = false);
+                               WebPPicture* const out, bool use_yuv = false);
 WP2Status ConvertFromWebPPicture(const WebPPicture& in,
                                  WP2::ArgbBuffer* const out);
 #endif

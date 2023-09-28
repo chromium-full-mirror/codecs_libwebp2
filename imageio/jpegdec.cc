@@ -28,6 +28,7 @@
 #ifdef WP2_HAVE_JPEG
 #include <jerror.h>
 #include <jpeglib.h>
+
 #include <csetjmp>
 #include <cstdlib>
 #include <cstring>
@@ -61,8 +62,8 @@ struct MetadataSignature {
 };
 
 // Exif 2.2 Section 4.7.2 Interoperability Structure of APP1 ...
-const MetadataSignature kEXIFSignature = {
-    JPEG_APP1, (const uint8_t*)"Exif\0", 6, 6};
+const MetadataSignature kEXIFSignature = {JPEG_APP1, (const uint8_t*)"Exif\0",
+                                          6, 6};
 
 // XMP Specification Part 3 Section 3 Embedding XMP Metadata ... #JPEG
 // TODO(jzern) Add support for 'ExtendedXMP'
@@ -199,8 +200,8 @@ WP2Status VerifyICCP(size_t iccp_segment_count,
 
 // Merges all ICC profile segments from 'iccp_segments' to 'metadata'.
 // Returns WP2_STATUS_OK on success.
-WP2Status MergeICCP(ICCPSegment iccp_segments[255],
-                    size_t iccp_segment_count, WP2::Data* const metadata) {
+WP2Status MergeICCP(ICCPSegment iccp_segments[255], size_t iccp_segment_count,
+                    WP2::Data* const metadata) {
   // The segments may appear out of order in the file, sort them based on
   // sequence number before assembling the payload.
   qsort(iccp_segments, iccp_segment_count, sizeof(*iccp_segments),
@@ -317,12 +318,9 @@ void ContextSkip(j_decompress_ptr dinfo, long jump_size) {  // NOLINT (long)
   ctx->pub.next_input_byte += jump;
 }
 
-void ContextTerm(j_decompress_ptr dinfo) {
-  (void)dinfo;
-}
+void ContextTerm(j_decompress_ptr dinfo) { (void)dinfo; }
 
-void ContextSetup(j_decompress_ptr dinfo,
-                  JPEGReadContext* const ctx) {
+void ContextSetup(j_decompress_ptr dinfo, JPEGReadContext* const ctx) {
   assert((void*)ctx == (void*)&ctx->pub);
   dinfo->src = &ctx->pub;
   ctx->pub.init_source = ContextInit;
@@ -455,8 +453,8 @@ class ImageReaderJPEG : public ImageReader::Impl {
   }
 };
 
-void ImageReader::SetImplJPEG(ArgbBuffer* const buffer,
-                              LogLevel log_level, size_t max_num_pixels) {
+void ImageReader::SetImplJPEG(ArgbBuffer* const buffer, LogLevel log_level,
+                              size_t max_num_pixels) {
   impl_.reset(new (WP2Allocable::nothrow) ImageReaderJPEG(
       data_.bytes, data_.size, buffer, log_level, max_num_pixels));
   if (impl_ == nullptr) status_ = WP2_STATUS_OUT_OF_MEMORY;
@@ -473,8 +471,9 @@ void ImageReader::SetImplJPEG(ArgbBuffer* const buffer, LogLevel log_level,
   (void)buffer;
   (void)max_num_pixels;
   if (log_level >= WP2::LogLevel::DEFAULT) {
-    fprintf(stderr, "JPEG support not compiled. Please install the libjpeg "
-                    "development package before building.\n");
+    fprintf(stderr,
+            "JPEG support not compiled. Please install the libjpeg "
+            "development package before building.\n");
   }
   status_ = WP2_STATUS_UNSUPPORTED_FEATURE;
 }

@@ -270,11 +270,11 @@ TEST(ImplicitCflPredictor, SimpleLinearRelationship) {
 
   // Try with more extreme values to test accuracy of the prediction.
   cache.SetContext(kYChannel, {2, 2, 2, 2, 2,                 // Left + top left
-                            4, 4, 4, 4, 4,                 // Top + top right
-                            2, 2, missing, missing});      // Right
+                               4, 4, 4, 4, 4,                 // Top + top right
+                               2, 2, missing, missing});      // Right
   cache.SetContext(kUChannel, {250, 250, 250, 250, 250,       // Left + top left
-                            450, 450, 450, 450, 450,       // Top + top right
-                            250, 250, missing, missing});  // Right
+                               450, 450, 450, 450, 450,       // Top + top right
+                               250, 250, missing, missing});  // Right
 
   p.Predict(cb, kUChannel, /*split_tf=*/false, /*tf_i=*/0, prediction,
             kPredWidth);
@@ -341,7 +341,8 @@ TEST(ImplicitCflPredictor, WithErrors) {
   cache.SetContext(kYChannel, {100, 100, 100, 100, 100,  // Left + top left
                                200, 200, 200, 200, 200,  // Top + top right
                                100, 100, 100, 100});     // Right
-  cache.SetContext(kUChannel,
+  cache.SetContext(
+      kUChannel,
       {250 + 10, 250 - 5, 250, 250 + 5, 250,        // Left + top left
        450 + 11, 450 + 15, 450 - 10, 450 - 2, 450,  // Top + top right
        250, 250 + 5, 250 - 3, 250 + 4});            // Right
@@ -376,10 +377,11 @@ TEST(SignalingCflPredictor, Test) {
   cache.SetContext(kYChannel, {100, 100, 100, 100, 100,  // Left + top left
                                200, 200, 200, 200, 200,  // Top + top right
                                100, 100, 100, 100});     // Right
-  cache.SetContext(kUChannel,
-      {350 + 40, 350 - 25, 350, 350 + 35, 350,        // Left + top left
-       550 + 51, 550 + 35, 550 - 30, 550 - 20, 550,   // Top + top right
-       350, 350 + 35, 350 - 33, 350 + 4});            // Right
+  cache.SetContext(
+      kUChannel,
+      {350 + 40, 350 - 25, 350, 350 + 35, 350,       // Left + top left
+       550 + 51, 550 + 35, 550 - 30, 550 - 20, 550,  // Top + top right
+       350, 350 + 35, 350 - 33, 350 + 4});           // Right
 
   cb.cfl_[0] = -27;
 
@@ -581,8 +583,9 @@ TEST(LargePredictors, PrintSimpleAngleTable) {
          kAnglePredPrecision);
   for (uint32_t i = 0; i < kNumDirectionalAngles; ++i) {
     const double alpha = M_PI / 180. * (45.f + 22.5f * ((int)i - 3) / 7.);
-    printf("%d,", (i == 45) ? 0 :
-           (int32_t)(1. / std::tan(alpha) * (1u << kAnglePredPrecision)));
+    printf("%d,", (i == 45) ? 0
+                            : (int32_t)(1. / std::tan(alpha) *
+                                        (1u << kAnglePredPrecision)));
     printf("%s", ((i & 7) == 7) ? "\n  " : " ");
   }
   printf("};\n");
@@ -591,8 +594,9 @@ TEST(LargePredictors, PrintSimpleAngleTable) {
          kAnglePredPrecision);
   for (uint32_t i = 0; i < kNumDirectionalAngles; ++i) {
     const double alpha = M_PI / 180. * (45.f + 22.5f * ((int)i - 3) / 7.);
-    printf("%d,", (i == 17) ? 0 :
-           (int32_t)(std::tan(alpha) * (1u << kAnglePredPrecision)));
+    printf("%d,", (i == 17) ? 0
+                            : (int32_t)(std::tan(alpha) *
+                                        (1u << kAnglePredPrecision)));
     printf("%s", ((i & 7) == 7) ? "\n  " : " ");
   }
   printf("};\n");

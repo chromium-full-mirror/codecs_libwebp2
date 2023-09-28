@@ -23,8 +23,8 @@
 #include "src/common/symbols.h"
 #include "src/dec/symbols_dec.h"
 #include "src/enc/symbols_enc.h"
-#include "src/utils/random.h"
 #include "src/utils/data_source.h"
+#include "src/utils/random.h"
 
 namespace WP2 {
 namespace {
@@ -55,13 +55,12 @@ class SymbolsInfoTest : public SymbolsInfo {
  protected:
   bool Equal(const SymbolInfo& a, const SymbolInfo& b) const {
     return a.num_clusters == b.num_clusters &&
-           a.storage_method == b.storage_method &&
-           a.min == b.min && a.max == b.max;
+           a.storage_method == b.storage_method && a.min == b.min &&
+           a.max == b.max;
   }
 
   bool Equal(const ClusterInfo& a, const ClusterInfo& b) const {
-    return (a.p0 == b.p0 && a.p1 == b.p1 &&
-            a.min == b.min && a.max == b.max &&
+    return (a.p0 == b.p0 && a.p1 == b.p1 && a.min == b.min && a.max == b.max &&
             a.cdf == b.cdf);
   }
 };
@@ -423,8 +422,8 @@ TEST(SymbolsTest, CDF) {
   for (uint32_t i = 0; i < kNumSymbolTypes; ++i) {
     info.SetInfo(i, /*min=*/0, /*max=*/info.Range(i, /*cluster=*/0) - 1,
                  info.NumClusters(i), StorageMethod::kAdaptiveSym);
-    EXPECT_WP2_OK(info.SetInitialCDF(i, /*cluster=*/0,
-                                     cdfs[i], ANS_MAX_SYMBOLS));
+    EXPECT_WP2_OK(
+        info.SetInitialCDF(i, /*cluster=*/0, cdfs[i], ANS_MAX_SYMBOLS));
   }
   DataGenerator generator(info, &random);
 
@@ -659,7 +658,7 @@ TEST(SymbolsTest, StorageMethodAdaptiveWithAutoSpeed) {
   ANSDictionaries dicts;
   uint32_t max_nnz = kNumSymbol;
   ASSERT_WP2_OK(
-      sw->WriteHeader( /*sym=*/0, max_nnz, recorder, "header", &enc, &dicts));
+      sw->WriteHeader(/*sym=*/0, max_nnz, recorder, "header", &enc, &dicts));
 
   for (const DataGenerator::Symbol& sym : symbols) {
     sw->Process(sym.s, sym.cluster, sym.value, "sym", &enc);
@@ -1128,8 +1127,8 @@ class SymbolCostTest : public testing::TestWithParam<std::tuple<bool, bool>> {
       SCOPED_TRACE(SPrintf("value  %d", i));
       if (!max_values.empty()) {
         int32_t v = 0;
-        EXPECT_WP2_OK(sr->ReadWithMax(kSymbol, kCluster, max_values[i],
-                                      "label", &v, cost_ptr));
+        EXPECT_WP2_OK(sr->ReadWithMax(kSymbol, kCluster, max_values[i], "label",
+                                      &v, cost_ptr));
         EXPECT_EQ(values[i], v);
       } else {
         EXPECT_EQ(values[i], sr->Read(kSymbol, "label", cost_ptr));

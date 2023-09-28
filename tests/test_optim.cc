@@ -32,16 +32,17 @@
 #include "src/utils/wiener.h"
 #include "src/wp2/base.h"
 
-#include "examples/example_utils.h"  // must be last to avoid CPUInfo conflict
+// must be last to avoid CPUInfo conflict
+#include "examples/example_utils.h"
 
 namespace WP2 {
 namespace {
 
 int16_t GetRand(int min, int max, UniformIntDistribution& r) {
   return (min < max)
-           ? (int16_t)(min + (r.Get(0, std::numeric_limits<int32_t>::max()) %
-                              (max - min)))
-           : (int16_t)0;
+             ? (int16_t)(min + (r.Get(0, std::numeric_limits<int32_t>::max()) %
+                                (max - min)))
+             : (int16_t)0;
 }
 
 void FindBestUpsampling(const Plane16& src, const Plane16& ref, float scale,
@@ -109,13 +110,14 @@ void Upsample(const Plane16& uv, int16_t w[4], Plane16* const dst) {
 ////////////////////////////////////////////////////////////////////////////////
 // test for recovering pure gradients (w/ noise)
 
-template <int kNum> void DoTestGradient() {
+template <int kNum>
+void DoTestGradient() {
   UniformIntDistribution r;
   for (int n = 0; n < 100; ++n) {
     const int16_t max_range = (int16_t)sqrt(32768. / (kNum + 1));
     const int16_t range = GetRand(2, max_range, r);
     EXPECT_LT(range * range * (kNum + 1), 32768)
-         << "range overflows 16b signed calculations!";
+        << "range overflows 16b signed calculations!";
 
     int16_t alpha[kNum + 1];
     for (size_t i = 0; i < kNum; ++i) alpha[i] = GetRand(-range, range, r);

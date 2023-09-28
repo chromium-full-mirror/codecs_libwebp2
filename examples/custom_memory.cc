@@ -82,16 +82,15 @@ MemoryTrace::~MemoryTrace() {
     fprintf(stderr, "\n=== MEMORY INFO ===\n");
     fprintf(stderr, "num calls to: malloc = %4d\n", num_malloc_calls);
     fprintf(stderr, "              free   = %4d\n", num_free_calls);
-    fprintf(stderr, "final memory:     %u%s\n",
-            (uint32_t)mem_allocated,
+    fprintf(stderr, "final memory:     %u%s\n", (uint32_t)mem_allocated,
             (mem_allocated == 0) ? "" : "  !!! ERROR");
     fprintf(stderr, "total allocation: %u\n", (uint32_t)total_allocation);
     fprintf(stderr, "high-water mark:  %u\n", (uint32_t)high_water_mark);
     if (show_traffic && mem_allocated > 0) {
       fprintf(stderr, "Still allocated:\n");
       for (auto it : all_blocks) {
-        fprintf(stderr, "ptr = %p   size = %7u\n",
-                it.first, (uint32_t)it.second);
+        fprintf(stderr, "ptr = %p   size = %7u\n", it.first,
+                (uint32_t)it.second);
       }
     }
     all_blocks.clear();
@@ -106,9 +105,8 @@ MemoryTrace::~MemoryTrace() {
       fprintf(stderr, "\n");
       for (uint32_t i = 0;
            i < std::min(top_stacktrace_num, (uint32_t)counts.size()); ++i) {
-        fprintf(stderr,
-                "Most called %d/%d: %d %s (might be a duplicate)\n\n", i + 1,
-                top_stacktrace_num, counts[i].second,
+        fprintf(stderr, "Most called %d/%d: %d %s (might be a duplicate)\n\n",
+                i + 1, top_stacktrace_num, counts[i].second,
                 top_alloc_size ? "bytes" : "calls");
         fprintf(stderr, "%s\n\n", counts[i].first.c_str());
       }
@@ -122,8 +120,9 @@ bool MemoryTrace::Register(void* ptr, size_t size) {
   // don't call Unregister() when failing here! This would dead-lock...
   if (countdown_to_fail >= 1) {
     if (countdown_to_fail == 1) {
-      fprintf(stderr, "WARNING! We already FAILED! Do you have any delayed "
-                      "malloc checks (in constructors e.g.) ??\n");
+      fprintf(stderr,
+              "WARNING! We already FAILED! Do you have any delayed "
+              "malloc checks (in constructors e.g.) ??\n");
       return false;
     }
     if (--countdown_to_fail == 1) {
@@ -151,9 +150,8 @@ bool MemoryTrace::Register(void* ptr, size_t size) {
       fprintf(stderr, "fail-count: %5d [mem=%5u \t(+%7u)  ptr=%p]\n",
               countdown_to_fail, (uint32_t)mem_allocated, (uint32_t)size, ptr);
     } else {
-      fprintf(stderr, "Alloc #%5u: %u (+%u)\n",
-              (uint32_t)num_malloc_calls, (uint32_t)mem_allocated,
-              (uint32_t)size);
+      fprintf(stderr, "Alloc #%5u: %u (+%u)\n", (uint32_t)num_malloc_calls,
+              (uint32_t)mem_allocated, (uint32_t)size);
     }
   }
   return true;
@@ -165,7 +163,7 @@ void MemoryTrace::Unregister(void* ptr) {
   ++num_free_calls;
   if (all_blocks.find(ptr) == all_blocks.end()) {
     fprintf(stderr, "Invalid pointer free! (%p)\n", ptr);
-    abort();   // Critical error. Just can't happen.
+    abort();  // Critical error. Just can't happen.
   }
   const size_t size = all_blocks[ptr];
   all_blocks.erase(ptr);
@@ -204,12 +202,12 @@ bool ProgramOptions::ParseMemoryOptions(char* arg[], int argc, int& skip) {
     kMemoryTrace.print_info = true;
     skip = 1;
   } else if (!strcmp(arg[0], "-mem_limit")) {
-    if (argc < 2) return false;   // not enough args
+    if (argc < 2) return false;  // not enough args
     kMemoryTrace.memory_limit = ExUtilGetUInt(arg[1], &error);
     if (error) return false;
     skip = 2;
   } else if (!strcmp(arg[0], "-mem_fail")) {
-    if (argc < 2) return false;   // not enough args
+    if (argc < 2) return false;  // not enough args
     kMemoryTrace.countdown_to_fail = 1 + ExUtilGetUInt(arg[1], &error);
     if (error) return false;
     skip = 2;

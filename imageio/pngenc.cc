@@ -21,7 +21,7 @@
 #ifdef WP2_HAVE_PNG
 #include <png.h>
 #include <setjmp.h>  // note: this must be included *after* png.h
-#endif  // WP2_HAVE_PNG
+#endif               // WP2_HAVE_PNG
 
 #ifdef HAVE_WINCODEC_H
 #ifdef __MINGW32__
@@ -29,12 +29,13 @@
 #endif
 #define CINTERFACE
 #define COBJMACROS
-#define _WIN32_IE 0x500  // Workaround bug in shlwapi.h when compiling C++
-                         // code with COBJMACROS.
+#define _WIN32_IE \
+  0x500            // Workaround bug in shlwapi.h when compiling C++
+                   // code with COBJMACROS.
 #include <ole2.h>  // CreateStreamOnHGlobal()
 #include <shlwapi.h>
-#include <windows.h>
 #include <wincodec.h>
+#include <windows.h>
 #endif  // HAVE_WINCODEC_H
 
 #include "./image_enc.h"
@@ -174,8 +175,8 @@ void PNGAPI PNGErrorFunction(png_structp png, png_const_charp dummy) {
 
 }  // namespace
 
-WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout,
-                   const char*, bool, bool, size_t*) {
+WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout, const char*, bool,
+                   bool, size_t*) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(buffer.format() == WP2_Argb_32 || buffer.format() == WP2_ARGB_32,
                WP2_STATUS_UNSUPPORTED_FEATURE);
@@ -234,8 +235,9 @@ WP2Status WritePNG(const ArgbBuffer&, FILE* fout, const char*, bool, bool,
                    size_t*) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
 
-  fprintf(stderr, "PNG support not compiled. Please install the libpng "
-                  "development package before building.\n");
+  fprintf(stderr,
+          "PNG support not compiled. Please install the libpng "
+          "development package before building.\n");
   fprintf(stderr, "You can run with -ppm flag to decode in PPM format.\n");
   return WP2_STATUS_UNSUPPORTED_FEATURE;
 }

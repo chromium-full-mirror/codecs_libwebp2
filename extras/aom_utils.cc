@@ -733,9 +733,9 @@ WP2Status DecodeAV1WithLibaom(const ArgbBuffer& ref, const ParamsAV1& params,
 
   Av1DecodeReturn user_priv = {nullptr, 0, 0};  // Necessary to enable inspect
   const double start_time = GetStopwatchTime();
-  CHECK_AOM_STATUS(
-      aom_codec_decode(&codec, (const uint8_t*)bitstream.data(),
-                       bitstream.size(), &user_priv), &codec);
+  CHECK_AOM_STATUS(aom_codec_decode(&codec, (const uint8_t*)bitstream.data(),
+                                    bitstream.size(), &user_priv),
+                   &codec);
   if (timing != nullptr) *timing = GetStopwatchTime() - start_time;
   aom_image_t* img = NULL;
   aom_codec_iter_t iter = NULL;
@@ -938,8 +938,8 @@ WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
                       std::vector<Rectangle>* const transforms,
                       QuantAV1* const quant) {
   if (aom_codec_version() != VERSION_PACKED) {
-    fprintf(stderr, "Version mismatch! (%x vs %x)\n",
-                     aom_codec_version(), VERSION_PACKED);
+    fprintf(stderr, "Version mismatch! (%x vs %x)\n", aom_codec_version(),
+            VERSION_PACKED);
     fprintf(stderr, "Please check includes and lib locations.\n");
     return WP2_STATUS_VERSION_MISMATCH;
   }

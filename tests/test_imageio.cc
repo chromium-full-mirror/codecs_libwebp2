@@ -127,10 +127,9 @@ TEST_P(WriteImageTest, Ccsp) {
 
   const std::string temp_file_path = testutil::GetTempDataPath(file_name);
   std::remove(temp_file_path.c_str());  // Make sure it doesn't exist.
-  ASSERT_WP2_OK(SaveImage(upsampled, ccsp_to_rgb,
-                          file_num_bits, temp_file_path.c_str(),
-                          /*overwrite=*/true, format, Metadata(),
-                          SamplingTaps::kDownAvg));
+  ASSERT_WP2_OK(SaveImage(
+      upsampled, ccsp_to_rgb, file_num_bits, temp_file_path.c_str(),
+      /*overwrite=*/true, format, Metadata(), SamplingTaps::kDownAvg));
 
   YUVPlane comparison;
   ASSERT_WP2_OK(ReadImage(temp_file_path.c_str(), &comparison, &ccsp_to_rgb));

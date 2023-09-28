@@ -23,10 +23,9 @@
 
 #if defined(WP2_HAVE_SDL)
 
-#include "./wp2_to_sdl.h"
-
 #include <cstdio>
 
+#include "./wp2_to_sdl.h"
 #include "wp2/decode.h"
 
 #if defined(WP2_HAVE_JUST_SDL_H)
@@ -61,15 +60,14 @@ int WP2ToSDL(const char* const data, unsigned int data_size) {
   }
 
   SDL_Surface* const surface =
-      SDL_CreateRGBSurface(SDL_SWSURFACE,
-                           bitstream.width, bitstream.height, 32,
+      SDL_CreateRGBSurface(SDL_SWSURFACE, bitstream.width, bitstream.height, 32,
                            0x000000ffu,   // R mask
                            0x0000ff00u,   // G mask
                            0x00ff0000u,   // B mask
                            0xff000000u);  // A mask
   if (surface == NULL) {
-    fprintf(stderr, "Unable to create %dx%d RGBA surface!\n",
-            bitstream.width, bitstream.height);
+    fprintf(stderr, "Unable to create %dx%d RGBA surface!\n", bitstream.width,
+            bitstream.height);
     return 0;
   }
 
@@ -82,9 +80,9 @@ int WP2ToSDL(const char* const data, unsigned int data_size) {
 #endif
   WP2Status status;
   WP2::ArgbBuffer output(format);
-  status = output.SetExternal((uint32_t)surface->w, (uint32_t)surface->h,
-                              (uint8_t*)surface->pixels,
-                              (uint32_t)surface->pitch);
+  status =
+      output.SetExternal((uint32_t)surface->w, (uint32_t)surface->h,
+                         (uint8_t*)surface->pixels, (uint32_t)surface->pitch);
   if (status == WP2_STATUS_OK) {
     status = WP2::Decode((const uint8_t*)data, data_size, &output);
   }
@@ -96,7 +94,7 @@ int WP2ToSDL(const char* const data, unsigned int data_size) {
 
   ok = 1;
 
- Error:
+Error:
   SDL_FreeSurface(surface);
   SDL_FreeSurface(screen);
   return ok;

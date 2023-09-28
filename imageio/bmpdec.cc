@@ -48,16 +48,16 @@ class ImageReaderBMP : public ImageReader::Impl {
     WP2_CHECK_STATUS(CheckData());
     static constexpr uint32_t kBMPHeaderSize = 54u;
     static constexpr uint32_t kBMPAlphaHeaderSize = 70u;
-    WP2_CHECK_OK(data_size_ >= kBMPHeaderSize,  WP2_STATUS_NOT_ENOUGH_DATA);
+    WP2_CHECK_OK(data_size_ >= kBMPHeaderSize, WP2_STATUS_NOT_ENOUGH_DATA);
     WP2_CHECK_OK(ReadLE16(data_ + 0) == 0x4d42, WP2_STATUS_BITSTREAM_ERROR);
     const uint32_t total_size = ReadLE32(data_ + 2);
     WP2_CHECK_OK(data_size_ >= total_size, WP2_STATUS_BITSTREAM_ERROR);
     WP2_CHECK_OK(ReadLE16(data_ + 6) == 0, WP2_STATUS_BITSTREAM_ERROR);
     const uint32_t offset = ReadLE32(data_ + 10);
-    const uint32_t width  = ReadLE32(data_ + 18);
+    const uint32_t width = ReadLE32(data_ + 18);
     const uint32_t height = ReadLE32(data_ + 22);
     WP2_CHECK_OK(height <= kMaxBufferDimension ||
-                 height >= (uint32_t)-kMaxBufferDimension,
+                     height >= (uint32_t)-kMaxBufferDimension,
                  WP2_STATUS_BAD_DIMENSION);
     const bool top_down = ((int32_t)height < 0);
     const uint32_t real_height = top_down ? -(int32_t)height : height;
@@ -73,17 +73,16 @@ class ImageReaderBMP : public ImageReader::Impl {
     const bool has_alpha = (bpp == 32 && format == 3);
     const uint32_t header_size =
         (format == 3) ? kBMPAlphaHeaderSize : kBMPHeaderSize;
-    const size_t stride = (width * (has_alpha ? 4 : 3) + 3) & ~3;   // pad to 4
-    WP2_CHECK_OK(data_size_ >= header_size &&
-                 offset >= header_size &&
-                 data_size_ >= offset + real_height * stride,
+    const size_t stride = (width * (has_alpha ? 4 : 3) + 3) & ~3;  // pad to 4
+    WP2_CHECK_OK(data_size_ >= header_size && offset >= header_size &&
+                     data_size_ >= offset + real_height * stride,
                  WP2_STATUS_NOT_ENOUGH_DATA);
 
     if (format == 3) {  // check ARGB masks
       WP2_CHECK_OK(ReadLE32(data_ + 54) == 0x00ff0000 &&
-                   ReadLE32(data_ + 58) == 0x0000ff00 &&
-                   ReadLE32(data_ + 62) == 0x000000ff &&
-                   ReadLE32(data_ + 66) == 0xff000000,
+                       ReadLE32(data_ + 58) == 0x0000ff00 &&
+                       ReadLE32(data_ + 62) == 0x000000ff &&
+                       ReadLE32(data_ + 66) == 0xff000000,
                    WP2_STATUS_UNSUPPORTED_FEATURE);
     }
 
@@ -103,8 +102,8 @@ class ImageReaderBMP : public ImageReader::Impl {
   }
 };
 
-void ImageReader::SetImplBMP(ArgbBuffer* const buffer,
-                             LogLevel log_level, size_t max_num_pixels) {
+void ImageReader::SetImplBMP(ArgbBuffer* const buffer, LogLevel log_level,
+                             size_t max_num_pixels) {
   impl_.reset(new (WP2Allocable::nothrow) ImageReaderBMP(
       data_.bytes, data_.size, buffer, log_level, max_num_pixels));
   if (impl_ == nullptr) status_ = WP2_STATUS_OUT_OF_MEMORY;

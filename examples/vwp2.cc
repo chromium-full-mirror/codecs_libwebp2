@@ -135,7 +135,8 @@ struct VDToken {
                                next.begin(), next.end(),
                                [](const VDToken& lhs, const VDToken& rhs) {
                                  return lhs.name.size() < rhs.name.size();
-                               })->name.size()) {}
+                               })
+                               ->name.size()) {}
 
   const std::string name;
   const std::vector<VDToken> next;       // Direct children.
@@ -363,7 +364,7 @@ class Params {
   WP2_NO_DISCARD bool SetAltFile(const char* const file_name);
   WP2_NO_DISCARD bool SetAltImage();
   WP2_NO_DISCARD bool DumpCurrentCanvas(const char* const file_path);
-  void ShiftAlt();   // move alt1 to alt2
+  void ShiftAlt();  // move alt1 to alt2
   void SetQuality(float incr);
   WP2_NO_DISCARD bool EncodeImage();
   WP2_NO_DISCARD bool DecodeOutput();
@@ -392,7 +393,8 @@ class Params {
     kCompressed,
     kPreview,
     kPreviewColor,
-    kAlt1, kAlt2,
+    kAlt1,
+    kAlt2,
     kWebP,
     kInfo,
     kHelp,
@@ -443,7 +445,7 @@ class Params {
   void PrintBlockHeader(const BlockInfo& b,
                         std::vector<std::string>* const msg) const;
   void PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
-                        std::vector<std::string>* const msg) const;
+                      std::vector<std::string>* const msg) const;
   void PrintPredModes(const BlockInfo& b,
                       std::vector<std::string>* const msg) const;
 
@@ -556,8 +558,8 @@ class Params {
   size_t current_file_;
   std::vector<std::string> files_;
   std::string original_file_;  // used with view_only_
-  std::string input_;   // input file
-  std::string output_;  // currently encoded file
+  std::string input_;          // input file
+  std::string output_;         // currently encoded file
 
   float riskiness_ = 0.f;
 
@@ -568,8 +570,8 @@ class Params {
   float alpha_quality_ = 100.;
   EncoderConfig enc_config_;  // encoding parameters
   DecoderConfig dec_config_;
-  std::string menu_selection_ = "decompressed";  // hovered menu selection
-  std::string visual_debug_ = "decompressed";    // displayed debug view
+  std::string menu_selection_ = "decompressed";     // hovered menu selection
+  std::string visual_debug_ = "decompressed";       // displayed debug view
   std::string visual_debug_prev_ = "decompressed";  // last displayed debug view
 
   bool view_only_ = false;
@@ -722,8 +724,8 @@ bool Params::DisplaySubMenu(int32_t x, int32_t y, const VDToken& prefix,
   const float kMenuAlpha = .8;
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   glColor4f(0.f, 0.f, 0.f, kMenuAlpha);
-  glRectf(ToAbsoluteX(x), ToAbsoluteY(y),
-          ToAbsoluteX(x + submenu_width), ToAbsoluteY(y + submenu_height));
+  glRectf(ToAbsoluteX(x), ToAbsoluteY(y), ToAbsoluteX(x + submenu_width),
+          ToAbsoluteY(y + submenu_height));
 
   // For each branch in the current VisualDebug tree node.
   int32_t top = y;
@@ -1153,8 +1155,8 @@ void Params::PrintInfo() {
 
     msg.emplace_back(SPrintf("Dimension: %d x %d", width_, height_));
     if (viewport_width_ != width_ || viewport_height_ != height_) {
-      msg.emplace_back(SPrintf(" (displayed as %d x %d)",
-                               viewport_width_, viewport_height_));
+      msg.emplace_back(SPrintf(" (displayed as %d x %d)", viewport_width_,
+                               viewport_height_));
     }
 
     if (!view_only_) {
@@ -1172,9 +1174,9 @@ void Params::PrintInfo() {
 #endif
 
       if (in_.HasTransparency()) {
-        msg.emplace_back(SPrintf("Alpha quality: %.1f (%s=%.2f)",
-            alpha_quality_, kMetricNames[distortion_metric_],
-            distortion_[0]));
+        msg.emplace_back(
+            SPrintf("Alpha quality: %.1f (%s=%.2f)", alpha_quality_,
+                    kMetricNames[distortion_metric_], distortion_[0]));
       }
     } else {
       msg.emplace_back(" -- WARNING: Showing original WP2 image --");
@@ -1198,7 +1200,7 @@ void Params::PrintInfo() {
     } else {
       const Metadata& mi = in_.metadata_;
       const Metadata& mo = out_.metadata_;
-      msg.emplace_back(SPrintf(   // 6 spaces to align with "Size: ".
+      msg.emplace_back(SPrintf(  // 6 spaces to align with "Size: ".
           "      %s %u B of metadata (ICCP %u, XMP %u, EXIF %u)",
           keep_metadata_ ? "included" : "ignored",
           (uint32_t)(mi.iccp.size + mi.xmp.size + mi.exif.size),
@@ -1208,10 +1210,9 @@ void Params::PrintInfo() {
         assert(out_.metadata_.IsEmpty());
       } else if (mi.iccp.size != mo.iccp.size || mi.xmp.size != mo.xmp.size ||
                  mi.exif.size != mo.exif.size) {
-        msg.emplace_back(SPrintf(
-            " decoded as ICCP %u, XMP %u, EXIF %u",
-            (uint32_t)mo.iccp.size, (uint32_t)mo.xmp.size,
-            (uint32_t)mo.exif.size));
+        msg.emplace_back(SPrintf(" decoded as ICCP %u, XMP %u, EXIF %u",
+                                 (uint32_t)mo.iccp.size, (uint32_t)mo.xmp.size,
+                                 (uint32_t)mo.exif.size));
       }
     }
 
@@ -1220,30 +1221,34 @@ void Params::PrintInfo() {
         "      Warning: size is inflated by WP2_ENC_DEC_MATCH"));
 #endif
     msg.emplace_back(SPrintf("Filters: dblk=%s, drct=%s, rstr=%s, alpha=%s",
-        kOnOff[dec_config_.enable_deblocking_filter],
-        kOnOff[dec_config_.enable_directional_filter],
-        kOnOff[dec_config_.enable_restoration_filter],
-        kOnOff[dec_config_.enable_alpha_filter]));
+                             kOnOff[dec_config_.enable_deblocking_filter],
+                             kOnOff[dec_config_.enable_directional_filter],
+                             kOnOff[dec_config_.enable_restoration_filter],
+                             kOnOff[dec_config_.enable_alpha_filter]));
 
     if (!view_only_ || !original_file_.empty()) {
       msg.emplace_back(SPrintf("%s=%.2f  (a %.1f, r %.1f, g %.1f, b %.1f)",
-          kMetricNames[distortion_metric_], distortion_[4], distortion_[0],
-          distortion_[1], distortion_[2], distortion_[3]));
+                               kMetricNames[distortion_metric_], distortion_[4],
+                               distortion_[0], distortion_[1], distortion_[2],
+                               distortion_[3]));
       if (yuv_distortion_[0] > 0.f) {  // Maybe it is unavailable.
         msg.emplace_back(SPrintf("  (y %.1f, u %.1f, v %.1f)",
-            yuv_distortion_[0], yuv_distortion_[1], yuv_distortion_[2]));
+                                 yuv_distortion_[0], yuv_distortion_[1],
+                                 yuv_distortion_[2]));
       }
 
-      msg.emplace_back(SPrintf("CSP: %s   UV: %s  Partition: %s, %s  Tile: %s",
-          kCSPString[(int)enc_config_.csp_type],
-          kUVModeString[(int)enc_config_.uv_mode],
-          kPartitionMethodString[enc_config_.partition_method],
-          kPartitionSetString[enc_config_.partition_set],
-          kTileShapeString[enc_config_.tile_shape]));
+      msg.emplace_back(
+          SPrintf("CSP: %s   UV: %s  Partition: %s, %s  Tile: %s",
+                  kCSPString[(int)enc_config_.csp_type],
+                  kUVModeString[(int)enc_config_.uv_mode],
+                  kPartitionMethodString[enc_config_.partition_method],
+                  kPartitionSetString[enc_config_.partition_set],
+                  kTileShapeString[enc_config_.tile_shape]));
       msg.emplace_back(SPrintf("Perceptual:%s  RndMtx: %s  Grain: %s Amp: %d",
-          kOnOff[enc_config_.tune_perceptual],
-          kOnOff[enc_config_.use_random_matrix],
-          kOnOff[enc_config_.store_grain], dec_config_.grain_amplitude));
+                               kOnOff[enc_config_.tune_perceptual],
+                               kOnOff[enc_config_.use_random_matrix],
+                               kOnOff[enc_config_.store_grain],
+                               dec_config_.grain_amplitude));
     }
 #if defined(WP2_BITTRACE)
     DisplayBitTraces();
@@ -1337,7 +1342,8 @@ WP2Status ComputeErrorMap(MetricType metric, const ArgbBuffer& original,
                           ArgbBuffer* const error_map,
                           DecoderInfo* const info = nullptr) {
   WP2_CHECK_OK(decoded.width() == original.width() &&
-               decoded.height() == original.height(), WP2_STATUS_BAD_DIMENSION);
+                   decoded.height() == original.height(),
+               WP2_STATUS_BAD_DIMENSION);
   WP2_CHECK_STATUS(error_map->Resize(original.width(), original.height()));
   const double norm = (metric == PSNR) ? 5. : (metric == LSIM) ? 5. : 8.;
   for (uint32_t y = 0; y < error_map->height(); ++y) {
@@ -1718,8 +1724,8 @@ bool Params::EncodeAV1(bool copy_partition, float av1_quality,
   cfg.draw_transforms = (display_block_ == kDisplayYCoeffs);
   if (copy_partition) force_partition_.clear();
 
-  printf("Compressing AV1 at quality %.1f (effort:%d)...\n",
-         cfg.quality, cfg.effort);
+  printf("Compressing AV1 at quality %.1f (effort:%d)...\n", cfg.quality,
+         cfg.effort);
   std::string tmp;
   double timing[2];
   ShiftAlt();
@@ -2097,15 +2103,14 @@ class ParagraphMaker {
   std::string indentation_;
 };
 
-
 constexpr uint32_t kLastChannel = 4;
 constexpr const char* const kEncNames[] = {
     "X", "Mtd0", "Mtd1", "DC  ", "Zero", "AOM",
 };
 
 // Isolate the bit costs about residuals (Y, U, V, A, remaining stuff).
-static void IsolateBitTraces(const BlockInfo& b,
-    std::map<const std::string, LabelStats> bit_traces[],
+static void IsolateBitTraces(
+    const BlockInfo& b, std::map<const std::string, LabelStats> bit_traces[],
     double bit_sums[]) {
   for (const auto& bt : b.bit_traces) {
     std::string label = bt.first;
@@ -2116,8 +2121,7 @@ static void IsolateBitTraces(const BlockInfo& b,
       if (label.size() >= prefix.size() &&
           std::strncmp(label.c_str(), prefix.c_str(), prefix.size()) == 0) {
         // 'label' starts with 'prefix', remove 'prefix' from it.
-        assert(label.size() > prefix.size() + 1 &&
-               label[prefix.size()] == '/');
+        assert(label.size() > prefix.size() + 1 && label[prefix.size()] == '/');
         label = label.substr(prefix.size() + 1);
         break;
       }
@@ -2149,19 +2153,17 @@ void Params::PrintBlockHeader(const BlockInfo& b,
   }
   pm.PushBackTo(msg);
   msg->push_back(SPrintf("segment id: %d (%s %s)", b.segment_id,
-                          b.is420 ? "is420" : "",
-                          b.has_lossy_alpha ? "has_alpha_res" : ""));
-  msg->push_back(SPrintf("transform: %s %s",
-                          WP2TransformNames[b.tf_x],
-                          WP2TransformNames[b.tf_y]));
+                         b.is420 ? "is420" : "",
+                         b.has_lossy_alpha ? "has_alpha_res" : ""));
+  msg->push_back(SPrintf("transform: %s %s", WP2TransformNames[b.tf_x],
+                         WP2TransformNames[b.tf_y]));
   for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
     if (b.encoding_method[kYChannel][tf_i] == -1) continue;
-    msg->push_back(
-      SPrintf("Transform %u. Mthd: Y=%s U=%s V=%s (A=%s)", tf_i,
-              kEncNames[b.encoding_method[kYChannel][tf_i] + 1],
-              kEncNames[b.encoding_method[kUChannel][tf_i] + 1],
-              kEncNames[b.encoding_method[kVChannel][tf_i] + 1],
-              kEncNames[b.encoding_method[kAChannel][tf_i] + 1]));
+    msg->push_back(SPrintf("Transform %u. Mthd: Y=%s U=%s V=%s (A=%s)", tf_i,
+                           kEncNames[b.encoding_method[kYChannel][tf_i] + 1],
+                           kEncNames[b.encoding_method[kUChannel][tf_i] + 1],
+                           kEncNames[b.encoding_method[kVChannel][tf_i] + 1],
+                           kEncNames[b.encoding_method[kAChannel][tf_i] + 1]));
   }
 }
 
@@ -2172,10 +2174,10 @@ void Params::PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
   IsolateBitTraces(b, bit_traces, bit_sums);
 
   ParagraphMaker pm;
-  const uint32_t channel =
-      (display_block_ == kDisplayYCoeffs) ? kYChannel :
-      (display_block_ == kDisplayUCoeffs) ? kUChannel :
-      (display_block_ == kDisplayVCoeffs) ? kVChannel : kAChannel;
+  const uint32_t channel = (display_block_ == kDisplayYCoeffs)   ? kYChannel
+                           : (display_block_ == kDisplayUCoeffs) ? kUChannel
+                           : (display_block_ == kDisplayVCoeffs) ? kVChannel
+                                                                 : kAChannel;
 
   msg->push_back(SPrintf("%s channel.", kChannelStr[channel]));
   for (uint32_t tf_i = 0; tf_i < 4; ++tf_i) {
@@ -2206,10 +2208,9 @@ void Params::PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
     // Display stats as bit cost (/num of occurrences = individual bit cost).
     for (uint32_t i : indices) {
       const auto& p = stats[i];
-      pm.AppendToList(
-          SPrintf("%s: %.1f (/%d=%.1f)", p.first.c_str(), p.second.bits,
-                  p.second.num_occurrences,
-                  p.second.bits / p.second.num_occurrences));
+      pm.AppendToList(SPrintf("%s: %.1f (/%d=%.1f)", p.first.c_str(),
+                              p.second.bits, p.second.num_occurrences,
+                              p.second.bits / p.second.num_occurrences));
     }
     pm.PushBackTo(msg);
   }
@@ -2218,28 +2219,25 @@ void Params::PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
     if (b.encoding_method[channel][tf_i] == -1) continue;
     msg->push_back(SPrintf("Enc %u. Mthd: %s", tf_i,
                            kEncNames[b.encoding_method[channel][tf_i] + 1]));
-    const uint32_t scale =
-        (b.is420 && (channel == 1 || channel == 2)) ? 2 : 1;
-    const BlockSize split_size = GetSplitSize(
-        GetBlockSize(bw / kMinBlockSizePix, bh / kMinBlockSizePix),
-        b.split_tf[channel]);
+    const uint32_t scale = (b.is420 && (channel == 1 || channel == 2)) ? 2 : 1;
+    const BlockSize split_size =
+        GetSplitSize(GetBlockSize(bw / kMinBlockSizePix, bh / kMinBlockSizePix),
+                     b.split_tf[channel]);
     const uint32_t w = BlockWidthPix(split_size) / scale;
     const uint32_t h = BlockHeightPix(split_size) / scale;
     const bool show_original = (show_ == kOriginal);
-    if (show_original || b.encoding_method[channel][tf_i] !=
-        (int8_t)EncodingMethod::kAllZero) {
+    if (show_original ||
+        b.encoding_method[channel][tf_i] != (int8_t)EncodingMethod::kAllZero) {
       int16_t res[kMaxBlockSizePix2];
       int32_t coeffs[kMaxBlockSizePix2];
       const uint32_t num_coeffs = w * h;
       std::copy(&b_enc.original_res[channel][tf_i][0],
-                &b_enc.original_res[channel][tf_i][0] + num_coeffs,
-                &res[0]);
+                &b_enc.original_res[channel][tf_i][0] + num_coeffs, &res[0]);
       const bool reduced_transform =
           (channel == kUChannel || channel == kVChannel) && b_enc.is420;
-      WP2Transform2D(res,
-                     (WP2TransformType)b_enc.tf_x,
-                     (WP2TransformType)b_enc.tf_y,
-                     w, h, coeffs, reduced_transform);
+      WP2Transform2D(res, (WP2TransformType)b_enc.tf_x,
+                     (WP2TransformType)b_enc.tf_y, w, h, coeffs,
+                     reduced_transform);
 
       const float norm = 2. * (int32_t)std::sqrt(num_coeffs);
       for (uint32_t j = 0; j < h; ++j) {
@@ -2251,9 +2249,9 @@ void Params::PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
             if (std::abs(v) >= (norm * 1.00)) {
               line += SPrintf("%3d ", (int)(v / norm));
             } else {
-              const char symbol = (std::abs(v) >= (norm * 0.50)) ? 'X'
-                                : (std::abs(v) >= (norm * 0.25)) ? 'x'
-                                                                 : '.';
+              const char symbol = (std::abs(v) >= (norm * 0.50))   ? 'X'
+                                  : (std::abs(v) >= (norm * 0.25)) ? 'x'
+                                                                   : '.';
               line += SPrintf("  %c ", symbol);
             }
           } else {
@@ -2285,12 +2283,12 @@ void Params::PrintPredModes(const BlockInfo& b,
   msg->push_back(b.y_context_is_constant ? "Y context is constant"
                                          : "Y context is not constant");
   const int optimize_modes =
-      (b.y_context_is_constant || enc_config_.effort == 0) ? 0 :
-      (enc_config_.effort == 1)                            ? 1 : 2;
-  msg->push_back(
-      SPrintf("OptimizeModes%d() Y score: %.1f (%.1f per pixel)",
-              optimize_modes, b.pred_scores[kYChannel],
-              b.pred_scores[kYChannel] / b.rect.GetArea()));
+      (b.y_context_is_constant || enc_config_.effort == 0) ? 0
+      : (enc_config_.effort == 1)                          ? 1
+                                                           : 2;
+  msg->push_back(SPrintf("OptimizeModes%d() Y score: %.1f (%.1f per pixel)",
+                         optimize_modes, b.pred_scores[kYChannel],
+                         b.pred_scores[kYChannel] / b.rect.GetArea()));
   msg->push_back(SPrintf("FindBestUVModes() score: %.1f (%.1f per pixel)",
                          b.pred_scores[kUChannel],
                          b.pred_scores[kUChannel] / b.rect.GetArea()));
@@ -2343,8 +2341,8 @@ void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
         break;
       }
     }
-    msg->push_back(SPrintf("size: %2d x %2d  pos: %3d x %3d  %s",
-                           bw, bh, bx, by, forced ? "(forced)" : ""));
+    msg->push_back(SPrintf("size: %2d x %2d  pos: %3d x %3d  %s", bw, bh, bx,
+                           by, forced ? "(forced)" : ""));
     float disto[5];
     const Rectangle rect = b.rect.ClipWith({0, 0, width_, height_});
     WP2_ASSERT_STATUS(out_.GetDistortionBlackOrWhiteBackground(
@@ -2482,8 +2480,8 @@ void Params::DisplayForcedSegments() const {
     if (!view_rect_.Contains(forced.x, forced.y)) continue;
     const BlockInfo* const b = einfo_.FindBlock(forced.x, forced.y);
     if (b != nullptr) {
-      const Rectangle rect{b->rect.x, b->rect.y,
-                           b->rect.width - 1, b->rect.height - 1};
+      const Rectangle rect{b->rect.x, b->rect.y, b->rect.width - 1,
+                           b->rect.height - 1};
       glColor4f(0.f, 0.f, 0.f, 1.f);
       glRect(rect, thick * 2);
       const Argb32b color = kSegmentColors[forced.value];
@@ -2517,9 +2515,9 @@ void Params::DisplayForcedPredictors() const {
       glRect(b->rect, 4.f);
 
       const std::vector<std::string>& predictors =
-            (channel == kYChannel) ? dinfo_.y_predictors :
-            (channel == kAChannel) ? dinfo_.a_predictors :
-                                     dinfo_.uv_predictors;
+          (channel == kYChannel)   ? dinfo_.y_predictors
+          : (channel == kAChannel) ? dinfo_.a_predictors
+                                   : dinfo_.uv_predictors;
       const uint32_t predictor_id =
           std::min(forced.value, (uint32_t)(predictors.size() - 1));
 
@@ -2551,8 +2549,8 @@ void Params::DisplayForcedTransforms() const {
     if (!view_rect_.Contains(forced.x, forced.y)) continue;
     const BlockInfo* const b = einfo_.FindBlock(forced.x, forced.y);
     if (b != nullptr) {
-      const Rectangle rect{b->rect.x, b->rect.y,
-                           b->rect.width - 1, b->rect.height - 1};
+      const Rectangle rect{b->rect.x, b->rect.y, b->rect.width - 1,
+                           b->rect.height - 1};
       glColor4f(1.f, 1.f, 1.f, 1.f);
       glRect(rect, thick * 2);
 
@@ -3366,8 +3364,9 @@ void Params::HandleMouseClick(int button, int state, int x, int y) {
   const uint32_t img_x_down = ToImageX(mouse_x_down_);
   const uint32_t img_y_down = ToImageY(mouse_y_down_);
 
-  const int incr = (button == kScrollWheelUp) ? 1 :
-                   (button == kScrollWheelDown) ? -1 : 0;
+  const int incr = (button == kScrollWheelUp)     ? 1
+                   : (button == kScrollWheelDown) ? -1
+                                                  : 0;
 
   if (HandleMenuClick(button, state, img_x_down, img_y_down, img_x, img_y) ||
       HandleForcedParamClick(button, state, img_x_down, img_y_down, incr) ||

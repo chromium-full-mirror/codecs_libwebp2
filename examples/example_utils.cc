@@ -180,9 +180,8 @@ class ChunkWatcher : public Writer {
 };
 
 // Returns a string containing info about a 'chunk_type' in 'input_data_bytes'.
-std::string PrintChunk(const uint8_t input_data_bytes[],
-                              size_t input_data_size, ChunkType chunk_type,
-                              uint32_t frame_index = 0) {
+std::string PrintChunk(const uint8_t input_data_bytes[], size_t input_data_size,
+                       ChunkType chunk_type, uint32_t frame_index = 0) {
   ChunkWatcher chunk;
   const WP2Status status = GetChunk(input_data_bytes, input_data_size,
                                     chunk_type, &chunk, frame_index);
@@ -542,8 +541,7 @@ bool ProgramOptions::ParseSystemOptions(const char* const arg,
   if (!strcmp(arg, "-version")) {
     const auto version = (uint32_t)WP2GetVersion();
     printf("WebP2 version: %d.%d.%d [%s]\n", (version >> 16u) & 0xffu,
-           (version >> 8u) & 0xffu, (version >> 0u) & 0xffu,
-           GitVersion);
+           (version >> 8u) & 0xffu, (version >> 0u) & 0xffu, GitVersion);
     *must_stop = true;
     return true;
   } else if (!strcmp(arg, "-git")) {

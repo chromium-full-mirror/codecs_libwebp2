@@ -163,7 +163,7 @@ struct y4m_input {
 
 // Reads 'size' bytes from 'file' into 'buf'. Returns true on success.
 int file_read(void *buf, size_t size, DataSource *file) {
-  const uint8_t* data = nullptr;
+  const uint8_t *data = nullptr;
   if (file->TryReadNext(size, &data)) {
     // TODO(yguyon): Copying data for API convenience. Adapting file_read()
     //               signature might avoid that.
@@ -301,9 +301,8 @@ int y4m_parse_tags(y4m_input *_y4m, char *_tags) {
   The 4:2:2 modes look exactly the same, except there are twice as many chroma
    lines, and they are vertically co-sited with the luma samples in both the
    mpeg2 and jpeg cases (thus requiring no vertical resampling).*/
-void y4m_42xmpeg2_42xjpeg_helper(unsigned char *_dst,
-                                        const unsigned char *_src, int _c_w,
-                                        int _c_h) {
+void y4m_42xmpeg2_42xjpeg_helper(unsigned char *_dst, const unsigned char *_src,
+                                 int _c_w, int _c_h) {
   int y;
   int x;
   for (y = 0; y < _c_h; y++) {
@@ -342,7 +341,7 @@ void y4m_42xmpeg2_42xjpeg_helper(unsigned char *_dst,
 }
 /*Handles both 422 and 420mpeg2 to 422jpeg and 420jpeg, respectively.*/
 void y4m_convert_42xmpeg2_42xjpeg(y4m_input *_y4m, unsigned char *_dst,
-                                         unsigned char *_aux) {
+                                  unsigned char *_aux) {
   int c_w;
   int c_h;
   int c_sz;
@@ -400,7 +399,7 @@ void y4m_convert_42xmpeg2_42xjpeg(y4m_input *_y4m, unsigned char *_dst,
   Then we use another filter to move the C_r location down one quarter pixel,
    and the C_b location up one quarter pixel.*/
 void y4m_convert_42xpaldv_42xjpeg(y4m_input *_y4m, unsigned char *_dst,
-                                         unsigned char *_aux) {
+                                  unsigned char *_aux) {
   unsigned char *tmp;
   int c_w;
   int c_h;
@@ -512,9 +511,8 @@ void y4m_convert_42xpaldv_42xjpeg(y4m_input *_y4m, unsigned char *_dst,
 }
 /*Perform vertical filtering to reduce a single plane from 4:2:2 to 4:2:0.
   This is used as a helper by several converation routines.*/
-void y4m_422jpeg_420jpeg_helper(unsigned char *_dst,
-                                       const unsigned char *_src, int _c_w,
-                                       int _c_h) {
+void y4m_422jpeg_420jpeg_helper(unsigned char *_dst, const unsigned char *_src,
+                                int _c_w, int _c_h) {
   int y;
   int x;
   /*Filter: [3 -17 78 78 -17 3]/128, derived from a 6-tap Lanczos window.*/
@@ -588,7 +586,7 @@ void y4m_422jpeg_420jpeg_helper(unsigned char *_dst,
   We use a resampling filter to decimate the chroma planes by two in the
    vertical direction.*/
 void y4m_convert_422jpeg_420jpeg(y4m_input *_y4m, unsigned char *_dst,
-                                        unsigned char *_aux) {
+                                 unsigned char *_aux) {
   int c_w;
   int c_h;
   int c_sz;
@@ -650,7 +648,7 @@ void y4m_convert_422jpeg_420jpeg(y4m_input *_y4m, unsigned char *_dst,
   Then we use a second resampling filter to decimate the chroma planes by two
    in the vertical direction.*/
 void y4m_convert_422_420jpeg(y4m_input *_y4m, unsigned char *_dst,
-                                    unsigned char *_aux) {
+                             unsigned char *_aux) {
   unsigned char *tmp;
   int c_w;
   int c_h;
@@ -719,7 +717,7 @@ void y4m_convert_422_420jpeg(y4m_input *_y4m, unsigned char *_dst,
   Then we use another filter to decimate the planes by 2 in the vertical
    direction.*/
 void y4m_convert_411_420jpeg(y4m_input *_y4m, unsigned char *_dst,
-                                    unsigned char *_aux) {
+                             unsigned char *_aux) {
   unsigned char *tmp;
   int c_w;
   int c_h;
@@ -805,7 +803,7 @@ void y4m_convert_411_420jpeg(y4m_input *_y4m, unsigned char *_dst,
 }
 /*Convert 444 to 420jpeg.*/
 void y4m_convert_444_420jpeg(y4m_input *_y4m, unsigned char *_dst,
-                                    unsigned char *_aux) {
+                             unsigned char *_aux) {
   unsigned char *tmp;
   int c_w;
   int c_h;
@@ -867,7 +865,7 @@ void y4m_convert_444_420jpeg(y4m_input *_y4m, unsigned char *_dst,
 }
 /*The image is padded with empty chroma components at 4:2:0.*/
 void y4m_convert_mono_420jpeg(y4m_input *_y4m, unsigned char *_dst,
-                                     unsigned char *_aux) {
+                              unsigned char *_aux) {
   int c_sz;
   (void)_aux;
   _dst += _y4m->pic_w * _y4m->pic_h;
@@ -877,14 +875,14 @@ void y4m_convert_mono_420jpeg(y4m_input *_y4m, unsigned char *_dst,
 }
 /*No conversion function needed.*/
 void y4m_convert_null(y4m_input *_y4m, unsigned char *_dst,
-                             unsigned char *_aux) {
+                      unsigned char *_aux) {
   (void)_y4m;
   (void)_dst;
   (void)_aux;
 }
 int y4m_input_open(y4m_input *_y4m, DataSource *_fin, char *_skip, int _nskip,
                    int only_420, bool log) {
-  char buffer[80] = { 0 };
+  char buffer[80] = {0};
   int ret;
   int i;
   /*Read until newline, or 80 cols, whichever happens first.*/
@@ -1186,8 +1184,8 @@ void y4m_input_close(y4m_input *_y4m) {
   free(_y4m->dst_buf);
   free(_y4m->aux_buf);
 }
-int y4m_input_fetch_frame(y4m_input *_y4m, DataSource *_fin,
-                          vpx_image_t *_img, bool log) {
+int y4m_input_fetch_frame(y4m_input *_y4m, DataSource *_fin, vpx_image_t *_img,
+                          bool log) {
   char frame[6];
   int pic_sz;
   int c_w;
@@ -1273,8 +1271,8 @@ class ImageReaderY4M : public ImageReader::Impl {
     if (opened_) y4m_input_close(&info_);
   }
 
-  WP2Status ReadFrame(bool* const is_last,
-                      uint32_t* const duration_ms) override {
+  WP2Status ReadFrame(bool *const is_last,
+                      uint32_t *const duration_ms) override {
     WP2_CHECK_OK(ccsp_buffer_ != nullptr, WP2_STATUS_NULL_PARAMETER);
     WP2_CHECK_OK(ccsp_to_rgb_ != nullptr, WP2_STATUS_NULL_PARAMETER);
     if (!opened_) {
@@ -1341,7 +1339,7 @@ class ImageReaderY4M : public ImageReader::Impl {
     // TODO(yguyon): Handle alpha if y4m does
     constexpr uint32_t kToVPX[] = {VPX_PLANE_Y, VPX_PLANE_U, VPX_PLANE_V};
     for (Channel channel : {kYChannel, kUChannel, kVChannel}) {
-      Plane16* const plane = &ccsp_buffer_->GetChannel(channel);
+      Plane16 *const plane = &ccsp_buffer_->GetChannel(channel);
       if (channel == kUChannel || channel == kVChannel) {
         // Subsampled dimensions, rounded up.
         WP2_CHECK_STATUS(
@@ -1351,10 +1349,10 @@ class ImageReaderY4M : public ImageReader::Impl {
         WP2_CHECK_STATUS(plane->Resize(image_.w, image_.h));
       }
 
-      const uint8_t* src_row = image_.planes[kToVPX[channel]];
-      int16_t* dst_row = plane->Row(0);
+      const uint8_t *src_row = image_.planes[kToVPX[channel]];
+      int16_t *dst_row = plane->Row(0);
       for (uint32_t y = 0; y < plane->h_; ++y) {
-        const int16_t* const src_row16b =
+        const int16_t *const src_row16b =
             reinterpret_cast<const int16_t *>(src_row);
         for (uint32_t x = 0; x < plane->w_; ++x) {
           if (info_.bit_depth == 8) {
@@ -1377,9 +1375,9 @@ class ImageReaderY4M : public ImageReader::Impl {
 
  protected:
   // Pointers to user structs.
-  YUVPlane* const ccsp_buffer_;
-  CSPMtx* const ccsp_to_rgb_;
-  Metadata* const metadata_;
+  YUVPlane *const ccsp_buffer_;
+  CSPMtx *const ccsp_to_rgb_;
+  Metadata *const metadata_;
 
   ExternalDataSource data_source_;
   y4m_input info_;

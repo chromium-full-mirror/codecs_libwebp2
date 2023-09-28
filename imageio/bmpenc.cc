@@ -58,11 +58,11 @@ WP2Status WriteBMP(const ArgbBuffer& buffer, FILE* fout) {
   for (uint32_t i = line_size; i < bmp_stride; ++i) ARGB[i] = 0;
 
   // bitmap file header
-  uint8_t bmp_header[kBMPAlphaHeaderSize] = { 0 };
-  PutLE16(bmp_header + 0, 0x4d42);             // signature 'BM'
-  PutLE32(bmp_header + 2, total_size);         // size including header
-  PutLE32(bmp_header + 6, 0);                  // reserved
-  PutLE32(bmp_header + 10, header_size);       // offset to pixel array
+  uint8_t bmp_header[kBMPAlphaHeaderSize] = {0};
+  PutLE16(bmp_header + 0, 0x4d42);        // signature 'BM'
+  PutLE32(bmp_header + 2, total_size);    // size including header
+  PutLE32(bmp_header + 6, 0);             // reserved
+  PutLE32(bmp_header + 10, header_size);  // offset to pixel array
   // bitmap info header
   PutLE32(bmp_header + 14, header_size - 14);  // DIB header size
   PutLE32(bmp_header + 18, width);             // dimensions
@@ -75,11 +75,11 @@ WP2Status WriteBMP(const ArgbBuffer& buffer, FILE* fout) {
   PutLE32(bmp_header + 42, 2400);              // y pixels/meter
   PutLE32(bmp_header + 46, 0);                 // number of palette colors
   PutLE32(bmp_header + 50, 0);                 // important color count
-  if (format == 3) {  // BITMAPV3INFOHEADER complement
-    PutLE32(bmp_header + 54, 0x00ff0000);         // red mask
-    PutLE32(bmp_header + 58, 0x0000ff00);         // green mask
-    PutLE32(bmp_header + 62, 0x000000ff);         // blue mask
-    PutLE32(bmp_header + 66, 0xff000000);         // alpha mask
+  if (format == 3) {                           // BITMAPV3INFOHEADER complement
+    PutLE32(bmp_header + 54, 0x00ff0000);      // red mask
+    PutLE32(bmp_header + 58, 0x0000ff00);      // green mask
+    PutLE32(bmp_header + 62, 0x000000ff);      // blue mask
+    PutLE32(bmp_header + 66, 0xff000000);      // alpha mask
   }
 
   // TODO(skal): color profile

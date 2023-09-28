@@ -77,8 +77,9 @@ void Help() {
   opt.Add("-pass <int>", "number of passes [1..2]");
   opt.Add("-420", "use YUV420 encoding (default)");
   opt.Add("-444", "use YUV444 encoding");
-  opt.Add("-tune <metric>", "choose metric for tuning. "
-                            "One of: psnr, ssim, vmaf, butteraugli");
+  opt.Add("-tune <metric>",
+          "choose metric for tuning. "
+          "One of: psnr, ssim, vmaf, butteraugli");
   opt.Add("-notransforms", "disable transforms other than DCT");
   opt.Add("-nopreds",
           "disable predictors other than DC (and some angles for now)");
@@ -327,10 +328,11 @@ int main(int argc, const char* argv[]) {
           return 2;
         }
       } else if (WP2::CompressAV1(
-              ref, params, &decoded, &bits, timing,
-              (store_blocks || count_blocks) ? &blocks : nullptr,
-              (store_transforms || count_transforms) ? &transforms : nullptr,
-              print_quant ? &quant : nullptr) != WP2_STATUS_OK) {
+                     ref, params, &decoded, &bits, timing,
+                     (store_blocks || count_blocks) ? &blocks : nullptr,
+                     (store_transforms || count_transforms) ? &transforms
+                                                            : nullptr,
+                     print_quant ? &quant : nullptr) != WP2_STATUS_OK) {
         fprintf(stderr, "Error compressing to AV1\n");
         return 2;
       }

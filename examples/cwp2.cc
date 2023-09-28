@@ -127,7 +127,8 @@ void HelpLong() {
           "number of clockwise rotations by 90 degrees during decoding");
   opt.Add("-tf <int>", "transfer function");
   opt.Add("-nometadata", "ignore source metadata");
-  opt.Add("-metadata [dst] file", "force metadata with content of 'file'. "
+  opt.Add("-metadata [dst] file",
+          "force metadata with content of 'file'. "
           "'dst' is one of iccp, exif or xmp\n");
   opt.Add("-crop <x> <y> <w> <h>", "crop picture with the given rectangle");
   opt.Add("-segments <int>", "number of segments");
@@ -188,8 +189,9 @@ struct InputFrame {
 };
 
 // Gets frames to encode as an animation (-frames).
-WP2_NO_DISCARD WP2Status GetFramesToEncode(WP2::LogLevel log_level,
-    std::vector<uint32_t>* const durations, WP2::FileList* const frames_paths) {
+WP2_NO_DISCARD WP2Status GetFramesToEncode(
+    WP2::LogLevel log_level, std::vector<uint32_t>* const durations,
+    WP2::FileList* const frames_paths) {
   // Keep only files with a matching frame name.
   std::vector<InputFrame> input_frames;
   for (const std::string& file_path : *frames_paths) {
@@ -218,8 +220,8 @@ WP2_NO_DISCARD WP2Status GetFramesToEncode(WP2::LogLevel log_level,
   uint32_t last_index = 0;
   for (const InputFrame& input_frame : input_frames) {
     CHECK_TRUE(last_index == 0 || input_frame.index > last_index,
-               "Error! Duplicate frame index %u at '%s'",
-               input_frame.index, input_frame.file_path->c_str());
+               "Error! Duplicate frame index %u at '%s'", input_frame.index,
+               input_frame.file_path->c_str());
     new_list.push_back(*input_frame.file_path);
     durations->push_back(input_frame.duration);
     last_index = input_frame.index;
@@ -254,8 +256,7 @@ WP2_NO_DISCARD WP2Status GetFilesToEncode(
           }
         }
       } else if (log_level >= WP2::LogLevel::DEFAULT) {
-        fprintf(stderr,
-                "Ignoring directory %s because -r was not specified.\n",
+        fprintf(stderr, "Ignoring directory %s because -r was not specified.\n",
                 path.c_str());
       }
     } else {
@@ -350,10 +351,9 @@ WP2Status CompressAnimation(const WP2::FileList& frames,
 
   // Encode animation.
   start = GetStopwatchTime();
-  CHECK_STATUS(
-      animation_encoder.Encode(writer, params.config, params.loop_forever,
-                               metadata),
-      "Error! Cannot encode animation as WP2");
+  CHECK_STATUS(animation_encoder.Encode(writer, params.config,
+                                        params.loop_forever, metadata),
+               "Error! Cannot encode animation as WP2");
   if (params.log_level >= WP2::LogLevel::VERBOSE) {
     const double encode_time = GetStopwatchTime() - start;
     fprintf(stderr, "Time to encode animation: %.3fs\n", encode_time);
@@ -363,8 +363,7 @@ WP2Status CompressAnimation(const WP2::FileList& frames,
 
 // Encodes 'file' into 'writer'.
 WP2_NO_DISCARD
-WP2Status CompressImage(const char* const file_path,
-                        const Params& params,
+WP2Status CompressImage(const char* const file_path, const Params& params,
                         std::vector<WP2::ArgbBuffer>* const refs,
                         WP2::ArgbBuffer* const buffer,
                         WP2::Writer* const writer) {
@@ -404,8 +403,7 @@ WP2Status CompressImage(const char* const file_path,
     // Infinite duration means it's a still image.
     if (duration_ms != WP2::ImageReader::kInfiniteDuration) {
       CHECK_STATUS(animation_encoder.AddFrame(frame, duration_ms),
-                   "Error! Cannot add input frame %u from '%s'",
-                   i, file_path);
+                   "Error! Cannot add input frame %u from '%s'", i, file_path);
     } else {
       assert(is_last_frame);
     }
@@ -446,8 +444,8 @@ uint32_t GetHeight(const Params& params, const WP2::ArgbBuffer& argb_buffer) {
   return params.crop ? params.crop_area.height : argb_buffer.height();
 }
 
-void PrintSize(const std::string& out_file,
-               size_t out_size, float num_pixels, bool short_output) {
+void PrintSize(const std::string& out_file, size_t out_size, float num_pixels,
+               bool short_output) {
   const float bpp = 8.f * out_size / num_pixels;
   printf("output size:  %u (%.2f bpp)", (uint32_t)out_size, bpp);
   if (out_file.empty()) {
@@ -467,16 +465,17 @@ WP2Status SaveImage(const WP2::MemoryWriter& memory_writer,
     const WP2Status status =
         WP2::IoUtilWriteFile(memory_writer.mem_, memory_writer.size_,
                              out_file.c_str(), params.allow_overwrite);
-    CHECK_STATUS(status, "Error while saving file '%s'%s", out_file.c_str(),
-                 (status == WP2_STATUS_BAD_WRITE) ? "" :
-                 " (hint: use -force flag to overwrite an existing file)");
+    CHECK_STATUS(
+        status, "Error while saving file '%s'%s", out_file.c_str(),
+        (status == WP2_STATUS_BAD_WRITE)
+            ? ""
+            : " (hint: use -force flag to overwrite an existing file)");
   }
 
   if (params.bit_trace > 0) {
-    WP2_CHECK_STATUS(
-        WP2::CollectBitTraces(memory_writer.mem_, memory_writer.size_,
-                              params.bit_trace, params.bit_trace_level,
-                              params.short_output, params.show_histograms));
+    WP2_CHECK_STATUS(WP2::CollectBitTraces(
+        memory_writer.mem_, memory_writer.size_, params.bit_trace,
+        params.bit_trace_level, params.short_output, params.show_histograms));
   }
 
   if (params.log_level >= WP2::LogLevel::DEFAULT && params.print_info) {
@@ -490,11 +489,12 @@ WP2Status SaveImage(const WP2::MemoryWriter& memory_writer,
 
 }  // namespace
 
-#define NEED_ARGS(nb) do {                                          \
-  CHECK_TRUE(c + (nb) < argc,                                       \
-             "Expected at least %d arguments after option %s!",     \
-             (nb), argv[c]);                                        \
-} while (false)
+#define NEED_ARGS(nb)                                                   \
+  do {                                                                  \
+    CHECK_TRUE(c + (nb) < argc,                                         \
+               "Expected at least %d arguments after option %s!", (nb), \
+               argv[c]);                                                \
+  } while (false)
 
 int main(int argc, char* argv[]) {
   CHECK_TRUE(WP2CheckVersion(), "Error! Library version mismatch!");
@@ -578,9 +578,8 @@ int main(int argc, char* argv[]) {
       params.config.quality = ExUtilGetFloat(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-quants")) {
       NEED_ARGS(1);
-      ExUtilGetFloats(argv[++c],
-                      params.config.segment_factors, WP2::kMaxNumSegments,
-                      &parse_error);
+      ExUtilGetFloats(argv[++c], params.config.segment_factors,
+                      WP2::kMaxNumSegments, &parse_error);
     } else if (!strcmp(argv[c], "-alt_tuning")) {
       NEED_ARGS(1);
       ++c;
@@ -660,11 +659,9 @@ int main(int argc, char* argv[]) {
       if (!strcmp(argv[c], "auto")) {
         params.config.segment_id_mode = WP2::EncoderConfig::SEGMENT_ID_AUTO;
       } else if (!strcmp(argv[c], "explicit")) {
-        params.config.segment_id_mode =
-            WP2::EncoderConfig::SEGMENT_ID_EXPLICIT;
+        params.config.segment_id_mode = WP2::EncoderConfig::SEGMENT_ID_EXPLICIT;
       } else if (!strcmp(argv[c], "implicit")) {
-        params.config.segment_id_mode =
-            WP2::EncoderConfig::SEGMENT_ID_IMPLICIT;
+        params.config.segment_id_mode = WP2::EncoderConfig::SEGMENT_ID_IMPLICIT;
       } else {
         fprintf(stderr, "Unsupported segment mode %s\n", argv[c]);
         parse_error = true;
@@ -718,10 +715,10 @@ int main(int argc, char* argv[]) {
       WP2::Data* dst = nullptr;
       ++c;
       if (!strcmp(argv[c], "iccp")) dst = &params.forced_metadata.iccp;
-      if (!strcmp(argv[c], "xmp"))  dst = &params.forced_metadata.xmp;
+      if (!strcmp(argv[c], "xmp")) dst = &params.forced_metadata.xmp;
       if (!strcmp(argv[c], "exif")) dst = &params.forced_metadata.exif;
-      CHECK_TRUE(dst != nullptr,
-                 "Error! unknown metadata type '%s'.\n", argv[c]);
+      CHECK_TRUE(dst != nullptr, "Error! unknown metadata type '%s'.\n",
+                 argv[c]);
       ++c;
       CHECK_STATUS(IoUtilReadFile(argv[c], dst),
                    "Error! Can't read data for '%s' metadata.", argv[c - 1]);
@@ -840,8 +837,9 @@ int main(int argc, char* argv[]) {
   if (params.log_level >= WP2::LogLevel::DEFAULT &&
       params.config.quality >= 95) {
     if (params.config.target_size > 0 || params.config.target_psnr > 0) {
-      fprintf(stderr, "Encoding for specified size or PSNR is not supported "
-                      "for ~lossless encoding. Ignoring such option(s)!\n");
+      fprintf(stderr,
+              "Encoding for specified size or PSNR is not supported "
+              "for ~lossless encoding. Ignoring such option(s)!\n");
     }
   }
   // If a target size or PSNR was given, but somehow the -pass option was
@@ -850,8 +848,9 @@ int main(int argc, char* argv[]) {
     if (params.config.pass == 1) params.config.pass = 6;
   }
 
-  CHECK_TRUE(params.config.IsValid(), "Error! Invalid configuration. "
-                                      "Some parameters are erroneous.");
+  CHECK_TRUE(params.config.IsValid(),
+             "Error! Invalid configuration. "
+             "Some parameters are erroneous.");
 
   const bool is_animation = !frame_durations.empty();
   const bool output_to_directory =
@@ -889,25 +888,23 @@ int main(int argc, char* argv[]) {
         WP2_CHECK_STATUS(CompressAnimation(in_files, frame_durations, params,
                                            &refs, &rgb_buffer, &writer));
 
-        WP2_CHECK_STATUS(
-            PrintDistortion(refs, writer.mem_, writer.size_,
-                            (WP2::MetricType)params.print_distortion,
-                            params.short_output));
+        WP2_CHECK_STATUS(PrintDistortion(
+            refs, writer.mem_, writer.size_,
+            (WP2::MetricType)params.print_distortion, params.short_output));
       } else {
         WP2_CHECK_STATUS(CompressAnimation(in_files, frame_durations, params,
                                            nullptr, &rgb_buffer, &writer));
       }
 
       out_size = writer.size_;
-      CHECK_STATUS(SaveImage(writer, params, out_file,
-                             GetWidth(params, rgb_buffer),
-                             GetHeight(params, rgb_buffer)),
-                   "Error saving image");
+      CHECK_STATUS(
+          SaveImage(writer, params, out_file, GetWidth(params, rgb_buffer),
+                    GetHeight(params, rgb_buffer)),
+          "Error saving image");
       writer.size_ = 0;
     } else {
-      WP2_CHECK_STATUS(
-          CompressAnimation(in_files, frame_durations, params,
-                            nullptr, &rgb_buffer, &counter));
+      WP2_CHECK_STATUS(CompressAnimation(in_files, frame_durations, params,
+                                         nullptr, &rgb_buffer, &counter));
       out_size = counter.size_;
       counter.size_ = 0;
     }
@@ -954,32 +951,28 @@ int main(int argc, char* argv[]) {
 
       const bool write_to_memory =
           (!out_file.empty() || params.print_distortion >= 0 ||
-           params.print_info || params.bit_trace > 0 ||
-           !decoded_file.empty());
+           params.print_info || params.bit_trace > 0 || !decoded_file.empty());
 
       size_t out_size;
       if (write_to_memory) {
         if (params.print_distortion >= 0) {
           std::vector<WP2::ArgbBuffer> refs;
-          WP2_CHECK_STATUS(
-              CompressImage(in_file.c_str(), params,
-                            &refs, &rgb_buffer, &writer));
+          WP2_CHECK_STATUS(CompressImage(in_file.c_str(), params, &refs,
+                                         &rgb_buffer, &writer));
 
-          WP2_CHECK_STATUS(
-              PrintDistortion(refs, writer.mem_, writer.size_,
-                              (WP2::MetricType)params.print_distortion,
-                              params.short_output));
+          WP2_CHECK_STATUS(PrintDistortion(
+              refs, writer.mem_, writer.size_,
+              (WP2::MetricType)params.print_distortion, params.short_output));
         } else {
-          WP2_CHECK_STATUS(
-              CompressImage(in_file.c_str(), params, nullptr,
-                            &rgb_buffer, &writer));
+          WP2_CHECK_STATUS(CompressImage(in_file.c_str(), params, nullptr,
+                                         &rgb_buffer, &writer));
         }
 
         out_size = writer.size_;
-        CHECK_STATUS(SaveImage(writer, params, out_file,
-                               GetWidth(params, rgb_buffer),
-                               GetHeight(params, rgb_buffer)),
-                     "Error saving image");
+        CHECK_STATUS(
+            SaveImage(writer, params, out_file, GetWidth(params, rgb_buffer),
+                      GetHeight(params, rgb_buffer)),
+            "Error saving image");
         if (!decoded_file.empty()) {
           WP2::ArgbBuffer argb;
           CHECK_STATUS(Decode(writer.mem_, writer.size_, &argb, dec_config),

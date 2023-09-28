@@ -16,10 +16,10 @@
 
 #include <memory>
 
-#include "src/dsp/dsp.h"
-#include "src/dsp/lossless/encl_dsp.h"
 #include "examples/example_utils.h"
 #include "include/helpers.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/lossless/encl_dsp.h"
 #include "src/utils/plane.h"
 #include "src/utils/random.h"
 
@@ -49,7 +49,7 @@ TEST_P(SpeedTestCpuInfo, TestAddSub) {
   for (uint32_t t = 0; t < kNumTests; ++t) {
     const uint32_t len = (rng.GetUnsigned(kMaxLen - 1) + 1) & ~3;
     const int32_t min = -(1 + rng.GetUnsigned(1023u));
-    const int32_t max =  (1 + rng.GetUnsigned(1023u));
+    const int32_t max = (1 + rng.GetUnsigned(1023u));
     testutil::PrecalculatedRandom<kMaxLen * 3, int16_t> rnd16(-2048, 2048);
     for (uint32_t l = 0; l < kNumLoops; ++l) {
       rnd16.Fill(src, len);
@@ -81,7 +81,7 @@ TEST_P(SpeedTestCpuInfo, TestAddSubBlock) {
     for (uint32_t t = 0; t < kNumTests; ++t) {
       const uint32_t height = 1 + rng.GetUnsigned(32 - 1);
       const int32_t min = -(1 + rng.GetUnsigned(1023u));
-      const int32_t max =  (1 + rng.GetUnsigned(1023u));
+      const int32_t max = (1 + rng.GetUnsigned(1023u));
       testutil::PrecalculatedRandom<kMaxLen * 3, int16_t> rnd16(-2048, 2048);
       for (uint32_t l = 0; l < kNumLoops; ++l) {
         rnd16.Fill(src, kMaxLen);
@@ -168,7 +168,7 @@ void DoTestSsim(BitDepth bit_depth, int max_diff,
   PseudoRNG rng;
   double average_score = 0.;
   for (uint32_t t = 0; t < kNumTests; ++t) {
-    const uint32_t width  = 1 + rng.GetUnsigned(kMaxDim);
+    const uint32_t width = 1 + rng.GetUnsigned(kMaxDim);
     const uint32_t height = 1 + rng.GetUnsigned(kMaxDim);
     testutil::PrecalculatedRandom<kMaxDim * 7, T> rnd(bit_depth.min(),
                                                       bit_depth.max() + 1);
@@ -238,7 +238,7 @@ TEST_P(SpeedTestCpuInfo, TestSsim12bits) {
 
 //------------------------------------------------------------------------------
 
-template<typename T>
+template <typename T>
 void DoTestPSNR(int min_range, int max_range, uint64_t result) {
   constexpr uint32_t kMaxDim = 500;
   constexpr uint32_t kNumTests = 10;
@@ -246,7 +246,7 @@ void DoTestPSNR(int min_range, int max_range, uint64_t result) {
   PseudoRNG rng;
   uint64_t total_score = 0;
   for (uint32_t t = 0; t < kNumTests; ++t) {
-    const uint32_t width  = 1 + rng.GetUnsigned(kMaxDim);
+    const uint32_t width = 1 + rng.GetUnsigned(kMaxDim);
     const uint32_t height = 1 + rng.GetUnsigned(kMaxDim);
     testutil::PrecalculatedRandom<kMaxDim * 7, T> rnd(min_range, max_range);
     uint64_t score;
@@ -291,8 +291,8 @@ TEST_P(SpeedTestCpuInfo, TestCflPrediction) {
   constexpr uint32_t kNumTests = 60;
   constexpr uint32_t kNumLoops = 500;
   for (uint32_t t = 0; t < kNumTests; ++t) {
-    int16_t in[kMaxSize], out[kMaxSize] = { 0 };
-    uint32_t len  = (t < 16) ? 4 * t : 1 + rng.GetUnsigned(kMaxSize - 1);
+    int16_t in[kMaxSize], out[kMaxSize] = {0};
+    uint32_t len = (t < 16) ? 4 * t : 1 + rng.GetUnsigned(kMaxSize - 1);
     len = (len & ~3);
     const int32_t min_value = -rng.GetUnsigned(511);
     const int32_t max_value = +rng.GetUnsigned(511);
@@ -304,9 +304,8 @@ TEST_P(SpeedTestCpuInfo, TestCflPrediction) {
     }
     for (uint32_t l = 0; l < len; ++l) {
       ASSERT_EQ(out[l], CflScale(in[l], a, b, min_value, max_value))
-          << "[" << in[l] << " * a=" << a << " + b=" << b << " = "
-          << out[l] << "  clipped to ["
-          << min_value << ", " << max_value << "]";
+          << "[" << in[l] << " * a=" << a << " + b=" << b << " = " << out[l]
+          << "  clipped to [" << min_value << ", " << max_value << "]";
     }
     for (uint32_t l = len; l < kMaxSize; ++l) ASSERT_EQ(out[l], 0);
   }

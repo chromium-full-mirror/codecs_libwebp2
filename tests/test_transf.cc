@@ -21,6 +21,7 @@
 #include <tuple>
 
 #include "examples/example_utils.h"
+#include "extras/extras.h"
 #include "include/helpers.h"
 #include "src/common/lossy/transforms.h"
 #include "src/dsp/dsp.h"
@@ -28,7 +29,6 @@
 #include "src/utils/stats.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
-#include "extras/extras.h"
 
 namespace WP2 {
 namespace {
@@ -97,12 +97,12 @@ class RandomTransform2DTest : public testing::TestWithParam<size_t> {
   void BuildAutoRegression(int16_t dst[], uint32_t size_x, uint32_t size_y,
                            UniformIntDistribution* const random) {
     int32_t first = 0;
-    const int32_t hx = size_x / 2, hy = size_y / 2;   // noise amplitude
+    const int32_t hx = size_x / 2, hy = size_y / 2;  // noise amplitude
     for (uint32_t y = 0; y < size_y; ++y) {
       int32_t last = first;
       for (uint32_t x = 0; x < size_x; ++x) {
         last += random->Get<int32_t>(-hx, hx);
-        if (x & y & 1) {   // average with above
+        if (x & y & 1) {  // average with above
           last = (last + dst[x + (y - 1) * size_x] + 1) / 2;
         }
         dst[x + y * size_x] = last;
@@ -112,12 +112,12 @@ class RandomTransform2DTest : public testing::TestWithParam<size_t> {
   }
 };
 
-template<typename U, typename V>
+template <typename U, typename V>
 void CopyArray(const U src[32 * 32], V dst[32 * 32], uint32_t num_coeffs) {
   for (uint32_t i = 0; i < 32 * 32; ++i) dst[i] = (V)src[i];
   for (uint32_t i = 0; i < num_coeffs; ++i) {
     ASSERT_GE(src[i], -32768);
-    ASSERT_LT(src[i],  32768);
+    ASSERT_LT(src[i], 32768);
   }
 }
 
@@ -149,11 +149,11 @@ TEST_P(RandomTransform2DTest, All) {
             uint32_t max_err = 0;
             SCOPED_TRACE(SPrintf(
                 "tf_x: %s (size_x: %d), tf_y: %s (size_y: %d), reduced:%d",
-                WP2TransformNames[tf_x], size_x,
-                WP2TransformNames[tf_y], size_y, reduced));
+                WP2TransformNames[tf_x], size_x, WP2TransformNames[tf_y],
+                size_y, reduced));
             for (int n = 0; n < N; ++n) {
               int16_t dst[32 * 32], ref[32 * 32] = {0};
-              int32_t tmp[32 * 32];   // intermediate result
+              int32_t tmp[32 * 32];  // intermediate result
               if (!reduced) {
                 for (auto& v : ref) {
                   v = random.Get<int32_t>(-1024, 1023);
@@ -271,7 +271,7 @@ TEST_P(RandomTransform2DTest, Compare) {
               printf("-------------\n");
             }
             EXPECT_LE(err, thresh)
-              << "Precision error: " << size_x << ", " << size_y;
+                << "Precision error: " << size_x << ", " << size_y;
             max_err = std::max(err, max_err);
           }
         }
@@ -324,10 +324,10 @@ TEST_P(RandomTransformTest, TestTransformPrecision) {
   const WP2TransformType type = std::get<0>(GetParam());
   const uint32_t size = std::get<1>(GetParam());
   const int N = 20000;
-  const float tolerance = (type == kHadamard) ? 0.89f :
-                          (type == kAdst) ? 0.30f :
-                          (type == kIdentity) ? 0.00f :
-                          0.15f;
+  const float tolerance = (type == kHadamard)   ? 0.89f
+                          : (type == kAdst)     ? 0.30f
+                          : (type == kIdentity) ? 0.00f
+                                                : 0.15f;
 
   UniformIntDistribution random(/*seed=*/(size_t)size +
                                 1000 * (size_t)type);  // Deterministic.
@@ -362,8 +362,8 @@ TEST_P(RandomTransformTest, TestTransformPrecision) {
     max_err = std::max(max_err, err[i]);
     ASSERT_LE(err[i], tolerance_max);
   }
-  printf("  type=%d size=%d max-err=%.3lf tolerance=%.3f\n",
-         type, S, max_err, tolerance_max);
+  printf("  type=%d size=%d max-err=%.3lf tolerance=%.3f\n", type, S, max_err,
+         tolerance_max);
 }
 
 INSTANTIATE_TEST_SUITE_P(RandomTransformTestInstantiation, RandomTransformTest,
@@ -454,10 +454,10 @@ TEST(TransformProperty, DCOnlyImpliesConstant) {
       for (uint32_t size_y : kTransformSizes) {
         for (uint32_t tf_x = 0; tf_x < (uint32_t)kNumTransforms; ++tf_x) {
           for (uint32_t tf_y = 0; tf_y < (uint32_t)kNumTransforms; ++tf_y) {
-            SCOPED_TRACE(SPrintf(
-                "tf_x: %s (size_x: %d), tf_y: %s (size_y: %d)  DC=%d",
-                WP2TransformNames[tf_x], size_x,
-                WP2TransformNames[tf_y], size_y, i));
+            SCOPED_TRACE(
+                SPrintf("tf_x: %s (size_x: %d), tf_y: %s (size_y: %d)  DC=%d",
+                        WP2TransformNames[tf_x], size_x,
+                        WP2TransformNames[tf_y], size_y, i));
 
             std::fill(coeffs, coeffs + size_x * size_y, 0);
             coeffs[0] = i;

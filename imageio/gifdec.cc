@@ -141,9 +141,9 @@ WP2Status ConvertIndexedColors(const GifFileType* const decoder,
                                uint32_t num_pixels, int transparent_index,
                                uint8_t* const pixels,
                                WP2SampleFormat pixel_format) {
-  const ColorMapObject* const color_map =
-      (decoder->Image.ColorMap != NULL) ? decoder->Image.ColorMap
-                                        : decoder->SColorMap;
+  const ColorMapObject* const color_map = (decoder->Image.ColorMap != NULL)
+                                              ? decoder->Image.ColorMap
+                                              : decoder->SColorMap;
   if (color_map == NULL) return WP2_STATUS_OK;  // Nothing to do.
   WP2_CHECK_OK(color_map->Colors != NULL && color_map->ColorCount > 0,
                WP2_STATUS_BITSTREAM_ERROR);
@@ -163,8 +163,8 @@ WP2Status ConvertIndexedColors(const GifFileType* const decoder,
       // Do nothing. A tranparent pixel implies keeping previous color.
     } else if (indexed_color_pixels[i] < color_map->ColorCount) {
       const GifColorType color = color_map->Colors[indexed_color_pixels[i]];
-      dst_pixels[i] = (uint32_t)0xffu | (color.Red << 8) |
-                      (color.Green << 16) | (color.Blue << 24);
+      dst_pixels[i] = (uint32_t)0xffu | (color.Red << 8) | (color.Green << 16) |
+                      (color.Blue << 24);
     } else {
       return WP2_STATUS_BITSTREAM_ERROR;
     }
@@ -410,11 +410,8 @@ class ImageReaderGIF : public ImageReader::Impl {
         }
 
         frame_rect_ = {
-            (uint32_t)decoder_->Image.Left,
-            (uint32_t)decoder_->Image.Top,
-            (uint32_t)decoder_->Image.Width,
-            (uint32_t)decoder_->Image.Height
-        };
+            (uint32_t)decoder_->Image.Left, (uint32_t)decoder_->Image.Top,
+            (uint32_t)decoder_->Image.Width, (uint32_t)decoder_->Image.Height};
         WP2_CHECK_STATUS(frame_.SetView(*buffer_, frame_rect_));
         WP2_CHECK_STATUS(DecodeFrame(decoder_, transparent_index_, &frame_,
                                      tmp_indexed_row_, tmp_argb_row_,
@@ -493,8 +490,8 @@ static int InputFunction(GifFileType* decoder, GifByteType* data_source,
 
 // -----------------------------------------------------------------------------
 
-void ImageReader::SetImplGIF(ArgbBuffer* const buffer,
-                             LogLevel log_level, size_t max_num_pixels) {
+void ImageReader::SetImplGIF(ArgbBuffer* const buffer, LogLevel log_level,
+                             size_t max_num_pixels) {
   impl_.reset(new (WP2Allocable::nothrow) ImageReaderGIF(
       data_.bytes, data_.size, buffer, log_level, max_num_pixels));
   if (impl_ == nullptr) status_ = WP2_STATUS_OUT_OF_MEMORY;
@@ -510,8 +507,9 @@ void WP2::ImageReader::SetImplGIF(WP2::ArgbBuffer* const buffer,
   (void)buffer;
   (void)max_num_pixels;
   if (log_level >= WP2::LogLevel::DEFAULT) {
-    fprintf(stderr, "GIF support not compiled. Please install the libgif "
-                    "development package before building.\n");
+    fprintf(stderr,
+            "GIF support not compiled. Please install the libgif "
+            "development package before building.\n");
   }
   status_ = WP2_STATUS_UNSUPPORTED_FEATURE;
 }

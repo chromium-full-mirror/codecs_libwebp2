@@ -86,7 +86,7 @@ WP2Status ExtractMetadata(const uint8_t* const data, size_t data_size,
     WebPDemuxReleaseChunkIterator(&chunk_iter);
     if (status != WP2_STATUS_OK) goto End;
   }
- End:
+End:
   WebPDemuxDelete(demux);
   return status;
 }
@@ -165,9 +165,9 @@ class ImageReaderWEBP : public ImageReader::Impl {
           status = WP2_STATUS_BITSTREAM_ERROR;
           goto End;
         }
-        loop_count_ =
-            (info.loop_count == 0) ? WP2::ImageReader::kInfiniteLoopCount
-                                   : info.loop_count;
+        loop_count_ = (info.loop_count == 0)
+                          ? WP2::ImageReader::kInfiniteLoopCount
+                          : info.loop_count;
 
         status = DecodeFrame(is_last, duration_ms);
       }
@@ -179,12 +179,12 @@ class ImageReaderWEBP : public ImageReader::Impl {
         if (status_metadata != WP2_STATUS_OK) status = status_metadata;
       }
 
-     End:
+    End:
       WebPFreeDecBuffer(output_buffer);
       if (status != WP2_STATUS_OK) {
         if (log_level_ >= LogLevel::DEFAULT) {
-          fprintf(stderr, "Decoding failed.\nStatus: %d (%s)\n",
-                  status, WP2GetStatusMessage(status));
+          fprintf(stderr, "Decoding failed.\nStatus: %d (%s)\n", status,
+                  WP2GetStatusMessage(status));
         }
         buffer_->Deallocate();
       }
@@ -202,7 +202,7 @@ class ImageReaderWEBP : public ImageReader::Impl {
 
     // Decode frames until one with a duration > 0.
     while (WebPAnimDecoderHasMoreFrames(decoder_) &&
-        timestamp <= last_timestamp_) {
+           timestamp <= last_timestamp_) {
       if (!WebPAnimDecoderGetNext(decoder_, &buf, &timestamp) ||
           timestamp < last_timestamp_) {
         return WP2_STATUS_BITSTREAM_ERROR;
@@ -223,8 +223,8 @@ class ImageReaderWEBP : public ImageReader::Impl {
   int last_timestamp_ = 0;
 };
 
-void ImageReader::SetImplWEBP(ArgbBuffer* const buffer,
-                              LogLevel log_level, size_t max_num_pixels) {
+void ImageReader::SetImplWEBP(ArgbBuffer* const buffer, LogLevel log_level,
+                              size_t max_num_pixels) {
   impl_.reset(new (WP2Allocable::nothrow) ImageReaderWEBP(
       data_.bytes, data_.size, buffer, log_level, max_num_pixels));
   if (impl_ == nullptr) status_ = WP2_STATUS_OUT_OF_MEMORY;
@@ -240,8 +240,9 @@ void WP2::ImageReader::SetImplWEBP(WP2::ArgbBuffer* const buffer,
   (void)buffer;
   (void)max_num_pixels;
   if (log_level >= WP2::LogLevel::DEFAULT) {
-    fprintf(stderr, "WEBP support not compiled. Please install the libwebp "
-                    "development package before building.\n");
+    fprintf(stderr,
+            "WEBP support not compiled. Please install the libwebp "
+            "development package before building.\n");
   }
   status_ = WP2_STATUS_UNSUPPORTED_FEATURE;
 }

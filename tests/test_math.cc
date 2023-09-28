@@ -15,8 +15,8 @@
 // Tests for math functions and random generators
 
 #include <iostream>
-#include <random>
 #include <limits>
+#include <random>
 #include <vector>
 
 #include "include/helpers.h"
@@ -45,7 +45,7 @@ TEST(Math, InnerProduct) {
 
 TEST(Math, PseudoRandom) {
   PseudoRNG rng;
-  for (int32_t amp : { 1, 4, 16, 65536, 0x7fffffff }) {
+  for (int32_t amp : {1, 4, 16, 65536, 0x7fffffff}) {
     for (uint32_t n = 0; n < 10000; ++n) {
       const int32_t v = rng.GetSigned(amp);
       EXPECT_LT(v, amp);
@@ -58,7 +58,7 @@ TEST(Math, PseudoRandomStats) {
   PseudoRNG rng;
   const int32_t kAmp = 100;
   const int32_t kCount = 1000000;
-  int32_t histo[2 * kAmp - 1] = { 0 };
+  int32_t histo[2 * kAmp - 1] = {0};
   const int32_t num_samples = (2 * kAmp - 1) * kCount;
   for (uint32_t n = 0; n < num_samples; ++n) {
     ++histo[kAmp - 1 + rng.GetSigned(kAmp)];
@@ -96,7 +96,7 @@ TEST(Math, PseudoRandomStats2) {
 
 TEST(Math, Random) {
   UniformIntDistribution dist;
-  for (int32_t amp : { 1, 4, 16, 65536, 0x7fffffff }) {
+  for (int32_t amp : {1, 4, 16, 65536, 0x7fffffff}) {
     for (uint32_t n = 0; n < 10000; ++n) {
       const int32_t v = dist.Get(-(amp - 1), amp - 1);
       EXPECT_LT(v, amp);
@@ -109,7 +109,7 @@ TEST(Math, RandomStats) {
   UniformIntDistribution dist;
   const int32_t kAmp = 100;
   const int32_t kCount = 100000;
-  int32_t histo[2 * kAmp - 1] = { 0 };
+  int32_t histo[2 * kAmp - 1] = {0};
   const int32_t num_samples = (2 * kAmp - 1) * kCount;
   for (uint32_t n = 0; n < num_samples; ++n) {
     ++histo[kAmp - 1 + dist.Get(-kAmp + 1, kAmp - 1)];
@@ -181,8 +181,8 @@ TEST(Math, CtzClz) {
   UniformIntDistribution random(/*seed=*/421523);
   for (int i = 0; i < 32; ++i) {
     for (uint32_t n = 0; n < 1000; ++n) {
-      const uint32_t v0 = random.Get<uint16_t>(0u, 0xffff)
-         | (random.Get<uint16_t>(0u, 0xffff) << 16);
+      const uint32_t v0 = random.Get<uint16_t>(0u, 0xffff) |
+                          (random.Get<uint16_t>(0u, 0xffff) << 16);
       // clear 'i' lower bits, and force ith bit to 1
       const uint32_t v1 = ((v0 >> i) | 1) << i;
       ASSERT_EQ(WP2Ctz(v1), i) << " bit : " << i << " value: " << v1;

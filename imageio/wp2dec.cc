@@ -55,8 +55,7 @@ class ImageReaderWP2 : public ImageReader::Impl {
       status = WP2_STATUS_OK;
       assert(frame_index_ == decoder_.GetCurrentFrameIndex());
       // Features are not null because ReadFrame() returned true.
-      const BitstreamFeatures& features =
-          *decoder_.TryGetDecodedFeatures();
+      const BitstreamFeatures& features = *decoder_.TryGetDecodedFeatures();
       const FrameFeatures& frame_features =
           *decoder_.TryGetFrameDecodedFeatures(frame_index_);
 
@@ -91,8 +90,8 @@ class ImageReaderWP2 : public ImageReader::Impl {
 
     if (status != WP2_STATUS_OK) {
       if (log_level_ >= LogLevel::DEFAULT) {
-        fprintf(stderr, "Decoding failed.\nStatus: %d (%s)\n",
-                status, WP2GetStatusMessage(status));
+        fprintf(stderr, "Decoding failed.\nStatus: %d (%s)\n", status,
+                WP2GetStatusMessage(status));
       }
     } else {
       ++frame_index_;
@@ -105,8 +104,8 @@ class ImageReaderWP2 : public ImageReader::Impl {
   uint32_t frame_index_ = 0;
 };
 
-void ImageReader::SetImplWP2(ArgbBuffer* const buffer,
-                             LogLevel log_level, size_t max_num_pixels) {
+void ImageReader::SetImplWP2(ArgbBuffer* const buffer, LogLevel log_level,
+                             size_t max_num_pixels) {
   impl_.reset(new (WP2Allocable::nothrow) ImageReaderWP2(
       data_.bytes, data_.size, buffer, log_level, max_num_pixels));
   if (impl_ == nullptr) status_ = WP2_STATUS_OUT_OF_MEMORY;

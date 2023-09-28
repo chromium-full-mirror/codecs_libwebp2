@@ -86,9 +86,9 @@ toff_t MySize(thandle_t opaque) {
 
 toff_t MySeek(thandle_t opaque, toff_t offset, int whence) {
   MyData* const my_data = (MyData*)opaque;
-  offset += (whence == SEEK_CUR) ? my_data->pos
-          : (whence == SEEK_SET) ? 0
-          : my_data->size;
+  offset += (whence == SEEK_CUR)   ? my_data->pos
+            : (whence == SEEK_SET) ? 0
+                                   : my_data->size;
   if (offset > my_data->size) return (toff_t)-1;
   my_data->pos = offset;
   return offset;
@@ -162,9 +162,8 @@ class ImageReaderTIFF : public ImageReader::Impl {
 
     MyData my_data = {data_, (toff_t)data_size_, 0};
     TIFF* const tiff =
-        TIFFClientOpen("Memory", "r", (thandle_t*)&my_data,
-                       MyRead, MyRead, MySeek, MyClose,
-                       MySize, MyMapFile, MyUnmapFile);
+        TIFFClientOpen("Memory", "r", (thandle_t*)&my_data, MyRead, MyRead,
+                       MySeek, MyClose, MySize, MyMapFile, MyUnmapFile);
     if (tiff == NULL) {
       if (log_level_ >= LogLevel::DEFAULT) {
         fprintf(stderr, "Error! Cannot parse TIFF file\n");
@@ -295,8 +294,9 @@ void WP2::ImageReader::SetImplTIFF(WP2::ArgbBuffer* const buffer,
   (void)buffer;
   (void)max_num_pixels;
   if (log_level >= WP2::LogLevel::DEFAULT) {
-    fprintf(stderr, "TIFF support not compiled. Please install the libtiff "
-                    "development package before building.\n");
+    fprintf(stderr,
+            "TIFF support not compiled. Please install the libtiff "
+            "development package before building.\n");
   }
   status_ = WP2_STATUS_UNSUPPORTED_FEATURE;
 }

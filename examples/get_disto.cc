@@ -220,23 +220,22 @@ int main(int argc, char* argv[]) {
       "Error while computing the distortion.");
 
   if (exact) min_disto = 99.f;
-  if (min_disto > 0.) {   // simply check min disto and exit
+  if (min_disto > 0.) {  // simply check min disto and exit
     const bool ok = (disto[4] >= min_disto);
-    fprintf(stderr, "[%s] Check: %f > %f ? %s\n",
-            path1, disto[4], min_disto, ok ? "OK" : "FAIL");
+    fprintf(stderr, "[%s] Check: %f > %f ? %s\n", path1, disto[4], min_disto,
+            ok ? "OK" : "FAIL");
     return ok ? 0 : 1;
   }
   if (prefix != nullptr) printf("%s ", prefix);
   printf("%u %.2f    %.2f %.2f %.2f %.2f [ %.2f bpp %s]",
-         (unsigned int)ref_size,
-         disto[4], disto[0], disto[1], disto[2], disto[3],
-         bpp, (crop != NO_CROP) ? "(cropped)" : "");
+         (unsigned int)ref_size, disto[4], disto[0], disto[1], disto[2],
+         disto[3], bpp, (crop != NO_CROP) ? "(cropped)" : "");
   if (suffix != nullptr) printf(" %s", suffix);
   printf("\n");
 
   if (output != nullptr) {
     fprintf(stderr, "max differences per channel: ");
-    for (int n = 1; n < 4; ++n) {    // skip the alpha channel
+    for (int n = 1; n < 4; ++n) {  // skip the alpha channel
       const int range =
           DiffScaleChannel(&pic1_rgb, &pic2_rgb, n, scale, scaling_factor);
       if (range < 0) fprintf(stderr, "\nError computing diff map\n");

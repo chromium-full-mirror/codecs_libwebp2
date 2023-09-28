@@ -32,25 +32,25 @@ struct ParamsAV1 {
   float quality = 75.f;         // in [0..100]
   float alpha_quality = 100.f;  // in [0..100]
   uint32_t size = 0;            // target size if not zero (predates 'quality')
-  uint32_t effort = 5;           // in [0..9]
+  uint32_t effort = 5;          // in [0..9]
   uint32_t threads = 1;         // 1 means no multi-threading
   uint32_t pass = 2;
   bool use_yuv444 = true;
   // if 0, CDEF and restoration filters are disabled (but deblocking is kept)
-  float filter_strength = 50.f;  // in [0..100]
+  float filter_strength = 50.f;      // in [0..100]
   std::map<int, int> extra_options;  // extra options for libaom
   enum class Tuning { kPsnr, kSsim, kVmaf, kButteraugli };
   Tuning tuning = Tuning::kPsnr;
-  uint32_t bittrace = 0;         // 0=off, 1=bits, 2=bytes
-  bool compact_trace = false;    // compact traces into fewer categories
-  bool draw_blocks = false;      // for visual debug
+  uint32_t bittrace = 0;       // 0=off, 1=bits, 2=bytes
+  bool compact_trace = false;  // compact traces into fewer categories
+  bool draw_blocks = false;    // for visual debug
   bool draw_transforms = false;
   const char* draw_mi_data = nullptr;
   bool draw_mi_number = false;  // draw value of mi data as red square (9 bits)
   bool use_libgav1_decoder = false;  // use libaom decoder if false
 
   // libaom only options
-  bool disable_transforms = false;   // disable tf other than DCT (av1 only)
+  bool disable_transforms = false;  // disable tf other than DCT (av1 only)
   // disable predictors other than DC (and some directional predictors for now)
   bool disable_predictors = false;
   bool disable_palette = false;     // disable palette predictor

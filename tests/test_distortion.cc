@@ -321,9 +321,8 @@ WP2Status EncodeInCCSP(const YUVPlane& original_ccsp, const CSPMtx& ccsp_to_rgb,
         {0, 0, original_ccsp.GetWidth(), original_ccsp.GetHeight()}));
   }
   WP2_CHECK_STATUS(Encode(
-      upsampled.GetWidth(), upsampled.GetHeight(),
-      upsampled.Y.Row(0), upsampled.Y.Step(),
-      upsampled.U.Row(0), upsampled.U.Step(),
+      upsampled.GetWidth(), upsampled.GetHeight(), upsampled.Y.Row(0),
+      upsampled.Y.Step(), upsampled.U.Row(0), upsampled.U.Step(),
       upsampled.V.Row(0), upsampled.V.Step(),
       upsampled.HasAlpha() ? upsampled.A.Row(0) : nullptr, upsampled.A.Step(),
       ccsp_to_rgb.mtx(), ccsp_to_rgb.shift, writer, config));

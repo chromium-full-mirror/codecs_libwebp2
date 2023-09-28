@@ -14,10 +14,10 @@
 
 // Test example utils.
 
+#include <deque>
+#include <random>
 #include <string>
 #include <vector>
-#include <random>
-#include <deque>
 
 #include "examples/example_utils.h"
 #include "include/helpers.h"
@@ -120,23 +120,25 @@ TEST(ArgParser, Floats) {
   EXPECT_EQ(values[1], 312.f);
   CheckAndReset(values, 2u, kNumValues, &error, false);
 
-  EXPECT_EQ(ExUtilGetFloats(" -2.54,3, -2., 4",
-                            values, kNumValues, &error, ','), 4u);
+  EXPECT_EQ(
+      ExUtilGetFloats(" -2.54,3, -2., 4", values, kNumValues, &error, ','), 4u);
   EXPECT_EQ(values[0], -2.54f);
   EXPECT_EQ(values[1], 3.f);
   EXPECT_EQ(values[2], -2.f);
   EXPECT_EQ(values[3], 4.f);
   CheckAndReset(values, 4u, kNumValues, &error, false);
 
-  EXPECT_EQ(ExUtilGetFloats(" -2.4| 3.2 |-2.1 4|",
-                            values, kNumValues, &error, '|'), 3u);
+  EXPECT_EQ(
+      ExUtilGetFloats(" -2.4| 3.2 |-2.1 4|", values, kNumValues, &error, '|'),
+      3u);
   EXPECT_EQ(values[0], -2.4f);
   EXPECT_EQ(values[1], 3.2f);
   EXPECT_EQ(values[2], -2.1f);
   CheckAndReset(values, 4u, kNumValues, &error, false);
 
-  EXPECT_EQ(ExUtilGetFloats("0,-1,2,-3,4,-5,6,-7,1,1,1,1,1,1,1,1,1",
-                            values, kNumValues, &error, ','), kNumValues);
+  EXPECT_EQ(ExUtilGetFloats("0,-1,2,-3,4,-5,6,-7,1,1,1,1,1,1,1,1,1", values,
+                            kNumValues, &error, ','),
+            kNumValues);
   EXPECT_EQ(values[0], 0.f);
   EXPECT_EQ(values[1], -1.f);
   EXPECT_EQ(values[2], 2.f);

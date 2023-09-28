@@ -130,8 +130,7 @@ TEST_P(BypassTest, MaxChunkSize) {
 
     if (use_lossy) {
       ASSERT_TRUE(testutil::Compare(enc_tile.yuv_input, dec_tile.yuv_output,
-                                    gparams.transf_.GetYuvDepth(),
-                                    file_name));
+                                    gparams.transf_.GetYuvDepth(), file_name));
     } else {
       ArgbBuffer converted_rgb_output(enc_tile.rgb_input.format());
       ASSERT_WP2_OK(converted_rgb_output.ConvertFrom(dec_tile.rgb_output));

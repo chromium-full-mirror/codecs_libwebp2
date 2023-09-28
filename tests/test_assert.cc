@@ -24,7 +24,7 @@
 
 int main(int argc, const char* argv[]) {
   if (argc != 2) return 1;
-  const int c = atoi(argv[1]);    // NOLINT (atoi)
+  const int c = atoi(argv[1]);  // NOLINT (atoi)
   WP2::ANSEnc enc;
   // All cases <0 should execute normally.
   // All cases >0 should fail because of an assert.

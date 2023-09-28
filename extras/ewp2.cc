@@ -289,12 +289,11 @@ int main(int argc, char* argv[]) {
     CHECK_STATUS(
         WP2::Decode(
             in_data.bytes, in_data.size, WP2::kRGBToYCbCrMatrix,
-            rgb_to_ycbcr_shift,
-            ccsp_buffer.Y.Row(0), ccsp_buffer.Y.Step(), ccsp_buffer.Y.Size(),
-            ccsp_buffer.U.Row(0), ccsp_buffer.U.Step(), ccsp_buffer.U.Size(),
-            ccsp_buffer.V.Row(0), ccsp_buffer.V.Step(), ccsp_buffer.V.Size(),
-            ccsp_buffer.A.Row(0), ccsp_buffer.A.Step(), ccsp_buffer.A.Size(),
-            keep_metadata ? &metadata : nullptr),
+            rgb_to_ycbcr_shift, ccsp_buffer.Y.Row(0), ccsp_buffer.Y.Step(),
+            ccsp_buffer.Y.Size(), ccsp_buffer.U.Row(0), ccsp_buffer.U.Step(),
+            ccsp_buffer.U.Size(), ccsp_buffer.V.Row(0), ccsp_buffer.V.Step(),
+            ccsp_buffer.V.Size(), ccsp_buffer.A.Row(0), ccsp_buffer.A.Step(),
+            ccsp_buffer.A.Size(), keep_metadata ? &metadata : nullptr),
         "Error! Failed to decode the wp2 image.");
 
     CHECK_TRUE(
@@ -423,17 +422,14 @@ int main(int argc, char* argv[]) {
       swap(ccsp_buffer, cmp);
       cmp_matrix = ccsp_to_rgb;
     } else {  // Compare 'ref' with output.
-      CHECK_STATUS(
-          WP2::ReadImage(cmp_path.c_str(), &cmp, &cmp_matrix),
-          "Error! Failed to read '%s'.", cmp_path.c_str());
+      CHECK_STATUS(WP2::ReadImage(cmp_path.c_str(), &cmp, &cmp_matrix),
+                   "Error! Failed to read '%s'.", cmp_path.c_str());
     }
-    CHECK_STATUS(
-        WP2::ReadImage(ref_path.c_str(), &ref, &ref_matrix),
-        "Error! Failed to read reference '%s'.", ref_path.c_str());
+    CHECK_STATUS(WP2::ReadImage(ref_path.c_str(), &ref, &ref_matrix),
+                 "Error! Failed to read reference '%s'.", ref_path.c_str());
 
-    CHECK_TRUE(
-        cmp_matrix == ref_matrix,
-        "Error! Can only compute distortion for the same color space.");
+    CHECK_TRUE(cmp_matrix == ref_matrix,
+               "Error! Can only compute distortion for the same color space.");
     WP2::BitDepth cmp_bit_depth, ref_bit_depth;
     CHECK_STATUS(WP2::ReadBitDepth(cmp_path.c_str(), &cmp_bit_depth),
                  "Error! Failed to read bit depth of '%s'.", cmp_path.c_str());

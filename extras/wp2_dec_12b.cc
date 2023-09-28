@@ -58,13 +58,13 @@ class ImageReaderWP212b : public ImageReader::Impl {
                                           /*has_alpha=*/true));
 
     // Decode.
-    WP2_CHECK_STATUS(Decode(data_, data_size_,
-      kRGBToRGB12.mtx(), kRGBToRGB12.shift,
-      ccsp_buffer_->Y.Row(0), ccsp_buffer_->Y.Step(), ccsp_buffer_->Y.Size(),
-      ccsp_buffer_->U.Row(0), ccsp_buffer_->U.Step(), ccsp_buffer_->U.Size(),
-      ccsp_buffer_->V.Row(0), ccsp_buffer_->V.Step(), ccsp_buffer_->V.Size(),
-      ccsp_buffer_->HasAlpha() ? ccsp_buffer_->A.Row(0) : nullptr,
-      ccsp_buffer_->A.Step(), ccsp_buffer_->A.Size(), metadata_));
+    WP2_CHECK_STATUS(Decode(
+        data_, data_size_, kRGBToRGB12.mtx(), kRGBToRGB12.shift,
+        ccsp_buffer_->Y.Row(0), ccsp_buffer_->Y.Step(), ccsp_buffer_->Y.Size(),
+        ccsp_buffer_->U.Row(0), ccsp_buffer_->U.Step(), ccsp_buffer_->U.Size(),
+        ccsp_buffer_->V.Row(0), ccsp_buffer_->V.Step(), ccsp_buffer_->V.Size(),
+        ccsp_buffer_->HasAlpha() ? ccsp_buffer_->A.Row(0) : nullptr,
+        ccsp_buffer_->A.Step(), ccsp_buffer_->A.Size(), metadata_));
 
     bool is_opaque = true;
     for (uint32_t y = 0; y < ccsp_buffer_->A.h_ && is_opaque; ++y) {

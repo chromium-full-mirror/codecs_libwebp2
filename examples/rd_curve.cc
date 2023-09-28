@@ -24,7 +24,7 @@
 #include <sstream>
 #include <vector>
 
-#include "src/utils/utils.h"   // this deep link needs to be first
+#include "src/utils/utils.h"  // this deep link needs to be first
 #include "examples/example_utils.h"
 #include "examples/stopwatch.h"
 #include "imageio/image_dec.h"
@@ -32,8 +32,8 @@
 #include "src/utils/thread_utils.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
-#include "src/wp2/encode.h"
 #include "src/wp2/decode.h"
+#include "src/wp2/encode.h"
 
 #ifdef WP2_HAVE_WEBP
 #include "imageio/imageio_util.h"
@@ -83,11 +83,11 @@ struct TestParams {
   bool quiet = false;
   EncoderConfig config;
   std::vector<Rectangle> force_partition;
-  bool store_partition = false;      // Only for AV1.
-  float q = 0;                       // in [0..100]
-  float alpha_q = -1.f;              // < 0: same as 'q', otherwise [0..100]
+  bool store_partition = false;  // Only for AV1.
+  float q = 0;                   // in [0..100]
+  float alpha_q = -1.f;          // < 0: same as 'q', otherwise [0..100]
   bool use_mt = true;
-  uint32_t stack_size = 50 * 4096u;   // must be a multiple of system's pagesize
+  uint32_t stack_size = 50 * 4096u;  // must be a multiple of system's pagesize
   bool disable_filters = false;
   bool disable_transforms = false;  // disable transforms other than dct
   bool disable_preds = false;       // disable predictors other than DC
@@ -158,7 +158,8 @@ void PrintHelpAndExit(int return_code) {
           SPrintf("number of segments to use (%u)", kDefaultConfig.segments));
   opt.Add("-segment_mode [mode]", "one of auto, explicit, implicit");
   opt.Add("-pass <int>", SPrintf("number of passes (%u)", kDefaultConfig.pass));
-  opt.Add("-nofilter",
+  opt.Add(
+      "-nofilter",
       "disable all filters during decoding (or all except deblocking for av1)");
   opt.Add("-notransforms", "disable transforms other than DCT");
   opt.Add("-nopreds", "disable predictors other than DC (wp2 only)");
@@ -246,7 +247,7 @@ class Task : public Worker {
     psnr_ = values[4];
     if (params_.metric != PSNR) {
       CHECK_STATUS(decoded.GetDistortionBlackOrWhiteBackground(
-                   *ref_, params_.metric, values),
+                       *ref_, params_.metric, values),
                    "GetDistortionBlackOrWhiteBackground() failed.");
       disto_ = values[4];
     }
@@ -513,10 +514,10 @@ WP2Status Task::EncodeJPEG(const std::string& out_file,
   param.adaptive_quantization = (params_.config.effort >= 2);
   param.Huffman_compress = (params_.config.effort >= 1);
   param.yuv_mode =
-      (params_.config.uv_mode == EncoderConfig::UVMode444) ? SJPEG_YUV_444 :
-      (params_.config.uv_mode == EncoderConfig::UVMode420) ? SJPEG_YUV_420 :
-      params_.use_sharp_yuv                                ? SJPEG_YUV_SHARP :
-                                                             SJPEG_YUV_AUTO;
+      (params_.config.uv_mode == EncoderConfig::UVMode444)   ? SJPEG_YUV_444
+      : (params_.config.uv_mode == EncoderConfig::UVMode420) ? SJPEG_YUV_420
+      : params_.use_sharp_yuv                                ? SJPEG_YUV_SHARP
+                                                             : SJPEG_YUV_AUTO;
 
   const uint32_t w = ref_->width();
   const uint32_t h = ref_->height();
@@ -746,7 +747,7 @@ class GnuplotOutputWriter : public OutputWriter {
                           column + skip, label);
         for (const auto& log : extra_log_) {
           curves += SPrintf(", '%s' u %d:%d t '%s / %s'", log.name, column,
-                          column + skip, log.label, kTypeNames[type]);
+                            column + skip, log.label, kTypeNames[type]);
         }
         column += 6;
       }
@@ -830,7 +831,7 @@ class LumascopeOutputWriter : public OutputWriter {
 
   void StartStep(uint32_t step, const Task* const task) override {
     if (step == 0) {
-      report_ += "null,\n";   // in version 2, it's the default label
+      report_ += "null,\n";  // in version 2, it's the default label
     } else {
       report_ += "],\n";
     }
@@ -847,8 +848,8 @@ class LumascopeOutputWriter : public OutputWriter {
       report_ +=
           SPrintf(" %s: %2.2lf ;", kMetricNames[params_.metric], task->disto_);
     }
-    report_ += SPrintf(" enc: %.2f ; dec: %.2f\"",
-                       task->enc_time_, task->dec_time_);
+    report_ +=
+        SPrintf(" enc: %.2f ; dec: %.2f\"", task->enc_time_, task->dec_time_);
   }
 
   void End() override { report_ += "]\n]\n}]}\n"; }
@@ -1137,16 +1138,16 @@ int RdCurveMain(int argc, char* argv[], std::string* output_str) {
     }
     if (do_webp) {
       task->Init(params, ref, prefix, WEBP_STATS);
-      CHECK_TRUE(itf.Reset(task, params.use_mt,
-                           std::max(params.stack_size, 131072u)),
-                 "Bad WebP thread initialization!.");
+      CHECK_TRUE(
+          itf.Reset(task, params.use_mt, std::max(params.stack_size, 131072u)),
+          "Bad WebP thread initialization!.");
       ++task;
     }
     if (do_av1) {
       task->Init(params, ref, prefix, AV1_STATS);
-      CHECK_TRUE(itf.Reset(task, params.use_mt,
-                           std::max(params.stack_size, 524288u)),
-                 "Bad AV1 thread initialization!.");
+      CHECK_TRUE(
+          itf.Reset(task, params.use_mt, std::max(params.stack_size, 524288u)),
+          "Bad AV1 thread initialization!.");
       if (copy_av1_partition) {
         task->params_.store_partition = true;
       }

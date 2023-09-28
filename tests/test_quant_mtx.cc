@@ -46,11 +46,13 @@ TEST_F(QuantMtxTest, DCError) {
       for (int32_t dc : {1000, 0, -1000}) {
         const int32_t dc_error = mtx.DCError(dc, trf);
         EXPECT_LT(std::abs(dc_error), quant * scale);
-        if (dc == 0) { EXPECT_EQ(dc_error, 0); }
+        if (dc == 0) {
+          EXPECT_EQ(dc_error, 0);
+        }
       }
     }
   }
-  mtx.Print();   // just for coverage!
+  mtx.Print();  // just for coverage!
 }
 
 TEST_F(QuantMtxTest, DCErrorRoundTrip) {
@@ -97,7 +99,7 @@ class QuantMtxTestCpuInfo : public testing::TestWithParam<WP2CPUInfo> {
 };
 
 TEST_P(QuantMtxTestCpuInfo, VerifyDcScaling) {
-  constexpr WP2TransformType kTrfs[] = { kDct, kAdst };
+  constexpr WP2TransformType kTrfs[] = {kDct, kAdst};
   for (const BlockSize block_size : kAllBlockSizes) {
     for (bool reduced : {false, false}) {
       const uint32_t W = BlockWidthPix(block_size);
@@ -114,8 +116,8 @@ TEST_P(QuantMtxTestCpuInfo, VerifyDcScaling) {
             const float observed_scale = 1.f * out[0] / dc;
             EXPECT_NEAR(expected_scale / observed_scale, ratio0, 0.6)
                 << kDimNames[block_size] << "  DC=" << dc
-                << " transf=" << WP2TransformNames[trf_x]
-                << " x " << WP2TransformNames[trf_y];
+                << " transf=" << WP2TransformNames[trf_x] << " x "
+                << WP2TransformNames[trf_y];
           }
         }
       }
@@ -136,14 +138,14 @@ TEST_P(QuantMtxTestCpuInfo, DcQuantizedDynamicRange) {
     std::fill(residuals, residuals + kMaxCoeffs, kMaxResidual);
     const uint32_t W = BlockWidthPix(block_size);
     const uint32_t H = BlockHeightPix(block_size);
-    constexpr WP2TransformType kTrfs[] = { kDct, kAdst };
+    constexpr WP2TransformType kTrfs[] = {kDct, kAdst};
     for (auto& trf_x : kTrfs) {
       for (auto& trf_y : kTrfs) {
         WP2Transform2D(residuals, trf_x, trf_y, W, H, out, /*reduced=*/false);
         SCOPED_TRACE(SPrintf("block size: %s  DC: %d  ratio=%.1f",
                              kDimNames[block_size], out[0], sqrt(W * H)));
-        for (uint16_t quant : {0u, 29u, 36u, 123u, 177u,
-                               203u, (uint32_t)kQFactorMax}) {
+        for (uint16_t quant :
+             {0u, 29u, 36u, 123u, 177u, 203u, (uint32_t)kQFactorMax}) {
           SCOPED_TRACE(SPrintf("quant: %d", quant));
           const uint16_t quants[kNumQuantZones] = {quant, quant, quant, quant,
                                                    quant};
@@ -152,8 +154,8 @@ TEST_P(QuantMtxTestCpuInfo, DcQuantizedDynamicRange) {
           int16_t dequantized[kMaxCoeffs];
           const TrfSize tdim = GetTransform(block_size);
           uint32_t num_coeffs;
-          mtx.Quantize(out, tdim, /*first_is_dc=*/true, coeffs,
-                       &num_coeffs, dequantized);
+          mtx.Quantize(out, tdim, /*first_is_dc=*/true, coeffs, &num_coeffs,
+                       dequantized);
           EXPECT_LE(num_coeffs, kNumCoeffs[tdim]);
 
           // Check DC is equal or near equal (because of rounding errors)
@@ -181,7 +183,7 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
   int16_t dq[2 * kMaxCoeffs];
   const uint32_t bias = (1 << WP2QBits) / 2;
   for (uint32_t i = 0; i < 2 * kMaxCoeffs; ++i) {
-    const uint32_t Q = (i * 17 + 4) % 1024;   // 1024=max quant-step value
+    const uint32_t Q = (i * 17 + 4) % 1024;  // 1024=max quant-step value
     iq[i] = (1u << WP2QBits) / (Q + 1);
     dq[i] = Q;
   }
@@ -199,11 +201,11 @@ TEST_P(QuantMtxTestCpuInfo, TestQuantSpeed) {
       uint32_t len = bsize % num;
       for (uint32_t i = 0; i < len; ++i) out0[i] = buf[(num % kBufferSize) + i];
       for (uint32_t i = len; i < bsize; ++i) out0[i] = 0;
-      for (uint32_t k = 0; k < kLoop; ++k) {   // timing loop
+      for (uint32_t k = 0; k < kLoop; ++k) {  // timing loop
         WP2Quantize(&iq[num % kMaxCoeffs], bias, out0, out1, TrfWidth[tdim],
                     TrfHeight[tdim]);
-        WP2Dequantize(out1, &dq[num % kMaxCoeffs], out2,
-                      TrfWidth[tdim], TrfHeight[tdim], len);
+        WP2Dequantize(out1, &dq[num % kMaxCoeffs], out2, TrfWidth[tdim],
+                      TrfHeight[tdim], len);
       }
       for (uint32_t i = len; i < bsize; ++i) {
         EXPECT_EQ(out0[i], 0);

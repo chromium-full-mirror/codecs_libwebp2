@@ -86,7 +86,7 @@ struct Ctx {
   }
 
  private:
-  static constexpr uint32_t kCtxBits = 8;   // number of context bits
+  static constexpr uint32_t kCtxBits = 8;  // number of context bits
   static constexpr uint32_t kCtxSize = 1u << kCtxBits;
   // we use two sets of contexts for hi and lo nibbles
   ANSAdaptiveSymbol ctx1[kCtxSize], ctx2[kCtxSize];
@@ -156,8 +156,8 @@ static bool Decompress0(ANSDec* const dec, std::string* const out) {
     Vector_u32 counts;
     if (!counts.resize(256)) return false;
     ReadVector(dec, kMaxFreq, counts);
-    if (ANSCountsToSpreadTable(
-        counts.data(), 256, ANS_TAB_SIZE, codes) != WP2_STATUS_OK) {
+    if (ANSCountsToSpreadTable(counts.data(), 256, ANS_TAB_SIZE, codes) !=
+        WP2_STATUS_OK) {
       return false;
     }
   }
@@ -203,7 +203,7 @@ int main(int argc, const char* argv[]) {
 #endif
   bool decomp = false;
   bool check = false;
-  WP2::CompressionMethod method = WP2::ORDER_N;   // default:
+  WP2::CompressionMethod method = WP2::ORDER_N;  // default:
   const char *in_file = NULL, *out_file = NULL;
   for (int c = 1; c < argc; ++c) {
     if (!strcmp(argv[c], "-d")) {
@@ -215,8 +215,7 @@ int main(int argc, const char* argv[]) {
     } else if (!strcmp(argv[c], "-o") && c + 1 < argc) {
       out_file = argv[++c];
     } else if (!strcmp(argv[c], "-h")) {
-      printf("Usage %s in_file [-d] [-check] [-o0] [-o out_file]\n",
-             argv[0]);
+      printf("Usage %s in_file [-d] [-check] [-o0] [-o out_file]\n", argv[0]);
       return 0;
     } else {
       in_file = argv[c];
@@ -260,8 +259,8 @@ int main(int argc, const char* argv[]) {
       return 3;
     }
   }
-  fprintf(stderr, "in: %d out:%d    (%.2f%%) %s\n",
-    (int)in.size(), (int)out.size(), 100.f * out.size() / in.size(),
-    in.size() < out.size() ? "***" : "");
+  fprintf(stderr, "in: %d out:%d    (%.2f%%) %s\n", (int)in.size(),
+          (int)out.size(), 100.f * out.size() / in.size(),
+          in.size() < out.size() ? "***" : "");
   return 0;
 }

@@ -71,12 +71,12 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "Error displaying file %s\n", file);
       goto Error;
     }
-    data.Clear();   // free some memory
+    data.Clear();  // free some memory
     ProcessEvents();
   }
   ok = 1;
 
- Error:
+Error:
   SDL_Quit();
   return ok ? 0 : 1;
 }

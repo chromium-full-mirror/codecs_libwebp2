@@ -67,7 +67,7 @@ uint32_t ExUtilGetFloats(const char* v, float values[], uint32_t num_values_max,
 #if !defined(WP2_DLL)
 #if !defined(WP2_CPUINFO_IS_DEFINED)
 #include "src/dsp/dsp.h"  // for WP2GetCPUInfo definition
-#endif  // WP2_CPUINFO_IS_DEFINED
+#endif                    // WP2_CPUINFO_IS_DEFINED
 static inline void ExUtilDisableSIMD() { WP2GetCPUInfo = nullptr; }
 #else
 static inline void ExUtilDisableSIMD() {}
@@ -87,15 +87,15 @@ static inline void ExUtilDisableSIMD() {}
 
 // TODO(skal): doesn't need to be exposed in .h. Move to custom_memory.cc.
 extern struct MemoryTrace : public WP2MemoryHook {
-  ~MemoryTrace() override;   // will print information to stderr
+  ~MemoryTrace() override;  // will print information to stderr
 
   // diverted calls to record/control traffic:
   bool Register(void* ptr, size_t size) override;
   void Unregister(void* ptr) override;
 
-  bool print_info = false;      // print summary at destruction (if not implied)
-  bool show_traffic = false;    // prints all the malloc/free calls
-  int countdown_to_fail = 0;    // fails after n mallocs calls. 0 = off.
+  bool print_info = false;    // print summary at destruction (if not implied)
+  bool show_traffic = false;  // prints all the malloc/free calls
+  int countdown_to_fail = 0;  // fails after n mallocs calls. 0 = off.
   uint32_t top_stacktrace_num = 0;  // number of top stacks
   bool top_alloc_size = false;  // if true, gather top allocation stacktraces
   size_t memory_limit = 0;      // limit to total memory allocated. 0 = off.
@@ -166,24 +166,21 @@ static inline void PrintBitTraceCluster(const std::vector<TraceType>& values,
          return sort_values ? (a.second.bits > b.second.bits)
                             : (a.first > b.first);
        });
-  const char * const byte_str = use_bytes ? "bytes" : "bits";
+  const char* const byte_str = use_bytes ? "bytes" : "bits";
   const float byte_factor = use_bytes ? 8.f : 1.f;
   for (const auto& v : cluster_totals) {
     // Print cluster_type  _alignment_: cluster_size bit/bytes.
-    const int len = fprintf(stderr, "%*s%s%*s %5.2f %% : %9.1f %s ",
-                            2 * level, "",
-                            v.first.c_str(),
-                            std::max(30 - (int)v.first.size(), 0), "",
-                            100. * v.second.bits / data_size,
-                            v.second.bits / byte_factor,
-                            byte_str);
+    const int len =
+        fprintf(stderr, "%*s%s%*s %5.2f %% : %9.1f %s ", 2 * level, "",
+                v.first.c_str(), std::max(30 - (int)v.first.size(), 0), "",
+                100. * v.second.bits / data_size, v.second.bits / byte_factor,
+                byte_str);
     // Print _alignment_(% total).
-    fprintf(stderr, "%*savg: %6.2f %s/call (%6d calls)",
-            std::max(60 - len, 0), "",
+    fprintf(stderr, "%*savg: %6.2f %s/call (%6d calls)", std::max(60 - len, 0),
+            "",
             v.second.bits / byte_factor /
                 (v.second.num_occurrences == 0 ? 1 : v.second.num_occurrences),
-            byte_str,
-            v.second.num_occurrences);
+            byte_str, v.second.num_occurrences);
     // Display the histogram
     if (show_histograms && !v.second.histo.empty()) {
       // Build the histogram.
@@ -194,11 +191,8 @@ static inline void PrintBitTraceCluster(const std::vector<TraceType>& values,
           WP2::ANSCountsCost(counts.data(), counts.size()) / byte_factor;
       constexpr const char* types[] = {"Bit",    "ABit",    "RValue",
                                        "UValue", "ASymbol", "Symbol"};
-      fprintf(stderr, "%*s %s, entr: %.1f %s [",
-              5, "",
-              types[(int)v.second.type],
-              entropy,
-              byte_str);
+      fprintf(stderr, "%*s %s, entr: %.1f %s [", 5, "",
+              types[(int)v.second.type], entropy, byte_str);
       for (uint32_t i = 0; i < counts.size(); ++i) {
         if (counts[i] == 0) {
           // Count how many zeros we have.
@@ -279,8 +273,8 @@ WP2Status CollectBitTraces(const uint8_t* const data, size_t data_size,
 //------------------------------------------------------------------------------
 
 // Print to an std::string like sprintf() would
-[[gnu::format (printf, 1, 0)]]
-static inline std::string SPrintf(const char* format, ...) {
+[[gnu::format(printf, 1, 0)]] static inline std::string SPrintf(
+    const char* format, ...) {
   va_list args;
   va_start(args, format);
   std::string result;
@@ -323,7 +317,7 @@ std::string PrintSummary(const uint8_t input_data_bytes[],
 //------------------------------------------------------------------------------
 // Tools for working with directories.
 
-typedef std::vector<std::string> FileList;   // handy shortcut
+typedef std::vector<std::string> FileList;  // handy shortcut
 
 // Join 'prefix' and 'suffix' with the OS' path separator, if not already there.
 std::string JoinPath(const std::string& prefix, const std::string& suffix);
@@ -341,8 +335,8 @@ std::string GetFileExtension(const std::string& path);
 bool IsDirectory(const std::string& path);
 
 // Append the paths of all files in 'dir_path' to 'files'.
-bool GetFilesIn(const std::string& dir_path,
-                FileList* const files, bool recursive);
+bool GetFilesIn(const std::string& dir_path, FileList* const files,
+                bool recursive);
 
 // Combine input file name and output directory path to form an output file path
 // with the given 'extension'.

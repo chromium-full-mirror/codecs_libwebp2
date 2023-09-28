@@ -209,7 +209,7 @@ TYPED_TEST(CodedBlockTest, GetContext_FirstBlock) {
       missing, missing, missing, missing,   // Top.
       missing,                              // Top right.
       missing, missing, missing, missing);  // Right.
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(cb.GetContext(kYChannel, kContextSmall),
+  EXPECT_THAT_FIRST_ELEMENTS_ARE(cb.GetContext(kYChannel, kContextSmall),  //
                                  0, 0, 0, 0,   // Left.
                                  0,            // Top left.
                                  0, 0, 0, 0,   // Top.

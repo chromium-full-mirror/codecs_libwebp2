@@ -25,7 +25,7 @@ const int kMagic = 38, kMagic2 = 113;
 
 class Foo {
  public:
-  Foo(int x = kMagic) : x_(x) {}       // NOLINT (explicitly no 'explicit')
+  Foo(int x = kMagic) : x_(x) {}  // NOLINT (explicitly no 'explicit')
   ~Foo() { x_ = -1; }
   operator int() const { return x_; }  // NOLINT (explicitly no 'explicit')
 
@@ -53,7 +53,8 @@ TEST(VectorTest, NoCtor) {
 #endif
 }
 
-template<typename T> void DoTestCtor(const T& v0) {
+template <typename T>
+void DoTestCtor(const T& v0) {
   Vector<T> V;
   EXPECT_TRUE(V.resize(100));
   for (const T& v : V) EXPECT_EQ(v, v0);
@@ -138,7 +139,8 @@ TEST(VectorTest, PushBack) {
 
 // Copy constructor and assignment are deleted, but move constructor and
 // assignment are OK.
-template<typename T> void DoTestMove(const T& vector_type) {
+template <typename T>
+void DoTestMove(const T& vector_type) {
   (void)vector_type;
 
   T v1;
@@ -173,7 +175,8 @@ TEST(VectorTest, Move) {
   DoTestMove(Vector<float>());
 }
 
-template<typename T> void DoTestErase(const T& vector_type) {
+template <typename T>
+void DoTestErase(const T& vector_type) {
   (void)vector_type;
 
   T v;
@@ -204,7 +207,8 @@ TEST(VectorTest, Erase) {
   DoTestErase(Vector<Foo>());
 }
 
-template<typename T> void DoTestCopy(const T& vector_type) {
+template <typename T>
+void DoTestCopy(const T& vector_type) {
   (void)vector_type;
 
   T v, copy;

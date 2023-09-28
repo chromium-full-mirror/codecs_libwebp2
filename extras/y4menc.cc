@@ -59,8 +59,8 @@ WP2Status ToYCbCr(const YUVPlane& ccsp, const CSPMtx& ccsp_to_rgb,
       // Internal precision is 64 bits as input samples are 16b and matrix 32b.
       Multiply<int16_t, int32_t, int16_t, int64_t>(
           source.Y.At(x, y), source.U.At(x, y), source.V.At(x, y),
-          ccsp_to_ycbcr_matrix, ccsp_to_ycbcr_shift,
-          &ycbcr->Y.At(x, y), &ycbcr->U.At(x, y), &ycbcr->V.At(x, y));
+          ccsp_to_ycbcr_matrix, ccsp_to_ycbcr_shift, &ycbcr->Y.At(x, y),
+          &ycbcr->U.At(x, y), &ycbcr->V.At(x, y));
     }
   }
 
@@ -148,7 +148,7 @@ WP2Status WriteY4M(const YUVPlane& buffer, BitDepth bit_depth, FILE* const fout,
       }
       // write row-by-row, for speed
       WP2_CHECK_OK(fwrite(&row[0], row.size(), 1, fout) == 1,
-                          WP2_STATUS_BAD_WRITE);
+                   WP2_STATUS_BAD_WRITE);
     }
   }
 

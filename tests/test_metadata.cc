@@ -213,8 +213,8 @@ TEST(MetadataTest, GetNumFramesAndGetChunkForAnimation) {
   // Make sure each frame chunk can be retrieved.
   for (size_t i = 0; i < num_frames; ++i) {
     Counter counter;
-    ASSERT_WP2_OK(GetChunk(
-        data.mem_, data.size_, ChunkType::kFrame, &counter, /*frame_index=*/i));
+    ASSERT_WP2_OK(GetChunk(data.mem_, data.size_, ChunkType::kFrame, &counter,
+                           /*frame_index=*/i));
     EXPECT_GT(counter.size_, 0u);
   }
 

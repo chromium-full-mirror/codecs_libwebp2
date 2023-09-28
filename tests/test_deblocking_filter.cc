@@ -324,7 +324,7 @@ TEST_P(FilterTestCpuInfo, TestMeasureLength) {
 TEST_P(FilterTestCpuInfo, TestWouldDeblock) {
   UniformIntDistribution gen(86214);
   const uint32_t kNumTests = 1000;
-  int16_t A[kDblCacheStep], * const B = A + 8;
+  int16_t A[kDblCacheStep], *const B = A + 8;
   uint32_t crc = 1;
   for (uint32_t test = 0; test < kNumTests; ++test) {
     for (auto& a : A) a = gen.Get(-1024, 1024);
@@ -340,11 +340,11 @@ TEST_P(FilterTestCpuInfo, TestWouldDeblock) {
 TEST_P(FilterTestCpuInfo, TestDeblockLines) {
   UniformIntDistribution gen(86214);
   const uint32_t kNumTests = 120000;
-  int16_t A[kDblCacheStep], * const B = A + 8, C[kDblCacheStep];
+  int16_t A[kDblCacheStep], *const B = A + 8, C[kDblCacheStep];
   uint32_t crc = 1;
   for (int h = 1; h <= 8; ++h) {
     for (uint32_t bits : {8, 10}) {
-      const int32_t min = (bits == 8) ?   0 : -1024;
+      const int32_t min = (bits == 8) ? 0 : -1024;
       const int32_t max = (bits == 8) ? 255 : 1024;
       for (auto& c : C) c = gen.Get(min, max);
       for (uint32_t test = 0; test < kNumTests; ++test) {

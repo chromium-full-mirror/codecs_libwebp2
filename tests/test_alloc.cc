@@ -20,8 +20,8 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "src/utils/vector.h"
 #include "include/helpers.h"
+#include "src/utils/vector.h"
 
 namespace WP2 {
 namespace {

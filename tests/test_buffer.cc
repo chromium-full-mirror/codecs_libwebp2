@@ -155,8 +155,8 @@ TEST(BufferTest, Fill) {
 class BufferTest
     : public testing::TestWithParam<std::tuple<std::string, bool, bool>> {};
 
-WP2Status Decode(const uint8_t* data, size_t data_size,
-                 ArgbBuffer* output, bool use_decoder) {
+WP2Status Decode(const uint8_t* data, size_t data_size, ArgbBuffer* output,
+                 bool use_decoder) {
   if (use_decoder) {
     ArrayDecoder decoder(data, data_size, DecoderConfig::kDefault, output);
     const bool decoded_frame = decoder.ReadFrame();

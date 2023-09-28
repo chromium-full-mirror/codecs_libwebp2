@@ -141,9 +141,9 @@ struct DecodingSettings {
 //------------------------------------------------------------------------------
 
 // Get images to decode from input arguments.
-WP2Status GetFilesToDecode(const WP2::FileList& paths,
-                           bool recursive_input, bool verbose,
-                           bool quiet, WP2::FileList* const files_to_decode) {
+WP2Status GetFilesToDecode(const WP2::FileList& paths, bool recursive_input,
+                           bool verbose, bool quiet,
+                           WP2::FileList* const files_to_decode) {
   files_to_decode->clear();
   for (const std::string& path : paths) {
     if (WP2::IsDirectory(path)) {
@@ -170,8 +170,7 @@ WP2Status GetFilesToDecode(const WP2::FileList& paths,
           }
         }
       } else if (!quiet) {
-        fprintf(stderr,
-                "Ignoring directory %s because -r was not specified.\n",
+        fprintf(stderr, "Ignoring directory %s because -r was not specified.\n",
                 path.c_str());
       }
     } else {
@@ -201,8 +200,8 @@ std::string GetFrameFilename(size_t index, uint32_t duration_ms) {
 class ImageDecoder : public WP2::WorkerBase {
  public:
   ImageDecoder(const DecodingSettings& settings,
-               const WP2::FileList& image_pool,
-               size_t* const next_image_index, WP2::ThreadLock* const mutex,
+               const WP2::FileList& image_pool, size_t* const next_image_index,
+               WP2::ThreadLock* const mutex,
                WP2::MultiProgressPrinter* const progress_printer)
       : settings_(settings),
         image_pool_(image_pool),
@@ -237,10 +236,9 @@ class ImageDecoder : public WP2::WorkerBase {
       }
 
       const double start = GetStopwatchTime();
-      const WP2Status status =
-          WP2::SaveImage(buffer, final_out_path.c_str(),
-                         settings_.allow_overwrite, settings_.out_format,
-                         nullptr, transform_);
+      const WP2Status status = WP2::SaveImage(
+          buffer, final_out_path.c_str(), settings_.allow_overwrite,
+          settings_.out_format, nullptr, transform_);
       if (!settings_.quiet && status != WP2_STATUS_OK) {
         *standard_err +=
             SPrintf("Could not save to '%s'\n", final_out_path.c_str());
@@ -262,10 +260,10 @@ class ImageDecoder : public WP2::WorkerBase {
     return WP2_STATUS_OK;
   }
 
-  WP2Status DecodeAndSaveImage(
-      const std::string& in_path, std::string* const standard_out,
-      std::string* const standard_err,
-      WP2::ProgressHook* const progress_hook) {
+  WP2Status DecodeAndSaveImage(const std::string& in_path,
+                               std::string* const standard_out,
+                               std::string* const standard_err,
+                               WP2::ProgressHook* const progress_hook) {
     WP2::ArgbBuffer output_buffer(settings_.config.exact ? WP2_ARGB_32
                                                          : WP2_Argb_32);
 
@@ -405,7 +403,7 @@ class ImageDecoder : public WP2::WorkerBase {
   WP2::ThreadLock* const mutex_ = nullptr;  // Acquire/release if not null.
 
   WP2::MultiProgressPrinter* const progress_printer_;  // Thread-safe.
-  WP2::CSPTransform transform_;  // to capture csp
+  WP2::CSPTransform transform_;                        // to capture csp
 };
 
 //------------------------------------------------------------------------------
@@ -555,8 +553,9 @@ int main(int argc, char* argv[]) {
     CHECK_TRUE(settings.output_to_directory,
                "Error! -frames requires a single output directory.");
   } else {
-    CHECK_TRUE(in_files.size() == 1 || settings.output_to_directory ||
-               settings.out_path.empty(),
+    CHECK_TRUE(
+        in_files.size() == 1 || settings.output_to_directory ||
+            settings.out_path.empty(),
         "Error! Several input images require the output to be an existing "
         "directory.");
   }

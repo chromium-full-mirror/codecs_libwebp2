@@ -20,8 +20,8 @@
 
 #include "examples/example_utils.h"
 #include "include/helpers.h"
-#include "src/dsp/math.h"
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/utils/plane.h"
 #include "src/utils/random.h"
 
@@ -48,8 +48,8 @@ TEST_P(DspTest, SSETest16sFullBlock) {
       int16_t tmp1[stride1 * max_h], tmp2[stride2 * max_h];
       rnd.Fill(tmp1, w, h, stride1);
       rnd.Fill(tmp2, w, h, stride2);
-      sum = ((sum << 2) + (sum << 3))
-          ^ WP2SumSquaredErrorBlock(tmp1, stride1, tmp2, stride2, w, h);
+      sum = ((sum << 2) + (sum << 3)) ^
+            WP2SumSquaredErrorBlock(tmp1, stride1, tmp2, stride2, w, h);
     }
   }
   EXPECT_EQ(sum, 4978086325689542192llu);
@@ -68,8 +68,8 @@ TEST_P(DspTest, SSETest16sHalfBlock) {
       int16_t tmp1[stride1 * max_h], tmp2[stride2 * max_h];
       rnd.Fill(tmp1, w, h, stride1);
       rnd.Fill(tmp2, w, h, stride2);
-      sum = ((sum << 2) + (sum << 3))
-          ^ WP2SumSquaredErrorHalfBlock(tmp1, stride1, tmp2, stride2, w, h);
+      sum = ((sum << 2) + (sum << 3)) ^
+            WP2SumSquaredErrorHalfBlock(tmp1, stride1, tmp2, stride2, w, h);
     }
   }
   EXPECT_EQ(sum, 7047682130755693817u);
@@ -85,8 +85,7 @@ TEST_P(DspTest, SSETest8u) {
     uint8_t tmp1[max_w], tmp2[max_w];
     rnd.Fill(tmp1, w);
     rnd.Fill(tmp2, w);
-    sum = ((sum >> 3) + (sum << 2))
-        ^ WP2SumSquaredError8u(tmp1, tmp2, w);
+    sum = ((sum >> 3) + (sum << 2)) ^ WP2SumSquaredError8u(tmp1, tmp2, w);
   }
   EXPECT_EQ(sum, 3894653819151780583llu);
 }
@@ -95,7 +94,7 @@ TEST_P(DspTest, SSETest4x8u) {
   WP2PSNRInit();
   testutil::PrecalculatedRandom<65536u, uint8_t> rnd(0, 256);
   constexpr uint32_t max_w = 128;
-  uint64_t sums[4] = { 0 };
+  uint64_t sums[4] = {0};
   for (uint32_t N = 0; N < 500000; ++N) {
     const uint32_t w = 1 + rnd.GetUnsigned(max_w);
     uint8_t tmp1[4 * max_w], tmp2[4 * max_w];
@@ -111,7 +110,7 @@ TEST_P(DspTest, SSETest3x8u) {
   WP2PSNRInit();
   testutil::PrecalculatedRandom<65536u, uint8_t> rnd(0, 256);
   constexpr uint32_t max_w = 1024;
-  uint64_t sums[3] = { 0 };
+  uint64_t sums[3] = {0};
   for (uint32_t N = 0; N < 50000; ++N) {
     const uint32_t w = 1 + rnd.GetUnsigned(max_w);
     uint8_t tmp1[3 * max_w], tmp2[3 * max_w];
@@ -133,8 +132,7 @@ TEST_P(DspTest, SSETest16s) {
     int16_t tmp1[max_w], tmp2[max_w];
     rnd.Fill(tmp1, w);
     rnd.Fill(tmp2, w);
-    sum = ((sum << 2) + (sum << 3))
-        ^ WP2SumSquaredError16s(tmp1, tmp2, w);
+    sum = ((sum << 2) + (sum << 3)) ^ WP2SumSquaredError16s(tmp1, tmp2, w);
   }
   EXPECT_EQ(sum, 16061882581321156135llu);
 }
@@ -215,7 +213,7 @@ TEST_P(DspTest, Alpha) {
     for (auto& v : tmp8) v = value8 ^ 255;
     EXPECT_TRUE(WP2HasOtherValue8b32b(tmp8.data(), kMaxLen / 4, value8));
 
-    for (uint32_t c : { 1, 2, 3 }) {
+    for (uint32_t c : {1, 2, 3}) {
       for (uint32_t i = 0; i < kMaxLen / 4; ++i) tmp8[4 * i + c] = value8;
       EXPECT_TRUE(WP2HasOtherValue8b32b(tmp8.data(), kMaxLen / 4, value8));
     }
@@ -282,7 +280,7 @@ void Fill8DirPatterns(int16_t patterns[kDrctFltNumDirs][s][s], int v) {
 TEST_P(DspTest, CdefDirection4x4) {
   DrctFilterInit();
   const uint32_t kNumPrecisionBits = 10;
-  int16_t patterns[kDrctFltNumDirs + 1][4][4] = {{{0}}};    // direction, y, x
+  int16_t patterns[kDrctFltNumDirs + 1][4][4] = {{{0}}};  // direction, y, x
   Fill8DirPatterns<4>(patterns, (1 << (kNumPrecisionBits - 1)) - 1);
 
   for (uint32_t d = 0; d <= kDrctFltNumDirs; ++d) {
@@ -301,7 +299,7 @@ TEST_P(DspTest, CdefDirection4x4) {
 TEST_P(DspTest, CdefDirection8x8) {
   DrctFilterInit();
   const uint32_t kNumPrecisionBits = 10;
-  int16_t patterns[kDrctFltNumDirs + 1][8][8] = {{{0}}};    // direction, y, x
+  int16_t patterns[kDrctFltNumDirs + 1][8][8] = {{{0}}};  // direction, y, x
   Fill8DirPatterns<8>(patterns, (1 << (kNumPrecisionBits - 1)) - 1);
 
   for (uint32_t d = 0; d <= kDrctFltNumDirs; ++d) {

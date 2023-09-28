@@ -32,7 +32,7 @@ static struct FailMemoryTrace : public WP2MemoryHook {
     return (countdown == 0 || --countdown > 0);
   }
   int countdown = 0;
-} kFailMemory;   // singleton, highly non-reentrant!
+} kFailMemory;  // singleton, highly non-reentrant!
 
 void SetMallocFailAt(int num_malloc_before_failure) {
   kFailMemory.countdown = num_malloc_before_failure;

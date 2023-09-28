@@ -31,6 +31,7 @@
 #endif
 #include <png.h>
 #include <setjmp.h>  // note: this must be included *after* png.h
+
 #include <cstdlib>
 #include <cstring>
 
@@ -39,8 +40,7 @@
 #include "src/wp2/base.h"
 
 #define LOCAL_PNG_VERSION ((PNG_LIBPNG_VER_MAJOR << 8) | PNG_LIBPNG_VER_MINOR)
-#define LOCAL_PNG_PREREQ(maj, min) \
-   (LOCAL_PNG_VERSION >= (((maj) << 8) | (min)))
+#define LOCAL_PNG_PREREQ(maj, min) (LOCAL_PNG_VERSION >= (((maj) << 8) | (min)))
 #if LOCAL_PNG_PREREQ(1, 4)
 typedef png_alloc_size_t LocalPngAllocSize;
 #else
@@ -65,8 +65,7 @@ void PNGAPI ErrorFunction(png_structp png, png_const_charp error) {
   ErrorFunctionNoLog(png, error);
 }
 
-png_voidp PNGAPI MallocFunction(png_structp png_ptr,
-                                LocalPngAllocSize size) {
+png_voidp PNGAPI MallocFunction(png_structp png_ptr, LocalPngAllocSize size) {
   const png_voidp mem = (png_voidp)WP2Malloc(1, (size_t)size);
   if (mem == nullptr) {
     volatile bool* const had_malloc_error =
@@ -300,10 +299,9 @@ class ImageReaderPNG : public ImageReader::Impl {
 
     volatile png_error_ptr error_function =
         (log_level_ >= LogLevel::DEFAULT) ? ErrorFunction : ErrorFunctionNoLog;
-    volatile png_structp const png =
-        png_create_read_struct_2(PNG_LIBPNG_VER_STRING, NULL, error_function,
-                                 NULL, (png_voidp)&had_malloc_error_,
-                                 MallocFunction, FreeFunction);
+    volatile png_structp const png = png_create_read_struct_2(
+        PNG_LIBPNG_VER_STRING, NULL, error_function, NULL,
+        (png_voidp)&had_malloc_error_, MallocFunction, FreeFunction);
     WP2_CHECK_ALLOC_OK(png != NULL);
 
     if (setjmp(png_jmpbuf(png))) {
@@ -316,8 +314,8 @@ class ImageReaderPNG : public ImageReader::Impl {
                                : WP2_STATUS_BITSTREAM_ERROR;
     }
 
-#if LOCAL_PNG_PREREQ(1,5) || \
-    (LOCAL_PNG_PREREQ(1,4) && PNG_LIBPNG_VER_RELEASE >= 1)
+#if LOCAL_PNG_PREREQ(1, 5) || \
+    (LOCAL_PNG_PREREQ(1, 4) && PNG_LIBPNG_VER_RELEASE >= 1)
     // If it looks like the bitstream is going to need more memory than libpng's
     // internal limit (default: 8M), try to (reasonably) raise it.
     // The WP2_MAX_ALLOCABLE_MEMORY limit is probably too high, use lower limit.
@@ -457,8 +455,9 @@ void ImageReader::SetImplPNG(ArgbBuffer* const buffer, LogLevel log_level,
   (void)buffer;
   (void)max_num_pixels;
   if (log_level >= WP2::LogLevel::DEFAULT) {
-    fprintf(stderr, "PNG support not compiled. Please install the libpng "
-                    "development package before building.\n");
+    fprintf(stderr,
+            "PNG support not compiled. Please install the libpng "
+            "development package before building.\n");
   }
   status_ = WP2_STATUS_UNSUPPORTED_FEATURE;
 }

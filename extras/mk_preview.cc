@@ -78,8 +78,9 @@ void Help() {
   ProgramOptions opt;
   opt.Add("Usage:");
   opt.Add("   preview -convert [-dry][-noforce][-b64] text_files... ");
-  opt.Add("   preview image [bits|text] [options... ]"
-          "[-o output] [-d output]");
+  opt.Add(
+      "   preview image [bits|text] [options... ]"
+      "[-o output] [-d output]");
   opt.Add("");
   opt.Add("PreviewConfiguration Options:");
   opt.Add(" -m [edge,rand,diff,voronoi]", "analysis method");
@@ -92,11 +93,12 @@ void Help() {
 
   opt.Add("Optimization Options:");
   opt.Add(" -s <int>", "target size in bytes");
-  opt.Add(" -i <int>",  "number of optim iterations");
-  opt.Add(" -l <int>",  "size vs quality trade-off. "
+  opt.Add(" -i <int>", "number of optim iterations");
+  opt.Add(" -l <int>",
+          "size vs quality trade-off. "
           "0=favor quality, 100=favor size");
   opt.Add(" -p none", "reset all proba to 0");
-  opt.Add(" -p <move> <int>",  "change the proba for the given <move>:");
+  opt.Add(" -p <move> <int>", "change the proba for the given <move>:");
   opt.Add("    . vmove: vertex move");
   opt.Add("    . vadd:  vertex insertion");
   opt.Add("    . vsub:  vertex removal");
@@ -215,7 +217,7 @@ int main(int argc, const char* argv[]) {
   const char* out_file = nullptr;
   const char* preview_file = nullptr;
   bool overwrite = true;
-  uint32_t out_w = 256;   // width of decoded preview
+  uint32_t out_w = 256;  // width of decoded preview
   enum { TEXT, INFO, SHORT, BASE64 } out_format = SHORT;
   for (int c = 1; c < argc; ++c) {
     bool parse_error = false;
@@ -256,14 +258,14 @@ int main(int argc, const char* argv[]) {
         c += 1;
       } else if (c + 2 < argc) {
         auto* const dst =
-          !strcmp(argv[c + 1], "vmove") ? &config.proba_vertex_move :
-          !strcmp(argv[c + 1], "vadd") ? &config.proba_vertex_add :
-          !strcmp(argv[c + 1], "vsub") ? &config.proba_vertex_sub :
-          !strcmp(argv[c + 1], "cmove") ? &config.proba_color_move :
-          !strcmp(argv[c + 1], "cadd") ? &config.proba_color_add :
-          !strcmp(argv[c + 1], "csub") ? &config.proba_color_sub :
-          !strcmp(argv[c + 1], "cidx") ? &config.proba_color_index_move :
-          nullptr;
+            !strcmp(argv[c + 1], "vmove")   ? &config.proba_vertex_move
+            : !strcmp(argv[c + 1], "vadd")  ? &config.proba_vertex_add
+            : !strcmp(argv[c + 1], "vsub")  ? &config.proba_vertex_sub
+            : !strcmp(argv[c + 1], "cmove") ? &config.proba_color_move
+            : !strcmp(argv[c + 1], "cadd")  ? &config.proba_color_add
+            : !strcmp(argv[c + 1], "csub")  ? &config.proba_color_sub
+            : !strcmp(argv[c + 1], "cidx")  ? &config.proba_color_index_move
+                                            : nullptr;
         CHECK_TRUE(dst != nullptr, "Invalid -p move '%s'\n", argv[c + 1]);
         *dst = ExUtilGetUInt(argv[c + 2], &parse_error);
         c += 2;
@@ -314,8 +316,8 @@ int main(int argc, const char* argv[]) {
   CHECK_TRUE(config.IsValid(), "PreviewConfig is invalid.\n");
 
   WP2::ArgbBuffer original;
-  CHECK_STATUS(WP2::ReadImage(img_file, &original),
-               "Can't read image [%s]\n", img_file);
+  CHECK_STATUS(WP2::ReadImage(img_file, &original), "Can't read image [%s]\n",
+               img_file);
 
   WP2::PreviewData data;
   if (bin_file == nullptr) {
@@ -329,13 +331,13 @@ int main(int argc, const char* argv[]) {
     // Read the starting state
     const bool as_txt = (WP2::GetFileExtension(bin_file) == "txt");
     std::string bin;
-    CHECK_STATUS(WP2::IoUtilReadFile(bin_file, &bin),
-                 "bad bin file [%s]\n", bin_file);
+    CHECK_STATUS(WP2::IoUtilReadFile(bin_file, &bin), "bad bin file [%s]\n",
+                 bin_file);
     if (as_txt) {
       CHECK_STATUS(PreviewFromText(bin, &data), "Error in text-to-preview\n");
     } else {
       CHECK_STATUS(data.Decode((const uint8_t*)bin.data(), bin.size()),
-                  "Can't decode binary data [%s]", bin_file);
+                   "Can't decode binary data [%s]", bin_file);
     }
     // optimize further
     CHECK_STATUS(
@@ -357,14 +359,12 @@ int main(int argc, const char* argv[]) {
     const bool as_txt = (WP2::GetFileExtension(out_file) == "txt");
     if (as_txt) {
       const std::string s = PreviewToText(data);
+      CHECK_STATUS(WP2::IoUtilWriteFile((const uint8_t*)s.data(), s.size(),
+                                        out_file, overwrite),
+                   "Couldn't write preview as text [%s]!\n", out_file);
+    } else {  // raw output
       CHECK_STATUS(
-          WP2::IoUtilWriteFile(
-              (const uint8_t*)s.data(), s.size(), out_file, overwrite),
-          "Couldn't write preview as text [%s]!\n", out_file);
-    } else {   // raw output
-      CHECK_STATUS(
-          WP2::IoUtilWriteFile(
-              preview_data, preview_size, out_file, overwrite),
+          WP2::IoUtilWriteFile(preview_data, preview_size, out_file, overwrite),
           "Couldn't write preview as binary [%s]!\n", out_file);
     }
     VERBOSE("Saved [%s] as %s\n", out_file, as_txt ? "text" : "binary");
@@ -379,17 +379,16 @@ int main(int argc, const char* argv[]) {
     CHECK_STATUS(WP2::DecodePreview(preview_data, preview_size, &thumb),
                  "Error in DecodePreview()\n");
     CHECK_STATUS(WP2::SaveImage(thumb, preview_file, overwrite),
-                 "Couldn't save decoded preview as [%s]!\n",
-                 preview_file);
+                 "Couldn't save decoded preview as [%s]!\n", preview_file);
     VERBOSE("Saved [%s]\n", preview_file);
   }
 
   // print final info
   std::string infos = "\n";
   if (out_format == INFO) {
-    infos = PrintPreview(data, /* reduced= */false);
+    infos = PrintPreview(data, /* reduced= */ false);
   } else if (out_format == SHORT) {
-    infos = PrintPreview(data, /* reduced= */true);
+    infos = PrintPreview(data, /* reduced= */ true);
   } else if (out_format == TEXT) {
     infos = PreviewToText(data);
   } else if (out_format == BASE64) {

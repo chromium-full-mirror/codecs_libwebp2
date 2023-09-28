@@ -30,19 +30,19 @@
 namespace {
 
 enum PNMFlags {
-  WIDTH_FLAG  = 1 << 0,
+  WIDTH_FLAG = 1 << 0,
   HEIGHT_FLAG = 1 << 1,
-  DEPTH_FLAG  = 1 << 2,
+  DEPTH_FLAG = 1 << 2,
   MAXVAL_FLAG = 1 << 3,
-  TUPLE_FLAG  = 1 << 4,
+  TUPLE_FLAG = 1 << 4,
   ALL_NEEDED_FLAGS = WIDTH_FLAG | HEIGHT_FLAG | DEPTH_FLAG | MAXVAL_FLAG
 };
 
 // See https://en.wikipedia.org/wiki/Netpbm_format
 enum class PNMType {
-  UNHANDLED     = 0,
-  GRAY_MAP      = 5,  // .pgm
-  PIX_MAP       = 6,  // .ppm
+  UNHANDLED = 0,
+  GRAY_MAP = 5,       // .pgm
+  PIX_MAP = 6,        // .ppm
   ARBITRARY_MAP = 7,  // .pam
 };
 
@@ -52,7 +52,7 @@ struct PNMInfo {
   uint32_t width = 0;
   uint32_t height = 0;
   int bytes_per_px = 0;
-  int depth = 0;         // 1, 2, 3, or 4
+  int depth = 0;  // 1, 2, 3, or 4
   int max_value = 0;
   PNMType type = PNMType::UNHANDLED;
   int seen_flags = 0;
@@ -248,29 +248,29 @@ class ImageReaderPNM : public ImageReader::Impl {
     Data rgb;  // Temp row.
     const uint32_t round = info.max_value >> 1;
     const WP2SampleFormat format =
-         (info.depth == 1 || info.depth == 3) ? WP2_RGB_24 : WP2_RGBA_32;
-    if (info.depth <= 2) {   // Convert grayscale(/A) -> RGB(A)
+        (info.depth == 1 || info.depth == 3) ? WP2_RGB_24 : WP2_RGBA_32;
+    if (info.depth <= 2) {  // Convert grayscale(/A) -> RGB(A)
       const uint32_t channels = (info.depth == 1) ? 1 : 2;
       WP2_CHECK_STATUS(
           rgb.Resize(info.width * (2 + info.depth), /*keep_bytes=*/false));
       for (uint32_t j = 0; j < info.height; ++j) {
         const uint8_t* const in = data_ + data_pos;
         for (uint32_t k = 0, i = 0; i < info.width * channels; ++i) {
-          uint32_t v = (sample_size == 2) ? 256u * in[2 * i + 0] + in[2 * i + 1]
-                     : in[i];
+          uint32_t v =
+              (sample_size == 2) ? 256u * in[2 * i + 0] + in[2 * i + 1] : in[i];
           if (info.max_value != 255) v = (v * 255u + round) / info.max_value;
           if ((i % channels) == 0) {
             rgb.bytes[k + 0] = rgb.bytes[k + 1] = rgb.bytes[k + 2] = v;
             k += 3;
           } else {
-            rgb.bytes[k] = v;   // alpha
+            rgb.bytes[k] = v;  // alpha
             k += 1;
           }
         }
         WP2_CHECK_STATUS(buffer_->ImportRow(format, j, rgb.bytes));
         data_pos += info.width * sample_size * channels;
       }
-    } else if (info.depth == 3 || info.depth == 4) {   // RGB or RGBA
+    } else if (info.depth == 3 || info.depth == 4) {  // RGB or RGBA
       if (sample_size == 2 || info.max_value != 255) {
         WP2_CHECK_STATUS(
             rgb.Resize(info.width * info.depth, /*keep_bytes=*/false));
@@ -280,9 +280,9 @@ class ImageReaderPNM : public ImageReader::Impl {
         data_pos += info.bytes_per_px * info.width;
         if (sample_size == 2 || info.max_value != 255) {
           for (uint32_t i = 0; i < info.width * info.depth; ++i) {
-            const uint32_t v =
-                 (sample_size == 2) ? 256u * in[2 * i + 0] + in[2 * i + 1] :
-                 in[i];
+            const uint32_t v = (sample_size == 2)
+                                   ? 256u * in[2 * i + 0] + in[2 * i + 1]
+                                   : in[i];
             rgb.bytes[i] = (v * 255u + round) / info.max_value;
           }
           in = rgb.bytes;

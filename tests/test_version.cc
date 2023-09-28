@@ -22,9 +22,7 @@
 namespace WP2 {
 namespace {
 
-TEST(VersionTest, Base) {
-  ASSERT_TRUE(WP2CheckVersion());
-}
+TEST(VersionTest, Base) { ASSERT_TRUE(WP2CheckVersion()); }
 
 TEST(VersionTest, Extras) {
   ASSERT_FALSE(

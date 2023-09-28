@@ -219,20 +219,16 @@ TEST_P(ReadCustomCspTest, Y4M) {
   MemoryWriter data;
   if (use_animation_encoder) {
     ASSERT_WP2_OK(
-        Encode(ccsp.GetWidth(), ccsp.GetHeight(),
-               ccsp.Y.Row(0), ccsp.Y.Step(),
-               ccsp.U.Row(0), ccsp.U.Step(),
-               ccsp.V.Row(0), ccsp.V.Step(),
+        Encode(ccsp.GetWidth(), ccsp.GetHeight(), ccsp.Y.Row(0), ccsp.Y.Step(),
+               ccsp.U.Row(0), ccsp.U.Step(), ccsp.V.Row(0), ccsp.V.Step(),
                ccsp.HasAlpha() ? ccsp.A.Row(0) : nullptr, ccsp.A.Step(),
                ccsp_to_rgb.mtx(), ccsp_to_rgb.shift, &data, config, metadata));
   } else {
     AnimationEncoder encoder;
     for (uint32_t duration_ms : {1, 2}) {
       ASSERT_WP2_OK(encoder.AddFrame(
-          ccsp.GetWidth(), ccsp.GetHeight(),
-          ccsp.Y.Row(0), ccsp.Y.Step(),
-          ccsp.U.Row(0), ccsp.U.Step(),
-          ccsp.V.Row(0), ccsp.V.Step(),
+          ccsp.GetWidth(), ccsp.GetHeight(), ccsp.Y.Row(0), ccsp.Y.Step(),
+          ccsp.U.Row(0), ccsp.U.Step(), ccsp.V.Row(0), ccsp.V.Step(),
           ccsp.HasAlpha() ? ccsp.A.Row(0) : nullptr, ccsp.A.Step(),
           ccsp_to_rgb.mtx(), ccsp_to_rgb.shift, duration_ms));
     }
@@ -262,27 +258,43 @@ static struct BufferParam {
   uint32_t steps[4];
   WP2Status expected_status;
 } const kBufferParams[] = {
-  { "0-sized buffers are nullptr.",
-    "source1_1x1.png", {0, 0, 0, 0}, WP2_STATUS_NULL_PARAMETER },
-  { "0-sized buffers are nullptr.",
-    "source1_1x1.png", {0, 2, 2, 2}, WP2_STATUS_NULL_PARAMETER },
-  { "0-sized buffers are nullptr.",
-    "source1_1x1.png", {2, 0, 2, 2}, WP2_STATUS_NULL_PARAMETER },
-  { "0-sized buffers are nullptr.",
-    "source1_1x1.png", {2, 2, 0, 2}, WP2_STATUS_NULL_PARAMETER },
-  { "OK strides.",
-    "source1_1x1.png", {1, 1, 1, 2}, WP2_STATUS_OK },
-  { "R-Stride is too small.",
-    "source1_32x32.png", {31, 32, 32, 0}, WP2_STATUS_BAD_DIMENSION },
-  { "G-Stride is too small.",
-    "source1_32x32.png", {32, 31, 32, 0}, WP2_STATUS_BAD_DIMENSION },
-  { "B-Stride is too small.",
-    "source1_32x32.png", {32, 32, 31, 0}, WP2_STATUS_BAD_DIMENSION },
-  { "Strides are fine I.",
-    "source1_32x32.png", {32, 32, 32, 0}, WP2_STATUS_OK },
-  { "Strides are fine II.",
-    "source1_32x32.png", {33, 35, 36, 0}, WP2_STATUS_OK }
-};
+    {"0-sized buffers are nullptr.",
+     "source1_1x1.png",
+     {0, 0, 0, 0},
+     WP2_STATUS_NULL_PARAMETER},
+    {"0-sized buffers are nullptr.",
+     "source1_1x1.png",
+     {0, 2, 2, 2},
+     WP2_STATUS_NULL_PARAMETER},
+    {"0-sized buffers are nullptr.",
+     "source1_1x1.png",
+     {2, 0, 2, 2},
+     WP2_STATUS_NULL_PARAMETER},
+    {"0-sized buffers are nullptr.",
+     "source1_1x1.png",
+     {2, 2, 0, 2},
+     WP2_STATUS_NULL_PARAMETER},
+    {"OK strides.", "source1_1x1.png", {1, 1, 1, 2}, WP2_STATUS_OK},
+    {"R-Stride is too small.",
+     "source1_32x32.png",
+     {31, 32, 32, 0},
+     WP2_STATUS_BAD_DIMENSION},
+    {"G-Stride is too small.",
+     "source1_32x32.png",
+     {32, 31, 32, 0},
+     WP2_STATUS_BAD_DIMENSION},
+    {"B-Stride is too small.",
+     "source1_32x32.png",
+     {32, 32, 31, 0},
+     WP2_STATUS_BAD_DIMENSION},
+    {"Strides are fine I.",
+     "source1_32x32.png",
+     {32, 32, 32, 0},
+     WP2_STATUS_OK},
+    {"Strides are fine II.",
+     "source1_32x32.png",
+     {33, 35, 36, 0},
+     WP2_STATUS_OK}};
 
 class StrideTest : public testing::TestWithParam<BufferParam> {};
 

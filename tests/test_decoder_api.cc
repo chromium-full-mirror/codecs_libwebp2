@@ -98,7 +98,8 @@ TEST(DecoderAPITest, StillImageConfig) {
   DecoderConfig config;
   config.thread_level = 11;  // Decode using 12 threads (including this one).
   ArrayDecoder decoder(bitstream.bytes, bitstream.size, config);
-  if (decoder.ReadFrame()) { /* Success! */ }
+  if (decoder.ReadFrame()) { /* Success! */
+  }
 }
 
 // Decode the still image or the first frame contained in a full bitstream
@@ -118,9 +119,10 @@ TEST(DecoderAPITest, StillImageToUserMem) {
   ASSERT_WP2_OK(buffer.SetExternal(features.width, features.height,
                                    pixels.data(), num_bytes_per_row));
 
-  ArrayDecoder decoder(bitstream.bytes, bitstream.size,
-                       DecoderConfig::kDefault, &buffer);
-  if (decoder.ReadFrame()) { /* Success! */ }
+  ArrayDecoder decoder(bitstream.bytes, bitstream.size, DecoderConfig::kDefault,
+                       &buffer);
+  if (decoder.ReadFrame()) { /* Success! */
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -170,7 +172,8 @@ TEST(DecoderAPITest, AnimationToVector) {
     frames.emplace_back(ArgbBuffer());
     ASSERT_WP2_OK(frames.back().CopyFrom(decoder.GetPixels()));
   }
-  if (decoder.GetStatus() != WP2_STATUS_OK) { /* Error */ }
+  if (decoder.GetStatus() != WP2_STATUS_OK) { /* Error */
+  }
 }
 
 // Count the number of frames and their features before decoding any pixel.
@@ -187,7 +190,8 @@ TEST(DecoderAPITest, AnimationFeatures) {
 
     // Rewind and start decoding pixels.
     decoder.Rewind();
-    while (decoder.ReadFrame()) { /* ... */ }
+    while (decoder.ReadFrame()) { /* ... */
+    }
   }
 }
 
@@ -206,10 +210,12 @@ TEST(DecoderAPITest, AnimationArray) {
     num_bytes = std::min(num_bytes + kStep, bitstream.size);  // Simulate stream
 
     decoder.SetInput(bitstream.bytes, num_bytes);  // Growing input array
-    while (decoder.ReadFrame()) { /* Frame is ready */ }
+    while (decoder.ReadFrame()) {                  /* Frame is ready */
+    }
     if (decoder.Failed()) break;
   }
-  if (decoder.GetStatus() != WP2_STATUS_OK) { /* Error */ }
+  if (decoder.GetStatus() != WP2_STATUS_OK) { /* Error */
+  }
 }
 
 // Decode all frames contained in a stream available chunk by chunk.
@@ -222,10 +228,12 @@ TEST(DecoderAPITest, AnimationStream) {
     // 'chunk' is destroyed now but it is ok, AppendInput() copied it.
     chunk.Clear();
 
-    while (decoder.ReadFrame()) { /* Frame is ready */ }
+    while (decoder.ReadFrame()) { /* Frame is ready */
+    }
     if (decoder.Failed()) break;
   }
-  if (decoder.GetStatus() != WP2_STATUS_OK) { /* Error */ }
+  if (decoder.GetStatus() != WP2_STATUS_OK) { /* Error */
+  }
 }
 
 // Decode all frames contained in a stream available chunk by chunk and avoid
@@ -240,7 +248,8 @@ TEST(DecoderAPITest, AnimationStreamPersistent) {
     decoder.AppendInput(chunk.bytes, chunk.size,
                         /*data_is_persistent=*/true);
 
-    while (decoder.ReadFrame()) { /* Frame is ready */ }
+    while (decoder.ReadFrame()) { /* Frame is ready */
+    }
     if (decoder.Failed()) break;
 
     // AppendInput() expects 'new_chunk' to be persistent till the next call to
@@ -250,7 +259,8 @@ TEST(DecoderAPITest, AnimationStreamPersistent) {
     // it needed to continue the decoding.
     chunk.Clear();
   }
-  if (decoder.GetStatus() != WP2_STATUS_OK) { /* Error */ }
+  if (decoder.GetStatus() != WP2_STATUS_OK) { /* Error */
+  }
 }
 
 //------------------------------------------------------------------------------

@@ -19,8 +19,8 @@
 
 #include "extras/extras.h"
 #include "include/helpers.h"
+#include "src/common/preview/preview.h"  // TODO(skal): make better include
 #include "src/utils/random.h"
-#include "src/common/preview/preview.h"   // TODO(skal): make better include
 
 namespace WP2 {
 namespace {
@@ -66,7 +66,7 @@ TEST(RandomTest, Deterministic) {
   std::vector<int> integers(10);
   std::iota(integers.begin(), integers.end(), 0);
   Shuffle(integers.begin(), integers.end(), /*seed=*/321);
-  EXPECT_EQ(integers, std::vector<int>({ 5, 2, 7, 1, 0, 9, 6, 4, 3, 8 }));
+  EXPECT_EQ(integers, std::vector<int>({5, 2, 7, 1, 0, 9, 6, 4, 3, 8}));
 }
 
 //------------------------------------------------------------------------------
@@ -87,17 +87,17 @@ TEST(PreviewTest, TestBase64) {
 TEST(PreviewTest, TestText) {
   PreviewData p;
   std::string in =
-    "12 7 3 1\n"       // grid_width grid_height palette_size use_noise
-    "8 31 1 1\n"       // colormap entries
-    "16 31 7 1\n"
-    "45 31 9 0\n"
-    "a..........c\n"   // grid content
-    ".........a..\n"
-    "...........a\n"
-    "............\n"
-    "....b.....b.\n"
-    ".a.........c\n"
-    "b.....c....a\n";
+      "12 7 3 1\n"  // grid_width grid_height palette_size use_noise
+      "8 31 1 1\n"  // colormap entries
+      "16 31 7 1\n"
+      "45 31 9 0\n"
+      "a..........c\n"  // grid content
+      ".........a..\n"
+      "...........a\n"
+      "............\n"
+      "....b.....b.\n"
+      ".a.........c\n"
+      "b.....c....a\n";
   EXPECT_WP2_OK(PreviewFromText(in, &p));
   std::string out = PreviewToText(p);
   EXPECT_EQ(out, in);
@@ -114,7 +114,7 @@ TEST(PreviewTest, TestText) {
   const std::string s_out = PreviewToBase64(p);
   EXPECT_TRUE(!s_out.empty());
   EXPECT_WP2_OK(PreviewFromBase64(s_out, &p));
-  printf("%s", PrintPreview(p, /* reduced= */false).c_str());
+  printf("%s", PrintPreview(p, /* reduced= */ false).c_str());
   EXPECT_EQ(p.grid_width_, 12u);
   EXPECT_EQ(p.grid_height_, 7u);
   EXPECT_EQ(p.palette_.size(), 3u);

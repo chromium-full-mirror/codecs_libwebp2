@@ -60,8 +60,7 @@ class RGBToCCSPImpl : public ImageReader::Impl {
 
   WP2Status ReadFrame(bool* const is_last,
                       uint32_t* const duration_ms) override {
-    const WP2Status status =
-        image_reader_.ReadFrame(is_last, duration_ms);
+    const WP2Status status = image_reader_.ReadFrame(is_last, duration_ms);
     if (status == WP2_STATUS_OK) {
       CSPTransform csp_transform;  // For API needs.
       constexpr int16_t kV = 1 << CSPTransform::kMtxShift;
@@ -273,8 +272,8 @@ WP2Status SaveImage(const YUVPlane& buffer, const CSPMtx& ccsp_to_rgb,
 
 //------------------------------------------------------------------------------
 
-WP2Status ToRGBA(const YUVPlane& ycbcr,
-                 const SamplingTaps* const upsample, ArgbBuffer* const argb) {
+WP2Status ToRGBA(const YUVPlane& ycbcr, const SamplingTaps* const upsample,
+                 ArgbBuffer* const argb) {
   WP2_CHECK_OK(argb != nullptr, WP2_STATUS_NULL_PARAMETER);
   return ycbcr.Export(CSPMtx(kYCbCrToRGBMatrix, kYCbCrToRGBShift),
                       /*resize_if_needed=*/true, argb,

@@ -47,6 +47,7 @@ class FileCloser {
   ~FileCloser() {
     if (file_ != nullptr && file_ != stdin && file_ != stdout) fclose(file_);
   }
+
  private:
   FILE* file_;
 };

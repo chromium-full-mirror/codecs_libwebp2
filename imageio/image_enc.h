@@ -27,9 +27,9 @@
 #endif
 
 #include "./file_format.h"
+#include "src/utils/csp.h"
 #include "src/wp2/base.h"
 #include "src/wp2/encode.h"
-#include "src/utils/csp.h"
 #ifdef WP2_HAVE_WEBP
 #include "webp/encode.h"
 #endif

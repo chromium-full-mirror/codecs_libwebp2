@@ -119,7 +119,7 @@ TEST_P(PlaneTest, Simple) {
 TEST_P(PlaneTest, TestProcess) {
   ArgbBuffer argb;
   ASSERT_WP2_OK(argb.Resize(23, 47));
-  constexpr uint8_t col[4] = { 253, 32, 63, 87 };
+  constexpr uint8_t col[4] = {253, 32, 63, 87};
   argb.Fill({col[0], col[1], col[2], col[3]});
   auto glambda = [](const void* s) {
     const uint8_t* const p = (const uint8_t*)s;

@@ -16,10 +16,9 @@
 
 #include <iostream>
 
+#include "include/helpers.h"
 #include "src/wp2/base.h"
 #include "src/wp2/encode.h"
-
-#include "include/helpers.h"
 
 namespace WP2 {
 namespace {

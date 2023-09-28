@@ -43,20 +43,13 @@ constexpr struct FormatExtension {
 } kFormatExtension[] = {
     // Top row for the same extension (or format) represent the default format
     // (or extension).
-    {FileFormat::PNG, "png"},
-    {FileFormat::JPEG, "jpg"},
-    {FileFormat::JPEG, "jpeg"},
-    {FileFormat::BMP, "bmp"},
-    {FileFormat::PAM, "pam"},
-    {FileFormat::PGM, "pgm"},
-    {FileFormat::PPM, "ppm"},
-    {FileFormat::TIFF, "tiff"},
-    {FileFormat::TIFF, "tif"},
-    {FileFormat::GIF, "gif"},
-    {FileFormat::WEBP, "webp"},
-    {FileFormat::WP2, "wp2"},
-    {FileFormat::Y4M_420, "y4m"},
-    {FileFormat::Y4M_444, "y4m"},
+    {FileFormat::PNG, "png"},     {FileFormat::JPEG, "jpg"},
+    {FileFormat::JPEG, "jpeg"},   {FileFormat::BMP, "bmp"},
+    {FileFormat::PAM, "pam"},     {FileFormat::PGM, "pgm"},
+    {FileFormat::PPM, "ppm"},     {FileFormat::TIFF, "tiff"},
+    {FileFormat::TIFF, "tif"},    {FileFormat::GIF, "gif"},
+    {FileFormat::WEBP, "webp"},   {FileFormat::WP2, "wp2"},
+    {FileFormat::Y4M_420, "y4m"}, {FileFormat::Y4M_444, "y4m"},
     {FileFormat::YUV_420, "yuv"},
 };
 

@@ -14,10 +14,9 @@
 
 // Simple encoding test.
 
-#include "src/wp2/encode.h"
-
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
+#include "src/wp2/encode.h"
 
 namespace WP2 {
 namespace {

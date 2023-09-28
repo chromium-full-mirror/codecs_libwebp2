@@ -20,10 +20,10 @@
 
 #include "./image_enc.h"
 #include "src/dsp/dsp.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
-#include "src/utils/plane.h"
-#include "src/utils/csp.h"
 
 namespace WP2 {
 
@@ -95,7 +95,7 @@ WP2Status WritePGM(const ArgbBuffer& buffer, FILE* const fout,
   const uint32_t width = buffer.width();
   const uint32_t height = buffer.height();
   WP2_CHECK_STATUS(yuva.Import(buffer, has_alpha, transform,
-                   /*resize_if_needed=*/true));
+                               /*resize_if_needed=*/true));
   fprintf(fout, "P5\n%u %u\n255\n", width * (has_alpha ? 4 : 3), height);
   Vector_u8 tmp;
   const BitDepth bit_depth = transform.GetYuvDepth();

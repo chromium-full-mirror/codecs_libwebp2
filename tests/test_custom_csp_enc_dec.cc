@@ -114,8 +114,8 @@ TEST_P(EncodeDecodeCustomCspTest, Comparison) {
   const float expected_distortion =
       std::min(testutil::GetExpectedDistortion(quality), 80.f);
   ASSERT_TRUE(testutil::Compare(custom_input, custom_output,
-                                csp_transform.GetYuvDepth(),
-                                file_name, expected_distortion));
+                                csp_transform.GetYuvDepth(), file_name,
+                                expected_distortion));
 }
 
 //------------------------------------------------------------------------------

@@ -243,9 +243,8 @@ TEST_P(FormatTest, EncodeDecodePreview) {
       original_image, decompressed_preview, true,
       &decompressed_preview_original_format));
   float disto[5];
-  ASSERT_WP2_OK(
-      decompressed_preview_original_format.GetDistortion(original_image,
-                                                         PSNR, disto));
+  ASSERT_WP2_OK(decompressed_preview_original_format.GetDistortion(
+      original_image, PSNR, disto));
   EXPECT_GE(disto[4], config.create_preview
                           ? kMinExpectedSimilarityForPreview
                           : kMinExpectedSimilarityForPreviewColor);
@@ -381,15 +380,15 @@ static struct FmtTestCase {
   size_t seed;
   bool has_alpha;
 } kFmtTestCases[] = {
-  { WP2_Argb_32, "WP2_Argb_32", 412412, true },
-  { WP2_ARGB_32, "WP2_ARGB_32", 655473, true },
-  { WP2_XRGB_32, "WP2_XRGB_32", 653134, false },
-  { WP2_rgbA_32, "WP2_rgbA_32", 812463, true },
-  { WP2_RGBA_32, "WP2_RGBA_32", 547271, true },
-  { WP2_RGBX_32, "WP2_RGBX_32", 872353, false },
-  { WP2_bgrA_32, "WP2_bgrA_32", 274353, true },
-  { WP2_BGRA_32, "WP2_BGRA_32", 897534, true },
-  { WP2_BGRX_32, "WP2_BGRX_32", 414125, false },
+    {WP2_Argb_32, "WP2_Argb_32", 412412, true},
+    {WP2_ARGB_32, "WP2_ARGB_32", 655473, true},
+    {WP2_XRGB_32, "WP2_XRGB_32", 653134, false},
+    {WP2_rgbA_32, "WP2_rgbA_32", 812463, true},
+    {WP2_RGBA_32, "WP2_RGBA_32", 547271, true},
+    {WP2_RGBX_32, "WP2_RGBX_32", 872353, false},
+    {WP2_bgrA_32, "WP2_bgrA_32", 274353, true},
+    {WP2_BGRA_32, "WP2_BGRA_32", 897534, true},
+    {WP2_BGRX_32, "WP2_BGRX_32", 414125, false},
 };
 
 typedef std::tuple<FmtTestCase, testutil::WP2CPUInfoStruct> SpeedTestParam;
@@ -459,9 +458,7 @@ class SpeedTest : public testing::TestWithParam<SpeedTestParam> {
   }
 };
 
-TEST_P(SpeedTest, TestBackForth) {
-  EXPECT_TRUE(DoTest());
-}
+TEST_P(SpeedTest, TestBackForth) { EXPECT_TRUE(DoTest()); }
 
 INSTANTIATE_TEST_SUITE_P(
     SpeedTestInstantiation, SpeedTest,

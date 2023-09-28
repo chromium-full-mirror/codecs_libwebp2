@@ -18,9 +18,9 @@
 
 #include "include/helpers.h"
 #include "src/common/lossy/block.h"
-#include "src/enc/wp2_enc_i.h"
 #include "src/dec/residuals_dec_aom.h"
 #include "src/enc/residuals_enc_aom.h"
+#include "src/enc/wp2_enc_i.h"
 #include "src/utils/data_source.h"
 
 namespace WP2 {
@@ -64,8 +64,8 @@ TEST_P(ResidualWriterTest, AOM) {
   cb.SetDim(block, mgr);
   cb.is420_ = false;
   for (bool do_reset : {false, true}) {
-    std::unique_ptr<WP2::SymbolWriter>
-      sw(new (WP2Allocable::nothrow) WP2::SymbolWriter);
+    std::unique_ptr<WP2::SymbolWriter> sw(new (WP2Allocable::nothrow)
+                                              WP2::SymbolWriter);
     ASSERT_TRUE(sw != nullptr);
     ASSERT_WP2_OK(sw->Init(info, /*effort=*/5));
     ASSERT_WP2_OK(sw->Allocate());
@@ -104,9 +104,8 @@ TEST_P(ResidualWriterTest, AOM) {
           }
           if (!all_zero) {
             ANSEncNoop enc_noop;
-            writer.WriteCoeffs(coeffs,
-                channel, cb.tdim(channel), kDctDct, /*first_is_dc=*/true,
-                &recorder, &enc_noop);
+            writer.WriteCoeffs(coeffs, channel, cb.tdim(channel), kDctDct,
+                               /*first_is_dc=*/true, &recorder, &enc_noop);
           }
 
           // Write the data.
@@ -123,9 +122,8 @@ TEST_P(ResidualWriterTest, AOM) {
           }
           // Write the coefficients.
           if (!all_zero) {
-            writer.WriteCoeffs(coeffs,
-                channel, cb.tdim(channel), kDctDct, /*first_is_dc=*/true,
-                sw.get(), &enc);
+            writer.WriteCoeffs(coeffs, channel, cb.tdim(channel), kDctDct,
+                               /*first_is_dc=*/true, sw.get(), &enc);
           }
 
           // Read the data.
@@ -158,10 +156,9 @@ TEST_P(ResidualWriterTest, AOM) {
           const uint16_t* const scan = ResidualIterator::GetZigzag(tdim);
           if (!all_zero) {
             cb_out.num_coeffs_[channel][tf_i] = reader.ReadCoeffs(
-                channel, dequant, tdim,
-                cb_out.GetCodingParams(channel)->tf,
-                cb_out.IsFirstCoeffDC(channel),
-                &sr, cb_out.coeffs_[channel][tf_i]);
+                channel, dequant, tdim, cb_out.GetCodingParams(channel)->tf,
+                cb_out.IsFirstCoeffDC(channel), &sr,
+                cb_out.coeffs_[channel][tf_i]);
           }
           for (uint32_t i = 0; i < num_elem; ++i) {
             const uint32_t j = scan[i];

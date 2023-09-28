@@ -20,8 +20,8 @@
 #include <numeric>
 
 #include "include/helpers.h"
-#include "src/utils/data_source_context.h"
 #include "src/utils/data_source.h"
+#include "src/utils/data_source_context.h"
 #include "src/utils/random.h"
 
 namespace WP2 {

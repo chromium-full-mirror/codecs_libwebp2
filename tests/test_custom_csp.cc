@@ -320,9 +320,9 @@ class SpeedTest : public testing::TestWithParam<WP2CPUInfo> {
     for (auto& v : yuv_) {
       // from time to time, inject some extreme values
       const int rnd = random->Get(0, 30);
-      v = (rnd == 0) ?  kMaxYUV
-        : (rnd == 1) ? -kMaxYUV
-        : random->Get<int16_t>(-kMaxYUV, kMaxYUV);
+      v = (rnd == 0)   ? kMaxYUV
+          : (rnd == 1) ? -kMaxYUV
+                       : random->Get<int16_t>(-kMaxYUV, kMaxYUV);
     }
   }
 
@@ -392,9 +392,8 @@ TEST_P(SpeedTest, YuvToCustom) {
     const int16_t* const v = &yuv_[random.Get(0u, kMaxLen - len)];
     FillMtx(&random);
     for (uint32_t iter = 0; iter < kIter; ++iter) {
-      WP2YuvToCustom(y, u, v, avg_, mtx_,
-                     &out[0 * kMaxLen], &out[1 * kMaxLen], &out[2 * kMaxLen],
-                     len);
+      WP2YuvToCustom(y, u, v, avg_, mtx_, &out[0 * kMaxLen], &out[1 * kMaxLen],
+                     &out[2 * kMaxLen], len);
     }
     for (auto i : out) crc = testutil::SillyCRC(crc, i);
   }

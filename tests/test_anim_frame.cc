@@ -72,8 +72,7 @@ TEST(AnimFrameTest, ForceLossless) {
       kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
-  FrameEncoder frame_encode(config, kDefaultBackgroundColor, frames,
-                            kProgress);
+  FrameEncoder frame_encode(config, kDefaultBackgroundColor, frames, kProgress);
   ASSERT_WP2_OK(frame_encode.Encode(&encoded_data));
 
   // Decode.
@@ -520,8 +519,8 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
 
   // Use the classic (non incremental) decoder to decode the first frame.
   ArgbBuffer decoded_first_frame;
-  ASSERT_WP2_OK(Decode(encoded_data.mem_, encoded_data.size_,
-                       &decoded_first_frame));
+  ASSERT_WP2_OK(
+      Decode(encoded_data.mem_, encoded_data.size_, &decoded_first_frame));
 
   ArgbBuffer expected_buffer;
   ASSERT_WP2_OK(expected_buffer.Resize(width, height));
