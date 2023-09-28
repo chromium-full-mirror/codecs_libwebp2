@@ -18,15 +18,25 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <utility>
 
 #include "src/common/color_precision.h"
+#include "src/common/constants.h"
+#include "src/common/progress_watcher.h"
 #include "src/dec/incr/decoder_info.h"
 #include "src/dec/incr/decoder_skip.h"
 #include "src/dec/incr/decoder_state.h"
+#include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/dsp/dsp.h"
 #include "src/utils/orientation.h"
+#include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 #if __cplusplus >= 201703L
 #define WP2_FALLTHROUGH [[fallthrough]]
@@ -152,7 +162,8 @@ static WP2Status SetupOutputBuffer(const AnimationFrame& frame_info,
       // a rotation is set). We need an extra buffer for blending.
       assert(!state->raw_output_buffer.IsView());
       // Swap so blended_buffer contains the pixels that we will blend onto.
-      WP2_CHECK_STATUS(state->blended_buffer.Swap(&state->raw_output_buffer));
+      using std::swap;
+      swap(state->blended_buffer, state->raw_output_buffer);
       if (state->raw_output_buffer.IsEmpty()) {
         WP2_CHECK_STATUS(state->raw_output_buffer.Resize(
             state->blended_buffer.width(), state->blended_buffer.height()));
@@ -174,7 +185,8 @@ static WP2Status SetupOutputBuffer(const AnimationFrame& frame_info,
       if (state->using_blended_buffer) {
         // The previous frame was being blended. We don't need the extra
         // 'blended_buffer' anymore but we have to copy the result.
-        WP2_CHECK_STATUS(state->raw_output_buffer.Swap(&state->blended_buffer));
+        using std::swap;
+        swap(state->raw_output_buffer, state->blended_buffer);
         state->using_blended_buffer = false;
       }
     } else {

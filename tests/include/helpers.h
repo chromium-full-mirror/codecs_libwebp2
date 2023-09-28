@@ -19,15 +19,17 @@
 #ifndef WP2_TESTS_INCLUDE_HELPERS_H_
 #define WP2_TESTS_INCLUDE_HELPERS_H_
 
+#include <cassert>
 #include <chrono>  // NOLINT
-#include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
-#include <random>
 #include <string>
 #include <vector>
 
 #include "src/common/lossy/block_size.h"
 #include "src/dsp/dsp.h"
+#include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/random.h"
 #include "src/utils/vector.h"
@@ -35,8 +37,8 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
+#include "gmock/gmock.h"  // IWYU pragma: export
+#include "gtest/gtest.h"  // IWYU pragma: export
 
 #if !defined(__has_feature)
 #define __has_feature(x) 0

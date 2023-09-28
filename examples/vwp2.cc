@@ -22,24 +22,28 @@
 #define _POSIX_C_SOURCE 200112L  // for setenv
 #endif
 
-#include <cmath>
-#include <cstdio>
-#include <cstdlib>
-#include <numeric>
-#include <string>
-#include <vector>
+#include <algorithm>
+#include <cassert>
+#include <cctype>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <utility>
 
 #ifdef HAVE_CONFIG_H
 #include "src/wp2/config.h"
 #endif
 
 #include "examples/example_utils.h"
+#include "examples/stopwatch.h"
+#include "imageio/file_format.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
 #include "src/common/color_precision.h"
 #include "src/common/constants.h"
 #include "src/common/lossy/block_size.h"
+#include "src/common/lossy/block_size_io.h"
 #include "src/common/vdebug.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
@@ -48,9 +52,14 @@
 #include "src/utils/random.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+
+#if defined(WP2_HAVE_WEBP)
+#include "webp/encode.h"
+#endif
 
 #if defined(WP2_HAVE_AOM)
 #include "extras/aom_utils.h"
@@ -1570,8 +1579,8 @@ bool Params::VDMatchEncDec(const char* token) const {
 }
 
 bool Params::DecodeAndSwap(ArgbBuffer* const buffer) {
-  status_ = buffer->Swap(&dec_config_.info->debug_output);  // Avoid realloc
-  assert(status_ == WP2_STATUS_OK);
+  using std::swap;
+  swap(*buffer, dec_config_.info->debug_output);
   status_ = dec_config_.info->debug_output.ConvertFrom(in_);
   assert(status_ == WP2_STATUS_OK);
   status_ = Decode(output_, &out_, dec_config_);
@@ -1579,8 +1588,7 @@ bool Params::DecodeAndSwap(ArgbBuffer* const buffer) {
     fprintf(stderr, "Decompression failed?!\n");
     return false;
   }
-  status_ = buffer->Swap(&dec_config_.info->debug_output);
-  assert(status_ == WP2_STATUS_OK);
+  swap(*buffer, dec_config_.info->debug_output);
   return true;
 }
 
@@ -1595,13 +1603,10 @@ bool Params::GetOriginal() {
     enc_config_.info = &encoder_info;
 
     // Avoid realloc
-    if (in_yuv_.Swap(&enc_config_.info->debug_output) != WP2_STATUS_OK) {
-      return false;
-    }
+    using std::swap;
+    swap(in_yuv_, enc_config_.info->debug_output);
     if (!EncodeImage()) return false;
-    if (in_yuv_.Swap(&enc_config_.info->debug_output) != WP2_STATUS_OK) {
-      return false;
-    }
+    swap(in_yuv_, enc_config_.info->debug_output);
 
     original_selection_info_ = encoder_info.selection_info;
     enc_config_.info = &einfo_;
@@ -1862,8 +1867,9 @@ bool Params::SetCurrentFile(uint32_t file_number) {
               "Warning: original file dimensions %d x %d don't match encoded "
               "file %d x %d\n",
               tmp_orig.width(), tmp_orig.height(), in_.width(), in_.height());
-    } else if (in_.Swap(&tmp_orig) != WP2_STATUS_OK) {
-      return false;
+    } else {
+      using std::swap;
+      swap(in_, tmp_orig);
     }
   }
 
@@ -1897,10 +1903,9 @@ bool Params::SetCurrentFile(uint32_t file_number) {
 }
 
 void Params::ShiftAlt() {
-  const WP2Status s = alt1_.Swap(&alt2_);
-  (void)s;
-  assert(s == WP2_STATUS_OK);
-  std::swap(alt1_msg_, alt2_msg_);
+  using std::swap;
+  swap(alt1_, alt2_);
+  swap(alt1_msg_, alt2_msg_);
   alt1_msg_.clear();
   alt1_.Deallocate();
 }
@@ -1930,8 +1935,8 @@ bool Params::SetBitstream(const char* const file_name) {
   using std::swap;
   swap(data, input_);
   data.clear();
-  status_ = tmp.Swap(&in_);
-  return (status_ == WP2_STATUS_OK);
+  swap(tmp, in_);
+  return true;
 }
 
 bool Params::SetAltFile(const char* const file_name) {
@@ -1960,7 +1965,12 @@ bool Params::SetAltImage() {
   ArgbBuffer tmp;
   if (GetCurrentCanvas(&tmp)) {
     ShiftAlt();
-    status_ = tmp.IsView() ? alt1_.CopyFrom(tmp) : alt1_.Swap(&tmp);
+    if (tmp.IsView()){
+      status_ = alt1_.CopyFrom(tmp);
+    } else {
+      using std::swap;
+      swap(alt1_, tmp);
+    }
     if (status_ == WP2_STATUS_OK) alt1_msg_ = "- Saved canvas -";
   }
   if (status_ != WP2_STATUS_OK) {
@@ -2193,7 +2203,7 @@ void Params::PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
               });
     pm.Init("Costs: ");
     pm.Append(SPrintf("all: %.1f, ", bit_sums[channel]));
-    // Display stats as bit cost (/num of occurences = individual bit cost).
+    // Display stats as bit cost (/num of occurrences = individual bit cost).
     for (uint32_t i : indices) {
       const auto& p = stats[i];
       pm.AppendToList(

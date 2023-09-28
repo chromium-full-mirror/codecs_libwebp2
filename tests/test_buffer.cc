@@ -18,15 +18,19 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <tuple>
-#include <vector>
 
 #include "examples/example_utils.h"
 #include "include/helpers.h"
 #include "include/helpers_filter.h"
-#include "src/wp2/decode.h"
 #include "src/common/vdebug.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
 
 namespace WP2 {
 namespace {
@@ -125,7 +129,8 @@ TEST(BufferTest, Metadata) {
     buffer.Deallocate();
     ASSERT_TRUE(buffer.metadata_.IsEmpty());
     ASSERT_FALSE(other_buffer.metadata_.IsEmpty());
-    ASSERT_WP2_OK(buffer.Swap(&other_buffer));
+    using std::swap;
+    swap(buffer, other_buffer);
     ASSERT_FALSE(buffer.metadata_.IsEmpty());
     ASSERT_TRUE(other_buffer.metadata_.IsEmpty());
   }

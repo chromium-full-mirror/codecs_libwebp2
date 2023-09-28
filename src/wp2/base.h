@@ -517,9 +517,6 @@ class ArgbBuffer {
       const ArgbBuffer& ref, const Rectangle& window, MetricType metric_type,
       float result[5]) const;
 
-  // Returns WP2_STATUS_OK upon success (same format expected for both).
-  WP2_NO_DISCARD WP2Status Swap(ArgbBuffer* other);
-
   // Simple in-place 2x down-sampler. Cheap! (box-average)
   void SimpleHalfDownsample();
 
@@ -548,6 +545,9 @@ class ArgbBuffer {
                                          MetricType metric_type,
                                          bool include_alpha_in_all,
                                          float result[5]) const;
+
+  // To be used after "using std::swap;".
+  friend void swap(ArgbBuffer& a, ArgbBuffer& b);
 
   WP2SampleFormat format_;
   uint32_t width_ = 0;

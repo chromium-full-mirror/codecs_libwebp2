@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cmath>
+#include <cstdint>
+#include <tuple>
+
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
-#include "src/common/constants.h"
 #include "src/common/global_params.h"
 #include "src/dec/tile_dec.h"
 #include "src/enc/analysis.h"
@@ -56,7 +59,8 @@ TEST_P(BypassTest, MaxChunkSize) {
     if (force_alpha) enc_tile.rgb_input.GetRow8(0)[0] = 42;
     if (src_format != enc_tile.rgb_input.format()) {
       ArgbBuffer tmp(src_format);
-      ASSERT_WP2_OK(tmp.Swap(&enc_tile.rgb_input));
+      using std::swap;
+      swap(tmp, enc_tile.rgb_input);
       ASSERT_WP2_OK(enc_tile.rgb_input.ConvertFrom(tmp));
     }
     enc_tile.rect = {0, 0, width, width};

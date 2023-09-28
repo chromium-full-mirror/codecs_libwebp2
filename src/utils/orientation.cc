@@ -21,10 +21,14 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
+#include <utility>
 
 #include "src/dsp/dsp.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -134,7 +138,8 @@ WP2Status OrientateBuffer(Orientation orientation, ArgbBuffer* const buffer) {
     if (buffer->IsView()) {
       WP2_CHECK_STATUS(buffer->CopyFrom(tmp));
     } else {
-      WP2_CHECK_STATUS(buffer->Swap(&tmp));
+      using std::swap;
+      swap(*buffer, tmp);
     }
   } else if (orientation == Orientation::k180) {
     // Swap first half of all pixels in scan-order with opposites.

@@ -15,19 +15,23 @@
 //
 // Test CSPTransform::Import() and Export() with different CspTypes.
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <tuple>
 
-#include "examples/example_utils.h"
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
-#include "src/dsp/math.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {
@@ -152,7 +156,8 @@ TEST_P(CspImageTest, Simple) {
   if (src.format() != format &&
       (format != WP2_Argb_38 || csp_type != Csp::kCustom)) {
     ArgbBuffer tmp(format);
-    ASSERT_WP2_OK(tmp.Swap(&src));
+    using std::swap;
+    swap(tmp, src);
     ASSERT_WP2_OK(src.ConvertFrom(tmp));
   }
 

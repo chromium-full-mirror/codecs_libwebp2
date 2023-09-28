@@ -518,20 +518,19 @@ bool ArgbBuffer::HasTransparency() const {
 
 //------------------------------------------------------------------------------
 
-WP2Status ArgbBuffer::Swap(ArgbBuffer* const other) {
+void swap(ArgbBuffer& a, ArgbBuffer& b) {
   using std::swap;
-  swap(format_, other->format_);
-  swap(width_, other->width_);
-  swap(height_, other->height_);
-  swap(stride_, other->stride_);
+  swap(a.format_, b.format_);
+  swap(a.width_, b.width_);
+  swap(a.height_, b.height_);
+  swap(a.stride_, b.stride_);
 
-  swap(metadata_, other->metadata_);
+  swap(a.metadata_, b.metadata_);
 
-  swap(pixels_, other->pixels_);
-  swap(private_memory_, other->private_memory_);
-  swap(is_external_memory_, other->is_external_memory_);
-
-  return WP2_STATUS_OK;
+  swap(a.pixels_, b.pixels_);
+  swap(a.is_external_memory_, b.is_external_memory_);
+  swap(a.private_memory_, b.private_memory_);
+  swap(a.is_slow_memory_, b.is_slow_memory_);
 }
 
 //------------------------------------------------------------------------------
