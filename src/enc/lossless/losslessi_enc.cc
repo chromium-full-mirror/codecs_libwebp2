@@ -648,11 +648,13 @@ WP2Status Encoder::ApplyPredictFilter(
     const int16_t min_values[4], const int16_t max_values[4],
     bool can_use_sub_modes, const ProgressRange& progress, uint32_t pred_bits,
     WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts) {
+  const ProgressRange residual_image_progress(progress, 0.5);
+  const ProgressRange helper_image_progress(progress, 0.5);
   WP2::Vector_s8 sub_modes;
-  WP2_CHECK_STATUS(
-      CreateResidualImage(pred_bits, config_.exact, can_use_sub_modes,
-                          min_values, max_values, config_.effort, &argb_buffer_,
-                          argb_scratch_, transform_data_, &sub_modes));
+  WP2_CHECK_STATUS(CreateResidualImage(
+      pred_bits, config_.exact, can_use_sub_modes, min_values, max_values,
+      config_.effort, residual_image_progress, &argb_buffer_, argb_scratch_,
+      transform_data_, &sub_modes));
 
   const WP2::ANSDebugPrefix prefix(enc, "predictor");
   enc->PutRange(pred_bits, kTransformBitsMin, kTransformBitsMax,
@@ -665,7 +667,7 @@ WP2Status Encoder::ApplyPredictFilter(
   const WP2Status status = EncodeHelperImage(
       enc, dicts, transform_data_, (HashChain*)&hash_chain_,
       (BackwardRefsPool*)&ref_pool_, transform_width, transform_height,
-      symbols_info, config_.effort, progress);
+      symbols_info, config_.effort, helper_image_progress);
 
   if (can_use_sub_modes && enc->PutBool(!sub_modes.empty(), "use_sub_modes")) {
     const WP2::ANSDebugPrefix prefix_sub_modes(enc, "sub_modes");

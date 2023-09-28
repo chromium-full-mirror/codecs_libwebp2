@@ -20,6 +20,7 @@
 #include <limits>
 
 #include "src/common/color_precision.h"
+#include "src/common/progress_watcher.h"
 #include "src/dsp/lossless/encl_dsp.h"
 #include "src/dsp/math.h"
 #include "src/enc/lossless/losslessi_enc.h"
@@ -417,6 +418,7 @@ static void CopyImageWithPrediction(int bits, bool exact,
 WP2Status CreateResidualImage(uint32_t bits, bool exact, bool can_use_sub_modes,
                               const int16_t min_values[4],
                               const int16_t max_values[4], int effort,
+                              const WP2::ProgressRange& progress,
                               Buffer_s16* const buffer,
                               int16_t* const argb_scratch, int16_t* const modes,
                               WP2::Vector_s8* const sub_modes) {
@@ -435,6 +437,7 @@ WP2Status CreateResidualImage(uint32_t bits, bool exact, bool can_use_sub_modes,
       modes[i + 2] = kPredLowEffort;
       modes[i + 3] = 0;
     }
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.0));
   } else {
     ChannelVector histo[2];
     ChannelVector tmp_histo[2];
@@ -453,6 +456,7 @@ WP2Status CreateResidualImage(uint32_t bits, bool exact, bool can_use_sub_modes,
     Predictor pred(/*mode_in=*/0, /*sub_mode_in=*/0, min_values, max_values);
     Predictor pred_wsub(/*mode_in=*/0, /*sub_mode_in=*/0, min_values,
                         max_values);
+    WP2::ProgressScale tile_progress(progress, 1.0 / (width * height));
     for (uint32_t tile_y = 0; tile_y < height; ++tile_y) {
       for (uint32_t tile_x = 0; tile_x < width; ++tile_x) {
         GetBestPredictorForTile(tile_x, tile_y, bits, exact, can_use_sub_modes,
@@ -469,6 +473,7 @@ WP2Status CreateResidualImage(uint32_t bits, bool exact, bool can_use_sub_modes,
         } else {
           modes[ind + 2] = pred.mode;
         }
+        WP2_CHECK_STATUS(tile_progress.AdvanceBy(1.0));
       }
     }
 
