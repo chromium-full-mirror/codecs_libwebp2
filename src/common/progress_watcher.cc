@@ -19,24 +19,30 @@
 
 #include "src/common/progress_watcher.h"
 
+#include <cassert>
 #include <cmath>
+#include <cstdint>
 
 #include "src/common/constants.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
 //------------------------------------------------------------------------------
-// TODO(yguyon): Add no-op fast return if 'hook_' is null
-//               (useful to keep assertions always running for now)
 
 WP2Status ProgressWatcher::Set(double progress) {
+  if (hook_ == nullptr) {
+    progress_ = progress;
+    return WP2_STATUS_OK;
+  }
+
   WP2_CHECK_STATUS(thread_lock_.Acquire());
   if (progress == 0.) aborted_ = false;  // Rewinded.
   if (!aborted_) {
-    WP2_CHECK_OK(progress >= 0. && progress <= 1., WP2_STATUS_INVALID_PARAMETER);
-    progress_ = (uint64_t)(progress * kProgressPrecision);
-    if (hook_ != nullptr) aborted_ = !hook_->OnUpdate(GetProgress());
+    assert(progress >= 0. && progress <= 1.);
+    progress_ = progress;
+    aborted_ = !hook_->OnUpdate(progress_);
   }
   thread_lock_.Release();
   return aborted_ ? WP2_STATUS_USER_ABORT : WP2_STATUS_OK;
@@ -46,24 +52,31 @@ WP2Status ProgressWatcher::Start() { return Set(0.); }
 
 WP2Status ProgressWatcher::Finish() {
   assert(progress_ < 1.);
-  // If the following assertion fails, it might be a precision error
-  // (progression is incremented by amounts that are too small).
-  assert(std::abs(progress_ + kProgressEnd - 1.) < 0.001);
+  if (hook_ != nullptr) {
+    // If the following assertion fails, it might be a precision error
+    // (progression is incremented by amounts that are too small).
+    assert(std::abs(progress_ + kProgressEnd - 1.) < 0.001);
+  }
   return Set(1.);
 }
 
 WP2Status ProgressWatcher::AdvanceBy(double step) {
-  if (!aborted_) {
-    const uint64_t cur_progress = progress_.fetch_add((uint64_t)(step * kProgressPrecision));
-    WP2_CHECK_OK(progress_ >= 0 && progress_ <= kProgressPrecision,
-                 WP2_STATUS_INVALID_PARAMETER);
-    if (hook_ != nullptr) {
-      WP2_CHECK_STATUS(thread_lock_.Acquire());
-      aborted_ = !hook_->OnUpdate((double)(cur_progress / kProgressPrecision));
-      thread_lock_.Release();
-    }
+  if (hook_ == nullptr) {
+    // Ignore step. Small progress_ increments are only used by the hook_.
+    // The alternative would be an atomic progress_ as suggested at
+    // https://bugs.chromium.org/p/webp2/issues/detail?id=15#c3.
+    return WP2_STATUS_OK;
   }
-  return aborted_ ? WP2_STATUS_USER_ABORT : WP2_STATUS_OK;
+
+  WP2_CHECK_STATUS(thread_lock_.Acquire());
+  if (!aborted_) {
+    progress_ += step;
+    assert(progress_ >= 0. && progress_ <= 1.);
+    aborted_ = !hook_->OnUpdate(progress_);
+  }
+  const bool aborted = aborted_;  // Prevent threaded data race.
+  thread_lock_.Release();
+  return aborted ? WP2_STATUS_USER_ABORT : WP2_STATUS_OK;
 }
 
 //------------------------------------------------------------------------------

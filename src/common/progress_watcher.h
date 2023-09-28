@@ -21,9 +21,10 @@
 #ifndef WP2_COMMON_PROGRESS_WATCHER_H_
 #define WP2_COMMON_PROGRESS_WATCHER_H_
 
+#include <cstdint>
+
 #include "src/utils/thread_utils.h"
 #include "src/wp2/base.h"
-#include <atomic>
 
 namespace WP2 {
 
@@ -34,7 +35,7 @@ namespace WP2 {
 class ProgressWatcher {
  public:
   explicit ProgressWatcher(ProgressHook* const hook)
-      : hook_(hook), progress_(0), aborted_(false) {}
+      : hook_(hook), progress_(0.), aborted_(false) {}
 
   // Sets the 'progress_'. Must be in [0:1].
   WP2Status Set(double progress);
@@ -46,12 +47,11 @@ class ProgressWatcher {
   WP2Status Finish();
 
   // Returns the progress in [0:1] range. Not thread-safe.
-  inline double GetProgress() const { return (double)(progress_ / kProgressPrecision); }
+  double GetProgress() const { return progress_; }
 
  private:
   ProgressHook* const hook_;
-  std::atomic<uint64_t> progress_;
-  static constexpr uint64_t kProgressPrecision = 0x0de0b6b3a7640000llu;
+  double progress_;
   ThreadLock thread_lock_;
   bool aborted_;  // True if 'hook_' returned false at least once.
 };
