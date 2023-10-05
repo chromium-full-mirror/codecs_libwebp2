@@ -17,12 +17,23 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>
+#include <cstdint>
 #include <cstring>
 
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/wp2/base.h"
 
 namespace {
+
+//------------------------------------------------------------------------------
+// Plain copy (same source and destination formats)
+
+template<int bytes_per_pixel>
+void WP2Copy_C(const void* src, uint32_t width, void* dst) {
+  std::memcpy(dst, src, static_cast<size_t>(width) * bytes_per_pixel);
+}
 
 //------------------------------------------------------------------------------
 // C conversion from a format to another
@@ -401,11 +412,16 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
 
 WP2ArgbConverterF WP2ConversionFunction(WP2SampleFormat from,
                                         WP2SampleFormat to) {
-  return (to == WP2_Argb_32)     ? WP2ArgbConvertFrom[from]
-         : (to == WP2_ARGB_32)   ? WP2ARGBConvertFrom[from]
-         : (from == WP2_Argb_32) ? WP2ArgbConvertTo[to]
-         : (from == WP2_ARGB_32) ? WP2ARGBConvertTo[to]
-                                 : nullptr;
+  if (to == WP2_Argb_32) return WP2ArgbConvertFrom[from];
+  if (to == WP2_ARGB_32) return WP2ARGBConvertFrom[from];
+  if (from == WP2_Argb_32) return WP2ArgbConvertTo[to];
+  if (from == WP2_ARGB_32) return WP2ARGBConvertTo[to];
+  if (from == to) {
+    if (WP2FormatBpp(from) == 3) return WP2Copy_C<3>;
+    if (WP2FormatBpp(from) == 4) return WP2Copy_C<4>;
+    if (WP2FormatBpp(from) == 8) return WP2Copy_C<8>;
+  }
+  return nullptr;
 }
 
 //------------------------------------------------------------------------------

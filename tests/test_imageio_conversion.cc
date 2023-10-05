@@ -14,15 +14,21 @@
 
 // Test ImageIo decoding a RGB image into a custom color space and vice versa.
 
+#include <algorithm>
+#include <cstddef>
 #include <string>
 #include <tuple>
 
 #include "extras/ccsp_imageio.h"
 #include "extras/extras.h"
-#include "imageio/anim_image_dec.h"
+#include "imageio/file_format.h"
 #include "imageio/image_dec.h"
-#include "imageio/image_enc.h"
+#include "imageio/imageio_util.h"
 #include "include/helpers.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace {
@@ -244,6 +250,56 @@ INSTANTIATE_TEST_SUITE_P(
                                      BitDepth{12, /*is_signed=*/false}),
                      testing::Values(&SamplingTaps::kDownSharp,
                                      &SamplingTaps::kDownAvg, nullptr)));
+
+//------------------------------------------------------------------------------
+
+// Returns OK if reading file_name both in ARGB and 'format' lead to the same
+// samples.
+WP2Status TestChannelOrder(const char* file_name, WP2SampleFormat format) {
+  const std::string path = testutil::GetTestDataPath(file_name);
+  ArgbBuffer argb(WP2_ARGB_32);
+  WP2_CHECK_STATUS(ReadImage(path.c_str(), &argb));
+  ArgbBuffer image(format);
+  WP2_CHECK_STATUS(ReadImage(path.c_str(), &image));
+  ArgbBuffer image_converted_to_argb(argb.format());
+  WP2_CHECK_STATUS(image_converted_to_argb.ConvertFrom(image));
+  WP2_CHECK_OK(testutil::Compare(image_converted_to_argb, argb, path),
+               WP2_STATUS_INVALID_PARAMETER);
+  return WP2_STATUS_OK;
+}
+
+TEST(ReadImageTest, ChannelOrder) {
+  // WP2ConversionFunction() only returns conversion functions for all formats
+  // from and to WP2_ARGB_32 or WP2_Argb_32. It also supports plain copy, and
+  // ImageReaderPNG reads PNG samples in RGB(A) order.
+
+  // Opaque
+  EXPECT_WP2_OK(TestChannelOrder("taiwan.png", WP2_ARGB_32));
+  EXPECT_WP2_OK(TestChannelOrder("taiwan.png", WP2_Argb_32));
+  EXPECT_WP2_OK(TestChannelOrder("taiwan.png", WP2_RGB_24));
+
+  // Alpha
+  EXPECT_WP2_OK(TestChannelOrder("source1.png", WP2_ARGB_32));
+  EXPECT_WP2_OK(TestChannelOrder("source1.png", WP2_RGBA_32));
+
+  // RGBA -> premultiplied Argb -> ARGB implies quality loss.
+  EXPECT_EQ(TestChannelOrder("source1.png", WP2_Argb_32),
+            WP2_STATUS_INVALID_PARAMETER);
+
+  // Expect all other combinations to fail.
+  EXPECT_EQ(TestChannelOrder("taiwan.png", WP2_RGBA_32),
+            WP2_STATUS_INVALID_COLORSPACE);
+  EXPECT_EQ(TestChannelOrder("source1.png", WP2_RGB_24),
+            WP2_STATUS_INVALID_COLORSPACE);
+  for (WP2SampleFormat format :
+       {WP2_XRGB_32, WP2_rgbA_32, WP2_RGBX_32, WP2_bgrA_32, WP2_BGRA_32,
+        WP2_BGRX_32, WP2_BGR_24, WP2_Argb_38}) {
+    EXPECT_EQ(TestChannelOrder("taiwan.png", format),
+              WP2_STATUS_INVALID_COLORSPACE);
+    EXPECT_EQ(TestChannelOrder("source1.png", format),
+              WP2_STATUS_INVALID_COLORSPACE);
+  }
+}
 
 //------------------------------------------------------------------------------
 
