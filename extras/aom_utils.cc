@@ -29,6 +29,7 @@
 #include "imageio/imageio_util.h"
 #include "src/common/av1_common.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 
@@ -1052,9 +1053,13 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
 
   const bool has_alpha = ref.HasTransparency();
   if (has_alpha) {
-    avifImageAllocatePlanes(image, AVIF_PLANES_YUV | AVIF_PLANES_A);
+    WP2_CHECK_OK(avifImageAllocatePlanes(
+                     image, AVIF_PLANES_YUV | AVIF_PLANES_A) != AVIF_RESULT_OK,
+                 WP2_STATUS_OUT_OF_MEMORY);
   } else {
-    avifImageAllocatePlanes(image, AVIF_PLANES_YUV);
+    WP2_CHECK_OK(
+        avifImageAllocatePlanes(image, AVIF_PLANES_YUV) != AVIF_RESULT_OK,
+        WP2_STATUS_OUT_OF_MEMORY);
   }
 
   // import into yuv
