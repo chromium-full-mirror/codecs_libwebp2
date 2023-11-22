@@ -23,12 +23,20 @@
 #ifndef WP2_DEC_INCR_DECODER_STATE_H_
 #define WP2_DEC_INCR_DECODER_STATE_H_
 
-#include "src/common/constants.h"
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+
+#include "src/common/progress_watcher.h"
 #include "src/dec/filters/intertile_filter.h"
 #include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/utils/data_source.h"
 #include "src/utils/data_source_stream.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -64,7 +72,12 @@ class PartialTileDecoder : public WP2Allocable {
 struct Decoder::State : public WP2Allocable {
  protected:
   State(const DecoderConfig& config, DataSource* const input)
-      : data_source(input), progress(config.progress_hook) {}
+      : data_source(input),
+        raw_output_buffer(ArgbBuffer(config.exact ? WP2_ARGB_32 : WP2_Argb_32)),
+        frame_output_buffer(
+            ArgbBuffer(config.exact ? WP2_ARGB_32 : WP2_Argb_32)),
+        blended_buffer(ArgbBuffer(config.exact ? WP2_ARGB_32 : WP2_Argb_32)),
+        progress(config.progress_hook) {}
 
  public:
   virtual ~State();
@@ -133,7 +146,7 @@ struct Decoder::State : public WP2Allocable {
   std::unique_ptr<PartialTileDecoder> partial_tile_decoder;
 
   // Temp buffer to store the non-oriented Argb32 output.
-  ArgbBuffer raw_output_buffer = ArgbBuffer(WP2_Argb_32);
+  ArgbBuffer raw_output_buffer;
   // Whether we must use a temporary buffer for this whole animation
   // (because of rotation, slow buffer, or format difference).
   bool must_use_raw_output_buffer = true;
@@ -143,9 +156,9 @@ struct Decoder::State : public WP2Allocable {
   // true, an extra 'blended_buffer' is also used.
   bool using_raw_output_buffer = false;
   // View of the output buffer, cropped to fit the current frame.
-  ArgbBuffer frame_output_buffer = ArgbBuffer(WP2_Argb_32);
+  ArgbBuffer frame_output_buffer;
   // Temporary buffer used for blending when raw_output_buffer is already used.
-  ArgbBuffer blended_buffer = ArgbBuffer(WP2_Argb_32);
+  ArgbBuffer blended_buffer;
   bool using_blended_buffer = false;
 
   // YUV output buffer that will be sliced into one view per tile.

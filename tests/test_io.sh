@@ -42,6 +42,7 @@ TMP_PGM1="${TMP_IMG}_1.pgm"
 TMP_PGM2="${TMP_IMG}_2.pgm"
 
 formats_to_test="png ppm tiff pam bmp"
+lossless_formats_to_test="png"
 sources1="source0.ppm alpha_ramp.tiff source4.webp"
 
 do_cmd() {
@@ -76,6 +77,18 @@ check_roundtrip() {
   done
 }
 
+check_roundtrip_lossless() {
+  echo "=== $1 ==="
+  do_cmd "${CWP2}" "$1" -q 100 -alpha_q 100 -exact -o "${TMP_WP2}" \
+    -short -effort 6
+  for fmt in ${lossless_formats_to_test}; do
+    do_cmd "${DWP2}" -exact -quiet -v "${TMP_WP2}" "-${fmt}" \
+      -o "${TMP_IMG}.${fmt}"
+    "${GET_DISTO}" "${TMP_IMG}.${fmt}" "$1" -exact -nopremultiply
+    "${GET_DISTO}" "${TMP_WP2}" "$1" -exact -nopremultiply
+  done
+}
+
 # Minimal quality checks
 for file in ${sources1}; do
   check_roundtrip "${TESTDATA_DIR}/${file}" 36.0 22.0
@@ -84,9 +97,11 @@ done
 for csp in 0 1 2 3; do
   check_roundtrip "${TESTDATA_DIR}/alpha_ramp.tiff" 46.0 18.8 \
     "-csp ${csp}"
-  check_roundtrip "${TESTDATA_DIR}/alpha_ramp.tiff" 99.0 99.0 \
-    "-csp ${csp} -q 100"
+  check_roundtrip "${TESTDATA_DIR}/source1_64x48.png" 32.4 23.5 \
+    "-csp ${csp}"
 done
+check_roundtrip_lossless "${TESTDATA_DIR}/alpha_ramp.tiff"
+check_roundtrip_lossless "${TESTDATA_DIR}/source1_64x48.png"
 
 check_roundtrip "${TESTDATA_DIR}/source3_222x167.jpg" 31.0 22.0 "-pass 3"
 

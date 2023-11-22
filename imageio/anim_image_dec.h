@@ -27,9 +27,9 @@
 
 #include "./file_format.h"
 #include "./imageio_util.h"
-#include "src/utils/plane.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 
 #ifdef HAVE_CONFIG_H
@@ -125,7 +125,7 @@ class ImageReader {
   void SetImplWEBP(ArgbBuffer* const buffer, LogLevel log_level,
                    size_t max_num_pixels);
   void SetImplWP2(ArgbBuffer* const buffer, LogLevel log_level,
-                  size_t max_num_pixels);
+                  size_t max_num_pixels, bool exact);
   void SetImplBMP(ArgbBuffer* const buffer, LogLevel log_level,
                   size_t max_num_pixels);
 
@@ -133,6 +133,7 @@ class ImageReader {
   void SetImpl(FileFormat data_format, LogLevel log_level,
                size_t max_num_pixels, ArgbBuffer* const buffer);
 
+  WP2::DecoderConfig config_;
   std::unique_ptr<Impl> impl_;
   DataView data_;    // Input. Points to 'file_bytes_' or to user-owned memory.
   Data file_bytes_;  // Empty unless a file was read.

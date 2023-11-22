@@ -25,7 +25,7 @@
 #include <mutex>  // NOLINT
 
 #if defined(WP2_HAVE_BOOST)
-#include <boost/stacktrace.hpp>
+#include <boost/stacktrace/stacktrace.hpp>
 #include <sstream>
 #elif defined(WP2_HAVE_BACKTRACE)
 #include <execinfo.h>

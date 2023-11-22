@@ -15,10 +15,13 @@
 //
 // WP2 decode.
 
+#include <cassert>
+#include <cstdint>
 #include <cstdio>
 
 #include "./anim_image_dec.h"
 #include "./imageio_util.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
@@ -30,10 +33,10 @@ namespace WP2 {
 class ImageReaderWP2 : public ImageReader::Impl {
  public:
   ImageReaderWP2(const uint8_t* data, size_t data_size,
-                 ArgbBuffer* const buffer, LogLevel log_level,
-                 size_t max_num_pixels)
+                 const DecoderConfig& config, ArgbBuffer* const buffer,
+                 LogLevel log_level, size_t max_num_pixels)
       : ImageReader::Impl(buffer, data, data_size, log_level, max_num_pixels),
-        decoder_(data, data_size, DecoderConfig::kDefault, buffer) {}
+        decoder_(data, data_size, config, buffer) {}
 
   WP2Status ReadFrame(bool* const is_last,
                       uint32_t* const duration_ms) override {
@@ -105,9 +108,11 @@ class ImageReaderWP2 : public ImageReader::Impl {
 };
 
 void ImageReader::SetImplWP2(ArgbBuffer* const buffer, LogLevel log_level,
-                             size_t max_num_pixels) {
+                             size_t max_num_pixels, bool exact) {
+  config_ = DecoderConfig::kDefault;
+  config_.exact = exact;
   impl_.reset(new (WP2Allocable::nothrow) ImageReaderWP2(
-      data_.bytes, data_.size, buffer, log_level, max_num_pixels));
+      data_.bytes, data_.size, config_, buffer, log_level, max_num_pixels));
   if (impl_ == nullptr) status_ = WP2_STATUS_OUT_OF_MEMORY;
 }
 

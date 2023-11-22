@@ -18,7 +18,10 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 
@@ -26,8 +29,7 @@
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
-#include "src/utils/plane.h"
-#include "src/wp2/encode.h"
+#include "src/wp2/base.h"
 
 namespace {
 
@@ -55,7 +57,7 @@ uint32_t DiffScaleChannel(ArgbBuffer* const pic1, const ArgbBuffer* const pic2,
     uint8_t* const ptr1 = pic1->GetRow8(y) + channel;
     const uint8_t* const ptr2 = pic2->GetRow8(y) + channel;
     for (uint32_t x = 0; x < pic1->width(); ++x) {
-      const uint32_t diff = abs(ptr1[4 * x] - ptr2[4 * x]);
+      const uint32_t diff = std::abs(ptr1[4 * x] - ptr2[4 * x]);
       if (diff > max) max = diff;
       ptr1[4 * x] = diff;
     }
@@ -109,6 +111,7 @@ int main(int argc, char* argv[]) {
   float scaling_factor = 0.f;
   bool use_gray = false;
   bool exact = false;
+  bool premultiply = true;
   bool downscale = false;
   float min_disto = 0.;
   const char* prefix = nullptr;
@@ -125,6 +128,8 @@ int main(int argc, char* argv[]) {
     const char* const arg = argv[c];
     if (!strcmp(arg, "-exact")) {
       exact = true;
+    } else if (!strcmp(arg, "-nopremultiply")) {
+      premultiply = false;
     } else if (!strcmp(arg, "-scale")) {
       scale = true;
       if (c + 1 < argc && argv[c + 1][0] >= '0' && argv[c + 1][0] <= '9') {
@@ -186,7 +191,8 @@ int main(int argc, char* argv[]) {
   }
 
   size_t file_size1, file_size2;
-  ArgbBuffer pic1_rgb, pic2_rgb;
+  ArgbBuffer pic1_rgb(premultiply ? WP2_Argb_32 : WP2_ARGB_32),
+      pic2_rgb(premultiply ? WP2_Argb_32 : WP2_ARGB_32);
   CHECK_STATUS(WP2::ReadImage(path1, &pic1_rgb, &file_size1),
                "Can't decode input file '%s'.", path1);
   CHECK_STATUS(WP2::ReadImage(path2, &pic2_rgb, &file_size2),

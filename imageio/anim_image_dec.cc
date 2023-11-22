@@ -47,7 +47,8 @@ void ImageReader::SetImpl(FileFormat data_format, LogLevel log_level,
   } else if (data_format == FileFormat::WEBP) {
     SetImplWEBP(buffer, log_level, max_num_pixels);
   } else if (data_format == FileFormat::WP2) {
-    SetImplWP2(buffer, log_level, max_num_pixels);
+    SetImplWP2(buffer, log_level, max_num_pixels,
+               /*exact=*/!WP2IsPremultiplied(buffer->format()));
   } else if (data_format == FileFormat::BMP) {
     SetImplBMP(buffer, log_level, max_num_pixels);
   } else {
