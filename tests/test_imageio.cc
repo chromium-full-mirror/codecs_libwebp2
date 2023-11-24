@@ -14,13 +14,18 @@
 
 // Test ImageIo.
 
+#include <cstdio>
 #include <string>
 
 #include "extras/ccsp_imageio.h"
-#include "imageio/anim_image_dec.h"
+#include "imageio/file_format.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
+#include "imageio/imageio_util.h"
 #include "include/helpers.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace {
@@ -139,9 +144,40 @@ TEST_P(WriteImageTest, Ccsp) {
       testutil::Compare(original, comparison, file_num_bits, file_name));
 }
 
-INSTANTIATE_TEST_SUITE_P(WriteImageTestInstantiation, WriteImageTest,
-                         testing::Values("ccsp/source3_C420p8.y4m"));
+INSTANTIATE_TEST_SUITE_P(
+    WriteImageTestInstantiation, WriteImageTest,
+    ::testing::Values("alpha_ramp.pam", "source1_1x1.png", "source1_64x48.png",
+                      "source0.ppm", "source2.tiff", "ccsp/source3_C420p8.y4m",
+                      "ccsp/source3_C420p10.y4m", "ccsp/source3_C420p12.y4m",
+                      "ccsp/source3_C444p8.y4m", "ccsp/source3_C444p10.y4m",
+                      "ccsp/source3_C444p12.y4m", "alpha_ramp.bmp",
+                      "source5.bmp"));
 
+// Does a lossless roundtrip through a not-lossless-only codec (e.g. WebP).
+TEST(ReadWriteImageTest, OtherLossless) {
+  const char* const file_name = "source1_64x48.png";
+  Data data;
+  ASSERT_WP2_OK(
+      IoUtilReadFile(testutil::GetTestDataPath(file_name).c_str(), &data));
+  const FileFormat format = WP2::FileFormat::WEBP;
+  {
+    ArgbBuffer original(WP2_ARGB_32);
+    ASSERT_WP2_OK(ReadImage(data.bytes, data.size, &original));
+
+    const std::string temp_file_path = testutil::GetTempDataPath(file_name);
+    std::remove(temp_file_path.c_str());  // Make sure it doesn't exist.
+    size_t written_file_size, read_file_size;
+    ASSERT_WP2_OK(SaveImage(original, temp_file_path.c_str(),
+                            /*overwrite=*/true, format, &written_file_size));
+
+    ArgbBuffer comparison(WP2_ARGB_32);
+    ASSERT_WP2_OK(
+        ReadImage(temp_file_path.c_str(), &comparison, &read_file_size));
+    EXPECT_EQ(written_file_size, read_file_size);
+
+    EXPECT_TRUE(testutil::Compare(original, comparison, file_name));
+  }
+}
 //------------------------------------------------------------------------------
 
 // Simple test to exercise a corner case (1px wide, non-multiple-of-2 tall).

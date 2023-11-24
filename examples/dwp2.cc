@@ -18,6 +18,9 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <algorithm>
+#include <cassert>
+#include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -28,10 +31,16 @@
 #endif
 
 #include "examples/example_utils.h"
+#include "imageio/file_format.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
 #include "src/utils/thread_utils.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/debug.h"
+#include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 namespace {
 
@@ -439,6 +448,8 @@ int main(int argc, char* argv[]) {
       settings.out_format = WP2::FileFormat::TIFF;
     } else if (!strcmp(argv[c], "-pgm")) {
       settings.out_format = WP2::FileFormat::PGM;
+    } else if (!strcmp(argv[c], "-webp")) {
+      settings.out_format = WP2::FileFormat::WEBP;
     } else if (!strcmp(argv[c], "-mt")) {
       if (c + 1 < argc && ExUtilTryGetUInt(argv[c + 1], &thread_level)) {
         ++c;

@@ -36,10 +36,9 @@
 
 namespace WP2 {
 
-// Saves 'buffer' to 'file_path'. The 'format' can be specified or it will be
-// deduced from 'file_path' extension.
-// If 'file_path' is "-", data is saved to stdout.
-// Returns WP2_STATUS_OK upon success.
+// Losslessly saves 'buffer' to 'file_path'. The 'format' can be specified or it
+// will be deduced from 'file_path' extension. If 'file_path' is "-", data is
+// saved to stdout. Returns WP2_STATUS_OK upon success.
 WP2Status SaveImage(const ArgbBuffer& buffer, const char* file_path,
                     bool overwrite = false,
                     FileFormat format = FileFormat::AUTO,

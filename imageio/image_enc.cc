@@ -17,10 +17,15 @@
 
 #include "./image_enc.h"
 
+#include <cstdio>
 #include <cstring>
 
+#include "./file_format.h"
 #include "./imageio_util.h"
+#include "src/utils/csp.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -32,7 +37,7 @@ WP2Status SaveImage(const ArgbBuffer& buffer, const char* const file_path,
   WP2_CHECK_OK(file_path != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!buffer.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
 
-  FILE* fout = nullptr;
+  std::FILE* fout = nullptr;
   const bool use_stdout = (strcmp(file_path, "-") == 0);
   if (use_stdout) {  // std::ftell() does not work with pipes.
     WP2_CHECK_OK(file_size == nullptr, WP2_STATUS_INVALID_PARAMETER);
@@ -68,6 +73,13 @@ WP2Status SaveImage(const ArgbBuffer& buffer, const char* const file_path,
     status = WritePPM(buffer, fout);
   } else if (format == FileFormat::PAM) {
     status = WritePAM(buffer, fout);
+  } else if (format == FileFormat::WEBP) {
+    MemoryWriter writer;
+    status = CompressWebP(buffer, /*quality=*/kMaxQuality,
+                          /*effort=*/kMaxEffort / 2, &writer);
+    if (status == WP2_STATUS_OK) {
+      std::fwrite(writer.mem_, writer.size_, 1, fout);
+    }
   } else {
     status = WP2_STATUS_UNSUPPORTED_FEATURE;
   }

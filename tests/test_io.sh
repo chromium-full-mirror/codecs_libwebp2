@@ -42,7 +42,7 @@ TMP_PGM1="${TMP_IMG}_1.pgm"
 TMP_PGM2="${TMP_IMG}_2.pgm"
 
 formats_to_test="png ppm tiff pam bmp"
-lossless_formats_to_test="png"
+lossless_formats_to_test="png webp"
 sources1="source0.ppm alpha_ramp.tiff source4.webp"
 
 do_cmd() {
@@ -81,11 +81,11 @@ check_roundtrip_lossless() {
   echo "=== $1 ==="
   do_cmd "${CWP2}" "$1" -q 100 -alpha_q 100 -exact -o "${TMP_WP2}" \
     -short -effort 6
+  "${GET_DISTO}" "${TMP_WP2}" "$1" -nopremultiply
   for fmt in ${lossless_formats_to_test}; do
     do_cmd "${DWP2}" -exact -quiet -v "${TMP_WP2}" "-${fmt}" \
       -o "${TMP_IMG}.${fmt}"
-    "${GET_DISTO}" "${TMP_IMG}.${fmt}" "$1" -exact -nopremultiply
-    "${GET_DISTO}" "${TMP_WP2}" "$1" -exact -nopremultiply
+    "${GET_DISTO}" "${TMP_IMG}.${fmt}" "$1" -nopremultiply
   done
 }
 
