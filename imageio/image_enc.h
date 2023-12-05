@@ -65,6 +65,8 @@ WP2Status CompressWebP(const ArgbBuffer& buffer, const WebPConfig& config,
 // Returns WP2_STATUS_UNSUPPORTED_FEATURE unless compiled with WP2_HAVE_WEBP.
 WP2Status CompressWebP(const ArgbBuffer& buffer, float quality, int effort,
                        Writer* const output);
+WP2Status CompressJXL(const ArgbBuffer& buffer, float quality, int effort,
+                      Writer* const output);
 
 }  // namespace WP2
 

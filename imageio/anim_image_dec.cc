@@ -36,6 +36,8 @@ void ImageReader::SetImpl(FileFormat data_format, LogLevel log_level,
     SetImplPNG(buffer, log_level, max_num_pixels);
   } else if (data_format == FileFormat::JPEG) {
     SetImplJPEG(buffer, log_level, max_num_pixels);
+  } else if (data_format == FileFormat::JPEG_XL) {
+    SetImplJXL(buffer, log_level, max_num_pixels);
   } else if ((data_format == FileFormat::PAM) ||
              (data_format == FileFormat::PGM) ||
              (data_format == FileFormat::PPM)) {

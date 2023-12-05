@@ -38,6 +38,7 @@ enum class FileFormat {
   Y4M_420,  // Subsampled chroma (Cb and Cr planes are half width, half height).
   Y4M_444,  // Full resolution for all Y, Cb and Cr planes. No alpha.
   YUV_420,  // Raw: y4m 420 with no header.
+  JPEG_XL,
   AUTO,  // Detect format automatically (by parsing file extension or header).
   UNSUPPORTED
 };

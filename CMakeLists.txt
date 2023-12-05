@@ -500,6 +500,8 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/imageio_util.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/imageio_util.h
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/jpegdec.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/imageio/jxldec.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/imageio/jxlenc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/pngdec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/pngenc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/imageio/pnmdec.cc
@@ -512,7 +514,7 @@ add_library(
 target_link_libraries(imageio webp2)
 
 # Find the standard image libraries.
-foreach(I_LIB PNG JPEG TIFF GIF WebP)
+foreach(I_LIB PNG JPEG jxl TIFF GIF WebP)
   find_package(${I_LIB} QUIET)
   set(WP2_HAVE_${I_LIB} ${${I_LIB}_FOUND})
   if(${I_LIB}_FOUND)

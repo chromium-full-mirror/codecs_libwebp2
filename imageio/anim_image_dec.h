@@ -116,6 +116,8 @@ class ImageReader {
                   size_t max_num_pixels);
   void SetImplJPEG(ArgbBuffer* const buffer, LogLevel log_level,
                    size_t max_num_pixels);
+  void SetImplJXL(ArgbBuffer* const buffer, LogLevel log_level,
+                  size_t max_num_pixels);
   void SetImplPNM(ArgbBuffer* const buffer, LogLevel log_level,
                   size_t max_num_pixels);
   void SetImplTIFF(ArgbBuffer* const buffer, LogLevel log_level,

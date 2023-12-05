@@ -19,8 +19,11 @@
 
 #include "./image_dec.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <string>
 
 #include "./anim_image_dec.h"
 
@@ -41,10 +44,22 @@ FileFormat GuessImageFormat(const uint8_t* const data, size_t data_size) {
     const uint32_t magic1 = GetBE32(data + 0);
     const uint32_t magic2 = GetBE16(data + 4);
     const uint32_t magic3 = GetBE32(data + 8);
+    // The other possible header for JPEG XL is in hex: 0000000C4A584C200D0A870A
+    // Which gives the following in bytes.
+    const std::string data_str(reinterpret_cast<const char*>(data),
+                               std::min(data_size, static_cast<size_t>(12)));
+
     if (magic1 == 0x89504E47U) {
       return FileFormat::PNG;
     } else if (magic1 >= 0xFFD8FF00U && magic1 <= 0xFFD8FFFFU) {
       return FileFormat::JPEG;
+    } else if ((data_str.substr(0, 2) == "\xff\x0a") ||
+               (data_str.size() >= 12 &&
+                (data_str.substr(0, 12) ==
+                 // std::string is needed here because of the zero bytes!
+                 std::string("\x00\x00\x00\x0c\x4a\x58\x4c\x20\x0d\x0a\x87\x0a",
+                             12)))) {
+      return FileFormat::JPEG_XL;
     } else if (magic1 == 0x49492A00 || magic1 == 0x4D4D002A) {
       return FileFormat::TIFF;
     } else if (magic1 == 0x47494638 && (magic2 == 0x3761 || magic2 == 0x3961)) {

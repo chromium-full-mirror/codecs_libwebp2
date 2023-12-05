@@ -64,9 +64,11 @@ void Help() {
   opt.Add("-pam", "save the raw RGBA samples as a color PAM");
   opt.Add("-ppm", "save the raw RGB samples as a color PPM");
   opt.Add("-bmp", "save as uncompressed BMP format");
+  opt.Add("-jxl", "save as lossless JPEG XL format");
   opt.Add("-tiff", "save as uncompressed TIFF format");
   opt.Add("-png", "save the raw RGBA samples as PNG (default)");
   opt.Add("-pgm", "save the raw Y/U/V/A samples as PGM (for debugging)");
+  opt.Add("-webp", "save as lossless WebP format");
   opt.Add("");
   opt.Add("Other options are:");
   opt.Add("-mt [int]", SPrintf("enable multi-threading, with %u extra threads "
@@ -444,6 +446,8 @@ int main(int argc, char* argv[]) {
       settings.out_format = WP2::FileFormat::PPM;
     } else if (!strcmp(argv[c], "-bmp")) {
       settings.out_format = WP2::FileFormat::BMP;
+    } else if (!strcmp(argv[c], "-jxl")) {
+      settings.out_format = WP2::FileFormat::JPEG_XL;
     } else if (!strcmp(argv[c], "-tiff")) {
       settings.out_format = WP2::FileFormat::TIFF;
     } else if (!strcmp(argv[c], "-pgm")) {

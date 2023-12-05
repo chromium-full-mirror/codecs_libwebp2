@@ -159,8 +159,14 @@ TEST(ReadWriteImageTest, OtherLossless) {
   Data data;
   ASSERT_WP2_OK(
       IoUtilReadFile(testutil::GetTestDataPath(file_name).c_str(), &data));
-  const FileFormat format = WP2::FileFormat::WEBP;
-  {
+  std::vector<FileFormat> formats;
+#ifdef WP2_HAVE_JXL
+  formats.push_back(WP2::FileFormat::JPEG_XL);
+#endif
+#ifdef WP2_HAVE_WEBP
+  formats.push_back(WP2::FileFormat::WEBP);
+#endif
+  for (const FileFormat format : formats) {
     ArgbBuffer original(WP2_ARGB_32);
     ASSERT_WP2_OK(ReadImage(data.bytes, data.size, &original));
 

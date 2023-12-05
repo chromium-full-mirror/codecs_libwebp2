@@ -75,8 +75,16 @@ WP2Status SaveImage(const ArgbBuffer& buffer, const char* const file_path,
     status = WritePAM(buffer, fout);
   } else if (format == FileFormat::WEBP) {
     MemoryWriter writer;
-    status = CompressWebP(buffer, /*quality=*/kMaxQuality,
-                          /*effort=*/kMaxEffort / 2, &writer);
+    status =
+        CompressWebP(buffer, /*quality=*/kMaxQuality, /*effort=*/6, &writer);
+    if (status == WP2_STATUS_OK) {
+      std::fwrite(writer.mem_, writer.size_, 1, fout);
+    }
+  } else if (format == FileFormat::JPEG_XL) {
+    MemoryWriter writer;
+    // Do not choose kMaxEffort as this would lead to JPEG XL's level 10.
+    status =
+        CompressJXL(buffer, /*quality=*/kMaxQuality, /*effort=*/6, &writer);
     if (status == WP2_STATUS_OK) {
       std::fwrite(writer.mem_, writer.size_, 1, fout);
     }
