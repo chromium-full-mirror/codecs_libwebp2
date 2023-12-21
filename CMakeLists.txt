@@ -554,7 +554,7 @@ foreach(I_LIB PNG JPEG jxl TIFF GIF WebP)
       else()
         message(STATUS "Found old CMake WebP")
         target_link_libraries(imageio ${WEBP_LIBRARIES})
-        target_include_directories(imageio PRIVATE ${WEBP_INCLUDE_DIRS})
+        target_include_directories(imageio PUBLIC ${WEBP_INCLUDE_DIRS})
       endif()
       set(WP2_HAVE_WEBP ${WebP_FOUND})
     else()
@@ -574,7 +574,7 @@ foreach(I_LIB PNG JPEG jxl TIFF GIF WebP)
       message(STATUS "Found non-cmake WebP: ${WEBP_LIBRARY}")
       target_include_directories(
         imageio
-        PRIVATE ${WEBP_INCLUDE_DIR} ${WEBP_DEMUX_INCLUDE_DIR}
+        PUBLIC ${WEBP_INCLUDE_DIR} ${WEBP_DEMUX_INCLUDE_DIR}
         PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
       target_link_libraries(imageio ${WEBP_LIBRARY} ${WEBP_DEMUX_LIBRARY})
       set(WebP_FOUND TRUE)
