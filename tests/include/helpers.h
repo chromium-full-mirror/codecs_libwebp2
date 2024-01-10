@@ -77,6 +77,16 @@ Argb32b GetPixel32b(const ArgbBuffer& buffer, const uint32_t x,
                     const uint32_t y);
 
 //------------------------------------------------------------------------------
+// Environment setup
+
+// Sets the environment variable 'name' to the 'value' during the setup step.
+::testing::Environment* SetEnv(const char* name, const char* value);
+
+inline ::testing::Environment* SetStackLimitTo512x512Bytes() {
+  return SetEnv("FUZZTEST_STACK_LIMIT", "262144");
+}
+
+//------------------------------------------------------------------------------
 
 // the following is only initialized once:
 static const WP2CPUInfo GetCPUInfo = WP2GetCPUInfo;

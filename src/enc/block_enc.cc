@@ -392,9 +392,6 @@ WP2Status CodedBlock::DecideChromaSubsampling(
     sub_block(in_.V.Row(0), in_.V.Step(), prediction, /*preds_step=*/w_pix,
               res_v, /*dst_step=*/w_pix, h_pix);
   }
-  int16_t orig_u[kMaxBlockSizePix2], orig_v[kMaxBlockSizePix2];
-  std::copy(res_u, res_u + w_pix * h_pix, orig_u);
-  std::copy(res_v, res_v + w_pix * h_pix, orig_v);
 
   int32_t tmp_u[kMaxBlockSizePix2], tmp_v[kMaxBlockSizePix2];
   // transform at full resolution
@@ -405,7 +402,7 @@ WP2Status CodedBlock::DecideChromaSubsampling(
 
   float score444;
   WP2_CHECK_STATUS(UVScore(context, config, tile_pos_x, tile_pos_y, has_alpha,
-                           quant_u, quant_v, orig_u, orig_v, tmp_u, tmp_v,
+                           quant_u, quant_v, res_u, res_v, tmp_u, tmp_v,
                            full_dim, /*reduced=*/false, counters->residuals(),
                            this, &score444));
   if (score444 == 0) {
@@ -420,7 +417,7 @@ WP2Status CodedBlock::DecideChromaSubsampling(
   WP2ReduceCoeffs(tmp_u, w_pix, h_pix, tmp_v);
   float score420;
   WP2_CHECK_STATUS(UVScore(context, config, tile_pos_x, tile_pos_y, has_alpha,
-                           quant_u, quant_v, orig_u, orig_v, tmp_u, tmp_v,
+                           quant_u, quant_v, res_u, res_v, tmp_u, tmp_v,
                            half_dim, /*reduced=*/true, counters->residuals(),
                            this, &score420));
 
