@@ -18,13 +18,15 @@
 // Author: Yannis Guyon (yguyon@google.com)
 
 #include <iostream>
-#include <string>
 #include <vector>
 
 #include "imageio/anim_image_dec.h"
 #include "src/wp2/encode.h"
 #include "tests/fuzz/fuzz_utils.h"
 #include "tests/include/helpers.h"
+
+::testing::Environment* const kStackLimitEnv =
+    WP2::testutil::SetStackLimitTo256KiB();
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Input is considered random data and converted to parameters.

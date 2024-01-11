@@ -30,6 +30,9 @@
 #include "tests/fuzz/fuzz_utils_temp_file.h"
 #include "tests/include/helpers.h"
 
+::testing::Environment* const kStackLimitEnv =
+    WP2::testutil::SetStackLimitTo256KiB();
+
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Input is considered random data and converted to parameters.
   WP2::testutil::FuzzedParameters params(data, size);

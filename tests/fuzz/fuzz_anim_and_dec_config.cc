@@ -24,6 +24,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 #include "tests/fuzz/fuzz_utils.h"
+#include "tests/include/helpers.h"
 #include "tests/include/helpers_incr.h"
 
 //------------------------------------------------------------------------------
@@ -31,6 +32,9 @@
 namespace WP2 {
 namespace testutil {
 namespace {
+
+::testing::Environment* const kStackLimitEnv =
+    WP2::testutil::SetStackLimitTo256KiB();
 
 class FuzzedParametersSetup : public FuzzedParameters {
  public:
