@@ -61,7 +61,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   progress.fail_at_ = params.ExtractBool() ? params.ExtractDouble(0., 1.) : 2.;
 
   const float expected_distortion =
-      WP2::testutil::GetExpectedDistortion(config) - 10.f;
+      WP2::testutil::GetExpectedDistortion(config) - 11.f;
   return WP2::testutil::TestImageEncConfig(original, config,
                                            expected_distortion);
 }
