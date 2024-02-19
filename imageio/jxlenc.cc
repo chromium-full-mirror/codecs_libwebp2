@@ -105,10 +105,7 @@ WP2Status CompressJXL(const ArgbBuffer& buffer_in, float quality, int effort,
     WP2_CHECK_OK(status == JXL_ENC_SUCCESS, WP2_STATUS_INVALID_CONFIGURATION);
     // JXL_ENC_FRAME_SETTING_KEEP_INVISIBLE should be ON by default if lossless.
   } else {
-    const float distance = quality >= 100  ? 0.0
-                           : quality >= 30 ? 0.1 + (100 - quality) * 0.09
-                                           : 53.0 / 3000.0 * quality * quality -
-                                                 23.0 / 20.0 * quality + 25.0;
+    const float distance = JxlEncoderDistanceFromQuality(quality);
     status = JxlEncoderSetFrameDistance(frame_settings, distance);
     WP2_CHECK_OK(status == JXL_ENC_SUCCESS, WP2_STATUS_INVALID_CONFIGURATION);
   }
