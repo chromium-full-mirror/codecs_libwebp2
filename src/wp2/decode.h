@@ -20,6 +20,8 @@
 #ifndef WP2_WP2_DECODE_H_
 #define WP2_WP2_DECODE_H_
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
 #include "./base.h"
@@ -212,7 +214,7 @@ WP2_NO_DISCARD WP2Status GetChunk(const uint8_t bitstream_data[],
 // 'num_frames' is a lower bound in case of corrupted or truncated bitstream.
 WP2_NO_DISCARD WP2Status GetNumFrames(const uint8_t bitstream_data[],
                                       size_t bitstream_size,
-                                      size_t* const num_frames);
+                                      size_t* num_frames);
 
 //------------------------------------------------------------------------------
 // Animation and incremental decoding
@@ -320,8 +322,7 @@ class Decoder {
   struct State;
 
  protected:
-  Decoder(State* const state, const DecoderConfig& config,
-          ArgbBuffer* output_buffer);
+  Decoder(State* state, const DecoderConfig& config, ArgbBuffer* output_buffer);
   virtual void DecodeAvailableData();
 
   State* const state_;

@@ -18,6 +18,8 @@
 #ifndef WP2_TESTS_INCLUDE_HELPERS_INCR_H_
 #define WP2_TESTS_INCLUDE_HELPERS_INCR_H_
 
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "src/utils/utils.h"
@@ -62,8 +64,8 @@ struct IncrementalDecodingTestSetup {
 WP2Status DecodeIncremental(
     const DecoderConfig& config, DataView input,
     const IncrementalDecodingTestSetup& setup,
-    std::vector<ArgbBuffer>* const decoded_frames = nullptr,
-    std::vector<uint32_t>* const decoded_durations_ms = nullptr);
+    std::vector<ArgbBuffer>* decoded_frames = nullptr,
+    std::vector<uint32_t>* decoded_durations_ms = nullptr);
 
 }  // namespace testutil
 }  // namespace WP2

@@ -22,10 +22,18 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
+#include "imageio/file_format.h"
 #include "imageio/image_enc.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 #include "examples/example_utils.h"  // For WP2::GetFilesIn()
@@ -182,7 +190,7 @@ bool FuzzedParameters::TryExtractWP2Bitstream(Data* const encoded_data) {
   encoded_data->bytes[0] = (uint8_t)((kSignature >> 0) & 0xffu);
   encoded_data->bytes[1] = (uint8_t)((kSignature >> 8) & 0xffu);
   encoded_data->bytes[2] = (uint8_t)((kSignature >> 16) & 0xffu);
-  memcpy(encoded_data->bytes + 3, data_ + byte_pos, num_available_bytes);
+  std::memcpy(encoded_data->bytes + 3, data_ + byte_pos, num_available_bytes);
   return true;
 }
 
