@@ -26,7 +26,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include "imageio/file_format.h"
@@ -35,6 +38,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "fuzzing/fuzztest.h"
 
 #include "examples/example_utils.h"  // For WP2::GetFilesIn()
 #include "imageio/imageio_util.h"    // For WP2::IoUtilReadFile()
@@ -281,6 +285,50 @@ void LimitConfigForBigImages(const Data& bitstream,
                    std::max(kMaxPeakMem / bytes_used_per_tile, 1u) - 1u);
     }
   }
+}
+
+//------------------------------------------------------------------------------
+
+std::vector<std::string> GetTestImagesContents(size_t max_file_size) {
+  const char* test_data_dirs[] = {"testdata"};
+
+  std::vector<std::string> seeds;
+  for (const char* test_data_dir : test_data_dirs) {
+    std::cout << "Reading seeds from " << test_data_dir << " (non recursively)"
+              << std::endl;
+    std::vector<std::tuple<std::string>> tuple_vector =
+        fuzztest::ReadFilesFromDirectory(test_data_dir);
+    seeds.reserve(seeds.size() + tuple_vector.size());
+    for (auto& [file_content] : tuple_vector) {
+      if (file_content.size() > max_file_size) continue;
+      seeds.push_back(std::move(file_content));
+    }
+  }
+  if (seeds.empty()) {
+    std::cerr << "ERROR: no files found that match the given file size"
+              << std::endl;
+    std::abort();
+  }
+  std::cout << "Returning " << seeds.size() << " seed images" << std::endl;
+  return seeds;
+}
+
+//------------------------------------------------------------------------------
+
+DecoderConfig CreateDecoderConfig(
+    uint32_t thread_level, bool enable_deblocking_filter,
+    bool enable_directional_filter, bool enable_restoration_filter,
+    bool enable_alpha_filter, uint8_t grain_amplitude,
+    DecoderConfig::IncrementalMode incremental_mode) {
+  DecoderConfig config;
+  config.thread_level = thread_level;
+  config.enable_deblocking_filter = enable_deblocking_filter;
+  config.enable_directional_filter = enable_directional_filter;
+  config.enable_restoration_filter = enable_restoration_filter;
+  config.enable_alpha_filter = enable_alpha_filter;
+  config.grain_amplitude = grain_amplitude;
+  config.incremental_mode = incremental_mode;
+  return config;
 }
 
 //------------------------------------------------------------------------------

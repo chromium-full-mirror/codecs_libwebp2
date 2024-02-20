@@ -30,6 +30,7 @@
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "fuzzing/fuzztest.h"
 
 namespace WP2 {
 namespace testutil {
@@ -45,6 +46,7 @@ constexpr size_t kMaxNumPixels = 1u << 22;
 constexpr double kEncodingMaxNumSeconds = 60.;
 
 // Used to extract test parameters from a bitstream of any size and content.
+// TODO: b/311360339 - Remove when migrated to FuzzTest.
 class FuzzedParameters {
  public:
   FuzzedParameters(const uint8_t data[], size_t data_size)
@@ -106,6 +108,47 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
 // Aborts if it's not decoded without error in case of 'expected_success'.
 int TestImageDecConfig(DataView encoded_data, const DecoderConfig& config,
                        bool expected_success);
+
+//------------------------------------------------------------------------------
+
+// Returns a list of test images contents (not paths) from the "testdata"
+// directory that are smaller than 'max_file_size'.
+std::vector<std::string> GetTestImagesContents(size_t max_file_size);
+
+// Generator for an arbitrary byte sequence taken from GetTestImagesContents()
+// or a mutation of it.
+inline auto ArbitraryImageWithSeeds() {
+  constexpr uint32_t kMaxSeedFileSize = 1024 * 1024;  // 1MB.
+  return fuzztest::Arbitrary<std::string>()
+      .WithMaxSize(kMaxSeedFileSize)
+      .WithSeeds(GetTestImagesContents(kMaxSeedFileSize));
+}
+
+//------------------------------------------------------------------------------
+
+// Exposed for convenient fuzztest reproducer output.
+DecoderConfig CreateDecoderConfig(
+    uint32_t thread_level, bool enable_deblocking_filter,
+    bool enable_directional_filter, bool enable_restoration_filter,
+    bool enable_alpha_filter, uint8_t grain_amplitude,
+    DecoderConfig::IncrementalMode incremental_mode);
+
+// Generator for an arbitrary DecoderConfig.
+inline auto ArbitraryDecoderConfig() {
+  return fuzztest::Map(
+      CreateDecoderConfig,
+      /*thread_level=*/fuzztest::InRange<uint32_t>(0, (1u << 31) - 1u),
+      /*enable_deblocking_filter=*/fuzztest::Arbitrary<bool>(),
+      /*enable_directional_filter=*/fuzztest::Arbitrary<bool>(),
+      /*enable_restoration_filter=*/fuzztest::Arbitrary<bool>(),
+      /*enable_alpha_filter=*/fuzztest::Arbitrary<bool>(),
+      /*grain_amplitude=*/fuzztest::InRange<uint8_t>(0, 100),
+      fuzztest::ElementOf(
+          {DecoderConfig::IncrementalMode::FULL_TILE,
+           DecoderConfig::IncrementalMode::PARTIAL_TILE_CONTEXT}));
+}
+
+//------------------------------------------------------------------------------
 
 // Exports 'original' and 'decompressed' to PNG files at 'path' for debugging.
 void SaveBeforeAfter(const ArgbBuffer& original, const ArgbBuffer& decompressed,
