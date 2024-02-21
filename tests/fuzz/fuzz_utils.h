@@ -30,6 +30,7 @@
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 #include "fuzzing/fuzztest.h"
 
 namespace WP2 {
@@ -127,11 +128,101 @@ inline auto ArbitraryImageWithSeeds() {
 //------------------------------------------------------------------------------
 
 // Exposed for convenient fuzztest reproducer output.
+EncoderConfig CreateEncoderConfig(
+    float quality, size_t target_size, float target_psnr, float alpha_quality,
+    int effort, bool exact, Orientation decoding_orientation,
+    bool create_preview, TransferFunction transfer_function, int pass,
+    float sns, int error_diffusion, const std::vector<float>& segments,
+    EncoderConfig::SegmentIdMode segment_id_mode, bool enable_alt_tuning,
+    TileShape tile_shape, PartitionMethod partition_method,
+    PartitionSet partition_set, bool partition_snapping, Csp csp_type,
+    EncoderConfig::UVMode uv_mode, int preprocessing,
+    int preprocessing_strength, bool use_random_matrix, bool store_grain,
+    bool tune_perceptual, bool use_delta_palette, int thread_level,
+    bool low_memory);
 DecoderConfig CreateDecoderConfig(
     uint32_t thread_level, bool enable_deblocking_filter,
     bool enable_directional_filter, bool enable_restoration_filter,
     bool enable_alpha_filter, uint8_t grain_amplitude,
     DecoderConfig::IncrementalMode incremental_mode);
+
+// Generator for an arbitrary EncoderConfig.
+inline auto ArbitraryEncoderConfig() {
+  return fuzztest::Map(
+      CreateEncoderConfig,
+
+      /*quality=*/fuzztest::InRange<float>(0, kMaxQuality),
+      /*target_size=*/
+      fuzztest::OneOf(fuzztest::Just<size_t>(0),
+                      fuzztest::InRange<size_t>(1, 1 << 20)),
+      /*target_psnr=*/
+      fuzztest::OneOf(fuzztest::Just<float>(0),
+                      fuzztest::Just<float>(99.),
+                      fuzztest::InRange<float>(.01, 99.)),
+      /*alpha_quality=*/fuzztest::InRange<float>(0, kMaxQuality),
+      /*effort=*/fuzztest::InRange<int>(kMinEffort, kMaxEffort),
+      /*exact=*/fuzztest::Arbitrary<bool>(),
+
+      fuzztest::ElementOf(
+          {Orientation::kOriginal, Orientation::kFlipLeftToRight,
+           Orientation::k180, Orientation::kFlipTopToBottom,
+           Orientation::kFlipBotLeftToTopRgt, Orientation::k90Clockwise,
+           Orientation::kFlipTopLeftToBotRgt, Orientation::k270Clockwise}),
+      /*create_preview=*/fuzztest::Arbitrary<bool>(),
+
+      fuzztest::ElementOf<TransferFunction>(
+          {WP2_TF_ITU_R_BT2020_10BIT, WP2_TF_ITU_R_BT709, WP2_TF_UNSPECIFIED,
+           WP2_TF_GAMMA_22, WP2_TF_GAMMA_28, WP2_TF_SMPTE_170M,
+           WP2_TF_SMPTE_240M, WP2_TF_LINEAR, WP2_TF_LOG, WP2_TF_SQRT,
+           WP2_TF_IEC_61966_2_4, WP2_TF_ITU_R_BT1361_EXTENDED,
+           WP2_TF_IEC_61966_2_1, WP2_TF_ITU_R_BT2020_12BIT,
+           WP2_TF_SMPTE_ST_2084, WP2_TF_SMPTE_ST_428_1,
+           WP2_TF_ARIB_STD_B67_HLG}),
+
+      /*pass=*/fuzztest::InRange<int>(1, 10),
+      /*sns=*/fuzztest::InRange<float>(0, 100),
+      /*error_diffusion=*/fuzztest::InRange<int>(0, 100),
+
+      /*segments=*/
+      fuzztest::VectorOf(fuzztest::InRange<float>(0, kMaxLossyQuality))
+          .WithMinSize(1)
+          .WithMaxSize(kMaxNumSegments),
+      fuzztest::ElementOf<EncoderConfig::SegmentIdMode>(
+          {EncoderConfig::SEGMENT_ID_AUTO, EncoderConfig::SEGMENT_ID_EXPLICIT,
+           EncoderConfig::SEGMENT_ID_IMPLICIT}),
+
+      /*enable_alt_tuning=*/fuzztest::Arbitrary<bool>(),
+      fuzztest::ElementOf<TileShape>(
+          {TILE_SHAPE_SQUARE_128, TILE_SHAPE_SQUARE_256, TILE_SHAPE_SQUARE_512,
+           TILE_SHAPE_WIDE, TILE_SHAPE_AUTO}),
+
+      fuzztest::ElementOf<PartitionMethod>(
+          {MULTIPASS_PARTITIONING, BLOCK_ENCODE_PARTITIONING,
+           SPLIT_PARTITIONING, TILE_ENCODE_PARTITIONING,
+           SPLIT_RECURSE_PARTITIONING, AREA_ENCODE_PARTITIONING,
+           SUB_AREA_ENCODE_PARTITIONING, EXHAUSTIVE_PARTITIONING,
+           ALL_4X4_PARTITIONING, ALL_8X8_PARTITIONING, ALL_16X16_PARTITIONING,
+           ALL_32X32_PARTITIONING, AUTO_PARTITIONING}),
+      fuzztest::ElementOf<PartitionSet>({SMALL_SQUARES, SMALL_RECTS, ALL_RECTS,
+                                         THICK_RECTS, MEDIUM_SQUARES,
+                                         ALL_SQUARES, SOME_RECTS}),
+      /*partition_snapping=*/fuzztest::Arbitrary<bool>(),
+
+      fuzztest::ElementOf<Csp>(
+          {Csp::kYCoCg, Csp::kYCbCr, Csp::kCustom, Csp::kYIQ}),
+      fuzztest::ElementOf<EncoderConfig::UVMode>(
+          {EncoderConfig::UVModeAdapt, EncoderConfig::UVMode420,
+           EncoderConfig::UVMode444, EncoderConfig::UVModeAuto}),
+      /*preprocessing=*/fuzztest::InRange<int>(0, 2),
+      /*preprocessing_strength=*/fuzztest::InRange<int>(0, 100),
+      /*use_random_matrix=*/fuzztest::Arbitrary<bool>(),
+      /*store_grain=*/fuzztest::Arbitrary<bool>(),
+      /*tune_perceptual=*/fuzztest::Arbitrary<bool>(),
+      /*use_delta_palette=*/fuzztest::Arbitrary<bool>(),
+
+      /*thread_level=*/fuzztest::InRange<int>(0, (1u << 31) - 1u),
+      /*low_memory=*/fuzztest::Arbitrary<bool>());
+}
 
 // Generator for an arbitrary DecoderConfig.
 inline auto ArbitraryDecoderConfig() {

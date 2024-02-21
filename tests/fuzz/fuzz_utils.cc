@@ -315,6 +315,68 @@ std::vector<std::string> GetTestImagesContents(size_t max_file_size) {
 
 //------------------------------------------------------------------------------
 
+EncoderConfig CreateEncoderConfig(
+    float quality, size_t target_size, float target_psnr, float alpha_quality,
+    int effort, bool exact, Orientation decoding_orientation,
+    bool create_preview, TransferFunction transfer_function, int pass,
+    float sns, int error_diffusion, const std::vector<float>& segments,
+    EncoderConfig::SegmentIdMode segment_id_mode, bool enable_alt_tuning,
+    TileShape tile_shape, PartitionMethod partition_method,
+    PartitionSet partition_set, bool partition_snapping, Csp csp_type,
+    EncoderConfig::UVMode uv_mode, int preprocessing,
+    int preprocessing_strength, bool use_random_matrix, bool store_grain,
+    bool tune_perceptual, bool use_delta_palette, int thread_level,
+    bool low_memory) {
+  EncoderConfig config;
+  config.quality = quality;
+  config.target_size = target_size;
+  config.target_psnr = target_psnr;
+  config.alpha_quality = alpha_quality;
+  config.effort = effort;
+  config.use_av1 = false;
+
+  config.decoding_orientation = decoding_orientation;
+  config.create_preview = create_preview;
+  // 'preview' and 'preview_size' are not fuzzed.
+
+  config.transfer_function = transfer_function;
+
+  config.pass = pass;
+  config.sns = sns;
+  config.error_diffusion = error_diffusion;
+
+  config.segments = static_cast<int>(segments.size());
+  config.segment_id_mode = segment_id_mode;
+  std::copy(segments.data(), segments.data() + segments.size(),
+            config.segment_factors);
+
+  config.tile_shape = tile_shape;
+
+  config.partition_method = partition_method;
+  config.partition_set = partition_set;
+  config.partition_snapping =
+      (partition_method == AREA_ENCODE_PARTITIONING ||
+       partition_method == SUB_AREA_ENCODE_PARTITIONING ||
+       partition_method == SPLIT_PARTITIONING ||
+       partition_method == SPLIT_RECURSE_PARTITIONING)
+          ? true
+          : partition_snapping;
+
+  config.csp_type = csp_type;
+  config.uv_mode = uv_mode;
+  config.preprocessing = preprocessing;
+  config.preprocessing_strength = preprocessing_strength;
+  config.use_random_matrix = use_random_matrix;
+  config.store_grain = store_grain;
+  config.tune_perceptual = tune_perceptual;
+  config.use_delta_palette = use_delta_palette;
+
+  config.thread_level = thread_level;
+  config.low_memory = low_memory;
+  // 'use_neural_compression' is not fuzzed.
+  return config;
+}
+
 DecoderConfig CreateDecoderConfig(
     uint32_t thread_level, bool enable_deblocking_filter,
     bool enable_directional_filter, bool enable_restoration_filter,
