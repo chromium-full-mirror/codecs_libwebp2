@@ -205,7 +205,8 @@ WP2Status OrientateSubBuffer(Orientation orientation, const ArgbBuffer& src,
                              ArgbBuffer* const dst) {
   WP2_CHECK_OK(dst != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(!src.IsEmpty() && !dst->IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
-  WP2_CHECK_OK(src.format() == WP2_Argb_32 || src.format() == WP2_ARGB_32 ||
+  WP2_CHECK_OK(src.format() == dst->format() || src.format() == WP2_Argb_32 ||
+                   src.format() == WP2_ARGB_32 ||
                    dst->format() == WP2_Argb_32 || dst->format() == WP2_ARGB_32,
                WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK((rect_in_src.x + rect_in_src.width <= src.width()) &&
@@ -265,9 +266,7 @@ WP2Status OrientateSubBuffer(Orientation orientation, const ArgbBuffer& src,
       const uint8_t* src_pixel = src_row;
       uint8_t* dst_pixel = dst_line;
       for (uint32_t x = 0; x < rect_in_src.width; ++x) {
-        for (uint32_t c = 0; c < src_pixel_depth; ++c) {
-          dst_pixel[c] = src_pixel[c];
-        }
+        std::copy_n(src_pixel, src_pixel_depth, dst_pixel);
         src_pixel += src_pixel_depth;
         dst_pixel += dst_next_pixel;
       }

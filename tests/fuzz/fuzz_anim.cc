@@ -17,12 +17,18 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
-#include "imageio/anim_image_dec.h"
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
+
 #include "src/utils/orientation.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
-#include "tests/include/helpers.h"
 #include "tests/fuzz/fuzz_utils.h"
+#include "tests/include/helpers.h"
 
 namespace WP2 {
 namespace testutil {
@@ -33,6 +39,7 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
                       float expected_distortion) {
   // std::cerr << config << std::endl;  // Uncomment to print config
   if (!config.IsValid()) abort();
+  if (original_frames.empty()) return 0;
 
   // Add frames to the encoder.
   AnimationEncoder animation_encoder;
@@ -56,8 +63,8 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
   }
 
   // Verify that it decodes fine and that the result is close enough.
-  ArgbBuffer decoded;
-  ArgbBuffer decoded_unoriented;
+  ArgbBuffer decoded(original_frames.front().format());
+  ArgbBuffer decoded_unoriented(original_frames.front().format());
   ArrayDecoder decoder(memory_writer.mem_, memory_writer.size_,
                        DecoderConfig::kDefault, &decoded);
   for (size_t i = 0; i < original_frames.size(); ++i) {
