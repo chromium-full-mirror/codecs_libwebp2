@@ -17,7 +17,6 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -32,6 +31,10 @@
 namespace WP2 {
 namespace testutil {
 namespace {
+
+::testing::Environment* const kStackLimitEnv = SetStackLimitTo256KiB();
+
+//------------------------------------------------------------------------------
 
 struct FramesAndDurations {
   // Cannot use a std::vector<ArgbBuffer> directly because of b/300630831.
