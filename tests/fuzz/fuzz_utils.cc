@@ -34,6 +34,7 @@
 
 #include "imageio/file_format.h"
 #include "imageio/image_enc.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
@@ -397,12 +398,21 @@ DecoderConfig CreateDecoderConfig(
 
 void SaveBeforeAfter(const ArgbBuffer& original, const ArgbBuffer& decompressed,
                      const std::string& path) {
-  if (SaveImage(original, (path + "_original.png").c_str(),
-                /*overwrite=*/true) != WP2_STATUS_OK ||
-      SaveImage(decompressed, (path + "_decompressed.png").c_str(),
-                /*overwrite=*/true) != WP2_STATUS_OK) {
-    abort();
-  }
+  ArgbBuffer original_buffer(
+      WP2IsPremultiplied(original.format()) ? WP2_Argb_32 : WP2_ARGB_32);
+  WP2_ASSERT_STATUS(original.format() == original_buffer.format()
+                        ? original_buffer.SetView(original)
+                        : original_buffer.ConvertFrom(original));
+  ArgbBuffer decompressed_buffer(
+      WP2IsPremultiplied(decompressed.format()) ? WP2_Argb_32 : WP2_ARGB_32);
+  WP2_ASSERT_STATUS(decompressed.format() == decompressed_buffer.format()
+                        ? decompressed_buffer.SetView(decompressed)
+                        : decompressed_buffer.ConvertFrom(decompressed));
+  WP2_ASSERT_STATUS(SaveImage(original_buffer, (path + "_original.png").c_str(),
+                              /*overwrite=*/true));
+  WP2_ASSERT_STATUS(SaveImage(decompressed_buffer,
+                              (path + "_decompressed.png").c_str(),
+                              /*overwrite=*/true));
 }
 
 //------------------------------------------------------------------------------
