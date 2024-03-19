@@ -17,13 +17,14 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
+#include <cassert>
+#include <cstdint>
+
 #include "src/common/header_enc_dec.h"
 #include "src/dec/tile_dec.h"
-#include "src/dsp/math.h"
 #include "src/enc/tile_enc.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
-#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -32,8 +33,7 @@ namespace WP2 {
 
 WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
                         Writer* const output) {
-  const uint32_t rgb_bit_depth =
-      (tile->rgb_input.format() == WP2_Argb_38) ? 10 : 8;
+  const uint32_t rgb_bit_depth = WP2Formatbpc(tile->rgb_input.format());
   const uint32_t max_num_bytes =
       GetTileMaxNumBytes(rgb_bit_depth, gparams, tile->rect);
 
@@ -41,7 +41,7 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
       gparams.type_ == GlobalParams::GP_AV1) {
     // RGB input is expected.
     assert(!tile->rgb_input.IsEmpty());
-    if (WP2Formatbpc(tile->rgb_input.format()) <= 8) {
+    if (rgb_bit_depth <= 8) {
       for (uint32_t y = 0; y < tile->rect.height; ++y) {
         const uint8_t* const row = tile->rgb_input.GetRow8(y);
         if (gparams.has_alpha_) {
