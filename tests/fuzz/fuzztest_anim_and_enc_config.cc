@@ -34,6 +34,22 @@ namespace {
 
 ::testing::Environment* const kStackLimitEnv = SetStackLimitTo256KiB();
 
+WP2SampleFormat GetPremulFormat(WP2SampleFormat format) {
+  switch (format) {
+    case WP2_ARGB_32:
+    case WP2_XRGB_32:
+      return WP2_Argb_32;
+    case WP2_RGBA_32:
+    case WP2_RGBX_32:
+      return WP2_rgbA_32;
+    case WP2_BGRA_32:
+    case WP2_BGRX_32:
+      return WP2_bgrA_32;
+    default:
+      return WP2_Argb_32;
+  }
+}
+
 //------------------------------------------------------------------------------
 
 struct FramesAndDurations {
@@ -62,11 +78,26 @@ void EncodeDecode(const FramesAndDurations& frames_and_durations,
 
   original_frames.reserve(num_frames);
   for (size_t i = 0; i < num_frames; ++i) {
-    original_frames.emplace_back(frames_and_durations.format);
-    ASSERT_EQ(original_frames.back().SetExternal(frames_and_durations.width,
-                                                 frames_and_durations.height,
-                                                 samples, stride),
-              WP2_STATUS_OK);
+    if (config.quality == 100 &&
+        !WP2IsPremultiplied(frames_and_durations.format)) {
+      // TODO: b/329621116 - Support exact non-alpha-premultiplied samples in
+      //                     AnimationEncoder::AddFrame().
+      ArgbBuffer original_frame(frames_and_durations.format);
+      ASSERT_EQ(original_frame.SetExternal(frames_and_durations.width,
+                                           frames_and_durations.height, samples,
+                                           stride),
+                WP2_STATUS_OK);
+      original_frames.emplace_back(
+          GetPremulFormat(frames_and_durations.format));
+      ASSERT_EQ(original_frames.back().ConvertFrom(original_frame),
+                WP2_STATUS_OK);
+    } else {
+      original_frames.emplace_back(frames_and_durations.format);
+      ASSERT_EQ(original_frames.back().SetExternal(frames_and_durations.width,
+                                                   frames_and_durations.height,
+                                                   samples, stride),
+                WP2_STATUS_OK);
+    }
     samples += stride * frames_and_durations.height;
   }
 

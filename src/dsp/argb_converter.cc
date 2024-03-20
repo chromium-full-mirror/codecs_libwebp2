@@ -18,6 +18,7 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <algorithm>
+#include <cassert>
 #include <cstdint>
 #include <cstring>
 
@@ -30,7 +31,7 @@ namespace {
 //------------------------------------------------------------------------------
 // Plain copy (same source and destination formats)
 
-template<int bytes_per_pixel>
+template <int bytes_per_pixel>
 void WP2Copy_C(const void* src, uint32_t width, void* dst) {
   std::memcpy(dst, src, static_cast<size_t>(width) * bytes_per_pixel);
 }
@@ -86,6 +87,7 @@ template <typename SrcType, int kSrcA, int kSrcR, int kSrcG, int kSrcB,
           int kSrcStep, typename DstType, int kDstA, int kDstR, int kDstG,
           int kDstB, int kDstStep, int kMult, bool kFillAlpha>
 void Convert_C(const void* src_data, uint32_t width, void* dst_data) {
+  assert(src_data != dst_data);
   const SrcType* src = (const SrcType*)src_data;
   DstType* dst = (DstType*)dst_data;
   for (uint32_t i = 0; i < width; ++i, src += kSrcStep, dst += kDstStep) {
@@ -410,6 +412,51 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
   argb_converter_last_cpuinfo_used = WP2GetCPUInfo;
 }
 
+//------------------------------------------------------------------------------
+// Combinations (32-bit to 32-bit only)
+
+namespace {
+
+template <int from, int to>
+void WP2ConvertFromTo(const void* src, uint32_t width, void* dst) {
+  static_assert(from > WP2_ARGB_32 && from <= WP2_BGRX_32, "Unimplemented");
+  static_assert(to > WP2_ARGB_32 && to <= WP2_BGRX_32, "Unimplemented");
+
+  // Use a temporary layout Argb or ARGB to go from SRC to DST.
+  // Do not premultiply or unmultiply unless necessary.
+  // The functions below do not work inplace so use a temporary buffer.
+  uint8_t tmp[128];
+  while (width > 0) {
+    const uint32_t num_pixels = std::min<uint32_t>(width, sizeof(tmp) / 4);
+    if (WP2IsPremultiplied(static_cast<WP2SampleFormat>(from))) {
+      WP2ArgbConvertFrom[from](src, num_pixels, tmp);
+      WP2ArgbConvertTo[to](tmp, num_pixels, dst);
+    } else {
+      WP2ARGBConvertFrom[from](src, num_pixels, tmp);
+      WP2ARGBConvertTo[to](tmp, num_pixels, dst);
+    }
+    src = reinterpret_cast<const uint8_t*>(src) + num_pixels * 4;
+    dst = reinterpret_cast<uint8_t*>(dst) + num_pixels * 4;
+    width -= num_pixels;
+  }
+}
+
+template <int from>
+WP2ArgbConverterF WP2ConvertFromToFunc(WP2SampleFormat to) {
+  if (to == WP2_XRGB_32) return WP2ConvertFromTo<from, WP2_XRGB_32>;
+  if (to == WP2_rgbA_32) return WP2ConvertFromTo<from, WP2_rgbA_32>;
+  if (to == WP2_RGBA_32) return WP2ConvertFromTo<from, WP2_RGBA_32>;
+  if (to == WP2_RGBX_32) return WP2ConvertFromTo<from, WP2_RGBX_32>;
+  if (to == WP2_bgrA_32) return WP2ConvertFromTo<from, WP2_bgrA_32>;
+  if (to == WP2_BGRA_32) return WP2ConvertFromTo<from, WP2_BGRA_32>;
+  if (to == WP2_BGRX_32) return WP2ConvertFromTo<from, WP2_BGRX_32>;
+  return nullptr;
+}
+
+}  // namespace
+
+//------------------------------------------------------------------------------
+
 WP2ArgbConverterF WP2ConversionFunction(WP2SampleFormat from,
                                         WP2SampleFormat to) {
   if (to == WP2_Argb_32) return WP2ArgbConvertFrom[from];
@@ -421,6 +468,14 @@ WP2ArgbConverterF WP2ConversionFunction(WP2SampleFormat from,
     if (WP2FormatBpp(from) == 4) return WP2Copy_C<4>;
     if (WP2FormatBpp(from) == 8) return WP2Copy_C<8>;
   }
+
+  if (from == WP2_XRGB_32) return WP2ConvertFromToFunc<WP2_XRGB_32>(to);
+  if (from == WP2_rgbA_32) return WP2ConvertFromToFunc<WP2_rgbA_32>(to);
+  if (from == WP2_RGBA_32) return WP2ConvertFromToFunc<WP2_RGBA_32>(to);
+  if (from == WP2_RGBX_32) return WP2ConvertFromToFunc<WP2_RGBX_32>(to);
+  if (from == WP2_bgrA_32) return WP2ConvertFromToFunc<WP2_bgrA_32>(to);
+  if (from == WP2_BGRA_32) return WP2ConvertFromToFunc<WP2_BGRA_32>(to);
+  if (from == WP2_BGRX_32) return WP2ConvertFromToFunc<WP2_BGRX_32>(to);
   return nullptr;
 }
 

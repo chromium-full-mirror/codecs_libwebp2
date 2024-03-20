@@ -270,8 +270,8 @@ WP2Status TestChannelOrder(const char* file_name, WP2SampleFormat format) {
 
 TEST(ReadImageTest, ChannelOrder) {
   // WP2ConversionFunction() only returns conversion functions for all formats
-  // from and to WP2_ARGB_32 or WP2_Argb_32. It also supports plain copy, and
-  // ImageReaderPNG reads PNG samples in RGB(A) order.
+  // from and to WP2_ARGB_32 or WP2_Argb_32 and between 32-bit formats. It also
+  // supports plain copy, and ImageReaderPNG reads PNG samples in RGB(A) order.
 
   // Opaque
   EXPECT_WP2_OK(TestChannelOrder("taiwan.png", WP2_ARGB_32));
@@ -281,21 +281,25 @@ TEST(ReadImageTest, ChannelOrder) {
   // Alpha
   EXPECT_WP2_OK(TestChannelOrder("source1.png", WP2_ARGB_32));
   EXPECT_WP2_OK(TestChannelOrder("source1.png", WP2_RGBA_32));
+  EXPECT_WP2_OK(TestChannelOrder("source1.png", WP2_BGRA_32));
 
-  // RGBA -> premultiplied Argb -> ARGB implies quality loss.
-  EXPECT_EQ(TestChannelOrder("source1.png", WP2_Argb_32),
-            WP2_STATUS_INVALID_PARAMETER);
+  // RGBA -> premultiplied/opaque Argb -> ARGB implies quality loss.
+  for (WP2SampleFormat format : {WP2_Argb_32, WP2_rgbA_32, WP2_bgrA_32,
+                                 WP2_XRGB_32, WP2_RGBX_32, WP2_BGRX_32}) {
+    EXPECT_EQ(TestChannelOrder("source1.png", format),
+              WP2_STATUS_INVALID_PARAMETER);
+  }
 
-  // Expect all other combinations to fail.
-  EXPECT_EQ(TestChannelOrder("taiwan.png", WP2_RGBA_32),
-            WP2_STATUS_INVALID_COLORSPACE);
-  EXPECT_EQ(TestChannelOrder("source1.png", WP2_RGB_24),
-            WP2_STATUS_INVALID_COLORSPACE);
+  // 24-bit to something else except WP2_Argb_32 and WP2_ARGB_32 is unsupported.
   for (WP2SampleFormat format :
-       {WP2_XRGB_32, WP2_rgbA_32, WP2_RGBX_32, WP2_bgrA_32, WP2_BGRA_32,
-        WP2_BGRX_32, WP2_BGR_24, WP2_Argb_38}) {
+       {WP2_RGBA_32, WP2_RGBX_32, WP2_bgrA_32, WP2_BGRA_32, WP2_BGRX_32,
+        WP2_BGR_24, WP2_Argb_38}) {
     EXPECT_EQ(TestChannelOrder("taiwan.png", format),
               WP2_STATUS_INVALID_COLORSPACE);
+  }
+
+  // Expect all other combinations to fail.
+  for (WP2SampleFormat format : {WP2_RGB_24, WP2_BGR_24, WP2_Argb_38}) {
     EXPECT_EQ(TestChannelOrder("source1.png", format),
               WP2_STATUS_INVALID_COLORSPACE);
   }

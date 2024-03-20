@@ -1171,6 +1171,7 @@ DIST_FILES= \
             tests/test_coded_block.cc \
             tests/test_color_precision.cc \
             tests/test_context.cc \
+            tests/test_conversion.cc \
             tests/test_csp.cc \
             tests/test_custom_csp.cc \
             tests/test_custom_csp_dec.cc \

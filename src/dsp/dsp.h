@@ -217,8 +217,12 @@ extern WP2ArgbConverterF WP2ARGBConvertFrom[WP2_FORMAT_NUM];
 extern WP2ArgbConverterF WP2ArgbConvertTo[WP2_FORMAT_NUM];
 // ARGB -> any format
 extern WP2ArgbConverterF WP2ARGBConvertTo[WP2_FORMAT_NUM];
-// Returns the function for converting between the two formats. At least one of
-// the two formats must be Argb or ARGB, returns null otherwise.
+// Returns the function for converting between the two formats.
+// All conversions from Argb or ARGB are implemented.
+// All conversions to Argb or ARGB are implemented.
+// All conversions from four 8-bit channels to four 8-bit channels are
+// implemented, using a temporary step (slower).
+// Returns null in other cases.
 WP2ArgbConverterF WP2ConversionFunction(WP2SampleFormat from,
                                         WP2SampleFormat to);
 
