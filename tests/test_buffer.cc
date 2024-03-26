@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <string>
 #include <tuple>
+#include <utility>
 
 #include "examples/example_utils.h"
 #include "include/helpers.h"
@@ -133,6 +134,9 @@ TEST(BufferTest, Metadata) {
     swap(buffer, other_buffer);
     ASSERT_FALSE(buffer.metadata_.IsEmpty());
     ASSERT_TRUE(other_buffer.metadata_.IsEmpty());
+
+    buffer = std::move(other_buffer);
+    ASSERT_TRUE(buffer.metadata_.IsEmpty());
   }
 }
 

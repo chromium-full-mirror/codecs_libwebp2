@@ -138,8 +138,7 @@ WP2Status OrientateBuffer(Orientation orientation, ArgbBuffer* const buffer) {
     if (buffer->IsView()) {
       WP2_CHECK_STATUS(buffer->CopyFrom(tmp));
     } else {
-      using std::swap;
-      swap(*buffer, tmp);
+      *buffer = std::move(tmp);
     }
   } else if (orientation == Orientation::k180) {
     // Swap first half of all pixels in scan-order with opposites.

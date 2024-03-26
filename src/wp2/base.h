@@ -206,6 +206,7 @@ struct Data {
   Data(Data&& other) noexcept;
   Data(const Data&) = delete;
   ~Data() { Clear(); }
+  Data& operator=(Data&& other) noexcept;
 
   bool IsEmpty() const { return (size == 0); }
 
@@ -378,6 +379,7 @@ class ArgbBuffer {
   ArgbBuffer(const ArgbBuffer&) = delete;  // No invisible copy, for safety.
   ArgbBuffer(ArgbBuffer&&) noexcept;
   ~ArgbBuffer() { Deallocate(); }
+  ArgbBuffer& operator=(ArgbBuffer&&) noexcept;
 
   // Returns true if this buffer is empty (has no pixel).
   bool IsEmpty() const { return (pixels_ == nullptr); }

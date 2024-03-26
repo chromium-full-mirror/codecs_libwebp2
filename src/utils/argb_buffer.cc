@@ -150,6 +150,12 @@ ArgbBuffer::ArgbBuffer(ArgbBuffer&& other) noexcept : format_(other.format()) {
   TrivialMoveCtor(this, &other);
 }
 
+ArgbBuffer& ArgbBuffer::operator=(ArgbBuffer&& other) noexcept {
+  this->Deallocate();
+  TrivialMoveCtor(this, &other);
+  return *this;
+}
+
 void ArgbBuffer::Deallocate() {
   if (!is_external_memory_) {
     WP2Free(private_memory_);

@@ -29,6 +29,12 @@ namespace WP2 {
 
 Data::Data(Data&& other) noexcept { TrivialMoveCtor(this, &other); }
 
+Data& Data::operator=(Data&& other) noexcept {
+  this->Clear();
+  TrivialMoveCtor(this, &other);
+  return *this;
+}
+
 void Data::Clear() {
   WP2Free(bytes);
   bytes = nullptr;
