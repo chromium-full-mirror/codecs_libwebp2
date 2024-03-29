@@ -266,8 +266,11 @@ void FuzzedParameters::ExtractConfig(DecoderConfig* const config) {
   config->incremental_mode = (DecoderConfig::IncrementalMode)ExtractUInt32(1);
 }
 
-void LimitConfigForBigImages(const Data& bitstream,
-                             DecoderConfig* const config) {
+void LimitConfigForBigImages(const Data& bitstream, DecoderConfig* config) {
+  LimitConfigForBigImages(DataView{bitstream.bytes, bitstream.size}, config);
+}
+
+void LimitConfigForBigImages(DataView bitstream, DecoderConfig* config) {
   // Try to keep the peak allocated memory below 2 GB by reducing the number of
   // concurrently decoded tiles for big images.
   WP2::BitstreamFeatures features;

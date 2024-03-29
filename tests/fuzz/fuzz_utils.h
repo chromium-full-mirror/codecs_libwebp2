@@ -92,8 +92,8 @@ class FuzzedParameters {
 
 // Modifies the 'config' so that decoding the 'bitstream' is not too CPU- or
 // memory-intensive.
-void LimitConfigForBigImages(const Data& bitstream,
-                             DecoderConfig* const config);
+void LimitConfigForBigImages(const Data& bitstream, DecoderConfig* config);
+void LimitConfigForBigImages(DataView bitstream, DecoderConfig* config);
 
 // Verifies that 'original' can be encoded with 'config' or aborts. Also checks
 // that the decoded image is not worse than the 'expected_distortion' if not 0.
