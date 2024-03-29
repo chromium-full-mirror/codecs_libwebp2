@@ -20,11 +20,12 @@
 #include <algorithm>
 
 #include "src/utils/orientation.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "tests/fuzz/fuzz_utils.h"
 #include "tests/include/helpers.h"
-#include "third_party/libwebp2/public/src/wp2/base.h"
 
 namespace WP2 {
 namespace testutil {
@@ -71,7 +72,7 @@ int TestImageDecConfig(DataView encoded_data, const DecoderConfig& config,
                        bool expected_success) {
   ArgbBuffer decoded;
   const WP2Status status =
-      Decode(encoded_data.bytes, encoded_data.size, &decoded);
+      Decode(encoded_data.bytes, encoded_data.size, &decoded, config);
   if (status != WP2_STATUS_OK && expected_success) abort();
   return 0;
 }
