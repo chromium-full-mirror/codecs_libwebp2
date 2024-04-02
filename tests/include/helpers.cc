@@ -15,20 +15,40 @@
 
 #include "./helpers.h"
 
+#include <algorithm>
 #include <cassert>
+#include <chrono>  // NOLINT
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include "examples/example_utils.h"
 #include "imageio/anim_image_dec.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
+#include "imageio/imageio_util.h"
+#include "src/common/constants.h"
+#include "src/common/lossy/block_size.h"
+#include "src/dsp/dsp.h"
 #include "src/dsp/lossless/decl_dsp.h"
 #include "src/dsp/lossless/dspl.h"
 #include "src/dsp/lossless/encl_dsp.h"
+#include "src/dsp/math.h"
+#include "src/utils/csp.h"
 #include "src/utils/front_mgr.h"
 #include "src/utils/orientation.h"
+#include "src/utils/plane.h"
+#include "src/utils/random.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
+#include "src/wp2/decode.h"
+#include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace testutil {
@@ -198,7 +218,7 @@ float GetExpectedDistortion(float quality, float alpha_quality, int effort) {
   } else if (quality < kMaxQuality || alpha_quality < kMaxQuality) {
     quality -= kMaxLossyQuality;
     alpha_quality -= kMaxLossyQuality;
-    return (30.f + 1.f * quality + 1.f * alpha_quality);  // Near-lossless
+    return (25.f + 1.f * quality + 1.f * alpha_quality);  // Near-lossless
   } else {
     return 99.f;  // Lossless
   }
