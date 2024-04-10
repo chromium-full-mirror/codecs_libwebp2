@@ -42,7 +42,7 @@ class ContextTileDecoder : public PartialTileDecoder {
 
  protected:
   // To be called only through MainContext::CreateLocalContext().
-  static void SuspendingDecode(LocalContext* const context);
+  static void SuspendingDecode(void* local_context);
 
   // Resumes decoding and sets partial_tile_.status.
   void DecodePartialTile();

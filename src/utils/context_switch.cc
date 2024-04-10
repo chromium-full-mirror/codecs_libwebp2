@@ -105,8 +105,8 @@ void LocalContext::Close() {
 
 //------------------------------------------------------------------------------
 
-bool MainContext::CreateLocalContext(
-    void (*suspendable_function)(LocalContext*), void* inter_context_data) {
+bool MainContext::CreateLocalContext(void (*suspendable_function)(void*),
+                                     void* inter_context_data) {
   if (!context_.closed_) {
     LOG_CONTEXT_ERROR("Another context is already created.");
     return false;

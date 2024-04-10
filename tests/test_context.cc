@@ -44,12 +44,14 @@ void IncrementData(LocalContext* const context,
   inter_context_data->data += 16;
 }
 
-void RunContext(LocalContext* const context) {
+void RunContext(void* const local_context) {
+  LocalContext* const context = reinterpret_cast<LocalContext*>(local_context);
   IncrementData(context, (InterContextData*)context->GetInterContextData());
   context->Close();
 }
 
-void RunBadContext(LocalContext* const context) {
+void RunBadContext(void* const local_context) {
+  LocalContext* const context = reinterpret_cast<LocalContext*>(local_context);
   context->Close();
   context->Yield();  // Nothing should be called after Close().
   context->Close();

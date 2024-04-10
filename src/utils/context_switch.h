@@ -164,7 +164,7 @@ class MainContext {
   // MainContext::Resume() is called. It must end with a LocalContext::Close().
   // The 'inter_context_data' can be accessed with
   // LocalContext::GetInterContextData().
-  bool CreateLocalContext(void (*suspendable_function)(LocalContext*),
+  bool CreateLocalContext(void (*suspendable_function)(void*),
                           void* inter_context_data);
 
   // Give back control to the local context. Returns false if local context

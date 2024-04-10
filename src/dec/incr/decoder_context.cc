@@ -19,13 +19,16 @@
 
 #include "src/dec/incr/decoder_context.h"
 
+#include "src/utils/context_switch.h"
+
 #if defined(WP2_USE_CONTEXT_SWITCH) && (WP2_USE_CONTEXT_SWITCH > 0)
 
 namespace WP2 {
 
 //------------------------------------------------------------------------------
 
-void ContextTileDecoder::SuspendingDecode(LocalContext* const context) {
+void ContextTileDecoder::SuspendingDecode(void* const local_context) {
+  LocalContext* const context = reinterpret_cast<LocalContext*>(local_context);
   InterContextData* const inter_context_data =
       (InterContextData*)context->GetInterContextData();
   inter_context_data->input.SetContext(context);  // Enable suspension.
