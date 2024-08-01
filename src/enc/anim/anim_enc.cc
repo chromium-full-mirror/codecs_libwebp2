@@ -19,10 +19,19 @@
 
 #include "./anim_enc.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
+#include "src/common/constants.h"
 #include "src/common/progress_watcher.h"
 #include "src/enc/preview/preview_enc.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
@@ -38,7 +47,7 @@ struct AnimationEncoder::State : public WP2Allocable {
 
 // If PImpl allocation failed, AddFrame() and Encode() will return OUT_OF_MEM.
 AnimationEncoder::AnimationEncoder()
-    : state_(new (WP2Allocable::nothrow) State()) {}
+    : state_(new(WP2Allocable::nothrow) State()) {}
 
 AnimationEncoder::AnimationEncoder(AnimationEncoder&& other) noexcept
     : state_(other.state_) {
@@ -77,7 +86,12 @@ WP2Status AnimationEncoder::AddFrame(const ArgbBuffer& pixels,
   }
 
   WP2_CHECK_ALLOC_OK(frames.resize(frames.size() + 1));
-  // TODO(yguyon): Handle Argb38 without precision loss
+  // TODO(yguyon): Handle Argb38
+  if (frames.back().rgb_pixels.SetFormat(WP2IsPremultiplied(pixels.format())
+                                             ? WP2_Argb_32
+                                             : WP2_ARGB_32) != WP2_STATUS_OK) {
+    assert(false);
+  }
   const WP2Status status = frames.back().rgb_pixels.ConvertFrom(pixels);
   if (status != WP2_STATUS_OK) frames.pop_back();  // No-op if problem.
   WP2_CHECK_STATUS(status);
@@ -86,14 +100,14 @@ WP2Status AnimationEncoder::AddFrame(const ArgbBuffer& pixels,
   return WP2_STATUS_OK;
 }
 
-WP2Status AnimationEncoder::AddFrame(
-    uint32_t width, uint32_t height,
-    const int16_t* c0_buffer, uint32_t c0_step,
-    const int16_t* c1_buffer, uint32_t c1_step,
-    const int16_t* c2_buffer, uint32_t c2_step,
-    const int16_t* a_buffer, uint32_t a_step,
-    const int16_t ccsp_to_rgb_matrix[9],
-    uint32_t ccsp_to_rgb_shift, uint32_t duration_ms, bool force_dispose) {
+WP2Status AnimationEncoder::AddFrame(uint32_t width, uint32_t height,
+                                     const int16_t* c0_buffer, uint32_t c0_step,
+                                     const int16_t* c1_buffer, uint32_t c1_step,
+                                     const int16_t* c2_buffer, uint32_t c2_step,
+                                     const int16_t* a_buffer, uint32_t a_step,
+                                     const int16_t ccsp_to_rgb_matrix[9],
+                                     uint32_t ccsp_to_rgb_shift,
+                                     uint32_t duration_ms, bool force_dispose) {
   WP2_CHECK_ALLOC_OK(state_ != nullptr);
   WP2_CHECK_OK(ccsp_to_rgb_matrix != nullptr, WP2_STATUS_NULL_PARAMETER);
   const CSPMtx ccsp_to_rgb(ccsp_to_rgb_matrix, ccsp_to_rgb_shift);

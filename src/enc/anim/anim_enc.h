@@ -20,9 +20,10 @@
 #ifndef WP2_ENC_ANIM_ANIM_ENC_H_
 #define WP2_ENC_ANIM_ANIM_ENC_H_
 
-#include "src/common/color_precision.h"
-#include "src/common/global_params.h"
+#include <cstdint>
+
 #include "src/common/progress_watcher.h"
+#include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
@@ -39,7 +40,7 @@ struct Frame {
   uint32_t GetHeight() const;
 
   // Either 'rgb_pixels' or 'ccsp_pixels' is empty.
-  ArgbBuffer rgb_pixels;  // In alpha-premultiplied format.
+  ArgbBuffer rgb_pixels;
 
   YUVPlane ccsp_pixels;     // In custom color space.
   CSPMtx ccsp_to_rgb = {};  // Should give alpha-premultiplied RGB samples

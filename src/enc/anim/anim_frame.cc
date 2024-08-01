@@ -18,13 +18,25 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <cassert>
+#include <cmath>
+#include <cstdint>
 
+#include "src/common/color_precision.h"
 #include "src/common/constants.h"
+#include "src/common/global_params.h"
 #include "src/common/header_enc_dec.h"
+#include "src/common/progress_watcher.h"
+#include "src/dsp/math.h"
 #include "src/enc/analysis.h"
 #include "src/enc/anim/anim_enc.h"
 #include "src/enc/tile_enc.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -109,22 +121,16 @@ WP2Status FrameEncoder::SaveSubframeToCanvas(const ArgbBuffer& subframe,
            window.height == subframe.height());
     assert(window.x == 0 && window.y == 0);
 
+    WP2_CHECK_STATUS(rgb_canvas_.SetFormat(subframe.format()));
     WP2_CHECK_STATUS(rgb_canvas_.CopyFrom(subframe));
   } else {
     assert(subframe.width() == rgb_canvas_.width());
     assert(subframe.height() == rgb_canvas_.height());
-
-    const uint32_t pixel_depth = WP2FormatBpp(rgb_canvas_.format());
-    uint8_t* canvas_row =
-        rgb_canvas_.GetRow8(window.y) + window.x * pixel_depth;
-    const uint8_t* frame_row =
-        subframe.GetRow8(window.y) + window.x * pixel_depth;
-
-    for (uint32_t y = 0; y < window.height; ++y) {
-      memcpy(canvas_row, frame_row, window.width * pixel_depth);
-      canvas_row += rgb_canvas_.stride();
-      frame_row += subframe.stride();
-    }
+    WP2::ArgbBuffer subframe_view(rgb_canvas_.format());
+    WP2_CHECK_STATUS(subframe_view.SetView(subframe, window));
+    WP2::ArgbBuffer rgb_canvas_view(rgb_canvas_.format());
+    WP2_CHECK_STATUS(rgb_canvas_view.SetView(rgb_canvas_, window));
+    WP2_CHECK_STATUS(rgb_canvas_view.CopyFrom(subframe_view));
   }
   return WP2_STATUS_OK;
 }
@@ -284,6 +290,7 @@ WP2Status FrameEncoder::EncodeSubframe(const Frame& frame, bool dispose,
 
   Subframe subframe;
   if (!frame.rgb_pixels.IsEmpty()) {
+    WP2_CHECK_STATUS(subframe.rgb_pixels.SetFormat(frame.rgb_pixels.format()));
     WP2_CHECK_STATUS(subframe.rgb_pixels.SetView(frame.rgb_pixels));
   }
   if (!frame.ccsp_pixels.IsEmpty()) {

@@ -19,20 +19,31 @@
 
 #include "src/enc/screen_content/screen_enc.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
 #include "src/common/constants.h"
-#include "src/common/lossless/color_cache.h"
+#include "src/common/progress_watcher.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/enc/anim/anim_enc.h"
 #include "src/enc/preview/preview_enc.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/debug.h"
+#include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {
 
 // Split the image into a grid of kScreenBlockSize x kScreenBlockSize blocks,
 // and decide between lossy and lossless for each block.
-// TODO(maryla): we could try using the real paritioning so the blocks follow
+// TODO(maryla): we could try using the real partitioning so the blocks follow
 // image edges.
 static constexpr uint32_t kScreenBlockSize = 32;
 
@@ -116,8 +127,9 @@ WP2Status DecideLossy(const ArgbBuffer& input, const Planef& lossy_scores,
     for (uint32_t x = 0; x < block_width; ++x) {
       if (HasOnlyOneColor(input, x, y)) {
         // For monochrome areas, use the same mode as the neighboring blocks.
-        is_lossy->At(x, y) = (x > 0) ? is_lossy->At(x - 1, y)
-                                     : (y > 0) ? is_lossy->At(x, y - 1) : false;
+        is_lossy->At(x, y) = (x > 0)   ? is_lossy->At(x - 1, y)
+                             : (y > 0) ? is_lossy->At(x, y - 1)
+                                       : false;
       } else {
         is_lossy->At(x, y) = (lossy_scores.At(x, y) < lossless_scores.At(x, y));
       }
@@ -189,8 +201,7 @@ EncoderConfig LosslessConfig(const EncoderConfig& base_config) {
 
 }  // namespace
 
-WP2Status EncodeScreenContent(const ArgbBuffer& input,
-                              Writer* const output,
+WP2Status EncodeScreenContent(const ArgbBuffer& input, Writer* const output,
                               const EncoderConfig& config) {
 #if !defined(WP2_BITTRACE)
   fprintf(stderr, "WARNING! WP2_BITTRACE required for screen content\n");
@@ -256,6 +267,9 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
   Subframe lossless_subframe;
   Subframe lossy_subframe;
   WP2_CHECK_STATUS(lossy_subframe.rgb_pixels.ConvertFrom(input));
+  // There is no need to set the format to WP2_ARGB_32 if the input is not
+  // premultiplied because the lossy subframe will introduce some loss anyway.
+  // TODO(yguyon): Handle Argb38
   WP2_CHECK_STATUS(lossless_subframe.rgb_pixels.ConvertFrom(input));
   lossy_subframe.window =
       ScaleRect(lossy_rect_group.GetRectangle(0), block_size)
@@ -291,14 +305,13 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
     }
   }
 
-  const uint32_t rgb_bit_depth =
-      (lossless_subframe.rgb_pixels.format() == WP2_Argb_38) ? 10 : 8;
   const bool has_alpha = true;
   const bool has_icc = (input.metadata_.iccp.size > 0);
   const bool has_trailing_data =
       (input.metadata_.xmp.size > 0) || (input.metadata_.exif.size > 0);
   WP2_CHECK_STATUS(EncodeHeader(
-      config, input.width(), input.height(), rgb_bit_depth, has_alpha,
+      config, input.width(), input.height(),
+      WP2Formatbpc(lossless_subframe.rgb_pixels.format()), has_alpha,
       /*is_anim=*/true, /*loop_forever=*/false, kDefaultBackgroundColor,
       GetPreviewColor(input), has_icc, has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
