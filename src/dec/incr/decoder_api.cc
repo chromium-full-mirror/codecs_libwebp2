@@ -37,7 +37,8 @@ Decoder::Decoder(State* const state, const DecoderConfig& config,
                  ArgbBuffer* const output_buffer)
     : state_(state),
       config_(config),
-      output_((output_buffer != nullptr) ? output_buffer : &internal_output_) {
+      output_((output_buffer != nullptr) ? output_buffer : &internal_output_),
+      internal_output_(config.exact ? WP2_ARGB_32 : WP2_Argb_32) {
   if (state_ != nullptr) {
 #if defined(WP2_USE_CONTEXT_SWITCH) && (WP2_USE_CONTEXT_SWITCH > 0)
     if (config.incremental_mode ==
@@ -241,7 +242,7 @@ void Decoder::Rewind() {
 ArrayDecoder::ArrayDecoder(const DecoderConfig& config,
                            ArgbBuffer* output_buffer)
     // May fail. If so WP2_STATUS_OUT_OF_MEMORY will be returned by GetStatus().
-    : Decoder(new (WP2Allocable::nothrow) DecoderStateArray(config), config,
+    : Decoder(new(WP2Allocable::nothrow) DecoderStateArray(config), config,
               output_buffer) {}
 
 ArrayDecoder::ArrayDecoder(const uint8_t* data, size_t size,
@@ -264,7 +265,7 @@ void ArrayDecoder::SetInput(const uint8_t* data, size_t size) {
 StreamDecoder::StreamDecoder(const DecoderConfig& config,
                              ArgbBuffer* output_buffer)
     // May fail. If so WP2_STATUS_OUT_OF_MEMORY will be returned by GetStatus().
-    : Decoder(new (WP2Allocable::nothrow) DecoderStateStream(config), config,
+    : Decoder(new(WP2Allocable::nothrow) DecoderStateStream(config), config,
               output_buffer) {}
 
 void StreamDecoder::AppendInput(const uint8_t* data, size_t size,
@@ -295,7 +296,7 @@ void StreamDecoder::AppendInput(const uint8_t* data, size_t size,
 CustomDecoder::CustomDecoder(const DecoderConfig& config,
                              ArgbBuffer* output_buffer)
     // May fail. If so WP2_STATUS_OUT_OF_MEMORY will be returned by GetStatus().
-    : Decoder(new (WP2Allocable::nothrow) DecoderStateCustom(config, this),
+    : Decoder(new(WP2Allocable::nothrow) DecoderStateCustom(config, this),
               config, output_buffer) {}
 
 void CustomDecoder::DecodeAvailableData() {
