@@ -1118,23 +1118,6 @@ DIST_FILES= \
             swig/CMakeLists.txt \
             swig/libwebp2.i \
             swig/README.md \
-            tests/fuzz/common_tags.dict \
-            tests/fuzz/common_wp2_tags.dict \
-            tests/fuzz/fuzz_anim.cc \
-            tests/fuzz/fuzz_anim_and_dec_config.cc \
-            tests/fuzz/fuzz_anim_and_enc_config.cc \
-            tests/fuzz/fuzz_anim_enc_config.cc \
-            tests/fuzz/fuzz_image.cc \
-            tests/fuzz/fuzz_image_and_dec_config.cc \
-            tests/fuzz/fuzz_image_and_enc_config.cc \
-            tests/fuzz/fuzz_image_enc_config.cc \
-            tests/fuzz/fuzz_imageio_anim_dec.cc \
-            tests/fuzz/fuzz_imageio_image_dec_enc.cc \
-            tests/fuzz/fuzz_imageio_image_enc.cc \
-            tests/fuzz/fuzz_utils.cc \
-            tests/fuzz/fuzz_utils.h \
-            tests/fuzz/fuzz_utils_temp_file.h \
-            tests/fuzz/repro_fuzz.cc \
             tests/include/helpers.h \
             tests/include/helpers.cc \
             tests/include/helpers_filter.h \

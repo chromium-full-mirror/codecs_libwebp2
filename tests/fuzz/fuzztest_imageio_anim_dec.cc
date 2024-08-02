@@ -17,31 +17,40 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
-#include <cstddef>
 #include <cstdint>
 
-#include "./fuzz_utils.h"
 #include "imageio/anim_image_dec.h"
+#include "imageio/file_format.h"
+#include "imageio/imageio_util.h"
 #include "src/wp2/base.h"
-#include "tests/include/helpers.h"
+#include "fuzzing/fuzztest.h"
+#include "tests/fuzz/fuzz_utils.h"
 
-::testing::Environment* const kStackLimitEnv =
-    WP2::testutil::SetStackLimitTo256KiB();
+namespace WP2 {
+namespace testutil {
+namespace {
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  // Truncate lengthy inputs.
-  static constexpr uint32_t kMaxSize = 1024 * 1024;
-  if (size > kMaxSize) size = kMaxSize;
-
+void Read(std::string_view bytes) {
   // Input data is an encoded animation (webp, gif etc.) that may be invalid.
   // It can also be a still image (jpeg, png etc.).
-  WP2::ArgbBuffer buffer;
-  WP2::ImageReader image_reader(data, size, &buffer, WP2::FileFormat::AUTO,
-                                WP2::LogLevel::QUIET,
-                                WP2::testutil::kMaxNumPixels);
+  ArgbBuffer buffer;
+  ImageReader image_reader(reinterpret_cast<const uint8_t*>(bytes.data()),
+                           bytes.size(), &buffer, FileFormat::AUTO,
+                           LogLevel::QUIET, kMaxNumPixels);
   bool is_last_frame = true;
   while (image_reader.ReadFrame(&is_last_frame) == WP2_STATUS_OK &&
          !is_last_frame) {
   }
-  return 0;
 }
+
+// Truncate lengthy inputs.
+constexpr uint32_t kMaxSize = 1024 * 1024;  // 1 MB
+
+FUZZ_TEST(ReadAnim, Read)
+    .WithDomains(fuzztest::String().WithMaxSize(kMaxSize).WithDictionary(
+        ReadDictionaryFromFiles({GetTestAssetPath("fuzz/common_tags.dict")})))
+    .WithSeeds(ReadFilesFromDirectory(GetTestAssetPath("testdata")));
+
+}  // namespace
+}  // namespace testutil
+}  // namespace WP2

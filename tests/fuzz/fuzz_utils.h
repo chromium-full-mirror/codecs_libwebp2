@@ -25,7 +25,6 @@
 #include <string>
 #include <vector>
 
-#include "imageio/file_format.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
@@ -46,53 +45,8 @@ constexpr size_t kMaxNumPixels = 1u << 22;
 // Limit encoding duration to avoid timeout issues (< 90 seconds).
 constexpr double kEncodingMaxNumSeconds = 60.;
 
-// Used to extract test parameters from a bitstream of any size and content.
-// TODO: b/311360339 - Remove when migrated to FuzzTest.
-class FuzzedParameters {
- public:
-  FuzzedParameters(const uint8_t data[], size_t data_size)
-      : data_(data), data_size_(data_size) {}
-
-  // Returns a value in range [0..max_value] or [min_value..max_value].
-  // Only powers of two are uniformly distributed.
-  uint32_t ExtractUInt32(uint32_t max_value);
-  uint32_t ExtractUInt32(uint32_t min_value, uint32_t max_value);
-  double ExtractDouble(double min_value, double max_value);
-
-  bool ExtractBool();
-
-  // Returns the name, bytes and size of a valid image from testdata folder or
-  // false if an error occurred.
-  bool ExtractSource(const char** const file_name,
-                     const uint8_t** const file_data, size_t* const file_size);
-
-  // Returns a valid output format.
-  FileFormat ExtractOutputFormat();
-
-  // Returns a randomly sized buffer with random pixels. Returns an empty buffer
-  // if there is not enough data or if the allocation failed.
-  ArgbBuffer ExtractArgbBuffer(uint32_t max_num_pixels = 256 * 256,
-                               uint32_t max_width_or_height = kImageDimMax,
-                               WP2SampleFormat format = WP2_Argb_32);
-
-  // Returns a (possibly invalid) wp2 bitstream, starting with the wp2 tag.
-  bool TryExtractWP2Bitstream(Data* const encoded_data);
-
-  // Extracts encoding settings (quality, effort etc.). Can be very slow.
-  void ExtractConfig(EncoderConfig* const config);
-
-  // Extracts decoding settings.
-  void ExtractConfig(DecoderConfig* const config);
-
- protected:
-  const uint8_t* const data_;
-  const size_t data_size_;
-  size_t bit_pos_ = 0;
-};
-
 // Modifies the 'config' so that decoding the 'bitstream' is not too CPU- or
 // memory-intensive.
-void LimitConfigForBigImages(const Data& bitstream, DecoderConfig* config);
 void LimitConfigForBigImages(DataView bitstream, DecoderConfig* config);
 
 // Verifies that 'original' can be encoded with 'config' or aborts. Also checks
@@ -112,17 +66,34 @@ int TestImageDecConfig(DataView encoded_data, const DecoderConfig& config,
 
 //------------------------------------------------------------------------------
 
-// Returns a list of test images contents (not paths) from the "testdata"
-// directory that are smaller than 'max_file_size'.
+std::string GetTestAssetPath(std::string_view name);
+
+// Returns the list of test image paths from the "testdata" directory.
+std::vector<std::string> GetTestImageNames();
+
+// Reads a file from the tests/testdata directory and returns its contents.
+Data ReadTestImage(const std::string& name);
+
+// Returns a list of test image contents (not paths) that are smaller than
+// 'max_file_size'.
 std::vector<std::string> GetTestImagesContents(size_t max_file_size);
 
-// Generator for an arbitrary byte sequence taken from GetTestImagesContents()
-// or a mutation of it.
+// Same as fuzztest::ReadFilesFromDirectory() but checks for file existence.
+std::vector<std::tuple<std::string>> ReadFilesFromDirectory(
+    std::string_view dir);
+
+std::vector<std::string> ReadDictionaryFromFiles(
+    const std::vector<std::string_view>& file_paths);
+
+// Generator for an arbitrary encoded byte sequence taken from
+// GetTestImagesContents() or a mutation of it.
 inline auto ArbitraryImageWithSeeds() {
   constexpr uint32_t kMaxSeedFileSize = 1024 * 1024;  // 1MB.
-  return fuzztest::Arbitrary<std::string>()
+  return fuzztest::String()
       .WithMaxSize(kMaxSeedFileSize)
-      .WithSeeds(GetTestImagesContents(kMaxSeedFileSize));
+      .WithSeeds(GetTestImagesContents(kMaxSeedFileSize))
+      .WithDictionary(ReadDictionaryFromFiles(
+          {GetTestAssetPath("fuzz/common_wp2_tags.dict")}));
 }
 
 //------------------------------------------------------------------------------
@@ -146,6 +117,33 @@ DecoderConfig CreateDecoderConfig(
     bool enable_alpha_filter, uint8_t grain_amplitude,
     DecoderConfig::IncrementalMode incremental_mode);
 
+ArgbBuffer CreateArgbBuffer8b(size_t width, size_t height,
+                              WP2SampleFormat format,
+                              const std::vector<uint8_t>& samples);
+
+size_t GetNumSamples(size_t width, size_t height, WP2SampleFormat format);
+
+//------------------------------------------------------------------------------
+
+// Do not generate images wider or taller than this.
+inline constexpr size_t kMaxDimension = 256;  // In pixels.
+
+// ArgbBuffer generator type: Width, height, format and 8-bit samples.
+inline auto ArbitraryArgbBuffer8b() {
+  return fuzztest::FlatMap(
+      [](size_t width, size_t height, WP2SampleFormat format) {
+        return fuzztest::Map(
+            CreateArgbBuffer8b, fuzztest::Just(width), fuzztest::Just(height),
+            fuzztest::Just(format),
+            fuzztest::Arbitrary<std::vector<uint8_t>>().WithSize(
+                GetNumSamples(width, height, format)));
+      },
+      fuzztest::InRange<size_t>(1, kMaxDimension),
+      fuzztest::InRange<size_t>(1, kMaxDimension), fuzztest::Just(WP2_Argb_32));
+}
+
+//------------------------------------------------------------------------------
+
 // Generator for an arbitrary EncoderConfig.
 inline auto ArbitraryEncoderConfig() {
   return fuzztest::Map(
@@ -156,8 +154,7 @@ inline auto ArbitraryEncoderConfig() {
       fuzztest::OneOf(fuzztest::Just<size_t>(0),
                       fuzztest::InRange<size_t>(1, 1 << 20)),
       /*target_psnr=*/
-      fuzztest::OneOf(fuzztest::Just<float>(0),
-                      fuzztest::Just<float>(99.),
+      fuzztest::OneOf(fuzztest::Just<float>(0), fuzztest::Just<float>(99.),
                       fuzztest::InRange<float>(.01, 99.)),
       /*alpha_quality=*/fuzztest::InRange<float>(0, kMaxQuality),
       /*effort=*/fuzztest::InRange<int>(kMinEffort, kMaxEffort),
@@ -222,6 +219,11 @@ inline auto ArbitraryEncoderConfig() {
 
       /*thread_level=*/fuzztest::InRange<int>(0, (1u << 31) - 1u),
       /*low_memory=*/fuzztest::Arbitrary<bool>());
+}
+
+inline auto ArbitraryProgressFailAt() {
+  return fuzztest::OneOf(fuzztest::InRange<double>(0, 1),
+                         fuzztest::Just<double>(2));
 }
 
 // Generator for an arbitrary DecoderConfig.

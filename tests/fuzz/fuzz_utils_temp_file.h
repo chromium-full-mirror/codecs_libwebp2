@@ -19,130 +19,26 @@
 // Adapter utility from fuzzer input to a temporary file, for fuzzing APIs that
 // require a file instead of an input buffer.
 
-#include <limits.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <cstdio>
+#include <cstring>
 
-// Pure-C interface for creating and cleaning up temporary files.
-
-static char* fuzzer_get_tmpfile_with_suffix(const uint8_t* data, size_t size,
-                                            const char* suffix) {
-  if (suffix == NULL) {  // NOLINT (this could be a C compilation unit)
-    suffix = "";
-  }
-  const size_t suffix_len = strlen(suffix);
-  if (suffix_len > INT_MAX) {  // mkstemps takes int for suffixlen param
-    perror("Suffix too long");
-    abort();
-  }
-
-#ifdef __ANDROID__
-  const char* leading_temp_path =
-      "/data/local/tmp/generate_temporary_file.XXXXXX";
-#else
-  const char* leading_temp_path = "/tmp/generate_temporary_file.XXXXXX";
-#endif
-  const size_t buffer_sz = strlen(leading_temp_path) + suffix_len + 1;
-  char* filename_buffer =
-      (char*)malloc(buffer_sz);  // NOLINT (this could be a C compilation unit)
-  if (!filename_buffer) {
-    perror("Failed to allocate file name buffer.");
-    abort();
-  }
-
-  if (snprintf(filename_buffer, buffer_sz, "%s%s", leading_temp_path, suffix) >=
-      buffer_sz) {
-    perror("File name buffer too short.");
-    abort();
-  }
-
-  const int file_descriptor = mkstemps(filename_buffer, suffix_len);
-  if (file_descriptor < 0) {
-    perror("Failed to make temporary file.");
-    abort();
-  }
-  FILE* file = fdopen(file_descriptor, "wb");
-  if (!file) {
-    perror("Failed to open file descriptor.");
-    close(file_descriptor);
-    abort();
-  }
-  const size_t bytes_written = fwrite(data, sizeof(uint8_t), size, file);
-  if (bytes_written < size) {
-    close(file_descriptor);
-    fprintf(stderr, "Failed to write all bytes to file (%zu out of %zu)",
-            bytes_written, size);
-    abort();
-  }
-  fclose(file);
-  return filename_buffer;
-}
-
-static char* fuzzer_get_tmpfile(
-    const uint8_t* data,
-    size_t size) {  // NOLINT (people include this .inc file directly)
-  return fuzzer_get_tmpfile_with_suffix(data, size, NULL);  // NOLINT
-}
-
-static void fuzzer_release_tmpfile(char* filename) {
-  if (unlink(filename) != 0) {
-    perror("WARNING: Failed to delete temporary file.");
-  }
-  free(filename);
-}
-
-// C++ RAII object for creating temporary files.
-
-#ifdef __cplusplus
 class FuzzerTemporaryFile {
  public:
-  FuzzerTemporaryFile(const uint8_t* data, size_t size)
-      : original_filename_(fuzzer_get_tmpfile(data, size)) {
-    filename_ = strdup(original_filename_);
-    if (!filename_) {
-      perror("Failed to allocate file name copy.");
-      abort();
-    }
-  }
-
-  FuzzerTemporaryFile(const uint8_t* data, size_t size, const char* suffix)
-      : original_filename_(fuzzer_get_tmpfile_with_suffix(data, size, suffix)) {
-    filename_ = strdup(original_filename_);
-    if (!filename_) {
-      perror("Failed to allocate file name copy.");
-      abort();
-    }
+  FuzzerTemporaryFile() {
+    std::memset(path_, 0, sizeof(path_));
+    std::tmpnam(path_);
   }
 
   ~FuzzerTemporaryFile() {
-    free(filename_);
-    fuzzer_release_tmpfile(original_filename_);
+    if (std::strlen(path_) != 0) {
+      std::remove(path_);
+    }
   }
 
-  FuzzerTemporaryFile(const FuzzerTemporaryFile& other) = delete;
-  FuzzerTemporaryFile operator=(const FuzzerTemporaryFile& other) = delete;
-
-  FuzzerTemporaryFile(const FuzzerTemporaryFile&& other) = delete;
-  FuzzerTemporaryFile operator=(const FuzzerTemporaryFile&& other) = delete;
-
-  const char* filename() const { return filename_; }
-
-  // Returns a mutable pointer to the file name. Should be used sparingly, only
-  // in case the fuzzed API demands it or when making a mutable copy is
-  // inconvenient (e.g., in auto-generated code).
-  char* mutable_filename() const { return filename_; }
+  const char* path() const { return path_; }
 
  private:
-  char* original_filename_;
-
-  // A mutable copy of the original filename, returned by the accessor. This
-  // guarantees that the original filename can always be used to release the
-  // temporary path.
-  char* filename_;
+  char path_[L_tmpnam];
 };
 
-#endif  // __cplusplus
 #endif  // WP2_TESTS_FUZZ_FUZZ_UTILS_TEMP_FILE_H_

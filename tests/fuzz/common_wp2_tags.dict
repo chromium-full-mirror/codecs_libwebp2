@@ -1,5 +1,5 @@
 # Common markers from WP2 format.
-# They will be used randomly by the cc_fuzz_targets.
+# They will be used randomly by the fuzz targets.
 # Lines starting with '#' and empty lines are ignored. Use \xAB for hex values.
 
 # Signature

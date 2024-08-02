@@ -17,36 +17,38 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
-#include <iostream>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <string>
 #include <vector>
 
 #include "imageio/anim_image_dec.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
+#include "fuzzing/fuzztest.h"
 #include "tests/fuzz/fuzz_utils.h"
 #include "tests/include/helpers.h"
 
-::testing::Environment* const kStackLimitEnv =
-    WP2::testutil::SetStackLimitTo256KiB();
+namespace WP2 {
+namespace testutil {
+namespace {
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  // Input is considered random data and converted to parameters.
-  WP2::testutil::FuzzedParameters params(data, size);
-  const char* file_name;
-  const uint8_t* file_data;
-  size_t file_size;
-  if (!params.ExtractSource(&file_name, &file_data, &file_size)) abort();
+::testing::Environment* const kStackLimitEnv = SetStackLimitTo256KiB();
 
+//------------------------------------------------------------------------------
+
+void ReadEncodeDecode(const std::string& file_name, EncoderConfig config,
+                      double progress_fail_at) {
+  const Data data = ReadTestImage(file_name);
   // Read a randomly chosen valid image file (possibly an animation).
-  std::vector<WP2::ArgbBuffer> original_frames;
+  std::vector<ArgbBuffer> original_frames;
   std::vector<uint32_t> durations_ms;
   uint32_t loop_count = 1;
-  const WP2Status read_status = WP2::testutil::ReadAnimation(
-      file_data, file_size, &original_frames, &durations_ms, &loop_count);
-  if (read_status != WP2_STATUS_OK) {
-    std::cerr << "Unable to read " << file_name << ": "
-              << WP2GetStatusMessage(read_status) << std::endl;
-    abort();
-  }
+  ASSERT_EQ(ReadAnimation(data.bytes, data.size, &original_frames,
+                          &durations_ms, &loop_count),
+            WP2_STATUS_OK);
   const bool loop_forever = (loop_count != 1);
 
   // Encode up to ~1M pixels to avoid timeouts.
@@ -61,24 +63,27 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   // Make sure durations are valid for wp2 (to keep the same number of frames).
   for (size_t i = 0; i < original_frames.size(); ++i) {
-    if (durations_ms[i] == WP2::ImageReader::kInfiniteDuration ||
-        durations_ms[i] > WP2::kMaxFrameDurationMs) {
-      durations_ms[i] = params.ExtractUInt32(1, WP2::kMaxFrameDurationMs);
+    if (durations_ms[i] == ImageReader::kInfiniteDuration ||
+        durations_ms[i] > kMaxFrameDurationMs) {
+      durations_ms[i] = kMaxFrameDurationMs;
     }
   }
 
-  // Extract a random config.
-  WP2::EncoderConfig config;
-  params.ExtractConfig(&config);
-
   // Make sure the encoding stops before the fuzzer timeout.
-  WP2::testutil::ProgressTimeout progress(
-      WP2::testutil::kEncodingMaxNumSeconds);
+  ProgressTimeout progress(kEncodingMaxNumSeconds);
   config.progress_hook = &progress;
-  progress.fail_at_ = params.ExtractBool() ? params.ExtractDouble(0., 1.) : 2.;
+  progress.fail_at_ = progress_fail_at;
 
-  const float expected_distortion =
-      WP2::testutil::GetExpectedDistortion(config) - 10.f;
-  return WP2::testutil::TestAnimEncConfig(
-      original_frames, durations_ms, loop_forever, config, expected_distortion);
+  const float expected_distortion = GetExpectedDistortion(config) - 10.f;
+  EXPECT_EQ(TestAnimEncConfig(original_frames, durations_ms, loop_forever,
+                              config, expected_distortion),
+            0);
 }
+
+FUZZ_TEST(ReadEncodeDecodeAnim, ReadEncodeDecode)
+    .WithDomains(fuzztest::ElementOf(GetTestImageNames()),
+                 ArbitraryEncoderConfig(), ArbitraryProgressFailAt());
+
+}  // namespace
+}  // namespace testutil
+}  // namespace WP2

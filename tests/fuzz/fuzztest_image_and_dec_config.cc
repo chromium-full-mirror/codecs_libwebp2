@@ -36,7 +36,7 @@ namespace {
 void Decode(const std::string& bytes, DecoderConfig config) {
   const DataView encoded_data = {reinterpret_cast<const uint8_t*>(bytes.data()),
                                  bytes.size()};
-  WP2::testutil::LimitConfigForBigImages(encoded_data, &config);
+  LimitConfigForBigImages(encoded_data, &config);
 
   ArgbBuffer decoded;
   // Success is not expected but it should not crash nor return a weird error.

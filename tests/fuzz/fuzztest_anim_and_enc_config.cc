@@ -136,8 +136,7 @@ FUZZ_TEST(EncodeDecodeWebP2Anim, EncodeDecode)
                   fuzztest::Just(num_frames));
             },
             /*num_frames=*/fuzztest::InRange<size_t>(1, 16)),
-        ArbitraryEncoderConfig(),
-        /*progress_fail_at=*/fuzztest::ElementOf<double>({0, 1, 2}),
+        ArbitraryEncoderConfig(), ArbitraryProgressFailAt(),
         /*loop_forever=*/fuzztest::Arbitrary<bool>());
 
 }  // namespace

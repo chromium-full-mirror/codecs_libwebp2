@@ -21,19 +21,19 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
 
-#include "imageio/file_format.h"
 #include "imageio/image_enc.h"
+#include "imageio/imageio_util.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
@@ -41,239 +41,15 @@
 #include "src/wp2/format_constants.h"
 #include "fuzzing/fuzztest.h"
 
-#include "examples/example_utils.h"  // For WP2::GetFilesIn()
-#include "imageio/imageio_util.h"    // For WP2::IoUtilReadFile()
-#include "tests/include/helpers.h"   // For WP2::GetTestDataPath()
-
 namespace WP2 {
 namespace testutil {
 
 //------------------------------------------------------------------------------
 
-uint32_t FuzzedParameters::ExtractUInt32(uint32_t max_value) {
-  uint32_t extracted_value = 0;
-  int max_extracted_value = 0;
-
-  while (bit_pos_ < 8 * data_size_ && max_extracted_value < max_value) {
-    extracted_value = (extracted_value << 1);
-    max_extracted_value = (max_extracted_value << 1) | 1u;
-
-    const uint8_t mask = (uint8_t)1 << (bit_pos_ & 7);
-    if (data_[bit_pos_ >> 3] & mask) extracted_value |= 1;
-
-    ++bit_pos_;
-  }
-
-  // Also handles the case where (max_value + 1) would overflow.
-  if (max_value < max_extracted_value) {
-    return extracted_value % (max_value + 1);
-  }
-  return extracted_value;
-}
-
-uint32_t FuzzedParameters::ExtractUInt32(uint32_t min_value,
-                                         uint32_t max_value) {
-  assert(max_value >= min_value);
-  return min_value + ExtractUInt32(max_value - min_value);
-}
-
-double FuzzedParameters::ExtractDouble(double min_value, double max_value) {
-  assert(max_value >= min_value);
-  return min_value +
-         (ExtractUInt32(4294967295u) / 4294967295.) * (max_value - min_value);
-}
-
-bool FuzzedParameters::ExtractBool() { return (ExtractUInt32(1) == 1); }
-
-//------------------------------------------------------------------------------
-
-bool FuzzedParameters::ExtractSource(const char** const file_name,
-                                     const uint8_t** const file_data,
-                                     size_t* const file_size) {
-  std::vector<std::string> files;
-  constexpr bool kRecursive = false;
-  if (!GetFilesIn(GetTestDataPath(""), &files, kRecursive)) return false;
-  if (files.size() == 0) return false;
-  *file_name = files[ExtractUInt32((uint32_t)files.size() - 1)].c_str();
-  Data data;
-  if (IoUtilReadFile(*file_name, &data) != WP2_STATUS_OK) return false;
-  *file_data = data.bytes;
-  *file_size = data.size;
-  return true;
-}
-
-FileFormat FuzzedParameters::ExtractOutputFormat() {
-  const FileFormat kOutputFormats[] = {
-      FileFormat::PNG, FileFormat::TIFF, FileFormat::BMP,
-      FileFormat::PAM, FileFormat::PGM,  FileFormat::PPM,
-  };
-  const uint32_t kNumOutputFormats =
-      sizeof(kOutputFormats) / sizeof(kOutputFormats[0]);
-
-  return kOutputFormats[ExtractUInt32(kNumOutputFormats - 1)];
-}
-
-//------------------------------------------------------------------------------
-
-namespace {
-
-// Returns all unique divisors of 'number', unsorted.
-std::vector<uint32_t> GetDivisors(uint32_t number, uint32_t max_divisor) {
-  std::vector<uint32_t> divisors;
-  uint32_t divisor = (uint32_t)std::lround(
-      std::ceil(number / (double)std::min(max_divisor, number)));
-  for (; divisor * divisor < number; ++divisor) {
-    if (number % divisor == 0) {
-      if (divisor > max_divisor) return divisors;
-      divisors.push_back(divisor);
-      divisors.push_back(number / divisor);
-    }
-  }
-  if (divisor * divisor == number && divisor <= max_divisor) {
-    divisors.push_back(divisor);
-  }
-  return divisors;
-}
-
-}  // namespace
-
-ArgbBuffer FuzzedParameters::ExtractArgbBuffer(uint32_t max_num_pixels,
-                                               uint32_t max_width_or_height,
-                                               WP2SampleFormat format) {
-  assert(max_num_pixels <= kMaxBufferDimension);
-  const size_t previous_bit_pos = bit_pos_;
-
-  // Some bytes will be used for extracting the size and for the alignment.
-  const size_t max_num_bits_for_size = (sizeof(uint32_t) + sizeof(uint8_t)) * 8;
-  assert(bit_pos_ <= data_size_ * 8);
-
-  // Check if there is enough data left.
-  size_t num_available_bits = data_size_ * 8 - bit_pos_;
-  if (num_available_bits < max_num_bits_for_size) return ArgbBuffer(format);
-  num_available_bits -= max_num_bits_for_size;
-
-  uint32_t num_pixels =
-      std::min((uint32_t)num_available_bits / (8 * WP2FormatBpp(format)),
-               max_num_pixels);
-  if (num_pixels < 1) return ArgbBuffer(format);
-
-  // Compute random valid width and height based on the number of pixels.
-  std::vector<uint32_t> divisors =
-      GetDivisors(num_pixels, /*max_divisor=*/max_width_or_height);
-  if (divisors.empty()) {  // No valid divisor respecting 'max_width_or_height'.
-    num_pixels = max_width_or_height;
-    divisors = GetDivisors(num_pixels, /*max_divisor=*/max_width_or_height);
-  }
-  const uint32_t width = divisors[ExtractUInt32((uint32_t)divisors.size() - 1)];
-  const uint32_t height = num_pixels / width;
-
-  bit_pos_ = (bit_pos_ + 7u) & ~7u;  // Align.
-  const uint32_t stride = width * WP2FormatBpp(format);
-  assert(data_size_ - (bit_pos_ >> 3) >= height * stride);
-
-  // Copy bytes and consider them as ARGB. Allocation may fail.
-  ArgbBuffer buffer(format);
-  if (buffer.Import(WP2_ARGB_32, width, height, data_ + (bit_pos_ >> 3),
-                    stride) != WP2_STATUS_OK) {
-    bit_pos_ = previous_bit_pos;  // Unread everything in case of failure.
-    return ArgbBuffer(format);
-  }
-  bit_pos_ += (height * stride) * 8;
-  return buffer;
-}
-
-//------------------------------------------------------------------------------
-
-bool FuzzedParameters::TryExtractWP2Bitstream(Data* const encoded_data) {
-  bit_pos_ = (bit_pos_ + 7u) & ~7u;  // Align.
-  const size_t byte_pos = bit_pos_ / 8u;
-  const size_t num_available_bytes = data_size_ - byte_pos;
-  if (encoded_data->Resize(3u + num_available_bytes, /*keep_bytes=*/false) !=
-      WP2_STATUS_OK) {
-    return false;
-  }
-  encoded_data->bytes[0] = (uint8_t)((kSignature >> 0) & 0xffu);
-  encoded_data->bytes[1] = (uint8_t)((kSignature >> 8) & 0xffu);
-  encoded_data->bytes[2] = (uint8_t)((kSignature >> 16) & 0xffu);
-  std::memcpy(encoded_data->bytes + 3, data_ + byte_pos, num_available_bytes);
-  return true;
-}
-
-//------------------------------------------------------------------------------
-
-void FuzzedParameters::ExtractConfig(EncoderConfig* const config) {
-  config->quality = (float)ExtractDouble(0., kMaxQuality);
-  config->target_size = ExtractBool() ? 0 : (size_t)ExtractUInt32(1 << 20);
-  config->target_psnr = ExtractBool() ? 0.f : (float)ExtractDouble(.01, 99.);
-  config->alpha_quality = (float)ExtractDouble(0., kMaxQuality);
-  config->effort = (int)ExtractUInt32(kMinEffort, kMaxEffort);
-  config->use_av1 = false;  // TODO(yguyon): Test AV1
-
-  config->decoding_orientation = (Orientation)ExtractUInt32(7);
-  config->create_preview = ExtractBool();
-  // 'preview' and 'preview_size' are not fuzzed.
-
-  config->transfer_function =
-      (TransferFunction)ExtractUInt32((uint32_t)WP2_TF_ARIB_STD_B67_HLG);
-
-  config->pass = (int)ExtractUInt32(1, 10);
-  config->sns = (float)ExtractDouble(0., 100.);
-  config->error_diffusion = (int)ExtractUInt32(100);
-
-  config->segments = (int)ExtractUInt32(1, kMaxNumSegments);
-  config->segment_id_mode = (EncoderConfig::SegmentIdMode)ExtractUInt32(2);
-  for (uint32_t segment = 0; segment < kMaxNumSegments; ++segment) {
-    config->segment_factors[segment] = (float)ExtractUInt32(kMaxLossyQuality);
-  }
-
-  config->tile_shape = (TileShape)ExtractUInt32((uint32_t)TILE_SHAPE_AUTO);
-
-  config->partition_method =
-      (PartitionMethod)ExtractUInt32(NUM_PARTITION_METHODS - 1);
-  config->partition_set = (PartitionSet)ExtractUInt32(NUM_PARTITION_SETS - 1);
-  config->partition_snapping =
-      (config->partition_method == AREA_ENCODE_PARTITIONING ||
-       config->partition_method == SUB_AREA_ENCODE_PARTITIONING ||
-       config->partition_method == SPLIT_PARTITIONING ||
-       config->partition_method == SPLIT_RECURSE_PARTITIONING)
-          ? true
-          : ExtractBool();
-
-  config->csp_type = (Csp)ExtractUInt32(kNumCspTypes - 1);
-  config->uv_mode = (EncoderConfig::UVMode)ExtractUInt32(
-      (uint32_t)EncoderConfig::NumUVMode - 1);
-  config->preprocessing = (int)ExtractUInt32(2);
-  config->preprocessing_strength = (int)ExtractUInt32(100);
-  config->use_random_matrix = ExtractBool();
-  config->store_grain = ExtractBool();
-  config->tune_perceptual = ExtractBool();
-  config->use_delta_palette = ExtractBool();
-
-  config->thread_level = (int)ExtractUInt32((1u << 31) - 1u);
-  config->low_memory = ExtractBool();
-  // 'use_neural_compression' is not fuzzed.
-}
-
-//------------------------------------------------------------------------------
-
-void FuzzedParameters::ExtractConfig(DecoderConfig* const config) {
-  config->thread_level = ExtractUInt32((1u << 31) - 1u);
-  config->enable_deblocking_filter = ExtractBool();
-  config->enable_directional_filter = ExtractBool();
-  config->enable_restoration_filter = ExtractBool();
-  config->enable_alpha_filter = ExtractBool();
-  config->grain_amplitude = (uint8_t)ExtractUInt32(100);
-  config->incremental_mode = (DecoderConfig::IncrementalMode)ExtractUInt32(1);
-}
-
-void LimitConfigForBigImages(const Data& bitstream, DecoderConfig* config) {
-  LimitConfigForBigImages(DataView{bitstream.bytes, bitstream.size}, config);
-}
-
 void LimitConfigForBigImages(DataView bitstream, DecoderConfig* config) {
   // Try to keep the peak allocated memory below 2 GB by reducing the number of
   // concurrently decoded tiles for big images.
-  WP2::BitstreamFeatures features;
+  BitstreamFeatures features;
   if (features.Read(bitstream.bytes, bitstream.size) == WP2_STATUS_OK) {
     if (features.width * features.height <= (1u << 20)) {
       // Small image, leave as is.
@@ -292,6 +68,57 @@ void LimitConfigForBigImages(DataView bitstream, DecoderConfig* config) {
 }
 
 //------------------------------------------------------------------------------
+
+std::string GetTestAssetPath(std::string_view name) {
+  return "tests/" + std::string(name);
+}
+
+// Returns a vector of strings instead of const char* to avoid
+// fuzztest::ElementOf()-related errors.
+std::vector<std::string> GetTestImageNames() {
+  // Valid files only.
+  return {"alpha_ramp.bmp",
+          "alpha_ramp.lossy.webp",
+          "alpha_ramp.pam",
+          "alpha_ramp.png",
+          "alpha_ramp.tiff",
+          "alpha_ramp.webp",
+          "animation0.gif",
+          "animation0.webp",
+          "animation1.webp",
+          "background.png",
+          "composited.png",
+          "large.png",
+          "logo.png",
+          "source0.pgm",
+          "source0.ppm",
+          "source1_1x1.png",
+          "source1_1x48.png",
+          "source1_32x32.png",
+          "source1_4x4.png",
+          "source1_64x1.png",
+          "source1_64x48.png",
+          "source1.itl.png",
+          "source1.png",
+          "source2.tiff",
+          "source3_222x167.jpg",
+          "source3.jpg",
+          "source4.ll.webp",
+          "source4.webp",
+          "source5.bmp",
+          "taiwan.png",
+          "test_exif_xmp.webp",
+          "verylarge.png"};
+}
+
+Data ReadTestImage(const std::string& name) {
+  Data data;
+  if (IoUtilReadFile(GetTestAssetPath("testdata/" + name).c_str(), &data) !=
+      WP2_STATUS_OK) {
+    std::abort();
+  }
+  return data;
+}
 
 std::vector<std::string> GetTestImagesContents(size_t max_file_size) {
   const char* test_data_dirs[] = {"testdata"};
@@ -315,6 +142,36 @@ std::vector<std::string> GetTestImagesContents(size_t max_file_size) {
   }
   std::cout << "Returning " << seeds.size() << " seed images" << std::endl;
   return seeds;
+}
+
+std::vector<std::tuple<std::string>> ReadFilesFromDirectory(
+    std::string_view dir_path) {
+  const std::vector<std::tuple<std::string>> files =
+      fuzztest::ReadFilesFromDirectory(dir_path);
+  if (files.empty()) {
+    std::cerr << "fuzztest::ReadFilesFromDirectory() failed on " << dir_path
+              << std::endl;
+    abort();
+  }
+  return files;
+}
+
+std::vector<std::string> ReadDictionaryFromFiles(
+    const std::vector<std::string_view>& file_paths) {
+  std::vector<std::string> merged_dictionary;
+  for (std::string_view file_path : file_paths) {
+    std::vector<std::string> dictionary =
+        fuzztest::ReadDictionaryFromFile(file_path);
+    if (dictionary.empty()) {
+      std::cerr << "fuzztest::ReadDictionaryFromFile() failed on " << file_path
+                << std::endl;
+      abort();
+    }
+    merged_dictionary.insert(merged_dictionary.end(),
+                             std::make_move_iterator(dictionary.begin()),
+                             std::make_move_iterator(dictionary.end()));
+  }
+  return merged_dictionary;
 }
 
 //------------------------------------------------------------------------------
@@ -395,6 +252,29 @@ DecoderConfig CreateDecoderConfig(
   config.grain_amplitude = grain_amplitude;
   config.incremental_mode = incremental_mode;
   return config;
+}
+
+ArgbBuffer CreateArgbBuffer8b(size_t width, size_t height,
+                              WP2SampleFormat format,
+                              const std::vector<uint8_t>& samples) {
+  assert(samples.size() == GetNumSamples(width, height, format));
+  ArgbBuffer image(format);
+  // Converting samples is simpler than generating alpha-premultiplied ones.
+  const WP2SampleFormat fuzzed_format = format == WP2_Argb_32   ? WP2_ARGB_32
+                                        : format == WP2_rgbA_32 ? WP2_RGBA_32
+                                        : format == WP2_bgrA_32 ? WP2_BGRA_32
+                                                                : format;
+  assert(!WP2IsPremultiplied(fuzzed_format));
+  if (image.Import(fuzzed_format, width, height, samples.data(),
+                   WP2FormatBpp(format) * width) != WP2_STATUS_OK) {
+    std::abort();
+  }
+  return image;
+}
+
+size_t GetNumSamples(size_t width, size_t height, WP2SampleFormat format) {
+  return width * height * WP2FormatBpp(format) /
+         (WP2Formatbpc(format) == 8 ? 1 : 2);
 }
 
 //------------------------------------------------------------------------------

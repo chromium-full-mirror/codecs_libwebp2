@@ -1,5 +1,5 @@
 # Common markers from formats handled by WP2 imageio.
-# They will be used randomly by the cc_fuzz_targets.
+# They will be used randomly by the fuzz targets.
 # Lines starting with '#' and empty lines are ignored. Use \xAB for hex values.
 
 # Generic

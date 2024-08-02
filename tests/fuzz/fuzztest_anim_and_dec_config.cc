@@ -124,13 +124,7 @@ void Decode(BytesAndIncrementalDecodingTestSetup bytes_and_setup,
       reinterpret_cast<const uint8_t*>(bytes_and_setup.bytes.data()),
       bytes_and_setup.bytes.size()};
   LimitSetupForBigImages(encoded_data, &bytes_and_setup.setup);
-
-  Data encoded_data_wrapper;  // TODO: b/311360339 - Remove.
-  encoded_data_wrapper.bytes = const_cast<uint8_t*>(encoded_data.bytes);
-  encoded_data_wrapper.size = bytes_and_setup.bytes.size();
-  LimitConfigForBigImages(encoded_data_wrapper, &config);
-  encoded_data_wrapper.bytes = nullptr;
-  encoded_data_wrapper.size = 0;
+  LimitConfigForBigImages(encoded_data, &config);
 
   // Success is not expected but it should not crash or return a weird error.
   EXPECT_THAT(
