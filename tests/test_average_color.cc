@@ -19,6 +19,7 @@
 #include "include/helpers.h"
 #include "src/enc/preview/preview_enc.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {
@@ -168,7 +169,7 @@ TEST(GetAverageColorTest_Argb_32, DifferentColorsConstantAlpha) {
   ASSERT_NO_FATAL_FAILURE(testutil::VerifyEqual(expected_color, avg_color));
 }
 
-TEST(GetAverageColorTest_Argb_32, DifferentAlhpaConstantColors) {
+TEST(GetAverageColorTest_Argb_32, DifferentAlphaConstantColors) {
   // Checks if color averaging works correctly for a pixel surrounded with
   // pixels having other alpha, and constant color. The tested buffer looks
   // as follows:
@@ -203,6 +204,21 @@ TEST(GetAverageColorTest_Argb_32, DifferentAlhpaConstantColors) {
   Argb32b expected_color = Argb32b({113, 0, 0, 0});
 
   ASSERT_NO_FATAL_FAILURE(testutil::VerifyEqual(expected_color, avg_color));
+}
+
+TEST(GetAverageColorTest, Premultiplied) {
+  // Checks if averaging works correctly for alpha premultiplication.
+  ArgbBuffer unmul(WP2_ARGB_32), premul(WP2_Argb_32);
+  for (ArgbBuffer* buffer : {&unmul, &premul}) {
+    ASSERT_WP2_OK(buffer->Resize(2, 1));
+    buffer->Fill({0, 0, 1, 1}, Argb32b{0, 0, 0, 0});
+    buffer->Fill({1, 0, 1, 1}, Argb32b{255, 100, 100, 100});
+  }
+  // Only fully transparent and fully opaque pixels means the result should not
+  // depend on alpha premultiplication mode.
+  ASSERT_NO_FATAL_FAILURE(testutil::VerifyEqual(
+      GetAverageColor(unmul, kMaxBufferDimension, 0, 0),
+      GetAverageColor(premul, kMaxBufferDimension, 0, 0)));
 }
 
 }  // namespace

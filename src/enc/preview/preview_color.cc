@@ -17,17 +17,23 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include "./preview_enc.h"
-
 #include <algorithm>
 #include <cassert>
-#include <cmath>
-#include <cstring>
+#include <cstdint>
 #include <iterator>
+#include <limits>
 #include <numeric>
 
 #include "src/common/color_precision.h"
 #include "src/common/preview/preview.h"
+#include "src/dsp/math.h"
+#include "src/enc/preview/preview_enc.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -51,10 +57,9 @@ class ColorAccumulator {
   Argb32b GetAverage() const {
     assert(!IsEmpty());
     const double s = count_ ? (1. / count_) : 0.;
-    return {    // round down! otherwise, 255.9 turns to 256.f (= 0u)
-        (uint8_t)(sum_[0] * s), (uint8_t)(sum_[1] * s),
-        (uint8_t)(sum_[2] * s), (uint8_t)(sum_[3] * s)
-    };
+    return {// round down! otherwise, 255.9 turns to 256.f (= 0u)
+            (uint8_t)(sum_[0] * s), (uint8_t)(sum_[1] * s),
+            (uint8_t)(sum_[2] * s), (uint8_t)(sum_[3] * s)};
   }
   bool operator<(const ColorAccumulator& other) const {
     if (count_ != other.count_) return (count_ > other.count_);
@@ -73,7 +78,7 @@ class ColorAccumulator {
 
 // Weighted color difference.
 float GetSquareDistance(AYCoCg19b c1, AYCoCg19b c2) {
-  float square_distance = 0.3f * (c1.y  - c2.y)  * (c1.y  - c2.y) +
+  float square_distance = 0.3f * (c1.y - c2.y) * (c1.y - c2.y) +
                           0.1f * (c1.co - c2.co) * (c1.co - c2.co) +
                           0.6f * (c1.cg - c2.cg) * (c1.cg - c2.cg);
   if (c1.a != c2.a) square_distance += 0.2f * 63 * 63;
@@ -88,21 +93,21 @@ constexpr float GetSquareDistance(float x1, float y1, float x2, float y2) {
 //------------------------------------------------------------------------------
 
 // Weighted color average.
-void MergeColors(AYCoCg19b c1, uint16_t c1_weight,
-                 AYCoCg19b c2, uint16_t c2_weight,
-                 AYCoCg19b* const into, uint16_t* const into_weight) {
+void MergeColors(AYCoCg19b c1, uint16_t c1_weight, AYCoCg19b c2,
+                 uint16_t c2_weight, AYCoCg19b* const into,
+                 uint16_t* const into_weight) {
   *into_weight = c1_weight + c2_weight;
   if (*into_weight == 0) {
-    into->a  = (uint8_t)((c1.a  + c2.a  + 1) >> 1);
-    into->y  = (uint8_t)((c1.y  + c2.y  + 1) >> 1);
+    into->a = (uint8_t)((c1.a + c2.a + 1) >> 1);
+    into->y = (uint8_t)((c1.y + c2.y + 1) >> 1);
     into->co = (uint8_t)((c1.co + c2.co + 1) >> 1);
     into->cg = (uint8_t)((c1.cg + c2.cg + 1) >> 1);
   } else {
     const uint32_t round = *into_weight >> 1;
-    into->a =  (uint8_t)((c1.a  * c1_weight + c2.a  * c2_weight + round) /
-                         *into_weight);
-    into->y =  (uint8_t)((c1.y  * c1_weight + c2.y  * c2_weight + round) /
-                         *into_weight);
+    into->a =
+        (uint8_t)((c1.a * c1_weight + c2.a * c2_weight + round) / *into_weight);
+    into->y =
+        (uint8_t)((c1.y * c1_weight + c2.y * c2_weight + round) / *into_weight);
     into->co = (uint8_t)((c1.co * c1_weight + c2.co * c2_weight + round) /
                          *into_weight);
     into->cg = (uint8_t)((c1.cg * c1_weight + c2.cg * c2_weight + round) /
@@ -114,7 +119,6 @@ void MergeColors(AYCoCg19b c1, uint16_t c1_weight,
 
 //------------------------------------------------------------------------------
 
-// Works with premultiplied RGB values because alpha is averaged too.
 Argb32b GetAverageColor(const ArgbBuffer& canvas, uint32_t radius,
                         uint32_t pixel_x, uint32_t pixel_y) {
   const uint32_t min_x =
@@ -127,16 +131,23 @@ Argb32b GetAverageColor(const ArgbBuffer& canvas, uint32_t radius,
   assert(canvas.format() == WP2_Argb_32 || canvas.format() == WP2_ARGB_32 ||
          canvas.format() == WP2_Argb_38);
   ColorAccumulator accumulator;
-  if (WP2Formatbpc(canvas.format()) <= 8) {
-    for (uint32_t y = min_y; y <= max_y; ++y) {
+  for (uint32_t y = min_y; y <= max_y; ++y) {
+    if (WP2Formatbpc(canvas.format()) <= 8) {
       const uint8_t* const row = canvas.GetRow8(y);
       for (uint32_t x = min_x; x <= max_x; ++x) {
-        accumulator.Add(row[x * 4 + 0], row[x * 4 + 1], row[x * 4 + 2],
-                        row[x * 4 + 3]);
+        const uint32_t alpha = row[x * 4 + 0];
+        if (WP2IsPremultiplied(canvas.format())) {
+          accumulator.Add(alpha, row[x * 4 + 1], row[x * 4 + 2],
+                          row[x * 4 + 3]);
+        } else {
+          accumulator.Add(alpha, WP2::DivBy255(row[x * 4 + 1] * alpha),
+                          WP2::DivBy255(row[x * 4 + 2] * alpha),
+                          WP2::DivBy255(row[x * 4 + 3] * alpha));
+        }
       }
-    }
-  } else {
-    for (uint32_t y = min_y; y <= max_y; ++y) {
+
+    } else {
+      assert(WP2IsPremultiplied(canvas.format()));
       const uint16_t* const row = canvas.GetRow16(y);
       for (uint32_t x = min_x; x <= max_x; ++x) {
         accumulator.Add(row[x * 4 + 0], row[x * 4 + 1], row[x * 4 + 2],
@@ -144,16 +155,7 @@ Argb32b GetAverageColor(const ArgbBuffer& canvas, uint32_t radius,
       }
     }
   }
-  Argb32b average = accumulator.GetAverage();
-  if (canvas.format() == WP2_ARGB_32) {
-    // Premultiply.
-    return {average.a,
-            (uint8_t)WP2::DivBy255(average.r * average.a),
-            (uint8_t)WP2::DivBy255(average.g * average.a),
-            (uint8_t)WP2::DivBy255(average.b * average.a)};
-  } else {
-    return average;
-  }
+  return accumulator.GetAverage();
 }
 
 static int16_t GetAverageColor(const Plane16& plane) {
@@ -202,8 +204,8 @@ WP2Status PreviewData::ReduceColors(const ArgbBuffer& canvas,
 
 //------------------------------------------------------------------------------
 
-uint16_t PreviewData::GetBestIndex(const ArgbBuffer& canvas,
-                                   uint32_t x, uint32_t y) const {
+uint16_t PreviewData::GetBestIndex(const ArgbBuffer& canvas, uint32_t x,
+                                   uint32_t y) const {
   const uint32_t round_x = (grid_width_ - 1) >> 1;
   const uint32_t round_y = (grid_height_ - 1) >> 1;
   x = (x * (canvas.width() - 1) + round_x) / (grid_width_ - 1);
@@ -221,9 +223,8 @@ void PreviewData::AssignBestVertices(const ArgbBuffer& canvas) {
 WP2Status MakePaletteValid(Vector<AYCoCg19b>* const palette) {
   assert(palette != nullptr);
   const AYCoCg19b kDefaultPalette[kPreviewMinNumColors] = {
-    ToAYCoCg19b({0xff, 0x00, 0x00, 0x00}),
-    ToAYCoCg19b({0xff, 0xff, 0xff, 0xff})
-  };
+      ToAYCoCg19b({0xff, 0x00, 0x00, 0x00}),
+      ToAYCoCg19b({0xff, 0xff, 0xff, 0xff})};
   if (palette->empty()) {
     for (const auto& color : kDefaultPalette) {
       WP2_CHECK_ALLOC_OK(palette->push_back(color));
