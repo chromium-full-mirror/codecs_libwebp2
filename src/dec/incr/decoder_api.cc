@@ -215,7 +215,9 @@ bool Decoder::ReadFrame(uint32_t* const duration_ms) {
     const State::InternalFrameFeatures& frame =
         state_->frames[state_->current_frame_index];
     if (frame.final_frame_index >= state_->skip_final_frames_before_index) {
-      if (duration_ms != nullptr) *duration_ms = frame.duration_ms;
+      if (duration_ms != nullptr) {
+        *duration_ms = features_.is_animation ? frame.duration_ms : 0;
+      }
       return true;
     }
   }
