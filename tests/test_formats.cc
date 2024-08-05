@@ -389,6 +389,8 @@ static struct FmtTestCase {
     {WP2_bgrA_32, "WP2_bgrA_32", 274353, true},
     {WP2_BGRA_32, "WP2_BGRA_32", 897534, true},
     {WP2_BGRX_32, "WP2_BGRX_32", 414125, false},
+    {WP2_RGB_24, "WP2_RGB_24", 414125, false},
+    {WP2_BGR_24, "WP2_BGR_24", 414125, false},
 };
 
 typedef std::tuple<FmtTestCase, testutil::WP2CPUInfoStruct> SpeedTestParam;

@@ -28,7 +28,8 @@ TEST(RgbConversionTest, From32bTo32b) {
 
   for (WP2SampleFormat from :
        {WP2_Argb_32, WP2_ARGB_32, WP2_XRGB_32, WP2_rgbA_32, WP2_RGBA_32,
-        WP2_RGBX_32, WP2_bgrA_32, WP2_BGRA_32, WP2_BGRX_32}) {
+        WP2_RGBX_32, WP2_bgrA_32, WP2_BGRA_32, WP2_BGRX_32, WP2_RGB_24,
+        WP2_BGR_24}) {
     ArgbBuffer src(from);
     ASSERT_WP2_OK(src.Resize(1, 1));
     ArgbBuffer roundtrip(from);
@@ -36,7 +37,8 @@ TEST(RgbConversionTest, From32bTo32b) {
 
     for (WP2SampleFormat to :
          {WP2_Argb_32, WP2_ARGB_32, WP2_XRGB_32, WP2_rgbA_32, WP2_RGBA_32,
-          WP2_RGBX_32, WP2_bgrA_32, WP2_BGRA_32, WP2_BGRX_32}) {
+          WP2_RGBX_32, WP2_bgrA_32, WP2_BGRA_32, WP2_BGRX_32, WP2_RGB_24,
+          WP2_BGR_24}) {
       uint8_t values[] = {123, 61, 200, 211};  // Arbitrary.
 
       uint32_t alpha_channel_index;
@@ -50,11 +52,11 @@ TEST(RgbConversionTest, From32bTo32b) {
           uint8_t* max_element = std::max_element(values, values + 4);
           std::swap(*max_element, values[alpha_channel_index]);
         }
-      } else {
+      } else if (alpha_channel_index < WP2FormatBpp(from)) {
         values[alpha_channel_index] = 255;
       }
 
-      std::copy(values, values + 4, src.GetRow8(0));
+      std::copy(values, values + WP2FormatBpp(from), src.GetRow8(0));
 
       ArgbBuffer dst(to);
       ASSERT_WP2_OK(dst.ConvertFrom(src));
@@ -62,7 +64,7 @@ TEST(RgbConversionTest, From32bTo32b) {
 
       const int tolerance =
           WP2IsPremultiplied(from) == WP2IsPremultiplied(to) ? 0 : 1;
-      for (int i = 0; i < 4; ++i) {
+      for (uint32_t i = 0; i < WP2FormatBpp(from); ++i) {
         ASSERT_NEAR(roundtrip.GetRow8(0)[i], values[i], tolerance)
             << " (channel " << i << ") from " << from << " to " << to << " ("
             << static_cast<int>(dst.GetRow8(0)[i]) << ")";

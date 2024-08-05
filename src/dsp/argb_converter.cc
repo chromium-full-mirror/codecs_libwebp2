@@ -413,14 +413,18 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
 }
 
 //------------------------------------------------------------------------------
-// Combinations (32-bit to 32-bit only)
+// Combinations
 
 namespace {
 
 template <int from, int to>
 void WP2ConvertFromTo(const void* src, uint32_t width, void* dst) {
-  static_assert(from > WP2_ARGB_32 && from <= WP2_BGRX_32, "Unimplemented");
-  static_assert(to > WP2_ARGB_32 && to <= WP2_BGRX_32, "Unimplemented");
+  static_assert(from > WP2_ARGB_32 && from <= WP2_BGR_24, "Unimplemented");
+  static_assert(to > WP2_ARGB_32 && to <= WP2_BGR_24, "Unimplemented");
+  const size_t src_bytes_per_pixel =
+      WP2FormatBpp(static_cast<WP2SampleFormat>(from));
+  const size_t dst_bytes_per_pixel =
+      WP2FormatBpp(static_cast<WP2SampleFormat>(to));
 
   // Use a temporary layout Argb or ARGB to go from SRC to DST.
   // Do not premultiply or unmultiply unless necessary.
@@ -435,8 +439,9 @@ void WP2ConvertFromTo(const void* src, uint32_t width, void* dst) {
       WP2ARGBConvertFrom[from](src, num_pixels, tmp);
       WP2ARGBConvertTo[to](tmp, num_pixels, dst);
     }
-    src = reinterpret_cast<const uint8_t*>(src) + num_pixels * 4;
-    dst = reinterpret_cast<uint8_t*>(dst) + num_pixels * 4;
+    src = reinterpret_cast<const uint8_t*>(src) +
+          num_pixels * src_bytes_per_pixel;
+    dst = reinterpret_cast<uint8_t*>(dst) + num_pixels * dst_bytes_per_pixel;
     width -= num_pixels;
   }
 }
@@ -450,6 +455,8 @@ WP2ArgbConverterF WP2ConvertFromToFunc(WP2SampleFormat to) {
   if (to == WP2_bgrA_32) return WP2ConvertFromTo<from, WP2_bgrA_32>;
   if (to == WP2_BGRA_32) return WP2ConvertFromTo<from, WP2_BGRA_32>;
   if (to == WP2_BGRX_32) return WP2ConvertFromTo<from, WP2_BGRX_32>;
+  if (to == WP2_RGB_24) return WP2ConvertFromTo<from, WP2_RGB_24>;
+  if (to == WP2_BGR_24) return WP2ConvertFromTo<from, WP2_BGR_24>;
   return nullptr;
 }
 
@@ -476,6 +483,8 @@ WP2ArgbConverterF WP2ConversionFunction(WP2SampleFormat from,
   if (from == WP2_bgrA_32) return WP2ConvertFromToFunc<WP2_bgrA_32>(to);
   if (from == WP2_BGRA_32) return WP2ConvertFromToFunc<WP2_BGRA_32>(to);
   if (from == WP2_BGRX_32) return WP2ConvertFromToFunc<WP2_BGRX_32>(to);
+  if (from == WP2_RGB_24) return WP2ConvertFromToFunc<WP2_RGB_24>(to);
+  if (from == WP2_BGR_24) return WP2ConvertFromToFunc<WP2_BGR_24>(to);
   return nullptr;
 }
 
