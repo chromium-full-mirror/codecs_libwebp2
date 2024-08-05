@@ -84,7 +84,9 @@ void BlockContextPredictor::GetContext(const CodedBlockBase& cb,
   const uint32_t size =
       ctxt_.GetContext(cb.blk(), y_left_occ, y_right_occ, context_tmp);
   // we use the lower 8bit to store the id, the upper 8 to store the counts
-  uint16_t counts[kMaxNumSegments] = {0};
+  // TODO: Remove *5 workaround once the following GCC bug is fixed
+  //       https://gcc.gnu.org/bugzilla/show_bug.cgi?id=107986
+  uint16_t counts[kMaxNumSegments * 5] = {0};
   for (uint32_t i = 0; i < size; ++i) counts[context_tmp[i]] += (1 << 8);
   for (uint32_t v = 0; v < range_; ++v) counts[v] |= v;
   std::sort(counts, counts + range_, std::greater<int>());
