@@ -13,23 +13,30 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 //
-// Assymetric Numeral System - encoding part
+// Asymmetric Numeral System - encoding part
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include "src/utils/ans_enc.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
+#include <functional>
 #include <memory>
 #include <numeric>
 #include <utility>
 
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/utils/ans.h"
 #include "src/utils/utils.h"
-#include "src/wp2/encode.h"   // for Writer
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -96,12 +103,12 @@ void ANSAdaptiveSymbol::FindBestAdaptationSpeed(
   }
 
   if (header_bits != nullptr) {
-    uint32_t counts[APROBA_MAX_SYMBOL] = { 0 };
+    uint32_t counts[APROBA_MAX_SYMBOL] = {0};
     for (uint32_t s : syms) ++counts[s];
     float cost = 0.;
     for (uint32_t c : counts) cost += WP2SLog2m1(c);
     // fixed probabilities seems better
-    if (cost + 2.f < best_cost) {    // +2.f = headroom for inaccuracy
+    if (cost + 2.f < best_cost) {  // +2.f = headroom for inaccuracy
       *header_bits = (uint32_t)(best_cost - cost);
     }
   }
@@ -128,11 +135,11 @@ float ANSAdaptiveSymbol::ScoreSequence(Method method, uint32_t speed,
 typedef uint32_t ANSToken;
 
 enum ANSTokenType {
-  ANSTokenTypeBit    = (1u << 29),
-  ANSTokenTypeU      = (2u << 29),
-  ANSTokenTypeR      = (3u << 29),
-  ANSTokenTypeSym    = (4u << 29),
-  ANSTokenTypeASym   = (5u << 29),
+  ANSTokenTypeBit = (1u << 29),
+  ANSTokenTypeU = (2u << 29),
+  ANSTokenTypeR = (3u << 29),
+  ANSTokenTypeSym = (4u << 29),
+  ANSTokenTypeASym = (5u << 29),
 #if defined(WP2_ENC_DEC_MATCH)
   ANSTokenTypeDebugU = (6u << 29)
 #endif
@@ -158,13 +165,11 @@ class ANSTokenInfo {
   static_assert(!DoCheckSecondBits ||
                     (kBitsSecond > 0 && kBitsSecond <= IO_BITS),
                 "wrong token bits");
-  static uint32_t First(const ANSToken& t) {
+  static uint32_t First(ANSToken t) {
     return (t >> kBitsSecond) & ((1u << kBitsFirst) - 1);
   }
-  static uint32_t Second(const ANSToken& t) {
-    return t & ((1u << kBitsSecond) - 1);
-  }
-  static ANSToken Init(const uint32_t& f, const uint32_t& s) {
+  static uint32_t Second(ANSToken t) { return t & ((1u << kBitsSecond) - 1); }
+  static ANSToken Init(uint32_t f, uint32_t s) {
     assert(f < (1u << kBitsFirst));
     assert(s < (1u << kBitsSecond));
     return (ANSToken)(T | (f << kBitsSecond) | s);
@@ -196,48 +201,48 @@ static_assert(3 + 2 * ANSTokenInfoR::kBitsSecond <= 32u,
 
 // Specializations.
 template <>
-ANSToken ANSTokenInfoBit::Init(const uint32_t& bit, const uint32_t& proba) {
+ANSToken ANSTokenInfoBit::Init(uint32_t bit, uint32_t proba) {
   assert(proba >= 0 && proba <= PROBA_MAX);
   return (ANSToken)(ANSTokenTypeBit | (!!bit << kBitsSecond) | proba);
 }
 template <>
-ANSToken ANSTokenInfoBit::First(const uint32_t& t) {
+ANSToken ANSTokenInfoBit::First(uint32_t t) {
   // Optimized computation.
   return !!(t & (1u << kBitsSecond));
 }
 template <>
-ANSToken ANSTokenInfoR::Init(const uint32_t& v, const uint32_t& R) {
+ANSToken ANSTokenInfoR::Init(uint32_t v, uint32_t R) {
   assert(v < (1u << kBitsFirst));
   assert(R > 0 && R <= (1u << kBitsSecond));
   // The range is always > 0 so we can remove 1.
   return (ANSToken)(ANSTokenTypeR | (v << kBitsSecond) | (R - 1));
 }
 template <>
-ANSToken ANSTokenInfoR::Second(const uint32_t& t) {
+ANSToken ANSTokenInfoR::Second(uint32_t t) {
   return 1 + (t & ((1u << kBitsSecond) - 1));
 }
 
 // Adaptive symbol token. We store the offset+freq ANSSymbolInfo.
 template <>
-ANSToken ANSTokenInfoASym::Init(const uint32_t& s, const uint32_t& f) {
+ANSToken ANSTokenInfoASym::Init(uint32_t s, uint32_t f) {
   assert(s < (1u << kBitsFirst));
   assert(f > 0 && f <= (1u << kBitsSecond));
   return (ANSToken)(ANSTokenTypeASym | (s << kBitsSecond) | (f - 1));
 }
 template <>
-ANSToken ANSTokenInfoASym::Second(const uint32_t& f) {
+ANSToken ANSTokenInfoASym::Second(uint32_t f) {
   return 1 + (f & ((1u << kBitsSecond) - 1));
 }
 
 // Dictionary symbol: same as adaptive symbol.
 template <>
-ANSToken ANSTokenInfoSym::Init(const uint32_t& s, const uint32_t& f) {
+ANSToken ANSTokenInfoSym::Init(uint32_t s, uint32_t f) {
   assert(s < (1u << kBitsFirst));
   assert(f > 0 && f <= (1u << kBitsSecond));
   return (ANSToken)(ANSTokenTypeSym | (s << kBitsSecond) | (f - 1));
 }
 template <>
-ANSToken ANSTokenInfoSym::Second(const uint32_t& f) {
+ANSToken ANSTokenInfoSym::Second(uint32_t f) {
   return 1 + (f & ((1u << kBitsSecond) - 1));
 }
 
@@ -376,9 +381,8 @@ WP2Status ANSDictionary::ToCodingTable() {
   // total_ has been updated all along with RecordSymbol
   assert(total_ == std::accumulate(counts_.begin(), counts_.end(), 0u));
   if (IsQuantized()) {  // total_quantized_ is updated by SetQuantizedCounts()
-    assert(total_quantized_ ==
-           std::accumulate(quantized_counts_.begin(),
-                           quantized_counts_.end(), 0u));
+    assert(total_quantized_ == std::accumulate(quantized_counts_.begin(),
+                                               quantized_counts_.end(), 0u));
   }
   const uint32_t tab_size = 1u << log2_tab_size_;
   if (total_quantized_ != tab_size) {
@@ -411,8 +415,8 @@ WP2Status ANSDictionaries::CopyFrom(const ANSDictionaries& dicts) {
   // Copy the dictionaries.
   WP2_CHECK_ALLOC_OK(reserve(dicts.size()));
   for (const ANSDictionary* dict : dicts) {
-    std::unique_ptr<ANSDictionary>
-        s(new (WP2Allocable::nothrow) ANSDictionary());
+    std::unique_ptr<ANSDictionary> s(new (WP2Allocable::nothrow)
+                                         ANSDictionary());
     WP2_CHECK_ALLOC_OK(s != nullptr);
     WP2_CHECK_STATUS(s->CopyFrom(*dict));
     WP2_CHECK_ALLOC_OK(push_back(s.get(), /*resize_if_needed=*/false));
@@ -433,8 +437,7 @@ ANSDictionary* ANSDictionaries::GetEquivalent(
 }
 
 WP2Status ANSDictionaries::Add(uint32_t max_symbol) {
-  std::unique_ptr<ANSDictionary>
-        s(new (WP2Allocable::nothrow) ANSDictionary());
+  std::unique_ptr<ANSDictionary> s(new (WP2Allocable::nothrow) ANSDictionary());
   WP2_CHECK_ALLOC_OK(s != nullptr);
   WP2_CHECK_STATUS(s->Init(max_symbol));
   WP2_CHECK_ALLOC_OK(push_back(s.get()));
@@ -514,7 +517,7 @@ struct BufferPage : public WP2Allocable {
   // adjust the page size so that the total is exactly 4k.
   static const uint32_t kPageSize = 4096u - sizeof(BufferPage*);
   uint8_t data[kPageSize];
-  BufferPage* prev;   // list of pages, in reverse order
+  BufferPage* prev;  // list of pages, in reverse order
 };
 static_assert(sizeof(BufferPage) <= 4096u, "non-adjusted BufferPage size");
 static_assert(BufferPage::kPageSize % IO_BYTES == 0,
@@ -638,7 +641,7 @@ WP2Status ANSEnc::WriteBitstreamTo(Vector_u8& bits) const {
 
 uint32_t ANSEnc::EmitWord(uint32_t s) {
   if (buffer_pos_ < IO_BYTES) {
-    if (!NewBufferPage()) return (s >> IO_BITS);   // error
+    if (!NewBufferPage()) return (s >> IO_BITS);  // error
   }
   buffer_pos_ -= IO_BYTES;
   // written in endian-neutral way. Compiler will optimize with a memcpy()
@@ -672,7 +675,7 @@ void ANSEnc::EmitBit(uint32_t bit, uint32_t p0) {
 
 void ANSEnc::EmitASymbol(uint32_t offset, uint32_t freq) {
   uint32_t s = state_;
-  assert(freq > 0);   // coding a symbol that was never seen ?!
+  assert(freq > 0);  // coding a symbol that was never seen ?!
   assert(freq <= APROBA_MAX);
   if ((s >> (IO_LIMIT_BITS + IO_BITS - APROBA_BITS)) >= freq) {
     s = EmitWord(s);
@@ -700,8 +703,8 @@ void ANSEnc::EmitRValue(uint32_t value, uint32_t range) {
   uint64_t state = state_ * (uint64_t)range + value;
   constexpr uint64_t kLimitHi = 1ull << (IO_LIMIT_BITS + IO_BITS);
   if (state >= kLimitHi) {
-    EmitWord((uint32_t)state);   // flush the lower bits of 'state'
-    state >>= IO_LIMIT_BITS;     // rotate-in the higher bits
+    EmitWord((uint32_t)state);  // flush the lower bits of 'state'
+    state >>= IO_LIMIT_BITS;    // rotate-in the higher bits
   }
   assert(state >= IO_LIMIT && state < kLimitHi);
   state_ = (uint32_t)state;
@@ -770,7 +773,7 @@ WP2Status ANSEnc::AssembleToBitstream(bool clear_tokens) {
 // Analyze counts[] and renormalize with Squeaky Wheel fix, so that
 // the total is rescaled to be equal to 'sum' exactly.
 WP2Status ANSNormalizeCounts(uint32_t counts[], uint32_t size, uint32_t sum) {
-  if (size == 0) return WP2_STATUS_OK;   // corner case, but ok.
+  if (size == 0) return WP2_STATUS_OK;  // corner case, but ok.
 
   WP2_CHECK_OK(size <= 0xffffu, WP2_STATUS_INVALID_PARAMETER);
 
@@ -782,8 +785,8 @@ WP2Status ANSNormalizeCounts(uint32_t counts[], uint32_t size, uint32_t sum) {
   }
   WP2_CHECK_OK(total <= 0xffffffffu, WP2_STATUS_INVALID_PARAMETER);  // overflow
   WP2_CHECK_OK(sum >= num_symbols, WP2_STATUS_INVALID_PARAMETER);
-  if (total == sum) return WP2_STATUS_OK;   // already ok.
-  if (total == 0) {   // force a sane state
+  if (total == sum) return WP2_STATUS_OK;  // already ok.
+  if (total == 0) {                        // force a sane state
     counts[0] = sum;
     return WP2_STATUS_OK;
   }
@@ -808,7 +811,7 @@ WP2Status ANSNormalizeCounts(uint32_t counts[], uint32_t size, uint32_t sum) {
       keys[n++] = (error << 16) | s;
     }
   }
-  if (sub_sum == sum) return WP2_STATUS_OK;   // done!
+  if (sub_sum == sum) return WP2_STATUS_OK;  // done!
   if (sub_sum < sum) {
     // Under-shoot -> increase the count of symbols with most errors.
     const uint32_t missing = sum - sub_sum;
@@ -816,7 +819,7 @@ WP2Status ANSNormalizeCounts(uint32_t counts[], uint32_t size, uint32_t sum) {
                      std::greater<uint32_t>());
     for (uint32_t i = 0; i < missing; ++i) ++counts[keys[i] & 0xffffu];
   } else {
-    // Over-shoot -> decrease the count of symbols with largest counts.
+    // Overshoot -> decrease the count of symbols with largest counts.
     const uint32_t missing = sub_sum - sum;
     constexpr uint32_t kCountMax = 0xffffu;
     uint32_t n = 0;
@@ -1111,4 +1114,4 @@ void swap(ANSEnc& e1, ANSEnc& e2) {
   swap(e1.nb_tokens_, e2.nb_tokens_);
 }
 
-}   // namespace WP2
+}  // namespace WP2

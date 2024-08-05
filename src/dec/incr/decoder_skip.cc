@@ -20,11 +20,14 @@
 #include "src/dec/incr/decoder_skip.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
 
 #include "src/dec/incr/decoder_info.h"
 #include "src/dec/incr/decoder_state.h"
+#include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
-#include "src/utils/orientation.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
@@ -134,8 +137,9 @@ WP2Status GlimpseAtNextFrame(const DecoderConfig& config,
 
 bool DiscardWholeFrames(Decoder::State* const state) {
   if (state->frames.empty()) return false;
-  uint32_t target_frame_index = std::min(state->discard_frames_before_index,
-                                         (uint32_t)state->frames.size());
+  uint32_t target_frame_index =
+      std::min(state->discard_frames_before_index,
+               static_cast<uint32_t>(state->frames.size()));
   if (target_frame_index <= state->current_frame_index) return false;
 
   size_t target_bitstream_position =

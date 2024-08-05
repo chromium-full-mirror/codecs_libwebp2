@@ -19,6 +19,7 @@
 
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 
 #include "src/common/color_precision.h"
 #include "src/common/constants.h"
@@ -26,11 +27,13 @@
 #include "src/dec/preview/preview_dec.h"
 #include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
-#include "src/utils/ans_utils.h"
 #include "src/utils/data_source.h"
 #include "src/utils/orientation.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
+#include "src/utils/ans.h"
+#include "src/utils/utils.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 

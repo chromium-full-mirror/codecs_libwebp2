@@ -22,11 +22,13 @@
 #define WP2_COMMON_LOSSY_RESIDUALS_AOM_H_
 
 #include <array>
+#include <cstdint>
 
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/residuals.h"
 #include "src/common/lossy/transforms.h"
 #include "src/common/symbols.h"
-#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace libgav1 {
@@ -91,8 +93,9 @@ enum {
 
 typedef uint32_t (*CoeffBaseContextFunc)(const uint8_t qlevels[], TrfSize tdim,
                                          uint32_t tx_width_log2, uint32_t pos);
-typedef uint32_t (*CoeffBaseRangeContextFunc)(
-    const uint8_t qlevels[], uint32_t tx_width_log2, uint32_t pos);
+typedef uint32_t (*CoeffBaseRangeContextFunc)(const uint8_t qlevels[],
+                                              uint32_t tx_width_log2,
+                                              uint32_t pos);
 
 // Class specialized in reading transform residuals.
 class AOMResidualIO {
@@ -107,23 +110,23 @@ class AOMResidualIO {
   }
   template <Symbol sym>
   static uint32_t GetClusterAOM2(uint32_t arg0, uint32_t arg1) {
-    static_assert(sym == kAOMEOBPT4   || sym == kAOMEOBPT8 ||
-                  sym == kAOMEOBPT16  ||
-                  sym == kAOMEOBPT32  || sym == kAOMEOBPT64 ||
-                  sym == kAOMEOBPT128 || sym == kAOMEOBPT256 ||
-                  sym == kAOMCoeffBase || sym == kAOMCoeffBaseRange ||
-                  sym == kAOMEOBExtra || sym == kAOMCoeffBaseEOB,
+    static_assert(sym == kAOMEOBPT4 || sym == kAOMEOBPT8 ||
+                      sym == kAOMEOBPT16 || sym == kAOMEOBPT32 ||
+                      sym == kAOMEOBPT64 || sym == kAOMEOBPT128 ||
+                      sym == kAOMEOBPT256 || sym == kAOMCoeffBase ||
+                      sym == kAOMCoeffBaseRange || sym == kAOMEOBExtra ||
+                      sym == kAOMCoeffBaseEOB,
                   "wrong symbol");
     const std::array<uint32_t, 2> extent =
-        (sym == kAOMEOBExtra) ?
-            std::array<uint32_t, 2>{kNumPlaneTypes, kEobExtraContexts} :
-        (sym == kAOMCoeffBaseEOB) ?
-            std::array<uint32_t, 2>{kNumPlaneTypes, kCoeffBaseEobContexts} :
-        (sym == kAOMCoeffBase) ?
-           std::array<uint32_t, 2>{kNumPlaneTypes, kCoeffBaseContexts} :
-        (sym == kAOMCoeffBaseRange) ?
-           std::array<uint32_t, 2>{kNumPlaneTypes, kCoeffBaseRangeContexts} :
-           std::array<uint32_t, 2>{kNumPlaneTypes, kEobPtContexts};
+        (sym == kAOMEOBExtra)
+            ? std::array<uint32_t, 2>{kNumPlaneTypes, kEobExtraContexts}
+        : (sym == kAOMCoeffBaseEOB)
+            ? std::array<uint32_t, 2>{kNumPlaneTypes, kCoeffBaseEobContexts}
+        : (sym == kAOMCoeffBase)
+            ? std::array<uint32_t, 2>{kNumPlaneTypes, kCoeffBaseContexts}
+        : (sym == kAOMCoeffBaseRange)
+            ? std::array<uint32_t, 2>{kNumPlaneTypes, kCoeffBaseRangeContexts}
+            : std::array<uint32_t, 2>{kNumPlaneTypes, kEobPtContexts};
     uint32_t cluster = arg1;
     uint32_t stride = extent[1];
     cluster += arg0 * stride;
@@ -137,12 +140,12 @@ class AOMResidualIO {
   static CoeffBaseRangeContextFunc GetCoeffBaseRangeContextFunc(
       TransformClass tx_class);
   static void UpdateLevels(int32_t res, uint32_t pos, TrfSize tdim,
-                           uint8_t* const levels);
+                           uint8_t* levels);
 
  protected:
   static uint32_t GetCoeffBaseContextEob(TrfSize tdim, uint32_t index);
-  static uint32_t GetCoeffBaseRangeContextEob(
-      uint32_t tx_width_log2, uint32_t pos);
+  static uint32_t GetCoeffBaseRangeContextEob(uint32_t tx_width_log2,
+                                              uint32_t pos);
 };
 
 //------------------------------------------------------------------------------

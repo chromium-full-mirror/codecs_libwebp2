@@ -20,11 +20,25 @@
 #include "src/enc/symbols_enc.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <initializer_list>
 #include <limits>
 #include <numeric>
 
+#include "src/common/symbols.h"
 #include "src/dsp/math.h"
+#include "src/utils/ans.h"
 #include "src/utils/ans_enc.h"
+#include "src/utils/ans_utils.h"
+#include "src/utils/quantizer.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -633,8 +647,8 @@ void SymbolWriter::AddTrivial(uint32_t sym, uint32_t cluster, bool is_symmetric,
   stat->extra.mapping_size = 0;
 }
 
-void SymbolWriter::SetMapping(Stat* const stat,
-                              const uint16_t mapping[], uint32_t size) {
+void SymbolWriter::SetMapping(Stat* const stat, const uint16_t mapping[],
+                              uint32_t size) {
   stat->use_mapping = true;
   stat->range = size;
   stat->extra.mapping_size = 1 + *std::max_element(mapping, mapping + size);
@@ -715,7 +729,7 @@ uint32_t SymbolWriter::FindLargestMappingIndex(const Stat& stat,
   for (index = index_ini; index < stat.extra.mapping_size; ++index) {
     if (stat.mappings[index] != Stat::kInvalidMapping) return index;
   }
-  assert(false);   // shouldn't happen
+  assert(false);  // shouldn't happen
   return index;
 }
 
@@ -757,7 +771,7 @@ int32_t SymbolWriter::ProcessInternal(uint32_t sym, uint32_t cluster,
       if (use_max_value && max_value + 1 < stat.extra.mapping_size) {
         // Get the info of the maximally usable symbol.
         const uint32_t max_idx =
-          stat.mappings[FindLargestMappingIndex(stat, max_value)];
+            stat.mappings[FindLargestMappingIndex(stat, max_value)];
         enc->PutSymbol(idx, max_idx, *stat.extra.dict, "dict");
         if (cost != nullptr) *cost += stat.extra.dict->SymbolCost(idx, max_idx);
       } else {
@@ -910,10 +924,9 @@ bool SymbolWriter::ComputeCachedPrefixCodeHistogramCost(uint32_t range,
   const float cost_extra =
       1.f + WP2Log2(nnz_range_prefix_code - 2) + cost_extra_bits;
   // Quantize the histogram to get the cost of using a dictionary.
-  if (quantizer_.Quantize(histogram_prefix_code_.data(),
-                          mapping_prefix_code_.data(), histo_len,
-                          range_prefix_code, max_nnz, cost_max, cost_extra,
-                          effort_)) {
+  if (quantizer_.Quantize(
+          histogram_prefix_code_.data(), mapping_prefix_code_.data(), histo_len,
+          range_prefix_code, max_nnz, cost_max, cost_extra, effort_)) {
     Quantizer::Config* config_best = quantizer_.GetBest();
     config_best->param.prefix_code_histo_len = histo_len;
     config_best->param.prefix_code_prefix_size = prefix_size;
@@ -974,8 +987,8 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
       s.InitFromUniform(symbols_info_.Range(sym, cluster));
       ANSAdaptiveSymbol::Method method;
       uint32_t speed;
-      s.FindBestAdaptationSpeed(
-          recorder.GetRecordedValues(sym, cluster), &method, &speed);
+      s.FindBestAdaptationSpeed(recorder.GetRecordedValues(sym, cluster),
+                                &method, &speed);
       enc->PutRValue((uint32_t)method,
                      (uint32_t)ANSAdaptiveSymbol::Method::kNum,
                      "adaptation_method");
@@ -1007,8 +1020,8 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t max_nnz,
                                     ANSDictionaries* const dicts) {
   for (uint32_t cluster = 0; cluster < symbols_info_.NumClusters(sym);
        ++cluster) {
-    WP2_CHECK_STATUS(WriteHeader(sym, cluster, max_nnz, syntax_recorder, label,
-                                 enc, dicts));
+    WP2_CHECK_STATUS(
+        WriteHeader(sym, cluster, max_nnz, syntax_recorder, label, enc, dicts));
   }
   return WP2_STATUS_OK;
 }
@@ -1067,9 +1080,8 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
   const int32_t max_symbol = symbols_info_.Max(sym, cluster);
   const bool changes_sign = (min_symbol < 0) && (max_symbol > 0);
   bool last_tried_symmetry = changes_sign;
-  uint32_t size =
-      ConvertCountsToCachedHistogram(counts, min_symbol, max_symbol,
-                                     last_tried_symmetry, &counts_total);
+  uint32_t size = ConvertCountsToCachedHistogram(
+      counts, min_symbol, max_symbol, last_tried_symmetry, &counts_total);
 
   // Deal with the trivial cases.
   ANSDebugPrefix prefix(enc, label);
@@ -1101,7 +1113,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
   enc->PutRValue(kSymbolCountMoreThanOne, kSymbolCountLast, "scount");
 
   float cost_best = std::numeric_limits<float>::max();
-  Stat::Type type_best =  Stat::Type::kUnknown;
+  Stat::Type type_best = Stat::Type::kUnknown;
   Quantizer::Config* config_best = nullptr;
   bool is_symmetric_best = false;
   uint32_t prefix_size_best = 0;
@@ -1170,8 +1182,9 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
 
   // TODO(vrabaud) For very small images, always choose range to save bits on
   // this symbol.
-  enc->PutRValue(type_best == Stat::Type::kRange ? 0 :
-                 type_best == Stat::Type::kDict ? 1 : 2,
+  enc->PutRValue(type_best == Stat::Type::kRange  ? 0
+                 : type_best == Stat::Type::kDict ? 1
+                                                  : 2,
                  3, "type");
   if (changes_sign) {
     enc->PutBool(is_symmetric_best, "is_symmetric");

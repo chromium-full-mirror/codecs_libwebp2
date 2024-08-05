@@ -18,12 +18,16 @@
 // Author: Yannis Guyon (yguyon@google.com)
 
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
 
 #include "src/common/color_precision.h"
 #include "src/common/header_enc_dec.h"
 #include "src/dec/wp2_dec_i.h"
-#include "src/utils/ans_utils.h"
+#include "src/utils/csp.h"
 #include "src/utils/data_source.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
@@ -67,9 +71,9 @@ WP2Status DecodeANMF(const DecoderConfig& config, DataSource* const data_source,
         WP2_CHECK_OK(!frame->is_last, WP2_STATUS_BITSTREAM_ERROR);
       }
     }
-    WP2_CHECK_REDUCED_STATUS(
-      RegisterBitTrace(config,
-          data_source->GetNumReadBytes() - num_read_bytes_before, "ANMF"));
+    WP2_CHECK_REDUCED_STATUS(RegisterBitTrace(
+        config, data_source->GetNumReadBytes() - num_read_bytes_before,
+        "ANMF"));
   } else {
     frame->dispose = true;
     frame->blend = false;

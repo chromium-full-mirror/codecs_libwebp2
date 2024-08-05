@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 
@@ -34,23 +35,22 @@
 namespace {
 
 //------------------------------------------------------------------------------
-// Constants for 10bit precision
+// Constants for 10 bit precision
 
 // kCosPi[j] = (int)round(cos(M_PI*j/128) * (1<<kPrecision));
 constexpr uint32_t kPrecision = 10u;
 constexpr int32_t kCosPi[64] = {
-  1024, 1024, 1023, 1021, 1019, 1016, 1013, 1009, 1004, 999, 993, 987, 980,
-  972,  964,  955,  946,  936,  926,  915,  903,  891,  878, 865, 851, 837,
-  822,  807,  792,  775,  759,  742,  724,  706,  688,  669, 650, 630, 610,
-  590,  569,  548,  526,  505,  483,  460,  438,  415,  392, 369, 345, 321,
-  297,  273,  249,  224,  200,  175,  150,  125,  100,  75,  50,  25
-};
+    1024, 1024, 1023, 1021, 1019, 1016, 1013, 1009, 1004, 999, 993, 987, 980,
+    972,  964,  955,  946,  936,  926,  915,  903,  891,  878, 865, 851, 837,
+    822,  807,  792,  775,  759,  742,  724,  706,  688,  669, 650, 630, 610,
+    590,  569,  548,  526,  505,  483,  460,  438,  415,  392, 369, 345, 321,
+    297,  273,  249,  224,  200,  175,  150,  125,  100,  75,  50,  25};
 // Pre-calculated constants kCosPi[32] * kCosPi[16/48]
-constexpr int32_t kCos32Cos48 = 277;   // cos(pi/4) * cos(3 * pi / 8)
-constexpr int32_t kCos32Cos16 = 669;   // cos(pi/4) * cos(pi / 8)
+constexpr int32_t kCos32Cos48 = 277;  // cos(pi/4) * cos(3 * pi / 8)
+constexpr int32_t kCos32Cos16 = 669;  // cos(pi/4) * cos(pi / 8)
 // These are the same constants but with one extra precision bit (p=pre-scaled).
-constexpr int32_t kCos32Cos48p = 554;    // 2 * cos(pi/4) * cos(3 * pi / 8)
-constexpr int32_t kCos32Cos16p = 1337;   // 2 * cos(pi/4) * cos(pi / 8)
+constexpr int32_t kCos32Cos48p = 554;   // 2 * cos(pi/4) * cos(3 * pi / 8)
+constexpr int32_t kCos32Cos16p = 1337;  // 2 * cos(pi/4) * cos(pi / 8)
 
 //------------------------------------------------------------------------------
 
@@ -119,7 +119,7 @@ void ColTransformGen<V>::idct4(int16_t* coeffs, uint32_t w) {
 
 template <class V>
 void ColTransformGen<V>::idct8(int16_t* coeffs, uint32_t w) {
-  const V c_08 = kCosPi[ 8];
+  const V c_08 = kCosPi[8];
   const V c_16 = kCosPi[16];
   const V c_24 = kCosPi[24];
   const V c_32 = kCosPi[32];
@@ -238,7 +238,7 @@ void ColTransformGen<V>::fdct8(int32_t* coeffs, uint32_t w) {
   constexpr uint32_t shift = kPrecision + 1;
   const V kRnd0 = Rounding(kPrecision);
   const V kRnd1 = Rounding(shift);
-  const V c_08 = kCosPi[ 8];
+  const V c_08 = kCosPi[8];
   const V c_16 = kCosPi[16];
   const V c_24 = kCosPi[24];
   const V c_32 = kCosPi[32];
@@ -327,8 +327,8 @@ void ColTransformGen<V>::fdct16(int32_t* coeffs, uint32_t w) {
     V a3 = Load(coeffs + w * 3) + Load(coeffs + w * 12);
     V a4 = Load(coeffs + w * 4) + Load(coeffs + w * 11);
     V a5 = Load(coeffs + w * 5) + Load(coeffs + w * 10);
-    V a6 = Load(coeffs + w * 6) + Load(coeffs + w *  9);
-    V a7 = Load(coeffs + w * 7) + Load(coeffs + w *  8);
+    V a6 = Load(coeffs + w * 6) + Load(coeffs + w * 9);
+    V a7 = Load(coeffs + w * 7) + Load(coeffs + w * 8);
 
     V b0 = a7 + a0;
     V b1 = a6 + a1;
@@ -357,9 +357,9 @@ void ColTransformGen<V>::fdct16(int32_t* coeffs, uint32_t w) {
     b2 = (b2 * c0 + kRnd1) >> shift;
     b3 = (b3 * c0 + kRnd1) >> shift;
 
-    b0.Store(temp +  0);  // 0
-    b2.Store(temp +  4);  // 4
-    b1.Store(temp +  8);  // 8
+    b0.Store(temp + 0);   // 0
+    b2.Store(temp + 4);   // 4
+    b1.Store(temp + 8);   // 8
     b3.Store(temp + 12);  // 12
 
     // part 2
@@ -384,10 +384,10 @@ void ColTransformGen<V>::fdct16(int32_t* coeffs, uint32_t w) {
     a6 = (a6 * c0 + kRnd1) >> shift;
     a7 = (a7 * c0 + kRnd1) >> shift;
 
-    a4.Store(temp +  16);  // 2
-    a6.Store(temp +  20);  // 6
-    a5.Store(temp +  24);  // 10
-    a7.Store(temp +  28);  // 14
+    a4.Store(temp + 16);  // 2
+    a6.Store(temp + 20);  // 6
+    a5.Store(temp + 24);  // 10
+    a7.Store(temp + 28);  // 14
 
     // high
     a3 = Load(coeffs + w * 4) - Load(coeffs + w * 11);
@@ -465,21 +465,21 @@ void ColTransformGen<V>::fdct16(int32_t* coeffs, uint32_t w) {
     b5.Store(coeffs + w * 11);
     b3.Store(coeffs + w * 13);
 
-    a0 = Load(temp +  0);
-    a1 = Load(temp +  4);
-    a2 = Load(temp +  8);
+    a0 = Load(temp + 0);
+    a1 = Load(temp + 4);
+    a2 = Load(temp + 8);
     a3 = Load(temp + 12);
     a4 = Load(temp + 16);
     a5 = Load(temp + 20);
     a6 = Load(temp + 24);
     a7 = Load(temp + 28);
 
-    a0.Store(coeffs + w *  0);
-    a1.Store(coeffs + w *  4);
-    a2.Store(coeffs + w *  8);
+    a0.Store(coeffs + w * 0);
+    a1.Store(coeffs + w * 4);
+    a2.Store(coeffs + w * 8);
     a3.Store(coeffs + w * 12);
-    a4.Store(coeffs + w *  2);
-    a5.Store(coeffs + w *  6);
+    a4.Store(coeffs + w * 2);
+    a5.Store(coeffs + w * 6);
     a6.Store(coeffs + w * 10);
     a7.Store(coeffs + w * 14);
   }
@@ -592,27 +592,27 @@ static void idct16_SSE(int16_t* coeffs) {
   __m128i v0, v1, v2, v3, v4, v5, v6, v7, c0, c1;
 
   // stage 1
-  v0 = Load_s16_s32(coeffs +  0);
-  v1 = Load_s16_s32(coeffs +  4);
-  v2 = Load_s16_s32(coeffs +  8);
+  v0 = Load_s16_s32(coeffs + 0);
+  v1 = Load_s16_s32(coeffs + 4);
+  v2 = Load_s16_s32(coeffs + 8);
   v3 = Load_s16_s32(coeffs + 12);
-  v4 = _mm_unpacklo_epi64(v0, v2);   // 0189
-  v5 = _mm_unpackhi_epi64(v0, v2);   // 23ab
-  v6 = _mm_unpacklo_epi64(v1, v3);   // 45cd
-  v7 = _mm_unpackhi_epi64(v1, v3);   // 67ef
-  v0 = _mm_unpacklo_epi32(v4, v6);   // 0415
-  v1 = _mm_unpackhi_epi32(v4, v6);   // 8c9d
-  v2 = _mm_unpacklo_epi32(v5, v7);   // 2637
-  v3 = _mm_unpackhi_epi32(v5, v7);   // aebf
-  v4 = _mm_unpacklo_epi32(v0, v1);   // 084c
-  v6 = _mm_unpackhi_epi32(v0, v1);   // 195d
-  v5 = _mm_unpacklo_epi32(v2, v3);   // 2a6e
-  v7 = _mm_unpackhi_epi32(v2, v3);   // 3b7f
+  v4 = _mm_unpacklo_epi64(v0, v2);  // 0189
+  v5 = _mm_unpackhi_epi64(v0, v2);  // 23ab
+  v6 = _mm_unpacklo_epi64(v1, v3);  // 45cd
+  v7 = _mm_unpackhi_epi64(v1, v3);  // 67ef
+  v0 = _mm_unpacklo_epi32(v4, v6);  // 0415
+  v1 = _mm_unpackhi_epi32(v4, v6);  // 8c9d
+  v2 = _mm_unpacklo_epi32(v5, v7);  // 2637
+  v3 = _mm_unpackhi_epi32(v5, v7);  // aebf
+  v4 = _mm_unpacklo_epi32(v0, v1);  // 084c
+  v6 = _mm_unpackhi_epi32(v0, v1);  // 195d
+  v5 = _mm_unpacklo_epi32(v2, v3);  // 2a6e
+  v7 = _mm_unpackhi_epi32(v2, v3);  // 3b7f
 
   // stage 2
   c0 = _mm_setr_epi32(kCosPi[60], kCosPi[28], kCosPi[44], kCosPi[12]);
   c1 = _mm_setr_epi32(kCosPi[4], kCosPi[36], kCosPi[20], kCosPi[52]);
-  v7 = _mm_shuffle_epi32(v7, 0x1b);   // fedc
+  v7 = _mm_shuffle_epi32(v7, 0x1b);  // fedc
   v0 = _mm_mullo_epi32(v6, c1);
   v6 = _mm_mullo_epi32(v6, c0);
   v1 = _mm_mullo_epi32(v7, c1);
@@ -635,9 +635,9 @@ static void idct16_SSE(int16_t* coeffs) {
   v5 = _mm_srai_epi32(v5, kPrecision);
 
   v7 = _mm_shuffle_epi32(v7, 0x4e);
-  v0 = _mm_blend_epi16(v6, v7, 0x3c);   // 8cfb
+  v0 = _mm_blend_epi16(v6, v7, 0x3c);  // 8cfb
   v1 = _mm_blend_epi16(v6, v7, 0xc3);
-  v1 = _mm_shuffle_epi32(v1, 0xb1);   // 9dea
+  v1 = _mm_shuffle_epi32(v1, 0xb1);  // 9dea
   v6 = _mm_add_epi32(v0, v1);
   v7 = _mm_sub_epi32(v0, v1);
 
@@ -666,10 +666,10 @@ static void idct16_SSE(int16_t* coeffs) {
   v7 = _mm_srai_epi32(v7, kPrecision);
 
   // stage 5
-  v0 = _mm_unpacklo_epi32(v6, v7);   // 89cd
-  v1 = _mm_unpackhi_epi32(v7, v6);   // efab
-  v6 = _mm_unpacklo_epi64(v1, v0);   // ef89
-  v7 = _mm_unpackhi_epi64(v1, v0);   // abcd
+  v0 = _mm_unpacklo_epi32(v6, v7);  // 89cd
+  v1 = _mm_unpackhi_epi32(v7, v6);  // efab
+  v6 = _mm_unpacklo_epi64(v1, v0);  // ef89
+  v7 = _mm_unpackhi_epi64(v1, v0);  // abcd
 
   v0 = _mm_shuffle_epi32(v6, 0x1b);
   v1 = _mm_shuffle_epi32(v7, 0x1b);
@@ -728,9 +728,9 @@ static void idct16_SSE(int16_t* coeffs) {
   v6 = _mm_srai_epi32(v6, shift);
   v7 = _mm_srai_epi32(v7, shift);
 
-  Store_s32_s16(v4, coeffs +  0);
-  Store_s32_s16(v5, coeffs +  4);
-  Store_s32_s16(v6, coeffs +  8);
+  Store_s32_s16(v4, coeffs + 0);
+  Store_s32_s16(v5, coeffs + 4);
+  Store_s32_s16(v6, coeffs + 8);
   Store_s32_s16(v7, coeffs + 12);
 }
 
@@ -835,9 +835,9 @@ static void fdct16_SSE(int32_t* coeffs) {
   __m128i v0, v1, v2, v3, v4, v5, v6, v7, c0, c1;
 
   // stage 1
-  v0 = Load128b(coeffs +  0);
-  v1 = Load128b(coeffs +  4);
-  v2 = Load128b(coeffs +  8);
+  v0 = Load128b(coeffs + 0);
+  v1 = Load128b(coeffs + 4);
+  v2 = Load128b(coeffs + 8);
   v3 = Load128b(coeffs + 12);
   v4 = _mm_shuffle_epi32(v0, 0x1b);
   v5 = _mm_shuffle_epi32(v1, 0x1b);
@@ -853,8 +853,8 @@ static void fdct16_SSE(int32_t* coeffs) {
   v6 = _mm_shuffle_epi32(v0, 0x1b);
   v4 = _mm_add_epi32(v0, v7);
   v5 = _mm_sub_epi32(v6, v1);
-  v6 = _mm_alignr_epi8(v3, v2, 8);   // abcd
-  v3 = _mm_alignr_epi8(v2, v3, 8);   // ef89
+  v6 = _mm_alignr_epi8(v3, v2, 8);  // abcd
+  v3 = _mm_alignr_epi8(v2, v3, 8);  // ef89
   c0 = _mm_setr_epi32(-1, -1, 1, 1);
   v7 = _mm_shuffle_epi32(v6, 0x1b);
   v6 = _mm_sign_epi32(v6, c0);
@@ -897,8 +897,8 @@ static void fdct16_SSE(int32_t* coeffs) {
   v2 = _mm_srai_epi32(v2, kPrecision);
 
   v0 = _mm_shuffle_epi32(v0, 0xb1);
-  v4 = _mm_blend_epi16(v0, v1, 0x3c);   // fbc8
-  v5 = _mm_blend_epi16(v0, v1, 0xc3);   // ae9d
+  v4 = _mm_blend_epi16(v0, v1, 0x3c);  // fbc8
+  v5 = _mm_blend_epi16(v0, v1, 0xc3);  // ae9d
 
   c0 = _mm_setr_epi32(-kCosPi[48], kCosPi[16], -kCosPi[16], kCosPi[48]);
   c1 = _mm_setr_epi32(-kCosPi[16], kCosPi[48], kCosPi[48], -kCosPi[16]);
@@ -920,14 +920,14 @@ static void fdct16_SSE(int32_t* coeffs) {
   v3 = _mm_srai_epi32(v3, kPrecision);
 
   v0 = _mm_shuffle_epi32(v5, 0xb1);
-  v5 = _mm_sub_epi32(v4, v0);   // ead9
-  v4 = _mm_add_epi32(v4, v0);   // fbc8
+  v5 = _mm_sub_epi32(v4, v0);  // ead9
+  v4 = _mm_add_epi32(v4, v0);  // fbc8
 
   // stage 6
-  v0 = _mm_shuffle_epi32(v5, 0x4e);   // d9ea
-  v5 = _mm_unpacklo_epi64(v4, v0);    // fbd9
-  v4 = _mm_unpackhi_epi64(v0, v4);    // eac8
-  v4 = _mm_shuffle_epi32(v4, 0x1b);   // 8cae
+  v0 = _mm_shuffle_epi32(v5, 0x4e);  // d9ea
+  v5 = _mm_unpacklo_epi64(v4, v0);   // fbd9
+  v4 = _mm_unpackhi_epi64(v0, v4);   // eac8
+  v4 = _mm_shuffle_epi32(v4, 0x1b);  // 8cae
 
   c0 = _mm_setr_epi32(kCosPi[4], -kCosPi[52], kCosPi[20], -kCosPi[36]);
   c1 = _mm_setr_epi32(kCosPi[60], kCosPi[12], kCosPi[44], kCosPi[28]);
@@ -958,18 +958,18 @@ static void fdct16_SSE(int32_t* coeffs) {
   v0 = _mm_srai_epi32(v0, shift);
   v1 = _mm_srai_epi32(v1, shift);
 
-  v4 = _mm_unpacklo_epi32(v2, v3);   // 0415
-  v5 = _mm_unpackhi_epi32(v2, v3);   // 2637
-  v6 = _mm_unpacklo_epi32(v4, v0);   // 084c
-  v7 = _mm_unpackhi_epi32(v5, v1);   // 3b7f
+  v4 = _mm_unpacklo_epi32(v2, v3);  // 0415
+  v5 = _mm_unpackhi_epi32(v2, v3);  // 2637
+  v6 = _mm_unpacklo_epi32(v4, v0);  // 084c
+  v7 = _mm_unpackhi_epi32(v5, v1);  // 3b7f
   v0 = _mm_shuffle_epi32(v0, 0x4e);
   v1 = _mm_shuffle_epi32(v1, 0x4e);
-  v5 = _mm_unpacklo_epi32(v5, v0);   // 2a6e
-  v4 = _mm_unpackhi_epi32(v4, v1);   // 195d
+  v5 = _mm_unpacklo_epi32(v5, v0);  // 2a6e
+  v4 = _mm_unpackhi_epi32(v4, v1);  // 195d
 
-  Store128b(v6, coeffs +  0);
-  Store128b(v5, coeffs +  4);
-  Store128b(v4, coeffs +  8);
+  Store128b(v6, coeffs + 0);
+  Store128b(v5, coeffs + 4);
+  Store128b(v4, coeffs + 8);
   Store128b(v7, coeffs + 12);
 }
 
@@ -981,9 +981,9 @@ void fdct32_SSE(int32_t* coeffs) {
   int32_t temp[16];
 
   // stage 1
-  v0 = Load128b(coeffs +  0);
-  v1 = Load128b(coeffs +  4);
-  v2 = Load128b(coeffs +  8);
+  v0 = Load128b(coeffs + 0);
+  v1 = Load128b(coeffs + 4);
+  v2 = Load128b(coeffs + 8);
   v3 = Load128b(coeffs + 12);
   v4 = Load128b(coeffs + 16);
   v5 = Load128b(coeffs + 20);
@@ -1049,9 +1049,9 @@ void fdct32_SSE(int32_t* coeffs) {
   v5 = _mm_sign_epi32(v5, c0);
   v1 = _mm_add_epi32(v1, v5);
 
-  v6 = _mm_shuffle_epi32(v6, 0xb1);     // fe98
-  v2 = _mm_blend_epi16(v6, v7, 0x3c);   // fbc8
-  v3 = _mm_blend_epi16(v6, v7, 0xc3);   // ae9d
+  v6 = _mm_shuffle_epi32(v6, 0xb1);    // fe98
+  v2 = _mm_blend_epi16(v6, v7, 0x3c);  // fbc8
+  v3 = _mm_blend_epi16(v6, v7, 0xc3);  // ae9d
 
   c0 = _mm_setr_epi32(-kCosPi[48], kCosPi[16], -kCosPi[16], kCosPi[48]);
   c1 = _mm_setr_epi32(-kCosPi[16], kCosPi[48], kCosPi[48], -kCosPi[16]);
@@ -1086,10 +1086,10 @@ void fdct32_SSE(int32_t* coeffs) {
   v7 = _mm_sub_epi32(v7, v3);  // ae9d
 
   // stage 7
-  v6 = _mm_shuffle_epi32(v6, 0x4e);   // 8cbf
-  v3 = _mm_unpackhi_epi64(v7, v6);    // 9dbf
-  v2 = _mm_unpacklo_epi64(v6, v7);    // 8cae
-  v3 = _mm_shuffle_epi32(v3, 0x1b);   // fbd9
+  v6 = _mm_shuffle_epi32(v6, 0x4e);  // 8cbf
+  v3 = _mm_unpackhi_epi64(v7, v6);   // 9dbf
+  v2 = _mm_unpacklo_epi64(v6, v7);   // 8cae
+  v3 = _mm_shuffle_epi32(v3, 0x1b);  // fbd9
 
   c0 = _mm_setr_epi32(kCosPi[4], -kCosPi[52], kCosPi[20], -kCosPi[36]);
   c1 = _mm_setr_epi32(kCosPi[60], kCosPi[12], kCosPi[44], kCosPi[28]);
@@ -1108,24 +1108,24 @@ void fdct32_SSE(int32_t* coeffs) {
   // stage 8
 
   // stage 9
-  v4 = _mm_unpacklo_epi32(v0, v1);   // 0415
-  v5 = _mm_unpackhi_epi32(v0, v1);   // 2637
-  v6 = _mm_unpacklo_epi32(v4, v2);   // 084c
-  v7 = _mm_unpackhi_epi32(v5, v3);   // 3b7f
+  v4 = _mm_unpacklo_epi32(v0, v1);  // 0415
+  v5 = _mm_unpackhi_epi32(v0, v1);  // 2637
+  v6 = _mm_unpacklo_epi32(v4, v2);  // 084c
+  v7 = _mm_unpackhi_epi32(v5, v3);  // 3b7f
   v2 = _mm_shuffle_epi32(v2, 0x4e);
   v3 = _mm_shuffle_epi32(v3, 0x4e);
-  v5 = _mm_unpacklo_epi32(v5, v2);   // 2a6e
-  v4 = _mm_unpackhi_epi32(v4, v3);   // 195d
+  v5 = _mm_unpacklo_epi32(v5, v2);  // 2a6e
+  v4 = _mm_unpackhi_epi32(v4, v3);  // 195d
 
-  Store128b(v6, temp +  0);
-  Store128b(v5, temp +  4);
-  Store128b(v4, temp +  8);
+  Store128b(v6, temp + 0);
+  Store128b(v5, temp + 4);
+  Store128b(v4, temp + 8);
   Store128b(v7, temp + 12);
 
   // stage 1
-  v3 = Load128b(coeffs +  0);
-  v2 = Load128b(coeffs +  4);
-  v1 = Load128b(coeffs +  8);
+  v3 = Load128b(coeffs + 0);
+  v2 = Load128b(coeffs + 4);
+  v1 = Load128b(coeffs + 8);
   v0 = Load128b(coeffs + 12);
   v4 = Load128b(coeffs + 16);
   v5 = Load128b(coeffs + 20);
@@ -1257,12 +1257,12 @@ void fdct32_SSE(int32_t* coeffs) {
   v5 = _mm_unpackhi_epi32(v6, v0);
   v6 = _mm_unpacklo_epi32(v7, v2);
   v7 = _mm_unpackhi_epi32(v7, v2);
-  v0 = Load128b(temp +  8);
+  v0 = Load128b(temp + 8);
   v2 = Load128b(temp + 12);
 
-  Store128b(v4, coeffs +  0);
-  Store128b(v5, coeffs +  4);
-  Store128b(v6, coeffs +  8);
+  Store128b(v4, coeffs + 0);
+  Store128b(v5, coeffs + 4);
+  Store128b(v6, coeffs + 8);
   Store128b(v7, coeffs + 12);
 
   v4 = _mm_unpacklo_epi32(v0, v1);
@@ -1358,16 +1358,16 @@ static void fadst8_SSE(int32_t* coeffs) {
 // row-wise fadst
 
 #define HALF_BTF_VEC(v0, v1, t0, t1, t2, t3) \
-    t0 = _mm_mullo_epi32(v0, c0);            \
-    t1 = _mm_mullo_epi32(v0, c1);            \
-    t2 = _mm_mullo_epi32(v1, c1);            \
-    t3 = _mm_mullo_epi32(v1, c0);            \
-    v0 = _mm_add_epi32(t0, t2);              \
-    v1 = _mm_sub_epi32(t1, t3);              \
-    v0 = _mm_add_epi32(v0, kRnd0);           \
-    v1 = _mm_add_epi32(v1, kRnd0);           \
-    v0 = _mm_srai_epi32(v0, kPrecision);     \
-    v1 = _mm_srai_epi32(v1, kPrecision)
+  t0 = _mm_mullo_epi32(v0, c0);              \
+  t1 = _mm_mullo_epi32(v0, c1);              \
+  t2 = _mm_mullo_epi32(v1, c1);              \
+  t3 = _mm_mullo_epi32(v1, c0);              \
+  v0 = _mm_add_epi32(t0, t2);                \
+  v1 = _mm_sub_epi32(t1, t3);                \
+  v0 = _mm_add_epi32(v0, kRnd0);             \
+  v1 = _mm_add_epi32(v1, kRnd0);             \
+  v0 = _mm_srai_epi32(v0, kPrecision);       \
+  v1 = _mm_srai_epi32(v1, kPrecision)
 
 static void fadst16_SSE(int32_t* coeffs) {
   constexpr uint32_t shift = kPrecision + 1;
@@ -1377,18 +1377,18 @@ static void fadst16_SSE(int32_t* coeffs) {
 
   // stage 1
   c0 = _mm_setr_epi32(1, -1, 1, -1);
-  v0 = Load128b(coeffs +  0);
-  v2 = Load128b(coeffs +  4);
-  v3 = Load128b(coeffs +  8);
+  v0 = Load128b(coeffs + 0);
+  v2 = Load128b(coeffs + 4);
+  v3 = Load128b(coeffs + 8);
   v1 = Load128b(coeffs + 12);
   v0 = _mm_sign_epi32(v0, c0);
   v1 = _mm_sign_epi32(v1, c0);
   v2 = _mm_sign_epi32(v2, c0);
   v3 = _mm_sign_epi32(v3, c0);
-  v0 = _mm_shuffle_epi32(v0, 0x9c);   // 048c
-  v1 = _mm_shuffle_epi32(v1, 0x63);   // 159d
-  v2 = _mm_shuffle_epi32(v2, 0x63);   // 26ae
-  v3 = _mm_shuffle_epi32(v3, 0x9c);   // 37bf
+  v0 = _mm_shuffle_epi32(v0, 0x9c);  // 048c
+  v1 = _mm_shuffle_epi32(v1, 0x63);  // 159d
+  v2 = _mm_shuffle_epi32(v2, 0x63);  // 26ae
+  v3 = _mm_shuffle_epi32(v3, 0x9c);  // 37bf
 
   // stage 2
   c0 = _mm_set1_epi32(kCosPi[32]);
@@ -1413,10 +1413,10 @@ static void fadst16_SSE(int32_t* coeffs) {
   v4 = _mm_unpackhi_epi32(v2, v4);
   v5 = _mm_unpackhi_epi32(v3, v5);
 
-  v0 = _mm_unpacklo_epi64(v6, v4);   // 028a
-  v1 = _mm_unpackhi_epi64(v6, v4);   // 46ce
-  v2 = _mm_unpacklo_epi64(v7, v5);   // 139b
-  v3 = _mm_unpackhi_epi64(v7, v5);   // 57df
+  v0 = _mm_unpacklo_epi64(v6, v4);  // 028a
+  v1 = _mm_unpackhi_epi64(v6, v4);  // 46ce
+  v2 = _mm_unpacklo_epi64(v7, v5);  // 139b
+  v3 = _mm_unpackhi_epi64(v7, v5);  // 57df
 
   c0 = _mm_setr_epi32(kCosPi[16], -kCosPi[48], kCosPi[16], -kCosPi[48]);
   c1 = _mm_setr_epi32(kCosPi[48], kCosPi[16], kCosPi[48], kCosPi[16]);
@@ -1429,10 +1429,10 @@ static void fadst16_SSE(int32_t* coeffs) {
   v7 = _mm_sub_epi32(v2, v3);
 
   // stage 6
-  v0 = _mm_unpacklo_epi64(v4, v5);   // 0246
-  v1 = _mm_unpackhi_epi64(v4, v5);   // 8ace
-  v2 = _mm_unpacklo_epi64(v6, v7);   // 1357
-  v3 = _mm_unpackhi_epi64(v6, v7);   // 9bdf
+  v0 = _mm_unpacklo_epi64(v4, v5);  // 0246
+  v1 = _mm_unpackhi_epi64(v4, v5);  // 8ace
+  v2 = _mm_unpacklo_epi64(v6, v7);  // 1357
+  v3 = _mm_unpackhi_epi64(v6, v7);  // 9bdf
 
   c0 = _mm_setr_epi32(kCosPi[8], kCosPi[40], -kCosPi[56], -kCosPi[24]);
   c1 = _mm_setr_epi32(kCosPi[56], kCosPi[24], kCosPi[8], kCosPi[40]);
@@ -1467,16 +1467,16 @@ static void fadst16_SSE(int32_t* coeffs) {
   v6 = _mm_srai_epi32(v6, shift);
   v7 = _mm_srai_epi32(v7, shift);
 
-  v4 = _mm_shuffle_epi32(v4, 0x1b);   // 6420
-  v5 = _mm_shuffle_epi32(v5, 0x1b);   // eca8
+  v4 = _mm_shuffle_epi32(v4, 0x1b);  // 6420
+  v5 = _mm_shuffle_epi32(v5, 0x1b);  // eca8
   v0 = _mm_unpacklo_epi32(v6, v5);
   v1 = _mm_unpackhi_epi32(v6, v5);
   v2 = _mm_unpacklo_epi32(v7, v4);
   v3 = _mm_unpackhi_epi32(v7, v4);
 
-  Store128b(v0, coeffs +  0);
-  Store128b(v1, coeffs +  4);
-  Store128b(v2, coeffs +  8);
+  Store128b(v0, coeffs + 0);
+  Store128b(v1, coeffs + 4);
+  Store128b(v2, coeffs + 8);
   Store128b(v3, coeffs + 12);
 }
 #undef HALF_BTF_VEC
@@ -1579,17 +1579,17 @@ int32_t hadd(const __m128 v0, const __m128 v1) {
   return (int32_t)lrintf((tmp[0] + tmp[1] + tmp[2] + tmp[3]) * 256.f);
 }
 
-int32_t SlowDct8x8_SSE(const int32_t in[64],
-                       const float cos_x[8], const float cos_y[8]) {
+int32_t SlowDct8x8_SSE(const int32_t in[64], const float cos_x[8],
+                       const float cos_y[8]) {
   __m128 sum0 = _mm_set1_ps(0.f);
   __m128 sum4 = _mm_set1_ps(0.f);
-  const __m128 cos_x0  = _mm_loadu_ps(cos_x + 0);
-  const __m128 cos_x4  = _mm_loadu_ps(cos_x + 4);
+  const __m128 cos_x0 = _mm_loadu_ps(cos_x + 0);
+  const __m128 cos_x4 = _mm_loadu_ps(cos_x + 4);
   const __m128i* src = (const __m128i*)in;
   for (uint32_t j = 0; j < 8; ++j, src += 2) {
     const __m128 C = _mm_set1_ps(cos_y[j]);
-    const __m128 in0  = _mm_cvtepi32_ps(_mm_loadu_si128(src + 0));
-    const __m128 in4  = _mm_cvtepi32_ps(_mm_loadu_si128(src + 1));
+    const __m128 in0 = _mm_cvtepi32_ps(_mm_loadu_si128(src + 0));
+    const __m128 in4 = _mm_cvtepi32_ps(_mm_loadu_si128(src + 1));
     const __m128 a0 = _mm_mul_ps(in0, cos_x0);
     const __m128 a4 = _mm_mul_ps(in4, cos_x4);
     sum0 = _mm_add_ps(sum0, _mm_mul_ps(a0, C));

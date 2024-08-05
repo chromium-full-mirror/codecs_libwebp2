@@ -18,14 +18,22 @@
 //
 // Author: Vincent Rabaud (vrabaud@google.com)
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
+#include "src/common/constants.h"
 #include "src/common/lossless/color_cache.h"
 #include "src/common/symbols.h"
 #include "src/dec/lossless/losslessi_dec.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/dec/symbols_dec.h"
+#include "src/utils/ans_utils.h"
 #include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2L {
-
 
 static void SetColor(int16_t color, uint32_t x, int16_t* const dst) {
   // Write to the image to the green channel (channel 2).

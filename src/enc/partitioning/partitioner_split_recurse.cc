@@ -20,18 +20,25 @@
 #include "src/enc/partitioning/partitioner_split_recurse.h"
 
 #include <algorithm>
-#include <numeric>
+#include <cassert>
+#include <cstdint>
 
+#include "src/common/global_params.h"
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
 #include "src/common/progress_watcher.h"
-#include "src/dsp/math.h"
-#include "src/enc/analysis.h"
+#include "src/common/symbols.h"
+#include "src/enc/partitioning/partition_score_func.h"
 #include "src/enc/partitioning/partition_score_func_block.h"
+#include "src/enc/partitioning/partitioner.h"
+#include "src/enc/symbols_enc.h"
+#include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans_utils.h"
 #include "src/utils/split_iterator.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
-#include "src/wp2/format_constants.h"
+#include "src/wp2/encode.h"
 
 namespace WP2 {
 

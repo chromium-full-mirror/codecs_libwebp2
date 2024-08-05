@@ -17,14 +17,19 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include "src/common/lossy/rnd_mtx.h"
+
 #include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <random>
 
-#include "src/common/lossy/rnd_mtx.h"
 #include "src/common/lossy/block.h"
-#include "src/enc/block_enc.h"
+#include "src/common/lossy/block_size.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 using std::mt19937;
 
@@ -42,9 +47,7 @@ static inline uint32_t Uniform(mt19937* const gen, uint32_t range) {
   return (uint32_t)std::round(scale * ((*gen)() - mt19937::min()));
 }
 
-static bool IsHighFrequency(uint32_t x, uint32_t y) {
-  return (x + y > 3);
-}
+static bool IsHighFrequency(uint32_t x, uint32_t y) { return (x + y > 3); }
 
 // TODO(skal): super slow!!
 uint32_t FillRandomMatrix(uint32_t id, uint32_t sparsity, uint32_t freq_cut_off,
@@ -79,8 +82,8 @@ static int16_t DecideValue(int16_t v0, int16_t v1) {
   return 0;
 }
 
-uint32_t DownscaleMatrix(const int16_t* src, int16_t* dst,
-                         uint32_t sx, uint32_t sy, bool vertically) {
+uint32_t DownscaleMatrix(const int16_t* src, int16_t* dst, uint32_t sx,
+                         uint32_t sy, bool vertically) {
   uint32_t num_ones = 0;
   for (uint32_t y = 0; y < sy; ++y) {
     if (!vertically) {
@@ -133,12 +136,12 @@ void SubtractRandomMatrix(uint32_t size, const int16_t rnd[], int16_t coeffs[],
   *num_coeffs = 0;
   for (uint32_t i = 0; i < size; ++i) {
     const uint32_t c = std::abs(coeffs[i]);
-    if (c == 0) {  /* nothing to do */
+    if (c == 0) { /* nothing to do */
     } else if (c == 1) {
       if (rnd[i]) {
         coeffs[i] = 0;  // replace +1/-1 with +1/-1 from rnd[]
       }
-    } else if (rnd[i]) {   // large coeffs
+    } else if (rnd[i]) {  // large coeffs
       const int16_t v = c - 1;
       coeffs[i] = (coeffs[i] < 0) ? -v : v;
     }
@@ -146,8 +149,8 @@ void SubtractRandomMatrix(uint32_t size, const int16_t rnd[], int16_t coeffs[],
   }
 }
 
-uint32_t RandomMatrixScore(const int16_t rnd[],
-                           const int16_t coeffs[], uint32_t sx, uint32_t sy) {
+uint32_t RandomMatrixScore(const int16_t rnd[], const int16_t coeffs[],
+                           uint32_t sx, uint32_t sy) {
   int32_t count = 0;
   for (uint32_t i = 0; i < sx * sy; ++i) {
     if (rnd[i]) {
@@ -177,9 +180,9 @@ void PrintRandomMatrix(uint32_t sx, uint32_t sy, const int16_t m[],
 
 //------------------------------------------------------------------------------
 
-template<class T>
-static WP2Status InitMtx(T* const mtx, uint32_t size,
-                         uint32_t sparsity, uint32_t freq_cut_off) {
+template <class T>
+static WP2Status InitMtx(T* const mtx, uint32_t size, uint32_t sparsity,
+                         uint32_t freq_cut_off) {
   WP2_CHECK_ALLOC_OK(mtx->resize(size));
   if (size >= kRndMtxBadIdx) return WP2_STATUS_INVALID_PARAMETER;
   for (uint32_t i = 0; i < size; ++i) {
@@ -248,7 +251,7 @@ WP2Status RndMtxSet::CopyFrom(const RndMtxSet& src) {
 }
 
 /// For the encoder:
-template<class T>
+template <class T>
 bool CodedBlockBase::CheckUseMtx(TrfSize trf, const T& mtx) {
   if (tdim(kYChannel) == trf) {
     // TODO(skal): later: mtx_[1] = ...
@@ -262,16 +265,15 @@ bool CodedBlockBase::CheckUseMtx(TrfSize trf, const T& mtx) {
 void RndMtxSet::DecideUseRndMtx(CodedBlockBase* const cb) const {
   assert(cb->mtx_set_ == this);
 #if defined(ENABLE_RND_MTX)
-  cb->use_mtx_ = cb->CheckUseMtx(TRF_4x4, mtx4x4_) ||
-                 cb->CheckUseMtx(TRF_4x8, mtx4x8_) ||
-                 cb->CheckUseMtx(TRF_8x4, mtx8x4_) ||
-                 cb->CheckUseMtx(TRF_8x8, mtx8x8_) ||
-                 cb->CheckUseMtx(TRF_16x8, mtx16x8_) ||
-                 cb->CheckUseMtx(TRF_8x16, mtx8x16_) ||
-                 cb->CheckUseMtx(TRF_16x16, mtx16x16_) ||
-                 cb->CheckUseMtx(TRF_32x16, mtx32x16_) ||
-                 cb->CheckUseMtx(TRF_16x32, mtx16x32_) ||
-                 cb->CheckUseMtx(TRF_32x32, mtx32x32_);
+  cb->use_mtx_ =
+      cb->CheckUseMtx(TRF_4x4, mtx4x4_) || cb->CheckUseMtx(TRF_4x8, mtx4x8_) ||
+      cb->CheckUseMtx(TRF_8x4, mtx8x4_) || cb->CheckUseMtx(TRF_8x8, mtx8x8_) ||
+      cb->CheckUseMtx(TRF_16x8, mtx16x8_) ||
+      cb->CheckUseMtx(TRF_8x16, mtx8x16_) ||
+      cb->CheckUseMtx(TRF_16x16, mtx16x16_) ||
+      cb->CheckUseMtx(TRF_32x16, mtx32x16_) ||
+      cb->CheckUseMtx(TRF_16x32, mtx16x32_) ||
+      cb->CheckUseMtx(TRF_32x32, mtx32x32_);
 #else
   cb->use_mtx_ = false;
 #endif
@@ -317,4 +319,4 @@ void RndMtxSet::AddMatrix(uint32_t id, TrfSize tdim, int32_t dst[]) const {
   if (tdim == TRF_32x32) mtx32x32_[id].AddTo(dst);
 }
 
-}    // namespace WP2
+}  // namespace WP2

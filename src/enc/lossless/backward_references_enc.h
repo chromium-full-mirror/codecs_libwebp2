@@ -20,7 +20,7 @@
 #define WP2_ENC_LOSSLESS_BACKWARD_REFERENCES_H_
 
 #include <cassert>
-#include <cstdlib>
+#include <cstdint>
 #include <memory>
 
 #include "src/common/lossless/color_cache.h"
@@ -141,7 +141,7 @@ class HashChain {
   WP2_NO_DISCARD
   bool Allocate(uint32_t size);
   // Pre-compute the best matches for argb.
-  WP2Status Fill(int effort, const int16_t* const argb, uint32_t width,
+  WP2Status Fill(int effort, const int16_t* argb, uint32_t width,
                  uint32_t height);
 
   // Contains the offset and length at which the best match is found.
@@ -154,9 +154,8 @@ class HashChain {
  private:
   // Updates the hash chain linking a pixel at 'pos' to its predecessor with the
   // same hash defined by 'pixel_pair'.
-  void UpdateChain(uint32_t pos, const int16_t* const pixel_pair,
-                   WP2::Vector_s32* const hash_to_first_index,
-                   int32_t* const chain);
+  void UpdateChain(uint32_t pos, const int16_t* pixel_pair,
+                   WP2::Vector_s32* hash_to_first_index, int32_t* chain);
 
   static constexpr uint8_t kHashBits = 18;
   static constexpr uint32_t kHashSize = (1u << kHashBits);
@@ -195,15 +194,15 @@ class BackwardRefs {
   // Returns true if the path covers "num_pixels" pixels.
   bool IsValid(uint32_t num_pixels) const;
 
-  friend RefsCursor;  // To access refs_
+  friend RefsCursor;        // To access refs_
   friend BackwardRefsPool;  // To access Init
 
  private:
   // Initialize the object. 'block_size' is the common block size to store
   // references (typically, width * height / MAX_REFS_BLOCK_PER_IMAGE).
-  void Init(uint32_t block_size, BackwardRefsPool* const pool);
+  void Init(uint32_t block_size, BackwardRefsPool* pool);
   WP2Status AddBlock();
-  static void FreeFromPool(BackwardRefs* const refs);
+  static void FreeFromPool(BackwardRefs* refs);
 
   // minimum block size for backward references
   static constexpr uint32_t kMinBlockSize = 256;
@@ -268,8 +267,8 @@ class BackwardRefsPool {
     assert(false);
   }
   // 5 is enough in the code for now: 1 as the chosen backward ref between
-  // iterations of the cruncher, 1 best per iteration, and 2 tmps in addition in
-  // GetBackwardReferences
+  // iterations of the cruncher, 1 best per iteration, and 2 temps in addition
+  // in GetBackwardReferences
   static constexpr uint32_t kNumBackwardRefs = 5;
   BackwardRefs refs_[kNumBackwardRefs];
   bool is_used_[kNumBackwardRefs];
@@ -314,11 +313,11 @@ enum LZ77Type {
 // The return value is the pointer to the best of the two backward refs viz,
 // refs[0] or refs[1].
 WP2Status GetBackwardReferences(
-    uint32_t width, uint32_t height, const int16_t* const argb, int effort,
+    uint32_t width, uint32_t height, const int16_t* argb, int effort,
     int lz77_types_to_try, uint32_t cache_bits_max, const HashChain& hash_chain,
     const LosslessSymbolsInfo& symbols_info,
-    WP2::SymbolRecorder* const symbol_recorder, CacheConfig* const cache_config,
-    BackwardRefsPool* const ref_pool, BackwardRefsPool::RefsPtr* const refs);
+    WP2::SymbolRecorder* symbol_recorder, CacheConfig* cache_config,
+    BackwardRefsPool* ref_pool, BackwardRefsPool::RefsPtr* refs);
 }  // namespace WP2L
 
 #endif  // WP2_ENC_LOSSLESS_BACKWARD_REFERENCES_H_

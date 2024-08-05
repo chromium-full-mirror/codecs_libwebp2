@@ -19,20 +19,32 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
 #include "src/common/color_precision.h"
+#include "src/common/constants.h"
+#include "src/common/global_params.h"
+#include "src/common/lossy/predictor.h"
 #include "src/common/progress_watcher.h"
 #include "src/common/vdebug.h"
 #include "src/dec/filters/intertile_filter.h"
+#include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
+#include "src/utils/csp.h"
 #include "src/utils/data_source.h"
 #include "src/utils/orientation.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -40,7 +52,7 @@ const DecoderConfig DecoderConfig::kDefault;
 
 //------------------------------------------------------------------------------
 
-template<class V>
+template <class V>
 static void CopyPredictorNames(const V& predictors,
                                std::vector<std::string>* const names) {
   names->clear();
@@ -126,9 +138,8 @@ WP2Status ReadTiles(uint32_t rgb_bit_depth, const DecoderConfig& config,
                                          tile.rect, data_source,
                                          &tile.chunk_size));
     tile.chunk_size_is_known = true;
-    WP2_CHECK_REDUCED_STATUS(
-        RegisterBitTrace(config, data_source->GetNumReadBytes() - size_before,
-                         "ChunkSize"));
+    WP2_CHECK_REDUCED_STATUS(RegisterBitTrace(
+        config, data_source->GetNumReadBytes() - size_before, "ChunkSize"));
     WP2_CHECK_OK(data_source->TryReadNext(tile.chunk_size, &tile.data_handle),
                  WP2_STATUS_NOT_ENOUGH_DATA);
   }
@@ -307,8 +318,8 @@ WP2Status InternalDecode(const DecoderConfig& config,
     if (yuv_output_needed) {
       if (yuv_output_wanted) {
         WP2_CHECK_STATUS(yuv_frame.SetView(
-            padded_yuv, {frame.window.x, frame.window.y,
-                         padded_frame_width, padded_frame_height}));
+            padded_yuv, {frame.window.x, frame.window.y, padded_frame_width,
+                         padded_frame_height}));
       } else {
         WP2_CHECK_STATUS(
             yuv_frame.Resize(frame.window.width, frame.window.height,
@@ -490,8 +501,8 @@ WP2Status DecodeArgb_32(const uint8_t* input_data, size_t input_data_size,
   ExternalDataSource data_source(input_data, input_data_size);
   const uint32_t bpp = WP2FormatBpp(output.format());
   WP2_CHECK_STATUS(DecodeHeader(&data_source, &features));
-  WP2_CHECK_OK(IsBufferLengthValid(features.width, features.height,
-                                   bpp, output_stride, output_buffer_size),
+  WP2_CHECK_OK(IsBufferLengthValid(features.width, features.height, bpp,
+                                   output_stride, output_buffer_size),
                WP2_STATUS_BAD_DIMENSION);
   WP2_CHECK_STATUS(output.SetExternal(features.width, features.height,
                                       output_buffer, output_stride));
@@ -524,7 +535,6 @@ WP2Status Decode(const uint8_t* input_data, size_t input_data_size,
   WP2_CHECK_OK(c1_buffer != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(c2_buffer != nullptr, WP2_STATUS_NULL_PARAMETER);
 
-
   // Try to fit the worst case into the output buffer to avoid temp buffers.
   uint32_t view_width = std::max(Pad(features.width, kPredWidth),
                                  Pad(features.raw_width, kPredWidth));
@@ -539,23 +549,23 @@ WP2Status Decode(const uint8_t* input_data, size_t input_data_size,
       !IsBufferLengthValid(view_width, view_height, bpp, c2_step * bpp,
                            c2_buffer_size) ||
       (a_buffer != nullptr &&
-       !IsBufferLengthValid(view_width, view_height, bpp,
-                            a_step * bpp, a_buffer_size))) {
+       !IsBufferLengthValid(view_width, view_height, bpp, a_step * bpp,
+                            a_buffer_size))) {
     // Not possible so settle for the minimum valid output buffer size.
     view_width = features.width;
     view_height = features.height;
-    WP2_CHECK_OK(IsBufferLengthValid(view_width, view_height,
-                                     bpp, c0_step * bpp, c0_buffer_size),
+    WP2_CHECK_OK(IsBufferLengthValid(view_width, view_height, bpp,
+                                     c0_step * bpp, c0_buffer_size),
                  WP2_STATUS_BAD_DIMENSION);
-    WP2_CHECK_OK(IsBufferLengthValid(view_width, view_height,
-                                     bpp, c1_step * bpp, c1_buffer_size),
+    WP2_CHECK_OK(IsBufferLengthValid(view_width, view_height, bpp,
+                                     c1_step * bpp, c1_buffer_size),
                  WP2_STATUS_BAD_DIMENSION);
-    WP2_CHECK_OK(IsBufferLengthValid(view_width, view_height,
-                                     bpp, c2_step * bpp, c2_buffer_size),
+    WP2_CHECK_OK(IsBufferLengthValid(view_width, view_height, bpp,
+                                     c2_step * bpp, c2_buffer_size),
                  WP2_STATUS_BAD_DIMENSION);
     if (a_buffer != nullptr) {
-      WP2_CHECK_OK(IsBufferLengthValid(view_width, view_height,
-                                       bpp, a_step * bpp, a_buffer_size),
+      WP2_CHECK_OK(IsBufferLengthValid(view_width, view_height, bpp,
+                                       a_step * bpp, a_buffer_size),
                    WP2_STATUS_BAD_DIMENSION);
     }
   }

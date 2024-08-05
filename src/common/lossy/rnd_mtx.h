@@ -20,7 +20,10 @@
 #ifndef WP2_COMMON_LOSSY_RND_MTX_H_
 #define WP2_COMMON_LOSSY_RND_MTX_H_
 
+#include <cstdint>
+
 #include "src/common/lossy/block_size.h"
+#include "src/utils/utils.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
 
@@ -50,27 +53,28 @@ static constexpr uint32_t kMaxNumRndMtx = 32;
 uint32_t FillRandomMatrix(uint32_t id, uint32_t sparsity, uint32_t freq_cut_off,
                           uint32_t sx, uint32_t sy, int16_t m[]);
 // returns the number of ones:
-uint32_t DownscaleMatrix(const int16_t* src, int16_t* dst,
-                         uint32_t sx, uint32_t sy, bool vertically);
+uint32_t DownscaleMatrix(const int16_t* src, int16_t* dst, uint32_t sx,
+                         uint32_t sy, bool vertically);
 
 // add/subtract operations (TODO(skal): move to dsp/)
 void AddRandomMatrix(uint32_t size, const int16_t rnd[], int16_t coeffs[]);
 void AddRandomMatrix(uint32_t size, const int16_t rnd[], int32_t coeffs[]);
 void SubtractRandomMatrix(uint32_t size, const int16_t rnd[], int16_t coeffs[],
-                          uint32_t* const num_coeffs);
+                          uint32_t* num_coeffs);
 
 // match scoring
-uint32_t RandomMatrixScore(const int16_t rnd[],
-                           const int16_t coeffs[], uint32_t sx, uint32_t sy);
+uint32_t RandomMatrixScore(const int16_t rnd[], const int16_t coeffs[],
+                           uint32_t sx, uint32_t sy);
 
 // debug
 void PrintRandomMatrix(uint32_t sx, uint32_t sy, const int16_t m[],
                        bool full_coeffs = false);
 
-template<int SX, int SY> struct RndMtx {
+template <int SX, int SY>
+struct RndMtx {
  public:
-  int16_t rnd[SX * SY];   // +1/-1 or 0 coeffs
-  uint32_t num_ones;    // for hashing
+  int16_t rnd[SX * SY];  // +1/-1 or 0 coeffs
+  uint32_t num_ones;     // for hashing
 
  public:
   void SubtractFrom(int16_t coeffs[], uint32_t* const num_coeffs) const {
@@ -132,7 +136,7 @@ uint32_t FindAndSubtractBestMatch(const Vector<RndMtx<SX, SY>>& mtx,
 class RndMtxSet {
  public:
   WP2Status Init(uint32_t num_mtx, const QuantMtx& quant);
-  void DecideUseRndMtx(CodedBlockBase* const cb) const;
+  void DecideUseRndMtx(CodedBlockBase* cb) const;
 
   // Returns true if dimension is compatible.
   bool IsOk(uint32_t id, TrfSize tdim) const;
@@ -144,7 +148,7 @@ class RndMtxSet {
   WP2Status CopyFrom(const RndMtxSet& src);
 
   // downscale from 'src', halving horizontally or vertically
-  template<int SX, int SY>
+  template <int SX, int SY>
   WP2Status Downscale(const Vector<RndMtx<2 * SX, SY>>& src,
                       Vector<RndMtx<SX, SY>>* const dst) {
     WP2_CHECK_ALLOC_OK(dst->resize(num_mtx_));
@@ -153,7 +157,7 @@ class RndMtxSet {
     }
     return WP2_STATUS_OK;
   }
-  template<int SX, int SY>
+  template <int SX, int SY>
   WP2Status Downscale(const Vector<RndMtx<SX, 2 * SY>>& src,
                       Vector<RndMtx<SX, SY>>* const dst) {
     WP2_CHECK_ALLOC_OK(dst->resize(num_mtx_));
@@ -178,6 +182,6 @@ class RndMtxSet {
   Vector<RndMtx<32, 32>> mtx32x32_;
 };
 
-}    // namespace WP2
+}  // namespace WP2
 
-#endif  /* WP2_COMMON_LOSSY_RND_MTX_H_ */
+#endif /* WP2_COMMON_LOSSY_RND_MTX_H_ */

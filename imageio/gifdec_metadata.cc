@@ -18,11 +18,14 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
+#include <cassert>
+#include <cstdint>
 #include <cstring>
 
-#include "./anim_image_dec.h"
+#include "imageio/anim_image_dec.h"
 #include "src/utils/data_source.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace {

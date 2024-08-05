@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 
 #include "src/dsp/dsp.h"
@@ -29,30 +30,32 @@
 // kCosPi[j] = (int)round(cos(M_PI*j/128) * (1<<kPrecision));
 static constexpr uint32_t kPrecision = 10u;
 static constexpr int32_t kCosPi[64] = {
-  1024, 1024, 1023, 1021, 1019, 1016, 1013, 1009, 1004, 999, 993, 987, 980,
-  972,  964,  955,  946,  936,  926,  915,  903,  891,  878, 865, 851, 837,
-  822,  807,  792,  775,  759,  742,  724,  706,  688,  669, 650, 630, 610,
-  590,  569,  548,  526,  505,  483,  460,  438,  415,  392, 369, 345, 321,
-  297,  273,  249,  224,  200,  175,  150,  125,  100,  75,  50,  25
-};
+    1024, 1024, 1023, 1021, 1019, 1016, 1013, 1009, 1004, 999, 993, 987, 980,
+    972,  964,  955,  946,  936,  926,  915,  903,  891,  878, 865, 851, 837,
+    822,  807,  792,  775,  759,  742,  724,  706,  688,  669, 650, 630, 610,
+    590,  569,  548,  526,  505,  483,  460,  438,  415,  392, 369, 345, 321,
+    297,  273,  249,  224,  200,  175,  150,  125,  100,  75,  50,  25};
 // Pre-calculated constants kCosPi[32] * kCosPi[16/48]
-constexpr int32_t kCos32Cos48 = 277;   // cos(pi/4) * cos(3 * pi / 8)
-constexpr int32_t kCos32Cos16 = 669;   // cos(pi/4) * cos(pi / 8)
+constexpr int32_t kCos32Cos48 = 277;  // cos(pi/4) * cos(3 * pi / 8)
+constexpr int32_t kCos32Cos16 = 669;  // cos(pi/4) * cos(pi / 8)
 // These are the same constants but with one extra precision bit (p=pre-scaled).
-constexpr int32_t kCos32Cos48p = 554;    // 2 * cos(pi/4) * cos(3 * pi / 8)
-constexpr int32_t kCos32Cos16p = 1337;   // 2 * cos(pi/4) * cos(pi / 8)
+constexpr int32_t kCos32Cos48p = 554;   // 2 * cos(pi/4) * cos(3 * pi / 8)
+constexpr int32_t kCos32Cos16p = 1337;  // 2 * cos(pi/4) * cos(pi / 8)
 
 //  kSinPi[j] =
 //    (int)round((sqrt(2) * sin(j*Pi/9) * 2 / 3) * (1 << kPrecision))
 //  modified so that elements j=1,2 sum to element j=4.
-static constexpr int32_t kSinPi[5] = { 0, 330, 621, 836, 951 };
+static constexpr int32_t kSinPi[5] = {0, 330, 621, 836, 951};
 static_assert(kSinPi[1] + kSinPi[2] == kSinPi[4],
               "invalid pre-condition on kSinPi[]");
 
 static inline uint32_t SizeToIdx(uint32_t size) {
   assert(size == 2 || size == 4 || size == 8 || size == 16 || size == 32);
-  return (size == 2) ? 0 : (size == 4) ? 1 : (size == 8) ? 2 :
-         (size == 16) ? 3 : 4;
+  return (size == 2)    ? 0
+         : (size == 4)  ? 1
+         : (size == 8)  ? 2
+         : (size == 16) ? 3
+                        : 4;
 }
 
 //------------------------------------------------------------------------------
@@ -89,7 +92,7 @@ static void idct4_C(int16_t* coeffs) {
   tmp[0] = coeffs[0] + coeffs[2];
   tmp[1] = coeffs[0] - coeffs[2];
   tmp[2] = half_btf(kCos32Cos48p, coeffs[1], -kCos32Cos16p, coeffs[3]);
-  tmp[3] = half_btf(kCos32Cos16p, coeffs[1],  kCos32Cos48p, coeffs[3]);
+  tmp[3] = half_btf(kCos32Cos16p, coeffs[1], kCos32Cos48p, coeffs[3]);
 
   // stage 3
   coeffs[0] = noround_shift(tmp[0] + tmp[3], 1);
@@ -119,14 +122,14 @@ static void idct8_C(int16_t* coeffs) {
   bf1[1] = bf0[1];
   bf1[2] = bf0[2];
   bf1[3] = bf0[3];
-  bf1[4] = half_btf(kCosPi[56], bf0[4], -kCosPi[ 8], bf0[7]);
+  bf1[4] = half_btf(kCosPi[56], bf0[4], -kCosPi[8], bf0[7]);
   bf1[5] = half_btf(kCosPi[24], bf0[5], -kCosPi[40], bf0[6]);
-  bf1[6] = half_btf(kCosPi[40], bf0[5],  kCosPi[24], bf0[6]);
-  bf1[7] = half_btf(kCosPi[ 8], bf0[4],  kCosPi[56], bf0[7]);
+  bf1[6] = half_btf(kCosPi[40], bf0[5], kCosPi[24], bf0[6]);
+  bf1[7] = half_btf(kCosPi[8], bf0[4], kCosPi[56], bf0[7]);
 
   // stage 3
   std::swap(bf0, bf1);
-  bf1[0] = div_sqrt2(bf0[0] + bf0[1]) + 1;   // +1=rounder
+  bf1[0] = div_sqrt2(bf0[0] + bf0[1]) + 1;  // +1=rounder
   bf1[1] = div_sqrt2(bf0[0] - bf0[1]) + 1;
   bf1[2] = half_btf(kCosPi[48], bf0[2], -kCosPi[16], bf0[3]);
   bf1[3] = half_btf(kCosPi[16], bf0[2], kCosPi[48], bf0[3]);
@@ -740,13 +743,13 @@ static void iadst8_C(int16_t* coeffs) {
 
   // stage 7
   std::swap(bf0, bf1);
-  coeffs[0] =  bf0[0];
+  coeffs[0] = bf0[0];
   coeffs[1] = -bf0[4];
-  coeffs[2] =  bf0[6];
+  coeffs[2] = bf0[6];
   coeffs[3] = -bf0[2];
-  coeffs[4] =  bf0[3];
+  coeffs[4] = bf0[3];
   coeffs[5] = -bf0[7];
-  coeffs[6] =  bf0[5];
+  coeffs[6] = bf0[5];
   coeffs[7] = -bf0[1];
 }
 
@@ -902,28 +905,28 @@ static void iadst16_C(int16_t* coeffs) {
   bf1[10] = round_shift(bf0[10] + bf0[11], shift - kPrecision + 1);
   bf1[11] = round_shift(bf0[10] - bf0[11], shift - kPrecision + 1);
   bf1[12] = div_sqrt2(bf0[12], shift - kPrecision);
-  bf1[13] =  div_sqrt2(bf0[13], shift - kPrecision);
+  bf1[13] = div_sqrt2(bf0[13], shift - kPrecision);
   bf1[14] = round_shift(bf0[14] + bf0[15], shift - kPrecision + 1);
   bf1[15] = round_shift(bf0[14] - bf0[15], shift - kPrecision + 1);
 
   // stage 9
   std::swap(bf0, bf1);
-  coeffs[ 0] =  bf0[ 0];
-  coeffs[ 1] = -bf0[ 8];
-  coeffs[ 2] =  bf0[12];
-  coeffs[ 3] = -bf0[ 4];
-  coeffs[ 4] =  bf0[ 6];
-  coeffs[ 5] = -bf0[14];
-  coeffs[ 6] =  bf0[10];
-  coeffs[ 7] = -bf0[ 2];
-  coeffs[ 8] =  bf0[ 3];
-  coeffs[ 9] = -bf0[11];
-  coeffs[10] =  bf0[15];
-  coeffs[11] = -bf0[ 7];
-  coeffs[12] =  bf0[ 5];
+  coeffs[0] = bf0[0];
+  coeffs[1] = -bf0[8];
+  coeffs[2] = bf0[12];
+  coeffs[3] = -bf0[4];
+  coeffs[4] = bf0[6];
+  coeffs[5] = -bf0[14];
+  coeffs[6] = bf0[10];
+  coeffs[7] = -bf0[2];
+  coeffs[8] = bf0[3];
+  coeffs[9] = -bf0[11];
+  coeffs[10] = bf0[15];
+  coeffs[11] = -bf0[7];
+  coeffs[12] = bf0[5];
   coeffs[13] = -bf0[13];
-  coeffs[14] =  bf0[ 9];
-  coeffs[15] = -bf0[ 1];
+  coeffs[14] = bf0[9];
+  coeffs[15] = -bf0[1];
 }
 
 static void iadst32_C(int16_t* coeffs) {
@@ -1282,16 +1285,16 @@ static void iadst32_C(int16_t* coeffs) {
 
   // stage 11
   std::swap(bf0, bf1);
-  coeffs[ 0] = bf0[ 1];
-  coeffs[ 1] = bf0[30];
-  coeffs[ 2] = bf0[ 3];
-  coeffs[ 3] = bf0[28];
-  coeffs[ 4] = bf0[ 5];
-  coeffs[ 5] = bf0[26];
-  coeffs[ 6] = bf0[ 7];
-  coeffs[ 7] = bf0[24];
-  coeffs[ 8] = bf0[ 9];
-  coeffs[ 9] = bf0[22];
+  coeffs[0] = bf0[1];
+  coeffs[1] = bf0[30];
+  coeffs[2] = bf0[3];
+  coeffs[3] = bf0[28];
+  coeffs[4] = bf0[5];
+  coeffs[5] = bf0[26];
+  coeffs[6] = bf0[7];
+  coeffs[7] = bf0[24];
+  coeffs[8] = bf0[9];
+  coeffs[9] = bf0[22];
   coeffs[10] = bf0[11];
   coeffs[11] = bf0[20];
   coeffs[12] = bf0[13];
@@ -1305,37 +1308,34 @@ static void iadst32_C(int16_t* coeffs) {
   coeffs[20] = bf0[21];
   coeffs[21] = bf0[10];
   coeffs[22] = bf0[23];
-  coeffs[23] = bf0[ 8];
+  coeffs[23] = bf0[8];
   coeffs[24] = bf0[25];
-  coeffs[25] = bf0[ 6];
+  coeffs[25] = bf0[6];
   coeffs[26] = bf0[27];
-  coeffs[27] = bf0[ 4];
+  coeffs[27] = bf0[4];
   coeffs[28] = bf0[29];
-  coeffs[29] = bf0[ 2];
+  coeffs[29] = bf0[2];
   coeffs[30] = bf0[31];
-  coeffs[31] = bf0[ 0];
+  coeffs[31] = bf0[0];
 }
 
 //------------------------------------------------------------------------------
 // Hadamard transform
 
-// sequency reordering (=bit-reversal + Gray code)
-static const uint32_t kHadamardR2[2] = { 0, 1 };
-static const uint32_t kHadamardR4[4] = { 0, 3, 1, 2 };
-static const uint32_t kHadamardR8[8] = { 0, 7, 3, 4, 1, 6, 2, 5 };
+// sequence reordering (=bit-reversal + Gray code)
+static const uint32_t kHadamardR2[2] = {0, 1};
+static const uint32_t kHadamardR4[4] = {0, 3, 1, 2};
+static const uint32_t kHadamardR8[8] = {0, 7, 3, 4, 1, 6, 2, 5};
 static const uint32_t kHadamardR16[16] = {  // https://oeis.org/A240909
-  0, 15, 7, 8, 3, 12, 4, 11, 1, 14, 6, 9, 2, 13, 5, 10
-};
+    0, 15, 7, 8, 3, 12, 4, 11, 1, 14, 6, 9, 2, 13, 5, 10};
 static const uint32_t kHadamardR32[32] = {  // https://oeis.org/A240910
-  0, 31, 15, 16, 7, 24, 8, 23, 3, 28, 12, 19, 4, 27, 11, 20,
-  1, 30, 14, 17, 6, 25, 9, 22, 2, 29, 13, 18, 5, 26, 10, 21
-};
+    0, 31, 15, 16, 7, 24, 8, 23, 3, 28, 12, 19, 4, 27, 11, 20,
+    1, 30, 14, 17, 6, 25, 9, 22, 2, 29, 13, 18, 5, 26, 10, 21};
 
 static const uint32_t* const kHadamardReorder[5] = {
-  kHadamardR2, kHadamardR4, kHadamardR8, kHadamardR16, kHadamardR32
-};
+    kHadamardR2, kHadamardR4, kHadamardR8, kHadamardR16, kHadamardR32};
 
-template<typename T>
+template <typename T>
 static void CoreHadamard_C(T* coeffs, uint32_t size) {
   assert(size == 2 || size == 4 || size == 8 || size == 16 || size == 32);
   int32_t tmp[32];
@@ -1343,14 +1343,14 @@ static void CoreHadamard_C(T* coeffs, uint32_t size) {
   for (uint32_t half_size = 1; half_size < size; half_size *= 2) {
     for (uint32_t i = 0; i < size; i += 2 * half_size) {
       for (uint32_t j = 0; j < half_size; ++j) {
-        const int32_t A = tmp[i + j +         0];
+        const int32_t A = tmp[i + j + 0];
         const int32_t B = tmp[i + j + half_size];
-        tmp[i + j +         0] = A + B;
+        tmp[i + j + 0] = A + B;
         tmp[i + j + half_size] = A - B;
       }
     }
   }
-  // Sequency-reordering
+  // Sequence-reordering
   const uint32_t* const reorder = kHadamardReorder[SizeToIdx(size)];
   const float norm = std::sqrt(1. / size);  // same norm for bwd/fwd
   for (uint32_t i = 0; i < size; ++i) {
@@ -1358,13 +1358,13 @@ static void CoreHadamard_C(T* coeffs, uint32_t size) {
   }
 }
 
-#define GENERATE_HADAMARD_FUNC(SIZE)                  \
-static void iHadamard##SIZE##_C(int16_t* coeffs) {    \
-  CoreHadamard_C<int16_t>(coeffs, SIZE);              \
-}                                                     \
-static void fHadamard##SIZE##_C(int32_t* coeffs) {    \
-  CoreHadamard_C<int32_t>(coeffs, SIZE);              \
-}
+#define GENERATE_HADAMARD_FUNC(SIZE)                 \
+  static void iHadamard##SIZE##_C(int16_t* coeffs) { \
+    CoreHadamard_C<int16_t>(coeffs, SIZE);           \
+  }                                                  \
+  static void fHadamard##SIZE##_C(int32_t* coeffs) { \
+    CoreHadamard_C<int32_t>(coeffs, SIZE);           \
+  }
 
 GENERATE_HADAMARD_FUNC(2)
 GENERATE_HADAMARD_FUNC(4)
@@ -1397,7 +1397,7 @@ static void fdct4_C(int32_t* coeffs) {
   std::swap(bf0, bf1);
   bf1[0] = round_shift(bf0[0] + bf0[1], 1);
   bf1[1] = round_shift(bf0[0] - bf0[1], 1);
-  bf1[2] = half_btf( kCos32Cos48, bf0[2], kCos32Cos16, bf0[3]);
+  bf1[2] = half_btf(kCos32Cos48, bf0[2], kCos32Cos16, bf0[3]);
   bf1[3] = half_btf(-kCos32Cos16, bf0[2], kCos32Cos48, bf0[3]);
 
   // stage 3
@@ -1588,21 +1588,21 @@ static void fdct16_C(int32_t* coeffs) {
   // stage 7
   std::swap(bf0, bf1);
   constexpr uint32_t shift = 1;
-  coeffs[ 0] = div_sqrt2(bf0[ 0], shift);
-  coeffs[ 1] = div_sqrt2(bf0[ 8], shift);
-  coeffs[ 2] = div_sqrt2(bf0[ 4], shift);
-  coeffs[ 3] = div_sqrt2(bf0[12], shift);
-  coeffs[ 4] = div_sqrt2(bf0[ 2], shift);
-  coeffs[ 5] = div_sqrt2(bf0[10], shift);
-  coeffs[ 6] = div_sqrt2(bf0[ 6], shift);
-  coeffs[ 7] = div_sqrt2(bf0[14], shift);
-  coeffs[ 8] = div_sqrt2(bf0[ 1], shift);
-  coeffs[ 9] = div_sqrt2(bf0[ 9], shift);
-  coeffs[10] = div_sqrt2(bf0[ 5], shift);
+  coeffs[0] = div_sqrt2(bf0[0], shift);
+  coeffs[1] = div_sqrt2(bf0[8], shift);
+  coeffs[2] = div_sqrt2(bf0[4], shift);
+  coeffs[3] = div_sqrt2(bf0[12], shift);
+  coeffs[4] = div_sqrt2(bf0[2], shift);
+  coeffs[5] = div_sqrt2(bf0[10], shift);
+  coeffs[6] = div_sqrt2(bf0[6], shift);
+  coeffs[7] = div_sqrt2(bf0[14], shift);
+  coeffs[8] = div_sqrt2(bf0[1], shift);
+  coeffs[9] = div_sqrt2(bf0[9], shift);
+  coeffs[10] = div_sqrt2(bf0[5], shift);
   coeffs[11] = div_sqrt2(bf0[13], shift);
-  coeffs[12] = div_sqrt2(bf0[ 3], shift);
+  coeffs[12] = div_sqrt2(bf0[3], shift);
   coeffs[13] = div_sqrt2(bf0[11], shift);
-  coeffs[14] = div_sqrt2(bf0[ 7], shift);
+  coeffs[14] = div_sqrt2(bf0[7], shift);
   coeffs[15] = div_sqrt2(bf0[15], shift);
 }
 
@@ -1892,35 +1892,35 @@ static void fdct32_C(int32_t* coeffs) {
 
   // stage 9
   std::swap(bf0, bf1);
-  coeffs[ 0] = bf0[ 0];
-  coeffs[ 1] = bf0[16];
-  coeffs[ 2] = bf0[ 8];
-  coeffs[ 3] = bf0[24];
-  coeffs[ 4] = bf0[ 4];
-  coeffs[ 5] = bf0[20];
-  coeffs[ 6] = bf0[12];
-  coeffs[ 7] = bf0[28];
-  coeffs[ 8] = bf0[ 2];
-  coeffs[ 9] = bf0[18];
+  coeffs[0] = bf0[0];
+  coeffs[1] = bf0[16];
+  coeffs[2] = bf0[8];
+  coeffs[3] = bf0[24];
+  coeffs[4] = bf0[4];
+  coeffs[5] = bf0[20];
+  coeffs[6] = bf0[12];
+  coeffs[7] = bf0[28];
+  coeffs[8] = bf0[2];
+  coeffs[9] = bf0[18];
   coeffs[10] = bf0[10];
   coeffs[11] = bf0[26];
-  coeffs[12] = bf0[ 6];
+  coeffs[12] = bf0[6];
   coeffs[13] = bf0[22];
   coeffs[14] = bf0[14];
   coeffs[15] = bf0[30];
-  coeffs[16] = bf0[ 1];
+  coeffs[16] = bf0[1];
   coeffs[17] = bf0[17];
-  coeffs[18] = bf0[ 9];
+  coeffs[18] = bf0[9];
   coeffs[19] = bf0[25];
-  coeffs[20] = bf0[ 5];
+  coeffs[20] = bf0[5];
   coeffs[21] = bf0[21];
   coeffs[22] = bf0[13];
   coeffs[23] = bf0[29];
-  coeffs[24] = bf0[ 3];
+  coeffs[24] = bf0[3];
   coeffs[25] = bf0[19];
   coeffs[26] = bf0[11];
   coeffs[27] = bf0[27];
-  coeffs[28] = bf0[ 7];
+  coeffs[28] = bf0[7];
   coeffs[29] = bf0[23];
   coeffs[30] = bf0[15];
   coeffs[31] = bf0[31];
@@ -2216,22 +2216,22 @@ static void fadst16_C(int32_t* coeffs) {
 
   // stage 9
   std::swap(bf0, bf1);
-  coeffs[ 0] = div_sqrt2(bf0[ 1], shift - kPrecision);
-  coeffs[ 1] = div_sqrt2(bf0[14], shift - kPrecision);
-  coeffs[ 2] = div_sqrt2(bf0[ 3], shift - kPrecision);
-  coeffs[ 3] = div_sqrt2(bf0[12], shift - kPrecision);
-  coeffs[ 4] = div_sqrt2(bf0[ 5], shift - kPrecision);
-  coeffs[ 5] = div_sqrt2(bf0[10], shift - kPrecision);
-  coeffs[ 6] = div_sqrt2(bf0[ 7], shift - kPrecision);
-  coeffs[ 7] = div_sqrt2(bf0[ 8], shift - kPrecision);
-  coeffs[ 8] = div_sqrt2(bf0[ 9], shift - kPrecision);
-  coeffs[ 9] = div_sqrt2(bf0[ 6], shift - kPrecision);
+  coeffs[0] = div_sqrt2(bf0[1], shift - kPrecision);
+  coeffs[1] = div_sqrt2(bf0[14], shift - kPrecision);
+  coeffs[2] = div_sqrt2(bf0[3], shift - kPrecision);
+  coeffs[3] = div_sqrt2(bf0[12], shift - kPrecision);
+  coeffs[4] = div_sqrt2(bf0[5], shift - kPrecision);
+  coeffs[5] = div_sqrt2(bf0[10], shift - kPrecision);
+  coeffs[6] = div_sqrt2(bf0[7], shift - kPrecision);
+  coeffs[7] = div_sqrt2(bf0[8], shift - kPrecision);
+  coeffs[8] = div_sqrt2(bf0[9], shift - kPrecision);
+  coeffs[9] = div_sqrt2(bf0[6], shift - kPrecision);
   coeffs[10] = div_sqrt2(bf0[11], shift - kPrecision);
-  coeffs[11] = div_sqrt2(bf0[ 4], shift - kPrecision);
+  coeffs[11] = div_sqrt2(bf0[4], shift - kPrecision);
   coeffs[12] = div_sqrt2(bf0[13], shift - kPrecision);
-  coeffs[13] = div_sqrt2(bf0[ 2], shift - kPrecision);
+  coeffs[13] = div_sqrt2(bf0[2], shift - kPrecision);
   coeffs[14] = div_sqrt2(bf0[15], shift - kPrecision);
-  coeffs[15] = div_sqrt2(bf0[ 0], shift - kPrecision);
+  coeffs[15] = div_sqrt2(bf0[0], shift - kPrecision);
 }
 
 static void fadst32_C(int32_t* coeffs) {
@@ -2590,38 +2590,38 @@ static void fadst32_C(int32_t* coeffs) {
 
   // stage 11
   std::swap(bf0, bf1);
-  coeffs[ 0] =  bf0[ 0];
-  coeffs[ 1] = -bf0[16];
-  coeffs[ 2] =  bf0[24];
-  coeffs[ 3] = -bf0[ 8];
-  coeffs[ 4] =  bf0[12];
-  coeffs[ 5] = -bf0[28];
-  coeffs[ 6] =  bf0[20];
-  coeffs[ 7] = -bf0[ 4];
-  coeffs[ 8] =  bf0[ 6];
-  coeffs[ 9] = -bf0[22];
-  coeffs[10] =  bf0[30];
+  coeffs[0] = bf0[0];
+  coeffs[1] = -bf0[16];
+  coeffs[2] = bf0[24];
+  coeffs[3] = -bf0[8];
+  coeffs[4] = bf0[12];
+  coeffs[5] = -bf0[28];
+  coeffs[6] = bf0[20];
+  coeffs[7] = -bf0[4];
+  coeffs[8] = bf0[6];
+  coeffs[9] = -bf0[22];
+  coeffs[10] = bf0[30];
   coeffs[11] = -bf0[14];
-  coeffs[12] =  bf0[10];
+  coeffs[12] = bf0[10];
   coeffs[13] = -bf0[26];
-  coeffs[14] =  bf0[18];
-  coeffs[15] = -bf0[ 2];
-  coeffs[16] =  bf0[ 3];
+  coeffs[14] = bf0[18];
+  coeffs[15] = -bf0[2];
+  coeffs[16] = bf0[3];
   coeffs[17] = -bf0[19];
-  coeffs[18] =  bf0[27];
+  coeffs[18] = bf0[27];
   coeffs[19] = -bf0[11];
-  coeffs[20] =  bf0[15];
+  coeffs[20] = bf0[15];
   coeffs[21] = -bf0[31];
-  coeffs[22] =  bf0[23];
-  coeffs[23] = -bf0[ 7];
-  coeffs[24] =  bf0[ 5];
+  coeffs[22] = bf0[23];
+  coeffs[23] = -bf0[7];
+  coeffs[24] = bf0[5];
   coeffs[25] = -bf0[21];
-  coeffs[26] =  bf0[29];
+  coeffs[26] = bf0[29];
   coeffs[27] = -bf0[13];
-  coeffs[28] =  bf0[ 9];
+  coeffs[28] = bf0[9];
   coeffs[29] = -bf0[25];
-  coeffs[30] =  bf0[17];
-  coeffs[31] = -bf0[ 1];
+  coeffs[30] = bf0[17];
+  coeffs[31] = -bf0[1];
 }
 
 //------------------------------------------------------------------------------
@@ -2648,8 +2648,8 @@ static void Transpose32_C(const int32_t* in, uint32_t w, uint32_t h,
 
 //------------------------------------------------------------------------------
 
-static int32_t SlowDct8x8_C(const int32_t in[64],
-                            const float cos_x[8], const float cos_y[8]) {
+static int32_t SlowDct8x8_C(const int32_t in[64], const float cos_x[8],
+                            const float cos_y[8]) {
   float sum = 0.;
   for (uint32_t j = 0; j < 8; ++j) {
     for (uint32_t i = 0; i < 8; ++i) {
@@ -2663,15 +2663,15 @@ static int32_t SlowDct8x8_C(const int32_t in[64],
 
 WP2FwdTransposeF WP2Transpose32b = nullptr;
 WP2InvTransposeF WP2Transpose16b = nullptr;
-WP2InvTransformF WP2InvDct[5] = { nullptr }, WP2InvAdst[5] = { nullptr };
-WP2FwdTransformF WP2FwdDct[5] = { nullptr }, WP2FwdAdst[5] = { nullptr };
-WP2InvTransformF WP2InvHadamard[5] = { nullptr };
-WP2FwdTransformF WP2FwdHadamard[5] = { nullptr };
-WP2InvTransformColF WP2InvDctCol[5][5] = { { nullptr } };
-WP2FwdTransformColF WP2FwdDctCol[5][5] = { { nullptr } };
+WP2InvTransformF WP2InvDct[5] = {nullptr}, WP2InvAdst[5] = {nullptr};
+WP2FwdTransformF WP2FwdDct[5] = {nullptr}, WP2FwdAdst[5] = {nullptr};
+WP2InvTransformF WP2InvHadamard[5] = {nullptr};
+WP2FwdTransformF WP2FwdHadamard[5] = {nullptr};
+WP2InvTransformColF WP2InvDctCol[5][5] = {{nullptr}};
+WP2FwdTransformColF WP2FwdDctCol[5][5] = {{nullptr}};
 
-int32_t (*WP2SlowDct8x8)(const int32_t in[64],
-                         const float cos_x[8], const float cos_y[8]) = nullptr;
+int32_t (*WP2SlowDct8x8)(const int32_t in[64], const float cos_x[8],
+                         const float cos_y[8]) = nullptr;
 
 static volatile WP2CPUInfo transform_last_cpuinfo_used =
     (WP2CPUInfo)&transform_last_cpuinfo_used;
@@ -2739,10 +2739,14 @@ WP2_TSAN_IGNORE_FUNCTION void WP2TransformInit() {
 static WP2FwdTransformF GetFwdFunc(WP2TransformType type, uint32_t size) {
   const uint32_t idx = SizeToIdx(size);
   switch (type) {
-    case WP2TransformType::kDct: return WP2FwdDct[idx];
-    case WP2TransformType::kAdst: return WP2FwdAdst[idx];
-    case WP2TransformType::kHadamard: return WP2FwdHadamard[idx];
-    case WP2TransformType::kIdentity: return nullptr;
+    case WP2TransformType::kDct:
+      return WP2FwdDct[idx];
+    case WP2TransformType::kAdst:
+      return WP2FwdAdst[idx];
+    case WP2TransformType::kHadamard:
+      return WP2FwdHadamard[idx];
+    case WP2TransformType::kIdentity:
+      return nullptr;
     default:
       assert(false);
   }
@@ -2770,8 +2774,8 @@ void WP2Transform(int16_t coeffs[], WP2TransformType type, uint32_t size) {
 }
 
 static void Transform2D(const int16_t src[], WP2TransformType tf_x,
-                        WP2TransformType tf_y, uint32_t size_x,
-                        uint32_t size_y, int32_t dst[]) {
+                        WP2TransformType tf_y, uint32_t size_x, uint32_t size_y,
+                        int32_t dst[]) {
   int32_t tmp[32 * 32];
   const uint32_t tw = size_x;
   const uint32_t th = size_y;
@@ -2811,7 +2815,6 @@ void WP2InvTransform(int16_t coeffs[], WP2TransformType type, uint32_t size,
   // clang-format on
 }
 
-
 // 'x_end' is the first x for which all coeffs are 0.
 // TODO(vrabaud) the DC only case can be sped up.
 static void InvTransform2D(int16_t coeffs[], WP2TransformType tf_x,
@@ -2819,9 +2822,10 @@ static void InvTransform2D(int16_t coeffs[], WP2TransformType tf_x,
                            uint32_t x_end, uint32_t size_y) {
   const uint32_t tw = size_x;
   const uint32_t th = size_y;
-  const WP2InvTransformColF transform = (tf_y == WP2TransformType::kDct) ?
-        WP2InvDctCol[SizeToIdx(size_y)][SizeToIdx(size_x)] :
-        nullptr;
+  const WP2InvTransformColF transform =
+      (tf_y == WP2TransformType::kDct)
+          ? WP2InvDctCol[SizeToIdx(size_y)][SizeToIdx(size_x)]
+          : nullptr;
   if (transform != nullptr) {
     transform(coeffs, tw);
   } else {
@@ -2847,10 +2851,10 @@ void WP2Transform2D(const int16_t src[], WP2TransformType tf_x,
   for (uint32_t y = 0; y < th; ++y) {
     for (uint32_t x = 0; x < tw; ++x) {
       const size_t offset = 2 * y * 2 * tw + 2 * x;
-      tmp[x + tw * y] = (src[offset +          0] +
-                         src[offset +          1] +
-                         src[offset + 2 * tw + 0] +
-                         src[offset + 2 * tw + 1] + 2) >> 2;
+      tmp[x + tw * y] =
+          (src[offset + 0] + src[offset + 1] + src[offset + 2 * tw + 0] +
+           src[offset + 2 * tw + 1] + 2) >>
+          2;
     }
   }
   Transform2D(tmp, tf_x, tf_y, tw, th, dst);
@@ -2861,13 +2865,13 @@ void WP2Transform2D(const int16_t src[], WP2TransformType tf_x,
 
 // Upsampling taps
 static constexpr int32_t kTaps[4][9] = {
-  {   64,     9,    -9,     9,    -9,     2,    -1,    -1,     0 },
-  {   64,    -9,     9,     9,    -9,    -1,     2,     0,    -1 },
-  {   64,     9,    -9,    -9,     9,    -1,     0,     2,    -1 },
-  {   64,    -9,     9,    -9,     9,     0,    -1,    -1,     2 },
+    {64, 9, -9, 9, -9, 2, -1, -1, 0},
+    {64, -9, 9, 9, -9, -1, 2, 0, -1},
+    {64, 9, -9, -9, 9, -1, 0, 2, -1},
+    {64, -9, 9, -9, 9, 0, -1, -1, 2},
 };
 
-// in-place 16bit upsample
+// in-place 16 bit upsample
 static void Upsample(uint32_t tw, uint32_t th, int16_t coeffs[]) {
   int16_t tmp[16 * 16];
   assert(tw <= 16 && th <= 16);
@@ -2890,9 +2894,9 @@ static void Upsample(uint32_t tw, uint32_t th, int16_t coeffs[]) {
       // 7...4...8
       // (interpolated samples v[] marked with 'x')
       const int32_t samples[9] = {
-          tmp[x  + tw * y],                      // #0
+          tmp[x + tw * y],                       // #0
           tmp[xm + tw * y],  tmp[xp + tw * y],   // #1 #2
-          tmp[x  + tw * ym], tmp[x  + tw * yp],  // #3 #4
+          tmp[x + tw * ym],  tmp[x + tw * yp],   // #3 #4
           tmp[xm + tw * ym], tmp[xp + tw * ym],  // #5 #6
           tmp[xm + tw * yp], tmp[xp + tw * yp]   // #7 #8
       };
@@ -2904,17 +2908,17 @@ static void Upsample(uint32_t tw, uint32_t th, int16_t coeffs[]) {
         v[3] += kTaps[3][i] * samples[i];
       }
       const size_t offset = 2 * y * 2 * tw + 2 * x;
-      coeffs[offset +          0] = v[0] >> 6;
-      coeffs[offset +          1] = v[1] >> 6;
+      coeffs[offset + 0] = v[0] >> 6;
+      coeffs[offset + 1] = v[1] >> 6;
       coeffs[offset + 2 * tw + 0] = v[2] >> 6;
       coeffs[offset + 2 * tw + 1] = v[3] >> 6;
     }
   }
 }
 
-void WP2InvTransform2D(int16_t coeffs[],
-                       WP2TransformType tf_x, WP2TransformType tf_y,
-                       uint32_t size_x, uint32_t size_y, bool reduced) {
+void WP2InvTransform2D(int16_t coeffs[], WP2TransformType tf_x,
+                       WP2TransformType tf_y, uint32_t size_x, uint32_t size_y,
+                       bool reduced) {
   const uint32_t tw = reduced ? size_x / 2 : size_x;
   const uint32_t th = reduced ? size_y / 2 : size_y;
   // Figure out the bounding column.

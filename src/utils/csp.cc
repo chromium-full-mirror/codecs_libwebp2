@@ -22,15 +22,21 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 
+#include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/data_source.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -68,7 +74,7 @@ double Norm2(const double a[3]) {
   return a[0] * a[0] + a[1] * a[1] + a[2] * a[2];
 }
 
-// WARNING! This is a 'special' cross-product funtion that ensures out[0] >= 0.
+// WARNING! This is a 'special' cross-product function that ensures out[0] >= 0.
 double CrossProduct(const double a[3], const double b[3], double out[3]) {
   out[0] = a[1] * b[2] - a[2] * b[1];
   out[1] = a[2] * b[0] - a[0] * b[2];
@@ -188,9 +194,7 @@ void CSPTransform::InitYCbCr() {
   for (auto v : kYCbCrMatrix) printf("%6d,\n", v);
 #else
   static constexpr int16_t kYCbCrMatrix[] = {
-      1188,    0, 1638,
-      1188, -399, -829,
-      1188, 2058,    0,
+      1188, 0, 1638, 1188, -399, -829, 1188, 2058, 0,
   };
 #endif
   if (!Init(kYCbCrMatrix)) assert(false);
@@ -216,9 +220,7 @@ void CSPTransform::InitYIQ() {
   for (auto v : kYIQMatrix) printf("%6d,\n", v);
 #else
   static constexpr int16_t kYIQMatrix[] = {
-      2048,  1958,  1273,
-      2048,  -558, -1325,
-      2048, -2260,  3483,
+      2048, 1958, 1273, 2048, -558, -1325, 2048, -2260, 3483,
   };
 #endif
   if (!Init(kYIQMatrix)) assert(false);
@@ -311,8 +313,8 @@ static inline void RgbToYuv(const int16_t avg[3], const int16_t m[9],
 
 template <int kNumRgbBits, typename Trgb>
 static inline void YuvToRgb(const int16_t avg[3], const int16_t im[9],
-                            int16_t y, int16_t u, int16_t v,
-                            Trgb* const r, Trgb* const g, Trgb* const b) {
+                            int16_t y, int16_t u, int16_t v, Trgb* const r,
+                            Trgb* const g, Trgb* const b) {
   constexpr int kNumExtraRgbBits = kNumRgbBits - 8;
   constexpr int kShift = CSPTransform::kMtxShift - kNumExtraRgbBits;
   constexpr int kMax = (1 << kNumRgbBits) - 1;
@@ -458,7 +460,7 @@ WP2Status CSPTransform::CustomToYuv(uint32_t width, uint32_t height,
   // A.ccsp = rgb    and    M.(rgb - avg) = yuv    so    M.A.ccsp - M.avg = yuv
 
   const int16_t* const a = ccsp_to_rgb.mtx();  // matrix A
-  const uint32_t a_shift = ccsp_to_rgb.shift;   // fixed point bits of A
+  const uint32_t a_shift = ccsp_to_rgb.shift;  // fixed point bits of A
 
   int16_t ma[9] = {};  // matrix M.A
   {
@@ -473,8 +475,8 @@ WP2Status CSPTransform::CustomToYuv(uint32_t width, uint32_t height,
   }
 
   int32_t offset[3];  // M.avg
-  Multiply<int32_t>(avg8_[0], avg8_[1], avg8_[2], m_,
-                    &offset[0], &offset[1], &offset[2]);
+  Multiply<int32_t>(avg8_[0], avg8_[1], avg8_[2], m_, &offset[0], &offset[1],
+                    &offset[2]);
   // 'offset' is now scaled by kMtxShift so it can be subtracted as is to 'yuv'
   // below which will also be scaled by kMtxShift.
 
@@ -482,8 +484,8 @@ WP2Status CSPTransform::CustomToYuv(uint32_t width, uint32_t height,
     for (uint32_t x = 0; x < width; ++x) {
       // TODO(skal): this loop should go in dsp/
       int32_t yuv[3];
-      Multiply<int32_t>(c0_buffer[x], c1_buffer[x], c2_buffer[x], ma,
-                        &yuv[0], &yuv[1], &yuv[2]);
+      Multiply<int32_t>(c0_buffer[x], c1_buffer[x], c2_buffer[x], ma, &yuv[0],
+                        &yuv[1], &yuv[2]);
       for (uint32_t i : {0, 1, 2}) {
         yuv[i] = RightShiftRound(yuv[i] - offset[i], kMtxShift);
         yuv[i] = Clamp<int32_t>(yuv[i], min_yuv_value_, max_yuv_value_);
@@ -513,7 +515,7 @@ WP2Status CSPTransform::YuvToCustom(
   // B.rgb = ccsp    and    N.yuv + avg = rgb    so    B.N.(yuv + M.avg) = ccsp
 
   const int16_t* const b = rgb_to_ccsp.mtx();  // matrix B
-  const uint32_t b_shift = rgb_to_ccsp.shift;   // fixed point bits of B
+  const uint32_t b_shift = rgb_to_ccsp.shift;  // fixed point bits of B
 
   int16_t bn[9] = {};  // matrix B.N
   {
@@ -528,13 +530,13 @@ WP2Status CSPTransform::YuvToCustom(
   }
 
   int16_t offset[3];  // M.avg
-  Multiply(avg8_[0], avg8_[1], avg8_[2], m_, kMtxShift,
-           &offset[0], &offset[1], &offset[2]);
+  Multiply(avg8_[0], avg8_[1], avg8_[2], m_, kMtxShift, &offset[0], &offset[1],
+           &offset[2]);
 
   WP2CSPConverterInit();
   for (uint32_t y = 0; y < height; ++y) {
-    WP2YuvToCustom(y_buffer, u_buffer, v_buffer, offset,
-                   bn, c0_buffer, c1_buffer, c2_buffer, width);
+    WP2YuvToCustom(y_buffer, u_buffer, v_buffer, offset, bn, c0_buffer,
+                   c1_buffer, c2_buffer, width);
     y_buffer += y_step;
     u_buffer += u_step;
     v_buffer += v_step;
@@ -556,9 +558,9 @@ bool CSPTransform::CheckRoundTrip(const int16_t yuv[3],
   const int16_t kErrorThreshold = 5;
   if (delta > kErrorThreshold) {
     static int cnt = 0;
-    printf("#%d: %d %d %d / %d %d %d (yuv=%d %d %d) err=%d\n",
-           cnt, rgb[0], rgb[1], rgb[2], out[0], out[1], out[2],
-           yuv[0], yuv[1], yuv[2], delta);
+    printf("#%d: %d %d %d / %d %d %d (yuv=%d %d %d) err=%d\n", cnt, rgb[0],
+           rgb[1], rgb[2], out[0], out[1], out[2], yuv[0], yuv[1], yuv[2],
+           delta);
     if (cnt == 0) Print();
     ++cnt;
     if (cnt == 10) exit(0);
@@ -584,7 +586,7 @@ static int16_t CompleteVector(int16_t v0, int16_t v1, int64_t v_sq_len) {
     v2 += 1;  // In case sqrt floor was "worse" than ceil.
   }
   return (int16_t)Clamp<int64_t>(v2, std::numeric_limits<int16_t>::min(),
-                                     std::numeric_limits<int16_t>::max());
+                                 std::numeric_limits<int16_t>::max());
 }
 
 //------------------------------------------------------------------------------
@@ -617,7 +619,7 @@ static constexpr int32_t kMaxDelta = 5;
 static constexpr int32_t kMaxDeltaBits = WP2Log2Ceil_k(kMaxDelta) + 1;
 
 static inline int32_t PutDelta(int16_t original, int16_t predicted,
-                        ANSEnc* const enc) {
+                               ANSEnc* const enc) {
   const int32_t delta = Clamp(original - predicted, -kMaxDelta, kMaxDelta);
   PutSValue(delta, kMaxDeltaBits, enc);
   return delta;
@@ -755,7 +757,7 @@ WP2Status CSPTransform::MakeEigenMatrixEncodable(const int16_t m[9],
 
 //------------------------------------------------------------------------------
 
-WP2Status CSPTransform::Write(ANSEnc* const enc)  const {
+WP2Status CSPTransform::Write(ANSEnc* const enc) const {
   enc->PutRValue((uint32_t)type_, kNumCspTypes, "csp_type");
   if (type_ == Csp::kCustom) {
     int32_t error;
@@ -803,11 +805,12 @@ WP2Status CSPTransform::Read(ANSDec* const dec) {
 
 namespace {
 
-template<typename A> constexpr double Dot(const A a[3], const A b[3]) {
+template <typename A>
+constexpr double Dot(const A a[3], const A b[3]) {
   return (double)a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
-constexpr uint32_t kAvgBlk = 8;   // size of the averaging block
+constexpr uint32_t kAvgBlk = 8;  // size of the averaging block
 
 double EdgeStrength(const uint8_t* src, size_t stride) {
   const double px = src[0], px_right = src[4], px_bottom = src[stride];
@@ -818,7 +821,7 @@ double EdgeStrength(const uint8_t* src, size_t stride) {
 // returns the number of samples added to avg_sum[] average accumulator.
 uint32_t ExtractCov(const uint8_t* argb, uint32_t w, uint32_t h, size_t stride,
                     double cov[3][3], double avg_sum[3], bool premultiplied) {
-  double avg[3] = { 0., 0., 0. };
+  double avg[3] = {0., 0., 0.};
   double tmp[3 * kAvgBlk * kAvgBlk];
   uint8_t unmult[4 * kAvgBlk * kAvgBlk];
   if (!premultiplied) {
@@ -873,12 +876,11 @@ uint32_t ExtractCov(const uint8_t* argb, uint32_t w, uint32_t h, size_t stride,
   return num_samples;
 }
 
-bool ExtractCovarianceMtx(const uint8_t* argb,
-                          uint32_t w, uint32_t h, size_t stride,
-                          double cov[3][3], int16_t avg[3],
+bool ExtractCovarianceMtx(const uint8_t* argb, uint32_t w, uint32_t h,
+                          size_t stride, double cov[3][3], int16_t avg[3],
                           bool premultiplied) {
   if (w <= 4u || h <= 4u || (uint64_t)w * h <= 64 * 64) {
-    return false;   // not enough sample to build reliable estimate!
+    return false;  // not enough sample to build reliable estimate!
   }
   double avg_sum[3];
   for (uint32_t j = 0; j < 3; ++j) {
@@ -890,8 +892,8 @@ bool ExtractCovarianceMtx(const uint8_t* argb,
     for (uint32_t i = 0; i < w; i += kAvgBlk) {
       const uint32_t W = std::min(i + kAvgBlk, w) - i;
       const uint32_t H = std::min(j + kAvgBlk, h) - j;
-      num_samples += ExtractCov(argb + i, W, H, stride, cov, avg_sum,
-                                premultiplied);
+      num_samples +=
+          ExtractCov(argb + i, W, H, stride, cov, avg_sum, premultiplied);
     }
   }
   // Normalize a bit the covariance matrix (not totally necessary, just comfort)
@@ -935,12 +937,12 @@ void ComputeEigenValues(double cov[3][3], double out[3]) {
   const double a11 = cov[1][1], a12 = cov[1][2];
   const double a22 = cov[2][2];
   const double max = std::max({a00, a01, a02, a11, a12, a22});
-  if (max == 0.) {   // zero matrix?
+  if (max == 0.) {  // zero matrix?
     out[0] = out[1] = out[2] = 0.;
     return;
   }
   const double norm = a01 * a01 + a02 * a02 + a12 * a12;
-  if (norm == 0.) {    // matrix is diagonal
+  if (norm == 0.) {  // matrix is diagonal
     out[0] = a00;
     out[1] = a11;
     out[2] = a22;
@@ -955,12 +957,12 @@ void ComputeEigenValues(double cov[3][3], double out[3]) {
   const double b0 = a00 - q, b1 = a11 - q, b2 = a22 - q;
   const double p =
       std::sqrt((b0 * b0 + b1 * b1 + b2 * b2 + 2. * norm) * (2. / 3.));
-  const double c0 = b1  * b2  - a12 * a12;
-  const double c1 = a01 * b2  - a12 * a02;
-  const double c2 = a01 * a12 - b1  * a02;
+  const double c0 = b1 * b2 - a12 * a12;
+  const double c1 = a01 * b2 - a12 * a02;
+  const double c2 = a01 * a12 - b1 * a02;
   const double hdet = 4.0 * (b0 * c0 - a01 * c1 + a02 * c2) / (p * p * p);
   const double angle = std::acos(Clamp(hdet, -1., 1.)) / 3.;
-  const double beta0 = std::cos(angle);    // largest solution
+  const double beta0 = std::cos(angle);  // largest solution
   const double beta2 = std::cos(angle + (2. * M_PI / 3.));
   const double beta1 = -(beta0 + beta2);
 
@@ -990,7 +992,7 @@ bool ExtractEigenMtx(double cov[3][3], double out[9]) {
 
   // Compute 2nd eigen-vector
   const double kThreshold = 0.000001;
-  if (lambdas[1] <= kThreshold) {   // MONOCHROME
+  if (lambdas[1] <= kThreshold) {  // MONOCHROME
     const double kAxis[3] = {0., 1., -1.};
     CrossProduct(kAxis, ev[0], ev[1]);
   } else {
@@ -1010,12 +1012,9 @@ bool ExtractEigenMtx(double cov[3][3], double out[9]) {
   return true;
 }
 
-bool NormalizeFromInput(const uint8_t* argb,
-                        uint32_t w, uint32_t h, size_t stride,
-                        bool premultiplied,
-                        double max_value,
-                        const int16_t avg[3],
-                        double custom_to_rgb_matrix[9],
+bool NormalizeFromInput(const uint8_t* argb, uint32_t w, uint32_t h,
+                        size_t stride, bool premultiplied, double max_value,
+                        const int16_t avg[3], double custom_to_rgb_matrix[9],
                         int16_t out[9]) {
   double rgb_to_custom_matrix[9];
   if (!TryInvertMatrix(custom_to_rgb_matrix, rgb_to_custom_matrix)) {
@@ -1062,7 +1061,7 @@ bool NormalizeFromInput(const uint8_t* argb,
   return true;
 }
 
-}    // anonymous namespace
+}  // anonymous namespace
 
 //------------------------------------------------------------------------------
 

@@ -21,9 +21,18 @@
 #include "src/dec/residuals_dec_aom.h"
 
 #include <algorithm>
-#include <numeric>
+#include <cassert>
+#include <cstdint>
 
-#include "src/utils/utils.h"
+#include "src/common/constants.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/quant_mtx.h"
+#include "src/common/lossy/residuals_aom.h"
+#include "src/common/lossy/transforms.h"
+#include "src/common/symbols.h"
+#include "src/dec/symbols_dec.h"
+#include "src/dsp/math.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace libgav1 {
@@ -51,7 +60,7 @@ int AOMResidualReader::ReadCoeffBaseRange(uint32_t cdf_context,
     const uint32_t coeff_base_range =
         sr->Read(kAOMCoeffBaseRange,
                  GetClusterAOM2<kAOMCoeffBaseRange>(plane_type, cdf_context),
-                  "coeff_base_range");
+                 "coeff_base_range");
     level += coeff_base_range;
     if (coeff_base_range < kCoeffBaseRangeSymbolCount) break;
   }
@@ -75,29 +84,29 @@ int AOMResidualReader::ReadEOB(TrfSize tdim, PlaneType plane_type,
                    "eob_pt");
       break;
     case 2:
-      eob_pt = sr->Read(kAOMEOBPT16,
-                        GetClusterAOM2<kAOMEOBPT16>(plane_type, context),
-                        "eob_pt");
+      eob_pt =
+          sr->Read(kAOMEOBPT16,
+                   GetClusterAOM2<kAOMEOBPT16>(plane_type, context), "eob_pt");
       break;
     case 3:
-      eob_pt = sr->Read(kAOMEOBPT32,
-                        GetClusterAOM2<kAOMEOBPT32>(plane_type, context),
-                        "eob_pt");
+      eob_pt =
+          sr->Read(kAOMEOBPT32,
+                   GetClusterAOM2<kAOMEOBPT32>(plane_type, context), "eob_pt");
       break;
     case 4:
-      eob_pt = sr->Read(kAOMEOBPT64,
-                        GetClusterAOM2<kAOMEOBPT64>(plane_type, context),
-                        "eob_pt");
+      eob_pt =
+          sr->Read(kAOMEOBPT64,
+                   GetClusterAOM2<kAOMEOBPT64>(plane_type, context), "eob_pt");
       break;
     case 5:
-      eob_pt = sr->Read(kAOMEOBPT128,
-                        GetClusterAOM2<kAOMEOBPT128>(plane_type, context),
-                        "eob_pt");
+      eob_pt =
+          sr->Read(kAOMEOBPT128,
+                   GetClusterAOM2<kAOMEOBPT128>(plane_type, context), "eob_pt");
       break;
     case 6:
-      eob_pt = sr->Read(kAOMEOBPT256,
-                        GetClusterAOM2<kAOMEOBPT256>(plane_type, context),
-                        "eob_pt");
+      eob_pt =
+          sr->Read(kAOMEOBPT256,
+                   GetClusterAOM2<kAOMEOBPT256>(plane_type, context), "eob_pt");
       break;
     case 7:
       eob_pt = sr->Read(kAOMEOBPT512, GetClusterAOM1<kAOMEOBPT512>(plane_type),
@@ -105,9 +114,8 @@ int AOMResidualReader::ReadEOB(TrfSize tdim, PlaneType plane_type,
       break;
     case 8:
     default:
-      eob_pt =
-          sr->Read(kAOMEOBPT1024, GetClusterAOM1<kAOMEOBPT1024>(plane_type),
-                   "eob_pt");
+      eob_pt = sr->Read(kAOMEOBPT1024,
+                        GetClusterAOM1<kAOMEOBPT1024>(plane_type), "eob_pt");
       break;
   }
 
@@ -171,10 +179,10 @@ bool AOMResidualReader::ReadCoeff(uint32_t pos, bool is_eob, uint32_t eob,
   return (level > 0);
 }
 
-uint32_t AOMResidualReader::ReadCoeffs(
-    Channel channel, const int16_t dequant[],
-    TrfSize tdim, TransformPair tx_type, bool first_is_dc,
-    SymbolReader* const sr, int16_t* const coeffs) {
+uint32_t AOMResidualReader::ReadCoeffs(Channel channel, const int16_t dequant[],
+                                       TrfSize tdim, TransformPair tx_type,
+                                       bool first_is_dc, SymbolReader* const sr,
+                                       int16_t* const coeffs) {
   const uint32_t tx_width = TrfWidth[tdim];
   const uint32_t tx_height = TrfHeight[tdim];
   const uint32_t padded_tx_width = tx_width + kLevelBufferPadding;

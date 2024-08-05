@@ -15,11 +15,13 @@
 //
 // Image savers
 
+#include <cassert>
 #include <cstdint>
 #include <cstdio>
 
 #ifdef WP2_HAVE_PNG
 #include <png.h>
+#include <pngconf.h>
 #include <setjmp.h>  // note: this must be included *after* png.h
 #endif               // WP2_HAVE_PNG
 
@@ -38,10 +40,11 @@
 #include <windows.h>
 #endif  // HAVE_WINCODEC_H
 
-#include "./image_enc.h"
+#include "imageio/image_enc.h"
 #include "src/dsp/dsp.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 

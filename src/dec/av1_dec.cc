@@ -16,18 +16,20 @@
 // AV1 lossy decoding.
 
 #include <cassert>
+#include <cstdio>
 
-#include "src/common/av1_common.h"
 #include "src/common/global_params.h"
+#include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
-#include "src/utils/csp.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 #if defined(WP2_HAVE_AOM)
 
 #include "aom/aom_decoder.h"
 #include "aom/aomdx.h"
+#include "src/common/av1_common.h"
 
 namespace WP2 {
 
@@ -36,7 +38,7 @@ namespace WP2 {
 WP2Status Av1Decode(const BitstreamFeatures& features,
                     const DecoderConfig& config, const DataView& dec,
                     Tile* const tile) {
-  // Codec instanciation
+  // Codec instantiation
   const aom_codec_iface_t* const itf = aom_codec_av1_dx();
   WP2_CHECK_OK(itf != nullptr, WP2_STATUS_VERSION_MISMATCH);
 

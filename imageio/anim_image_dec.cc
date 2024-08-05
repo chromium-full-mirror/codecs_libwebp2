@@ -19,8 +19,17 @@
 
 #include "./anim_image_dec.h"
 
-#include "./image_dec.h"
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+
+#include "imageio/file_format.h"
+#include "imageio/image_dec.h"
+#include "imageio/imageio_util.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 

@@ -20,18 +20,15 @@
 #ifndef WP2_ENC_PARTITION_SCORE_FUNC_H_
 #define WP2_ENC_PARTITION_SCORE_FUNC_H_
 
-#include "src/common/integral.h"
-#include "src/common/lossy/block.h"
+#include <cstdint>
+
+#include "src/common/global_params.h"
 #include "src/common/lossy/block_size.h"
-#include "src/common/lossy/block_size_io.h"
 #include "src/common/lossy/predictor.h"
-#include "src/common/symbols.h"
-#include "src/dec/wp2_dec_i.h"
-#include "src/enc/symbols_enc.h"
-#include "src/enc/wp2_enc_i.h"
-#include "src/utils/csp.h"
+#include "src/common/progress_watcher.h"
 #include "src/utils/plane.h"
-#include "src/utils/vector.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {
@@ -53,7 +50,7 @@ class PartitionScoreFunc : public WP2Allocable {
   // For a given block position and size, returns a score (higher means better).
   virtual WP2Status ComputeScore(const Block& block,
                                  const ProgressRange& progress,
-                                 float* const score) = 0;
+                                 float* score) = 0;
 
   // Called every time a block is definitively chosen.
   virtual WP2Status Use(const Block& block);
@@ -87,7 +84,7 @@ class FixedSizeScoreFunc : public PartitionScoreFunc {
   explicit FixedSizeScoreFunc(BlockSize size) : size_(size) {}
 
   WP2Status ComputeScore(const Block& block, const ProgressRange& progress,
-                         float* const score) override;
+                         float* score) override;
 
  protected:
   BlockSize size_;

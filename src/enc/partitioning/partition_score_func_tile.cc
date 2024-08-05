@@ -20,17 +20,28 @@
 #include "src/enc/partitioning/partition_score_func_tile.h"
 
 #include <algorithm>
-#include <array>
-#include <cmath>
-#include <limits>
-#include <numeric>
+#include <cassert>
+#include <cstdint>
 
-#include "src/common/integral.h"
+#include "src/common/constants.h"
+#include "src/common/global_params.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/progress_watcher.h"
+#include "src/dec/tile_dec.h"
+#include "src/dec/wp2_dec_i.h"
 #include "src/dsp/dsp.h"
-#include "src/dsp/math.h"
 #include "src/enc/analysis.h"
+#include "src/enc/partitioning/partition_score_func.h"
 #include "src/enc/partitioning/partitioner.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/data_source.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -47,8 +58,8 @@ WP2Status TileScoreFunc::Init(const EncoderConfig& config,
   WP2_CHECK_STATUS(
       PartitionScoreFunc::Init(config, tile_rect, yuv, gparams, init_progress));
   local_gparams_.features_ = &local_features_map_;
-  WP2_CHECK_STATUS(GlobalAnalysis(ArgbBuffer(), yuv, gparams.transf_,
-                                  config, &local_gparams_));
+  WP2_CHECK_STATUS(GlobalAnalysis(ArgbBuffer(), yuv, gparams.transf_, config,
+                                  &local_gparams_));
   WP2_CHECK_STATUS(InitForEncode());
 
   // Initialize the best score with the partition containing only the forced

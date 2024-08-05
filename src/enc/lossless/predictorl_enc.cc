@@ -17,14 +17,26 @@
 //
 // Authors: Vincent Rabaud (vrabaud@google.com)
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
 #include <limits>
+#include <utility>
 
-#include "src/common/color_precision.h"
+#include "src/common/lossless/color_cache.h"
 #include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
+#include "src/dsp/lossless/dspl.h"
 #include "src/dsp/lossless/encl_dsp.h"
 #include "src/dsp/math.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/symbols_enc.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/ans_utils.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 using WP2::Vector_u32;
 
@@ -562,8 +574,7 @@ static float GetPredictionCostCrossColorRed(
     return std::numeric_limits<float>::max();
   }
 
-  cur_diff =
-      PredictionCostCrossColor(accumulated_red_histo, *tmp_histo);
+  cur_diff = PredictionCostCrossColor(accumulated_red_histo, *tmp_histo);
   // cur_diff -= 3 favors keeping the areas locally similar
   if (green_to_red == prev_x.green_to_red) {
     cur_diff -= 3;
@@ -659,11 +670,12 @@ static void GetBestGreenRedToBlue(const int16_t* argb, uint32_t width,
                                   const Vector_u32& accumulated_blue_histo,
                                   Multipliers* const best_tx,
                                   Vector_u32* tmp_histo) {
-  const int8_t offset[kGreenRedToBlueNumAxis][2] =
-      {{0, -1}, {0, 1}, {-1, 0}, {1, 0}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
-  const int8_t delta_lut[kGreenRedToBlueMaxIters] = { 16, 16, 8, 4, 2, 2, 2 };
-  const int iters =
-      (effort < 3) ? 1 : (effort >= 5) ? kGreenRedToBlueMaxIters : 4;
+  const int8_t offset[kGreenRedToBlueNumAxis][2] = {
+      {0, -1}, {0, 1}, {-1, 0}, {1, 0}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+  const int8_t delta_lut[kGreenRedToBlueMaxIters] = {16, 16, 8, 4, 2, 2, 2};
+  const int iters = (effort < 3)    ? 1
+                    : (effort >= 5) ? kGreenRedToBlueMaxIters
+                                    : 4;
   int green_to_blue_best = 0;
   int red_to_blue_best = 0;
   int iter;

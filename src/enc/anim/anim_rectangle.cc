@@ -19,9 +19,12 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <utility>
 
 #include "./anim_enc.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -48,7 +51,7 @@ uint64_t GetMergeAreaIncrease(const Rectangle& a, const Rectangle& b) {
 
 //------------------------------------------------------------------------------
 
-// 'max_num_rectangles_' is clamped to make sure there is no oveflow but still
+// 'max_num_rectangles_' is clamped to make sure there is no overflow but still
 // assert that it's the expected value.
 RectangleGroup::RectangleGroup(uint32_t max_num_rectangles)
     : max_num_rectangles_(

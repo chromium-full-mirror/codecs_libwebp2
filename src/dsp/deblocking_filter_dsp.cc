@@ -18,8 +18,9 @@
 // Author: Yannis Guyon (yguyon@google.com)
 
 #include <algorithm>
-#include <cstring>
-#include <numeric>
+#include <cassert>
+#include <cstdint>
+#include <cstdlib>
 
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
@@ -53,17 +54,15 @@ constexpr uint16_t kWeightThreshold(int i) {
   return kBlurUnit / (2 * kBlurWeights[i][0]);
 }
 constexpr uint16_t kBlurWeightsThreshold[kDblkMaxHalf] = {
-  kWeightThreshold(0), kWeightThreshold(1),
-  kWeightThreshold(2), kWeightThreshold(3),
-  kWeightThreshold(4), kWeightThreshold(5),
-  kWeightThreshold(6), kWeightThreshold(7),
+    kWeightThreshold(0), kWeightThreshold(1), kWeightThreshold(2),
+    kWeightThreshold(3), kWeightThreshold(4), kWeightThreshold(5),
+    kWeightThreshold(6), kWeightThreshold(7),
 };
 
 // Per sharpness. Threshold to decide whether to filter a line or not-at-all.
 // Values are chosen experimentally with a fixed-point precision of 10 bits.
 constexpr int32_t kSharpnessThreshold[kDblkMaxSharpness + 1] = {
-  220, 212, 204, 168, 108, 72, 40, 20
-};
+    220, 212, 204, 168, 108, 72, 40, 20};
 
 // Per sharpness, per distance to edge. Threshold between this pixel and the
 // previous one (hence index 0 is irrelevant). Values are chosen experimentally.
@@ -105,8 +104,8 @@ uint8_t WouldDeblockLine_C(int32_t threshold, uint32_t half,
   return (std::abs(EdgeDelta(q0, half)) <= threshold) ? 1 : 0;
 }
 
-void DeblockLine_C(uint32_t filter_strength, int32_t threshold,
-                   uint8_t half, int32_t min, int32_t max, int16_t* q0) {
+void DeblockLine_C(uint32_t filter_strength, int32_t threshold, uint8_t half,
+                   int32_t min, int32_t max, int16_t* q0) {
   assert(filter_strength > 0 && half > 0);
   int32_t delta = EdgeDelta(q0, half);
   if (std::abs(delta) > threshold) return;
@@ -117,10 +116,10 @@ void DeblockLine_C(uint32_t filter_strength, int32_t threshold,
   int16_t* q = q0;
   for (uint32_t i = 0; i < half; ++i, p -= 1, q += 1) {
     // warning! -(b>>1) is not equal to (-b>>1), that's why we need two deltas
-    const int16_t p_weighted_delta = RightShiftRound(
-        +delta * kBlurWeights[half - 1][i], kBlurShift);
-    const int16_t m_weighted_delta = RightShiftRound(
-        -delta * kBlurWeights[half - 1][i], kBlurShift);
+    const int16_t p_weighted_delta =
+        RightShiftRound(+delta * kBlurWeights[half - 1][i], kBlurShift);
+    const int16_t m_weighted_delta =
+        RightShiftRound(-delta * kBlurWeights[half - 1][i], kBlurShift);
 
     // since kBlurWeights[] is decreasing, check if we can early-out
     if ((m_weighted_delta | p_weighted_delta) == 0) break;
@@ -167,8 +166,8 @@ uint32_t MeasureFlatLength_C(uint32_t filter_sharpness, uint32_t half,
 }
 
 void MeasureFlatLengths_C(uint32_t filter_sharpness, uint32_t half,
-                          const int16_t* q0, uint32_t step,
-                          uint8_t out[], uint32_t size) {
+                          const int16_t* q0, uint32_t step, uint8_t out[],
+                          uint32_t size) {
   for (uint32_t i = 0; i < size; ++i, q0 += step) {
     out[i] = MeasureFlatLength_C(filter_sharpness, half, q0);
   }
@@ -177,8 +176,8 @@ void MeasureFlatLengths_C(uint32_t filter_sharpness, uint32_t half,
 //------------------------------------------------------------------------------
 // buffer I/O
 
-void CopyIn_C(const int16_t* src, uint32_t src_step,
-              int16_t* dst, int32_t width, int32_t height) {
+void CopyIn_C(const int16_t* src, uint32_t src_step, int16_t* dst,
+              int32_t width, int32_t height) {
   src -= height * src_step;
   dst -= height;
   for (int j = 0; j < 2 * height; ++j, src += src_step, dst += 1) {
@@ -206,17 +205,17 @@ namespace {
 
 // loads 8 int16's of input
 #define LOAD_ROW8(ROW) \
-    _mm_loadu_si128((const __m128i*)(src + (ROW) * kDblCacheStep))
+  _mm_loadu_si128((const __m128i*)(src + (ROW) * kDblCacheStep))
 // stores 2x4 int16's of output
-#define STORE_ROW2x4(REG, ROW, STEP)                                \
-  _mm_storel_epi64((__m128i*)(dst + ((ROW) + 0) * (STEP)), (REG));  \
-  _mm_storel_epi64((__m128i*)(dst + ((ROW) + 1) * (STEP)),          \
+#define STORE_ROW2x4(REG, ROW, STEP)                               \
+  _mm_storel_epi64((__m128i*)(dst + ((ROW) + 0) * (STEP)), (REG)); \
+  _mm_storel_epi64((__m128i*)(dst + ((ROW) + 1) * (STEP)),         \
                    _mm_srli_si128((REG), 8))
 void Transpose8x4_SSE(const int16_t* src, int16_t* dst, uint32_t dst_step) {
-  const __m128i a0 = LOAD_ROW8(0);  // a00 a01 ... a07
-  const __m128i a1 = LOAD_ROW8(1);  // a10 a11 ... a17
-  const __m128i a2 = LOAD_ROW8(2);  // a20 a21 ... a27
-  const __m128i a3 = LOAD_ROW8(3);  // a30 a31 ... a37
+  const __m128i a0 = LOAD_ROW8(0);                // a00 a01 ... a07
+  const __m128i a1 = LOAD_ROW8(1);                // a10 a11 ... a17
+  const __m128i a2 = LOAD_ROW8(2);                // a20 a21 ... a27
+  const __m128i a3 = LOAD_ROW8(3);                // a30 a31 ... a37
   const __m128i b0 = _mm_unpacklo_epi16(a0, a1);  // a00 a10 a01 a11 ... a03 a13
   const __m128i b1 = _mm_unpackhi_epi16(a0, a1);  // a04 a14 a05 a15 ... a07 a17
   const __m128i b2 = _mm_unpacklo_epi16(a2, a3);  // a20 a30 a21 a31 ... a23 a33
@@ -234,9 +233,10 @@ void Transpose8x4_SSE(const int16_t* src, int16_t* dst, uint32_t dst_step) {
 #undef LOAD_ROW8
 
 // loads 2x4 int16's of input
-#define LOAD_ROW2x4(ROW, STEP) _mm_unpacklo_epi16(                   \
-  _mm_loadl_epi64((const __m128i*)(src + (ROW + 0) * (STEP))),  \
-  _mm_loadl_epi64((const __m128i*)(src + (ROW + 1) * (STEP))))
+#define LOAD_ROW2x4(ROW, STEP)                                     \
+  _mm_unpacklo_epi16(                                              \
+      _mm_loadl_epi64((const __m128i*)(src + (ROW + 0) * (STEP))), \
+      _mm_loadl_epi64((const __m128i*)(src + (ROW + 1) * (STEP))))
 // stores 8 int16's of output
 #define STORE_ROW8(REG, ROW) \
   _mm_storeu_si128((__m128i*)(dst + (ROW) * kDblCacheStep), REG)
@@ -261,8 +261,8 @@ void Transpose4x8_SSE(const int16_t* src, uint32_t src_step, int16_t* dst) {
 #undef STORE_ROW8
 #undef LOAD_ROW2x4
 
-void CopyIn_SSE(const int16_t* src, uint32_t src_step,
-                int16_t* dst, int32_t width, int32_t height) {
+void CopyIn_SSE(const int16_t* src, uint32_t src_step, int16_t* dst,
+                int32_t width, int32_t height) {
   for (int y = 0; y < width; y += 4) {
     if (height <= 4) {
       Transpose4x8_SSE(src - 4 * src_step, src_step, dst - 4);
@@ -306,8 +306,8 @@ constexpr int16_t kBlurWeights_SSE[kDblkMaxHalf][16] = {
 // clang-format on
 static_assert(kBlurShift == 15, "_mm_mulhrs_epi16 needs to be changed.");
 
-void DeblockLine_SSE(uint32_t filter_strength, int32_t threshold,
-                     uint8_t half, int32_t min, int32_t max, int16_t* q0) {
+void DeblockLine_SSE(uint32_t filter_strength, int32_t threshold, uint8_t half,
+                     int32_t min, int32_t max, int16_t* q0) {
   assert(filter_strength > 0 && half > 0);
   const __m128i m_min = _mm_set1_epi16(min);
   const __m128i m_max = _mm_set1_epi16(max);
@@ -343,8 +343,8 @@ void DeblockLine_SSE(uint32_t filter_strength, int32_t threshold,
 }
 
 void MeasureFlatLengths_SSE(uint32_t filter_sharpness, uint32_t half,
-                            const int16_t* q0, uint32_t step,
-                            uint8_t out[], uint32_t size) {
+                            const int16_t* q0, uint32_t step, uint8_t out[],
+                            uint32_t size) {
   assert(half > 0 && half <= kDblkMaxHalf);
   if (size <= 0) return;
   if (half <= 2) {
@@ -354,28 +354,27 @@ void MeasureFlatLengths_SSE(uint32_t filter_sharpness, uint32_t half,
       const int32_t t = kFlatnessThreshold[filter_sharpness][1];
       for (uint32_t j = 0; j < size; ++j, q0 += step) {
         const int32_t diff_p = q0[-1] - q0[-2];
-        const int32_t diff0  = q0[ 0] - q0[-1];
-        const int32_t diff_q = q0[ 1] - q0[ 0];
-        out[j] = (std::abs(diff_q - diff0) > t ||
-                  std::abs(diff_p - diff0) > t) ? 1 : 2;
+        const int32_t diff0 = q0[0] - q0[-1];
+        const int32_t diff_q = q0[1] - q0[0];
+        out[j] = (std::abs(diff_q - diff0) > t || std::abs(diff_p - diff0) > t)
+                     ? 1
+                     : 2;
       }
     }
     return;
   }
 
   static const uint8_t kThresh_SSE[kDblkMaxSharpness + 1][2 * kDblkMaxHalf] = {
-    {82, 15, 7, 4, 3, 2, 2, 0x7f, 0x7f, 2, 2, 3, 4, 7, 15, 82},
-    {80, 10, 6, 4, 3, 2, 2, 0x7f, 0x7f, 2, 2, 3, 4, 6, 10, 80},
-    {78,  7, 5, 4, 3, 2, 2, 0x7f, 0x7f, 2, 2, 3, 4, 5,  7, 78},
-    {66,  6, 4, 4, 3, 2, 1, 0x7f, 0x7f, 1, 2, 3, 4, 4,  6, 66},
-    {54,  6, 4, 3, 2, 1, 1, 0x7f, 0x7f, 1, 1, 2, 3, 4,  6, 54},
-    {40,  6, 4, 3, 2, 1, 1, 0x7f, 0x7f, 1, 1, 2, 3, 4,  6, 40},
-    {37,  4, 3, 2, 2, 1, 1, 0x7f, 0x7f, 1, 1, 2, 2, 3,  4, 37},
-    {25,  3, 2, 2, 1, 1, 1, 0x7f, 0x7f, 1, 1, 1, 2, 2,  3, 25}
-  };
-  static const uint16_t limit[8] = {
-    0xffff, 0x7ffe, 0x3ffc, 0x1ff8, 0x0ff0, 0x07e0, 0x03c0, 0x0180
-  };
+      {82, 15, 7, 4, 3, 2, 2, 0x7f, 0x7f, 2, 2, 3, 4, 7, 15, 82},
+      {80, 10, 6, 4, 3, 2, 2, 0x7f, 0x7f, 2, 2, 3, 4, 6, 10, 80},
+      {78, 7, 5, 4, 3, 2, 2, 0x7f, 0x7f, 2, 2, 3, 4, 5, 7, 78},
+      {66, 6, 4, 4, 3, 2, 1, 0x7f, 0x7f, 1, 2, 3, 4, 4, 6, 66},
+      {54, 6, 4, 3, 2, 1, 1, 0x7f, 0x7f, 1, 1, 2, 3, 4, 6, 54},
+      {40, 6, 4, 3, 2, 1, 1, 0x7f, 0x7f, 1, 1, 2, 3, 4, 6, 40},
+      {37, 4, 3, 2, 2, 1, 1, 0x7f, 0x7f, 1, 1, 2, 2, 3, 4, 37},
+      {25, 3, 2, 2, 1, 1, 1, 0x7f, 0x7f, 1, 1, 1, 2, 2, 3, 25}};
+  static const uint16_t limit[8] = {0xffff, 0x7ffe, 0x3ffc, 0x1ff8,
+                                    0x0ff0, 0x07e0, 0x03c0, 0x0180};
   const __m128i thresh =
       _mm_loadu_si128((const __m128i*)(kThresh_SSE[filter_sharpness]));
   const uint32_t or_mask = limit[half - 1];
@@ -428,8 +427,8 @@ WP2_TSAN_IGNORE_FUNCTION void DblkFilterInitSSE() {
 }
 
 #if defined(WP2_USE_AVX2)
-void DeblockLine_AVX2(uint32_t filter_strength, int32_t threshold,
-                     uint8_t half, int32_t min, int32_t max, int16_t* q0) {
+void DeblockLine_AVX2(uint32_t filter_strength, int32_t threshold, uint8_t half,
+                      int32_t min, int32_t max, int16_t* q0) {
   if (half <= 4) {
     DeblockLine_SSE(filter_strength, threshold, half, min, max, q0);
     return;
@@ -478,13 +477,12 @@ void (*DeblockLine)(uint32_t filter_strength, int32_t threshold, uint8_t half,
 uint8_t (*WouldDeblockLine)(int32_t threshold, uint32_t half,
                             const int16_t q0[]) = nullptr;
 
-
 void (*MeasureFlatLengths)(uint32_t filter_sharpness, uint32_t half,
-                           const int16_t* q0, uint32_t step,
-                           uint8_t out[], uint32_t size) = nullptr;
+                           const int16_t* q0, uint32_t step, uint8_t out[],
+                           uint32_t size) = nullptr;
 
-void (*FilterCopyIn)(const int16_t* src, uint32_t src_step,
-                     int16_t* dst, int32_t W, int32_t H) = nullptr;
+void (*FilterCopyIn)(const int16_t* src, uint32_t src_step, int16_t* dst,
+                     int32_t W, int32_t H) = nullptr;
 void (*FilterCopyOut)(const int16_t* src, int16_t* dst, uint32_t dst_step,
                       int32_t W, int32_t H) = nullptr;
 

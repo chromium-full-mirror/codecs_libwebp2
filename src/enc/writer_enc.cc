@@ -19,11 +19,12 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstring>  // for memcpy()
 #include <string>
 
 #include "src/utils/utils.h"
-#include "src/wp2/encode.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 

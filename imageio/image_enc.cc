@@ -15,13 +15,13 @@
 //
 // Image savers
 
-#include "./image_enc.h"
+#include "imageio/image_enc.h"
 
 #include <cstdio>
 #include <cstring>
 
-#include "./file_format.h"
-#include "./imageio_util.h"
+#include "imageio/file_format.h"
+#include "imageio/imageio_util.h"
 #include "src/utils/csp.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
@@ -48,7 +48,7 @@ WP2Status SaveImage(const ArgbBuffer& buffer, const char* const file_path,
   }
 
 #ifdef HAVE_WINCODEC_H
-  if (format != PNG)
+  if (format != PNG)  // NOLINT
 #endif
   {
     const char* const mode = (overwrite ? "wb" : "wxb");

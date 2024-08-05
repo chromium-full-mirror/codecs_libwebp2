@@ -21,17 +21,19 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <string>
 
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/rnd_mtx.h"
-#include "src/common/lossy/transforms.h"
 #include "src/common/symbols.h"
 #include "src/dsp/dsp.h"
-#include "src/dsp/math.h"
-#include "src/enc/wp2_enc_i.h"
-#include "src/utils/ans.h"
 #include "src/utils/front_mgr.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -436,7 +438,7 @@ void CodedBlockBase::GetContext(Channel channel, bool split_tf,
 
   const uint32_t kSizeThreshold = 48;  // context size above which to filter
   const int32_t kDiffThreshold = 96;   // slope threshold below which to filter
-  if (m > kSizeThreshold) {   // block is large enough?
+  if (m > kSizeThreshold) {            // block is large enough?
     int32_t prev = context[0], cur = context[0];
     uint32_t prev_diff = 0;
     for (uint32_t i = 0; i < m - 1; ++i) {
@@ -469,8 +471,8 @@ std::string CodedBlockBase::Print() const {
 #if defined(WP2_BITTRACE)
   str += WP2SPrint(" yuv: [%d - %d]\n", yuv_min_, yuv_max_);
   str += WP2SPrint(" cfl_: [%d, %d, %d]\n", cfl_[0], cfl_[1], cfl_[2]);
-  str += WP2SPrint(" blk_: [%d, %d, %d x %d]\n",
-                   x_pix(), y_pix(), w_pix(), h_pix());
+  str += WP2SPrint(" blk_: [%d, %d, %d x %d]\n", x_pix(), y_pix(), w_pix(),
+                   h_pix());
   str += WP2SPrint(" occupancy:%d %d\n", left_occupancy_, right_occupancy_);
   str += WP2SPrint(" top-ctx:%d\n", top_context_extent_);
   str += WP2SPrint(" id:%d  420:%d ", id_, is420_);
@@ -478,8 +480,8 @@ std::string CodedBlockBase::Print() const {
   str += WP2SPrint(" alpha_mode_:%d ", alpha_mode_);
   str += WP2SPrint(" y_context_is_constant_:%d\n", y_context_is_constant_);
   for (const CodingParams& prm : params_) {
-    str += WP2SPrint("  params_[%d]: trf:%d split:%d\n",
-                      &prm - params_, prm.tf, prm.split_tf);
+    str += WP2SPrint("  params_[%d]: trf:%d split:%d\n", &prm - params_, prm.tf,
+                     prm.split_tf);
   }
 #endif
   return str;

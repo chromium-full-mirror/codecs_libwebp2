@@ -20,16 +20,13 @@
 #ifndef WP2_ENC_PARTITIONER_TOP_LEFT_H_
 #define WP2_ENC_PARTITIONER_TOP_LEFT_H_
 
-#include "src/common/lossy/block.h"
+#include <cstdint>
+
 #include "src/common/lossy/block_size.h"
-#include "src/common/lossy/predictor.h"
-#include "src/common/symbols.h"
+#include "src/common/progress_watcher.h"
 #include "src/enc/partitioning/partitioner.h"
-#include "src/enc/symbols_enc.h"
-#include "src/utils/csp.h"
-#include "src/utils/plane.h"
 #include "src/utils/vector.h"
-#include "src/wp2/encode.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -39,13 +36,13 @@ namespace WP2 {
 class TopLeftBestPartitioner : public Partitioner {
  public:
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks,
-                             Vector_u32* const splits) override;
+                             VectorNoCtor<Block>* blocks,
+                             Vector_u32* splits) override;
 
  private:
   // Returns the 'best_block' size within 'max_block'.
   WP2Status GetBestSize(const Block& max_block, uint32_t num_forced_blocks,
-                        const ProgressRange& progress, Block* const best_block);
+                        const ProgressRange& progress, Block* best_block);
 };
 
 //------------------------------------------------------------------------------

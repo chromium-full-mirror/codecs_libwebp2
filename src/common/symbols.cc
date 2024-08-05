@@ -19,12 +19,26 @@
 
 #include "src/common/symbols.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
 #include "src/common/color_precision.h"
+#include "src/common/constants.h"
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
 #include "src/common/lossy/predictor.h"
+#include "src/common/lossy/rnd_mtx.h"
 #include "src/common/lossy/transforms.h"
+#include "src/dsp/dsp.h"
 #include "src/dsp/lossless/dspl.h"
+#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/ans_utils.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 //------------------------------------------------------------------------------
 
@@ -44,8 +58,8 @@ WP2Status SymbolsInfo::CopyFrom(const SymbolsInfo& other) {
 }
 
 void SymbolsInfo::SetUnused(uint32_t sym, uint32_t num_clusters) {
-  SetInfo(sym, /*min=*/kInvalidBound, /*max=*/kInvalidBound,
-          num_clusters, StorageMethod::kUnused);
+  SetInfo(sym, /*min=*/kInvalidBound, /*max=*/kInvalidBound, num_clusters,
+          StorageMethod::kUnused);
 }
 
 void SymbolsInfo::SetInfo(uint32_t sym, int32_t min, int32_t max,
@@ -142,9 +156,9 @@ uint32_t SymbolsInfo::GetMaxRange(uint32_t sym) const {
   return max_range;
 }
 
-WP2Status SymbolsInfo::SetInitialCDF(
-    uint32_t sym, uint32_t cluster,
-    const uint16_t* const cdf, uint16_t max_proba) {
+WP2Status SymbolsInfo::SetInitialCDF(uint32_t sym, uint32_t cluster,
+                                     const uint16_t* const cdf,
+                                     uint16_t max_proba) {
   assert(IsAdaptiveMethod(sym));
   ClusterInfo* const info = GetOrMakeClusterInfo(sym, cluster);
   WP2_CHECK_ALLOC_OK(info != nullptr);
@@ -153,9 +167,9 @@ WP2Status SymbolsInfo::SetInitialCDF(
   return WP2_STATUS_OK;
 }
 
-void SymbolsInfo::GetInitialCDF(
-    uint32_t sym, uint32_t cluster, const uint16_t** const cdf,
-    uint16_t* const max_proba) const {
+void SymbolsInfo::GetInitialCDF(uint32_t sym, uint32_t cluster,
+                                const uint16_t** const cdf,
+                                uint16_t* const max_proba) const {
   assert(IsAdaptiveMethod(sym));
   *cdf = GetClusterInfo(sym, cluster).cdf;
   *max_proba = GetClusterInfo(sym, cluster).max_proba;
@@ -248,8 +262,8 @@ WP2Status SymbolsInfo::InitLossy(uint32_t num_segments,
   SetInfo(kSymbolUseRandomMatrix, /*min=*/0, /*max=*/1,
           /*num_clusters=*/1, StorageMethod::kAdaptiveBit);
 
-  constexpr static uint32_t
-      kMaxAbsValueDeltaA = (1 << (SignalingCflPredictor::kIOBits - 1));
+  constexpr static uint32_t kMaxAbsValueDeltaA =
+      (1 << (SignalingCflPredictor::kIOBits - 1));
   SetInfo(kSymbolCflSlope,
           /*min=*/-kMaxAbsValueDeltaA, /*max=*/kMaxAbsValueDeltaA,
           /*num_clusters=*/1, StorageMethod::kAuto,
@@ -609,7 +623,7 @@ static inline void UpdateMinMax(uint32_t channel1, uint32_t channel2,
   maxima[channel1] = std::min(maxima[channel1], abs_value_max);
 }
 
-// The written logic is good but it is overriden by setting bounds to [0,255]
+// The written logic is good but it is overridden by setting bounds to [0,255]
 // for kPredictor, kCrossColor and kSubtractGreen because they still use wrap
 // arounds.
 void GetARGBRanges(const TransformType* transforms, WP2SampleFormat format,

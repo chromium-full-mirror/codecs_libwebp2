@@ -19,13 +19,20 @@
 
 #include "src/dec/filters/block_map_filter.h"
 
+#include <algorithm>
 #include <cassert>
+#include <cstdint>
 
+#include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
 #include "src/common/vdebug.h"
 #include "src/dec/filters/intertile_filter.h"
 #include "src/dec/filters/intratile_filter.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/dsp/math.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {

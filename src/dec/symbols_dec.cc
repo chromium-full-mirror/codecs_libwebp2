@@ -20,10 +20,18 @@
 #include "src/dec/symbols_dec.h"
 
 #include <algorithm>
-#include <numeric>
+#include <cassert>
+#include <cstdint>
+#include <cstdlib>
 
 #include "src/dsp/math.h"
 #include "src/utils/ans_utils.h"
+#include "src/common/symbols.h"
+#include "src/utils/ans.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 

@@ -17,7 +17,14 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include "./preview.h"
+#include "src/common/preview/preview.h"
+
+#include <cassert>
+#include <cstdint>
+
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -35,10 +42,10 @@ static bool TryGetCircumcircleOfTriangle(VertexIndexedColor v0,
                                          VertexIndexedColor v1,
                                          VertexIndexedColor v2,
                                          Circle* const circumcircle) {
-  const int64_t dx10 = (int64_t)v1.x - v0.x;
-  const int64_t dy10 = (int64_t)v1.y - v0.y;
-  const int64_t dx20 = (int64_t)v2.x - v0.x;
-  const int64_t dy20 = (int64_t)v2.y - v0.y;
+  const int64_t dx10 = static_cast<int64_t>(v1.x) - v0.x;
+  const int64_t dy10 = static_cast<int64_t>(v1.y) - v0.y;
+  const int64_t dx20 = static_cast<int64_t>(v2.x) - v0.x;
+  const int64_t dy20 = static_cast<int64_t>(v2.y) - v0.y;
   const int64_t inner_surface = 2 * (dx10 * dy20 - dx20 * dy10);
   if (inner_surface == 0) return false;
 
@@ -63,18 +70,18 @@ WP2Status Triangulation::InitCorners(const PreviewData& data) {
   static constexpr vtx_t bot_left = -3, bot_right = -4;
 
   WP2_CHECK_ALLOC_OK(triangles_.resize(2));
-  triangles_[0] = {top_left, top_right, bot_right, Circle() };
-  triangles_[1] = {top_left, bot_right, bot_left, Circle() };
-  corners_[0] = { 0, 0, data.corners_[0] };
-  corners_[1] = { w, 0, data.corners_[1] };
-  corners_[2] = { 0, h, data.corners_[2] };
-  corners_[3] = { w, h, data.corners_[3] };
+  triangles_[0] = {top_left, top_right, bot_right, Circle()};
+  triangles_[1] = {top_left, bot_right, bot_left, Circle()};
+  corners_[0] = {0, 0, data.corners_[0]};
+  corners_[1] = {w, 0, data.corners_[1]};
+  corners_[2] = {0, h, data.corners_[2]};
+  corners_[3] = {w, h, data.corners_[3]};
   WP2_CHECK_OK(
-    TryGetCircumcircleOfTriangle(corners_[0], corners_[1], corners_[3],
-                                 &triangles_[0].circumcircle) &&
-    TryGetCircumcircleOfTriangle(corners_[0], corners_[3], corners_[2],
-                                 &triangles_[1].circumcircle),
-    WP2_STATUS_INVALID_PARAMETER);
+      TryGetCircumcircleOfTriangle(corners_[0], corners_[1], corners_[3],
+                                   &triangles_[0].circumcircle) &&
+          TryGetCircumcircleOfTriangle(corners_[0], corners_[3], corners_[2],
+                                       &triangles_[1].circumcircle),
+      WP2_STATUS_INVALID_PARAMETER);
   return WP2_STATUS_OK;
 }
 
@@ -85,7 +92,9 @@ VertexIndexedColor Triangulation::GetVertex(
 
 //------------------------------------------------------------------------------
 
-struct Edge { vtx_t from, to; };
+struct Edge {
+  vtx_t from, to;
+};
 
 static WP2Status InsertEdge(const Edge& new_edge, Vector<Edge>& edges) {
   for (uint32_t i = 0; i < edges.size(); ++i) {
@@ -124,11 +133,10 @@ WP2Status Triangulation::Insert(const Vector<VertexIndexedColor>& vertices,
   }
 
   for (const Edge& edge : removed_edges) {
-    Triangle triangle = { new_vertex_index, edge.from, edge.to, Circle() };
-    if (TryGetCircumcircleOfTriangle(GetVertex(vertices, triangle.v0),
-                                     GetVertex(vertices, triangle.v1),
-                                     GetVertex(vertices, triangle.v2),
-                                     &triangle.circumcircle)) {
+    Triangle triangle = {new_vertex_index, edge.from, edge.to, Circle()};
+    if (TryGetCircumcircleOfTriangle(
+            GetVertex(vertices, triangle.v0), GetVertex(vertices, triangle.v1),
+            GetVertex(vertices, triangle.v2), &triangle.circumcircle)) {
       WP2_CHECK_ALLOC_OK(triangles_.push_back(triangle));
     }
   }

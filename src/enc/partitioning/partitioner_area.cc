@@ -20,15 +20,17 @@
 #include "src/enc/partitioning/partitioner_area.h"
 
 #include <algorithm>
-#include <numeric>
+#include <cassert>
+#include <cstdint>
+#include <limits>
 
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
 #include "src/common/progress_watcher.h"
 #include "src/dsp/math.h"
-#include "src/enc/analysis.h"
 #include "src/enc/partitioning/partition_score_func_area.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 

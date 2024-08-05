@@ -20,6 +20,7 @@
 #ifndef WP2_EXTRAS_AOM_UTILS_H_
 #define WP2_EXTRAS_AOM_UTILS_H_
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -70,28 +71,27 @@ struct QuantAV1 {
 };
 
 WP2Status CompressAV1(const ArgbBuffer& ref, const ParamsAV1& params,
-                      ArgbBuffer* const decoded, std::string* const out,
+                      ArgbBuffer* decoded, std::string* out,
                       double timing[2] = nullptr,
-                      std::vector<WP2::Rectangle>* const blocks = nullptr,
-                      std::vector<WP2::Rectangle>* const transforms = nullptr,
-                      QuantAV1* const quant = nullptr);
+                      std::vector<WP2::Rectangle>* blocks = nullptr,
+                      std::vector<WP2::Rectangle>* transforms = nullptr,
+                      QuantAV1* quant = nullptr);
 
 WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
-                       ArgbBuffer* const decoded, std::string* const out,
+                       ArgbBuffer* decoded, std::string* out,
                        double timing[2] = nullptr);
 
 // Decodes an AV1 (obu) bitstream.
 WP2Status DecodeAV1WithLibaom(const std::string& bitstream,
-                              ArgbBuffer* const decoded);
+                              ArgbBuffer* decoded);
 
 // Parses an option of libaom of the from "option-name=value", e.g. "aq-mode=1".
 // Sets 'option_enum' to the corresponding enum value for use with
 // 'aom_codec_control', and 'option_value' to the provided value.
 // Returns true on success, false and prints a message to stderr on error
 // (unknown option).
-WP2_NO_DISCARD bool ParseLibaomOption(const std::string& str,
-                                      int* const option_enum,
-                                      int* const option_value);
+WP2_NO_DISCARD bool ParseLibaomOption(const std::string& str, int* option_enum,
+                                      int* option_value);
 
 // Returns an "ivf" container header for an AV1 (obu) bitstream.
 std::string IvfStillImageHeader(uint32_t width, uint32_t height,

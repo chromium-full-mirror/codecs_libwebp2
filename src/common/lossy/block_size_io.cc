@@ -19,6 +19,21 @@
 
 #include "src/common/lossy/block_size_io.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
+#include "src/common/lossy/block_size.h"
+#include "src/common/symbols.h"
+#include "src/dec/symbols_dec.h"
+#include "src/enc/symbols_enc.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/front_mgr.h"
+#include "src/utils/split_iterator.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
+
 // if defined, record statistics about block size distribution
 // #define PRINT_STATS
 
@@ -282,4 +297,4 @@ WP2Status ReadBlockSplit(const SplitIteratorBase& it, SymbolReader* const sr,
 
 //------------------------------------------------------------------------------
 
-}   // namespace WP2
+}  // namespace WP2

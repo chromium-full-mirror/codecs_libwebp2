@@ -20,7 +20,9 @@
 #ifndef WP2_DEC_PREVIEW_PREVIEW_DEC_H_
 #define WP2_DEC_PREVIEW_PREVIEW_DEC_H_
 
-#include "src/common/preview/preview.h"
+#include <cstdint>
+
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -28,8 +30,8 @@ namespace WP2 {
 
 // Decompresses the preview from 'data' and draws it to the 'output_buffer'
 // which must be previously allocated to the desired dimensions.
-WP2Status DecodePreview(const uint8_t* const data, uint32_t data_size,
-                        ArgbBuffer* const output_buffer);
+WP2Status DecodePreview(const uint8_t* data, uint32_t data_size,
+                        ArgbBuffer* output_buffer);
 
 //------------------------------------------------------------------------------
 

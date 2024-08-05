@@ -21,15 +21,16 @@
 #define WP2_UTILS_PLANE_H_
 
 #include <algorithm>
-#include <cmath>
+#include <cassert>
+#include <cstdint>
 #include <cstring>
 
-#include "src/common/constants.h"
 #include "src/dsp/math.h"
 #include "src/utils/csp.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -79,7 +80,7 @@ class PlaneBase {
   bool IsEmpty() const { return w_ == 0 || h_ == 0; }
   bool IsView() const { return !is_private_; }
 
-  Rectangle AsRect() const { return {0, 0, w_, h_};}
+  Rectangle AsRect() const { return {0, 0, w_, h_}; }
   uint32_t w_ = 0, h_ = 0;
   size_t step_ = 0;
 
@@ -214,7 +215,8 @@ class Plane : public PlaneBase {
   }
 
   // Convert V src[] plane into plane's type T
-  template<typename V> void From(const V* src, size_t step, T offset = 0) {
+  template <typename V>
+  void From(const V* src, size_t step, T offset = 0) {
     for (uint32_t y = 0; y < h_; ++y) {
       T* const dst = Row(y);
       for (uint32_t x = 0; x < w_; ++x) dst[x] = (T)src[x] + offset;
@@ -222,7 +224,8 @@ class Plane : public PlaneBase {
     }
   }
   // Convert plane's type T into dst[] plane of type V
-  template<typename V> void To(V* dst, size_t step, T offset = 0) const {
+  template <typename V>
+  void To(V* dst, size_t step, T offset = 0) const {
     for (uint32_t y = 0; y < h_; ++y) {
       const T* const src = Row(y);
       for (uint32_t x = 0; x < w_; ++x) dst[x] = (V)(src[x] + offset);
@@ -372,17 +375,17 @@ class Plane : public PlaneBase {
   }
 
   // Computes sum of squared error. Implemented for 8u/16s.
-  WP2Status GetSSE(const Plane<T>& src, uint64_t* const score) const;
+  WP2Status GetSSE(const Plane<T>& src, uint64_t* score) const;
   // Computes SSIM. Implemented for 16s.
   WP2Status GetSSIM(const Plane<T>& src, BitDepth bit_depth,
-                    double* const score) const;
+                    double* score) const;
 
  protected:
   // Returns the sample at 'x, y' filtered horizontally by 'filter.t1' and
   // vertically by 'filter.t2'.
   T Sample(const SamplingTaps& filter, int32_t x, int32_t y) const {
-    const bool clipped = (x < filter.t1.radius ||
-                          x + filter.t1.radius >= (int32_t)w_);
+    const bool clipped =
+        (x < filter.t1.radius || x + filter.t1.radius >= (int32_t)w_);
     int32_t sum = 0;
     for (int32_t j = -filter.t2.radius; j <= filter.t2.radius; ++j) {
       const T* const data = &data_[Clamp(y + j, 0, (int32_t)h_ - 1) * step_];
@@ -409,13 +412,15 @@ class Plane : public PlaneBase {
     return ((77 * r + 149 * g + 29 * b + 128) >> 8);
   }
 
- public:     // minimal iterator
+ public:  // minimal iterator
   class iterator {
    public:
     iterator(const T* const ptr, uint32_t width, size_t step)
         : x_(0), y_(0), width_(width), step_(step), ptr_((T*)ptr) {}
     iterator operator++() {
-      if (++x_ == width_) { ptr_ += step_, x_ = 0, ++y_; }
+      if (++x_ == width_) {
+        ptr_ += step_, x_ = 0, ++y_;
+      }
       return *this;
     }
     bool operator!=(const iterator& i) const {
@@ -430,8 +435,7 @@ class Plane : public PlaneBase {
     T* ptr_;
   };
   iterator begin() const { return {data_, w_, step_}; }
-  const iterator end() const { return {data_ + h_ * step_, 0, 0}; }
-
+  iterator end() const { return {data_ + h_ * step_, 0, 0}; }
 
  protected:
   T* data_ = nullptr;
@@ -538,17 +542,16 @@ class YUVPlane {
   // Converts samples to Argb using the 'transform' and 'resize_if_needed'.
   // The 'upsample_if_needed' will convert 420->444 if not null and if needed.
   // 'dst' should be in WP2_Argb_32 or WP2_ARGB_32 format.
-  WP2Status Export(
-      const CSPTransform& transform, bool resize_if_needed,
-      ArgbBuffer* const dst,
-      const SamplingTaps* const upsample_if_needed = nullptr) const;
+  WP2Status Export(const CSPTransform& transform, bool resize_if_needed,
+                   ArgbBuffer* dst,
+                   const SamplingTaps* upsample_if_needed = nullptr) const;
 
   // Same as above but uses 'ccsp_to_rgb_matrix' and 'ccsp_to_rgb_shift' to
   // define the color space and precision of the input samples. See CSPTranform.
   // 'dst' should be in WP2_Argb_32 format.
-  WP2Status Export(
-      const CSPMtx& ccsp_to_rgb, bool resize_if_needed, ArgbBuffer* const dst,
-      const SamplingTaps* const upsample_if_needed = nullptr) const;
+  WP2Status Export(const CSPMtx& ccsp_to_rgb, bool resize_if_needed,
+                   ArgbBuffer* dst,
+                   const SamplingTaps* upsample_if_needed = nullptr) const;
 
   // Chroma up- and downsampling (4:2:0 <-> 4:4:4).
   // Some memory can be saved with 'use_views_for_ya' is 'src' is persistent.
@@ -591,6 +594,6 @@ void swap(YUVPlane& a, YUVPlane& b);
 
 //------------------------------------------------------------------------------
 
-}    // namespace WP2
+}  // namespace WP2
 
 #endif  // WP2_UTILS_PLANE_H_

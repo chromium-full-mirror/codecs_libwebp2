@@ -20,10 +20,12 @@
 #ifndef WP2_COMMON_PREVIEW_PREVIEW_H_
 #define WP2_COMMON_PREVIEW_PREVIEW_H_
 
+#include <cstdint>
+
 #include "src/common/color_precision.h"
 #include "src/common/progress_watcher.h"
 #include "src/utils/ans.h"
-#include "src/utils/ans_utils.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
 
@@ -47,8 +49,8 @@ static constexpr uint32_t kPreviewNoiseProba = 2;
 static constexpr uint32_t kPreviewTotalProba = 4;
 
 // 'cg' must be 0 because the palette is sorted by 'cg' before encoding.
-static constexpr AYCoCg19b kPreviewStartingColorPrediction =
-  { true, AYCoCg19b::kYCoCgMax >> 1, AYCoCg19b::kYCoCgMax >> 1, 0 };
+static constexpr AYCoCg19b kPreviewStartingColorPrediction = {
+    true, AYCoCg19b::kYCoCgMax >> 1, AYCoCg19b::kYCoCgMax >> 1, 0};
 
 // Fwd dcl.
 class UniformIntDistribution;
@@ -78,7 +80,7 @@ struct Circle {
   bool Contains(int64_t x, int64_t y) const;
 };
 
-// type for vertice index. If negative, refers to fixed corners.
+// Type for vertex index. If negative, refers to fixed corners.
 typedef int16_t vtx_t;
 struct Triangle {
   vtx_t v0, v1, v2;  // Vertex indices.
@@ -100,24 +102,20 @@ class Triangulation {
   const Vector<Triangle>& GetTriangles() const { return triangles_; }
 
   // Drawing calls.
-  WP2Status FillTriangles(const PreviewData& preview,
-                          ArgbBuffer* const canvas,
-                          uint32_t* const num_pixels) const;
+  WP2Status FillTriangles(const PreviewData& preview, ArgbBuffer* canvas,
+                          uint32_t* num_pixels) const;
 
-  WP2Status GetLoss(const PreviewData& preview,
-                    const ArgbBuffer& reference,
-                    float* const loss,
-                    uint32_t* const num_pixels) const;
+  WP2Status GetLoss(const PreviewData& preview, const ArgbBuffer& reference,
+                    float* loss, uint32_t* num_pixels) const;
   WP2Status GetPartialLoss(const PreviewData& preview,
                            const ArgbBuffer& reference,
-                           const Vector<Triangle>& triangles,
-                           float* const loss,
-                           uint32_t* const num_pixels) const;
+                           const Vector<Triangle>& triangles, float* loss,
+                           uint32_t* num_pixels) const;
   // For a given triangle, returns its vertices' colors that would best
   // approximate the content.
   WP2Status GetBestColors(const PreviewData& preview,
-                          const ArgbBuffer& reference,
-                          const Triangle& triangle, Argb32b colors[3]) const;
+                          const ArgbBuffer& reference, const Triangle& triangle,
+                          Argb32b colors[3]) const;
 
  protected:
   // sets up the two starting 'triangles_'.
@@ -146,10 +144,10 @@ class PreviewData {
  public:
   void Reset();
 
-  WP2Status Decode(ANSDec* const dec);
+  WP2Status Decode(ANSDec* dec);
   WP2Status Decode(const uint8_t data[], uint32_t size);
 
-  WP2Status Encode(ANSEnc* const enc) const;
+  WP2Status Encode(ANSEnc* enc) const;
 
  public:  // encoder-size generation / optimization of the preview
   // returns false in case of memory allocation failure
@@ -165,17 +163,17 @@ class PreviewData {
                      const ProgressRange& progress, bool log = false);
 
  protected:  // decoding I/O
-  WP2Status DecodePalette(ANSDec* const dec);
-  WP2Status DecodeVertices(ANSDec* const dec);
-  uint16_t DecodeColorIndex(ANSDec* const dec, ANSBinSymbol* const stats,
-                            uint16_t* const prediction);
+  WP2Status DecodePalette(ANSDec* dec);
+  WP2Status DecodeVertices(ANSDec* dec);
+  uint16_t DecodeColorIndex(ANSDec* dec, ANSBinSymbol* stats,
+                            uint16_t* prediction);
 
  protected:  // encoding I/O
-  WP2Status EncodePalette(ANSEnc* const enc) const;
-  WP2Status EncodeVertices(ANSEnc* const enc) const;
-  void EncodeColorIndex(uint16_t idx, ANSEnc* const enc,
-                        ANSBinSymbol* const stats,
-                        uint16_t* const prediction) const;
+  WP2Status EncodePalette(ANSEnc* enc) const;
+  WP2Status EncodeVertices(ANSEnc* enc) const;
+  void EncodeColorIndex(uint16_t idx, ANSEnc* enc,
+                        ANSBinSymbol* stats,
+                        uint16_t* prediction) const;
 
  protected:  // encoding
   // Removes least used colors until palette_ contains at most 'max_num_colors'.
@@ -222,7 +220,7 @@ class PreviewData {
   uint32_t grid_width_ = 0, grid_height_ = 0;
   Vector<VertexIndexedColor> vertices_;
   // color index of corners (order: top-left,top-right,bottom-left,bottom-right)
-  uint16_t corners_[4] = { 0 };
+  uint16_t corners_[4] = {0};
   Vector<AYCoCg19b> palette_;
   bool use_noise_ = false;
 };
@@ -235,7 +233,7 @@ class PreviewDataEnc : public PreviewData {
   explicit PreviewDataEnc(const ArgbBuffer& canvas) : canvas_(canvas) {}
 
   WP2Status ImportFrom(const PreviewData& data);
-  WP2Status ExportTo(PreviewData* const data) const;
+  WP2Status ExportTo(PreviewData* data) const;
   void Print() const;
 
  public:
@@ -246,17 +244,17 @@ class PreviewDataEnc : public PreviewData {
   WP2Status OptimizeColorIndices();
 
   // Returns true if a vertex is possibly duplicated.
-  bool MoveVertex(UniformIntDistribution* const rnd);
+  bool MoveVertex(UniformIntDistribution* rnd);
 
   // Vertex mutations.
-  WP2Status AddVertex(UniformIntDistribution* const rnd);
-  void RemoveVertex(UniformIntDistribution* const rnd);
-  void MoveColorIndex(UniformIntDistribution* const rnd);
+  WP2Status AddVertex(UniformIntDistribution* rnd);
+  void RemoveVertex(UniformIntDistribution* rnd);
+  void MoveColorIndex(UniformIntDistribution* rnd);
 
   // Color mutations.
-  WP2Status AddColor(UniformIntDistribution* const rnd);
-  WP2Status RemoveColor(UniformIntDistribution* const rnd);
-  void MoveColor(UniformIntDistribution* const rnd);
+  WP2Status AddColor(UniformIntDistribution* rnd);
+  WP2Status RemoveColor(UniformIntDistribution* rnd);
+  void MoveColor(UniformIntDistribution* rnd);
 
   float Score() const { return score_; }
   uint32_t Size() const { return num_bytes_; }
@@ -265,7 +263,7 @@ class PreviewDataEnc : public PreviewData {
   Triangulation triangulation_;
   const ArgbBuffer& canvas_;
   float score_;
-  float triangulation_loss_;   // ~distortion
+  float triangulation_loss_;  // ~distortion
   uint32_t num_bytes_;
 };
 

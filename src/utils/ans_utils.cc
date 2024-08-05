@@ -13,16 +13,23 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 //
-// Assymetric Numeral System helper functions.
+// Asymmetric Numeral System helper functions.
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include "src/utils/ans_utils.h"
 
 #include <algorithm>
-#include <cmath>
-#include <limits>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <numeric>
+
+#include "src/dsp/math.h"
+#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -130,9 +137,8 @@ float ANSCountsCost(const uint32_t* counts, uint32_t size) {
 // ANS vector storage.
 
 // Compute the bit cost when merging two stats.
-static inline uint32_t
-ComputeCost(const OptimizeArrayStorageStat* const s1,
-            const OptimizeArrayStorageStat* const s2) {
+static inline uint32_t ComputeCost(const OptimizeArrayStorageStat* const s1,
+                                   const OptimizeArrayStorageStat* const s2) {
   const int bit_diff = (s1->n_bits - s2->n_bits);
   int total_diff = bit_diff * ((bit_diff > 0) ? s2->count : -s1->count);
   // If there was only one value, by merging we lose the optimization that we
@@ -151,10 +157,11 @@ ComputeCost(const OptimizeArrayStorageStat* const s1,
 // with a smaller overall bit cost.
 void OptimizeArrayStorage(OptimizeArrayStorageStat* const stats,
                           size_t* const size_in, float overhead) {
-// TODO(vrabaud) include an effort parameter to choose between the two methods
-//               or at least, choose the slower one if size is small (e.g. < 5).
-// The first method gives a speedup of an order of magnitude for a compression
-// hit of less than 0.1%
+  // TODO(vrabaud) include an effort parameter to choose between the two methods
+  //               or at least, choose the slower one if size is small (e.g. <
+  //               5).
+  // The first method gives a speedup of an order of magnitude for a compression
+  // hit of less than 0.1%
   size_t size = *size_in;
 #if OPTIMIZE_ARRAY_STORAGE
   while (size > 1) {
@@ -231,13 +238,12 @@ void OptimizeArrayStorage(OptimizeArrayStorageStat* const stats,
   *size_in = size;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
 // ANSEncCounter
 
 float ANSEncCounter::GetCost() const { return cost_ + symbol_cost_; }
 
-float ANSEncCounter::GetCost(const ANSDictionaries&dicts) const {
+float ANSEncCounter::GetCost(const ANSDictionaries& dicts) const {
   float cost = cost_;
   for (const auto& d : dicts) {
     if (d != nullptr) cost += d->Cost();
@@ -398,8 +404,8 @@ WP2Status LoadMapping(ANSDec* const dec, uint32_t size, uint32_t range,
         if (k == 0 || n_bits_prev > n_bits_max) {
           n_bits = dec->ReadRValue(n_bits_max + 1, "n_bits");
         } else {
-           // If we know n_bits_prev is in [0:n_bits_max], we can save one bit
-           // as we know the value has to be different from before.
+          // If we know n_bits_prev is in [0:n_bits_max], we can save one bit
+          // as we know the value has to be different from before.
           n_bits = dec->ReadRValue(n_bits_max, "n_bits");
           if (n_bits >= n_bits_prev) ++n_bits;
         }
@@ -411,7 +417,7 @@ WP2Status LoadMapping(ANSDec* const dec, uint32_t size, uint32_t range,
           // For a depth of 0 bits, we know it is a 0.
           for (size_t i = 0; i < n; ++i) {
             mapping[k] = (k == 0) ? 0 : mapping[k - 1] + 1;
-           ++k;
+            ++k;
           }
         } else if (n == 1) {
           // If we only have one number, we didn't store the high order
@@ -468,8 +474,8 @@ WP2Status LoadMapping(ANSDec* const dec, uint32_t size, uint32_t range,
 }
 
 // Returns the effective reduced range of mapping values that are not trivial.
-static uint32_t GetEffectiveRange(const uint16_t* const mapping,
-                                  uint32_t size, uint32_t range) {
+static uint32_t GetEffectiveRange(const uint16_t* const mapping, uint32_t size,
+                                  uint32_t range) {
   uint32_t j = 0;
   for (uint32_t i = 0; i < size; ++i) {
     j = mapping[i] + 1;
@@ -572,16 +578,15 @@ static void StoreMappingHelper(const uint16_t* const mapping, size_t size,
         if (i == 0) {
           enc->PutRange(mapping[i], 0, range - num_left, "run_beg");
         } else {
-          enc->PutRange(mapping[i], mapping[i - 1] + 1,
-                        mapping[j] - num_left, "run_beg");
+          enc->PutRange(mapping[i], mapping[i - 1] + 1, mapping[j] - num_left,
+                        "run_beg");
         }
         --num_left;
         // Deal with the end runs.
         if (num_left > 0) {
           --j;
           enc->PutRange(mapping[j], mapping[i] + num_left,
-                        (i == 0) ? range - 1 : mapping[j + 1] - 1,
-                        "run_end");
+                        (i == 0) ? range - 1 : mapping[j + 1] - 1, "run_end");
           --num_left;
           // early-out to avoid empty calls to PutRange()
           if (mapping[i] + num_left + 1 == mapping[j]) break;
@@ -590,7 +595,7 @@ static void StoreMappingHelper(const uint16_t* const mapping, size_t size,
       break;
     }
     case MappingMethod::kStoreVector: {
-      // Store eveything as a list of tuples like in StoreVector.
+      // Store everything as a list of tuples like in StoreVector.
       // This method is usually good for many values in a big range.
       StoreVectorForMapping(mapping, size, range, stats, stats_size, enc);
       break;
@@ -634,9 +639,9 @@ static void StoreMappingHelper(const uint16_t* const mapping, size_t size,
 
 // stats[] stores number of bits, and numbers of consecutive values with
 // that bit depth.
-static uint32_t CollectOptimalStats(
-    const uint16_t* const mapping, size_t size, uint32_t range,
-    OptimizeArrayStorageStat* const stats) {
+static uint32_t CollectOptimalStats(const uint16_t* const mapping, size_t size,
+                                    uint32_t range,
+                                    OptimizeArrayStorageStat* const stats) {
   size_t stats_size = 0;
   uint16_t val_max = 0, val_min = 0;
   uint32_t range_left = range - size + 1;
@@ -689,12 +694,12 @@ float StoreMapping(const uint16_t* const mapping, size_t size, uint32_t range,
   // initial value.
   float cost_min = GetEffectiveRange(mapping, size, range);
   MappingMethod best_method = MappingMethod::kBit;
-  for (MappingMethod method : { MappingMethod::kRange,
-                                MappingMethod::kStoreVector,
-                                MappingMethod::kAdaptativeBit }) {
+  for (MappingMethod method :
+       {MappingMethod::kRange, MappingMethod::kStoreVector,
+        MappingMethod::kAdaptativeBit}) {
     ANSEncCounter counter;
-    StoreMappingHelper(mapping, size, range, stats, stats_size,
-                       method, &counter);
+    StoreMappingHelper(mapping, size, range, stats, stats_size, method,
+                       &counter);
     const float cost = counter.GetCost();
     if (cost < cost_min) {
       cost_min = cost;

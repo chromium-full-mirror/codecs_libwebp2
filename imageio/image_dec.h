@@ -20,9 +20,11 @@
 #ifndef WP2_IMAGEIO_IMAGE_DEC_H_
 #define WP2_IMAGEIO_IMAGE_DEC_H_
 
-#include "./file_format.h"
-#include "./imageio_util.h"
-#include "src/utils/plane.h"
+#include <cstddef>
+#include <cstdint>
+
+#include "imageio/file_format.h"
+#include "imageio/imageio_util.h"
 #include "src/wp2/base.h"
 
 #ifdef HAVE_CONFIG_H
@@ -33,13 +35,12 @@ namespace WP2 {
 
 // Tries to infer the image format. 'data_size' should be at least 12.
 // Returns UNSUPPORTED if format cannot be guessed safely.
-FileFormat GuessImageFormat(const uint8_t* const data, size_t data_size);
+FileFormat GuessImageFormat(const uint8_t* data, size_t data_size);
 
 // Decodes 'data' into 'buffer'. Image type (png, jpg etc.) is guessed from the
 // bitstream if 'format' is AUTO.
 // Returns WP2_STATUS_OK upon success.
-WP2Status ReadImage(const uint8_t* const data, size_t data_size,
-                    ArgbBuffer* const buffer,
+WP2Status ReadImage(const uint8_t* data, size_t data_size, ArgbBuffer* buffer,
                     FileFormat format = FileFormat::AUTO,
                     LogLevel log_level = LogLevel::DEFAULT);
 
@@ -47,7 +48,7 @@ WP2Status ReadImage(const uint8_t* const data, size_t data_size,
 // If 'file_size' is not null, the file's original size is returned.
 // Image type (png, jpg etc.) is guessed from the bitstream if 'format' is AUTO.
 // Returns WP2_STATUS_OK upon success.
-WP2Status ReadImage(const char* const file_path, ArgbBuffer* buffer,
+WP2Status ReadImage(const char* file_path, ArgbBuffer* buffer,
                     size_t* file_size = nullptr,
                     FileFormat format = FileFormat::AUTO,
                     LogLevel log_level = LogLevel::DEFAULT);

@@ -19,14 +19,26 @@
 //
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
+#include <cstdint>
 
+#include "src/common/global_params.h"
 #include "src/common/integral.h"
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/context.h"
 #include "src/common/lossy/residuals.h"
+#include "src/common/lossy/segment.h"
 #include "src/common/vdebug.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/enc/analysis.h"
-#include "src/enc/wp2_enc_i.h"
+#include "src/enc/block_enc.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/format_constants.h"
 
 // #define LOG_NOISE   // uncomment to print noise measurements
@@ -191,7 +203,7 @@ WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
       // Convert variance to a "risk" factor. In general, lower variance means
       // higher risk, because there is less detail and if you quantize too much
       // all the detail will be gone. However, very low variance is also low
-      // risk because the region is very smooth. So the function nmapping from
+      // risk because the region is very smooth. So the function mapping from
       // variance to risk is shaped like this: /\.
 
       // Variance that has the most risk. The risk decreases the farther away
@@ -259,8 +271,8 @@ WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
     segments[i].avg_lambda_ = Segment::kDefaultAvgLambda;
   }
   if (config.tune_perceptual) {
-    uint32_t counts[kMaxNumSegments] = { 0 };
-    uint32_t avg_cplx[kMaxNumSegments] = { 0 };
+    uint32_t counts[kMaxNumSegments] = {0};
+    uint32_t avg_cplx[kMaxNumSegments] = {0};
     for (uint32_t idx = 0; idx < map->smap_.size(); ++idx) {
       const uint32_t id = map->cluster_map_[map->smap_[idx]];
       counts[id] += 1;
@@ -278,7 +290,7 @@ WP2Status FindSegments(const YUVPlane& yuv, const EncoderConfig& config,
 WP2Status AssignGrainParams(const YUVPlane& yuv, const EncoderConfig& config,
                             GlobalParams* const gparams) {
   const FeatureMap* const map = gparams->features_;
-  Vector<Segment>* const segments = &gparams->segments_;   // shortcut
+  Vector<Segment>* const segments = &gparams->segments_;  // shortcut
   if (!config.store_grain) {
     for (auto& s : *segments) s.use_grain_ = false;
     return WP2_STATUS_OK;
@@ -348,8 +360,8 @@ uint8_t AssignSegmentId(const EncoderConfig& config,
   }
 
   if (block.IsSmall() || !gparams.explicit_segment_ids_) {
-    return SegmentIdPredictor::GetIdFromSize(
-        (uint32_t)gparams.segments_.size(), block.dim());
+    return SegmentIdPredictor::GetIdFromSize((uint32_t)gparams.segments_.size(),
+                                             block.dim());
   }
 
   const FeatureMap& map = *gparams.features_;
@@ -419,8 +431,7 @@ uint8_t AssignSegmentId(const EncoderConfig& config,
 // block.id_ must be assigned prior to calling this function
 static float AssignLambda(const EncoderConfig& config,
                           const GlobalParams& gparams,
-                          const Rectangle& padded_tile,
-                          const CodedBlock& cb) {
+                          const Rectangle& padded_tile, const CodedBlock& cb) {
   if (!config.tune_perceptual) return Segment::kDefaultAvgLambda;
 
   const FeatureMap& map = *gparams.features_;
@@ -446,8 +457,8 @@ static float AssignLambda(const EncoderConfig& config,
   // and we restrict to a reasonable [0.8, 1.4] range to avoid crazy cases.
   // The multiplier linearly depends on the other perceptual parameter 'sns'.
   const float multiplier = 10.f * config.sns / 100.f;
-  return Clamp(1.0f + multiplier * (avg_lambda - seg_lambda) / seg_lambda,
-               0.8f, 1.4f);
+  return Clamp(1.0f + multiplier * (avg_lambda - seg_lambda) / seg_lambda, 0.8f,
+               1.4f);
 }
 
 WP2Status AssignSegmentIds(const EncoderConfig& config,

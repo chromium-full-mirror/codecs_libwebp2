@@ -20,6 +20,7 @@
 #include "src/utils/wiener.h"
 
 #include <cmath>
+#include <cstddef>
 #include <utility>
 
 namespace WP2 {
@@ -51,7 +52,7 @@ bool LinearSolve(size_t n, double A[], double y[], float x[]) {
     }
   }
   // Backward substitution
-  for (size_t i = n; i-- > 0; ) {
+  for (size_t i = n; i-- > 0;) {
     if (fabs(A[i * n + i]) < kEpsilon) return false;
     double c = 0.;
     for (size_t j = i + 1; j < n; ++j) {
@@ -62,4 +63,4 @@ bool LinearSolve(size_t n, double A[], double y[], float x[]) {
   return true;
 }
 
-}    // namespace WP2
+}  // namespace WP2

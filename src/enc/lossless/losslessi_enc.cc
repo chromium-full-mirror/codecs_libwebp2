@@ -21,19 +21,29 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstdlib>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <string>
 
+#include "src/common/constants.h"
+#include "src/common/lossless/color_cache.h"
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
+#include "src/dsp/lossless/dspl.h"
 #include "src/dsp/lossless/encl_dsp.h"
+#include "src/dsp/math.h"
 #include "src/enc/lossless/backward_references_enc.h"
 #include "src/enc/lossless/histogram_enc.h"
 #include "src/enc/symbols_enc.h"
 #include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2L {
 
@@ -187,7 +197,7 @@ WP2Status StorePixels(uint32_t width, uint32_t height, uint32_t histo_bits,
                       EncodeInfo* const encode_info) {
   const uint32_t histo_xsize =
       histo_bits ? SubSampleSize(width, histo_bits) : 1;
-  const uint32_t tile_mask = (histo_bits == 0) ? 0 : ~((1u << histo_bits)-1);
+  const uint32_t tile_mask = (histo_bits == 0) ? 0 : ~((1u << histo_bits) - 1);
   // x and y trace the position in the image.
   uint32_t x = 0;
   uint32_t y = 0;

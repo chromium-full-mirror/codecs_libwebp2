@@ -13,14 +13,20 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 //
-// Assymetric Numeral System - encoding part
+// Asymmetric Numeral System - encoding part
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
 #ifndef WP2_UTILS_ANS_ENC_H_
 #define WP2_UTILS_ANS_ENC_H_
 
+#include <cassert>
+#include <cstdint>
+
 #include "src/utils/ans.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -76,8 +82,7 @@ class ANSDictionary : public WP2Allocable {
   // Returns whether this instance contains mostly the same data as 'other' and
   // thus is probably a clone.
   bool SeemsEquivalentTo(const ANSDictionary& other) const {
-    return (max_symbol_ == other.max_symbol_ &&
-            total_ == other.total_ &&
+    return (max_symbol_ == other.max_symbol_ && total_ == other.total_ &&
             total_quantized_ == other.total_quantized_ &&
             counts_.size() == other.counts_.size() &&
             quantized_counts_.size() == other.quantized_counts_.size() &&
@@ -100,7 +105,7 @@ class ANSDictionary : public WP2Allocable {
   // (0="default to ANS_LOG_TAB_SIZE")
   // Must be in [0,16] range.
 
-  ANSCodes infos_;    // used during final coding
+  ANSCodes infos_;  // used during final coding
 };
 
 //------------------------------------------------------------------------------
@@ -123,14 +128,14 @@ class ANSDictionaries : public VectorNoCtor<ANSDictionary*> {
   // Considering this ANSDictionaries to be an intact deep clone of 'original',
   // returns the equivalent of the 'dict_to_find' or null if none.
   ANSDictionary* GetEquivalent(const ANSDictionaries& original,
-                               const ANSDictionary* const dict_to_find) const;
+                               const ANSDictionary*  dict_to_find) const;
 
   // The dictionary is placed last, and can be immediately access using Back().
   WP2Status Add(uint32_t max_symbol);
 
   // Appends the dictionaries of 'in' into the invoking object.
   // As we are dealing with pointers, 'in' loses ownership and is cleared.
-  WP2Status AppendAndClear(ANSDictionaries* const in);
+  WP2Status AppendAndClear(ANSDictionaries*  in);
 
   // Finalize the dictionaries.
   WP2Status ToCodingTable();
@@ -145,7 +150,7 @@ class ANSAdaptiveBits : public VectorNoCtor<ANSBinSymbol> {
 // Class containing several ANSAdaptiveSymbol pointers.
 class ANSAdaptiveSymbols : public VectorNoCtor<ANSAdaptiveSymbol> {
  public:
-  WP2Status Add(uint32_t max_symbol, const uint16_t* const cdf,
+  WP2Status Add(uint32_t max_symbol, const uint16_t*  cdf,
                 uint16_t max_proba, bool resize_if_needed = true);
   WP2Status CopyFrom(const ANSAdaptiveSymbols& dicts);
 };
@@ -165,7 +170,7 @@ class ANSEncBase {
                           WP2_OPT_LABEL) = 0;
 
   // Appends an adaptive binary symbol 'bit', updating 'stats' afterward.
-  virtual uint32_t PutABit(uint32_t bit, ANSBinSymbol* const stats,
+  virtual uint32_t PutABit(uint32_t bit, ANSBinSymbol*  stats,
                            WP2_OPT_LABEL) = 0;
 
   // Appends a bool with a fifty-fifty probability. Takes one bit.
@@ -320,7 +325,7 @@ class ANSEnc : public ANSEncBase {
   WP2Status AppendTokens(const ANSEnc& enc, uint32_t start_token,
                          uint32_t n_tokens);
 
- public:   // overridden methods
+ public:  // overridden methods
   uint32_t PutBit(uint32_t bit, uint32_t num_zeros, uint32_t num_total,
                   WP2_OPT_LABEL) override {
     const uint32_t proba = (num_zeros << PROBA_BITS) / num_total;
@@ -379,12 +384,12 @@ class ANSEnc : public ANSEncBase {
 
   // internal PutXXX versions without label[]
   uint32_t PutBitInternal(uint32_t bit, uint32_t proba);
-  uint32_t PutABitInternal(uint32_t bit, ANSBinSymbol* const stats);
+  uint32_t PutABitInternal(uint32_t bit, ANSBinSymbol*  stats);
   // is_adaptive indicates whether the symbol is adaptive or not.
   void PutSymbolInternal(const ANSSymbolInfo& info, bool is_adaptive);
   uint32_t PutUValueInternal(uint32_t value, uint32_t bits);
   uint32_t PutRValueInternal(uint32_t value, uint32_t range);
-  template <class T>    // T must have a ::GetInfo(symbol)
+  template <class T>  // T must have a ::GetInfo(symbol)
   uint32_t PutSymbolInternal(uint32_t symbol, uint32_t max_symbol,
                              const T& dict, WP2_OPT_LABEL) {
     assert(symbol <= max_symbol);
@@ -401,8 +406,8 @@ class ANSEnc : public ANSEncBase {
   uint32_t PutDebugUValue(uint32_t value, uint32_t bits);
 #endif
 
-  template<typename ...Ts>
-  inline void Trace(const char* format, const char label[], Ts...extra) {
+  template <typename... Ts>
+  inline void Trace(const char* format, const char label[], Ts... extra) {
     (void)sizeof...(extra);
     (void)label;
     WP2Trace(format, debug_prefix_, label, extra...);
@@ -428,14 +433,14 @@ class ANSEnc : public ANSEncBase {
 
  protected:
   WP2Status status_;
-  uint32_t state_;          // state for the coder
+  uint32_t state_;  // state for the coder
 
-  BufferPage* pages_;       // paginated output
-  uint32_t num_pages_;      // number of pages (for a fast total_size eval)
-  uint8_t* buffer_;         // current write-buffer pointing to the last pages_
-  uint32_t buffer_pos_;     // write position, going down
-  bool NewBufferPage();     // allocate a new buffer page in pages_
-  void FreeBufferPages();   // clears the pages_
+  BufferPage* pages_;      // paginated output
+  uint32_t num_pages_;     // number of pages (for a fast total_size eval)
+  uint8_t* buffer_;        // current write-buffer pointing to the last pages_
+  uint32_t buffer_pos_;    // write position, going down
+  bool NewBufferPage();    // allocate a new buffer page in pages_
+  void FreeBufferPages();  // clears the pages_
 
   // Stored message, composed of "tokens" which can be bits, uvalues or symbols.
   // Pointer to the most recent (last) page of tokens. Use tokens_->prev_ to
@@ -443,14 +448,14 @@ class ANSEnc : public ANSEncBase {
   ANSTokenPage* tokens_;
   // total number of tokens in the message
   uint32_t nb_tokens_;
-  bool NewTokenPage();  // allocates a new token page in tokens_
+  bool NewTokenPage();    // allocates a new token page in tokens_
   void FreeTokenPages();  // clears the tokens_
 };
 
-void swap(ANSEnc& e1, ANSEnc&e2);
+void swap(ANSEnc& e1, ANSEnc& e2);
 
 //------------------------------------------------------------------------------
 
-}   // namespace WP2
+}  // namespace WP2
 
-#endif   // WP2_UTILS_ANS_ENC_H_
+#endif  // WP2_UTILS_ANS_ENC_H_

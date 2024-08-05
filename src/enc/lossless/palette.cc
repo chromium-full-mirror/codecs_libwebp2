@@ -20,13 +20,24 @@
 #include "src/enc/lossless/palette.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <numeric>
 
 #include "src/common/color_precision.h"
+#include "src/common/constants.h"
 #include "src/common/lossless/color_cache.h"
+#include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
+#include "src/dsp/math.h"
 #include "src/enc/lossless/losslessi_enc.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2L {
@@ -83,11 +94,10 @@ static void GreedyMinimizeDeltas(uint32_t num_colors, int16_t colors[],
 // position in the palette. If all have monotonic development, there is
 // no benefit to re-organize them greedily. A monotonic development would be
 // spotted in green-only situations (like lossy alpha) or gray-scale images.
-static bool HasNonMonotonousDeltas(const int16_t* const colors,
-                                   uint32_t num_colors) {
+static bool HasNonMonotonousDeltas(const int16_t* colors, uint32_t num_colors) {
   uint8_t diff_pos_bits = 0x00, diff_neg_bits = 0x00;
   const int16_t* prev = &colors[4 * 0];
-  const int16_t* cur =  &colors[4 * 1];
+  const int16_t* cur = &colors[4 * 1];
   while (cur != colors + 4 * num_colors) {
     for (uint32_t j = 1; j < 4; ++j) {
       const int16_t diff = (int16_t)cur[j] - (int16_t)prev[j];
@@ -139,7 +149,7 @@ static WP2Status SortColors(decltype(LexicographicComparison) comparator,
 
 template <typename T>
 uint32_t CountColors(const WP2::ArgbBuffer& pic, const T* src, bool exact,
-                     ColorCacheMap* const color_cache,
+                     ColorCacheMap* color_cache,
                      const uint32_t max_palette_size) {
   assert(pic.format() == WP2_Argb_32 || pic.format() == WP2_Argb_38 ||
          pic.format() == WP2_ARGB_32);
@@ -296,7 +306,7 @@ class InternalParams {
   uint32_t channel_max_;
   uint32_t num_channels_;
   uint32_t num_colors_;
-  const int16_t* const colors_;  // only used for Verbatim
+  const int16_t* colors_;  // only used for Verbatim
 
   // method-dependent:
   bool is_increasing_[4], is_decreasing_[4];
@@ -308,7 +318,7 @@ class InternalParams {
   WP2::Vector_u8 opposite_;
 };
 
-WP2Status InternalParams::StoreSigns(WP2::ANSEncBase* const bw) {
+WP2Status InternalParams::StoreSigns(WP2::ANSEncBase* bw) {
   // Store the signs.
   for (uint32_t c = 0; c < num_channels_; ++c) {
     if (c == 0 && !has_alpha_) {
@@ -347,7 +357,7 @@ WP2Status InternalParams::StoreSigns(WP2::ANSEncBase* const bw) {
   return bw->GetStatus();
 }
 
-WP2Status InternalParams::WriteVerbatim(WP2::ANSEncBase* const enc) const {
+WP2Status InternalParams::WriteVerbatim(WP2::ANSEncBase* enc) const {
   assert(num_colors_ <= kSmallPaletteLimit);
   uint32_t channel_max[4];
   for (uint32_t c = 0; c < num_channels_; ++c) {
@@ -376,7 +386,7 @@ WP2Status InternalParams::WriteVerbatim(WP2::ANSEncBase* const enc) const {
 //  - a random vector
 //  - a list of values in range [0:value] or [value:channel_max] depending on
 //    is_stored_as_above_
-WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
+WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* enc) {
   // Store the channels one by one.
   for (uint32_t c = has_alpha_ ? 0 : 1; c < num_channels_; ++c) {
     const uint16_t channel_max = WP2::FormatMax(format_, c);
@@ -389,7 +399,7 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
       // TODO(vrabaud): Check if we should stop here (when reaching the max
       //                and everything else is above).
       if (has_alpha_) {
-        alpha_value += is_stored_as_above_[0][i] ?  channel_diffs_[0][i]
+        alpha_value += is_stored_as_above_[0][i] ? channel_diffs_[0][i]
                                                  : -channel_diffs_[0][i];
         if (c > 0 && channel_prev > alpha_value && !exact_) {
           channel_prev = alpha_value;
@@ -429,7 +439,7 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
       channel_prev = diffs[0];
       for (uint32_t i = 1; i < num_colors_; ++i) {
         if (has_alpha_) {
-          alpha_value += (is_stored_as_above_[0][i]) ?  channel_diffs_[0][i]
+          alpha_value += (is_stored_as_above_[0][i]) ? channel_diffs_[0][i]
                                                      : -channel_diffs_[0][i];
           if (c > 0 && channel_prev > alpha_value && !exact_) {
             channel_prev = alpha_value;
@@ -453,9 +463,9 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* const enc) {
 }
 
 WP2Status InternalParams::WriteAsImage(const ProgressRange& progress,
-                                       WP2::ANSDictionaries* const dict,
-                                       Encoder* const encoder,
-                                       WP2::ANSEncBase* const enc) const {
+                                       WP2::ANSDictionaries* dict,
+                                       Encoder* encoder,
+                                       WP2::ANSEncBase* enc) const {
   // Compute the cost of storing the palette differences as an image.
   WP2::Vector_s16 tmp_palette;
   WP2_CHECK_ALLOC_OK(tmp_palette.resize(4 * num_colors_));
@@ -518,8 +528,9 @@ WP2Status InternalParams::Init(const int16_t colors[]) {
       is_decreasing_[c] &= (diff <= 0);
       // Store it above if it is indeed above or at the same value than
       // before but closer to channel_max_.
-      is_stored_as_above_[c][i] = (uint8_t)(
-          (diff > 0) || (diff == 0 && (int)channel_max_ - channel < channel));
+      is_stored_as_above_[c][i] =
+          (uint8_t)((diff > 0) ||
+                    (diff == 0 && (int)channel_max_ - channel < channel));
     }
     if (is_increasing_[c]) {
       std::fill(&is_stored_as_above_[c][0],
@@ -533,10 +544,8 @@ WP2Status InternalParams::Init(const int16_t colors[]) {
 }
 
 WP2Status Palette::TryPalette(float cost_header, WP2::Vector_s16& colors,
-                              const ProgressRange& progress,
-                              Encoder* const encoder,
-                              InternalParams* const params,
-                              bool also_as_image) {
+                              const ProgressRange& progress, Encoder* encoder,
+                              InternalParams* params, bool also_as_image) {
   bool is_better = false;
   WP2::ANSEncCounter bw;
   float cost;
@@ -579,7 +588,7 @@ WP2Status Palette::TryPalette(float cost_header, WP2::Vector_s16& colors,
 
 WP2Status Palette::FindBestMethod(const WP2::ArgbBuffer& pic,
                                   const ProgressRange& progress, Sorting type,
-                                  int effort, Encoder* const encoder) {
+                                  int effort, Encoder* encoder) {
   assert(type != Sorting::kUndefined);
   // Stop here if we have already sorted to the same type.
   if (type == sort_type_) {
@@ -677,7 +686,7 @@ class CoOccurrenceMatrix {
       }
     }
     // Find the index that is most frequently found adjacent to it.
-    const uint32_t* const beg = &mat_[*c1 * num_colors_ + 0];
+    const uint32_t* beg = &mat_[*c1 * num_colors_ + 0];
     *c2 = std::max_element(beg, beg + num_colors_) - beg;
     assert(*c1 != *c2);
   }
@@ -698,7 +707,7 @@ WP2Status BuildCoOccurrence(const WP2::ArgbBuffer& pic, const T* src,
   int16_t prev_pix[4] = {(int16_t)~src[0], (int16_t)~src[1], (int16_t)~src[2],
                          (int16_t)~src[3]};
   uint32_t prev_idx = 0;
-  const T* const src_ini = src;
+  const T* src_ini = src;
   (void)src_ini;
   for (uint32_t y = 0; y < pic.height(); ++y) {
     for (uint32_t x = 0; x < pic.width(); ++x) {
@@ -730,8 +739,8 @@ WP2Status BuildCoOccurrence(const WP2::ArgbBuffer& pic, const T* src,
 // Pinho and Antonio J. R. Neves.
 WP2Status Palette::SortModifiedZeng(const WP2::ArgbBuffer& pic,
                                     const ProgressRange& progress, int effort,
-                                    float cost_header, Encoder* const encoder,
-                                    InternalParams* const params) {
+                                    float cost_header, Encoder* encoder,
+                                    InternalParams* params) {
   // Fill the cache.
   ColorCacheMap color_cache;
   WP2_CHECK_STATUS(color_cache.Allocate(num_colors_));
@@ -829,9 +838,8 @@ WP2Status Palette::SortModifiedZeng(const WP2::ArgbBuffer& pic,
 }
 
 WP2Status Palette::SortLuminance(const ProgressRange& progress, int effort,
-                                 float cost_header,
-                                 Encoder* const encoder,
-                                 InternalParams* const params) {
+                                 float cost_header, Encoder* encoder,
+                                 InternalParams* params) {
   sort_type_ = Sorting::kLuminance;
   WP2_CHECK_STATUS(SortColors(LuminanceComparison, colors_));
   WP2_CHECK_STATUS(progress.AdvanceBy(0.5));
@@ -846,8 +854,8 @@ WP2Status Palette::SortLuminance(const ProgressRange& progress, int effort,
 }
 
 WP2Status Palette::SortMinimalSize(const ProgressRange& progress, int effort,
-                                   float cost_header, Encoder* const encoder,
-                                   InternalParams* const params) {
+                                   float cost_header, Encoder* encoder,
+                                   InternalParams* params) {
   sort_type_ = Sorting::kMinimalSize;
   // Advance progression by half the remaining range for each TryPalette() call.
   ProgressRange try_progress(progress, 0.5);
@@ -891,7 +899,7 @@ WP2Status Palette::SortMinimalSize(const ProgressRange& progress, int effort,
     // for slower efforts, we uniformly sample the range of weights
     // with increasing density.
     if (effort > 5 && full_optimize_) {
-      // we use more sub-divisions with higher effort
+      // we use more subdivisions with higher effort
       const int shift = std::min(effort - 4, 5);  // [1..5]
       // if 'effort' is high enough, or we already found that MethodImage
       // was better, try MethodImage again.
@@ -926,10 +934,9 @@ WP2Status Palette::SortMinimalSize(const ProgressRange& progress, int effort,
   return WP2_STATUS_OK;
 }
 
-WP2Status Palette::Write(const ProgressRange& progress,
-                         WP2::ANSEncBase* const enc,
-                         WP2::ANSDictionaries* const dicts_in,
-                         Encoder* const encoder) const {
+WP2Status Palette::Write(const ProgressRange& progress, WP2::ANSEncBase* enc,
+                         WP2::ANSDictionaries* dicts_in,
+                         Encoder* encoder) const {
   const WP2::ANSDebugPrefix prefix(enc, "palette");
   // Write the number of colors.
   WP2::WritePrefixCode(num_colors_, 2, max_palette_size_, /*prefix_size=*/0,

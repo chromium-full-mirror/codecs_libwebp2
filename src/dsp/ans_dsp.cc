@@ -18,6 +18,7 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <cassert>
+#include <cstdint>
 
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"

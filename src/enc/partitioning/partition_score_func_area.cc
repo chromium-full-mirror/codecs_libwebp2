@@ -20,19 +20,30 @@
 #include "src/enc/partitioning/partition_score_func_area.h"
 
 #include <algorithm>
-#include <array>
-#include <cmath>
-#include <limits>
-#include <numeric>
+#include <cassert>
+#include <cstdint>
 
-#include "src/common/integral.h"
+#include "src/common/global_params.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/block_size_io.h"
+#include "src/common/lossy/context.h"
+#include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
-#include "src/enc/analysis.h"
+#include "src/enc/block_enc.h"
+#include "src/enc/partitioning/partition_score_func.h"
+#include "src/enc/partitioning/partition_score_func_block.h"
 #include "src/enc/partitioning/partition_score_func_multi.h"
-#include "src/enc/partitioning/partitioner.h"
 #include "src/enc/partitioning/partitioner_multi.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/front_mgr.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -127,13 +138,13 @@ static float GetRelativeScore(const EncoderConfig& config, float ref_disto,
   if (disto > ref_disto || rate > ref_rate) return 0.f;  // No mercy.
   if (ref_disto > 0.f) {
     disto /= ref_disto;  // Normalize.
-  } else  {
+  } else {
     if (disto > 0.f) return 0.f;  // Discard, no way of assessing 'disto'/'ref'.
     disto = 1.f;  // Both values are 0 so set to 1 to signal it is equivalent.
   }
   if (ref_rate > 0.f) {
     rate /= ref_rate;  // Normalize.
-  } else  {
+  } else {
     if (rate > 0.f) return 0.f;  // Discard, no way of assessing 'rate'/'ref'.
     rate = 1.f;  // Both values are 0 so set to 1 to signal it is equivalent.
   }
@@ -160,9 +171,8 @@ WP2Status AreaScoreFunc::GetAreaDefaultScore(VectorNoCtor<Block>* const blocks,
     WP2_CHECK_ALLOC_OK(blocks->push_back(cb.blk()));
   }
 
-  WP2_CHECK_REDUCED_STATUS(
-    RegisterScoreForVDebug(BLK_LAST, partition, *score, default_disto_,
-                           default_rate_));
+  WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug(
+      BLK_LAST, partition, *score, default_disto_, default_rate_));
   return WP2_STATUS_OK;
 }
 
@@ -368,10 +378,9 @@ WP2Status SubAreaScoreFunc::ComputeScore(const Block& block,
     const float default_score =
         GetRelativeScore(*config_, default_block_disto_, default_block_rate_,
                          default_block_disto_, default_block_rate_);
-    WP2_CHECK_REDUCED_STATUS(
-        RegisterScoreForVDebug(default_partition.front().blk(),
-                               default_partition, default_score,
-                               default_block_disto_, default_block_rate_));
+    WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug(
+        default_partition.front().blk(), default_partition, default_score,
+        default_block_disto_, default_block_rate_));
 #endif  // WP2_REDUCE_BINARY_SIZE
     default_block_ = default_partition.front().blk();
   } else {
@@ -403,9 +412,8 @@ WP2Status SubAreaScoreFunc::ComputeScore(const Block& block,
         GetDistoRate(&area_remaining_blocks, &scorer_, &disto, &rate));
     *score = GetRelativeScore(*config_, default_block_disto_,
                               default_block_rate_, disto, rate);
-    WP2_CHECK_REDUCED_STATUS(
-        RegisterScoreForVDebug(block, area_remaining_blocks,
-                               *score, disto, rate));
+    WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug(
+        block, area_remaining_blocks, *score, disto, rate));
   }
   return WP2_STATUS_OK;
 }

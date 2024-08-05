@@ -20,7 +20,11 @@
 #ifndef DEC_FILTERS_ALPHA_FILTER_H_
 #define DEC_FILTERS_ALPHA_FILTER_H_
 
+#include <cstdint>
+
 #include "src/dec/filters/block_map_filter.h"
+#include "src/utils/plane.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 

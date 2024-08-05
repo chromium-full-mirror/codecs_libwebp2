@@ -17,7 +17,11 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include "./anim_image_dec.h"
+#include <cstdint>
+
+#include "imageio/anim_image_dec.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 #ifdef HAVE_CONFIG_H
 #include "src/wp2/config.h"
@@ -27,10 +31,10 @@
 #include <cstring>
 
 #ifdef WP2_HAVE_TIFF
+#include <tiff.h>
 #include <tiffio.h>
 
 #include "./imageio_util.h"
-#include "src/dsp/dsp.h"  // for WP2_WORDS_BIGENDIAN
 
 namespace {
 

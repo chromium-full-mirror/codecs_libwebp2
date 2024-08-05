@@ -78,7 +78,6 @@
 #endif
 
 #include <cstdint>
-#include <cstdio>
 
 namespace WP2 {
 
@@ -121,7 +120,6 @@ class LocalContext {
   bool error_ = false;
 
   void* inter_context_data_ = nullptr;
-
 
 #ifdef _WIN32
   // 1MB stack size is suggested in CreateFiber() documentation.

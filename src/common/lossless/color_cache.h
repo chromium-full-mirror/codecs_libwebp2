@@ -21,9 +21,10 @@
 #define WP2_COMMON_LOSSLESS_COLOR_CACHE_H_
 
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 
-#include "src/dsp/math.h"
+#include "src/utils/utils.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
 
@@ -31,11 +32,11 @@ namespace WP2L {
 
 // Returns true if the two colors are equal.
 template <typename T>
-static inline bool ColorEq(const T* const color1, const T* const color2) {
+static inline bool ColorEq(const T* color1, const T* color2) {
   return (std::memcmp(color1, color2, 4 * sizeof(T)) == 0);
 }
 template <typename T>
-static inline void ColorCopy(const T* const color1, T* const color2) {
+static inline void ColorCopy(const T* color1, T* color2) {
   std::memcpy(color2, color1, 4 * sizeof(T));
 }
 
@@ -52,10 +53,10 @@ class ColorCacheMap {
 
   // Returns whether the cache contains the value, and also gives back the index
   // accordingly.
-  bool Contains(const int16_t color[4], uint32_t* const value) const;
+  bool Contains(const int16_t color[4], uint32_t* value) const;
 
   // Copy the palette into a buffer.
-  void GetPalette(int16_t* const palette) const;
+  void GetPalette(int16_t* palette) const;
 
  private:
   struct Color {
@@ -86,17 +87,16 @@ class ColorCache : public WP2Allocable {
  public:
   virtual ~ColorCache() = default;
 
-  virtual void Lookup(uint32_t index, int16_t* const dest) const = 0;
+  virtual void Lookup(uint32_t index, int16_t* dest) const = 0;
 
   // Inserts the color in the cache. Returns true if the color was actually
   // inserted, false if it was already present. If false, sets index_ptr to the
   // index for this color *prior to inserting*.
-  virtual bool Insert(const int16_t color[4], uint32_t* const index_ptr) = 0;
+  virtual bool Insert(const int16_t color[4], uint32_t* index_ptr) = 0;
 
   // Returns whether the cache contains the value, and also gives back the index
   // accordingly.
-  virtual bool Contains(const int16_t color[4],
-                        uint32_t* const index_ptr) const = 0;
+  virtual bool Contains(const int16_t color[4], uint32_t* index_ptr) const = 0;
 
   // Returns the range of a color index given the current state of the cache
   // (e.g. number of colors in the cache).
@@ -126,10 +126,9 @@ class HashColorCache : public ColorCache {
   // Returns false in case of memory error.
   WP2_NO_DISCARD bool Allocate(uint32_t hash_bits);
 
-  void Lookup(uint32_t index, int16_t* const dest) const override;
-  bool Insert(const int16_t color[4], uint32_t* const index_ptr) override;
-  bool Contains(const int16_t color[4],
-                uint32_t* const index_ptr) const override;
+  void Lookup(uint32_t index, int16_t* dest) const override;
+  bool Insert(const int16_t color[4], uint32_t* index_ptr) override;
+  bool Contains(const int16_t color[4], uint32_t* index_ptr) const override;
   uint32_t IndexRange() const override;
   void Reset() override;
 
@@ -144,10 +143,9 @@ class FifoColorCache : public ColorCache {
   // Returns false in case of memory error.
   WP2_NO_DISCARD bool Allocate(uint32_t cache_bits);
 
-  void Lookup(uint32_t index, int16_t* const dest) const override;
-  bool Insert(const int16_t color[4], uint32_t* const index_ptr) override;
-  bool Contains(const int16_t color[4],
-                uint32_t* const index_ptr) const override;
+  void Lookup(uint32_t index, int16_t* dest) const override;
+  bool Insert(const int16_t color[4], uint32_t* index_ptr) override;
+  bool Contains(const int16_t color[4], uint32_t* index_ptr) const override;
   uint32_t IndexRange() const override;
   void Reset() override;
 
@@ -160,12 +158,11 @@ class FifoColorCache : public ColorCache {
 // Color cache that mixes two other caches.
 class HybridColorCache : public ColorCache {
  public:
-  void Init(ColorCache* const cache1, ColorCache* const cache2);
+  void Init(ColorCache* cache1, ColorCache* cache2);
 
-  void Lookup(uint32_t index, int16_t* const dest) const override;
-  bool Insert(const int16_t color[4], uint32_t* const index_ptr) override;
-  bool Contains(const int16_t color[4],
-                uint32_t* const index_ptr) const override;
+  void Lookup(uint32_t index, int16_t* dest) const override;
+  bool Insert(const int16_t color[4], uint32_t* index_ptr) override;
+  bool Contains(const int16_t color[4], uint32_t* index_ptr) const override;
   uint32_t IndexRange() const override;
   void Reset() override;
 

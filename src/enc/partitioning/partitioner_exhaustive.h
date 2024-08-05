@@ -20,16 +20,19 @@
 #ifndef WP2_ENC_PARTITIONER_EXHAUSTIVE_H_
 #define WP2_ENC_PARTITIONER_EXHAUSTIVE_H_
 
-#include "src/common/lossy/block.h"
+#include <array>
+#include <cstdint>
+
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/predictor.h"
-#include "src/common/symbols.h"
+#include "src/common/progress_watcher.h"
+#include "src/enc/partitioning/partition_score_func.h"
 #include "src/enc/partitioning/partition_score_func_tile.h"
 #include "src/enc/partitioning/partitioner.h"
-#include "src/enc/symbols_enc.h"
-#include "src/utils/csp.h"
+#include "src/utils/front_mgr.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {
@@ -45,20 +48,20 @@ class ExhaustivePartitioner : public Partitioner {
 
   WP2Status Init(const EncoderConfig& config, const YUVPlane& yuv,
                  const Rectangle& tile_rect,
-                 PartitionScoreFunc* const score_func) override;
+                 PartitionScoreFunc* score_func) override;
 
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks,
-                             Vector_u32* const splits) override;
+                             VectorNoCtor<Block>* blocks,
+                             Vector_u32* splits) override;
 
  private:
   // Finds the next valid partition. If 'found', returns its 'score'.
-  WP2Status GetNextPartitionScore(const ProgressRange& progress,
-                                  bool* const found, float* const score);
+  WP2Status GetNextPartitionScore(const ProgressRange& progress, bool* found,
+                                  float* score);
 
   // Pops blocks from the 'partition_' until a new path can be explored.
   // Returns false if none found or returns true and the 'next_block_size'.
-  bool FindNewBranch(BlockSize* const next_block_size);
+  bool FindNewBranch(BlockSize* next_block_size);
 
   TileScoreFunc* const tile_score_func_;  // Specific 'score_func_'.
 

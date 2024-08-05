@@ -20,11 +20,18 @@
 
 #include "src/common/global_params.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
 #include "src/common/constants.h"
+#include "src/common/lossy/predictor.h"
+#include "src/common/lossy/rnd_mtx.h"
 #include "src/common/lossy/segment.h"
+#include "src/utils/ans_utils.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
-#include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -76,7 +83,7 @@ WP2Status GlobalParams::Write(bool image_has_alpha, ANSEnc* const enc) const {
     bool write_alpha = maybe_use_lossy_alpha_;
     for (const Segment& s : segments_) {
       WP2_CHECK_STATUS(s.WriteHeader(enc, write_alpha, use_grain));
-      write_alpha = false;   // only for the first segment
+      write_alpha = false;  // only for the first segment
     }
     // TODO(skal): use some fixed-value probas
     enc->PutBool(use_rnd_mtx_, "rnd_mtx");  // TODO(skal): write num_mtx?
@@ -104,7 +111,8 @@ WP2Status GlobalParams::Write(bool image_has_alpha, ANSEnc* const enc) const {
 WP2Status GlobalParams::Read(bool image_has_alpha, ANSDec* const dec) {
   ANSDebugPrefix prefix(dec, "GlobalParams");
 
-  type_ = (Type)dec->ReadRValue(image_has_alpha ? GP_AV1 : GP_LAST, "gp_type");
+  type_ = static_cast<Type>(
+      dec->ReadRValue(image_has_alpha ? GP_AV1 : GP_LAST, "gp_type"));
 
   has_alpha_ = image_has_alpha && dec->ReadBool("has_alpha");
 
@@ -115,8 +123,8 @@ WP2Status GlobalParams::Read(bool image_has_alpha, ANSDec* const dec) {
     WP2_CHECK_STATUS(transf_.Read(dec));
     explicit_segment_ids_ = dec->ReadBool("explicit_segment_ids");
     // segments
-    partition_set_ =
-        (PartitionSet)dec->ReadRValue(NUM_PARTITION_SETS, "block_size");
+    partition_set_ = static_cast<PartitionSet>(
+        dec->ReadRValue(NUM_PARTITION_SETS, "block_size"));
     const uint32_t num_segments =
         dec->ReadRange(1, kMaxNumSegments, "num_segments_id");
     WP2_CHECK_ALLOC_OK(segments_.resize(num_segments));
@@ -143,7 +151,7 @@ WP2Status GlobalParams::Read(bool image_has_alpha, ANSDec* const dec) {
       segment.SetYUVBounds(transf_.GetYUVMin(), transf_.GetYUVMax());
       WP2_CHECK_STATUS(segment.ReadHeader(u_quant_offset_, v_quant_offset_,
                                           read_alpha, use_grain, dec));
-      read_alpha = false;   // only for the first segment
+      read_alpha = false;  // only for the first segment
     }
     use_rnd_mtx_ = dec->ReadBool("rnd_mtx");
     WP2_CHECK_STATUS(InitRndMtxSet());
@@ -236,4 +244,4 @@ void GlobalParams::Reset() {
   v_quant_offset_ = kDefaultQuantOffset;
 }
 
-}    // namespace WP2
+}  // namespace WP2

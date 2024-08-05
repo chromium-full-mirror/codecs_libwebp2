@@ -19,7 +19,6 @@
 #define WP2_COMMON_LOSSY_TRANSFORMS_H_
 
 #include "src/dsp/dsp.h"
-#include "src/utils/utils.h"
 
 namespace WP2 {
 

@@ -17,12 +17,22 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include <algorithm>
-#include <cstdio>
+#include "src/common/lossy/quant_mtx.h"
 
-#include "src/common/lossy/block.h"
-#include "src/common/lossy/block_size_io.h"
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+
+#include "src/common/constants.h"
+#include "src/common/lossy/block_size.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -34,8 +44,8 @@ static constexpr uint32_t kZones[kNumQuantZones] = {0, 1, 4, 16, 32};
 
 // Linearly interpolate values[] at point 'n' in interval [s, e]
 // TODO(skal): use fixed-point precision
-static uint32_t Interpolate(const uint16_t values[],
-                            uint32_t s, uint32_t e, uint32_t n) {
+static uint32_t Interpolate(const uint16_t values[], uint32_t s, uint32_t e,
+                            uint32_t n) {
   const float v = 1.f * (values[0] * (e - n) + values[1] * (n - s)) / (e - s);
   return (uint32_t)std::lrintf(v);
 }
@@ -157,25 +167,26 @@ constexpr uint8_t FindIdxLUT::kArr[];
 //  clang-format off
 // iQs[i] = (1<<16) / Qs[i], adjusted to maximize precision
 static const uint16_t iQs[kQFactorMax + 1] = {
-  5462, 5042, 4682, 4370, 4096, 3856, 3641, 3450, 3277, 3121, 2979, 2850, 2731,
-  2622, 2521, 2428, 2341, 2260, 2185, 2115, 2048, 1986, 1928, 1873, 1821, 1772,
-  1725, 1681, 1639, 1599, 1561, 1525, 1490, 1457, 1425, 1395, 1366, 1338, 1311,
-  1286, 1261, 1237, 1214, 1192, 1171, 1150, 1130, 1111, 1093, 1075, 1058, 1041,
-  1024, 1009,  993,  979,  964,  937,  924,  911,  898,  886,  874,  863,  852,
-   841,  820,  810,  800,  790,  781,  763,  754,  745,  729,  721,  713,  698,
-   690,  676,  669,  662,  649,  643,  631,  619,  613,  602,  596,  586,  575,
-   570,  561,  551,  542,  538,  529,  521,  512,  505,  497,  490,  482,  475,
-   469,  462,  456,  449,  440,  432,  429,  423,  415,  410,  405,  395,  393,
-   386,  379,  375,  369,  365,  359,  353,  347,  344,  338,  333,  328,  323,
-   319,  314,  310,  305,  300,  296,  292,  287,  283,  278,  275,  270,  267,
-   263,  259,  255,  252,  248,  244,  241,  237,  233,  230,  226,  223,  220,
-   217,  213,  211,  207,  204,  201,  198,  196,  193,  189,  187,  184,  182,
-   179,  176,  173,  171,  169,  166,  164,  161,  159,  157,  154,  152,  150,
-   147,  145,  143,  141,  139,  137,  135,  133,  131,  128,  127,  125,  123,
-   122,  120,  118,  116,  115,  113,  111,  110,  108,  107,  105,  103,  102,
-   100,   99,   97,   96,   95,   93,   92,   91,   89,   88,   87,   85,   84,
-    83,   82,   81,   79,   78,   77,   76,   75,   74,   73,   72,   71,   69,
-    68,   67,   66,   64,
+    5462, 5042, 4682, 4370, 4096, 3856, 3641, 3450, 3277, 3121, 2979, 2850,
+    2731, 2622, 2521, 2428, 2341, 2260, 2185, 2115, 2048, 1986, 1928, 1873,
+    1821, 1772, 1725, 1681, 1639, 1599, 1561, 1525, 1490, 1457, 1425, 1395,
+    1366, 1338, 1311, 1286, 1261, 1237, 1214, 1192, 1171, 1150, 1130, 1111,
+    1093, 1075, 1058, 1041, 1024, 1009, 993,  979,  964,  937,  924,  911,
+    898,  886,  874,  863,  852,  841,  820,  810,  800,  790,  781,  763,
+    754,  745,  729,  721,  713,  698,  690,  676,  669,  662,  649,  643,
+    631,  619,  613,  602,  596,  586,  575,  570,  561,  551,  542,  538,
+    529,  521,  512,  505,  497,  490,  482,  475,  469,  462,  456,  449,
+    440,  432,  429,  423,  415,  410,  405,  395,  393,  386,  379,  375,
+    369,  365,  359,  353,  347,  344,  338,  333,  328,  323,  319,  314,
+    310,  305,  300,  296,  292,  287,  283,  278,  275,  270,  267,  263,
+    259,  255,  252,  248,  244,  241,  237,  233,  230,  226,  223,  220,
+    217,  213,  211,  207,  204,  201,  198,  196,  193,  189,  187,  184,
+    182,  179,  176,  173,  171,  169,  166,  164,  161,  159,  157,  154,
+    152,  150,  147,  145,  143,  141,  139,  137,  135,  133,  131,  128,
+    127,  125,  123,  122,  120,  118,  116,  115,  113,  111,  110,  108,
+    107,  105,  103,  102,  100,  99,   97,   96,   95,   93,   92,   91,
+    89,   88,   87,   85,   84,   83,   82,   81,   79,   78,   77,   76,
+    75,   74,   73,   72,   71,   69,   68,   67,   66,   64,
 };
 // clang-format on
 
@@ -219,8 +230,7 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
     const uint32_t qy = qramp[j];
     for (uint32_t i = j; i < 32; ++i) {
       const uint32_t qx = qramp[i];
-      const uint32_t q_xy =
-          (i == 0 && j == 0) ? q_dc : ((qx + qy + 1) >> 1);
+      const uint32_t q_xy = (i == 0 && j == 0) ? q_dc : ((qx + qy + 1) >> 1);
       const uint32_t q_idx = FindIdx(q_xy, q_scale);
       // Matrix is symmetric.
       const uint32_t idx1 = i + j * WP2QStride;
@@ -236,7 +246,7 @@ void QuantMtx::Init(uint32_t max_residual, float q_scale,
     const uint32_t W = TrfWidth[tdim], H = TrfHeight[tdim];
     const uint32_t max_dc_res =
         WP2Quantize16b((uint32_t)(max_residual * std::sqrt(W * H) + .5), IQ0,
-                                  (1u << WP2QBits) - 1u);
+                       (1u << WP2QBits) - 1u);
     // Use 'floor' rounding, since (1<<16)-1 must strictly not be overflowed.
     const uint32_t max_dc_16b = WP2Quantize16b((1 << 16) - 1, IQ0, /*bias=*/0);
     max_abs_res_dc[tdim] = std::min({kMaxDcValue, max_dc_res, max_dc_16b});
@@ -270,8 +280,8 @@ void QuantMtx::Quantize(const int32_t residuals[], TrfSize dim,
       // a form of unexpected quantization that happens at high quality (but
       // skal disagrees).
       fprintf(stderr,
-              "WARNING!! Clipping occured. Clipped #%d value %d to %d\n",
-              i, v, max_v);
+              "WARNING!! Clipping occurred. Clipped #%d value %d to %d\n", i, v,
+              max_v);
     }
   }
 #endif
@@ -285,8 +295,8 @@ void QuantMtx::Quantize(const int32_t residuals[], TrfSize dim,
         Clamp<int16_t>(coeffs[i], -(int16_t)kMaxCoeffValue, kMaxCoeffValue);
   }
   // TODO(skal): merge the clamping to kMaxCoeffValue into WP2Dequantize()
-  WP2Dequantize(coeffs, dequants, dequantized_coeffs,
-                TrfWidth[dim], TrfHeight[dim], *num_coeffs);
+  WP2Dequantize(coeffs, dequants, dequantized_coeffs, TrfWidth[dim],
+                TrfHeight[dim], *num_coeffs);
 }
 
 int16_t QuantMtx::DCError(int32_t DC, TrfSize dim) const {
@@ -312,4 +322,4 @@ void QuantMtx::Print() const {
 
 //------------------------------------------------------------------------------
 
-}    // namespace WP2
+}  // namespace WP2

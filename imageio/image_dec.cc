@@ -17,7 +17,7 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include "./image_dec.h"
+#include "imageio/image_dec.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -25,7 +25,11 @@
 #include <cstdlib>
 #include <string>
 
-#include "./anim_image_dec.h"
+#include "imageio/anim_image_dec.h"
+#include "imageio/file_format.h"
+#include "imageio/imageio_util.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 

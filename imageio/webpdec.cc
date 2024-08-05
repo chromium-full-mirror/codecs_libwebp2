@@ -17,18 +17,22 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <cstdint>
 #include <cstdio>
 
-#include "./anim_image_dec.h"
+#include "imageio/anim_image_dec.h"
 
 #ifdef HAVE_CONFIG_H
 #include "wp2/config.h"
 #endif
 
 #ifdef WP2_HAVE_WEBP
-#include "./imageio_util.h"
+#include "imageio/imageio_util.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "webp/decode.h"
 #include "webp/demux.h"
+#include "webp/mux_types.h"
 
 namespace {
 

@@ -20,11 +20,24 @@
 #ifndef WP2_ENC_BLOCK_ENC_H_
 #define WP2_ENC_BLOCK_ENC_H_
 
+#include <cstdint>
+#include <memory>
+#include <string>
+
 #include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
-#include "src/common/lossy/predictor.h"
-#include "src/wp2/encode.h"
 #include "src/common/lossy/context.h"
+#include "src/common/lossy/predictor.h"
+#include "src/common/lossy/quant_mtx.h"
+#include "src/common/lossy/transforms.h"
+#include "src/common/symbols.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/debug.h"
+#include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -95,7 +108,7 @@ struct BlockRates {
 
 //------------------------------------------------------------------------------
 
-// Class containing several SymbolCounters for re-use (to avoid too many
+// Class containing several SymbolCounters for reuse (to avoid too many
 // mallocs).
 class Counters : public WP2Allocable {
  public:
@@ -144,11 +157,11 @@ class CodedBlock : public CodedBlockBase {
                                     uint32_t tile_pos_x, uint32_t tile_pos_y,
                                     bool has_alpha, const QuantMtx& quant_u,
                                     const QuantMtx& quant_v,
-                                    Counters* const counters);
+                                    Counters* counters);
 
   // Subtracts the 'prediction' from 'in_' and stores the residuals in 'res'.
   void GetResiduals(Channel channel, uint32_t tf_i, const Plane16& prediction,
-                    BlockCoeffs16* const res) const;
+                    BlockCoeffs16* res) const;
 
   // Applies the TransformPair to 'res', quantizes the 'coeffs_' and
   // reconstructs the pixels to 'out_' using the 'prediction'.
@@ -159,9 +172,8 @@ class CodedBlock : public CodedBlockBase {
                                const Segment& segment, Channel channel,
                                uint32_t tf_i, bool reduced_transform,
                                const Plane16& prediction,
-                               const BlockCoeffs16* const res,
-                               BlockCoeffs16* const tmp,
-                               Counters* const counters);
+                               const BlockCoeffs16* res, BlockCoeffs16* tmp,
+                               Counters* counters);
 
   // Predicts, quantizes and reconstructs channel 'channel'. If
   // 'reduced_transform' is true, 2x downsampling of residuals is performed.
@@ -169,27 +181,27 @@ class CodedBlock : public CodedBlockBase {
   // ... the given sub transform 'tf_i'
   void Quantize(const EncoderConfig& config, const BlockContext& context,
                 const Segment& segment, Channel channel, uint32_t tf_i,
-                bool reduced_transform, Counters* const counters);
+                bool reduced_transform, Counters* counters);
   // ... all sub transforms
   void QuantizeAll(const EncoderConfig& config, const BlockContext& context,
                    const Segment& segment, Channel channel,
-                   bool reduced_transform, Counters* const counters);
+                   bool reduced_transform, Counters* counters);
   // ... all sub transforms except the first one (noop if there is only one)
   void QuantizeAllButFirst(const EncoderConfig& config,
                            const BlockContext& context, const Segment& segment,
                            Channel channel, bool reduced_transform,
-                           Counters* const counters);
+                           Counters* counters);
 
   // Reconstructs 'channel' from dequantized residuals 'res' and 'prediction'
   // to 'out_'. 'prediction' can also point to 'out_' or be empty.
   // Upon return, res[] contains the inverse-transformed coeffs.
   void Reconstruct(Channel channel, uint32_t tf_i, bool reduced_transform,
-                   BlockCoeffs16* const res,
+                   BlockCoeffs16* res,
                    const Plane16& prediction = Plane16()) const;
 
   // Calls the base method and store some extra info
   // in 'blk'. Not a virtual.
-  void ToBlockInfo(bool use_aom_coeffs, BlockInfo* const blk) const;
+  void ToBlockInfo(bool use_aom_coeffs, BlockInfo* blk) const;
 
   // Returns the sum of square error between 'p_in_' and 'p_out_' for the pixels
   // inside the block (padded).
@@ -201,20 +213,20 @@ class CodedBlock : public CodedBlockBase {
 
   // Returns an estimation of the number of bits necessary to encode the
   // predictor modes.
-  float PredictorRate(Channel channel, SymbolCounter* const counter) const;
+  float PredictorRate(Channel channel, SymbolCounter* counter) const;
 
   // Returns an estimation of the number of bits necessary to encode the
   // transform.
-  float TransformRate(Channel channel, SymbolCounter* const counter) const;
+  float TransformRate(Channel channel, SymbolCounter* counter) const;
 
   // Returns an estimation of the number of bits necessary to encode the
   // segment id.
   float SegmentIdRate(const BlockContext& context,
-                      SymbolCounter* const counter) const;
+                      SymbolCounter* counter) const;
 
   // Estimated cost in bits of storing residuals for the given channel.
   float ResidualRate(const BlockContext& context, Channel channel,
-                     uint32_t num_channels, SymbolCounter* const counter) const;
+                     uint32_t num_channels, SymbolCounter* counter) const;
 
   // Pseudo-Visual debug: force the split_tf, tf or pred of the block.
   enum class SplitTf { kForcedUnsplit, kForcedSplit, kUnknown };
@@ -235,7 +247,7 @@ class CodedBlock : public CodedBlockBase {
   void StoreOriginalResiduals(
       const EncoderConfig& config, uint32_t tile_pos_x, uint32_t tile_pos_y,
       int16_t original_res[kMaxNumTransformsPerBlock][kMaxBlockSizePix2],
-      Plane16* const dst_plane) const;
+      Plane16* dst_plane) const;
   // Visual debug: stores prediction scores
   void StorePredictionScore(const EncoderConfig& config,
                             const Rectangle& tile_rect, Channel channel,
@@ -246,55 +258,50 @@ class CodedBlock : public CodedBlockBase {
   // Visual debug: stores information around the chroma subsampling decision.
   WP2Status Store420Scores(const EncoderConfig& config, uint32_t pos_x,
                            uint32_t pos_y, float lambda_u, float lambda_v,
-                           bool reduced, uint32_t disto,
-                           float rate_u, float rate_v);
+                           bool reduced, uint32_t disto, float rate_u,
+                           float rate_v);
   enum class Debug420Decision { k444EarlyExit, k444, k420 };
   WP2Status Store420Decision(const EncoderConfig& config, uint32_t pos_x,
                              uint32_t pos_y, Debug420Decision decision) const;
 
   // Visual debug: store lambda multiplier map.
-  WP2Status StoreLambdaMult(const EncoderConfig& config,
-                            uint32_t pos_x, uint32_t pos_y) const;
+  WP2Status StoreLambdaMult(const EncoderConfig& config, uint32_t pos_x,
+                            uint32_t pos_y) const;
 
   // Visual debug: stores propagated error or new error for U/V error diffusion.
   void StoreErrorDiffusion(const EncoderConfig& config, uint32_t tile_x,
-                           uint32_t tile_y, Plane16* const dst_plane) const;
+                           uint32_t tile_y, Plane16* dst_plane) const;
 
   // Visual debug: stores raw (unquantized) residuals after ideal chroma from
   // luma prediction.
   void StoreBestCflResiduals(Channel channel, int16_t yuv_min, int16_t yuv_max,
-                             Plane16* const dst_plane,
-                             std::string* const debug_str) const;
+                             Plane16* dst_plane, std::string* debug_str) const;
 
   // Visual debug: stores the best possible prediction of the given channel,
   // assuming we could transmit the best slope/bias instead of deducing them
   // from context.
   void StoreBestCflPrediction(Channel channel, int16_t yuv_min, int16_t yuv_max,
-                              Plane16* const dst_plane,
-                              std::string* const debug_str) const;
+                              Plane16* dst_plane, std::string* debug_str) const;
   // Visual debug: stores the best slope for Chroma from luma ('a' in 'chroma =
   // a * luma + b'), after doing a linear regression between the output luma and
   // input chroma.
   void StoreBestCflSlope(Channel channel, int16_t yuv_min, int16_t yuv_max,
-                         Plane16* const dst_plane,
-                         std::string* const debug_str) const;
+                         Plane16* dst_plane, std::string* debug_str) const;
   // Visual debug: stores the best intercept for Chroma from luma ('b' in
   // 'chroma = a * luma + b'), after doing a linear regression between the
   // output luma and input chroma.
   void StoreBestCflIntercept(Channel channel, int16_t yuv_min, int16_t yuv_max,
-                             Plane16* const dst_plane,
-                             std::string* const debug_str) const;
+                             Plane16* dst_plane, std::string* debug_str) const;
 
  private:
   void CflLinearRegression(Channel channel, int16_t yuv_min, int16_t yuv_max,
-                           float* const a, float* const b,
-                           std::string* const debug_str) const;
+                           float* a, float* b, std::string* debug_str) const;
 
  public:
   // Input and output samples must be views of buffers external to CodedBlock
   // pointing to the rectangle covered by 'blk_'. Except for 'predict_from_',
   // they will not be accessed outside of these bounds.
-  YUVPlane in_;            // source samples (input), within blk_
+  YUVPlane in_;  // source samples (input), within blk_
 
   float pred_scores_[4] = {0};  // per channel, only available during encoding
 
@@ -431,20 +438,21 @@ struct BlockModes {
 WP2Status OptimizeModes(const EncoderConfig& config, const Rectangle& tile_rect,
                         Channel channel, const Predictors& preds,
                         const BlockModes& m, const BlockContext& context,
-                        CodedBlock* const cb, Counters* const counters,
-                        BlockScorer* const scorer);
+                        CodedBlock* cb, Counters* counters,
+                        BlockScorer* scorer);
 
 // Calls OptimizeModes() and DecideChromaSubsampling() then QuantizeAll().
-WP2Status OptimizeModesChroma(
-    const EncoderConfig& config, const Rectangle& tile_rect, bool has_alpha,
-    const FrontMgrBase& mgr, const Predictors& preds,
-    ChromaSubsampling chroma_subsampling, const BlockModes& modes,
-    const BlockContext& context, CodedBlock* const cb, Counters* const counters,
-    DCDiffusionMap* const dc_error_u, DCDiffusionMap* const dc_error_v,
-    BlockScorer* const scorer);
+WP2Status OptimizeModesChroma(const EncoderConfig& config,
+                              const Rectangle& tile_rect, bool has_alpha,
+                              const FrontMgrBase& mgr, const Predictors& preds,
+                              ChromaSubsampling chroma_subsampling,
+                              const BlockModes& modes,
+                              const BlockContext& context, CodedBlock* cb,
+                              Counters* counters, DCDiffusionMap* dc_error_u,
+                              DCDiffusionMap* dc_error_v, BlockScorer* scorer);
 
 //------------------------------------------------------------------------------
 
-}    // namespace WP2
+}  // namespace WP2
 
-#endif  /* WP2_ENC_BLOCK_H_ */
+#endif /* WP2_ENC_BLOCK_H_ */

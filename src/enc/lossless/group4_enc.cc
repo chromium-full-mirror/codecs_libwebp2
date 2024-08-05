@@ -18,10 +18,22 @@
 //
 // Author: Vincent Rabaud (vrabaud@google.com)
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <cstdlib>
+
+#include "src/common/constants.h"
 #include "src/common/lossless/color_cache.h"
+#include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/symbols_enc.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/ans_utils.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2L {
 

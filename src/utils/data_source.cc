@@ -21,6 +21,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
 
 namespace WP2 {
 
@@ -41,13 +43,9 @@ size_t DataSource::GetNumNextBytes() const {
   return num_available_bytes_ - std::min(num_available_bytes_, num_read_bytes_);
 }
 
-size_t DataSource::GetNumReadBytes() const {
-  return num_read_bytes_;
-}
+size_t DataSource::GetNumReadBytes() const { return num_read_bytes_; }
 
-size_t DataSource::GetNumDiscardedBytes() const {
-  return num_discarded_bytes_;
-}
+size_t DataSource::GetNumDiscardedBytes() const { return num_discarded_bytes_; }
 
 void DataSource::MarkNumBytesAsRead(size_t num_bytes) {
   num_read_bytes_ += num_bytes;
@@ -83,7 +81,7 @@ const uint8_t* DataSource::DataHandle::GetBytes() const {
   return nullptr;
 }
 
-bool DataSource::TryGetNext(size_t num_bytes, DataHandle* const data_handle) {
+bool DataSource::TryGetNext(size_t num_bytes, DataHandle* data_handle) {
   const uint8_t* data_pointer;
   if (TryGetNext(num_bytes, &data_pointer)) {
     const size_t offset =
@@ -94,7 +92,7 @@ bool DataSource::TryGetNext(size_t num_bytes, DataHandle* const data_handle) {
   return false;
 }
 
-bool DataSource::TryReadNext(size_t num_bytes, DataHandle* const data_handle) {
+bool DataSource::TryReadNext(size_t num_bytes, DataHandle* data_handle) {
   if (TryGetNext(num_bytes, data_handle)) {
     MarkNumBytesAsRead(num_bytes);
     return true;

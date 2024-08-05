@@ -19,12 +19,21 @@
 
 #include "src/dec/filters/intertile_filter.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
+#include "src/common/global_params.h"
 #include "src/common/vdebug.h"
+#include "src/dec/filters/block_map_filter.h"
 #include "src/dec/filters/deblocking_filter.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/dec/tile_dec.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -141,10 +150,10 @@ void IntertileFilter::DeblockHorizontally(uint32_t num_rows) {
       const BlockFeatures* q_features =
           q_tile.block_map.GetRow(y_in_tile / kMinBlockSizePix);
 
-      // For each pixel along the edge = for each line accross the edge:
+      // For each pixel along the edge = for each line across the edge:
       uint32_t line = y_in_tile;
       while (line < height) {
-        // Number of lines accross the edge sharing the same block features.
+        // Number of lines across the edge sharing the same block features.
         const uint32_t num_same_lines =
             std::min(height - line, kMinBlockSizePix - line % kMinBlockSizePix);
 
@@ -217,10 +226,10 @@ void IntertileFilter::DeblockVertically(uint32_t num_rows) {
 
         const uint32_t width = std::min(tile_width, canvas_.Y.w_ - x);
 
-        // For each pixel along the edge = for each line accross the edge:
+        // For each pixel along the edge = for each line across the edge:
         uint32_t line = 0;
         while (line < width) {
-          // Number of lines accross the edge sharing the same block features.
+          // Number of lines across the edge sharing the same block features.
           const uint32_t num_same_lines = std::min(
               width - line, kMinBlockSizePix - line % kMinBlockSizePix);
 

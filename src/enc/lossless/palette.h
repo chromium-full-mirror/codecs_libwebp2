@@ -20,6 +20,8 @@
 #ifndef WP2_ENC_LOSSLESS_PALETTE_H_
 #define WP2_ENC_LOSSLESS_PALETTE_H_
 
+#include <cstdint>
+
 #include "src/common/progress_watcher.h"
 #include "src/utils/ans_enc.h"
 #include "src/utils/vector.h"
@@ -69,16 +71,15 @@ class Palette {
   uint32_t Size() const { return num_colors_; }
   // Try to find the best writing method 'method_'. Might reorder the colors_.
   // The storage cost cost_ will be calculated.
-  // The 'effort' parameter impacts the depth of analyzis to get a better cost.
+  // The 'effort' parameter impacts the depth of analysis to get a better cost.
   WP2Status FindBestMethod(const WP2::ArgbBuffer& pic,
                            const WP2::ProgressRange& progress, Sorting type,
-                           int effort, Encoder* const encoder);
+                           int effort, Encoder* encoder);
   // Returns the bit cost of the current palette, set by FindBestMethod().
   float GetCost() const { return cost_; }
   // Writes the palette to the provided bitwriter 'enc' according to method_.
-  WP2Status Write(const WP2::ProgressRange& progress,
-                  WP2::ANSEncBase* const enc, WP2::ANSDictionaries* const dicts,
-                  Encoder* const encoder) const;
+  WP2Status Write(const WP2::ProgressRange& progress, WP2::ANSEncBase* enc,
+                  WP2::ANSDictionaries* dicts, Encoder* encoder) const;
 
   // for debugging
   const WP2::Vector_s16& GetColors() const { return colors_; }
@@ -88,23 +89,22 @@ class Palette {
 
   // Sort the palette so that it takes the least space to store.
   WP2Status SortMinimalSize(const WP2::ProgressRange& progress, int effort,
-                            float cost_header, Encoder* const encoder,
-                            InternalParams* const params);
+                            float cost_header, Encoder* encoder,
+                            InternalParams* params);
   // Sort the palette so that it is sorted by luminance.
   WP2Status SortLuminance(const WP2::ProgressRange& progress, int effort,
-                          float cost_header, Encoder* const encoder,
-                          InternalParams* const params);
+                          float cost_header, Encoder* encoder,
+                          InternalParams* params);
   // Sort according to the modified Zeng's method.
   WP2Status SortModifiedZeng(const WP2::ArgbBuffer& pic,
                              const WP2::ProgressRange& progress, int effort,
-                             float cost_header, Encoder* const encoder,
-                             InternalParams* const params);
+                             float cost_header, Encoder* encoder,
+                             InternalParams* params);
   // try coding a palette 'colors' and if it has a better cost_, set it as the
   // new colors_.
   WP2Status TryPalette(float cost_header, WP2::Vector_s16& colors,
-                       const WP2::ProgressRange& progress,
-                       Encoder* const encoder, InternalParams* const params,
-                       bool also_as_image = true);
+                       const WP2::ProgressRange& progress, Encoder* encoder,
+                       InternalParams* params, bool also_as_image = true);
 
  private:
   WP2SampleFormat format_;

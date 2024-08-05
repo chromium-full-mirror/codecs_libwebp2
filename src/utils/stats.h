@@ -26,16 +26,19 @@
 #define WP2_UTILS_STATS_H_
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
-#include <functional>   // for std::less<>
+#include <functional>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "src/utils/utils.h"  // for WP2Print()
 
 namespace WP2 {
 
-template<typename K = uint32_t> class Stats {
+template <typename K = uint32_t>
+class Stats {
  public:
   explicit Stats(const char* const name = nullptr,
                  const char* const format = "%u",  // how to print type "K"
@@ -75,7 +78,9 @@ template<typename K = uint32_t> class Stats {
   bool sort_by_count_ = false;
   uint64_t total_ = 0llu;
 
-  struct Record { uint64_t total = 0, counts = 0; };
+  struct Record {
+    uint64_t total = 0, counts = 0;
+  };
   typedef std::pair<K, Record> Entry;
   std::unordered_map<K, Record> stats_;
 
@@ -85,14 +90,14 @@ template<typename K = uint32_t> class Stats {
     return stats;
   }
 
-  static bool cmp(const Entry&a, const Entry&b) {
+  static bool cmp(const Entry& a, const Entry& b) {
     return (a.second.counts > b.second.counts);
   }
-  static bool cmp_first(const Entry&a, const Entry&b) {
+  static bool cmp_first(const Entry& a, const Entry& b) {
     return std::less<K>()(a.first, b.first);
   }
 };
 
-}    // namespace WP2
+}  // namespace WP2
 
-#endif  /* WP2_UTILS_STATS_H_ */
+#endif /* WP2_UTILS_STATS_H_ */

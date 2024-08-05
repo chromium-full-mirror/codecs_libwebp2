@@ -20,12 +20,15 @@
 #ifndef WP2_ENC_TILE_ENC_H_
 #define WP2_ENC_TILE_ENC_H_
 
+#include <cstdint>
+
 #include "src/common/global_params.h"
+#include "src/common/lossy/block_size.h"
 #include "src/common/progress_watcher.h"
-#include "src/utils/ans.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/thread_utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
 #include "src/wp2/debug.h"
 #include "src/wp2/encode.h"
@@ -40,7 +43,7 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
                       const ArgbBuffer& rgb_buffer, const YUVPlane& yuv_buffer,
                       const CSPTransform& transf, const EncoderConfig& config,
                       bool image_has_alpha, const ProgressRange& progress,
-                      Writer* const output);
+                      Writer* output);
 
 //------------------------------------------------------------------------------
 
@@ -80,9 +83,9 @@ class TileEncoder : public WorkerBase {
 
   // Compresses the tile into 'enc'.
   WP2Status LossyEncode(const VectorNoCtor<Block>& forced_partition,
-                        ANSEnc* const enc);
-  WP2Status LosslessEncode(ANSEnc* const enc);
-  WP2Status Av1Encode(Data* const enc);
+                        ANSEnc* enc);
+  WP2Status LosslessEncode(ANSEnc* enc);
+  WP2Status Av1Encode(Data* enc);
 
   const EncoderConfig* config_ = nullptr;
   bool use_lossless_ = false;
@@ -94,11 +97,11 @@ class TileEncoder : public WorkerBase {
 };
 
 // Encodes pixels as row-ordered raw samples.
-WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
-                        Writer* const output);
+WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* tile,
+                        Writer* output);
 
 //------------------------------------------------------------------------------
 
 }  // namespace WP2
 
-#endif  /* WP2_ENC_TILE_ENC_H_ */
+#endif /* WP2_ENC_TILE_ENC_H_ */

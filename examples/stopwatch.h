@@ -20,8 +20,6 @@
 #ifndef WP2_EXAMPLES_STOPWATCH_H_
 #define WP2_EXAMPLES_STOPWATCH_H_
 
-#include "src/wp2/base.h"
-
 #if defined _WIN32 && !defined __GNUC__
 #include <windows.h>
 
@@ -39,7 +37,7 @@ static inline double GetStopwatchTime() {
 
 static inline double GetStopwatchTime() {
   struct timeval watch;
-  gettimeofday(&watch, NULL);
+  gettimeofday(&watch, nullptr);
   const double sec = (double)(watch.tv_sec);
   const double usec = (double)(watch.tv_usec);
   return sec + usec / 1000000.0;

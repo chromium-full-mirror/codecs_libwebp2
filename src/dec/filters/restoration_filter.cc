@@ -19,11 +19,20 @@
 
 #include "src/dec/filters/restoration_filter.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
+#include "src/common/filters/rstr_flt_params.h"
 #include "src/common/vdebug.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/dec/filters/block_map_filter.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/utils/ans.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -78,7 +87,6 @@ uint32_t RestorationFilter::Enhances(uint32_t num_rows) {
     // Wait for bottom taps to be available.
     num_filterable_rows = SafeSub(num_rows, kWieFltTapDist);
   }
-
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "restoration-filter")) SavePixelsForVDebug(num_rows);

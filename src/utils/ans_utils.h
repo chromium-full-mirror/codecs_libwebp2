@@ -13,7 +13,7 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 //
-// Assymetric Numeral System helper functions.
+// Asymmetric Numeral System helper functions.
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
@@ -22,13 +22,14 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_enc.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -38,11 +39,8 @@ namespace WP2 {
 // Scale the counts to fit in max_bits and replace them with the nearest powers
 // of 2. 'cost' is set to the cost of encoding the original counts using the
 // quantized counts.
-void ANSCountsQuantizeHuffman(uint32_t size,
-                              const uint32_t* const counts,
-                              uint32_t* const out,
-                              uint32_t max_bits,
-                              float* const cost);
+void ANSCountsQuantizeHuffman(uint32_t size, const uint32_t* counts,
+                              uint32_t* out, uint32_t max_bits, float* cost);
 
 // Quantize the counts to be at most max_freq. Non-null values stay non-null.
 // Returns true if the array is modified
@@ -52,10 +50,9 @@ void ANSCountsQuantizeHuffman(uint32_t size,
 // nullptr can be passed.
 // The function exists as inplace or with a pre-allocated 'out' buffer.
 bool ANSCountsQuantize(bool do_expand, uint32_t max_freq, uint32_t size,
-                       uint32_t* const counts, float* const cost);
+                       uint32_t* counts, float* cost);
 bool ANSCountsQuantize(bool do_expand, uint32_t max_freq, uint32_t size,
-                       const uint32_t* const counts, uint32_t* const out,
-                       float* const cost);
+                       const uint32_t* counts, uint32_t* out, float* cost);
 
 // Outputs the bit cost of a histogram.
 float ANSCountsCost(const uint32_t* counts, uint32_t size);
@@ -70,8 +67,8 @@ struct OptimizeArrayStorageStat {
 };
 // define to have a fast, but slightly less efficient OptimizeArrayStorage.
 #define OPTIMIZE_ARRAY_STORAGE 1
-void OptimizeArrayStorage(OptimizeArrayStorageStat* const stats,
-                          size_t* const size, float overhead);
+void OptimizeArrayStorage(OptimizeArrayStorageStat* stats, size_t* size,
+                          float overhead);
 
 // Return the index of the highest set bit.
 inline uint8_t FindLastSet(uint32_t val) {
@@ -388,7 +385,7 @@ void ReadVectorImpl(ANSDec* dec, size_t nnz, uint32_t val_upper, T& v) {
         const bool is_nz_for_sure = (size == nnz);
         if (use_r_value) {
           v[k] = dec->ReadRValue(is_nz_for_sure ? val_upper : val_upper + 1,
-                                    "value");
+                                 "value");
         } else {
           v[k] = dec->ReadUValue(n_bits, "value");
         }
@@ -412,8 +409,7 @@ class ANSEncCounter : public ANSEncBase {
   ANSEncCounter() : cost_(0.), symbol_cost_(0.) {}
   uint32_t PutBit(uint32_t bit, uint32_t num_zeros, uint32_t num_total,
                   WP2_OPT_LABEL) override;
-  uint32_t PutABit(uint32_t bit, ANSBinSymbol* const stats,
-                   WP2_OPT_LABEL) override;
+  uint32_t PutABit(uint32_t bit, ANSBinSymbol* stats, WP2_OPT_LABEL) override;
   uint32_t PutSymbol(uint32_t symbol, const ANSDictionary& dict,
                      WP2_OPT_LABEL) override;
   uint32_t PutSymbol(uint32_t symbol, const ANSAdaptiveSymbol& asym,
@@ -446,7 +442,7 @@ class ANSEncCounter : public ANSEncBase {
 };
 
 // ANS encoder that does nothing! Useful when a function expects an ANS encoder
-// but we don't actually want to write to the bistream.
+// but we don't actually want to write to the bitstream.
 class ANSEncNoop : public ANSEncBase {
  public:
   ANSEncNoop() = default;
@@ -502,24 +498,23 @@ class ANSEncNoop : public ANSEncBase {
 // A mapping is such that value i is mapped to 'mapping'[i]. All values are
 // strictly increasing and are in the range [ 0, 'range' ).
 // 'mapping' must point to a memory buffer of size at least 'size'.
-WP2Status LoadMapping(ANSDec* const dec, uint32_t size, uint32_t range,
-                      uint16_t* const mapping);
+WP2Status LoadMapping(ANSDec* dec, uint32_t size, uint32_t range,
+                      uint16_t* mapping);
 
 // Stores a mapping.
 // 'stats' is the same as in StoreVector.
-float StoreMapping(const uint16_t* const mapping, size_t size, uint32_t range,
-                   OptimizeArrayStorageStat* const stats, ANSEncBase* enc);
+float StoreMapping(const uint16_t* mapping, size_t size, uint32_t range,
+                   OptimizeArrayStorageStat* stats, ANSEncBase* enc);
 
 //------------------------------------------------------------------------------
 
 // Writes a value in [min, max] where the size of the interval can be larger
 // than kANSMaxRange.
-uint32_t PutLargeRange(uint32_t v, uint32_t min, uint32_t max,
-                       ANSEncBase* const enc, WP2_OPT_LABEL);
+uint32_t PutLargeRange(uint32_t v, uint32_t min, uint32_t max, ANSEncBase* enc,
+                       WP2_OPT_LABEL);
 
 // Reads a value written with PutLargeRange.
-uint32_t ReadLargeRange(uint32_t min, uint32_t max, ANSDec* const dec,
-                        WP2_OPT_LABEL);
+uint32_t ReadLargeRange(uint32_t min, uint32_t max, ANSDec* dec, WP2_OPT_LABEL);
 
 //------------------------------------------------------------------------------
 
@@ -561,6 +556,6 @@ class ANSDebugPrefix {
 #endif
 };
 
-}   // namespace WP2
+}  // namespace WP2
 
-#endif   // WP2_UTILS_ANS_UTILS_H_
+#endif  // WP2_UTILS_ANS_UTILS_H_

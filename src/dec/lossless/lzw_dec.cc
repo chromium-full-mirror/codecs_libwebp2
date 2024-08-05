@@ -19,10 +19,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include "src/dec/lossless/losslessi_dec.h"
+#include "src/utils/ans.h"
 #include "src/utils/hash_map.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2L {
 

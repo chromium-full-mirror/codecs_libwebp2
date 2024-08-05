@@ -20,18 +20,20 @@
 #ifndef WP2_COMMON_LOSSY_PREDICTOR_H_
 #define WP2_COMMON_LOSSY_PREDICTOR_H_
 
-#include <memory>
+#include <array>
+#include <cstdint>
+#include <limits>
 #include <string>
 
-#include "src/common/constants.h"
-#include "src/common/lossy/transforms.h"
 #include "src/dsp/dsp.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_enc.h"
-#include "src/utils/plane.h"
+#include "src/utils/csp.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
 #include "src/utils/wiener.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -69,7 +71,7 @@ class Predictor : public WP2Allocable {
                        uint32_t tf_i, int16_t output[],
                        uint32_t step) const = 0;
 
-  // Returns true if it should be processed again everytime luma changes.
+  // Returns true if it should be processed again every time luma changes.
   virtual bool DependsOnLuma() const { return false; }
 
   // The three following methods are for predictors that signal some
@@ -79,23 +81,22 @@ class Predictor : public WP2Allocable {
   // This should be called on the encoder side before using the predictor.
   // Returns false if the predictor seems too costly or useless, and should be
   // avoided.
-  virtual bool ComputeParams(CodedBlock* const cb, Channel channel) const {
+  virtual bool ComputeParams(CodedBlock* cb, Channel channel) const {
     (void)cb, (void)channel;
     return true;
   }
   // Writes the side-parameter to the bitstream.
   // Returns the sub-mode used, for info.
   virtual uint32_t WriteParams(const CodedBlockBase& cb, Channel channel,
-                               SymbolManager* const sm,
-                               ANSEncBase* const enc) const {
+                               SymbolManager* sm, ANSEncBase* enc) const {
     (void)cb, (void)channel, (void)sm, (void)enc;
     return 0;
   }
   // Reads the side-parameter for the predictor. Return the index offset to the
   // actual predictor to use (for instance, when refining the angular
   // prediction). Returns 0 if the predictor isn't changed.
-  virtual uint32_t ReadParams(CodedBlockBase* const cb, Channel channel,
-                              SymbolReader* const sm, ANSDec* const dec) const {
+  virtual uint32_t ReadParams(CodedBlockBase* cb, Channel channel,
+                              SymbolReader* sm, ANSDec* dec) const {
     (void)cb, (void)channel, (void)sm, (void)dec;
     return 0;
   }
@@ -105,7 +106,7 @@ class Predictor : public WP2Allocable {
   void SetMode(uint32_t mode) { mode_ = mode; }
   virtual uint32_t mode() const { return mode_; }
   // Returns true if this predictor is an angle predictor.
-  virtual bool IsAngle(float* const angle) const { return false; }
+  virtual bool IsAngle(float* angle) const { return false; }
 
   // Debugging methods.
   virtual std::string GetName() const = 0;
@@ -191,9 +192,8 @@ class Predictors {
   Channel channel_;
 
   // Fills the different angle and non-angle predictors.
-  WP2Status FillImpl(const Pred* const mapping, uint32_t num_modes,
-                     int16_t min_value, int16_t max_value,
-                     const CSPTransform* const transform);
+  WP2Status FillImpl(const Pred* mapping, uint32_t num_modes, int16_t min_value,
+                     int16_t max_value, const CSPTransform* transform);
 
  private:
   // Takes care of recording a freshly allocated predictor 'pred'.
@@ -201,7 +201,7 @@ class Predictors {
   // returned predictor is not necessarily the input 'pred'.
   // Returns nullptr in case of problem (and disallocates 'pred').
   Predictor* RecordPredictor(Predictor* pred, uint32_t mode,
-                             const CSPTransform* const transform);
+                             const CSPTransform* transform);
 
   PredictorVector preds_;
   Vector<const Predictor*> preds_no_angle_;
@@ -229,7 +229,7 @@ class APredictors : public YAPredictors {
   APredictors(APredictors&&) = default;
   // Fills the object with the non-angle and angle predictors.
   WP2Status Fill(int16_t min_value, int16_t max_value,
-                 const CSPTransform* const transform);
+                 const CSPTransform* transform);
 };
 
 class UVPredictors : public Predictors {
@@ -242,7 +242,7 @@ class UVPredictors : public Predictors {
 
 // Returns a pointer to Predictor. The caller has to take an ownership of the
 // pointer. Returns null if allocation fails.
-Predictor* MakeNonAnglePredictor(const Predictors::Pred predictor_type,
+Predictor* MakeNonAnglePredictor(Predictors::Pred predictor_type,
                                  int16_t min_value, int16_t max_value);
 
 //------------------------------------------------------------------------------
@@ -290,24 +290,23 @@ class CflPredictor : public Predictor {
   // Does a simple linear regression based on the context for chroma and luma,
   // assuming chroma = a * luma + b. Returns values in kCfLBits precision.
   void ContextLinearRegression(Channel channel, const CodedBlockBase& cb,
-                               int32_t* const a, int32_t* const b) const;
+                               int32_t* a, int32_t* b) const;
   // Does a simple linear regression based on the reconstructed luma and input
   // chroma, assuming chroma = a * luma + b.
   // a and b are returned in kCfLBits precision.
-  void BlockLinearRegression(Channel channel, const CodedBlock& cb,
-                             int32_t* const a, int32_t* const b) const;
+  void BlockLinearRegression(Channel channel, const CodedBlock& cb, int32_t* a,
+                             int32_t* b) const;
 
  protected:
-  void LinearRegression(const int16_t* const luma, const int16_t* const chroma,
-                        uint32_t size,
-                        int32_t* const a, int32_t* const b) const;
+  void LinearRegression(const int16_t* luma, const int16_t* chroma,
+                        uint32_t size, int32_t* a, int32_t* b) const;
 
   virtual void DoPredict(const CodedBlockBase& cb, Channel channel,
                          uint32_t x_start, uint32_t y_start, uint32_t w,
                          uint32_t h, int16_t* output, uint32_t step) const;
   // for debug:
   void DisplaySamples(const CodedBlockBase& cb, Channel channel,
-                      std::string* const str) const;
+                      std::string* str) const;
 
  protected:
   // number of bits for represent the 'a' and 'b' parameters, with sign.
@@ -331,32 +330,31 @@ class SignalingCflPredictor : public CflPredictor {
   std::string GetPredStr(const CodedBlockBase& cb, Channel channel,
                          bool split_tf, uint32_t tf_i) const override;
 
-  bool ComputeParams(CodedBlock* const cb, Channel channel) const override;
+  bool ComputeParams(CodedBlock* cb, Channel channel) const override;
   uint32_t WriteParams(const CodedBlockBase& cb, Channel channel,
-                       SymbolManager* const sm,
-                       ANSEncBase* const enc) const override;
-  uint32_t ReadParams(CodedBlockBase* const cb, Channel channel,
-                      SymbolReader* const sr, ANSDec* const dec) const override;
+                       SymbolManager* sm, ANSEncBase* enc) const override;
+  uint32_t ReadParams(CodedBlockBase* cb, Channel channel, SymbolReader* sr,
+                      ANSDec* dec) const override;
 
   bool DependsOnLuma() const override { return true; }
 
   // CodedBlockBase::cfl_[] params are in 1:2:6 fixed-point precision.
   constexpr static uint32_t kIOFracBits = 6;
-  constexpr static uint32_t kIOBits = 9;   // including sign
+  constexpr static uint32_t kIOBits = 9;  // including sign
 
  protected:
   void DoPredict(const CodedBlockBase& cb, Channel channel, uint32_t unused_x,
                  uint32_t unused_y, uint32_t w, uint32_t h, int16_t* output,
                  uint32_t step) const override;
-  void GetParams(const CodedBlockBase& cb, Channel channel,
-                 uint32_t w, uint32_t h, int32_t* a, int32_t* b) const;
+  void GetParams(const CodedBlockBase& cb, Channel channel, uint32_t w,
+                 uint32_t h, int32_t* a, int32_t* b) const;
 };
 
 //------------------------------------------------------------------------------
 
 // Adds predictors for the alpha plane.
 WP2Status InitAlphaPredictors(const CSPTransform& transform,
-                              APredictors* const preds);
+                              APredictors* preds);
 // Total number of angle predictors.
 static constexpr uint32_t kDirectionalPredNumYA =
     kAnglePredNum * (2 * kDirectionalMaxAngleDeltaYA + 1);

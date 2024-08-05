@@ -20,19 +20,17 @@
 #ifndef WP2_ENC_PARTITION_SCORE_FUNC_MULTI_H_
 #define WP2_ENC_PARTITION_SCORE_FUNC_MULTI_H_
 
+#include <cstdint>
+
+#include "src/common/global_params.h"
 #include "src/common/integral.h"
-#include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
-#include "src/common/lossy/block_size_io.h"
 #include "src/common/lossy/predictor.h"
-#include "src/common/symbols.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/common/progress_watcher.h"
 #include "src/enc/partitioning/partition_score_func.h"
-#include "src/enc/symbols_enc.h"
-#include "src/enc/wp2_enc_i.h"
-#include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {
@@ -44,11 +42,11 @@ class MultiScoreFunc : public PartitionScoreFunc {
  public:
   static constexpr float kMinScore = 0.5f;  // Blocks below that are discarded.
 
-  enum class Pass {  // The following passes select blocks with:
+  enum class Pass {     // The following passes select blocks with:
     LumaAlphaGradient,  // gradient-like original luma and alpha values
     NarrowStdDev,  // a narrow range of orig luma/alpha std dev per 4x4 block
-    Direction,         // a common direction with a high enough certainty
-    Any,               // no criterion (used for filling what's left)
+    Direction,     // a common direction with a high enough certainty
+    Any,           // no criterion (used for filling what's left)
   };
 
   WP2Status Init(const EncoderConfig& config, const Rectangle& tile_rect,
@@ -60,7 +58,7 @@ class MultiScoreFunc : public PartitionScoreFunc {
   // Returns a value/threshold ratio of the current 'pass_' in ]0:1].
   // Higher means better, scores above 0.5 are selected.
   WP2Status ComputeScore(const Block& block, const ProgressRange& progress,
-                         float* const score) override;
+                         float* score) override;
 
  protected:
   // Passes. Values below threshold are selected.
@@ -90,9 +88,9 @@ class MultiScoreFunc : public PartitionScoreFunc {
   // Visual debug.
   void DrawValueThresholdColor(uint32_t cell_width, uint32_t cell_height,
                                const Block& block,
-                               ArgbBuffer* const debug_output) const;
+                               ArgbBuffer* debug_output) const;
   WP2Status DrawSelection(const Block& block, const Rectangle& block_rect,
-                          ArgbBuffer* const debug_output) const;
+                          ArgbBuffer* debug_output) const;
   WP2Status DrawVDebug() const;
 };
 

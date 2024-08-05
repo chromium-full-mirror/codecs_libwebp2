@@ -20,14 +20,21 @@
 #include "./preview_enc.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
 
 #include "src/common/color_precision.h"
 #include "src/common/preview/preview.h"
+#include "src/common/progress_watcher.h"
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/utils.h"
-#include "src/wp2/encode.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -39,9 +46,8 @@ constexpr uint32_t AbsUInt32(uint8_t a, uint8_t b) {
   return (uint32_t)((a >= b) ? (a - b) : (b - a));
 }
 
-void BlurPixel(const ArgbBuffer& src, uint32_t radius,
-               uint32_t pixel_x, uint32_t pixel_y, uint32_t threshold,
-               ArgbBuffer* const dst) {
+void BlurPixel(const ArgbBuffer& src, uint32_t radius, uint32_t pixel_x,
+               uint32_t pixel_y, uint32_t threshold, ArgbBuffer* const dst) {
   const Argb32b color = GetAverageColor(src, radius, pixel_x, pixel_y);
 
   assert(src.format() == WP2_Argb_32 && src.format() == dst->format());
@@ -126,7 +132,6 @@ bool HalfHeightDownscale(ArgbBuffer* const canvas,
 
 //------------------------------------------------------------------------------
 
-
 // Encode the 'value' with 'stats'.
 void PutAValue(ANSEnc* enc, int32_t value, ValueStats* const stats,
                bool is_positive, WP2_OPT_LABEL) {
@@ -162,7 +167,7 @@ void PreviewData::EncodeColorIndex(uint16_t idx, ANSEnc* const enc,
 
 WP2Status PreviewData::EncodePalette(ANSEnc* const enc) const {
   WP2_CHECK_OK(palette_.size() >= kPreviewMinNumColors &&
-               palette_.size() <= kPreviewMaxNumColors,
+                   palette_.size() <= kPreviewMaxNumColors,
                WP2_STATUS_INVALID_PARAMETER);
   ANSDebugPrefix prefix(enc, "palette");
   enc->PutRange(palette_.size(), kPreviewMinNumColors, kPreviewMaxNumColors,
@@ -200,13 +205,12 @@ WP2Status PreviewData::EncodePalette(ANSEnc* const enc) const {
 WP2Status PreviewData::EncodeVertices(ANSEnc* const enc) const {
   uint32_t num_grid_points_left = grid_width_ * grid_height_ - 4u;
 
-  const uint32_t min_num_vertices =
-      std::max(std::max((uint32_t)palette_.size(), 4u) - 4u,
-               kPreviewMinNumVertices);
+  const uint32_t min_num_vertices = std::max(
+      std::max((uint32_t)palette_.size(), 4u) - 4u, kPreviewMinNumVertices);
   const uint32_t max_num_vertices =
       std::min(kPreviewMaxNumVertices, num_grid_points_left);
   WP2_CHECK_OK(vertices_.size() >= min_num_vertices &&
-               vertices_.size() <= max_num_vertices,
+                   vertices_.size() <= max_num_vertices,
                WP2_STATUS_INVALID_PARAMETER);
 
   ANSDebugPrefix prefix(enc, "vertices");
@@ -267,10 +271,8 @@ WP2Status PreviewData::SortPalette() {
       return (color.a < other.color.a);
     }
     bool operator==(const OrderedColor& other) const {
-      return (color.a == other.color.a) &&
-             (color.y == other.color.y) &&
-             (color.co == other.color.co) &&
-             (color.cg == other.color.cg);
+      return (color.a == other.color.a) && (color.y == other.color.y) &&
+             (color.co == other.color.co) && (color.cg == other.color.cg);
     }
   };
 
@@ -335,8 +337,9 @@ WP2Status PreviewData::CleanupVertices() {
   uint32_t size = 0;
   for (auto& v : vertices_) {
     if (IsCorner(v.x, v.y) || IsOutside(v.x, v.y)) continue;
-    if (size > 0 &&
-        v.x == vertices_[size - 1].x && v.y == vertices_[size - 1].y) continue;
+    if (size > 0 && v.x == vertices_[size - 1].x &&
+        v.y == vertices_[size - 1].y)
+      continue;
     std::swap(vertices_[size], v);
     ++size;
   }
@@ -355,9 +358,8 @@ WP2Status PreviewData::SortVertices() {
     // Is it inside the grid?
     WP2_CHECK_OK(!IsOutside(vertex.x, vertex.y), WP2_STATUS_INVALID_PARAMETER);
     // Is it different from the previous one?
-    WP2_CHECK_OK(i == 0 ||
-                 (vertex.x != vertices_[i - 1].x ||
-                  vertex.y != vertices_[i - 1].y),
+    WP2_CHECK_OK(i == 0 || (vertex.x != vertices_[i - 1].x ||
+                            vertex.y != vertices_[i - 1].y),
                  WP2_STATUS_INVALID_PARAMETER);
   }
   return WP2_STATUS_OK;
@@ -372,14 +374,14 @@ WP2Status PreviewData::Encode(ANSEnc* const enc) const {
     ANSDebugPrefix prefix(enc, "preview");
     assert(grid_width_ >= kPreviewMinGridSize);
     assert(grid_height_ >= kPreviewMinGridSize);
-        enc->PutRange(grid_width_, kPreviewMinGridSize, kPreviewMaxGridSize,
+    enc->PutRange(grid_width_, kPreviewMinGridSize, kPreviewMaxGridSize,
                   "grid_dim");
-        enc->PutRange(grid_height_, kPreviewMinGridSize, kPreviewMaxGridSize,
-                      "grid_dim");
-        enc->PutBit((uint32_t)use_noise_, kPreviewNoiseProba,
-                    kPreviewTotalProba, "use_noise");
-        WP2_CHECK_STATUS(EncodePalette(enc));
-        WP2_CHECK_STATUS(EncodeVertices(enc));
+    enc->PutRange(grid_height_, kPreviewMinGridSize, kPreviewMaxGridSize,
+                  "grid_dim");
+    enc->PutBit((uint32_t)use_noise_, kPreviewNoiseProba, kPreviewTotalProba,
+                "use_noise");
+    WP2_CHECK_STATUS(EncodePalette(enc));
+    WP2_CHECK_STATUS(EncodeVertices(enc));
   }
   WP2_CHECK_STATUS(enc->GetStatus());
   WP2_CHECK_STATUS(enc->AssembleToBitstream(/*clear_tokens=*/true));
@@ -458,12 +460,12 @@ WP2Status PreviewData::Generate(const ArgbBuffer& canvas,
     WP2_CHECK_STATUS(CollectVerticesFromColorDiffMaximization(
         canvas, max_num_vertices, this));
   } else if (config.analysis_method ==
-      PreviewConfig::AnalysisMethod::kRandomEdgeSelection) {
-    WP2_CHECK_STATUS(CollectVerticesFromRandomEdgeSelection(
-        canvas, max_num_vertices, this));
+             PreviewConfig::AnalysisMethod::kRandomEdgeSelection) {
+    WP2_CHECK_STATUS(
+        CollectVerticesFromRandomEdgeSelection(canvas, max_num_vertices, this));
   } else {
-    WP2_CHECK_STATUS(CollectVerticesFromVoronoiCells(
-        canvas, max_num_vertices, this));
+    WP2_CHECK_STATUS(
+        CollectVerticesFromVoronoiCells(canvas, max_num_vertices, this));
   }
   WP2_CHECK_STATUS(CollectColors2(canvas, config.num_colors));
   WP2_CHECK_STATUS(collect_progress.AdvanceBy(1.));

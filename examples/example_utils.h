@@ -20,25 +20,26 @@
 #ifndef WP2_EXAMPLES_EXAMPLE_UTILS_H_
 #define WP2_EXAMPLES_EXAMPLE_UTILS_H_
 
-#include <algorithm>
-#include <cmath>
 #include <cstdarg>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <map>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
-#include "examples/stopwatch.h"
-#include "src/common/lossy/block_size.h"
-#include "src/common/lossy/block_size_io.h"
+#include "src/dsp/dsp.h"
+#include "src/utils/thread_utils.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
+
+#if defined(WP2_BITTRACE)
 #include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
-#include "src/utils/thread_utils.h"
-#include "src/wp2/base.h"
-#include "src/wp2/decode.h"
+#endif
 
 namespace WP2 {
 
@@ -48,26 +49,23 @@ namespace WP2 {
 extern const char* const GitVersion;
 
 // Parse numerical values (and update *error in case of error).
-int ExUtilGetInt(const char* const v, bool* const error, int base = 0);
-uint32_t ExUtilGetUInt(const char* const v, bool* const error, int base = 0);
+int ExUtilGetInt(const char* v, bool* error, int base = 0);
+uint32_t ExUtilGetUInt(const char* v, bool* error, int base = 0);
 
-bool ExUtilTryGetInt(const char* const v, int* const n, int base = 0);
-bool ExUtilTryGetUInt(const char* const v, uint32_t* const n, int base = 0);
+bool ExUtilTryGetInt(const char* v, int* n, int base = 0);
+bool ExUtilTryGetUInt(const char* v, uint32_t* n, int base = 0);
 
-float ExUtilGetFloat(const char* v, bool* const error);
+float ExUtilGetFloat(const char* v, bool* error);
 
 // Parse several float values into values[] (at most 'num_values_max') from a
 // list. Return true in case of error ('parse_error').
 uint32_t ExUtilGetFloats(const char* v, float values[], uint32_t num_values_max,
-                         bool* const error, char separator = ',');
+                         bool* error, char separator = ',');
 
 //------------------------------------------------------------------------------
 
 // ExUtilDisableSIMD() will disable any CPU acceleration
 #if !defined(WP2_DLL)
-#if !defined(WP2_CPUINFO_IS_DEFINED)
-#include "src/dsp/dsp.h"  // for WP2GetCPUInfo definition
-#endif                    // WP2_CPUINFO_IS_DEFINED
 static inline void ExUtilDisableSIMD() { WP2GetCPUInfo = nullptr; }
 #else
 static inline void ExUtilDisableSIMD() {}
@@ -118,11 +116,11 @@ STATIC_ASSERT_ARRAY_SIZE(kMetricNames, WP2::NUM_METRIC_TYPES);
 // Computes and prints the distortion of the compressed image stored in 'data'
 // compared to 'refs' (single image or several frames if it's an animation).
 WP2Status PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
-                          const uint8_t* const data, size_t data_size,
+                          const uint8_t* data, size_t data_size,
                           WP2::MetricType metric, bool short_output);
 
 // One-liner for still images because ArgbBuffer doesn't provide a copy ctor.
-WP2Status PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
+WP2Status PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* data,
                           size_t data_size, WP2::MetricType metric,
                           bool short_output);
 
@@ -130,7 +128,7 @@ WP2Status PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* const data,
 // Buffer utils
 
 // Convert an argb picture to luminance.
-void ConvertToGray(ArgbBuffer* const pic);
+void ConvertToGray(ArgbBuffer* pic);
 
 //------------------------------------------------------------------------------
 // Bit trace
@@ -266,9 +264,9 @@ static inline void PrintBitTraces(const WP2::DecoderInfo& info,
 }
 #endif  // WP2_BITTRACE
 
-WP2Status CollectBitTraces(const uint8_t* const data, size_t data_size,
-                           int bit_trace, uint32_t bit_trace_level,
-                           bool short_output, bool show_histograms);
+WP2Status CollectBitTraces(const uint8_t* data, size_t data_size, int bit_trace,
+                           uint32_t bit_trace_level, bool short_output,
+                           bool show_histograms);
 
 //------------------------------------------------------------------------------
 
@@ -335,8 +333,7 @@ std::string GetFileExtension(const std::string& path);
 bool IsDirectory(const std::string& path);
 
 // Append the paths of all files in 'dir_path' to 'files'.
-bool GetFilesIn(const std::string& dir_path, FileList* const files,
-                bool recursive);
+bool GetFilesIn(const std::string& dir_path, FileList* files, bool recursive);
 
 // Combine input file name and output directory path to form an output file path
 // with the given 'extension'.
@@ -350,13 +347,13 @@ std::string InputFileToOutputDir(const std::string& input_file_path,
 // Read the 'partition' from the file located at 'file_path'. Returns true in
 // case of success (or if the file can not be opened and 'read_only' is true).
 bool ReadPartition(const char file_path[], bool read_only,
-                   std::vector<WP2::Rectangle>* const partition);
+                   std::vector<WP2::Rectangle>* partition);
 
 // Adapts the 'partition' by either ignoring blocks that are not part of the
 // 'partition_set' or by splitting them until they do.
 void ConvertPartition(uint32_t pic_width, uint32_t pic_height,
                       WP2::PartitionSet partition_set, bool ignore_invalid,
-                      std::vector<WP2::Rectangle>* const partition);
+                      std::vector<WP2::Rectangle>* partition);
 
 // Writes the 'partition' to the file located at 'file_path'.
 bool WritePartition(const std::vector<WP2::Rectangle>& partition,
@@ -391,11 +388,11 @@ class ProgramOptions {
   // Parses a "main" argument for a system options. Returns true if one was
   // found.
   WP2_NO_DISCARD
-  static bool ParseSystemOptions(const char* const arg, bool* const must_stop);
+  static bool ParseSystemOptions(const char* arg, bool* must_stop);
   // Parses the "main" argument for a metric option.
   // Leaves type untouched if nothing was found. Returns true if one was found.
   WP2_NO_DISCARD
-  static bool ParseMetricOptions(const char* const arg, WP2::MetricType* type);
+  static bool ParseMetricOptions(const char* arg, WP2::MetricType* type);
   // Parses the 'main' argument for memory-related option.
   // Returns true if some memory-related options were parsed, false otherwise.
   WP2_NO_DISCARD
@@ -418,7 +415,7 @@ class MultiProgressPrinter {
  private:
   class Job : public WP2::ProgressHook {
    public:
-    Job(MultiProgressPrinter* const parent, uint32_t index)
+    Job(MultiProgressPrinter* parent, uint32_t index)
         : parent_(parent), index_(index) {}
 
     bool OnUpdate(double progress) override;

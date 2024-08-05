@@ -20,15 +20,23 @@
 // Author: Vincent Rabaud (vrabaud@google.com)
 //
 
+#include <algorithm>
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 
 #include "src/common/lossless/color_cache.h"
-#include "src/dsp/lossless/encl_dsp.h"
+#include "src/common/symbols.h"
 #include "src/dsp/math.h"
 #include "src/enc/lossless/backward_references_enc.h"
 #include "src/enc/lossless/histogram_enc.h"
 #include "src/enc/lossless/losslessi_enc.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2L {
 
@@ -209,7 +217,7 @@ class CostManager {
  public:
   CostManager() = default;
   ~CostManager() { Reset(); }
-  bool Init(Segment* const segments, uint32_t num_pixels,
+  bool Init(Segment* segments, uint32_t num_pixels,
             const CostModel& cost_model);
   void Reset();
 
@@ -361,17 +369,16 @@ static inline void UpdateCost(CostManager* const manager, int i, int position,
 
 // Given the cost and the position that define an interval, update the cost for
 // all the pixels between 'start' and 'end' excluded.
-static inline void UpdateCostPerInterval(CostManager* const manager,
-                                              int start, int end, int position,
-                                              float cost) {
+static inline void UpdateCostPerInterval(CostManager* const manager, int start,
+                                         int end, int position, float cost) {
   int i;
   for (i = start; i < end; ++i) UpdateCost(manager, i, position, cost);
 }
 
 // Given two intervals, make 'prev' be the previous one of 'next' in 'manager'.
 static inline void ConnectIntervals(CostManager* const manager,
-                                         CostInterval* const prev,
-                                         CostInterval* const next) {
+                                    CostInterval* const prev,
+                                    CostInterval* const next) {
   if (prev != NULL) {
     prev->next = next;
   } else {
@@ -383,7 +390,7 @@ static inline void ConnectIntervals(CostManager* const manager,
 
 // Pop an interval in the manager.
 static inline void PopInterval(CostManager* const manager,
-                                    CostInterval* const interval) {
+                               CostInterval* const interval) {
   if (interval == NULL) return;
 
   ConnectIntervals(manager, interval->previous, interval->next);
@@ -759,15 +766,15 @@ static WP2Status BackwardReferencesHashChainFollowChosenPath(
 
 // Returns 1 on success.
 extern WP2Status BackwardReferencesTraceBackwards(
-    uint32_t width, uint32_t height, const int16_t* const argb,
+    uint32_t width, uint32_t height, const int16_t* argb,
     const LosslessSymbolsInfo& symbols_info, const HashChain& hash_chain,
     const CacheConfig& cache_config, const BackwardRefs& refs_src,
-    BackwardRefs* const refs_dst, bool* const check_histogram);
+    BackwardRefs* refs_dst, bool* check_histogram);
 WP2Status BackwardReferencesTraceBackwards(
-    uint32_t width, uint32_t height, const int16_t* const argb,
+    uint32_t width, uint32_t height, const int16_t* argb,
     const LosslessSymbolsInfo& symbols_info, const HashChain& hash_chain,
     const CacheConfig& cache_config, const BackwardRefs& refs_src,
-    BackwardRefs* const refs_dst, bool* const check_histogram) {
+    BackwardRefs* refs_dst, bool* check_histogram) {
   const uint32_t num_pixels = width * height;
   WP2::VectorNoCtor<Segment> segments;
   *check_histogram = true;

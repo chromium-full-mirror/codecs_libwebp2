@@ -19,12 +19,19 @@
 
 #include "./extras.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>  // for memcpy()
 #include <sstream>
+#include <string>
 
 #include "src/common/preview/preview.h"
+#include "src/dsp/math.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 //------------------------------------------------------------------------------
 

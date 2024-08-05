@@ -16,12 +16,14 @@
 // (limited) PNM decoder
 
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 
-#include "./anim_image_dec.h"
-#include "./imageio_util.h"
+#include "imageio/anim_image_dec.h"
+#include "imageio/imageio_util.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 #if defined(_MSC_VER) && _MSC_VER < 1900
 #define snprintf _snprintf

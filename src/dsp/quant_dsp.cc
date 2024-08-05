@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 
 #include "src/dsp/dsp.h"
 
@@ -31,7 +32,7 @@ void Quantize_C(const uint32_t iq[], uint32_t bias, const int32_t res[],
   for (uint32_t y = 0; y < H; ++y) {
     for (uint32_t x = 0; x < W; ++x) {
       coeffs[x] = (res[x] < 0) ? -WP2Quantize16b(-res[x], iq[x], bias)
-                               :  WP2Quantize16b( res[x], iq[x], bias);
+                               : WP2Quantize16b(res[x], iq[x], bias);
     }
     coeffs += W;
     res += W;
@@ -143,8 +144,8 @@ WP2_TSAN_IGNORE_FUNCTION void QuantizeInitSSE() {
 void (*WP2Quantize)(const uint32_t iq[], uint32_t bias, const int32_t res[],
                     int16_t coeffs[], uint32_t W, uint32_t H) = nullptr;
 void (*WP2Dequantize)(const int16_t in[], const int16_t dequants[],
-                      int16_t out[],
-                      uint32_t W, uint32_t H, uint32_t len) = nullptr;
+                      int16_t out[], uint32_t W, uint32_t H,
+                      uint32_t len) = nullptr;
 
 static volatile WP2CPUInfo quantize_last_cpuinfo_used =
     (WP2CPUInfo)&quantize_last_cpuinfo_used;

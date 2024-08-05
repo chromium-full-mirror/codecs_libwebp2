@@ -25,7 +25,10 @@
 // Author: Yannis Guyon (yguyon@google.com)
 
 #include <algorithm>
-#include <limits>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
@@ -42,8 +45,8 @@ inline void Fill(int16_t src_value, int32_t width, int32_t height,
   }
 }
 
-inline void Copy(const int16_t* src, size_t src_step,
-                 int32_t width, int32_t height, size_t dst_step, int16_t* dst) {
+inline void Copy(const int16_t* src, size_t src_step, int32_t width,
+                 int32_t height, size_t dst_step, int16_t* dst) {
   for (int32_t y = 0; y < height; ++y, dst += dst_step, src += src_step) {
     std::copy(src, src + width, dst);
   }
@@ -138,8 +141,9 @@ void CdefDirection4x4_C(const int16_t* src, int32_t step, uint32_t bitdepth,
       (*direction + kDrctFltNumDirs / 2) % kDrctFltNumDirs;
   // The 'variance' is the gap between the variances of the best and orthogonal
   // directions.
-  *variance = (uint32_t)(
-      (variances[orthogonal_direction] - variances[*direction]) >> 10);
+  *variance =
+      (uint32_t)((variances[orthogonal_direction] - variances[*direction]) >>
+                 10);
 }
 
 //------------------------------------------------------------------------------
@@ -174,12 +178,9 @@ const int8_t (*const kCdefDirections)[2][2] = kCdefDirectionsPadded + 2;
 //------------------------------------------------------------------------------
 // CdefDirection_C() from libgav1/src/dsp/cdef.cc adapted for int16_t.
 
-constexpr uint32_t kDivisionTable[] = {
-  840, 420, 280, 210, 168, 140, 120, 105
-};
+constexpr uint32_t kDivisionTable[] = {840, 420, 280, 210, 168, 140, 120, 105};
 constexpr uint32_t kDivisionTableOdd[] = {  // = kDivisionTable[2 * i + 1] + pad
-  420, 210, 140, 105, 105, 105, 105, 105
-};
+    420, 210, 140, 105, 105, 105, 105, 105};
 
 constexpr int32_t Square(int32_t x) { return x * x; }
 
@@ -256,54 +257,52 @@ static constexpr int16_t kUnknown = 0x4000;
 // 'top' contains [A]B[C] and 'left' contains D.
 void CdefPad_C(const int16_t* const src, int32_t src_step,
                const int16_t* const left, int32_t left_step,
-               const int16_t* const top, int32_t top_step,
-               int32_t width, int32_t height,
-               int32_t n_left, int32_t n_right,
-               int32_t n_top, int32_t n_bottom,
-               int16_t* const tmp, int32_t tmp_step) {
+               const int16_t* const top, int32_t top_step, int32_t width,
+               int32_t height, int32_t n_left, int32_t n_right, int32_t n_top,
+               int32_t n_bottom, int16_t* const tmp, int32_t tmp_step) {
   static constexpr int32_t gap = (int32_t)kDrctFltTapDist;
   int32_t x_start = -gap, x_end = width + gap;
   int32_t y_start = -gap, y_end = height + gap;
 
   // Set flagged values if the margin is not available.
   if (n_top < gap) {  // ABC
-    Fill(kUnknown, /*width=*/gap + width + gap, /*height=*/gap,
-         tmp_step, /*dst=*/tmp - gap * tmp_step - gap);
+    Fill(kUnknown, /*width=*/gap + width + gap, /*height=*/gap, tmp_step,
+         /*dst=*/tmp - gap * tmp_step - gap);
     y_start = 0;
   }
   if (n_bottom < gap) {  // GHI
-    Fill(kUnknown, /*width=*/gap + width + gap, /*height=*/gap,
-         tmp_step, /*dst=*/tmp + height * tmp_step - gap);
+    Fill(kUnknown, /*width=*/gap + width + gap, /*height=*/gap, tmp_step,
+         /*dst=*/tmp + height * tmp_step - gap);
     y_end -= gap;
   }
   if (n_left < gap) {  // D
-    Fill(kUnknown, /*width=*/gap, /*height=*/y_end - y_start,
-         tmp_step, /*dst=*/tmp + y_start * tmp_step - gap);
+    Fill(kUnknown, /*width=*/gap, /*height=*/y_end - y_start, tmp_step,
+         /*dst=*/tmp + y_start * tmp_step - gap);
     x_start = 0;
   }
   if (n_right < gap) {  // F
-    Fill(kUnknown, /*width=*/gap, /*height=*/y_end - y_start,
-         tmp_step, /*dst=*/tmp + y_start * tmp_step + width);
+    Fill(kUnknown, /*width=*/gap, /*height=*/y_end - y_start, tmp_step,
+         /*dst=*/tmp + y_start * tmp_step + width);
     x_end -= gap;
   }
 
   // Copy pixels if they exist.
   if (n_top >= gap) {  // [A]B[C]
-    Copy(top, top_step, /*width=*/x_end - x_start, /*height=*/gap,
-         tmp_step, /*dst=*/tmp + y_start * tmp_step + x_start);
+    Copy(top, top_step, /*width=*/x_end - x_start, /*height=*/gap, tmp_step,
+         /*dst=*/tmp + y_start * tmp_step + x_start);
   }
   if (n_bottom >= gap) {  // [G]H[I]
     Copy(src + height * src_step + x_start, src_step,
-         /*width=*/x_end - x_start, /*height=*/gap,
-         tmp_step, /*dst=*/tmp + height * tmp_step + x_start);
+         /*width=*/x_end - x_start, /*height=*/gap, tmp_step,
+         /*dst=*/tmp + height * tmp_step + x_start);
   }
   if (n_left >= gap) {  // D
-    Copy(left, left_step, /*width=*/gap, /*height=*/height,
-         tmp_step, /*dst=*/tmp + x_start);
+    Copy(left, left_step, /*width=*/gap, /*height=*/height, tmp_step,
+         /*dst=*/tmp + x_start);
   }
   // E[F]
-  Copy(src, src_step, /*width=*/x_end, /*height=*/height,
-       tmp_step, /*dst=*/tmp);
+  Copy(src, src_step, /*width=*/x_end, /*height=*/height, tmp_step,
+       /*dst=*/tmp);
 }
 
 //------------------------------------------------------------------------------
@@ -359,8 +358,8 @@ void CdefFilter_C(const int16_t* src, int32_t src_step, uint32_t bitdepth,
             const int dx = sign * kCdefDirections[direction][k][1];
             const int16_t value = src[dy * src_step + dx + x];
             if (value != kUnknown) {
-              sum += Constrain(value - pixel_value, primary_strength, damping)
-                   * kCdefPrimaryTaps[pri_str_shifted_1][k];
+              sum += Constrain(value - pixel_value, primary_strength, damping) *
+                     kCdefPrimaryTaps[pri_str_shifted_1][k];
               if (clipping_required) {
                 max_value = std::max(value, max_value);
                 min_value = std::min(value, min_value);
@@ -375,7 +374,8 @@ void CdefFilter_C(const int16_t* src, int32_t src_step, uint32_t bitdepth,
               const int16_t value = src[dy * src_step + dx + x];
               if (value != kUnknown) {
                 sum += Constrain(value - pixel_value, secondary_strength,
-                                 damping) * kCdefSecondaryTaps[k];
+                                 damping) *
+                       kCdefSecondaryTaps[k];
                 if (clipping_required) {
                   max_value = std::max(value, max_value);
                   min_value = std::min(value, min_value);
@@ -396,7 +396,7 @@ void CdefFilter_C(const int16_t* src, int32_t src_step, uint32_t bitdepth,
   }
 }
 
-// Dispatches to the right template instanciation based on pri/sec strengths.
+// Dispatches to the right template instantiation based on pri/sec strengths.
 void CdefFiltering_C(const int16_t* src, int32_t src_step, uint32_t bitdepth,
                      int block_width, int block_height, int primary_strength,
                      int secondary_strength, int damping, int direction,
@@ -427,18 +427,22 @@ void CdefFiltering_C(const int16_t* src, int32_t src_step, uint32_t bitdepth,
 
 #if defined(WP2_USE_SSE)
 
-template<typename T> __m128i LoadU(const T* a) {
+template <typename T>
+__m128i LoadU(const T* a) {
   return _mm_loadu_si128((const __m128i*)a);
 }
-template<typename T> __m128i LoadUx2(const T* a, const T* b) {
+template <typename T>
+__m128i LoadUx2(const T* a, const T* b) {
   const __m128i lo = _mm_loadl_epi64((const __m128i*)a);
   const __m128i hi = _mm_loadl_epi64((const __m128i*)b);
   return _mm_unpacklo_epi64(lo, hi);
 }
-template<typename T> void StoreU(const __m128i v, T* dst) {
+template <typename T>
+void StoreU(const __m128i v, T* dst) {
   return _mm_storeu_si128((__m128i*)dst, v);
 }
-template<typename T> void StoreUx2(const __m128i v, T* a, T* b) {
+template <typename T>
+void StoreUx2(const __m128i v, T* a, T* b) {
   _mm_storel_epi64((__m128i*)a, v);
   _mm_storel_epi64((__m128i*)b, _mm_srli_si128(v, 8));
 }
@@ -461,14 +465,13 @@ inline uint32_t SquareSum_S16(const __m128i a) {
 //            D0 D1 D2 D3 H0 | H1 H2 H3
 //  <--lo ----------------->  <-- hi --------...>
 inline void StaggeredSum(const __m128i v[4], __m128i* lo, __m128i* hi) {
-  const __m128i tmp0 = _mm_add_epi16(v[0],
-                                     _mm_slli_si128(v[1], 2));
-  const __m128i tmp1 = _mm_add_epi16(_mm_slli_si128(v[2], 4),
-                                     _mm_slli_si128(v[3], 6));
+  const __m128i tmp0 = _mm_add_epi16(v[0], _mm_slli_si128(v[1], 2));
+  const __m128i tmp1 =
+      _mm_add_epi16(_mm_slli_si128(v[2], 4), _mm_slli_si128(v[3], 6));
   *lo = _mm_add_epi16(tmp0, tmp1);
 
-  const __m128i tmp2 = _mm_add_epi16(_mm_srli_si128(v[1], 14),
-                                     _mm_srli_si128(v[2], 12));
+  const __m128i tmp2 =
+      _mm_add_epi16(_mm_srli_si128(v[1], 14), _mm_srli_si128(v[2], 12));
   *hi = _mm_add_epi16(tmp2, _mm_srli_si128(v[3], 10));
 }
 
@@ -483,15 +486,15 @@ inline void StaggeredSum(const __m128i v[4], __m128i* lo, __m128i* hi) {
 //                      70  71 72 73 74 75 76 77 xx
 inline void AddPartial_D0_D4(__m128i* v_src, __m128i* lo, __m128i* hi) {
   StaggeredSum(v_src, lo, hi);
-  const __m128i tmp0 = _mm_add_epi16(_mm_slli_si128(v_src[4], 8),
-                                     _mm_slli_si128(v_src[5], 10));
-  const __m128i tmp1 = _mm_add_epi16(_mm_slli_si128(v_src[6], 12),
-                                     _mm_slli_si128(v_src[7], 14));
+  const __m128i tmp0 =
+      _mm_add_epi16(_mm_slli_si128(v_src[4], 8), _mm_slli_si128(v_src[5], 10));
+  const __m128i tmp1 =
+      _mm_add_epi16(_mm_slli_si128(v_src[6], 12), _mm_slli_si128(v_src[7], 14));
   *lo = _mm_add_epi16(*lo, _mm_add_epi16(tmp0, tmp1));
-  const __m128i tmp2 = _mm_add_epi16(_mm_srli_si128(v_src[4], 8),
-                                     _mm_srli_si128(v_src[5], 6));
-  const __m128i tmp3 = _mm_add_epi16(_mm_srli_si128(v_src[6], 4),
-                                     _mm_srli_si128(v_src[7], 2));
+  const __m128i tmp2 =
+      _mm_add_epi16(_mm_srli_si128(v_src[4], 8), _mm_srli_si128(v_src[5], 6));
+  const __m128i tmp3 =
+      _mm_add_epi16(_mm_srli_si128(v_src[6], 4), _mm_srli_si128(v_src[7], 2));
   *hi = _mm_add_epi16(*hi, _mm_add_epi16(tmp2, tmp3));
 }
 
@@ -502,9 +505,8 @@ inline void AddPartial_D1_D2_D3(__m128i* v_src, __m128i* lo, __m128i* hi) {
   const __m128i kRev2 =
       _mm_set_epi32(0x09080b0a, 0x0d0c0f0e, 0x01000302, 0x05040706);
   __m128i v[4] = {
-    _mm_hadd_epi16(v_src[0], v_src[4]), _mm_hadd_epi16(v_src[1], v_src[5]),
-    _mm_hadd_epi16(v_src[2], v_src[6]), _mm_hadd_epi16(v_src[3], v_src[7])
-  };
+      _mm_hadd_epi16(v_src[0], v_src[4]), _mm_hadd_epi16(v_src[1], v_src[5]),
+      _mm_hadd_epi16(v_src[2], v_src[6]), _mm_hadd_epi16(v_src[3], v_src[7])};
   StaggeredSum(v, lo + 1, hi + 1);
   for (uint32_t i = 0; i < 4; ++i) v[i] = _mm_shuffle_epi8(v[i], kRev2);
   StaggeredSum(v, lo + 3, hi + 3);
@@ -517,9 +519,8 @@ inline void AddPartial_D7_D6_D5(__m128i* v_src, __m128i* lo, __m128i* hi) {
   const __m128i kRev1 =
       _mm_set_epi32(0x01000302, 0x05040706, 0x09080b0a, 0x0d0c0f0e);
   __m128i v[4] = {
-    _mm_add_epi16(v_src[0], v_src[1]), _mm_add_epi16(v_src[2], v_src[3]),
-    _mm_add_epi16(v_src[4], v_src[5]), _mm_add_epi16(v_src[6], v_src[7])
-  };
+      _mm_add_epi16(v_src[0], v_src[1]), _mm_add_epi16(v_src[2], v_src[3]),
+      _mm_add_epi16(v_src[4], v_src[5]), _mm_add_epi16(v_src[6], v_src[7])};
   StaggeredSum(v, lo + 7, hi + 7);
   for (uint32_t i = 0; i < 4; ++i) v[i] = _mm_shuffle_epi8(v[i], kRev1);
   StaggeredSum(v, lo + 5, hi + 5);
@@ -548,9 +549,8 @@ inline void AddPartial(const int16_t* src, uint32_t step,
   AddPartial_D0_D4(v_src, &partial_lo[4], &partial_hi[4]);
 }
 
-
-inline uint32_t CostSSE(const __m128i a, const __m128i b,
-                        const __m128i shuffle, const uint32_t mult[8]) {
+inline uint32_t CostSSE(const __m128i a, const __m128i b, const __m128i shuffle,
+                        const uint32_t mult[8]) {
   const __m128i b_reversed = _mm_shuffle_epi8(b, shuffle);
   const __m128i ab_lo = _mm_unpacklo_epi16(a, b_reversed);
   const __m128i ab_hi = _mm_unpackhi_epi16(a, b_reversed);
@@ -605,8 +605,8 @@ void CdefDirection8x8_SSE(const int16_t* src, int32_t step, uint32_t bitdepth,
 
 //------------------------------------------------------------------------------
 
-inline void LoadDir(const int16_t src[], int stride,
-                    __m128i* output, const int8_t directions[][2]) {
+inline void LoadDir(const int16_t src[], int stride, __m128i* output,
+                    const int8_t directions[][2]) {
   const int y_0 = directions[0][0];
   const int x_0 = directions[0][1];
   const int y_1 = directions[1][0];
@@ -617,8 +617,8 @@ inline void LoadDir(const int16_t src[], int stride,
   output[3] = LoadU(src + y_1 * stride + x_1);
 }
 
-inline void LoadDirx2(const int16_t src1[], int stride,
-                      __m128i* output, const int8_t directions[][2]) {
+inline void LoadDirx2(const int16_t src1[], int stride, __m128i* output,
+                      const int8_t directions[][2]) {
   const int16_t* const src2 = src1 + stride;
   const int y_0 = directions[0][0];
   const int x_0 = directions[0][1];
@@ -656,8 +656,8 @@ void CdefFilter_SSE(const int16_t* src, int32_t src_step, uint32_t bitdepth,
 
   __m128i primary_damping_shift, secondary_damping_shift;
   if (enable_primary) {
-    primary_damping_shift =
-      _mm_cvtsi32_si128(std::max(0, damping - WP2Log2Floor(primary_strength)));
+    primary_damping_shift = _mm_cvtsi32_si128(
+        std::max(0, damping - WP2Log2Floor(primary_strength)));
   }
   if (enable_secondary) {
     secondary_damping_shift =
@@ -694,8 +694,8 @@ void CdefFilter_SSE(const int16_t* src, int32_t src_step, uint32_t bitdepth,
           min = _mm_min_epi16(min, vals[i]);
           max = _mm_max_epi16(max, MapMax(vals[i]));
         }
-        vals[i] = Constrain_SSE(vals[i], pixel,
-                                primary_damping_shift, primary_threshold);
+        vals[i] = Constrain_SSE(vals[i], pixel, primary_damping_shift,
+                                primary_threshold);
       }
       const __m128i tmp01 = _mm_add_epi16(vals[0], vals[1]);
       const __m128i tmp23 = _mm_add_epi16(vals[2], vals[3]);
@@ -718,8 +718,8 @@ void CdefFilter_SSE(const int16_t* src, int32_t src_step, uint32_t bitdepth,
           min = _mm_min_epi16(min, vals[i]);
           max = _mm_max_epi16(max, MapMax(vals[i]));
         }
-        vals[i] = Constrain_SSE(vals[i], pixel,
-                                secondary_damping_shift, secondary_threshold);
+        vals[i] = Constrain_SSE(vals[i], pixel, secondary_damping_shift,
+                                secondary_threshold);
       }
 
       // cascading adds
@@ -755,7 +755,7 @@ void CdefFilter_SSE(const int16_t* src, int32_t src_step, uint32_t bitdepth,
   }
 }
 
-// Dispatches to the right template instanciation based on pri/sec strengths.
+// Dispatches to the right template instantiation based on pri/sec strengths.
 // We use the fact that block_width is 4 or 8.
 void CdefFiltering_SSE(const int16_t* src, int32_t src_step, uint32_t bitdepth,
                        int block_width, int block_height, int primary_strength,
@@ -765,12 +765,12 @@ void CdefFiltering_SSE(const int16_t* src, int32_t src_step, uint32_t bitdepth,
     if (secondary_strength > 0) {
       if (block_width == 4) {
         CdefFilter_SSE</*enable_primary=*/true, /*enable_secondary=*/true, 4>(
-          src, src_step, bitdepth, block_height, primary_strength,
-          secondary_strength, damping, direction, dst, dst_step);
+            src, src_step, bitdepth, block_height, primary_strength,
+            secondary_strength, damping, direction, dst, dst_step);
       } else {
         CdefFilter_SSE</*enable_primary=*/true, /*enable_secondary=*/true, 8>(
-          src, src_step, bitdepth, block_height, primary_strength,
-          secondary_strength, damping, direction, dst, dst_step);
+            src, src_step, bitdepth, block_height, primary_strength,
+            secondary_strength, damping, direction, dst, dst_step);
       }
     } else {
       if (block_width == 4) {
@@ -779,8 +779,8 @@ void CdefFiltering_SSE(const int16_t* src, int32_t src_step, uint32_t bitdepth,
             secondary_strength, damping, direction, dst, dst_step);
       } else {
         CdefFilter_SSE</*enable_primary=*/true, /*enable_secondary=*/false, 8>(
-          src, src_step, bitdepth, block_height, primary_strength,
-          secondary_strength, damping, direction, dst, dst_step);
+            src, src_step, bitdepth, block_height, primary_strength,
+            secondary_strength, damping, direction, dst, dst_step);
       }
     }
   } else {

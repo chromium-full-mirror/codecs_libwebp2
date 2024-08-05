@@ -22,6 +22,11 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
+
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -45,8 +50,7 @@ void RstrFltParams::SetAll(const int8_t values[kWieFltTapDist]) {
 
 //------------------------------------------------------------------------------
 
-bool WienerVerifyHalfTapWeights(
-    const int8_t half_tap_weights[kWieFltTapDist]) {
+bool WienerVerifyHalfTapWeights(const int8_t half_tap_weights[kWieFltTapDist]) {
   for (uint32_t i = 0; i < kWieFltTapDist; ++i) {
     if (half_tap_weights[i] < GetMinWienerTapWeight(i) ||
         half_tap_weights[i] > GetMaxWienerTapWeight(i)) {
@@ -67,4 +71,4 @@ bool WienerVerifyHalfTapWeights(
 
 //------------------------------------------------------------------------------
 
-}    // namespace WP2
+}  // namespace WP2

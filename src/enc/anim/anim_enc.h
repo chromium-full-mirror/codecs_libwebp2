@@ -61,7 +61,7 @@ bool AllFramesAreOpaque(const Vector<Frame>& frames);
 // unoriented, not padded, within the whole canvas.
 WP2Status WriteANMF(uint32_t image_width, uint32_t image_height,
                     uint32_t duration, const Rectangle& window, bool dispose,
-                    bool blend, bool is_last, Writer* const output);
+                    bool blend, bool is_last, Writer* output);
 
 //------------------------------------------------------------------------------
 
@@ -97,7 +97,7 @@ class RectangleGroup {
 
   // Merges a pair of rectangles if it does not increase the covered area.
   bool TryToMergeARectangleWith(uint32_t rectangle_index,
-                                uint32_t* const other_rectangle_index);
+                                uint32_t* other_rectangle_index);
 
   const uint32_t max_num_rectangles_;
   uint32_t num_rectangles_ = 0;
@@ -160,7 +160,7 @@ class FrameEncoder {
                const Vector<Frame>& frames, const ProgressRange& progress);
 
   // Encodes all frames. Returns WP2_STATUS_OK if no error occurred.
-  WP2Status Encode(Writer* const output);
+  WP2Status Encode(Writer* output);
 
  protected:
   // Saves pixels to the current canvas, for later comparison.
@@ -171,7 +171,7 @@ class FrameEncoder {
 
   // Compares pixels to the current canvas.
   WP2Status GetPixelsDifferentFromCanvas(
-      const ArgbBuffer& frame, RectangleGroup* const different_pixels) const;
+      const ArgbBuffer& frame, RectangleGroup* different_pixels) const;
 
   // Same as above but for a custom color space.
   WP2Status SaveSubframeToCanvas(const YUVPlane& frame,
@@ -182,19 +182,17 @@ class FrameEncoder {
                               const RectangleGroup& different_pixels);
   WP2Status GetPixelsDifferentFromCanvas(
       const YUVPlane& frame, const CSPMtx& ccsp_to_rgb,
-      RectangleGroup* const different_pixels) const;
+      RectangleGroup* different_pixels) const;
 
   // Encodes a preframe or a regular frame.
   WP2Status EncodeSubframe(const Frame& frame, bool dispose, bool is_preframe,
                            bool is_previous_preframe, const Rectangle& window,
-                           const ProgressRange& progress,
-                           Writer* const output) const;
+                           const ProgressRange& progress, Writer* output) const;
 
   // Encodes one final frame (including its preframes).
   WP2Status EncodeFrame(const Frame& frame, bool dispose,
                         const RectangleGroup& different_pixels,
-                        const ProgressRange& progress,
-                        Writer* const output) const;
+                        const ProgressRange& progress, Writer* output) const;
 
   const EncoderConfig& config_;
   const Vector<Frame>& frames_;

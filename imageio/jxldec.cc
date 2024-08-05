@@ -19,8 +19,8 @@
 
 #include <cstdio>
 
-#include "./anim_image_dec.h"
-#include "./imageio_util.h"
+#include "imageio/anim_image_dec.h"
+#include "imageio/imageio_util.h"
 #include "src/wp2/base.h"
 
 #ifdef HAVE_CONFIG_H

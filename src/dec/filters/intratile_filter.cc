@@ -19,7 +19,19 @@
 
 #include "src/dec/filters/intratile_filter.h"
 
+#include <cstdint>
+
+#include "src/common/filters/rstr_flt_params.h"
+#include "src/common/global_params.h"
+#include "src/dec/filters/alpha_filter.h"
+#include "src/dec/filters/block_map_filter.h"
+#include "src/dec/filters/deblocking_filter.h"
+#include "src/dec/filters/directional_filter.h"
+#include "src/dec/filters/grain_filter.h"
+#include "src/dec/filters/restoration_filter.h"
+#include "src/dsp/math.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {

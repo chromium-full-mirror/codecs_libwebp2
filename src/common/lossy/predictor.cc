@@ -21,20 +21,29 @@
 #include "src/common/lossy/predictor.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <limits>
-#include <numeric>
+#include <string>
 
-#include "src/common/constants.h"
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/symbols.h"
 #include "src/dec/symbols_dec.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/enc/block_enc.h"
 #include "src/enc/symbols_enc.h"
+#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 #define LOG 0
 
@@ -212,7 +221,8 @@ class DCPredictor : public ContextPredictor {
     // don't need to pass in accurate min/max bounds.
     constexpr int16_t kMin = std::numeric_limits<int16_t>::min();
     constexpr int16_t kMax = std::numeric_limits<int16_t>::max();
-    BasePredictors[BPRED_DC + type_](context, w, h, kMin, kMax, output, step);
+    BasePredictors[(int)BPRED_DC + (int)type_](context, w, h, kMin, kMax,
+                                               output, step);
   }
 
   const Type type_;
@@ -241,8 +251,8 @@ class MedianDCPredictor : public ContextPredictor {
     // so we don't need to pass in accurate min/max bounds.
     constexpr int16_t kMin = std::numeric_limits<int16_t>::min();
     constexpr int16_t kMax = std::numeric_limits<int16_t>::max();
-    BasePredictors[BPRED_MEDIAN_DC + type_](context, w, h, kMin, kMax, output,
-                                            step);
+    BasePredictors[(int)BPRED_MEDIAN_DC + (int)type_](context, w, h, kMin, kMax,
+                                                      output, step);
   }
 
   const Type type_;
@@ -273,8 +283,8 @@ class DoubleDcPredictor : public ContextPredictor {
     // so we don't need to pass in accurate min/max bounds.
     constexpr int16_t kMin = std::numeric_limits<int16_t>::min();
     constexpr int16_t kMax = std::numeric_limits<int16_t>::max();
-    BasePredictors[BPRED_DOUBLE_DC + type_](context, w, h, kMin, kMax, output,
-                                            step);
+    BasePredictors[(int)BPRED_DOUBLE_DC + (int)type_](context, w, h, kMin, kMax,
+                                                      output, step);
   }
 
   const Type type_;
@@ -331,11 +341,10 @@ class SmoothPredictor : public ContextPredictor {
     // we don't need to pass in accurate min/max bounds.
     constexpr int16_t kMin = std::numeric_limits<int16_t>::min();
     constexpr int16_t kMax = std::numeric_limits<int16_t>::max();
-    const BasePredictor p = (type_ == SmoothType::k2DSmooth)
-                                ? BPRED_SMOOTH
-                                : (type_ == SmoothType::kVerticalSmooth)
-                                      ? BPRED_SMOOTH_V
-                                      : BPRED_SMOOTH_H;
+    const BasePredictor p = (type_ == SmoothType::k2DSmooth) ? BPRED_SMOOTH
+                            : (type_ == SmoothType::kVerticalSmooth)
+                                ? BPRED_SMOOTH_V
+                                : BPRED_SMOOTH_H;
     BasePredictors[p](context, w, h, kMin, kMax, output, step);
   }
 
@@ -447,8 +456,8 @@ class AnglePredictor : public ContextPredictor {
   const int16_t max_value_;
 
  private:
-  const uint32_t sub_mode_;   // used by encoder during WriteParams()
-  uint32_t angle_idx_;        // global angle index, as calculated by AngleIdx()
+  const uint32_t sub_mode_;  // used by encoder during WriteParams()
+  uint32_t angle_idx_;       // global angle index, as calculated by AngleIdx()
 };
 
 //------------------------------------------------------------------------------
@@ -583,9 +592,9 @@ class AlphaPredictor : public Predictor {
                        ANSEncBase* const enc) const override {
     return pred_->WriteParams(cb, channel, sm, enc);
   }
-  uint32_t ReadParams(
-      CodedBlockBase* const cb, Channel channel,
-      SymbolReader* const sm, ANSDec* const dec) const override {
+  uint32_t ReadParams(CodedBlockBase* const cb, Channel channel,
+                      SymbolReader* const sm,
+                      ANSDec* const dec) const override {
     return pred_->ReadParams(cb, channel, sm, dec);
   }
   bool DependsOnLuma() const override { return true; }
@@ -614,8 +623,8 @@ const Predictor* Predictors::GetPred(uint32_t mode, uint32_t sub_mode) const {
 
 //------------------------------------------------------------------------------
 
-Predictor* Predictors::RecordPredictor(
-    Predictor* pred, uint32_t mode, const CSPTransform* const transform) {
+Predictor* Predictors::RecordPredictor(Predictor* pred, uint32_t mode,
+                                       const CSPTransform* const transform) {
   if (pred == nullptr) return nullptr;
   pred->SetMode(mode);
   if (channel_ == kAChannel) {
@@ -973,8 +982,8 @@ SignalingCflPredictor::SignalingCflPredictor(int16_t min_value,
     : CflPredictor(min_value, max_value) {}
 
 void SignalingCflPredictor::GetParams(const CodedBlockBase& cb, Channel channel,
-                                      uint32_t w, uint32_t h,
-                                      int32_t* a, int32_t* b) const {
+                                      uint32_t w, uint32_t h, int32_t* a,
+                                      int32_t* b) const {
   const Plane16& luma = cb.GetContextPlane(kYChannel);
   int32_t predicted_a, predicted_b;
   ContextLinearRegression(channel, cb, &predicted_a, &predicted_b);
@@ -1062,7 +1071,7 @@ void AdjustAlphaPrediction(const CodedBlockBase& cb, CSPTransform transform,
   for (uint16_t j = 0; j < cb.h_pix(); ++j) {
     const int16_t* const y_src = cb.GetContextPlane(kYChannel).Row(j);
     const int16_t* const u_src = cb.GetContextPlane(kUChannel).Row(j);
-    const int16_t* const v_src = cb.GetContextPlane(kVChannel).Row( j);
+    const int16_t* const v_src = cb.GetContextPlane(kVChannel).Row(j);
     for (uint16_t i = 0; i < cb.w_pix(); ++i) {
       int16_t r, g, b;
       transform.YuvToRgb8(y_src[i], u_src[i], v_src[i], &r, &g, &b);

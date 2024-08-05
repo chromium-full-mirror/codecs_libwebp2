@@ -20,8 +20,11 @@
 #ifndef WP2_DEC_INCR_DECODER_INFO_H_
 #define WP2_DEC_INCR_DECODER_INFO_H_
 
+#include <cstddef>
+
 #include "src/dec/incr/decoder_state.h"
 #include "src/utils/data_source.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -31,16 +34,15 @@ namespace WP2 {
 // If fully available, decodes the ANMF chunk, verifies its integrity and stores
 // the new frame features. 'glimpse' implies using the glimpsed frame index
 // instead of the current frame index.
-WP2Status DecodeFrameInfo(const DecoderConfig& config,
-                          DataSource* const data_source,
+WP2Status DecodeFrameInfo(const DecoderConfig& config, DataSource* data_source,
                           const BitstreamFeatures& features, bool glimpse,
-                          Decoder::State* const state);
+                          Decoder::State* state);
 
 // Checks that the position is valid and stores it as 'frame->num_bytes'. To be
 // called for each 'frame' as soon as the 'bitstream_position_at_end_of_frame'
 // is known.
 WP2Status SaveFrameNumBytes(size_t bitstream_position_at_end_of_frame,
-                            Decoder::State::InternalFrameFeatures* const frame);
+                            Decoder::State::InternalFrameFeatures* frame);
 
 //------------------------------------------------------------------------------
 

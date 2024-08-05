@@ -20,10 +20,14 @@
 #ifndef WP2_DEC_FILTERS_DEBLOCKING_FILTER_H_
 #define WP2_DEC_FILTERS_DEBLOCKING_FILTER_H_
 
+#include <cstdint>
+
 #include "src/dec/filters/block_map_filter.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -36,8 +40,7 @@ bool IsDeblockingFilterEnabled(const DecoderConfig& config,
 
 class DeblockingFilter {
  public:
-  DeblockingFilter(const DecoderConfig& config,
-                   const GlobalParams& gparams,
+  DeblockingFilter(const DecoderConfig& config, const GlobalParams& gparams,
                    const FilterBlockMap& blocks);
 
   // Allocates storage.
@@ -60,7 +63,7 @@ class DeblockingFilter {
                           int32_t yuv_min, int32_t yuv_max,
                           const FilterBlockMap::BlockFeatures& p_block,
                           const FilterBlockMap::BlockFeatures& q_block,
-                          const Rectangle& edge_rect, YUVPlane* const pixels);
+                          const Rectangle& edge_rect, YUVPlane* pixels);
 
   // Visual debugging.
   static void RegisterPixelsForVDebug(
@@ -68,7 +71,7 @@ class DeblockingFilter {
       uint32_t max_half, uint32_t filtered_half, bool horizontal_filtering,
       Channel channel, uint32_t strength, uint32_t sharpness,
       bool before_deblocking, bool deblocked, uint32_t num_bits,
-      const int16_t* const q0, uint32_t step);
+      const int16_t* q0, uint32_t step);
 
  private:
   // Performs the horizontal deblocking of vertical edges in [from_y:to_y].
@@ -85,7 +88,7 @@ class DeblockingFilter {
   const FilterBlockMap& blocks_;
   const bool enabled_;
 
-  uint32_t num_horizontally_deblocked_rows_ = 0;    // Rows of pixels.
+  uint32_t num_horizontally_deblocked_rows_ = 0;  // Rows of pixels.
   uint32_t num_vertically_deblocked_rows_ = 0;
 
   // For a given x, contains the y index of the next horizontal edge to deblock

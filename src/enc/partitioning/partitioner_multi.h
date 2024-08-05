@@ -20,17 +20,14 @@
 #ifndef WP2_ENC_PARTITIONER_MULTI_H_
 #define WP2_ENC_PARTITIONER_MULTI_H_
 
-#include "src/common/lossy/block.h"
+#include <cstdint>
+
 #include "src/common/lossy/block_size.h"
-#include "src/common/lossy/predictor.h"
-#include "src/common/symbols.h"
+#include "src/common/progress_watcher.h"
 #include "src/enc/partitioning/partition_score_func_multi.h"
 #include "src/enc/partitioning/partitioner.h"
-#include "src/enc/symbols_enc.h"
-#include "src/utils/csp.h"
-#include "src/utils/plane.h"
 #include "src/utils/vector.h"
-#include "src/wp2/encode.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -44,8 +41,8 @@ class MultiPassPartitioner : public Partitioner {
       : multi_score_func_(score_func) {}
 
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks,
-                             Vector_u32* const splits) override;
+                             VectorNoCtor<Block>* blocks,
+                             Vector_u32* splits) override;
 
  private:
   enum class Grid { Snapped, NonSnapped, All };
@@ -54,12 +51,11 @@ class MultiPassPartitioner : public Partitioner {
   // given 'pass' and 'restrict_to' some alignment.
   WP2Status GetBlocks(MultiScoreFunc::Pass pass, BlockSize block_size,
                       Grid restrict_to, const ProgressRange& progress,
-                      uint32_t* const max_num_blocks_left,
-                      VectorNoCtor<Block>* const out);
+                      uint32_t* max_num_blocks_left, VectorNoCtor<Block>* out);
 
   WP2Status SelectBlock(MultiScoreFunc::Pass pass, const Block& block,
-                        uint32_t* const max_num_blocks_left,
-                        VectorNoCtor<Block>* const out);
+                        uint32_t* max_num_blocks_left,
+                        VectorNoCtor<Block>* out);
 
   MultiScoreFunc* const multi_score_func_;  // Specific 'score_func_'.
   uint32_t pass_index_ = 0;

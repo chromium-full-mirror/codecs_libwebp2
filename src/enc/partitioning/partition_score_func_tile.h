@@ -20,21 +20,20 @@
 #ifndef WP2_ENC_PARTITION_SCORE_FUNC_TILE_H_
 #define WP2_ENC_PARTITION_SCORE_FUNC_TILE_H_
 
-#include "src/common/integral.h"
-#include "src/common/lossy/block.h"
+#include "src/common/global_params.h"
 #include "src/common/lossy/block_size.h"
-#include "src/common/lossy/block_size_io.h"
 #include "src/common/lossy/predictor.h"
-#include "src/common/symbols.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/common/progress_watcher.h"
+#include "src/dec/tile_dec.h"
 #include "src/enc/analysis.h"
 #include "src/enc/partitioning/partition_score_func.h"
-#include "src/enc/symbols_enc.h"
 #include "src/enc/tile_enc.h"
-#include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -54,11 +53,11 @@ class TileScoreFunc : public PartitionScoreFunc {
   // Encodes the whole tile with the forced 'blocks' and returns a score based
   // on its distortion and size in bytes.
   WP2Status TryEncode(const VectorNoCtor<Block>& blocks,
-                      const ProgressRange& progress, float* const score);
+                      const ProgressRange& progress, float* score);
 
   // Temporarily forces the 'block' for a TryEncode() call.
   WP2Status ComputeScore(const Block& block, const ProgressRange& progress,
-                         float* const score) override;
+                         float* score) override;
 
   // Forces the 'block' for all future TryEncode() calls.
   WP2Status Use(const Block& block) override;

@@ -20,14 +20,16 @@
 #include "src/enc/partitioning/partitioner_multi.h"
 
 #include <algorithm>
-#include <numeric>
+#include <cassert>
+#include <cstdint>
 
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
 #include "src/common/progress_watcher.h"
 #include "src/dsp/math.h"
-#include "src/enc/analysis.h"
+#include "src/enc/partitioning/partition_score_func_multi.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
@@ -179,10 +181,9 @@ WP2Status MultiPassPartitioner::GetBlocks(Pass pass, BlockSize block_size,
   if (restrict_to != Grid::Snapped) {
     // Select blocks with best (=lowest) score first.
     // stable_sort() is used for its determinism.
-    std::stable_sort(results.begin(), results.end(),
-                     [](const Result& l, const Result& r) {
-                       return l.score < r.score;
-                     });
+    std::stable_sort(
+        results.begin(), results.end(),
+        [](const Result& l, const Result& r) { return l.score < r.score; });
 
     for (const Result& result : results) {
       if (IsOccupied(result.blk)) continue;  // 'occupancy_' might have changed.

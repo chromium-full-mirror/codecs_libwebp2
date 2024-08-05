@@ -17,18 +17,25 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
+#include <cassert>
+#include <cstdint>
 #include <cstring>
 
 #include "src/common/global_params.h"
 #include "src/common/header_enc_dec.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
+#include "src/dec/filters/block_map_filter.h"
 #include "src/dec/tile_dec.h"
-#include "src/dec/wp2_dec_i.h"
 #include "src/dsp/math.h"
+#include "src/utils/data_source.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
+
+#if defined(WP2_BITTRACE)
+#include "src/dec/wp2_dec_i.h"
+#endif
 
 namespace WP2 {
 
@@ -245,4 +252,4 @@ WP2Status TileDecoder::BypassTileDecYuv() {
 
 //------------------------------------------------------------------------------
 
-}   // namespace WP2
+}  // namespace WP2

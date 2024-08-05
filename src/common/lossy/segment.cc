@@ -20,14 +20,23 @@
 #include "src/common/lossy/segment.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <cstdio>
 
 #include "src/common/constants.h"
+#include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/quant_mtx.h"
+#include "src/common/symbols.h"
 #include "src/dec/symbols_dec.h"
 #include "src/dsp/math.h"
 #include "src/enc/symbols_enc.h"
-#include "src/utils/ans_utils.h"
+#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -86,8 +95,8 @@ void GrainParams::Print() const {
 //------------------------------------------------------------------------------
 // Segment writing
 
-WP2Status Segment::WriteHeader(ANSEnc* const enc,
-                               bool write_alpha, bool write_grain) const {
+WP2Status Segment::WriteHeader(ANSEnc* const enc, bool write_alpha,
+                               bool write_grain) const {
   enc->PutBool(use_quality_factor_, "quant-factor");
 
   if (use_quality_factor_) {
@@ -124,12 +133,12 @@ void Segment::StoreEncodingMethods(const CodedBlockBase& cb,
         const Symbol symbol = (channel == kAChannel) ? kSymbolEncodingMethodA
                                                      : kSymbolEncodingMethod;
         if (cb.IsFirstCoeffDC(channel)) {
-          sm->Process(symbol, cluster, (uint32_t) cb.method_[channel][tf_i],
+          sm->Process(symbol, cluster, (uint32_t)cb.method_[channel][tf_i],
                       kChannelStr[channel], enc);
         } else {
           // Use 'max_value' to remove the EncodingMethod::kDCOnly possibility.
-          sm->Process(symbol, cluster, (uint32_t) cb.method_[channel][tf_i],
-              /*max_value=*/(uint32_t) EncodingMethod::kMethod1,
+          sm->Process(symbol, cluster, (uint32_t)cb.method_[channel][tf_i],
+                      /*max_value=*/(uint32_t)EncodingMethod::kMethod1,
                       kChannelStr[channel], enc);
         }
       }
@@ -220,11 +229,10 @@ uint32_t Segment::GetMaxAbsDC(Channel channel) const {
 //------------------------------------------------------------------------------
 
 bool Segment::IsMergeableWith(const Segment& other) const {
-  const bool same =
-      (q_scale_ == other.q_scale_) &&
-      (use_quality_factor_ == other.use_quality_factor_) &&
-      (use_grain_ == other.use_grain_) &&
-      (!use_grain_ || grain_ == other.grain_);
+  const bool same = (q_scale_ == other.q_scale_) &&
+                    (use_quality_factor_ == other.use_quality_factor_) &&
+                    (use_grain_ == other.use_grain_) &&
+                    (!use_grain_ || grain_ == other.grain_);
   if (!same) return false;
   if (use_quality_factor_) {
     if (quality_factor_ != other.quality_factor_) return false;
@@ -325,7 +333,7 @@ void Segment::SetYUVBounds(int16_t yuv_min, int16_t yuv_max) {
 }
 
 void Segment::FinalizeQuant() {
-  assert(q_scale_ > 0.f);   // must have been set prior to calling this
+  assert(q_scale_ > 0.f);  // must have been set prior to calling this
   quant_y_.Init(max_residual_, q_scale_, quant_steps_[kYChannel]);
   quant_u_.Init(max_residual_, q_scale_, quant_steps_[kUChannel]);
   quant_v_.Init(max_residual_, q_scale_, quant_steps_[kVChannel]);
@@ -364,4 +372,4 @@ void Segment::SetAlphaQuantizationFactor(uint32_t qfactor) {
 
 //------------------------------------------------------------------------------
 
-}   // namespace WP2
+}  // namespace WP2

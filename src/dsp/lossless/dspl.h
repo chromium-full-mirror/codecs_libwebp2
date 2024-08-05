@@ -22,10 +22,11 @@
 #define WP2_DSP_LOSSLESS_DSPL_H_
 
 #include <algorithm>
+#include <cstdint>
 
-#include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/utils.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2L {
 

@@ -13,23 +13,19 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 //
-// Assymetric Numeral System coder
+// Asymmetric Numeral System coder
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
 #ifndef WP2_UTILS_ANS_H_
 #define WP2_UTILS_ANS_H_
 
-#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdint>
-#include <cstdlib>
-#include <cstring>
-#include <map>
-#include <memory>
-#include <string>
 
+#include "src/dsp/dsp.h"
+#include "src/wp2/base.h"
 #include "src/wp2/debug.h"
 
 #ifdef HAVE_CONFIG_H
@@ -63,7 +59,7 @@ typedef std::map<const std::string, LabelStats> BitCounts;
 #define ANS_TAB_SIZE (1u << ANS_LOG_TAB_SIZE)
 
 // maximum numbers of symbols for dictionaries and tables
-#define ANS_MAX_SYMBOLS 1024   // 10 bits
+#define ANS_MAX_SYMBOLS 1024  // 10 bits
 
 // bits have a probability within [0, PROBA_MAX]
 #define PROBA_BITS 16
@@ -72,7 +68,7 @@ typedef std::map<const std::string, LabelStats> BitCounts;
 // how many bits used during I/O between state_ and bitstream
 #define IO_BITS 16
 #define IO_LIMIT_BITS 16
-#define ANS_SIGNATURE (0xf3 * IO_LIMIT)    // Initial state, used as CRC.
+#define ANS_SIGNATURE (0xf3 * IO_LIMIT)  // Initial state, used as CRC.
 
 static_assert(IO_BITS == 16, "IO_BITS should be == 16");
 static constexpr uint32_t kANSPaddingCost = (IO_LIMIT_BITS + IO_BITS);
@@ -91,7 +87,7 @@ static constexpr uint32_t kANSMaxUniformBits = IO_BITS;
 // the range in the ANSTokenInfoASym as 14+14 bits.
 #define APROBA_BITS 14
 #define APROBA_MAX (1 << APROBA_BITS)
-#define APROBA_ADAPT_SPEED 4096   // must be strictly less than 32768
+#define APROBA_ADAPT_SPEED 4096  // must be strictly less than 32768
 static constexpr uint32_t kANSAProbaInvalidSpeed = (1 << PROBA_BITS);
 
 // some derived constants:
@@ -125,9 +121,9 @@ class ANSBinSymbol {
     if (num_total_ < kMaxSum) UpdateCount(bit);
     return bit;
   }
-  // Returns the number of occurences 0 happened.
+  // Returns the number of occurrences 0 happened.
   uint32_t NumZeros() const { return num_zeros_; }
-  // Returns the number of occurences of the bit.
+  // Returns the number of occurrences of the bit.
   uint32_t NumTotal() const { return num_total_; }
 
   // cost of storing the given 'bit'.
@@ -179,7 +175,7 @@ class ANSAdaptiveSymbol {
   WP2Status InitFromCounts(const uint32_t counts[], uint32_t max_symbol);
   // Initializes from a cdf, normalization to APROBA_MAX is performed if the CDF
   // is normalized to max_proba.
-  WP2Status InitFromCDF(const uint16_t* const cdf, uint32_t max_symbol,
+  WP2Status InitFromCDF(const uint16_t* cdf, uint32_t max_symbol,
                         uint32_t max_proba = APROBA_MAX);
   void CopyFrom(const ANSAdaptiveSymbol& other);
 
@@ -218,8 +214,8 @@ class ANSAdaptiveSymbol {
   }
   float GetCost(uint32_t sym, uint32_t max_symbol) const {
     assert(sym <= max_symbol);
-    return kCostTable[cumul_[sym + 1] - cumul_[sym]]
-         - kCostTable[cumul_[max_symbol + 1] - cumul_[0]];
+    return kCostTable[cumul_[sym + 1] - cumul_[sym]] -
+           kCostTable[cumul_[max_symbol + 1] - cumul_[0]];
   }
 
   // debug
@@ -238,9 +234,9 @@ class ANSAdaptiveSymbol {
   // than an adaptive one (ie.: adaptation speed looks too fast), will return
   // the number of header-bits that can be spent to code the fixed distribution.
   // If fixed-proba is not advantageous, 0 is returned as header_bits.
-  void FindBestAdaptationSpeed(const Vector_u8& syms, Method* const method,
-                               uint32_t* const speed,
-                               uint32_t* const header_bits = nullptr) const;
+  void FindBestAdaptationSpeed(const Vector_u8& syms, Method* method,
+                               uint32_t* speed,
+                               uint32_t* header_bits = nullptr) const;
   // Evaluates the cost of the sequence of symbols for the given
   // adaptation speed.
   float ScoreSequence(Method method, uint32_t speed,
@@ -301,7 +297,7 @@ class ANSDec {
   ANSDec(const ANSDec&) = delete;
 
   // initializes a new ANSDec object.
-  void Init(DataSource* const data_source);
+  void Init(DataSource* data_source);
 
   // Decodes a symbol, according to the spread table 'codes'.
   uint32_t ReadSymbol(const ANSSymbolInfo codes[], uint32_t log2_tab_size,
@@ -427,8 +423,8 @@ class ANSDec {
 
  private:
   // Logs something and makes sure the label is the same.
-  template<typename ...Ts>
-  inline void Trace(const char* format, const char label[], Ts...extra) {
+  template <typename... Ts>
+  inline void Trace(const char* format, const char label[], Ts... extra) {
     (void)sizeof...(extra);
     (void)label;
     WP2Trace(format, debug_prefix_, label, extra...);
@@ -456,7 +452,7 @@ class ANSDec {
                               uint32_t max_index);
   uint32_t ReadRValueInternal(uint32_t range);
   uint32_t ReadUValueInternal(uint32_t bits);
-  uint32_t ReadABitInternal(ANSBinSymbol* const stats);
+  uint32_t ReadABitInternal(ANSBinSymbol* stats);
   uint32_t ReadBitInternal(uint32_t num_zeros, uint32_t num_total);
 
   // Shift 'state' and read-in the lower bits. Return the new value.
@@ -533,6 +529,6 @@ class ANSDec {
 
 //------------------------------------------------------------------------------
 
-}   // namespace WP2
+}  // namespace WP2
 
-#endif   // WP2_UTILS_ANS_H_
+#endif  // WP2_UTILS_ANS_H_

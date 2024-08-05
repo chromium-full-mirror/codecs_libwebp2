@@ -19,23 +19,27 @@
 
 #include "extras/aom_utils.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <map>
 #include <string>
+#include <utility>
+#include <vector>
 
-#include "examples/example_utils.h"
 #include "extras/ccsp_imageio.h"
-#include "imageio/imageio_util.h"
 #include "src/common/av1_common.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
-#include "src/wp2/decode.h"
-#include "src/wp2/encode.h"
 
 #if defined(WP2_HAVE_AOM)
 #include "aom/aom_decoder.h"
 #include "aom/aom_encoder.h"
+#include "aom/aom_image.h"
 #include "aom/aomcx.h"
 #include "aom/aomdx.h"
 #include "config/aom_config.h"
@@ -64,9 +68,6 @@
 
 #if !defined(WP2_HAVE_WEBP)
 #error "WEBP support is required by WP2_HAVE_AOM"
-#else
-#include "webp/decode.h"
-#include "webp/encode.h"
 #endif  // !defined(WP2_HAVE_WEBP)
 
 #endif  // WP2_HAVE_AOM
@@ -391,7 +392,7 @@ static const char* const kCtgSegmentId     = "segment-id";
 static const char* const kCtgHeader        = "header";
 static const char* const kCtgPaletteHeader = "palette-header";
 static const char* const kCtgBlockSize     = "block-size";
-static std::map<std::string, const char*> kCategories = {
+static std::map<std::string, const char*> kCategories = {  // NOLINT
   // coeffs
   {"read_coeffs_reverse_2d",          kCtgCoeffs},
   {"av1_read_coeffs_txb",             kCtgCoeffs},

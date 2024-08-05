@@ -20,10 +20,14 @@
 #ifndef WP2_DEC_FILTERS_RESTORATION_FILTER_H_
 #define WP2_DEC_FILTERS_RESTORATION_FILTER_H_
 
+#include <cstdint>
+
 #include "src/common/filters/rstr_flt_params.h"
 #include "src/dec/filters/block_map_filter.h"
+#include "src/utils/ans.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -65,16 +69,15 @@ class RestorationFilter {
   uint32_t num_debug_rows_ = 0;
 
   void SavePixelsForVDebug(uint32_t num_rows);
-  void RegisterPixelsForVDebug(uint32_t from_x, uint32_t to_x,
-                               uint32_t from_y, uint32_t to_y);
+  void RegisterPixelsForVDebug(uint32_t from_x, uint32_t to_x, uint32_t from_y,
+                               uint32_t to_y);
   void ApplyVDebug(uint32_t num_rows);
 };
 
 //------------------------------------------------------------------------------
 
 // Reads filter parameters from the bitstream.
-WP2Status ReadRestorationFilterParams(ANSDec* const dec,
-                                      RstrFltParams* const params);
+WP2Status ReadRestorationFilterParams(ANSDec* dec, RstrFltParams* params);
 
 //------------------------------------------------------------------------------
 

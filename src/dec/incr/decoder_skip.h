@@ -21,6 +21,7 @@
 #define WP2_DEC_INCR_DECODER_SKIP_H_
 
 #include "src/dec/incr/decoder_state.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -28,24 +29,24 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 // Sets the glimpsed frame to the same bitstream position as the current frame.
-void CopyGlimpseFromCurrent(Decoder::State* const state);
+void CopyGlimpseFromCurrent(Decoder::State* state);
 
 // Skips and reads the bitstream till the next frame features are known.
 WP2Status GlimpseTillNextANMFChunk(const DecoderConfig& config,
                                    const BitstreamFeatures& features,
-                                   Decoder::State* const state);
+                                   Decoder::State* state);
 
 // Advances the glimpsed frame without modifying the decoding state.
 WP2Status GlimpseAtNextFrame(const DecoderConfig& config,
                              const BitstreamFeatures& features,
-                             Decoder::State* const state);
+                             Decoder::State* state);
 
 // If possible, skips entire frames and discards the related bitstream part.
-bool DiscardWholeFrames(Decoder::State* const state);
+bool DiscardWholeFrames(Decoder::State* state);
 
 // If needed and possible, all remaining frames (known or unknown) are discarded
-// and the bistream is advanced till the ending metadata chunks.
-bool DiscardTillMetadata(Decoder::State* const state);
+// and the bitstream is advanced till the ending metadata chunks.
+bool DiscardTillMetadata(Decoder::State* state);
 
 //------------------------------------------------------------------------------
 

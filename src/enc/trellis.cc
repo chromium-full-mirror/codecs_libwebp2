@@ -20,16 +20,28 @@
 
 #include "src/enc/trellis.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/quant_mtx.h"
 #include "src/common/lossy/residuals.h"
+#include "src/common/lossy/residuals_aom.h"
 #include "src/common/lossy/transforms.h"
+#include "src/dsp/math.h"
 #include "src/enc/block_enc.h"
 #include "src/enc/residuals_enc_aom.h"
 #include "src/enc/symbols_enc.h"
+#include "src/utils/ans_utils.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
-// Hyper-parameters for dropout optimization, based on following logics.
+// Hyper-parameters for dropout optimization, based on following logic.
 // (1) Coefficients which are large enough will ALWAYS be kept.
 constexpr uint16_t kDropoutCoeffMax = 2;  // Max dropout-able coefficient
 // (2) Continuous coefficients will ALWAYS be kept. Here rigorous continuity is
@@ -307,7 +319,7 @@ void UpdateCoeffMiddle(int i, int eob, libgav1::PlaneType plane_type,
 
     if (score_low < score) {
       const bool is_negative = (coeff < 0);
-      coeffs[pos] = (is_negative? -abs_coeff_low : abs_coeff_low);
+      coeffs[pos] = (is_negative ? -abs_coeff_low : abs_coeff_low);
       dequantized_coeffs[pos] = (is_negative ? -abs_dequantized_coeff_low
                                              : abs_dequantized_coeff_low);
       libgav1::AOMResidualIO::UpdateLevels(abs_coeff_low, pos, tdim, levels);

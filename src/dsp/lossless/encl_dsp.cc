@@ -19,11 +19,14 @@
 
 #include "src/dsp/lossless/encl_dsp.h"
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 
 #include "src/dsp/dsp.h"
 #include "src/dsp/dsp_x86.h"
+#include "src/dsp/lossless/dspl.h"
 #include "src/dsp/math.h"
 
 namespace {
@@ -98,8 +101,7 @@ inline int16_t TransformColorRed(int16_t green_to_red,
   return new_red;
 }
 
-inline int16_t TransformColorBlue(int16_t green_to_blue,
-                                  int16_t red_to_blue,
+inline int16_t TransformColorBlue(int16_t green_to_blue, int16_t red_to_blue,
                                   const int16_t* const argb) {
   const int16_t green = argb[2];
   const int16_t red = argb[1];
@@ -163,8 +165,7 @@ float ExtraCostCombined_C(const uint32_t* X, const uint32_t* Y, int length) {
 //------------------------------------------------------------------------------
 
 void BufferAdd_C(const uint32_t* const a, const uint32_t* const b,
-                 uint32_t size, uint32_t* const out,
-                 uint32_t* const nonzeros) {
+                 uint32_t size, uint32_t* const out, uint32_t* const nonzeros) {
   assert(out != nullptr);
   if (nonzeros != nullptr) *nonzeros = 0;
   if (b != out) {
@@ -248,12 +249,13 @@ void PredictorAngleSub_C(int delta, const int16_t* in, bool has_alpha,
 
 #if defined(WP2_USE_SSE)
 
-#define CSE_CHECK_ZERO(m, j) do {               \
-  if (my & m) {                                 \
-    retval += WP2SLog2m1(X[i + j] + Y[i + j]);  \
-    if (mx & m) retval += WP2SLog2m1(X[i + j]); \
-  }                                             \
-} while (false)
+#define CSE_CHECK_ZERO(m, j)                      \
+  do {                                            \
+    if (my & m) {                                 \
+      retval += WP2SLog2m1(X[i + j] + Y[i + j]);  \
+      if (mx & m) retval += WP2SLog2m1(X[i + j]); \
+    }                                             \
+  } while (false)
 
 float CombinedShannonEntropy_SSE(const uint32_t* X, const uint32_t* Y,
                                  uint32_t length) {
@@ -261,18 +263,18 @@ float CombinedShannonEntropy_SSE(const uint32_t* X, const uint32_t* Y,
   uint32_t i = 0;
   const __m128i zero = _mm_setzero_si128();
   for (; i + 16 <= length; i += 16) {
-    const __m128i x0 = _mm_loadu_si128((const __m128i*)(X + i +  0));
-    const __m128i y0 = _mm_loadu_si128((const __m128i*)(Y + i +  0));
-    const __m128i x1 = _mm_loadu_si128((const __m128i*)(X + i +  4));
-    const __m128i y1 = _mm_loadu_si128((const __m128i*)(Y + i +  4));
-    const __m128i x2 = _mm_loadu_si128((const __m128i*)(X + i +  8));
-    const __m128i y2 = _mm_loadu_si128((const __m128i*)(Y + i +  8));
+    const __m128i x0 = _mm_loadu_si128((const __m128i*)(X + i + 0));
+    const __m128i y0 = _mm_loadu_si128((const __m128i*)(Y + i + 0));
+    const __m128i x1 = _mm_loadu_si128((const __m128i*)(X + i + 4));
+    const __m128i y1 = _mm_loadu_si128((const __m128i*)(Y + i + 4));
+    const __m128i x2 = _mm_loadu_si128((const __m128i*)(X + i + 8));
+    const __m128i y2 = _mm_loadu_si128((const __m128i*)(Y + i + 8));
     const __m128i x3 = _mm_loadu_si128((const __m128i*)(X + i + 12));
     const __m128i y3 = _mm_loadu_si128((const __m128i*)(Y + i + 12));
-    const __m128i x4 = _mm_packs_epi16(_mm_packs_epi32(x0, x1),
-                                       _mm_packs_epi32(x2, x3));
-    const __m128i y4 = _mm_packs_epi16(_mm_packs_epi32(y0, y1),
-                                       _mm_packs_epi32(y2, y3));
+    const __m128i x4 =
+        _mm_packs_epi16(_mm_packs_epi32(x0, x1), _mm_packs_epi32(x2, x3));
+    const __m128i y4 =
+        _mm_packs_epi16(_mm_packs_epi32(y0, y1), _mm_packs_epi32(y2, y3));
     const int32_t mx = _mm_movemask_epi8(_mm_cmpgt_epi8(x4, zero));
     int32_t my = _mm_movemask_epi8(_mm_cmpgt_epi8(y4, zero)) | mx;
     while (my) {
@@ -307,9 +309,10 @@ float CombinedShannonEntropy_SSE(const uint32_t* X, const uint32_t* Y,
 }
 #undef CSE_CHECK_ZERO
 
-inline bool DoCollectTransforms_SSE(
-    const int16_t* src, const __m128i mult, const __m128i vmaxval,
-    const __m128i vmaxidx, uint32_t* const histo) {
+inline bool DoCollectTransforms_SSE(const int16_t* src, const __m128i mult,
+                                    const __m128i vmaxval,
+                                    const __m128i vmaxidx,
+                                    uint32_t* const histo) {
   const __m128i kRound = _mm_set1_epi32(15);
   const __m128i argb0 = _mm_loadu_si128((const __m128i*)(src + 0));
   const __m128i argb1 = _mm_loadu_si128((const __m128i*)(src + 8));
@@ -344,8 +347,8 @@ bool CollectColorRedTransforms_SSE(const int16_t* argb, uint32_t width,
   for (uint32_t i = 0; i < tile_height; ++i, argb += 4 * width) {
     uint32_t x = 0;
     for (; x + 4 <= tile_width; x += 4) {
-      if (!DoCollectTransforms_SSE(argb + 4 * x, mult,
-                                   vmaxval, vmaxidx, histo)) return false;
+      if (!DoCollectTransforms_SSE(argb + 4 * x, mult, vmaxval, vmaxidx, histo))
+        return false;
     }
     for (; x < tile_width; ++x) {
       const int16_t value = TransformColorRed(green_to_red, &argb[4 * x]);
@@ -370,12 +373,12 @@ bool CollectColorBlueTransforms_SSE(const int16_t* argb, uint32_t width,
   for (uint32_t i = 0; i < tile_height; ++i, argb += 4 * width) {
     uint32_t x = 0;
     for (; x + 4 <= tile_width; x += 4) {
-      if (!DoCollectTransforms_SSE(argb + 4 * x, mult,
-                                   vmaxval, vmaxidx, histo)) return false;
+      if (!DoCollectTransforms_SSE(argb + 4 * x, mult, vmaxval, vmaxidx, histo))
+        return false;
     }
     for (; x < tile_width; ++x) {
-      const int32_t value = TransformColorBlue(
-          green_to_blue, red_to_blue, &argb[4 * x]);
+      const int32_t value =
+          TransformColorBlue(green_to_blue, red_to_blue, &argb[4 * x]);
       if (std::abs(value) > abs_value_max) return false;
       ++histo[WP2L::MakeIndex(value, histo_size - 1)];
     }
@@ -415,7 +418,7 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInitSSE() {
 
 #endif  // WP2_USE_SSE
 
-}    // namespace
+}  // namespace
 
 //------------------------------------------------------------------------------
 

@@ -20,16 +20,20 @@
 #include "src/enc/partitioning/partitioner_exhaustive.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
 #include <numeric>
 
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
 #include "src/common/progress_watcher.h"
-#include "src/dsp/math.h"
-#include "src/enc/analysis.h"
+#include "src/enc/partitioning/partition_score_func.h"
+#include "src/enc/partitioning/partitioner.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
-#include "src/wp2/format_constants.h"
+#include "src/wp2/encode.h"
 
 namespace WP2 {
 
@@ -48,8 +52,8 @@ WP2Status ExhaustivePartitioner::Init(const EncoderConfig& config,
   for (; *size != BLK_LAST; ++size) next_block_sizes_[*size] = *(size + 1);
 
   WP2_CHECK_STATUS(front_mgr_.Init(config_->partition_set,
-                                   config_->partition_snapping,
-                                   src_->Y.w_, src_->Y.h_));
+                                   config_->partition_snapping, src_->Y.w_,
+                                   src_->Y.h_));
   return WP2_STATUS_OK;
 }
 
@@ -98,9 +102,8 @@ WP2Status ExhaustivePartitioner::GetBestPartition(
   }
   WP2_CHECK_STATUS(progress.AdvanceBy(std::pow(0.5, 1. * num_iterations)));
 
-  WP2_CHECK_REDUCED_STATUS(
-      RegisterScoreForVDebug(best_score, best_partition->size(),
-                             num_iterations));
+  WP2_CHECK_REDUCED_STATUS(RegisterScoreForVDebug(
+      best_score, best_partition->size(), num_iterations));
   return WP2_STATUS_OK;
 }
 

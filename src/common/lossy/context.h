@@ -20,12 +20,17 @@
 #ifndef WP2_COMMON_LOSSY_CONTEXT_H_
 #define WP2_COMMON_LOSSY_CONTEXT_H_
 
-#include "src/common/constants.h"
+#include <cassert>
+#include <cstdint>
+
 #include "src/common/lossy/block_size.h"
 #include "src/common/symbols.h"
 #include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/front_mgr.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -44,7 +49,7 @@ class ContextImpl {
   ContextImpl() = default;
 
   // 'data' is an image representing the blocks of width 'width'.
-  void Init(VectorNoCtor<T>* const data, uint32_t width, uint32_t height) {
+  void Init(VectorNoCtor<T>* data, uint32_t width, uint32_t height) {
     assert(height >= kMaxBlockSize + 1);  // minimum cache height
     data_ = data;
     width_ = width;
@@ -125,11 +130,9 @@ class BlockContextPredictor {
   // Deep copy.
   WP2Status CopyFrom(const BlockContextPredictor& other);
 
-  void WriteValue(const CodedBlockBase& cb, uint8_t value,
-                  SymbolManager* const sm, ANSEncBase* const enc,
-                  WP2_OPT_LABEL) const;
-  uint8_t ReadValue(const CodedBlockBase& cb, SymbolReader* const sr,
-                    WP2_OPT_LABEL);
+  void WriteValue(const CodedBlockBase& cb, uint8_t value, SymbolManager* sm,
+                  ANSEncBase* enc, WP2_OPT_LABEL) const;
+  uint8_t ReadValue(const CodedBlockBase& cb, SymbolReader* sr, WP2_OPT_LABEL);
   // Updates the context for writing/reading values for following blocks.
   void SetValue(const CodedBlockBase& cb, uint8_t value);
 
@@ -144,7 +147,7 @@ class BlockContextPredictor {
  private:
   // Given a CodedBlock, returns in 'context' possible values sorted by
   // frequency in neighboring blocks. 'context' must have a size of 'range_'.
-  void GetContext(const CodedBlockBase& cb, uint8_t* const context) const;
+  void GetContext(const CodedBlockBase& cb, uint8_t* context) const;
   // Returns the slot where the coded-block's value is to be found in context[].
   uint32_t GetSlot(const CodedBlockBase& cb, uint8_t id) const;
 };
@@ -166,17 +169,17 @@ class SegmentIdPredictor {
   WP2Status InitWrite(uint32_t num_segments, bool explicit_segment_ids,
                       uint32_t width);
   // Called before the writing pass.
-  WP2Status WriteHeader(ANSEncBase* const enc) const;
+  WP2Status WriteHeader(ANSEncBase* enc) const;
   // Called for each block.
-  void WriteId(const CodedBlockBase& cb, SymbolManager* const sm,
-               ANSEncBase* const enc) const;
+  void WriteId(const CodedBlockBase& cb, SymbolManager* sm,
+               ANSEncBase* enc) const;
   void RecordId(const CodedBlockBase& cb);
 
   // Initializes the reader.
-  WP2Status ReadHeader(ANSDec* const dec, uint32_t num_segments,
+  WP2Status ReadHeader(ANSDec* dec, uint32_t num_segments,
                        bool explicit_segment_ids, uint32_t width);
   // Reads and records cb->id_. Called for each block.
-  void ReadId(SymbolReader* const sr, CodedBlockBase* const cb);
+  void ReadId(SymbolReader* sr, CodedBlockBase* cb);
 
   static uint8_t GetIdFromSize(uint32_t num_segments, BlockSize block_size);
 
@@ -196,10 +199,9 @@ class AlphaModePredictor {
 
   WP2Status Init(uint32_t width, uint32_t height);
   WP2Status CopyFrom(const AlphaModePredictor& other);
-  void Write(const CodedBlockBase& cb, ANSEncBase* const enc,
-             SymbolManager* const sw);
+  void Write(const CodedBlockBase& cb, ANSEncBase* enc, SymbolManager* sw);
   void Update(const CodedBlockBase& cb);
-  BlockAlphaMode Read(const CodedBlockBase& cb, SymbolReader* const sr);
+  BlockAlphaMode Read(const CodedBlockBase& cb, SymbolReader* sr);
 
  private:
   BlockContextPredictor predictor_;

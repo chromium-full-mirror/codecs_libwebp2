@@ -19,7 +19,13 @@
 
 #include "src/dec/incr/decoder_state.h"
 
-#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
+#include "src/dec/tile_dec.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -57,23 +63,19 @@ void DecoderStateArray::Rewind() {
 
 bool Decoder::State::InternalFrameFeatures::operator==(
     const InternalFrameFeatures& other) const {
-  return duration_ms == other.duration_ms &&
-         window.x == other.window.x &&
-         window.y == other.window.y &&
-         window.width == other.window.width &&
+  return duration_ms == other.duration_ms && window.x == other.window.x &&
+         window.y == other.window.y && window.width == other.window.width &&
          window.height == other.window.height &&
          last_dispose_frame_index == other.last_dispose_frame_index &&
          bitstream_position == other.bitstream_position &&
-         num_bytes == other.num_bytes &&
-         info.dispose == other.info.dispose &&
+         num_bytes == other.num_bytes && info.dispose == other.info.dispose &&
          info.blend == other.info.blend &&
          info.duration_ms == other.info.duration_ms &&
          info.window.x == other.info.window.x &&
          info.window.y == other.info.window.y &&
          info.window.width == other.info.window.width &&
          info.window.height == other.info.window.height &&
-         info.is_last == other.info.is_last &&
-         is_last == other.is_last &&
+         info.is_last == other.info.is_last && is_last == other.is_last &&
          final_frame_index == other.final_frame_index;
 }
 

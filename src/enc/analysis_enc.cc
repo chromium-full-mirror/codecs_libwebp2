@@ -19,11 +19,23 @@
 //
 
 #include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
 
+#include "src/common/global_params.h"
+#include "src/common/lossy/segment.h"
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/enc/analysis.h"
-#include "src/enc/wp2_enc_i.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/debug.h"
+#include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 // #define PRINT_STATS   // define, perform stats on predictors
 
@@ -52,7 +64,7 @@ static void AssignGrainLevel(const EncoderConfig& config,
   }
 }
 
-#if 0   // unused for now
+#if 0  // unused for now
 // Check if some segments are identical (same quantization) and reduce their
 // number accordingly. This usually happens at very low or very high quality.
 static WP2Status SimplifySegments(Vector<Segment>* const segments) {
@@ -125,7 +137,7 @@ WP2Status GlobalParams::AssignQuantizations(const EncoderConfig& config) {
   float max_risk = 0.0f;
   for (const auto& s : segments_) min_risk = std::min(min_risk, s.risk_);
   for (const auto& s : segments_) max_risk = std::max(max_risk, s.risk_);
-  min_risk -= 0.01f;   // to avoid divide-by-zero
+  min_risk -= 0.01f;  // to avoid divide-by-zero
   const float amp = 1.4f * Clamp(config.sns / 100.f, 0.f, 1.f);
   const float adjust_amp =
       std::min(1.f, num_segments / 4.f) / (max_risk - min_risk);
@@ -169,9 +181,8 @@ WP2Status GlobalParams::AssignAlphaQuantizations(const YUVPlane& yuv,
     // TODO(maryla): detect when to enable/disable alpha filtering.
     enable_alpha_filter_ = true;
     const uint32_t max_quality = kMaxLossyQuality;
-    const uint32_t quant_factor0 =
-        (uint32_t)std::lround(
-            kQFactorMax * (max_quality - config.alpha_quality) / max_quality);
+    const uint32_t quant_factor0 = (uint32_t)std::lround(
+        kQFactorMax * (max_quality - config.alpha_quality) / max_quality);
     assert(!segments_.empty());
     for (auto& s : segments_) {
       WP2_CHECK_STATUS(s.AllocateForEncoder(/*for_alpha=*/true));
@@ -224,9 +235,10 @@ WP2Status GlobalAnalysis(const ArgbBuffer& rgb, const YUVPlane& yuv,
     gparams->partition_set_ = config.partition_set;
     gparams->partition_snapping_ = config.partition_snapping;
     gparams->explicit_segment_ids_ =
-        (config.segment_id_mode == WP2::EncoderConfig::SEGMENT_ID_AUTO) ?
-            (config.quality > 15.f) :
-        (config.segment_id_mode == WP2::EncoderConfig::SEGMENT_ID_EXPLICIT);
+        (config.segment_id_mode == WP2::EncoderConfig::SEGMENT_ID_AUTO)
+            ? (config.quality > 15.f)
+            : (config.segment_id_mode ==
+               WP2::EncoderConfig::SEGMENT_ID_EXPLICIT);
     gparams->use_rnd_mtx_ = config.use_random_matrix;
     gparams->transf_ = transf;
     gparams->u_quant_offset_ =

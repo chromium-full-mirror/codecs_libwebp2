@@ -20,25 +20,25 @@
 #ifndef WP2_WP2_BASE_H_
 #define WP2_WP2_BASE_H_
 
-#define WP2_VERSION     0x000001    // MAJOR(8b) + MINOR(8b) + REVISION(8b)
-#define WP2_ABI_VERSION   0x0001    // MAJOR(8b) + MINOR(8b)
+#define WP2_VERSION 0x000001    // MAJOR(8b) + MINOR(8b) + REVISION(8b)
+#define WP2_ABI_VERSION 0x0001  // MAJOR(8b) + MINOR(8b)
 
 //------------------------------------------------------------------------------
 
 #include <cassert>
-#include <cinttypes>
-#include <cstddef>  // for size_t
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
 #ifndef WP2_EXTERN
 // This explicitly marks library functions and allows for changing the
 // signature for e.g., Windows DLL builds.
-# if defined(__GNUC__)
-#  define WP2_EXTERN extern __attribute__ ((visibility ("default")))
-# else
-#  define WP2_EXTERN extern
-# endif  /* __GNUC__ >= 4 */
-#endif  /* WP2_EXTERN */
+#if defined(__GNUC__)
+#define WP2_EXTERN extern __attribute__((visibility("default")))
+#else
+#define WP2_EXTERN extern
+#endif /* __GNUC__ >= 4 */
+#endif /* WP2_EXTERN */
 
 #if defined(__GNUC__)
 // With C++17, we could use the [[nodiscard]] attribute.
@@ -73,17 +73,17 @@ typedef enum
 #endif
 { WP2_STATUS_OK = 0,
   WP2_STATUS_VERSION_MISMATCH,
-  WP2_STATUS_OUT_OF_MEMORY,            // memory error allocating objects
-  WP2_STATUS_INVALID_PARAMETER,        // a parameter value is invalid
-  WP2_STATUS_NULL_PARAMETER,           // a pointer parameter is NULL
-  WP2_STATUS_BAD_DIMENSION,            // picture has invalid width/height
-  WP2_STATUS_USER_ABORT,               // abort request by user
-  WP2_STATUS_UNSUPPORTED_FEATURE,      // unsupported feature
+  WP2_STATUS_OUT_OF_MEMORY,        // memory error allocating objects
+  WP2_STATUS_INVALID_PARAMETER,    // a parameter value is invalid
+  WP2_STATUS_NULL_PARAMETER,       // a pointer parameter is NULL
+  WP2_STATUS_BAD_DIMENSION,        // picture has invalid width/height
+  WP2_STATUS_USER_ABORT,           // abort request by user
+  WP2_STATUS_UNSUPPORTED_FEATURE,  // unsupported feature
   // the following are specific to decoding:
-  WP2_STATUS_BITSTREAM_ERROR,          // bitstream has syntactic error
-  WP2_STATUS_NOT_ENOUGH_DATA,          // premature EOF during decoding
-  WP2_STATUS_BAD_READ,                 // error while reading bytes
-  WP2_STATUS_NEURAL_DECODE_FAILURE,    // neural decoder failed
+  WP2_STATUS_BITSTREAM_ERROR,        // bitstream has syntactic error
+  WP2_STATUS_NOT_ENOUGH_DATA,        // premature EOF during decoding
+  WP2_STATUS_BAD_READ,               // error while reading bytes
+  WP2_STATUS_NEURAL_DECODE_FAILURE,  // neural decoder failed
   // the following are specific to encoding:
   WP2_STATUS_BITSTREAM_OUT_OF_MEMORY,  // memory error while flushing bits
   WP2_STATUS_INVALID_CONFIGURATION,    // encoding configuration is invalid
@@ -92,7 +92,7 @@ typedef enum
   WP2_STATUS_INVALID_COLORSPACE,       // encoder called with bad colorspace
   WP2_STATUS_NEURAL_ENCODE_FAILURE,    // neural encoder failed
 
-  WP2_STATUS_LAST                      // list terminator. always last.
+  WP2_STATUS_LAST  // list terminator. always last.
 } WP2Status;
 
 // returns a printable string for the name of the status
@@ -327,12 +327,12 @@ struct Rectangle {
   uint32_t height = 0;
 
   Rectangle() = default;
-  Rectangle(uint32_t rect_x, uint32_t rect_y,
-            uint32_t rect_width, uint32_t rect_height)
+  Rectangle(uint32_t rect_x, uint32_t rect_y, uint32_t rect_width,
+            uint32_t rect_height)
       : x(rect_x), y(rect_y), width(rect_width), height(rect_height) {}
   bool operator==(const Rectangle& other) const {
-    return x == other.x && y == other.y &&
-           width == other.width && height == other.height;
+    return x == other.x && y == other.y && width == other.width &&
+           height == other.height;
   }
   bool operator!=(const Rectangle& other) const { return !(*this == other); }
 
@@ -354,14 +354,14 @@ struct Rectangle {
   // Returns the minimum rectangle covering both this and 'r'.
   Rectangle MergeWith(const Rectangle& r) const;
   // Returns the areas covered by this but not covered by 'r'.
-  void Exclude(const Rectangle& r, Rectangle* const top, Rectangle* const bot,
-               Rectangle* const lft, Rectangle* const rgt) const;
+  void Exclude(const Rectangle& r, Rectangle* top, Rectangle* bot,
+               Rectangle* lft, Rectangle* rgt) const;
 };
 
 // Follows orientation tags defined in JEITA CP-3451C (section 4.6.4.A)
 enum class Orientation {
   kOriginal = 0,
-  kFlipLeftToRight,      // Mirror horizontally = vertical symmetry axis
+  kFlipLeftToRight,  // Mirror horizontally = vertical symmetry axis
   k180,
   kFlipTopToBottom,      // Mirror vertically = horizontal symmetry axis
   kFlipBotLeftToTopRgt,  // 90 clockwise then mirror horizontally
@@ -464,7 +464,7 @@ class ArgbBuffer {
   WP2_NO_DISCARD WP2Status CompositeUnder(const ArgbBuffer& foreground,
                                           const Rectangle& window = {});
 
-  // Deallocates then initiliazes this buffer as a view pointing to 'src'.
+  // Deallocates then initializes this buffer as a view pointing to 'src'.
   // Previous metadata is discarded and deallocated, new metadata is not copied
   // nor pointed to. The view may modify the pixels of 'src'.
   // Returns WP2_STATUS_OK upon success.
@@ -473,7 +473,7 @@ class ArgbBuffer {
   WP2_NO_DISCARD WP2Status SetView(const ArgbBuffer& src,
                                    const Rectangle& window);
 
-  // Deallocates then initiliazes this buffer as a view pointing to the external
+  // Deallocates then initializes this buffer as a view pointing to the external
   // 'samples'. If this buffer 'is_slow', fewer read/write operations will
   // happen during encoding/decoding, at the expense of processing time and/or
   // internal memory usage. Returns WP2_STATUS_OK upon success.
@@ -490,7 +490,7 @@ class ArgbBuffer {
   bool HasTransparency() const;
 
   // Computes PSNR, SSIM, LSIM or PSNRHVS distortion metric between two images.
-  // Results are in dB, stored in result[] in the the same order as the channels
+  // Results are in dB, stored in result[] in the same order as the channels
   // in the format, with result[4] being the aggregate metric for all channels.
   // For PSNRHVS, the result[] content is A/Y/U/V/All. Warning: this function is
   // rather CPU-intensive.
@@ -531,7 +531,7 @@ class ArgbBuffer {
   // Difference in bytes from a scanline to the next one.
   WP2_NO_DISCARD uint32_t stride() const { return stride_; }
   // Returns the rectangle representing the buffer.
-  Rectangle AsRect() const { return { 0, 0, width_, height_ }; }
+  Rectangle AsRect() const { return {0, 0, width_, height_}; }
 
  public:
   Metadata metadata_;  // ICC / XMP / EXIF metadata.
@@ -579,6 +579,6 @@ class ProgressHook {
 
 //------------------------------------------------------------------------------
 
-}   // namespace WP2
+}  // namespace WP2
 
-#endif  /* WP2_WP2_BASE_H_ */
+#endif /* WP2_WP2_BASE_H_ */

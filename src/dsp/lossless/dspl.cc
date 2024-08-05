@@ -21,9 +21,14 @@
 
 #include "src/dsp/lossless/dspl.h"
 
-#include "src/common/constants.h"
-#include "src/dec/lossless/losslessi_dec.h"
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
+#include "src/wp2/format_constants.h"
 
 //------------------------------------------------------------------------------
 // Predictors
@@ -254,7 +259,7 @@ WP2_TSAN_IGNORE_FUNCTION void DspInit() {
 
   // If defined, use CPUInfo() to overwrite some pointers with faster versions.
   if (WP2GetCPUInfo != NULL) {
-  // TODO(skal): SSE2, etc.
+    // TODO(skal): SSE2, etc.
   }
   lossless_last_cpuinfo_used = WP2GetCPUInfo;
 }

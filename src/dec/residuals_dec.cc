@@ -17,11 +17,25 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <string>
+
 #include "src/common/constants.h"
+#include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/symbols.h"
+#include "src/dec/residuals_dec_aom.h"
+#include "src/dec/symbols_dec.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/utils.h"
-#include "src/wp2/decode.h"
+#include "src/wp2/base.h"
+#include "src/wp2/debug.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -145,8 +159,9 @@ WP2Status ResidualReader::ReadCoeffs(Channel channel, const int16_t dequant[],
                                      CodedBlockBase* const cb,
                                      BlockInfo* const info) {
   const bool is_uv = (channel == kUChannel || channel == kVChannel);
-  ANSDebugPrefix prefix(sr->dec(),
-                        is_uv ? "UV" : (channel == kAChannel) ? "A" : "Y");
+  ANSDebugPrefix prefix(sr->dec(), is_uv                    ? "UV"
+                                   : (channel == kAChannel) ? "A"
+                                                            : "Y");
 
   CodedBlockBase::CodingParams* const params = cb->GetCodingParams(channel);
   const BlockSize split_size = GetSplitSize(cb->dim(), params->split_tf);
@@ -161,9 +176,9 @@ WP2Status ResidualReader::ReadCoeffs(Channel channel, const int16_t dequant[],
       if (use_aom_coeffs_) {
         if (cb->num_coeffs_[channel][tf_i] > 0) {  // need to read coeffs?
           cb->num_coeffs_[channel][tf_i] =
-            libgav1::AOMResidualReader::ReadCoeffs(
-              channel, dequant, cb->tdim(channel), params->tf,
-              cb->IsFirstCoeffDC(channel), sr, coeffs);
+              libgav1::AOMResidualReader::ReadCoeffs(
+                  channel, dequant, cb->tdim(channel), params->tf,
+                  cb->IsFirstCoeffDC(channel), sr, coeffs);
         }
         // TODO(skal): properly initialize method_[]
       } else if (cb->method_[channel][tf_i] == EncodingMethod::kAllZero) {
@@ -225,13 +240,13 @@ uint32_t ResidualReader::ReadCoeffsMethod01(
     }
     if (is_x_first) {
       use_bounds_x = true;
-      ReadBounds(channel, num_channels_, method, tdim, /*is_x_first=*/true,
-                 sr, &use_bounds_y, &max_x, &max_y);
+      ReadBounds(channel, num_channels_, method, tdim, /*is_x_first=*/true, sr,
+                 &use_bounds_y, &max_x, &max_y);
       if (!use_bounds_y) max_y = bh - 1;
     } else {
       use_bounds_y = true;
-      ReadBounds(channel, num_channels_, method, tdim, /*is_x_first=*/false,
-                 sr, &use_bounds_x, &max_y, &max_x);
+      ReadBounds(channel, num_channels_, method, tdim, /*is_x_first=*/false, sr,
+                 &use_bounds_x, &max_y, &max_x);
       if (!use_bounds_x) max_x = bw - 1;
     }
 
@@ -285,14 +300,14 @@ uint32_t ResidualReader::ReadCoeffsMethod01(
       do {
         if (iter.MaxNumCoeffsLeft() < kResidualCons0Max + 1u) {
           // If the number of elements left is smaller than the max number of
-          // possible 0s plus one non-zero element, go with a ramge to force
+          // possible 0s plus one non-zero element, go with a range to force
           // feasibility.
           num_zeros_tmp =
               sr->dec()->ReadRValue(iter.MaxNumCoeffsLeft(), "num_zeros");
         } else {
-          num_zeros_tmp = sr->Read(kSymbolResNumZeros,
-                                   GetCluster(channel, num_channels_, method),
-                                   "num_zeros");
+          num_zeros_tmp =
+              sr->Read(kSymbolResNumZeros,
+                       GetCluster(channel, num_channels_, method), "num_zeros");
         }
         for (int32_t j = 0; j < num_zeros_tmp; ++j) ++iter;
       } while (num_zeros_tmp == kResidualCons0Max);
@@ -344,9 +359,8 @@ uint32_t ResidualReader::ReadCoeffsMethod01(
       break;
     }
     if (abs_v == 1 && !has_only_ones_left && !previous_is_a_one) {
-      has_only_ones_left =
-          (bool)sr->Read(kSymbolResidualHasOnlyOnesLeft, sector_cluster,
-                         "has_only_ones_left");
+      has_only_ones_left = (bool)sr->Read(kSymbolResidualHasOnlyOnesLeft,
+                                          sector_cluster, "has_only_ones_left");
     }
     previous_is_a_one = (abs_v == 1);
   }

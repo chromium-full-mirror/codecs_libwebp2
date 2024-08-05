@@ -20,15 +20,16 @@
 #include "src/enc/partitioning/partitioner.h"
 
 #include <algorithm>
-#include <numeric>
+#include <cassert>
+#include <cstdint>
 
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
-#include "src/common/progress_watcher.h"
-#include "src/dsp/math.h"
-#include "src/enc/analysis.h"
+#include "src/enc/partitioning/partition_score_func.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -94,8 +95,8 @@ WP2Status AddForcedBlocks(const EncoderConfig& config,
       continue;  // Ignore this block, it's outside of this tile.
     }
     const Rectangle local_rect = {rect_px.x - padded_tile_rect.x,
-                                  rect_px.y - padded_tile_rect.y,
-                                  rect_px.width, rect_px.height};
+                                  rect_px.y - padded_tile_rect.y, rect_px.width,
+                                  rect_px.height};
     if (local_rect.x >= padded_tile_rect.width ||
         local_rect.y >= padded_tile_rect.height) {
       continue;  // Ignore this block, it's outside of this tile.

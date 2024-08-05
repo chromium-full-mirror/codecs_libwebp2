@@ -23,7 +23,8 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
-#include <memory>
+
+#include "src/wp2/base.h"
 
 //------------------------------------------------------------------------------
 
@@ -63,7 +64,7 @@ WP2ErrorTracer* wp2_error_tracer = &default_error_tracer;
 
 //------------------------------------------------------------------------------
 
-[[gnu::format (printf, 1, 0)]]
+[[gnu::format(printf, 1, 0)]]
 void WP2Print(const char* const fmt, ...) {
   va_list arg;
   va_start(arg, fmt);
@@ -92,7 +93,7 @@ std::string WP2SPrint(const char* const fmt, ...) {
 // provide a default printing mechanism in case none is supplied
 #if defined(WP2_TRACE) && !defined(WP2_HAVE_WP2TRACE)
 // we use gnu::format to avoid error message "format not a string literal..."
-[[gnu::format (printf, 1, 0)]]
+[[gnu::format(printf, 1, 0)]]
 void WP2Trace(const char* format, const std::string prefix, ...) {
   fprintf(stderr, "%s", prefix.c_str());
   va_list list;
@@ -101,7 +102,7 @@ void WP2Trace(const char* format, const std::string prefix, ...) {
   fprintf(stderr, "\n");
   va_end(list);
 }
-#endif   // WP2_TRACE && !WP2_HAVE_WP2TRACE
+#endif  // WP2_TRACE && !WP2_HAVE_WP2TRACE
 
 //------------------------------------------------------------------------------
 

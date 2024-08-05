@@ -16,17 +16,19 @@
 // AV1 lossy encoding.
 
 #include <cassert>
+#include <cstdio>
 
-#include "src/common/av1_common.h"
 #include "src/enc/tile_enc.h"
-#include "src/utils/plane.h"
-#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 #if defined(WP2_HAVE_AOM)
 
 #include "aom/aom_encoder.h"
 #include "aom/aomcx.h"
 #include "av1/encoder/encodeframe.h"
+#include "src/common/av1_common.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
 
 namespace WP2 {
 namespace {
@@ -87,7 +89,7 @@ WP2Status CreateCodec(uint32_t w, uint32_t h, bool is_monochrome,
   cfg.g_usage =
       (config.effort == 0) ? AOM_USAGE_REALTIME : AOM_USAGE_GOOD_QUALITY;
   cfg.g_profile = (is_monochrome ? 0 : 1);  // yuv444 is 1, 0 otherwise.
-  cfg.g_threads = 0;  // One thread per tile.
+  cfg.g_threads = 0;                        // One thread per tile.
   cfg.rc_end_usage = AOM_Q;
   cfg.g_pass = AOM_RC_ONE_PASS;
   cfg.rc_twopass_stats_in = {NULL, 0};
@@ -125,7 +127,7 @@ WP2Status TileEncoder::Av1Encode(Data* const enc) {
   WP2_CHECK_STATUS(CreateImage(tile_->rgb_input, &img));
   Cleaner<aom_image_t> img_cleaner(&img, aom_img_free);
 
-  // Codec instanciation
+  // Codec instantiation
   aom_codec_ctx_t codec;
   WP2_CHECK_STATUS(CreateCodec(tile_->rgb_input.width(),
                                tile_->rgb_input.height(), img.monochrome,

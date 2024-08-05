@@ -20,10 +20,12 @@
 #ifndef WP2_COMMON_LOSSY_SEGMENT_H_
 #define WP2_COMMON_LOSSY_SEGMENT_H_
 
-#include <cmath>
+#include <cassert>
+#include <cstdint>
 
 #include "src/common/lossy/quant_mtx.h"
-#include "src/utils/ans_utils.h"
+#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
@@ -42,8 +44,8 @@ class GlobalParams;
 
 class GrainParams {
  public:
-  void Write(ANSEnc* const enc) const;
-  void Read(ANSDec* const dec);
+  void Write(ANSEnc* enc) const;
+  void Read(ANSDec* dec);
 
   bool operator==(const GrainParams& other) const;
   bool IsUsed() const { return (y_ > 0 || uv_ > 0); }
@@ -62,17 +64,15 @@ class GrainParams {
 class Segment {
  public:
   // I/O for header
-  WP2Status WriteHeader(ANSEnc* const enc, bool write_alpha,
-                        bool write_grain) const;
+  WP2Status WriteHeader(ANSEnc* enc, bool write_alpha, bool write_grain) const;
   WP2Status ReadHeader(uint32_t u_quant_offset, uint32_t v_quant_offset,
-                       bool read_alpha, bool read_grain, ANSDec* const dec);
+                       bool read_alpha, bool read_grain, ANSDec* dec);
 
   // I/O for Encoding methods.
-  WP2Status ReadEncodingMethods(SymbolReader* const sr,
-                                CodedBlockBase* const cb) const;
+  WP2Status ReadEncodingMethods(SymbolReader* sr, CodedBlockBase* cb) const;
 
-  void StoreEncodingMethods(const CodedBlockBase& cb, SymbolManager* const sm,
-                            ANSEncBase* const enc) const;
+  void StoreEncodingMethods(const CodedBlockBase& cb, SymbolManager* sm,
+                            ANSEncBase* enc) const;
 
  public:
   // quantization

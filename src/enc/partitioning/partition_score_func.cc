@@ -20,16 +20,14 @@
 #include "src/enc/partitioning/partition_score_func.h"
 
 #include <algorithm>
-#include <array>
-#include <cmath>
-#include <limits>
-#include <numeric>
 
-#include "src/common/integral.h"
-#include "src/dsp/dsp.h"
-#include "src/dsp/math.h"
-#include "src/enc/analysis.h"
-#include "src/enc/wp2_enc_i.h"
+#include "src/common/global_params.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/progress_watcher.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {

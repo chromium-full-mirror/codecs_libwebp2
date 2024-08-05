@@ -20,6 +20,8 @@
 #ifndef WP2_DSP_DSP_H_
 #define WP2_DSP_DSP_H_
 
+#include <cstddef>
+#include <cstdint>
 #ifdef HAVE_CONFIG_H
 #include "src/wp2/config.h"
 #endif
@@ -44,12 +46,12 @@ static_assert(((__GNUC__ << 8) | __GNUC_MINOR__) >= ((4 << 8) | 8),
 // MSVC 2015, cf https://msdn.microsoft.com/en-us/library/hh567368.aspx
 static_assert(_MSC_VER >= 1900, "Visual Studio needs to be at version >= 2015");
 #if defined(_M_X64) || defined(_M_IX86)
-#define WP2_MSC_SSE   // Visual C++ SSE4.2 targets
+#define WP2_MSC_SSE  // Visual C++ SSE4.2 targets
 #endif
 #endif
 
 #ifndef __has_builtin
-# define __has_builtin(x) 0
+#define __has_builtin(x) 0
 #endif
 
 // WP2_HAVE_* are used to indicate the presence of the instruction set in dsp
@@ -57,7 +59,7 @@ static_assert(_MSC_VER >= 1900, "Visual Studio needs to be at version >= 2015");
 // Files containing intrinsics will need to be built targeting the instruction
 // set so should succeed on one of the earlier tests.
 #if defined(__SSE4_2__) || defined(WP2_MSC_SSE) || defined(WP2_HAVE_SSE)
-#define WP2_USE_SSE    // incorporate all instructions up to SSE4.2 (inclusive)
+#define WP2_USE_SSE  // incorporate all instructions up to SSE4.2 (inclusive)
 #include <smmintrin.h>
 
 // HAVE_AVX2 is dependent on HAVE_SSE
@@ -75,7 +77,7 @@ static_assert(_MSC_VER >= 1900, "Visual Studio needs to be at version >= 2015");
 // The intrinsics currently cause compiler errors with arm-nacl-gcc and the
 // inline assembly would need to be modified for use with Native Client.
 #if (defined(__ARM_NEON__) || defined(WP2_ANDROID_NEON) || \
-     defined(__aarch64__) || defined(WP2_HAVE_NEON)) && \
+     defined(__aarch64__) || defined(WP2_HAVE_NEON)) &&    \
     !defined(__native_client__)
 #define WP2_USE_NEON
 #endif
@@ -89,8 +91,8 @@ static_assert(_MSC_VER >= 1900, "Visual Studio needs to be at version >= 2015");
 #include <arm_neon.h>
 #endif
 
-#if defined(__mips__) && !defined(__mips64) && \
-    defined(__mips_isa_rev) && (__mips_isa_rev >= 1) && (__mips_isa_rev < 6)
+#if defined(__mips__) && !defined(__mips64) && defined(__mips_isa_rev) && \
+    (__mips_isa_rev >= 1) && (__mips_isa_rev < 6)
 #define WP2_USE_MIPS32
 #if (__mips_isa_rev >= 2)
 #define WP2_USE_MIPS32_R2
@@ -121,8 +123,7 @@ static_assert(_MSC_VER >= 1900, "Visual Studio needs to be at version >= 2015");
 // failures. This is only meant to silence unaligned loads on platforms that
 // are known to support them.
 #undef WP2_UBSAN_IGNORE_UNDEF
-#define WP2_UBSAN_IGNORE_UNDEF \
-  __attribute__((no_sanitize("undefined")))
+#define WP2_UBSAN_IGNORE_UNDEF __attribute__((no_sanitize("undefined")))
 
 // This macro prevents the undefined behavior sanitizer from reporting
 // failures related to unsigned integer overflows. This is only meant to
@@ -142,7 +143,7 @@ static_assert(_MSC_VER >= 1900, "Visual Studio needs to be at version >= 2015");
 #endif
 
 typedef enum {
-  kSSE,        // everything up to 4.2
+  kSSE,  // everything up to 4.2
   kAVX,
   kAVX2,
   kNEON,
@@ -150,7 +151,10 @@ typedef enum {
   kMIPSdspR2,
   kMSA,
   // some particular fine-grained CPU types
-  kSSE2, kSSE3, kSSE4_1, kSSE4_2,
+  kSSE2,
+  kSSE3,
+  kSSE4_1,
+  kSSE4_2,
   kSlowSSSE3,  // special feature for slow SSSE3 architectures
 } WP2CPUFeature;
 
@@ -165,7 +169,7 @@ WP2_EXTERN WP2CPUInfo WP2GetCPUInfo;
 // Defines an init function stub to ensure each module exposes a symbol,
 // avoiding a compiler warning.
 #define WP2_DSP_INIT_STUB(func) \
-  extern void func(); \
+  extern void func();           \
   WP2_TSAN_IGNORE_FUNCTION void func() {}
 
 //------------------------------------------------------------------------------
@@ -187,11 +191,11 @@ extern void (*WP2Quantize)(const uint32_t iq[], uint32_t bias,
                            uint32_t H);
 // Performs unclamped out[] = in[] * dequants[] for i in [0..len), and pad the
 // rest of out[] with 0s. It's assumed that in[] is padded with 0s for i >= len.
-// It is the caller's responsability to ensure the in[] * dequants[] will not
+// It is the caller's responsibility to ensure the in[] * dequants[] will not
 // overflow 16b storage. No clamping is to be expected.
 extern void (*WP2Dequantize)(const int16_t in[], const int16_t dequants[],
-                             int16_t out[],
-                             uint32_t W, uint32_t H, uint32_t len);
+                             int16_t out[], uint32_t W, uint32_t H,
+                             uint32_t len);
 
 void WP2QuantizeInit();
 
@@ -230,18 +234,20 @@ void WP2ArgbConverterInit();
 
 // Applies the matrix mtx[] to (y,u,v)[] + offset[].
 // mtx[] is assumed to be 12-bit fixed-point precision matrix.
-extern void (*WP2YuvToCustom)(
-  const int16_t* y, const int16_t* u, const int16_t* v,
-  const int16_t offset[3], const int16_t mtx[9],
-  int16_t* dst0, int16_t* dst1, int16_t* dst2, uint32_t width);
+extern void (*WP2YuvToCustom)(const int16_t* y, const int16_t* u,
+                              const int16_t* v, const int16_t offset[3],
+                              const int16_t mtx[9], int16_t* dst0,
+                              int16_t* dst1, int16_t* dst2, uint32_t width);
 
 // Same but outputs to ARGB (alternated channels).
-typedef void (*WP2AyuvToArgbFunc)(
-  const int16_t* y, const int16_t* u, const int16_t* v, const int16_t* a,
-  const int16_t avg[3], const int16_t mtx[9], void* argb, uint32_t width);
-typedef void (*WP2YuvToArgbFunc)(
-  const int16_t* y, const int16_t* u, const int16_t* v,
-  const int16_t avg[3], const int16_t mtx[9], void* argb, uint32_t width);
+typedef void (*WP2AyuvToArgbFunc)(const int16_t* y, const int16_t* u,
+                                  const int16_t* v, const int16_t* a,
+                                  const int16_t avg[3], const int16_t mtx[9],
+                                  void* argb, uint32_t width);
+typedef void (*WP2YuvToArgbFunc)(const int16_t* y, const int16_t* u,
+                                 const int16_t* v, const int16_t avg[3],
+                                 const int16_t mtx[9], void* argb,
+                                 uint32_t width);
 
 // 8-bit output
 extern WP2AyuvToArgbFunc WP2AyuvToArgb32;  // Convert to pre-multiplied Argb
@@ -330,8 +336,8 @@ void WP2ReduceCoeffs(const int32_t src[], uint32_t size_x, uint32_t size_y,
 // Warning! Do not expect bit-exact same result amongst several implementation,
 // because of rounding order of floating-point computations. The SSE version
 // is different (off-by-one) from the C-version in ~1% of cases, e.g.
-extern int32_t (*WP2SlowDct8x8)(const int32_t in[64],
-                                const float cos_x[8], const float cos_y[8]);
+extern int32_t (*WP2SlowDct8x8)(const int32_t in[64], const float cos_x[8],
+                                const float cos_y[8]);
 
 // Convenience function for 1D in-place fwd-transform. Only for testing!
 void WP2Transform(int16_t coeffs[], WP2TransformType type, uint32_t size);
@@ -345,11 +351,11 @@ static constexpr uint32_t kDblkMaxStrength = 63;
 static constexpr uint32_t kDblkMaxSharpness = 7;
 // max number of filtered pixels on each side of the edge
 static constexpr uint32_t kDblkMaxHalf = 8;
-static constexpr int kDblCacheStep = 2 * kDblkMaxHalf;   // ('step' of cache)
+static constexpr int kDblCacheStep = 2 * kDblkMaxHalf;  // ('step' of cache)
 
 // Copy a width x '2*height' area to and from cache, transposed.
-extern void (*FilterCopyIn)(const int16_t* src, uint32_t src_step,
-                            int16_t* dst, int32_t width, int32_t height);
+extern void (*FilterCopyIn)(const int16_t* src, uint32_t src_step, int16_t* dst,
+                            int32_t width, int32_t height);
 extern void (*FilterCopyOut)(const int16_t* src, int16_t* dst,
                              uint32_t dst_step, int32_t width, int32_t height);
 
@@ -568,7 +574,7 @@ static constexpr ContextType GetContextType(uint32_t angle_idx) {
 
 // Precalculation of 'fuse' weight. 'strength' in [0..1].
 static constexpr uint32_t LargeWeightTableDim = 16u;
-typedef float LargeWeightTable[LargeWeightTableDim *  LargeWeightTableDim];
+typedef float LargeWeightTable[LargeWeightTableDim * LargeWeightTableDim];
 extern void PrecomputeLargeWeightTable(float strength, LargeWeightTable table);
 
 // "fuse" weights computation. 'w,h,x,y' in pixels.
@@ -595,8 +601,8 @@ extern void (*SubtractRow)(const int16_t src[], const int16_t pred[],
 // Add prediction 'res' to 'src', clamp and store in 'dst'.
 // 'len' is assumed to be multiple of 4.
 // 'res[]' and 'res[] + src[]' is assumed to fit in int16_t.
-extern void (*AddRow)(const int16_t src[], const int16_t res[],
-                      int32_t min, int32_t max, int16_t dst[], uint32_t len);
+extern void (*AddRow)(const int16_t src[], const int16_t res[], int32_t min,
+                      int32_t max, int16_t dst[], uint32_t len);
 
 // Equivalent version for blocks instead of row (same restrictions)
 typedef void (*SubtractBlockFunc)(const int16_t src[], uint32_t src_step,
@@ -605,13 +611,12 @@ typedef void (*SubtractBlockFunc)(const int16_t src[], uint32_t src_step,
                                   uint32_t height);
 typedef void (*AddBlockFunc)(const int16_t src[], uint32_t src_step,
                              const int16_t res[], uint32_t res_step,
-                             int32_t min, int32_t max,
-                             int16_t dst[], uint32_t dst_step,
-                             uint32_t height);
+                             int32_t min, int32_t max, int16_t dst[],
+                             uint32_t dst_step, uint32_t height);
 // in-place 16b version that performs dst[...] += res[...]
 typedef void (*AddBlockEqFunc)(const int16_t res[], uint32_t res_step,
-                               int16_t dst[], uint32_t dst_step,
-                               int32_t min, int32_t max, uint32_t height);
+                               int16_t dst[], uint32_t dst_step, int32_t min,
+                               int32_t max, uint32_t height);
 
 // the array is indexed by log2(width / 4): 0=4, 1=8, 2=16, 3=32
 extern SubtractBlockFunc SubtractBlock[4];
@@ -628,8 +633,8 @@ constexpr uint32_t kCflFracBits = 12;
 // 'len' is assumed to be a multiple of 4.
 extern void (*CflPredict)(const int16_t* src, int16_t a, int32_t b,
                           int16_t* dst, int16_t min, int16_t max, uint32_t len);
-static inline int16_t CflScale(int16_t v, int16_t a, int32_t b,
-                               int16_t min, int16_t max) {
+static inline int16_t CflScale(int16_t v, int16_t a, int32_t b, int16_t min,
+                               int16_t max) {
   const int32_t V = ((int32_t)a * v + b) >> kCflFracBits;
   return (int16_t)(V < min ? min : V > max ? max : V);
 }
@@ -646,17 +651,17 @@ namespace WP2 {
 
 // returns the min/max value of a 4x4 blocks located at 'src'
 extern void (*GetBlockMinMax)(const int16_t* src, uint32_t step,
-                              uint32_t num_blocks,
-                              int16_t min[], int16_t max[]);
+                              uint32_t num_blocks, int16_t min[],
+                              int16_t max[]);
 
 // returns the Min/Max values over a 5x5 block. It is assumed that the whole
 // 8x5 block memory is readable.
 extern void (*GetBlockMinMax_5x5)(const int16_t* src, uint32_t step,
                                   int16_t* const min, int16_t* const max);
 
-extern void GetBlockMinMaxGeneric(const int16_t* src, uint32_t step,
-                                  uint32_t w, uint32_t h,
-                                  int16_t* const min, int16_t* const max);
+extern void GetBlockMinMaxGeneric(const int16_t* src, uint32_t step, uint32_t w,
+                                  uint32_t h, int16_t* const min,
+                                  int16_t* const max);
 
 extern void ScoreDspInit();
 
@@ -667,7 +672,7 @@ extern void ScoreDspInit();
 
 // total size of the kernel: 2 * kWP2SSIMKernel + 1
 static constexpr uint32_t kWP2SSIMKernel = 3;
-static constexpr uint32_t kWP2SSIMWeightSum = 16 * 16;   // sum{kWeight}^2
+static constexpr uint32_t kWP2SSIMWeightSum = 16 * 16;  // sum{kWeight}^2
 
 // some implementation (like SSE2) will process more than the kernel's size of
 // data in the non-clipped fast version. This value specifies how many
@@ -694,9 +699,8 @@ extern double WP2CsSSIMCalculation(uint32_t bit_depth,
 
 // Returns the accumulated 'stats' of a (kWP2SSIMKernel*2+1)-sided pixel square.
 // 'src1' and 'src2' are absolute pointers to the top-left corner.
-typedef void (*WP2SSIMGetFunc)(const void* src1, size_t step1,
-                               const void* src2, size_t step2,
-                               WP2DistoStats* const stats);
+typedef void (*WP2SSIMGetFunc)(const void* src1, size_t step1, const void* src2,
+                               size_t step2, WP2DistoStats* const stats);
 // Same as above but handles the canvas edges, where the square does not fit.
 // 'center_x,y' are the coordinates of the center of the square and
 // 'width,height' are the dimensions of the whole canvas.
@@ -725,14 +729,14 @@ extern bool (*WP2HasValue8b)(const uint8_t* src, size_t len, uint8_t value);
 extern bool (*WP2HasValue16b)(const int16_t* src, size_t len, int16_t value);
 
 // returns true if src[0..len) contains other values than 'value'
-extern bool (*WP2HasOtherValue8b)(
-    const uint8_t* src, size_t len, uint8_t value);
-extern bool (*WP2HasOtherValue16b)(
-    const int16_t* src, size_t len, int16_t value);
+extern bool (*WP2HasOtherValue8b)(const uint8_t* src, size_t len,
+                                  uint8_t value);
+extern bool (*WP2HasOtherValue16b)(const int16_t* src, size_t len,
+                                   int16_t value);
 
 // return true if src[4 * i + 0] is different from 'value'
-extern bool (*WP2HasOtherValue8b32b)(
-    const uint8_t* src, size_t len, uint8_t value);
+extern bool (*WP2HasOtherValue8b32b)(const uint8_t* src, size_t len,
+                                     uint8_t value);
 
 void WP2AlphaInit();
 
@@ -740,15 +744,12 @@ void WP2AlphaInit();
 
 // Return the sum of squared error for a continuous row of samples.
 extern uint64_t (*WP2SumSquaredError8u)(const uint8_t* src1,
-                                        const uint8_t* src2,
-                                        uint32_t len);
+                                        const uint8_t* src2, uint32_t len);
 // the int16_t in src1[] and src2[] are assumed in range [-1024, 1023]
 extern uint64_t (*WP2SumSquaredError16s)(const int16_t* src1,
-                                         const int16_t* src2,
-                                         uint32_t len);
+                                         const int16_t* src2, uint32_t len);
 // Accumulate 32b samples channels by channels. result[] is not reset to 0.
-extern void (*WP2SumSquaredError4x8u)(const uint8_t* src1,
-                                      const uint8_t* src2,
+extern void (*WP2SumSquaredError4x8u)(const uint8_t* src1, const uint8_t* src2,
                                       uint32_t len, uint64_t result[4]);
 // Accumulate 24b samples channels by channels. result[] is not reset to 0.
 extern void (*WP2SumSquaredError3x8u)(const uint8_t* src1, const uint8_t* src2,
@@ -763,9 +764,11 @@ extern uint64_t (*WP2SumSquaredErrorBlock)(const int16_t* src1, uint32_t step1,
                                            const int16_t* src2, uint32_t step2,
                                            uint32_t w, uint32_t h);
 // Same, but after first downsampling the sources by half (2x2 average filter).
-extern uint64_t (*WP2SumSquaredErrorHalfBlock)(
-    const int16_t* src1, uint32_t step1, const int16_t* src2, uint32_t step2,
-    uint32_t w, uint32_t h);
+extern uint64_t (*WP2SumSquaredErrorHalfBlock)(const int16_t* src1,
+                                               uint32_t step1,
+                                               const int16_t* src2,
+                                               uint32_t step2, uint32_t w,
+                                               uint32_t h);
 
 void WP2PSNRInit();
 
@@ -774,8 +777,8 @@ void WP2PSNRInit();
 
 namespace WP2 {
 
-constexpr uint32_t kRasterPrec = 16;   // gradient's fixed-point precision
-typedef int32_t grad_t;    // type for holding values in fixed-precision
+constexpr uint32_t kRasterPrec = 16;  // gradient's fixed-point precision
+typedef int32_t grad_t;  // type for holding values in fixed-precision
 
 // compute cur[] at position 'dX' and update grads[]
 extern void (*RasterAdvance)(grad_t grads[3 * 4], grad_t dX, grad_t cur[4]);
@@ -792,4 +795,4 @@ void RasterInit();
 
 }  // namespace WP2
 
-#endif  /* WP2_DSP_DSP_H_ */
+#endif /* WP2_DSP_DSP_H_ */

@@ -26,10 +26,9 @@
 #include "src/wp2/config.h"
 #endif
 
-#include "./file_format.h"
+#include "imageio/file_format.h"
 #include "src/utils/csp.h"
 #include "src/wp2/base.h"
-#include "src/wp2/encode.h"
 #ifdef WP2_HAVE_WEBP
 #include "webp/encode.h"
 #endif
@@ -59,14 +58,14 @@ WP2Status WritePGM(const ArgbBuffer& buffer, FILE* fout,
 #ifdef WP2_HAVE_WEBP
 // Encodes 'buffer' as a WebP image with a given 'config' to 'output'.
 WP2Status CompressWebP(const ArgbBuffer& buffer, const WebPConfig& config,
-                       Writer* const output);
+                       Writer* output);
 #endif
 // Same as above but maps wp2 'quality' and 'effort' to a WebPConfig.
 // Returns WP2_STATUS_UNSUPPORTED_FEATURE unless compiled with WP2_HAVE_WEBP.
 WP2Status CompressWebP(const ArgbBuffer& buffer, float quality, int effort,
-                       Writer* const output);
+                       Writer* output);
 WP2Status CompressJXL(const ArgbBuffer& buffer, float quality, int effort,
-                      Writer* const output);
+                      Writer* output);
 
 }  // namespace WP2
 

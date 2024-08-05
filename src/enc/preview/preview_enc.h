@@ -21,11 +21,15 @@
 #define WP2_ENC_PREVIEW_PREVIEW_ENC_H_
 
 #include <cassert>
+#include <cstdint>
 
+#include "src/common/color_precision.h"
 #include "src/common/preview/preview.h"
 #include "src/common/progress_watcher.h"
+#include "src/utils/csp.h"
 #include "src/utils/plane.h"
-#include "src/wp2/encode.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -64,9 +68,9 @@ struct PreviewConfig {
   // See preview.h for valid ranges.
   // The following settings give better results for higher values but longer
   // encoding, decoding time and bigger bitstream size.
-  uint32_t num_vertices = 200;    // starting number of vertices
-  uint32_t num_colors = 6;        // starting number of colors
-  uint32_t grid_size = 64;        // grid size in the longest dimension
+  uint32_t num_vertices = 200;  // starting number of vertices
+  uint32_t num_colors = 6;      // starting number of colors
+  uint32_t grid_size = 64;      // grid size in the longest dimension
 
   // The following settings give better results for higher values but longer
   // encoding time.
@@ -99,7 +103,7 @@ struct PreviewConfig {
 // Compresses 'buffer' into a preview and writes it to 'output'.
 // Returns WP2_STATUS_OK or an error.
 WP2Status EncodePreview(const ArgbBuffer& buffer, const PreviewConfig& config,
-                        const ProgressRange& progress, Writer* const output);
+                        const ProgressRange& progress, Writer* output);
 
 //------------------------------------------------------------------------------
 // Internal vertex collection
@@ -107,25 +111,24 @@ WP2Status EncodePreview(const ArgbBuffer& buffer, const PreviewConfig& config,
 // Places a vertex on the hardest edge, repulses following ones from it,
 // repeats 'max_num_vertices' times.
 WP2Status CollectVerticesFromEdgeSelectionAndRepulsion(
-    const ArgbBuffer& canvas, uint32_t max_num_vertices,
-    PreviewData* const preview);
+    const ArgbBuffer& canvas, uint32_t max_num_vertices, PreviewData* preview);
 
 // Places a point where it maximizes color difference with current canvas,
 // updates canvas, repeats 'max_num_vertices' times.
-WP2Status CollectVerticesFromColorDiffMaximization(
-    const ArgbBuffer& canvas, uint32_t max_num_vertices,
-    PreviewData* const preview);
+WP2Status CollectVerticesFromColorDiffMaximization(const ArgbBuffer& canvas,
+                                                   uint32_t max_num_vertices,
+                                                   PreviewData* preview);
 
 // Takes a list of at most twice 'max_num_vertices' of the most edgy,
 // non-isolated pixels, and draws 'max_num_vertices' at random from it.
-WP2Status CollectVerticesFromRandomEdgeSelection(
-    const ArgbBuffer& canvas, uint32_t max_num_vertices,
-    PreviewData* const preview);
+WP2Status CollectVerticesFromRandomEdgeSelection(const ArgbBuffer& canvas,
+                                                 uint32_t max_num_vertices,
+                                                 PreviewData* preview);
 
 // Use Voronoi cells to spread vertices with equal-density.
-WP2Status CollectVerticesFromVoronoiCells(
-    const ArgbBuffer& canvas, uint32_t max_num_vertices,
-    PreviewData* const preview);
+WP2Status CollectVerticesFromVoronoiCells(const ArgbBuffer& canvas,
+                                          uint32_t max_num_vertices,
+                                          PreviewData* preview);
 
 //------------------------------------------------------------------------------
 // Internal color collection
@@ -137,7 +140,7 @@ Argb32b GetAverageColor(const ArgbBuffer& canvas, uint32_t radius,
 // Returns 'counts' with the number of 'vertices' using each 'palette' color.
 WP2Status GetPaletteHistogram(const Vector<VertexIndexedColor>& vertices,
                               const Vector<AYCoCg19b>& palette,
-                              Vector_u16* const counts);
+                              Vector_u16* counts);
 
 // Returns the index of the 'palette' element matching the 'color' the most.
 uint16_t FindClosestColorIndex(const Vector<AYCoCg19b>& palette,
@@ -145,7 +148,7 @@ uint16_t FindClosestColorIndex(const Vector<AYCoCg19b>& palette,
 
 // Make sure the palette has enough color, and insert a default colormap if
 // needed.
-WP2Status MakePaletteValid(Vector<AYCoCg19b>* const palette);
+WP2Status MakePaletteValid(Vector<AYCoCg19b>* palette);
 
 //------------------------------------------------------------------------------
 

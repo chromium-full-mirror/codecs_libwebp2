@@ -18,12 +18,19 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
 
 #include "src/common/global_params.h"
 #include "src/dec/incr/decoder_info.h"
 #include "src/dec/incr/decoder_state.h"
+#include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/dsp/math.h"
 #include "src/utils/data_source.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 

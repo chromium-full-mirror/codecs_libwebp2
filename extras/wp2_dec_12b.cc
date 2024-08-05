@@ -15,11 +15,18 @@
 //
 // WP2 decode into RGB 12 bits to keep as much precision as possible.
 
+#include <cstddef>
+#include <cstdint>
+
 #include "extras/ccsp_imageio.h"
-#include "extras/extras.h"
-#include "src/utils/data_source.h"
+#include "imageio/anim_image_dec.h"
+#include "imageio/imageio_util.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 

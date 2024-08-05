@@ -109,8 +109,8 @@ class DataSource {
 
   // Returns a 'data_handle' that is valid until its bytes are discarded or
   // until this DataSource instance is destroyed.
-  bool TryGetNext(size_t num_bytes, DataHandle* const data_handle);
-  bool TryReadNext(size_t num_bytes, DataHandle* const data_handle);
+  bool TryGetNext(size_t num_bytes, DataHandle* data_handle);
+  bool TryReadNext(size_t num_bytes, DataHandle* data_handle);
 
   // Sets all members to default values.
   virtual void Reset();

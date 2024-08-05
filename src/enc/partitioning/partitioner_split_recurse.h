@@ -20,16 +20,20 @@
 #ifndef WP2_ENC_PARTITIONER_SPLIT_RECURSE_H_
 #define WP2_ENC_PARTITIONER_SPLIT_RECURSE_H_
 
-#include "src/common/lossy/block.h"
+#include <cstdint>
+
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/predictor.h"
-#include "src/common/symbols.h"
+#include "src/common/progress_watcher.h"
+#include "src/enc/partitioning/partition_score_func.h"
 #include "src/enc/partitioning/partition_score_func_block.h"
 #include "src/enc/partitioning/partitioner.h"
 #include "src/enc/symbols_enc.h"
-#include "src/utils/csp.h"
+#include "src/utils/ans_utils.h"
 #include "src/utils/plane.h"
+#include "src/utils/split_iterator.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {
@@ -42,32 +46,31 @@ class SplitRecursePartitioner : public Partitioner {
  public:
   WP2Status Init(const EncoderConfig& config, const YUVPlane& yuv,
                  const Rectangle& tile_rect,
-                 PartitionScoreFunc* const score_func) override;
+                 PartitionScoreFunc* score_func) override;
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks,
-                             Vector_u32* const splits) override;
+                             VectorNoCtor<Block>* blocks,
+                             Vector_u32* splits) override;
 
  private:
   // Tries all split patterns for the block it.CurrentBlock() and appends the
   // split indices to 'best_pattern_idxs'.
   WP2Status FindBestPattern(
       const ProgressRange& progress, const VectorNoCtor<Block>& forced_blocks,
-      const SplitIteratorDefault& it, BlockScoreFunc* const score_func,
-      SymbolCounter* const symbol_counter, ANSEncCounter* const counter,
-      float extra_rate, uint32_t recursion_level, bool selected,
-      Vector_u32* const best_pattern_idxs, float* const best_score) const;
+      const SplitIteratorDefault& it, BlockScoreFunc* score_func,
+      SymbolCounter* symbol_counter, ANSEncCounter* counter, float extra_rate,
+      uint32_t recursion_level, bool selected, Vector_u32* best_pattern_idxs,
+      float* best_score) const;
 
   // Recursively computes the score for the given split pattern.
   WP2Status ComputeScore(const ProgressRange& progress,
                          const VectorNoCtor<Block>& forced_blocks,
                          const SplitIteratorDefault& it, uint32_t split_idx,
                          Block sub_blocks[4], uint32_t num_sub_blocks,
-                         BlockScoreFunc* const score_func,
-                         SymbolCounter* const symbol_counter,
-                         ANSEncCounter* const counter, float best_score,
-                         float extra_rate, uint32_t recursion_level,
-                         bool selected, Vector_u32* const best_pattern_idxs,
-                         float* const score) const;
+                         BlockScoreFunc* score_func,
+                         SymbolCounter* symbol_counter, ANSEncCounter* counter,
+                         float best_score, float extra_rate,
+                         uint32_t recursion_level, bool selected,
+                         Vector_u32* best_pattern_idxs, float* score) const;
 
   WP2Status VDebugRecursionLevel(const Block& block,
                                  uint32_t recursion_level) const;

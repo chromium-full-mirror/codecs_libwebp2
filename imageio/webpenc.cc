@@ -26,8 +26,8 @@
 #include "wp2/config.h"
 #endif
 
-#include "./image_enc.h"
-#include "./imageio_util.h"
+#include "imageio/image_enc.h"
+#include "imageio/imageio_util.h"
 #include "src/dsp/math.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"

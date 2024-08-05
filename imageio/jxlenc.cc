@@ -25,6 +25,7 @@
 #endif
 
 #ifdef WP2_HAVE_JXL
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 

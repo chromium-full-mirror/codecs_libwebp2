@@ -83,7 +83,7 @@ bool VDSelected(uint32_t tile_x, uint32_t tile_y, const Rectangle& rect,
 
 // Handles VisualDebug for "compressed" and "original".
 void ApplyVDebugBeforeAfter(const DecoderConfig& config,
-                            const CSPTransform& csp_tranform, const Tile& tile,
+                            const CSPTransform& csp_transform, const Tile& tile,
                             ArgbBuffer* const debug_output);
 
 void VDDrawUndefinedPattern(ArgbBuffer* const debug_output);

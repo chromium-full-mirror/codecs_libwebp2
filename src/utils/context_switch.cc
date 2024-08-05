@@ -21,16 +21,18 @@
 
 #if defined(WP2_USE_CONTEXT_SWITCH) && (WP2_USE_CONTEXT_SWITCH > 0)
 
+#if defined(WP2_TRACE)
 #include <cstdlib>
 
-#if defined(WP2_TRACE)
 #include "src/utils/utils.h"
 #define LOG_CONTEXT_ERROR(message)                                      \
   do {                                                                  \
     WP2ErrorLog(__FILE__, __LINE__, WP2_STATUS_OUT_OF_MEMORY, message); \
   } while (0)
 #else
-#define LOG_CONTEXT_ERROR(message)  do {} while (0)
+#define LOG_CONTEXT_ERROR(message) \
+  do {                             \
+  } while (0)
 #endif  // WP2_TRACE
 
 namespace WP2 {
@@ -149,8 +151,8 @@ bool MainContext::CreateLocalContext(void (*suspendable_function)(void*),
   context_.local_context_.uc_stack.ss_size =
       sizeof(context_.stack_buffer_) / sizeof(context_.stack_buffer_[0]);
   context_.local_context_.uc_stack.ss_flags = 0;
-  makecontext(&context_.local_context_,
-              (void (*)())(suspendable_function), 1, &context_);
+  makecontext(&context_.local_context_, (void (*)())(suspendable_function), 1,
+              &context_);
 #endif
   return true;
 }

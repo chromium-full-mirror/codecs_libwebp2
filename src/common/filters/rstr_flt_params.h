@@ -21,9 +21,11 @@
 #ifndef WP2_COMMON_FILTERS_RSTR_FLT_PARAMS_H_
 #define WP2_COMMON_FILTERS_RSTR_FLT_PARAMS_H_
 
-#include "src/common/constants.h"
+#include <cstdint>
+
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 

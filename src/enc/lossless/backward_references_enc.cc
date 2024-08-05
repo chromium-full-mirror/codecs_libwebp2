@@ -18,13 +18,25 @@
 
 #include "src/enc/lossless/backward_references_enc.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <memory>
+#include <utility>
+
 #include "src/common/lossless/color_cache.h"
-#include "src/dsp/math.h"
-#include "src/enc/lossless/histogram_enc.h"
+#include "src/common/symbols.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/symbols_enc.h"
+#include "src/utils/ans_utils.h"
 #include "src/utils/hash.h"
 #include "src/utils/hash_map.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2L {
 
@@ -35,15 +47,14 @@ namespace WP2L {
 // -----------------------------------------------------------------------------
 
 static const uint8_t plane_to_code_lut[128] = {
-  96,   73,  55,  39,  23,  13,   5,  1, 255, 255, 255, 255, 255, 255, 255, 255,
-  101,  78,  58,  42,  26,  16,   8,  2,   0,   3,  9,   17,  27,  43,  59,  79,
-  102,  86,  62,  46,  32,  20,  10,  6,   4,   7,  11,  21,  33,  47,  63,  87,
-  105,  90,  70,  52,  37,  28,  18,  14, 12,  15,  19,  29,  38,  53,  71,  91,
-  110,  99,  82,  66,  48,  35,  30,  24, 22,  25,  31,  36,  49,  67,  83, 100,
-  115, 108,  94,  76,  64,  50,  44,  40, 34,  41,  45,  51,  65,  77,  95, 109,
-  118, 113, 103,  92,  80,  68,  60,  56, 54,  57,  61,  69,  81,  93, 104, 114,
-  119, 116, 111, 106,  97,  88,  84,  74, 72,  75,  85,  89,  98, 107, 112, 117
-};
+    96,  73,  55,  39,  23, 13, 5,  1,  255, 255, 255, 255, 255, 255, 255, 255,
+    101, 78,  58,  42,  26, 16, 8,  2,  0,   3,   9,   17,  27,  43,  59,  79,
+    102, 86,  62,  46,  32, 20, 10, 6,  4,   7,   11,  21,  33,  47,  63,  87,
+    105, 90,  70,  52,  37, 28, 18, 14, 12,  15,  19,  29,  38,  53,  71,  91,
+    110, 99,  82,  66,  48, 35, 30, 24, 22,  25,  31,  36,  49,  67,  83,  100,
+    115, 108, 94,  76,  64, 50, 44, 40, 34,  41,  45,  51,  65,  77,  95,  109,
+    118, 113, 103, 92,  80, 68, 60, 56, 54,  57,  61,  69,  81,  93,  104, 114,
+    119, 116, 111, 106, 97, 88, 84, 74, 72,  75,  85,  89,  98,  107, 112, 117};
 
 uint32_t OffsetToPlaneCode(uint32_t width, uint32_t offset) {
   const uint32_t yoffset = offset / width;
@@ -194,8 +205,9 @@ bool HashChain::Allocate(uint32_t size) {
 // TODO(vrabaud) re-adjust those values and have a different logic (the number
 // of iteration does not necessarily matter as much as the number of lines)
 static int GetMaxItersForSpeed(int effort) {
-  return (effort == 3) ? 8 + 20 * 20 / 128 :
-         (effort == 5) ? 8 + 75 * 75 / 128 : 45 + effort * effort;
+  return (effort == 3)   ? 8 + 20 * 20 / 128
+         : (effort == 5) ? 8 + 75 * 75 / 128
+                         : 45 + effort * effort;
 }
 
 static uint32_t GetWindowSizeForHashChain(int effort, uint32_t width) {
@@ -273,7 +285,7 @@ WP2Status HashChain::Fill(int effort, const int16_t* const argb, uint32_t width,
 
   // Find the best match interval at each pixel, defined by an offset to the
   // pixel and a length. The right-most pixel cannot match anything to the right
-  // (hence a best length of 0) and the left-most pixel nothing to the left
+  // (hence a best length of 0) and the leftmost pixel nothing to the left
   // (hence an offset of 0).
   const int iter_max = GetMaxItersForSpeed(effort);
   assert(size > 2);
@@ -633,9 +645,9 @@ static WP2Status BackwardReferencesLz77Box(uint32_t width, uint32_t height,
 
 // -----------------------------------------------------------------------------
 
-WP2Status BackwardRefsWithLocalCache(const int16_t* const argb,
+WP2Status BackwardRefsWithLocalCache(const int16_t* argb,
                                      const CacheConfig& cache_config,
-                                     BackwardRefs* const refs);
+                                     BackwardRefs* refs);
 
 // Evaluate optimal cache bits for the local color cache.
 // The input *best_cache_bits sets the maximum cache bits to use (passing 0
@@ -810,16 +822,16 @@ static WP2Status GetStorageCost(uint32_t width, uint32_t height,
 }
 
 extern WP2Status BackwardReferencesTraceBackwards(
-    uint32_t width, uint32_t height, const int16_t* const argb,
+    uint32_t width, uint32_t height, const int16_t* argb,
     const LosslessSymbolsInfo& symbols_info, const HashChain& hash_chain,
     const CacheConfig& cache_config, const BackwardRefs& refs_src,
-    BackwardRefs* const refs_dst, bool* const check_histogram);
+    BackwardRefs* refs_dst, bool* check_histogram);
 static WP2Status GetBackwardReferencesImpl(
-    uint32_t width, uint32_t height, const int16_t* const argb, int effort,
+    uint32_t width, uint32_t height, const int16_t* argb, int effort,
     int lz77_types_to_try, uint32_t cache_bits_max, const HashChain& hash_chain,
     const LosslessSymbolsInfo& symbols_info,
-    WP2::SymbolRecorder* const symbol_recorder, CacheConfig* const cache_config,
-    BackwardRefsPool* ref_pool, BackwardRefsPool::RefsPtr* const refs_best) {
+    WP2::SymbolRecorder* symbol_recorder, CacheConfig* cache_config,
+    BackwardRefsPool* ref_pool, BackwardRefsPool::RefsPtr* refs_best) {
   LosslessSymbolsInfo symbols_info_tmp;
   WP2_CHECK_STATUS(symbols_info_tmp.CopyFrom(symbols_info));
   symbols_info_tmp.SetNumClusters(1);

@@ -17,14 +17,32 @@
 //
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
-#include <memory>
 
+#include "src/common/global_params.h"
+#include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/block_size_io.h"
 #include "src/common/lossy/transforms.h"
+#include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
+#include "src/dsp/math.h"
 #include "src/enc/analysis.h"
+#include "src/enc/block_enc.h"
+#include "src/enc/symbols_enc.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/ans_utils.h"
+#include "src/utils/front_mgr.h"
+#include "src/utils/plane.h"
+#include "src/utils/split_iterator.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -56,7 +74,6 @@ WP2Status SyntaxWriter::Init(ANSDictionaries* const dicts,
 
   WP2_CHECK_STATUS(residual_writer_.Init(context_.use_aom(),
                                          gparams_->maybe_use_lossy_alpha_));
-
 
   if (gparams_->has_alpha_) {
     WP2_CHECK_STATUS(alpha_writer_.Init(*config_, gparams, context_, yuv,
@@ -145,7 +162,7 @@ WP2Status SyntaxWriter::WriteHeader(ANSEncBase* const enc) {
   const uint32_t max_num_blocks =
       SizeBlocks(tile_rect_.width) * SizeBlocks(tile_rect_.height);
   // The minimum number of blocks is not accurate but it is not worth it to have
-  // a more complex solution (neglictible pessimization).
+  // a more complex solution (negligible pessimization).
   const uint32_t min_num_blocks = std::max(1u, max_num_blocks / kMaxBlockSize2);
   // This is also used for partitioning with an upper bound of 'num_blocks_'.
   assert((num_blocks_ == max_num_blocks) || (recorded_blocks_ == num_blocks_));
@@ -179,13 +196,13 @@ WP2Status SyntaxWriter::WriteHeader(ANSEncBase* const enc) {
   if (gparams_->use_rnd_mtx_) {
     WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
         kSymbolRndMtx0, num_blocks_, symbol_recorder_, "rnd_mtx", enc, dicts_));
-    WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
-        kSymbolUseRandomMatrix, num_blocks_, symbol_recorder_, "use_rnd_mtx",
-        enc, dicts_));
+    WP2_CHECK_STATUS(symbol_writer_.WriteHeader(kSymbolUseRandomMatrix,
+                                                num_blocks_, symbol_recorder_,
+                                                "use_rnd_mtx", enc, dicts_));
   }
-  WP2_CHECK_STATUS(
-      symbol_writer_.WriteHeader(kSymbolSplitTransform, num_blocks_,
-                                 symbol_recorder_, "split_tf", enc, dicts_));
+  WP2_CHECK_STATUS(symbol_writer_.WriteHeader(kSymbolSplitTransform,
+                                              num_blocks_, symbol_recorder_,
+                                              "split_tf", enc, dicts_));
   if (chroma_subsampling_ == ChromaSubsampling::kSingleBlock ||
       chroma_subsampling_ == ChromaSubsampling::kAdaptive) {
     WP2_CHECK_STATUS(symbol_writer_.WriteHeader(
@@ -309,7 +326,7 @@ void SyntaxWriter::WritePredictors(const CodedBlock& cb, Channel channel,
   } else {
     sm->Process(kSymbolModeA, params.pred->mode(), "a", enc);
   }
-  /* sub_mode = */params.pred->WriteParams(cb, channel, sm, enc);
+  /* sub_mode = */ params.pred->WriteParams(cb, channel, sm, enc);
 }
 
 void SyntaxWriter::WriteSplitTransform(const CodedBlock& cb, Channel channel,

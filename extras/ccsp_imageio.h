@@ -22,12 +22,17 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <memory>
 
 #include "imageio/anim_image_dec.h"
 #include "imageio/file_format.h"
+#include "imageio/imageio_util.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -44,23 +49,21 @@ class CCSPImageReader {
   // can be applied in this order to the output 'ccsp_buffer' samples to obtain
   // RGB. If not null, 'metadata' is filled with EXIF, XMP and/or ICCP data, if
   // any. Clears 'ccsp_buffer'.
-  CCSPImageReader(const uint8_t* const data, size_t data_size,
-                  YUVPlane* const ccsp_buffer, CSPMtx* const ccsp_to_rgb,
-                  Metadata* const metadata = nullptr,
+  CCSPImageReader(const uint8_t* data, size_t data_size, YUVPlane* ccsp_buffer,
+                  CSPMtx* ccsp_to_rgb, Metadata* metadata = nullptr,
                   FileFormat data_format = FileFormat::AUTO,
                   LogLevel log_level = LogLevel::DEFAULT,
                   size_t max_num_pixels = kMaxBufferArea);
 
-  WP2Status ReadFrame(bool* const is_last = nullptr,
-                      uint32_t* const duration_ms = nullptr);
+  WP2Status ReadFrame(bool* is_last = nullptr, uint32_t* duration_ms = nullptr);
   uint32_t GetLoopCount() const;
 
  protected:
-  void SetImplY4M(YUVPlane* const ccsp_buffer, CSPMtx* const ccsp_to_rgb,
-                  Metadata* const metadata, LogLevel log_level,
+  void SetImplY4M(YUVPlane* ccsp_buffer, CSPMtx* ccsp_to_rgb,
+                  Metadata* metadata, LogLevel log_level,
                   size_t max_num_pixels);
-  void SetImplWP2(YUVPlane* const ccsp_buffer, CSPMtx* const ccsp_to_rgb,
-                  Metadata* const metadata, LogLevel log_level,
+  void SetImplWP2(YUVPlane* ccsp_buffer, CSPMtx* ccsp_to_rgb,
+                  Metadata* metadata, LogLevel log_level,
                   size_t max_num_pixels);
   void SetCCSPImpl(FileFormat data_format, LogLevel log_level,
                    size_t max_num_pixels);
@@ -71,9 +74,9 @@ class CCSPImageReader {
   bool is_done_ = false;
 
   // Final output, points to the user data structs.
-  YUVPlane* const ccsp_buffer_;
-  CSPMtx* const ccsp_to_rgb_;
-  Metadata* const metadata_;
+  YUVPlane* ccsp_buffer_;
+  CSPMtx* ccsp_to_rgb_;
+  Metadata* metadata_;
 };
 
 //------------------------------------------------------------------------------
@@ -83,25 +86,24 @@ class CCSPImageReader {
 // The 'ccsp_to_rgb_matrix' and the 'ccsp_to_rgb_shift' are also returned and
 // can be applied in this order to the output 'buffer' samples to obtain RGB.
 // Returns WP2_STATUS_OK upon success.
-WP2Status ReadImage(const uint8_t* const data, size_t data_size,
-                    YUVPlane* const ccsp_buffer, CSPMtx* const ccsp_to_rgb,
-                    Metadata* const metadata = nullptr,
+WP2Status ReadImage(const uint8_t* data, size_t data_size,
+                    YUVPlane* ccsp_buffer, CSPMtx* ccsp_to_rgb,
+                    Metadata* metadata = nullptr,
                     FileFormat format = FileFormat::AUTO,
                     LogLevel log_level = LogLevel::DEFAULT);
 
 // Reads the file at 'file_path' and calls the function above.
 // If 'file_size' is not null, the file's original size is returned.
-WP2Status ReadImage(const char* const file_path, YUVPlane* const ccsp_buffer,
-                    CSPMtx* const ccsp_to_rgb,
-                    Metadata* const metadata = nullptr,
+WP2Status ReadImage(const char* file_path, YUVPlane* ccsp_buffer,
+                    CSPMtx* ccsp_to_rgb, Metadata* metadata = nullptr,
                     size_t* file_size = nullptr,
                     FileFormat format = FileFormat::AUTO,
                     LogLevel log_level = LogLevel::DEFAULT);
 
 // Decodes enough 'data' to get the 'bit_depth' of the image.
-WP2Status ReadBitDepth(const uint8_t* const data, size_t data_size,
-                       BitDepth* const bit_depth);
-WP2Status ReadBitDepth(const char* const file_path, BitDepth* const bit_depth);
+WP2Status ReadBitDepth(const uint8_t* data, size_t data_size,
+                       BitDepth* bit_depth);
+WP2Status ReadBitDepth(const char* file_path, BitDepth* bit_depth);
 
 //------------------------------------------------------------------------------
 
@@ -114,21 +116,21 @@ WP2Status SaveImage(const YUVPlane& buffer, const CSPMtx& ccsp_to_rgb,
                     FileFormat format = FileFormat::AUTO,
                     const Metadata& metadata = Metadata(),
                     const SamplingTaps& filter = SamplingTaps::kDownSharp,
-                    size_t* const file_size = nullptr);
+                    size_t* file_size = nullptr);
 
 // Converts samples to MPEG-2 YCbCr color space.
 // Halves Cb and Cr resolution if 'downsample' is not null.
 WP2Status ToYCbCr(const YUVPlane& ccsp, const CSPMtx& ccsp_to_rgb,
-                  BitDepth ycbcr_bit_depth,
-                  const SamplingTaps* const downsample, YUVPlane* const ycbcr);
+                  BitDepth ycbcr_bit_depth, const SamplingTaps* downsample,
+                  YUVPlane* ycbcr);
 // This specialized version uses kRGBToYCbCrMatrix[] (hence: reduced range)
 WP2Status ToYCbCr(const ArgbBuffer& rgb, BitDepth ycbcr_bit_depth,
-                  const SamplingTaps* const downsample, YUVPlane* const ycbcr);
+                  const SamplingTaps* downsample, YUVPlane* ycbcr);
 
 // Expects 'buffer' in MPEG-2 YCbCr color space.
 // If write_header is false, only the raw buffer is written. This is sometimes
 // referred to as a .yuv file.
-WP2Status WriteY4M(const YUVPlane& buffer, BitDepth bit_depth, FILE* const fout,
+WP2Status WriteY4M(const YUVPlane& buffer, BitDepth bit_depth, FILE* fout,
                    bool write_header = true);
 
 //------------------------------------------------------------------------------
@@ -136,8 +138,8 @@ WP2Status WriteY4M(const YUVPlane& buffer, BitDepth bit_depth, FILE* const fout,
 // Converts YCbCr content of 'yuv' into 'argb'. If 'ycbcr' is downsampled, the
 // filter 'upsample' will be used for upsampling into 'argb'.
 // This function is the inverse of ToYCbCr().
-WP2Status ToRGBA(const YUVPlane& ycbcr, const SamplingTaps* const upsample,
-                 ArgbBuffer* const argb);
+WP2Status ToRGBA(const YUVPlane& ycbcr, const SamplingTaps* upsample,
+                 ArgbBuffer* argb);
 
 //------------------------------------------------------------------------------
 

@@ -20,9 +20,14 @@
 #include "src/common/lossless/color_cache.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <cstring>
 
 #include "src/dsp/math.h"
 #include "src/utils/hash.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2L {
 

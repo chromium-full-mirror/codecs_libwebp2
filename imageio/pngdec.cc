@@ -17,6 +17,7 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <cstdint>
 #include <cstdio>
 
 #ifdef HAVE_CONFIG_H
@@ -30,6 +31,8 @@
 #define PNG_USER_MEM_SUPPORTED  // for png_create_read_struct_2
 #endif
 #include <png.h>
+#include <pngconf.h>
+#include <pnglibconf.h>
 #include <setjmp.h>  // note: this must be included *after* png.h
 
 #include <cstdlib>

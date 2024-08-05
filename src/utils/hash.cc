@@ -17,6 +17,8 @@
 
 #include "src/utils/hash.h"
 
+#include <cstdint>
+
 #ifdef WP2_WORDS_BIGENDIAN
 #define SPLIT(X) (uint8_t)((uint16_t)argb[X] >> 8), (uint8_t)(argb[X] & 0xff)
 #else

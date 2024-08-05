@@ -20,20 +20,29 @@
 #include "src/dec/lossless/losslessi_dec.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cstdint>
 #include <string>
 
 #include "src/common/color_precision.h"
 #include "src/common/constants.h"
+#include "src/common/global_params.h"
 #include "src/common/lossless/color_cache.h"
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/common/vdebug.h"
+#include "src/dec/symbols_dec.h"
 #include "src/dsp/lossless/decl_dsp.h"
+#include "src/dsp/lossless/dspl.h"
 #include "src/dsp/math.h"
+#include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/hash_map.h"
 #include "src/utils/plane.h"
+#include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2L {
@@ -1009,7 +1018,7 @@ WP2Status Decoder::DecodeHeader() {
     }
   }
 
-  // De-activate all transforms in case the decoder is re-used.
+  // Deactivate all transforms in case the decoder is re-used.
   for (Transform& t : transforms_) t.type_ = TransformType::kNum;
   for (uint32_t i = 0; i < num_transforms; ++i) {
     TransformType type = transforms[i];

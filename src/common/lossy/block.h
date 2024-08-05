@@ -20,17 +20,24 @@
 #ifndef WP2_COMMON_LOSSY_BLOCK_H_
 #define WP2_COMMON_LOSSY_BLOCK_H_
 
-#include "src/common/constants.h"
+#include <cstdint>
+#include <limits>
+#include <string>
+
 #include "src/common/global_params.h"
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/context.h"
 #include "src/common/lossy/predictor.h"
 #include "src/common/lossy/quant_mtx.h"
 #include "src/common/lossy/residuals.h"
-#include "src/common/lossy/residuals_aom.h"
 #include "src/common/lossy/transforms.h"
+#include "src/common/symbols.h"
+#include "src/dsp/dsp.h"
+#include "src/utils/csp.h"
 #include "src/utils/plane.h"
-#include "src/utils/vector.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 
@@ -113,12 +120,12 @@ class CodedBlockBase {
   void SetRange(int16_t yuv_min, int16_t yuv_max);
 
   // Specifies the destination for reconstruction.
-  void SetReconstructedOutput(YUVPlane* const out);
+  void SetReconstructedOutput(YUVPlane* out);
 
   // Used by GetContext(). If context_cache == nullptr, the previous instance
   // will be used. It must be != nullptr the first time it is used.
   void SetContextInput(const YUVPlane& in,
-                       ContextCache* const context_cache = nullptr);
+                       ContextCache* context_cache = nullptr);
 
   // Returns true if the context of the block (neighboring pixels used for
   // prediction) all have the same value for the given channel.
@@ -134,7 +141,7 @@ class CodedBlockBase {
   void Reconstruct(Channel channel, uint32_t tf_i);
 
   // Exports debug info during decoding.
-  void ToBlockInfo(bool use_aom_coeffs, struct BlockInfo* const blk) const;
+  void ToBlockInfo(bool use_aom_coeffs, struct BlockInfo* blk) const;
 
   // Printable string for debug.
   std::string Print() const;
@@ -146,14 +153,14 @@ class CodedBlockBase {
   const int16_t* GetContext(Channel channel, ContextType context_type) const;
   const int16_t* GetContext(Channel channel, bool split_tf, uint32_t tf_i,
                             ContextType context_type) const;
-  void SetContextCache(ContextCache* const context_cache);
+  void SetContextCache(ContextCache* context_cache);
   void ResetContextCache() const;
 
   // Returns left and right occupancy, in kMinBlockSizePix units.
   // If top_context_extent is not nullptr, fills it with the possible extent of
   // the top context.
-  void GetOccupancy(int8_t* const left, int8_t* const right,
-                    int8_t* const top_context_extent) const;
+  void GetOccupancy(int8_t* left, int8_t* right,
+                    int8_t* top_context_extent) const;
 
   // Coding parameters for a given channel.
   struct CodingParams {
@@ -242,64 +249,61 @@ class CodedBlockBase {
 
   // Visual debug: stores transform at block position
   void StoreTransform(const WP2::DecoderConfig& config, uint32_t tile_x,
-                      uint32_t tile_y, ArgbBuffer* const debug_output) const;
+                      uint32_t tile_y, ArgbBuffer* debug_output) const;
   // Visual debug: stores residuals at block position
   void StoreResiduals(const DecoderConfig& config, uint32_t tile_x,
                       uint32_t tile_y, const QuantMtx& quant, Channel channel,
-                      Plane16* const dst_plane) const;
+                      Plane16* dst_plane) const;
   // Visual debug: stores prediction modes
   void StorePredictionModes(const WP2::DecoderConfig& config,
                             const Rectangle& tile_rect, Channel channel,
                             uint32_t tf_i, const Predictors& preds,
-                            Plane16* const raw_prediction,
-                            ArgbBuffer* const debug_output) const;
+                            Plane16* raw_prediction,
+                            ArgbBuffer* debug_output) const;
   // Visual debug: append the values of the original pixels as text
   void AppendOriginalPixels(const DecoderConfig& config, uint32_t tile_x,
-                            uint32_t tile_y, const CSPTransform& csp_tranform,
-                            ArgbBuffer* const debug_output) const;
+                            uint32_t tile_y, const CSPTransform& csp_transform,
+                            ArgbBuffer* debug_output) const;
   // Visual debug: append the values of the original pixels as text
   void AppendCompressedPixels(const DecoderConfig& config, uint32_t tile_x,
-                              uint32_t tile_y,
-                              ArgbBuffer* const debug_output) const;
+                              uint32_t tile_y, ArgbBuffer* debug_output) const;
   // Visual debug: stores coeff methods
   void StoreCoeffMethod(const WP2::DecoderConfig& config,
-                        Plane16* const dst_plane) const;
+                        Plane16* dst_plane) const;
   // Visual debug: stores whether there are coeffs
   void StoreHasCoeffs(const WP2::DecoderConfig& config,
-                      Plane16* const dst_plane) const;
+                      Plane16* dst_plane) const;
   // Visual debug: stores the slope for Chroma from luma ('a' in 'chroma =
   // a * luma + b'), after doing a linear regression on the context.
   void StoreCflSlope(Channel channel, int16_t yuv_min, int16_t yuv_max,
-                     Plane16* const dst_plane,
-                     std::string* const debug_str) const;
+                     Plane16* dst_plane, std::string* debug_str) const;
   // Visual debug: stores the intercept for Chroma from luma ('b' in 'chroma =
   // a * luma + b'), after doing a linear regression on the context.
   void StoreCflIntercept(Channel channel, int16_t yuv_min, int16_t yuv_max,
-                         Plane16* const dst_plane,
-                         std::string* const debug_str) const;
+                         Plane16* dst_plane, std::string* debug_str) const;
 
   // VisualDebug (for config 'blocks')
   WP2Status Draw(const DecoderConfig& config, const Tile& tile,
-                 const GlobalParams& gparams,
-                 ArgbBuffer* const debug_output) const;
+                 const GlobalParams& gparams, ArgbBuffer* debug_output) const;
 
  public:
   uint32_t left_occupancy_;   // occupancy along the left edge
   uint32_t right_occupancy_;  // occupancy along the right edge
   // Length of the top context beyond the top-right corner of the block.
   uint32_t top_context_extent_;
-  uint8_t id_;      // segment id
-  bool is420_;      // reduced transform
+  uint8_t id_;  // segment id
+  bool is420_;  // reduced transform
 
   uint8_t mtx_[2];        // index of rnd_mtx to use
   bool use_mtx_ = false;  // true if rnd_mtx should be used
   const RndMtxSet* mtx_set_ = nullptr;
-  template<class T> bool CheckUseMtx(TrfSize trf, const T& mtx);
+  template <class T>
+  bool CheckUseMtx(TrfSize trf, const T& mtx);
 
   // The input/output samples must be views of buffers external to CodedBlock
   // pointing to the rectangle covered by 'blk_'. Except for 'predict_from_',
   // they will not be accessed outside of these bounds.
-  mutable YUVPlane out_;   // coded samples (output), within blk_
+  mutable YUVPlane out_;  // coded samples (output), within blk_
 
   // Encoder: Quantized residuals for Y/U/V/A, aka coefficients.
   // Decoder: inv-transformed coefficients (TODO(skal): remove?)
@@ -339,9 +343,9 @@ class CodedBlockBase {
   YUVPlane predict_from_;  // context (input), within 1px left/top/right of blk_
 
   CodingParams params_[3];  // Y/UV/A
-  Block blk_;      // position and dimension
+  Block blk_;               // position and dimension
 };
 
-}    // namespace WP2
+}  // namespace WP2
 
-#endif  /* WP2_COMMON_LOSSY_BLOCK_H_ */
+#endif /* WP2_COMMON_LOSSY_BLOCK_H_ */

@@ -18,28 +18,36 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <algorithm>
-#include <cmath>
+#include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <map>
+#include <memory>
 #include <sstream>
+#include <string>
 #include <vector>
 
-#include "src/utils/utils.h"  // this deep link needs to be first
 #include "examples/example_utils.h"
 #include "examples/stopwatch.h"
+#include "extras/aom_utils.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
+#include "imageio/imageio_util.h"
 #include "src/utils/thread_utils.h"
+#include "src/utils/utils.h"  // this deep link needs to be first
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
-#ifdef WP2_HAVE_WEBP
-#include "imageio/imageio_util.h"
-#endif  // WP2_HAVE_WEBP
-
-#include "extras/aom_utils.h"
+#if defined(WP2_HAVE_WEBP)
+#include "src/dsp/math.h"
+#include "webp/encode.h"
+#endif
 
 #ifdef WP2_HAVE_SJPEG
 #include "sjpeg.h"
@@ -277,23 +285,21 @@ class Task : public Worker {
 
  private:
   // used by the two methods below
-  WP2Status DoEncodeWP2(const std::string& out_file, ArgbBuffer* const decoded);
+  WP2Status DoEncodeWP2(const std::string& out_file, ArgbBuffer* decoded);
   WP2Status DoEncodeAV1(const std::string& out_file, bool use_avif,
-                        ArgbBuffer* const decoded);
-  WP2Status EncodeWP2(const std::string& out_file, ArgbBuffer* const decoded);
-  WP2Status EncodeNeural(const std::string& out_file,
-                         ArgbBuffer* const decoded);
+                        ArgbBuffer* decoded);
+  WP2Status EncodeWP2(const std::string& out_file, ArgbBuffer* decoded);
+  WP2Status EncodeNeural(const std::string& out_file, ArgbBuffer* decoded);
 
-  WP2Status EncodeWebP(const std::string& out_file, ArgbBuffer* const decoded);
-  WP2Status EncodeAV1(const std::string& out_file, ArgbBuffer* const decoded);
-  WP2Status EncodeAVIF(const std::string& out_file, ArgbBuffer* const decoded);
-  WP2Status EncodeJPEG(const std::string& out_file, ArgbBuffer* const decoded);
+  WP2Status EncodeWebP(const std::string& out_file, ArgbBuffer* decoded);
+  WP2Status EncodeAV1(const std::string& out_file, ArgbBuffer* decoded);
+  WP2Status EncodeAVIF(const std::string& out_file, ArgbBuffer* decoded);
+  WP2Status EncodeJPEG(const std::string& out_file, ArgbBuffer* decoded);
 };
 
 //------------------------------------------------------------------------------
 
-WP2Status Task::DoEncodeWP2(const std::string& out_file,
-                            ArgbBuffer* const decoded) {
+WP2Status Task::DoEncodeWP2(const std::string& out_file, ArgbBuffer* decoded) {
   // Create working copy
   params_.config.thread_level = (int)params_.use_mt;
   params_.config.store_grain = (params_.grain > 0);
@@ -369,16 +375,14 @@ WP2Status Task::DoEncodeWP2(const std::string& out_file,
   return WP2_STATUS_OK;
 }
 
-WP2Status Task::EncodeWP2(const std::string& out_file,
-                          ArgbBuffer* const decoded) {
+WP2Status Task::EncodeWP2(const std::string& out_file, ArgbBuffer* decoded) {
   params_.config.quality = params_.q;
   params_.config.alpha_quality =
       (params_.alpha_q < 0) ? params_.q : params_.alpha_q;
   return DoEncodeWP2(out_file, decoded);
 }
 
-WP2Status Task::EncodeNeural(const std::string& out_file,
-                             ArgbBuffer* const decoded) {
+WP2Status Task::EncodeNeural(const std::string& out_file, ArgbBuffer* decoded) {
   CHECK_TRUE(params_.neural_path != nullptr, "missing neural path");
   params_.config.graphdef_path = params_.neural_path;
   params_.config.use_neural_compression = 1;
@@ -389,8 +393,7 @@ WP2Status Task::EncodeNeural(const std::string& out_file,
 
 //------------------------------------------------------------------------------
 
-WP2Status Task::EncodeWebP(const std::string& out_file,
-                           ArgbBuffer* const decoded) {
+WP2Status Task::EncodeWebP(const std::string& out_file, ArgbBuffer* decoded) {
 #if defined(WP2_HAVE_WEBP)
   WebPConfig config;
   CHECK_TRUE(WebPConfigPreset(&config, WEBP_PRESET_DEFAULT, params_.q),
@@ -434,7 +437,7 @@ WP2Status Task::EncodeWebP(const std::string& out_file,
 //------------------------------------------------------------------------------
 
 WP2Status Task::DoEncodeAV1(const std::string& out_file, bool use_avif,
-                            ArgbBuffer* const decoded) {
+                            ArgbBuffer* decoded) {
   ParamsAV1 p;
   p.quality = params_.q;
   p.use_yuv444 = (params_.config.uv_mode != EncoderConfig::UVMode420);
@@ -493,20 +496,17 @@ WP2Status Task::DoEncodeAV1(const std::string& out_file, bool use_avif,
 
 //------------------------------------------------------------------------------
 
-WP2Status Task::EncodeAV1(const std::string& out_file,
-                          ArgbBuffer* const decoded) {
+WP2Status Task::EncodeAV1(const std::string& out_file, ArgbBuffer* decoded) {
   return DoEncodeAV1(out_file, /*use_avif=*/false, decoded);
 }
 
-WP2Status Task::EncodeAVIF(const std::string& out_file,
-                           ArgbBuffer* const decoded) {
+WP2Status Task::EncodeAVIF(const std::string& out_file, ArgbBuffer* decoded) {
   return DoEncodeAV1(out_file, /*use_avif=*/true, decoded);
 }
 
 //------------------------------------------------------------------------------
 
-WP2Status Task::EncodeJPEG(const std::string& out_file,
-                           ArgbBuffer* const decoded) {
+WP2Status Task::EncodeJPEG(const std::string& out_file, ArgbBuffer* decoded) {
 #if defined(WP2_HAVE_SJPEG)
   sjpeg::EncoderParam param;
   param.SetQuality(params_.q);
@@ -572,11 +572,11 @@ class OutputWriter {
  public:
   OutputWriter(const TestParams& params, const std::vector<StatType>& types)
       : params_(params), types_(types) {}
-  virtual ~OutputWriter() {}
+  virtual ~OutputWriter() = default;
 
   virtual void Start() {}
-  virtual void StartStep(uint32_t step, const Task* const task) {}
-  virtual void TaskStats(StatType type, const Task* const task, bool first) {}
+  virtual void StartStep(uint32_t step, const Task* task) {}
+  virtual void TaskStats(StatType type, const Task* task, bool first) {}
   virtual void EndStep(uint32_t step) { report_ += "\n"; }
   virtual void End() {}
 
@@ -613,11 +613,11 @@ class TextOutputWriter : public OutputWriter {
     report_ += "\n";
   }
 
-  void StartStep(uint32_t step, const Task* const task) override {
+  void StartStep(uint32_t step, const Task* task) override {
     report_ += SPrintf("%.1f  \t", task->params_.q);
   }
 
-  void TaskStats(StatType type, const Task* const task, bool first) override {
+  void TaskStats(StatType type, const Task* task, bool first) override {
     report_ +=
         SPrintf("   %6d %.3f %2.2lf %2.2lf %.2f %.2f", task->size_, task->bpp_,
                 task->psnr_, task->disto_, task->enc_time_, task->dec_time_);
@@ -662,27 +662,26 @@ class HtmlOutputWriter : public OutputWriter {
     report_ += "  }\n";
     report_ += "}\n";
     report_ += "</script></head>\n";
-    report_ += SPrintf("<title>RD-curve for file %s</title>\n",
-                       params_.in_file.c_str());
-    report_ += SPrintf("<body>\n<center>RD-curve for file %s</center>\n",
-                       params_.in_file.c_str());
+    report_ += "<title>RD-curve for file " + params_.in_file + "</center>\n";
     report_ += "<table border='1px'>\n";
     report_ += "<tr><td>Q</td>";
     for (auto type : kAllTypes) {
       if (DoType(type)) {
-        report_ += SPrintf("<td colspan='6'>%s</td>", kTypeNames[type]);
+        report_ += "<td colspan='6'>";
+        report_ += kTypeNames[type];
+        report_ += "</td>";
       }
     }
     report_ += "</tr>";
     report_ += "\n";
   }
 
-  void StartStep(uint32_t step, const Task* const task) override {
+  void StartStep(uint32_t step, const Task* task) override {
     report_ += "<tr><td>";
     report_ += SPrintf("%.1f  \t", task->params_.q);
   }
 
-  void TaskStats(StatType type, const Task* const task, bool first) override {
+  void TaskStats(StatType type, const Task* task, bool first) override {
     report_ += SPrintf(
         "<td>%6d</td><td>%.3f</td><td>%2.2lf</td><td>%2.2lf</td><td>%.2f</td>"
         "<td>%.2f</td>",
@@ -768,11 +767,11 @@ class GnuplotOutputWriter : public OutputWriter {
     report_ += "\n";
   }
 
-  void StartStep(uint32_t step, const Task* const task) override {
+  void StartStep(uint32_t step, const Task* task) override {
     report_ += SPrintf("%.1f  \t", task->params_.q);
   }
 
-  void TaskStats(StatType type, const Task* const task, bool first) override {
+  void TaskStats(StatType type, const Task* task, bool first) override {
     report_ +=
         SPrintf("   %6d %.3f %2.2lf %2.2lf %.2f %.2f", task->size_, task->bpp_,
                 task->psnr_, task->disto_, task->enc_time_, task->dec_time_);
@@ -829,7 +828,7 @@ class LumascopeOutputWriter : public OutputWriter {
     report_ += "\"topTexts\": [\n";
   }
 
-  void StartStep(uint32_t step, const Task* const task) override {
+  void StartStep(uint32_t step, const Task* task) override {
     if (step == 0) {
       report_ += "null,\n";  // in version 2, it's the default label
     } else {
@@ -838,7 +837,7 @@ class LumascopeOutputWriter : public OutputWriter {
     report_ += "[";
   }
 
-  void TaskStats(StatType type, const Task* const task, bool first) override {
+  void TaskStats(StatType type, const Task* task, bool first) override {
     if (!first) {
       report_ += ",\n";
     }

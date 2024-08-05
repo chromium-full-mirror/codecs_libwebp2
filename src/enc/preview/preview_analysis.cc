@@ -17,15 +17,20 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include "./preview_enc.h"
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <cstring>
+#include <cstdint>
 
+#include "src/common/color_precision.h"
 #include "src/common/preview/preview.h"
+#include "src/dsp/math.h"
+#include "src/enc/preview/preview_enc.h"
+#include "src/utils/plane.h"
 #include "src/utils/random.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 // Uncomment the following to enable visual debug functions.
 // #define VISUAL_DEBUG
@@ -54,8 +59,7 @@ WP2Status DetectEdges(const ArgbBuffer& canvas, Plane16* const dst) {
     const uint32_t dst_y = y * dst->h_ / canvas.height();
     auto* const sobel = dst->Row(dst_y);
     for (uint32_t x = 1; x < canvas.width() - 1; ++x) {
-      const int32_t neighbors_sum = (src +          1)[x] +
-                                    (src -          1)[x] +
+      const int32_t neighbors_sum = (src + 1)[x] + (src - 1)[x] +
                                     (src + gray.step_)[x] +
                                     (src - gray.step_)[x];
       const int32_t diff = std::abs(neighbors_sum - 4 * (int32_t)src[x]);
@@ -120,10 +124,8 @@ void RepulseFutureVerticesFrom(const VertexIndexedColor& point,
 
 //------------------------------------------------------------------------------
 
-float GetDiff(const Plane8u& diff_map,
-              uint32_t pixel_x, uint32_t pixel_y,
-              uint32_t grid_w, uint32_t grid_h,
-              int radius = 3) {
+float GetDiff(const Plane8u& diff_map, uint32_t pixel_x, uint32_t pixel_y,
+              uint32_t grid_w, uint32_t grid_h, int radius = 3) {
   const int x_limit = diff_map.w_ - 1;
   const int y_limit = diff_map.h_ - 1;
   const int cx = DivRound(pixel_x * x_limit, grid_w - 1);
@@ -145,7 +147,7 @@ WP2Status Randomize(uint32_t size, uint16_t w, uint16_t h, uint32_t seed,
   WP2_CHECK_ALLOC_OK(vertices.resize(size));
   UniformIntDistribution rnd(seed);
   for (auto& v : vertices) {
-    v = { rnd.Get<uint16_t>(0, w), rnd.Get<uint16_t>(0, h), 0 };
+    v = {rnd.Get<uint16_t>(0, w), rnd.Get<uint16_t>(0, h), 0};
   }
   return WP2_STATUS_OK;
 }
@@ -188,7 +190,7 @@ WP2Status CollectVerticesFromEdgeSelectionAndRepulsion(
         const float attraction = kEdgeScale * edges_row[x] - repulsive_row[x];
         if (attraction > max_attraction) {
           max_attraction = attraction;
-          vtx = { x, y, 0 };
+          vtx = {x, y, 0};
           found = true;
         }
       }
@@ -203,9 +205,9 @@ WP2Status CollectVerticesFromEdgeSelectionAndRepulsion(
 
 //------------------------------------------------------------------------------
 
-WP2Status CollectVerticesFromColorDiffMaximization(
-    const ArgbBuffer& canvas, uint32_t max_num_vertices,
-    PreviewData* const preview) {
+WP2Status CollectVerticesFromColorDiffMaximization(const ArgbBuffer& canvas,
+                                                   uint32_t max_num_vertices,
+                                                   PreviewData* const preview) {
   assert(preview != nullptr);
   static constexpr uint32_t avg_radius = 3;
 
@@ -250,10 +252,9 @@ WP2Status CollectVerticesFromColorDiffMaximization(
       const uint8_t* src2 = result.GetRow8(y);
       uint8_t* const dst = diff_map.Row(y);
       for (uint16_t x = 0; x < result.width(); ++x) {
-        dst[x] = (std::abs(src1[0] - src2[0]) +
-                  std::abs(src1[1] - src2[1]) +
-                  std::abs(src1[2] - src2[2]) +
-                  std::abs(src1[3] - src2[3])) >> 2;
+        dst[x] = (std::abs(src1[0] - src2[0]) + std::abs(src1[1] - src2[1]) +
+                  std::abs(src1[2] - src2[2]) + std::abs(src1[3] - src2[3])) >>
+                 2;
         src1 += 4;
         src2 += 4;
       }
@@ -261,7 +262,7 @@ WP2Status CollectVerticesFromColorDiffMaximization(
 
     int32_t best_offset = -1;
     best_diff *= 0.2;  // next vertex will have to be better by 20% at least
-    VertexIndexedColor best_vtx = { 0, 0, (uint16_t)palette.size() };
+    VertexIndexedColor best_vtx = {0, 0, (uint16_t)palette.size()};
     // sample ~20% of the image to find the most-offending spot
     for (uint32_t n = w * h / 5; n > 0; --n) {
       const uint16_t x = rnd.Get(0u, w - 1);
@@ -271,12 +272,12 @@ WP2Status CollectVerticesFromColorDiffMaximization(
       if (used[offset]) continue;
       const float diff = GetDiff(diff_map, x, y, w, h);
       assert(diff >= 0.f);
-        if (diff >= best_diff) {
-          best_diff = diff;
-          best_vtx.x = x;
-          best_vtx.y = y;
-          best_offset = offset;
-        }
+      if (diff >= best_diff) {
+        best_diff = diff;
+        best_vtx.x = x;
+        best_vtx.y = y;
+        best_offset = offset;
+      }
     }
     if (best_offset < 0) break;
     used[best_offset] = 1u;
@@ -294,9 +295,9 @@ WP2Status CollectVerticesFromColorDiffMaximization(
 
 //------------------------------------------------------------------------------
 
-WP2Status CollectVerticesFromRandomEdgeSelection(
-    const ArgbBuffer& canvas, uint32_t max_num_vertices,
-    PreviewData* const preview) {
+WP2Status CollectVerticesFromRandomEdgeSelection(const ArgbBuffer& canvas,
+                                                 uint32_t max_num_vertices,
+                                                 PreviewData* const preview) {
   assert(preview != nullptr);
   Vector<VertexIndexedColor>& vertices = preview->vertices_;
   vertices.clear();
@@ -310,10 +311,9 @@ WP2Status CollectVerticesFromRandomEdgeSelection(
   for (uint16_t y = 1; y < edges.h_ - 1; ++y) {
     auto* const row = edges.Row(y);
     for (uint16_t x = 1; x < edges.w_ - 1; ++x) {
-      const int nb = (int)((row[x] > row[x + edges.step_]) +
-                           (row[x] > row[x + 1]) +
-                           (row[x] > row[x - 1]) +
-                           (row[x] > row[x - edges.step_]));
+      const int nb =
+          (int)((row[x] > row[x + edges.step_]) + (row[x] > row[x + 1]) +
+                (row[x] > row[x - 1]) + (row[x] > row[x - edges.step_]));
       if (nb >= 3) row[x] = 0;
       max_value = std::max(max_value, row[x]);
     }
@@ -339,7 +339,7 @@ WP2Status CollectVerticesFromRandomEdgeSelection(
           }
         }
         if (best_v->color_index < row[x]) {
-          *best_v = { x, y, (uint16_t)row[x] };
+          *best_v = {x, y, (uint16_t)row[x]};
           ++nb_moved;
         }
       }
@@ -365,13 +365,13 @@ WP2Status CollectVerticesFromRandomEdgeSelection(
 namespace {
 
 struct VoronoiCell {
-  uint32_t acc   = 0;   // sum{1}
-  int32_t r_acc  = 0;   // sum{rho}
-  double x_acc   = 0;   // sum{x} / acc
-  double y_acc   = 0;   // sum{y} / acc
-  double rx_acc  = 0;   // sum{rho * x} / r_acc
-  double ry_acc  = 0;   // sum{rho * y} / r_acc
-  double rxx_acc = 0;   // higher moments, for determining cell's typical size
+  uint32_t acc = 0;    // sum{1}
+  int32_t r_acc = 0;   // sum{rho}
+  double x_acc = 0;    // sum{x} / acc
+  double y_acc = 0;    // sum{y} / acc
+  double rx_acc = 0;   // sum{rho * x} / r_acc
+  double ry_acc = 0;   // sum{rho * y} / r_acc
+  double rxx_acc = 0;  // higher moments, for determining cell's typical size
   double rxy_acc = 0;
   double ryy_acc = 0;
 
@@ -386,7 +386,7 @@ struct VoronoiCell {
     acc += 1u;
     x_acc += x;
     y_acc += y;
-    r_acc  += rho;
+    r_acc += rho;
     rx_acc += rho * x;
     ry_acc += rho * y;
     rxx_acc += rho * x * x;
@@ -394,15 +394,15 @@ struct VoronoiCell {
     ryy_acc += rho * y * y;
   }
 
-  bool StoreAverage() {   // returns false is cell is empty
+  bool StoreAverage() {  // returns false is cell is empty
     if (acc == 0) return false;
     const double norm = 1.f / acc;
-    x_acc *=  norm;
-    y_acc *=  norm;
+    x_acc *= norm;
+    y_acc *= norm;
     if (r_acc > 0) {
       const double rnorm = 1.f / r_acc;
-      rx_acc  *= rnorm;
-      ry_acc  *= rnorm;
+      rx_acc *= rnorm;
+      ry_acc *= rnorm;
       rxx_acc *= rnorm;
       rxy_acc *= rnorm;
       ryy_acc *= rnorm;
@@ -422,7 +422,7 @@ struct VoronoiCell {
       t = 0.5 * std::atan2(2. * num, den);
     }
     // displacement of a half-radius in the main direction
-    double radius = 0.5 * std::sqrt(acc / M_PI);   // a = pi.r^2
+    double radius = 0.5 * std::sqrt(acc / M_PI);  // a = pi.r^2
     if (amp != nullptr) {
       radius *= *amp;
       *amp = radius;
@@ -445,13 +445,14 @@ static void CollectVoronoi(const Plane16& src,
   // sort y-first, x-second
   std::sort(vertices.begin(), vertices.end(),
             [](const VertexIndexedColor& a, const VertexIndexedColor& b) {
-              return (a.y != b.y) ? (a.y < b.y) : (a.x < b.x); });
+              return (a.y != b.y) ? (a.y < b.y) : (a.x < b.x);
+            });
   // remove dupes
   uint32_t num_vertices = 0;
   for (auto& v : vertices) {
-    if (num_vertices > 0 &&
-        v.x == vertices[num_vertices - 1].x &&
-        v.y == vertices[num_vertices - 1].y) continue;
+    if (num_vertices > 0 && v.x == vertices[num_vertices - 1].x &&
+        v.y == vertices[num_vertices - 1].y)
+      continue;
     std::swap(vertices[num_vertices], v);
     ++num_vertices;
   }
@@ -484,9 +485,9 @@ static void CollectVoronoi(const Plane16& src,
           best_dist = d;
         }
       }
-      cells[best].Add(x , y, src.Row(y)[x]);
-      if (view != nullptr) view->Row(y)[x] = best;   // draw the cells
-      if (x == 0) best_y = best;  // for next line
+      cells[best].Add(x, y, src.Row(y)[x]);
+      if (view != nullptr) view->Row(y)[x] = best;  // draw the cells
+      if (x == 0) best_y = best;                    // for next line
     }
   }
 }
@@ -549,7 +550,7 @@ WP2Status DrawAndSave(const Vector<VoronoiCell>& cells,
 
   out.Fill(255);
 
-  if (false) {   // draw Voronoi diagram
+  if (false) {  // draw Voronoi diagram
     for (auto it = out.begin(); it != out.end(); ++it) {
       const auto c = cells[voronoi.Row(it.y_)[it.x_]];
       *it = 255 - c.r_acc / c.acc;
@@ -581,12 +582,12 @@ static int32_t ToGray(const void* src) {
   const uint8_t* const src8 = (const uint8_t*)src;
   const int32_t r = src8[1], g = src8[2], b = src8[3];
   double gray = 0.299 * r + 0.587 * g + 0.114 * b;  // rec.601
-  gray = 255. * pow(gray / 255., 0.45);   // gamma-correction
-  return (int32_t)(255. - gray);  // white = 0, black = 255
+  gray = 255. * pow(gray / 255., 0.45);             // gamma-correction
+  return (int32_t)(255. - gray);                    // white = 0, black = 255
 }
 
-void QuantizeToGrid(Vector<VertexIndexedColor>& vertices,
-                    uint32_t grid_w, uint32_t W, uint32_t grid_h, uint32_t H) {
+void QuantizeToGrid(Vector<VertexIndexedColor>& vertices, uint32_t grid_w,
+                    uint32_t W, uint32_t grid_h, uint32_t H) {
   for (auto& v : vertices) {
     const uint32_t ix = (v.x * grid_w + W / 2) / W;
     const uint32_t iy = (v.y * grid_h + H / 2) / H;
@@ -598,7 +599,8 @@ void QuantizeToGrid(Vector<VertexIndexedColor>& vertices,
 }  // namespace
 
 WP2Status CollectVerticesFromVoronoiCells(const ArgbBuffer& canvas,
-    uint32_t max_num_vertices, PreviewData* const preview) {
+                                          uint32_t max_num_vertices,
+                                          PreviewData* const preview) {
   assert(preview != nullptr);
 
   Vector<VertexIndexedColor>& vertices = preview->vertices_;
@@ -656,15 +658,15 @@ WP2Status CollectVerticesFromVoronoiCells(const ArgbBuffer& canvas,
     vertices.clear();
     extra_vertices.clear();
     for (const auto& c : cells) {
-      if (c.acc == 0) continue;   // remove empty cell
+      if (c.acc == 0) continue;  // remove empty cell
       const float rho = c.r_acc;
-      if (rho < Tl) continue;       // remove the vertex (too sparse)
+      if (rho < Tl) continue;  // remove the vertex (too sparse)
       const float xf = c.rx_acc;
       const float yf = c.ry_acc;
       const uint16_t xi = (uint16_t)std::lround(xf);
       const uint16_t yi = (uint16_t)std::lround(yf);
       bool stored = false;
-      if (c.acc > 1 && rho > Tu) {   // if too dense, split the cell's vertex
+      if (c.acc > 1 && rho > Tu) {  // if too dense, split the cell's vertex
         float dx, dy, amp = 0.5f;
         c.GetMainDirection(&dx, &dy, &amp);
         const uint16_t v1_x = (uint16_t)std::lround(xf - dx);

@@ -20,15 +20,16 @@
 #ifndef WP2_ENC_PARTITIONER_H_
 #define WP2_ENC_PARTITIONER_H_
 
-#include "src/common/lossy/block.h"
+#include <cstdint>
+
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/predictor.h"
-#include "src/common/symbols.h"
+#include "src/common/progress_watcher.h"
 #include "src/enc/partitioning/partition_score_func.h"
-#include "src/enc/symbols_enc.h"
-#include "src/utils/csp.h"
 #include "src/utils/plane.h"
+#include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {
@@ -43,14 +44,14 @@ class Partitioner : public WP2Allocable {
   // Configures the partition settings and allocates memory.
   virtual WP2Status Init(const EncoderConfig& config, const YUVPlane& yuv,
                          const Rectangle& tile_rect,
-                         PartitionScoreFunc* const score_func);
+                         PartitionScoreFunc* score_func);
 
   // Computes and returns the best layout. Input 'blocks' are considered forced.
   // Some partitioners also fill in 'splits' (if not nullptr), as an
   // alternate way to encode block geometry. See also split_iterator.h
   virtual WP2Status GetBestPartition(const ProgressRange& progress,
-                                     VectorNoCtor<Block>* const blocks,
-                                     Vector_u32* const splits) = 0;
+                                     VectorNoCtor<Block>* blocks,
+                                     Vector_u32* splits) = 0;
 
  protected:
   // Gets or sets areas as occupied.
@@ -64,7 +65,7 @@ class Partitioner : public WP2Allocable {
   // Verifies that the 'forced_blocks' don't overlap each other.
   // 'max_num_blocks_left' will be decremented by the sum of their areas.
   WP2Status RegisterForcedBlocks(const VectorNoCtor<Block>& forced_blocks,
-                                 uint32_t* const max_num_blocks_left);
+                                 uint32_t* max_num_blocks_left);
 
   const EncoderConfig* config_ = nullptr;
   Rectangle tile_rect_;            // In pixels, not padded.
@@ -88,7 +89,7 @@ class Partitioner : public WP2Allocable {
 // 'EncoderInfo::force_partition' to 'out' (debug).
 WP2Status AddForcedBlocks(const EncoderConfig& config,
                           const Rectangle& padded_tile_rect,
-                          VectorNoCtor<Block>* const out);
+                          VectorNoCtor<Block>* out);
 
 // Returns true if the given split pattern (given as the whole block + sub
 // blocks) is compatible with the given forced blocks which must be sorted.

@@ -22,11 +22,11 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 
-#include "./anim_image_dec.h"
-
+#include "imageio/anim_image_dec.h"
 #ifdef HAVE_CONFIG_H
 #include "wp2/config.h"
 #endif
@@ -37,6 +37,7 @@
 
 #include <gif_lib.h>
 
+#include "imageio/imageio_util.h"
 #include "src/dsp/dsp.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
@@ -160,7 +161,7 @@ WP2Status ConvertIndexedColors(const GifFileType* const decoder,
 
   for (uint32_t i = 0; i < num_pixels; ++i) {
     if (indexed_color_pixels[i] == transparent_index) {
-      // Do nothing. A tranparent pixel implies keeping previous color.
+      // Do nothing. A transparent pixel implies keeping previous color.
     } else if (indexed_color_pixels[i] < color_map->ColorCount) {
       const GifColorType color = color_map->Colors[indexed_color_pixels[i]];
       dst_pixels[i] = (uint32_t)0xffu | (color.Red << 8) | (color.Green << 16) |
@@ -437,7 +438,7 @@ class ImageReaderGIF : public ImageReader::Impl {
             WP2_CHECK_STATUS(ReadGraphicsExtension(data, &frame_duration_ms,
                                                    &frame_dispose_method_,
                                                    &transparent_index_));
-            // Avoid instant frames from unconsistent GIF images.
+            // Avoid instant frames from inconsistent GIF images.
             *duration_ms = (frame_duration_ms > 0) ? frame_duration_ms
                                                    : kDefaultDurationMs;
           } else if (extension == APPLICATION_EXT_FUNC_CODE) {

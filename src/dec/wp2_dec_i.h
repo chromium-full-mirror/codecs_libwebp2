@@ -20,23 +20,28 @@
 #ifndef WP2_DEC_WP2_DEC_I_H_
 #define WP2_DEC_WP2_DEC_I_H_
 
+#include <cstdint>
+#include <memory>
+
 #include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
-#include "src/common/lossy/block_size_io.h"
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/context.h"
 #include "src/common/lossy/residuals.h"
 #include "src/common/lossy/rnd_mtx.h"
-#include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
 #include "src/dec/lossless/losslessi_dec.h"
-#include "src/dec/residuals_dec_aom.h"
 #include "src/dec/symbols_dec.h"
 #include "src/dec/tile_dec.h"
-#include "src/dsp/dsp.h"
 #include "src/utils/ans.h"
 #include "src/utils/csp.h"
 #include "src/utils/data_source.h"
 #include "src/utils/front_mgr.h"
+#include "src/utils/plane.h"
+#include "src/utils/split_iterator.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 
@@ -50,27 +55,25 @@ namespace WP2 {
 //   A row must be left intact once it is included in num_decoded_rows.
 
 WP2Status LossyDecode(const BitstreamFeatures& features,
-                      const DecoderConfig& config,
-                      TilesLayout* const tiles_layout, ANSDec* const dec,
-                      Tile* const tile);
+                      const DecoderConfig& config, TilesLayout* tiles_layout,
+                      ANSDec* dec, Tile* tile);
 
 WP2Status LosslessDecode(const BitstreamFeatures& features,
                          const DecoderConfig& config,
-                         const GlobalParams& gparams, ANSDec* const dec,
-                         Tile* const tile);
+                         const GlobalParams& gparams, ANSDec* dec, Tile* tile);
 
-WP2Status NeuralDecode(ArgbBuffer* const picture, ANSDec* const dec,
+WP2Status NeuralDecode(ArgbBuffer* picture, ANSDec* dec,
                        const BitstreamFeatures& features);
 
 WP2Status Av1Decode(const BitstreamFeatures& features,
                     const DecoderConfig& config, const DataView& dec,
-                    Tile* const tile);
+                    Tile* tile);
 
 //------------------------------------------------------------------------------
 
 // These internal methods are to avoid polluting public decode.h
-void ResetDecoderInfo(DecoderInfo* const info);
-WP2Status MergeDecoderInfo(DecoderInfo* const from, DecoderInfo* const to);
+void ResetDecoderInfo(DecoderInfo* info);
+WP2Status MergeDecoderInfo(DecoderInfo* from, DecoderInfo* to);
 
 //------------------------------------------------------------------------------
 // Internal decode.
@@ -102,52 +105,48 @@ WP2Status FillDecoderInfo(const GlobalParams& gparams,
 // functions only call DataSource::MarkNumBytesAsRead(). This way the calling
 // function can decide whether to retry later (UnmarkAllReadBytes()) or not
 // (Discard(GetNumNextBytes())).
-WP2Status DecodeHeader(DataSource* const data_source,
-                       BitstreamFeatures* const features);
+WP2Status DecodeHeader(DataSource* data_source, BitstreamFeatures* features);
 
-WP2Status DecodePreview(DataSource* const data_source,
+WP2Status DecodePreview(DataSource* data_source,
                         const BitstreamFeatures& features,
-                        ArgbBuffer* const output_buffer);
-WP2Status SkipPreview(DataSource* const data_source,
+                        ArgbBuffer* output_buffer);
+WP2Status SkipPreview(DataSource* data_source,
                       const BitstreamFeatures& features);
 
-WP2Status DecodeICC(DataSource* const data_source,
-                    const BitstreamFeatures& features, Data* const iccp);
+WP2Status DecodeICC(DataSource* data_source, const BitstreamFeatures& features,
+                    Data* iccp);
 
-WP2Status DecodeANMF(const DecoderConfig& config, DataSource* const data_source,
+WP2Status DecodeANMF(const DecoderConfig& config, DataSource* data_source,
                      const BitstreamFeatures& features, uint32_t frame_index,
-                     AnimationFrame* const frame);
+                     AnimationFrame* frame);
 
 // if gparams = nullptr, just skip over the data without parsing
-WP2Status DecodeGLBL(DataSource* const data_source,
-                     const DecoderConfig& config,
+WP2Status DecodeGLBL(DataSource* data_source, const DecoderConfig& config,
                      const BitstreamFeatures& features,
-                     GlobalParams* const gparams = nullptr);
+                     GlobalParams* gparams = nullptr);
 
 // Fills the area outside 'frame.window' with the 'features.background_color'.
 WP2Status FillBorders(const BitstreamFeatures& features,
-                      const AnimationFrame& frame, ArgbBuffer* const output);
+                      const AnimationFrame& frame, ArgbBuffer* output);
 WP2Status FillBorders(const BitstreamFeatures& features,
                       const AnimationFrame& frame,
-                      const CSPTransform& csp_transform,
-                      YUVPlane* const output);
+                      const CSPTransform& csp_transform, YUVPlane* output);
 
 WP2Status DecodeTileChunkSize(uint32_t rgb_bit_depth,
                               const GlobalParams& params,
                               const Rectangle& tile_rect,
-                              DataSource* const data_source,
-                              uint32_t* const tile_chunk_size);
+                              DataSource* data_source,
+                              uint32_t* tile_chunk_size);
 
-WP2Status DecodeMetadata(DataSource* const data_source,
-                         const BitstreamFeatures& features,
-                         Data* const xmp, Data* const exif);
+WP2Status DecodeMetadata(DataSource* data_source,
+                         const BitstreamFeatures& features, Data* xmp,
+                         Data* exif);
 
 // These two Skip() functions do not attempt to read anything past the chunk
 // size; if data length check through reading is necessary but data copy should
 // be avoided, call the Decode() functions instead with null Data pointers.
-WP2Status SkipICC(DataSource* const data_source,
-                  const BitstreamFeatures& features);
-WP2Status SkipMetadata(DataSource* const data_source,
+WP2Status SkipICC(DataSource* data_source, const BitstreamFeatures& features);
+WP2Status SkipMetadata(DataSource* data_source,
                        const BitstreamFeatures& features);
 
 //------------------------------------------------------------------------------
@@ -157,23 +156,20 @@ class ResidualReader : public ResidualIO {
  public:
   ResidualReader() = default;
   // Updates the symbol reader with what will be needed to read residuals.
-  WP2Status ReadHeader(SymbolReader* const sr, uint32_t num_coeffs_max_y,
+  WP2Status ReadHeader(SymbolReader* sr, uint32_t num_coeffs_max_y,
                        uint32_t num_coeffs_max_uv, uint32_t num_transforms,
                        bool has_alpha, bool has_lossy_alpha);
 
   // Reads residual coefficients.
   WP2Status ReadCoeffs(Channel channel, const int16_t dequant[],
-                       SymbolReader* const sr, CodedBlockBase* const cb,
-                       BlockInfo* const info);
+                       SymbolReader* sr, CodedBlockBase* cb, BlockInfo* info);
 
  private:
   WP2Status ReadHeaderForResidualSymbols(uint32_t num_coeffs_max,
-                                         Channel channel,
-                                         SymbolReader* const sr);
-  uint32_t ReadCoeffsMethod01(
-      Channel channel, const int16_t dequant[], uint32_t tf_i,
-      SymbolReader* const sr, CodedBlockBase* const cb,
-      BlockInfo* const info);
+                                         Channel channel, SymbolReader* sr);
+  uint32_t ReadCoeffsMethod01(Channel channel, const int16_t dequant[],
+                              uint32_t tf_i, SymbolReader* sr,
+                              CodedBlockBase* cb, BlockInfo* info);
 
   uint32_t num_channels_;
 };
@@ -184,25 +180,24 @@ class ResidualReader : public ResidualIO {
 class AlphaReader : public WP2Allocable {
  public:
   // Image width and height are in pixels.
-  explicit AlphaReader(ANSDec* const dec, const Tile& tile);
+  explicit AlphaReader(ANSDec* dec, const Tile& tile);
   WP2Status Allocate();
 
   WP2Status ReadHeader(const GlobalParams& gparams);
 
   // Reads alpha information for the given block from the stream.
-  void GetBlockHeader(SymbolReader* const sr, CodedBlockBase* const cb);
+  void GetBlockHeader(SymbolReader* sr, CodedBlockBase* cb);
   // Reads alpha information for the given block from the stream.
-  WP2Status GetBlock(CodedBlockBase* const cb);
+  WP2Status GetBlock(CodedBlockBase* cb);
   // Reconstructs the alpha plane for the given block.
-  void Reconstruct(CodedBlockBase* const cb) const;
+  void Reconstruct(CodedBlockBase* cb) const;
   // Copies the lossless alpha data for this block to the given plane (at 0, 0).
-  void ReconstructLossless(const CodedBlockBase& cb,
-                           Plane16* const plane) const;
+  void ReconstructLossless(const CodedBlockBase& cb, Plane16* plane) const;
 
   AlphaMode GetAlphaMode() const { return alpha_mode_; }
 
  private:
-  WP2Status ReadLossless(CodedBlockBase* const cb);
+  WP2Status ReadLossless(CodedBlockBase* cb);
 
   const GlobalParams* gparams_ = nullptr;
   // ANS reader
@@ -229,18 +224,16 @@ class AlphaReader : public WP2Allocable {
 
 class SyntaxReader {
  public:
-  SyntaxReader(ANSDec* const dec, const Rectangle& rect);
+  SyntaxReader(ANSDec* dec, const Rectangle& rect);
 
   WP2Status ReadHeader(const BitstreamFeatures& features,
                        const GlobalParams& gparams, const Tile& tile);
 
   // Reads 'cb' size, segment id, coeffs etc. and sets 'out' as the
   // reconstructed pixels buffer destination.
-  WP2Status GetBlock(CodedBlockBase* const cb, YUVPlane* const out,
-                     BlockInfo* const info);
+  WP2Status GetBlock(CodedBlockBase* cb, YUVPlane* out, BlockInfo* info);
   BlockSize GetBlockSize(const FrontMgrDoubleOrderBase& mgr);
-  WP2Status GetBlockSplit(const SplitIteratorBase& it,
-                          uint32_t* const split_idx);
+  WP2Status GetBlockSplit(const SplitIteratorBase& it, uint32_t* split_idx);
 
   PartitionSet partition_set() const { return gparams_->partition_set_; }
   bool partition_snapping() const { return gparams_->partition_snapping_; }
@@ -252,16 +245,16 @@ class SyntaxReader {
   void ApplyDecoderConfig(const DecoderConfig& config);
 
  private:
-  void ReadSplitTransform(Channel channel, CodedBlockBase* const cb);
-  void ReadHasCoeffs(Channel channel, CodedBlockBase* const cb);
-  void ReadTransform(Channel channel, CodedBlockBase* const cb);
+  void ReadSplitTransform(Channel channel, CodedBlockBase* cb);
+  void ReadHasCoeffs(Channel channel, CodedBlockBase* cb);
+  void ReadTransform(Channel channel, CodedBlockBase* cb);
 
   // Fill the is420_ data in the block.
-  void ReadIs420(CodedBlockBase* const cb);
+  void ReadIs420(CodedBlockBase* cb);
 
   WP2Status LoadDictionaries();
 
-  WP2Status ReadPredModes(CodedBlockBase* const cb);
+  WP2Status ReadPredModes(CodedBlockBase* cb);
 
   const GlobalParams* gparams_ = nullptr;
 
@@ -286,10 +279,10 @@ class SyntaxReader {
   // Visual debug: stores bit cost for a block
   void StoreBitCost(const WP2::DecoderConfig& config, uint32_t tile_x,
                     uint32_t tile_y, const Block& block,
-                    Plane16* const dst_plane) const;
+                    Plane16* dst_plane) const;
   // Decodes the 'block' boundaries and the 'pixels'. Check that they match.
   void ReadAndCompareRawPixels(const CodedBlockBase& cb, const YUVPlane& pixels,
-                               ANSDec* const dec);
+                               ANSDec* dec);
 };
 
 //------------------------------------------------------------------------------

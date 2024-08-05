@@ -15,11 +15,18 @@
 //
 // y4m (raw YCbCr bytes) encoding.
 
+#include <cstdint>
 #include <cstdio>
 
 #include "extras/ccsp_imageio.h"
 #include "extras/extras.h"
 #include "src/dsp/math.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 

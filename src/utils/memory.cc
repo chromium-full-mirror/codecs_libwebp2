@@ -17,6 +17,8 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <cassert>
+#include <cstdint>
 #include <cstdlib>
 
 #include "src/utils/utils.h"
@@ -24,13 +26,13 @@
 //------------------------------------------------------------------------------
 // memory hook
 
-void WP2MemoryHook::Free(void *ptr) { free(ptr); }
+void WP2MemoryHook::Free(void* ptr) { free(ptr); }
 void* WP2MemoryHook::Malloc(size_t size) { return malloc(size); }
 void* WP2MemoryHook::Calloc(size_t count, size_t size) {
   return calloc(count, size);
 }
 
-static WP2MemoryHook kMemory;   // singleton
+static WP2MemoryHook kMemory;  // singleton NOLINT
 static WP2MemoryHook* kMemoryPtr = &kMemory;
 
 WP2MemoryHook* WP2SetMemoryHook(WP2MemoryHook* hook) {

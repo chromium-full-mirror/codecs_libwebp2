@@ -19,11 +19,18 @@
 
 #include "src/dec/filters/directional_filter.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
+#include "src/common/global_params.h"
 #include "src/common/vdebug.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/dec/filters/block_map_filter.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -36,9 +43,9 @@ constexpr uint32_t DirectionalFilter::kMaxSecStr;
 static uint32_t GetStrengthFromMagnitude(uint32_t filter_magnitude,
                                          uint32_t max_strength) {
   // Full filtering at low/medium qualities, no filtering at high qualities.
-  return std::min(DivRound(filter_magnitude * max_strength * 3u,
-                           kMaxYuvFilterMagnitude),
-                  max_strength);
+  return std::min(
+      DivRound(filter_magnitude * max_strength * 3u, kMaxYuvFilterMagnitude),
+      max_strength);
 }
 
 bool IsDirectionalFilterEnabled(const DecoderConfig& config,
@@ -239,12 +246,11 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
         const uint32_t shifted_sec_str = sec_str << precision_shift;
 
         // Copy pixels from source plane and backups to 'tmp'.
-        CdefPad(&pixels_plane->At(x, y), (int32_t)pixels_plane->Step(),
-                left, (int32_t)left_plane.Step(),
-                top, (int32_t)top_plane.Step(),
+        CdefPad(&pixels_plane->At(x, y), (int32_t)pixels_plane->Step(), left,
+                (int32_t)left_plane.Step(), top, (int32_t)top_plane.Step(),
                 (int32_t)width, (int32_t)height, (int32_t)n_left,
-                (int32_t)n_right, (int32_t)n_top, (int32_t)n_bottom,
-                tmp, kTmpStep);
+                (int32_t)n_right, (int32_t)n_top, (int32_t)n_bottom, tmp,
+                kTmpStep);
 
         CdefFiltering(tmp, kTmpStep, blocks_.bit_depth_.num_bits, width, height,
                       AdjustPriStr(c, shifted_pri_str, variance),
@@ -279,7 +285,6 @@ uint32_t DirectionalFilter::Smooth(uint32_t num_rows) {
     y += height;
   }
   num_filtered_rows_ = y;
-
 
 #if !defined(WP2_REDUCE_BINARY_SIZE)
   if (VDMatch(config_, "directional-filter")) ApplyVDebug(num_rows);

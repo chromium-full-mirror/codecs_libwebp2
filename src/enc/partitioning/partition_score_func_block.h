@@ -20,19 +20,21 @@
 #ifndef WP2_ENC_PARTITION_SCORE_FUNC_BLOCK_H_
 #define WP2_ENC_PARTITION_SCORE_FUNC_BLOCK_H_
 
-#include "src/common/integral.h"
+#include <cstdint>
+
+#include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
-#include "src/common/lossy/block_size_io.h"
+#include "src/common/lossy/context.h"
 #include "src/common/lossy/predictor.h"
-#include "src/common/symbols.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/common/progress_watcher.h"
+#include "src/enc/block_enc.h"
 #include "src/enc/partitioning/partition_score_func.h"
-#include "src/enc/symbols_enc.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
-#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {
@@ -51,7 +53,7 @@ class BlockScoreFunc : public PartitionScoreFunc {
   WP2Status CopyFrom(const BlockScoreFunc& other);
 
   WP2Status ComputeScore(const Block& block, const ProgressRange& progress,
-                         float* const score) override;
+                         float* score) override;
 
   // Returns the score for encoding several 'blocks' (at most 4).
   // Can be used for evaluating a block against its sub-blocks, for example.
@@ -60,30 +62,26 @@ class BlockScoreFunc : public PartitionScoreFunc {
   // 'force_selected' is for visual debug (forces outputting of debug info).
   WP2Status ComputeScore(const Block blocks[4], uint32_t num_blocks,
                          float extra_rate, float best_score,
-                         bool force_selected, float* const score);
+                         bool force_selected, float* score);
 
   WP2Status Use(const Block& block) override;
 
  protected:
   // Tries some or all transform/predictor pairs and keeps the best one in 'cb'.
   WP2Status FindBestBlockParams(const FrontMgrBase& front_mgr,
-                                SyntaxWriter* const syntax_writer,
-                                DCDiffusionMap* const dc_error_u,
-                                DCDiffusionMap* const dc_error_v,
-                                CodedBlock* const cb,
-                                BlockScorer* const scorer) const;
+                                SyntaxWriter* syntax_writer,
+                                DCDiffusionMap* dc_error_u,
+                                DCDiffusionMap* dc_error_v, CodedBlock* cb,
+                                BlockScorer* scorer) const;
   // Finds the best encoding parameters then encodes and records 'cb'.
   // Advances the 'front_mgr'.
   WP2Status EncodeBlock(const FrontMgrBase& front_mgr,
-                        SyntaxWriter* const syntax_writer,
-                        DCDiffusionMap* const dc_error_u,
-                        DCDiffusionMap* const dc_error_v, CodedBlock* const cb,
-                        BlockScorer* const scorer,
-                        YUVPlane* const buffer) const;
+                        SyntaxWriter* syntax_writer, DCDiffusionMap* dc_error_u,
+                        DCDiffusionMap* dc_error_v, CodedBlock* cb,
+                        BlockScorer* scorer, YUVPlane* buffer) const;
   // Writes 'cb' to 'enc'. Advances the 'front_mgr'.
   WP2Status WriteBlock(const FrontMgrBase& front_mgr, const CodedBlock& cb,
-                       SyntaxWriter* const syntax_writer,
-                       ANSEnc* const enc) const;
+                       SyntaxWriter* syntax_writer, ANSEnc* enc) const;
 
   // Defined by 'config_' and not modified outside Init().
   BlockModes y_modes_, uv_modes_, a_modes_;

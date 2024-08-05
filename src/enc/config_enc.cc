@@ -17,8 +17,8 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include "src/common/constants.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 #ifdef HAVE_CONFIG_H
 #include "src/wp2/config.h"

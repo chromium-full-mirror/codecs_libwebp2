@@ -17,9 +17,16 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include "src/dec/wp2_dec_i.h"
+#include <cassert>
 
+#include "src/common/global_params.h"
 #include "src/dec/lossless/losslessi_dec.h"
+#include "src/dec/tile_dec.h"
+#include "src/dec/wp2_dec_i.h"
+#include "src/utils/ans.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
 
 namespace WP2 {
 
@@ -48,4 +55,4 @@ WP2Status LosslessDecode(const BitstreamFeatures& features,
   return WP2_STATUS_OK;
 }
 
-}    // namespace WP2
+}  // namespace WP2

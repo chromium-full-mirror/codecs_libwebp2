@@ -18,12 +18,15 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "./image_enc.h"
+#include "imageio/image_enc.h"
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 

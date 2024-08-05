@@ -18,15 +18,22 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <cassert>
+#include <cstdint>
+#include <cstring>
 
+#include "src/common/color_precision.h"
 #include "src/common/constants.h"
+#include "src/common/global_params.h"
 #include "src/common/header_enc_dec.h"
+#include "src/common/progress_watcher.h"
 #include "src/common/vdebug.h"
 #include "src/enc/analysis.h"
 #include "src/enc/preview/preview_enc.h"
 #include "src/enc/tile_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/ans_enc.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/encode.h"
@@ -88,9 +95,9 @@ WP2Status SetupEncoderInfo(uint32_t width, uint32_t height,
 //------------------------------------------------------------------------------
 
 // Encode header to 'output'.
-WP2Status EncodeHeader(const EncoderConfig& config,
-                       uint32_t width, uint32_t height, uint32_t rgb_bit_depth,
-                       bool has_alpha, bool is_anim, bool loop_forever,
+WP2Status EncodeHeader(const EncoderConfig& config, uint32_t width,
+                       uint32_t height, uint32_t rgb_bit_depth, bool has_alpha,
+                       bool is_anim, bool loop_forever,
                        Argb38b background_color, RGB12b preview_color,
                        bool has_icc, bool has_trailing_data,
                        Writer* const output) {
@@ -346,9 +353,8 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
 
 //------------------------------------------------------------------------------
 
-WP2Status Encode(uint32_t width, uint32_t height,
-                 const int16_t* c0_buffer, uint32_t c0_step,
-                 const int16_t* c1_buffer, uint32_t c1_step,
+WP2Status Encode(uint32_t width, uint32_t height, const int16_t* c0_buffer,
+                 uint32_t c0_step, const int16_t* c1_buffer, uint32_t c1_step,
                  const int16_t* c2_buffer, uint32_t c2_step,
                  const int16_t* a_buffer, uint32_t a_step,
                  const int16_t ccsp_to_rgb_matrix[9],
@@ -436,9 +442,9 @@ WP2Status Encode(uint32_t width, uint32_t height,
   }
 
   const uint32_t rgb_bit_depth = WP2Formatbpc(rgb_input.format());
-  const RGB12b preview_color =
-      yuv_input.IsEmpty() ? GetPreviewColor(rgb_input)
-                          : GetPreviewColor(yuv_input, csp_transform);
+  const RGB12b preview_color = yuv_input.IsEmpty()
+                                   ? GetPreviewColor(rgb_input)
+                                   : GetPreviewColor(yuv_input, csp_transform);
   const bool has_icc = (metadata.iccp.size > 0);
   const bool has_trailing_data =
       (metadata.xmp.size > 0 || metadata.exif.size > 0);

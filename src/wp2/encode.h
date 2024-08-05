@@ -21,6 +21,8 @@
 #define WP2_WP2_ENCODE_H_
 
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
 
 #include "./base.h"
 #include "./debug.h"
@@ -83,13 +85,13 @@ struct EncoderConfig {
   int segments = 4;  // Max number of segments. Range: [1..kMaxNumSegments]
   // Selector for explicit or implicit segment-id.
   typedef enum {
-    SEGMENT_ID_AUTO,     // use ID_EXPLICIT above a quality threshold
+    SEGMENT_ID_AUTO,  // use ID_EXPLICIT above a quality threshold
     SEGMENT_ID_EXPLICIT,
     SEGMENT_ID_IMPLICIT
   } SegmentIdMode;
   SegmentIdMode segment_id_mode = SEGMENT_ID_AUTO;
   // If non-zero, forces a quantization factor for the corresponding segment.
-  float segment_factors[kMaxNumSegments] = { 0.f };
+  float segment_factors[kMaxNumSegments] = {0.f};
 
   // Alteration tuning:
   // If true, some settings are adapted based on the image or quality range.
@@ -124,7 +126,7 @@ struct EncoderConfig {
   bool use_random_matrix = false;  // Experimental.
   bool store_grain = false;        // Experimental: store grain info
 
-  bool tune_perceptual = false;    // Experimental: tune for SSIM
+  bool tune_perceptual = false;  // Experimental: tune for SSIM
 
   // Parameters related to lossless compression only:
   bool use_delta_palette = false;  // Reserved for future lossless feature.
@@ -151,7 +153,7 @@ struct EncoderConfig {
   // progress and/or to abort encoding.
   ProgressHook* progress_hook = nullptr;
 
-  EncoderInfo* info = nullptr;   // If not null, report internal stats and info.
+  EncoderInfo* info = nullptr;  // If not null, report internal stats and info.
 };
 
 //------------------------------------------------------------------------------
@@ -160,12 +162,12 @@ struct EncoderConfig {
 // Enumerate some predefined picture types for Encode(), depending on the
 // source picture type.
 typedef enum PictureHint {
-  HINT_NONE = 0,     // nothing particular (default)
-  HINT_PICTURE,      // digital picture, like portrait, inner shot
-  HINT_PHOTO,        // outdoor photograph, with natural lighting
-  HINT_DRAWING,      // hand or line drawing, with high-contrast details
-  HINT_ICON,         // small-sized colorful images
-  HINT_TEXT          // text-like
+  HINT_NONE = 0,  // nothing particular (default)
+  HINT_PICTURE,   // digital picture, like portrait, inner shot
+  HINT_PHOTO,     // outdoor photograph, with natural lighting
+  HINT_DRAWING,   // hand or line drawing, with high-contrast details
+  HINT_ICON,      // small-sized colorful images
+  HINT_TEXT       // text-like
 } PictureHint;
 
 //------------------------------------------------------------------------------
@@ -188,11 +190,9 @@ Encode(const ArgbBuffer& input, Writer* output,
 // precision. Alpha must have a precision of 8 unsigned bits unless 'a_buffer'
 // is null. Returns WP2_STATUS_OK or an error.
 WP2_NO_DISCARD WP2Status Encode(
-    uint32_t width, uint32_t height,
-    const int16_t* c0_buffer, uint32_t c0_step,
-    const int16_t* c1_buffer, uint32_t c1_step,
-    const int16_t* c2_buffer, uint32_t c2_step,
-    const int16_t* a_buffer, uint32_t a_step,
+    uint32_t width, uint32_t height, const int16_t* c0_buffer, uint32_t c0_step,
+    const int16_t* c1_buffer, uint32_t c1_step, const int16_t* c2_buffer,
+    uint32_t c2_step, const int16_t* a_buffer, uint32_t a_step,
     const int16_t ccsp_to_rgb_matrix[9], uint32_t ccsp_to_rgb_shift,
     Writer* output, const EncoderConfig& config = EncoderConfig::kDefault,
     const Metadata& metadata = Metadata());
@@ -218,21 +218,22 @@ class AnimationEncoder {
 
   // Same as above but for a custom color space. See Encode().
   // All input frames must have the same color space within an animation.
-  WP2_NO_DISCARD WP2Status AddFrame(
-      uint32_t width, uint32_t height,
-      const int16_t* c0_buffer, uint32_t c0_step,
-      const int16_t* c1_buffer, uint32_t c1_step,
-      const int16_t* c2_buffer, uint32_t c2_step,
-      const int16_t* a_buffer, uint32_t a_step,
-      const int16_t ccsp_to_rgb_matrix[9], uint32_t ccsp_to_rgb_shift,
-      uint32_t duration_ms, bool force_dispose = false);
+  WP2_NO_DISCARD WP2Status AddFrame(uint32_t width, uint32_t height,
+                                    const int16_t* c0_buffer, uint32_t c0_step,
+                                    const int16_t* c1_buffer, uint32_t c1_step,
+                                    const int16_t* c2_buffer, uint32_t c2_step,
+                                    const int16_t* a_buffer, uint32_t a_step,
+                                    const int16_t ccsp_to_rgb_matrix[9],
+                                    uint32_t ccsp_to_rgb_shift,
+                                    uint32_t duration_ms,
+                                    bool force_dispose = false);
 
   // Encodes all frames. Call it again to compress the same frames with a
   // different 'config' and/or to another 'output'.
   // Returns WP2_STATUS_OK if no error occurred.
-  WP2_NO_DISCARD WP2Status Encode(
-      Writer* output, const EncoderConfig& config = EncoderConfig::kDefault,
-      bool loop_forever = true, const Metadata& metadata = Metadata()) const;
+  WP2_NO_DISCARD WP2Status
+  Encode(Writer* output, const EncoderConfig& config = EncoderConfig::kDefault,
+         bool loop_forever = true, const Metadata& metadata = Metadata()) const;
 
   struct State;
 

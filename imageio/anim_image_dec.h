@@ -40,27 +40,26 @@ namespace WP2 {
 
 // Extracts the first XMP and ICCP blocks found in 'data' GIF bitstream to
 // 'metadata' if they are not already there.
-WP2Status ReadGIFMetadata(const uint8_t* const data, size_t data_size,
-                          Metadata* const metadata);
+WP2Status ReadGIFMetadata(const uint8_t* data, size_t data_size,
+                          Metadata* metadata);
 
 // Can decode a still image or an animation. 'buffer' must not be changed
 // between calls to ReadFrame(). Incremental decoding is not supported.
 class ImageReader {
  public:
   // Reads 'file_path' and stores the content. Clears 'buffer'.
-  ImageReader(const char* const file_path, ArgbBuffer* const buffer,
+  ImageReader(const char* file_path, ArgbBuffer* buffer,
               FileFormat data_format = FileFormat::AUTO,
               LogLevel log_level = LogLevel::DEFAULT,
               size_t max_num_pixels = kMaxBufferArea);
   // 'data' must not change till the last ReadFrame() call. Clears 'buffer'.
-  ImageReader(const uint8_t* const data, size_t data_size,
-              ArgbBuffer* const buffer,
+  ImageReader(const uint8_t* data, size_t data_size, ArgbBuffer* buffer,
               FileFormat data_format = FileFormat::AUTO,
               LogLevel log_level = LogLevel::DEFAULT,
               size_t max_num_pixels = kMaxBufferArea);
 
   // 'data' must not change till the last ReadFrame() call. Clears 'buffer'.
-  ImageReader(const std::string& data, ArgbBuffer* const buffer,
+  ImageReader(const std::string& data, ArgbBuffer* buffer,
               FileFormat data_format = FileFormat::AUTO,
               LogLevel log_level = LogLevel::DEFAULT,
               size_t max_num_pixels = kMaxBufferArea);
@@ -69,8 +68,7 @@ class ImageReader {
   // if not null. If it's not an animation, returns the image as the only frame
   // with kInfiniteDuration. Returns WP2_STATUS_OK upon success.
   static constexpr uint32_t kInfiniteDuration = 0;
-  WP2Status ReadFrame(bool* const is_last = nullptr,
-                      uint32_t* const duration_ms = nullptr);
+  WP2Status ReadFrame(bool* is_last = nullptr, uint32_t* duration_ms = nullptr);
 
   // Returns the number of times the animation should be played.
   // Should be called once all frames have been read.
@@ -92,8 +90,7 @@ class ImageReader {
     // Must set 'loop_count_'.
     // Metadata must be set during the first call so that ReadImage() also reads
     // metadata from animations even if only the first frame is read.
-    virtual WP2Status ReadFrame(bool* const is_last,
-                                uint32_t* const duration_ms) = 0;
+    virtual WP2Status ReadFrame(bool* is_last, uint32_t* duration_ms) = 0;
 
     uint32_t GetLoopCount() const { return loop_count_; }
 
@@ -112,28 +109,28 @@ class ImageReader {
 
  protected:
   // Sets 'impl_'. Sets 'status_' in case of error.
-  void SetImplPNG(ArgbBuffer* const buffer, LogLevel log_level,
+  void SetImplPNG(ArgbBuffer* buffer, LogLevel log_level,
                   size_t max_num_pixels);
-  void SetImplJPEG(ArgbBuffer* const buffer, LogLevel log_level,
+  void SetImplJPEG(ArgbBuffer* buffer, LogLevel log_level,
                    size_t max_num_pixels);
-  void SetImplJXL(ArgbBuffer* const buffer, LogLevel log_level,
+  void SetImplJXL(ArgbBuffer* buffer, LogLevel log_level,
                   size_t max_num_pixels);
-  void SetImplPNM(ArgbBuffer* const buffer, LogLevel log_level,
+  void SetImplPNM(ArgbBuffer* buffer, LogLevel log_level,
                   size_t max_num_pixels);
-  void SetImplTIFF(ArgbBuffer* const buffer, LogLevel log_level,
+  void SetImplTIFF(ArgbBuffer* buffer, LogLevel log_level,
                    size_t max_num_pixels);
-  void SetImplGIF(ArgbBuffer* const buffer, LogLevel log_level,
+  void SetImplGIF(ArgbBuffer* buffer, LogLevel log_level,
                   size_t max_num_pixels);
-  void SetImplWEBP(ArgbBuffer* const buffer, LogLevel log_level,
+  void SetImplWEBP(ArgbBuffer* buffer, LogLevel log_level,
                    size_t max_num_pixels);
-  void SetImplWP2(ArgbBuffer* const buffer, LogLevel log_level,
-                  size_t max_num_pixels, bool exact);
-  void SetImplBMP(ArgbBuffer* const buffer, LogLevel log_level,
+  void SetImplWP2(ArgbBuffer* buffer, LogLevel log_level, size_t max_num_pixels,
+                  bool exact);
+  void SetImplBMP(ArgbBuffer* buffer, LogLevel log_level,
                   size_t max_num_pixels);
 
   // Calls a function above depending on 'data_format'.
   void SetImpl(FileFormat data_format, LogLevel log_level,
-               size_t max_num_pixels, ArgbBuffer* const buffer);
+               size_t max_num_pixels, ArgbBuffer* buffer);
 
   WP2::DecoderConfig config_;
   std::unique_ptr<Impl> impl_;

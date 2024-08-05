@@ -20,10 +20,14 @@
 #ifndef WP2_UTILS_SPLIT_ITERATOR_H_
 #define WP2_UTILS_SPLIT_ITERATOR_H_
 
+#include <cstdint>
+
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 

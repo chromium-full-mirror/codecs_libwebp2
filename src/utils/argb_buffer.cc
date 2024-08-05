@@ -18,13 +18,16 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <algorithm>
-#include <cmath>
+#include <cassert>
+#include <cstdint>
 #include <cstring>  // for memcpy()
 
 #include "src/common/color_precision.h"
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 uint32_t WP2FormatBpp(WP2SampleFormat format) {
   if (format <= WP2_BGRX_32) return 4;
@@ -222,7 +225,7 @@ WP2Status ArgbBuffer::Resize(uint32_t new_width, uint32_t new_height) {
 
   if (width_ == new_height && height_ == new_width) {
     // Changing layout is enough.
-    width_  = new_width;
+    width_ = new_width;
     height_ = new_height;
     stride_ = new_stride;
     metadata_.Clear();
@@ -233,7 +236,7 @@ WP2Status ArgbBuffer::Resize(uint32_t new_width, uint32_t new_height) {
   void* const new_pixels = WP2Malloc(new_height, new_stride);
   WP2_CHECK_ALLOC_OK(new_pixels != nullptr);
   pixels_ = new_pixels;
-  width_  = new_width;
+  width_ = new_width;
   height_ = new_height;
   stride_ = new_stride;
   is_external_memory_ = false;
@@ -273,9 +276,9 @@ WP2Status ArgbBuffer::ConvertFrom(const ArgbBuffer& src) {
   return WP2_STATUS_OK;
 }
 
-WP2Status ArgbBuffer::Import(WP2SampleFormat input_format,
-                             uint32_t new_width, uint32_t new_height,
-                             const uint8_t* samples, uint32_t samples_stride) {
+WP2Status ArgbBuffer::Import(WP2SampleFormat input_format, uint32_t new_width,
+                             uint32_t new_height, const uint8_t* samples,
+                             uint32_t samples_stride) {
   WP2ArgbConverterInit();
   const WP2ArgbConverterF convert =
       WP2ConversionFunction(input_format, format_);
@@ -333,9 +336,7 @@ void ArgbBuffer::Fill(const Rectangle& window, const uint16_t color[]) {
   FillImpl(window, color);
 }
 
-void ArgbBuffer::Fill(const Argb32b color) {
-  Fill(AsRect(), color);
-}
+void ArgbBuffer::Fill(const Argb32b color) { Fill(AsRect(), color); }
 
 void ArgbBuffer::FillImpl(const Rectangle& window, const void* color) {
   const Rectangle r = window.ClipWith(AsRect());
@@ -362,17 +363,17 @@ void ArgbBuffer::DrawRect(const Rectangle& window, Argb32b color,
   // left
   if (edges_to_draw & 2) Fill({window.x, window.y, 1, window.height}, color);
   // bottom
-  if (edges_to_draw & 4) Fill({window.x, window.y + window.height - 1,
-                               window.width, 1}, color);
+  if (edges_to_draw & 4)
+    Fill({window.x, window.y + window.height - 1, window.width, 1}, color);
   // right
-  if (edges_to_draw & 8) Fill({window.x + window.width - 1, window.y,
-                              1, window.height}, color);
+  if (edges_to_draw & 8)
+    Fill({window.x + window.width - 1, window.y, 1, window.height}, color);
   // mid horizontal
-  if (edges_to_draw & 16) Fill({window.x, window.y + window.height / 2,
-                                window.width, 1}, color);
+  if (edges_to_draw & 16)
+    Fill({window.x, window.y + window.height / 2, window.width, 1}, color);
   // mid vertical
-  if (edges_to_draw & 32) Fill({window.x + window.width / 2, window.y,
-                                1, window.height}, color);
+  if (edges_to_draw & 32)
+    Fill({window.x + window.width / 2, window.y, 1, window.height}, color);
 }
 
 WP2Status ArgbBuffer::CompositeOver(Argb32b background) {
@@ -403,8 +404,7 @@ static WP2Status CompositeBuffers(const ArgbBuffer& background,
                WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(foreground.height() == background.height(),
                WP2_STATUS_INVALID_PARAMETER);
-  const Rectangle w =
-      (window.GetArea() > 0) ? window : background.AsRect();
+  const Rectangle w = (window.GetArea() > 0) ? window : background.AsRect();
   WP2_CHECK_OK(window.x + window.width <= background.width(),
                WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_OK(window.y + window.height <= background.height(),
@@ -554,8 +554,8 @@ void ArgbBuffer::SimpleHalfDownsample() {
     for (uint32_t x = 0; x < half_w_low; ++x) {
       // TODO(skal): implement in dsp/
       for (uint32_t c = 0; c < 4; ++c) {
-        *dst++ = (row1[c + 0] + row1[c + 4] +
-                  row2[c + 0] + row2[c + 4] + 2) >> 2;
+        *dst++ =
+            (row1[c + 0] + row1[c + 4] + row2[c + 0] + row2[c + 4] + 2) >> 2;
       }
       row1 += 2 * 4;
       row2 += 2 * 4;

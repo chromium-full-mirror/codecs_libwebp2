@@ -20,14 +20,14 @@
 #ifndef WP2_COMMON_HEADER_ENC_DEC_H_
 #define WP2_COMMON_HEADER_ENC_DEC_H_
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 
-#include "src/common/constants.h"
 #include "src/utils/ans.h"
 #include "src/utils/data_source.h"
-#include "src/utils/utils.h"
 #include "src/wp2/base.h"
 
 namespace WP2 {
@@ -36,8 +36,8 @@ namespace WP2 {
 
 // Returns true if 'value' is successfully read, false otherwise.
 // 'value' is expected to be in [min_value:max_value].
-WP2Status TryReadVarInt(DataSource* const data_source, uint32_t min_value,
-                        uint32_t max_value, uint32_t* const value);
+WP2Status TryReadVarInt(DataSource* data_source, uint32_t min_value,
+                        uint32_t max_value, uint32_t* value);
 
 // Encodes 'value' in [min_value:max_value] into a variable length integer.
 // 'max_value' cannot exceed kMaxVarInt.
@@ -115,10 +115,7 @@ class BitUnpacker {
 class BitPacker {
  public:
   BitPacker(uint8_t* buf, uint32_t size, const char debug_prefix[])
-      : buf_(buf),
-        bit_pos_(0),
-        error_(false),
-        debug_prefix_(debug_prefix) {
+      : buf_(buf), bit_pos_(0), error_(false), debug_prefix_(debug_prefix) {
     (void)debug_prefix_;
     // Check for potential overflows.
     max_pos_ = (uint32_t)std::min(
@@ -163,6 +160,6 @@ class BitPacker {
 
 //------------------------------------------------------------------------------
 
-}   // namespace WP2
+}  // namespace WP2
 
-#endif   // WP2_COMMON_HEADER_ENC_DEC_H_
+#endif  // WP2_COMMON_HEADER_ENC_DEC_H_

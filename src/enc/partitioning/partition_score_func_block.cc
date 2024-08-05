@@ -19,19 +19,28 @@
 
 #include "src/enc/partitioning/partition_score_func_block.h"
 
-#include <algorithm>
-#include <array>
-#include <cmath>
-#include <limits>
-#include <numeric>
+#include <cassert>
+#include <cstdint>
 
-#include "src/common/integral.h"
+#include "src/common/global_params.h"
+#include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/block_size_io.h"
+#include "src/common/lossy/context.h"
+#include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
 #include "src/dsp/dsp.h"
-#include "src/dsp/math.h"
 #include "src/enc/analysis.h"
-#include "src/enc/partitioning/partitioner.h"
+#include "src/enc/block_enc.h"
+#include "src/enc/partitioning/partition_score_func.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/ans_utils.h"
+#include "src/utils/front_mgr.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -61,7 +70,7 @@ WP2Status BlockScoreFunc::Init(const EncoderConfig& config,
   WP2_CHECK_STATUS(front_mgr_.InitBase(tile_rect_.width, tile_rect_.height));
 
   // Call the ProgressHook during the encoding of this block but do not advance
-  // progress. The steps woulb be insignificant anyway.
+  // progress. The steps would be insignificant anyway.
   const ProgressRange sub_progress(progress, 0.);
   // Initialize the instances recording only final blocks.
   WP2_CHECK_STATUS(

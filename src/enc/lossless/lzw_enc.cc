@@ -19,6 +19,7 @@
 // Author: Felipe Mourad Pereira (mouradfelipe@google.com)
 
 #include <algorithm>
+#include <cmath>
 
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/utils/hash_map.h"

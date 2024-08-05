@@ -31,6 +31,7 @@
 #endif
 
 #include "examples/example_utils.h"
+#include "examples/stopwatch.h"
 #include "imageio/file_format.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"

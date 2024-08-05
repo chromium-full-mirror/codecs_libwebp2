@@ -15,13 +15,16 @@
 //
 // Image savers
 
+#include <cstddef>
 #include <cstdint>
+#include <cstdio>
 
-#include "./image_enc.h"
-#include "./imageio_util.h"
+#include "imageio/image_enc.h"
+#include "imageio/imageio_util.h"
 #include "src/dsp/dsp.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 

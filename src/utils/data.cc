@@ -18,6 +18,7 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <algorithm>  // for std::min
+#include <cstdint>
 #include <cstring>  // for memcpy()
 
 #include "src/utils/utils.h"

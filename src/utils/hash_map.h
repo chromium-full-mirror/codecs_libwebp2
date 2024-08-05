@@ -21,9 +21,11 @@
 #define WP2_UTILS_HASH_MAP_H_
 
 #include <algorithm>
+#include <cstdint>
 
 #include "src/enc/lossless/palette.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 // Each ColorSegment is an array of int16_t's.
 // Each group of 4 int16_t's describes a pixel.
@@ -66,7 +68,7 @@ class SegmentMap {
 
  private:
   // hash_map_ size is bigger than segments_, because it is desired to
-  // reduce hash colision. For now, it will be at least 2 times bigger than
+  // reduce hash collision. For now, it will be at least 2 times bigger than
   // segments_capacity_. hash_map_ size is defined by num_bits_ in Allocate().
   const uint32_t segments_capacity_, num_bits_;
 
@@ -83,14 +85,14 @@ class SegmentCache {
   WP2Status Allocate(uint32_t num_bits);
 
   // Searches for segment in the cache. Returns index in cache if found.
-  bool HasKey(const ColorSegment& segment, uint32_t* const index) const;
+  bool HasKey(const ColorSegment& segment, uint32_t* index) const;
 
   // Inserts segment in the cache. Returns false if segment is already in
   // the cache. Returns segment index in cache.
-  bool Insert(const ColorSegment& segment, uint32_t* const index);
+  bool Insert(const ColorSegment& segment, uint32_t* index);
 
   // Returns a segment from a given cache index.
-  void Lookup(uint32_t index, ColorSegment* const segment) const;
+  void Lookup(uint32_t index, ColorSegment* segment) const;
 
   uint32_t IndexRange() const { return segments_.size(); }
 

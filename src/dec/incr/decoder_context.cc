@@ -19,7 +19,14 @@
 
 #include "src/dec/incr/decoder_context.h"
 
+#include <cstddef>
+#include <cstdint>
+
+#include "src/dec/tile_dec.h"
 #include "src/utils/context_switch.h"
+#include "src/utils/data_source_context.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
 
 #if defined(WP2_USE_CONTEXT_SWITCH) && (WP2_USE_CONTEXT_SWITCH > 0)
 
@@ -69,7 +76,7 @@ WP2Status ContextTileDecoder::Init(const BitstreamFeatures& features,
   worker.tiles_layout_ = tiles_layout;
   worker.gparams_ = tiles_layout->gparams;
   worker.tile_ = partial_tile;
-  worker.self_assigning_ = false;   // Isolated worker.
+  worker.self_assigning_ = false;                       // Isolated worker.
   inter_context_data_.input = SuspendableDataSource();  // Clear.
   partial_tile_ = partial_tile;
   partial_tile_->input = &inter_context_data_.input;
@@ -102,9 +109,7 @@ void ContextTileDecoder::Clear() {
   inter_context_data_.status = WP2_STATUS_OK;
 }
 
-Tile* ContextTileDecoder::GetPartialTile() const {
-  return partial_tile_;
-}
+Tile* ContextTileDecoder::GetPartialTile() const { return partial_tile_; }
 
 bool ContextTileDecoder::IsComplete() const {
   return (inter_context_data_.status == WP2_STATUS_OK) &&

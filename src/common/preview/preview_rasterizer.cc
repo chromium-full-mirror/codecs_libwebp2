@@ -17,13 +17,20 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <utility>
+
 #include "./preview.h"
-
-#include <cmath>
-
+#include "src/common/color_precision.h"
+#include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/utils/wiener.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -51,49 +58,47 @@ class Rasterizer {
 
   // Fills the triangle 'v0,v1,v2' in 'canvas' with interpolated colors.
   void FillTriangle(VertexArgb v0, VertexArgb v1, VertexArgb v2,
-                    ArgbBuffer* const canvas, uint32_t* const num_pixels) {
+                    ArgbBuffer* canvas, uint32_t* num_pixels) {
     RecordTriangleSpan(&v0, &v1, &v2);
     DrawScans(v0, v1, v2, canvas, num_pixels);
   }
 
   // Same as FillTriangle() but returns the loss from 'reference' instead.
-  float GetLossInTriangle(const ArgbBuffer& reference,
-                          VertexArgb v0, VertexArgb v1, VertexArgb v2,
-                          uint32_t* const num_pixels) {
+  float GetLossInTriangle(const ArgbBuffer& reference, VertexArgb v0,
+                          VertexArgb v1, VertexArgb v2, uint32_t* num_pixels) {
     RecordTriangleSpan(&v0, &v1, &v2);
     return GetLossInScans(reference, v0, v1, v2, num_pixels);
   }
 
-  void CollectColors(const ArgbBuffer& reference,
-                     VertexArgb& v0, VertexArgb& v1, VertexArgb& v2);
+  void CollectColors(const ArgbBuffer& reference, VertexArgb& v0,
+                     VertexArgb& v1, VertexArgb& v2);
 
  protected:
   // Increases vertical span and sets horizontal spans covered by triangle.
-  void RecordTriangleSpan(VertexArgb* const v0,
-                          VertexArgb* const v1,
-                          VertexArgb* const v2);
+  void RecordTriangleSpan(VertexArgb* v0, VertexArgb* v1, VertexArgb* v2);
 
   // Increases vertical span and sets horizontal spans covered by segment 'v0v1'
   void RecordEdgeSpan(VertexArgb v0, VertexArgb v1);
 
   // Paints all pixels in the area defined by the spans.
   void DrawScans(VertexArgb v0, VertexArgb v1, VertexArgb v2,
-                 ArgbBuffer* const canvas,
-                 uint32_t* const num_pixels) const;
+                 ArgbBuffer* canvas, uint32_t* num_pixels) const;
 
   // Same as DrawScans() but returns the loss from 'canvas' instead.
-  float GetLossInScans(const ArgbBuffer& reference,
-                       VertexArgb v0, VertexArgb v1, VertexArgb v2,
-                       uint32_t* const num_pixels) const;
+  float GetLossInScans(const ArgbBuffer& reference, VertexArgb v0,
+                       VertexArgb v1, VertexArgb v2,
+                       uint32_t* num_pixels) const;
 
   // Pixels are drawn in range [from, to)
-  struct Span { uint16_t from, to; };
+  struct Span {
+    uint16_t from, to;
+  };
 
   // fixed-point precision when converting from grid-space to canvas-space
   const uint32_t kBits = 17u;
   const uint32_t kRound = (1u << kBits >> 1);
   uint32_t mult_w_, mult_h_;
-  uint32_t img_w_, img_h_;    // width / height limit
+  uint32_t img_w_, img_h_;  // width / height limit
 
   Span vertical_span_;
   Vector<Span> row_spans_;
@@ -137,14 +142,14 @@ constexpr int32_t ToFixedPrec(float v) {
 
 static void CalcTransform(VertexArgb v0, VertexArgb v1, VertexArgb v2,
                           float iM[4]) {
-  const int32_t dx1 = v1.x - v0.x, dy1 = v1.y - v0.y;   // ~14b
+  const int32_t dx1 = v1.x - v0.x, dy1 = v1.y - v0.y;  // ~14b
   const int32_t dx2 = v2.x - v0.x, dy2 = v2.y - v0.y;
-  const int32_t area = dx1 * dy2 - dx2 * dy1;           // ~28b
+  const int32_t area = dx1 * dy2 - dx2 * dy1;  // ~28b
   const float inv_area = (area == 0) ? 0.f : 1.f / area;
-  iM[0] = ( dy2 * inv_area);
+  iM[0] = (dy2 * inv_area);
   iM[1] = (-dy1 * inv_area);
   iM[2] = (-dx2 * inv_area);
-  iM[3] = ( dx1 * inv_area);
+  iM[3] = (dx1 * inv_area);
 }
 
 static void CalcGradient(const float iM[4], int32_t f0, int32_t f1, int32_t f2,
@@ -173,8 +178,7 @@ static void GetGradients(VertexArgb v0, VertexArgb v1, VertexArgb v2,
 }
 
 void Rasterizer::DrawScans(VertexArgb v0, VertexArgb v1, VertexArgb v2,
-                           ArgbBuffer* const canvas,
-                           uint32_t* const num_pixels) const {
+                           ArgbBuffer* canvas, uint32_t* num_pixels) const {
   assert(canvas->width() == img_w_ && canvas->height() == img_h_);
   const grad_t dY = vertical_span_.from - v0.y;
   grad_t grads[3 * 4];
@@ -189,7 +193,7 @@ void Rasterizer::DrawScans(VertexArgb v0, VertexArgb v1, VertexArgb v2,
     if (size > 0) {  // because of rounding errors, size can be < 0
       *num_pixels += size;
       RasterDraw(cur, grads, argb + 4 * span.from, size);
-#if 0   // uncomment to show the triangles:
+#if 0  // uncomment to show the triangles:
       argb[4 * span.from + 0] = 0xff;
       argb[4 * span.from + 1] = 0xff;
       argb[4 * span.from + 2] = 0xff;
@@ -204,21 +208,21 @@ static uint8_t ColorFromGradient(const float g[3], int x, int y) {
   return Clamp<uint8_t>(v, 0, 255);
 }
 
-static void GetColor(const float grad[4][3], int x, int y, Argb32b* const c) {
+static void GetColor(const float grad[4][3], int x, int y, Argb32b* c) {
   c->a = ColorFromGradient(grad[0], x, y);
   c->r = ColorFromGradient(grad[1], x, y);
   c->g = ColorFromGradient(grad[2], x, y);
   c->b = ColorFromGradient(grad[3], x, y);
 }
 
-static void GetRawColor(const ArgbBuffer& buf, int x, int y, Argb32b* const c) {
+static void GetRawColor(const ArgbBuffer& buf, int x, int y, Argb32b* c) {
   x = std::max(0, std::min(x, (int)buf.width() - 1));
   y = std::max(0, std::min(y, (int)buf.height() - 1));
   *c = ToArgb32b(buf.GetRow8(y) + 4 * x);
 }
 
-void Rasterizer::CollectColors(const ArgbBuffer& reference,
-                               VertexArgb& v0, VertexArgb& v1, VertexArgb& v2) {
+void Rasterizer::CollectColors(const ArgbBuffer& reference, VertexArgb& v0,
+                               VertexArgb& v1, VertexArgb& v2) {
   RecordTriangleSpan(&v0, &v1, &v2);  // modifies x/y !
 
   WienerOptimizer<2, 4> opt;  // linearly predict four A,R,G,B values from x,y
@@ -227,8 +231,8 @@ void Rasterizer::CollectColors(const ArgbBuffer& reference,
     const Span& span = row_spans_[y];
     for (uint16_t x = span.from; x < span.to; ++x) {
       const uint8_t* const src = argb + x * 4;
-      const int16_t xy[2] = { (int16_t)x, (int16_t)y };
-      const int16_t samples[4] = { src[0], src[1], src[2], src[3] };
+      const int16_t xy[2] = {(int16_t)x, (int16_t)y};
+      const int16_t samples[4] = {src[0], src[1], src[2], src[3]};
       opt.AddSample(xy, samples);
     }
   }
@@ -246,14 +250,14 @@ void Rasterizer::CollectColors(const ArgbBuffer& reference,
 
 //------------------------------------------------------------------------------
 
-float Rasterizer::GetLossInScans(const ArgbBuffer& reference,
-                                 VertexArgb v0, VertexArgb v1, VertexArgb v2,
-                                 uint32_t* const num_pixels) const {
+float Rasterizer::GetLossInScans(const ArgbBuffer& reference, VertexArgb v0,
+                                 VertexArgb v1, VertexArgb v2,
+                                 uint32_t* num_pixels) const {
   assert(reference.width() == img_w_ && reference.height() == img_h_);
   grad_t grads[3 * 4];
   const grad_t dY = vertical_span_.from - v0.y;
   GetGradients(v0, v1, v2, grads, dY);
-  uint32_t loss[4] = { 0, 0, 0, 0 };
+  uint32_t loss[4] = {0, 0, 0, 0};
   for (uint32_t y = vertical_span_.from; y < vertical_span_.to; ++y) {
     const uint8_t* const argb = reference.GetRow8(y);
     const Span& span = row_spans_[y];
@@ -270,8 +274,8 @@ float Rasterizer::GetLossInScans(const ArgbBuffer& reference,
 
 //------------------------------------------------------------------------------
 
-void Rasterizer::RecordTriangleSpan(VertexArgb* const v0, VertexArgb* const v1,
-                                    VertexArgb* const v2) {
+void Rasterizer::RecordTriangleSpan(VertexArgb* v0, VertexArgb* v1,
+                                    VertexArgb* v2) {
   assert(row_spans_.size() == img_h_);
 
   // Triangles will be drawn top-left based, meaning in ranges [x,X) [y,Y).
@@ -294,8 +298,8 @@ void Rasterizer::RecordTriangleSpan(VertexArgb* const v0, VertexArgb* const v1,
 //------------------------------------------------------------------------------
 
 WP2Status Triangulation::FillTriangles(const PreviewData& preview,
-                                       ArgbBuffer* const canvas,
-                                       uint32_t* const num_pixels) const {
+                                       ArgbBuffer* canvas,
+                                       uint32_t* num_pixels) const {
   Rasterizer rasterizer;
   WP2_CHECK_STATUS(rasterizer.Init(*canvas, preview));
 
@@ -316,8 +320,8 @@ WP2Status Triangulation::FillTriangles(const PreviewData& preview,
 WP2Status Triangulation::GetPartialLoss(const PreviewData& preview,
                                         const ArgbBuffer& reference,
                                         const Vector<Triangle>& triangles,
-                                        float* const loss,
-                                        uint32_t* const num_pixels) const {
+                                        float* loss,
+                                        uint32_t* num_pixels) const {
   Rasterizer rasterizer;
   WP2_CHECK_STATUS(rasterizer.Init(reference, preview));
   *loss = 0.f;
@@ -337,9 +341,8 @@ WP2Status Triangulation::GetPartialLoss(const PreviewData& preview,
 }
 
 WP2Status Triangulation::GetLoss(const PreviewData& preview,
-                                 const ArgbBuffer& reference,
-                                 float* const loss,
-                                 uint32_t* const num_pixels) const {
+                                 const ArgbBuffer& reference, float* loss,
+                                 uint32_t* num_pixels) const {
   return GetPartialLoss(preview, reference, triangles_, loss, num_pixels);
 }
 

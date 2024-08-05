@@ -20,16 +20,14 @@
 #ifndef WP2_ENC_PARTITIONER_AREA_H_
 #define WP2_ENC_PARTITIONER_AREA_H_
 
-#include "src/common/lossy/block.h"
+#include <cstdint>
+
 #include "src/common/lossy/block_size.h"
-#include "src/common/lossy/predictor.h"
-#include "src/common/symbols.h"
+#include "src/common/progress_watcher.h"
 #include "src/enc/partitioning/partitioner.h"
-#include "src/enc/symbols_enc.h"
-#include "src/utils/csp.h"
-#include "src/utils/plane.h"
+#include "src/utils/front_mgr.h"
 #include "src/utils/vector.h"
-#include "src/wp2/encode.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -42,14 +40,14 @@ class AreaRDOptPartitioner : public Partitioner {
   AreaRDOptPartitioner(uint32_t area_width, uint32_t area_height)  // In pixels.
       : area_width_(area_width), area_height_(area_height) {}
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks,
-                             Vector_u32* const splits) override;
+                             VectorNoCtor<Block>* blocks,
+                             Vector_u32* splits) override;
 
  private:
   virtual WP2Status GetAreaBestPartition(const Rectangle& area,
                                          const ProgressRange& progress,
-                                         VectorNoCtor<Block>* const blocks,
-                                         uint32_t* const max_num_blocks_left);
+                                         VectorNoCtor<Block>* blocks,
+                                         uint32_t* max_num_blocks_left);
 
   const uint32_t area_width_, area_height_;  // In pixels.
 };
@@ -64,14 +62,14 @@ class SubAreaRDOptPartitioner : public AreaRDOptPartitioner {
       : AreaRDOptPartitioner(area_width, area_height),
         front_mgr_(area_width, area_height) {}
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks,
-                             Vector_u32* const splits) override;
+                             VectorNoCtor<Block>* blocks,
+                             Vector_u32* splits) override;
 
  private:
   WP2Status GetAreaBestPartition(const Rectangle& area,
                                  const ProgressRange& progress,
-                                 VectorNoCtor<Block>* const blocks,
-                                 uint32_t* const max_num_blocks_left) override;
+                                 VectorNoCtor<Block>* blocks,
+                                 uint32_t* max_num_blocks_left) override;
   FrontMgrArea front_mgr_;
 };
 

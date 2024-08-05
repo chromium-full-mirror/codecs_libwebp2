@@ -18,9 +18,10 @@
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <memory>
 
-#include "./anim_image_dec.h"
-#include "./imageio_util.h"
+#include "imageio/anim_image_dec.h"
+#include "imageio/imageio_util.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
@@ -111,8 +112,9 @@ void ImageReader::SetImplWP2(ArgbBuffer* const buffer, LogLevel log_level,
                              size_t max_num_pixels, bool exact) {
   config_ = DecoderConfig::kDefault;
   config_.exact = exact;
-  impl_.reset(new (WP2Allocable::nothrow) ImageReaderWP2(
-      data_.bytes, data_.size, config_, buffer, log_level, max_num_pixels));
+  impl_ = std::unique_ptr<ImageReaderWP2>(
+      new (WP2Allocable::nothrow) ImageReaderWP2(
+          data_.bytes, data_.size, config_, buffer, log_level, max_num_pixels));
   if (impl_ == nullptr) status_ = WP2_STATUS_OUT_OF_MEMORY;
 }
 

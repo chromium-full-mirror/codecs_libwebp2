@@ -23,6 +23,6 @@
 // Exports the method WP2ToSDL(const char* data, int data_size) which decodes
 // a WP2 bitstream into an RGBA SDL surface.
 // Return false on failure.
-extern "C" int WP2ToSDL(const char* const data, unsigned int data_size);
+extern "C" int WP2ToSDL(const char* data, unsigned int data_size);
 
 #endif  // WP2_EXTRAS_WP2_TO_SDL_H_

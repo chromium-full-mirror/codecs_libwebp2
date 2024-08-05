@@ -21,12 +21,17 @@
 #include "src/utils/quantizer.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
 
-#include "src/common/constants.h"
 #include "src/dsp/math.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -81,8 +86,8 @@ void Quantizer::Config::WriteHistogramHeader(uint32_t symbol_range,
   if (histo.nnz < symbol_range) {
     enc->PutBool(param.is_sparse, "is_sparse");
     if (param.is_sparse) {
-      // The diff between two consecutive elements is at most symbol_range-nbr
-      // of symbols.
+      // The diff between two consecutive elements is at most symbol_range -
+      // number of symbols.
       assert(histo.nnz <= stats_size);
       StoreMapping(histo.mapping, histo.nnz, symbol_range, stats, enc);
     } else {

@@ -21,11 +21,13 @@
 #ifndef WP2_UTILS_FRONT_MGR_H_
 #define WP2_UTILS_FRONT_MGR_H_
 
-#include <array>
+#include <cassert>
+#include <cstdint>
 
 #include "src/common/lossy/block_size.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -69,10 +71,10 @@ class FrontMgrBase {
   bool Done() const { return (left_ == 0); }
 
   // Finds the coordinates of the next unused block in lexicographic order.
-  void FindNextLexico(uint32_t* const bx, uint32_t* const by) const;
+  void FindNextLexico(uint32_t* bx, uint32_t* by) const;
   // Same as above but we know the last block that got added (speed optim).
-  void FindNextLexico(const Block& added_last, uint32_t* const bx,
-                      uint32_t* const by) const;
+  void FindNextLexico(const Block& added_last, uint32_t* bx,
+                      uint32_t* by) const;
   // Returns the largest possible block that fits at coordinates (x, y),
   // taking snapping into account.
   Block LargestPossibleBlockAt(uint32_t x, uint32_t y, bool snapped) const;
@@ -185,17 +187,17 @@ class FrontMgrDoubleOrderBase : public FrontMgrBase {
   // If 'use_block' is true, the block is also marked as used, block pixel
   // wise. Otherwise, it is added to a stack of blocks to be popped by calling
   // UseReady(). Returns false in case of error.
-  WP2_NO_DISCARD bool UseSize(BlockSize dim, Block* const block,
+  WP2_NO_DISCARD bool UseSize(BlockSize dim, Block* block,
                               bool use_block = false);
 
   // Finds a block whose size was recorded with UseSize(), but that hasn't been
   // used yet, and is ready to be used. Returns whether a block was found.
-  bool UseReady(Block* const block = nullptr);
+  bool UseReady(Block* block = nullptr);
 
   // For a valid 'size', returns true and the next block (pos) in size order.
   // Assumes 'size' is part of the 'partition_set_'.
   virtual WP2_NO_DISCARD bool TryGetNextBlock(BlockSize size,
-                                              Block* const block) const;
+                                              Block* block) const;
 
  protected:
   // Finds the position (min x/y coordinates and max size) of the next block
@@ -249,7 +251,7 @@ class FrontMgrMax : public FrontMgrDoubleOrderBase {
  public:
   WP2Status CopyFrom(const FrontMgrMax& other);
   WP2_NO_DISCARD
-  bool TryGetNextBlock(BlockSize size, Block* const block) const override;
+  bool TryGetNextBlock(BlockSize size, Block* block) const override;
   WP2Status Sort(VectorNoCtor<Block>& blocks,
                  Vector_u16& size_order_indices) const override;
 
@@ -300,8 +302,8 @@ class FrontMgrArea : public FrontMgrDoubleOrderBase {
     assert(area_height_ * kMinBlockSizePix == area_height);
   }
   // Only 'snapped=true' is allowed.
-  WP2Status Init(PartitionSet partition_set, bool snapped,
-                 uint32_t width, uint32_t height) override;
+  WP2Status Init(PartitionSet partition_set, bool snapped, uint32_t width,
+                 uint32_t height) override;
 
   WP2Status CopyFrom(const FrontMgrArea& other);
   WP2Status Sort(VectorNoCtor<Block>& blocks,
@@ -314,8 +316,8 @@ class FrontMgrArea : public FrontMgrDoubleOrderBase {
  protected:
   // Returns the next available block in the current area, or the first block in
   // the next area if the current area is full.
-  void FindNextInArea(const FrontMgrBase& occupancy, uint32_t* const bx,
-                      uint32_t* const by) const;
+  void FindNextInArea(const FrontMgrBase& occupancy, uint32_t* bx,
+                      uint32_t* by) const;
 
   const uint32_t area_width_, area_height_;  // In kMinBlockSizePix units.
 };

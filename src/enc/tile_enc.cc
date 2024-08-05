@@ -21,18 +21,25 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 
-#include "src/common/color_precision.h"
 #include "src/common/constants.h"
+#include "src/common/global_params.h"
 #include "src/common/header_enc_dec.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/progress_watcher.h"
+#include "src/dec/tile_dec.h"
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/enc/analysis.h"
 #include "src/enc/partitioning/partitioner.h"
-#include "src/enc/preview/preview_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
@@ -189,9 +196,8 @@ WP2Status CodeTiles(EncTilesLayout* const tiles_layout,
         (tile.data.size > 0) ? tile.data.size : tile.enc.GetBitstreamSize();
     {
       uint8_t buffer[kMaxVarIntLength];
-      const uint32_t size =
-          WriteVarInt(std::min(num_bytes, max_num_bytes), 1,
-                      max_num_bytes, buffer);
+      const uint32_t size = WriteVarInt(std::min(num_bytes, max_num_bytes), 1,
+                                        max_num_bytes, buffer);
       WP2_CHECK_ALLOC_OK(output->Append(buffer, size));
     }
 

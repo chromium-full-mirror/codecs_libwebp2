@@ -20,12 +20,15 @@
 #ifndef WP2_DEC_TILE_DEC_H_
 #define WP2_DEC_TILE_DEC_H_
 
+#include <cstdint>
+
 #include "src/common/progress_watcher.h"
 #include "src/dec/filters/block_map_filter.h"
-#include "src/utils/csp.h"
 #include "src/utils/data_source.h"
 #include "src/utils/plane.h"
 #include "src/utils/thread_utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -80,8 +83,8 @@ struct TilesLayout {
 // 'frame_width' and 'frame_height' (in pixels, not padded).
 uint32_t GetNumTiles(uint32_t frame_width, uint32_t frame_height,
                      uint32_t tile_width, uint32_t tile_height,
-                     uint32_t* const num_tiles_x = nullptr,
-                     uint32_t* const num_tiles_y = nullptr);
+                     uint32_t* num_tiles_x = nullptr,
+                     uint32_t* num_tiles_y = nullptr);
 
 // Returns the tile area within the frame (in pixels, not padded).
 // The specified 'tile_index' is ordered by rows, top-left being 0.
@@ -93,10 +96,8 @@ Rectangle GetTileRect(uint32_t frame_width, uint32_t frame_height,
 // 'rgb_output' and/or 'yuv_output' can be empty.
 WP2Status GetTilesLayout(uint32_t frame_width, uint32_t frame_height,
                          uint32_t tile_width, uint32_t tile_height,
-                         const ProgressRange& progress,
-                         ArgbBuffer* const rgb_output,
-                         YUVPlane* const yuv_output,
-                         TilesLayout* const tiles_layout);
+                         const ProgressRange& progress, ArgbBuffer* rgb_output,
+                         YUVPlane* yuv_output, TilesLayout* tiles_layout);
 
 // Returns the maximum number of bytes that the chunk of a tile can occupy
 // (without the chunk size header). 'tile_rect' in pixels, not padded.
@@ -139,16 +140,15 @@ class TileDecoder : public WorkerBase {
 // Instanciates and sets up a number of 'workers' depending on the number of
 // tiles and threads.
 WP2Status SetupWorkers(const BitstreamFeatures& features,
-                       const DecoderConfig& config,
-                       TilesLayout* const tiles_layout,
-                       Vector<TileDecoder>* const workers);
+                       const DecoderConfig& config, TilesLayout* tiles_layout,
+                       Vector<TileDecoder>* workers);
 
 // Skips global params and then calls SkipTiles.
-WP2Status SkipGlobalParamsAndTiles(DataSource* const data_source,
+WP2Status SkipGlobalParamsAndTiles(DataSource* data_source,
                                    const BitstreamFeatures& features,
                                    const Rectangle& window);
 // Skips all tiles fitting in 'window' from the 'data_source'.
-WP2Status SkipTiles(const GlobalParams& gparams, DataSource* const data_source,
+WP2Status SkipTiles(const GlobalParams& gparams, DataSource* data_source,
                     const BitstreamFeatures& features, const Rectangle& window);
 
 //------------------------------------------------------------------------------

@@ -20,10 +20,14 @@
 #ifndef WP2_DEC_FILTERS_GRAIN_FILTER_H_
 #define WP2_DEC_FILTERS_GRAIN_FILTER_H_
 
+#include <cstdint>
+
 #include "src/common/lossy/block.h"
 #include "src/dec/filters/block_map_filter.h"
+#include "src/dsp/math.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {

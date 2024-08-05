@@ -25,14 +25,12 @@
 #ifndef WP2_DEC_FILTERS_INTERTILE_FILTER_H_
 #define WP2_DEC_FILTERS_INTERTILE_FILTER_H_
 
+#include <cstdint>
+
 #include "src/common/global_params.h"
-#include "src/common/lossy/block.h"
 #include "src/dec/filters/block_map_filter.h"
 #include "src/dec/tile_dec.h"
-#include "src/dec/wp2_dec_i.h"
-#include "src/utils/csp.h"
 #include "src/utils/plane.h"
-#include "src/utils/vector.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -51,7 +49,7 @@ class IntertileFilter {
   // the filter will be enabled and its strength. 'canvas' should contain the
   // padded compressed YUV samples to be filtered. Calls Clear().
   void Init(const DecoderConfig& config, const GlobalParams& gparams,
-            const TilesLayout& tiles_layout, YUVPlane* const canvas);
+            const TilesLayout& tiles_layout, YUVPlane* canvas);
 
   // Resets the filter. After that, Init() must be called before Deblock().
   void Clear();

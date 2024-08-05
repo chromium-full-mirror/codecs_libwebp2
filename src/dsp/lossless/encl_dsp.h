@@ -20,7 +20,10 @@
 #ifndef WP2_DSP_LOSSLESS_ENCL_DSP_H_
 #define WP2_DSP_LOSSLESS_ENCL_DSP_H_
 
+#include <cstdint>
+
 #include "src/dsp/lossless/dspl.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2L {
 

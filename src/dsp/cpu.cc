@@ -17,10 +17,9 @@
 //
 // Author: James Zern (jzern@google.com)
 
-#include <initializer_list>
+#include <cstdint>
 
 #include "src/dsp/dsp.h"
-#include "src/dsp/math.h"
 
 #if defined(WP2_HAVE_NEON_RTCD)
 #include <cstdio>

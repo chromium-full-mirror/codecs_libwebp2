@@ -18,17 +18,14 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <algorithm>
-#include <cmath>
-#include <numeric>
+#include <cstdint>
 
 #include "src/dsp/dsp.h"
-#include "src/dsp/math.h"
 
 namespace WP2 {
 
-void GetBlockMinMaxGeneric(const int16_t* src, uint32_t step,
-                           uint32_t w, uint32_t h,
-                           int16_t* const min, int16_t* const max) {
+void GetBlockMinMaxGeneric(const int16_t* src, uint32_t step, uint32_t w,
+                           uint32_t h, int16_t* const min, int16_t* const max) {
   *min = src[0];
   *max = src[0];
   for (uint32_t j = 0; j < h; ++j) {
@@ -43,8 +40,7 @@ namespace {
 
 //------------------------------------------------------------------------------
 
-void GetBlockMinMax_C(const int16_t* src, uint32_t step,
-                      uint32_t num_blocks,
+void GetBlockMinMax_C(const int16_t* src, uint32_t step, uint32_t num_blocks,
                       int16_t min[], int16_t max[]) {
   for (uint32_t n = 0; n < num_blocks; ++n) {
     const int16_t* p = src + n * 4;
@@ -58,8 +54,8 @@ void GetBlockMinMax_C(const int16_t* src, uint32_t step,
   }
 }
 
-void GetBlockMinMax_5x5_C(const int16_t* src, uint32_t step,
-                          int16_t* const min, int16_t* const max) {
+void GetBlockMinMax_5x5_C(const int16_t* src, uint32_t step, int16_t* const min,
+                          int16_t* const max) {
   GetBlockMinMaxGeneric(src, step, 5, 5, min, max);
 }
 
@@ -82,8 +78,7 @@ static void DoMinMax8x4(const __m128i& A, const __m128i& B, const __m128i& C,
   *M = _mm_max_epi16(M3, _mm_srli_epi64(M3, 16));
 }
 
-void GetBlockMinMax_SSE(const int16_t* src, uint32_t step,
-                        uint32_t num_blocks,
+void GetBlockMinMax_SSE(const int16_t* src, uint32_t step, uint32_t num_blocks,
                         int16_t min[], int16_t max[]) {
   uint32_t n = 0;
   for (; n + 2 <= num_blocks; n += 2, src += 8) {

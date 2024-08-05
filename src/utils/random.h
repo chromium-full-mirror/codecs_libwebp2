@@ -21,7 +21,7 @@
 #define WP2_UTILS_RANDOM_H_
 
 #include <cassert>
-#include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <limits>
 #include <random>
@@ -35,8 +35,8 @@ namespace WP2 {
 // Uses fixed-point instead of floating-point operations to remove any
 // possibility of different results on different platforms.
 template <typename Generator, typename IntType>
-static IntType GetUniformIntDistribution(Generator* const gen,
-                                         IntType min, IntType max) {
+static IntType GetUniformIntDistribution(Generator* const gen, IntType min,
+                                         IntType max) {
   static constexpr uint64_t random_max_value =
       (uint64_t)Generator::max() - Generator::min();
   static_assert(random_max_value <= std::numeric_limits<uint32_t>::max(),
@@ -65,7 +65,7 @@ class UniformIntDistribution {
   explicit UniformIntDistribution(uint32_t seed = 0) : generator_(seed) {}
 
   template <typename T = int32_t>
-  T Get(T min, T max) {   // uniform distribution in [min, max]
+  T Get(T min, T max) {  // uniform distribution in [min, max]
     return GetUniformIntDistribution(&generator_, min, max);
   }
 

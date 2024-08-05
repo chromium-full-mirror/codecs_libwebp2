@@ -17,12 +17,15 @@
 //
 #include "src/common/lossy/transforms.h"
 
+#include "src/dsp/dsp.h"
+#include "src/utils/utils.h"
+
 namespace WP2 {
 
-const WP2TransformType kTfX[]{
-    kDct, kAdst, kDct,  kAdst, kIdentity, kDct,      kIdentity};
-const WP2TransformType kTfY[]{
-    kDct, kAdst, kAdst, kDct,  kDct,      kIdentity, kIdentity};
+const WP2TransformType kTfX[]{kDct,      kAdst, kDct,     kAdst,
+                              kIdentity, kDct,  kIdentity};
+const WP2TransformType kTfY[]{kDct, kAdst,     kAdst,    kDct,
+                              kDct, kIdentity, kIdentity};
 STATIC_ASSERT_ARRAY_SIZE(kTfX, kNumTransformPairs);
 STATIC_ASSERT_ARRAY_SIZE(kTfY, kNumTransformPairs);
 

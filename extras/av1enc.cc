@@ -28,16 +28,21 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "examples/example_utils.h"
 #include "extras/aom_utils.h"
-#include "imageio/file_format.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
+#include "imageio/imageio_util.h"
+#include "src/wp2/base.h"
 
 namespace {
 

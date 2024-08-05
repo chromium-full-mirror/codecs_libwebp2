@@ -21,9 +21,16 @@
 
 #include "src/dsp/lossless/decl_dsp.h"
 
-#include "src/common/constants.h"
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+
+#include "src/common/lossless/color_cache.h"
 #include "src/dec/lossless/losslessi_dec.h"
 #include "src/dsp/dsp.h"
+#include "src/dsp/lossless/dspl.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2L {
 namespace {

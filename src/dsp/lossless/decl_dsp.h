@@ -20,6 +20,8 @@
 #ifndef WP2_DSP_LOSSLESS_DECL_DSP_H_
 #define WP2_DSP_LOSSLESS_DECL_DSP_H_
 
+#include <cstdint>
+
 #include "src/dsp/lossless/dspl.h"
 
 namespace WP2L {
@@ -67,15 +69,15 @@ class Transform;  // Defined in dec/lossless/losslessi_dec.h.
 // The *in and *out pointers refer to source and destination data respectively
 // corresponding to the intermediate row (row_start).
 // If 'predicted' is not null, it will contain the predicted samples on return.
-void InverseTransform(const Transform* const transform, uint32_t row_start,
+void InverseTransform(const Transform* transform, uint32_t row_start,
                       uint32_t row_end, const int16_t min_values[4],
-                      const int16_t max_values[4], const int16_t* const in,
-                      bool has_alpha, int16_t* const out,
-                      int16_t* const predicted = nullptr);
+                      const int16_t max_values[4], const int16_t* in,
+                      bool has_alpha, int16_t* out,
+                      int16_t* predicted = nullptr);
 
 // Fills 'dst' with the samples from the 'color_map' at the indices specified by
 // the green channel of the pixels in 'src'.
-typedef void (*MapARGBFunc)(const int16_t* src, const int16_t* const color_map,
+typedef void (*MapARGBFunc)(const int16_t* src, const int16_t* color_map,
                             uint32_t color_map_size, uint32_t y_start,
                             uint32_t y_end, uint32_t width, int16_t* dst);
 

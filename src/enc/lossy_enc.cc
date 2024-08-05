@@ -17,19 +17,36 @@
 //
 
 #include <algorithm>
+#include <cassert>
+#include <cstdint>
 #include <cstdio>
-#include <memory>
 #include <numeric>
 #include <string>
 
 #include "src/common/global_params.h"
+#include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/context.h"
+#include "src/common/lossy/predictor.h"
+#include "src/common/lossy/segment.h"
+#include "src/common/lossy/transforms.h"
+#include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
 #include "src/common/vdebug.h"
 #include "src/enc/analysis.h"
+#include "src/enc/block_enc.h"
 #include "src/enc/tile_enc.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/csp.h"
+#include "src/utils/front_mgr.h"
+#include "src/utils/plane.h"
+#include "src/utils/split_iterator.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -499,10 +516,11 @@ WP2Status NeuralEncode(const ArgbBuffer& buffer, const EncoderConfig& config,
   (void)buffer;
   (void)config;
   (void)enc;
-  fprintf(stderr, "Attempted to use neural compression in a "
-                  "non-experimental build.\n");
+  fprintf(stderr,
+          "Attempted to use neural compression in a "
+          "non-experimental build.\n");
   return WP2_STATUS_UNSUPPORTED_FEATURE;
 }
 #endif  // !WP2_NEURAL
 
-}    // namespace WP2
+}  // namespace WP2

@@ -17,10 +17,12 @@
 //
 // Author: Yannis Guyon (yguyon)
 
-#include "src/enc/preview/preview_enc.h"
-
 #include <cassert>
 #include <cmath>
+#include <cstdint>
+
+#include "src/common/preview/preview.h"
+#include "src/enc/preview/preview_enc.h"
 
 namespace WP2 {
 

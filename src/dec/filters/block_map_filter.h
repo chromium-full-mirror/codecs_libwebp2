@@ -20,9 +20,14 @@
 #ifndef WP2_DEC_FILTERS_BLOCK_MAP_FILTER_H_
 #define WP2_DEC_FILTERS_BLOCK_MAP_FILTER_H_
 
+#include <cstdint>
+
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -45,8 +50,8 @@ class FilterBlockMap {
   // 'tile_rect' contains the position and the dimensions of the tile in the
   // image in pixels, not padded.
   // 'pixels' should point to the padded tile samples.
-  void Init(const Rectangle& tile_rect, BitDepth bit_depth,
-            int32_t yuv_min, int32_t yuv_max, YUVPlane* const pixels);
+  void Init(const Rectangle& tile_rect, BitDepth bit_depth, int32_t yuv_min,
+            int32_t yuv_max, YUVPlane* pixels);
 
   // Allocates storage to register block features.
   WP2Status Allocate();
@@ -61,11 +66,11 @@ class FilterBlockMap {
 
  public:
   struct BlockFeatures {
-    uint32_t index;      // Unique block index (vdebug).
-    BlockSize size;      // Width, height.
-    uint8_t segment_id;  // The id of the segment it belongs to.
-    uint8_t min_bpp;     // Lower bound of num bits-per-pixel. 255 is ~2 bpp.
-    uint8_t res_den[4];  // Residual density per channel. 255 is all non-zero.
+    uint32_t index;        // Unique block index (vdebug).
+    BlockSize size;        // Width, height.
+    uint8_t segment_id;    // The id of the segment it belongs to.
+    uint8_t min_bpp;       // Lower bound of num bits-per-pixel. 255 is ~2 bpp.
+    uint8_t res_den[4];    // Residual density per channel. 255 is all non-zero.
     bool has_lossy_alpha;  // Whether the block has lossy alpha.
   };
 
@@ -86,7 +91,7 @@ class FilterBlockMap {
   uint32_t current_block_index_ = 0;
 
  public:
-  void ApplyVDebug(const DecoderConfig& config, ArgbBuffer* const debug_output);
+  void ApplyVDebug(const DecoderConfig& config, ArgbBuffer* debug_output);
 };
 
 //------------------------------------------------------------------------------

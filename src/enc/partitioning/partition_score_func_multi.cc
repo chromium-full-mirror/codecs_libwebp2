@@ -20,17 +20,21 @@
 #include "src/enc/partitioning/partition_score_func_multi.h"
 
 #include <algorithm>
-#include <array>
+#include <cassert>
 #include <cmath>
-#include <limits>
-#include <numeric>
+#include <cstdint>
 
+#include "src/common/global_params.h"
 #include "src/common/integral.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/progress_watcher.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
-#include "src/enc/analysis.h"
-#include "src/enc/partitioning/partitioner.h"
-#include "src/enc/wp2_enc_i.h"
+#include "src/enc/partitioning/partition_score_func.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -160,8 +164,8 @@ WP2Status MultiScoreFunc::ComputeScore(const Block& block,
 
 // Returns the maximum difference between 'src' and its predicted gradient.
 // 'step' goes from a 'src' line to the next.
-static int32_t GetGradientDiff(const int16_t* src, int32_t step,
-                               int32_t w, int32_t h) {
+static int32_t GetGradientDiff(const int16_t* src, int32_t step, int32_t w,
+                               int32_t h) {
   assert(w >= 4 && h >= 4);
   const int32_t max_x = w - 1, max_y = h - 1;
 

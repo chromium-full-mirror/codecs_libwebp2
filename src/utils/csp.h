@@ -98,14 +98,14 @@ class CSPTransform {
   Csp GetType() const { return type_; }
 
   // YUV <-> RGB conversion with several type overloads.
-  void Rgb8ToYuv(int32_t r, int32_t g, int32_t b,
-                 int16_t* const y, int16_t* const u, int16_t* const v) const;
-  void Rgb10ToYuv(int32_t r, int32_t g, int32_t b,
-                  int16_t* const y, int16_t* const u, int16_t* const v) const;
-  void YuvToRgb8(int16_t y, int16_t u, int16_t v,
-                 int16_t* const r, int16_t* const g, int16_t* const b) const;
-  void YuvToRgb8(int16_t y, int16_t u, int16_t v,
-                 uint8_t* const r, uint8_t* const g, uint8_t* const b) const;
+  void Rgb8ToYuv(int32_t r, int32_t g, int32_t b, int16_t* y, int16_t* u,
+                 int16_t* v) const;
+  void Rgb10ToYuv(int32_t r, int32_t g, int32_t b, int16_t* y, int16_t* u,
+                  int16_t* v) const;
+  void YuvToRgb8(int16_t y, int16_t u, int16_t v, int16_t* r, int16_t* g,
+                 int16_t* b) const;
+  void YuvToRgb8(int16_t y, int16_t u, int16_t v, uint8_t* r, uint8_t* g,
+                 uint8_t* b) const;
 
   void Rgb8ToYuv(const int16_t* rgb, int16_t* yuv) const;
   void YuvToRgb8(const int16_t* yuv, int16_t* rgb) const;
@@ -123,8 +123,7 @@ class CSPTransform {
                                 const int16_t* c1_buffer, uint32_t c1_step,
                                 const int16_t* c2_buffer, uint32_t c2_step,
                                 const int16_t* a_buffer, uint32_t a_step,
-                                const CSPMtx& ccsp_to_rgb,
-                                ArgbBuffer* const argb);
+                                const CSPMtx& ccsp_to_rgb, ArgbBuffer* argb);
 
   // Converts the channels 'c0, c1, c2' from a custom color space to
   // 'CSPTransform::type_' color space using 'ccsp_to_rgb_matrix'.
@@ -165,14 +164,14 @@ class CSPTransform {
   WP2Status Init(Csp csp_type, const ArgbBuffer& argb_buffer = ArgbBuffer());
 
   // Encodes 'm' then decodes it as 'dm'. In case the former is not perfectly
-  // shaped as the expected eigenmatrix, 'dm' might have suffered some loss
+  // shaped as the expected eigen matrix, 'dm' might have suffered some loss
   // during encoding. The maximum 'error' between the two is returned.
   static WP2Status MakeEigenMatrixEncodable(const int16_t m[9], int16_t dm[9],
-                                            int32_t* const error);
+                                            int32_t* error);
 
   // Writes this instance to the bitstream.
-  WP2Status Write(ANSEnc* const enc) const;
-  WP2Status Read(ANSDec* const dec);
+  WP2Status Write(ANSEnc* enc) const;
+  WP2Status Read(ANSDec* dec);
 
   // Returns the number of bits used to store each Y, U or V sample.
   BitDepth GetYuvDepth() const { return yuv_depth_; }
@@ -190,8 +189,8 @@ class CSPTransform {
   const int16_t* GetRgb10Average() const { return avg10_; }
   // In-place apply the transform to 'image' area defined by {x,y,w,h}.
   // Output is yuva packed as 8b-unsigned (not s16).
-  void Apply(ArgbBuffer* const image, BitDepth bit_depth,
-             uint32_t x, uint32_t y, uint32_t w, uint32_t h) const;
+  void Apply(ArgbBuffer* image, BitDepth bit_depth, uint32_t x, uint32_t y,
+             uint32_t w, uint32_t h) const;
 
  private:
   // Input RGB and output RGB are in range [0..255].
@@ -217,6 +216,6 @@ class CSPTransform {
 
 //------------------------------------------------------------------------------
 
-}   // namespace WP2
+}  // namespace WP2
 
-#endif   // WP2_UTILS_CSP_H_
+#endif  // WP2_UTILS_CSP_H_

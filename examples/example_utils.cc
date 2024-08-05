@@ -15,7 +15,15 @@
 //
 //  Helper functions used by examples.
 
-#include "./example_utils.h"
+#include "examples/example_utils.h"
+
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <utility>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -29,8 +37,13 @@
 
 #include "examples/stopwatch.h"
 #include "src/common/color_precision.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/block_size_io.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 

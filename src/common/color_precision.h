@@ -20,11 +20,12 @@
 #ifndef WP2_COMMON_COLOR_PRECISION_H_
 #define WP2_COMMON_COLOR_PRECISION_H_
 
+#include <cassert>
 #include <cstdint>
 
 #include "src/dsp/math.h"
-#include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -56,7 +57,7 @@ constexpr TypeOut Dequantize(TypeIn x) {
   static_assert(2 * NumBitsIn >= NumBitsOut,
                 "Cannot dequantize more than twice the input range");
   return (TypeOut)(((uint32_t)x << (NumBitsOut - NumBitsIn)) |
-      ((uint32_t)x >> (2 * NumBitsIn - NumBitsOut)));
+                   ((uint32_t)x >> (2 * NumBitsIn - NumBitsOut)));
 }
 
 }  // namespace Internal
@@ -70,7 +71,7 @@ constexpr uint32_t ToUInt32(Argb32b color) {
 
 constexpr Argb32b ToArgb32b(uint32_t color) {
   return {(uint8_t)((color >> 24) & 0xFFu), (uint8_t)((color >> 16) & 0xFFu),
-          (uint8_t)((color >>  8) & 0xFFu), (uint8_t)((color >>  0) & 0xFFu)};
+          (uint8_t)((color >> 8) & 0xFFu), (uint8_t)((color >> 0) & 0xFFu)};
 }
 
 //------------------------------------------------------------------------------
@@ -91,14 +92,12 @@ inline Argb32b ToArgb32b(const uint8_t argb[4]) {
 // RGB12b <-> uint32_t
 
 constexpr uint32_t ToUInt32(RGB12b color) {
-  return (((uint32_t)color.r & 0xFu) << 8) |
-         (((uint32_t)color.g & 0xFu) << 4) |
+  return (((uint32_t)color.r & 0xFu) << 8) | (((uint32_t)color.g & 0xFu) << 4) |
          (((uint32_t)color.b & 0xFu) << 0);
 }
 
 constexpr RGB12b ToRGB12b(uint32_t color) {
-  return {(uint8_t)((color >> 8) & 0xFu),
-          (uint8_t)((color >> 4) & 0xFu),
+  return {(uint8_t)((color >> 8) & 0xFu), (uint8_t)((color >> 4) & 0xFu),
           (uint8_t)((color >> 0) & 0xFu)};
 }
 
@@ -106,15 +105,13 @@ constexpr RGB12b ToRGB12b(uint32_t color) {
 // Argb32b <-> Argb38b
 
 constexpr Argb38b ToArgb38b(Argb32b color) {
-  return {color.a,
-          Internal::Dequantize<uint8_t, 8, uint16_t, 10>(color.r),
+  return {color.a, Internal::Dequantize<uint8_t, 8, uint16_t, 10>(color.r),
           Internal::Dequantize<uint8_t, 8, uint16_t, 10>(color.g),
           Internal::Dequantize<uint8_t, 8, uint16_t, 10>(color.b)};
 }
 
 constexpr Argb32b ToArgb32b(Argb38b color) {
-  return {color.a,
-          Internal::Quantize<uint16_t, 10, uint8_t, 8>(color.r),
+  return {color.a, Internal::Quantize<uint16_t, 10, uint8_t, 8>(color.r),
           Internal::Quantize<uint16_t, 10, uint8_t, 8>(color.g),
           Internal::Quantize<uint16_t, 10, uint8_t, 8>(color.b)};
 }
@@ -133,8 +130,7 @@ constexpr RGB12b ToRGB12b(Argb32b color) {
 }
 
 constexpr Argb32b ToArgb32b(RGB12b color) {
-  return {WP2::kAlphaMax,
-          Internal::Dequantize<uint8_t, 4, uint8_t, 8>(color.r),
+  return {WP2::kAlphaMax, Internal::Dequantize<uint8_t, 4, uint8_t, 8>(color.r),
           Internal::Dequantize<uint8_t, 4, uint8_t, 8>(color.g),
           Internal::Dequantize<uint8_t, 4, uint8_t, 8>(color.b)};
 }
@@ -145,8 +141,8 @@ constexpr Argb32b ToArgb32b(RGB12b color) {
 
 constexpr AYCoCg19b ToAYCoCg19b(Argb32b color) {
   return {(uint8_t)(color.a >> 7),
-          (uint8_t)(((uint32_t)  1u + color.g * 2 + color.r + color.b) >> 4),
-          (uint8_t)(((uint32_t)256u               + color.r - color.b) >> 3),
+          (uint8_t)(((uint32_t)1u + color.g * 2 + color.r + color.b) >> 4),
+          (uint8_t)(((uint32_t)256u + color.r - color.b) >> 3),
           (uint8_t)(((uint32_t)512u + color.g * 2 - color.r - color.b) >> 4)};
 }
 

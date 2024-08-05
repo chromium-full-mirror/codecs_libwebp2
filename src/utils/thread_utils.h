@@ -20,6 +20,8 @@
 #ifndef WP2_UTILS_THREAD_UTILS_H_
 #define WP2_UTILS_THREAD_UTILS_H_
 
+#include <cassert>
+#include <cstdint>
 #ifdef HAVE_CONFIG_H
 #include "src/wp2/config.h"
 #endif
@@ -67,9 +69,9 @@ class WorkerBase {
 
   // State of the worker thread object
   enum {
-    NOT_OK = 0,   // object is unusable
-    OK,           // ready to work
-    WORK          // busy finishing the current task
+    NOT_OK = 0,  // object is unusable
+    OK,          // ready to work
+    WORK         // busy finishing the current task
   } state_ = NOT_OK;
 
   WP2Status status_ = WP2_STATUS_OK;  // Should contain the output
@@ -79,7 +81,7 @@ class WorkerBase {
   void* GetImpl() const { return impl_; }
 
  protected:
-  void* impl_ = nullptr;              // platform-dependent implementation
+  void* impl_ = nullptr;  // platform-dependent implementation
 };
 
 //------------------------------------------------------------------------------
@@ -87,20 +89,20 @@ class WorkerBase {
 
 // Function to be called by the worker thread. Takes two opaque pointers as
 // arguments (data1_ and data2_), and should return false in case of error.
-using WorkerHook = WP2Status (*)(void *, void *);
+using WorkerHook = WP2Status (*)(void*, void*);
 
 // Synchronization object used to launch job in the worker thread
 class Worker : public WorkerBase {
  public:
-  WP2Status Execute() override {         // just calls the hook
+  WP2Status Execute() override {  // just calls the hook
     assert(status_ == WP2_STATUS_OK);
     return (hook_ != nullptr) ? hook_(data1_, data2_) : WP2_STATUS_OK;
   }
 
  public:
-  WorkerHook hook_ = nullptr;            // hook to call
-  void* data1_ = nullptr;                // first argument passed to 'hook_'
-  void* data2_ = nullptr;                // second argument passed to 'hook_'
+  WorkerHook hook_ = nullptr;  // hook to call
+  void* data1_ = nullptr;      // first argument passed to 'hook_'
+  void* data2_ = nullptr;      // second argument passed to 'hook_'
 };
 
 //------------------------------------------------------------------------------
@@ -118,7 +120,7 @@ class WorkerInterface {
   // worker. 'stack_size' is the limit in bytes for the thread's stack size.
   // Use a stack-size value of '0' to use the system's default size.
   // Returns false in case of error (memory or thread-launch).
-  virtual bool Reset(WorkerBase* const worker, bool do_mt,
+  virtual bool Reset(WorkerBase* worker, bool do_mt,
                      uint32_t stack_size) const = 0;
   bool Reset(WorkerBase* const worker, bool do_mt) const {
     return Reset(worker, do_mt, 0);
@@ -127,13 +129,13 @@ class WorkerInterface {
   // initially calling Reset(), the method is called directly, not in a thread.
   // But even in this case, it's still required to call Sync(), for proper
   // error reporting.
-  virtual void Launch(WorkerBase* const worker) const = 0;
+  virtual void Launch(WorkerBase* worker) const = 0;
   // Makes sure the previous work is finished. Returns true if worker->status_
   // is WP2_STATUS_OK and no error was triggered by the working thread.
-  virtual WP2Status Sync(WorkerBase* const worker) const = 0;
+  virtual WP2Status Sync(WorkerBase* worker) const = 0;
   // Kills the thread (if launched) and marks the object as closed. To use the
   // object again, one must call Reset() again.
-  virtual void End(WorkerBase* const worker) const = 0;
+  virtual void End(WorkerBase* worker) const = 0;
 };
 
 // Install a new set of threading functions, overriding the defaults. This
@@ -148,6 +150,6 @@ WP2_EXTERN const WorkerInterface& GetWorkerInterface();
 
 //------------------------------------------------------------------------------
 
-}    // namespace WP2
+}  // namespace WP2
 
-#endif  /* WP2_UTILS_THREAD_UTILS_H_ */
+#endif /* WP2_UTILS_THREAD_UTILS_H_ */

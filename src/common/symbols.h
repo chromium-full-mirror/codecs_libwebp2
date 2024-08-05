@@ -20,18 +20,19 @@
 #ifndef WP2_COMMON_SYMBOLS_H_
 #define WP2_COMMON_SYMBOLS_H_
 
-#include <algorithm>
-#include <array>
 #include <cassert>
+#include <cstdint>
 #include <limits>
 
 #include "src/common/constants.h"
 #include "src/common/lossy/block_size.h"
+#include "src/dsp/math.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_enc.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 //------------------------------------------------------------------------------
 
@@ -118,10 +119,10 @@ class SymbolsInfo {
     return GetClusterInfo(sym, cluster).p1;
   }
 
-  void GetInitialCDF(uint32_t sym, uint32_t cluster, const uint16_t** const cdf,
-                     uint16_t* const max_proba) const;
-  WP2Status SetInitialCDF(uint32_t sym, uint32_t cluster,
-                          const uint16_t* const cdf, uint16_t max_proba);
+  void GetInitialCDF(uint32_t sym, uint32_t cluster, const uint16_t** cdf,
+                     uint16_t* max_proba) const;
+  WP2Status SetInitialCDF(uint32_t sym, uint32_t cluster, const uint16_t* cdf,
+                          uint16_t max_proba);
 
   // Range of the symbol of bounds [min,max]: max-min+1.
   inline uint32_t Range(uint32_t sym, uint32_t cluster) const {
@@ -288,10 +289,9 @@ struct PrefixCode {
 // Read/write a value in [min, max] using prefix coding.
 // 'prefix_size' must be 1 or 2 (number of leading bits coded separately).
 void WritePrefixCode(int32_t value, int32_t min, int32_t max,
-                     uint32_t prefix_size, ANSEncBase* const enc,
-                     WP2_OPT_LABEL);
+                     uint32_t prefix_size, ANSEncBase* enc, WP2_OPT_LABEL);
 int32_t ReadPrefixCode(int32_t min, int32_t max, uint32_t prefix_size,
-                       ANSDec* const dec, WP2_OPT_LABEL);
+                       ANSDec* dec, WP2_OPT_LABEL);
 
 //------------------------------------------------------------------------------
 
@@ -622,8 +622,7 @@ static const char* const kSymbolGroup4Names[] = {"type", "hdist", "vdist",
 STATIC_ASSERT_ARRAY_SIZE(kSymbolGroup4Names, kSymbolG4Num);
 
 // Initializes a SymbolsInfo to be used with Group 4 algorithm.
-void InitGroup4(uint32_t width, uint32_t num_colors,
-                WP2::SymbolsInfo* const info);
+void InitGroup4(uint32_t width, uint32_t num_colors, WP2::SymbolsInfo* info);
 
 static_assert(kSymbolNum <= WP2::kSymbolNumMax, "kSymbolNumMax too small");
 
@@ -637,7 +636,7 @@ enum SymbolType {
 };
 
 // Returns whether a symbol will be potentially used, depending on type.
-bool IsSymbolUsed(const Symbol sym, const bool is_maybe_used[kSymbolTypeNum]);
+bool IsSymbolUsed(Symbol sym, const bool is_maybe_used[kSymbolTypeNum]);
 
 // Class containing info about the size (in bits) of the different symbols
 // (colors, cache index and LZ77 distance/length).

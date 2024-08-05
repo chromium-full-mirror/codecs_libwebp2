@@ -51,9 +51,8 @@ class PartialTileDecoder : public WP2Allocable {
 
   // Initializes the worker.
   virtual WP2Status Init(const BitstreamFeatures& features,
-                         const DecoderConfig& config,
-                         TilesLayout* const tiles_layout,
-                         Tile* const partial_tile) = 0;
+                         const DecoderConfig& config, TilesLayout* tiles_layout,
+                         Tile* partial_tile) = 0;
   // Starts work. Returns WP2_STATUS_OK or an error.
   virtual WP2Status Start() = 0;
   // Continues work. Returns WP2_STATUS_OK or an error.
@@ -110,7 +109,7 @@ struct Decoder::State : public WP2Allocable {
   bool glimpsed_frame_anmf = false;  // Is glimpsed frame's header decoded.
   bool glimpsed_frame_glbl = false;
   GlobalParams glimpsed_frame_gparams;  // Partially valid (type, transf, alpha)
-  uint32_t num_glimpsed_tiles = 0;  // Number of skipped tiles.
+  uint32_t num_glimpsed_tiles = 0;      // Number of skipped tiles.
   size_t glimpsed_bitstream_position = 0;
 
   // Internal information about preframes and regular frames.
@@ -132,7 +131,7 @@ struct Decoder::State : public WP2Allocable {
   GlobalParams gparams;
   TilesLayout tiles_layout;  // Known once features are decoded.
 
-  IntertileFilter intertile_filter;   // Smooths the tile edges out.
+  IntertileFilter intertile_filter;       // Smooths the tile edges out.
   uint32_t frame_num_converted_rows = 0;  // Total number of RGB pixel rows in
                                           // the current frame window.
   uint32_t frame_num_final_rows = 0;  // Total number of final pixel rows in the
@@ -182,7 +181,7 @@ struct Decoder::State : public WP2Allocable {
   // Conversion between final frame index and frame (preframe or regular) index.
   uint32_t GetFinalFrameIndex(uint32_t frame_index) const;
   bool TryGetFirstFrameBelongingToFinalFrame(uint32_t final_frame_index,
-                                             uint32_t* const frame_index) const;
+                                             uint32_t* frame_index) const;
 
   // Updates 'discard_frames_before_index' based on
   // 'skip_final_frames_before_index' and known 'frames'.

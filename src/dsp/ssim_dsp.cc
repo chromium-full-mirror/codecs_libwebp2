@@ -18,21 +18,20 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <cassert>
-#include <cmath>
+#include <cstddef>
+#include <cstdint>
 
 #include "src/dsp/dsp.h"
 
 #if defined(WP2_USE_SSE)
-#include <initializer_list>
 #include "src/dsp/dsp_x86.h"
 #endif
 
 //------------------------------------------------------------------------------
 
 // hat-shaped filter. Sum of coefficients is equal to 16.
-static constexpr uint32_t kWeight[2 * kWP2SSIMKernel + 1] = {
-  1, 2, 3, 4, 3, 2, 1
-};
+static constexpr uint32_t kWeight[2 * kWP2SSIMKernel + 1] = {1, 2, 3, 4,
+                                                             3, 2, 1};
 
 // Computes the Structural Similarity
 // See https://en.wikipedia.org/wiki/Structural_similarity
@@ -91,11 +90,11 @@ WP2DistoStats SSIMGetClipped_C(const void* src1, size_t step1, const void* src2,
                                size_t step2, uint32_t xo, uint32_t yo,
                                uint32_t W, uint32_t H) {
   const uint32_t ymin = (yo < kWP2SSIMKernel) ? 0 : yo - kWP2SSIMKernel;
-  const uint32_t ymax = (yo + kWP2SSIMKernel > H - 1) ? H - 1
-                                                      : yo + kWP2SSIMKernel;
+  const uint32_t ymax =
+      (yo + kWP2SSIMKernel > H - 1) ? H - 1 : yo + kWP2SSIMKernel;
   const uint32_t xmin = (xo < kWP2SSIMKernel) ? 0 : xo - kWP2SSIMKernel;
-  const uint32_t xmax = (xo + kWP2SSIMKernel > W - 1) ? W - 1
-                                                      : xo + kWP2SSIMKernel;
+  const uint32_t xmax =
+      (xo + kWP2SSIMKernel > W - 1) ? W - 1 : xo + kWP2SSIMKernel;
   src1 = (const T*)src1 + ymin * step1;
   src2 = (const T*)src2 + ymin * step2;
   WP2DistoStats stats;
@@ -126,8 +125,8 @@ void SSIMGet_C(const void* src1, size_t step1, const void* src2, size_t step2,
       const int32_t w = kWeight[x] * kWeight[y];
       const int32_t s1 = ((const T*)src1)[channel_step * x];
       const int32_t s2 = ((const T*)src2)[channel_step * x];
-      stats->xm  += w * s1;
-      stats->ym  += w * s2;
+      stats->xm += w * s1;
+      stats->ym += w * s2;
       stats->xxm += w * s1 * s1;
       stats->xym += w * s1 * s2;
       stats->yym += w * s2 * s2;
@@ -201,13 +200,12 @@ int32_t HorizontalAdd32b_SSE(const __m128i* const m) {
     src2 = (const uint8_t*)src2 + step2;                    \
   } while (0)
 
-void SSIMGet_SSE_4x(const void* src1, size_t step1,
-                    const void* src2, size_t step2,
-                    WP2DistoStats* const stats) {
+void SSIMGet_SSE_4x(const void* src1, size_t step1, const void* src2,
+                    size_t step2, WP2DistoStats* const stats) {
   const __m128i zero = _mm_setzero_si128();
   const __m128i mask = _mm_set1_epi32(0xffu);
-  __m128i xm = zero, ym = zero;                 // 16b accums
-  __m128i xxm = zero, yym = zero, xym = zero;   // 32b accums
+  __m128i xm = zero, ym = zero;                // 16b accums
+  __m128i xxm = zero, yym = zero, xym = zero;  // 32b accums
   ACCUMULATE_ROW_4x8u(kWeight1_16b);
   ACCUMULATE_ROW_4x8u(kWeight2_16b);
   ACCUMULATE_ROW_4x8u(kWeight3_16b);
@@ -216,9 +214,9 @@ void SSIMGet_SSE_4x(const void* src1, size_t step1,
   ACCUMULATE_ROW_4x8u(kWeight2_16b);
   ACCUMULATE_ROW_4x8u(kWeight1_16b);
 
-  stats->w   += kWP2SSIMWeightSum;
-  stats->xm  += HorizontalAdd16b_SSE(&xm);
-  stats->ym  += HorizontalAdd16b_SSE(&ym);
+  stats->w += kWP2SSIMWeightSum;
+  stats->xm += HorizontalAdd16b_SSE(&xm);
+  stats->ym += HorizontalAdd16b_SSE(&ym);
   stats->xxm += HorizontalAdd32b_SSE(&xxm);
   stats->xym += HorizontalAdd32b_SSE(&xym);
   stats->yym += HorizontalAdd32b_SSE(&yym);
@@ -267,15 +265,14 @@ __m128i Load8x8bTo16s(const uint8_t* const ptr) {
     src2 = (const int16_t*)src2 + step2; \
   } while (0)
 
-void SSIMGet_SSE_8u(const void* src1, size_t step1,
-                    const void* src2, size_t step2,
-                    WP2DistoStats* const stats) {
+void SSIMGet_SSE_8u(const void* src1, size_t step1, const void* src2,
+                    size_t step2, WP2DistoStats* const stats) {
   // Constant to shuffle 16b values [A B C D E F G H] into [A G|B F|C E|D 0].
   const __m128i kShuffleCst = _mm_set_epi16(
       -1 /*0xffff*/, 0x0706, 0x0908, 0x0504, 0x0b0a, 0x0302, 0x0d0c, 0x0100);
   const __m128i zero = _mm_setzero_si128();
-  __m128i xm = zero, ym = zero;                 // 32b accums
-  __m128i xxm = zero, yym = zero, xym = zero;   // 32b accums
+  __m128i xm = zero, ym = zero;                // 32b accums
+  __m128i xxm = zero, yym = zero, xym = zero;  // 32b accums
   ACCUMULATE_ROW_8b(kWeight1_16b, kWeight1_32b);
   ACCUMULATE_ROW_8b(kWeight2_16b, kWeight2_32b);
   ACCUMULATE_ROW_8b(kWeight3_16b, kWeight3_32b);
@@ -283,23 +280,22 @@ void SSIMGet_SSE_8u(const void* src1, size_t step1,
   ACCUMULATE_ROW_8b(kWeight3_16b, kWeight3_32b);
   ACCUMULATE_ROW_8b(kWeight2_16b, kWeight2_32b);
   ACCUMULATE_ROW_8b(kWeight1_16b, kWeight1_32b);
-  stats->w   += kWP2SSIMWeightSum;
-  stats->xm  += HorizontalAdd32b_SSE(&xm);
-  stats->ym  += HorizontalAdd32b_SSE(&ym);
+  stats->w += kWP2SSIMWeightSum;
+  stats->xm += HorizontalAdd32b_SSE(&xm);
+  stats->ym += HorizontalAdd32b_SSE(&ym);
   stats->xxm += HorizontalAdd32b_SSE(&xxm);
   stats->xym += HorizontalAdd32b_SSE(&xym);
   stats->yym += HorizontalAdd32b_SSE(&yym);
 }
 
-void SSIMGet_SSE_10s(const void* src1, size_t step1,
-                     const void* src2, size_t step2,
-                     WP2DistoStats* const stats) {
+void SSIMGet_SSE_10s(const void* src1, size_t step1, const void* src2,
+                     size_t step2, WP2DistoStats* const stats) {
   // Constant to shuffle 16b values [A B C D E F G H] into [A G|B F|C E|D 0].
   const __m128i kShuffleCst = _mm_set_epi16(
       -1 /*0xffff*/, 0x0706, 0x0908, 0x0504, 0x0b0a, 0x0302, 0x0d0c, 0x0100);
   const __m128i zero = _mm_setzero_si128();
-  __m128i xm = zero, ym = zero;                 // 32b accums
-  __m128i xxm = zero, yym = zero, xym = zero;   // 32b accums
+  __m128i xm = zero, ym = zero;                // 32b accums
+  __m128i xxm = zero, yym = zero, xym = zero;  // 32b accums
   ACCUMULATE_ROW_16b(kWeight1_16b, kWeight1_32b);
   ACCUMULATE_ROW_16b(kWeight2_16b, kWeight2_32b);
   ACCUMULATE_ROW_16b(kWeight3_16b, kWeight3_32b);
@@ -307,9 +303,9 @@ void SSIMGet_SSE_10s(const void* src1, size_t step1,
   ACCUMULATE_ROW_16b(kWeight3_16b, kWeight3_32b);
   ACCUMULATE_ROW_16b(kWeight2_16b, kWeight2_32b);
   ACCUMULATE_ROW_16b(kWeight1_16b, kWeight1_32b);
-  stats->w   += kWP2SSIMWeightSum;
-  stats->xm  += HorizontalAdd32b_SSE(&xm);
-  stats->ym  += HorizontalAdd32b_SSE(&ym);
+  stats->w += kWP2SSIMWeightSum;
+  stats->xm += HorizontalAdd32b_SSE(&xm);
+  stats->ym += HorizontalAdd32b_SSE(&ym);
   stats->xxm += HorizontalAdd32b_SSE(&xxm);
   stats->xym += HorizontalAdd32b_SSE(&xym);
   stats->yym += HorizontalAdd32b_SSE(&yym);
@@ -368,9 +364,8 @@ WP2_TSAN_IGNORE_FUNCTION void WP2SSIMInit() {
 
 namespace {
 
-template<typename T> uint64_t Accumulate(const T* const src1,
-                                         const T* const src2,
-                                         uint32_t len) {
+template <typename T>
+uint64_t Accumulate(const T* const src1, const T* const src2, uint32_t len) {
   assert(sizeof(T) <= 2);
   uint64_t sum = 0;
   for (uint32_t i = 0; i < len; ++i) {
@@ -413,8 +408,8 @@ void SumSquaredError4x16u_C(const uint16_t* src1, const uint16_t* src2,
 }
 
 uint64_t SumSquaredErrorBlock_C(const int16_t* src1, uint32_t step1,
-                                const int16_t* src2, uint32_t step2,
-                                uint32_t w, uint32_t h) {
+                                const int16_t* src2, uint32_t step2, uint32_t w,
+                                uint32_t h) {
   uint64_t sum = 0;
   for (uint32_t j = 0; j < h; ++j) {
     sum += SumSquaredError16s_C(src1, src2, w);
@@ -430,10 +425,10 @@ uint64_t SumSquaredErrorHalfBlock_C(const int16_t* src1, uint32_t step1,
   uint64_t sum = 0;
   for (uint32_t j = 0; j < h; j += 2) {
     for (uint32_t i = 0; i < w; i += 2) {
-      const int32_t v1 = src1[i + 0] + src1[i + 1]
-                       + src1[i + 0 + step1] + src1[i + 1 + step1];
-      const int32_t v2 = src2[i + 0] + src2[i + 1]
-                       + src2[i + 0 + step2] + src2[i + 1 + step2];
+      const int32_t v1 =
+          src1[i + 0] + src1[i + 1] + src1[i + 0 + step1] + src1[i + 1 + step1];
+      const int32_t v2 =
+          src2[i + 0] + src2[i + 1] + src2[i + 0 + step2] + src2[i + 1 + step2];
       const int32_t diff = (v1 - v2);
       sum += diff * diff;
     }
@@ -452,7 +447,7 @@ inline void SubtractAndAccumulate_SSE(const __m128i a, const __m128i b,
                                       __m128i* const sum) {
   const __m128i a_b = _mm_subs_epu8(a, b);
   const __m128i b_a = _mm_subs_epu8(b, a);
-  const __m128i abs_a_b = _mm_or_si128(a_b, b_a);   // |a - b|
+  const __m128i abs_a_b = _mm_or_si128(a_b, b_a);  // |a - b|
   const __m128i zero = _mm_setzero_si128();
   const __m128i C0 = _mm_unpacklo_epi8(abs_a_b, zero);
   const __m128i C1 = _mm_unpackhi_epi8(abs_a_b, zero);
@@ -524,7 +519,7 @@ inline void SubtractAndAccumulate4x_SSE(const __m128i a, const __m128i b,
                                         __m128i* const sum) {
   const __m128i a_b = _mm_subs_epu8(a, b);
   const __m128i b_a = _mm_subs_epu8(b, a);
-  const __m128i abs_a_b = _mm_or_si128(a_b, b_a);   // |a - b|
+  const __m128i abs_a_b = _mm_or_si128(a_b, b_a);  // |a - b|
   const __m128i zero = _mm_setzero_si128();
   const __m128i C0 = _mm_unpacklo_epi8(abs_a_b, zero);
   const __m128i C1 = _mm_unpackhi_epi8(abs_a_b, zero);
@@ -541,8 +536,8 @@ inline void SubtractAndAccumulate4x_SSE(const __m128i a, const __m128i b,
   *sum = _mm_add_epi32(F0, F1);
 }
 
-void SumSquaredError4x8u_SSE(const uint8_t* A, const uint8_t* B,
-                             uint32_t len, uint64_t result[4]) {
+void SumSquaredError4x8u_SSE(const uint8_t* A, const uint8_t* B, uint32_t len,
+                             uint64_t result[4]) {
   __m128i sum = _mm_setzero_si128();
   uint32_t i = 0;
   for (; i + 4 <= len; i += 4) {
@@ -566,10 +561,10 @@ void SumSquaredError4x8u_SSE(const uint8_t* A, const uint8_t* B,
   }
 }
 
-void SumSquaredError3x8u_SSE(const uint8_t* A, const uint8_t* B,
-                             uint32_t len, uint64_t result[4]) {
-  const __m128i kShuffleCst = _mm_setr_epi8(
-    0, 1, 2, -1, 3, 4, 5, -1, 6, 7, 8, -1, 9, 10, 11, -1);
+void SumSquaredError3x8u_SSE(const uint8_t* A, const uint8_t* B, uint32_t len,
+                             uint64_t result[4]) {
+  const __m128i kShuffleCst =
+      _mm_setr_epi8(0, 1, 2, -1, 3, 4, 5, -1, 6, 7, 8, -1, 9, 10, 11, -1);
   __m128i sum = _mm_setzero_si128();
   uint32_t i = 0;
   // load 4*4 bytes, but process 3*4 bytes
@@ -644,7 +639,7 @@ static WP2_TSAN_IGNORE_FUNCTION void WP2PSNRInitSSE() {
 }  // namespace
 
 uint64_t (*WP2SumSquaredError8u)(const uint8_t* src1, const uint8_t* src2,
-                                uint32_t len) = nullptr;
+                                 uint32_t len) = nullptr;
 uint64_t (*WP2SumSquaredError16s)(const int16_t* src1, const int16_t* src2,
                                   uint32_t len) = nullptr;
 void (*WP2SumSquaredError4x8u)(const uint8_t* src1, const uint8_t* src2,

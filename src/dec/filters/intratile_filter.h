@@ -20,15 +20,16 @@
 #ifndef WP2_DEC_FILTERS_INTRATILE_FILTER_H_
 #define WP2_DEC_FILTERS_INTRATILE_FILTER_H_
 
+#include <cstdint>
+
 #include "src/common/filters/rstr_flt_params.h"
-#include "src/common/lossy/block.h"
 #include "src/dec/filters/alpha_filter.h"
 #include "src/dec/filters/block_map_filter.h"
 #include "src/dec/filters/deblocking_filter.h"
 #include "src/dec/filters/directional_filter.h"
 #include "src/dec/filters/grain_filter.h"
 #include "src/dec/filters/restoration_filter.h"
-#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 

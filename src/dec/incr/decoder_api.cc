@@ -18,16 +18,20 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
 
 #include "src/dec/incr/decoder_context.h"
-#include "src/dec/incr/decoder_skip.h"
 #include "src/dec/incr/decoder_state.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/utils/context_switch.h"
 #include "src/utils/data_source.h"
 #include "src/utils/orientation.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 

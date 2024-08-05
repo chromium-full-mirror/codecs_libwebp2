@@ -20,7 +20,7 @@
 #ifndef WP2_WP2_DEBUG_H_
 #define WP2_WP2_DEBUG_H_
 
-#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <string>
@@ -44,14 +44,7 @@ struct LabelStats {
   double bits;
   uint32_t num_occurrences;
   std::map<uint32_t, uint32_t> histo;
-  enum class Type {
-    Bit,
-    ABit,
-    RValue,
-    UValue,
-    ASymbol,
-    Symbol
-  } type;
+  enum class Type { Bit, ABit, RValue, UValue, ASymbol, Symbol } type;
 };
 
 // Structure for storing side info and stats.
@@ -77,7 +70,7 @@ struct BlockInfo {
   // how are encoded the 'coeffs' per channel per split transform
   int8_t encoding_method[4][4];
 
-  double bits;  // approx. number of bits used
+  double bits;                                   // approx. number of bits used
   std::vector<std::string> residual_info[4][4];  // Residual info per channel
                                                  // per split transform.
 
@@ -108,7 +101,7 @@ struct EncoderInfo {
     Type type;
     // xy coordinates of the block in pixels.
     uint32_t x, y;
-    // transform id, semgent id, predictor id or split_tf (bool)
+    // transform id, segment id, predictor id or split_tf (bool)
     uint32_t value;
     Channel channel;  // only relevant for kPredictor
   };
@@ -123,6 +116,7 @@ struct EncoderInfo {
     return nullptr;
   }
 #endif  // WP2_BITTRACE
+
   bool store_blocks = false;  // Fills 'blocks' if true (input).
 
   // If 'visual_debug' is not null and, depending on its value, 'debug_output'
@@ -154,7 +148,7 @@ struct DecoderInfo {
 
   bool store_blocks = false;  // Fills 'blocks' if true. (input)
 
-  size_t header_size = 0;       // Byte size of the header. (output)
+  size_t header_size = 0;  // Byte size of the header. (output)
   uint32_t num_segments = 0;
   bool explicit_segment_ids = false;
   std::vector<std::string> y_predictors;

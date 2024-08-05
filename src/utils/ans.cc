@@ -13,23 +13,24 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 //
-// Assymetric Numeral System coder
+// Asymmetric Numeral System coder
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include "src/utils/ans.h"
 
 #include <algorithm>
-#include <cmath>
+#include <cassert>
+#include <cstdint>
 #include <cstdio>
-#include <memory>
-#include <numeric>
-#include <utility>
+#include <iterator>
 
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/data_source.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 // some derived constants:
 #define IO_BYTES (IO_BITS / 8)
@@ -42,7 +43,7 @@ ANSSymbolInfo ANSSymbolInfo::Rescale(const ANSSymbolInfo& max,
   ANSSymbolInfo info;
   const uint32_t max_offset = max.offset + max.freq;
   const uint32_t offset_next = (offset + freq) * tab_size / max_offset;
-  info.offset                =  offset         * tab_size / max_offset;
+  info.offset = offset * tab_size / max_offset;
   // Compute the frequency with the next offset to not leave any gap.
   info.freq = offset_next - info.offset;
   info.symbol = symbol;
@@ -183,8 +184,8 @@ void ANSAdaptiveSymbol::SetAdaptationSpeed(Method method, uint32_t speed) {
 }
 
 void ANSAdaptiveSymbol::Print(bool use_percents) const {
-  printf(" -- adaptive [max_symbol:%d] (speed factor=%u): ",
-         max_symbol_, adapt_factor_);
+  printf(" -- adaptive [max_symbol:%d] (speed factor=%u): ", max_symbol_,
+         adapt_factor_);
   if (use_percents) {
     for (uint32_t i = 0; i < APROBA_MAX_SYMBOL; ++i) {
       printf("[%5.2f%%]", 100.f * GetProba(i));
@@ -225,7 +226,7 @@ uint32_t ANSDec::ReadNextWord(uint32_t s) {
   s <<= IO_BITS;
   const uint8_t* data;
   if (data_source_->TryReadNext(IO_BYTES, &data)) {
-    s |= (data[1] << 8) | data[0];   // written as endian-neutral code
+    s |= (data[1] << 8) | data[0];  // written as endian-neutral code
   } else {
     status_ = WP2_STATUS_NOT_ENOUGH_DATA;
   }
@@ -348,7 +349,7 @@ uint32_t ANSDec::ReadUValueInternal(uint32_t bits) {
 uint32_t ANSDec::ReadRValueInternal(uint32_t range) {
   assert(range <= (1u << kANSMaxRangeBits));
   uint32_t s = state_ % range;
-  state_     = state_ / range;
+  state_ = state_ / range;
   if (state_ < IO_LIMIT) {
     s = ReadNextWord(s);
     state_ = (state_ << IO_LIMIT_BITS) + s / range;
@@ -457,4 +458,4 @@ uint32_t ANSDec::GetMinNumUsedBytesDiff(uint32_t num_used_bytes_before,
 
 //------------------------------------------------------------------------------
 
-}   // namespace WP2
+}  // namespace WP2

@@ -20,9 +20,11 @@
 #include "src/common/lossy/block_size.h"
 
 #include <algorithm>
+#include <cstdint>
 
-#include "src/utils/utils.h"
 #include "src/dsp/math.h"
+#include "src/utils/utils.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -56,8 +58,8 @@ BlockSize GetBlockSize(uint32_t width, uint32_t height) {
                     [WP2Log2Floor(std::min(height, kMaxBlockSize))];
 }
 
-BlockSize GetSnappedBlockSize(uint32_t x, uint32_t y,
-                              uint32_t width, uint32_t height) {
+BlockSize GetSnappedBlockSize(uint32_t x, uint32_t y, uint32_t width,
+                              uint32_t height) {
   constexpr uint32_t kMaxSizePerPos[] = {8, 1, 2, 1, 4, 1, 2, 1};
   STATIC_ASSERT_ARRAY_SIZE(kMaxSizePerPos, kMaxBlockSize);
   return GetBlockSize(std::min(width, kMaxSizePerPos[x % kMaxBlockSize]),

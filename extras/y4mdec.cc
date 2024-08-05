@@ -19,12 +19,21 @@
 // Author: Yannis Guyon (yguyon@google.com)
 
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "extras/ccsp_imageio.h"
+#include "imageio/anim_image_dec.h"
+#include "imageio/imageio_util.h"
+#include "src/dsp/math.h"
+#include "src/utils/csp.h"
 #include "src/utils/data_source.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {
@@ -141,9 +150,9 @@ struct y4m_input {
   size_t dst_buf_sz;
   /*The amount to read directly into the converted frame buffer.*/
   size_t dst_buf_read_sz;
-  /*The size of the auxilliary buffer.*/
+  /*The size of the auxiliary buffer.*/
   size_t aux_buf_sz;
-  /*The amount to read into the auxilliary buffer.*/
+  /*The amount to read into the auxiliary buffer.*/
   size_t aux_buf_read_sz;
   y4m_convert_func convert;
   unsigned char *dst_buf;
@@ -510,7 +519,7 @@ void y4m_convert_42xpaldv_42xjpeg(y4m_input *_y4m, unsigned char *_dst,
   }
 }
 /*Perform vertical filtering to reduce a single plane from 4:2:2 to 4:2:0.
-  This is used as a helper by several converation routines.*/
+  This is used as a helper by several conversion routines.*/
 void y4m_422jpeg_420jpeg_helper(unsigned char *_dst, const unsigned char *_src,
                                 int _c_w, int _c_h) {
   int y;

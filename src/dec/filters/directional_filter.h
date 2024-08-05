@@ -21,8 +21,11 @@
 #ifndef WP2_DEC_FILTERS_DIRECTIONAL_FILTER_H_
 #define WP2_DEC_FILTERS_DIRECTIONAL_FILTER_H_
 
+#include <cstdint>
+
 #include "src/dec/filters/block_map_filter.h"
 #include "src/utils/plane.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {
@@ -39,8 +42,7 @@ class DirectionalFilter {
   static constexpr uint32_t kMaxPriStr = (1u << 4) - 1u;  // Constants defined
   static constexpr uint32_t kMaxSecStr = (1u << 2) - 1u;  // in AV1 spec.
 
-  DirectionalFilter(const DecoderConfig& config,
-                    const GlobalParams& gparams,
+  DirectionalFilter(const DecoderConfig& config, const GlobalParams& gparams,
                     const FilterBlockMap& blocks);
 
   // Allocates storage.
@@ -69,11 +71,10 @@ class DirectionalFilter {
   uint32_t num_debug_rows_ = 0;
 
   void SavePixelsForVDebug(uint32_t num_rows);
-  void RegisterPixelsForVDebug(uint32_t from_x, uint32_t to_x,
-                               uint32_t from_y, uint32_t to_y,
-                               uint32_t primary_strength,
-                               uint32_t secondary_strength,
-                               uint32_t direction, uint32_t variance);
+  void RegisterPixelsForVDebug(uint32_t from_x, uint32_t to_x, uint32_t from_y,
+                               uint32_t to_y, uint32_t primary_strength,
+                               uint32_t secondary_strength, uint32_t direction,
+                               uint32_t variance);
   void ApplyVDebug(uint32_t num_rows);
 };
 

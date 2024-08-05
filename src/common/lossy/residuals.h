@@ -17,43 +17,45 @@
 //
 // Author: Vincent Rabaud (vrabaud@google.com)
 
-#include "src/common/constants.h"
+#include <cassert>
+#include <cstdint>
+
 #include "src/common/lossy/block_size.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 #ifndef WP2_COMMON_LOSSY_RESIDUALS_H_
 #define WP2_COMMON_LOSSY_RESIDUALS_H_
 
 namespace WP2 {
 
-static const char *const kCoeffsStr[]{"Y_coeffs", "U_coeffs", "V_coeffs",
+static const char* const kCoeffsStr[]{"Y_coeffs", "U_coeffs", "V_coeffs",
                                       "A_coeffs"};
 
 struct ResidualBoxAnalyzer {
  public:
   // Finds the smallest bounding box of a set of coefficients so that all
   // non-zero values are within.
-  static void FindBoundingBox(const int16_t* const coeffs, uint32_t size,
-                              TrfSize dim, uint32_t* const max_x,
-                              uint32_t* const max_y);
+  static void FindBoundingBox(const int16_t* coeffs, uint32_t size, TrfSize dim,
+                              uint32_t* max_x, uint32_t* max_y);
   // Computes whether we should use bounds on x/y.
   static void ShouldUseBounds(TrfSize tdim, uint32_t last_zigzag_ind,
                               uint32_t max_x, uint32_t max_y,
-                              bool* const use_bounds_x,
-                              bool* const use_bounds_y);
+                              bool* use_bounds_x, bool* use_bounds_y);
   // Returns whether bounds could be useful for that dimension.
-  static void CanUseBounds(TrfSize tdim, bool* const can_use_bounds_x,
-                           bool* const can_use_bounds_y);
+  static void CanUseBounds(TrfSize tdim, bool* can_use_bounds_x,
+                           bool* can_use_bounds_y);
   static void FindBounds(TrfSize tdim, uint32_t max_x, uint32_t max_y,
-                         uint32_t* const min_zig_zag_ind_x,
-                         uint32_t* const min_zig_zag_ind_y);
+                         uint32_t* min_zig_zag_ind_x,
+                         uint32_t* min_zig_zag_ind_y);
   // Returns the range of X/Y when using bounds,
-  static void GetRangeX(TrfSize tdim, uint8_t* const min, uint8_t* const max);
-  static void GetRangeY(TrfSize tdim, uint8_t* const min, uint8_t* const max);
+  static void GetRangeX(TrfSize tdim, uint8_t* min, uint8_t* max);
+  static void GetRangeY(TrfSize tdim, uint8_t* min, uint8_t* max);
   // Returns the range of Y/X for a given X/Y when using bounds,
-  static void GetRangePerX(TrfSize tdim, uint8_t max_x, uint8_t* const min,
-                           uint8_t* const max);
-  static void GetRangePerY(TrfSize tdim, uint8_t max_y, uint8_t* const min,
-                           uint8_t* const max);
+  static void GetRangePerX(TrfSize tdim, uint8_t max_x, uint8_t* min,
+                           uint8_t* max);
+  static void GetRangePerY(TrfSize tdim, uint8_t max_y, uint8_t* min,
+                           uint8_t* max);
 
  private:
   // Per transform size, the min/max of the x bound.
@@ -90,13 +92,13 @@ class ResidualIterator {
   static const uint16_t* GetZigzag(TrfSize dim);
 
  protected:
-  const uint32_t max_i_;                // max possible index
-  uint32_t ind_;                        // index in the block in zigzag order
-  const uint16_t* const zigzag_;        // zigzag order we follow
-  uint32_t x_, y_;                      // current coefficient position
-  const TrfSize dim_;                   // block size
-  const uint32_t bw_;                   // block width in pixels
-  const uint32_t bw_shift_;             // log2(bw_)
+  const uint32_t max_i_;          // max possible index
+  uint32_t ind_;                  // index in the block in zigzag order
+  const uint16_t* const zigzag_;  // zigzag order we follow
+  uint32_t x_, y_;                // current coefficient position
+  const TrfSize dim_;             // block size
+  const uint32_t bw_;             // block width in pixels
+  const uint32_t bw_shift_;       // log2(bw_)
 };
 // This iterator takes into account the bounding box on the coefficients, if
 // any, by skipping the values outside of it.
@@ -162,12 +164,11 @@ class ResidualIO {
 
   // Initialize the probabilities for the symbol info.
   static WP2Status InitializeInfo(bool has_alpha, bool use_aom_coeffs,
-                                  SymbolsInfo* const info);
+                                  SymbolsInfo* info);
 
   // Looks at the coeffs and figure out the geometry of the residuals.
   // When it is not all zero or DC only, it returns kMethod0.
-  static void SetGeometry(uint32_t num_coeffs,
-                          EncodingMethod* const encoding_method);
+  static void SetGeometry(uint32_t num_coeffs, EncodingMethod* encoding_method);
 
  protected:
   // Returns the sector in which we are in a block. The sectors divide the block

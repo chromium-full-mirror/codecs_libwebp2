@@ -21,10 +21,8 @@
 #define WP2_UTILS_WIENER_H_
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
-
-#include "src/utils/csp.h"
-#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -40,7 +38,7 @@ bool LinearSolve(size_t n, double A[], double y[], float x[]);
 // that optimally predict each output N samples from M samples through linear
 // combination. This can only be called once. New cycle should start with a
 // call to Reset().
-template<size_t N, size_t M>
+template <size_t N, size_t M>
 class WienerOptimizer {
  public:
   WienerOptimizer() noexcept { Reset(); }
@@ -74,9 +72,9 @@ class WienerOptimizer {
   // warning! will trash cov_[][][] and acc_[][].
   // output[][N] is the average component.
   bool Optimize(float output[M][N + 1]) {
-    if (count_ <= 2 * N) return false;   // not enough stats
+    if (count_ <= 2 * N) return false;  // not enough stats
     for (size_t m = 0; m < M; ++m) {
-      cov_[m][N][N] = count_;   // finish setting up cov matrix
+      cov_[m][N][N] = count_;  // finish setting up cov matrix
       if (!Solve(cov_[m], acc_[m], output[m])) return false;
     }
     return true;
@@ -90,11 +88,10 @@ class WienerOptimizer {
     return true;
   }
 
-  double acc_[M][N + 1];     // cross-correlation vectors
+  double acc_[M][N + 1];         // cross-correlation vectors
   double cov_[M][N + 1][N + 1];  // auto-correlation matrices
   size_t count_;
 };
-
 
 }  // namespace WP2
 

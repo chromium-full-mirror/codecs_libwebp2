@@ -20,10 +20,12 @@
 #ifndef WP2_COMMON_LOSSY_QUANT_MTX_H_
 #define WP2_COMMON_LOSSY_QUANT_MTX_H_
 
-#include "src/common/constants.h"
+#include <cstdint>
+
 #include "src/common/lossy/block_size.h"
-#include "src/wp2/base.h"
+#include "src/dsp/dsp.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -54,7 +56,7 @@ struct QuantMtx {
   // If 'use_bias' is true, rounding will be biased towards 0.
   // The dequantized result is returned in 'dequantized_coeffs'.
   void Quantize(const int32_t residuals[], TrfSize dim, bool first_is_dc,
-                int16_t coeffs[], uint32_t* const num_coeffs,
+                int16_t coeffs[], uint32_t* num_coeffs,
                 int16_t dequantized_coeffs[], bool use_bias = true) const;
   // Returns the dequantization matrix (used by decoder only).
   const int16_t* Dequant() const { return dequants; }
@@ -91,7 +93,7 @@ struct QuantMtx {
   static constexpr uint32_t kBias = (1u << WP2QBits) / 3;
   static constexpr uint32_t kNoBias = (1u << WP2QBits) / 2;
 
-  uint16_t quant_steps[kNumQuantZones] = {0};   // quant id for each zones
+  uint16_t quant_steps[kNumQuantZones] = {0};  // quant id for each zones
 
   // quantization and dequantization factors for converting between transform
   // coefficients and coded levels:
@@ -99,7 +101,7 @@ struct QuantMtx {
   //   coeffs[] = level[] * dequant[]
   // quant[] incorporates the transform scaling constant sqrt(W * H / 4).
   static constexpr uint32_t kDataSize = WP2QStride * WP2QStride;
-  int16_t dequants[kDataSize];   // 15bits (always > 0)
+  int16_t dequants[kDataSize];  // 15 bits (always > 0)
   // for encoder:
   Vector_u32 iquants;
   // ranges of quantized DC residuals, for each transform
@@ -108,6 +110,6 @@ struct QuantMtx {
 
 //------------------------------------------------------------------------------
 
-}    // namespace WP2
+}  // namespace WP2
 
-#endif  /* WP2_COMMON_LOSSY_QUANT_MTX_H_ */
+#endif /* WP2_COMMON_LOSSY_QUANT_MTX_H_ */

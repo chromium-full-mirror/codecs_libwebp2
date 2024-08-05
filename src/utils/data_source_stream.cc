@@ -20,9 +20,15 @@
 #include "src/utils/data_source_stream.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 
 #include "src/dsp/math.h"
+#include "src/utils/data_source.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 

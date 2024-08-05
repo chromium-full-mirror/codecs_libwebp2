@@ -19,6 +19,11 @@
 
 #include "src/utils/data_source_context.h"
 
+#include <cstddef>
+
+#include "src/utils/context_switch.h"
+#include "src/utils/data_source.h"
+
 #if defined(WP2_USE_CONTEXT_SWITCH) && (WP2_USE_CONTEXT_SWITCH > 0)
 
 namespace WP2 {
@@ -28,7 +33,7 @@ void SuspendableDataSource::SetContext(LocalContext* const context) {
 }
 
 bool SuspendableDataSource::HasEnoughDataToResume() const {
-  return (GetNumNextBytes() >= num_requested_bytes_);
+  return GetNumNextBytes() >= num_requested_bytes_;
 }
 
 void SuspendableDataSource::Reset() {

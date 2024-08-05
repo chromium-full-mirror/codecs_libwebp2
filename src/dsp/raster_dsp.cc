@@ -18,9 +18,9 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <cassert>
+#include <cstdint>
 
 #include "src/dsp/dsp.h"
-#include "src/dsp/math.h"
 
 namespace WP2 {
 namespace {
@@ -29,12 +29,12 @@ namespace {
 // C version
 
 static void RasterAdvance_C(grad_t grads[3 * 4], grad_t dX, grad_t cur[4]) {
-  cur[0] = grads[ 8] + grads[0] * dX;
-  cur[1] = grads[ 9] + grads[1] * dX;
+  cur[0] = grads[8] + grads[0] * dX;
+  cur[1] = grads[9] + grads[1] * dX;
   cur[2] = grads[10] + grads[2] * dX;
   cur[3] = grads[11] + grads[3] * dX;
-  grads[ 8] += grads[4];
-  grads[ 9] += grads[5];
+  grads[8] += grads[4];
+  grads[9] += grads[5];
   grads[10] += grads[6];
   grads[11] += grads[7];
 }
@@ -47,7 +47,7 @@ static uint32_t Square(int32_t v, uint8_t b) {
 static void RasterLoss_C(const uint8_t* src, uint32_t size,
                          const grad_t value[4], const grad_t gradient[4],
                          uint32_t loss[4]) {
-  grad_t cur[4] = { value[0], value[1], value[2], value[3] };
+  grad_t cur[4] = {value[0], value[1], value[2], value[3]};
   for (uint32_t x = 0; x < size; ++x, src += 4) {
     loss[0] += Square(cur[0], src[0]);
     loss[1] += Square(cur[1], src[1]);
@@ -67,7 +67,7 @@ static uint8_t FloorToUInt8(int32_t v) {
 
 static void RasterDraw_C(const grad_t value[4], const grad_t gradient[4],
                          uint8_t* dst, uint32_t size) {
-  grad_t cur[4] = { value[0], value[1], value[2], value[3] };
+  grad_t cur[4] = {value[0], value[1], value[2], value[3]};
   for (uint32_t x = 0; x < size; ++x, dst += 4) {
     dst[0] = FloorToUInt8(cur[0]);
     dst[1] = FloorToUInt8(cur[1]);
@@ -136,8 +136,7 @@ static void RasterDraw_SSE(const grad_t value[4], const grad_t gradient[4],
 }  // namespace
 
 void (*RasterAdvance)(grad_t grads[3 * 4], grad_t dX, grad_t cur[4]) = nullptr;
-void (*RasterLoss)(const uint8_t* src, uint32_t size,
-                   const grad_t value[4],
+void (*RasterLoss)(const uint8_t* src, uint32_t size, const grad_t value[4],
                    const grad_t gradient[4], uint32_t loss[4]) = nullptr;
 void (*RasterDraw)(const grad_t value[4], const grad_t gradient[4],
                    uint8_t* dst, uint32_t size) = nullptr;

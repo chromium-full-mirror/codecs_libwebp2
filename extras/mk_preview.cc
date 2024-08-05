@@ -17,22 +17,26 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
-#include <vector>
 
 #include "examples/example_utils.h"
 #include "extras/extras.h"
-#include "imageio/file_format.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
-#include "src/common/preview/preview.h"  // TODO(skal): make better include
+#include "src/common/color_precision.h"
+#include "src/common/preview/preview.h"
 #include "src/common/progress_watcher.h"
 #include "src/dec/preview/preview_dec.h"
+#include "src/dsp/math.h"
 #include "src/enc/preview/preview_enc.h"
-#include "src/wp2/encode.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 //------------------------------------------------------------------------------
 

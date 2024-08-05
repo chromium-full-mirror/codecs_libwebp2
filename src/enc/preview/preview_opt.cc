@@ -17,16 +17,22 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include "./preview_enc.h"
-
 #include <algorithm>
+#include <cassert>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <iterator>
 
+#include "./preview_enc.h"
+#include "src/common/color_precision.h"
 #include "src/common/preview/preview.h"
+#include "src/common/progress_watcher.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/random.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
-#include "src/wp2/encode.h"
 
 namespace WP2 {
 
@@ -42,9 +48,9 @@ void PreviewDataEnc::Print() const {
 
 bool PreviewData::CopyFrom(const PreviewData& other) {
   Reset();
-  grid_width_  = other.grid_width_;
+  grid_width_ = other.grid_width_;
   grid_height_ = other.grid_height_;
-  use_noise_   = other.use_noise_;
+  use_noise_ = other.use_noise_;
   std::copy(other.corners_, other.corners_ + 4, corners_);
   return vertices_.copy_from(other.vertices_) &&
          palette_.copy_from(other.palette_);
@@ -76,8 +82,7 @@ WP2Status PreviewDataEnc::GetScore(float bigger_size_penalty) {
   WP2_CHECK_STATUS(triangulation_.Create(*this));
 
   uint32_t num_covered_pixels = 0;
-  WP2_CHECK_STATUS(triangulation_.GetLoss(*this, canvas_,
-                                          &triangulation_loss_,
+  WP2_CHECK_STATUS(triangulation_.GetLoss(*this, canvas_, &triangulation_loss_,
                                           &num_covered_pixels));
   // Make sure all canvas_' pixels were tested (fast good enough test).
   // TODO(yguyon): Make sure each pixel is tested exactly once.
@@ -98,9 +103,11 @@ template <typename T>
 constexpr T Move(T value, bool positively, int32_t distance, int32_t min_value,
                  int32_t max_value) {
   return (T)(positively ? (((int32_t)value + distance > max_value)
-                               ? max_value : (int32_t)value + distance)
+                               ? max_value
+                               : (int32_t)value + distance)
                         : (((int32_t)value - distance < max_value)
-                               ? min_value : (int32_t)value - distance));
+                               ? min_value
+                               : (int32_t)value - distance));
 }
 
 bool IsMutationHappening(UniformIntDistribution* const random,
@@ -131,9 +138,7 @@ bool PreviewDataEnc::MoveVertex(UniformIntDistribution* const rnd) {
 WP2Status PreviewDataEnc::AddVertex(UniformIntDistribution* const rnd) {
   VertexIndexedColor vertex = {
       rnd->Get<uint16_t>(0u, (uint16_t)grid_width_ - 1u),
-      rnd->Get<uint16_t>(0u, (uint16_t)grid_height_ - 1u),
-      0
-  };
+      rnd->Get<uint16_t>(0u, (uint16_t)grid_height_ - 1u), 0};
   if (!IsCorner(vertex.x, vertex.y)) {
     WP2_CHECK_ALLOC_OK(vertices_.push_back(vertex));
   }
@@ -171,8 +176,7 @@ void PreviewDataEnc::MoveColor(UniformIntDistribution* const rnd) {
   // Check for dup if palette is becoming small
   if (palette_.size() == kPreviewMinNumColors) {
     for (const auto& c : palette_) {
-      if (tmp.y == c.y && tmp.co == c.co &&
-          tmp.cg == c.cg && tmp.a == c.a) {
+      if (tmp.y == c.y && tmp.co == c.co && tmp.cg == c.cg && tmp.a == c.a) {
         return;
       }
     }
@@ -181,10 +185,10 @@ void PreviewDataEnc::MoveColor(UniformIntDistribution* const rnd) {
 }
 
 WP2Status PreviewDataEnc::AddColor(UniformIntDistribution* const rnd) {
-  const AYCoCg19b color = { rnd->Get<uint8_t>(0u, AYCoCg19b::kAlphaMax),
-                            rnd->Get<uint8_t>(0u, AYCoCg19b::kYCoCgMax),
-                            rnd->Get<uint8_t>(0u, AYCoCg19b::kYCoCgMax),
-                            rnd->Get<uint8_t>(0u, AYCoCg19b::kYCoCgMax) };
+  const AYCoCg19b color = {rnd->Get<uint8_t>(0u, AYCoCg19b::kAlphaMax),
+                           rnd->Get<uint8_t>(0u, AYCoCg19b::kYCoCgMax),
+                           rnd->Get<uint8_t>(0u, AYCoCg19b::kYCoCgMax),
+                           rnd->Get<uint8_t>(0u, AYCoCg19b::kYCoCgMax)};
   WP2_CHECK_ALLOC_OK(palette_.push_back(color));
   const uint32_t last_index = palette_.size() - 1;
   // Only reassign vertices that are closest to the new color.
@@ -206,11 +210,10 @@ WP2Status PreviewDataEnc::AddColor(UniformIntDistribution* const rnd) {
 WP2Status PreviewDataEnc::RemoveColor(UniformIntDistribution* const rnd) {
   Vector_u16 palette_histogram;
   WP2_CHECK_STATUS(
-            GetPaletteHistogram(vertices_, palette_, &palette_histogram));
-  const uint32_t least_used_color_index = (uint32_t)std::abs(
-      std::distance(palette_histogram.begin(),
-                    std::min_element(palette_histogram.begin(),
-                                     palette_histogram.end())));
+      GetPaletteHistogram(vertices_, palette_, &palette_histogram));
+  const uint32_t least_used_color_index = (uint32_t)std::abs(std::distance(
+      palette_histogram.begin(),
+      std::min_element(palette_histogram.begin(), palette_histogram.end())));
   const AYCoCg19b color = palette_[least_used_color_index];
   palette_[least_used_color_index] = palette_.back();
   palette_.pop_back();
@@ -282,10 +285,9 @@ WP2Status PreviewDataEnc::OptimizeColorIndices() {
       float loss = 0.f;
       uint32_t num_covered_pixels = 0;
       SetColorIndex(vtx_idx, color_index);
-      WP2_CHECK_STATUS(
-        triangulation_.GetPartialLoss(*this, canvas_,
-                                      triangles_containing_vertex,
-                                      &loss, &num_covered_pixels));
+      WP2_CHECK_STATUS(triangulation_.GetPartialLoss(
+          *this, canvas_, triangles_containing_vertex, &loss,
+          &num_covered_pixels));
       if (color_index == 0 || loss < best_color_loss) {
         best_color_loss = loss;
         best_color_index = color_index;
@@ -405,9 +407,10 @@ WP2Status PreviewData::Optimize(const ArgbBuffer& canvas,
       // TODO(yguyon): Return strictly best solution if nothing better at end?
       if (score < best_triangulation_score) {
         if (log) {
-          fprintf(stderr, "New best solution, keeping it. "
-                          "    score:%.1f -> %.1f\n",
-                          best_triangulation_score, score);
+          fprintf(stderr,
+                  "New best solution, keeping it. "
+                  "    score:%.1f -> %.1f\n",
+                  best_triangulation_score, score);
         }
         best_triangulation_score = score;
         num_solutions_since_last_improvement = 0;
@@ -427,7 +430,7 @@ WP2Status PreviewData::Optimize(const ArgbBuffer& canvas,
           bigger_size_penalty /= mult;
         }
       }
-    } else {   // restore previous best
+    } else {  // restore previous best
       WP2_CHECK_STATUS(best.ImportFrom(*this));
     }
 

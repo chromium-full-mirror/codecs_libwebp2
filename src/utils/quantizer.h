@@ -21,9 +21,13 @@
 #ifndef WP2_ENC_LOSSLESS_QUANTIZER_H_
 #define WP2_ENC_LOSSLESS_QUANTIZER_H_
 
+#include <cstddef>
+#include <cstdint>
+
+#include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/vector.h"
-#include "src/wp2/format_constants.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -60,10 +64,10 @@ class Quantizer {
     // Writes the header and the count of a histogram.
     void WriteHistogramHeader(uint32_t symbol_range,
                               OptimizeArrayStorageStat* stats,
-                              uint32_t stats_size, ANSEncBase* const enc) const;
+                              uint32_t stats_size, ANSEncBase* enc) const;
     void WriteHistogramCounts(uint32_t symbol_range, uint32_t max_count,
                               OptimizeArrayStorageStat* stats,
-                              uint32_t stats_size, ANSEncBase* const enc) const;
+                              uint32_t stats_size, ANSEncBase* enc) const;
 
     ConfigParam param;
     // Histogram to write (which might be different from histo.counts: e.g.,
@@ -93,7 +97,7 @@ class Quantizer {
   // 'cost_offset' is the cost that will be added to the Config cost.
   // 'cost_max' is the cost above which we can give up if
   // cost_offset + Config cost >= cost_max.
-  bool Quantize(const uint32_t* const histogram, const uint16_t* const mapping,
+  bool Quantize(const uint32_t* histogram, const uint16_t* mapping,
                 size_t size_sparse, uint32_t symbol_range, uint32_t max_count,
                 float cost_max, float cost_offset, int effort);
 
@@ -101,17 +105,15 @@ class Quantizer {
   // between Quantize calls.
   Config* GetBest() { return config_best_; }
   // Resets what is considered as the best config.
-  void ResetBest() {
-    config_best_ = nullptr;
-  }
+  void ResetBest() { config_best_ = nullptr; }
 
  private:
   // Implementation of the quantization that can call itself to compress its own
   // coefficients.
   // 'cost_max' is the value above which we can early exit.
-  void QuantizeImpl(const uint32_t* const histogram,
-                    const uint16_t* const mapping, size_t size_sparse,
-                    uint32_t symbol_range, uint32_t max_count, int effort);
+  void QuantizeImpl(const uint32_t* histogram, const uint16_t* mapping,
+                    size_t size_sparse, uint32_t symbol_range,
+                    uint32_t max_count, int effort);
 
   static constexpr size_t kConfigNbr = 2;
   Config configs_[kConfigNbr];

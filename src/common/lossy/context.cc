@@ -20,12 +20,23 @@
 #include "src/common/lossy/context.h"
 
 #include <algorithm>
-#include <functional>   // for std::greater<>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <functional>
 
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/predictor.h"
+#include "src/common/symbols.h"
 #include "src/dec/symbols_dec.h"
+#include "src/dsp/math.h"
 #include "src/enc/symbols_enc.h"
+#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -288,4 +299,4 @@ int16_t DCDiffusionMap::Get(const Block& blk, uint32_t strength) const {
   return std::round(new_error * strength / 255.f);
 }
 
-}   // namespace WP2
+}  // namespace WP2

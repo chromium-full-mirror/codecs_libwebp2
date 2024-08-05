@@ -46,7 +46,7 @@ enum class FileFormat {
 const char* GetFileFormatStr(FileFormat file_format);
 
 // Returns UNSUPPORTED if no format matching 'file_path' extension is found.
-FileFormat GetFormatFromExtension(const char* const file_path);
+FileFormat GetFormatFromExtension(const char* file_path);
 
 // Returns a lowercase extension or nullptr if 'format' is unhandled.
 const char* GetExtensionFromFormat(FileFormat format);

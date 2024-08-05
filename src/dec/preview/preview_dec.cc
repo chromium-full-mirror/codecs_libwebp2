@@ -18,7 +18,18 @@
 // Author: Yannis Guyon (yguyon@google.com)
 
 #include "./preview_dec.h"
+
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
+#include "src/common/color_precision.h"
+#include "src/common/preview/preview.h"
+#include "src/utils/ans.h"
+#include "src/utils/ans_utils.h"
 #include "src/utils/data_source.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -75,16 +86,15 @@ uint16_t PreviewData::DecodeColorIndex(ANSDec* const dec,
     // TODO(yguyon): Map color index better (if only unused colors left..)
     const uint16_t coded_idx =
         dec->ReadRValue(palette_.size() - 1, "residual_color_index");
-    *prediction = (coded_idx <= *prediction) ? coded_idx : coded_idx  + 1;
+    *prediction = (coded_idx <= *prediction) ? coded_idx : coded_idx + 1;
   }
   return *prediction;
 }
 
 WP2Status PreviewData::DecodeVertices(ANSDec* const dec) {
   uint32_t num_grid_points_left = grid_width_ * grid_height_ - 4u;
-  const uint32_t min_num_vertices =
-      std::max(std::max((uint32_t)palette_.size(), 4u) - 4u,
-               kPreviewMinNumVertices);
+  const uint32_t min_num_vertices = std::max(
+      std::max((uint32_t)palette_.size(), 4u) - 4u, kPreviewMinNumVertices);
   const uint32_t max_num_vertices =
       std::min(kPreviewMaxNumVertices, num_grid_points_left);
 
@@ -136,10 +146,10 @@ void PreviewData::Reset() {
 WP2Status PreviewData::Decode(ANSDec* const dec) {
   Reset();
   ANSDebugPrefix prefix(dec, "preview");
-  grid_width_ = dec->ReadRange(kPreviewMinGridSize, kPreviewMaxGridSize,
-                               "grid_dim");
-  grid_height_ = dec->ReadRange(kPreviewMinGridSize, kPreviewMaxGridSize,
-                               "grid_dim");
+  grid_width_ =
+      dec->ReadRange(kPreviewMinGridSize, kPreviewMaxGridSize, "grid_dim");
+  grid_height_ =
+      dec->ReadRange(kPreviewMinGridSize, kPreviewMaxGridSize, "grid_dim");
   use_noise_ =
       (bool)dec->ReadBit(kPreviewNoiseProba, kPreviewTotalProba, "use_noise");
   WP2_CHECK_STATUS(DecodePalette(dec));
@@ -176,8 +186,8 @@ WP2Status DecodePreview(const uint8_t* const data, uint32_t data_size,
     WP2_CHECK_STATUS(triangulation.Create(preview));
 
     uint32_t num_covered_pixels = 0;
-    WP2_CHECK_STATUS(
-      triangulation.FillTriangles(preview, output_buffer, &num_covered_pixels));
+    WP2_CHECK_STATUS(triangulation.FillTriangles(preview, output_buffer,
+                                                 &num_covered_pixels));
     // Make sure all 'canvas' pixels were drawn (fast good enough test).
     // TODO(yguyon): Make sure each pixel is drawn exactly once.
     assert(num_covered_pixels >=

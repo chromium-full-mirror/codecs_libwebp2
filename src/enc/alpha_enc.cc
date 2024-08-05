@@ -18,10 +18,24 @@
 // Author: Maryla (maryla@google.com)
 
 #include <algorithm>
+#include <cassert>
+#include <cstdint>
 
+#include "src/common/global_params.h"
+#include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
+#include "src/dsp/math.h"
 #include "src/enc/analysis.h"
+#include "src/enc/block_enc.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/ans_utils.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {

@@ -21,15 +21,25 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 
+#include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/context.h"
 #include "src/common/lossy/predictor.h"
+#include "src/common/lossy/quant_mtx.h"
 #include "src/common/lossy/transforms.h"
 #include "src/common/symbols.h"
+#include "src/dsp/dsp.h"
 #include "src/enc/trellis.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans_utils.h"
 #include "src/utils/front_mgr.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -169,7 +179,7 @@ void CodedBlock::TransformAndReconstruct(
     // will have a bigger impact on a smaller block than on a large one.
     // This is intentional: since we have fewer pixels in a smaller block,
     // we shift them more. But it would also be possible to normalize by a
-    // factor of NumPix(dim) (multiply dc_error_ by this and devide
+    // factor of NumPix(dim) (multiply dc_error_ by this and divide
     // dc_error_next by the same factor). This would mean we apply the same
     // color shift regardless of the block size.
     tf_res[0] += dc_error_[channel];
@@ -344,9 +354,9 @@ static WP2Status UVScore(const BlockContext& context,
                      tmp_coeffs_v, &tmp_num_coeffs_v);
   // early out if there's ~only DC
   if (!reduced && tmp_num_coeffs_u <= 1 && tmp_num_coeffs_v <= 1) {
-    WP2_CHECK_REDUCED_STATUS(
-        cb->Store420Scores(config, tile_pos_x, tile_pos_y, lambda_u, lambda_v,
-                           reduced, disto, 0, 0));
+    WP2_CHECK_REDUCED_STATUS(cb->Store420Scores(config, tile_pos_x, tile_pos_y,
+                                                lambda_u, lambda_v, reduced,
+                                                disto, 0, 0));
     *score = 0;
     return WP2_STATUS_OK;
   }

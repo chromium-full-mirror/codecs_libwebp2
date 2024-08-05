@@ -21,13 +21,14 @@
 #ifndef WP2_DEC_RESIDUALS_DEC_AOM_H_
 #define WP2_DEC_RESIDUALS_DEC_AOM_H_
 
-#include "src/common/lossy/block.h"
+#include <cstdint>
+
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/residuals.h"
 #include "src/common/lossy/residuals_aom.h"
 #include "src/common/lossy/transforms.h"
 #include "src/dec/symbols_dec.h"
-#include "src/utils/ans.h"
-#include "src/utils/utils.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace libgav1 {
@@ -40,15 +41,15 @@ namespace libgav1 {
 class AOMResidualReader : public AOMResidualIO {
  public:
   // Reads residual coeffs, returns the number of non-zero coefficients read.
-  static uint32_t ReadCoeffs(
-      Channel channel, const int16_t dequant[],
-      TrfSize tdim, TransformPair tx_type, bool first_is_dc,
-      SymbolReader* const sr, int16_t* const coeffs);
+  static uint32_t ReadCoeffs(Channel channel, const int16_t dequant[],
+                             TrfSize tdim, TransformPair tx_type,
+                             bool first_is_dc, SymbolReader* sr,
+                             int16_t* coeffs);
 
  private:
   // Reads the position of the end of block.
   static int ReadEOB(TrfSize tdim, PlaneType plane_type, uint32_t context,
-                     SymbolReader* const sr);
+                     SymbolReader* sr);
 
   // Reads a coefficient and stores it at position 'coeffs[pos]'. Updates
   // 'levels' for reading following coeffs.
@@ -57,16 +58,14 @@ class AOMResidualReader : public AOMResidualIO {
   static bool ReadCoeff(uint32_t pos, bool is_eob, uint32_t eob,
                         const int16_t dequant[], PlaneType plane_type,
                         TrfSize tdim, TransformClass tx_class, bool first_is_dc,
-                        uint8_t* const levels, SymbolReader* const sr,
-                        int16_t* const coeffs);
+                        uint8_t* levels, SymbolReader* sr, int16_t* coeffs);
 
   // Part of 5.11.39.
   // Writes the coefficient's sign, and the remaining part that is above
   // kQuantizerCoefficientBaseRangeContextClamp if needed.
-  static int16_t ReadSignAndRest(int16_t coeff, bool is_dc,
-                                 SymbolReader* const sr);
+  static int16_t ReadSignAndRest(int16_t coeff, bool is_dc, SymbolReader* sr);
   static int ReadCoeffBaseRange(uint32_t cdf_context, PlaneType plane_type,
-                                SymbolReader* const sr);
+                                SymbolReader* sr);
 };
 
 }  // namespace libgav1

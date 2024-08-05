@@ -19,6 +19,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -29,14 +31,17 @@
 #endif
 
 #include "examples/example_utils.h"
+#include "examples/stopwatch.h"
 #include "imageio/anim_image_dec.h"
 #include "imageio/file_format.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
-#include "src/common/color_precision.h"
+#include "src/utils/csp.h"
 #include "src/utils/orientation.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"

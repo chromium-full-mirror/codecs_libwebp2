@@ -21,18 +21,22 @@
 //
 // Author: skal@google.com (Pascal Massimino)
 
+#include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "imageio/imageio_util.h"
 #include "src/dsp/dsp.h"
-#include "src/dsp/math.h"
 #include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/data_source.h"
-#include "src/wp2/encode.h"  // for StringWriter
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace {

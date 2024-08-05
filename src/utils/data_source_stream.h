@@ -20,6 +20,9 @@
 #ifndef WP2_UTILS_DATA_SOURCE_STREAM_H_
 #define WP2_UTILS_DATA_SOURCE_STREAM_H_
 
+#include <cstddef>
+#include <cstdint>
+
 #include "src/utils/data_source.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"

@@ -22,10 +22,15 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <numeric>
 
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
+#include "src/dsp/math.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
@@ -235,9 +240,9 @@ bool FrontMgrDoubleOrderBase::TryGetNextBlock(BlockSize size,
 
 Block FrontMgrDoubleOrderBase::GetMaxFittingBlock() const {
   const Block max_block = GetMaxPossibleBlock();
-  // If 'max_block' is 'snapped_', all inner rects with the same position will
-  // be snapped too, so no need to enforce it here. Just clamp to a rect
-  // belonging to the 'partition_set_'.
+  // If 'max_block' is 'snapped_', all inner rectangles with the same position
+  // will be snapped too, so no need to enforce it here. Just clamp to a
+  // rectangle belonging to the 'partition_set_'.
   return Block(max_block.x(), max_block.y(),
                GetFittingBlockSize(partition_set_, max_block.dim()));
 }
@@ -298,8 +303,10 @@ WP2Status FrontMgrLexico::CheckBlockList(
 
     // Compare to the input block.
     if (!(b.x() == v.x() && b.y() == v.y())) {
-      fprintf(stderr, "Block validation error: wrong x,y position! "
-                      "@%d,%d: expected %d,%d\n", v.x(), v.y(), b.x(), b.y());
+      fprintf(stderr,
+              "Block validation error: wrong x,y position! "
+              "@%d,%d: expected %d,%d\n",
+              v.x(), v.y(), b.x(), b.y());
       assert(false);
       return WP2_STATUS_INVALID_PARAMETER;
     }

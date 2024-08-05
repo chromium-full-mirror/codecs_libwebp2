@@ -22,14 +22,14 @@
 #define WP2_DSP_MATH_H_
 
 #include <algorithm>
-#include <cmath>
+#include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <initializer_list>
 #include <limits>
 #include <type_traits>
 
 #include "src/dsp/dsp.h"
-#include "src/wp2/base.h"
 
 const uint32_t kLogLookupIdxMax = 256;
 
@@ -101,9 +101,15 @@ static inline int WP2Ctz(uint32_t n) {
 // To be used by constants and assertions.
 // Returns floor(log2(n)).
 static constexpr uint32_t WP2Log2Floor_k(uint64_t n) {
-  return (n <   2) ? 0 : (n <   4) ? 1 : (n <   8) ? 2 : (n <  16) ? 3 :
-         (n <  32) ? 4 : (n <  64) ? 5 : (n < 128) ? 6 : (n < 256) ? 7 :
-         (8u + WP2Log2Floor_k(n >> 8));
+  return (n < 2)     ? 0
+         : (n < 4)   ? 1
+         : (n < 8)   ? 2
+         : (n < 16)  ? 3
+         : (n < 32)  ? 4
+         : (n < 64)  ? 5
+         : (n < 128) ? 6
+         : (n < 256) ? 7
+                     : (8u + WP2Log2Floor_k(n >> 8));
 }
 // Returns ceil(log2(n)).
 static constexpr uint32_t WP2Log2Ceil_k(uint64_t n) {

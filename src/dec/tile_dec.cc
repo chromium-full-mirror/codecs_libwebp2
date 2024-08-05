@@ -20,17 +20,23 @@
 #include "src/dec/tile_dec.h"
 
 #include <algorithm>
-#include <cstddef>
+#include <cassert>
+#include <cstdint>
 
 #include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
+#include "src/common/progress_watcher.h"
 #include "src/common/vdebug.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/dsp/math.h"
-#include "src/wp2/base.h"
-#include "src/wp2/format_constants.h"
+#include "src/utils/ans_utils.h"
+#include "src/utils/data_source.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -199,7 +205,7 @@ WP2Status GetTilesLayout(uint32_t frame_width, uint32_t frame_height,
       GetNumTiles(frame_width, frame_height, tile_width, tile_height,
                   &tiles_layout->num_tiles_x, &tiles_layout->num_tiles_y);
   WP2_CHECK_ALLOC_OK(tiles_layout->tiles.resize(num_tiles));
-    const uint32_t num_pixels = frame_width * frame_height;
+  const uint32_t num_pixels = frame_width * frame_height;
 
   for (uint32_t tile_index = 0; tile_index < num_tiles; ++tile_index) {
     Tile& tile = tiles_layout->tiles[tile_index];
@@ -286,4 +292,4 @@ WP2Status SkipTiles(const GlobalParams& gparams, DataSource* const data_source,
 
 //------------------------------------------------------------------------------
 
-}   // namespace WP2
+}  // namespace WP2

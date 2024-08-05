@@ -19,8 +19,19 @@
 
 #include "src/dec/filters/alpha_filter.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <cstdlib>
+
+#include "src/common/global_params.h"
 #include "src/common/vdebug.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/dec/filters/block_map_filter.h"
+#include "src/dsp/math.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -158,9 +169,8 @@ uint32_t AlphaFilter::Smooth(uint32_t num_rows) {
           const int32_t diff = std::abs(center_pix - pix);
           const uint32_t value_weight = value_weights_[diff];
           const uint32_t x_weight = gaussian_[(X >= x) ? X - x : x - X];
-          const uint32_t weight =
-              ChangePrecision(value_weight * x_weight * y_weight,
-                              kWeightBits * 3, kWeightBits);
+          const uint32_t weight = ChangePrecision(
+              value_weight * x_weight * y_weight, kWeightBits * 3, kWeightBits);
           static_assert(kWeightBits * 3 <= sizeof(x_weight) * 8 - 1,
                         "Possible overflow.");
           weights += weight;

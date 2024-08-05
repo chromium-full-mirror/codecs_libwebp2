@@ -18,11 +18,13 @@
 // Author: Skal (pascal.massimino@gmail.com)
 //
 
-#include <algorithm>
-#include <cmath>
+#include <cassert>
+#include <cstdint>
+#include <memory>
 
-#include "src/common/integral.h"
-#include "src/common/lossy/block_size_io.h"
+#include "src/common/global_params.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/progress_watcher.h"
 #include "src/enc/analysis.h"
 #include "src/enc/partitioning/partition_score_func.h"
 #include "src/enc/partitioning/partition_score_func_area.h"
@@ -37,6 +39,12 @@
 #include "src/enc/partitioning/partitioner_split_recurse.h"
 #include "src/enc/partitioning/partitioner_top_left.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 // Uncomment the following to collect and print block-type statistics
 // #define BLOCK_STATS
@@ -79,8 +87,8 @@ WP2Status ExtractBlockPartition(const EncoderConfig& config,
                            AreaScoreFunc(kRDOptAreaSize, kRDOptAreaSize));
       break;
     case SUB_AREA_ENCODE_PARTITIONING:
-      score_func.reset(new (WP2Allocable::nothrow) SubAreaScoreFunc(
-          kRDOptAreaSize, kRDOptAreaSize));
+      score_func.reset(new (WP2Allocable::nothrow)
+                           SubAreaScoreFunc(kRDOptAreaSize, kRDOptAreaSize));
       break;
     case TILE_ENCODE_PARTITIONING:
     case EXHAUSTIVE_PARTITIONING:

@@ -20,6 +20,7 @@
 #ifndef WP2_EXTRAS_EXTRAS_H_
 #define WP2_EXTRAS_EXTRAS_H_
 
+#include <cstdint>
 #include <string>
 
 #include "src/wp2/base.h"
@@ -27,7 +28,7 @@
 #define WP2_EXTRAS_ABI_VERSION 0x0001  // MAJOR(8b) + MINOR(8b)
 
 // Returns the version number of the extras library, packed in hexadecimal using
-// 8bits for each of major/minor/revision. E.g: v2.5.7 is 0x020507.
+// 8 bits for each of major/minor/revision. E.g: v2.5.7 is 0x020507.
 WP2_EXTERN int WP2GetExtrasVersion();
 
 namespace WP2 {

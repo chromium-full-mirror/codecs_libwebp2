@@ -17,20 +17,23 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <cstddef>
 #include <cstdint>
 
 #include "src/dsp/dsp.h"
 
 namespace {
 
-template<typename T> bool HasValue_C(const T* src, size_t len, T value) {
+template <typename T>
+bool HasValue_C(const T* src, size_t len, T value) {
   for (size_t i = 0; i < len; ++i) {
     if (src[i] == value) return true;
   }
   return false;
 }
 
-template<typename T> bool HasOtherValue_C(const T* src, size_t len, T value) {
+template <typename T>
+bool HasOtherValue_C(const T* src, size_t len, T value) {
   for (size_t i = 0; i < len; ++i) {
     if (src[i] != value) return true;
   }
@@ -53,12 +56,12 @@ extern void WP2AlphaInitSSE();
 
 bool (*WP2HasValue8b)(const uint8_t* src, size_t len, uint8_t value) = nullptr;
 bool (*WP2HasValue16b)(const int16_t* src, size_t len, int16_t value) = nullptr;
-bool (*WP2HasOtherValue8b)(
-    const uint8_t* src, size_t len, uint8_t value) = nullptr;
-bool (*WP2HasOtherValue16b)(
-    const int16_t* src, size_t len, int16_t value) = nullptr;
-bool (*WP2HasOtherValue8b32b)(
-    const uint8_t* src, size_t len, uint8_t value) = nullptr;
+bool (*WP2HasOtherValue8b)(const uint8_t* src, size_t len,
+                           uint8_t value) = nullptr;
+bool (*WP2HasOtherValue16b)(const int16_t* src, size_t len,
+                            int16_t value) = nullptr;
+bool (*WP2HasOtherValue8b32b)(const uint8_t* src, size_t len,
+                              uint8_t value) = nullptr;
 
 static volatile WP2CPUInfo alpha_last_cpuinfo_used =
     (WP2CPUInfo)&alpha_last_cpuinfo_used;

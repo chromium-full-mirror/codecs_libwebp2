@@ -20,38 +20,59 @@
 #include "src/common/vdebug.h"
 
 #include <algorithm>
+#include <array>
+#include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
-#include <numeric>
+#include <cstring>
+#include <limits>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 #include "src/common/color_precision.h"
+#include "src/common/constants.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/predictor.h"
+#include "src/common/lossy/quant_mtx.h"
+#include "src/common/lossy/segment.h"
+#include "src/common/lossy/transforms.h"
+#include "src/common/symbols.h"
 #include "src/dec/filters/alpha_filter.h"
+#include "src/dec/filters/block_map_filter.h"
 #include "src/dec/filters/deblocking_filter.h"
 #include "src/dec/filters/directional_filter.h"
 #include "src/dec/filters/grain_filter.h"
 #include "src/dec/filters/intertile_filter.h"
 #include "src/dec/filters/restoration_filter.h"
+#include "src/dec/lossless/losslessi_dec.h"
 #include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/lossless/dspl.h"
 #include "src/dsp/math.h"
+#include "src/enc/analysis.h"
 #include "src/enc/block_enc.h"
+#include "src/enc/partitioning/partition_score_func.h"
 #include "src/enc/partitioning/partition_score_func_area.h"
 #include "src/enc/partitioning/partition_score_func_block.h"
 #include "src/enc/partitioning/partition_score_func_multi.h"
+#include "src/enc/partitioning/partition_score_func_tile.h"
 #include "src/enc/partitioning/partitioner.h"
 #include "src/enc/partitioning/partitioner_exhaustive.h"
 #include "src/enc/partitioning/partitioner_multi.h"
 #include "src/enc/partitioning/partitioner_split_recurse.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 
@@ -253,7 +274,7 @@ const Predictor* CodedBlock::GetForcedPredictor(const EncoderConfig& config,
 //------------------------------------------------------------------------------
 
 static const int kFontW = 8, kFontH = 8;  // font size
-static constexpr uint64_t kFonts[96] = {  // Bitmap'd 8x8 font packed as u64
+static constexpr uint64_t kFonts[96] = {  // Bitmapped 8x8 font packed as u64
     0x0000000000000000, 0x0008000808080800, 0x0000000000242400,
     0x00247e24247e2400, 0x107c507c147c1000, 0x0062640810264600,
     0x005c225408140800, 0x0000000000081000, 0x0020101010102000,
@@ -466,22 +487,26 @@ float VDGetParam(const EncoderConfig& config, float default_value) {
 
 //------------------------------------------------------------------------------
 
+namespace {
+
 // Maps a value in [0; num_values) to the [-512;512] range.
-static int16_t ToPixel10(uint32_t value, uint32_t num_values) {
+int16_t ToPixel10(uint32_t value, uint32_t num_values) {
   if (num_values <= 1) return 0;
   return (int16_t)(DivRound(value * 1024u, num_values - 1u) - 512);
 }
 
 // Maps a value in [0; num_values) to the [0;255] range.
-static int16_t ToPixel8(uint32_t value, uint32_t num_values) {
+int16_t ToPixel8(uint32_t value, uint32_t num_values) {
   if (num_values <= 1) return 0;
   return (uint8_t)DivRound(value * 255u, num_values - 1u);
 }
 
-static const Argb32b ColorMult(Argb32b color, float mutiplier) {
-  return {color.a, (uint8_t)(color.r * mutiplier),
-          (uint8_t)(color.g * mutiplier), (uint8_t)(color.b * mutiplier)};
+Argb32b ColorMult(Argb32b color, float multiplier) {
+  return {color.a, (uint8_t)(color.r * multiplier),
+          (uint8_t)(color.g * multiplier), (uint8_t)(color.b * multiplier)};
 }
+
+}  // namespace
 
 //------------------------------------------------------------------------------
 
@@ -909,7 +934,7 @@ void CodedBlockBase::StorePredictionModes(
 
 void CodedBlockBase::AppendOriginalPixels(
     const DecoderConfig& config, uint32_t tile_x, uint32_t tile_y,
-    const CSPTransform& csp_tranform, ArgbBuffer* const debug_output) const {
+    const CSPTransform& csp_transform, ArgbBuffer* const debug_output) const {
   if (!(VDMatch(config, "y") || VDMatch(config, "u") || VDMatch(config, "v") ||
         VDMatch(config, "a"))) {
     return;
@@ -918,7 +943,7 @@ void CodedBlockBase::AppendOriginalPixels(
     const Channel channel = VDChannel(config);
     YUVPlane original_yuv;  // 'debug_output' should be the original RGB pixels.
     WP2_ASSERT_STATUS(
-        original_yuv.Import(*debug_output, /*import_alpha=*/true, csp_tranform,
+        original_yuv.Import(*debug_output, /*import_alpha=*/true, csp_transform,
                             /*resize_if_needed=*/true, /*pad=*/kPredWidth));
     // Use a dummy CodedBlockBase to get the 'context' out of 'original_yuv'.
     CodedBlockBase cb;
@@ -1938,7 +1963,7 @@ static uint32_t GetHistogram(const ArgbBuffer& src, uint32_t channel,
 
 // Handles VisualDebug for "compressed" and "original". Declared in wp2_dec_i.h.
 void ApplyVDebugBeforeAfter(const DecoderConfig& config,
-                            const CSPTransform& csp_tranform, const Tile& tile,
+                            const CSPTransform& csp_transform, const Tile& tile,
                             ArgbBuffer* const debug_output) {
   if (VDMatch(config, "original/diff")) {
     ArgbBuffer argb;
@@ -1948,17 +1973,18 @@ void ApplyVDebugBeforeAfter(const DecoderConfig& config,
     WP2_ASSERT_STATUS(non_padded.SetView(
         tile.yuv_output, {0, 0, tile.rect.width, tile.rect.height}));
     WP2_ASSERT_STATUS(
-        non_padded.Export(csp_tranform, /*resize_if_needed=*/false, &argb));
+        non_padded.Export(csp_transform, /*resize_if_needed=*/false, &argb));
     ApplyVDebugDiff(*debug_output, argb, 2, debug_output);
   } else if (VDMatch(config, "y") || VDMatch(config, "u") ||
              VDMatch(config, "v")) {
     if (VDMatch(config, "original")) {
-      csp_tranform.Apply(debug_output, csp_tranform.GetYuvDepth(), 0, 0,
-                         debug_output->width(), debug_output->height());
+      csp_transform.Apply(debug_output, csp_transform.GetYuvDepth(), 0, 0,
+                          debug_output->width(), debug_output->height());
       ToGray(*debug_output, VDChannel(config) + 1, debug_output);
     } else if (VDMatch(config, "compressed")) {
       const Plane16& plane = tile.yuv_output.GetChannel(VDChannel(config));
-      WP2_ASSERT_STATUS(plane.ToGray(debug_output, csp_tranform.GetYuvDepth()));
+      WP2_ASSERT_STATUS(
+          plane.ToGray(debug_output, csp_transform.GetYuvDepth()));
     }
   } else {
     const bool a = VDMatch(config, "a"), r = VDMatch(config, "r");
@@ -1975,7 +2001,7 @@ void ApplyVDebugBeforeAfter(const DecoderConfig& config,
         WP2_ASSERT_STATUS(non_padded_yuv.SetView(
             tile.yuv_output, {0, 0, tile.rect.width, tile.rect.height}));
         WP2_ASSERT_STATUS(non_padded_yuv.Export(
-            csp_tranform, /*resize_if_needed=*/false, &argb));
+            csp_transform, /*resize_if_needed=*/false, &argb));
         ToGray(argb, channel, debug_output);
       }
     }

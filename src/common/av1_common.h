@@ -18,11 +18,9 @@
 #ifndef WP2_COMMON_AV1_COMMON_H_
 #define WP2_COMMON_AV1_COMMON_H_
 
-
-#include "src/wp2/base.h"
-
 #if defined(WP2_HAVE_AOM)
 #include "aom/aom_codec.h"
+#include "src/wp2/base.h"
 #endif
 
 namespace WP2 {
@@ -33,7 +31,7 @@ namespace WP2 {
 template <typename TypeToDestruct, typename ReturnedType = void>
 class Cleaner {
  public:
-  Cleaner(TypeToDestruct* const obj, ReturnedType (*dtor)(TypeToDestruct*))
+  Cleaner(TypeToDestruct* obj, ReturnedType (*dtor)(TypeToDestruct*))
       : obj_(obj), dtor_(dtor) {}
   ~Cleaner() { Destruct(); }
   ReturnedType Destruct() {
@@ -78,6 +76,5 @@ static WP2Status MapAomStatus(aom_codec_err_t aom_status) {
 //------------------------------------------------------------------------------
 
 }  // namespace WP2
-
 
 #endif  // WP2_COMMON_AV1_COMMON_H_

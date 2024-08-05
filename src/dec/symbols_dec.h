@@ -20,8 +20,12 @@
 #ifndef WP2_DEC_SYMBOLS_DEC_H_
 #define WP2_DEC_SYMBOLS_DEC_H_
 
+#include <cstdint>
+
 #include "src/common/symbols.h"
 #include "src/utils/ans.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -39,7 +43,7 @@ struct StatExtra {
 
 class SymbolReader : public SymbolIO<StatExtra> {
  public:
-  WP2Status Init(const SymbolsInfo& symbols_info, ANSDec* const dec);
+  WP2Status Init(const SymbolsInfo& symbols_info, ANSDec* dec);
 
   const SymbolsInfo& symbols_info() const { return symbols_info_; }
   ANSDec* dec() const { return dec_; }
@@ -63,15 +67,14 @@ class SymbolReader : public SymbolIO<StatExtra> {
   // If 'cost' is not nullptr, the cost in bits of storing 'sym' is ADDED to
   // 'cost'.
   int32_t Read(uint32_t sym, uint32_t cluster, WP2_OPT_LABEL,
-               float* const cost = nullptr);
+               float* cost = nullptr);
   int32_t Read(uint32_t sym, WP2_OPT_LABEL, float* const cost = nullptr) {
     return Read(sym, /*cluster=*/0, label, cost);
   }
   // Same as above except we know that the read value cannot be strictly
   // superior to 'max_value'.
   WP2Status ReadWithMax(uint32_t sym, uint32_t cluster, uint32_t max_value,
-                        WP2_OPT_LABEL, int32_t* const value,
-                        float* const cost = nullptr);
+                        WP2_OPT_LABEL, int32_t* value, float* cost = nullptr);
   // Fills the array 'is_maybe_used' with true when the symbol might be used,
   // false if we are sure it is not used.
   void GetPotentialUsage(uint32_t sym, uint32_t cluster, bool is_maybe_used[],
@@ -85,22 +88,22 @@ class SymbolReader : public SymbolIO<StatExtra> {
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to range value,
   // in [0:'range'), without mapping by default. Returns the corresponding Stat.
   Stat* AddRange(uint32_t sym, uint32_t cluster, bool is_symmetric,
-                uint16_t range);
+                 uint16_t range);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to dictionary
   // value, using info from 'infos'. 'infos' is modified in this call.
   WP2Status AddDict(uint32_t sym, uint32_t cluster, bool is_symmetric,
-                    ANSCodes* const infos);
+                    ANSCodes* infos);
   // For the 'cluster'th cluster of symbol 'sym', sets the mode to kPrefixCode
   // value, using info from 'infos'. 'infos' is modified in this call.
   // 'prefix_size' is the number of bits in the prefix code.
   WP2Status AddPrefixCode(uint32_t sym, uint32_t cluster, bool is_symmetric,
-                          ANSCodes* const infos, uint32_t prefix_size);
+                          ANSCodes* infos, uint32_t prefix_size);
 
  private:
   // Generic implementation called by the different Read specializations above.
   WP2Status ReadInternal(uint32_t sym, uint32_t cluster, bool use_max_value,
-                         uint32_t max_value, WP2_OPT_LABEL,
-                         int32_t* const value, float* const cost = nullptr);
+                         uint32_t max_value, WP2_OPT_LABEL, int32_t* value,
+                         float* cost = nullptr);
   // return the largest index 'idx' such that 'stat.mappings[idx] <= max_value'.
   static uint32_t FindSymbol(const Stat& stat, uint32_t max_value);
 

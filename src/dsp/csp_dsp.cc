@@ -18,6 +18,7 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <cassert>
+#include <cstdint>
 
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
@@ -32,9 +33,8 @@ constexpr uint32_t kMtxShift = 12u;
 // Converts a row of 'width' pixels from the 'y,u,v' planes into the
 // 'dst0,dst1,dst2' planes using an 'offset' then a 'mtx' multiplication.
 void YuvToCustom_C(const int16_t* y, const int16_t* u, const int16_t* v,
-                   const int16_t offset[3], const int16_t mtx[9],
-                   int16_t* dst0, int16_t* dst1, int16_t* dst2,
-                   uint32_t width) {
+                   const int16_t offset[3], const int16_t mtx[9], int16_t* dst0,
+                   int16_t* dst1, int16_t* dst2, uint32_t width) {
   for (uint32_t x = 0; x < width; ++x) {
     // TODO(yguyon): No-overflow guaranteed only if custom ccsp is kYuvMaxPrec
     int32_t ccsp[3];
@@ -80,7 +80,7 @@ void AyuvToArgb32_C(const int16_t* y, const int16_t* u, const int16_t* v,
   uint8_t* const argb32 = (uint8_t*)argb;
   for (uint32_t x = 0; x < width; ++x) {
     AyuvToArgb</*kNumRgbBits=*/8>(y[x], u[x], v[x], a[x], avg, mtx,
-                                   argb32 + 4 * x);
+                                  argb32 + 4 * x);
   }
 }
 void AyuvToArgb38_C(const int16_t* y, const int16_t* u, const int16_t* v,
@@ -153,7 +153,7 @@ void YuvToArgb38_C(const int16_t* y, const int16_t* u, const int16_t* v,
 // some useful macros used extensively below
 
 // load the matrix elements mtx[] into variables mtx00, ... mtx21
-#define MAKE32b(A, B) ((uint32_t)((A)&0xffff) | ((uint32_t)(B) << 16))
+#define MAKE32b(A, B) ((uint32_t)((A) & 0xffff) | ((uint32_t)(B) << 16))
 
 #define LOAD_MTX_ELEMENTS(MTX)                                   \
   constexpr uint32_t kRnd = 1u << kMtxShift >> 1;                \

@@ -20,10 +20,15 @@
 
 #include "src/utils/thread_utils.h"
 
+#include <cstddef>
+#include <cstdint>
+
+#include "src/wp2/base.h"
+
 #if defined(WP2_USE_THREAD)
 #if defined(_WIN32)
-#include <windows.h>
 #include <process.h>
+#include <windows.h>
 #else
 #include <pthread.h>
 #endif
@@ -69,8 +74,8 @@ typedef struct {
 
 typedef struct {
   pthread_mutex_t mutex;
-  pthread_cond_t  condition;
-  pthread_t       thread;
+  pthread_cond_t condition;
+  pthread_t thread;
 } WorkerImpl;
 
 #if defined(_WIN32)
@@ -101,19 +106,15 @@ static int pthread_create(pthread_t* const thread, const pthread_attr_t* attr,
                           unsigned int (__stdcall *start)(void*), void* arg) {
   const size_t stack_size = (attr != NULL) ? attr->stack_size : 0u;
 #ifdef USE_CREATE_THREAD
-  *thread = CreateThread(NULL,        /* lpThreadAttributes */
-                         stack_size,  /* dwStackSize */
-                         start,
-                         arg,
-                         0,           /* dwCreationFlags */
-                         NULL);       /* lpThreadId */
+  *thread = CreateThread(NULL,          /* lpThreadAttributes */
+                         stack_size,    /* dwStackSize */
+                         start, arg, 0, /* dwCreationFlags */
+                         NULL);         /* lpThreadId */
 #else
-  *thread = (pthread_t)_beginthreadex(NULL,        /* void *security */
-                                      stack_size,  /* unsigned stack_size */
-                                      start,
-                                      arg,
-                                      0,           /* unsigned initflag */
-                                      NULL);       /* unsigned *thrdaddr */
+  *thread = (pthread_t)_beginthreadex(NULL,          /* void *security */
+                                      stack_size,    /* unsigned stack_size */
+                                      start, arg, 0, /* unsigned initflag */
+                                      NULL);         /* unsigned *thrdaddr */
 #endif
   if (*thread == NULL) return 1;
   SetThreadPriority(*thread, THREAD_PRIORITY_ABOVE_NORMAL);
@@ -173,8 +174,7 @@ static int pthread_cond_init(pthread_cond_t* const condition, void* cond_attr) {
   condition->waiting_sem = CreateSemaphore(NULL, 0, 1, NULL);
   condition->received_sem = CreateSemaphore(NULL, 0, 1, NULL);
   condition->signal_event = CreateEvent(NULL, FALSE, FALSE, NULL);
-  if (condition->waiting_sem == NULL ||
-      condition->received_sem == NULL ||
+  if (condition->waiting_sem == NULL || condition->received_sem == NULL ||
       condition->signal_event == NULL) {
     pthread_cond_destroy(condition);
     return 1;
@@ -211,8 +211,8 @@ static int pthread_cond_wait(pthread_cond_t* const condition,
   if (!ReleaseSemaphore(condition->waiting_sem, 1, NULL)) return 1;
   // now unlock the mutex so pthread_cond_signal may be issued
   pthread_mutex_unlock(mutex);
-  ok = (WaitForSingleObject(condition->signal_event, INFINITE) ==
-        WAIT_OBJECT_0);
+  ok =
+      (WaitForSingleObject(condition->signal_event, INFINITE) == WAIT_OBJECT_0);
   ok &= ReleaseSemaphore(condition->received_sem, 1, NULL);
   pthread_mutex_lock(mutex);
 #endif
@@ -220,8 +220,8 @@ static int pthread_cond_wait(pthread_cond_t* const condition,
 }
 
 #else  // !_WIN32
-# define THREADFN void*
-# define THREAD_RETURN(val) val
+#define THREADFN void*
+#define THREAD_RETURN(val) val
 #endif  // _WIN32
 
 //------------------------------------------------------------------------------
@@ -234,20 +234,20 @@ static THREADFN ThreadLoop(void* ptr) {
   bool done = false;
   while (!done) {
     pthread_mutex_lock(&impl->mutex);
-    while (worker->state_ == Worker::OK) {   // wait in idling mode
+    while (worker->state_ == Worker::OK) {  // wait in idling mode
       pthread_cond_wait(&impl->condition, &impl->mutex);
     }
     if (worker->state_ == Worker::WORK) {
       worker->status_ = worker->Execute();
       worker->state_ = Worker::OK;
-    } else if (worker->state_ == Worker::NOT_OK) {   // finish the worker
+    } else if (worker->state_ == Worker::NOT_OK) {  // finish the worker
       done = true;
     }
     // signal to the main thread that we're done (for Sync())
     pthread_mutex_unlock(&impl->mutex);
     pthread_cond_signal(&impl->condition);
   }
-  return THREAD_RETURN(NULL);    // Thread is finished
+  return THREAD_RETURN(nullptr);  // Thread is finished
 }
 
 // main thread state control
@@ -357,8 +357,8 @@ static class : public WorkerInterface {
     return worker->status_;
   }
 
-  bool Reset(WorkerBase* const worker,
-             bool do_mt, uint32_t stack_size) const override {
+  bool Reset(WorkerBase* const worker, bool do_mt,
+             uint32_t stack_size) const override {
     if (worker == nullptr) return false;
     bool ok = true;
     worker->status_ = WP2_STATUS_OK;
@@ -389,7 +389,7 @@ static class : public WorkerInterface {
         if (!ok) {
           pthread_mutex_destroy(&impl->mutex);
           pthread_cond_destroy(&impl->condition);
-   Error:
+        Error:
           WP2Free(impl);
           worker->SetImpl(nullptr);
           worker->state_ = Worker::NOT_OK;
@@ -405,7 +405,7 @@ static class : public WorkerInterface {
   }
 
   void Launch(WorkerBase* const worker) const override {
-    if (worker == nullptr) return;   // !?
+    if (worker == nullptr) return;  // !?
     if (worker->state_ == Worker::OK) {
 #ifdef WP2_USE_THREAD
       if (worker->GetImpl() != nullptr) {
@@ -414,12 +414,12 @@ static class : public WorkerInterface {
       }
       // fall through
 #endif
-      worker->status_ = worker->Execute();   // direct call
+      worker->status_ = worker->Execute();  // direct call
     }
   }
 
   void End(WorkerBase* const worker) const override {
-    if (worker == nullptr) return;   // !?
+    if (worker == nullptr) return;  // !?
 #ifdef WP2_USE_THREAD
     WorkerImpl* const impl = (WorkerImpl*)worker->GetImpl();
     if (impl != nullptr) {
@@ -436,7 +436,7 @@ static class : public WorkerInterface {
     worker->state_ = Worker::NOT_OK;
     assert(worker->GetImpl() == nullptr);
   }
-} kDefaultInterface;
+} kDefaultInterface;  // NOLINT
 
 //------------------------------------------------------------------------------
 
@@ -446,10 +446,8 @@ void SetWorkerInterface(const WorkerInterface& winterface) {
   g_worker_interface = &winterface;
 }
 
-const WorkerInterface& GetWorkerInterface() {
-  return *g_worker_interface;
-}
+const WorkerInterface& GetWorkerInterface() { return *g_worker_interface; }
 
 //------------------------------------------------------------------------------
 
-}    // namespace WP2
+}  // namespace WP2

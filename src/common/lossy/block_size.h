@@ -21,6 +21,7 @@
 #define WP2_COMMON_LOSSY_BLOCK_SIZE_H_
 
 #include <cassert>
+#include <cstdint>
 
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
@@ -32,10 +33,20 @@ namespace WP2 {
 
 // Block types
 typedef enum {
-  BLK_4x4 = 0, BLK_8x4,  BLK_16x4,
-  BLK_4x8,     BLK_8x8,  BLK_16x8,  BLK_32x8,
-  BLK_4x16,    BLK_8x16, BLK_16x16, BLK_32x16,
-               BLK_8x32, BLK_16x32, BLK_32x32,
+  BLK_4x4 = 0,
+  BLK_8x4,
+  BLK_16x4,
+  BLK_4x8,
+  BLK_8x8,
+  BLK_16x8,
+  BLK_32x8,
+  BLK_4x16,
+  BLK_8x16,
+  BLK_16x16,
+  BLK_32x16,
+  BLK_8x32,
+  BLK_16x32,
+  BLK_32x32,
   BLK_LAST
 } BlockSize;
 
@@ -58,8 +69,8 @@ static inline uint32_t BlockHeightPix(BlockSize size) {
 BlockSize GetBlockSize(uint32_t width, uint32_t height);
 // Returns the biggest BlockSize with dimensions at most 'width, height' snapped
 // at position 'x, y' in kMinBlockSizePix units.
-BlockSize GetSnappedBlockSize(uint32_t x, uint32_t y,
-                              uint32_t width, uint32_t height);
+BlockSize GetSnappedBlockSize(uint32_t x, uint32_t y, uint32_t width,
+                              uint32_t height);
 
 // number of pixel for a given block size
 extern uint32_t NumPix(BlockSize dim);
@@ -110,7 +121,7 @@ static inline TrfSize GetTransform(BlockSize dim, bool reduced = false) {
 extern const uint32_t kNumCoeffs[TRF_LAST];
 extern const uint32_t TrfWidth[TRF_LAST];
 extern const uint32_t TrfHeight[TRF_LAST];
-extern const uint32_t TrfLog2[kMaxBlockSizePix + 1];   // log2(width/height)
+extern const uint32_t TrfLog2[kMaxBlockSizePix + 1];  // log2(width/height)
 
 // all transform sizes
 extern const TrfSize kAllTrfSizes[TRF_LAST];
@@ -136,13 +147,13 @@ class Block {
     return (y_ != other.y_) ? (y_ < other.y_) : (x_ < other.x_);
   }
   inline bool operator==(const Block& other) const {
-    return (x_ == other.x_ && y_ == other.y_ &&
-            w_ == other.w_ && h_ == other.h_);
+    return (x_ == other.x_ && y_ == other.y_ && w_ == other.w_ &&
+            h_ == other.h_);
   }
   inline bool operator!=(const Block& other) const {
     return !operator==(other);
   }
-  void Draw(YUVPlane* const yuv) const;   // for debugging
+  void Draw(YUVPlane* yuv) const;  // for debugging
 
   // x, y coordinates and width height in pixel units.
   inline uint32_t x_pix() const { return x_pix_; }
@@ -153,14 +164,14 @@ class Block {
   inline Rectangle AsRect(uint32_t offset_x = 0, uint32_t offset_y = 0) const {
     return {offset_x + x_pix_, offset_y + y_pix_, w_pix_, h_pix_};
   }
-  // Returns a rectangle in pixels corresponding to the the given sub transform
+  // Returns a rectangle in pixels corresponding to the given sub transform
   // index 'tf_i' if 'split_tf' is true, or to the whole block otherwise.
   inline Rectangle TfRect(bool split_tf, uint32_t tf_i) const {
     const Rectangle local_rect = LocalTfRect(split_tf, tf_i);
     return {x_pix_ + local_rect.x, y_pix_ + local_rect.y, local_rect.width,
             local_rect.height};
   }
-  // Returns a rectangle in pixels corresponding to the the given sub transform
+  // Returns a rectangle in pixels corresponding to the given sub transform
   // index 'tf_i' if 'split_tf' is true, or to the whole block otherwise,
   // relative to the block itself.
   inline Rectangle LocalTfRect(bool split_tf, uint32_t tf_i) const {
@@ -177,7 +188,7 @@ class Block {
   inline uint32_t w() const { return w_; }
   inline uint32_t h() const { return h_; }
   inline uint32_t area() const { return (w_ * h_); }
-  inline Rectangle const rect() const { return {x_, y_, w_, h_}; }
+  inline Rectangle rect() const { return {x_, y_, w_, h_}; }
 
   inline BlockSize dim() const { return dim_; }
 
@@ -207,6 +218,6 @@ class Block {
   BlockSize dim_ = BLK_LAST;
 };
 
-}    // namespace WP2
+}  // namespace WP2
 
-#endif  /* WP2_COMMON_LOSSY_BLOCK_SIZE_H_ */
+#endif /* WP2_COMMON_LOSSY_BLOCK_SIZE_H_ */

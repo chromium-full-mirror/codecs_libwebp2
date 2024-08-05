@@ -21,6 +21,8 @@
 #define WP2_COMMON_CONSTANTS_H_
 
 #include <algorithm>
+#include <cassert>
+#include <cstdint>
 
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"

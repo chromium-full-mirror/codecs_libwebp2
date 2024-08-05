@@ -19,9 +19,18 @@
 
 #include "src/dec/filters/grain_filter.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
+#include "src/common/lossy/segment.h"
 #include "src/common/vdebug.h"
-#include "src/dec/wp2_dec_i.h"
-#include "src/dsp/math.h"
+#include "src/dec/filters/block_map_filter.h"
+#include "src/dsp/dsp.h"
+#include "src/utils/plane.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 

@@ -17,13 +17,9 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <cassert>
+#include <cstdint>
 #include <cstdio>
-
-#ifdef HAVE_CONFIG_H
-#include "src/wp2/config.h"
-#endif
-
-#include "./anim_image_dec.h"
 
 #ifdef WP2_HAVE_JPEG
 #include <jerror.h>
@@ -33,7 +29,12 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "./imageio_util.h"
+#ifdef HAVE_CONFIG_H
+#include "src/wp2/config.h"
+#endif
+
+#include "imageio/anim_image_dec.h"
+#include "imageio/imageio_util.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 

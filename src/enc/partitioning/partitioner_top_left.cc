@@ -20,16 +20,16 @@
 #include "src/enc/partitioning/partitioner_top_left.h"
 
 #include <algorithm>
-#include <numeric>
+#include <cassert>
+#include <cstdint>
 
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
 #include "src/common/progress_watcher.h"
-#include "src/dsp/math.h"
-#include "src/enc/analysis.h"
+#include "src/utils/front_mgr.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
-#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -55,8 +55,8 @@ WP2Status TopLeftBestPartitioner::GetBestPartition(
   // Use a front manager to easily browse the blocks.
   FrontMgrLexico front_mgr;
   WP2_CHECK_STATUS(front_mgr.Init(config_->partition_set,
-                                  config_->partition_snapping,
-                                  src_->Y.w_, src_->Y.h_));
+                                  config_->partition_snapping, src_->Y.w_,
+                                  src_->Y.h_));
 
   while (!front_mgr.Done()) {
     // TODO(yguyon): This is using a top-most first order. Find an order that
@@ -77,9 +77,8 @@ WP2Status TopLeftBestPartitioner::GetBestPartition(
       assert(max_num_blocks_left > 0);
       WP2_CHECK_STATUS(GetBestSize(max_block, forced_blocks.size(),
                                    block_progress, &best_block));
-      WP2_CHECK_REDUCED_STATUS(
-          RegisterOrderForVDebug(0, 0, best_block, blocks->size(),
-                                 max_num_blocks));
+      WP2_CHECK_REDUCED_STATUS(RegisterOrderForVDebug(
+          0, 0, best_block, blocks->size(), max_num_blocks));
       WP2_CHECK_ALLOC_OK(blocks->push_back(best_block));
 
       // The following instructions are done only for assertions/debug

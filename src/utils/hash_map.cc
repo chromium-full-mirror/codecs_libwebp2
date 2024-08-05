@@ -19,12 +19,14 @@
 
 #include "src/utils/hash_map.h"
 
-#include <algorithm>
 #include <cassert>
+#include <cstdint>
 
 #include "src/dsp/math.h"
+#include "src/enc/lossless/palette.h"
 #include "src/utils/hash.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 SegmentMap::SegmentMap(uint32_t num_segments)

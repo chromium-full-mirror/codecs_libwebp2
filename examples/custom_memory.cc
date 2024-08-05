@@ -15,14 +15,20 @@
 //
 //  Custom memory allocators
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <string>
 #include <unordered_map>
 
 // A regular ThreadLock cannot be used as its ctor would call WP2Malloc(),
 // which uses this 'thread_lock', which calls WP2Malloc() in its ctor etc.
 // std::mutex might be forbidden in the library, but here it's for debugging.
 #include <mutex>  // NOLINT
+#include <utility>
+#include <vector>
 
 #if defined(WP2_HAVE_BOOST)
 #include <boost/stacktrace/stacktrace.hpp>
@@ -31,9 +37,10 @@
 #include <execinfo.h>
 #endif
 
-#include "./example_utils.h"
+#include "examples/example_utils.h"
+#include "src/utils/utils.h"
 
-static std::unordered_map<void*, size_t> all_blocks;
+static std::unordered_map<void*, size_t> all_blocks;  // NOLINT
 static size_t mem_allocated = 0;
 static size_t total_allocation = 0;
 static size_t high_water_mark = 0;
@@ -44,8 +51,9 @@ static std::mutex mutex;
 
 namespace WP2 {
 
+namespace {
 // Get the stack trace.
-static std::string GetTrace() {
+std::string GetTrace() {
 #if defined(WP2_HAVE_BOOST)
   std::stringstream ss;
   ss << boost::stacktrace::stacktrace();
@@ -68,6 +76,7 @@ static std::string GetTrace() {
   return "";
 #endif
 }
+}  // namespace
 
 bool WP2MemoryFailNow(size_t size) {
   fprintf(stderr, "=== FAILING to allocate %u more bytes NOW ===\n",
@@ -98,6 +107,7 @@ MemoryTrace::~MemoryTrace() {
       // Compute the most frequent stack traces.
       typedef std::pair<std::string, uint32_t> Pair;
       std::vector<Pair> counts;
+      counts.reserve(counts_per_trace.size());
       for (const auto& iter : counts_per_trace) counts.push_back(iter);
       std::sort(
           counts.begin(), counts.end(),
@@ -174,7 +184,7 @@ void MemoryTrace::Unregister(void* ptr) {
   }
 }
 
-MemoryTrace kMemoryTrace;
+MemoryTrace kMemoryTrace;  // NOLINT
 
 //------------------------------------------------------------------------------
 

@@ -17,8 +17,12 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <cstddef>
+#include <cstdint>
+
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/wp2/format_constants.h"
 
 namespace {
 
@@ -53,8 +57,8 @@ void AddGrain4x4_C(int16_t* samples, size_t step, WP2::PseudoRNG* const rng,
   const int32_t max_value = (1 << WP2::kYuvMaxPrec) - 1;
   for (uint32_t j = 0; j < 4; ++j) {
     for (uint32_t i = 0; i < 4; ++i) {
-      samples[i] = WP2::Clamp(samples[i] + tmp[i + j * 4],
-                              -max_value, max_value);
+      samples[i] =
+          WP2::Clamp(samples[i] + tmp[i + j * 4], -max_value, max_value);
     }
     samples += step;
   }

@@ -33,7 +33,7 @@ namespace WP2 {
 // (occurs when TryGetNext() is missing data), if a LocalContext is set.
 class SuspendableDataSource : public ExternalDataSource {
  public:
-  void SetContext(LocalContext* const context);
+  void SetContext(LocalContext* context);
   bool HasEnoughDataToResume() const;
 
   void Reset() override;

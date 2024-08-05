@@ -19,7 +19,8 @@
 #ifndef WP2_UTILS_HASH_H_
 #define WP2_UTILS_HASH_H_
 
-#include "src/dsp/dsp.h"
+#include <cassert>
+#include <cstdint>
 
 //------------------------------------------------------------------------------
 // Copied from abseil city.cc computing city hash.
@@ -98,8 +99,7 @@ static inline uint32_t HashPix(const int16_t* const argb, uint32_t hash_bits) {
 }
 
 // Defines a 'hash_bits'-bit hash value of num_pixels pixels.
-uint32_t HashPixN(const int16_t* const argb, uint32_t num_pixels,
-                  uint32_t hash_bits);
+uint32_t HashPixN(const int16_t* argb, uint32_t num_pixels, uint32_t hash_bits);
 }  // namespace decoding
 
 #undef SPLIT

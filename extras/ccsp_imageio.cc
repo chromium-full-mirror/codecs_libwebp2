@@ -19,10 +19,23 @@
 
 #include "extras/ccsp_imageio.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+
 #include "extras/extras.h"
+#include "imageio/anim_image_dec.h"
+#include "imageio/file_format.h"
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 

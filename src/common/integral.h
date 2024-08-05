@@ -20,9 +20,14 @@
 #ifndef WP2_COMMON_INTEGRAL_H_
 #define WP2_COMMON_INTEGRAL_H_
 
+#include <cassert>
 #include <cmath>
+#include <cstdint>
+
+#include "src/dsp/math.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -81,22 +86,22 @@ class Integral {
   }
 
   // Returns mean and square mean at a given position (in block units).
-  void GetArea(const Plane<input_t>& p, uint32_t x0, uint32_t y0,
-               integral_t* const M, integral_t* const M2) const;
+  void GetArea(const Plane<input_t>& p, uint32_t x0, uint32_t y0, integral_t* M,
+               integral_t* M2) const;
   void GetArea(const YUVPlane& yuv, float uv_mix, uint32_t x0, uint32_t y0,
-               integral_t* const M, integral_t* const M2) const;
+               integral_t* M, integral_t* M2) const;
 
  private:
   void SetW(uint32_t i, uint32_t j, integral_t M, integral_t M2);
 
   VectorNoCtor<integral_t> w1_, w2_;
   uint32_t wstride_ = 0;
-  uint32_t w_ = 0, h_ = 0;   // dimension in block unit
-  uint32_t size_ = 0;        // unit block size
+  uint32_t w_ = 0, h_ = 0;  // dimension in block unit
+  uint32_t size_ = 0;       // unit block size
 };
 
 //------------------------------------------------------------------------------
 
-}    // namespace WP2
+}  // namespace WP2
 
 #endif  // WP2_COMMON_INTEGRAL_H_

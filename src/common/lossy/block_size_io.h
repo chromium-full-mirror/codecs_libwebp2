@@ -20,11 +20,16 @@
 #ifndef WP2_COMMON_LOSSY_BLOCK_SIZE_IO_H_
 #define WP2_COMMON_LOSSY_BLOCK_SIZE_IO_H_
 
+#include <cstdint>
+
+#include "src/common/lossy/block_size.h"
 #include "src/dec/symbols_dec.h"
 #include "src/enc/symbols_enc.h"
-#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/front_mgr.h"
 #include "src/utils/split_iterator.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -94,25 +99,24 @@ const SplitPattern* GetSplitPatterns(PartitionSet set, BlockSize size);
 
 // Writes 'dim'.
 void WriteBlockSize(const FrontMgrDoubleOrderBase& mgr, BlockSize dim,
-                    SymbolManager* const sm, ANSEncBase* const enc);
+                    SymbolManager* sm, ANSEncBase* enc);
 void WriteBlockSize(BlockSize dim, BlockSize max_possible_size,
-                    PartitionSet partition_set, SymbolManager* const sm,
-                    ANSEncBase* const enc);
+                    PartitionSet partition_set, SymbolManager* sm,
+                    ANSEncBase* enc);
 // Reads, updates and returns 'dim'.
-BlockSize ReadBlockSize(const FrontMgrDoubleOrderBase& mgr,
-                        SymbolReader* const sr);
+BlockSize ReadBlockSize(const FrontMgrDoubleOrderBase& mgr, SymbolReader* sr);
 BlockSize ReadBlockSize(BlockSize max_possible_size, PartitionSet partition_set,
-                        SymbolReader* const sr);
+                        SymbolReader* sr);
 
 //------------------------------------------------------------------------------
 
 // Writes the split 'split_idx'. Asserts that it.CurrentBlock().splittable
 void WriteBlockSplit(const SplitIteratorBase& it, uint32_t split_idx,
-                     SymbolManager* const sm, ANSEncBase* const enc);
+                     SymbolManager* sm, ANSEncBase* enc);
 
 // Reads and returns 'split_idx'. Asserts that it.CurrentBlock().splittable
-WP2Status ReadBlockSplit(const SplitIteratorBase& it, SymbolReader* const sr,
-                         uint32_t* const split_idx);
+WP2Status ReadBlockSplit(const SplitIteratorBase& it, SymbolReader* sr,
+                         uint32_t* split_idx);
 
 //------------------------------------------------------------------------------
 

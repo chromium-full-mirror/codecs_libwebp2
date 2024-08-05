@@ -15,9 +15,14 @@
 //
 // BMP Image writer
 
-#include "./image_enc.h"
+#include <cstdint>
+#include <cstdio>
+
+#include "imageio/image_enc.h"
 #include "src/dsp/dsp.h"
+#include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 

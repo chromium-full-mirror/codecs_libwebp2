@@ -27,15 +27,13 @@
 
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <initializer_list>
 #include <new>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "src/wp2/base.h"
-#include "src/wp2/format_constants.h"
 
 //------------------------------------------------------------------------------
 // Tracing and printing
@@ -48,10 +46,10 @@ extern void WP2Trace(const char* format, const std::string prefix, ...);
 #endif  // WP2_TRACE
 
 // Safe replacement for printf(fmt, ...) when fmt is not a literal
-void WP2Print(const char* const fmt, ...);
+void WP2Print(const char* fmt, ...);
 
 // Safe replacement for sprintf(fmt, ...) when fmt is not a literal.
-// Writes the data to str. Used only for debugging pruposes, hence the
+// Writes the data to str. Used only for debugging purposes, hence the
 // replacement with an empty macro otherwise
 #if defined(WP2_BITTRACE) || defined(WP2_TRACE) || defined(WP2_ENC_DEC_MATCH)
 std::string WP2SPrint(const char* const fmt, ...);
@@ -63,8 +61,8 @@ inline std::string WP2SPrint(const char* const fmt, ...) {
 #endif
 
 // handy error-logging macros
-void WP2ErrorLog(const char* const file, int line, WP2Status s,
-                 const char* const extra_message = nullptr);
+void WP2ErrorLog(const char* file, int line, WP2Status s,
+                 const char* extra_message = nullptr);
 
 // performs "if (status != WP2_STATUS_OK) return status;"
 #define WP2_CHECK_STATUS(status)                                 \
@@ -102,7 +100,9 @@ void WP2ErrorLog(const char* const file, int line, WP2Status s,
 #if !defined(WP2_REDUCE_BINARY_SIZE)
 #define WP2_CHECK_REDUCED_STATUS(status) WP2_CHECK_STATUS(status)
 #else
-#define WP2_CHECK_REDUCED_STATUS(status) do {} while (false)
+#define WP2_CHECK_REDUCED_STATUS(status) \
+  do {                                   \
+  } while (false)
 #endif
 
 // Can be overridden and called instead of WP2ErrorLog() if 'wp2_error_tracer'
@@ -147,7 +147,7 @@ struct WP2MemoryHook {
   // customizable relays toward system calls.
   virtual void* Malloc(size_t size);
   virtual void* Calloc(size_t count, size_t size);
-  virtual void Free(void *ptr);
+  virtual void Free(void* ptr);
 
   virtual ~WP2MemoryHook() = default;
 
@@ -218,7 +218,7 @@ struct DataView {
 template <typename T>
 void TrivialMoveCtor(T* const created_instance, T* const moved_instance) {
   std::memcpy((void*)created_instance, (const void*)moved_instance, sizeof(T));
-  new(moved_instance) T();
+  new (moved_instance) T();
 }
 
 template <typename T>
@@ -238,7 +238,7 @@ constexpr std::size_t ArraySize(const ElementType (&)[FirstDimension]) {
                 "Expected " #array " to contain " #size " elements")
 
 // Same as std::strstr() but considers 'str[count]' to be the null-character.
-const char* strnstr(const char* str, size_t count, const char* const target);
+const char* strnstr(const char* str, size_t count, const char* target);
 
 // Same as std::strncmp() but clamps 'count' to std::strlen(rhs).
 int strlcmp(const char* lhs, const char* rhs, size_t count);
@@ -247,4 +247,4 @@ int strlcmp(const char* lhs, const char* rhs, size_t count);
 
 //------------------------------------------------------------------------------
 
-#endif  /* WP2_UTILS_UTILS_H_ */
+#endif /* WP2_UTILS_UTILS_H_ */

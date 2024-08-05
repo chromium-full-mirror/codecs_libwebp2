@@ -20,32 +20,39 @@
 
 #include "src/common/integral.h"
 
+#include <cassert>
+#include <cstdint>
+
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+
 namespace WP2 {
 
 void Integral::GetArea(const Plane<input_t>& p, uint32_t x0, uint32_t y0,
                        integral_t* const M, integral_t* const M2) const {
-  *M  = 0;
+  *M = 0;
   *M2 = 0;
   for (uint32_t y = 0; y < size_; ++y) {
     for (uint32_t x = 0; x < size_; ++x) {
       const integral_t v = p.AtClamped(x0 * size_ + x, y0 * size_ + y);
-      *M  += v;
+      *M += v;
       *M2 += v * v;
     }
   }
 }
 
-void Integral::GetArea(const YUVPlane& yuv, float uv_mix,
-                       uint32_t x0, uint32_t y0,
-                       integral_t* const M, integral_t* const M2) const {
+void Integral::GetArea(const YUVPlane& yuv, float uv_mix, uint32_t x0,
+                       uint32_t y0, integral_t* const M,
+                       integral_t* const M2) const {
   if (uv_mix == 0.f) return GetArea(yuv.Y, x0, y0, M, M2);
   *M = 0;
   *M2 = 0;
   for (uint32_t y = 0; y < size_; ++y) {
     for (uint32_t x = 0; x < size_; ++x) {
       const integral_t v_y = yuv.Y.AtClamped(x0 * size_ + x, y0 * size_ + y);
-      const integral_t v_uv = yuv.U.AtClamped(x0 * size_ + x, y0 * size_ + y)
-                            + yuv.V.AtClamped(x0 * size_ + x, y0 * size_ + y);
+      const integral_t v_uv = yuv.U.AtClamped(x0 * size_ + x, y0 * size_ + y) +
+                              yuv.V.AtClamped(x0 * size_ + x, y0 * size_ + y);
       const integral_t v = (integral_t)(v_y * (1.f - uv_mix) + v_uv * uv_mix);
       *M += v;
       *M2 += v * v;
@@ -102,4 +109,4 @@ void Integral::AddValues(const Plane16& plane) {
   }
 }
 
-}    // namespace WP2
+}  // namespace WP2

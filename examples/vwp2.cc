@@ -25,10 +25,15 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <string>
 #include <utility>
+#include <vector>
 
 #ifdef HAVE_CONFIG_H
 #include "src/wp2/config.h"
@@ -47,8 +52,6 @@
 #include "src/common/vdebug.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
-#include "src/enc/wp2_enc_i.h"
-#include "src/utils/plane.h"
 #include "src/utils/random.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
@@ -75,8 +78,8 @@
 
 #define GL_SILENCE_DEPRECATION  // to avoid deprecation warnings on MacOS
 #if defined(HAVE_GLUT_GLUT_H)
-#include <OpenGL/gl.h>
 #include <GLUT/glut.h>
+#include <OpenGL/gl.h>
 #else
 #include <GL/gl.h>
 #include <GL/glut.h>
@@ -360,28 +363,28 @@ class Params {
 #endif
   }
   WP2_NO_DISCARD bool SetCurrentFile(uint32_t file_number);
-  WP2_NO_DISCARD bool SetBitstream(const char* const file_name);
-  WP2_NO_DISCARD bool SetAltFile(const char* const file_name);
+  WP2_NO_DISCARD bool SetBitstream(const char* file_name);
+  WP2_NO_DISCARD bool SetAltFile(const char* file_name);
   WP2_NO_DISCARD bool SetAltImage();
-  WP2_NO_DISCARD bool DumpCurrentCanvas(const char* const file_path);
+  WP2_NO_DISCARD bool DumpCurrentCanvas(const char* file_path);
   void ShiftAlt();  // move alt1 to alt2
   void SetQuality(float incr);
   WP2_NO_DISCARD bool EncodeImage();
   WP2_NO_DISCARD bool DecodeOutput();
   WP2_NO_DISCARD bool EncodeAndDecode();
-  WP2_NO_DISCARD bool DecodeAndSwap(ArgbBuffer* const buffer);
+  WP2_NO_DISCARD bool DecodeAndSwap(ArgbBuffer* buffer);
   WP2_NO_DISCARD bool GetOriginal();
   WP2_NO_DISCARD bool GetCompressed();
   WP2_NO_DISCARD bool ComputeYUVDistortion();
 
   const ArgbBuffer& GetBuffer() const;
-  WP2_NO_DISCARD bool GetCurrentCanvas(ArgbBuffer* const buffer);
+  WP2_NO_DISCARD bool GetCurrentCanvas(ArgbBuffer* buffer);
 
   WP2_NO_DISCARD bool EncodeWebP(bool match_size);
   float webp_distortion_ = 0.f;
   uint32_t webp_size_ = 0;
   WP2_NO_DISCARD bool EncodeAV1(bool copy_partition, float av1_quality,
-                                size_t* const av1_file_size = nullptr);
+                                size_t* av1_file_size = nullptr);
   WP2_NO_DISCARD bool EncodeAV1ToMatch(bool copy_partition,
                                        size_t target_file_size);
 
@@ -440,14 +443,14 @@ class Params {
     kDisplayGrid,
     kDisplayNum
   } display_block_ = kDisplayNone;
-  void DisplayBlockInfo(std::vector<std::string>* const msg);
+  void DisplayBlockInfo(std::vector<std::string>* msg);
   // side-func to help DisplayBlockInfo()
   void PrintBlockHeader(const BlockInfo& b,
-                        std::vector<std::string>* const msg) const;
+                        std::vector<std::string>* msg) const;
   void PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
-                      std::vector<std::string>* const msg) const;
+                      std::vector<std::string>* msg) const;
   void PrintPredModes(const BlockInfo& b,
-                      std::vector<std::string>* const msg) const;
+                      std::vector<std::string>* msg) const;
 
   const char* partition_file_path_ = "/tmp/partition.txt";
   const char* dump_wp2_path_ = "/tmp/dump.wp2";
@@ -486,7 +489,7 @@ class Params {
   bool IsHamburgerMenuVisible() const;
   void DisplayMenu();
   bool DisplaySubMenu(int32_t x, int32_t y, const VDToken& prefix,
-                      std::string* const current_selection);
+                      std::string* current_selection);
 
   // Adds a temporary 'message' on screen.
   void SetMessage(const std::string& message, bool even_if_show_info = false,
@@ -705,7 +708,7 @@ constexpr int32_t kMenuBorderWidth = 2;
 // matching the 'current_selection' or sets it to the hovered entry.
 // Returns true if the mouse at 'mouse_x, mouse_y' is inside the submenu.
 bool Params::DisplaySubMenu(int32_t x, int32_t y, const VDToken& prefix,
-                            std::string* const current_selection) {
+                            std::string* current_selection) {
   const int32_t longest_name_size = prefix.longest_next_name_size;
   const int32_t submenu_width =
       (longest_name_size + 3) * kMenuCharWidth + 2 * kMenuBorderWidth;
@@ -825,7 +828,7 @@ constexpr uint32_t kFontWidthPix = 9;
 
 // Split 'str' by the line break delimiter into 'msg' entries.
 void SplitIntoMessages(const std::string& str,
-                       std::vector<std::string>* const msg) {
+                       std::vector<std::string>* msg) {
   std::string::size_type from = 0, to;
   while (from < str.size()) {
     if ((to = str.find('\n', from)) == std::string::npos) to = str.size();
@@ -1339,8 +1342,8 @@ void DisplayLoop(int delay_ms) {
 
 WP2Status ComputeErrorMap(MetricType metric, const ArgbBuffer& original,
                           const ArgbBuffer& decoded,
-                          ArgbBuffer* const error_map,
-                          DecoderInfo* const info = nullptr) {
+                          ArgbBuffer* error_map,
+                          DecoderInfo* info = nullptr) {
   WP2_CHECK_OK(decoded.width() == original.width() &&
                    decoded.height() == original.height(),
                WP2_STATUS_BAD_DIMENSION);
@@ -1384,8 +1387,8 @@ void ComputeDiffPixel(const uint8_t original[4], uint8_t error_a,
 // closer than 'alt', redder otherwise.
 WP2Status ComputeDiffMap(MetricType metric, const ArgbBuffer& original,
                          const ArgbBuffer& decoded, const ArgbBuffer& alt,
-                         ArgbBuffer* const diff_map,
-                         DecoderInfo* const info = nullptr) {
+                         ArgbBuffer* diff_map,
+                         DecoderInfo* info = nullptr) {
   if (info != nullptr) {
     float disto_dec[5] = {}, disto_alt[5] = {};
     WP2_CHECK_STATUS(decoded.GetDistortion(original, metric, disto_dec));
@@ -1584,7 +1587,7 @@ bool Params::VDMatchEncDec(const char* token) const {
   return VDMatch(dec_config_, token) || VDMatch(enc_config_, token);
 }
 
-bool Params::DecodeAndSwap(ArgbBuffer* const buffer) {
+bool Params::DecodeAndSwap(ArgbBuffer* buffer) {
   using std::swap;
   swap(*buffer, dec_config_.info->debug_output);
   status_ = dec_config_.info->debug_output.ConvertFrom(in_);
@@ -1708,7 +1711,7 @@ bool Params::EncodeWebP(bool match_size) {
 }
 
 bool Params::EncodeAV1(bool copy_partition, float av1_quality,
-                       size_t* const av1_file_size) {
+                       size_t* av1_file_size) {
 #if !defined(WP2_HAVE_AOM_DBG)
   if (copy_partition) return false;
 #endif
@@ -1916,7 +1919,7 @@ void Params::ShiftAlt() {
   alt1_.Deallocate();
 }
 
-bool Params::SetBitstream(const char* const file_name) {
+bool Params::SetBitstream(const char* file_name) {
   std::string data;
   status_ = IoUtilReadFile(file_name, &data);
   if (status_ != WP2_STATUS_OK) {
@@ -1945,7 +1948,7 @@ bool Params::SetBitstream(const char* const file_name) {
   return true;
 }
 
-bool Params::SetAltFile(const char* const file_name) {
+bool Params::SetAltFile(const char* file_name) {
   ShiftAlt();
   status_ = ReadImage(file_name, &alt1_);
   if (status_ != WP2_STATUS_OK) {
@@ -1971,7 +1974,7 @@ bool Params::SetAltImage() {
   ArgbBuffer tmp;
   if (GetCurrentCanvas(&tmp)) {
     ShiftAlt();
-    if (tmp.IsView()){
+    if (tmp.IsView()) {
       status_ = alt1_.CopyFrom(tmp);
     } else {
       using std::swap;
@@ -1986,7 +1989,7 @@ bool Params::SetAltImage() {
   return true;
 }
 
-bool Params::DumpCurrentCanvas(const char* const file_path) {
+bool Params::DumpCurrentCanvas(const char* file_path) {
   ArgbBuffer tmp;
   if (GetCurrentCanvas(&tmp)) {
     status_ = SaveImage(tmp, file_path, /*overwrite=*/true);
@@ -2015,7 +2018,7 @@ const ArgbBuffer& Params::GetBuffer() const {
 }
 
 // Copies the current canvas to 'buffer'.
-bool Params::GetCurrentCanvas(ArgbBuffer* const buffer) {
+bool Params::GetCurrentCanvas(ArgbBuffer* buffer) {
   if (show_ == kPreviewColor) {
     ShiftAlt();
     status_ = buffer->Resize(out_.width(), out_.height());
@@ -2085,7 +2088,7 @@ class ParagraphMaker {
     if (strs_.back().size() >= 50u) strs_.push_back(indentation_);
   }
   // Push back all the elements of the list to the msg.
-  void PushBackTo(std::vector<std::string>* const msg) {
+  void PushBackTo(std::vector<std::string>* msg) {
     if (strs_.empty()) return;
     // Remove the last element if empty.
     if (strs_.back() == indentation_) strs_.pop_back();
@@ -2138,7 +2141,7 @@ static void IsolateBitTraces(
 }
 
 void Params::PrintBlockHeader(const BlockInfo& b,
-                              std::vector<std::string>* const msg) const {
+                              std::vector<std::string>* msg) const {
   std::map<const std::string, LabelStats> bit_traces[kLastChannel + 1];
   double bit_sums[kLastChannel + 1] = {0};
   IsolateBitTraces(b, bit_traces, bit_sums);
@@ -2168,7 +2171,7 @@ void Params::PrintBlockHeader(const BlockInfo& b,
 }
 
 void Params::PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
-                            std::vector<std::string>* const msg) const {
+                            std::vector<std::string>* msg) const {
   std::map<const std::string, LabelStats> bit_traces[kLastChannel + 1];
   double bit_sums[kLastChannel + 1] = {0};
   IsolateBitTraces(b, bit_traces, bit_sums);
@@ -2271,7 +2274,7 @@ void Params::PrintResiduals(const BlockInfo& b, const BlockInfo& b_enc,
 }
 
 void Params::PrintPredModes(const BlockInfo& b,
-                            std::vector<std::string>* const msg) const {
+                            std::vector<std::string>* msg) const {
   msg->push_back(SPrintf("Chroma prediction mode: %d", b.uv_pred));
   msg->push_back(SPrintf("Luma prediction: %d", b.y_pred));
   if (b.has_lossy_alpha) {
@@ -2296,7 +2299,7 @@ void Params::PrintPredModes(const BlockInfo& b,
 
 #endif  // WP2_BITTRACE
 
-void Params::DisplayBlockInfo(std::vector<std::string>* const msg) {
+void Params::DisplayBlockInfo(std::vector<std::string>* msg) {
   if (display_block_ == kDisplayNone) return;
 #if defined(WP2_BITTRACE)
   assert(dinfo_.store_blocks && einfo_.store_blocks);

@@ -19,12 +19,19 @@
 
 #include "src/dec/filters/deblocking_filter.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
 #include "src/common/global_params.h"
+#include "src/common/lossy/block_size.h"
 #include "src/common/vdebug.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/dec/filters/block_map_filter.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -89,7 +96,7 @@ WP2Status DeblockingFilter::Allocate() {
   WP2_CHECK_ALLOC_OK(x_to_next_up_block_y_.resize(blocks_.max_num_blocks_x_));
   // "Block position should fit in x_to_next_up_block_y_
   static_assert(kMaxTileSize / kMinBlockSizePix <
-                (1u << (sizeof(x_to_next_up_block_y_[0]) * 8)),
+                    (1u << (sizeof(x_to_next_up_block_y_[0]) * 8)),
                 "Incorrect kMaxTileSize value");
   // No vertical deblocking will happen before at least 1 min block and a half.
   min_num_rows_to_vdblk_ = std::min(kMinBlockSizePix + kMinBlockSizePix / 2,
@@ -252,7 +259,7 @@ uint32_t DeblockingFilter::DeblockVertically(uint32_t to_y) {
   }
   // Decoded all lines, all edges should have been deblocked.
   if (to_y + 1u == blocks_.tile_rect_.height) return blocks_.tile_rect_.height;
-  // Return the position of the up-most not yet deblocked edge.
+  // Return the position of the upmost not yet deblocked edge.
   const uint32_t min_edge_y = *std::min_element(x_to_next_up_block_y_.begin(),
                                                 x_to_next_up_block_y_.end());
   return std::min(min_edge_y * kMinBlockSizePix, blocks_.tile_rect_.height);
@@ -273,9 +280,9 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
   const bool vertical_edge = (edge_rect.width == 0);
 
   // The strength is determined by the block using the fewest bits per px.
-  const uint32_t yuv_strength = std::min(
-      GetStrengthFromMagnitude(yuv_filter_magnitude),
-      GetStrengthFromBpp(std::min(p_block.min_bpp, q_block.min_bpp)));
+  const uint32_t yuv_strength =
+      std::min(GetStrengthFromMagnitude(yuv_filter_magnitude),
+               GetStrengthFromBpp(std::min(p_block.min_bpp, q_block.min_bpp)));
   // TODO(maryla): this should be computed based on alpha_quality and
   //               alpha bpp instead!
   const uint32_t alpha_strength = yuv_strength;
@@ -362,10 +369,10 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
         VDMatch(config, intertile ? "intertile-filter" : "deblocking-filter");
     if (vd_match) {
       for (uint32_t pos = 0; pos < edge_length; ++pos) {
-        RegisterPixelsForVDebug(config,
-            tile_rect.x + edge_rect.x + (vertical_edge ? 0 : pos),
-            tile_rect.y + edge_rect.y + (vertical_edge ? pos : 0),
-            half, halfs[pos], vertical_edge, c, strength, sharpness,
+        RegisterPixelsForVDebug(
+            config, tile_rect.x + edge_rect.x + (vertical_edge ? 0 : pos),
+            tile_rect.y + edge_rect.y + (vertical_edge ? pos : 0), half,
+            halfs[pos], vertical_edge, c, strength, sharpness,
             /*before_deblocking=*/true, do_deblock, num_bits,
             src + pos * src_step, /*step=*/1);
       }
@@ -390,7 +397,7 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
             if (a_halfs[pos] == 0) h = 0;
           }
         }
-        if (h > 0) {   // Process line.
+        if (h > 0) {  // Process line.
           DeblockLine(strength, deblock_threshold, h, min, max, q);
           max_half = std::max(max_half, h);
         }
@@ -407,10 +414,10 @@ void DeblockingFilter::DeblockEdge(const DecoderConfig& config, bool intertile,
 #if !defined(WP2_REDUCE_BINARY_SIZE)
     if (vd_match) {
       for (uint32_t pos = 0; pos < edge_length; ++pos) {
-        RegisterPixelsForVDebug(config,
-            tile_rect.x + edge_rect.x + (vertical_edge ? 0 : pos),
-            tile_rect.y + edge_rect.y + (vertical_edge ? pos : 0),
-            half, halfs[pos], vertical_edge, c, strength, sharpness,
+        RegisterPixelsForVDebug(
+            config, tile_rect.x + edge_rect.x + (vertical_edge ? 0 : pos),
+            tile_rect.y + edge_rect.y + (vertical_edge ? pos : 0), half,
+            halfs[pos], vertical_edge, c, strength, sharpness,
             /*before_deblocking=*/false, do_deblock, num_bits,
             src + pos * src_step, /*step=*/1);
       }

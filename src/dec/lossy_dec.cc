@@ -17,25 +17,32 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <string>
+
 #if !defined(WP2_BITTRACE)
 #include <cstdio>
 #endif
-#include <utility>
 
-#include "src/common/constants.h"
 #include "src/common/filters/rstr_flt_params.h"
 #include "src/common/global_params.h"
-#include "src/common/lossy/residuals_aom.h"
+#include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/predictor.h"
+#include "src/common/lossy/segment.h"
 #include "src/common/vdebug.h"
 #include "src/dec/filters/block_map_filter.h"
-#include "src/dec/filters/intertile_filter.h"
 #include "src/dec/filters/intratile_filter.h"
+#include "src/dec/filters/restoration_filter.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
-#include "src/utils/ans_utils.h"
 #include "src/utils/front_mgr.h"
+#include "src/utils/plane.h"
+#include "src/utils/split_iterator.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 
@@ -167,7 +174,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
   cb.SetContextCache(&context_cache);
 
 #if defined(WP2_BITTRACE)
-  // Segments for debugging, with quant intialized for encoding.
+  // Segments for debugging, with quant initialized for encoding.
   Vector<Segment> debug_segments;
   if (config.info != nullptr && config.info->store_blocks) {
     const uint32_t num_segments = gparams.segments_.size();
@@ -417,7 +424,7 @@ WP2Status LossyDecode(const BitstreamFeatures& features,
     }
     if (config.info != nullptr && config.info->bits_per_pixel != nullptr) {
       config.info->bits_per_pixel->Fill(cb.AsRect(tile->rect.x, tile->rect.y),
-          num_bits / (cb.w_pix() * cb.h_pix()));
+                                        num_bits / (cb.w_pix() * cb.h_pix()));
     }
 #endif
 

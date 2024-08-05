@@ -20,14 +20,19 @@
 #ifndef WP2_DEC_LOSSLESS_LOSSLESSI_DEC_H_
 #define WP2_DEC_LOSSLESS_LOSSLESSI_DEC_H_
 
+#include <cstdint>
+
+#include "src/common/constants.h"
 #include "src/common/lossless/color_cache.h"
-#include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/dec/symbols_dec.h"
 #include "src/dec/tile_dec.h"
 #include "src/utils/ans.h"
 #include "src/utils/hash_map.h"
+#include "src/utils/plane.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 
@@ -65,9 +70,8 @@ class Metadata {
 class Decoder {
  public:
   Decoder();
-  void Init(const WP2::DecoderConfig& config,
-            const WP2::GlobalParams& gparams, WP2::ANSDec* const dec,
-            WP2::Tile* const tile);
+  void Init(const WP2::DecoderConfig& config, const WP2::GlobalParams& gparams,
+            WP2::ANSDec* dec, WP2::Tile* tile);
   // Decodes the image header. Returns false in case of error.
   WP2Status DecodeHeader();
   // Decodes an image. It's required to decode the lossless header before
@@ -82,63 +86,62 @@ class Decoder {
 
   // Reads palette data from the stream.
   // Visible for testing.
-  WP2Status ReadPalette(Transform* const transform);
+  WP2Status ReadPalette(Transform* transform);
 
  private:
   // Reads the stats useful for the symbols for later ANS decoding.
   WP2Status ReadANSStats(uint32_t width, uint32_t height,
                          const LosslessSymbolsInfo& symbols_info);
-  WP2Status ApplyInverseTransforms(uint32_t num_rows,
-                                   const int16_t* const rows);
+  WP2Status ApplyInverseTransforms(uint32_t num_rows, const int16_t* rows);
   // Processes (transforms, scales & color-converts) the rows decoded after the
   // last call until row number 'row'.
   WP2Status ProcessRows(uint32_t row);
   // Decodes an image and post-processes the rows.
   WP2Status DecodeAndProcess(uint32_t width, uint32_t last_row, bool do_process,
-                             WP2::Vector_s16* const data_vec,
-                             WP2::Planef* const bits_per_pixel = nullptr,
-                             WP2::DecoderInfo* const decoder_info = nullptr,
+                             WP2::Vector_s16* data_vec,
+                             WP2::Planef* bits_per_pixel = nullptr,
+                             WP2::DecoderInfo* decoder_info = nullptr,
                              int16_t** src_out = nullptr);
   // Decodes any image that is not the main image (segment image, transform
   // images (predictors, palette ...)).
   WP2Status DecodeHelperImage(uint32_t width, uint32_t height,
                               const LosslessSymbolsInfo& symbols_info,
-                              WP2::Vector_s16* const data_vec);
+                              WP2::Vector_s16* data_vec);
   // Decodes a sub-image encoded with the Group 4 algorithm.
   WP2Status DecodeGroup4(uint32_t width, uint32_t last_row,
-                         WP2::Planef* const bits_per_pixel, int16_t** src_out);
+                         WP2::Planef* bits_per_pixel, int16_t** src_out);
   // Decodes a sub-image encoded with the LZW algorithm.
   WP2Status DecodeLZW(uint32_t width, uint32_t last_row,
-                      WP2::Planef* const bits_per_pixel, int16_t** src_out);
+                      WP2::Planef* bits_per_pixel, int16_t** src_out);
 
   // Decodes an image, once the pre-processing has been done.
   WP2Status DecodeImageData(uint32_t width, uint32_t height, uint32_t last_row,
-                            WP2::Planef* const bits_per_pixel);
+                            WP2::Planef* bits_per_pixel);
   // Reads a transform of a certain size from the stream.
   WP2Status ReadTransform(uint32_t width, uint32_t height, TransformType type,
-                          Transform* const transform);
+                          Transform* transform);
 
   // Visual debug. 'symbol_type' can be a SymbolType for classical algorithm,
   // a Group4Mode for Group4 algorithm, or 0 for LZW algorithm.
   WP2Status RegisterSymbolForVDebug(int symbol_type, uint32_t pos,
                                     uint32_t distance, uint32_t length,
-                                    float cost,
-                                    WP2::DecoderInfo* const decoder_info);
+                                    float cost, WP2::DecoderInfo* decoder_info);
   // Visual debug. 'rows' should contain the raw decoded pixels before inverse
   // transforms are applied. 'decoder_info' can be nullptr (in which case
   // nothing is done).
   // 'index' is the transform index up to which the transforms are applied.
-  WP2Status RegisterTransformedRowForVDebug(
-      int index, uint32_t num_rows, uint32_t num_bits,
-      const int16_t* const rows, WP2::DecoderInfo* const decoder_info);
+  WP2Status RegisterTransformedRowForVDebug(int index, uint32_t num_rows,
+                                            uint32_t num_bits,
+                                            const int16_t* rows,
+                                            WP2::DecoderInfo* decoder_info);
   // Display the predicted pixels for the predictor and cross-color transforms
   WP2Status RegisterPredictedRowForVDebug(uint32_t index, uint32_t num_rows,
                                           uint32_t num_bits,
-                                          const int16_t* const rows,
-                                          WP2::DecoderInfo* const decoder_info);
+                                          const int16_t* rows,
+                                          WP2::DecoderInfo* decoder_info);
   // Display the predictor and cross-color transforms.
   WP2Status RegisterTransformForVDebug(const Transform& transform,
-                                       WP2::DecoderInfo* const decoder_info);
+                                       WP2::DecoderInfo* decoder_info);
 
   // Visual debug for header info.
   WP2Status HeaderVDebug();
@@ -155,10 +158,10 @@ class Decoder {
 
   WP2::ANSDec* dec_ = nullptr;
 
-  uint32_t last_row_ = 0;    // last input row decoded so far.
-  uint32_t last_pixel_ = 0;  // last pixel decoded so far. However,
-                             // it may not be transformed, scaled and
-                             // color-converted yet.
+  uint32_t last_row_ = 0;      // last input row decoded so far.
+  uint32_t last_pixel_ = 0;    // last pixel decoded so far. However,
+                               // it may not be transformed, scaled and
+                               // color-converted yet.
   uint32_t last_out_row_ = 0;  // last row output so far.
 
   Metadata hdr_;

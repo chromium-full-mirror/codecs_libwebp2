@@ -20,14 +20,17 @@
 #ifndef WP2_ENC_LOSSLESS_HISTOGRAM_ENC_H_
 #define WP2_ENC_LOSSLESS_HISTOGRAM_ENC_H_
 
-#include <algorithm>
+#include <cassert>
+#include <cstdint>
 #include <cstring>
 
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/enc/lossless/backward_references_enc.h"
 #include "src/utils/quantizer.h"
-#include "src/wp2/format_constants.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2L {
 
@@ -122,12 +125,12 @@ class HistogramSet {
 
 // Fills the histograms initialized in HistogramSet from the backward
 // references. If there is only one histogram, the parameters 'width',
-// 'height'and 'histo_bits' do not matter.
+// 'height' and 'histo_bits' do not matter.
 // Histogram indices correspond to value - value_min like in the SymbolRecorder.
 WP2Status BuildHistograms(uint32_t width, uint32_t height, uint32_t histo_bits,
                           const LosslessSymbolsInfo& symbols_info,
                           const BackwardRefs& refs,
-                          HistogramSet* const histogram_set);
+                          HistogramSet* histogram_set);
 
 // Builds the histogram image.
 // 'segments' is an ARGB image where the segment is stored in G and other
@@ -137,8 +140,7 @@ WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
                                const WP2::ProgressRange& progress,
                                int histogram_bits,
                                const LosslessSymbolsInfo& symbols_info,
-                               HistogramSet* const merged_histo,
-                               int16_t* const segments);
+                               HistogramSet* merged_histo, int16_t* segments);
 
 // Class comparing histograms for the sake of merging them.
 // It contains several buffers that speed-up the computation of the different
@@ -155,11 +157,10 @@ class PopulationAnalyzer {
     WP2_CHECK_STATUS(quantizer_.Allocate(histogram_size_max_));
     return WP2_STATUS_OK;
   }
-  void PopulationCost(const uint32_t* const population, uint32_t range,
-                      uint32_t* const nonzeros, uint32_t* const trivial_sym,
-                      float* cost);
+  void PopulationCost(const uint32_t* population, uint32_t range,
+                      uint32_t* nonzeros, uint32_t* trivial_sym, float* cost);
 
-  void GetCombinedEntropy(const uint32_t* const X, const uint32_t* const Y,
+  void GetCombinedEntropy(const uint32_t* X, const uint32_t* Y,
                           uint32_t X_nonzeros, uint32_t Y_nonzeros,
                           uint32_t X_trivial, uint32_t Y_trivial,
                           uint32_t length, float* cost);
@@ -175,8 +176,8 @@ class PopulationAnalyzer {
   // Since the previous score passed is 'cost_threshold', we only need to
   // compare the partial cost against 'cost_threshold + C(a) + C(b)' to possibly
   // bail-out early.
-  float HistogramAddEval(const Histogram& a, const Histogram& b,
-                         Histogram* const out, float cost_threshold);
+  float HistogramAddEval(const Histogram& a, const Histogram& b, Histogram* out,
+                         float cost_threshold);
 
   // Same as HistogramAddEval(), except that the resulting histogram
   // is not stored. Only the cost C(a+b) - C(a) is evaluated. We omit
@@ -185,7 +186,7 @@ class PopulationAnalyzer {
                            float cost_threshold);
 
   // Update the individual/overall bit costs of an histogram.
-  void UpdateHistogramCost(Histogram* const h);
+  void UpdateHistogramCost(Histogram* h);
 
  private:
   WP2::Vector_u32 sum_tmp_;
@@ -238,8 +239,8 @@ class HistoQueue {
 
   // Initializes the queue to be used with a given set of histograms using a
   // given 'analyzer'
-  WP2Status Init(WP2::VectorNoCtor<Histogram*>* const histograms,
-                 PopulationAnalyzer* const analyzer);
+  WP2Status Init(WP2::VectorNoCtor<Histogram*>* histograms,
+                 PopulationAnalyzer* analyzer);
   // Resizes the queue: the bigger the size the more flexibility, but the
   // slower it gets.
   WP2Status Resize(uint32_t size);
@@ -247,13 +248,13 @@ class HistoQueue {
   // Merges the histograms from the front (idx1 and idx2), invalidate idx2 and
   // also checks if any pair that dealt with idx1 or idx2 is still worth it (by
   // updating the cost or removing the pair).
-  void MergeFront(SegmentImgWrapper* const segments);
+  void MergeFront(SegmentImgWrapper* segments);
 
   // Creates a pair from indices "idx1" and "idx2" provided its cost
   // is inferior to "threshold", a negative entropy.
   // It returns the cost of the pair, or 0. if it superior to threshold.
   WP2Status Push(uint16_t idx1, uint16_t idx2, float threshold,
-                 float* const cost_diff = nullptr);
+                 float* cost_diff = nullptr);
 
   // Removes histograms that are not part of the valid indices. Also empties the
   // queue as elements become invalid. The queue needs to be resized to be used
@@ -262,7 +263,7 @@ class HistoQueue {
 
  private:
   // Checks whether a pair should be updated as head or not.
-  void MaybeUpdateHead(HistogramPair* const pair);
+  void MaybeUpdateHead(HistogramPair* pair);
 
   WP2::VectorNoCtor<HistogramPair> queue_;
   // List of valid indices (idx2 of pairs that have been merged are removed).

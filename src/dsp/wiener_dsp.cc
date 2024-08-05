@@ -21,20 +21,22 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
 //------------------------------------------------------------------------------
 
-static inline void Copy(const int16_t* src, size_t src_step,
-                        int32_t width, int32_t height,
-                        size_t dst_step, int16_t* dst) {
+static inline void Copy(const int16_t* src, size_t src_step, int32_t width,
+                        int32_t height, size_t dst_step, int16_t* dst) {
   for (int32_t y = 0; y < height; ++y, dst += dst_step, src += src_step) {
     std::memcpy(dst, src, width * sizeof(src[0]));
   }
@@ -58,14 +60,12 @@ void WienerHalfToFullWgts(const int32_t half_tap_weights[kWieFltTapDist],
 // Area is sliced into corners, sides, and center areas as follows ->  ABBBC
 // 'tmp[0]' and 'src[0]' represent the top-left E.                     DEEEF
 // 'n_*' should be at most kWieFltTapDist.                             GHHHI
-static void Pad(int32_t width, int32_t height,
-                const int16_t* const src, size_t src_step,
-                const int16_t* const left, size_t left_step,
+static void Pad(int32_t width, int32_t height, const int16_t* const src,
+                size_t src_step, const int16_t* const left, size_t left_step,
                 const int16_t* const right, size_t right_step,
                 const int16_t* const top, size_t top_step,
-                const int16_t* const bottom, size_t bottom_step,
-                int32_t n_left, int32_t n_right,
-                int32_t n_top, int32_t n_bottom,
+                const int16_t* const bottom, size_t bottom_step, int32_t n_left,
+                int32_t n_right, int32_t n_top, int32_t n_bottom,
                 size_t tmp_step, int16_t* const tmp) {
   static constexpr int32_t gap = (int32_t)kWieFltTapDist;
   assert(width > 0 && height > 0);
@@ -75,20 +75,20 @@ static void Pad(int32_t width, int32_t height,
 
   // Copy pixels as far as available.
   if (n_top > 0) {  // [A]B[C]
-    Copy(top, top_step, /*width=*/x_end - x_start, /*height=*/n_top,
-         tmp_step, /*dst=*/tmp - gap * (int32_t)tmp_step + x_start);
+    Copy(top, top_step, /*width=*/x_end - x_start, /*height=*/n_top, tmp_step,
+         /*dst=*/tmp - gap * (int32_t)tmp_step + x_start);
   }
   if (n_left > 0) {  // D
-    Copy(left, left_step, /*width=*/n_left, /*height=*/height,
-         tmp_step, /*dst=*/tmp + x_start);
+    Copy(left, left_step, /*width=*/n_left, /*height=*/height, tmp_step,
+         /*dst=*/tmp + x_start);
   }
   {  // E
-    Copy(src, src_step, /*width=*/width, /*height=*/height,
-         tmp_step, /*dst=*/tmp);
+    Copy(src, src_step, /*width=*/width, /*height=*/height, tmp_step,
+         /*dst=*/tmp);
   }
-  if (n_right> 0) {  // F
-    Copy(right, right_step, /*width=*/n_right, /*height=*/height,
-         tmp_step, /*dst=*/tmp + width);
+  if (n_right > 0) {  // F
+    Copy(right, right_step, /*width=*/n_right, /*height=*/height, tmp_step,
+         /*dst=*/tmp + width);
   }
   if (n_bottom > 0) {  // [G]H[I]
     Copy(bottom, bottom_step, /*width=*/x_end - x_start, /*height=*/n_bottom,
@@ -98,26 +98,26 @@ static void Pad(int32_t width, int32_t height,
   // Stretch [A]B[C] from [D]E[F].
   for (int32_t y = -gap; y < y_start; ++y) {
     Copy(/*src=*/tmp + y_start * (int)tmp_step + x_start, tmp_step,
-         /*width=*/x_end - x_start, /*height=*/1,
-         tmp_step, /*dst=*/tmp + y * (int)tmp_step + x_start);
+         /*width=*/x_end - x_start, /*height=*/1, tmp_step,
+         /*dst=*/tmp + y * (int)tmp_step + x_start);
   }
   // Stretch [G]H[I] from [D]E[F].
   for (int32_t y = height + gap - 1; y >= y_end; --y) {
     Copy(/*src=*/tmp + (y_end - 1) * (int)tmp_step + x_start, tmp_step,
-         /*width=*/x_end - x_start, /*height=*/1,
-         tmp_step, /*dst=*/tmp + y * (int)tmp_step + x_start);
+         /*width=*/x_end - x_start, /*height=*/1, tmp_step,
+         /*dst=*/tmp + y * (int)tmp_step + x_start);
   }
   // Stretch ADG from BEH.
   for (int32_t x = -gap; x < x_start; ++x) {
     Copy(/*src=*/tmp - gap * (int)tmp_step + x_start, tmp_step,
-         /*width=*/1, /*height=*/gap + height + gap,
-         tmp_step, /*dst=*/tmp - gap * (int)tmp_step + x);
+         /*width=*/1, /*height=*/gap + height + gap, tmp_step,
+         /*dst=*/tmp - gap * (int)tmp_step + x);
   }
   // Stretch CFI from BEH.
   for (int32_t x = width + gap - 1; x >= x_end; --x) {
     Copy(/*src=*/tmp - gap * (int)tmp_step + x_end - 1, tmp_step,
-         /*width=*/1, /*height=*/gap + height + gap,
-         tmp_step, /*dst=*/tmp - gap * (int)tmp_step + x);
+         /*width=*/1, /*height=*/gap + height + gap, tmp_step,
+         /*dst=*/tmp - gap * (int)tmp_step + x);
   }
 }
 

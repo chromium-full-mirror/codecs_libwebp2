@@ -18,6 +18,9 @@
 
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/tile_enc.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 
@@ -32,4 +35,4 @@ WP2Status TileEncoder::LosslessEncode(ANSEnc* const enc) {
 
 // -----------------------------------------------------------------------------
 
-}    // namespace WP2
+}  // namespace WP2

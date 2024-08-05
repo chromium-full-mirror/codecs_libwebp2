@@ -20,11 +20,14 @@
 #ifndef WP2_ENC_RESIDUALS_ENC_AOM_H_
 #define WP2_ENC_RESIDUALS_ENC_AOM_H_
 
-#include "src/common/lossy/block.h"
+#include <cstdint>
+
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/residuals_aom.h"
 #include "src/common/lossy/transforms.h"
 #include "src/enc/symbols_enc.h"
-#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace libgav1 {
@@ -36,29 +39,29 @@ class AOMResidualWriter : public AOMResidualIO {
  public:
   static void WriteCoeffs(const int16_t res[], Channel channel, TrfSize tdim,
                           TransformPair tx_type, bool first_is_dc,
-                          SymbolManager* const sm, ANSEncBase* const enc);
+                          SymbolManager* sm, ANSEncBase* enc);
 
   // Writes the position of the end of block.
   static void WriteEOB(int eob, TrfSize tdim, PlaneType plane_type,
-                       TransformClass tx_class, SymbolManager* const sm,
-                       ANSEncBase* const enc);
+                       TransformClass tx_class, SymbolManager* sm,
+                       ANSEncBase* enc);
 
   // Writes the coefficient 'res'. Updates 'levels' for writing following
   // coeffs. This method should be called in reverse zigzag order.
   static void WriteCoeff(int16_t res, uint32_t pos, bool is_eob, uint32_t eob,
                          bool first_is_dc, PlaneType plane_type, TrfSize tdim,
-                         TransformClass tx_class, const uint8_t* const levels,
-                         SymbolManager* const sm, ANSEncBase* const enc);
+                         TransformClass tx_class, const uint8_t* levels,
+                         SymbolManager* sm, ANSEncBase* enc);
 
  private:
   // Writes the coefficient's sign, and the remaining part that is above
   // kQuantizerCoefficientBaseRangeContextClamp if needed.
-  static void WriteSignAndRest(int16_t res, bool is_dc, SymbolManager* const sm,
-                               ANSEncBase* const enc);
+  static void WriteSignAndRest(int16_t res, bool is_dc, SymbolManager* sm,
+                               ANSEncBase* enc);
 
   static void WriteCoeffBaseRange(uint32_t level, uint32_t cdf_context,
-                                  PlaneType plane_type, SymbolManager* const sm,
-                                  ANSEncBase* const enc);
+                                  PlaneType plane_type, SymbolManager* sm,
+                                  ANSEncBase* enc);
 };
 
 }  // namespace libgav1

@@ -17,13 +17,26 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include "src/common/constants.h"
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+
+#include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
+#include "src/common/lossy/block_size_io.h"
+#include "src/common/lossy/predictor.h"
+#include "src/common/lossy/segment.h"
+#include "src/common/lossy/transforms.h"
+#include "src/common/symbols.h"
 #include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/utils/ans.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/front_mgr.h"
+#include "src/utils/split_iterator.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
 
@@ -149,7 +162,7 @@ WP2Status SyntaxReader::LoadDictionaries() {
       gparams_->has_alpha_ &&
           (alpha_reader_->GetAlphaMode() != kAlphaModeLossless)));
 
-  sr_.Clear();   // reclaim some tmp memory
+  sr_.Clear();  // reclaim some tmp memory
   return WP2_STATUS_OK;
 }
 
@@ -165,10 +178,10 @@ WP2Status SyntaxReader::ReadPredModes(CodedBlockBase* const cb) {
     if (channel == kYChannel && cb->y_context_is_constant_) {
       cb->GetCodingParams(kYChannel)->pred = preds[0];
     } else {
-      const uint32_t mode =
-          (channel == kYChannel) ? sr_.Read(kSymbolModeY, "y") :
-          (channel == kAChannel) ? sr_.Read(kSymbolModeA, "a") :
-                                   sr_.Read(kSymbolModeUV, "uv");
+      const uint32_t mode = (channel == kYChannel) ? sr_.Read(kSymbolModeY, "y")
+                            : (channel == kAChannel)
+                                ? sr_.Read(kSymbolModeA, "a")
+                                : sr_.Read(kSymbolModeUV, "uv");
       const uint32_t sub_mode =
           preds.GetPred(mode)->ReadParams(cb, channel, &sr_, dec_);
       if (channel == kUChannel) {
@@ -309,8 +322,7 @@ WP2Status SyntaxReader::GetBlock(CodedBlockBase* const cb, YUVPlane* const out,
     const Segment& segment =
         gparams_->segments_[(c == kAChannel) ? 0 : cb->id_];
     const int16_t* const dequant = segment.GetQuant(c).Dequant();
-    WP2_CHECK_STATUS(
-        residual_reader_.ReadCoeffs(c, dequant, &sr_, cb, info));
+    WP2_CHECK_STATUS(residual_reader_.ReadCoeffs(c, dequant, &sr_, cb, info));
     dec_->PopBitTracesCustomPrefix(kCoeffsStr[c]);
   }
 

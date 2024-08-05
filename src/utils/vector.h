@@ -20,10 +20,11 @@
 #ifndef WP2_UTILS_VECTOR_H_
 #define WP2_UTILS_VECTOR_H_
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
-#include <memory>
 #include <type_traits>
 #include <utility>
 

@@ -20,13 +20,16 @@
 #ifndef WP2_COMMON_GLOBAL_PARAMS_H_
 #define WP2_COMMON_GLOBAL_PARAMS_H_
 
-#include "src/wp2/base.h"
-#include "src/wp2/format_constants.h"
+#include <cstdint>
+
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/predictor.h"
 #include "src/common/lossy/rnd_mtx.h"
 #include "src/common/lossy/segment.h"
-#include "src/utils/vector.h"
 #include "src/utils/csp.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -47,8 +50,8 @@ static constexpr uint32_t kMaxYuvFilterMagnitude = 15;
 
 class GlobalParams {
  public:
-  WP2Status Write(bool image_has_alpha, ANSEnc* const enc) const;
-  WP2Status Read(bool image_has_alpha, ANSDec* const dec);
+  WP2Status Write(bool image_has_alpha, ANSEnc* enc) const;
+  WP2Status Read(bool image_has_alpha, ANSDec* dec);
 
   void Reset();
 
@@ -92,9 +95,8 @@ class GlobalParams {
   uint32_t yuv_filter_magnitude_ = 0;  // In [0:kMaxYuvFilterMagnitude].
   bool enable_alpha_filter_ = false;   // For lossy alpha only.
 
- public:   // lossless part
-  // TODO(skal)
-
+ public:  // lossless part
+          // TODO(skal)
  public:
   const Predictors& GetPredictors(Channel channel) const {
     if (channel == kAChannel) return a_preds_;

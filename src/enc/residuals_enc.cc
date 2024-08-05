@@ -410,7 +410,7 @@ void ResidualWriter::FindBestEncodingMethod(
 void ResidualWriter::RecordCoeffs(const CodedBlock& cb, Channel channel,
                                   SymbolRecorder* const recorder) const {
   // Using a counter because it updates adaptive bits, which we do want.
-  // TODO(maryla): be more consistant with using counter vs noop.
+  // TODO(maryla): be more consistent with using counter vs noop.
   ANSEncCounter enc;
   WriteCoeffs(cb, channel, &enc, recorder);
 }

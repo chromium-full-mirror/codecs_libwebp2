@@ -19,15 +19,28 @@
 #include "src/enc/lossless/histogram_enc.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <numeric>
+#include <utility>
+
+#include "src/common/symbols.h"
+#include "src/dsp/lossless/dspl.h"
+#include "src/dsp/math.h"
+#include "src/enc/lossless/backward_references_enc.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/ans_utils.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 #ifdef HAVE_CONFIG_H
 #include "src/webp/config.h"
 #endif
 
-#include "src/common/color_precision.h"
 #include "src/common/progress_watcher.h"
 #include "src/dsp/lossless/encl_dsp.h"
 #include "src/enc/lossless/losslessi_enc.h"
@@ -629,7 +642,7 @@ static WP2Status HistogramCombineGreedy(HistogramSet* const image_histo,
   const uint32_t image_histo_size = image_histo->histograms_.size();
 
   // The number of loops is not trivial to compute so the ProgressHook is called
-  // for interruptability but there is no advancement.
+  // for interruptibility but there is no advancement.
   WP2::ProgressScale loop_progress(progress, 0.);
 
   // Priority queue of histogram pairs.

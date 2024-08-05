@@ -20,11 +20,18 @@
 #include "src/utils/plane.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <numeric>
 
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/utils/csp.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -222,7 +229,7 @@ WP2Status YUVPlane::Resize(uint32_t width, uint32_t height, uint32_t pad,
   WP2_CHECK_OK(pad > 0, WP2_STATUS_INVALID_PARAMETER);
   const uint32_t w = Pad(width, pad);
   const uint32_t h = Pad(height, pad);
-  const uint32_t uv_w = as_yuv420 ? Pad((width  + 1u) >> 1, pad) : w;
+  const uint32_t uv_w = as_yuv420 ? Pad((width + 1u) >> 1, pad) : w;
   const uint32_t uv_h = as_yuv420 ? Pad((height + 1u) >> 1, pad) : h;
   WP2_CHECK_STATUS(GetChannel(kYChannel).Resize(w, h));
   WP2_CHECK_STATUS(GetChannel(kUChannel).Resize(uv_w, uv_h));
@@ -320,9 +327,9 @@ static WP2Status ResizeIfAllowed(uint32_t width, uint32_t height, uint32_t pad,
 WP2Status YUVPlane::Import(const ArgbBuffer& rgb, bool import_alpha,
                            const CSPTransform& csp_transform,
                            bool resize_if_needed, size_t pad) {
-  WP2_CHECK_OK(rgb.format() == WP2_Argb_32 ||
-               rgb.format() == WP2_ARGB_32 ||
-               rgb.format() == WP2_Argb_38, WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(rgb.format() == WP2_Argb_32 || rgb.format() == WP2_ARGB_32 ||
+                   rgb.format() == WP2_Argb_38,
+               WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_STATUS(ResizeIfAllowed(rgb.width(), rgb.height(), pad, import_alpha,
                                    resize_if_needed, this));
   const bool premultiply = !WP2IsPremultiplied(rgb.format()) && import_alpha;
@@ -360,8 +367,8 @@ WP2Status YUVPlane::Import(const ArgbBuffer& rgb, bool import_alpha,
       for (size_t x = 0; x < rgb.width(); ++x, rgb_row += 4) {
         // Do not discard alpha by accident.
         if (rgb_row[0] != kAlphaMax) assert(import_alpha);
-        csp_transform.Rgb10ToYuv(rgb_row[1], rgb_row[2], rgb_row[3],
-                                 &y_row[x], &u_row[x], &v_row[x]);
+        csp_transform.Rgb10ToYuv(rgb_row[1], rgb_row[2], rgb_row[3], &y_row[x],
+                                 &u_row[x], &v_row[x]);
         if (a_row != nullptr) a_row[x] = rgb_row[0];
       }
     }
@@ -428,9 +435,9 @@ WP2Status YUVPlane::Import(const YUVPlane& ccsp, const CSPMtx& ccsp_to_rgb,
 WP2Status YUVPlane::Export(const CSPTransform& transform, bool resize_if_needed,
                            ArgbBuffer* const dst,
                            const SamplingTaps* const upsample_if_needed) const {
-  WP2_CHECK_OK(dst->format() == WP2_Argb_32 ||
-               dst->format() == WP2_ARGB_32 ||
-               dst->format() == WP2_Argb_38, WP2_STATUS_INVALID_PARAMETER);
+  WP2_CHECK_OK(dst->format() == WP2_Argb_32 || dst->format() == WP2_ARGB_32 ||
+                   dst->format() == WP2_Argb_38,
+               WP2_STATUS_INVALID_PARAMETER);
   if (IsDownsampled()) {
     WP2_CHECK_OK(upsample_if_needed != nullptr, WP2_STATUS_INVALID_COLORSPACE);
     YUVPlane upsampled;
@@ -443,15 +450,15 @@ WP2Status YUVPlane::Export(const CSPTransform& transform, bool resize_if_needed,
     WP2_CHECK_OK(resize_if_needed, WP2_STATUS_BAD_DIMENSION);
     WP2_CHECK_STATUS(dst->Resize(GetWidth(), GetHeight()));
   }
-  const int16_t* const rgb_average =
-      (WP2Formatbpc(dst->format()) == 8) ? transform.GetRgb8Average()
+  const int16_t* const rgb_average = (WP2Formatbpc(dst->format()) == 8)
+                                         ? transform.GetRgb8Average()
                                          : transform.GetRgb10Average();
   WP2CSPConverterInit();
   if (HasAlpha()) {
     WP2AyuvToArgbFunc cvrt_func =
-        (dst->format() == WP2_Argb_32) ? WP2AyuvToArgb32 :
-        (dst->format() == WP2_ARGB_32) ? WP2AyuvToARGB32 :
-                                         WP2AyuvToArgb38;
+        (dst->format() == WP2_Argb_32)   ? WP2AyuvToArgb32
+        : (dst->format() == WP2_ARGB_32) ? WP2AyuvToARGB32
+                                         : WP2AyuvToArgb38;
     for (size_t y = 0; y < dst->height(); ++y) {
       cvrt_func(Y.Row(y), U.Row(y), V.Row(y), A.Row(y), rgb_average,
                 transform.GetYuvToRgbMatrix(), dst->GetRow(y), dst->width());
@@ -640,4 +647,4 @@ void swap(YUVPlane& a, YUVPlane& b) {
 
 //------------------------------------------------------------------------------
 
-}    // namespace WP2
+}  // namespace WP2

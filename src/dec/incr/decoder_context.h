@@ -21,8 +21,11 @@
 #define WP2_DEC_INCR_DECODER_CONTEXT_H_
 
 #include "src/dec/incr/decoder_state.h"
-#include "src/dec/wp2_dec_i.h"
+#include "src/dec/tile_dec.h"
+#include "src/utils/context_switch.h"
 #include "src/utils/data_source_context.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
 
 #if defined(WP2_USE_CONTEXT_SWITCH) && (WP2_USE_CONTEXT_SWITCH > 0)
 
@@ -32,8 +35,7 @@ namespace WP2 {
 class ContextTileDecoder : public PartialTileDecoder {
  public:
   WP2Status Init(const BitstreamFeatures& features, const DecoderConfig& config,
-                 TilesLayout* const tiles_layout,
-                 Tile* const partial_tile) override;
+                 TilesLayout* tiles_layout, Tile* partial_tile) override;
   WP2Status Start() override;
   WP2Status Continue() override;
   void Clear() override;

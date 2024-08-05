@@ -20,15 +20,14 @@
 #ifndef WP2_ENC_PARTITIONER_SPLIT_H_
 #define WP2_ENC_PARTITIONER_SPLIT_H_
 
-#include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/predictor.h"
-#include "src/common/symbols.h"
+#include "src/common/progress_watcher.h"
+#include "src/enc/partitioning/partition_score_func.h"
 #include "src/enc/partitioning/partitioner.h"
-#include "src/enc/symbols_enc.h"
-#include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {
@@ -41,10 +40,10 @@ class SplitPartitioner : public Partitioner {
  public:
   WP2Status Init(const EncoderConfig& config, const YUVPlane& yuv,
                  const Rectangle& tile_rect,
-                 PartitionScoreFunc* const score_func) override;
+                 PartitionScoreFunc* score_func) override;
   WP2Status GetBestPartition(const ProgressRange& progress,
-                             VectorNoCtor<Block>* const blocks,
-                             Vector_u32* const splits) override;
+                             VectorNoCtor<Block>* blocks,
+                             Vector_u32* splits) override;
 };
 
 //------------------------------------------------------------------------------

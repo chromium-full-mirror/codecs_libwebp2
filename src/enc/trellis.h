@@ -20,10 +20,13 @@
 #ifndef WP2_ENC_TRELLIS_H_
 #define WP2_ENC_TRELLIS_H_
 
+#include <cstdint>
+
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/quant_mtx.h"
 #include "src/common/lossy/transforms.h"
 #include "src/enc/symbols_enc.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 
@@ -37,10 +40,9 @@ namespace WP2 {
 // updated.
 void Av1CoeffOptimization(Channel channel, TransformPair tx_type, TrfSize tdim,
                           const QuantMtx& quant, bool first_is_dc,
-                          const int32_t* const residuals, int16_t* const coeffs,
-                          uint32_t* const num_coeffs,
-                          int16_t* const dequantized_coeffs,
-                          SymbolCounter* const counter, float* const rate_cost);
+                          const int32_t* residuals, int16_t* coeffs,
+                          uint32_t* num_coeffs, int16_t* dequantized_coeffs,
+                          SymbolCounter* counter, float* rate_cost);
 
 // Removes small coeffs surrounded by many zeros. This is a faster/less accurate
 // alternative to full trellis optimization. The number of zeroes required to
@@ -49,8 +51,8 @@ void DropoutCoeffs(TrfSize tdim, int quality_factor, int16_t* coeffs,
                    uint32_t* num_coeffs, int16_t* dequantized_coeffs);
 // Same as above except that the number of leading/trailing zeros required to
 // drop a coeff are explicitly passed in.
-void DropoutCoeffs(TrfSize tdim, const uint32_t dropout_num_before,
-                   const uint32_t dropout_num_after, int16_t coeffs[],
+void DropoutCoeffs(TrfSize tdim, uint32_t dropout_num_before,
+                   uint32_t dropout_num_after, int16_t coeffs[],
                    uint32_t* num_coeffs, int16_t dequantized_coeffs[]);
 
 }  // namespace WP2

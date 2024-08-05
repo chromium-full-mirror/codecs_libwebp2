@@ -13,8 +13,16 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 //
-// simple BMP Image reader. Only guaranted to read BMP files that *we* wrote!
+// simple BMP Image reader. Only guaranteed to read BMP files that *we* wrote!
 
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+
+#include "imageio/imageio_util.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 #ifdef HAVE_CONFIG_H
 #include "src/wp2/config.h"
 #endif
