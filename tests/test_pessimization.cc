@@ -16,25 +16,33 @@
 // and mutated bitstreams that decompress fine compared to those that are
 // invalid.
 
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
 #include <cstdio>
-#include <limits>
 #include <string>
 #include <tuple>
+#include <vector>
 
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
 #include "src/common/constants.h"
+#include "src/common/global_params.h"
 #include "src/common/header_enc_dec.h"
 #include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/dsp/dsp.h"
 #include "src/enc/analysis.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans.h"
 #include "src/utils/data_source.h"
 #include "src/utils/random.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 // Define WP2_ERROR_TRACE to gather stats about where the random bitstreams fail
 // to decode. Do not use multithreading, even only at tile or test level.

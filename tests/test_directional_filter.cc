@@ -14,14 +14,24 @@
 
 // Test the directional filter.
 
+#include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <tuple>
 
 #include "include/helpers.h"
 #include "include/helpers_filter.h"
+#include "src/common/global_params.h"
+#include "src/common/lossy/segment.h"
+#include "src/dec/filters/block_map_filter.h"
 #include "src/dec/filters/directional_filter.h"
-#include "src/dsp/math.h"
+#include "src/dsp/dsp.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/decode.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {

@@ -18,14 +18,15 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <limits>
 #include <string>
+#include <tuple>
 
 #include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
-#include "imageio/imageio_util.h"
 #include "include/helpers.h"
 #include "src/utils/plane.h"
 #include "src/utils/random.h"
@@ -33,7 +34,7 @@
 #include "src/wp2/base.h"
 
 // must be last to avoid CPUInfo conflict
-#include "examples/example_utils.h"
+#include "src/utils/csp.h"
 
 namespace WP2 {
 namespace {

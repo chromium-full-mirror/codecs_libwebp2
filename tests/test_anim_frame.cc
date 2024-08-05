@@ -14,21 +14,26 @@
 
 // Tests for FrameEncoder.
 
+#include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <tuple>
 #include <vector>
 
 #include "examples/example_utils.h"
-#include "imageio/image_dec.h"
 #include "imageio/image_enc.h"
 #include "include/helpers.h"
 #include "src/common/color_precision.h"
+#include "src/common/constants.h"
 #include "src/common/progress_watcher.h"
 #include "src/enc/anim/anim_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/orientation.h"
+#include "src/utils/random.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"

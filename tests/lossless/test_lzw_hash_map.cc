@@ -16,9 +16,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <vector>
 
+#include "src/enc/lossless/palette.h"
 #include "src/utils/hash_map.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "tests/include/helpers.h"
 
 namespace WP2 {

@@ -14,11 +14,13 @@
 
 // tests for scoring functions
 
-#include "examples/example_utils.h"
+#include <cstdint>
+
 #include "include/helpers.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/random.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

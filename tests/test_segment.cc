@@ -18,11 +18,18 @@
 
 #include "include/helpers.h"
 #include "src/common/constants.h"
+#include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
 #include "src/enc/analysis.h"
-#include "src/enc/wp2_enc_i.h"
+#include "src/enc/block_enc.h"
 #include "src/utils/plane.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {

@@ -18,6 +18,7 @@
 #include <cstdio>
 
 #include "imageio/image_dec.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 

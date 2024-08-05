@@ -14,9 +14,19 @@
 
 // SplitIterator test.
 
+#include <cstdint>
+#include <memory>
+#include <tuple>
+#include <vector>
+
 #include "include/helpers.h"
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
+#include "src/dsp/math.h"
+#include "src/utils/front_mgr.h"
+#include "src/utils/random.h"
 #include "src/utils/split_iterator.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

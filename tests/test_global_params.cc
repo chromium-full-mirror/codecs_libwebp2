@@ -14,8 +14,12 @@
 
 #include "include/helpers.h"
 #include "src/common/global_params.h"
-#include "src/enc/wp2_enc_i.h"
+#include "src/common/lossy/predictor.h"
+#include "src/common/lossy/segment.h"
 #include "src/utils/data_source.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 using testing::AssertionResult;
 

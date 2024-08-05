@@ -14,11 +14,14 @@
 
 // Simple decoding test.
 
+#include <cstdint>
 #include <string>
 #include <tuple>
 
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
+#include "src/utils/random.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 

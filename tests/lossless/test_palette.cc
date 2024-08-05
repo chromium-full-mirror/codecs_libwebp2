@@ -15,15 +15,26 @@
 // Test Palette class.
 
 #include <algorithm>
+#include <cstdint>
 #include <tuple>
 
 #include "src/common/color_precision.h"
+#include "src/common/global_params.h"
+#include "src/common/progress_watcher.h"
 #include "src/dec/lossless/losslessi_dec.h"
+#include "src/dec/tile_dec.h"
 #include "src/dsp/lossless/decl_dsp.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/lossless/palette.h"
+#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/data_source.h"
+#include "src/utils/random.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 #include "tests/include/helpers.h"
 
 namespace WP2 {

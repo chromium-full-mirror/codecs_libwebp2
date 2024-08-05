@@ -14,10 +14,15 @@
 
 // Test example utils.
 
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
 #include <limits>
+#include <string>
 
 #include "imageio/imageio_util.h"
 #include "include/helpers.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace {

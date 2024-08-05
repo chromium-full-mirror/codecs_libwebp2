@@ -14,13 +14,18 @@
 
 // Test different headers (~encoder configs)
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+
 #include "include/helpers.h"
-#include "src/common/constants.h"
 #include "src/common/header_enc_dec.h"
 #include "src/dec/wp2_dec_i.h"
 #include "src/dsp/math.h"
 #include "src/enc/anim/anim_enc.h"
 #include "src/utils/data_source.h"
+#include "src/utils/random.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"

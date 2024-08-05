@@ -13,7 +13,10 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 
+#include <algorithm>
 #include <array>
+#include <cstdint>
+#include <numeric>
 #include <string>
 
 #include "include/helpers.h"

@@ -14,14 +14,32 @@
 
 // Test ResidualWriter/ResidualReader.
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <memory>
+#include <tuple>
 
 #include "include/helpers.h"
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/transforms.h"
 #include "src/dec/residuals_dec_aom.h"
+#include "src/dec/symbols_dec.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
+#include "src/enc/block_enc.h"
 #include "src/enc/residuals_enc_aom.h"
-#include "src/enc/wp2_enc_i.h"
+#include "src/enc/symbols_enc.h"
+#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/ans_utils.h"
 #include "src/utils/data_source.h"
+#include "src/utils/front_mgr.h"
+#include "src/utils/random.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

@@ -13,7 +13,7 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 
-#include "./helpers.h"
+#include "tests/include/helpers.h"
 
 #include <algorithm>
 #include <cassert>
@@ -49,6 +49,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace testutil {
@@ -62,8 +63,7 @@ void VerifyEqual(const Argb32b& x, const Argb32b& y) {
   EXPECT_EQ(x.b, y.b);
 }
 
-Argb32b GetPixel32b(const ArgbBuffer& buffer, const uint32_t x,
-                    const uint32_t y) {
+Argb32b GetPixel32b(const ArgbBuffer& buffer, uint32_t x, uint32_t y) {
   const uint8_t* const pixel = buffer.GetRow8(y) + x * 4;
   return {pixel[0], pixel[1], pixel[2], pixel[3]};
 }
@@ -102,7 +102,7 @@ void GetTestDataPaths(const std::vector<const char*>& file_names,
 }
 
 std::string GetTempDataPath(const std::string& file_path) {
-  return "/tmp/" + GetFileName(file_path);
+  return ::testing::TempDir() + "/" + GetFileName(file_path);
 }
 
 //------------------------------------------------------------------------------

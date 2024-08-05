@@ -29,9 +29,9 @@
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
+#include "gmock/gmock.h"
 #include "fuzzing/fuzztest.h"
 #include "tests/fuzz/fuzz_utils.h"
-#include "tests/include/helpers.h"
 #include "tests/include/helpers_incr.h"
 
 //------------------------------------------------------------------------------

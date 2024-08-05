@@ -16,6 +16,7 @@
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include "extras/ccsp_imageio.h"
 #include "imageio/file_format.h"

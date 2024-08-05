@@ -15,14 +15,27 @@
 // Test the directional filter.
 
 #include <array>
+#include <cstdint>
 #include <tuple>
+#include <vector>
 
 #include "include/helpers.h"
 #include "include/helpers_filter.h"
+#include "src/common/filters/rstr_flt_params.h"
+#include "src/common/lossy/segment.h"
+#include "src/dec/filters/block_map_filter.h"
 #include "src/dec/filters/restoration_filter.h"
-#include "src/dsp/math.h"
+#include "src/dsp/dsp.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 using testing::ElementsAre;
 

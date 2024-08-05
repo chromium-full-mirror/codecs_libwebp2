@@ -15,6 +15,7 @@
 // Maximum compression effort test.
 
 #include <string>
+#include <tuple>
 
 #include "include/helpers.h"
 #include "src/wp2/encode.h"

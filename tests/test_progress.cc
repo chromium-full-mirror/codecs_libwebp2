@@ -15,12 +15,16 @@
 // Decoding progress hook test.
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string>
 #include <tuple>
 
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
 #include "src/common/constants.h"
 #include "src/common/progress_watcher.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"

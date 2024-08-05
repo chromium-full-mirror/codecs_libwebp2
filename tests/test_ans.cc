@@ -17,22 +17,27 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <random>
+#include <limits>
+#include <string>
+#include <tuple>
 #include <vector>
 
 #include "examples/example_utils.h"
 #include "include/helpers.h"
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
 #include "src/utils/data_source.h"
 #include "src/utils/quantizer.h"
 #include "src/utils/random.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace {

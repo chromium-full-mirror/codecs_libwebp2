@@ -17,6 +17,10 @@
 // premultiplied before encoding and the 'premul <-> unpremul <-> premul'
 // operation is stable.
 
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <ostream>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -24,6 +28,10 @@
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
 #include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
+#include "src/utils/random.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"

@@ -14,14 +14,19 @@
 
 // Tests for math functions and random generators
 
-#include <iostream>
-#include <limits>
-#include <random>
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <numeric>
 #include <vector>
 
 #include "include/helpers.h"
 #include "src/dsp/math.h"
 #include "src/utils/random.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

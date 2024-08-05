@@ -15,7 +15,11 @@
 //
 // Test custom vector API
 
+#include <cstddef>
+#include <cstdint>
+
 #include "include/helpers.h"
+#include "src/utils/utils.h"
 #include "src/utils/vector.h"
 
 namespace WP2 {

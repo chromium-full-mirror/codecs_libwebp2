@@ -15,11 +15,21 @@
 
 // Test the alpha filter.
 
+#include <cstdint>
+
 #include "examples/example_utils.h"
 #include "include/helpers.h"
 #include "include/helpers_filter.h"
+#include "src/common/global_params.h"
 #include "src/common/integral.h"
+#include "src/common/lossy/block_size.h"
 #include "src/dec/filters/alpha_filter.h"
+#include "src/dec/filters/block_map_filter.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
+#include "src/wp2/decode.h"
+#include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

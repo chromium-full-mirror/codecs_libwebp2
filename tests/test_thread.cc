@@ -21,6 +21,7 @@
 #include "src/dsp/dsp.h"
 #include "src/utils/thread_utils.h"
 #include "src/utils/utils.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace {

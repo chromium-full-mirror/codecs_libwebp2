@@ -23,6 +23,7 @@
 #include <chrono>  // NOLINT
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -36,9 +37,8 @@
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
-
-#include "gmock/gmock.h"  // IWYU pragma: export
-#include "gtest/gtest.h"  // IWYU pragma: export
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 #if !defined(__has_feature)
 #define __has_feature(x) 0
@@ -53,15 +53,6 @@
 #define ASSERT_WP2_OK(expression) ASSERT_EQ(expression, WP2_STATUS_OK)
 #define EXPECT_WP2_OK(expression) EXPECT_EQ(expression, WP2_STATUS_OK)
 
-// Expects that the first elements of 'array' match the given list.
-#define EXPECT_THAT_FIRST_ELEMENTS_ARE(array, ...)                   \
-  do {                                                               \
-    int16_t truncated[]{__VA_ARGS__};                                \
-    const uint32_t num = (sizeof(truncated) / sizeof(truncated[0])); \
-    std::copy(array, array + num, truncated);                        \
-    EXPECT_THAT(truncated, testing::ElementsAre(__VA_ARGS__));       \
-  } while (0)
-
 // Just for testing. Warning, this function is NOT thread safe, and
 // should be used in a single-thread testing environment!
 extern void WP2DspReset();
@@ -69,12 +60,18 @@ extern void WP2DspReset();
 namespace WP2 {
 namespace testutil {
 
+// Expects that the first elements of 'array' match the given ordered 'list'.
+template <typename TArray, typename TList>
+void ExpectBeginsWith(const TArray* array, std::initializer_list<TList> list) {
+  EXPECT_THAT(std::vector<TArray>(array, array + list.size()),
+              testing::ElementsAreArray(list));
+}
+
 //------------------------------------------------------------------------------
 
 void VerifyEqual(const Argb32b& x, const Argb32b& y);
 
-Argb32b GetPixel32b(const ArgbBuffer& buffer, const uint32_t x,
-                    const uint32_t y);
+Argb32b GetPixel32b(const ArgbBuffer& buffer, uint32_t x, uint32_t y);
 
 //------------------------------------------------------------------------------
 // Environment setup
@@ -116,29 +113,27 @@ static bool GetCPUInfoOnlyC(WP2CPUFeature feature) { return false; }
 
 // To be used with 'testing::ValuesIn(kWP2CPUInfos)'
 // Warning! No multi-thread safe! don't use in *sharded* tests!
-const WP2CPUInfo kWP2CpuInfos[] = {
-  GetCPUInfoOnlyC, GetCPUInfoForceSlowSSSE3,
-  GetCPUInfoNoSSE, GetCPUInfoNoAVX,
-  GetCPUInfo
-};
+const WP2CPUInfo kWP2CpuInfos[] = {GetCPUInfoOnlyC, GetCPUInfoForceSlowSSSE3,
+                                   GetCPUInfoNoSSE, GetCPUInfoNoAVX,
+                                   GetCPUInfo};
 
 // Same, but as struct rather than typedef
 static struct WP2CPUInfoStruct {
   const WP2CPUInfo cpu_info;
   const char* const name;
 } const kWP2CpuInfoStructs[] = {
-  { GetCPUInfoOnlyC, "OnlyC" },
-  { GetCPUInfoForceSlowSSSE3, "ForceSlowSSSE3" },
-  { GetCPUInfoNoSSE, "NoSSE" },
-  { GetCPUInfoNoAVX, "NoAVX" },
-  { GetCPUInfo, "Regular GetCPUInfo" },
+    {GetCPUInfoOnlyC, "OnlyC"},
+    {GetCPUInfoForceSlowSSSE3, "ForceSlowSSSE3"},
+    {GetCPUInfoNoSSE, "NoSSE"},
+    {GetCPUInfoNoAVX, "NoAVX"},
+    {GetCPUInfo, "Regular GetCPUInfo"},
 };
 
 //------------------------------------------------------------------------------
 
 std::string GetTestDataPath(const std::string& file_name);
 void GetTestDataPaths(const std::vector<const char*>& file_names,
-                      std::vector<std::string>* const file_paths);
+                      std::vector<std::string>* file_paths);
 
 std::string GetTempDataPath(const std::string& file_path);
 
@@ -149,31 +144,30 @@ bool HasSameData(const Data& a, const Data& b);
 //------------------------------------------------------------------------------
 
 WP2Status ReadImages(const std::vector<std::string>& file_paths,
-                     std::vector<ArgbBuffer>* const frames);
+                     std::vector<ArgbBuffer>* frames);
 
-WP2Status ReadAnimation(const uint8_t* const data, size_t size,
-                        std::vector<ArgbBuffer>* const frames,
-                        std::vector<uint32_t>* const frame_durations = nullptr,
-                        uint32_t* const loop_count = nullptr);
+WP2Status ReadAnimation(const uint8_t* data, size_t size,
+                        std::vector<ArgbBuffer>* frames,
+                        std::vector<uint32_t>* frame_durations = nullptr,
+                        uint32_t* loop_count = nullptr);
 
 WP2Status ReadAnimation(const std::string& file_path,
-                        std::vector<ArgbBuffer>* const frames,
-                        std::vector<uint32_t>* const frame_durations = nullptr,
-                        uint32_t* const loop_count = nullptr);
+                        std::vector<ArgbBuffer>* frames,
+                        std::vector<uint32_t>* frame_durations = nullptr,
+                        uint32_t* loop_count = nullptr);
 
 //------------------------------------------------------------------------------
 
-WP2Status CompressImage(
-    const std::string& file_name, Writer* const encoded_data,
-    ArgbBuffer* original_image = nullptr,
-    float quality = EncoderConfig::kDefault.quality,
-    int effort = EncoderConfig::kDefault.effort,
-    int thread_level = EncoderConfig::kDefault.thread_level,
-    uint32_t num_downsamplings = 0);
+WP2Status CompressImage(const std::string& file_name, Writer* encoded_data,
+                        ArgbBuffer* original_image = nullptr,
+                        float quality = EncoderConfig::kDefault.quality,
+                        int effort = EncoderConfig::kDefault.effort,
+                        int thread_level = EncoderConfig::kDefault.thread_level,
+                        uint32_t num_downsamplings = 0);
 
 WP2Status CompressAnimation(
     const std::vector<const char*>& frames_file_names,
-    const std::vector<uint32_t>& durations_ms, Writer* const encoded_data,
+    const std::vector<uint32_t>& durations_ms, Writer* encoded_data,
     std::vector<ArgbBuffer>* frames = nullptr,
     float quality = EncoderConfig::kDefault.quality,
     int effort = EncoderConfig::kDefault.effort,
@@ -258,13 +252,13 @@ void DumpData(const void* data, size_t data_size, const std::string& file_path);
 
 // Creates a random block partition of a tile of size w x h.
 void CreatePartition(uint32_t w, uint32_t h, bool snapped,
-                     UniformIntDistribution* const gen,
-                     VectorNoCtor<Block>* const blocks);
+                     UniformIntDistribution* gen, VectorNoCtor<Block>* blocks);
 
 //------------------------------------------------------------------------------
 // struct for speeding up pseudo-random filling of buffers
 
-template<size_t N, typename T> struct PrecalculatedRandom {
+template <size_t N, typename T>
+struct PrecalculatedRandom {
  public:
   PrecalculatedRandom(uint32_t min, uint32_t max) {
     for (auto& b : buffer) b = min + rng.GetSigned(max - min);
@@ -283,8 +277,8 @@ template<size_t N, typename T> struct PrecalculatedRandom {
   void Fill(T* dst, uint32_t w) { Fill(dst, w, 1, /*step=*/0); }
 
   // this version is not using the precalc'd buffer[], so is slower
-  void FreshFill(uint32_t min, uint32_t max,
-                 T* dst, uint32_t w, uint32_t h, uint32_t step) {
+  void FreshFill(uint32_t min, uint32_t max, T* dst, uint32_t w, uint32_t h,
+                 uint32_t step) {
     for (uint32_t y = 0; y < h; ++y) {
       for (uint32_t x = 0; x < w; ++x) {
         dst[x] = min + rng.GetUnsigned(max - min);

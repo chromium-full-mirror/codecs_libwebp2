@@ -15,13 +15,16 @@
 
 // Incremental animation decoding test.
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <tuple>
 #include <vector>
 
-#include "imageio/image_dec.h"
 #include "include/helpers.h"
 #include "include/helpers_incr.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"

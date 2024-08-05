@@ -14,6 +14,8 @@
 //
 // Tests segment cache implementation, used during lossless compression.
 
+#include <cstdint>
+
 #include "src/utils/hash_map.h"
 #include "tests/include/helpers.h"
 

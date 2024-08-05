@@ -14,16 +14,7 @@
 //
 // Tests LZW-like algorithm implementation, both encoding and decoding.
 
-#include <algorithm>
-#include <string>
-#include <vector>
 
-#include "imageio/image_dec.h"
-#include "src/dec/lossless/losslessi_dec.h"
-#include "src/enc/lossless/losslessi_enc.h"
-#include "src/enc/lossless/palette.h"
-#include "src/utils/ans_enc.h"
-#include "tests/include/helpers.h"
 
 #if 0
 

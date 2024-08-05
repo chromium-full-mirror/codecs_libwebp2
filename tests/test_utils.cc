@@ -14,7 +14,11 @@
 
 // Tests functions in utils.h
 
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
 #include <initializer_list>
+#include <utility>
 
 #include "include/helpers.h"
 #include "src/utils/utils.h"

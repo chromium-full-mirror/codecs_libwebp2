@@ -15,13 +15,21 @@
 //
 // Measures performance of trellis related functions.
 
+#include <algorithm>
+#include <cstdint>
+
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/quant_mtx.h"
 #include "src/common/lossy/residuals.h"
 #include "src/common/lossy/transforms.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/enc/block_enc.h"
 #include "src/enc/symbols_enc.h"
 #include "src/enc/trellis.h"
-#include "tests/bench/helpers_bm.h"
+#include "src/utils/random.h"
+#include "src/wp2/format_constants.h"
+#include "benchmark/benchmark.h"
 #include "tests/include/helpers.h"
 
 namespace WP2 {

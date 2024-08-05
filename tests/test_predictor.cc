@@ -16,18 +16,29 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <vector>
 
 #include "examples/example_utils.h"
 #include "include/helpers.h"
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/predictor.h"
+#include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/enc/block_enc.h"
+#include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/random.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {

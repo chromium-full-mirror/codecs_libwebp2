@@ -16,12 +16,15 @@
 // conversion Argb <-> YCoCg is stable at some point.
 // Warning: These tests can be easily optimized out. Compile with Debug and -O0
 
-#include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 #include "include/helpers.h"
 #include "src/common/color_precision.h"
 #include "src/dsp/lossless/decl_dsp.h"
 #include "src/dsp/lossless/encl_dsp.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace {

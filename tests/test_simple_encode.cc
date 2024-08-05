@@ -16,6 +16,7 @@
 
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {

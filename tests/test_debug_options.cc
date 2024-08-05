@@ -13,8 +13,10 @@
 // limitations under the License.
 
 #include <string>
+#include <tuple>
 
 #include "include/helpers.h"
+#include "src/wp2/debug.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {

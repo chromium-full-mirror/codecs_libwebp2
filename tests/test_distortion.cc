@@ -14,18 +14,30 @@
 
 // Compare YUVPlane and ArgbBuffer distortion computation.
 
-#include <array>
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <ostream>
 #include <string>
 #include <tuple>
+#include <vector>
 
 #include "examples/example_utils.h"
 #include "extras/ccsp_imageio.h"
 #include "extras/extras.h"
+#include "imageio/file_format.h"
 #include "imageio/image_dec.h"
+#include "imageio/imageio_util.h"
 #include "include/helpers.h"
 #include "include/helpers_filter.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

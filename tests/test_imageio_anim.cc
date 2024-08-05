@@ -14,12 +14,18 @@
 
 // Test ImageIo animations.
 
+#include <cstdint>
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include "imageio/anim_image_dec.h"
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
+#include "src/utils/utils.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

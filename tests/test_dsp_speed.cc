@@ -14,14 +14,15 @@
 
 // Test speed of some DSP functions
 
-#include <memory>
+#include <cstdint>
 
-#include "examples/example_utils.h"
 #include "include/helpers.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/lossless/encl_dsp.h"
+#include "src/utils/csp.h"
 #include "src/utils/plane.h"
-#include "src/utils/random.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace {

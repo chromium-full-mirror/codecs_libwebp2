@@ -15,11 +15,11 @@
 
 // Context test.
 
-#include "src/utils/context_switch.h"
-
 #if defined(WP2_USE_CONTEXT_SWITCH) && (WP2_USE_CONTEXT_SWITCH > 0)
 
 #include "include/helpers.h"
+#include "src/utils/context_switch.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {

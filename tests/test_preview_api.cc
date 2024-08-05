@@ -14,17 +14,16 @@
 
 // Test example utils.
 
-#include <cstdio>
+#include <cstdint>
+#include <cstring>
 #include <string>
 #include <tuple>
 
-#include "examples/example_utils.h"
 #include "imageio/image_dec.h"
-#include "imageio/image_enc.h"
 #include "include/helpers.h"
+#include "src/common/progress_watcher.h"
 #include "src/dec/preview/preview_dec.h"
 #include "src/enc/preview/preview_enc.h"
-#include "src/utils/data_source.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"

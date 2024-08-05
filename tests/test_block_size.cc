@@ -14,12 +14,17 @@
 
 // BlockSize tests.
 
+#include <cstdint>
 #include <set>
+#include <string>
+#include <tuple>
 
 #include "examples/example_utils.h"
 #include "include/helpers.h"
 #include "src/common/lossy/block_size.h"
 #include "src/common/lossy/block_size_io.h"
+#include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

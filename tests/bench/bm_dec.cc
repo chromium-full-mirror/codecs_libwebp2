@@ -15,11 +15,12 @@
 //
 // Measures WP2 decoding time.
 
-#include <cstddef>
-
 #include "imageio/image_dec.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "benchmark/benchmark.h"
+#include "gtest/gtest.h"
 #include "tests/bench/helpers_bm.h"
 #include "tests/include/helpers.h"
 

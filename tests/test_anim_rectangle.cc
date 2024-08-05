@@ -14,8 +14,11 @@
 
 // RectangleGroup test.
 
+#include <cstdint>
+
 #include "include/helpers.h"
 #include "src/enc/anim/anim_enc.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace {

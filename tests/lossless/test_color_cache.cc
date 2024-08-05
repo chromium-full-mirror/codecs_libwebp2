@@ -17,9 +17,15 @@
 //
 // Author: Maryla (maryla@google.com)
 
+#include <cstdint>
+#include <limits>
+#include <numeric>
+#include <vector>
+
 #include "src/common/lossless/color_cache.h"
-#include "src/common/symbols.h"
 #include "src/utils/random.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 #include "tests/include/helpers.h"
 
 namespace WP2L {

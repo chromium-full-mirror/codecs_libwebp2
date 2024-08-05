@@ -14,12 +14,35 @@
 
 // Test quantization matrix.
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
 #include <memory>
+#include <numeric>
 
 #include "examples/example_utils.h"
 #include "include/helpers.h"
+#include "src/common/global_params.h"
 #include "src/common/lossy/block_size.h"
+#include "src/common/lossy/quant_mtx.h"
+#include "src/common/lossy/segment.h"
+#include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
+#include "src/enc/block_enc.h"
+#include "src/enc/symbols_enc.h"
 #include "src/enc/wp2_enc_i.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/front_mgr.h"
+#include "src/utils/random.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {

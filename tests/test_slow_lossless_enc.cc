@@ -15,9 +15,11 @@
 // Test a random image with alpha to make sure all lossless configs at maximum
 // effort are dealt with properly.
 
+#include <cstdint>
 #include <tuple>
 
 #include "include/helpers.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 

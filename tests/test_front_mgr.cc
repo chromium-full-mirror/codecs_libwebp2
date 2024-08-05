@@ -19,11 +19,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <set>
+#include <tuple>
 #include <vector>
 
 #include "include/helpers.h"
+#include "src/common/lossy/block_size.h"
 #include "src/utils/front_mgr.h"
+#include "src/utils/random.h"
+#include "src/utils/vector.h"
 #include "src/wp2/format_constants.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -209,7 +215,7 @@ TEST_P(TestFrontMgr, CopyFrom) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    TestFrontMgrInstanciation, TestFrontMgr,
+    TestFrontMgrInstantiation, TestFrontMgr,
     testing::Combine(
         /*seed=*/testing::Values(37, 42),
         /*num_iterations=*/testing::Values(7),

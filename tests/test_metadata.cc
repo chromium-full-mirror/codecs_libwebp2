@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
-#include "src/common/constants.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"

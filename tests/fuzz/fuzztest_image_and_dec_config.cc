@@ -23,6 +23,7 @@
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
+#include "gmock/gmock.h"
 #include "fuzzing/fuzztest.h"
 #include "tests/fuzz/fuzz_utils.h"
 #include "tests/include/helpers.h"

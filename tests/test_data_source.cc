@@ -15,11 +15,15 @@
 
 // DataSource test.
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <numeric>
 
 #include "include/helpers.h"
+#include "src/utils/context_switch.h"
 #include "src/utils/data_source.h"
 #include "src/utils/data_source_context.h"
 #include "src/utils/random.h"

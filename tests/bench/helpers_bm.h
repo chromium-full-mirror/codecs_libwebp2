@@ -20,9 +20,6 @@
 
 #include <cstddef>
 
-#include "benchmark/benchmark.h"
-#include "gtest/gtest.h"
-
 namespace WP2 {
 namespace testutil {
 

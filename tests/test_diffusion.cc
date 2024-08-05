@@ -13,9 +13,15 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 
+#include <cmath>
+#include <cstdint>
+#include <vector>
+
 #include "include/helpers.h"
+#include "src/common/lossy/block_size.h"
 #include "src/common/lossy/context.h"
-#include "src/enc/wp2_enc_i.h"
+#include "src/utils/front_mgr.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

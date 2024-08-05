@@ -17,6 +17,8 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -27,6 +29,7 @@
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

@@ -14,15 +14,31 @@
 
 // Test SyntaxWriter class.
 
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <numeric>
+
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
 #include "src/common/global_params.h"
+#include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/enc/analysis.h"
+#include "src/enc/block_enc.h"
 #include "src/enc/wp2_enc_i.h"
-#include "src/utils/ans.h"
+#include "src/utils/ans_enc.h"
+#include "src/utils/csp.h"
+#include "src/utils/front_mgr.h"
+#include "src/utils/plane.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

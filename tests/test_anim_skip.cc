@@ -15,14 +15,10 @@
 
 // Exercise frame skipping API.
 
-#include <cstring>
-#include <string>
-#include <tuple>
-#include <vector>
+#include <cstdint>
 
 #include "include/helpers.h"
 #include "include/helpers_filter.h"
-#include "src/utils/random.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"

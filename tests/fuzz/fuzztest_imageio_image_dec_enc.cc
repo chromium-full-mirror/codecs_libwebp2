@@ -24,7 +24,7 @@
 #include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
 #include "src/wp2/base.h"
-#include "testing/base/public/gunit.h"
+#include "gtest/gtest.h"
 #include "fuzzing/fuzztest.h"
 #include "tests/fuzz/fuzz_utils.h"
 #include "tests/fuzz/fuzz_utils_temp_file.h"

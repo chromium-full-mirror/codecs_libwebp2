@@ -16,12 +16,26 @@
 #include "tests/include/helpers_filter.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
 #include <cstdlib>
 
-#include "./helpers.h"
+#include "src/common/global_params.h"
+#include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/segment.h"
+#include "src/common/symbols.h"
+#include "src/dec/filters/block_map_filter.h"
 #include "src/dsp/math.h"
-#include "src/utils/front_mgr.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/random.h"
+#include "src/utils/utils.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
+#include "tests/include/helpers.h"
 
 namespace WP2 {
 namespace testutil {
@@ -88,7 +102,6 @@ bool AreEqual(const ArgbBuffer& a, const ArgbBuffer& b) {
   if (a.GetDistortion(b, PSNR, psnr) != WP2_STATUS_OK) assert(false);
   return (psnr[4] == 99.f);
 }
-
 
 //------------------------------------------------------------------------------
 

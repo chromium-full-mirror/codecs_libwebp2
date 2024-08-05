@@ -15,12 +15,18 @@
 
 // Test functions in extras/extras.h and src/utils/random.h
 
-#include <random>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <numeric>
+#include <string>
+#include <vector>
 
 #include "extras/extras.h"
 #include "include/helpers.h"
 #include "src/common/preview/preview.h"  // TODO(skal): make better include
 #include "src/utils/random.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace {

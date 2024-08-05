@@ -15,9 +15,9 @@
 // Integration tests for the 'speed' encoding parameter.
 
 #include <string>
+#include <tuple>
 
 #include "include/helpers.h"
-#include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 
 namespace WP2 {

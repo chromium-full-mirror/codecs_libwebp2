@@ -14,11 +14,14 @@
 
 // API tests.
 
+#include <cstdint>
 #include <iostream>
 
 #include "include/helpers.h"
 #include "src/wp2/base.h"
+#include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

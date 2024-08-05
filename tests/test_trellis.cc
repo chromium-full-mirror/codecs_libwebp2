@@ -17,12 +17,23 @@
 //
 // Author: Maryla (maryla@google.com)
 
-#include <tuple>
+#include <algorithm>
+#include <cstdint>
+#include <cstdlib>
 
 #include "include/helpers.h"
+#include "src/common/lossy/block_size.h"
+#include "src/common/lossy/quant_mtx.h"
 #include "src/common/lossy/residuals.h"
+#include "src/common/lossy/transforms.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
 #include "src/enc/block_enc.h"
 #include "src/enc/trellis.h"
+#include "src/utils/random.h"
+#include "src/wp2/format_constants.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -142,7 +153,7 @@ TEST(DropoutTest, KeepsSmallCoeffsCloseToStart) {
   const TrfSize tdim = TRF_8x4;
   const uint32_t dropout_num_before = 4;
   const uint32_t dropout_num_after = 6;
-  // Small coeffs that are too close the the beginning of the block
+  // Small coeffs that are too close the beginning of the block
   // should also be kept (counts as not enough zeroes before).
   // However, coeffs at the end of the block should be removed (we pretend that
   // there are more zeros after it if needed).

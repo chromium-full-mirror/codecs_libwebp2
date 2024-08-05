@@ -14,12 +14,14 @@
 
 // Image analysis/preprocessing tests.
 
+#include <cstdint>
 #include <unordered_set>
 
 #include "examples/example_utils.h"
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
 #include "src/enc/analysis.h"
+#include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 

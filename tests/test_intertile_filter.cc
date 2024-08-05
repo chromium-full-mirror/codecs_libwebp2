@@ -14,13 +14,27 @@
 
 // Test the intertile filter.
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
 #include <vector>
 
 #include "include/helpers.h"
 #include "include/helpers_filter.h"
-#include "src/common/constants.h"
+#include "src/common/global_params.h"
+#include "src/common/lossy/segment.h"
+#include "src/common/progress_watcher.h"
 #include "src/dec/filters/intertile_filter.h"
+#include "src/dec/tile_dec.h"
+#include "src/utils/csp.h"
+#include "src/utils/plane.h"
 #include "src/utils/random.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
+#include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

@@ -15,15 +15,14 @@
 
 // Test some DSP functions in dsp/dsp.h
 
-#include <cstdio>
-#include <string>
+#include <algorithm>
+#include <cstdint>
+#include <vector>
 
-#include "examples/example_utils.h"
 #include "include/helpers.h"
 #include "src/dsp/dsp.h"
-#include "src/dsp/math.h"
-#include "src/utils/plane.h"
-#include "src/utils/random.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {

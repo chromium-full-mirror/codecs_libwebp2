@@ -15,17 +15,26 @@
 
 // Incremental decoding test function.
 
-#include "./helpers_incr.h"
+#include "tests/include/helpers_incr.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <vector>
 
-#include "./helpers.h"
+#include "src/common/global_params.h"
+#include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/utils/data_source.h"
 #include "src/utils/orientation.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/format_constants.h"
+#include "tests/include/helpers.h"
 
 namespace WP2 {
 namespace testutil {

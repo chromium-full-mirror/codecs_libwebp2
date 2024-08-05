@@ -14,12 +14,17 @@
 
 // Test WP2Malloc() failure at different places.
 
+#include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <string>
+#include <tuple>
 #include <vector>
 
 #include "include/helpers.h"
+#include "src/utils/utils.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 //------------------------------------------------------------------------------

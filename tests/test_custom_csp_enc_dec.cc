@@ -14,13 +14,17 @@
 
 // Encoding from and to custom color space test.
 
+#include <algorithm>
+#include <cstdint>
 #include <string>
 #include <tuple>
 
 #include "extras/extras.h"
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
+#include "src/utils/csp.h"
 #include "src/utils/plane.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 

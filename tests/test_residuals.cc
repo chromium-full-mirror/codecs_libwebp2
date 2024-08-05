@@ -14,10 +14,20 @@
 
 // Test ResidualWriter/ResidualReader.
 
+#include <algorithm>
+#include <cstdint>
+#include <tuple>
+
 #include "include/helpers.h"
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
+#include "src/dsp/math.h"
+#include "src/enc/block_enc.h"
+#include "src/enc/symbols_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/wp2/format_constants.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {

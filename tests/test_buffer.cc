@@ -32,6 +32,7 @@
 #include "src/utils/plane.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -146,12 +147,12 @@ TEST(BufferTest, Fill) {
   ArgbBuffer premultiplied(WP2_Argb_32);
   ASSERT_WP2_OK(premultiplied.Resize(10, 20));
   premultiplied.Fill(color);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(premultiplied.GetRow8(0), 200, 30, 200, 0);
+  testutil::ExpectBeginsWith(premultiplied.GetRow8(0), {200, 30, 200, 0});
 
   ArgbBuffer unmultiplied(WP2_ARGB_32);
   ASSERT_WP2_OK(unmultiplied.Resize(10, 20));
   unmultiplied.Fill(color);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(unmultiplied.GetRow8(0), 200, 38, 255, 0);
+  testutil::ExpectBeginsWith(unmultiplied.GetRow8(0), {200, 38, 255, 0});
 }
 
 //------------------------------------------------------------------------------

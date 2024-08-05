@@ -14,10 +14,10 @@
 
 // Test example utils.
 
+#include <cstddef>
+#include <cstdint>
 #include <deque>
-#include <random>
 #include <string>
-#include <vector>
 
 #include "examples/example_utils.h"
 #include "include/helpers.h"

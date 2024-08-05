@@ -14,11 +14,15 @@
 
 // Incremental decoding test.
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <tuple>
+#include <vector>
 
 #include "include/helpers.h"
 #include "include/helpers_incr.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 
 namespace WP2 {

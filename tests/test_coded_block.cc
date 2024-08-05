@@ -14,16 +14,30 @@
 
 // Test CodedBlock.
 
+#include <cassert>
+#include <cstdint>
+
 #include "include/helpers.h"
 #include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
-#include "src/common/lossy/transforms.h"
+#include "src/common/lossy/predictor.h"
+#include "src/common/lossy/quant_mtx.h"
+#include "src/common/symbols.h"
+#include "src/dsp/dsp.h"
+#include "src/dsp/math.h"
+#include "src/enc/block_enc.h"
+#include "src/enc/symbols_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/csp.h"
+#include "src/utils/front_mgr.h"
 #include "src/utils/plane.h"
 #include "src/utils/random.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -168,104 +182,120 @@ TYPED_TEST(CodedBlockTest, GetContext_FirstBlock) {
   const int16_t missing = CodedBlock::kMissing;
 
   for (ContextType context_type : {kContextSmall, kContextExtendRight}) {
-    EXPECT_THAT_FIRST_ELEMENTS_ARE(cb.GetContext(kYChannel, context_type),
-                                   // Left.
-                                   0, 0, 0, 0, 0, 0, 0, 0,
-                                   // Top left.
-                                   0,
-                                   // Top.
-                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                   0,
-                                   // Top right.
-                                   0,
-                                   // Right.
-                                   0, 0, 0, 0, 0, 0, 0, 0);
+    testutil::ExpectBeginsWith(cb.GetContext(kYChannel, context_type),
+                               {// Left.
+                                0, 0, 0, 0, 0, 0, 0, 0,
+                                // Top left.
+                                0,
+                                // Top.
+                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                // Top right.
+                                0,
+                                // Right.
+                                0, 0, 0, 0, 0, 0, 0, 0});
   }
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(cb.GetContext(kYChannel, kContextExtendLeft),
-                                 0, 0, 0, 0, 0, 0, 0, 0,   // Extended left.
-                                 0, 0, 0, 0, 0, 0, 0, 0);  // Left.
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, kContextExtendLeft),
+                             {
+                                 0, 0, 0, 0, 0, 0, 0, 0,  // Extended left.
+                                 0, 0, 0, 0, 0, 0, 0, 0   // Left.
+                             });
 
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
+  testutil::ExpectBeginsWith(
       cb.GetContext(kYChannel, kContextSmallNoFillIn),
-      // Left.
-      missing, missing, missing, missing, missing, missing, missing, missing,
-      // Top left.
-      missing,
-      // Top.
-      missing, missing, missing, missing, missing, missing, missing, missing,
-      missing, missing, missing, missing, missing, missing, missing, missing,
-      // Top right.
-      missing,
-      // Right.
-      missing, missing, missing, missing, missing, missing, missing, missing);
+      {// Left.
+       missing, missing, missing, missing, missing, missing, missing, missing,
+       // Top left.
+       missing,
+       // Top.
+       missing, missing, missing, missing, missing, missing, missing, missing,
+       missing, missing, missing, missing, missing, missing, missing, missing,
+       // Top right.
+       missing,
+       // Right.
+       missing, missing, missing, missing, missing, missing, missing, missing});
 
   // This is the first block of the image. The first (top left) sub-block has
   // therefore zero context.
   SetCoords4x4(/*num_blocks=*/0, /*x=*/0, /*y=*/0, &mgr, &yuv, &cb);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmallNoFillIn), missing, missing,
-      missing, missing,                     // Left.
-      missing,                              // Top left.
-      missing, missing, missing, missing,   // Top.
-      missing,                              // Top right.
-      missing, missing, missing, missing);  // Right.
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(cb.GetContext(kYChannel, kContextSmall),  //
-                                 0, 0, 0, 0,   // Left.
-                                 0,            // Top left.
-                                 0, 0, 0, 0,   // Top.
-                                 0,            // Top right.
-                                 0, 0, 0, 0);  // Right.
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, kContextSmallNoFillIn),
+                             {
+                                 missing, missing, missing, missing,  // Left.
+                                 missing,  // Top left.
+                                 missing, missing, missing, missing,  // Top.
+                                 missing,  // Top right.
+                                 missing, missing, missing, missing  // Right.
+                             });
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, kContextSmall),
+                             {
+                                 0, 0, 0, 0,  // Left.
+                                 0,           // Top left.
+                                 0, 0, 0, 0,  // Top.
+                                 0,           // Top right.
+                                 0, 0, 0, 0   // Right.
+                             });
 
   // Top middle sub block. Only left context is available.
   SetCoords4x4(/*num_blocks=*/1, /*x=*/1, /*y=*/0, &mgr, &yuv, &cb);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmallNoFillIn), Pix(3, 3), Pix(3, 2),
-      Pix(3, 1), Pix(3, 0),                 // Left.
-      missing,                              // Top left.
-      missing, missing, missing, missing,   // Top.
-      missing,                              // Top right.
-      missing, missing, missing, missing);  // Right.
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmall), Pix(3, 3), Pix(3, 2), Pix(3, 1),
-      Pix(3, 0),                                    // Left.
-      Pix(3, 0),                                    // Top left.
-      Pix(3, 0), Pix(3, 0), Pix(3, 0), Pix(3, 0),   // Top.
-      Pix(3, 0),                                    // Top right.
-      Pix(3, 0), Pix(3, 0), Pix(3, 0), Pix(3, 0));  // Right.
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmallNoFillIn),
+      {
+          Pix(3, 3), Pix(3, 2), Pix(3, 1), Pix(3, 0),  // Left.
+          missing,                                     // Top left.
+          missing, missing, missing, missing,          // Top.
+          missing,                                     // Top right.
+          missing, missing, missing, missing           // Right.
+      });
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmall),
+      {
+          Pix(3, 3), Pix(3, 2), Pix(3, 1), Pix(3, 0),  // Left.
+          Pix(3, 0),                                   // Top left.
+          Pix(3, 0), Pix(3, 0), Pix(3, 0), Pix(3, 0),  // Top.
+          Pix(3, 0),                                   // Top right.
+          Pix(3, 0), Pix(3, 0), Pix(3, 0), Pix(3, 0)   // Right.
+      });
 
   // Bottom left sub block. Only top context is available.
   SetCoords4x4(/*num_blocks=*/3, /*x=*/0, /*y=*/1, &mgr, &yuv, &cb);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmallNoFillIn), missing, missing,
-      missing, missing,                            // Left.
-      missing,                                     // Top left.
-      Pix(0, 3), Pix(1, 3), Pix(2, 3), Pix(3, 3),  // Top.
-      Pix(4, 3),                                   // Top right.
-      missing, missing, missing, missing);         // Right.
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmall), Pix(0, 3), Pix(0, 3), Pix(0, 3),
-      Pix(0, 3),                                    // Left.
-      Pix(0, 3),                                    // Top left.
-      Pix(0, 3), Pix(1, 3), Pix(2, 3), Pix(3, 3),   // Top.
-      Pix(4, 3),                                    // Top right.
-      Pix(4, 3), Pix(4, 3), Pix(4, 3), Pix(4, 3));  // Right.
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmallNoFillIn),
+      {
+          missing, missing, missing, missing,          // Left.
+          missing,                                     // Top left.
+          Pix(0, 3), Pix(1, 3), Pix(2, 3), Pix(3, 3),  // Top.
+          Pix(4, 3),                                   // Top right.
+          missing, missing, missing, missing           // Right.
+      });
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmall),
+      {
+          Pix(0, 3), Pix(0, 3), Pix(0, 3), Pix(0, 3),  // Left.
+          Pix(0, 3),                                   // Top left.
+          Pix(0, 3), Pix(1, 3), Pix(2, 3), Pix(3, 3),  // Top.
+          Pix(4, 3),                                   // Top right.
+          Pix(4, 3), Pix(4, 3), Pix(4, 3), Pix(4, 3)   // Right.
+      });
 
   // Bottom middle sub block. Left and top contexts are available.
   SetCoords4x4(/*num_blocks=*/1, /*x=*/1, /*y=*/1, &mgr, &yuv, &cb);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmallNoFillIn), Pix(3, 7), Pix(3, 6),
-      Pix(3, 5), Pix(3, 4),                        // Left.
-      Pix(3, 3),                                   // Top left.
-      Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),  // Top.
-      Pix(8, 3),                                   // Top right.
-      missing, missing, missing, missing);         // Right.
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmall), Pix(3, 7), Pix(3, 6), Pix(3, 5),
-      Pix(3, 4),                                    // Left.
-      Pix(3, 3),                                    // Top left.
-      Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),   // Top.
-      Pix(8, 3),                                    // Top right.
-      Pix(8, 3), Pix(8, 3), Pix(8, 3), Pix(8, 3));  // Right.
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmallNoFillIn),
+      {
+          Pix(3, 7), Pix(3, 6), Pix(3, 5), Pix(3, 4),  // Left.
+          Pix(3, 3),                                   // Top left.
+          Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),  // Top.
+          Pix(8, 3),                                   // Top right.
+          missing, missing, missing, missing           // Right.
+      });
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmall),
+      {
+          Pix(3, 7), Pix(3, 6), Pix(3, 5), Pix(3, 4),  // Left.
+          Pix(3, 3),                                   // Top left.
+          Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),  // Top.
+          Pix(8, 3),                                   // Top right.
+          Pix(8, 3), Pix(8, 3), Pix(8, 3), Pix(8, 3)   // Right.
+      });
 }
 
 TYPED_TEST(CodedBlockTest, GetContext_HasRight) {
@@ -301,11 +331,11 @@ TYPED_TEST(CodedBlockTest, GetContext_HasRight) {
   EXPECT_EQ(right, 0);
   EXPECT_EQ(top_context_extent, 0);
 
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(cb.GetContext(kYChannel, kContextExtendLeft),
-                                 // Extended left context.
-                                 Pix(3, 7), Pix(3, 6), Pix(3, 5), Pix(3, 4),
-                                 // Left.
-                                 Pix(3, 3), Pix(3, 2), Pix(3, 1), Pix(3, 0));
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, kContextExtendLeft),
+                             {// Extended left context.
+                              Pix(3, 7), Pix(3, 6), Pix(3, 5), Pix(3, 4),
+                              // Left.
+                              Pix(3, 3), Pix(3, 2), Pix(3, 1), Pix(3, 0)});
 
   // Mark block 2 as seen.
   ASSERT_TRUE(mgr.UseSize(BLK_8x4, &blk));
@@ -340,201 +370,215 @@ TYPED_TEST(CodedBlockTest, GetContext_HasRight) {
   const int16_t missing = CodedBlock::kMissing;
 
   // Check full context.
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmallNoFillIn),
-      // Left.
-      missing, missing, missing, missing, Pix(3, 7), Pix(3, 6), Pix(3, 5),
-      Pix(3, 4),
-      // Top left
-      Pix(3, 3),
-      // Top
-      Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3), Pix(8, 3), Pix(9, 3),
-      Pix(10, 3), Pix(11, 3),
-      // Top right
-      Pix(12, 3),
-      // Right
-      Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7), missing, missing, missing,
-      missing);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(cb.GetContext(kYChannel, kContextSmall),
-                                 // Left
-                                 Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7),
-                                 Pix(3, 7), Pix(3, 6), Pix(3, 5), Pix(3, 4),
-                                 // Top left
-                                 Pix(3, 3),
-                                 // Top
-                                 Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),
-                                 Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),
-                                 // Top right
-                                 Pix(12, 3),
-                                 // Right
-                                 Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7),
-                                 Pix(12, 7), Pix(12, 7), Pix(12, 7),
-                                 Pix(12, 7));
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, kContextSmallNoFillIn),
+                             {// Left.
+                              missing, missing, missing, missing, Pix(3, 7),
+                              Pix(3, 6), Pix(3, 5), Pix(3, 4),
+                              // Top left
+                              Pix(3, 3),
+                              // Top
+                              Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),
+                              Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),
+                              // Top right
+                              Pix(12, 3),
+                              // Right
+                              Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7),
+                              missing, missing, missing, missing});
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, kContextSmall),
+                             {// Left
+                              Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7),
+                              Pix(3, 7), Pix(3, 6), Pix(3, 5), Pix(3, 4),
+                              // Top left
+                              Pix(3, 3),
+                              // Top
+                              Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),
+                              Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),
+                              // Top right
+                              Pix(12, 3),
+                              // Right
+                              Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7),
+                              Pix(12, 7), Pix(12, 7), Pix(12, 7), Pix(12, 7)});
+  testutil::ExpectBeginsWith(
       cb.GetContext(kYChannel, kContextExtendRight),
-      // Left (first 4 pixels are missing and filled in).
-      Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 6),
-      Pix(3, 5), Pix(3, 4),
-      // Top left
-      Pix(3, 3),
-      // Top
-      Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3), Pix(8, 3), Pix(9, 3),
-      Pix(10, 3), Pix(11, 3),
-      // Extended top right
-      Pix(12, 3), Pix(13, 3), Pix(14, 3), Pix(15, 3),
-      // Further (missing, filled in)
-      Pix(15, 3), Pix(15, 3), Pix(15, 3), Pix(15, 3), Pix(15, 3));
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
+      {// Left (first 4 pixels are missing and filled in).
+       Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 6),
+       Pix(3, 5), Pix(3, 4),
+       // Top left
+       Pix(3, 3),
+       // Top
+       Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3), Pix(8, 3), Pix(9, 3),
+       Pix(10, 3), Pix(11, 3),
+       // Extended top right
+       Pix(12, 3), Pix(13, 3), Pix(14, 3), Pix(15, 3),
+       // Further (missing, filled in)
+       Pix(15, 3), Pix(15, 3), Pix(15, 3), Pix(15, 3), Pix(15, 3)});
+  testutil::ExpectBeginsWith(
       cb.GetContext(kYChannel, kContextExtendLeft),
-      // Extended left context (missing, filled in).
-      Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7),
-      Pix(3, 7), Pix(3, 7),
-      // Left (first 4 pixels are missing and filled in).
-      Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 6),
-      Pix(3, 5), Pix(3, 4));
+      {// Extended left context (missing, filled in).
+       Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7),
+       Pix(3, 7), Pix(3, 7),
+       // Left (first 4 pixels are missing and filled in).
+       Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 6),
+       Pix(3, 5), Pix(3, 4)});
 
   // Check sub block context.
   cb.GetCodingParams(kYChannel)->split_tf = true;
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, /*split_tf=*/true, /*tf_i=*/0,
-                    kContextSmallNoFillIn),
-      // Left.
-      Pix(3, 7), Pix(3, 6), Pix(3, 5), Pix(3, 4),
-      // Top left
-      Pix(3, 3),
-      // Top
-      Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),
-      // Top right
-      Pix(8, 3),
-      // Right
-      missing, missing, missing, missing);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, /*split_tf=*/true, /*tf_i=*/1,
-                    kContextSmallNoFillIn),
-      // Left.
-      Pix(7, 7), Pix(7, 6), Pix(7, 5), Pix(7, 4),
-      // Top left
-      Pix(7, 3),
-      // Top
-      Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),
-      // Top right
-      Pix(12, 3),
-      // Right
-      Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7));
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, /*split_tf=*/true, /*tf_i=*/2,
-                    kContextSmallNoFillIn),
-      // Left.
-      missing, missing, missing, missing,
-      // Top left
-      Pix(3, 7),
-      // Top
-      Pix(4, 7), Pix(5, 7), Pix(6, 7), Pix(7, 7),
-      // Top right
-      Pix(8, 7),
-      // Right
-      missing, missing, missing, missing);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, /*split_tf=*/true, /*tf_i=*/3,
-                    kContextSmallNoFillIn),
-      // Left.
-      Pix(7, 11), Pix(7, 10), Pix(7, 9), Pix(7, 8),
-      // Top left
-      Pix(7, 7),
-      // Top
-      Pix(8, 7), Pix(9, 7), Pix(10, 7), Pix(11, 7),
-      // Top right
-      Pix(12, 7),
-      // Right
-      missing, missing, missing, missing);
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, /*split_tf=*/true,
+                                           /*tf_i=*/0, kContextSmallNoFillIn),
+                             {// Left.
+                              Pix(3, 7), Pix(3, 6), Pix(3, 5), Pix(3, 4),
+                              // Top left
+                              Pix(3, 3),
+                              // Top
+                              Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),
+                              // Top right
+                              Pix(8, 3),
+                              // Right
+                              missing, missing, missing, missing});
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, /*split_tf=*/true,
+                                           /*tf_i=*/1, kContextSmallNoFillIn),
+                             {// Left.
+                              Pix(7, 7), Pix(7, 6), Pix(7, 5), Pix(7, 4),
+                              // Top left
+                              Pix(7, 3),
+                              // Top
+                              Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),
+                              // Top right
+                              Pix(12, 3),
+                              // Right
+                              Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7)});
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, /*split_tf=*/true,
+                                           /*tf_i=*/2, kContextSmallNoFillIn),
+                             {// Left.
+                              missing, missing, missing, missing,
+                              // Top left
+                              Pix(3, 7),
+                              // Top
+                              Pix(4, 7), Pix(5, 7), Pix(6, 7), Pix(7, 7),
+                              // Top right
+                              Pix(8, 7),
+                              // Right
+                              missing, missing, missing, missing});
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, /*split_tf=*/true,
+                                           /*tf_i=*/3, kContextSmallNoFillIn),
+                             {// Left.
+                              Pix(7, 11), Pix(7, 10), Pix(7, 9), Pix(7, 8),
+                              // Top left
+                              Pix(7, 7),
+                              // Top
+                              Pix(8, 7), Pix(9, 7), Pix(10, 7), Pix(11, 7),
+                              // Top right
+                              Pix(12, 7),
+                              // Right
+                              missing, missing, missing, missing});
   cb.GetCodingParams(kYChannel)->split_tf = false;
 
   // Top left block. Left and top contexts are available
   // (from previously decoded blocks 1 and 2).
   SetCoords4x4(/*num_blocks=*/0, /*x=*/1, /*y=*/1, &mgr, &yuv, &cb);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmallNoFillIn), Pix(3, 7), Pix(3, 6),
-      Pix(3, 5), Pix(3, 4),                        // Left.
-      Pix(3, 3),                                   // Top left.
-      Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),  // Top.
-      Pix(8, 3),                                   // Top right.
-      missing, missing, missing, missing);         // Right.
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmall), Pix(3, 7), Pix(3, 6), Pix(3, 5),
-      Pix(3, 4),                                    // Left.
-      Pix(3, 3),                                    // Top left.
-      Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),   // Top.
-      Pix(8, 3),                                    // Top right.
-      Pix(8, 3), Pix(8, 3), Pix(8, 3), Pix(8, 3));  // Right.
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmallNoFillIn),
+      {
+          Pix(3, 7), Pix(3, 6), Pix(3, 5), Pix(3, 4),  // Left.
+          Pix(3, 3),                                   // Top left.
+          Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),  // Top.
+          Pix(8, 3),                                   // Top right.
+          missing, missing, missing, missing           // Right.
+      });
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmall),
+      {
+          Pix(3, 7), Pix(3, 6), Pix(3, 5), Pix(3, 4),  // Left.
+          Pix(3, 3),                                   // Top left.
+          Pix(4, 3), Pix(5, 3), Pix(6, 3), Pix(7, 3),  // Top.
+          Pix(8, 3),                                   // Top right.
+          Pix(8, 3), Pix(8, 3), Pix(8, 3), Pix(8, 3)   // Right.
+      });
 
   // Top right sub block. Full context (left, top and right) is available.
   SetCoords4x4(/*num_blocks=*/1, /*x=*/2, /*y=*/1, &mgr, &yuv, &cb);
   if (TypeParam::kId == 0) {
-    EXPECT_THAT_FIRST_ELEMENTS_ARE(
-        cb.GetContext(kYChannel, kContextSmallNoFillIn), Pix(7, 7), Pix(7, 6),
-        Pix(7, 5), Pix(7, 4),                             // Left.
-        Pix(7, 3),                                        // Top left.
-        Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),     // Top.
-        Pix(12, 3),                                       // Top right.
-        Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7));  // Right.
-    EXPECT_THAT_FIRST_ELEMENTS_ARE(
-        cb.GetContext(kYChannel, kContextSmall), Pix(7, 7), Pix(7, 6),
-        Pix(7, 5), Pix(7, 4),                             // Left.
-        Pix(7, 3),                                        // Top left.
-        Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),     // Top.
-        Pix(12, 3),                                       // Top right.
-        Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7));  // Right.
+    testutil::ExpectBeginsWith(
+        cb.GetContext(kYChannel, kContextSmallNoFillIn),
+        {
+            Pix(7, 7), Pix(7, 6), Pix(7, 5), Pix(7, 4),     // Left.
+            Pix(7, 3),                                      // Top left.
+            Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),   // Top.
+            Pix(12, 3),                                     // Top right.
+            Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7)  // Right.
+        });
+    testutil::ExpectBeginsWith(
+        cb.GetContext(kYChannel, kContextSmall),
+        {
+            Pix(7, 7), Pix(7, 6), Pix(7, 5), Pix(7, 4),     // Left.
+            Pix(7, 3),                                      // Top left.
+            Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),   // Top.
+            Pix(12, 3),                                     // Top right.
+            Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7)  // Right.
+        });
   } else {
     assert(TypeParam::kId == 1);
-    EXPECT_THAT_FIRST_ELEMENTS_ARE(
-        cb.GetContext(kYChannel, kContextSmallNoFillIn), missing, missing,
-        missing, missing,                                 // Left.
-        Pix(7, 3),                                        // Top left.
-        Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),     // Top.
-        Pix(12, 3),                                       // Top right.
-        Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7));  // Right.
-    EXPECT_THAT_FIRST_ELEMENTS_ARE(
-        cb.GetContext(kYChannel, kContextSmall), Pix(7, 3), Pix(7, 3),
-        Pix(7, 3), Pix(7, 3),                             // Left.
-        Pix(7, 3),                                        // Top left.
-        Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),     // Top.
-        Pix(12, 3),                                       // Top right.
-        Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7));  // Right.
+    testutil::ExpectBeginsWith(
+        cb.GetContext(kYChannel, kContextSmallNoFillIn),
+        {
+            missing, missing, missing, missing,             // Left.
+            Pix(7, 3),                                      // Top left.
+            Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),   // Top.
+            Pix(12, 3),                                     // Top right.
+            Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7)  // Right.
+        });
+    testutil::ExpectBeginsWith(
+        cb.GetContext(kYChannel, kContextSmall),
+        {
+            Pix(7, 3), Pix(7, 3), Pix(7, 3), Pix(7, 3),     // Left.
+            Pix(7, 3),                                      // Top left.
+            Pix(8, 3), Pix(9, 3), Pix(10, 3), Pix(11, 3),   // Top.
+            Pix(12, 3),                                     // Top right.
+            Pix(12, 4), Pix(12, 5), Pix(12, 6), Pix(12, 7)  // Right.
+        });
   }
 
   // Bottom left sub block. Only top context is available.
   SetCoords4x4(/*num_blocks=*/1, /*x=*/1, /*y=*/2, &mgr, &yuv, &cb);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmallNoFillIn), missing, missing,
-      missing, missing,                            // Left.
-      Pix(3, 7),                                   // Top left.
-      Pix(4, 7), Pix(5, 7), Pix(6, 7), Pix(7, 7),  // Top.
-      Pix(8, 7),                                   // Top right.
-      missing, missing, missing, missing);         // Right.
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmall), Pix(3, 7), Pix(3, 7), Pix(3, 7),
-      Pix(3, 7),                                    // Left.
-      Pix(3, 7),                                    // Top left.
-      Pix(4, 7), Pix(5, 7), Pix(6, 7), Pix(7, 7),   // Top.
-      Pix(8, 7),                                    // Top right.
-      Pix(8, 7), Pix(8, 7), Pix(8, 7), Pix(8, 7));  // Right.
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmallNoFillIn),
+      {
+          missing, missing, missing, missing,          // Left.
+          Pix(3, 7),                                   // Top left.
+          Pix(4, 7), Pix(5, 7), Pix(6, 7), Pix(7, 7),  // Top.
+          Pix(8, 7),                                   // Top right.
+          missing, missing, missing, missing           // Right.
+      });
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmall),
+      {
+          Pix(3, 7), Pix(3, 7), Pix(3, 7), Pix(3, 7),  // Left.
+          Pix(3, 7),                                   // Top left.
+          Pix(4, 7), Pix(5, 7), Pix(6, 7), Pix(7, 7),  // Top.
+          Pix(8, 7),                                   // Top right.
+          Pix(8, 7), Pix(8, 7), Pix(8, 7), Pix(8, 7)   // Right.
+      });
 
   // Bottom right sub block. Left and top contexts are available.
   SetCoords4x4(/*num_blocks=*/2, /*x=*/2, /*y=*/2, &mgr, &yuv, &cb);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmallNoFillIn), Pix(7, 11), Pix(7, 10),
-      Pix(7, 9), Pix(7, 8),                          // Left.
-      Pix(7, 7),                                     // Top left.
-      Pix(8, 7), Pix(9, 7), Pix(10, 7), Pix(11, 7),  // Top.
-      Pix(12, 7),                                    // Top right.
-      missing, missing, missing, missing);           // Right.
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmall), Pix(7, 11), Pix(7, 10),
-      Pix(7, 9), Pix(7, 8),                             // Left.
-      Pix(7, 7),                                        // Top left.
-      Pix(8, 7), Pix(9, 7), Pix(10, 7), Pix(11, 7),     // Top.
-      Pix(12, 7),                                       // Top right.
-      Pix(12, 7), Pix(12, 7), Pix(12, 7), Pix(12, 7));  // Right.
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmallNoFillIn),
+      {
+          Pix(7, 11), Pix(7, 10), Pix(7, 9), Pix(7, 8),  // Left.
+          Pix(7, 7),                                     // Top left.
+          Pix(8, 7), Pix(9, 7), Pix(10, 7), Pix(11, 7),  // Top.
+          Pix(12, 7),                                    // Top right.
+          missing, missing, missing, missing             // Right.
+      });
+  testutil::ExpectBeginsWith(
+      cb.GetContext(kYChannel, kContextSmall),
+      {
+          Pix(7, 11), Pix(7, 10), Pix(7, 9), Pix(7, 8),   // Left.
+          Pix(7, 7),                                      // Top left.
+          Pix(8, 7), Pix(9, 7), Pix(10, 7), Pix(11, 7),   // Top.
+          Pix(12, 7),                                     // Top right.
+          Pix(12, 7), Pix(12, 7), Pix(12, 7), Pix(12, 7)  // Right.
+      });
 }
 
 TYPED_TEST(CodedBlockTest, GetContext_Large) {
@@ -570,37 +614,36 @@ TYPED_TEST(CodedBlockTest, GetContext_Large) {
 
   // The context of block 2 is only the bottom of block 0.
   for (ContextType context_type : {kContextSmall, kContextExtendRight}) {
-    EXPECT_THAT_FIRST_ELEMENTS_ARE(
+    testutil::ExpectBeginsWith(
         cb.GetContext(kYChannel, context_type),
-        // Left.
-        Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
-        Pix(0, 7), Pix(0, 7), Pix(0, 7),
-        // Top.
-        Pix(0, 7), Pix(1, 7), Pix(2, 7), Pix(3, 7), Pix(4, 7), Pix(5, 7),
-        Pix(6, 7), Pix(7, 7),
-        // Right.
-        Pix(7, 7), Pix(7, 7), Pix(7, 7), Pix(7, 7), Pix(7, 7), Pix(7, 7),
-        Pix(7, 7), Pix(7, 7), Pix(7, 7));
+        {// Left.
+         Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
+         Pix(0, 7), Pix(0, 7), Pix(0, 7),
+         // Top.
+         Pix(0, 7), Pix(1, 7), Pix(2, 7), Pix(3, 7), Pix(4, 7), Pix(5, 7),
+         Pix(6, 7), Pix(7, 7),
+         // Right.
+         Pix(7, 7), Pix(7, 7), Pix(7, 7), Pix(7, 7), Pix(7, 7), Pix(7, 7),
+         Pix(7, 7), Pix(7, 7), Pix(7, 7)});
   }
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(cb.GetContext(kYChannel, kContextExtendLeft),
-                                 // Extended left.
-                                 Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
-                                 Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
-                                 // Left.
-                                 Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
-                                 Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7));
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, kContextExtendLeft),
+                             {// Extended left.
+                              Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
+                              Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
+                              // Left.
+                              Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
+                              Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7)});
 
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmallNoFillIn),
-      // Left.
-      missing, missing, missing, missing, missing, missing, missing, missing,
-      missing,
-      // Top.
-      Pix(0, 7), Pix(1, 7), Pix(2, 7), Pix(3, 7), Pix(4, 7), Pix(5, 7),
-      Pix(6, 7), Pix(7, 7),
-      // Right.
-      missing, missing, missing, missing, missing, missing, missing, missing,
-      missing);
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, kContextSmallNoFillIn),
+                             {// Left.
+                              missing, missing, missing, missing, missing,
+                              missing, missing, missing, missing,
+                              // Top.
+                              Pix(0, 7), Pix(1, 7), Pix(2, 7), Pix(3, 7),
+                              Pix(4, 7), Pix(5, 7), Pix(6, 7), Pix(7, 7),
+                              // Right.
+                              missing, missing, missing, missing, missing,
+                              missing, missing, missing, missing});
 
   // Add block 1 and redefine block 2.
   Block blk;
@@ -609,39 +652,38 @@ TYPED_TEST(CodedBlockTest, GetContext_Large) {
   cb.SetDim({/*x=*/0, /*y=*/2, /*dim=*/BLK_8x8}, mgr);
   cb.ResetContextCache();
   // The context of block 2 now has a top right context.
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
-      cb.GetContext(kYChannel, kContextSmallNoFillIn),
-      // Left.
-      missing, missing, missing, missing, missing, missing, missing, missing,
-      missing,
-      // Top.
-      Pix(0, 7), Pix(1, 7), Pix(2, 7), Pix(3, 7), Pix(4, 7), Pix(5, 7),
-      Pix(6, 7), Pix(7, 7),
-      // Right.
-      Pix(8, 7), missing, missing, missing, missing, missing, missing, missing,
-      missing);
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
+  testutil::ExpectBeginsWith(cb.GetContext(kYChannel, kContextSmallNoFillIn),
+                             {// Left.
+                              missing, missing, missing, missing, missing,
+                              missing, missing, missing, missing,
+                              // Top.
+                              Pix(0, 7), Pix(1, 7), Pix(2, 7), Pix(3, 7),
+                              Pix(4, 7), Pix(5, 7), Pix(6, 7), Pix(7, 7),
+                              // Right.
+                              Pix(8, 7), missing, missing, missing, missing,
+                              missing, missing, missing, missing});
+  testutil::ExpectBeginsWith(
       cb.GetContext(kYChannel, kContextSmall),
-      // Left.
-      Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
-      Pix(0, 7), Pix(0, 7), Pix(0, 7),
-      // Top.
-      Pix(0, 7), Pix(1, 7), Pix(2, 7), Pix(3, 7), Pix(4, 7), Pix(5, 7),
-      Pix(6, 7), Pix(7, 7),
-      // Right.
-      Pix(8, 7), Pix(8, 7), Pix(8, 7), Pix(8, 7), Pix(8, 7), Pix(8, 7),
-      Pix(8, 7), Pix(8, 7), Pix(8, 7));
-  EXPECT_THAT_FIRST_ELEMENTS_ARE(
+      {// Left.
+       Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
+       Pix(0, 7), Pix(0, 7), Pix(0, 7),
+       // Top.
+       Pix(0, 7), Pix(1, 7), Pix(2, 7), Pix(3, 7), Pix(4, 7), Pix(5, 7),
+       Pix(6, 7), Pix(7, 7),
+       // Right.
+       Pix(8, 7), Pix(8, 7), Pix(8, 7), Pix(8, 7), Pix(8, 7), Pix(8, 7),
+       Pix(8, 7), Pix(8, 7), Pix(8, 7)});
+  testutil::ExpectBeginsWith(
       cb.GetContext(kYChannel, kContextExtendRight),
-      // Left (missing, filled in).
-      Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
-      Pix(0, 7), Pix(0, 7), Pix(0, 7),
-      // Top.
-      Pix(0, 7), Pix(1, 7), Pix(2, 7), Pix(3, 7), Pix(4, 7), Pix(5, 7),
-      Pix(6, 7), Pix(7, 7),
-      // Top right.
-      Pix(8, 7), Pix(9, 7), Pix(10, 7), Pix(11, 7), Pix(12, 7), Pix(13, 7),
-      Pix(14, 7), Pix(15, 7), Pix(15, 7));
+      {// Left (missing, filled in).
+       Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7), Pix(0, 7),
+       Pix(0, 7), Pix(0, 7), Pix(0, 7),
+       // Top.
+       Pix(0, 7), Pix(1, 7), Pix(2, 7), Pix(3, 7), Pix(4, 7), Pix(5, 7),
+       Pix(6, 7), Pix(7, 7),
+       // Top right.
+       Pix(8, 7), Pix(9, 7), Pix(10, 7), Pix(11, 7), Pix(12, 7), Pix(13, 7),
+       Pix(14, 7), Pix(15, 7), Pix(15, 7)});
 }
 
 TYPED_TEST(CodedBlockTest, ContextIsConstant) {

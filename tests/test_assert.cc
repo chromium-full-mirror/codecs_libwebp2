@@ -17,10 +17,12 @@
 // Author: vrabaud@google.com (Vincent Rabaud)
 
 #include <cassert>
+#include <cstdlib>
 
 #include "src/utils/ans.h"
-#include "src/utils/ans_utils.h"
+#include "src/utils/ans_enc.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 int main(int argc, const char* argv[]) {
   if (argc != 2) return 1;

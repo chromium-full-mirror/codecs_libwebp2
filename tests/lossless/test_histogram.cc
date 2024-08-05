@@ -17,8 +17,16 @@
 //
 // Author: Vincent Rabaud (vincent.rabaud@gmail.com)
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+
 #include "src/common/symbols.h"
 #include "src/enc/lossless/histogram_enc.h"
+#include "src/utils/random.h"
+#include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "tests/include/helpers.h"
 
 namespace WP2L {

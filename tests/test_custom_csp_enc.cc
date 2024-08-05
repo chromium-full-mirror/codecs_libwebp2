@@ -14,6 +14,8 @@
 
 // Encoding from custom color space test.
 
+#include <algorithm>
+#include <cstdint>
 #include <limits>
 #include <string>
 #include <tuple>
@@ -22,11 +24,15 @@
 #include "extras/extras.h"
 #include "imageio/image_dec.h"
 #include "include/helpers.h"
+#include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {

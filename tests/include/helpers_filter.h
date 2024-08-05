@@ -18,12 +18,16 @@
 #ifndef WP2_TESTS_INCLUDE_HELPERS_FILTER_H_
 #define WP2_TESTS_INCLUDE_HELPERS_FILTER_H_
 
-#include <vector>
+#include <cstddef>
+#include <cstdint>
 
 #include "src/common/lossy/block.h"
+#include "src/common/lossy/block_size.h"
 #include "src/dec/filters/block_map_filter.h"
+#include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/utils/vector.h"
+#include "src/wp2/base.h"
 
 namespace WP2 {
 namespace testutil {
