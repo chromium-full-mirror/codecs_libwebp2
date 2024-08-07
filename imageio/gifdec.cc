@@ -325,8 +325,10 @@ class ImageReaderGIF : public ImageReader::Impl {
     // or might update it if the palette changes.
     background_color_ = GetBackgroundColor(
         decoder_->SColorMap, decoder_->SBackGroundColor, transparent_index_);
+    // Do as gif2webp from libwebp: ignore the signaled background color.
+    background_color_ = kTransparentColor;
 
-    // Allocate canvas and fill it with background color.
+    // Allocate canvas and fill it with transparent pixels.
     WP2_CHECK_STATUS(buffer_->Resize((uint32_t)decoder_->SWidth,
                                      (uint32_t)decoder_->SHeight));
     buffer_->Fill(background_color_);
@@ -385,8 +387,6 @@ class ImageReaderGIF : public ImageReader::Impl {
       ++frame_index_;
     }
 
-    // In GIF format the duration is stored after the frame. The following
-    // records are parsed till the next frame to know if it was the last one.
     bool just_decoded_frame = false;
     while (record_type != TERMINATE_RECORD_TYPE) {
       if (record_type == IMAGE_DESC_RECORD_TYPE) {
@@ -424,7 +424,8 @@ class ImageReaderGIF : public ImageReader::Impl {
         // frame properties to reasonable defaults.
         previous_frame_dispose_method_ = frame_dispose_method_;
         frame_dispose_method_ = DisposeMethod::NONE;
-        *duration_ms = kDefaultDurationMs;
+        *duration_ms = frame_duration_ms_;
+        frame_duration_ms_ = kDefaultDurationMs;
         transparent_index_ = kInvalidIndex;
       } else if (record_type == EXTENSION_RECORD_TYPE) {
         int extension;
@@ -439,8 +440,8 @@ class ImageReaderGIF : public ImageReader::Impl {
                                                    &frame_dispose_method_,
                                                    &transparent_index_));
             // Avoid instant frames from inconsistent GIF images.
-            *duration_ms = (frame_duration_ms > 0) ? frame_duration_ms
-                                                   : kDefaultDurationMs;
+            frame_duration_ms_ = (frame_duration_ms > 0) ? frame_duration_ms
+                                                         : kDefaultDurationMs;
           } else if (extension == APPLICATION_EXT_FUNC_CODE) {
             WP2_CHECK_STATUS(ReadApplicationExtension(
                 decoder_, data, &loop_count_, log_level_));
@@ -472,6 +473,7 @@ class ImageReaderGIF : public ImageReader::Impl {
   ArgbBuffer frame_;  // Is a subview of buffer_, which represents the canvas.
   Rectangle frame_rect_;
   uint32_t frame_index_ = 0;
+  uint32_t frame_duration_ms_ = kDefaultDurationMs;
   DisposeMethod frame_dispose_method_ = DisposeMethod::NONE;
   DisposeMethod previous_frame_dispose_method_ = DisposeMethod::NONE;
   int transparent_index_ = kInvalidIndex;
