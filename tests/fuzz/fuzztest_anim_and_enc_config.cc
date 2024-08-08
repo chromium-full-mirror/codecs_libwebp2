@@ -24,6 +24,7 @@
 #include "src/wp2/base.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 #include "fuzzing/fuzztest.h"
 #include "tests/fuzz/fuzz_utils.h"
 #include "tests/include/helpers.h"
@@ -75,6 +76,10 @@ void EncodeDecode(const FramesAndDurations& frames_and_durations,
   uint8_t* samples = const_cast<uint8_t*>(frames_and_durations.samples.data());
   const uint32_t stride =
       WP2FormatBpp(frames_and_durations.format) * frames_and_durations.width;
+  // Make sure the fuzzer generates enough samples as described by the domains
+  // below (b/358211151).
+  ASSERT_GE(frames_and_durations.samples.size(),
+            stride * frames_and_durations.height * num_frames);
 
   original_frames.reserve(num_frames);
   for (size_t i = 0; i < num_frames; ++i) {
