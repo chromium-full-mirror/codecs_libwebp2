@@ -595,10 +595,12 @@ std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& c) {
                "float");
   PrintSetting(out, c.effort, kD.effort, "effort");
   PrintSetting(out, c.use_av1, kD.use_av1, "use_av1", "bool");
+  PrintSetting(out, c.exact, kD.exact, "exact", "bool");
   PrintSetting(out, c.decoding_orientation, kD.decoding_orientation,
                "decoding_orientation", "Orientation");
   PrintSetting(out, c.create_preview, kD.create_preview, "create_preview",
                "bool");
+  PrintSetting(out, c.preview_size, kD.preview_size, "preview_size");
   PrintSetting(out, c.transfer_function, kD.transfer_function,
                "transfer_function", "TransferFunction");
   PrintSetting(out, c.pass, kD.pass, "pass");
@@ -637,6 +639,8 @@ std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& c) {
   PrintSetting(out, c.low_memory, kD.low_memory, "low_memory", "bool");
   PrintSetting(out, c.use_neural_compression, kD.use_neural_compression,
                "use_neural_compression");
+  PrintSetting(out, c.u_quant_offset, kD.u_quant_offset, "u_quant_offset");
+  PrintSetting(out, c.v_quant_offset, kD.v_quant_offset, "v_quant_offset");
   return out << std::endl;
 }
 
@@ -655,6 +659,7 @@ std::ostream& operator<<(std::ostream& out, const WP2::DecoderConfig& c) {
   PrintSetting(out, c.grain_amplitude, kD.grain_amplitude, "grain_amplitude");
   PrintSetting(out, c.incremental_mode, kD.incremental_mode, "incremental_mode",
                "DecoderConfig::IncrementalMode");
+  PrintSetting(out, c.exact, kD.exact, "exact", "bool");
   return out << std::endl;
 }
 
