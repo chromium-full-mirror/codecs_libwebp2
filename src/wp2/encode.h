@@ -58,6 +58,8 @@ struct EncoderConfig {
                                 // Range: [0=faster-bigger .. 9=slower-better]
   bool use_av1 = false;  // Use lossy AV1 internally instead of lossy WP2.
   bool exact = false;    // Do not pre-multiply the input (for lossless only).
+                         // TODO: b/359162718 - Rename this field and signal
+                         //                     premul status in encoded files.
 
   // Side parameters:
   // Set whether the image will be rotated or mirrored during decoding.

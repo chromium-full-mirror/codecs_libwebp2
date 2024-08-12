@@ -83,26 +83,11 @@ void EncodeDecode(const FramesAndDurations& frames_and_durations,
 
   original_frames.reserve(num_frames);
   for (size_t i = 0; i < num_frames; ++i) {
-    if (config.quality == 100 &&
-        !WP2IsPremultiplied(frames_and_durations.format)) {
-      // TODO: b/329621116 - Support exact non-alpha-premultiplied samples in
-      //                     AnimationEncoder::AddFrame().
-      ArgbBuffer original_frame(frames_and_durations.format);
-      ASSERT_EQ(original_frame.SetExternal(frames_and_durations.width,
-                                           frames_and_durations.height, samples,
-                                           stride),
-                WP2_STATUS_OK);
-      original_frames.emplace_back(
-          GetPremulFormat(frames_and_durations.format));
-      ASSERT_EQ(original_frames.back().ConvertFrom(original_frame),
-                WP2_STATUS_OK);
-    } else {
-      original_frames.emplace_back(frames_and_durations.format);
-      ASSERT_EQ(original_frames.back().SetExternal(frames_and_durations.width,
-                                                   frames_and_durations.height,
-                                                   samples, stride),
-                WP2_STATUS_OK);
-    }
+    original_frames.emplace_back(frames_and_durations.format);
+    ASSERT_EQ(original_frames.back().SetExternal(frames_and_durations.width,
+                                                 frames_and_durations.height,
+                                                 samples, stride),
+              WP2_STATUS_OK);
     samples += stride * frames_and_durations.height;
   }
 

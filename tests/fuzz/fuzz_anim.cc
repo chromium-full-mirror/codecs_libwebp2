@@ -35,10 +35,10 @@ namespace testutil {
 
 int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
                       const std::vector<uint32_t>& durations_ms,
-                      bool loop_forever, const EncoderConfig& config,
+                      bool loop_forever, const EncoderConfig& encoder_config,
                       float expected_distortion) {
-  // std::cerr << config << std::endl;  // Uncomment to print config
-  if (!config.IsValid()) abort();
+  // std::cerr << encoder_config << std::endl;  // Uncomment to print config
+  if (!encoder_config.IsValid()) abort();
   if (original_frames.empty()) return 0;
 
   // Add frames to the encoder.
@@ -53,9 +53,9 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
   // Encode with a reasonable config, without diving into detailed settings.
   MemoryWriter memory_writer;
   const WP2Status encoder_status =
-      animation_encoder.Encode(&memory_writer, config, loop_forever);
+      animation_encoder.Encode(&memory_writer, encoder_config, loop_forever);
   if (encoder_status != WP2_STATUS_OK) {
-    if (config.progress_hook != nullptr &&
+    if (encoder_config.progress_hook != nullptr &&
         encoder_status == WP2_STATUS_USER_ABORT) {
       return 0;
     }
@@ -65,8 +65,13 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
   // Verify that it decodes fine and that the result is close enough.
   ArgbBuffer decoded(original_frames.front().format());
   ArgbBuffer decoded_unoriented(original_frames.front().format());
-  ArrayDecoder decoder(memory_writer.mem_, memory_writer.size_,
-                       DecoderConfig::kDefault, &decoded);
+  DecoderConfig decoder_config = DecoderConfig::kDefault;
+  // AnimationEncoder does not take EncoderConfig::exact into account.
+  // It encodes the input frames in their original premul/unpremul state.
+  // The decoder has no way to know that, so it must be told.
+  decoder_config.exact = !WP2IsPremultiplied(original_frames.front().format());
+  ArrayDecoder decoder(memory_writer.mem_, memory_writer.size_, decoder_config,
+                       &decoded);
   for (size_t i = 0; i < original_frames.size(); ++i) {
     uint32_t duration_ms;
     if (!decoder.ReadFrame(&duration_ms)) abort();
@@ -76,12 +81,12 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
     if (expected_distortion > 0.f) {
       // 'decoded' can't be modified as long as 'decoder' is used, so
       // 'decoded_unoriented' is compared instead.
-      if (config.decoding_orientation == Orientation::kOriginal) {
+      if (encoder_config.decoding_orientation == Orientation::kOriginal) {
         if (decoded_unoriented.SetView(decoded) != WP2_STATUS_OK) {
           abort();
         }
       } else if (OrientateBuffer(
-                     GetInverseOrientation(config.decoding_orientation),
+                     GetInverseOrientation(encoder_config.decoding_orientation),
                      decoded, &decoded_unoriented) != WP2_STATUS_OK) {
         abort();
       }
