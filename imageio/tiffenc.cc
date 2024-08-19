@@ -21,9 +21,7 @@
 
 #include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
-#include "src/dsp/dsp.h"
 #include "src/utils/utils.h"
-#include "src/utils/vector.h"
 #include "src/wp2/base.h"
 
 namespace WP2 {
@@ -50,18 +48,17 @@ void PutLE32(uint8_t* const dst, uint32_t value) {
 
 WP2Status WriteTIFF(const ArgbBuffer& buffer, FILE* fout) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(!buffer.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
-  WP2_CHECK_OK(buffer.format() == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
+  WP2_CHECK_OK(!buffer.IsEmpty(), WP2_STATUS_NULL_PARAMETER);
+  WP2_CHECK_OK(WP2Formatbpc(buffer.format()) == 8,
+               WP2_STATUS_INVALID_PARAMETER);
 
   // TODO(skal): should be has_alpha = WP2ArgbBufferHasTransparency(buffer);
   // but tests are failing with that.
   const int has_alpha = 1;
   const uint32_t width = buffer.width();
   const uint32_t height = buffer.height();
-  const uint8_t* Argb = buffer.GetRow8(0);
-  const uint32_t stride = buffer.stride();
-  const WP2SampleFormat fmt = has_alpha ? WP2_rgbA_32 : WP2_RGB_24;
-  const uint8_t bytes_per_px = has_alpha ? 4 : 3;
+  ArgbBuffer converted_row(has_alpha ? WP2_rgbA_32 : WP2_RGB_24);
+  const uint8_t bytes_per_px = WP2FormatBpp(converted_row.format());
   // For non-alpha case, we omit tag 0x152 (ExtraSamples).
   const uint8_t num_ifd_entries =
       has_alpha ? NUM_IFD_ENTRIES : NUM_IFD_ENTRIES - 1;
@@ -108,19 +105,21 @@ WP2Status WriteTIFF(const ArgbBuffer& buffer, FILE* fout) {
   PutLE32(tiff_header + 118 + 8, strip_byte_count);
   if (!has_alpha) PutLE32(tiff_header + 178, 0);  // IFD terminator
 
-  Vector_u8 dest;
-  WP2_CHECK_ALLOC_OK(dest.resize(bytes_per_row));
-  WP2ArgbConverterInit();
-
   // write header
   WP2_CHECK_OK(fwrite(tiff_header, sizeof(tiff_header), 1, fout) == 1,
                WP2_STATUS_BAD_WRITE);
   // write pixel values
   for (uint32_t y = 0; y < height; ++y) {
-    WP2ArgbConvertTo[fmt](Argb, width, dest.data());
-    WP2_CHECK_OK(fwrite(dest.data(), bytes_per_px, width, fout) == width,
-                 WP2_STATUS_BAD_WRITE);
-    Argb += stride;
+    ArgbBuffer buffer_row(buffer.format());
+    WP2_CHECK_STATUS(buffer_row.SetView(buffer, {0, y, buffer.width(), 1}));
+    if (converted_row.format() == buffer_row.format()) {
+      WP2_CHECK_STATUS(converted_row.SetView(buffer_row));
+    } else {
+      WP2_CHECK_STATUS(converted_row.ConvertFrom(buffer_row));
+    }
+    WP2_CHECK_OK(
+        fwrite(converted_row.GetRow8(0), bytes_per_px, width, fout) == width,
+        WP2_STATUS_BAD_WRITE);
   }
   return WP2_STATUS_OK;
 }

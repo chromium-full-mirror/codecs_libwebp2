@@ -19,7 +19,6 @@
 #include <cstdio>
 
 #include "imageio/image_enc.h"
-#include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
@@ -33,36 +32,31 @@ namespace WP2 {
 static WP2Status WritePPMPAM(const ArgbBuffer& buffer, int alpha,
                              FILE* const fout) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(buffer.format() == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
+  WP2_CHECK_OK(!buffer.IsEmpty(), WP2_STATUS_NULL_PARAMETER);
+  WP2_CHECK_OK(WP2Formatbpc(buffer.format()) == 8,
+               WP2_STATUS_INVALID_PARAMETER);
 
-  const uint32_t width = buffer.width();
-  const uint32_t height = buffer.height();
-  const uint8_t* row = buffer.GetRow8(0);
-  const uint32_t stride = buffer.stride();
-  const size_t bytes_per_px = alpha ? 4 : 3;
-  WP2SampleFormat fmt;
-  Vector_u8 dest;
-  uint32_t y;
-
-  WP2_CHECK_OK(row != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_ALLOC_OK(dest.resize(width * bytes_per_px));
-  WP2ArgbConverterInit();
-
+  ArgbBuffer converted_row(alpha ? WP2_RGBA_32 : WP2_RGB_24);
+  const uint8_t bytes_per_px = WP2FormatBpp(converted_row.format());
   if (alpha) {
     fprintf(fout,
             "P7\nWIDTH %u\nHEIGHT %u\nDEPTH 4\nMAXVAL 255\n"
             "TUPLTYPE RGB_ALPHA\nENDHDR\n",
-            width, height);
-    fmt = WP2_RGBA_32;
+            buffer.width(), buffer.height());
   } else {
-    fprintf(fout, "P6\n%u %u\n255\n", width, height);
-    fmt = WP2_RGB_24;
+    fprintf(fout, "P6\n%u %u\n255\n", buffer.width(), buffer.height());
   }
-  for (y = 0; y < height; ++y) {
-    WP2ArgbConvertTo[fmt](row, width, dest.data());
-    WP2_CHECK_OK(fwrite(dest.data(), width, bytes_per_px, fout) == bytes_per_px,
+  for (uint32_t y = 0; y < buffer.height(); ++y) {
+    ArgbBuffer buffer_row(buffer.format());
+    WP2_CHECK_STATUS(buffer_row.SetView(buffer, {0, y, buffer.width(), 1}));
+    if (converted_row.format() == buffer_row.format()) {
+      WP2_CHECK_STATUS(converted_row.SetView(buffer_row));
+    } else {
+      WP2_CHECK_STATUS(converted_row.ConvertFrom(buffer_row));
+    }
+    WP2_CHECK_OK(fwrite(converted_row.GetRow8(0), bytes_per_px,
+                        converted_row.width(), fout) == converted_row.width(),
                  WP2_STATUS_BAD_WRITE);
-    row += stride;
   }
   return WP2_STATUS_OK;
 }

@@ -27,6 +27,7 @@
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
 #include "src/wp2/base.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {

@@ -19,9 +19,7 @@
 #include <cstdio>
 
 #include "imageio/image_enc.h"
-#include "src/dsp/dsp.h"
 #include "src/utils/utils.h"
-#include "src/utils/vector.h"
 #include "src/wp2/base.h"
 
 namespace WP2 {
@@ -45,22 +43,21 @@ static constexpr uint32_t kBMPAlphaHeaderSize = 70u;  // + 16 bytes of masks
 
 WP2Status WriteBMP(const ArgbBuffer& buffer, FILE* fout) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(buffer.format() == WP2_Argb_32, WP2_STATUS_UNSUPPORTED_FEATURE);
-
+  WP2_CHECK_OK(!buffer.IsEmpty(), WP2_STATUS_NULL_PARAMETER);
+  WP2_CHECK_OK(WP2Formatbpc(buffer.format()) == 8,
+               WP2_STATUS_INVALID_PARAMETER);
   const bool has_alpha = buffer.HasTransparency();
+
+  ArgbBuffer converted_row(has_alpha ? WP2_BGRA_32 : WP2_BGR_24);
+  const uint8_t bytes_per_px = WP2FormatBpp(converted_row.format());
+
   const uint32_t width = buffer.width();
   const uint32_t height = buffer.height();
-  WP2_CHECK_OK(!buffer.IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
-  const uint32_t bytes_per_px = has_alpha ? 4 : 3;
   const uint32_t line_size = bytes_per_px * width;
   const uint32_t bmp_stride = (line_size + 3) & ~3;  // pad to 4
   const uint32_t header_size = has_alpha ? kBMPAlphaHeaderSize : kBMPHeaderSize;
   const uint32_t total_size = bmp_stride * height + header_size;
   const uint32_t format = has_alpha ? 3 : 0;  // BI_BITFIELDS or BI_RGB
-
-  WP2::Vector_u8 ARGB;
-  WP2_CHECK_ALLOC_OK(ARGB.resize(bmp_stride));
-  for (uint32_t i = line_size; i < bmp_stride; ++i) ARGB[i] = 0;
 
   // bitmap file header
   uint8_t bmp_header[kBMPAlphaHeaderSize] = {0};
@@ -94,13 +91,23 @@ WP2Status WriteBMP(const ArgbBuffer& buffer, FILE* fout) {
                WP2_STATUS_BAD_WRITE);
 
   // write pixel array
-  WP2ArgbConverterInit();
   for (uint32_t y = 0; y < height; ++y) {
-    const uint8_t* const Argb = buffer.GetRow8(height - 1 - y);
-    WP2ArgbConvertTo[has_alpha ? WP2_BGRA_32 : WP2_BGR_24](Argb, width,
-                                                           ARGB.data());
-    WP2_CHECK_OK(fwrite(ARGB.data(), bmp_stride, 1, fout) == 1,
+    ArgbBuffer buffer_row(buffer.format());
+    WP2_CHECK_STATUS(buffer_row.SetView(buffer, {0, height - y - 1, width, 1}));
+    if (converted_row.format() == buffer_row.format()) {
+      WP2_CHECK_STATUS(converted_row.SetView(buffer_row));
+    } else {
+      WP2_CHECK_STATUS(converted_row.ConvertFrom(buffer_row));
+    }
+    WP2_CHECK_OK(fwrite(converted_row.GetRow8(0), bytes_per_px,
+                        converted_row.width(), fout) == converted_row.width(),
                  WP2_STATUS_BAD_WRITE);
+    // Pad till the line length is a multiple of 4 bytes.
+    if (bmp_stride > line_size) {
+      const uint8_t padding[3] = {0, 0, 0};
+      WP2_CHECK_OK(fwrite(padding, bmp_stride - line_size, 1, fout) == 1,
+                   WP2_STATUS_BAD_WRITE);
+    }
   }
   return WP2_STATUS_OK;
 }
