@@ -37,6 +37,9 @@ void WP2ErrorLog(const char* const file, int line, WP2Status s,
   assert(wp2_error_tracer != nullptr);
   wp2_error_tracer->Log(file, line, s, extra_message);
 #else
+  // Uncomment to print when an error was caught.
+  // fprintf(stderr, "%s:%d: %s (%s)\n", file, line, WP2GetStatusMessage(s),
+  //         extra_message);
   (void)file;
   (void)line;
   (void)s;

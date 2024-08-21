@@ -30,6 +30,7 @@
 #include "src/common/vdebug.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "gtest/gtest.h"
@@ -349,6 +350,40 @@ TEST(BufferTest, CompositeOnBuffer) {
   EXPECT_EQ(row[4 * 3 + 1], 0);
   EXPECT_EQ(row[4 * 3 + 2], 0);
   EXPECT_EQ(row[4 * 3 + 3], 0);
+}
+
+std::tuple<uint8_t, uint8_t, uint8_t, uint8_t> Composite(
+    uint8_t fg_a, uint8_t fg_r, uint8_t fg_g, uint8_t fg_b, uint8_t bg_a,
+    uint8_t bg_r, uint8_t bg_g, uint8_t bg_b) {
+  ArgbBuffer fg(WP2_ARGB_32), bg(WP2_ARGB_32);
+  WP2_ASSERT_STATUS(fg.Resize(1, 1));
+  WP2_ASSERT_STATUS(bg.Resize(1, 1));
+  const uint8_t fg_color[] = {fg_a, fg_r, fg_g, fg_b};
+  const uint8_t bg_color[] = {bg_a, bg_r, bg_g, bg_b};
+  fg.Fill({0, 0, 1, 1}, fg_color);
+  bg.Fill({0, 0, 1, 1}, bg_color);
+  WP2_ASSERT_STATUS(fg.CompositeOver(bg));
+  return {fg.GetRow8(0)[0], fg.GetRow8(0)[1], fg.GetRow8(0)[2],
+          fg.GetRow8(0)[3]};
+}
+
+TEST(BufferTest, CompositeUnmultiplied) {
+  EXPECT_EQ(Composite(/*fg*/ 255, 0, 127, 255, /*bg*/ 255, 255, 255, 255),
+            std::make_tuple(255, 0, 127, 255));
+  EXPECT_EQ(Composite(/*fg*/ 0, 0, 127, 255, /*bg*/ 255, 255, 255, 255),
+            std::make_tuple(255, 255, 255, 255));
+  EXPECT_EQ(Composite(/*fg*/ 0, 0, 127, 255, /*bg*/ 127, 255, 255, 255),
+            std::make_tuple(127, 255, 255, 255));
+  EXPECT_EQ(Composite(/*fg*/ 255, 0, 127, 255, /*bg*/ 127, 255, 255, 255),
+            std::make_tuple(255, 0, 127, 255));
+  EXPECT_EQ(Composite(/*fg*/ 127, 0, 127, 255, /*bg*/ 255, 255, 255, 255),
+            std::make_tuple(255, 128, 191, 255));
+  EXPECT_EQ(Composite(/*fg*/ 127, 0, 127, 255, /*bg*/ 127, 255, 255, 255),
+            std::make_tuple(191, 85, 170, 255));
+  EXPECT_EQ(Composite(/*fg*/ 127, 0, 127, 255, /*bg*/ 0, 255, 255, 255),
+            std::make_tuple(127, 0, 127, 255));
+  EXPECT_EQ(Composite(/*fg*/ 127, 0, 127, 255, /*bg*/ 0, 0, 0, 0),
+            std::make_tuple(127, 0, 127, 255));
 }
 
 TEST(BufferTest, CompositeYuv) {

@@ -396,9 +396,10 @@ static WP2Status CompositeBuffers(const ArgbBuffer& background,
                                   const ArgbBuffer& foreground,
                                   const Rectangle& window,
                                   ArgbBuffer* const dest) {
-  WP2_CHECK_OK(background.format() == WP2_Argb_32,
-               WP2_STATUS_INVALID_COLORSPACE);
-  WP2_CHECK_OK(foreground.format() == WP2_Argb_32,
+  WP2_CHECK_OK(
+      background.format() == WP2_Argb_32 || background.format() == WP2_ARGB_32,
+      WP2_STATUS_INVALID_COLORSPACE);
+  WP2_CHECK_OK(foreground.format() == background.format(),
                WP2_STATUS_INVALID_COLORSPACE);
   WP2_CHECK_OK(foreground.width() == background.width(),
                WP2_STATUS_INVALID_PARAMETER);
@@ -414,11 +415,28 @@ static WP2Status CompositeBuffers(const ArgbBuffer& background,
     const uint8_t* const fg_row = foreground.GetPosition(w.x, y);
     const uint8_t* const bg_row = background.GetPosition(w.x, y);
     uint8_t* const dest_row = dest->GetPosition(w.x, y);
-    for (uint32_t x = 0; x < w.width; ++x) {
-      const uint8_t b = kAlphaMax - fg_row[4 * x + 0];  // ~ 255 * (1-alpha)
-      for (uint32_t c = 0; c < 4; ++c) {
-        dest_row[4 * x + c] =
-            fg_row[4 * x + c] + DivBy255(b * bg_row[4 * x + c]);
+    // See https://en.wikipedia.org/wiki/Alpha_compositing.
+    if (WP2IsPremultiplied(foreground.format())) {
+      for (uint32_t x = 0; x < w.width; ++x) {
+        const uint8_t b = kAlphaMax - fg_row[4 * x + 0];  // ~ 255 * (1-alpha)
+        for (uint32_t c = 0; c < 4; ++c) {
+          dest_row[4 * x + c] =
+              fg_row[4 * x + c] + DivBy255(b * bg_row[4 * x + c]);
+        }
+      }
+    } else {
+      for (uint32_t x = 0; x < w.width; ++x) {
+        const uint8_t b = kAlphaMax - fg_row[4 * x + 0];  // ~ 255 * (1-alpha)
+        const uint8_t fg_alpha = fg_row[4 * x + 0];
+        const uint8_t bg_alpha = bg_row[4 * x + 0];
+        const uint8_t dest_alpha = fg_alpha + DivBy255(b * bg_row[4 * x + 0]);
+        dest_row[4 * x + 0] = dest_alpha;
+        for (uint32_t c = 1; c < 4; ++c) {
+          dest_row[4 * x + c] =
+              DivRound<int32_t>(fg_row[4 * x + c] * fg_alpha +
+                                    DivBy255(b * bg_row[4 * x + c] * bg_alpha),
+                                dest_alpha);
+        }
       }
     }
   }
