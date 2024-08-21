@@ -595,7 +595,8 @@ std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& c) {
                "float");
   PrintSetting(out, c.effort, kD.effort, "effort");
   PrintSetting(out, c.use_av1, kD.use_av1, "use_av1", "bool");
-  PrintSetting(out, c.exact, kD.exact, "exact", "bool");
+  PrintSetting(out, c.keep_unmultiplied, kD.keep_unmultiplied,
+               "keep_unmultiplied", "bool");
   PrintSetting(out, c.decoding_orientation, kD.decoding_orientation,
                "decoding_orientation", "Orientation");
   PrintSetting(out, c.create_preview, kD.create_preview, "create_preview",
@@ -659,7 +660,6 @@ std::ostream& operator<<(std::ostream& out, const WP2::DecoderConfig& c) {
   PrintSetting(out, c.grain_amplitude, kD.grain_amplitude, "grain_amplitude");
   PrintSetting(out, c.incremental_mode, kD.incremental_mode, "incremental_mode",
                "DecoderConfig::IncrementalMode");
-  PrintSetting(out, c.exact, kD.exact, "exact", "bool");
   return out << std::endl;
 }
 

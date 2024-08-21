@@ -103,12 +103,14 @@ Rectangle Subframe::GetFrameRect() const {
 FrameEncoder::FrameEncoder(const EncoderConfig& config,
                            Argb38b background_color,
                            const Vector<Frame>& frames,
+                           bool image_is_premultiplied,
                            const ProgressRange& progress)
     : config_(config),
       frames_(frames),
       image_has_alpha_(!AllFramesAreOpaque(frames)),
       background_color_(ToArgb32b(background_color)),
-      subframe_encoder_(image_has_alpha_, FinalTileShape(config)),
+      subframe_encoder_(image_has_alpha_, image_is_premultiplied,
+                        FinalTileShape(config)),
       progress_(progress, 1.f) {}
 
 WP2Status FrameEncoder::SaveSubframeToCanvas(const ArgbBuffer& subframe,
@@ -448,8 +450,12 @@ WP2Status FrameEncoder::Encode(Writer* const output) {
 
 //------------------------------------------------------------------------------
 
-SubframeEncoder::SubframeEncoder(bool image_has_alpha, TileShape tile_shape)
-    : tile_shape_(tile_shape), image_has_alpha_(image_has_alpha) {
+SubframeEncoder::SubframeEncoder(bool image_has_alpha,
+                                 bool image_is_premultiplied,
+                                 TileShape tile_shape)
+    : tile_shape_(tile_shape),
+      image_has_alpha_(image_has_alpha),
+      image_is_premultiplied_(image_is_premultiplied) {
   assert(tile_shape != TILE_SHAPE_AUTO);
 }
 
@@ -521,7 +527,8 @@ WP2Status SubframeEncoder::EncodeSubframe(const EncoderConfig& config,
 
   WP2_CHECK_STATUS(EncodeTiles(subframe.window.width, subframe.window.height,
                                rgb_subframe, yuv_subframe, csp_transform,
-                               config, image_has_alpha_, progress, output));
+                               config, image_has_alpha_,
+                               image_is_premultiplied_, progress, output));
   return WP2_STATUS_OK;
 }
 

@@ -57,9 +57,10 @@ struct EncoderConfig {
   int effort = 5;               // Compression rate/speed trade-off.
                                 // Range: [0=faster-bigger .. 9=slower-better]
   bool use_av1 = false;  // Use lossy AV1 internally instead of lossy WP2.
-  bool exact = false;    // Do not pre-multiply the input (for lossless only).
-                         // TODO: b/359162718 - Rename this field and signal
-                         //                     premul status in encoded files.
+  bool keep_unmultiplied = false;  // Do not premultiply color samples by alpha.
+                                   // Ignored if the input color samples are
+                                   // already premultiplied by alpha values.
+                                   // See the table below for more information.
 
   // Side parameters:
   // Set whether the image will be rotated or mirrored during decoding.
@@ -159,6 +160,18 @@ struct EncoderConfig {
 };
 
 //------------------------------------------------------------------------------
+// Effect of EncoderConfig::keep_unmultiplied
+//
+// |      input      |   format when coded   |         signaled flags         |
+// |---------|-------|----------|------------|----------------|---------------|
+// | samples | keep_ | lossily  | losslessly | BitstreamFeatu | is_tile_      |
+// | format  | unmul |          |            | res::is_premul | premultiplied |
+// |---------|-------|----------|------------|----------------|---------------|
+// |  ARGB   | true  | (unimpl) | ARGB       | explicit false | implicit no   |
+// |  ARGB   | false | Argb     | (chooses)  | explicit true  | explicit y/no |
+// |  Argb   | (any) | Argb     | Argb       | explicit true  | explicit yes  |
+
+//------------------------------------------------------------------------------
 // Picture hint
 
 // Enumerate some predefined picture types for Encode(), depending on the
@@ -185,19 +198,21 @@ Encode(const ArgbBuffer& input, Writer* output,
 // Specialized call
 
 // Encodes an image of 'width' by 'height' pixels of channels 'c0, c1, c2' in a
-// custom color space (converted from alpha-premultiplied RGB samples), 10b max.
+// custom color space (converted from alpha-premultiplied RGB samples if
+// 'c_premultiplied_by_a' is true), 10b max.
 // The '_step' parameters specify the distances in samples between scanlines and
 // must be multiples of two. The 'ccsp_to_rgb_matrix' and the following
 // 'ccsp_to_rgb_shift' are assumed to output RGB with 8 unsigned bits of
 // precision. Alpha must have a precision of 8 unsigned bits unless 'a_buffer'
 // is null. Returns WP2_STATUS_OK or an error.
-WP2_NO_DISCARD WP2Status Encode(
-    uint32_t width, uint32_t height, const int16_t* c0_buffer, uint32_t c0_step,
-    const int16_t* c1_buffer, uint32_t c1_step, const int16_t* c2_buffer,
-    uint32_t c2_step, const int16_t* a_buffer, uint32_t a_step,
-    const int16_t ccsp_to_rgb_matrix[9], uint32_t ccsp_to_rgb_shift,
-    Writer* output, const EncoderConfig& config = EncoderConfig::kDefault,
-    const Metadata& metadata = Metadata());
+WP2_NO_DISCARD WP2Status
+Encode(uint32_t width, uint32_t height, const int16_t* c0_buffer,
+       uint32_t c0_step, const int16_t* c1_buffer, uint32_t c1_step,
+       const int16_t* c2_buffer, uint32_t c2_step, const int16_t* a_buffer,
+       uint32_t a_step, bool c_premultiplied_by_a,
+       const int16_t ccsp_to_rgb_matrix[9], uint32_t ccsp_to_rgb_shift,
+       Writer* output, const EncoderConfig& config = EncoderConfig::kDefault,
+       const Metadata& metadata = Metadata());
 
 //------------------------------------------------------------------------------
 // AnimationEncoder

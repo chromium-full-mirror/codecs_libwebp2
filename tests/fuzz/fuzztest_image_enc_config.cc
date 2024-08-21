@@ -40,7 +40,7 @@ void ReadEncodeDecode(const std::string& file_name, EncoderConfig config,
                       double progress_fail_at) {
   const Data data = ReadTestImage(file_name);
   // Read a randomly chosen valid image file.
-  ArgbBuffer original(config.exact ? WP2_ARGB_32 : WP2_Argb_32);
+  ArgbBuffer original(config.keep_unmultiplied ? WP2_ARGB_32 : WP2_Argb_32);
   ASSERT_EQ(ReadImage(data.bytes, data.size, &original, FileFormat::AUTO,
                       LogLevel::QUIET),
             WP2_STATUS_OK);

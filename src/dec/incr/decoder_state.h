@@ -71,12 +71,7 @@ class PartialTileDecoder : public WP2Allocable {
 struct Decoder::State : public WP2Allocable {
  protected:
   State(const DecoderConfig& config, DataSource* const input)
-      : data_source(input),
-        raw_output_buffer(ArgbBuffer(config.exact ? WP2_ARGB_32 : WP2_Argb_32)),
-        frame_output_buffer(
-            ArgbBuffer(config.exact ? WP2_ARGB_32 : WP2_Argb_32)),
-        blended_buffer(ArgbBuffer(config.exact ? WP2_ARGB_32 : WP2_Argb_32)),
-        progress(config.progress_hook) {}
+      : data_source(input), progress(config.progress_hook) {}
 
  public:
   virtual ~State();

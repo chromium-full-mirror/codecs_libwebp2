@@ -25,6 +25,7 @@
 
 #include "src/common/constants.h"
 #include "src/common/progress_watcher.h"
+#include "src/enc/analysis.h"
 #include "src/enc/preview/preview_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/csp.h"
@@ -198,12 +199,15 @@ WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
       assert(false);
     }
   }
+  const bool is_premultiplied =
+      DecidePremultiplied(first_frame.rgb_pixels.format(), config);
 
   // TODO(yguyon): Actually encode frames and compute background color etc.
-  WP2_CHECK_STATUS(EncodeHeader(
-      config, first_frame.GetWidth(), first_frame.GetHeight(), rgb_bit_depth,
-      has_alpha, /*is_anim=*/true, loop_forever, kDefaultBackgroundColor,
-      preview_color, has_icc, has_trailing_data, output));
+  WP2_CHECK_STATUS(
+      EncodeHeader(config, first_frame.GetWidth(), first_frame.GetHeight(),
+                   rgb_bit_depth, has_alpha, is_premultiplied, /*is_anim=*/true,
+                   loop_forever, kDefaultBackgroundColor, preview_color,
+                   has_icc, has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   const ProgressRange preview_progress(&progress, kOnePercent);
@@ -227,7 +231,7 @@ WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
   {
     const ProgressRange frames_progress(&progress, kProgressFrames);
     FrameEncoder frame_encoder(config, kDefaultBackgroundColor, frames,
-                               frames_progress);
+                               is_premultiplied, frames_progress);
     WP2_CHECK_STATUS(frame_encoder.Encode(output));
   }
 

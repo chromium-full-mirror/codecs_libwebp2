@@ -369,8 +369,9 @@ int main(int argc, char* argv[]) {
                         ccsp_buffer.U.Row(0), ccsp_buffer.U.Step(),
                         ccsp_buffer.V.Row(0), ccsp_buffer.V.Step(),
                         ccsp_buffer.HasAlpha() ? ccsp_buffer.A.Row(0) : nullptr,
-                        ccsp_buffer.A.Step(), ccsp_to_rgb.mtx(),
-                        ccsp_to_rgb.shift, &writer, wp2_enc_config, metadata),
+                        ccsp_buffer.A.Step(), /*c_premultiplied_by_a=*/true,
+                        ccsp_to_rgb.mtx(), ccsp_to_rgb.shift, &writer,
+                        wp2_enc_config, metadata),
             "Error! Failed to encode as wp2.");
 
         CHECK_STATUS(

@@ -27,6 +27,7 @@
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -101,8 +102,8 @@ TEST_P(EncodeDecodeCustomCspTest, Comparison) {
       custom_input.U.Row(0), custom_input.U.Step(), custom_input.V.Row(0),
       custom_input.V.Step(),
       custom_input.HasAlpha() ? custom_input.A.Row(0) : nullptr,
-      custom_input.A.Step(), ccsp_to_rgb_matrix, ccsp_to_rgb_shift, &data,
-      config));
+      custom_input.A.Step(), /*c_premultiplied_by_a=*/true, ccsp_to_rgb_matrix,
+      ccsp_to_rgb_shift, &data, config));
 
   ASSERT_WP2_OK(Decode(
       data.mem_, data.size_, rgb_to_ccsp_matrix, rgb_to_ccsp_shift,

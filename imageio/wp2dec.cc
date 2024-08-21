@@ -111,7 +111,6 @@ class ImageReaderWP2 : public ImageReader::Impl {
 void ImageReader::SetImplWP2(ArgbBuffer* const buffer, LogLevel log_level,
                              size_t max_num_pixels, bool exact) {
   config_ = DecoderConfig::kDefault;
-  config_.exact = exact;
   impl_ = std::unique_ptr<ImageReaderWP2>(
       new (WP2Allocable::nothrow) ImageReaderWP2(
           data_.bytes, data_.size, config_, buffer, log_level, max_num_pixels));

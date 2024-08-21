@@ -54,6 +54,10 @@ class FeatureMap {
   uint32_t cluster_map_[kHistogramSize];  // map from score to segment id
 };
 
+// Returns whether to use color samples premultiplied by alpha internally.
+bool DecidePremultiplied(WP2SampleFormat input_format,
+                         const EncoderConfig& config);
+
 // Returns whether to have lossless and/or lossy tiles depending on 'config'.
 GlobalParams::Type DecideGlobalParamsType(const EncoderConfig& config);
 

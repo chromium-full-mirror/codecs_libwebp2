@@ -64,6 +64,7 @@ class GlobalParams {
   // True if the frame contains alpha (either lossless or lossy).
   // Can only be true if 'BitstreamFeatures::has_alpha' is true as well.
   bool has_alpha_ = false;
+  // TODO: b/359162718 - Consider adding an is_premultiplied_ field here.
 
   // lossy part
   CSPTransform transf_;

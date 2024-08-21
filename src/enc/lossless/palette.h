@@ -50,10 +50,10 @@ class Palette {
     kUndefined
   };
   Palette() : num_colors_(0) {}
-  void Init(WP2SampleFormat format, bool has_alpha, bool exact) {
+  void Init(WP2SampleFormat format, bool has_alpha, bool keep_unmultiplied) {
     format_ = format;
     has_alpha_ = has_alpha;
-    exact_ = exact;
+    keep_unmultiplied_ = keep_unmultiplied;
   }
   // Populates the palette with colors from the given 'pic'.
   // If the unique color count is more than kMaxPaletteSize (or if there is only
@@ -109,7 +109,7 @@ class Palette {
  private:
   WP2SampleFormat format_;
   bool has_alpha_ = false;
-  bool exact_ = false;
+  bool keep_unmultiplied_ = false;
   bool is_grayscale_ = false;
   WP2::Vector_s16 colors_;
   uint32_t num_colors_ = 0;        // 0 = palette is disabled

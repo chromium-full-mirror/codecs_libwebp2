@@ -27,6 +27,7 @@
 #include "src/common/color_precision.h"
 #include "src/common/constants.h"
 #include "src/common/progress_watcher.h"
+#include "src/enc/analysis.h"
 #include "src/enc/anim/anim_enc.h"
 #include "src/enc/wp2_enc_i.h"
 #include "src/utils/orientation.h"
@@ -37,6 +38,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -62,8 +64,7 @@ TEST(AnimFrameTest, ForceLossless) {
   second_frame.duration_ms = 20;
   ASSERT_WP2_OK(second_frame.rgb_pixels.SetView(buffers[1]));
 
-  const uint32_t rgb_bit_depth =
-      (first_frame.rgb_pixels.format() == WP2_Argb_38) ? 10 : 8;
+  const uint32_t rgb_bit_depth = WP2Formatbpc(first_frame.rgb_pixels.format());
   const bool has_alpha = !AllFramesAreOpaque(frames);
 
   EncoderConfig config;
@@ -71,13 +72,16 @@ TEST(AnimFrameTest, ForceLossless) {
   config.tile_shape = TILE_SHAPE_SQUARE_256;
   MemoryWriter encoded_data;
 
+  const bool is_premultiplied =
+      DecidePremultiplied(first_frame.rgb_pixels.format(), config);
   ASSERT_WP2_OK(EncodeHeader(
       config, first_frame.GetWidth(), first_frame.GetHeight(), rgb_bit_depth,
-      has_alpha, /*is_anim=*/(frames.size() > 1), /*loop_forever=*/false,
-      kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
-      /*has_trailing_data=*/false, &encoded_data));
+      has_alpha, is_premultiplied, /*is_anim=*/(frames.size() > 1),
+      /*loop_forever=*/false, kDefaultBackgroundColor, RGB12b{10, 0, 30},
+      /*has_icc=*/false, /*has_trailing_data=*/false, &encoded_data));
 
-  FrameEncoder frame_encode(config, kDefaultBackgroundColor, frames, kProgress);
+  FrameEncoder frame_encode(config, kDefaultBackgroundColor, frames,
+                            is_premultiplied, kProgress);
   ASSERT_WP2_OK(frame_encode.Encode(&encoded_data));
 
   // Decode.
@@ -172,13 +176,17 @@ TEST_P(ParameterizedAnimFrameTest, Blend) {
   config.decoding_orientation = orientation;
   MemoryWriter encoded_data;
 
+  const bool is_premultiplied =
+      DecidePremultiplied(first_frame.rgb_pixels.format(), config);
   ASSERT_WP2_OK(EncodeHeader(
       config, first_frame.rgb_pixels.width(), first_frame.rgb_pixels.height(),
-      rgb_bit_depth, has_alpha, /*is_anim=*/(subframes.size() > 1),
-      /*loop_forever=*/false, kDefaultBackgroundColor, RGB12b{10, 0, 30},
-      /*has_icc=*/false, /*has_trailing_data=*/false, &encoded_data));
+      rgb_bit_depth, has_alpha, is_premultiplied,
+      /*is_anim=*/(subframes.size() > 1), /*loop_forever=*/false,
+      kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
+      /*has_trailing_data=*/false, &encoded_data));
 
-  SubframeEncoder subframe_encoder(has_alpha, config.tile_shape);
+  SubframeEncoder subframe_encoder(has_alpha, is_premultiplied,
+                                   config.tile_shape);
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
       config, first_frame, /*is_last=*/false, kProgress, &encoded_data));
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
@@ -252,13 +260,17 @@ TEST_P(ParameterizedAnimFrameTest, BlendWithPreframe) {
   config.decoding_orientation = orientation;
   MemoryWriter encoded_data;
 
+  const bool is_premultiplied =
+      DecidePremultiplied(first_frame.rgb_pixels.format(), config);
   ASSERT_WP2_OK(EncodeHeader(
       config, first_frame.rgb_pixels.width(), first_frame.rgb_pixels.height(),
-      rgb_bit_depth, has_alpha, /*is_anim=*/(subframes.size() > 1),
-      /*loop_forever=*/false, kDefaultBackgroundColor, RGB12b{10, 0, 30},
-      /*has_icc=*/false, /*has_trailing_data=*/false, &encoded_data));
+      rgb_bit_depth, has_alpha, is_premultiplied,
+      /*is_anim=*/(subframes.size() > 1), /*loop_forever=*/false,
+      kDefaultBackgroundColor, RGB12b{10, 0, 30}, /*has_icc=*/false,
+      /*has_trailing_data=*/false, &encoded_data));
 
-  SubframeEncoder subframe_encoder(has_alpha, config.tile_shape);
+  SubframeEncoder subframe_encoder(has_alpha, is_premultiplied,
+                                   config.tile_shape);
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
       config, first_frame, /*is_last=*/false, kProgress, &encoded_data));
   ASSERT_WP2_OK(subframe_encoder.EncodeSubframe(
@@ -409,14 +421,16 @@ TEST_P(ParameterizedAnimFrameTest, RandomFrames) {
   const Argb32b background_color = RandomColor(has_alpha, &random);
   printf("Background_color: Argb32(%d, %d, %d, %d)\n", background_color.a,
          background_color.r, background_color.g, background_color.b);
+  const bool is_premultiplied =
+      DecidePremultiplied(frames.front().rgb_pixels.format(), config);
   ASSERT_WP2_OK(EncodeHeader(
-      config, width, height, rgb_bit_depth, has_alpha,
+      config, width, height, rgb_bit_depth, has_alpha, is_premultiplied,
       /*is_anim=*/(frames.size() > 1), /*loop_forever=*/false,
       ToArgb38b(background_color), /*preview_color=*/RGB12b{10, 0, 30},
       /*has_icc=*/false, /*has_trailing_data=*/false, &encoded_data));
 
   FrameEncoder frame_encode(config, ToArgb38b(background_color), frames,
-                            kProgress);
+                            is_premultiplied, kProgress);
   ASSERT_WP2_OK(frame_encode.Encode(&encoded_data));
 
   // Decode.
@@ -446,7 +460,7 @@ TEST_P(ParameterizedAnimFrameTest, RandomFrames) {
 TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
   const Orientation orientation = std::get<0>(GetParam());
   const bool is_slow = std::get<1>(GetParam());
-  const int test_id = (int)orientation * 2 + is_slow;
+  const int test_id = static_cast<int>(orientation) * 2 + is_slow;
   UniformIntDistribution random(test_id);
 
   Vector<Subframe> subframes;
@@ -503,13 +517,16 @@ TEST_P(ParameterizedAnimFrameTest, RandomSubframes) {
   printf("Background_color: Argb32(%d, %d, %d, %d)\n", background_color.a,
          background_color.r, background_color.g, background_color.b);
 
+  const bool is_premultiplied =
+      DecidePremultiplied(subframes.front().rgb_pixels.format(), config);
   ASSERT_WP2_OK(EncodeHeader(
-      config, width, height, rgb_bit_depth, has_alpha, /*is_anim=*/true,
-      /*loop_forever=*/false, ToArgb38b(background_color),
+      config, width, height, rgb_bit_depth, has_alpha, is_premultiplied,
+      /*is_anim=*/true, /*loop_forever=*/false, ToArgb38b(background_color),
       /*preview_color=*/RGB12b{10, 0, 30}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &encoded_data));
 
-  SubframeEncoder subframe_encoder(has_alpha, config.tile_shape);
+  SubframeEncoder subframe_encoder(has_alpha, is_premultiplied,
+                                   config.tile_shape);
 
   for (uint32_t i = 0; i < subframes.size(); ++i) {
     const bool is_last = (i == num_subframes - 1);

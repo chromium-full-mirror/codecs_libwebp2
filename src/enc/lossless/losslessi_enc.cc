@@ -662,9 +662,9 @@ WP2Status Encoder::ApplyPredictFilter(
   const ProgressRange helper_image_progress(progress, 0.5);
   WP2::Vector_s8 sub_modes;
   WP2_CHECK_STATUS(CreateResidualImage(
-      pred_bits, config_.exact, can_use_sub_modes, min_values, max_values,
-      config_.effort, residual_image_progress, &argb_buffer_, argb_scratch_,
-      transform_data_, &sub_modes));
+      pred_bits, config_.keep_unmultiplied, can_use_sub_modes, min_values,
+      max_values, config_.effort, residual_image_progress, &argb_buffer_,
+      argb_scratch_, transform_data_, &sub_modes));
 
   const WP2::ANSDebugPrefix prefix(enc, "predictor");
   enc->PutRange(pred_bits, kTransformBitsMin, kTransformBitsMax,
@@ -778,8 +778,9 @@ WP2Status Encoder::AllocateTransformBuffer(
 WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
   const uint32_t width = pic_.width();
   const uint32_t height = pic_.height();
-  const bool can_premultiply =
-      (has_alpha_ && !WP2IsPremultiplied(pic_.format()));
+  const bool can_premultiply = has_alpha_ &&
+                               !WP2IsPremultiplied(pic_.format()) &&
+                               !config_.keep_unmultiplied;
   if (!can_premultiply) assert(!config.use_premultiplied);
   argb_buffer_.has_alpha = has_alpha_;
   argb_buffer_.channel_bits = WP2Formatbpc(pic_.format());
@@ -787,7 +788,7 @@ WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
     int16_t* const dst_row = argb_buffer_.GetRow(y);
     if (WP2Formatbpc(pic_.format()) <= 8) {
       const uint8_t* const src_row = pic_.GetRow8(y);
-      if (can_premultiply && !config_.exact) {
+      if (can_premultiply) {
         for (uint32_t x = 0; x < width; ++x) {
           const uint8_t a = src_row[4 * x + 0];
           if (a == 0) {
@@ -988,16 +989,15 @@ WP2Status Encoder::ApplyAndWriteTransforms(
     return WP2_STATUS_OK;
   }
 
-  if (has_alpha_) {
-    if (WP2IsPremultiplied(pic_.format())) {
-      // If the format is already pre-multiplied, the decoder will not have to
-      // do it.
-      enc->PutBool(false, "premultiply");
-    } else {
-      // The decoder will have to pre-multiply if the transforms do not
-      // pre-multiply, and conversely.
-      enc->PutBool(!config.use_premultiplied, "premultiply");
-    }
+  if (has_alpha_ && image_is_premultiplied_) {
+    // The lossless encoder may use unmultiplied samples for better compression,
+    // even if the image is signaled as premultiplied overall.
+    enc->PutBool(WP2IsPremultiplied(pic_.format()) || config.use_premultiplied,
+                 "is_tile_premultiplied");
+  } else {
+    // If it is signaled that the color information in the translucent pixels is
+    // kept, no lossless compression algorithm can encode premultiplied samples.
+    assert(!config.use_premultiplied);
   }
 
   if (config.transforms[0] == TransformType::kNum) {
@@ -1064,8 +1064,12 @@ WP2Status Encoder::ApplyAndWriteTransforms(
 // Encoder
 
 Encoder::Encoder(const WP2::EncoderConfig& config,
-                 const WP2::ArgbBuffer& picture, bool has_alpha)
-    : config_(config), pic_(picture), has_alpha_(has_alpha) {
+                 const WP2::ArgbBuffer& picture, bool has_alpha,
+                 bool is_premultiplied)
+    : config_(config),
+      pic_(picture),
+      has_alpha_(has_alpha),
+      image_is_premultiplied_(is_premultiplied) {
   argb_scratch_ = nullptr;
   transform_data_ = nullptr;
 
@@ -1078,7 +1082,8 @@ Encoder::Encoder(const WP2::EncoderConfig& config,
 WP2Status Encoder::Allocate() {
   const uint32_t num_pixels = pic_.width() * pic_.height();
   WP2_CHECK_ALLOC_OK(hash_chain_.Allocate(num_pixels));
-  palette_.Init(symbols_info_.SampleFormat(), has_alpha_, config_.exact);
+  palette_.Init(symbols_info_.SampleFormat(), has_alpha_,
+                config_.keep_unmultiplied);
   ref_pool_.Init(num_pixels);
 
   return WP2_STATUS_OK;
@@ -1089,6 +1094,7 @@ WP2Status Encoder::Allocate() {
 
 WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
                       const WP2::ArgbBuffer& picture, bool has_alpha,
+                      bool image_is_premultiplied,
                       const ProgressRange& progress,
                       WP2::ANSEnc* const enc_init,
                       EncodeInfo* const encode_info) {
@@ -1101,7 +1107,7 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
   WP2::Vector<CrunchConfig> crunch_configs;
 
   // Analyze image (entropy, num_palettes etc)
-  Encoder encoder(encoder_config, picture, has_alpha);
+  Encoder encoder(encoder_config, picture, has_alpha, image_is_premultiplied);
   WP2_CHECK_STATUS(encoder.Allocate());
   WP2_CHECK_STATUS(
       EncoderAnalyze(analysis_progress, &encoder, &crunch_configs));

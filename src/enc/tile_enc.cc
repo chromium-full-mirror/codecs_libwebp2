@@ -104,6 +104,7 @@ WP2Status GetEncTilesLayout(uint32_t frame_width, uint32_t frame_height,
                             const ArgbBuffer& frame_rgb,
                             const YUVPlane& frame_yuv,
                             const GlobalParams& gparams,
+                            bool image_is_premultiplied,
                             EncTilesLayout* const tiles_layout) {
   tiles_layout->tile_width = tile_width;
   tiles_layout->tile_height = tile_height;
@@ -146,6 +147,7 @@ WP2Status GetEncTilesLayout(uint32_t frame_width, uint32_t frame_height,
   }
   tiles_layout->first_unassigned_tile_index = 0;
   tiles_layout->gparams = &gparams;
+  tiles_layout->image_is_premultiplied = image_is_premultiplied;
   return WP2_STATUS_OK;
 }
 
@@ -226,8 +228,8 @@ WP2Status CodeTiles(EncTilesLayout* const tiles_layout,
 WP2Status EncodeTiles(uint32_t width, uint32_t height,
                       const ArgbBuffer& rgb_buffer, const YUVPlane& yuv_buffer,
                       const CSPTransform& transf, const EncoderConfig& config,
-                      bool image_has_alpha, const ProgressRange& progress,
-                      Writer* const output) {
+                      bool image_has_alpha, bool image_is_premultiplied,
+                      const ProgressRange& progress, Writer* const output) {
   WP2EncDspInit();
   GlobalParams gparams;
   FeatureMap features;
@@ -261,9 +263,9 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
 
   const ProgressRange tiles_progress(progress, kProgressTiles);
   EncTilesLayout tiles_layout;
-  WP2_CHECK_STATUS(GetEncTilesLayout(width, height, tile_width, tile_height,
-                                     tiles_progress, *buffer, yuv_buffer,
-                                     gparams, &tiles_layout));
+  WP2_CHECK_STATUS(GetEncTilesLayout(
+      width, height, tile_width, tile_height, tiles_progress, *buffer,
+      yuv_buffer, gparams, image_is_premultiplied, &tiles_layout));
 
   Vector<TileEncoder> workers;
   WP2_CHECK_STATUS(SetupWorkers(width, height, *buffer, yuv_buffer, config,

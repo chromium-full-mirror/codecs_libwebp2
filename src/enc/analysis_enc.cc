@@ -194,6 +194,21 @@ WP2Status GlobalParams::AssignAlphaQuantizations(const YUVPlane& yuv,
 
 //------------------------------------------------------------------------------
 
+bool DecidePremultiplied(WP2SampleFormat input_format,
+                         const EncoderConfig& config) {
+  // Input samples are already premultiplied. Signal to the decoder that some
+  // color information was lost in translucent pixels.
+  if (WP2IsPremultiplied(input_format)) return true;
+  // The user requested that there is no loss because of translucency.
+  if (config.keep_unmultiplied) return false;
+  // Let the encoder decide whether to premultiply or not. Signal to the decoder
+  // that some color information may have been lost in translucent pixels in all
+  // cases.
+  // Lossy compression always uses premultiplied samples for now.
+  // Lossless compression chooses based on encoded file size.
+  return true;
+}
+
 GlobalParams::Type DecideGlobalParamsType(const EncoderConfig& config) {
   // Neural compression is considered as GP_BOTH for now because it is lossy
   // compression outputting RGB.

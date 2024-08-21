@@ -138,17 +138,18 @@ class SubframeEncoder {
   // animation. 'tile_shape' is also global to the whole animation and must be a
   // concrete size, not TILE_SHAPE_AUTO. It is used to sanity check that the
   // tile size for all subframes match this one.
-  SubframeEncoder(bool image_has_alpha, TileShape tile_shape);
+  SubframeEncoder(bool image_has_alpha, bool image_is_premultiplied,
+                  TileShape tile_shape);
 
   // The  EncoderConfig, and therefore quality setting, can vary per frame.
   WP2Status EncodeSubframe(const EncoderConfig& config,
                            const Subframe& subframe, bool is_last,
-                           const ProgressRange& progress,
-                           Writer* const output) const;
+                           const ProgressRange& progress, Writer* output) const;
 
  private:
   TileShape tile_shape_;
   const bool image_has_alpha_;
+  const bool image_is_premultiplied_;
 };
 
 //------------------------------------------------------------------------------
@@ -157,7 +158,8 @@ class SubframeEncoder {
 class FrameEncoder {
  public:
   FrameEncoder(const EncoderConfig& config, Argb38b background_color,
-               const Vector<Frame>& frames, const ProgressRange& progress);
+               const Vector<Frame>& frames, bool image_is_premultiplied,
+               const ProgressRange& progress);
 
   // Encodes all frames. Returns WP2_STATUS_OK if no error occurred.
   WP2Status Encode(Writer* output);

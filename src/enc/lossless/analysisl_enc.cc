@@ -210,14 +210,17 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
                  height = pic.height();
   const WP2SampleFormat format = pic.format();
 
+  const bool can_premultiply =
+      (encoder.has_alpha_ && !WP2IsPremultiplied(format) &&
+       !encoder.config_.keep_unmultiplied);
+
   if (can_use_palette && encoder.palette_.Size() <= 16) {
     // In practice, small palettes are better than any other transform.
     WP2_CHECK_ALLOC_OK(configs->reserve(1));
     for (EntropyMode mode :
          {EntropyMode::kPalette, EntropyMode::kPaletteSpatial}) {
-      AddConfig(mode, /*use_premultiplied=*/!encoder.config_.exact,
-                /*red_and_blue_always_zero=*/true, /*entropy=*/0.f, effort,
-                configs);
+      AddConfig(mode, can_premultiply, /*red_and_blue_always_zero=*/true,
+                /*entropy=*/0.f, effort, configs);
     }
     return WP2_STATUS_OK;
   }
@@ -256,8 +259,6 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
     histo_len += h.len;
   }
 
-  const bool can_premultiply =
-      (encoder.has_alpha_ && !WP2IsPremultiplied(format));
   WP2_CHECK_ALLOC_OK(configs->reserve(2 * (uint32_t)EntropyMode::kNum));
   for (bool premult : {false, true}) {
     if (!can_premultiply && premult) {
@@ -507,8 +508,8 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   // anyway.
   const bool can_use_palette = (encoder->palette_.Size() > 1);
   const bool can_premultiply =
-      (!encoder->config_.exact && encoder->has_alpha_ &&
-       !WP2IsPremultiplied(encoder->pic_.format()));
+      (encoder->has_alpha_ && !WP2IsPremultiplied(encoder->pic_.format()) &&
+       !encoder->config_.keep_unmultiplied);
 
   // Try LZW within the same palette size range condition as Group4.
   if (encoder->palette_.Size() >= 2 && encoder->palette_.Size() < 256) {

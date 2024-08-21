@@ -22,11 +22,15 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#if !defined(WP2_BITTRACE)
+#include <iostream>
+#endif
 
 #include "src/common/constants.h"
 #include "src/common/progress_watcher.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
+#include "src/enc/analysis.h"
 #include "src/enc/anim/anim_enc.h"
 #include "src/enc/preview/preview_enc.h"
 #include "src/enc/wp2_enc_i.h"
@@ -204,7 +208,7 @@ EncoderConfig LosslessConfig(const EncoderConfig& base_config) {
 WP2Status EncodeScreenContent(const ArgbBuffer& input, Writer* const output,
                               const EncoderConfig& config) {
 #if !defined(WP2_BITTRACE)
-  fprintf(stderr, "WARNING! WP2_BITTRACE required for screen content\n");
+  std::cerr << "WARNING! WP2_BITTRACE required for screen content\n";
   return Encode(input, output, config);
 #endif
 
@@ -306,14 +310,16 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
   }
 
   const bool has_alpha = true;
+  const bool is_premultiplied = DecidePremultiplied(input.format(), config);
   const bool has_icc = (input.metadata_.iccp.size > 0);
   const bool has_trailing_data =
       (input.metadata_.xmp.size > 0) || (input.metadata_.exif.size > 0);
-  WP2_CHECK_STATUS(EncodeHeader(
-      config, input.width(), input.height(),
-      WP2Formatbpc(lossless_subframe.rgb_pixels.format()), has_alpha,
-      /*is_anim=*/true, /*loop_forever=*/false, kDefaultBackgroundColor,
-      GetPreviewColor(input), has_icc, has_trailing_data, output));
+  WP2_CHECK_STATUS(
+      EncodeHeader(config, input.width(), input.height(),
+                   WP2Formatbpc(lossless_subframe.rgb_pixels.format()),
+                   has_alpha, is_premultiplied, /*is_anim=*/true,
+                   /*loop_forever=*/false, kDefaultBackgroundColor,
+                   GetPreviewColor(input), has_icc, has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   const ProgressRange preview_progress(&progress, kOnePercent);
@@ -328,7 +334,8 @@ WP2Status EncodeScreenContent(const ArgbBuffer& input,
   const ProgressRange lossy_progress(
       &progress, GetFrameProgression(/*frame_index=*/1, /*is_last=*/true));
 
-  SubframeEncoder frame_encode(has_alpha, FinalTileShape(config));
+  SubframeEncoder frame_encode(has_alpha, is_premultiplied,
+                               FinalTileShape(config));
   WP2_CHECK_STATUS(frame_encode.EncodeSubframe(
       LosslessConfig(config), lossless_subframe,
       /*is_last=*/false, lossless_progress, output));

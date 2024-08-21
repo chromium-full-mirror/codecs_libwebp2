@@ -38,6 +38,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -152,7 +153,7 @@ TEST(GetDistortion, HandlesAllFormats) {
 
 //------------------------------------------------------------------------------
 
-// Verify that distortion results are not bitdepth-dependent.
+// Verify that distortion results are not bit depth-dependent.
 TEST(DistoTest, BitDepth) {
   YUVPlane original_8b, distorted_8b;
   for (Channel c : {kYChannel, kUChannel, kVChannel, kAChannel}) {
@@ -332,12 +333,13 @@ WP2Status EncodeInCCSP(const YUVPlane& original_ccsp, const CSPMtx& ccsp_to_rgb,
         original_ccsp,
         {0, 0, original_ccsp.GetWidth(), original_ccsp.GetHeight()}));
   }
-  WP2_CHECK_STATUS(Encode(
-      upsampled.GetWidth(), upsampled.GetHeight(), upsampled.Y.Row(0),
-      upsampled.Y.Step(), upsampled.U.Row(0), upsampled.U.Step(),
-      upsampled.V.Row(0), upsampled.V.Step(),
-      upsampled.HasAlpha() ? upsampled.A.Row(0) : nullptr, upsampled.A.Step(),
-      ccsp_to_rgb.mtx(), ccsp_to_rgb.shift, writer, config));
+  WP2_CHECK_STATUS(
+      Encode(upsampled.GetWidth(), upsampled.GetHeight(), upsampled.Y.Row(0),
+             upsampled.Y.Step(), upsampled.U.Row(0), upsampled.U.Step(),
+             upsampled.V.Row(0), upsampled.V.Step(),
+             upsampled.HasAlpha() ? upsampled.A.Row(0) : nullptr,
+             upsampled.A.Step(), /*c_premultiplied_by_a=*/true,
+             ccsp_to_rgb.mtx(), ccsp_to_rgb.shift, writer, config));
   return WP2_STATUS_OK;
 }
 

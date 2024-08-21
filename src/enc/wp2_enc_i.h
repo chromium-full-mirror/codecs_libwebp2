@@ -51,7 +51,7 @@ WP2Status SetupEncoderInfo(uint32_t width, uint32_t height,
 // Writes WP2 header to 'output' based on 'config' and other arguments.
 WP2Status EncodeHeader(const EncoderConfig& config, uint32_t width,
                        uint32_t height, uint32_t rgb_bit_depth, bool has_alpha,
-                       bool is_anim, bool loop_forever,
+                       bool is_premultiplied, bool is_anim, bool loop_forever,
                        Argb38b background_color, RGB12b preview_color,
                        bool has_icc, bool has_trailing_data, Writer* output);
 

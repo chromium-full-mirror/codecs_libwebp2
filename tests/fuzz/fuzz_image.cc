@@ -45,11 +45,9 @@ int TestImageEncConfig(const ArgbBuffer& original, const EncoderConfig& config,
   }
 
   // Verify that it decodes fine and that the result is close enough.
-  ArgbBuffer decoded(config.exact ? WP2_ARGB_32 : WP2_Argb_32);
-  DecoderConfig decoder_config = DecoderConfig::kDefault;
-  decoder_config.exact = config.exact;
-  if (Decode(memory_writer.mem_, memory_writer.size_, &decoded,
-             decoder_config) != WP2_STATUS_OK) {
+  ArgbBuffer decoded(original.format());
+  if (Decode(memory_writer.mem_, memory_writer.size_, &decoded) !=
+      WP2_STATUS_OK) {
     abort();
   }
   if (expected_distortion > 0.f) {

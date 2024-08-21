@@ -89,9 +89,9 @@ WP2Status AlphaWriter::Init(const EncoderConfig& config,
         tile_rect_.width * tile_rect_.height));
     WP2_CHECK_ALLOC_OK(
         lossless_encode_info_.line_tokens.resize(tile_rect_.height));
-    WP2_CHECK_STATUS(WP2L::EncodeImage(config_, *buffer, /*has_alpha=*/true,
-                                       encode_image_progress, &lossless_enc_,
-                                       &lossless_encode_info_));
+    WP2_CHECK_STATUS(WP2L::EncodeImage(
+        config_, *buffer, /*has_alpha=*/true, /*image_is_premultiplied=*/false,
+        encode_image_progress, &lossless_enc_, &lossless_encode_info_));
     assert(lossless_encode_info_.line_tokens[alpha_.height() - 1] ==
            lossless_enc_.NumTokens());
   }

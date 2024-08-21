@@ -65,13 +65,8 @@ int TestAnimEncConfig(const std::vector<ArgbBuffer>& original_frames,
   // Verify that it decodes fine and that the result is close enough.
   ArgbBuffer decoded(original_frames.front().format());
   ArgbBuffer decoded_unoriented(original_frames.front().format());
-  DecoderConfig decoder_config = DecoderConfig::kDefault;
-  // AnimationEncoder does not take EncoderConfig::exact into account.
-  // It encodes the input frames in their original premul/unpremul state.
-  // The decoder has no way to know that, so it must be told.
-  decoder_config.exact = !WP2IsPremultiplied(original_frames.front().format());
-  ArrayDecoder decoder(memory_writer.mem_, memory_writer.size_, decoder_config,
-                       &decoded);
+  ArrayDecoder decoder(memory_writer.mem_, memory_writer.size_,
+                       DecoderConfig::kDefault, &decoded);
   for (size_t i = 0; i < original_frames.size(); ++i) {
     uint32_t duration_ms;
     if (!decoder.ReadFrame(&duration_ms)) abort();

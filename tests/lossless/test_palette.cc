@@ -35,6 +35,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 #include "tests/include/helpers.h"
 
 namespace WP2 {
@@ -42,14 +43,18 @@ namespace {
 
 // num_colors, seed, src format
 class PaletteTest : public testing::TestWithParam<
-                        std::tuple<uint32_t, uint32_t, WP2SampleFormat>> {};
+                        std::tuple<uint32_t, uint32_t, WP2SampleFormat, bool>> {
+};
 
 TEST_P(PaletteTest, RoundTrip) {
   WP2L::DecLDspInit();
   const uint32_t num_colors = std::get<0>(GetParam());
   const uint32_t seed = std::get<1>(GetParam());
   const WP2SampleFormat format = std::get<2>(GetParam());
-  const bool premultiplied = WP2IsPremultiplied(format);
+  const bool input_is_premultiplied = WP2IsPremultiplied(format);
+  const bool keep_unmultiplied = std::get<3>(GetParam());
+  const bool encoded_samples_are_premultiplied =
+      input_is_premultiplied || !keep_unmultiplied;
 
   UniformIntDistribution random(seed);
 
@@ -61,7 +66,8 @@ TEST_P(PaletteTest, RoundTrip) {
     const uint32_t a = random.Get(0u, kAlphaMax);
     colors[4 * i + 0] = a;
     for (uint32_t c = 1; c < 4; ++c) {
-      const uint32_t max = premultiplied ? a : WP2::FormatMax(format, c);
+      const uint32_t max =
+          input_is_premultiplied ? a : WP2::FormatMax(format, c);
       colors[4 * i + c] = random.Get(0u, max);
     }
   }
@@ -79,14 +85,15 @@ TEST_P(PaletteTest, RoundTrip) {
                 &row[4 * x]);
     }
   }
-  ArgbBuffer premultiplied_buffer;
-  ASSERT_WP2_OK(premultiplied ? premultiplied_buffer.SetView(buffer)
-                              : premultiplied_buffer.ConvertFrom(buffer));
+  ArgbBuffer premultiplied_buffer(WP2_Argb_32);
+  ASSERT_WP2_OK(input_is_premultiplied
+                    ? premultiplied_buffer.SetView(buffer)
+                    : premultiplied_buffer.ConvertFrom(buffer));
 
   // Create palette.
   WP2L::Palette palette;
   const bool has_alpha = buffer.HasTransparency();
-  palette.Init(buffer.format(), has_alpha, /*exact=*/false);
+  palette.Init(buffer.format(), has_alpha, keep_unmultiplied);
   ASSERT_WP2_OK(palette.AnalyzeAndCreate(buffer));
   // There could be fewer colors if we never chose some of them but it's pretty
   // unlikely so check for equality.
@@ -96,7 +103,8 @@ TEST_P(PaletteTest, RoundTrip) {
   ANSEnc enc;
   WP2::ANSDictionaries dicts;
   const WP2::EncoderConfig encoder_config;
-  WP2L::Encoder encoder(encoder_config, buffer, has_alpha);
+  WP2L::Encoder encoder(encoder_config, buffer, has_alpha,
+                        encoded_samples_are_premultiplied);
   ASSERT_WP2_OK(encoder.Allocate());
   ASSERT_WP2_OK(palette.FindBestMethod(buffer, ProgressRange(),
                                        WP2L::Palette::Sorting::kMinimalSize,
@@ -118,7 +126,10 @@ TEST_P(PaletteTest, RoundTrip) {
   ExternalDataSource data_source(bits.data(), bits.size());
   ANSDec dec(&data_source);
   Tile tile;
-  decoder.Init(WP2::DecoderConfig::kDefault, gparams, &dec, &tile);
+  ASSERT_WP2_OK(tile.rgb_output.SetFormat(
+      encoded_samples_are_premultiplied ? WP2_Argb_32 : WP2_ARGB_32));
+  decoder.Init(WP2::DecoderConfig::kDefault, gparams,
+               encoded_samples_are_premultiplied, &dec, &tile);
   WP2L::Transform transform;
   transform.type_ = WP2L::TransformType::kColorIndexing;
   transform.width_pic_ = kWidth;
@@ -127,7 +138,7 @@ TEST_P(PaletteTest, RoundTrip) {
   EXPECT_EQ(transform.data_.size(), colors.size());
   for (uint32_t i = 0; i < 4 * num_colors; ++i) {
     SCOPED_TRACE(i);
-    EXPECT_EQ(transform.data_[i], palette.GetColors()[i]);
+    ASSERT_EQ(transform.data_[i], palette.GetColors()[i]) << i;
   }
 
   // Reconstruct original buffer.
@@ -140,7 +151,9 @@ TEST_P(PaletteTest, RoundTrip) {
                    /*has_alpha=*/true, reconstructed.data());
 
   for (uint32_t y = 0; y < kHeight; ++y) {
-    uint8_t* const reference_row = premultiplied_buffer.GetRow8(y);
+    uint8_t* const reference_row = encoded_samples_are_premultiplied
+                                       ? premultiplied_buffer.GetRow8(y)
+                                       : buffer.GetRow8(y);
     int16_t* const reconstructed_row = &reconstructed[y * kWidth * 4];
     for (uint32_t x = 0; x < kWidth; ++x) {
       for (uint32_t c = 0; c < 4; ++c) {
@@ -157,7 +170,9 @@ INSTANTIATE_TEST_SUITE_P(PaletteTestInstantiation, PaletteTest,
                              testing::Values<uint32_t>(2, 5, 10, 30, 50, 100),
                              // seed
                              testing::Range<uint32_t>(0, 5),
-                             testing::Values(WP2_Argb_32, WP2_ARGB_32)));
+                             testing::Values(WP2_Argb_32, WP2_ARGB_32),
+                             // keep_unmultiplied
+                             testing::Bool()));
 
 }  // namespace
 }  // namespace WP2

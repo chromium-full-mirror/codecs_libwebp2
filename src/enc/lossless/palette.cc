@@ -148,12 +148,13 @@ static WP2Status SortColors(decltype(LexicographicComparison) comparator,
 }
 
 template <typename T>
-uint32_t CountColors(const WP2::ArgbBuffer& pic, const T* src, bool exact,
-                     ColorCacheMap* color_cache,
+uint32_t CountColors(const WP2::ArgbBuffer& pic, const T* src,
+                     bool keep_unmultiplied, ColorCacheMap* color_cache,
                      const uint32_t max_palette_size) {
   assert(pic.format() == WP2_Argb_32 || pic.format() == WP2_Argb_38 ||
          pic.format() == WP2_ARGB_32);
-  const bool premultiply = !exact && !WP2IsPremultiplied(pic.format());
+  const bool premultiply =
+      !WP2IsPremultiplied(pic.format()) && !keep_unmultiplied;
   uint32_t num_colors = 0;
   // so we're sure that last_pix != argb[0]
   int16_t prev_pix[4] = {(int16_t)~src[0], 0, 0, 0};
@@ -197,11 +198,11 @@ WP2Status Palette::AnalyzeAndCreate(const WP2::ArgbBuffer& pic) {
   WP2_CHECK_STATUS(color_cache.Allocate(max_palette_size_));
 
   if (WP2Formatbpc(pic.format()) <= 8) {
-    num_colors_ = CountColors(pic, pic.GetRow8(0), exact_, &color_cache,
-                              max_palette_size_);
+    num_colors_ = CountColors(pic, pic.GetRow8(0), keep_unmultiplied_,
+                              &color_cache, max_palette_size_);
   } else {
-    num_colors_ = CountColors(pic, pic.GetRow16(0), exact_, &color_cache,
-                              max_palette_size_);
+    num_colors_ = CountColors(pic, pic.GetRow16(0), keep_unmultiplied_,
+                              &color_cache, max_palette_size_);
   }
 
   if (num_colors_ <= 1 || num_colors_ > max_palette_size_) {
@@ -221,7 +222,10 @@ WP2Status Palette::AnalyzeAndCreate(const WP2::ArgbBuffer& pic) {
 
 template <typename T>
 void ApplyT(const WP2::ArgbBuffer& pic, const T* src,
-            const ColorCacheMap& color_cache, bool exact, int16_t* dst) {
+            const ColorCacheMap& color_cache, bool keep_unmultiplied,
+            int16_t* dst) {
+  const bool premultiply =
+      !WP2IsPremultiplied(pic.format()) && !keep_unmultiplied;
   int16_t prev_pix[4] = {(int16_t)~src[0], (int16_t)~src[1], (int16_t)~src[2],
                          (int16_t)~src[3]};
   uint32_t prev_idx = 0;
@@ -229,7 +233,7 @@ void ApplyT(const WP2::ArgbBuffer& pic, const T* src,
     for (uint32_t x = 0; x < pic.width(); ++x, dst += 4) {
       int16_t pix[4] = {(int16_t)src[4 * x + 0], (int16_t)src[4 * x + 1],
                         (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
-      if (!exact && !WP2IsPremultiplied(pic.format())) {
+      if (premultiply) {
         for (uint32_t c = 1; c < 4; ++c) {
           pix[c] = WP2::DivBy255(pix[c] * pix[0]);
         }
@@ -260,9 +264,9 @@ WP2Status Palette::Apply(const WP2::ArgbBuffer& pic, int16_t* dst) const {
   }
 
   if (WP2Formatbpc(pic.format()) <= 8) {
-    ApplyT(pic, pic.GetRow8(0), color_cache, exact_, dst);
+    ApplyT(pic, pic.GetRow8(0), color_cache, keep_unmultiplied_, dst);
   } else {
-    ApplyT(pic, pic.GetRow16(0), color_cache, exact_, dst);
+    ApplyT(pic, pic.GetRow16(0), color_cache, keep_unmultiplied_, dst);
   }
 
   return WP2_STATUS_OK;
@@ -284,7 +288,7 @@ bool Palette::IsGrayScale() const {
 
 class InternalParams {
  public:
-  InternalParams(WP2SampleFormat format, bool has_alpha, bool exact,
+  InternalParams(WP2SampleFormat format, bool has_alpha, bool keep_unmultiplied,
                  uint32_t channel_max, uint32_t num_channels,
                  const WP2::Vector_s16& colors);
   // Allocates the needed space for analysis.
@@ -302,7 +306,7 @@ class InternalParams {
  public:
   WP2SampleFormat format_;
   bool has_alpha_;
-  bool exact_;
+  bool keep_unmultiplied_;
   uint32_t channel_max_;
   uint32_t num_channels_;
   uint32_t num_colors_;
@@ -358,6 +362,8 @@ WP2Status InternalParams::StoreSigns(WP2::ANSEncBase* bw) {
 }
 
 WP2Status InternalParams::WriteVerbatim(WP2::ANSEncBase* enc) const {
+  const bool is_premultiplied =
+      has_alpha_ && (WP2IsPremultiplied(format_) || !keep_unmultiplied_);
   assert(num_colors_ <= kSmallPaletteLimit);
   uint32_t channel_max[4];
   for (uint32_t c = 0; c < num_channels_; ++c) {
@@ -369,7 +375,7 @@ WP2Status InternalParams::WriteVerbatim(WP2::ANSEncBase* enc) const {
     }
     for (uint32_t c = 1; c < num_channels_; ++c) {
       const uint32_t max =
-          (has_alpha_ && !exact_)
+          is_premultiplied
               ? WP2::DivRound((uint32_t)(channel_max[c] * colors_[4 * i + 0]),
                               channel_max[0])
               : channel_max[c];
@@ -387,6 +393,8 @@ WP2Status InternalParams::WriteVerbatim(WP2::ANSEncBase* enc) const {
 //  - a list of values in range [0:value] or [value:channel_max] depending on
 //    is_stored_as_above_
 WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* enc) {
+  const bool is_premultiplied =
+      has_alpha_ && (WP2IsPremultiplied(format_) || !keep_unmultiplied_);
   // Store the channels one by one.
   for (uint32_t c = has_alpha_ ? 0 : 1; c < num_channels_; ++c) {
     const uint16_t channel_max = WP2::FormatMax(format_, c);
@@ -401,14 +409,14 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* enc) {
       if (has_alpha_) {
         alpha_value += is_stored_as_above_[0][i] ? channel_diffs_[0][i]
                                                  : -channel_diffs_[0][i];
-        if (c > 0 && channel_prev > alpha_value && !exact_) {
+        if (c > 0 && channel_prev > alpha_value && is_premultiplied) {
           channel_prev = alpha_value;
         }
       }
       if (is_stored_as_above_[c][i]) {
-        const uint32_t max = (c == 0 || exact_)
-                                 ? channel_max
-                                 : WP2::DivBy255(channel_max * alpha_value);
+        const uint32_t max = (c > 0 && is_premultiplied)
+                                 ? WP2::DivBy255(channel_max * alpha_value)
+                                 : channel_max;
         cost_range += WP2Log2(max + 1 - channel_prev);
         assert(channel_prev <= max);
         assert((int)channel_prev + (int)diffs[i] <= (int)channel_max);
@@ -427,7 +435,7 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* enc) {
     const bool use_vector = cost_store_vector < cost_range;
     enc->PutBool(use_vector, "use_vector");
     const uint32_t max_first =
-        (c == 0 || exact_) ? channel_max : channel_diffs_[0][0];
+        (c > 0 && is_premultiplied) ? channel_diffs_[0][0] : channel_max;
     enc->PutRValue(diffs[0], max_first + 1, "first_channel");
     if (use_vector) {
       enc->AddDebugPrefix("transform_index_vals");
@@ -441,14 +449,14 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* enc) {
         if (has_alpha_) {
           alpha_value += (is_stored_as_above_[0][i]) ? channel_diffs_[0][i]
                                                      : -channel_diffs_[0][i];
-          if (c > 0 && channel_prev > alpha_value && !exact_) {
+          if (c > 0 && channel_prev > alpha_value && is_premultiplied) {
             channel_prev = alpha_value;
           }
         }
         if (is_stored_as_above_[c][i]) {
-          const uint32_t max = (c == 0 || exact_)
-                                   ? channel_max
-                                   : WP2::DivBy255(channel_max * alpha_value);
+          const uint32_t max = (c > 0 && is_premultiplied)
+                                   ? WP2::DivBy255(channel_max * alpha_value)
+                                   : channel_max;
           enc->PutRValue(diffs[i], (uint32_t)(max + 1 - channel_prev),
                          "store_diff");
           channel_prev += diffs[i];
@@ -489,12 +497,12 @@ WP2Status InternalParams::WriteAsImage(const ProgressRange& progress,
 }
 
 InternalParams::InternalParams(WP2SampleFormat format, bool has_alpha,
-                               bool exact, uint32_t channel_max,
+                               bool keep_unmultiplied, uint32_t channel_max,
                                uint32_t num_channels,
                                const WP2::Vector_s16& colors)
     : format_(format),
       has_alpha_(has_alpha),
-      exact_(exact),
+      keep_unmultiplied_(keep_unmultiplied),
       channel_max_(channel_max),
       num_channels_(num_channels),
       num_colors_(colors.size() / 4),
@@ -510,6 +518,9 @@ WP2Status InternalParams::Init(const int16_t colors[]) {
   WP2_CHECK_ALLOC_OK(opposite_.resize(num_colors_ - 1));
   for (auto& d : channel_diffs_) WP2_CHECK_ALLOC_OK(d.resize(num_colors_));
 
+  const bool is_premultiplied =
+      has_alpha_ && (WP2IsPremultiplied(format_) || !keep_unmultiplied_);
+
   // Compute the differences between the channels.
   for (uint32_t c = 0; c < num_channels_; ++c) {
     int16_t channel_prev = colors[c];
@@ -518,7 +529,9 @@ WP2Status InternalParams::Init(const int16_t colors[]) {
     for (uint32_t i = 1; i < num_colors_; ++i) {
       if (has_alpha_) {
         const auto alpha = colors[4 * i + 0];
-        if (c > 0 && channel_prev > alpha && !exact_) channel_prev = alpha;
+        if (c > 0 && channel_prev > alpha && is_premultiplied) {
+          channel_prev = alpha;
+        }
       }
       const int16_t channel = colors[4 * i + c];
       const int diff = (int)channel - (int)channel_prev;
@@ -614,8 +627,8 @@ WP2Status Palette::FindBestMethod(const WP2::ArgbBuffer& pic,
   const uint16_t channel_max = encoder->symbols_info_.GetMaxRange(kSymbolR) - 1;
   const uint32_t num_channels = (is_grayscale_ ? 2 : 4);
 
-  InternalParams params(format_, has_alpha_, exact_, channel_max, num_channels,
-                        colors_);
+  InternalParams params(format_, has_alpha_, keep_unmultiplied_, channel_max,
+                        num_channels, colors_);
 
   if (num_colors_ <= kSmallPaletteLimit) {
     sort_type_ = Sorting::kLexicographic;
@@ -698,8 +711,12 @@ class CoOccurrenceMatrix {
 
 template <typename T>
 WP2Status BuildCoOccurrence(const WP2::ArgbBuffer& pic, const T* src,
-                            const ColorCacheMap& color_cache, bool exact,
+                            const ColorCacheMap& color_cache,
+                            bool keep_unmultiplied,
                             CoOccurrenceMatrix* cooccurrence) {
+  const bool premultiply =
+      !WP2IsPremultiplied(pic.format()) && !keep_unmultiplied;
+
   WP2::Vector_u16 lines;
   WP2_CHECK_ALLOC_OK(lines.resize(2 * pic.width()));
   uint16_t* line_top = &lines[0];
@@ -713,7 +730,7 @@ WP2Status BuildCoOccurrence(const WP2::ArgbBuffer& pic, const T* src,
     for (uint32_t x = 0; x < pic.width(); ++x) {
       int16_t pix[4] = {(int16_t)src[4 * x + 0], (int16_t)src[4 * x + 1],
                         (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
-      if (!exact && !WP2IsPremultiplied(pic.format())) {
+      if (premultiply) {
         for (uint32_t c = 1; c < 4; ++c) {
           pix[c] = WP2::DivBy255(pix[c] * pix[0]);
         }
@@ -752,11 +769,11 @@ WP2Status Palette::SortModifiedZeng(const WP2::ArgbBuffer& pic,
   CoOccurrenceMatrix cooccurrence(num_colors_);
   WP2_CHECK_STATUS(cooccurrence.Allocate());
   if (WP2Formatbpc(pic.format()) <= 8) {
-    WP2_CHECK_STATUS(BuildCoOccurrence(pic, pic.GetRow8(0), color_cache, exact_,
-                                       &cooccurrence));
+    WP2_CHECK_STATUS(BuildCoOccurrence(pic, pic.GetRow8(0), color_cache,
+                                       keep_unmultiplied_, &cooccurrence));
   } else {
     WP2_CHECK_STATUS(BuildCoOccurrence(pic, pic.GetRow16(0), color_cache,
-                                       exact_, &cooccurrence));
+                                       keep_unmultiplied_, &cooccurrence));
   }
 
   // Initialize the mapping list with the two best indices.
@@ -947,8 +964,8 @@ WP2Status Palette::Write(const ProgressRange& progress, WP2::ANSEncBase* enc,
 
   const uint32_t num_channels = (is_grayscale_ ? 2 : 4);
   const uint16_t channel_max = encoder->symbols_info_.GetMaxRange(kSymbolR) - 1;
-  InternalParams params(format_, has_alpha_, exact_, channel_max, num_channels,
-                        colors_);
+  InternalParams params(format_, has_alpha_, keep_unmultiplied_, channel_max,
+                        num_channels, colors_);
 
   if (method_ == PaletteStorageMethod::kMethodVerbatim) {
     WP2_CHECK_STATUS(params.WriteVerbatim(enc));

@@ -43,6 +43,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 // Define WP2_ERROR_TRACE to gather stats about where the random bitstreams fail
 // to decode. Do not use multithreading, even only at tile or test level.
@@ -161,10 +162,11 @@ WP2Status RandomEncodeBeforeTile(uint32_t width, uint32_t height,
 
   const uint32_t rgb_bit_depth = random->FlipACoin() ? 10 : 8;
   const bool has_alpha = random->FlipACoin();
+  const bool is_premultiplied = random->FlipACoin();
 
   // Append proxy header data, only config and dimensions are relevant.
   WP2_CHECK_STATUS(EncodeHeader(final_config, width, height, rgb_bit_depth,
-                                has_alpha, /*is_anim=*/false,
+                                has_alpha, is_premultiplied, /*is_anim=*/false,
                                 /*loop_forever=*/true, kDefaultBackgroundColor,
                                 /*preview_color=*/RGB12b(), /*has_icc=*/false,
                                 /*has_trailing_data=*/false, output));

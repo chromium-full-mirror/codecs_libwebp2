@@ -41,7 +41,9 @@
 #if __cplusplus >= 201703L
 #define WP2_FALLTHROUGH [[fallthrough]]
 #else
-#define WP2_FALLTHROUGH do { } while (0)
+#define WP2_FALLTHROUGH \
+  do {                  \
+  } while (0)
 #endif
 
 namespace WP2 {
@@ -302,7 +304,24 @@ void Decoder::DecodeAvailableData() {
       // TODO(maryla): merge with SetupOutputBuffer?
       case State::Stage::ALLOCATE_OUTPUT_BUFFER: {
         if (!state_->ShouldDiscardAllFrames()) {
-          state_->status = output_->Resize(features_.width, features_.height);
+          const WP2SampleFormat format_requested_by_user =
+              output_ != &internal_output_ ? output_->format() : WP2_Argb_32;
+          // TODO: b/359162718 - Support 10-bit color samples.
+          const WP2SampleFormat raw_format = ChooseRawFormat(
+              features_, format_requested_by_user, /*support_10b=*/false);
+          state_->status = internal_output_.SetFormat(raw_format);
+          if (state_->status == WP2_STATUS_OK) {
+            state_->status = state_->raw_output_buffer.SetFormat(raw_format);
+          }
+          if (state_->status == WP2_STATUS_OK) {
+            state_->status = state_->frame_output_buffer.SetFormat(raw_format);
+          }
+          if (state_->status == WP2_STATUS_OK) {
+            state_->status = state_->blended_buffer.SetFormat(raw_format);
+          }
+          if (state_->status == WP2_STATUS_OK) {
+            state_->status = output_->Resize(features_.width, features_.height);
+          }
           if (state_->status == WP2_STATUS_OK) {
             state_->must_use_raw_output_buffer =
                 (features_.orientation != Orientation::kOriginal ||

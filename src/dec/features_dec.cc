@@ -27,12 +27,12 @@
 #include "src/dec/preview/preview_dec.h"
 #include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
+#include "src/utils/ans.h"
 #include "src/utils/data_source.h"
 #include "src/utils/orientation.h"
+#include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
-#include "src/utils/ans.h"
-#include "src/utils/utils.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2 {
@@ -111,6 +111,7 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
   width = OrientateWidth(orientation, raw_width, raw_height);
   height = OrientateHeight(orientation, raw_width, raw_height);
   is_opaque = !dec.ReadBits(1, "has_alpha");
+  is_premultiplied = !is_opaque && !!dec.ReadBits(1, "is_premultiplied");
   is_animation = !!dec.ReadBits(1, "is_animation");
 
   preview_color = ToRGB12b(dec.ReadBits(12, "preview_color"));
@@ -159,6 +160,29 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
 }
 
 //------------------------------------------------------------------------------
+
+WP2SampleFormat ChooseRawFormat(const BitstreamFeatures& features,
+                                WP2SampleFormat format_requested_by_user,
+                                bool support_10b) {
+  if (features.rgb_bit_depth > 8) {
+    if (support_10b) {
+      // With high bit depth, there is only support for premultiplied samples.
+      return WP2_Argb_38;
+    } else {
+      return WP2_Argb_32;  // Format closest to WP2_Argb_38.
+    }
+  } else if (features.is_opaque) {
+    // Picking an unmultiplied or a premultiplied format has no impact on the
+    // color values because all alpha values are at their maximum.
+    // Pick the format closest to the one requested by the user instead, to
+    // potentially avoid a conversion if they match.
+    return WP2IsPremultiplied(format_requested_by_user) ? WP2_Argb_32
+                                                        : WP2_ARGB_32;
+  } else {
+    // Match the format used by the compressed samples.
+    return features.is_premultiplied ? WP2_Argb_32 : WP2_ARGB_32;
+  }
+}
 
 WP2Status DecodeHeader(DataSource* const data_source,
                        BitstreamFeatures* const features) {
@@ -296,8 +320,8 @@ static WP2Status HasMetadata(DataSource* const data_source,
 }
 
 WP2Status DecodeMetadata(DataSource* const data_source,
-                         const BitstreamFeatures& features,
-                         Data* const xmp, Data* const exif) {
+                         const BitstreamFeatures& features, Data* const xmp,
+                         Data* const exif) {
   bool has_xmp, has_exif;
   WP2_CHECK_STATUS(HasMetadata(data_source, features, &has_xmp, &has_exif));
   if (has_xmp) {
@@ -498,4 +522,4 @@ WP2Status GetNumFrames(const uint8_t bitstream_data[], size_t bitstream_size,
 
 //------------------------------------------------------------------------------
 
-}   // namespace WP2
+}  // namespace WP2

@@ -33,6 +33,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -136,8 +137,9 @@ TEST_P(EncodeCustomCspTest, Comparison) {
       custom_input.U.Row(0), custom_input.U.Step(), custom_input.V.Row(0),
       custom_input.V.Step(),
       custom_input.HasAlpha() ? custom_input.A.Row(0) : nullptr,
-      custom_input.A.Step(), ccsp_to_rgb_matrix, ccsp_to_rgb_shift, &data,
-      config, encode_metadata ? src.metadata_ : empty_metadata));
+      custom_input.A.Step(), /*c_premultiplied_by_a=*/true, ccsp_to_rgb_matrix,
+      ccsp_to_rgb_shift, &data, config,
+      encode_metadata ? src.metadata_ : empty_metadata));
 
   // Decode the reference and the custom bitstreams.
   ArgbBuffer ref, dst;
@@ -228,7 +230,8 @@ TEST_P(ReadCustomCspTest, Y4M) {
         Encode(ccsp.GetWidth(), ccsp.GetHeight(), ccsp.Y.Row(0), ccsp.Y.Step(),
                ccsp.U.Row(0), ccsp.U.Step(), ccsp.V.Row(0), ccsp.V.Step(),
                ccsp.HasAlpha() ? ccsp.A.Row(0) : nullptr, ccsp.A.Step(),
-               ccsp_to_rgb.mtx(), ccsp_to_rgb.shift, &data, config, metadata));
+               /*c_premultiplied_by_a=*/true, ccsp_to_rgb.mtx(),
+               ccsp_to_rgb.shift, &data, config, metadata));
   } else {
     AnimationEncoder encoder;
     for (uint32_t duration_ms : {1, 2}) {
@@ -329,8 +332,8 @@ TEST_P(StrideTest, Combination) {
   MemoryWriter writer;
   ASSERT_EQ(Encode(src.width(), src.height(), rgba[0].data(), p.steps[0],
                    rgba[1].data(), p.steps[1], rgba[2].data(), p.steps[2],
-                   rgba[3].data(), p.steps[3], kRGB8ToRGBMatrix,
-                   kRGB8ToRGBShift, &writer),
+                   rgba[3].data(), p.steps[3], WP2IsPremultiplied(src.format()),
+                   kRGB8ToRGBMatrix, kRGB8ToRGBShift, &writer),
             p.expected_status)
       << p.label;
 }
@@ -357,7 +360,8 @@ TEST(CustomCspAlphaTest, Garbage) {
     MemoryWriter writer;
     ASSERT_EQ(Encode(kWidth, kHeight, rgba[0].data(), kWidth, rgba[1].data(),
                      kWidth, rgba[2].data(), kWidth, rgba[3].data(), kWidth,
-                     kRGB8ToRGBMatrix, kRGB8ToRGBShift, &writer),
+                     /*c_premultiplied_by_a=*/true, kRGB8ToRGBMatrix,
+                     kRGB8ToRGBShift, &writer),
               WP2_STATUS_INVALID_PARAMETER);
   }
 }
@@ -374,11 +378,13 @@ TEST(CustomCspAlphaTest, Opaque) {
   MemoryWriter writer_opaque;
   ASSERT_WP2_OK(Encode(kWidth, kHeight, rgba[0].data(), kWidth, rgba[1].data(),
                        kWidth, rgba[2].data(), kWidth, rgba[3].data(), kWidth,
-                       kRGB8ToRGBMatrix, kRGB8ToRGBShift, &writer_opaque));
+                       /*c_premultiplied_by_a=*/true, kRGB8ToRGBMatrix,
+                       kRGB8ToRGBShift, &writer_opaque));
   MemoryWriter writer_no_alpha;
   ASSERT_WP2_OK(Encode(kWidth, kHeight, rgba[0].data(), kWidth, rgba[1].data(),
                        kWidth, rgba[2].data(), kWidth, nullptr, 0,
-                       kRGB8ToRGBMatrix, kRGB8ToRGBShift, &writer_no_alpha));
+                       /*c_premultiplied_by_a=*/true, kRGB8ToRGBMatrix,
+                       kRGB8ToRGBShift, &writer_no_alpha));
   ASSERT_EQ(writer_opaque.size_, writer_no_alpha.size_);
   ASSERT_TRUE(std::equal(writer_opaque.mem_,
                          writer_opaque.mem_ + writer_opaque.size_,

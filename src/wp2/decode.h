@@ -34,25 +34,27 @@ namespace WP2 {
 // Features gathered from the bitstream
 
 struct BitstreamFeatures {
-  uint32_t raw_width;        // Width in pixels, as read from the bitstream.
-  uint32_t raw_height;       // Height in pixels, as read from the bitstream.
+  uint32_t raw_width;   // Width in pixels, as read from the bitstream.
+  uint32_t raw_height;  // Height in pixels, as read from the bitstream.
 
-  Orientation orientation;   // Rotation or mirroring applied during decoding.
-  uint32_t width;            // Width after the orientation is applied.
-  uint32_t height;           // Height after the orientation is applied.
-  uint32_t tile_width;       // Width of tiles in pixels.
-  uint32_t tile_height;      // Height of tiles in pixels.
-  uint32_t rgb_bit_depth;    // RGB depth in bits. 8 or 10. Alpha is always 8.
+  Orientation orientation;  // Rotation or mirroring applied during decoding.
+  uint32_t width;           // Width after the orientation is applied.
+  uint32_t height;          // Height after the orientation is applied.
+  uint32_t tile_width;      // Width of tiles in pixels.
+  uint32_t tile_height;     // Height of tiles in pixels.
+  uint32_t rgb_bit_depth;   // RGB depth in bits. 8 or 10. Alpha is always 8.
 
-  bool is_opaque;            // True if no alpha. False has no guarantee.
-  bool is_animation;         // True if the bitstream is an animation.
-  bool has_preview;          // True if the bitstream has a preview image
-                             // (irrespective of the preview color).
+  bool is_opaque;         // True if no alpha. False has no guarantee.
+  bool is_premultiplied;  // If true, color information in translucent pixels
+                          // was partially or totally discarded at encoding.
+  bool is_animation;      // True if the bitstream is an animation.
+  bool has_preview;       // True if the bitstream has a preview image
+                          // (irrespective of the preview color).
 
-  RGB12b preview_color;      // Average color in RGB444 format.
+  RGB12b preview_color;  // Average color in RGB444 format.
 
-  bool has_icc;              // Indicates the presence of ICC information.
-  bool has_trailing_data;    // Trailing data is present (XMP, EXIF, ...).
+  bool has_icc;            // Indicates the presence of ICC information.
+  bool has_trailing_data;  // Trailing data is present (XMP, EXIF, ...).
   TransferFunction transfer_function;
 
   bool loop_forever;         // Play once if false, forever if true (anim only).
@@ -119,12 +121,9 @@ struct DecoderConfig {
   // progress and/or to abort decoding.
   ProgressHook* progress_hook = nullptr;
 
-  DecoderInfo* info = nullptr;   // if not null, report internal stats and info
+  DecoderInfo* info = nullptr;  // if not null, report internal stats and info
 
   static const DecoderConfig kDefault;
-
-  // Do not pre-multiply the output (for lossless only).
-  bool exact = false;
 };
 
 // This function decodes the bitstream into 'output_buffer' as Argb samples.
@@ -156,11 +155,10 @@ Decode(const std::string& data, ArgbBuffer* output_buffer,
 // The output format is Argb 32b (premultiplied). The ordering of samples in
 // memory is:     A, r, g, b, A, r, g, b, A, r, g, b...
 // in scan order with 8b per channel (endian-independent).
-WP2_EXTERN WP2_NO_DISCARD WP2Status
-DecodeArgb_32(const uint8_t* input_data, size_t input_data_size,
-              uint8_t* output_buffer, uint32_t output_stride,
-              size_t output_buffer_size,
-              const DecoderConfig& config = DecoderConfig::kDefault);
+WP2_EXTERN WP2_NO_DISCARD WP2Status DecodeArgb_32(
+    const uint8_t* input_data, size_t input_data_size, uint8_t* output_buffer,
+    uint32_t output_stride, size_t output_buffer_size,
+    const DecoderConfig& config = DecoderConfig::kDefault);
 
 // Decodes to a custom color space defined by fixed-point 'rgb_to_ccsp_matrix'
 // (row-ordered) and its 'rgb_to_ccsp_shift' (applied after). The output samples
@@ -198,7 +196,7 @@ WP2_EXTERN WP2_NO_DISCARD WP2Status ExtractPreview(const uint8_t* data,
 // WebP2 container parsing
 
 // Types of byte chunk that can be found in a WebP2 bitstream, in order:
-enum class ChunkType {kHeader, kPreview, kIcc, kFrame, kXmp, kExif};
+enum class ChunkType { kHeader, kPreview, kIcc, kFrame, kXmp, kExif };
 
 // Retrieves the chunk of 'chunk_type' within the 'bitstream_data' and outputs
 // it through the given 'writer'.
@@ -332,7 +330,8 @@ class Decoder {
   WP2Status DiscardAvailableTiles();
 
   const DecoderConfig& config_;
-  ArgbBuffer* output_, internal_output_;
+  ArgbBuffer* output_;
+  ArgbBuffer internal_output_;
   BitstreamFeatures features_;
 };
 

@@ -101,7 +101,8 @@ void HelpLong() {
   opt.Add("-alpha_q <float>",
           SPrintf("alpha quality factor (0:small..100:big), default=%1.1f",
                   WP2::EncoderConfig::kDefault.alpha_quality));
-  opt.Add("-exact", "No premultiplication is done in lossless.");
+  opt.Add("-keep_unmultiplied",
+          "No premultiplication is done (default when -q 100 -alpha_q 100).");
   opt.Add("-target_size <int>", "target size (in bytes)");
   opt.Add("-target_psnr <float>", "target PSNR (in dB. typically: 42)");
   opt.Add("-effort <int>",
@@ -517,7 +518,6 @@ int main(int argc, char* argv[]) {
   WP2::CSPTransform transform;
   dec_info.csp = &transform;
 
-  bool premult = false;
   bool recursive_input = false;
   bool input_frames = false;
   bool inplace_output = false;
@@ -599,8 +599,8 @@ int main(int argc, char* argv[]) {
     } else if (!strcmp(argv[c], "-alpha_q")) {
       NEED_ARGS(1);
       params.config.alpha_quality = ExUtilGetFloat(argv[++c], &parse_error);
-    } else if (!strcmp(argv[c], "-exact")) {
-      params.config.exact = true;
+    } else if (!strcmp(argv[c], "-keep_unmultiplied")) {
+      params.config.keep_unmultiplied = true;
     } else if (!strcmp(argv[c], "-csp")) {
       NEED_ARGS(1);
       params.config.csp_type = (WP2::Csp)ExUtilGetInt(argv[++c], &parse_error);
@@ -752,10 +752,6 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Error! Unrecognized picture hint: %s\n", argv[c]);
         parse_error = true;
       }
-    } else if (!strcmp(argv[c], "-premult")) {  // debugging option!
-      premult = true;
-    } else if (!strcmp(argv[c], "-nopremult")) {  // debugging option!
-      premult = false;
     } else if (!strcmp(argv[c], "-v")) {
       params.log_level = WP2::LogLevel::VERBOSE;
     } else if (!strcmp(argv[c], "-neural")) {
@@ -840,7 +836,7 @@ int main(int argc, char* argv[]) {
   // Check for unsupported command line options for lossless mode and log
   // warning for such options.
   if (params.log_level >= WP2::LogLevel::DEFAULT &&
-      params.config.quality >= 95) {
+      params.config.quality > 95) {
     if (params.config.target_size > 0 || params.config.target_psnr > 0) {
       fprintf(stderr,
               "Encoding for specified size or PSNR is not supported "
@@ -867,9 +863,16 @@ int main(int argc, char* argv[]) {
   WP2::MemoryWriter writer;
   WP2::Counter counter;
 
-  // Load images unmultiplied, as some images compress better this way
-  // (only useful for lossless).
-  WP2::ArgbBuffer rgb_buffer(premult ? WP2_Argb_32 : WP2_ARGB_32);
+  // Decide whether to keep samples unmultiplied or to discard color information
+  // in translucent pixels.
+  if (params.config.quality == 100 && params.config.alpha_quality == 100) {
+    // The user probably expects true lossless encoding.
+    params.config.keep_unmultiplied = true;
+  }
+  // The action to premultiply could be left to the encoder but doing it now may
+  // save one conversion.
+  WP2::ArgbBuffer rgb_buffer(params.config.keep_unmultiplied ? WP2_ARGB_32
+                                                             : WP2_Argb_32);
 
   if (is_animation) {
     CHECK_TRUE(!output_to_directory,

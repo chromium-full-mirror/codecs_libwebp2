@@ -45,6 +45,8 @@ AlphaReader::AlphaReader(ANSDec* const dec, const Tile& tile)
   alpha_tile_.input = tile.input;
   alpha_tile_.rect = tile.rect;
   alpha_tile_.num_decoded_rows = 0;
+  // Alpha values cannot be premultiplied by themselves.
+  WP2_ASSERT_STATUS(alpha_tile_.rgb_output.SetFormat(WP2_ARGB_32));
 }
 
 WP2Status AlphaReader::Allocate() {
@@ -135,7 +137,9 @@ WP2Status AlphaReader::ReadLossless(CodedBlockBase* const cb) {
 
     if (next_line_ == 0) {
       // Initialize the lossless decoder and read the header.
-      lossless_decoder_.Init(DecoderConfig(), *gparams_, dec_, &alpha_tile_);
+      lossless_decoder_.Init(DecoderConfig(), *gparams_,
+                             /*image_is_premultiplied=*/false, dec_,
+                             &alpha_tile_);
       WP2_CHECK_STATUS(lossless_decoder_.DecodeHeader());
     }
 

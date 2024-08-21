@@ -27,9 +27,9 @@ namespace WP2 {
 // -----------------------------------------------------------------------------
 
 WP2Status TileEncoder::LosslessEncode(ANSEnc* const enc) {
-  WP2_CHECK_STATUS(WP2L::EncodeImage(*config_, tile_->rgb_input,
-                                     tiles_layout_->gparams->has_alpha_,
-                                     tile_->progress, enc));
+  WP2_CHECK_STATUS(WP2L::EncodeImage(
+      *config_, tile_->rgb_input, tiles_layout_->gparams->has_alpha_,
+      tiles_layout_->image_is_premultiplied, tile_->progress, enc));
   return enc->GetStatus();
 }
 

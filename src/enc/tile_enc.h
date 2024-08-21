@@ -42,8 +42,8 @@ namespace WP2 {
 WP2Status EncodeTiles(uint32_t width, uint32_t height,
                       const ArgbBuffer& rgb_buffer, const YUVPlane& yuv_buffer,
                       const CSPTransform& transf, const EncoderConfig& config,
-                      bool image_has_alpha, const ProgressRange& progress,
-                      Writer* output);
+                      bool image_has_alpha, bool image_is_premultiplied,
+                      const ProgressRange& progress, Writer* output);
 
 //------------------------------------------------------------------------------
 
@@ -72,6 +72,7 @@ struct EncTilesLayout {
 
   // Frame's global parameters (externally owned).
   const GlobalParams* gparams = nullptr;
+  bool image_is_premultiplied = false;
 };
 
 class TileEncoder : public WorkerBase {

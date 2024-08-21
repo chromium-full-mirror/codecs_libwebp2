@@ -101,6 +101,12 @@ WP2Status RegisterBitTrace(const DecoderConfig& config, uint32_t num_bytes,
 WP2Status FillDecoderInfo(const GlobalParams& gparams,
                           const DecoderConfig& config);
 
+// Returns the format closest to the one requested by the user and matching how
+// the samples were compressed.
+WP2SampleFormat ChooseRawFormat(const BitstreamFeatures& features,
+                                WP2SampleFormat format_requested_by_user,
+                                bool support_10b);
+
 // Decode steps are split into functions for incremental decoding. These
 // functions only call DataSource::MarkNumBytesAsRead(). This way the calling
 // function can decide whether to retry later (UnmarkAllReadBytes()) or not

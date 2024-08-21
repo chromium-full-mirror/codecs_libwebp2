@@ -28,6 +28,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -148,7 +149,7 @@ TEST_P(EncDecProgressTest, Decoder) {
     decoder.Rewind();
     decoder.SetInput(data.mem_, data.size_);
     ASSERT_FALSE(decoder.ReadFrame());
-    ASSERT_EQ(decoder.GetStatus(), WP2_STATUS_USER_ABORT);
+    ASSERT_EQ(decoder.GetStatus(), WP2_STATUS_USER_ABORT) << fail_at;
   }
 
   // Test that it ends at 1.

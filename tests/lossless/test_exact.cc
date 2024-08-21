@@ -13,7 +13,7 @@
 // limitations under the License.
 // -----------------------------------------------------------------------------
 //
-// Test lossless exact compression (no pre-multiplication).
+// Test exact compression (no pre-multiplication).
 //
 // Author: Vincent Rabaud (vrabaud@google.com)
 
@@ -25,28 +25,29 @@
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "gtest/gtest.h"
 #include "tests/include/helpers.h"
 
 namespace WP2 {
 namespace {
 
-bool EncodeDecodeExact(const ArgbBuffer &original, bool exact) {
+bool EncodeDecodeExact(const ArgbBuffer &original, bool lossless,
+                       bool keep_unmultiplied) {
   EncoderConfig encoder_config = EncoderConfig::kDefault;
-  encoder_config.quality = 100.f;
+  encoder_config.quality = lossless ? 100.f : 95.f;
   encoder_config.alpha_quality = 100.f;
-  encoder_config.exact = exact;
-  DecoderConfig decoder_config = DecoderConfig::kDefault;
-  decoder_config.exact = exact;
+  encoder_config.keep_unmultiplied = keep_unmultiplied;
 
   MemoryWriter memory_writer;
   EXPECT_EQ(Encode(original, &memory_writer, encoder_config), WP2_STATUS_OK);
 
   ArgbBuffer decompressed(original.format());
-  EXPECT_EQ(Decode(memory_writer.mem_, memory_writer.size_, &decompressed,
-                   decoder_config),
+  EXPECT_EQ(Decode(memory_writer.mem_, memory_writer.size_, &decompressed),
             WP2_STATUS_OK);
 
-  return testutil::Compare(original, decompressed, "internal");
+  const float expected_distortion = lossless ? 99.f : 30.f;
+  return testutil::Compare(original, decompressed, "internal",
+                           expected_distortion);
 }
 
 //------------------------------------------------------------------------------
@@ -67,7 +68,8 @@ TEST_P(ExactTest, Random) {
            original.width() * WP2FormatBpp(original.format()),
            original.height(), original.stride());
 
-  ASSERT_TRUE(EncodeDecodeExact(original, /*exact=*/true));
+  ASSERT_TRUE(EncodeDecodeExact(original, /*lossless=*/true,
+                                /*keep_unmultiplied=*/true));
 }
 
 INSTANTIATE_TEST_SUITE_P(SlowLosslessTestWide, ExactTest,
@@ -79,69 +81,78 @@ TEST(ExactTest, ReadFile) {
   ArgbBuffer original(WP2_ARGB_32);
   ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath("alpha_ramp.png").c_str(),
                           &original));
-  ASSERT_TRUE(EncodeDecodeExact(original, /*exact=*/true));
+  ASSERT_TRUE(EncodeDecodeExact(original, /*lossless=*/true,
+                                /*keep_unmultiplied=*/true));
 }
 
 //------------------------------------------------------------------------------
-// Exact settings and premultiplied modes combinations
+// keep_unmultiplied values and premultiplied modes combinations
 
 ArgbBuffer CreateArgbBuffer(WP2SampleFormat format) {
   ArgbBuffer original(format);
-  EXPECT_EQ(original.Resize(1, 1), WP2_STATUS_OK);
-  const uint8_t kColor[] = {67, 66, 65, 64};
-  original.Fill({0, 0, original.width(), original.height()}, kColor);
+  EXPECT_EQ(original.Resize(32, 32), WP2_STATUS_OK);
+  const uint8_t alpha = WP2IsPremultiplied(format) ? 67 : 0;
+  const uint8_t color[] = {alpha, 66, 65, 64};
+  original.Fill({0, 0, original.width(), original.height()}, color);
   return original;
 }
 
-class ExactFormatTest : public testing::TestWithParam<
-                            std::tuple<WP2SampleFormat, /*exact=*/bool>> {};
+class ExactFormatTest
+    : public testing::TestWithParam<std::tuple<
+          WP2SampleFormat, /*lossless=*/bool, /*keep_unmultiplied=*/bool>> {};
 
 TEST_P(ExactFormatTest, StillImageAPI) {
   const ArgbBuffer original = CreateArgbBuffer(std::get<0>(GetParam()));
-  const bool exact = std::get<1>(GetParam());
+  const bool lossless = std::get<1>(GetParam());
+  const bool keep_unmultiplied = std::get<2>(GetParam());
 
-  const bool is_truly_lossless = EncodeDecodeExact(original, exact);
-  const bool uses_premultiplied_alpha_internally = !exact;
-  const bool is_expected_to_be_truly_lossless =
-      uses_premultiplied_alpha_internally ==
-      WP2IsPremultiplied(original.format());
-  ASSERT_EQ(is_truly_lossless, is_expected_to_be_truly_lossless);
+  const bool loss_is_small =
+      EncodeDecodeExact(original, lossless, keep_unmultiplied);
+  const bool loss_is_expected_to_be_small =
+      WP2IsPremultiplied(original.format()) || keep_unmultiplied;
+  ASSERT_EQ(loss_is_small, loss_is_expected_to_be_small);
 }
 
 TEST_P(ExactFormatTest, AnimationAPI) {
   const ArgbBuffer original = CreateArgbBuffer(std::get<0>(GetParam()));
-  const bool exact = !std::get<1>(GetParam());
+  const bool lossless = std::get<1>(GetParam());
+  const bool keep_unmultiplied = std::get<2>(GetParam());
 
   AnimationEncoder animation_encoder;
   ASSERT_WP2_OK(animation_encoder.AddFrame(original, /*duration_ms=*/1000));
   ASSERT_WP2_OK(animation_encoder.AddFrame(original, /*duration_ms=*/1000));
   MemoryWriter memory_writer;
   EncoderConfig encoder_config = EncoderConfig::kDefault;
-  encoder_config.quality = 100.f;
+  encoder_config.quality = lossless ? 100.f : 95.f;
   encoder_config.alpha_quality = 100.f;
-  encoder_config.exact = exact;
+  encoder_config.keep_unmultiplied = keep_unmultiplied;
   ASSERT_WP2_OK(animation_encoder.Encode(&memory_writer, encoder_config));
 
-  DecoderConfig decoder_config = DecoderConfig::kDefault;
-  decoder_config.exact = exact;
-  ArrayDecoder decoder(memory_writer.mem_, memory_writer.size_, decoder_config);
+  ArrayDecoder decoder(memory_writer.mem_, memory_writer.size_);
   while (decoder.ReadFrame()) {
-    const bool is_truly_lossless =
-        testutil::Compare(original, decoder.GetPixels(), "internal");
-    const bool uses_premultiplied_alpha_internally = !exact;
-    const bool is_expected_to_be_truly_lossless =
-        uses_premultiplied_alpha_internally ==
-        WP2IsPremultiplied(original.format());
-    ASSERT_EQ(is_truly_lossless, is_expected_to_be_truly_lossless);
+    const float expected_distortion = lossless ? 99.f : 30.f;
+    const bool loss_is_small = testutil::Compare(
+        original, decoder.GetPixels(), "internal", expected_distortion);
+    const bool loss_is_expected_to_be_small =
+        WP2IsPremultiplied(original.format()) || keep_unmultiplied;
+    ASSERT_EQ(loss_is_small, loss_is_expected_to_be_small);
   }
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    All, ExactFormatTest,
-    testing::Values(std::make_tuple(WP2_Argb_32, /*exact=*/false),
-                    std::make_tuple(WP2_ARGB_32, /*exact=*/false),
-                    std::make_tuple(WP2_Argb_32, /*exact=*/true),
-                    std::make_tuple(WP2_ARGB_32, /*exact=*/true)));
+    Premultiplied, ExactFormatTest,
+    testing::Combine(testing::Values(WP2_Argb_32),
+                     /*lossless=*/testing::Bool(),
+                     /*keep_unmultiplied=*/testing::Bool()));
+
+INSTANTIATE_TEST_SUITE_P(
+    Unmultiplied, ExactFormatTest,
+    testing::Values(std::make_tuple(WP2_ARGB_32, /*lossless=*/false,
+                                    /*keep_unmultiplied=*/false),
+                    std::make_tuple(WP2_ARGB_32, /*lossless=*/true,
+                                    /*keep_unmultiplied=*/false),
+                    std::make_tuple(WP2_ARGB_32, /*lossless=*/true,
+                                    /*keep_unmultiplied=*/true)));
 
 }  // namespace
 }  // namespace WP2

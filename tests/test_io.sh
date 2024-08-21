@@ -79,11 +79,11 @@ check_roundtrip() {
 
 check_roundtrip_lossless() {
   echo "=== $1 ==="
-  do_cmd "${CWP2}" "$1" -q 100 -alpha_q 100 -exact -o "${TMP_WP2}" \
+  do_cmd "${CWP2}" "$1" -q 100 -alpha_q 100 -o "${TMP_WP2}" \
     -short -effort 6
   "${GET_DISTO}" "${TMP_WP2}" "$1" -nopremultiply
   for fmt in ${lossless_formats_to_test}; do
-    if do_cmd "${DWP2}" -exact -quiet -v "${TMP_WP2}" "-${fmt}" \
+    if do_cmd "${DWP2}" -quiet -v "${TMP_WP2}" "-${fmt}" \
       -o "${TMP_IMG}.${fmt}"; then
       "${GET_DISTO}" "${TMP_IMG}.${fmt}" "$1" -exact -nopremultiply
     else

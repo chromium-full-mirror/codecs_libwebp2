@@ -24,6 +24,7 @@
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {

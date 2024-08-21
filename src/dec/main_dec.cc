@@ -184,9 +184,10 @@ WP2Status DecodeTiles(uint32_t rgb_bit_depth, const DecoderConfig& config,
 
 //------------------------------------------------------------------------------
 
+// Decodes the data_source into rgb_output if not null or into yuv_output if
+// not null.
 WP2Status InternalDecode(const DecoderConfig& config,
-                         DataSource* const data_source,
-                         ArgbBuffer* const rgb_output,
+                         DataSource* const data_source, ArgbBuffer* rgb_output,
                          YUVPlane* const yuv_output, Metadata* const metadata,
                          CSPTransform* const csp_transform = nullptr) {
   WP2DecDspInit();
@@ -203,11 +204,26 @@ WP2Status InternalDecode(const DecoderConfig& config,
   WP2_CHECK_STATUS(SkipPreview(data_source, features));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
-  // Exactly one output format.
+  // Exactly one output buffer.
   const bool rgb_output_wanted = (rgb_output != nullptr);
   const bool yuv_output_wanted = (yuv_output != nullptr);
   WP2_CHECK_OK(rgb_output_wanted != yuv_output_wanted,
                WP2_STATUS_INVALID_PARAMETER);
+  // Check if a temporary buffer is needed before converting to the requested
+  // format.
+  ArgbBuffer tmp_rgb_output;
+  ArgbBuffer* raw_rgb_output = nullptr;
+  if (rgb_output_wanted) {
+    const WP2SampleFormat format_requested_by_user = rgb_output->format();
+    const WP2SampleFormat raw_rgb_format = ChooseRawFormat(
+        features, format_requested_by_user, /*support_10b=*/true);
+    if (format_requested_by_user == raw_rgb_format && !rgb_output->IsSlow()) {
+      raw_rgb_output = rgb_output;
+    } else {
+      raw_rgb_output = &tmp_rgb_output;
+      WP2_ASSERT_STATUS(raw_rgb_output->SetFormat(raw_rgb_format));
+    }
+  }
 
   // Placeholders for missing alpha, unoriented planes, padding etc.
   YUVPlane padded_yuv, non_padded_yuv;
@@ -218,10 +234,11 @@ WP2Status InternalDecode(const DecoderConfig& config,
   if (rgb_output_wanted) {
     // ArgbBuffer::Resize() clears even metadata so do it before anything else.
     WP2_CHECK_STATUS(
-        rgb_output->Resize(features.raw_width, features.raw_height));
+        raw_rgb_output->Resize(features.raw_width, features.raw_height));
   }
+  Data iccp;
   if (metadata != nullptr) {
-    WP2_CHECK_STATUS(DecodeICC(data_source, features, &metadata->iccp));
+    WP2_CHECK_STATUS(DecodeICC(data_source, features, &iccp));
   } else {
     WP2_CHECK_STATUS(SkipICC(data_source, features));
   }
@@ -302,12 +319,12 @@ WP2Status InternalDecode(const DecoderConfig& config,
                               gparams.type_ == GlobalParams::GP_BOTH);
 
     // Create views or buffers of the dimensions of the 'frame.window'.
-    ArgbBuffer rgb_frame(rgb_output_wanted ? rgb_output->format()
+    ArgbBuffer rgb_frame(rgb_output_wanted ? raw_rgb_output->format()
                                            : WP2_Argb_32);
 
     if (rgb_output_needed) {
       if (rgb_output_wanted && !frame.blend) {
-        WP2_CHECK_STATUS(rgb_frame.SetView(*rgb_output, frame.window));
+        WP2_CHECK_STATUS(rgb_frame.SetView(*raw_rgb_output, frame.window));
       } else {
         WP2_CHECK_STATUS(
             rgb_frame.Resize(frame.window.width, frame.window.height));
@@ -352,7 +369,7 @@ WP2Status InternalDecode(const DecoderConfig& config,
     // of padding, FillBorders() is done afterwards.
     if (frame.dispose) {
       if (rgb_output_wanted) {
-        WP2_CHECK_STATUS(FillBorders(features, frame, rgb_output));
+        WP2_CHECK_STATUS(FillBorders(features, frame, raw_rgb_output));
       } else {
         WP2_CHECK_STATUS(
             FillBorders(features, frame, gparams.transf_, &non_padded_yuv));
@@ -400,10 +417,11 @@ WP2Status InternalDecode(const DecoderConfig& config,
     if (frame.blend) {
       if (rgb_output_wanted) {
         if (frame.dispose) {
-          rgb_output->Fill(ToArgb32b(features.background_color));
+          raw_rgb_output->Fill(ToArgb32b(features.background_color));
         }
-        ArgbBuffer output_view;
-        WP2_CHECK_STATUS(output_view.SetView(*rgb_output, frame.window));
+        ArgbBuffer output_view(raw_rgb_output->format());
+        WP2_CHECK_STATUS(output_view.SetView(*raw_rgb_output, frame.window));
+        // TODO: b/359162718 - Support composition of unmultiplied samples.
         WP2_CHECK_STATUS(output_view.CompositeUnder(rgb_frame));
       } else {
         // TODO(maryla): handle blending for yuv output.
@@ -421,8 +439,18 @@ WP2Status InternalDecode(const DecoderConfig& config,
     ++frame_index;
   }
 
+  // Convert to user format if needed.
+  if (rgb_output_wanted && raw_rgb_output != rgb_output) {
+    WP2_CHECK_STATUS(rgb_output->ConvertFrom(*raw_rgb_output));
+    tmp_rgb_output.Deallocate();
+  }
+
   // Decode or skip trailing metadata if any (XMP, EXIF).
   if (metadata != nullptr) {
+    // Only set metadata after the ArgbBuffer::ConvertFrom() call above, because
+    // ArgbBuffer::ConvertFrom() clears all metadata and 'metadata' may point to
+    // 'rgb_output->metadata'.
+    swap(iccp, metadata->iccp);
     WP2_CHECK_STATUS(
         DecodeMetadata(data_source, features, &metadata->xmp, &metadata->exif));
   } else {
@@ -454,18 +482,6 @@ WP2Status InternalDecode(const DecoderConfig& config,
 WP2Status Decode(const uint8_t* data, size_t data_size, ArgbBuffer* output,
                  const DecoderConfig& config) {
   WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
-  const WP2SampleFormat format_default =
-      (WP2Formatbpc(output->format()) <= 8)
-          ? (config.exact ? WP2_ARGB_32 : WP2_Argb_32)
-          : WP2_Argb_38;
-  ArgbBuffer tmp_output(format_default);
-  ArgbBuffer* real_output = nullptr;
-
-  if ((output->format() != format_default) || output->IsSlow()) {
-    // work on tmp buffer
-    real_output = output;
-    output = &tmp_output;  // tmp working buffer
-  }
   ExternalDataSource data_source(data, data_size);
   WP2Status status = InternalDecode(config, &data_source, output,
                                     /*yuv_output=*/nullptr, &output->metadata_);
@@ -474,10 +490,6 @@ WP2Status Decode(const uint8_t* data, size_t data_size, ArgbBuffer* output,
     // Because it's not incremental decoding, missing data means an error.
     if (status == WP2_STATUS_NOT_ENOUGH_DATA) return WP2_STATUS_BITSTREAM_ERROR;
     return status;
-  }
-  if (real_output != nullptr) {
-    WP2_CHECK_STATUS(real_output->ConvertFrom(*output));
-    swap(real_output->metadata_, output->metadata_);
   }
   return WP2_STATUS_OK;
 }
@@ -530,6 +542,10 @@ WP2Status Decode(const uint8_t* input_data, size_t input_data_size,
   BitstreamFeatures features;
   ExternalDataSource data_source(input_data, input_data_size);
   WP2_CHECK_STATUS(DecodeHeader(&data_source, &features));
+  if (!features.is_opaque) {
+    // TODO: b/359162718 - Implement.
+    WP2_CHECK_OK(features.is_premultiplied, WP2_STATUS_UNSUPPORTED_FEATURE);
+  }
 
   WP2_CHECK_OK(c0_buffer != nullptr, WP2_STATUS_NULL_PARAMETER);
   WP2_CHECK_OK(c1_buffer != nullptr, WP2_STATUS_NULL_PARAMETER);
@@ -618,19 +634,19 @@ WP2Status ExtractPreview(const uint8_t* const data, size_t data_size,
       // Create another buffer to leave intact the layout of 'output_buffer'
       // that would be modified by a rotation of 90 or 270 degrees.
       // This is also needed if output is not in Argb32 format or is slow.
-      ArgbBuffer raw_output_buffer(WP2_Argb_32);
-      WP2_CHECK_STATUS(raw_output_buffer.Resize(
+      ArgbBuffer tmp_rgb_output_buffer(WP2_Argb_32);
+      WP2_CHECK_STATUS(tmp_rgb_output_buffer.Resize(
           OrientateWidth(GetInverseOrientation(features.orientation),
                          output_buffer->width(), output_buffer->height()),
           OrientateHeight(GetInverseOrientation(features.orientation),
                           output_buffer->width(), output_buffer->height())));
 
       WP2_CHECK_STATUS(
-          DecodePreview(&data_source, features, &raw_output_buffer));
+          DecodePreview(&data_source, features, &tmp_rgb_output_buffer));
 
       WP2_CHECK_STATUS(OrientateSubBuffer(
-          features.orientation, raw_output_buffer,
-          {0, 0, raw_output_buffer.width(), raw_output_buffer.height()},
+          features.orientation, tmp_rgb_output_buffer,
+          {0, 0, tmp_rgb_output_buffer.width(), tmp_rgb_output_buffer.height()},
           output_buffer));
     } else {
       // The layout of 'output_buffer' will not be modified, only its content.

@@ -123,10 +123,13 @@ WP2Status TileScoreFunc::InitForEncode() {
       decompressed_argb_.Resize(tile_rect_.width, tile_rect_.height));
 
   // A BitstreamFeatures instance is needed by LossyDecode(). Make up one.
+  const bool is_premultiplied =
+      WP2IsPremultiplied(decompressed_argb_.format()) ||
+      !tmp_config_.keep_unmultiplied;
   MemoryWriter writer;
   WP2_CHECK_STATUS(EncodeHeader(
       tmp_config_, tile_rect_.width, tile_rect_.height, /*rgb_bit_depth=*/8,
-      with_alpha_, /*is_anim=*/false, /*loop_forever=*/true,
+      with_alpha_, is_premultiplied, /*is_anim=*/false, /*loop_forever=*/true,
       kDefaultBackgroundColor, /*preview_color=*/{}, /*has_icc=*/false,
       /*has_trailing_data=*/false, &writer));
   WP2_CHECK_STATUS(features_.Read(writer.mem_, writer.size_));
@@ -139,6 +142,7 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
   ANSEnc& enc = enc_tiles_layout_.tiles.front().enc;
   enc.Reset();
   enc_tiles_layout_.gparams = &local_gparams_;
+  enc_tiles_layout_.image_is_premultiplied = true;
   tile_encoder_.tile_->progress = progress;
   // Encode the whole tile with the forced 'blocks'.
   WP2_CHECK_STATUS(tile_encoder_.LossyEncode(blocks, &enc));

@@ -20,11 +20,11 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "include/helpers.h"
 #include "src/common/color_precision.h"
 #include "src/dsp/lossless/decl_dsp.h"
 #include "src/dsp/lossless/encl_dsp.h"
 #include "src/wp2/base.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {

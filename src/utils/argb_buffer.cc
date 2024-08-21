@@ -207,8 +207,10 @@ uint8_t* ArgbBuffer::GetPosition(uint32_t x, uint32_t y) {
 }
 
 WP2Status ArgbBuffer::SetFormat(WP2SampleFormat format_in) {
-  WP2_CHECK_OK(IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
-  format_ = format_in;
+  if (format_ != format_in) {
+    WP2_CHECK_OK(IsEmpty(), WP2_STATUS_INVALID_PARAMETER);
+    format_ = format_in;
+  }
   return WP2_STATUS_OK;
 }
 

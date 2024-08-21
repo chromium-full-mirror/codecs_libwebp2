@@ -66,7 +66,7 @@ struct CrunchConfig;
 class Encoder {
  public:
   Encoder(const WP2::EncoderConfig& config, const WP2::ArgbBuffer& picture,
-          bool has_alpha);
+          bool has_alpha, bool is_premultiplied);
   WP2Status Allocate();
   WP2Status AllocateTransformBuffer(const WP2::Vector<CrunchConfig>& configs);
   // Applies and writes the transforms as well as some more info about the
@@ -98,6 +98,8 @@ class Encoder {
   const WP2::EncoderConfig& config_;  // user configuration and parameters
   const WP2::ArgbBuffer& pic_;        // input picture (tile view)
   bool has_alpha_;  // false if the whole image is opaque (not only this tile)
+  bool image_is_premultiplied_;  // true if the whole image is considered
+                                 // premultiplied, even if this tile is not
 
   LosslessSymbolsInfo symbols_info_;
 
@@ -179,8 +181,11 @@ struct EncodeInfo {
 
 // Encodes the picture.
 // 'has_alpha' might be true for another tile even if this one does not.
+// 'image_is_premultiplied' can be true for the whole image even if this tile
+// is not, and the format of the input picture is not necessarily matched.
 WP2Status EncodeImage(const WP2::EncoderConfig& config,
                       const WP2::ArgbBuffer& picture, bool has_alpha,
+                      bool image_is_premultiplied,
                       const WP2::ProgressRange& progress, WP2::ANSEnc* enc,
                       EncodeInfo* encode_info = nullptr);
 

@@ -117,7 +117,7 @@ class CSPTransform {
   Argb32b ToRgb8(const Ayuv38b& color) const;
 
   // Converts the channels 'c0, c1, c2' from a custom color space to RGB using
-  // 'ccsp_to_rgb_matrix'. Copies alpha if not null and clamp RGB to [0:alpha].
+  // 'ccsp_to_rgb_matrix'. Copies alpha if not null and clamps RGB to [0:alpha].
   static WP2Status CustomToArgb(uint32_t width, uint32_t height,
                                 const int16_t* c0_buffer, uint32_t c0_step,
                                 const int16_t* c1_buffer, uint32_t c1_step,

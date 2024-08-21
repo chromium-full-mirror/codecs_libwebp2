@@ -21,6 +21,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 #include "src/dec/incr/decoder_context.h"
 #include "src/dec/incr/decoder_state.h"
@@ -41,14 +42,13 @@ Decoder::Decoder(State* const state, const DecoderConfig& config,
                  ArgbBuffer* const output_buffer)
     : state_(state),
       config_(config),
-      output_((output_buffer != nullptr) ? output_buffer : &internal_output_),
-      internal_output_(config.exact ? WP2_ARGB_32 : WP2_Argb_32) {
+      output_((output_buffer != nullptr) ? output_buffer : &internal_output_) {
   if (state_ != nullptr) {
 #if defined(WP2_USE_CONTEXT_SWITCH) && (WP2_USE_CONTEXT_SWITCH > 0)
     if (config.incremental_mode ==
         DecoderConfig::IncrementalMode::PARTIAL_TILE_CONTEXT) {
-      state_->partial_tile_decoder.reset(new (WP2Allocable::nothrow)
-                                             ContextTileDecoder());
+      state_->partial_tile_decoder = std::unique_ptr<PartialTileDecoder>(
+          new (WP2Allocable::nothrow) ContextTileDecoder());
       // If the allocation fails, the partial_tile_decoder will not be used.
     }
 #endif  // WP2_USE_CONTEXT_SWITCH

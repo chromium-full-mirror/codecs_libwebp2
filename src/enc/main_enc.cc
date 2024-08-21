@@ -97,7 +97,7 @@ WP2Status SetupEncoderInfo(uint32_t width, uint32_t height,
 // Encode header to 'output'.
 WP2Status EncodeHeader(const EncoderConfig& config, uint32_t width,
                        uint32_t height, uint32_t rgb_bit_depth, bool has_alpha,
-                       bool is_anim, bool loop_forever,
+                       bool is_premultiplied, bool is_anim, bool loop_forever,
                        Argb38b background_color, RGB12b preview_color,
                        bool has_icc, bool has_trailing_data,
                        Writer* const output) {
@@ -118,6 +118,7 @@ WP2Status EncodeHeader(const EncoderConfig& config, uint32_t width,
   henc.PutBits(height - 1, kImageDimNumBits, "height_m1");
   henc.PutBits((uint32_t)config.decoding_orientation, 3, "orientation");
   henc.PutBits(has_alpha ? 1 : 0, 1, "has_alpha");
+  if (has_alpha) henc.PutBits(is_premultiplied ? 1 : 0, 1, "is_premultiplied");
   henc.PutBits(is_anim ? 1 : 0, 1, "is_animation");
 
   henc.PutBits(ToUInt32(preview_color), 12, "preview_color");
@@ -311,13 +312,15 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
   const uint32_t rgb_bit_depth = WP2Formatbpc(input.format());
   const RGB12b preview_color = GetPreviewColor(input);
   const bool has_alpha = input.HasTransparency();
+  const bool is_premultiplied = DecidePremultiplied(input.format(), config);
   const bool has_icc = (input.metadata_.iccp.size > 0);
   const bool has_trailing_data =
       (input.metadata_.xmp.size > 0) || (input.metadata_.exif.size > 0);
-  WP2_CHECK_STATUS(EncodeHeader(
-      config, input.width(), input.height(), rgb_bit_depth, has_alpha,
-      /*is_anim=*/false, /*loop_forever=*/true, kDefaultBackgroundColor,
-      preview_color, has_icc, has_trailing_data, output));
+  WP2_CHECK_STATUS(EncodeHeader(config, input.width(), input.height(),
+                                rgb_bit_depth, has_alpha, is_premultiplied,
+                                /*is_anim=*/false, /*loop_forever=*/true,
+                                kDefaultBackgroundColor, preview_color, has_icc,
+                                has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   const ProgressRange preview_progress(&progress, kOnePercent);
@@ -335,6 +338,10 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
   CSPTransform csp_transform;
   if (yuv_is_needed) {
     WP2_CHECK_STATUS(csp_transform.Init(config.csp_type, input));
+    if (has_alpha) {
+      // TODO: b/359162718 - Add support for unmultiplied in YUVPlane::Import().
+      WP2_CHECK_OK(is_premultiplied, WP2_STATUS_UNSUPPORTED_FEATURE);
+    }
     WP2_CHECK_STATUS(yuv_input.Import(input, has_alpha, csp_transform,
                                       /*resize_if_needed=*/true,
                                       /*pad=*/kPredWidth));
@@ -344,7 +351,7 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
   WP2_CHECK_STATUS(frames_progress.AdvanceBy(kOnePercent));  // Simulate ANMF
   WP2_CHECK_STATUS(EncodeTiles(input.width(), input.height(), input, yuv_input,
                                csp_transform, config, has_alpha,
-                               frames_progress, output));
+                               is_premultiplied, frames_progress, output));
 
   WP2_CHECK_STATUS(EncodeMetadata(input.metadata_, output));
   WP2_CHECK_STATUS(progress.Finish());
@@ -357,7 +364,7 @@ WP2Status Encode(uint32_t width, uint32_t height, const int16_t* c0_buffer,
                  uint32_t c0_step, const int16_t* c1_buffer, uint32_t c1_step,
                  const int16_t* c2_buffer, uint32_t c2_step,
                  const int16_t* a_buffer, uint32_t a_step,
-                 const int16_t ccsp_to_rgb_matrix[9],
+                 bool c_premultiplied_by_a, const int16_t ccsp_to_rgb_matrix[9],
                  uint32_t ccsp_to_rgb_shift, Writer* output,
                  const EncoderConfig& config, const Metadata& metadata) {
   WP2_CHECK_OK(ccsp_to_rgb_matrix != nullptr, WP2_STATUS_NULL_PARAMETER);
@@ -412,10 +419,15 @@ WP2Status Encode(uint32_t width, uint32_t height, const int16_t* c0_buffer,
   // TODO(yguyon): Some of these cases could also be done directly in YUV space
   //               instead of needing RGB conversion.
 
-  ArgbBuffer rgb_input(config.exact ? WP2_ARGB_32 : WP2_Argb_32);
+  const bool is_premultiplied = DecidePremultiplied(
+      c_premultiplied_by_a ? WP2_Argb_32 : WP2_ARGB_32, config);
+  ArgbBuffer rgb_input(is_premultiplied ? WP2_Argb_32 : WP2_ARGB_32);
   YUVPlane yuv_input;
   CSPTransform csp_transform;
   if (rgb_is_needed) {
+    // TODO: b/359162718 - Add support for unmultiplied in CustomToArgb().
+    WP2_CHECK_OK(c_premultiplied_by_a, WP2_STATUS_UNSUPPORTED_FEATURE);
+    WP2_CHECK_OK(is_premultiplied, WP2_STATUS_UNSUPPORTED_FEATURE);
     WP2_CHECK_STATUS(rgb_input.Resize(width, height));
     WP2_CHECK_STATUS(CSPTransform::CustomToArgb(
         width, height, c0_buffer, c0_step, c1_buffer, c1_step, c2_buffer,
@@ -448,10 +460,10 @@ WP2Status Encode(uint32_t width, uint32_t height, const int16_t* c0_buffer,
   const bool has_icc = (metadata.iccp.size > 0);
   const bool has_trailing_data =
       (metadata.xmp.size > 0 || metadata.exif.size > 0);
-  WP2_CHECK_STATUS(EncodeHeader(config, width, height, rgb_bit_depth, has_alpha,
-                                /*is_anim=*/false, /*loop_forever=*/true,
-                                kDefaultBackgroundColor, preview_color, has_icc,
-                                has_trailing_data, output));
+  WP2_CHECK_STATUS(EncodeHeader(
+      config, width, height, rgb_bit_depth, has_alpha, is_premultiplied,
+      /*is_anim=*/false, /*loop_forever=*/true, kDefaultBackgroundColor,
+      preview_color, has_icc, has_trailing_data, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));
 
   const ProgressRange preview_progress(&progress, kOnePercent);
@@ -465,7 +477,7 @@ WP2Status Encode(uint32_t width, uint32_t height, const int16_t* c0_buffer,
   WP2_CHECK_STATUS(frames_progress.AdvanceBy(kOnePercent));  // Simulate ANMF
   WP2_CHECK_STATUS(EncodeTiles(width, height, rgb_input, yuv_input,
                                csp_transform, config, has_alpha,
-                               frames_progress, output));
+                               is_premultiplied, frames_progress, output));
 
   WP2_CHECK_STATUS(EncodeMetadata(metadata, output));
   WP2_CHECK_STATUS(progress.Finish());

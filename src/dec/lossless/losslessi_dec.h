@@ -71,7 +71,7 @@ class Decoder {
  public:
   Decoder();
   void Init(const WP2::DecoderConfig& config, const WP2::GlobalParams& gparams,
-            WP2::ANSDec* dec, WP2::Tile* tile);
+            bool image_is_premultiplied, WP2::ANSDec* dec, WP2::Tile* tile);
   // Decodes the image header. Returns false in case of error.
   WP2Status DecodeHeader();
   // Decodes an image. It's required to decode the lossless header before
@@ -177,8 +177,14 @@ class Decoder {
 #endif
   WP2::DecoderConfig config_;
   const WP2::GlobalParams* gparams_ = nullptr;
-  // Whether pixels mut be premultiplied with the alpha value before emitting.
-  bool premultiply_ = false;
+  // If true, all samples will be emitted as premultiplied (and then
+  // unmultiplied if the user asks for ARGB).
+  // If false, all samples will be emitted as unmultiplied (and then
+  // premultiplied if the user asks for Argb).
+  bool image_is_premultiplied_ = false;
+  // Whether the samples in this tile were in Argb (true) or ARGB (false) format
+  // before being encoded losslessly.
+  bool tile_is_premultiplied_ = false;
   WP2::Vector<ColorSegment> lzw_segments_;  // LZW segments
   ColorSegment lzw_last_seg_;               // last decoded segment
 };
