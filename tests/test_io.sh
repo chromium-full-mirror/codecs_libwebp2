@@ -83,10 +83,17 @@ check_roundtrip_lossless() {
     -short -effort 6
   "${GET_DISTO}" "${TMP_WP2}" "$1" -nopremultiply
   for fmt in ${lossless_formats_to_test}; do
-    do_cmd "${DWP2}" -exact -quiet -v "${TMP_WP2}" "-${fmt}" \
-      -o "${TMP_IMG}.${fmt}"
-    if [ -s "${TMP_IMG}.${fmt}" ]; then
+    if do_cmd "${DWP2}" -exact -quiet -v "${TMP_WP2}" "-${fmt}" \
+      -o "${TMP_IMG}.${fmt}"; then
       "${GET_DISTO}" "${TMP_IMG}.${fmt}" "$1" -exact -nopremultiply
+    else
+      # maybe it is just a missing dependency for the requested output format
+      WP2_STATUS=$?
+      WP2_STATUS_UNSUPPORTED_FEATURE=7
+      if [ ${WP2_STATUS} -ne ${WP2_STATUS_UNSUPPORTED_FEATURE} ]; then
+        echo "${DWP2} returned error code ${WP2_STATUS}"
+        exit 1
+      fi
     fi
   done
 }

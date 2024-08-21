@@ -258,8 +258,8 @@ class ImageDecoder : public WP2::WorkerBase {
           *standard_err +=
               "(hint: use -force flag to overwrite an existing file)\n";
         }
-        return status;
       }
+      WP2_CHECK_STATUS(status);
 
       if (!settings_.quiet) {
         *standard_out += SPrintf("Saved to '%s'\n", final_out_path.c_str());
