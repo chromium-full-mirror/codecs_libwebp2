@@ -257,9 +257,9 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
   WP2_CHECK_STATUS(EncodeGLBL(config, gparams, image_has_alpha, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));  // GlobalParams
 
-  const uint32_t tile_width = TileWidth(FinalTileShape(config), width);
+  const uint32_t tile_width = TileWidth(FinalTileShape(config), width, height);
   const uint32_t tile_height =
-      TileHeight(FinalTileShape(config), /*image_width=*/width);
+      TileHeight(FinalTileShape(config), width, height);
 
   const ProgressRange tiles_progress(progress, kProgressTiles);
   EncTilesLayout tiles_layout;

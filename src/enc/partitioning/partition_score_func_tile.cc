@@ -153,9 +153,10 @@ WP2Status TileScoreFunc::TryEncode(const VectorNoCtor<Block>& blocks,
   // Reset the unique tile to a fresh state.
   const uint32_t width = decompressed_argb_.width();
   const uint32_t height = decompressed_argb_.height();
-  const uint32_t tile_width = TileWidth(FinalTileShape(*config_), width);
+  const uint32_t tile_width =
+      TileWidth(FinalTileShape(*config_), width, height);
   const uint32_t tile_height =
-      TileHeight(FinalTileShape(*config_), /*image_width=*/width);
+      TileHeight(FinalTileShape(*config_), width, height);
   WP2_CHECK_STATUS(GetTilesLayout(width, height, tile_width, tile_height,
                                   ProgressRange(), &decompressed_argb_,
                                   &decompressed_yuv_, &tiles_layout_));

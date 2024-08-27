@@ -345,10 +345,13 @@ WP2Status InternalDecode(const DecoderConfig& config,
     }
 
     const ProgressRange tiles_progress(frame_progress, kProgressTiles);
+    const uint32_t tile_width =
+        TileWidth(features.tile_shape, frame.window.width, frame.window.height);
+    const uint32_t tile_height = TileHeight(
+        features.tile_shape, frame.window.width, frame.window.height);
     WP2_CHECK_STATUS(GetTilesLayout(frame.window.width, frame.window.height,
-                                    features.tile_width, features.tile_height,
-                                    tiles_progress, &rgb_frame, &yuv_frame,
-                                    &tiles_layout));
+                                    tile_width, tile_height, tiles_progress,
+                                    &rgb_frame, &yuv_frame, &tiles_layout));
     // All tiles should be immediately decodable.
     tiles_layout.num_assignable_tiles = (uint32_t)tiles_layout.tiles.size();
 

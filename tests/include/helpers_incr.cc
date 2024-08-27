@@ -23,6 +23,7 @@
 #include <cstring>
 #include <vector>
 
+#include "src/common/constants.h"
 #include "src/common/global_params.h"
 #include "src/dec/tile_dec.h"
 #include "src/dec/wp2_dec_i.h"
@@ -458,7 +459,8 @@ class IncrementalDecodingTester {
                         is_sideways ? features->height : features->width));
         max_num_lines = kMaxBlockSizePix * max_num_block_rows_in_two_bytes;
       } else {
-        max_num_lines = features->tile_height;
+        max_num_lines = TileHeight(features->tile_shape, features->raw_width,
+                                   features->raw_height);
       }
       max_num_lines = std::min(max_num_lines, features->raw_height);
       // Filters are applied sequentially and each needs a few rows untouched by

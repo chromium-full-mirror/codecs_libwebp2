@@ -23,6 +23,7 @@
 #include <cassert>
 #include <cstdint>
 
+#include "src/common/constants.h"
 #include "src/common/global_params.h"
 #include "src/common/lossy/block.h"
 #include "src/common/lossy/block_size.h"
@@ -275,12 +276,15 @@ WP2Status SkipGlobalParamsAndTiles(DataSource* const data_source,
 WP2Status SkipTiles(const GlobalParams& gparams, DataSource* const data_source,
                     const BitstreamFeatures& features,
                     const Rectangle& window) {
-  const uint32_t num_tiles = GetNumTiles(
-      window.width, window.height, features.tile_width, features.tile_height);
+  const uint32_t tile_width =
+      TileWidth(features.tile_shape, window.width, window.height);
+  const uint32_t tile_height =
+      TileHeight(features.tile_shape, window.width, window.height);
+  const uint32_t num_tiles =
+      GetNumTiles(window.width, window.height, tile_width, tile_height);
   for (uint32_t tile_index = 0; tile_index < num_tiles; ++tile_index) {
-    const Rectangle& tile_rect =
-        GetTileRect(window.width, window.height, features.tile_width,
-                    features.tile_height, tile_index);
+    const Rectangle& tile_rect = GetTileRect(
+        window.width, window.height, tile_width, tile_height, tile_index);
     uint32_t tile_chunk_size;
     WP2_CHECK_STATUS(DecodeTileChunkSize(features.rgb_bit_depth, gparams,
                                          tile_rect, data_source,

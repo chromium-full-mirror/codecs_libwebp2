@@ -88,9 +88,10 @@ static constexpr double kProgressFrames =
 // Progress for all tiles within a frame minus ANMF + GlobalParams.
 static constexpr double kProgressTiles = 1. - 2 * kOnePercent;
 
-// Returns the tile width/height in pixels for a given TileShape and a given
-// image width.
-static inline uint32_t TileWidth(TileShape tile_shape, uint32_t image_width) {
+// Returns the tile width/height in pixels for a given TileShape and frame
+// dimensions.
+static inline uint32_t TileWidth(TileShape tile_shape, uint32_t frame_width,
+                                 uint32_t frame_height) {
   switch (tile_shape) {
     case TILE_SHAPE_SQUARE_128:
       return 128;
@@ -99,14 +100,16 @@ static inline uint32_t TileWidth(TileShape tile_shape, uint32_t image_width) {
     case TILE_SHAPE_SQUARE_512:
       return 512;
     case TILE_SHAPE_WIDE:
-      return std::min(Pad(image_width, kMinBlockSizePix), kMaxTileSize);
+      (void)frame_height;
+      return std::min(Pad(frame_width, kMinBlockSizePix), kMaxTileSize);
     default:
       assert(false);
       return 0;
   }
 }
-static inline uint32_t TileHeight(TileShape tile_shape, uint32_t image_width) {
-  const uint32_t tile_width = TileWidth(tile_shape, image_width);
+static inline uint32_t TileHeight(TileShape tile_shape, uint32_t frame_width,
+                                  uint32_t frame_height) {
+  const uint32_t tile_width = TileWidth(tile_shape, frame_width, frame_height);
   switch (tile_shape) {
     case TILE_SHAPE_SQUARE_128:
     case TILE_SHAPE_SQUARE_256:

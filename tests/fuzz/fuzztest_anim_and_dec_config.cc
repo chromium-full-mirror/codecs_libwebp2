@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <string>
 
+#include "src/common/constants.h"
 #include "src/dec/tile_dec.h"
 #include "src/dsp/math.h"
 #include "src/utils/utils.h"
@@ -102,9 +103,12 @@ void LimitSetupForBigImages(DataView bitstream,
 
   // Too many tiles and/or too many decodings generate timeouts because heavy
   // memset()/memcpy() usage slows sanitizers down considerably.
-  const uint32_t num_tiles =
-      GetNumTiles(features.raw_width, features.raw_height, features.tile_width,
-                  features.tile_height);
+  const uint32_t tile_width =
+      TileWidth(features.tile_shape, features.raw_width, features.raw_height);
+  const uint32_t tile_height =
+      TileHeight(features.tile_shape, features.raw_width, features.raw_height);
+  const uint32_t num_tiles = GetNumTiles(
+      features.raw_width, features.raw_height, tile_width, tile_height);
   const uint32_t num_decodings = DivCeil(bitstream.size, setup->incr_size_step);
   // The threshold was found empirically.
   const uint32_t max_num_tiles = DivRound(1024u, num_decodings);

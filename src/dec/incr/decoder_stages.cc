@@ -91,10 +91,14 @@ static WP2Status PrepareTiles(const DecoderConfig& config,
 
   state->current_tiles_progress =
       ProgressRange(state->current_frame_progress, kProgressTiles);
-  WP2_CHECK_STATUS(GetTilesLayout(
-      window.width, window.height, features.tile_width, features.tile_height,
-      state->current_tiles_progress, &state->frame_output_buffer,
-      &state->yuv_output_buffer, &state->tiles_layout));
+  const uint32_t tile_width =
+      TileWidth(features.tile_shape, window.width, window.height);
+  const uint32_t tile_height =
+      TileHeight(features.tile_shape, window.width, window.height);
+  WP2_CHECK_STATUS(
+      GetTilesLayout(window.width, window.height, tile_width, tile_height,
+                     state->current_tiles_progress, &state->frame_output_buffer,
+                     &state->yuv_output_buffer, &state->tiles_layout));
   state->tiles_layout.gparams = &state->gparams;
 
   if (!discard_frame) {

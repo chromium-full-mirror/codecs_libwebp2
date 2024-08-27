@@ -462,8 +462,10 @@ WP2Status GetTileBytesPosition(const uint8_t bitstream[],
       DecodeGLBL(&data_source, DecoderConfig::kDefault, features, &gparams));
   *tile_bytes_position =
       data_source.GetNumDiscardedBytes() + data_source.GetNumReadBytes();
-  *tile_width = features.tile_width;
-  *tile_height = features.tile_height;
+  *tile_width =
+      TileWidth(features.tile_shape, features.raw_width, features.raw_height);
+  *tile_height =
+      TileHeight(features.tile_shape, features.raw_width, features.raw_height);
   return WP2_STATUS_OK;
 }
 

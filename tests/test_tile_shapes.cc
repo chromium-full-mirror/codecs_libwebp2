@@ -14,12 +14,17 @@
 
 // Integration tests for tile shapes.
 
+#include <cstdint>
 #include <string>
 #include <tuple>
 
+#include "imageio/anim_image_dec.h"
 #include "include/helpers.h"
+#include "src/wp2/base.h"
+#include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -44,6 +49,43 @@ INSTANTIATE_TEST_SUITE_P(
                      testing::Values(TILE_SHAPE_SQUARE_128,
                                      TILE_SHAPE_SQUARE_256,
                                      TILE_SHAPE_SQUARE_512, TILE_SHAPE_WIDE)));
+
+//------------------------------------------------------------------------------
+
+// Regression test for tile dimension mismatch due to being based on frame width
+// and height at encoding and image width and height at decoding.
+TEST(LosslessAnimationTileShapeWideTest, Regression) {
+  ArgbBuffer frame(WP2_ARGB_32);
+  const std::string path =
+      testutil::GetTestDataPath("okfestival2014_sullivan_vs_sullivan.gif");
+  ImageReader reader(path.c_str(), &frame);
+  AnimationEncoder encoder;
+  bool is_last;
+  int frame_count = 0;
+  do {
+    uint32_t duration_ms;
+    ASSERT_WP2_OK(reader.ReadFrame(&is_last, &duration_ms));
+    ++frame_count;
+    // Speed up the test while keeping the relevant code covered.
+    if (frame_count != 1 && frame_count != 30) continue;
+    ASSERT_WP2_OK(encoder.AddFrame(frame, duration_ms));
+  } while (!is_last);
+
+  EncoderConfig config = EncoderConfig::kDefault;
+  config.quality = 100.0f;
+  config.alpha_quality = 100.0f;
+  config.effort = 1;
+  config.keep_unmultiplied = true;
+  config.tile_shape = WP2::TILE_SHAPE_WIDE;
+  MemoryWriter writer;
+  ASSERT_WP2_OK(encoder.Encode(&writer, config));
+
+  ArrayDecoder decoder(writer.mem_, writer.size_);
+  uint32_t duration_ms;
+  while (decoder.ReadFrame(&duration_ms)) {
+  }
+  ASSERT_WP2_OK(decoder.GetStatus());
+}
 
 //------------------------------------------------------------------------------
 

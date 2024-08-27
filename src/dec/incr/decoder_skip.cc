@@ -24,6 +24,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "src/common/constants.h"
 #include "src/dec/incr/decoder_info.h"
 #include "src/dec/incr/decoder_state.h"
 #include "src/dec/tile_dec.h"
@@ -74,12 +75,16 @@ WP2Status GlimpseTillNextANMFChunk(const DecoderConfig& config,
     const Decoder::State::InternalFrameFeatures& glimpsed_frame_features =
         state->frames[state->glimpsed_frame_index];
     const Rectangle& window = glimpsed_frame_features.info.window;
-    const uint32_t num_tiles = GetNumTiles(
-        window.width, window.height, features.tile_width, features.tile_height);
+    const uint32_t tile_width =
+        TileWidth(features.tile_shape, window.width, window.height);
+    const uint32_t tile_height =
+        TileHeight(features.tile_shape, window.width, window.height);
+    const uint32_t num_tiles =
+        GetNumTiles(window.width, window.height, tile_width, tile_height);
     while (state->num_glimpsed_tiles < num_tiles) {
       const Rectangle& tile_rect =
-          GetTileRect(window.width, window.height, features.tile_width,
-                      features.tile_height, state->num_glimpsed_tiles);
+          GetTileRect(window.width, window.height, tile_width, tile_height,
+                      state->num_glimpsed_tiles);
       uint32_t tile_chunk_size = 0;
       WP2_CHECK_STATUS(DecodeTileChunkSize(
           features.rgb_bit_depth, state->glimpsed_frame_gparams, tile_rect,

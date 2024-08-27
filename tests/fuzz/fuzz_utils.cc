@@ -34,6 +34,7 @@
 
 #include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
+#include "src/common/constants.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
 #include "src/wp2/decode.h"
@@ -57,9 +58,12 @@ void LimitConfigForBigImages(DataView bitstream, DecoderConfig* config) {
       constexpr uint32_t kMaxPeakMem = (1u << 28);  // 256 MB
       // Estimation of the peak memory allocation within each tile
       // (roughly 16 times the 16-bit 4-channel tile canvas).
-      const uint32_t bytes_used_per_tile = features.tile_width *
-                                           features.tile_height *
-                                           (sizeof(int16_t) * 4) * 16;
+      const uint32_t tile_width = TileWidth(
+          features.tile_shape, features.raw_width, features.raw_height);
+      const uint32_t tile_height = TileHeight(
+          features.tile_shape, features.raw_width, features.raw_height);
+      const uint32_t bytes_used_per_tile =
+          tile_width * tile_height * (sizeof(int16_t) * 4) * 16;
       config->thread_level =
           std::min(config->thread_level,
                    std::max(kMaxPeakMem / bytes_used_per_tile, 1u) - 1u);

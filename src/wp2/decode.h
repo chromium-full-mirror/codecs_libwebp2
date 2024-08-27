@@ -40,8 +40,7 @@ struct BitstreamFeatures {
   Orientation orientation;  // Rotation or mirroring applied during decoding.
   uint32_t width;           // Width after the orientation is applied.
   uint32_t height;          // Height after the orientation is applied.
-  uint32_t tile_width;      // Width of tiles in pixels.
-  uint32_t tile_height;     // Height of tiles in pixels.
+  TileShape tile_shape;     // Tile sizing pattern.
   uint32_t rgb_bit_depth;   // RGB depth in bits. 8 or 10. Alpha is always 8.
 
   bool is_opaque;         // True if no alpha. False has no guarantee.
