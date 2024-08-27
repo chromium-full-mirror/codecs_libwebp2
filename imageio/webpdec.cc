@@ -17,19 +17,20 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include <cstdint>
 #include <cstdio>
-
-#include "imageio/anim_image_dec.h"
+#include <cstdlib>
 
 #ifdef HAVE_CONFIG_H
-#include "wp2/config.h"
+#include "src/wp2/config.h"
 #endif
+#include "imageio/anim_image_dec.h"
+#include "imageio/imageio_util.h"
+#include "src/wp2/base.h"
 
 #ifdef WP2_HAVE_WEBP
-#include "imageio/imageio_util.h"
+#include <cstdint>
+
 #include "src/utils/utils.h"
-#include "src/wp2/base.h"
 #include "webp/decode.h"
 #include "webp/demux.h"
 #include "webp/mux_types.h"
@@ -227,6 +228,8 @@ class ImageReaderWEBP : public ImageReader::Impl {
   int last_timestamp_ = 0;
 };
 
+// -----------------------------------------------------------------------------
+
 void ImageReader::SetImplWEBP(ArgbBuffer* const buffer, LogLevel log_level,
                               size_t max_num_pixels) {
   impl_.reset(new (WP2Allocable::nothrow) ImageReaderWEBP(
@@ -252,5 +255,3 @@ void WP2::ImageReader::SetImplWEBP(WP2::ArgbBuffer* const buffer,
 }
 
 #endif  // WP2_HAVE_WEBP
-
-// -----------------------------------------------------------------------------

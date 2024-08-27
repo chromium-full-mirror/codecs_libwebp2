@@ -17,14 +17,15 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 #ifdef HAVE_CONFIG_H
 #include "src/wp2/config.h"
 #endif
-
-#include "./anim_image_dec.h"
+#include "imageio/anim_image_dec.h"
+#include "imageio/imageio_util.h"
+#include "src/wp2/base.h"
 
 #ifdef WP2_HAVE_PNG
 #ifndef PNG_USER_MEM_SUPPORTED
@@ -35,12 +36,10 @@
 #include <pnglibconf.h>
 #include <setjmp.h>  // note: this must be included *after* png.h
 
-#include <cstdlib>
+#include <cstdint>
 #include <cstring>
 
-#include "./imageio_util.h"
 #include "src/utils/utils.h"
-#include "src/wp2/base.h"
 
 #define LOCAL_PNG_VERSION ((PNG_LIBPNG_VER_MAJOR << 8) | PNG_LIBPNG_VER_MINOR)
 #define LOCAL_PNG_PREREQ(maj, min) (LOCAL_PNG_VERSION >= (((maj) << 8) | (min)))
@@ -440,6 +439,8 @@ class ImageReaderPNG : public ImageReader::Impl {
   volatile bool had_malloc_error_;
 };
 
+// -----------------------------------------------------------------------------
+
 void ImageReader::SetImplPNG(ArgbBuffer* const buffer, LogLevel log_level,
                              size_t max_num_pixels) {
   impl_.reset(new (WP2Allocable::nothrow) ImageReaderPNG(
@@ -451,10 +452,9 @@ void ImageReader::SetImplPNG(ArgbBuffer* const buffer, LogLevel log_level,
 
 #else  // !WP2_HAVE_PNG
 
-namespace WP2 {
-
-void ImageReader::SetImplPNG(ArgbBuffer* const buffer, LogLevel log_level,
-                             size_t max_num_pixels) {
+void WP2::ImageReader::SetImplPNG(WP2::ArgbBuffer* const buffer,
+                                  WP2::LogLevel log_level,
+                                  size_t max_num_pixels) {
   (void)buffer;
   (void)max_num_pixels;
   if (log_level >= WP2::LogLevel::DEFAULT) {
@@ -465,8 +465,4 @@ void ImageReader::SetImplPNG(ArgbBuffer* const buffer, LogLevel log_level,
   status_ = WP2_STATUS_UNSUPPORTED_FEATURE;
 }
 
-}  // namespace WP2
-
 #endif  // WP2_HAVE_PNG
-
-// -----------------------------------------------------------------------------

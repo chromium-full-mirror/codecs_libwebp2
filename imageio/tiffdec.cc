@@ -17,24 +17,24 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include <cstdint>
-
-#include "imageio/anim_image_dec.h"
-#include "src/utils/utils.h"
-#include "src/wp2/base.h"
+#include <cstdio>
+#include <cstdlib>
 
 #ifdef HAVE_CONFIG_H
 #include "src/wp2/config.h"
 #endif
-
-#include <cstdio>
-#include <cstring>
+#include "imageio/anim_image_dec.h"
+#include "imageio/imageio_util.h"
+#include "src/wp2/base.h"
 
 #ifdef WP2_HAVE_TIFF
 #include <tiff.h>
 #include <tiffio.h>
 
-#include "./imageio_util.h"
+#include <cstdint>
+#include <cstring>
+
+#include "src/utils/utils.h"
 
 namespace {
 
@@ -281,6 +281,8 @@ class ImageReaderTIFF : public ImageReader::Impl {
   }
 };
 
+// -----------------------------------------------------------------------------
+
 void ImageReader::SetImplTIFF(ArgbBuffer* const buffer, LogLevel log_level,
                               size_t max_num_pixels) {
   impl_.reset(new (WP2Allocable::nothrow) ImageReaderTIFF(
@@ -306,5 +308,3 @@ void WP2::ImageReader::SetImplTIFF(WP2::ArgbBuffer* const buffer,
 }
 
 #endif  // WP2_HAVE_TIFF
-
-// -----------------------------------------------------------------------------

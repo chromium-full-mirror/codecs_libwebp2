@@ -18,14 +18,14 @@
 // Author: Vincent Rabaud (vrabaud@google.com)
 
 #include <cstdio>
+#include <cstdlib>
 
+#ifdef HAVE_CONFIG_H
+#include "src/wp2/config.h"
+#endif
 #include "imageio/anim_image_dec.h"
 #include "imageio/imageio_util.h"
 #include "src/wp2/base.h"
-
-#ifdef HAVE_CONFIG_H
-#include "wp2/config.h"
-#endif
 
 #ifdef WP2_HAVE_JXL
 #include <cstdint>
@@ -125,6 +125,8 @@ class ImageReaderJXL : public ImageReader::Impl {
   size_t frame_index_ = 0;
 };
 
+// -----------------------------------------------------------------------------
+
 void ImageReader::SetImplJXL(ArgbBuffer* const buffer, LogLevel log_level,
                              size_t max_num_pixels) {
   impl_.reset(new (WP2Allocable::nothrow) ImageReaderJXL(
@@ -150,5 +152,3 @@ void WP2::ImageReader::SetImplJXL(WP2::ArgbBuffer* const buffer,
 }
 
 #endif  // WP2_HAVE_JXL
-
-// -----------------------------------------------------------------------------

@@ -17,26 +17,26 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
-#include <cassert>
-#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+
+#ifdef HAVE_CONFIG_H
+#include "src/wp2/config.h"
+#endif
+#include "imageio/anim_image_dec.h"
+#include "imageio/imageio_util.h"
+#include "src/wp2/base.h"
 
 #ifdef WP2_HAVE_JPEG
 #include <jerror.h>
 #include <jpeglib.h>
 
+#include <cassert>
 #include <csetjmp>
-#include <cstdlib>
+#include <cstdint>
 #include <cstring>
 
-#ifdef HAVE_CONFIG_H
-#include "src/wp2/config.h"
-#endif
-
-#include "imageio/anim_image_dec.h"
-#include "imageio/imageio_util.h"
 #include "src/utils/utils.h"
-#include "src/wp2/base.h"
 
 namespace {
 
@@ -454,6 +454,8 @@ class ImageReaderJPEG : public ImageReader::Impl {
   }
 };
 
+// -----------------------------------------------------------------------------
+
 void ImageReader::SetImplJPEG(ArgbBuffer* const buffer, LogLevel log_level,
                               size_t max_num_pixels) {
   impl_.reset(new (WP2Allocable::nothrow) ImageReaderJPEG(
@@ -465,10 +467,9 @@ void ImageReader::SetImplJPEG(ArgbBuffer* const buffer, LogLevel log_level,
 
 #else  // !WP2_HAVE_JPEG
 
-namespace WP2 {
-
-void ImageReader::SetImplJPEG(ArgbBuffer* const buffer, LogLevel log_level,
-                              size_t max_num_pixels) {
+void WP2::ImageReader::SetImplJPEG(WP2::ArgbBuffer* const buffer,
+                                   WP2::LogLevel log_level,
+                                   size_t max_num_pixels) {
   (void)buffer;
   (void)max_num_pixels;
   if (log_level >= WP2::LogLevel::DEFAULT) {
@@ -479,8 +480,4 @@ void ImageReader::SetImplJPEG(ArgbBuffer* const buffer, LogLevel log_level,
   status_ = WP2_STATUS_UNSUPPORTED_FEATURE;
 }
 
-}  // namespace WP2
-
 #endif  // WP2_HAVE_JPEG
-
-// -----------------------------------------------------------------------------

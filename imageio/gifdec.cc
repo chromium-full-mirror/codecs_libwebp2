@@ -20,27 +20,26 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
-#include <algorithm>
-#include <cassert>
-#include <cstdint>
 #include <cstdio>
-#include <cstring>
+#include <cstdlib>
 
-#include "imageio/anim_image_dec.h"
 #ifdef HAVE_CONFIG_H
 #include "wp2/config.h"
 #endif
-
-//------------------------------------------------------------------------------
+#include "imageio/anim_image_dec.h"
+#include "imageio/imageio_util.h"
+#include "src/wp2/base.h"
 
 #ifdef WP2_HAVE_GIF
-
 #include <gif_lib.h>
 
-#include "imageio/imageio_util.h"
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+
 #include "src/dsp/dsp.h"
 #include "src/utils/utils.h"
-#include "src/wp2/base.h"
 
 // GIFLIB_MAJOR is only defined in libgif >= 4.2.0.
 #if defined(GIFLIB_MAJOR) && defined(GIFLIB_MINOR)
@@ -518,5 +517,3 @@ void WP2::ImageReader::SetImplGIF(WP2::ArgbBuffer* const buffer,
 }
 
 #endif  // WP2_HAVE_GIF
-
-// -----------------------------------------------------------------------------

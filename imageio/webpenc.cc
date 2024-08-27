@@ -17,22 +17,22 @@
 //
 // Author: Yannis Guyon (yguyon@google.com)
 
+#ifdef HAVE_CONFIG_H
+#include "wp2/config.h"
+#endif
+#include "imageio/image_enc.h"
+#include "src/wp2/base.h"
+
+#ifdef WP2_HAVE_WEBP
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
 
-#ifdef HAVE_CONFIG_H
-#include "wp2/config.h"
-#endif
-
-#include "imageio/image_enc.h"
 #include "imageio/imageio_util.h"
 #include "src/dsp/math.h"
 #include "src/utils/utils.h"
-#include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
-#ifdef WP2_HAVE_WEBP
 #include "webp/encode.h"
 #endif
 
