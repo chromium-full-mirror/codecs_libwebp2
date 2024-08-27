@@ -75,7 +75,13 @@ class Environment : public ::testing::Environment {
  public:
   Environment(const char* name, const char* value)
       : name_(name), value_(value) {}
-  void SetUp() override { setenv(name_, value_, 1); }
+  void SetUp() override {
+#ifdef _WIN32
+    _putenv_s(name_, value_);
+#else
+    setenv(name_, value_, 1);
+#endif
+  }
 
  private:
   const char* name_;

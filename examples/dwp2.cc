@@ -389,8 +389,9 @@ class ImageDecoder : public WP2::WorkerBase {
       std::string standard_out, standard_err;
       const WP2Status status = DecodeAndSaveImage(
           in_path, &standard_out, &standard_err,
-          settings_.report_progress ? progress_printer_->GetJob(image_index)
-                                    : nullptr);
+          settings_.report_progress
+              ? progress_printer_->GetProgressHook(image_index)
+              : nullptr);
 
       if (!settings_.quiet && !settings_.report_progress) {
         // Acquire mutex to be sure to print in order without mixing lines.

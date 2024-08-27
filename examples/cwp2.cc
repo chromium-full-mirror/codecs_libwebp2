@@ -886,7 +886,7 @@ int main(int argc, char* argv[]) {
     WP2::MultiProgressPrinter progress_printer;
     if (report_progress) {
       progress_printer.Init(/*num_jobs=*/1);
-      params.config.progress_hook = progress_printer.GetJob(0);
+      params.config.progress_hook = progress_printer.GetProgressHook(0);
     }
 
     size_t out_size;
@@ -954,7 +954,8 @@ int main(int argc, char* argv[]) {
       }
 
       if (report_progress) {
-        params.config.progress_hook = progress_printer.GetJob(job_index++);
+        params.config.progress_hook =
+            progress_printer.GetProgressHook(job_index++);
       }
 
       const bool write_to_memory =

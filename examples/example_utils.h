@@ -111,17 +111,17 @@ extern bool WP2MemoryFailNow(size_t size);
 static const char* const kMetricNames[] = {"PSNR",   "PSNRHVS",  "PSNR_YUV",
                                            "SSIM",   "SSIM_YUV", "MSSSSIM_orig",
                                            "MSSSIM", "LSIM"};
-STATIC_ASSERT_ARRAY_SIZE(kMetricNames, WP2::NUM_METRIC_TYPES);
+STATIC_ASSERT_ARRAY_SIZE(kMetricNames, NUM_METRIC_TYPES);
 
 // Computes and prints the distortion of the compressed image stored in 'data'
 // compared to 'refs' (single image or several frames if it's an animation).
-WP2Status PrintDistortion(const std::vector<WP2::ArgbBuffer>& refs,
+WP2Status PrintDistortion(const std::vector<ArgbBuffer>& refs,
                           const uint8_t* data, size_t data_size,
-                          WP2::MetricType metric, bool short_output);
+                          MetricType metric, bool short_output);
 
 // One-liner for still images because ArgbBuffer doesn't provide a copy ctor.
-WP2Status PrintDistortion(const WP2::ArgbBuffer& ref, const uint8_t* data,
-                          size_t data_size, WP2::MetricType metric,
+WP2Status PrintDistortion(const ArgbBuffer& ref, const uint8_t* data,
+                          size_t data_size, MetricType metric,
                           bool short_output);
 
 //------------------------------------------------------------------------------
@@ -186,7 +186,7 @@ static inline void PrintBitTraceCluster(const std::vector<TraceType>& values,
       for (const auto& p : v.second.histo) counts[p.first] = p.second;
       // Display the type and entropy.
       const float entropy =
-          WP2::ANSCountsCost(counts.data(), counts.size()) / byte_factor;
+          ANSCountsCost(counts.data(), counts.size()) / byte_factor;
       constexpr const char* types[] = {"Bit",    "ABit",    "RValue",
                                        "UValue", "ASymbol", "Symbol"};
       fprintf(stderr, "%*s %s, entr: %.1f %s [", 5, "",
@@ -216,8 +216,8 @@ static inline void PrintBitTraceCluster(const std::vector<TraceType>& values,
   }
 }
 
-static inline void PrintBitTraces(const WP2::DecoderInfo& info,
-                                  size_t data_size, bool sort_values = true,
+static inline void PrintBitTraces(const DecoderInfo& info, size_t data_size,
+                                  bool sort_values = true,
                                   bool use_bytes = false,
                                   bool show_histograms = false,
                                   bool short_version = false,
@@ -227,7 +227,7 @@ static inline void PrintBitTraces(const WP2::DecoderInfo& info,
   for (const auto& p : info.bit_traces) {
     int level = bit_trace_level;
     if (p.first.find(ANSDec::kPrefixStr) == 0) {
-      const std::string str = p.first.substr(strlen(WP2::ANSDec::kPrefixStr));
+      const std::string str = p.first.substr(strlen(ANSDec::kPrefixStr));
       // The number of calls for a cluster is roughly the number of times a
       // prefix was added.
       acc[str].num_occurrences += p.second.num_occurrences;
@@ -347,16 +347,16 @@ std::string InputFileToOutputDir(const std::string& input_file_path,
 // Read the 'partition' from the file located at 'file_path'. Returns true in
 // case of success (or if the file can not be opened and 'read_only' is true).
 bool ReadPartition(const char file_path[], bool read_only,
-                   std::vector<WP2::Rectangle>* partition);
+                   std::vector<Rectangle>* partition);
 
 // Adapts the 'partition' by either ignoring blocks that are not part of the
 // 'partition_set' or by splitting them until they do.
 void ConvertPartition(uint32_t pic_width, uint32_t pic_height,
-                      WP2::PartitionSet partition_set, bool ignore_invalid,
-                      std::vector<WP2::Rectangle>* partition);
+                      PartitionSet partition_set, bool ignore_invalid,
+                      std::vector<Rectangle>* partition);
 
 // Writes the 'partition' to the file located at 'file_path'.
-bool WritePartition(const std::vector<WP2::Rectangle>& partition,
+bool WritePartition(const std::vector<Rectangle>& partition,
                     const char file_path[]);
 
 static const char* const kPartitionSetString[] = {
@@ -392,7 +392,7 @@ class ProgramOptions {
   // Parses the "main" argument for a metric option.
   // Leaves type untouched if nothing was found. Returns true if one was found.
   WP2_NO_DISCARD
-  static bool ParseMetricOptions(const char* arg, WP2::MetricType* type);
+  static bool ParseMetricOptions(const char* arg, MetricType* type);
   // Parses the 'main' argument for memory-related option.
   // Returns true if some memory-related options were parsed, false otherwise.
   WP2_NO_DISCARD
@@ -410,10 +410,10 @@ class MultiProgressPrinter {
   static constexpr double kNumSecondsBetweenPrints = 5.;
 
   void Init(uint32_t num_jobs);
-  WP2::ProgressHook* GetJob(uint32_t index) { return &jobs_[index]; }
+  ProgressHook* GetProgressHook(uint32_t index) { return &jobs_[index]; }
 
  private:
-  class Job : public WP2::ProgressHook {
+  class Job : public ProgressHook {
    public:
     Job(MultiProgressPrinter* parent, uint32_t index)
         : parent_(parent), index_(index) {}
@@ -429,7 +429,7 @@ class MultiProgressPrinter {
   void OnUpdate(bool job_just_finished);
 
   std::vector<Job> jobs_;
-  WP2::ThreadLock lock_;
+  ThreadLock lock_;
   bool started_;
   double last_timestamp_;
   uint32_t num_finished_jobs_;
