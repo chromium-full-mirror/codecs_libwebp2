@@ -182,7 +182,9 @@ float GetExpectedDistortion(
     float alpha_quality = EncoderConfig::kDefault.alpha_quality,
     int effort = EncoderConfig::kDefault.effort);
 
-float GetExpectedDistortion(const EncoderConfig& encoder_config);
+float GetExpectedDistortion(const EncoderConfig& encoder_config,
+                            WP2SampleFormat input_format = WP2_Argb_32,
+                            bool input_is_opaque = false);
 
 // Returns true if 'src' and 'dec' are similar of at least 'expected_distortion'
 testing::AssertionResult Compare(

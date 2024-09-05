@@ -230,12 +230,27 @@ float GetExpectedDistortion(float quality, float alpha_quality, int effort) {
   }
 }
 
-float GetExpectedDistortion(const EncoderConfig& encoder_config) {
+float GetExpectedDistortion(const EncoderConfig& encoder_config,
+                            WP2SampleFormat input_format,
+                            bool input_is_opaque) {
+  // Premultiplying samples by alpha slightly distorts the image in some cases.
+  // It is usually undistinguishable from lossy compression so only adapt the
+  // threshold for lossless compression.
+  if (encoder_config.quality > kMaxLossyQuality &&
+      encoder_config.alpha_quality > kMaxLossyQuality && !input_is_opaque &&
+      !WP2IsPremultiplied(input_format) && !encoder_config.keep_unmultiplied) {
+    return 25.f;  // Arbitrary.
+  }
+
   const float expected_distortion = GetExpectedDistortion(
       encoder_config.quality, encoder_config.alpha_quality,
       encoder_config.effort);
+
   // The following settings may have a dramatic impact on the distortion.
-  if (!std::equal(encoder_config.segment_factors,
+
+  if ((encoder_config.quality <= kMaxLossyQuality ||
+       encoder_config.alpha_quality <= kMaxLossyQuality) &&
+      !std::equal(encoder_config.segment_factors,
                   encoder_config.segment_factors + kMaxNumSegments,
                   EncoderConfig::kDefault.segment_factors)) {
     return std::max(0.f, expected_distortion - 5.f);

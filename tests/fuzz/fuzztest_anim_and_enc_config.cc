@@ -81,6 +81,7 @@ void EncodeDecode(const FramesAndDurations& frames_and_durations,
   ASSERT_GE(frames_and_durations.samples.size(),
             stride * frames_and_durations.height * num_frames);
 
+  bool is_opaque = true;
   original_frames.reserve(num_frames);
   for (size_t i = 0; i < num_frames; ++i) {
     original_frames.emplace_back(frames_and_durations.format);
@@ -88,11 +89,14 @@ void EncodeDecode(const FramesAndDurations& frames_and_durations,
                                                  frames_and_durations.height,
                                                  samples, stride),
               WP2_STATUS_OK);
+    is_opaque &= !original_frames.back().HasTransparency();
     samples += stride * frames_and_durations.height;
   }
 
   // Input can be random noise; output can get heavily distorted but it's fine.
-  const float expected_distortion = GetExpectedDistortion(config) - 15.f;
+  const float expected_distortion =
+      GetExpectedDistortion(config, frames_and_durations.format, is_opaque) -
+      15.f;
   EXPECT_EQ(
       TestAnimEncConfig(original_frames, frames_and_durations.durations_ms,
                         loop_forever, config, expected_distortion),
