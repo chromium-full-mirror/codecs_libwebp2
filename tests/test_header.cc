@@ -187,7 +187,7 @@ TEST(HeaderTest, MaxHeaderSize) {
   ASSERT_WP2_OK(features.Read(memory_writer.mem_, memory_writer.size_));
   // TODO(yguyon): Compare with exactly 'kHeaderMaxSize' when it's possible to
   //               reach it (with a 'kBackgroundCustom' color)
-  EXPECT_EQ(features.header_size, kHeaderMaxSize - 4);
+  EXPECT_EQ(features.header_size, kHeaderMaxSize - 5);
 }
 
 //------------------------------------------------------------------------------

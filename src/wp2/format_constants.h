@@ -34,7 +34,7 @@ static constexpr uint32_t kMaxBufferArea = (1u << 28);
 static constexpr uint32_t kSignature = 0x6ffff4;
 static constexpr uint32_t kMaxPreviewSize = 333;
 static constexpr uint32_t kHeaderMinSize = 10;
-static constexpr uint32_t kHeaderMaxSize = 15;
+static constexpr uint32_t kHeaderMaxSize = 16;
 static constexpr uint32_t kTagMask = 0x60ffe9;
 
 // Maximum (inclusive) size of a buffer chunk.
