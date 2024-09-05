@@ -665,9 +665,10 @@ static WP2Status ReadPaletteVerbatim(uint32_t num_colors,
 }
 
 WP2Status Decoder::ReadPalette(Transform* const transform) {
-  if (gparams_->has_alpha_)
+  if (gparams_->has_alpha_) {
     assert(WP2IsPremultiplied(hdr_.symbols_info_.SampleFormat()) ==
            tile_is_premultiplied_);
+  }
   transform->bits_ = 0;
 
   dec_->AddDebugPrefix("palette");

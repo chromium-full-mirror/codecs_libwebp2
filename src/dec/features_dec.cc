@@ -162,14 +162,12 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
 WP2SampleFormat ChooseRawFormat(const BitstreamFeatures& features,
                                 WP2SampleFormat format_requested_by_user,
                                 bool support_10b) {
-  if (features.rgb_bit_depth > 8) {
-    if (support_10b) {
-      // With high bit depth, there is only support for premultiplied samples.
-      return WP2_Argb_38;
-    } else {
-      return WP2_Argb_32;  // Format closest to WP2_Argb_38.
-    }
-  } else if (features.is_opaque) {
+  // With high bit depth, there is only support for premultiplied samples.
+  if (features.rgb_bit_depth > 8 && support_10b &&
+      (features.is_opaque || features.is_premultiplied)) {
+    return WP2_Argb_38;
+  }
+  if (features.is_opaque) {
     // Picking an unmultiplied or a premultiplied format has no impact on the
     // color values because all alpha values are at their maximum.
     // Pick the format closest to the one requested by the user instead, to
