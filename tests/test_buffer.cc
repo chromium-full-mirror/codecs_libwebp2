@@ -391,12 +391,12 @@ TEST(BufferTest, CompositeYuv) {
   const uint32_t width = 100;
   const uint32_t height = 50;
   ASSERT_WP2_OK(foreground.Resize(width, height));
-  foreground.Fill({128, 128, 128, 128});
+  foreground.Fill(Argb32b{128, 128, 128, 128});
   testutil::Noise(/*seed=*/1, /*strength=*/128, &foreground);
 
   ArgbBuffer background(WP2_Argb_32);
   ASSERT_WP2_OK(background.Resize(width, height));
-  background.Fill({128, 128, 128, 128});
+  background.Fill(Argb32b{128, 128, 128, 128});
   testutil::Noise(/*seed=*/2, /*strength=*/128, &background);
 
   CSPTransform csp;

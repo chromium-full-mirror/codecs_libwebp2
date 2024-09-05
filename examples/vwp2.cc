@@ -1318,7 +1318,7 @@ void Params::SetError(const std::string& message) {
   // Reset outputs so that nothing misleading is displayed.
   for (ArgbBuffer* const buffer : {&out_, &dinfo_.debug_output}) {
     WP2_ASSERT_STATUS(buffer->Resize(in_.width(), in_.height()));
-    buffer->Fill({0, 0, 0, 0});
+    buffer->Fill(Argb32b{0, 0, 0, 0});
   }
 #if defined(WP2_BITTRACE)
   einfo_.blocks.clear();

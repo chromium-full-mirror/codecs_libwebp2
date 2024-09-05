@@ -332,7 +332,7 @@ WP2Status FillRandom(const std::string& debug_str,
   } else if (random->FlipACoin()) {
     buffer->Fill(RandomColor(/*has_alpha=*/true, random));
   } else {
-    buffer->Fill({0, 0, 0, 0});
+    buffer->Fill(Argb32b{0, 0, 0, 0});
   }
 
   const uint32_t width = buffer->width();

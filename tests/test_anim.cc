@@ -239,7 +239,7 @@ TEST(AnimTest, Preframes) {
   // This way preframes should be way smaller than entire frames and should be
   // selected as the best option.
   ASSERT_WP2_OK(first_frame.Resize(512, 512));
-  first_frame.Fill({128, 128, 128, 128});
+  first_frame.Fill(Argb32b{128, 128, 128, 128});
   testutil::Noise(/*seed=*/42, /*strength=*/128, &first_frame);
 
   // Copy of first frame except for two areas that are far from each other

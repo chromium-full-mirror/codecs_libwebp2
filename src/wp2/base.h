@@ -445,6 +445,7 @@ class ArgbBuffer {
   void Fill(const Rectangle& window, Argb32b color);
   void Fill(const Rectangle& window, Argb38b color);
   void Fill(Argb32b color);  // fills the whole buffer
+  void Fill(Argb38b color);  // fills the whole buffer
   // Draw edges in the rectangle. 'edges_to_draw' is an OR combination of:
   //  1: top-edge,    2: left-edge  4: bottom-edge  8: right edge
   // 16: horizontal middle edge   32: vertical middle edge

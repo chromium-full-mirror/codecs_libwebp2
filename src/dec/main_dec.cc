@@ -420,7 +420,11 @@ WP2Status InternalDecode(const DecoderConfig& config,
     if (frame.blend) {
       if (rgb_output_wanted) {
         if (frame.dispose) {
-          raw_rgb_output->Fill(ToArgb32b(features.background_color));
+          if (raw_rgb_output->format() == WP2_Argb_38) {
+            raw_rgb_output->Fill(features.background_color);
+          } else {
+            raw_rgb_output->Fill(ToArgb32b(features.background_color));
+          }
         }
         ArgbBuffer output_view(raw_rgb_output->format());
         WP2_CHECK_STATUS(output_view.SetView(*raw_rgb_output, frame.window));

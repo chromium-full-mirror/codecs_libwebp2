@@ -35,7 +35,7 @@ WP2Status CreateNoiseAnimation(uint32_t num_frames, Writer* const writer) {
   ArgbBuffer frame;
   WP2_CHECK_STATUS(frame.Resize(32, 32));
   for (uint32_t i = 1; i <= num_frames; ++i) {
-    frame.Fill({128, 128, 128, 128});
+    frame.Fill(Argb32b{128, 128, 128, 128});
     testutil::Noise(/*seed=*/i, /*strength=*/128, &frame);
     WP2_CHECK_STATUS(animation_encoder.AddFrame(frame, /*duration_ms=*/i));
   }

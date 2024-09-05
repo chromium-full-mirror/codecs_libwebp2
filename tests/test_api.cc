@@ -31,7 +31,7 @@ namespace {
 TEST(EncodeTest, Simple) {
   ArgbBuffer input;
   ASSERT_WP2_OK(input.Resize(256, 256));
-  input.Fill({0xEFu, 0x48u, 0xACu, 0x02u});
+  input.Fill(Argb32b{0xEFu, 0x48u, 0xACu, 0x02u});
 
   MemoryWriter output;
   ASSERT_WP2_OK(Encode(input, &output));
@@ -50,11 +50,11 @@ TEST(EncodeTest, BadDimensions) {
 
   MemoryWriter output;
   ASSERT_WP2_OK(input.Resize(1, kImageDimMax + 1));
-  input.Fill({0xEFu, 0x48u, 0xACu, 0x02u});
+  input.Fill(Argb32b{0xEFu, 0x48u, 0xACu, 0x02u});
   ASSERT_EQ(Encode(input, &output), WP2_STATUS_BAD_DIMENSION);
 
   ASSERT_WP2_OK(input.Resize(kImageDimMax + 1, 1));
-  input.Fill({0xEFu, 0x48u, 0xACu, 0x02u});
+  input.Fill(Argb32b{0xEFu, 0x48u, 0xACu, 0x02u});
   ASSERT_EQ(Encode(input, &output), WP2_STATUS_BAD_DIMENSION);
 }
 

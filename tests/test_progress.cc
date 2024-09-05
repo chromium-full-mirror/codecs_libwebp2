@@ -260,7 +260,7 @@ TEST_P(ProgressPrecisionTest, Encode) {
 
   ArgbBuffer big_source;
   ASSERT_WP2_OK(big_source.Resize(width, height));
-  big_source.Fill({alpha, 129, 128, 127});
+  big_source.Fill(Argb32b{alpha, 129, 128, 127});
 
   MemoryWriter encoded_bitstream;
   EncoderConfig encoder_config = EncoderConfig::kDefault;

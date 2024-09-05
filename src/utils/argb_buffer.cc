@@ -339,6 +339,7 @@ void ArgbBuffer::Fill(const Rectangle& window, const uint16_t color[]) {
 }
 
 void ArgbBuffer::Fill(const Argb32b color) { Fill(AsRect(), color); }
+void ArgbBuffer::Fill(const Argb38b color) { Fill(AsRect(), color); }
 
 void ArgbBuffer::FillImpl(const Rectangle& window, const void* color) {
   const Rectangle r = window.ClipWith(AsRect());
@@ -400,7 +401,7 @@ static WP2Status CompositeBuffers(const ArgbBuffer& background,
                                   ArgbBuffer* const dest) {
   WP2_CHECK_OK(
       background.format() == WP2_Argb_32 || background.format() == WP2_ARGB_32,
-      WP2_STATUS_INVALID_COLORSPACE);
+      WP2_STATUS_UNSUPPORTED_FEATURE);
   WP2_CHECK_OK(foreground.format() == background.format(),
                WP2_STATUS_INVALID_COLORSPACE);
   WP2_CHECK_OK(foreground.width() == background.width(),

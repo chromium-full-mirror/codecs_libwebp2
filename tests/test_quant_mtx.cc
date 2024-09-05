@@ -325,7 +325,7 @@ TYPED_TEST(QuantMtxTestFrontMgrs, PlaysWellWithSyntaxWriter) {
     cb.GetCodingParams(kUChannel)->pred = params.uv_preds_[0];
 
     ASSERT_WP2_OK(buffer.Resize(rect.width, rect.height));
-    buffer.Fill({0xFFu, 0xFFu, 0xFFu, 0xFFu});
+    buffer.Fill(Argb32b{0xFFu, 0xFFu, 0xFFu, 0xFFu});
     YUVPlane yuv;
     ASSERT_WP2_OK(yuv.Import(buffer, buffer.HasTransparency(), params.transf_,
                              /*resize_if_needed=*/true));
