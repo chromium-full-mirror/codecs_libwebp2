@@ -150,7 +150,8 @@ WP2Status TileDecoder::BypassTileDecRgb10b() {
                  WP2_STATUS_NOT_ENOUGH_DATA);
 
     const uint32_t y = tile_->num_decoded_rows;
-    if (tile_->rgb_output.format() == WP2_Argb_32) {
+    if (tile_->rgb_output.format() == WP2_Argb_32 ||
+        tile_->rgb_output.format() == WP2_ARGB_32) {
       uint8_t* const row = tile_->rgb_output.GetRow8(y);
       for (uint32_t x = 0; x < tile_->rect.width; ++x) {
         row[x * 4 + 0] = gparams_->has_alpha_
