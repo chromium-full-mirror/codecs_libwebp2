@@ -260,4 +260,18 @@ class AnimationEncoder {
 
 }  // namespace WP2
 
+//------------------------------------------------------------------------------
+// Simple signatures for language interoperability
+
+// Encodes the image of 'width' by 'height' 'rgb' pixels in WP2_RGB_24 format.
+// 'stride' is the number of samples to go from one row to the next.
+// 'effort' has the same meaning as in WP2::EncoderConfig.
+// Remember to call WP2Release() on the returned 'encoded_bytes' pointer after
+// using or copying it.
+int WP2EncodeLosslessRgb8(uint32_t width, uint32_t height, const uint8_t* rgb,
+                          uint32_t stride, int effort, uint8_t*& encoded_bytes,
+                          size_t& num_encoded_bytes);
+
+void WP2Release(uint8_t* encoded_bytes);
+
 #endif /* WP2_WP2_ENCODE_H_ */

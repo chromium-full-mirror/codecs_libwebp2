@@ -14,17 +14,18 @@
 // -----------------------------------------------------------------------------
 //
 // WP2 lossless encoding.
-//
+
+#include <cstddef>
+#include <cstdint>
 
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/enc/tile_enc.h"
 #include "src/utils/ans_enc.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 
 namespace WP2 {
-
-// -----------------------------------------------------------------------------
 
 WP2Status TileEncoder::LosslessEncode(ANSEnc* const enc) {
   WP2_CHECK_STATUS(WP2L::EncodeImage(
@@ -33,6 +34,33 @@ WP2Status TileEncoder::LosslessEncode(ANSEnc* const enc) {
   return enc->GetStatus();
 }
 
-// -----------------------------------------------------------------------------
-
 }  // namespace WP2
+
+//------------------------------------------------------------------------------
+
+int WP2EncodeLosslessRgb8(uint32_t width, uint32_t height, const uint8_t* rgb,
+                          uint32_t stride, int effort, uint8_t*& encoded_bytes,
+                          size_t& num_encoded_bytes) {
+  WP2::ArgbBuffer buffer(WP2_RGB_24);
+  WP2Status status =
+      buffer.SetExternal(width, height, const_cast<uint8_t*>(rgb), stride);
+  if (status != WP2_STATUS_OK) {
+    return static_cast<int>(status);
+  }
+  WP2::EncoderConfig config;
+  config.quality = config.alpha_quality = 100;
+  config.keep_unmultiplied = true;
+  config.effort = effort;
+  WP2::MemoryWriter writer;
+  status = WP2::Encode(buffer, &writer, config);
+  if (status != WP2_STATUS_OK) {
+    return static_cast<int>(status);
+  }
+  encoded_bytes = writer.mem_;
+  num_encoded_bytes = writer.size_;
+  writer.mem_ = nullptr;
+  writer.size_ = 0;
+  return static_cast<int>(WP2_STATUS_OK);
+}
+
+void WP2Release(uint8_t* encoded_bytes) { WP2Free(encoded_bytes); }

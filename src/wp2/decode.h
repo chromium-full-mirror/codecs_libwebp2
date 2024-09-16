@@ -141,7 +141,7 @@ Decode(const std::string& data, ArgbBuffer* output_buffer,
        const DecoderConfig& config = DecoderConfig::kDefault);
 
 //------------------------------------------------------------------------------
-// Specialized call
+// Specialized calls
 
 // Decodes the image bitstream in '*input_data' directly into the pre-allocated
 // buffer 'output_buffer'. The maximum storage available in this buffer is
@@ -404,5 +404,15 @@ class CustomDecoder : public Decoder {
 };
 
 }  // namespace WP2
+
+//------------------------------------------------------------------------------
+// Simple signatures for language interoperability
+
+int WP2Parse(const uint8_t* encoded_bytes, size_t num_encoded_bytes,
+             uint32_t* width, uint32_t* height);
+
+int WP2DecodeRgb8(const uint8_t* encoded_bytes, size_t num_encoded_bytes,
+                        uint32_t width, uint32_t height, uint8_t* rgb,
+                        uint32_t stride);
 
 #endif /* WP2_WP2_DECODE_H_ */

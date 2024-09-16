@@ -292,6 +292,13 @@ WP2Status Encode(const ArgbBuffer& input, Writer* output,
 
   WP2_CHECK_OK(config.IsValid(), WP2_STATUS_INVALID_CONFIGURATION);
 
+  if (input.format() != WP2_Argb_32 && input.format() != WP2_ARGB_32 &&
+      input.format() != WP2_Argb_38) {
+    ArgbBuffer converted(WP2IsPremultiplied(input.format()) ? WP2_Argb_32
+                                                            : WP2_ARGB_32);
+    WP2_CHECK_STATUS(converted.ConvertFrom(input));
+    return Encode(converted, output, config, picture_hint);
+  }
   WP2_CHECK_OK(
       input.format() == WP2_Argb_32 || input.format() == WP2_ARGB_32 ||
           (input.format() == WP2_Argb_38 && config.quality == kMaxQuality),

@@ -22,6 +22,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -71,7 +72,7 @@ TEST(EncodeTest, BadFormat) {
       ((uint8_t*)input.GetRow(0))[i] = (uint8_t)0xFF;
     }
     const WP2Status status = Encode(input, &output);
-    if (format == WP2_Argb_32 || format == WP2_ARGB_32) {
+    if (format != WP2_Argb_38) {
       ASSERT_WP2_OK(status);
     } else {
       ASSERT_EQ(status, WP2_STATUS_INVALID_COLORSPACE);
