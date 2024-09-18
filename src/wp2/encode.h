@@ -268,9 +268,14 @@ class AnimationEncoder {
 // 'effort' has the same meaning as in WP2::EncoderConfig.
 // Remember to call WP2Release() on the returned 'encoded_bytes' pointer after
 // using or copying it.
+// Returns the value corresponding to the WP2Status enum.
 int WP2EncodeLosslessRgb8(uint32_t width, uint32_t height, const uint8_t* rgb,
                           uint32_t stride, int effort, uint8_t*& encoded_bytes,
                           size_t& num_encoded_bytes);
+// Same but for the WP2_RGBA_32 format (unmultiplied).
+int WP2EncodeLosslessRgba8(uint32_t width, uint32_t height, const uint8_t* rgba,
+                           uint32_t stride, int effort, uint8_t*& encoded_bytes,
+                           size_t& num_encoded_bytes);
 
 void WP2Release(uint8_t* encoded_bytes);
 

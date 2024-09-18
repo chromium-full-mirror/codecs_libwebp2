@@ -408,11 +408,20 @@ class CustomDecoder : public Decoder {
 //------------------------------------------------------------------------------
 // Simple signatures for language interoperability
 
+// Parses the 'width' and 'height' of the image encoded in 'encoded_bytes'.
+// Returns the value corresponding to the WP2Status enum.
 int WP2Parse(const uint8_t* encoded_bytes, size_t num_encoded_bytes,
              uint32_t* width, uint32_t* height);
 
+// Decodes the pixels of the image encoded in 'encoded_bytes' into 'rgb' in
+// WP2_RGB_24 format.
+// Returns the value corresponding to the WP2Status enum.
 int WP2DecodeRgb8(const uint8_t* encoded_bytes, size_t num_encoded_bytes,
-                        uint32_t width, uint32_t height, uint8_t* rgb,
-                        uint32_t stride);
+                  uint32_t width, uint32_t height, uint8_t* rgb,
+                  uint32_t stride);
+// Same but for the WP2_RGBA_32 format (unmultiplied).
+int WP2DecodeRgba8(const uint8_t* encoded_bytes, size_t num_encoded_bytes,
+                   uint32_t width, uint32_t height, uint8_t* rgba,
+                   uint32_t stride);
 
 #endif /* WP2_WP2_DECODE_H_ */

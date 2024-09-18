@@ -69,14 +69,30 @@ int WP2Parse(const uint8_t* encoded_bytes, size_t num_encoded_bytes,
   return static_cast<int>(WP2_STATUS_OK);
 }
 
+namespace WP2 {
+namespace {
+
+int Decode8(const uint8_t* encoded_bytes, size_t num_encoded_bytes,
+            uint32_t width, uint32_t height, WP2SampleFormat pixels_format,
+            uint8_t* pixels, uint32_t stride) {
+  ArgbBuffer buffer(pixels_format);
+  WP2_CHECK_STATUS(buffer.SetExternal(width, height, pixels, stride));
+  return Decode(encoded_bytes, num_encoded_bytes, &buffer);
+}
+
+}  // namespace
+}  // namespace WP2
+
 int WP2DecodeRgb8(const uint8_t* encoded_bytes, size_t num_encoded_bytes,
                   uint32_t width, uint32_t height, uint8_t* rgb,
                   uint32_t stride) {
-  WP2::ArgbBuffer buffer(WP2_RGB_24);
-  const WP2Status status = buffer.SetExternal(width, height, rgb, stride);
-  if (status != WP2_STATUS_OK) {
-    return static_cast<int>(status);
-  }
-  return static_cast<int>(
-      WP2::Decode(encoded_bytes, num_encoded_bytes, &buffer));
+  return static_cast<int>(WP2::Decode8(encoded_bytes, num_encoded_bytes, width,
+                                       height, WP2_RGB_24, rgb, stride));
+}
+
+int WP2DecodeRgba8(const uint8_t* encoded_bytes, size_t num_encoded_bytes,
+                   uint32_t width, uint32_t height, uint8_t* rgba,
+                   uint32_t stride) {
+  return static_cast<int>(WP2::Decode8(encoded_bytes, num_encoded_bytes, width,
+                                       height, WP2_RGBA_32, rgba, stride));
 }
