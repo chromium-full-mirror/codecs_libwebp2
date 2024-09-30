@@ -367,8 +367,7 @@ issues, making sure to include:
 
 *   the version of the compiler used (if you compiled your own version)
 
-*   the problematic source image (will only be used for debugging and discarded
-    afterward!)
+*   the problematic source image (will only be used for debugging)
 
 *   the *exact* command line to use to reproduce the issue
 
@@ -377,14 +376,13 @@ issues, making sure to include:
 ### Coding conventions and style
 
 *   Code must follow the
-    [Google C++ style guide](https://google.github.io/styleguide/cppguide.html)
-    unless local style differs.
+    [Google C++ style guide](https://google.github.io/styleguide/cppguide.html).
 
-*   `const` is used for variables everywhere possible, including for pointers in
-    function declarations. Input parameters use const references.
+*   `const` is used for variables everywhere possible. Input parameters use
+    const references.
 
     ```c++
-    void DoSomething(const Type1& const input, Type2* const out)
+    void DoSomething(const Type1& const input, Type2* const out) { }
     ```
 
 *   Do not use C++ exceptions.
@@ -394,12 +392,12 @@ issues, making sure to include:
 
 *   Use uint32_t for sizes, width, height, loop indices, etc.
 
-*   Most functions should return a WP2Status
+*   Most functions should return a WP2Status.
 
 ### File layout
 
 *   **CMakeLists.txt** and **cmake/\*** are used to build the project with
-    CMake.
+    CMake. **Makefile** is unmaintained.
 
 *   **doc/\*** contains the container and format specifications.
 
