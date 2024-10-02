@@ -239,7 +239,7 @@ float GetExpectedDistortion(const EncoderConfig& encoder_config,
   if (encoder_config.quality > kMaxLossyQuality &&
       encoder_config.alpha_quality > kMaxLossyQuality && !input_is_opaque &&
       !WP2IsPremultiplied(input_format) && !encoder_config.keep_unmultiplied) {
-    return 25.f;  // Arbitrary.
+    return 23.f;  // Arbitrary.
   }
 
   const float expected_distortion = GetExpectedDistortion(
