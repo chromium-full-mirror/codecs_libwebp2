@@ -16,6 +16,7 @@
 // AV1 lossy encoding.
 
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 
 #include "src/enc/tile_enc.h"

@@ -20,6 +20,7 @@
 #ifndef WP2_EXAMPLES_EXAMPLE_UTILS_H_
 #define WP2_EXAMPLES_EXAMPLE_UTILS_H_
 
+#include <cmath>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
