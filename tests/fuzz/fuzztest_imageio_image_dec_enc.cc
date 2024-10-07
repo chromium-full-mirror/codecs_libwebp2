@@ -28,13 +28,10 @@
 #include "fuzzing/fuzztest.h"
 #include "tests/fuzz/fuzz_utils.h"
 #include "tests/fuzz/fuzz_utils_temp_file.h"
-#include "tests/include/helpers.h"
 
 namespace WP2 {
 namespace testutil {
 namespace {
-
-::testing::Environment* const kStackLimitEnv = SetStackLimitTo256KiB();
 
 void ReadSave(const std::string& file_name, FileFormat file_format) {
   const Data data = ReadTestImage(file_name);

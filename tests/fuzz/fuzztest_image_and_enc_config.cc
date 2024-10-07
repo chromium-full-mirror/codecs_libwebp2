@@ -19,6 +19,7 @@
 
 #include "src/wp2/base.h"
 #include "src/wp2/encode.h"
+#include "gtest/gtest.h"
 #include "fuzzing/fuzztest.h"
 #include "tests/fuzz/fuzz_utils.h"
 #include "tests/include/helpers.h"
@@ -26,8 +27,6 @@
 namespace WP2 {
 namespace testutil {
 namespace {
-
-::testing::Environment* const kStackLimitEnv = SetStackLimitTo256KiB();
 
 void EncodeDecode(const ArgbBuffer& image, EncoderConfig config,
                   double progress_fail_at) {

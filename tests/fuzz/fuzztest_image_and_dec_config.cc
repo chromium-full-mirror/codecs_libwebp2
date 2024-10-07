@@ -26,13 +26,10 @@
 #include "gmock/gmock.h"
 #include "fuzzing/fuzztest.h"
 #include "tests/fuzz/fuzz_utils.h"
-#include "tests/include/helpers.h"
 
 namespace WP2 {
 namespace testutil {
 namespace {
-
-::testing::Environment* const kStackLimitEnv = SetStackLimitTo256KiB();
 
 void Decode(const std::string& bytes, DecoderConfig config) {
   const DataView encoded_data = {reinterpret_cast<const uint8_t*>(bytes.data()),

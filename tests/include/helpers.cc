@@ -70,31 +70,6 @@ Argb32b GetPixel32b(const ArgbBuffer& buffer, uint32_t x, uint32_t y) {
 
 //------------------------------------------------------------------------------
 
-namespace {
-class Environment : public ::testing::Environment {
- public:
-  Environment(const char* name, const char* value)
-      : name_(name), value_(value) {}
-  void SetUp() override {
-#ifdef _WIN32
-    _putenv_s(name_, value_);
-#else
-    setenv(name_, value_, 1);
-#endif
-  }
-
- private:
-  const char* name_;
-  const char* value_;
-};
-}  // namespace
-
-::testing::Environment* SetEnv(const char* name, const char* value) {
-  return ::testing::AddGlobalTestEnvironment(new Environment(name, value));
-}
-
-//------------------------------------------------------------------------------
-
 std::string GetTestDataPath(const std::string& file_name) {
   return "testdata/" + file_name;
 }

@@ -33,24 +33,6 @@ namespace WP2 {
 namespace testutil {
 namespace {
 
-::testing::Environment* const kStackLimitEnv = SetStackLimitTo256KiB();
-
-WP2SampleFormat GetPremulFormat(WP2SampleFormat format) {
-  switch (format) {
-    case WP2_ARGB_32:
-    case WP2_XRGB_32:
-      return WP2_Argb_32;
-    case WP2_RGBA_32:
-    case WP2_RGBX_32:
-      return WP2_rgbA_32;
-    case WP2_BGRA_32:
-    case WP2_BGRX_32:
-      return WP2_bgrA_32;
-    default:
-      return WP2_Argb_32;
-  }
-}
-
 //------------------------------------------------------------------------------
 
 struct FramesAndDurations {
