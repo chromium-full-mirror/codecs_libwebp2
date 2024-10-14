@@ -630,8 +630,6 @@ std::ostream& operator<<(std::ostream& out, const WP2::EncoderConfig& c) {
   PrintSetting(out, c.store_grain, kD.store_grain, "store_grain", "bool");
   PrintSetting(out, c.tune_perceptual, kD.tune_perceptual, "tune_perceptual",
                "bool");
-  PrintSetting(out, c.use_delta_palette, kD.use_delta_palette,
-               "use_delta_palette", "bool");
   PrintSetting(out, c.thread_level, kD.thread_level, "thread_level");
   PrintSetting(out, c.low_memory, kD.low_memory, "low_memory", "bool");
   PrintSetting(out, c.use_neural_compression, kD.use_neural_compression,

@@ -109,8 +109,7 @@ EncoderConfig CreateEncoderConfig(
     PartitionSet partition_set, bool partition_snapping, Csp csp_type,
     EncoderConfig::UVMode uv_mode, int preprocessing,
     int preprocessing_strength, bool use_random_matrix, bool store_grain,
-    bool tune_perceptual, bool use_delta_palette, int thread_level,
-    bool low_memory);
+    bool tune_perceptual, int thread_level, bool low_memory);
 DecoderConfig CreateDecoderConfig(
     uint32_t thread_level, bool enable_deblocking_filter,
     bool enable_directional_filter, bool enable_restoration_filter,
@@ -215,7 +214,6 @@ inline auto ArbitraryEncoderConfig() {
       /*use_random_matrix=*/fuzztest::Arbitrary<bool>(),
       /*store_grain=*/fuzztest::Arbitrary<bool>(),
       /*tune_perceptual=*/fuzztest::Arbitrary<bool>(),
-      /*use_delta_palette=*/fuzztest::Arbitrary<bool>(),
 
       /*thread_level=*/fuzztest::InRange<int>(0, (1u << 31) - 1u),
       /*low_memory=*/fuzztest::Arbitrary<bool>());

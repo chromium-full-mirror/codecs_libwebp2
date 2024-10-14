@@ -190,8 +190,7 @@ EncoderConfig CreateEncoderConfig(
     PartitionSet partition_set, bool partition_snapping, Csp csp_type,
     EncoderConfig::UVMode uv_mode, int preprocessing,
     int preprocessing_strength, bool use_random_matrix, bool store_grain,
-    bool tune_perceptual, bool use_delta_palette, int thread_level,
-    bool low_memory) {
+    bool tune_perceptual, int thread_level, bool low_memory) {
   EncoderConfig config;
   config.quality = quality;
   config.target_size = target_size;
@@ -234,7 +233,6 @@ EncoderConfig CreateEncoderConfig(
   config.use_random_matrix = use_random_matrix;
   config.store_grain = store_grain;
   config.tune_perceptual = tune_perceptual;
-  config.use_delta_palette = use_delta_palette;
 
   config.thread_level = thread_level;
   config.low_memory = low_memory;

@@ -131,9 +131,6 @@ struct EncoderConfig {
 
   bool tune_perceptual = false;  // Experimental: tune for SSIM
 
-  // Parameters related to lossless compression only:
-  bool use_delta_palette = false;  // Reserved for future lossless feature.
-
   // 0 to disable multi-threading. Any other value represents the maximum number
   // of simultaneous extra threads (can be as large as 2^31 - 1).
   // No impact on encoded bytes.

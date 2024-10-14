@@ -620,9 +620,6 @@ int main(int argc, char* argv[]) {
       params.config.partition_snapping = true;
     } else if (!strcmp(argv[c], "-lossless")) {
       params.config.quality = 100;
-    } else if (!strcmp(argv[c], "-delta_palette")) {
-      params.config.use_delta_palette = true;
-      params.config.quality = 100;  // delta-palette is for lossless only
     } else if (!strcmp(argv[c], "-transfer")) {
       NEED_ARGS(1);
       const int tfunction = ExUtilGetInt(argv[++c], &parse_error);
