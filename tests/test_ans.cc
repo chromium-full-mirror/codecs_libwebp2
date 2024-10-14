@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <tuple>
@@ -345,6 +346,31 @@ TEST_F(TestANS, Test0) {
   }
   EXPECT_TRUE(VerifyBuffer(buf, size, /*codes=*/nullptr, /*bin_symbol=*/nullptr,
                            /*asymbol=*/nullptr, tokens));
+}
+
+// Test the Clone function properly copies the tokens.
+TEST_F(TestANS, Clone) {
+  // The page is 4096 tokens so choose a bit more.
+  constexpr uint32_t kNumTokens = 4100;
+  ANSEnc enc, enc_copy;
+  UniformIntDistribution random(kBaseSeed);
+  std::vector<Token> tokens;
+
+  GenerateRandomEnc(kNumTokens, {Token::Uniform}, /*max_asymbol=*/0,
+                    /*n_dict=*/0, /*max_symbol=*/0, /*max_range=*/0,
+                    /*bin_symbol=*/nullptr, /*asymbol=*/nullptr,
+                    /*dicts=*/nullptr, &random, &tokens, &enc);
+
+  EXPECT_WP2_OK(enc.AssembleToBitstream());
+  Vector_u8 bits, bits_copy;
+  EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
+
+  EXPECT_WP2_OK(enc_copy.Clone(enc));
+  EXPECT_WP2_OK(enc_copy.AssembleToBitstream());
+  EXPECT_WP2_OK(enc_copy.WriteBitstreamTo(bits_copy));
+
+  EXPECT_EQ(0, std::memcmp(bits.data(), bits_copy.data(),
+                           bits.size() * sizeof(Vector_u8::value_type)));
 }
 
 //------------------------------------------------------------------------------

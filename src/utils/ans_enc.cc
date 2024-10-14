@@ -566,13 +566,22 @@ WP2Status ANSEnc::Clone(const ANSEnc& e) {
   state_ = e.state_;
   // Copy the tokens.
   const ANSTokenPage* page_e = e.tokens_;
+  // Pre-allocate the tokens.
   while (page_e != nullptr) {
     if (!NewTokenPage()) {
       Reset();
       return WP2_STATUS_OUT_OF_MEMORY;
     }
-    memcpy(tokens_->tokens, page_e->tokens, sizeof(page_e->tokens));
-    tokens_->nb_tokens = page_e->nb_tokens;
+    page_e = page_e->prev;
+  }
+  // Copy the tokens.
+  page_e = e.tokens_;
+  ANSTokenPage* page = tokens_;
+  while (page_e != nullptr) {
+    memcpy(page->tokens, page_e->tokens,
+           sizeof(page_e->tokens[0]) * page_e->nb_tokens);
+    page->nb_tokens = page_e->nb_tokens;
+    page = const_cast<ANSTokenPage*>(page->prev);
     page_e = page_e->prev;
   }
   nb_tokens_ = e.nb_tokens_;
