@@ -436,12 +436,8 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
       ColorSpaceInverseTransform_C(transform, row_start, row_end, in, out,
                                    predicted);
       break;
-    case TransformType::kGroup4:
     case TransformType::kColorIndexing:
       ColorIndexInverseTransform_C(transform, row_start, row_end, in, out);
-      break;
-    case TransformType::kLZW:
-      std::copy(in, in + 4 * (row_end - row_start) * width, out);
       break;
     default:
       assert(false);

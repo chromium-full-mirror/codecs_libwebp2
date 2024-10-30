@@ -123,6 +123,9 @@ struct EncoderConfig {
   } UVMode;
   UVMode uv_mode = UVModeAuto;  // Default sub-sampling mode for U/V planes.
 
+  WP2L::EncodingAlgorithm lossless_algorithm =
+      WP2L::EncodingAlgorithm::kDefault;
+
   int preprocessing = 0;           // Preprocessing filter.
   int preprocessing_strength = 0;  // Range: [0 .. 100]
 

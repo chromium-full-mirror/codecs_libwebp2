@@ -118,6 +118,7 @@ TEST_P(Group4Test, Pattern) {
   MemoryWriter memory_writer;
   EncoderConfig encoder_config;
   encoder_config.quality = 100;
+  encoder_config.lossless_algorithm = WP2L::EncodingAlgorithm::kGroup4;
   WP2_ASSERT_STATUS(Encode(original, &memory_writer, encoder_config));
 
   DecoderConfig decoder_config;

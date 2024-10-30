@@ -20,9 +20,9 @@
 #ifndef WP2_DEC_LOSSLESS_LOSSLESSI_DEC_H_
 #define WP2_DEC_LOSSLESS_LOSSLESSI_DEC_H_
 
+#include <array>
 #include <cstdint>
 
-#include "src/common/constants.h"
 #include "src/common/lossless/color_cache.h"
 #include "src/common/symbols.h"
 #include "src/dec/symbols_dec.h"
@@ -166,8 +166,8 @@ class Decoder {
 
   Metadata hdr_;
 
-  Transform transforms_[kPossibleTransformCombinationSize];
-  EncodingAlgorithm encoding_algorithm_ = EncodingAlgorithm::kClassical;
+  std::array<Transform, kPossibleTransformCombinationSize> transforms_;
+  EncodingAlgorithm encoding_algorithm_ = EncodingAlgorithm::kWebP;
   uint16_t group4_first_color_ = 0;  // starting color for group4 compression
   MoveToFrontCache mtf_;
   uint32_t num_colors_ = 0;

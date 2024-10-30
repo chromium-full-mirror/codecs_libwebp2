@@ -2722,7 +2722,7 @@ WP2Status Decoder::RegisterSymbolForVDebug(
       } else if (encoding_algorithm_ == EncodingAlgorithm::kLZW) {
         str += "LZW\n";
         str += WP2SPrint("Number of colors: %d\n", num_colors_);
-      } else if (encoding_algorithm_ == EncodingAlgorithm::kClassical) {
+      } else if (encoding_algorithm_ == EncodingAlgorithm::kWebP) {
         uint32_t cache_bits = hdr_.cache_config_.cache_bits;
         if (cache_bits > 0) {
           str += WP2SPrint("Color cache: %d bits\n", cache_bits);
@@ -2782,8 +2782,8 @@ WP2Status Decoder::RegisterSymbolForVDebug(
 }
 
 static const char* const kTransformNames[] = {
-    "Predictor",      "Predictor with sub", "CrossColor", "YCoCgR",
-    "SubstractGreen", "ColorIndexing",      "Group4",     "LZW"};
+    "Predictor", "Predictor with sub", "CrossColor",
+    "YCoCgR",    "SubstractGreen",     "ColorIndexing"};
 STATIC_ASSERT_ARRAY_SIZE(kTransformNames, (uint32_t)TransformType::kNum);
 static const char* const kPredictorNames[] = {"Black",
                                               "180",
@@ -2906,8 +2906,7 @@ WP2Status Decoder::RegisterTransformedRowForVDebug(
           transform_i.type_ == TransformType::kPredictor ||
           transform_i.type_ == TransformType::kPredictorWSub) {
         str += WP2SPrint(" Bits: %d", transform_i.bits_);
-      } else if (transform_i.type_ == TransformType::kColorIndexing ||
-                 transform_i.type_ == TransformType::kGroup4) {
+      } else if (transform_i.type_ == TransformType::kColorIndexing) {
         str += WP2SPrint(" Num colors: %d", num_colors_);
       }
       str += "\n";

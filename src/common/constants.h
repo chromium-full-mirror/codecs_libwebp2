@@ -137,9 +137,6 @@ namespace WP2L {
 // vertical is about defining a segment with respect to the line above.
 enum class Group4Mode { kVertical, kHorizontal, kPass };
 
-// Different encoding algorithms used for image compression.
-enum class EncodingAlgorithm { kClassical, kGroup4, kLZW };
-
 // TODO(mouradfelipe): change location of LZW capacity definition.
 // For now, it is defined as a value taken from the gifsicle GIF optimizer.
 static constexpr uint32_t kLZWCapacity = 3963;

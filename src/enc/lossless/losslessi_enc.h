@@ -22,7 +22,6 @@
 
 #include <cstdint>
 
-#include "src/common/constants.h"
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/enc/lossless/backward_references_enc.h"
@@ -113,13 +112,12 @@ class Encoder {
   // Applies and writes the transforms one by one and nothing else.
   // If 'config_prev' is not nullptr, its transforms are supposed to be the
   // first transforms of 'config' and are skipped.
-  WP2Status DoApplyAndWriteTransforms(const CrunchConfig& config,
-                                      const CrunchConfig* config_prev,
-                                      WP2::ProgressRange progress,
-                                      LosslessSymbolsInfo* symbols_info,
-                                      WP2::ANSEnc* enc,
-                                      WP2::ANSDictionaries* dicts,
-                                      EncodingAlgorithm* encoding_algorithm);
+  WP2Status ApplyAndWriteTransformsImpl(const CrunchConfig& config,
+                                        const CrunchConfig* config_prev,
+                                        WP2::ProgressRange progress,
+                                        LosslessSymbolsInfo* symbols_info,
+                                        WP2::ANSEnc* enc,
+                                        WP2::ANSDictionaries* dicts);
   // Implementations of the different transforms.
   void ApplyYCoCgR();
   void ApplySubtractGreen();
@@ -247,8 +245,8 @@ struct CrunchConfig {
   uint32_t lz77s_types_to_try[kCrunchLZ77Max];
   uint32_t lz77s_types_to_try_size;
   // Image transforms to apply in order. Each transform is only used once.
-  // It is a pointer into the reference list of transform combinations.
-  const TransformType* transforms = nullptr;
+  // It is a pointer into the reference list of possible recipes.
+  const EncodingRecipe* recipe = nullptr;
   uint32_t GetNumTransforms() const;
   // whether pixels should be encoded premultiplied with the alpha value
   bool use_premultiplied;
@@ -262,7 +260,7 @@ struct CrunchConfig {
   // Returns whether one of the transforms is kPredictorWSub.
   bool HasSubModes() const {
     for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {
-      if (transforms[i] == TransformType::kPredictorWSub) {
+      if (recipe->transforms[i] == TransformType::kPredictorWSub) {
         return true;
       }
     }

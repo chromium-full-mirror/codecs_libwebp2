@@ -262,12 +262,11 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
   const uint32_t start_row = last_row_;
   const uint32_t end_row = start_row + num_rows;
 
-  int16_t* const rows_out = (int16_t*)argb_cache_;
+  int16_t* const rows_out = argb_cache_;
   // Inverse transforms.
   for (int ind = num_transforms - 1; ind >= 0; --ind) {
     const Transform& transform = transforms_[ind];
-    if (transform.type_ == TransformType::kColorIndexing ||
-        transform.type_ == TransformType::kGroup4) {
+    if (transform.type_ == TransformType::kColorIndexing) {
       // Check that all color map indices are valid here rather than in dsp.
       // TODO(yguyon): Remove pessimization.
       const int16_t color_map_size = (int16_t)transform.data_.size() / 4;
@@ -898,50 +897,6 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       WP2_CHECK_STATUS(ReadPalette(transform));
       break;
     }
-    case TransformType::kGroup4: {
-      WP2_CHECK_STATUS(ReadPalette(transform));
-      const uint32_t color_map_size = (uint32_t)transform->data_.size() / 4;
-      group4_first_color_ = dec_->ReadRValue(color_map_size, "first_color");
-      const bool use_move_to_front =
-          (num_colors_ > 3) ? dec_->ReadBool("use_move_to_front") : false;
-      WP2_CHECK_STATUS(mtf_.Init(use_move_to_front, num_colors_));
-
-      WP2::SymbolsInfo info;
-      InitGroup4(width, color_map_size, &info);
-
-      // Read the headers.
-      WP2::SymbolReader* const sr = &hdr_.sr_;
-      WP2_CHECK_STATUS(sr->Init(info, dec_));
-      WP2_CHECK_STATUS(sr->Allocate());
-
-      {
-        WP2::ANSDebugPrefix prefix(dec_, "group4");
-        for (uint32_t s = 0; s < (uint32_t)kSymbolG4Num; ++s) {
-          if (color_map_size <= 2 &&
-              (s == kSymbolG4ColorChange || s == kSymbolG4NewColor)) {
-            continue;
-          }
-          const uint32_t max_nnz = width * height;
-          WP2_CHECK_STATUS(sr->ReadHeader(s, max_nnz, kSymbolGroup4Names[s]));
-        }
-      }
-      break;
-    }
-    case TransformType::kLZW: {
-      WP2_CHECK_STATUS(ReadPalette(transform));
-
-      const uint32_t lzw_capacity =
-          dec_->ReadRange(num_colors_ + 1, kLZWCapacityMax, "capacity");
-      WP2_CHECK_ALLOC_OK(lzw_segments_.reserve(lzw_capacity + 1));
-
-      const WP2::Vector_s16& palette = transforms_[0].data_;
-      lzw_segments_.resize_no_check(num_colors_ + 1);
-      lzw_segments_[0] = {nullptr, 0};  // reserved for clear code
-      for (uint32_t index = 0; index < num_colors_; ++index) {
-        lzw_segments_[index + 1] = {&palette[4 * index], 1};
-      }
-      break;
-    }
     case TransformType::kSubtractGreen:
     case TransformType::kYCoCgR:
       break;
@@ -1025,15 +980,14 @@ WP2Status Decoder::DecodeHeader() {
   const WP2::ANSDebugPrefix prefix1(dec_, "GlobalHeader");
 
   // Read the transforms.
-  encoding_algorithm_ = EncodingAlgorithm::kClassical;
   dec_->AddDebugPrefix("transforms");
-  const uint32_t index =
-      dec_->ReadRValue(kPossibleTransformCombinationsNum, "index");
-  const TransformType* transforms = kPossibleTransformCombinations[index];
+  const uint32_t index = dec_->ReadRValue(kPossibleEncodingRecipesNum, "index");
+  encoding_algorithm_ = kPossibleEncodingRecipes[index].algorithm;
+  const TransformType* const transforms =
+      kPossibleEncodingRecipes[index].transforms;
   uint32_t num_transforms = 0;
   for (; num_transforms < kPossibleTransformCombinationSize; ++num_transforms) {
-    if (kPossibleTransformCombinations[index][num_transforms] ==
-        TransformType::kNum) {
+    if (transforms[num_transforms] == TransformType::kNum) {
       break;
     }
   }
@@ -1044,21 +998,68 @@ WP2Status Decoder::DecodeHeader() {
     TransformType type = transforms[i];
     WP2_CHECK_STATUS(ReadTransform(tile_->rect.width, tile_->rect.height, type,
                                    &transforms_[i]));
-    if (type == TransformType::kGroup4) {
-      encoding_algorithm_ = EncodingAlgorithm::kGroup4;
-      // Make sure it is the only used transform.
-      assert(num_transforms == 1);
-      dec_->PopDebugPrefix();
-      return WP2_STATUS_OK;
-    } else if (type == TransformType::kLZW) {
-      encoding_algorithm_ = EncodingAlgorithm::kLZW;
-      // Make sure it is the only used transform.
-      assert(num_transforms == 1);
-      dec_->PopDebugPrefix();
-      return WP2_STATUS_OK;
-    }
     WP2_CHECK_REDUCED_STATUS(
         RegisterTransformForVDebug(transforms_[i], config_.info));
+  }
+
+  // Read headers for specific algorithms.
+  if (encoding_algorithm_ == EncodingAlgorithm::kGroup4) {
+    // Find the palette.
+    Transform* transform = nullptr;
+    for (uint32_t i = 0; i < num_transforms; ++i) {
+      if (transforms_[i].type_ == TransformType::kColorIndexing) {
+        transform = &transforms_[i];
+        break;
+      }
+    }
+    assert(transform != nullptr);
+    const uint32_t color_map_size = (uint32_t)transform->data_.size() / 4;
+    group4_first_color_ = dec_->ReadRValue(color_map_size, "first_color");
+    const bool use_move_to_front =
+        (num_colors_ > 3) ? dec_->ReadBool("use_move_to_front") : false;
+    WP2_CHECK_STATUS(mtf_.Init(use_move_to_front, num_colors_));
+
+    WP2::SymbolsInfo info;
+    InitGroup4(tile_->rect.width, color_map_size, &info);
+
+    // Read the headers.
+    WP2::SymbolReader* const sr = &hdr_.sr_;
+    WP2_CHECK_STATUS(sr->Init(info, dec_));
+    WP2_CHECK_STATUS(sr->Allocate());
+
+    {
+      WP2::ANSDebugPrefix prefix(dec_, "group4");
+      for (uint32_t s = 0; s < (uint32_t)kSymbolG4Num; ++s) {
+        if (color_map_size <= 2 &&
+            (s == kSymbolG4ColorChange || s == kSymbolG4NewColor)) {
+          continue;
+        }
+        const uint32_t max_nnz = tile_->rect.GetArea();
+        WP2_CHECK_STATUS(sr->ReadHeader(s, max_nnz, kSymbolGroup4Names[s]));
+      }
+    }
+    dec_->PopDebugPrefix();
+    return WP2_STATUS_OK;
+  } else if (encoding_algorithm_ == EncodingAlgorithm::kLZW) {
+    // TODO(vrabaud): hack. The palette is stored in a transform though
+    // it is invalid (type == kNum).
+    // Read the palette in a temporary transform.
+    transforms_[0].width_pic_ = tile_->rect.width;
+    transforms_[0].height_pic_ = tile_->rect.height;
+    WP2_CHECK_STATUS(ReadPalette(&transforms_[0]));
+
+    const uint32_t lzw_capacity =
+        dec_->ReadRange(num_colors_ + 1, kLZWCapacityMax, "capacity");
+    WP2_CHECK_ALLOC_OK(lzw_segments_.reserve(lzw_capacity + 1));
+
+    const WP2::Vector_s16& palette = transforms_[0].data_;
+    lzw_segments_.resize_no_check(num_colors_ + 1);
+    lzw_segments_[0] = {nullptr, 0};  // reserved for clear code
+    for (uint32_t i = 0; i < num_colors_; ++i) {
+      lzw_segments_[i + 1] = {&palette[4 * i], 1};
+    }
+    dec_->PopDebugPrefix();
+    return WP2_STATUS_OK;
   }
 
   if (gparams_->has_alpha_ && image_is_premultiplied_) {

@@ -359,6 +359,8 @@ static constexpr uint32_t kRedToBlueMax = 63;
 static constexpr uint32_t kGreenToBlueMax = 127;
 static constexpr uint32_t kGreenToRedMax = 127;
 
+enum class EncodingAlgorithm { kWebP, kGroup4, kLZW, kNum, kDefault = kNum };
+
 enum class TransformType {
   kPredictor,
   kPredictorWSub,  // predictors with sub-modes (unused)
@@ -366,40 +368,53 @@ enum class TransformType {
   kYCoCgR,  // reversible YCoCg (unused)
   kSubtractGreen,
   kColorIndexing,
-  kGroup4,
-  kLZW,
   kNum
 };
 // Possible image transform combinations that can be applied.
 // Must be filled with TransformType::kNum after the last transform.
 static constexpr uint32_t kPossibleTransformCombinationSize = 3;
-static constexpr TransformType
-    kPossibleTransformCombinations[][kPossibleTransformCombinationSize] = {
-        // No transform.
-        {TransformType::kNum, TransformType::kNum, TransformType::kNum},
-        // Only one.
-        {TransformType::kGroup4, TransformType::kNum, TransformType::kNum},
-        {TransformType::kLZW, TransformType::kNum, TransformType::kNum},
-        {TransformType::kSubtractGreen, TransformType::kNum,
-         TransformType::kNum},
-        {TransformType::kColorIndexing, TransformType::kNum,
-         TransformType::kNum},
-        {TransformType::kPredictor, TransformType::kNum, TransformType::kNum},
-        {TransformType::kCrossColor, TransformType::kNum, TransformType::kNum},
-        // Allowed pairs.
-        {TransformType::kSubtractGreen, TransformType::kPredictor,
-         TransformType::kNum},
-        {TransformType::kSubtractGreen, TransformType::kCrossColor,
-         TransformType::kNum},
-        {TransformType::kColorIndexing, TransformType::kPredictor,
-         TransformType::kNum},
-        {TransformType::kPredictor, TransformType::kCrossColor,
-         TransformType::kNum},
-        // Triplet.
-        {TransformType::kSubtractGreen, TransformType::kPredictor,
-         TransformType::kCrossColor}};
-static constexpr uint32_t kPossibleTransformCombinationsNum =
-    std::extent<decltype(kPossibleTransformCombinations), 0>::value;
+
+struct EncodingRecipe {
+  EncodingAlgorithm algorithm;
+  TransformType transforms[kPossibleTransformCombinationSize];
+};
+
+static constexpr EncodingRecipe kPossibleEncodingRecipes[] = {
+    // No transform.
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kNum, TransformType::kNum, TransformType::kNum}},
+    {EncodingAlgorithm::kLZW,
+     {TransformType::kNum, TransformType::kNum, TransformType::kNum}},
+    // Only one.
+    {EncodingAlgorithm::kGroup4,
+     {TransformType::kColorIndexing, TransformType::kNum, TransformType::kNum}},
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kSubtractGreen, TransformType::kNum, TransformType::kNum}},
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kColorIndexing, TransformType::kNum, TransformType::kNum}},
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kPredictor, TransformType::kNum, TransformType::kNum}},
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kCrossColor, TransformType::kNum, TransformType::kNum}},
+    // Allowed pairs.
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kSubtractGreen, TransformType::kPredictor,
+      TransformType::kNum}},
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kSubtractGreen, TransformType::kCrossColor,
+      TransformType::kNum}},
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kColorIndexing, TransformType::kPredictor,
+      TransformType::kNum}},
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kPredictor, TransformType::kCrossColor,
+      TransformType::kNum}},
+    // Triplet.
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kSubtractGreen, TransformType::kPredictor,
+      TransformType::kCrossColor}}};
+static constexpr uint32_t kPossibleEncodingRecipesNum =
+    std::extent<decltype(kPossibleEncodingRecipes), 0>::value;
 
 }  // namespace WP2L
 

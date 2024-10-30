@@ -109,23 +109,24 @@ void WriteLZ77PrefixCode(uint32_t sym, uint32_t cluster, int32_t value,
 uint32_t CrunchConfig::GetNumTransforms() const {
   uint32_t num_transforms = 0;
   while (num_transforms < kPossibleTransformCombinationSize &&
-         transforms[num_transforms] != TransformType::kNum) {
+         recipe->transforms[num_transforms] != TransformType::kNum) {
     ++num_transforms;
   }
   return num_transforms;
 }
 
 bool CrunchConfig::ShouldBeCachedFor(const CrunchConfig& config) const {
-  // First, make sure the pre-multiplication is the same and that the set of
-  // transforms is a subset.
-  if (use_premultiplied != config.use_premultiplied ||
-      !std::equal(transforms, transforms + GetNumTransforms(),
-                  config.transforms)) {
+  // First, make sure the encoding algorithm and pre-multiplication are the same
+  // and that the set of transforms is a subset.
+  if (recipe->algorithm != config.recipe->algorithm ||
+      use_premultiplied != config.use_premultiplied ||
+      !std::equal(recipe->transforms, recipe->transforms + GetNumTransforms(),
+                  config.recipe->transforms)) {
     return false;
   }
   // If we have a palette, make sure the type is the same.
   for (uint32_t i = 0; i < GetNumTransforms(); ++i) {
-    if (transforms[i] == TransformType::kColorIndexing &&
+    if (recipe->transforms[i] == TransformType::kColorIndexing &&
         palette_sorting_type != config.palette_sorting_type) {
       return false;
     }
@@ -440,8 +441,8 @@ WP2Status Encoder::EncodeImageInternal(
     WP2::ANSDictionaries* const dicts_init) {
   // First, check whether Group4 is used or anything else.
   const TransformType* const end =
-      config.transforms + kPossibleTransformCombinationSize;
-  if (std::find(config.transforms, end, TransformType::kGroup4) != end) {
+      config.recipe->transforms + kPossibleTransformCombinationSize;
+  if (config.recipe->algorithm == EncodingAlgorithm::kGroup4) {
     WP2_CHECK_STATUS(Group4Encode(
         argb_buffer_, palette_.Size(), config.group4_use_move_to_front,
         config_.effort, progress, enc_init, encode_info));
@@ -449,7 +450,7 @@ WP2Status Encoder::EncodeImageInternal(
   }
 
   // Check if LZW is used.
-  if (std::find(config.transforms, end, TransformType::kLZW) != end) {
+  if (config.recipe->algorithm == EncodingAlgorithm::kLZW) {
     WP2_CHECK_STATUS(LZWEncode(argb_buffer_, palette_, config_.effort, enc_init,
                                encode_info));
     WP2_CHECK_STATUS(progress.AdvanceBy(1.));
@@ -458,8 +459,8 @@ WP2Status Encoder::EncodeImageInternal(
 
   // If using a color cache, do not have it bigger than the number of
   // colors.
-  const bool use_palette =
-      (std::find(config.transforms, end, TransformType::kColorIndexing) != end);
+  const bool use_palette = (std::find(config.recipe->transforms, end,
+                                      TransformType::kColorIndexing) != end);
   const uint32_t width = argb_buffer_.width, height = argb_buffer_.height;
   const bool color_cache_is_disabled = (width * height == 1);
   const bool segment_cache_is_disabled = (width * height < 3);
@@ -730,13 +731,13 @@ WP2Status Encoder::AllocateTransformBuffer(
   bool use_predict = false, use_cross_color = false;
   for (const CrunchConfig& config : configs) {
     const TransformType* end =
-        config.transforms + kPossibleTransformCombinationSize;
-    use_predict |=
-        (std::find(config.transforms, end, TransformType::kPredictor) != end ||
-         std::find(config.transforms, end, TransformType::kPredictorWSub) !=
-             end);
-    use_cross_color |=
-        (std::find(config.transforms, end, TransformType::kCrossColor) != end);
+        config.recipe->transforms + kPossibleTransformCombinationSize;
+    use_predict |= (std::find(config.recipe->transforms, end,
+                              TransformType::kPredictor) != end ||
+                    std::find(config.recipe->transforms, end,
+                              TransformType::kPredictorWSub) != end);
+    use_cross_color |= (std::find(config.recipe->transforms, end,
+                                  TransformType::kCrossColor) != end);
   }
 
   // ResidualImage needs room for 2 scanlines of uint32 pixels with an extra
@@ -824,15 +825,13 @@ WP2Status Encoder::MapImageFromPalette(const CrunchConfig& config) {
   return status;
 }
 
-WP2Status Encoder::DoApplyAndWriteTransforms(
+WP2Status Encoder::ApplyAndWriteTransformsImpl(
     const CrunchConfig& config, const CrunchConfig* const config_prev,
     const ProgressRange progress, LosslessSymbolsInfo* const symbols_info,
-    WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts,
-    EncodingAlgorithm* const encoding_algorithm) {
+    WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts) {
   // We only need to copy the original image if we are not building upon a
   // previous transformed image.
   bool need_copy = (config_prev == nullptr);
-  *encoding_algorithm = EncodingAlgorithm::kClassical;
 
   // Get the number of transforms and previous transforms.
   const uint32_t num_transforms = config.GetNumTransforms();
@@ -842,10 +841,11 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
   for (uint32_t i = 0; i < num_transforms; ++i) {
     if (config_prev != nullptr && i < num_transforms_prev) {
       // Skip transforms that are the same in the previous configuration.
-      assert(config_prev->transforms[i] == config.transforms[i]);
+      assert(config_prev->recipe->transforms[i] ==
+             config.recipe->transforms[i]);
       continue;
     }
-    const TransformType type = config.transforms[i];
+    const TransformType type = config.recipe->transforms[i];
     ProgressRange progress_local(progress,
                                  1. / (num_transforms - num_transforms_prev));
     switch (type) {
@@ -860,43 +860,6 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
         WP2_CHECK_STATUS(MapImageFromPalette(config));
         need_copy = false;
         break;
-      }
-      case TransformType::kGroup4: {
-        // Group4 cannot be used with other transforms.
-        assert(num_transforms == 1);
-        assert(palette_.Size() >= 2);
-        WP2_CHECK_STATUS(palette_.Write(progress_local, enc, dicts, this));
-        WP2_CHECK_STATUS(MapImageFromPalette(config));
-        // Green channel of first pixel.
-        const int16_t first_color = argb_buffer_.data[2];
-        assert(first_color >= 0);
-        enc->PutRValue(first_color, palette_.Size(), "first_color");
-        if (palette_.Size() > 3) {
-          // MoveToFront is only relevant when there are more than 3 colors.
-          // With 2 colors, any color change is necessarily the other color
-          // (different from the current one). With 3 colors, we use a boolean
-          // to encode whether the new color is the one expected (from the row
-          // above), or the other one, and that is enough.
-          enc->PutBool(config.group4_use_move_to_front, "use_move_to_front");
-        } else {
-          assert(!config.group4_use_move_to_front);
-        }
-        *encoding_algorithm = EncodingAlgorithm::kGroup4;
-        return WP2_STATUS_OK;
-      }
-      case TransformType::kLZW: {
-        WP2_CHECK_STATUS(MakeInputImageCopy(config));
-        // LZW cannot be used with other transforms.
-        assert(num_transforms == 1);
-        assert(palette_.Size() >= 2);
-        WP2_CHECK_STATUS(palette_.Write(progress_local, enc, dicts, this));
-        // 'lzw_capacity' must be at least number of colors.
-        const uint32_t lzw_capacity = palette_.Size() + kLZWCapacity;
-        assert(lzw_capacity <= kLZWCapacityMax);
-        enc->PutRange(lzw_capacity, palette_.Size() + 1, kLZWCapacityMax,
-                      "capacity");
-        *encoding_algorithm = EncodingAlgorithm::kLZW;
-        return WP2_STATUS_OK;
       }
       case TransformType::kYCoCgR:
       case TransformType::kSubtractGreen:
@@ -917,7 +880,7 @@ WP2Status Encoder::DoApplyAndWriteTransforms(
                    type == TransformType::kPredictorWSub) {
           // Define the minimum/maximum values before applying the predictors.
           int16_t minima_range[4], maxima_range[4];
-          GetARGBRanges(config.transforms, symbols_info_.SampleFormat(),
+          GetARGBRanges(config.recipe->transforms, symbols_info_.SampleFormat(),
                         palette_.Size(), minima_range, maxima_range,
                         /*num_transforms=*/i);
           WP2_CHECK_STATUS(ApplyPredictFilter(
@@ -950,16 +913,16 @@ WP2Status Encoder::ApplyAndWriteTransforms(
   const WP2::ANSDebugPrefix prefix2(enc, "transforms");
 
   // Find the transform combination in the official set and store its index.
-  uint32_t index = 0;
-  for (; index < kPossibleTransformCombinationsNum; ++index) {
-    if (std::equal(config.transforms,
-                   config.transforms + kPossibleTransformCombinationSize,
-                   kPossibleTransformCombinations[index])) {
+  for (uint32_t index = 0; index < kPossibleEncodingRecipesNum; ++index) {
+    if (config.recipe->algorithm == kPossibleEncodingRecipes[index].algorithm &&
+        std::equal(
+            config.recipe->transforms,
+            config.recipe->transforms + kPossibleTransformCombinationSize,
+            kPossibleEncodingRecipes[index].transforms)) {
+      enc->PutRValue(index, kPossibleEncodingRecipesNum, "index");
       break;
     }
   }
-
-  enc->PutRValue(index, kPossibleTransformCombinationsNum, "index");
 
   if (config_prev != nullptr) {
     // If we have already computed transforms before, re-use cached data.
@@ -967,25 +930,48 @@ WP2Status Encoder::ApplyAndWriteTransforms(
                                        std::numeric_limits<uint32_t>::max()));
     WP2::swap(cached_transforms_dict_, *dicts);
   }
-  EncodingAlgorithm encoding_algorithm;
   if (cache_data) {
     // First store to cached_transforms_core_ for future use.
     cached_transforms_enc_.Reset();
     cached_transforms_enc_.CopyDebugPrefix(*enc);
-    WP2_CHECK_STATUS(DoApplyAndWriteTransforms(
-        config, config_prev, progress, symbols_info, &cached_transforms_enc_,
-        dicts, &encoding_algorithm));
+    WP2_CHECK_STATUS(
+        ApplyAndWriteTransformsImpl(config, config_prev, progress, symbols_info,
+                                    &cached_transforms_enc_, dicts));
     WP2_CHECK_STATUS(cached_transforms_dict_.CopyFrom(*dicts));
     // Then append cached_transforms_core_ to the output encoder.
     WP2_CHECK_STATUS(enc->AppendTokens(cached_transforms_enc_, 0,
                                        std::numeric_limits<uint32_t>::max()));
   } else {
-    WP2_CHECK_STATUS(DoApplyAndWriteTransforms(config, config_prev, progress,
-                                               symbols_info, enc, dicts,
-                                               &encoding_algorithm));
+    WP2_CHECK_STATUS(ApplyAndWriteTransformsImpl(config, config_prev, progress,
+                                                 symbols_info, enc, dicts));
   }
-  if (encoding_algorithm == EncodingAlgorithm::kGroup4 ||
-      encoding_algorithm == EncodingAlgorithm::kLZW) {
+
+  if (config.recipe->algorithm == EncodingAlgorithm::kGroup4) {
+    // Green channel of first pixel.
+    const int16_t first_color = argb_buffer_.data[2];
+    assert(first_color >= 0);
+    enc->PutRValue(first_color, palette_.Size(), "first_color");
+    if (palette_.Size() > 3) {
+      // MoveToFront is only relevant when there are more than 3 colors.
+      // With 2 colors, any color change is necessarily the other color
+      // (different from the current one). With 3 colors, we use a boolean
+      // to encode whether the new color is the one expected (from the row
+      // above), or the other one, and that is enough.
+      enc->PutBool(config.group4_use_move_to_front, "use_move_to_front");
+    } else {
+      assert(!config.group4_use_move_to_front);
+    }
+    return WP2_STATUS_OK;
+  }
+  if (config.recipe->algorithm == EncodingAlgorithm::kLZW) {
+    WP2_CHECK_STATUS(MakeInputImageCopy(config));
+    ProgressRange progress_local(progress, 1.);
+    WP2_CHECK_STATUS(palette_.Write(progress_local, enc, dicts, this));
+    // 'lzw_capacity' must be at least number of colors.
+    const uint32_t lzw_capacity = palette_.Size() + kLZWCapacity;
+    assert(lzw_capacity <= kLZWCapacityMax);
+    enc->PutRange(lzw_capacity, palette_.Size() + 1, kLZWCapacityMax,
+                  "capacity");
     return WP2_STATUS_OK;
   }
 
@@ -1000,11 +986,11 @@ WP2Status Encoder::ApplyAndWriteTransforms(
     assert(!config.use_premultiplied);
   }
 
-  if (config.transforms[0] == TransformType::kNum) {
+  if (config.recipe->transforms[0] == TransformType::kNum) {
     ProgressRange progress_local(progress, 1.);
     WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
-  } else if (config.transforms[0] == TransformType::kColorIndexing &&
-             config.transforms[1] == TransformType::kNum) {
+  } else if (config.recipe->transforms[0] == TransformType::kColorIndexing &&
+             config.recipe->transforms[1] == TransformType::kNum) {
     symbols_info->InitAsLabelImage(pic_.width() * pic_.height(),
                                    palette_.Size());
   } else {
@@ -1025,7 +1011,7 @@ WP2Status Encoder::ApplyAndWriteTransforms(
     }
     // Find the ranges in which they should belong according to the transforms.
     int16_t minima_range[4], maxima_range[4];
-    GetARGBRanges(config.transforms, symbols_info->SampleFormat(),
+    GetARGBRanges(config.recipe->transforms, symbols_info->SampleFormat(),
                   palette_.Size(), minima_range, maxima_range);
     for (uint32_t c = 0; c < 4; ++c) {
       assert(minima_range[c] <= minima[c]);
@@ -1138,8 +1124,8 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
     // configuration has the same first transforms.
     bool cache_transforms = false;
     if (i_config + 1 < crunch_configs.size() &&
-        config.transforms[0] != TransformType::kGroup4 &&
-        config.transforms[0] != TransformType::kLZW) {
+        config.recipe->algorithm != EncodingAlgorithm::kGroup4 &&
+        config.recipe->algorithm != EncodingAlgorithm::kLZW) {
       cache_transforms = config.ShouldBeCachedFor(crunch_configs[i_config + 1]);
     }
     WP2_CHECK_STATUS(encoder.ApplyAndWriteTransforms(
