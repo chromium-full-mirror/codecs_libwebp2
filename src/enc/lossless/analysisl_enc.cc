@@ -167,7 +167,7 @@ const EncodingRecipe* FindEncodingRecipeImpl(
 template <typename... Ts>
 const EncodingRecipe* FindEncodingRecipe(EncodingAlgorithm algorithm,
                                          Ts... args) {
-  const TransformType transforms[] = {args...};
+  const TransformType transforms[] = {args..., TransformType::kNum};
   return FindEncodingRecipeImpl(algorithm, transforms, sizeof...(args));
 }
 
