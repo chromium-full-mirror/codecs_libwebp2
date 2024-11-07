@@ -192,7 +192,7 @@ static constexpr uint32_t kMaxBlockSize = (kMaxBlockSizePix / kMinBlockSizePix);
 static constexpr uint32_t kMaxBlockSize2 = (kMaxBlockSize * kMaxBlockSize);
 
 // Tile sizes.
-static constexpr uint32_t kTileShapeBits = 2;
+static constexpr uint32_t kTileShapeBits = 3;
 static constexpr uint32_t kMaxTilePixels = 512 * 512;
 static constexpr uint32_t kMaxTileSize =
     kMaxTilePixels / (2 * kMaxBlockSizePix);
@@ -213,8 +213,11 @@ typedef enum {
   // As wide as possible (with a max of kMaxTileSize) and height set so that
   // it has at most kMaxTilePixels.
   TILE_SHAPE_WIDE,
-  TILE_SHAPE_AUTO,
+  // he whole image is a tile. Only valid for lossless.
+  TILE_SHAPE_FULL,
   NUM_TILE_SHAPES,
+  // Only valid for encoding.
+  TILE_SHAPE_AUTO,
 } TileShape;
 
 // max coded level. number of prefix bits for the dictionaries.

@@ -102,6 +102,8 @@ static inline uint32_t TileWidth(TileShape tile_shape, uint32_t frame_width,
     case TILE_SHAPE_WIDE:
       (void)frame_height;
       return std::min(Pad(frame_width, kMinBlockSizePix), kMaxTileSize);
+    case TILE_SHAPE_FULL:
+      return frame_width;
     default:
       assert(false);
       return 0;
@@ -119,6 +121,8 @@ static inline uint32_t TileHeight(TileShape tile_shape, uint32_t frame_width,
       // Should this be smaller than width?
       return std::min(Pad(kMaxTilePixels / tile_width, kMinBlockSizePix),
                       kMaxTileSize);
+    case TILE_SHAPE_FULL:
+      return frame_height;
     default:
       assert(false);
       return 0;

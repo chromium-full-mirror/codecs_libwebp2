@@ -45,7 +45,11 @@ bool EncoderConfig::IsValid() const {
   for (const float s : segment_factors) {
     not_ok |= (s < 0.f || s > kMaxLossyQuality);
   }
-  not_ok |= (tile_shape < 0 || tile_shape > TILE_SHAPE_AUTO);
+  not_ok |= (tile_shape < 0 ||
+             (tile_shape >= NUM_TILE_SHAPES && tile_shape != TILE_SHAPE_AUTO));
+  // TILE_SHAPE_FULL is only ok for lossless.
+  not_ok |= ((quality != kMaxQuality || alpha_quality != kMaxQuality) &&
+             tile_shape == TILE_SHAPE_FULL);
   not_ok |= (partition_method < 0 || partition_method >= NUM_PARTITION_METHODS);
   not_ok |= (partition_set < 0 || partition_set >= NUM_PARTITION_SETS);
   not_ok |= ((int)uv_mode >= NumUVMode || (int)uv_mode < UVModeAdapt);

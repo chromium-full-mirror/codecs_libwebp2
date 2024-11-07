@@ -122,6 +122,8 @@ WP2Status BitstreamFeatures::InitInternal(int version, const uint8_t* data,
   rgb_bit_depth = (dec.ReadBits(1, "rgb_bit_depth") == 1) ? 10 : 8;
 
   tile_shape = (TileShape)dec.ReadBits(kTileShapeBits, "tile_shape");
+  WP2_CHECK_OK(tile_shape < static_cast<int>(NUM_TILE_SHAPES),
+               WP2_STATUS_BITSTREAM_ERROR);
 
   if (dec.ReadBits(1, "default_transfer_function")) {
     transfer_function = WP2_TF_ITU_R_BT2020_10BIT;

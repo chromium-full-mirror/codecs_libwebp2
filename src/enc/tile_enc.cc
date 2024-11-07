@@ -256,7 +256,10 @@ WP2Status EncodeTiles(uint32_t width, uint32_t height,
 
   WP2_CHECK_STATUS(EncodeGLBL(config, gparams, image_has_alpha, output));
   WP2_CHECK_STATUS(progress.AdvanceBy(kOnePercent));  // GlobalParams
-
+  // TILE_SHAPE_ALL is only valid for lossless for now.
+  WP2_CHECK_OK(config.tile_shape != TILE_SHAPE_FULL ||
+                   gparams.type_ == GlobalParams::GP_LOSSLESS,
+               WP2_STATUS_INVALID_PARAMETER);
   const uint32_t tile_width = TileWidth(FinalTileShape(config), width, height);
   const uint32_t tile_height =
       TileHeight(FinalTileShape(config), width, height);
