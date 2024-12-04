@@ -42,13 +42,13 @@ typedef enum { READ_DATA = 0, READ_HDR = 1, READ_DIM = 2 } DecodeState;
 
 class Transform {
  public:
-  TransformType type_;    // transform type.
-  uint32_t bits_ = 0;     // subsampling bits defining transform window.
-  uint32_t width_pic_;    // initial picture width
-  uint32_t height_pic_;   // initial picture height
-  uint32_t width_ = 0;    // transform width (if any)
-  uint32_t height_ = 0;   // transform height (if any)
-  WP2::Vector_s16 data_;  // transform data.
+  TransformHeader header_;  // header.
+  uint32_t bits_ = 0;       // subsampling bits defining transform window.
+  uint32_t width_pic_;      // initial picture width
+  uint32_t height_pic_;     // initial picture height
+  uint32_t width_ = 0;      // transform width (if any)
+  uint32_t height_ = 0;     // transform height (if any)
+  WP2::Vector_s16 data_;    // transform data.
 };
 
 class Metadata {

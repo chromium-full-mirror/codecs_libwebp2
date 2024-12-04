@@ -413,7 +413,7 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
   assert(row_start < row_end);
   assert(row_end <= transform->height_pic_);
 
-  switch (transform->type_) {
+  switch (transform->header_.type) {
     case TransformType::kYCoCgR:
       YCoCgRToRGB(in, (row_end - row_start) * width, out);
       break;

@@ -146,29 +146,32 @@ struct EntropyConfig {
 };
 
 // Find the corresponding combination of transforms in the reference table.
-const EncodingRecipe* FindEncodingRecipeImpl(
-    EncodingAlgorithm algorithm, const TransformType* const transforms,
-    uint32_t size) {
+void FindEncodingRecipeImpl(EncodingAlgorithm algorithm, CrunchConfig* config,
+                            const TransformType* const transforms,
+                            uint32_t size) {
   assert(size <= kPossibleTransformCombinationSize);
   for (const EncodingRecipe& recipe : kPossibleEncodingRecipes) {
     if (recipe.algorithm != algorithm) continue;
     if (std::equal(transforms, transforms + size, recipe.transforms) &&
         (size == kPossibleTransformCombinationSize ||
          recipe.transforms[size] == TransformType::kNum)) {
-      return &recipe;
+      config->algorithm = algorithm;
+      for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {
+        config->transforms[i].type = recipe.transforms[i];
+      }
+      return;
     }
   }
   assert(false);
-  return nullptr;
 }
 
 // Find a set of TransformType's into the official list and returns a pointer to
 // it.
 template <typename... Ts>
-const EncodingRecipe* FindEncodingRecipe(EncodingAlgorithm algorithm,
-                                         Ts... args) {
+void FindEncodingRecipe(EncodingAlgorithm algorithm, CrunchConfig* config,
+                        Ts... args) {
   const TransformType transforms[] = {args..., TransformType::kNum};
-  return FindEncodingRecipeImpl(algorithm, transforms, sizeof...(args));
+  return FindEncodingRecipeImpl(algorithm, config, transforms, sizeof...(args));
 }
 
 void AddWebPConfig(EntropyMode mode, bool use_premultiplied,
@@ -195,8 +198,7 @@ void AddWebPConfig(EntropyMode mode, bool use_premultiplied,
       transforms[size++] = TransformType::kCrossColor;
     }
   }
-  c.config.recipe =
-      FindEncodingRecipeImpl(EncodingAlgorithm::kWebP, transforms, size);
+  FindEncodingRecipeImpl(EncodingAlgorithm::kWebP, &c.config, transforms, size);
   configs->push_back_no_resize(c);
 }
 
@@ -409,18 +411,17 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
                                         SubSampleSize(height, transform_bits);
   for (EntropyConfig& c : *configs) {
     for (uint32_t i = 0; i < c.config.GetNumTransforms(); ++i) {
-      if (c.config.recipe->transforms[i] == TransformType::kPredictor) {
+      if (c.config.transforms[i].type == TransformType::kPredictor) {
         // When including transforms, there is an overhead in bits from
         // storing them. This overhead is small but matters for small images.
         // For spatial, there are 14 transformations.
         c.entropy += transform_image_size * WP2Log2(14);
-      } else if (c.config.recipe->transforms[i] == TransformType::kCrossColor) {
+      } else if (c.config.transforms[i].type == TransformType::kCrossColor) {
         // For color transforms, estimating the cross color transform entropy is
         // hard and easy to overshoot. Adding the cost of the transform image is
         // actually worsening results so we are not artificially adding it like
         // we do for kPredictor.
-      } else if (c.config.recipe->transforms[i] ==
-                 TransformType::kColorIndexing) {
+      } else if (c.config.transforms[i].type == TransformType::kColorIndexing) {
         // For palettes, add the cost of storing the palette.
         c.entropy += encoder.palette_.GetCost();
       }
@@ -437,7 +438,7 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
   // In case we have a kColorIndexing transform, also add kColorIndexing +
   // kPredictor.
   for (const EntropyConfig& c : *configs) {
-    if (c.config.recipe->transforms[0] == TransformType::kColorIndexing &&
+    if (c.config.transforms[0].type == TransformType::kColorIndexing &&
         c.config.GetNumTransforms() == 1) {
       AddWebPConfig(EntropyMode::kPaletteSpatial, c.config.use_premultiplied,
                     /*red_and_blue_always_zero=*/true, c.entropy, effort,
@@ -521,7 +522,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   // Though inefficient, we force the use of LZW if it is requested.
   if (encoder->config_.lossless_algorithm == WP2L::EncodingAlgorithm::kLZW) {
     WP2_CHECK_ALLOC_OK(configs->resize(1));
-    configs->back().recipe = FindEncodingRecipe(EncodingAlgorithm::kLZW);
+    FindEncodingRecipe(EncodingAlgorithm::kLZW, &configs->back());
     configs->back().use_premultiplied = can_premultiply;
     return WP2_STATUS_OK;
   }
@@ -529,7 +530,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   // Try LZW within the same palette size range condition as Group4.
   if (encoder->palette_.Size() >= 2 && encoder->palette_.Size() < 256) {
     WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
-    configs->back().recipe = FindEncodingRecipe(EncodingAlgorithm::kLZW);
+    FindEncodingRecipe(EncodingAlgorithm::kLZW, &configs->back());
     configs->back().use_premultiplied = can_premultiply;
   }
 
@@ -538,8 +539,8 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   if (encoder->palette_.Size() >= 2 && encoder->palette_.Size() < 256) {
     // Try group4 for images with a palette.
     WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
-    configs->back().recipe = FindEncodingRecipe(EncodingAlgorithm::kGroup4,
-                                                TransformType::kColorIndexing);
+    FindEncodingRecipe(EncodingAlgorithm::kGroup4, &configs->back(),
+                       TransformType::kColorIndexing);
     configs->back().group4_use_move_to_front = false;
     configs->back().use_premultiplied = false;
 
@@ -556,8 +557,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   // If the encoding algorithm is forced, only keep the corresponding configs.
   if (encoder->config_.lossless_algorithm == WP2L::EncodingAlgorithm::kGroup4) {
     for (size_t i = 0; i < configs->size();) {
-      if ((*configs)[i].recipe->algorithm !=
-          encoder->config_.lossless_algorithm) {
+      if ((*configs)[i].algorithm != encoder->config_.lossless_algorithm) {
         configs->erase(configs->begin() + i);
       } else {
         ++i;
@@ -622,8 +622,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   uint32_t configs_size = configs->size();
   for (uint32_t i = 0; i < configs_size; ++i) {
     for (uint32_t t = 0; t < kPossibleTransformCombinationSize; ++t) {
-      if ((*configs)[i].recipe->transforms[t] ==
-          TransformType::kColorIndexing) {
+      if ((*configs)[i].transforms[t].type == TransformType::kColorIndexing) {
         (*configs)[i].palette_sorting_type = Palette::Sorting::kMinimalSize;
         if (effort == 9) {
           // Try more methods for palette sorting.
@@ -673,7 +672,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   for (CrunchConfig& c : *configs) {
     const bool use_palette =
         (c.GetNumTransforms() > 0 &&
-         c.recipe->transforms[0] == TransformType::kColorIndexing);
+         c.transforms[0].type == TransformType::kColorIndexing);
     c.histo_bits = GetHistoBits(effort, use_palette, pic.width(), pic.height());
     c.transform_bits = GetTransformBits(effort, c.histo_bits);
   }

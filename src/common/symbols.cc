@@ -20,6 +20,7 @@
 #include "src/common/symbols.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 
@@ -626,8 +627,9 @@ static inline void UpdateMinMax(uint32_t channel1, uint32_t channel2,
 // The written logic is good but it is overridden by setting bounds to [0,255]
 // for kPredictor, kCrossColor and kSubtractGreen because they still use wrap
 // arounds.
-void GetARGBRanges(const TransformType* transforms, WP2SampleFormat format,
-                   uint32_t num_colors, int16_t minima_range[4],
+void GetARGBRanges(const std::array<TransformHeader,
+                                    kPossibleTransformCombinationSize>& headers,
+                   WP2SampleFormat format, int16_t minima_range[4],
                    int16_t maxima_range[4], uint32_t num_transforms) {
   // Define the original range according to the pixel format.
   // Deal with alpha.
@@ -643,8 +645,8 @@ void GetARGBRanges(const TransformType* transforms, WP2SampleFormat format,
   constexpr int16_t kCoeffOne = (1 << kColorTransformBits);
   bool do_clamp = true;
   for (uint32_t i = 0; i < num_transforms; ++i) {
-    if (transforms[i] == TransformType::kNum) break;
-    switch (transforms[i]) {
+    if (headers[i].type == TransformType::kNum) break;
+    switch (headers[i].type) {
       case TransformType::kPredictor:
       case TransformType::kPredictorWSub:
         // The predictors are convex or clamped in the current bounds. Only the
@@ -700,7 +702,7 @@ void GetARGBRanges(const TransformType* transforms, WP2SampleFormat format,
         maxima_range[1] = maxima_range[3] = 0;
         // Only the color index in [0, num_colors-1] is stored in G.
         minima_range[2] = 0;
-        maxima_range[2] = num_colors - 1;
+        maxima_range[2] = headers[i].indexing_num_colors - 1;
         break;
       default:
         assert(false);

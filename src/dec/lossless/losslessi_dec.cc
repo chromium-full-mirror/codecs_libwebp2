@@ -20,6 +20,7 @@
 #include "src/dec/lossless/losslessi_dec.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <string>
@@ -248,7 +249,7 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
                                           const int16_t* rows) {
   uint32_t num_transforms = 0;
   while (num_transforms < kPossibleTransformCombinationSize &&
-         transforms_[num_transforms].type_ != TransformType::kNum) {
+         transforms_[num_transforms].header_.type != TransformType::kNum) {
     ++num_transforms;
   }
   const uint32_t cache_pixs = tile_->rect.width * num_rows;
@@ -266,7 +267,7 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
   // Inverse transforms.
   for (int ind = num_transforms - 1; ind >= 0; --ind) {
     const Transform& transform = transforms_[ind];
-    if (transform.type_ == TransformType::kColorIndexing) {
+    if (transform.header_.type == TransformType::kColorIndexing) {
       // Check that all color map indices are valid here rather than in dsp.
       // TODO(yguyon): Remove pessimization.
       const int16_t color_map_size = (int16_t)transform.data_.size() / 4;
@@ -277,20 +278,21 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
       }
     }
     int16_t minima_range[4], maxima_range[4];
-    if (transform.type_ == TransformType::kPredictor ||
-        transform.type_ == TransformType::kPredictorWSub) {
+    if (transform.header_.type == TransformType::kPredictor ||
+        transform.header_.type == TransformType::kPredictorWSub) {
       // Define the minimum/maximum values before applying the predictors.
-      TransformType transforms_type[(uint32_t)TransformType::kNum];
-      for (int i = 0; i < ind; ++i) transforms_type[i] = transforms_[i].type_;
-      GetARGBRanges(transforms_type, hdr_.symbols_info_.SampleFormat(),
-                    num_colors_, minima_range, maxima_range, ind);
+      std::array<TransformHeader, kPossibleTransformCombinationSize> headers;
+      for (int i = 0; i < ind; ++i) headers[i] = transforms_[i].header_;
+
+      GetARGBRanges(headers, hdr_.symbols_info_.SampleFormat(), minima_range,
+                    maxima_range, ind);
     }
     int16_t* predicted = nullptr;
 #ifndef WP2_REDUCE_BINARY_SIZE
-    if (((transform.type_ == TransformType::kPredictor ||
-          transform.type_ == TransformType::kPredictorWSub) &&
+    if (((transform.header_.type == TransformType::kPredictor ||
+          transform.header_.type == TransformType::kPredictorWSub) &&
          VDMatch(config_, "lossless/prediction/raw")) ||
-        (transform.type_ == TransformType::kCrossColor &&
+        (transform.header_.type == TransformType::kCrossColor &&
          VDMatch(config_, "lossless/cross-color/raw"))) {
       predicted = (int16_t*)predicted_.GetRow16(start_row);
     }
@@ -822,7 +824,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
 WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
                                  TransformType type,
                                  Transform* const transform) {
-  transform->type_ = type;
+  transform->header_.type = type;
   transform->width_pic_ = width;
   transform->height_pic_ = height;
   transform->width_ = 0;
@@ -895,6 +897,7 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
     }
     case TransformType::kColorIndexing: {
       WP2_CHECK_STATUS(ReadPalette(transform));
+      transform->header_.indexing_num_colors = transform->data_.size() / 4;
       break;
     }
     case TransformType::kSubtractGreen:
@@ -993,7 +996,7 @@ WP2Status Decoder::DecodeHeader() {
   }
 
   // Deactivate all transforms in case the decoder is re-used.
-  for (Transform& t : transforms_) t.type_ = TransformType::kNum;
+  for (Transform& t : transforms_) t.header_.type = TransformType::kNum;
   for (uint32_t i = 0; i < num_transforms; ++i) {
     TransformType type = transforms[i];
     WP2_CHECK_STATUS(ReadTransform(tile_->rect.width, tile_->rect.height, type,
@@ -1007,7 +1010,7 @@ WP2Status Decoder::DecodeHeader() {
     // Find the palette.
     Transform* transform = nullptr;
     for (uint32_t i = 0; i < num_transforms; ++i) {
-      if (transforms_[i].type_ == TransformType::kColorIndexing) {
+      if (transforms_[i].header_.type == TransformType::kColorIndexing) {
         transform = &transforms_[i];
         break;
       }
@@ -1078,8 +1081,14 @@ WP2Status Decoder::DecodeHeader() {
   } else if (num_transforms != 0) {
     int16_t minima_range[4], maxima_range[4];
     // Find the ranges in which the ARGB values are.
-    GetARGBRanges(transforms, hdr_.symbols_info_.SampleFormat(), num_colors_,
-                  minima_range, maxima_range);
+
+    std::array<TransformHeader, kPossibleTransformCombinationSize> headers;
+    for (uint32_t t = 0; t < kPossibleTransformCombinationSize; ++t) {
+      headers[t] = transforms_[t].header_;
+    }
+
+    GetARGBRanges(headers, hdr_.symbols_info_.SampleFormat(), minima_range,
+                  maxima_range);
     // Read the ARGB ranges. As the encoder tries to reduce the ranges of ARGB
     // values around zero, they are more efficiently stored with prefix coding.
     for (Symbol sym : {kSymbolA, kSymbolR, kSymbolG, kSymbolB}) {
