@@ -701,8 +701,8 @@ struct TransformHeader {
 // its length with 'num_transforms'.
 void GetARGBRanges(const std::array<TransformHeader,
                                     kPossibleTransformCombinationSize>& headers,
-                   WP2SampleFormat format, int16_t minima_range[4],
-                   int16_t maxima_range[4],
+                   WP2SampleFormat format, int32_t minima_range[4],
+                   int32_t maxima_range[4],
                    uint32_t num_transforms = kPossibleTransformCombinationSize);
 
 }  // namespace WP2L

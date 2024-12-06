@@ -56,8 +56,8 @@ inline void Average4(const int16_t* const a0, const int16_t* const a1,
   }
 }
 
-inline int AddSubtractComponentFull(int a, int b, int c, int min_value,
-                                    int max_value) {
+inline int AddSubtractComponentFull(int a, int b, int c, int32_t min_value,
+                                    int32_t max_value) {
   return WP2::Clamp(a + b - c, min_value, max_value);
 }
 
@@ -70,8 +70,8 @@ inline int ClampedAddSubtractComponentFull(int a, int b, int c) {
 
 inline void AddSubtractFull(const int16_t* const c0, const int16_t* const c1,
                             const int16_t* const c2,
-                            const int16_t min_values[4],
-                            const int16_t max_values[4], int16_t* const out) {
+                            const int32_t min_values[4],
+                            const int32_t max_values[4], int16_t* const out) {
   for (uint32_t c = 0; c < 4; ++c) {
     out[c] = AddSubtractComponentFull(c0[c], c1[c], c2[c], min_values[c],
                                       max_values[c]);
@@ -87,15 +87,15 @@ inline void ClampedAddSubtractFull(const int16_t* const c0,
   }
 }
 
-inline int AddSubtractComponentHalf(int a, int b, int min_value,
-                                    int max_value) {
+inline int AddSubtractComponentHalf(int a, int b, int32_t min_value,
+                                    int32_t max_value) {
   return WP2::Clamp(a + (a - b) / 2, min_value, max_value);
 }
 
 inline void AddSubtractHalf(const int16_t* const c0, const int16_t* const c1,
                             const int16_t* const c2,
-                            const int16_t min_values[4],
-                            const int16_t max_values[4], int16_t* const out) {
+                            const int32_t min_values[4],
+                            const int32_t max_values[4], int16_t* const out) {
   Average2(c0, c1, out);
   for (uint32_t c = 0; c < 4; ++c) {
     out[c] =
@@ -146,13 +146,13 @@ void PredictorNonClamped5_C(const int16_t* left, const int16_t* top,
 
 // Predictors of type Clamped.
 void PredictorClamped0_C(const int16_t* left, const int16_t* top,
-                         const int16_t min_values[4],
-                         const int16_t max_values[4], int16_t* out) {
+                         const int32_t min_values[4],
+                         const int32_t max_values[4], int16_t* out) {
   AddSubtractFull(left, top, top - 4, min_values, max_values, out);
 }
 void PredictorClamped1_C(const int16_t* left, const int16_t* top,
-                         const int16_t min_values[4],
-                         const int16_t max_values[4], int16_t* out) {
+                         const int32_t min_values[4],
+                         const int32_t max_values[4], int16_t* out) {
   AddSubtractHalf(left, top, top - 4, min_values, max_values, out);
 }
 }  // namespace

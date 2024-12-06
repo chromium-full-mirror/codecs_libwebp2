@@ -657,10 +657,12 @@ void Encoder::ApplySubtractGreen() {
 // Finds the best spatial predictor for each prediction block (of size
 // 2^(enc->transform_bits_)), saves the residuals in enc->argb_ and writes the
 // transform for each block in the form of an image.
-WP2Status Encoder::ApplyPredictFilter(
-    const int16_t min_values[4], const int16_t max_values[4],
-    bool can_use_sub_modes, const ProgressRange& progress, uint32_t pred_bits,
-    WP2::ANSEnc* const enc, WP2::ANSDictionaries* const dicts) {
+WP2Status Encoder::ApplyPredictor(const int32_t min_values[4],
+                                  const int32_t max_values[4],
+                                  bool can_use_sub_modes,
+                                  const ProgressRange& progress,
+                                  uint32_t pred_bits, WP2::ANSEnc* const enc,
+                                  WP2::ANSDictionaries* const dicts) {
   const ProgressRange residual_image_progress(progress, 0.5);
   const ProgressRange helper_image_progress(progress, 0.5);
   WP2::Vector_s8 sub_modes;
@@ -694,10 +696,10 @@ WP2Status Encoder::ApplyPredictFilter(
 // Finds the best cross channel transform for each prediction block (of size
 // 2^(enc->transform_bits_)), saves the residuals in enc->argb_ and writes the
 // transform for each block in the form of an image.
-WP2Status Encoder::ApplyCrossColorFilter(const ProgressRange& progress,
-                                         uint32_t ccolor_transform_bits,
-                                         WP2::ANSEnc* const enc,
-                                         WP2::ANSDictionaries* const dicts) {
+WP2Status Encoder::ApplyCrossColor(const ProgressRange& progress,
+                                   uint32_t ccolor_transform_bits,
+                                   WP2::ANSEnc* const enc,
+                                   WP2::ANSDictionaries* const dicts) {
   WP2_CHECK_STATUS(ColorSpaceTransform(ccolor_transform_bits, config_.effort,
                                        &argb_buffer_, transform_data_));
   const WP2::ANSDebugPrefix prefix(enc, "cross_color");
@@ -714,6 +716,14 @@ WP2Status Encoder::ApplyCrossColorFilter(const ProgressRange& progress,
       (BackwardRefsPool*)&ref_pool_, transform_width, transform_height,
       symbols_info, config_.effort, progress));
   return WP2_STATUS_OK;
+}
+
+// Note: Expects "enc->palette_" to be set properly.
+WP2Status Encoder::ApplyColorIndexing(const CrunchConfig& config) {
+  const WP2Status status = palette_.Apply(pic_, argb_buffer_.data);
+  argb_buffer_.has_alpha = has_alpha_;
+  argb_buffer_.channel_bits = WP2Formatbpc(pic_.format());
+  return status;
 }
 
 // -----------------------------------------------------------------------------
@@ -822,14 +832,6 @@ WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
 
 // -----------------------------------------------------------------------------
 
-// Note: Expects "enc->palette_" to be set properly.
-WP2Status Encoder::MapImageFromPalette(const CrunchConfig& config) {
-  const WP2Status status = palette_.Apply(pic_, argb_buffer_.data);
-  argb_buffer_.has_alpha = has_alpha_;
-  argb_buffer_.channel_bits = WP2Formatbpc(pic_.format());
-  return status;
-}
-
 WP2Status Encoder::ApplyAndWriteTransformsImpl(
     const CrunchConfig* const config_prev, const ProgressRange progress,
     CrunchConfig* const config, LosslessSymbolsInfo* const symbols_info,
@@ -865,38 +867,35 @@ WP2Status Encoder::ApplyAndWriteTransformsImpl(
                                                config->palette_sorting_type,
                                                config_.effort, this));
       WP2_CHECK_STATUS(palette_.Write(palette_write, enc, dicts, this));
-      WP2_CHECK_STATUS(MapImageFromPalette(*config));
+      WP2_CHECK_STATUS(ApplyColorIndexing(*config));
       need_copy = false;
     } else {
+      if (need_copy) {
+        WP2_CHECK_STATUS(MakeInputImageCopy(*config));
+        need_copy = false;
+      }
       switch (type) {
         case TransformType::kYCoCgR:
+          ApplyYCoCgR();
+          WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
+          break;
         case TransformType::kSubtractGreen:
+          ApplySubtractGreen();
+          WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
+          break;
         case TransformType::kPredictor:
         case TransformType::kPredictorWSub:
+          // Define the minimum/maximum values before applying the predictors.
+          int32_t minima_range[4], maxima_range[4];
+          GetARGBRanges(config->transforms, symbols_info_.SampleFormat(),
+                        minima_range, maxima_range, /*num_transforms=*/i);
+          WP2_CHECK_STATUS(ApplyPredictor(minima_range, maxima_range,
+                                          config->HasSubModes(), progress_local,
+                                          config->transform_bits, enc, dicts));
+          break;
         case TransformType::kCrossColor:
-          if (need_copy) {
-            WP2_CHECK_STATUS(MakeInputImageCopy(*config));
-            need_copy = false;
-          }
-          if (type == TransformType::kYCoCgR) {
-            ApplyYCoCgR();
-            WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
-          } else if (type == TransformType::kSubtractGreen) {
-            ApplySubtractGreen();
-            WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
-          } else if (type == TransformType::kPredictor ||
-                     type == TransformType::kPredictorWSub) {
-            // Define the minimum/maximum values before applying the predictors.
-            int16_t minima_range[4], maxima_range[4];
-            GetARGBRanges(config->transforms, symbols_info_.SampleFormat(),
-                          minima_range, maxima_range, /*num_transforms=*/i);
-            WP2_CHECK_STATUS(ApplyPredictFilter(
-                minima_range, maxima_range, config->HasSubModes(),
-                progress_local, config->transform_bits, enc, dicts));
-          } else {
-            WP2_CHECK_STATUS(ApplyCrossColorFilter(
-                progress_local, config->transform_bits, enc, dicts));
-          }
+          WP2_CHECK_STATUS(ApplyCrossColor(progress_local,
+                                           config->transform_bits, enc, dicts));
           break;
         case TransformType::kColorIndexing:
         case TransformType::kNum:
@@ -1025,7 +1024,7 @@ WP2Status Encoder::ApplyAndWriteTransforms(
       }
     }
     // Find the ranges in which they should belong according to the transforms.
-    int16_t minima_range[4], maxima_range[4];
+    int32_t minima_range[4], maxima_range[4];
     GetARGBRanges(config->transforms, symbols_info->SampleFormat(),
                   minima_range, maxima_range);
     for (uint32_t c = 0; c < 4; ++c) {

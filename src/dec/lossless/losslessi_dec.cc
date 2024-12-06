@@ -277,7 +277,7 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
                      WP2_STATUS_BITSTREAM_ERROR);
       }
     }
-    int16_t minima_range[4], maxima_range[4];
+    int32_t minima_range[4], maxima_range[4];
     if (transform.header_.type == TransformType::kPredictor ||
         transform.header_.type == TransformType::kPredictorWSub) {
       // Define the minimum/maximum values before applying the predictors.
@@ -1079,7 +1079,7 @@ WP2Status Decoder::DecodeHeader() {
   if (num_transforms == 1 && transforms[0] == TransformType::kColorIndexing) {
     hdr_.symbols_info_.InitAsLabelImage(tile_->rect.GetArea(), num_colors_);
   } else if (num_transforms != 0) {
-    int16_t minima_range[4], maxima_range[4];
+    int32_t minima_range[4], maxima_range[4];
     // Find the ranges in which the ARGB values are.
 
     std::array<TransformHeader, kPossibleTransformCombinationSize> headers;

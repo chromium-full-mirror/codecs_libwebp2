@@ -74,8 +74,8 @@ extern PredictorNonClampedSubFunc
 typedef void (*PredictorClampedSubFunc)(const int16_t* in, bool has_alpha,
                                         const int16_t* upper,
                                         uint32_t num_pixels,
-                                        const int16_t min_value[4],
-                                        const int16_t max_values[4],
+                                        const int32_t min_value[4],
+                                        const int32_t max_values[4],
                                         int16_t* out);
 extern PredictorClampedSubFunc PredictorsClampedSub[kNumPredictorsClamped];
 extern PredictorClampedSubFunc PredictorsClampedSub_C[kNumPredictorsClamped];

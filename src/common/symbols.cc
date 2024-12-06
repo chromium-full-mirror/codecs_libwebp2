@@ -23,6 +23,7 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <limits>
 
 #include "src/common/color_precision.h"
 #include "src/common/constants.h"
@@ -34,6 +35,7 @@
 #include "src/common/lossy/transforms.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/lossless/dspl.h"
+#include "src/dsp/math.h"
 #include "src/utils/ans.h"
 #include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
@@ -591,58 +593,52 @@ bool LosslessSymbolsInfo::IsLabelImage(const SymbolsInfo& info) {
   return is_label_image;
 }
 
-// Updates the range of channel 'channel1' by taking the maximum
-// addition/subtraction with channel 'channel2' up to a multiplicative
-// coefficient 'coeff' with kColorTransformBits bits of fixed precision (like
-// color transforms).
-static inline void UpdateMinMax(uint32_t channel1, uint32_t channel2,
-                                int16_t coeff, int32_t num_bits, bool do_clamp,
-                                int16_t* const minima, int16_t* const maxima) {
-  // Extend the interval with all possible deltas.
-  int16_t minimum = minima[channel1];
-  int16_t maximum = maxima[channel1];
-  for (int16_t delta :
-       {ColorTransformDelta((int32_t)coeff * minima[channel2]),
-        ColorTransformDelta(-(int32_t)coeff * minima[channel2]),
-        ColorTransformDelta((int32_t)coeff * maxima[channel2]),
-        ColorTransformDelta(-(int32_t)coeff * maxima[channel2])}) {
-    minimum = std::min(
-        {(int)minimum, minima[channel1] - delta, minima[channel1] + delta});
-    maximum = std::max(
-        {(int)maximum, maxima[channel1] - delta, maxima[channel1] + delta});
-  }
-  minima[channel1] = minimum;
-  maxima[channel1] = maximum;
-  if (!do_clamp) return;
-  const int16_t abs_value_max =
-      (num_bits == 8) ? kMaxAbsResidual8 : kMaxAbsResidual10;
-  static_assert(2 * kMaxAbsResidual8 + 1 <= WP2::kANSMaxRange,
-                "invalid kMaxAbsResidual8 value");
-  static_assert(2 * kMaxAbsResidual10 + 1 <= WP2::kANSMaxRange,
-                "invalid kMaxAbsResidual10 value");
-  minima[channel1] = std::max(minima[channel1], (int16_t)-abs_value_max);
-  maxima[channel1] = std::min(maxima[channel1], abs_value_max);
-}
+//------------------------------------------------------------------------------
 
-// The written logic is good but it is overridden by setting bounds to [0,255]
-// for kPredictor, kCrossColor and kSubtractGreen because they still use wrap
-// arounds.
+// A segment of integers, defining the min/max of a channel.
+struct Segment {
+  Segment operator+(const Segment& other) const {
+    return Segment{min + other.min, max + other.max};
+  }
+  Segment operator-(const Segment& other) const {
+    return Segment{min - other.max, max - other.min};
+  }
+  Segment operator*(int32_t v) const {
+    return v >= 0 ? Segment{min * v, max * v} : Segment{max * v, min * v};
+  }
+  Segment operator/(int32_t v) const {
+    return v > 0 ? Segment{min / v, max / v} : Segment{max / v, min / v};
+  }
+  Segment operator|(const Segment& other) const {
+    return Segment{std::min(min, other.min), std::max(max, other.max)};
+  }
+  int32_t min, max;
+};
+}  // namespace WP2L
+
+namespace WP2 {
+template <>
+inline WP2L::Segment RightShiftRound<WP2L::Segment>(WP2L::Segment v,
+                                                    uint32_t shift) {
+  return {RightShiftRound(v.min, shift), RightShiftRound(v.max, shift)};
+}
+}  // namespace WP2
+
+namespace WP2L {
 void GetARGBRanges(const std::array<TransformHeader,
                                     kPossibleTransformCombinationSize>& headers,
-                   WP2SampleFormat format, int16_t minima_range[4],
-                   int16_t maxima_range[4], uint32_t num_transforms) {
+                   WP2SampleFormat format, int32_t minima_range[4],
+                   int32_t maxima_range[4], uint32_t num_transforms) {
+  Segment segments[4];
   // Define the original range according to the pixel format.
   // Deal with alpha.
-  minima_range[0] = 0;
-  maxima_range[0] = WP2::kAlphaMax;
-  const int32_t num_bits_alpha = WP2::kAlphaBits;
+  segments[0] = {0, ::WP2::kAlphaMax};
+  const int32_t num_bits_alpha = ::WP2::kAlphaBits;
   // Deal with other channels.
   const int32_t num_bits_non_alpha = (format == WP2_Argb_38) ? 10 : 8;
   for (uint32_t c = 1; c < 4; ++c) {
-    minima_range[c] = 0;
-    maxima_range[c] = (1 << num_bits_non_alpha) - 1;
+    segments[c] = {0, (1 << num_bits_non_alpha) - 1};
   }
-  constexpr int16_t kCoeffOne = (1 << kColorTransformBits);
   bool do_clamp = true;
   for (uint32_t i = 0; i < num_transforms; ++i) {
     if (headers[i].type == TransformType::kNum) break;
@@ -653,42 +649,63 @@ void GetARGBRanges(const std::array<TransformHeader,
         // black predictor can give results out of those bounds.
         // The ranges are updated to be the ranges of the residuals.
         for (uint32_t c = 0; c < 4; ++c) {
-          UpdateMinMax(/*channel1=*/c, /*channel2=*/c, /*coeff=*/kCoeffOne,
-                       (c == 0) ? num_bits_alpha : num_bits_non_alpha, do_clamp,
-                       minima_range, maxima_range);
+          segments[c] =
+              (segments[c] + segments[c]) | (segments[c] - segments[c]);
+          if (do_clamp) {
+            const uint32_t num_bits =
+                (c == 0) ? num_bits_alpha : num_bits_non_alpha;
+            const int32_t abs_value_max =
+                (num_bits == 8) ? kMaxAbsResidual8 : kMaxAbsResidual10;
+            static_assert(2 * kMaxAbsResidual8 + 1 <= ::WP2::kANSMaxRange,
+                          "invalid kMaxAbsResidual8 value");
+            static_assert(2 * kMaxAbsResidual10 + 1 <= ::WP2::kANSMaxRange,
+                          "invalid kMaxAbsResidual10 value");
+            segments[c] = Segment{std::max(segments[c].min, -abs_value_max),
+                                  std::min(segments[c].max, abs_value_max)};
+            if (segments[c].min > segments[c].max) {
+              // Should not happen.
+              assert(false);
+              segments[c].min = segments[c].max =
+                  std::numeric_limits<int32_t>::max();
+            }
+          }
         }
         break;
-      case TransformType::kCrossColor:
-        // The color transforms add another rounded(channel * coeff >>
-        // kColorTransformBits). First, red is modified by green.
-        UpdateMinMax(/*channel1=*/1, /*channel2=*/2,
-                     /*coeff=*/kGreenToRedMax, num_bits_non_alpha, do_clamp,
-                     minima_range, maxima_range);
+      case TransformType::kCrossColor: {
+        auto update_min_max = [&segments](uint32_t c0, uint32_t c1,
+                                          int32_t coeff) {
+          // The color transforms adds rounded(channel * coeff >>
+          // kColorTransformBits). Extend the interval with all possible deltas.
+          const Segment delta_pos =
+              WP2::RightShiftRound(segments[c1] * coeff, kColorTransformBits);
+          const Segment delta_neg =
+              WP2::RightShiftRound(segments[c1] * -coeff, kColorTransformBits);
+          segments[c0] =
+              (segments[c0] + delta_pos) | (segments[c0] - delta_pos) |
+              (segments[c0] + delta_neg) | (segments[c0] - delta_neg);
+        };
+        // First, red is modified by green.
+        update_min_max(/*c0=*/1, /*c1=*/2, kGreenToRedMax);
         // Then blue by green and red.
-        UpdateMinMax(/*channel1=*/3, /*channel2=*/2,
-                     /*coeff=*/kGreenToBlueMax, num_bits_non_alpha, do_clamp,
-                     minima_range, maxima_range);
-        UpdateMinMax(/*channel1=*/3, /*channel2=*/1,
-                     /*coeff=*/kRedToBlueMax, num_bits_non_alpha, do_clamp,
-                     minima_range, maxima_range);
+        update_min_max(/*c0=*/3, /*c1=*/2, kGreenToBlueMax);
+        update_min_max(/*c0=*/3, /*c1=*/1, kRedToBlueMax);
         break;
-      case TransformType::kYCoCgR:
-        assert(i == 0);
-        // Y range is the same as the original RGB.
-        minima_range[1] = 0;
-        maxima_range[1] = (1 << num_bits_non_alpha) - 1;
-        // Switching to YCoCgR adds one bit to chroma.
-        for (uint32_t c = 2; c < 4; ++c) {
-          maxima_range[c] = (1 << num_bits_non_alpha) - 1;
-          minima_range[c] = -maxima_range[c];
-        }
+      }
+      case TransformType::kYCoCgR: {
+        // co: r-b.
+        const Segment segment_g = segments[2];
+        segments[2] = segments[1] - segments[3];
+        // tmp = (b + (co / 2)); cg = g - tmp;
+        const Segment segment_tmp = segments[3] + (segments[2] / 2);
+        segments[3] = segment_g - segment_tmp;
+        // y = tmp + (cg / 2);
+        segments[1] = segment_tmp + (segments[3] / 2);
         break;
+      }
       case TransformType::kSubtractGreen:
         // green is subtracted from red and blue
-        UpdateMinMax(/*channel1=*/1, /*channel2=*/2, /*coeff=*/kCoeffOne,
-                     num_bits_non_alpha, do_clamp, minima_range, maxima_range);
-        UpdateMinMax(/*channel1=*/3, /*channel2=*/2, /*coeff=*/kCoeffOne,
-                     num_bits_non_alpha, do_clamp, minima_range, maxima_range);
+        segments[1] = segments[1] - segments[2];
+        segments[3] = segments[3] - segments[2];
         break;
       case TransformType::kColorIndexing:
         assert(i == 0);
@@ -696,23 +713,22 @@ void GetARGBRanges(const std::array<TransformHeader,
         // not clamp anymore after that.
         do_clamp = false;
         // A is set to its maximum value.
-        minima_range[0] = maxima_range[0] = WP2::kAlphaMax;
+        segments[0] = {::WP2::kAlphaMax, ::WP2::kAlphaMax};
         // R and B are set to 0.
-        minima_range[1] = minima_range[3] = 0;
-        maxima_range[1] = maxima_range[3] = 0;
+        segments[1] = segments[3] = {0, 0};
         // Only the color index in [0, num_colors-1] is stored in G.
-        minima_range[2] = 0;
-        maxima_range[2] = headers[i].indexing_num_colors - 1;
+        segments[2] = {
+            0, static_cast<int32_t>(headers[i].indexing_num_colors) - 1};
         break;
       default:
         assert(false);
     }
   }
   for (uint32_t c = 0; c < 4; ++c) {
+    minima_range[c] = segments[c].min;
+    maxima_range[c] = segments[c].max;
     assert(minima_range[c] <= maxima_range[c]);
   }
 }
 
 }  // namespace WP2L
-
-//------------------------------------------------------------------------------

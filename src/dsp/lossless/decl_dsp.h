@@ -39,8 +39,8 @@ extern PredictorNonClampedAddFunc
 typedef void (*PredictorClampedAddFunc)(const int16_t* in, bool has_alpha,
                                         const int16_t* upper,
                                         uint32_t num_pixels,
-                                        const int16_t min_value[4],
-                                        const int16_t max_values[4],
+                                        const int32_t min_value[4],
+                                        const int32_t max_values[4],
                                         int16_t* out, int16_t* predicted);
 extern PredictorClampedAddFunc PredictorsClampedAdd[kNumPredictorsClamped];
 
@@ -70,8 +70,8 @@ class Transform;  // Defined in dec/lossless/losslessi_dec.h.
 // corresponding to the intermediate row (row_start).
 // If 'predicted' is not null, it will contain the predicted samples on return.
 void InverseTransform(const Transform* transform, uint32_t row_start,
-                      uint32_t row_end, const int16_t min_values[4],
-                      const int16_t max_values[4], const int16_t* in,
+                      uint32_t row_end, const int32_t min_values[4],
+                      const int32_t max_values[4], const int16_t* in,
                       bool has_alpha, int16_t* out,
                       int16_t* predicted = nullptr);
 

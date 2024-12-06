@@ -118,8 +118,8 @@ extern PredictorNonClampedFunc PredictorsNonClamped_C[kNumPredictorsNonClamped];
   } while (0);
 
 typedef void (*PredictorClampedFunc)(const int16_t* left, const int16_t* top,
-                                     const int16_t min_values[4],
-                                     const int16_t max_values[4], int16_t* out);
+                                     const int32_t min_values[4],
+                                     const int32_t max_values[4], int16_t* out);
 extern PredictorClampedFunc PredictorsClamped[kNumPredictorsClamped];
 extern PredictorClampedFunc PredictorsClamped_C[kNumPredictorsClamped];
 

@@ -216,8 +216,8 @@ GENERATE_PREDICTOR_NON_CLAMPED_SUB(5)
 #define GENERATE_PREDICTOR_CLAMPED_SUB(I)                                      \
   void PredictorClampedSub##I##_C(const int16_t* in, bool has_alpha,           \
                                   const int16_t* upper, uint32_t num_pixels,   \
-                                  const int16_t min_values[4],                 \
-                                  const int16_t max_values[4], int16_t* out) { \
+                                  const int32_t min_values[4],                 \
+                                  const int32_t max_values[4], int16_t* out) { \
     int16_t pred[4];                                                           \
     assert(upper != nullptr);                                                  \
     for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end;   \

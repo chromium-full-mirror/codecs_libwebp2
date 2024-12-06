@@ -80,8 +80,8 @@ GENERATE_PREDICTOR_NON_CLAMPED_ADD(5)
 #define GENERATE_PREDICTOR_CLAMPED_ADD(I)                                    \
   void PredictorClampedAdd##I##_C(                                           \
       const int16_t* in, bool has_alpha, const int16_t* upper,               \
-      uint32_t num_pixels, const int16_t min_values[4],                      \
-      const int16_t max_values[4], int16_t* out, int16_t* predicted) {       \
+      uint32_t num_pixels, const int32_t min_values[4],                      \
+      const int32_t max_values[4], int16_t* out, int16_t* predicted) {       \
     int16_t pred[4];                                                         \
     assert(upper != nullptr);                                                \
     for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
@@ -125,8 +125,8 @@ PredictorAngleAddFunc PredictorsAddLeft;
 
 // Inverse prediction.
 void PredictorInverseTransform_C(const Transform* const transform, int y_start,
-                                 int y_end, const int16_t min_values[4],
-                                 const int16_t max_values[4], const int16_t* in,
+                                 int y_end, const int32_t min_values[4],
+                                 const int32_t max_values[4], const int16_t* in,
                                  bool has_alpha, int16_t* out,
                                  int16_t* predicted) {
   const int width = transform->width_pic_;
@@ -405,8 +405,8 @@ WP2_TSAN_IGNORE_FUNCTION void DecLDspInitSSE() {
 //------------------------------------------------------------------------------
 
 void InverseTransform(const Transform* const transform, uint32_t row_start,
-                      uint32_t row_end, const int16_t min_values[4],
-                      const int16_t max_values[4], const int16_t* const in,
+                      uint32_t row_end, const int32_t min_values[4],
+                      const int32_t max_values[4], const int16_t* const in,
                       bool has_alpha, int16_t* const out,
                       int16_t* const predicted) {
   const uint32_t width = transform->width_pic_;

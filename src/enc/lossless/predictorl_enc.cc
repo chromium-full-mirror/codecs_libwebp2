@@ -123,7 +123,7 @@ inline void UpdateHisto(const int16_t* const argb, uint32_t max_x,
 // Struct containing the info about a predictor.
 struct Predictor {
   Predictor(uint32_t mode_in, int8_t sub_mode_in,
-            const int16_t min_values_in[4], const int16_t max_values_in[4])
+            const int32_t min_values_in[4], const int32_t max_values_in[4])
       : mode(mode_in),
         sub_mode(sub_mode_in),
         type(kPredictorType[mode]),
@@ -134,8 +134,8 @@ struct Predictor {
   int8_t sub_mode;
   PredictorType type;
   uint32_t index;
-  const int16_t* min_values;
-  const int16_t* max_values;
+  const int32_t* min_values;
+  const int32_t* max_values;
 };
 
 static void WriteSubModesImpl(const int16_t* const modes, bool needs_shift,
@@ -261,7 +261,7 @@ static inline void GetResidual(int width, int16_t* const upper_row,
 // Returns best predictor and updates the accumulated histogram.
 static void GetBestPredictorForTile(
     int tile_x, int tile_y, uint32_t bits, bool exact, bool use_sub_modes,
-    const int16_t min_values[4], const int16_t max_values[4],
+    const int32_t min_values[4], const int32_t max_values[4],
     const Buffer_s16& buffer, const int16_t* const modes,
     int16_t* const argb_scratch, ChannelVector accumulated[2],
     ChannelVector tmp_histo[2], Predictor* const pred_best,
@@ -392,8 +392,8 @@ static void GetBestPredictorForTile(
 
 // Converts pixels of the image to residuals with respect to predictions.
 static void CopyImageWithPrediction(int bits, bool exact,
-                                    const int16_t min_values[4],
-                                    const int16_t max_values[4],
+                                    const int32_t min_values[4],
+                                    const int32_t max_values[4],
                                     const int16_t* const modes, int effort,
                                     const WP2::Vector_s8& sub_modes,
                                     int16_t* const argb_scratch,
@@ -428,8 +428,8 @@ static void CopyImageWithPrediction(int bits, bool exact,
 // Finds the best predictor for each tile, and converts the image to residuals
 // with respect to predictions.
 WP2Status CreateResidualImage(uint32_t bits, bool exact, bool can_use_sub_modes,
-                              const int16_t min_values[4],
-                              const int16_t max_values[4], int effort,
+                              const int32_t min_values[4],
+                              const int32_t max_values[4], int effort,
                               const WP2::ProgressRange& progress,
                               Buffer_s16* const buffer,
                               int16_t* const argb_scratch, int16_t* const modes,
@@ -455,8 +455,8 @@ WP2Status CreateResidualImage(uint32_t bits, bool exact, bool can_use_sub_modes,
     ChannelVector tmp_histo[2];
     for (uint32_t c = 0; c < 4; ++c) {
       uint32_t histo_size = 0;
-      for (int16_t i : {(int16_t)-min_values[c], min_values[c],
-                        (int16_t)-max_values[c], max_values[c]}) {
+      for (int32_t i :
+           {-min_values[c], min_values[c], -max_values[c], max_values[c]}) {
         histo_size = std::max(histo_size, 1u + MakeIndex(i));
       }
       for (uint32_t j = 0; j < 2; ++j) {
