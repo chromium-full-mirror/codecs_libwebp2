@@ -206,7 +206,9 @@ WP2Status CodeTiles(EncTilesLayout* const tiles_layout,
     if (num_bytes >= max_num_bytes) {
       // Discard ANS encoding because it takes at least as many bytes as raw
       // pixels.
-      WP2_CHECK_STATUS(BypassTileEnc(*tiles_layout->gparams, &tile, output));
+      WP2_CHECK_STATUS(BypassTileEnc(*tiles_layout->gparams,
+                                     tiles_layout->image_is_premultiplied,
+                                     &tile, output));
     } else {
       if (tile.data.size > 0) {
         WP2_CHECK_ALLOC_OK(output->Append(tile.data.bytes, tile.data.size));

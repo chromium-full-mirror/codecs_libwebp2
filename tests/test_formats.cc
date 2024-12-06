@@ -17,10 +17,10 @@
 // premultiplied before encoding and the 'premul <-> unpremul <-> premul'
 // operation is stable.
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <ostream>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -35,6 +35,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -312,7 +313,7 @@ class ExhaustiveTest
     src_is_premul_ = std::get<1>(GetParam());
     tmp_is_premul_ = WP2IsPremultiplied(tmp_format);
     tmp_has_alpha_ = WP2FormatHasAlpha(tmp_format);
-    tmp_is_38b_ = (WP2Formatbpc(tmp_format) > 8);
+    tmp_is_38b_ = tmp_format == WP2_Argb_38;
     convert_to_tmp_ = src_is_premul_ ? WP2ArgbConvertTo[tmp_format]
                                      : WP2ARGBConvertTo[tmp_format];
     convert_from_tmp_ = src_is_premul_ ? WP2ArgbConvertFrom[tmp_format]
@@ -323,14 +324,20 @@ class ExhaustiveTest
   // Returns the expected output of 'v' given alpha 'a' and input/temp formats.
   uint32_t GetExpectedValue(uint32_t a, uint32_t v) const {
     if (src_is_premul_) {
+      if (tmp_has_alpha_) return v;
+      if (tmp_is_38b_) return std::min(Unmult(a, v), 1023u);
       return (tmp_has_alpha_ ? v : Unmult(a, v));
     }
     if (tmp_is_premul_) {
       // Temp is premultiplied but not src so there is some loss.
       if (tmp_is_38b_) {
-        return RightShiftRound(Unmult(a, DivBy255(a * LeftShift(v, 2))), 2);
+        const uint32_t v_38b = (v * 1023 + 127) / 255;
+        const uint32_t v_premul = (a * v_38b + 127) / 255;
+        const uint32_t v_unmul = std::min(Unmult(a, v_premul), 1023u);
+        const uint32_t v_32b = (v_unmul * 255 + 511) / 1023;
+        return v_32b;
       }
-      return Unmult(a, DivBy255(a * v));
+      return Unmult(a, (a * v + 127) / 255);
     }
     return v;
   }
@@ -375,8 +382,7 @@ INSTANTIATE_TEST_SUITE_P(
     ExhaustiveTestInstantiation, ExhaustiveTest,
     testing::Combine(testing::ValuesIn(testutil::kWP2CpuInfoStructs),
                      testing::Values(false, true),  // src_is_premul_
-                     // TODO(yguyon): Include WP2_Argb_38 when ready
-                     testing::Range(WP2_Argb_32, WP2_Argb_38)  // tmp_format
+                     testing::Range(WP2_Argb_32, WP2_FORMAT_NUM)  // tmp_format
                      ));
 
 //------------------------------------------------------------------------------
@@ -402,9 +408,6 @@ static struct FmtTestCase {
 };
 
 typedef std::tuple<FmtTestCase, testutil::WP2CPUInfoStruct> SpeedTestParam;
-static void PrintTo(const SpeedTestParam& p, std::ostream* os) {
-  *os << "{" << std::get<0>(p).name << ", " << std::get<1>(p).name << "}";
-}
 
 class SpeedTest : public testing::TestWithParam<SpeedTestParam> {
   void SetUp() override {

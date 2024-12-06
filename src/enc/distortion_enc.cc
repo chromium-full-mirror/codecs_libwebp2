@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "src/common/color_precision.h"
 #include "src/dsp/dsp.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
@@ -447,14 +448,18 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
   result[0] = result[1] = result[2] = result[3] = result[4] = 0.f;
 
   const double pix_size = width() * height();
-  const double max = 255.;  // Maximum value per pixel per channel.
+  double total_max = 0.;  // Sum of the maximum values of each channel.
   double total_distortion = 0.;
   uint32_t alpha_channel_index = 0;
   WP2FormatHasAlpha(format_, &alpha_channel_index);
   const bool has_transparency = HasTransparency();
   const bool include_alpha = has_transparency && include_alpha_in_all;
-  const uint32_t pix_channel_size = pix_size * (include_alpha ? 4 : 3);
+  const uint32_t num_channels = include_alpha ? 4 : 3;
+  const uint32_t pix_channel_size = pix_size * num_channels;
   if (metric_type == PSNR) {
+    WP2_CHECK_OK(WP2FormatBpp(format_) == 3 || WP2FormatBpp(format_) == 4 ||
+                     WP2FormatBpp(format_) == 8,
+                 WP2_STATUS_UNSUPPORTED_FEATURE);
     WP2PSNRInit();
     auto metric_call = (WP2FormatBpp(format_) == 4) ? WP2SumSquaredError4x8u
                                                     : WP2SumSquaredError3x8u;
@@ -471,12 +476,17 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
       }
     }
     for (uint32_t c = 0; c < 4; ++c) {
+      const double max = WP2::FormatMax(
+          ref.format(), (c == alpha_channel_index && include_alpha) ? 0 : 1);
       if (c != alpha_channel_index || include_alpha) {
+        total_max += max;
         total_distortion += (float)result_64b[c];
       }
       result[c] = (float)GetPSNR(result_64b[c], pix_size, max);
     }
-    result[4] = (float)GetPSNR(total_distortion, pix_channel_size, max);
+    // TODO: b/382677532 - Verify formula (maybe shift alpha to 10b)
+    result[4] = (float)GetPSNR(total_distortion, pix_channel_size,
+                               total_max / num_channels);
   } else if (metric_type == SSIM) {
     WP2_CHECK_OK(WP2FormatBpp(format_) == 4, WP2_STATUS_UNSUPPORTED_FEATURE);
     WP2SSIMInit();
@@ -524,12 +534,17 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
     WP2_CHECK_OK(WP2FormatBpp(format_) == 4, WP2_STATUS_UNSUPPORTED_FEATURE);
     for (uint32_t c = 0; c < 4; ++c) {
       const double disto = AccumulateLSIM(*this, ref, c);
+      const double max = WP2::FormatMax(
+          ref.format(), (c == alpha_channel_index && include_alpha) ? 0 : 1);
       if (c != alpha_channel_index || include_alpha) {
+        total_max += max;
         total_distortion += disto;
       }
       result[c] = (float)GetPSNR(disto, pix_size, max);
     }
-    result[4] = (float)GetPSNR(total_distortion, pix_channel_size, max);
+    // TODO: b/382677532 - Verify formula (maybe shift alpha to 10b)
+    result[4] = (float)GetPSNR(total_distortion, pix_channel_size,
+                               total_max / num_channels);
   } else {
     // We are working in YUV space.
     CSPTransform transf;
@@ -546,10 +561,17 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
       result[2] = CalcPSNRHVS(yuv0.U, yuv1.U, kMaskU);
       result[3] = CalcPSNRHVS(yuv0.V, yuv1.V, kMaskV);
       for (uint32_t c = 0; c < 4; ++c) {
-        if (c > 0 || include_alpha) total_distortion += result[c];
+        const double max =
+            WP2::FormatMax(ref.format(), (c == 0 && include_alpha) ? 0 : 1);
+        if (c > 0 || include_alpha) {
+          total_max += max;
+          total_distortion += result[c];
+        }
         result[c] = (float)GetPSNR(result[c], pix_size, max);
       }
-      result[4] = (float)GetPSNR(total_distortion, pix_channel_size, max);
+      // TODO: b/382677532 - Verify formula (maybe shift alpha to 10b)
+      result[4] = (float)GetPSNR(total_distortion, pix_channel_size,
+                                 total_max / num_channels);
     } else if (metric_type == PSNR_YUV) {
       WP2_CHECK_STATUS(
           yuv0.GetDistortion(yuv1, transf.GetYuvDepth(), PSNR, result));

@@ -14,11 +14,14 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <numeric>
 #include <utility>
+#include <vector>
 
 #include "include/helpers.h"
 #include "src/dsp/dsp.h"
 #include "src/wp2/base.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -68,6 +71,70 @@ TEST(RgbConversionTest, From32bTo32b) {
         ASSERT_NEAR(roundtrip.GetRow8(0)[i], values[i], tolerance)
             << " (channel " << i << ") from " << from << " to " << to << " ("
             << static_cast<int>(dst.GetRow8(0)[i]) << ")";
+      }
+    }
+  }
+}
+
+TEST(RgbConversionTest, From32bTo64b) {
+  WP2ArgbConverterInit();
+
+  ArgbBuffer src(WP2_ARGB_32);
+  ASSERT_WP2_OK(src.Resize(256, 256));
+  for (uint32_t y = 0; y < src.height(); ++y) {
+    for (uint32_t x = 0; x < src.width(); ++x) {
+      src.GetRow8(y)[x * 4] = x;
+      src.GetRow8(y)[x * 4 + 1] = y;
+      src.GetRow8(y)[x * 4 + 2] = y;
+      src.GetRow8(y)[x * 4 + 3] = y;
+    }
+  }
+
+  ArgbBuffer dst(WP2_ARGB_64);
+  ASSERT_WP2_OK(dst.ConvertFrom(src));
+  ArgbBuffer roundtrip(WP2_ARGB_32);
+  ASSERT_WP2_OK(roundtrip.ConvertFrom(dst));
+  ASSERT_TRUE(testutil::Compare(src, roundtrip, "all_alpha_rgb_combinations"));
+}
+
+TEST(RgbConversionTest, From64bTo32b) {
+  WP2ArgbConverterInit();
+
+  // Try some alpha values but not all, otherwise it takes too long.
+  std::vector<uint16_t> alpha_values(550);
+  std::iota(alpha_values.begin(), alpha_values.end(), 0);
+  alpha_values.push_back(1000);
+  alpha_values.push_back(65533);
+  alpha_values.push_back(65534);
+  alpha_values.push_back(65535);
+
+  for (uint16_t alpha : alpha_values) {
+    ArgbBuffer src(WP2_ARGB_64);
+    ASSERT_WP2_OK(src.Resize(256, 256));
+    // Test all values of RGB.
+    for (uint32_t y = 0; y < src.height(); ++y) {
+      for (uint32_t x = 0; x < src.width(); ++x) {
+        src.GetRow16(y)[x * 4] = alpha;
+        src.GetRow16(y)[x * 4 + 1] = x;
+        src.GetRow16(y)[x * 4 + 2] = y;
+        src.GetRow16(y)[x * 4 + 3] = y * 256 + x;
+      }
+    }
+
+    ArgbBuffer dst(WP2_ARGB_32);
+    ASSERT_WP2_OK(dst.ConvertFrom(src));
+    ArgbBuffer roundtrip(WP2_ARGB_64);
+    ASSERT_WP2_OK(roundtrip.ConvertFrom(dst));
+    ASSERT_TRUE(testutil::Compare(src, roundtrip, "all_alpha_rgb_combinations",
+                                  /*expected_distortion=*/40.f));
+
+    for (uint32_t y = 0; y < src.height(); ++y) {
+      for (uint32_t x = 0; x < src.width(); ++x) {
+        for (uint32_t c = 0; c < 4; ++c) {
+          ASSERT_NEAR(src.GetRow16(y)[x * 4 + c],
+                      roundtrip.GetRow16(y)[x * 4 + c], 128)
+              << " (channel " << c << " at " << x << ", " << y << ")";
+        }
       }
     }
   }

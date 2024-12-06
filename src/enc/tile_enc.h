@@ -98,7 +98,8 @@ class TileEncoder : public WorkerBase {
 };
 
 // Encodes pixels as row-ordered raw samples.
-WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* tile,
+WP2Status BypassTileEnc(const GlobalParams& gparams,
+                        bool image_is_premultiplied, EncTile* tile,
                         Writer* output);
 
 //------------------------------------------------------------------------------

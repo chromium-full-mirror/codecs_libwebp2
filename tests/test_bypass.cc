@@ -28,6 +28,7 @@
 #include "src/wp2/decode.h"
 #include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -81,7 +82,8 @@ TEST_P(BypassTest, MaxChunkSize) {
 
     ASSERT_WP2_OK(GlobalAnalysis(enc_tile.rgb_input, enc_tile.yuv_input, transf,
                                  config, &gparams));
-    ASSERT_WP2_OK(BypassTileEnc(gparams, &enc_tile, &writer));
+    ASSERT_WP2_OK(BypassTileEnc(gparams, WP2IsPremultiplied(src_format),
+                                &enc_tile, &writer));
   }
 
 #if !defined(WP2_ENC_DEC_MATCH)
@@ -95,6 +97,7 @@ TEST_P(BypassTest, MaxChunkSize) {
   {  // Decode
     BitstreamFeatures features;
     features.rgb_bit_depth = WP2Formatbpc(src_format);
+    features.is_premultiplied = WP2IsPremultiplied(src_format);
     TilesLayout tiles;
     tiles.num_tiles_x = tiles.num_tiles_y = 1;
     tiles.tile_width = tiles.tile_height = width;

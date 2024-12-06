@@ -31,7 +31,8 @@ namespace WP2 {
 
 //------------------------------------------------------------------------------
 
-WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
+WP2Status BypassTileEnc(const GlobalParams& gparams,
+                        bool image_is_premultiplied, EncTile* const tile,
                         Writer* const output) {
   const uint32_t rgb_bit_depth = WP2Formatbpc(tile->rgb_input.format());
   const uint32_t max_num_bytes =
@@ -42,13 +43,32 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
     // RGB input is expected.
     assert(!tile->rgb_input.IsEmpty());
     if (rgb_bit_depth <= 8) {
+      assert(tile->rgb_input.format() == WP2_Argb_32 ||
+             tile->rgb_input.format() == WP2_ARGB_32);
+      if (!image_is_premultiplied) {
+        // There should be no loss here.
+        assert(!WP2IsPremultiplied(tile->rgb_input.format()));
+      }
       for (uint32_t y = 0; y < tile->rect.height; ++y) {
-        const uint8_t* const row = tile->rgb_input.GetRow8(y);
+        ArgbBuffer input_row(tile->rgb_input.format());
+        WP2_CHECK_STATUS(
+            input_row.SetView(tile->rgb_input, {0, y, tile->rect.width, 1}));
+        // Respect the header's image_is_premultiplied flag, otherwise the
+        // decoder will not be able to know whether the samples were
+        // premultiplied. Each non-bypass tile explicitly signals that
+        // information on top of the image header.
+        ArgbBuffer raw_row(image_is_premultiplied ? WP2_Argb_32 : WP2_ARGB_32);
+        if (raw_row.format() == input_row.format()) {
+          WP2_CHECK_STATUS(raw_row.SetView(input_row));
+        } else {
+          WP2_CHECK_STATUS(raw_row.ConvertFrom(input_row));
+        }
+        const uint8_t* const row = raw_row.GetRow8(0);
         if (gparams.has_alpha_) {
-          // Write rows of Argb samples.
+          // Write rows of Argb or ARGB samples.
           WP2_CHECK_ALLOC_OK(output->Append((void*)row, tile->rect.width * 4));
         } else {
-          // Write only rgb.
+          // Write only RGB.
           for (uint32_t x = 0; x < tile->rect.width; ++x) {
             WP2_CHECK_ALLOC_OK(output->Append((void*)&row[x * 4 + 1], 3));
           }
@@ -56,7 +76,9 @@ WP2Status BypassTileEnc(const GlobalParams& gparams, EncTile* const tile,
       }
       // TODO(yguyon): Simulate ANSDebugPrefix to count these raw bytes?
     } else {
+      // Only premultiplied WP2_Argb_38 is available here.
       assert(tile->rgb_input.format() == WP2_Argb_38);
+      assert(image_is_premultiplied);
       // Allocate, fill and write the 'data' to 'output'.
       // TODO(yguyon): Use less memory by outputting 8 lines by 8 lines?
       Data data;

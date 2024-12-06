@@ -23,7 +23,6 @@
 #include <cstring>
 
 #include "src/dsp/dsp.h"
-#include "src/dsp/math.h"
 #include "src/wp2/base.h"
 
 namespace {
@@ -39,43 +38,37 @@ void WP2Copy_C(const void* src, uint32_t width, void* dst) {
 //------------------------------------------------------------------------------
 // C conversion from a format to another
 
-// Demultiplies color 'v' by alpha 'a'. Set 'kIs8b' to true if 'v' fits in 8
-// bits (and will fit afterwards) so that a faster version is used. 'a' is 8b.
-template <typename Type, bool kIs8b = (sizeof(Type) == 1)>
-void Unmult(uint32_t a, Type v[]) {
+// Demultiplies color 'v' by alpha 'a'.
+template <typename Type, int kAlphaMax, int kColorMax>
+void Unmult(uint32_t a, Type& r, Type& g, Type& b) {
   if (a == 0) {
-    v[0] = v[1] = v[2] = 0;
+    r = g = b = 0;
     return;
   }
-  if (a == 255) return;
+  if (a == kAlphaMax) return;
 
-  if (kIs8b) {
-    const uint32_t M = WP2::kAlphaDiv[a];
-    for (int c : {0, 1, 2}) {
-      v[c] = std::min(WP2::DivByAlphaDiv(v[c], M), 255u);
-    }
-  } else {
-    // WP2::DivByAlphaDiv() cannot be used here because the result needs to
-    // be clamped to 255.
-    const uint32_t round = a >> 1;
-    for (int c : {0, 1, 2}) {
-      v[c] = (v[c] * 255 + round) / a;
-    }
-  }
+  const uint32_t round = a >> 1;
+  r = static_cast<Type>(
+      std::min<uint32_t>((r * kAlphaMax + round) / a, kColorMax));
+  g = static_cast<Type>(
+      std::min<uint32_t>((g * kAlphaMax + round) / a, kColorMax));
+  b = static_cast<Type>(
+      std::min<uint32_t>((b * kAlphaMax + round) / a, kColorMax));
 }
 
-// Premultiplies color 'v' (8- or 10-bit) by alpha 'a' (8-bit).
-template <typename Type>
-void Premult(uint32_t a, Type v[]) {
+// Premultiplies color 'v' by alpha 'a'.
+template <typename Type, int kAlphaMax>
+void Premult(uint32_t a, Type& r, Type& g, Type& b) {
   if (a == 0) {
-    v[0] = v[1] = v[2] = 0;
+    r = g = b = 0;
     return;
   }
-  if (a == 255) return;
+  if (a == kAlphaMax) return;
 
-  for (int c : {0, 1, 2}) {
-    v[c] = WP2::DivBy255(v[c] * a);
-  }
+  constexpr uint32_t kAlphaRound = kAlphaMax >> 1;
+  r = static_cast<Type>((r * a + kAlphaRound) / kAlphaMax);
+  g = static_cast<Type>((g * a + kAlphaRound) / kAlphaMax);
+  b = static_cast<Type>((b * a + kAlphaRound) / kAlphaMax);
 }
 
 // Converts 'width' px from 'src_data' of 'SrcType' to 'dst_data' of 'DstType'.
@@ -83,104 +76,137 @@ void Premult(uint32_t a, Type v[]) {
 // Positive 'kMult' will premultiply the destination by the source alpha.
 // Negative 'kMult' will unmultiply the destination by the source alpha.
 // 'kFillAlpha' will replace the destination alpha by 255.
-template <typename SrcType, int kSrcA, int kSrcR, int kSrcG, int kSrcB,
-          int kSrcStep, typename DstType, int kDstA, int kDstR, int kDstG,
-          int kDstB, int kDstStep, int kMult, bool kFillAlpha>
-void Convert_C(const void* src_data, uint32_t width, void* dst_data) {
+template <typename SrcType, int kSrcDepth, int kSrcA, int kSrcR, int kSrcG,
+          int kSrcB, int kSrcStep, typename DstType, int kDstDepth, int kDstA,
+          int kDstR, int kDstG, int kDstB, int kDstStep, int kMult,
+          bool kFillAlpha>
+void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
+  static_assert((kSrcDepth == 8 || kSrcDepth == 10 || kSrcDepth == 16) &&
+                    (kDstDepth == 8 || kDstDepth == 10 || kDstDepth == 16),
+                "Unimplemented");
+
+  constexpr uint32_t kSrcMax = (1u << kSrcDepth) - 1u;
+  constexpr uint32_t kSrcRound = kSrcMax >> 1;
+  constexpr uint32_t kDstMax = (1u << kDstDepth) - 1u;
+
+  // The alpha channel of WP2_Argb_38 (depth = 10) uses only 8 bits.
+  constexpr uint32_t kSrcAlphaMax = kSrcDepth <= 10 ? 255u : kSrcMax;
+  constexpr uint32_t kSrcAlphaRound = kSrcAlphaMax >> 1;
+  constexpr uint32_t kDstAlphaMax = kDstDepth <= 10 ? 255u : kDstMax;
+
   assert(src_data != dst_data);
-  const SrcType* src = (const SrcType*)src_data;
-  DstType* dst = (DstType*)dst_data;
+  const SrcType* src = reinterpret_cast<const SrcType*>(src_data);
+  DstType* dst = reinterpret_cast<DstType*>(dst_data);
   for (uint32_t i = 0; i < width; ++i, src += kSrcStep, dst += kDstStep) {
     if (kDstStep == 4) {
-      dst[kDstA] = (kFillAlpha ? 0xff : src[kSrcA]);
+      if (kFillAlpha) {
+        dst[kDstA] = kDstAlphaMax;
+      } else if (kSrcAlphaMax == kDstAlphaMax) {
+        dst[kDstA] = src[kSrcA];
+      } else {
+        dst[kDstA] =
+            (src[kSrcA] * kDstAlphaMax + kSrcAlphaRound) / kSrcAlphaMax;
+      }
     }
     uint32_t tmp[3] = {src[kSrcR], src[kSrcG], src[kSrcB]};
-    if (sizeof(SrcType) < sizeof(DstType)) {
+    if (kSrcDepth < kDstDepth) {
       for (uint32_t& channel : tmp) {
-        channel = WP2::ChangePrecision(channel, /*from=*/8, /*to=*/10);
+        channel = (channel * kDstMax + kSrcRound) / kSrcMax;
       }
     }
+    // Premul or unmul by alpha at the highest bit depth to keep accuracy.
+    constexpr uint32_t kTmpMax = kSrcDepth < kDstDepth ? kDstMax : kSrcMax;
     if (kMult > 0) {
-      Premult(src[kSrcA], tmp);
+      Premult<uint32_t, kSrcAlphaMax>(src[kSrcA], tmp[0], tmp[1], tmp[2]);
     } else if (kMult < 0) {
-      Unmult<uint32_t, /*kIs8b=*/(sizeof(SrcType) == 1 &&
-                                  sizeof(DstType) == 1)>(src[kSrcA], tmp);
+      Unmult<uint32_t, kSrcAlphaMax, kTmpMax>(src[kSrcA], tmp[0], tmp[1],
+                                              tmp[2]);
     }
-    if (sizeof(SrcType) > sizeof(DstType)) {
+    if (kSrcDepth > kDstDepth) {
       for (uint32_t& channel : tmp) {
-        channel = WP2::ChangePrecision(channel, /*from=*/10, /*to=*/8);
+        channel = (channel * kDstMax + kSrcRound) / kSrcMax;
       }
     }
-    dst[kDstR] = tmp[0], dst[kDstG] = tmp[1], dst[kDstB] = tmp[2];
+    dst[kDstR] = static_cast<DstType>(tmp[0]);
+    dst[kDstG] = static_cast<DstType>(tmp[1]);
+    dst[kDstB] = static_cast<DstType>(tmp[2]);
   }
 }
 
 // From the specified format to Argb32 or ARGB32.
-#define CONVERT_TO_ARGB32(SRC_TYPE, A, R, G, B, MULT, FILL, SRC_STEP) \
-  Convert_C<SRC_TYPE, A, R, G, B, SRC_STEP, uint8_t, 0, 1, 2, 3, 4, MULT, FILL>
+#define CVRT_TO_ARGB32(SRC_TYPE, SRC_DEPTH, A, R, G, B, MULT, FILL, SRC_STEP)  \
+  Cvrt_C<SRC_TYPE, SRC_DEPTH, A, R, G, B, SRC_STEP, uint8_t, 8, 0, 1, 2, 3, 4, \
+         MULT, FILL>
 
 // From the Argb32 or ARGB32 to specified format.
-#define CONVERT_ARGB32_TO(DST_TYPE, A, R, G, B, MULT, FILL, DST_STEP) \
-  Convert_C<uint8_t, 0, 1, 2, 3, 4, DST_TYPE, A, R, G, B, DST_STEP, MULT, FILL>
+#define CVRT_ARGB32_TO(DST_TYPE, DST_DEPTH, A, R, G, B, MULT, FILL, DST_STEP)  \
+  Cvrt_C<uint8_t, 8, 0, 1, 2, 3, 4, DST_TYPE, DST_DEPTH, A, R, G, B, DST_STEP, \
+         MULT, FILL>
 
-#define Convert_Argb32_Argb32_C CONVERT_TO_ARGB32(uint8_t, 0, 1, 2, 3, 0, 0, 4)
-#define Convert_ARGB32_ARGB32_C CONVERT_TO_ARGB32(uint8_t, 0, 1, 2, 3, 0, 0, 4)
+#define Cvrt_Argb32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 1, 2, 3, 0, 0, 4)
+#define Cvrt_ARGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 1, 2, 3, 0, 0, 4)
 
-#define Convert_ARGB32_Argb32_C CONVERT_TO_ARGB32(uint8_t, 0, 1, 2, 3, 1, 0, 4)
-#define Convert_XRGB32_Argb32_C CONVERT_TO_ARGB32(uint8_t, 0, 1, 2, 3, 0, 1, 4)
-#define Convert_rgbA32_Argb32_C CONVERT_TO_ARGB32(uint8_t, 3, 0, 1, 2, 0, 0, 4)
-#define Convert_RGBA32_Argb32_C CONVERT_TO_ARGB32(uint8_t, 3, 0, 1, 2, 1, 0, 4)
-#define Convert_RGBX32_Argb32_C CONVERT_TO_ARGB32(uint8_t, 3, 0, 1, 2, 0, 1, 4)
-#define Convert_bgrA32_Argb32_C CONVERT_TO_ARGB32(uint8_t, 3, 2, 1, 0, 0, 0, 4)
-#define Convert_BGRA32_Argb32_C CONVERT_TO_ARGB32(uint8_t, 3, 2, 1, 0, 1, 0, 4)
-#define Convert_BGRX32_Argb32_C CONVERT_TO_ARGB32(uint8_t, 3, 2, 1, 0, 0, 1, 4)
-#define Convert_RGB32_Argb32_C CONVERT_TO_ARGB32(uint8_t, 0, 0, 1, 2, 0, 1, 3)
-#define Convert_BGR32_Argb32_C CONVERT_TO_ARGB32(uint8_t, 0, 2, 1, 0, 0, 1, 3)
+#define Cvrt_ARGB32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 1, 2, 3, 1, 0, 4)
+#define Cvrt_XRGB32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 1, 2, 3, 0, 1, 4)
+#define Cvrt_rgbA32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, 0, 0, 4)
+#define Cvrt_RGBA32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, 1, 0, 4)
+#define Cvrt_RGBX32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, 0, 1, 4)
+#define Cvrt_bgrA32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, 0, 0, 4)
+#define Cvrt_BGRA32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, 1, 0, 4)
+#define Cvrt_BGRX32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, 0, 1, 4)
+#define Cvrt_RGB32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 1, 2, 0, 1, 3)
+#define Cvrt_BGR32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 2, 1, 0, 0, 1, 3)
 
-#define Convert_XRGB32_ARGB32_C CONVERT_TO_ARGB32(uint8_t, 0, 1, 2, 3, 0, 1, 4)
-#define Convert_rgbA32_ARGB32_C CONVERT_TO_ARGB32(uint8_t, 3, 0, 1, 2, -1, 0, 4)
-#define Convert_RGBA32_ARGB32_C CONVERT_TO_ARGB32(uint8_t, 3, 0, 1, 2, 0, 0, 4)
-#define Convert_RGBX32_ARGB32_C CONVERT_TO_ARGB32(uint8_t, 3, 0, 1, 2, 0, 1, 4)
-#define Convert_bgrA32_ARGB32_C CONVERT_TO_ARGB32(uint8_t, 3, 2, 1, 0, -1, 0, 4)
-#define Convert_BGRA32_ARGB32_C CONVERT_TO_ARGB32(uint8_t, 3, 2, 1, 0, 0, 0, 4)
-#define Convert_BGRX32_ARGB32_C CONVERT_TO_ARGB32(uint8_t, 3, 2, 1, 0, 0, 1, 4)
-#define Convert_RGB32_ARGB32_C CONVERT_TO_ARGB32(uint8_t, 0, 0, 1, 2, 0, 1, 3)
-#define Convert_BGR32_ARGB32_C CONVERT_TO_ARGB32(uint8_t, 0, 2, 1, 0, 0, 1, 3)
+#define Cvrt_XRGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 1, 2, 3, 0, 1, 4)
+#define Cvrt_rgbA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, -1, 0, 4)
+#define Cvrt_RGBA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, 0, 0, 4)
+#define Cvrt_RGBX32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, 0, 1, 4)
+#define Cvrt_bgrA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, -1, 0, 4)
+#define Cvrt_BGRA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, 0, 0, 4)
+#define Cvrt_BGRX32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, 0, 1, 4)
+#define Cvrt_RGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 1, 2, 0, 1, 3)
+#define Cvrt_BGR32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 2, 1, 0, 0, 1, 3)
 
-#define Convert_Argb32_ARGB32_C CONVERT_ARGB32_TO(uint8_t, 0, 1, 2, 3, -1, 0, 4)
-#define Convert_Argb32_XRGB32_C CONVERT_ARGB32_TO(uint8_t, 0, 1, 2, 3, -1, 1, 4)
-#define Convert_Argb32_rgbA32_C CONVERT_ARGB32_TO(uint8_t, 3, 0, 1, 2, 0, 0, 4)
-#define Convert_Argb32_RGBA32_C CONVERT_ARGB32_TO(uint8_t, 3, 0, 1, 2, -1, 0, 4)
-#define Convert_Argb32_RGBX32_C CONVERT_ARGB32_TO(uint8_t, 3, 0, 1, 2, -1, 1, 4)
-#define Convert_Argb32_bgrA32_C CONVERT_ARGB32_TO(uint8_t, 3, 2, 1, 0, 0, 0, 4)
-#define Convert_Argb32_BGRA32_C CONVERT_ARGB32_TO(uint8_t, 3, 2, 1, 0, -1, 0, 4)
-#define Convert_Argb32_BGRX32_C CONVERT_ARGB32_TO(uint8_t, 3, 2, 1, 0, -1, 1, 4)
-#define Convert_Argb32_RGB32_C CONVERT_ARGB32_TO(uint8_t, 0, 0, 1, 2, -1, 1, 3)
-#define Convert_Argb32_BGR32_C CONVERT_ARGB32_TO(uint8_t, 0, 2, 1, 0, -1, 1, 3)
+#define Cvrt_Argb32_ARGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 1, 2, 3, -1, 0, 4)
+#define Cvrt_Argb32_XRGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 1, 2, 3, -1, 1, 4)
+#define Cvrt_Argb32_rgbA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, 0, 0, 4)
+#define Cvrt_Argb32_RGBA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, -1, 0, 4)
+#define Cvrt_Argb32_RGBX32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, -1, 1, 4)
+#define Cvrt_Argb32_bgrA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, 0, 0, 4)
+#define Cvrt_Argb32_BGRA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, -1, 0, 4)
+#define Cvrt_Argb32_BGRX32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, -1, 1, 4)
+#define Cvrt_Argb32_RGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 0, 1, 2, -1, 1, 3)
+#define Cvrt_Argb32_BGR32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 2, 1, 0, -1, 1, 3)
 
-#define Convert_ARGB32_XRGB32_C CONVERT_ARGB32_TO(uint8_t, 0, 1, 2, 3, 0, 1, 4)
-#define Convert_ARGB32_rgbA32_C CONVERT_ARGB32_TO(uint8_t, 3, 0, 1, 2, 1, 0, 4)
-#define Convert_ARGB32_RGBA32_C CONVERT_ARGB32_TO(uint8_t, 3, 0, 1, 2, 0, 0, 4)
-#define Convert_ARGB32_RGBX32_C CONVERT_ARGB32_TO(uint8_t, 3, 0, 1, 2, 0, 1, 4)
-#define Convert_ARGB32_bgrA32_C CONVERT_ARGB32_TO(uint8_t, 3, 2, 1, 0, 1, 0, 4)
-#define Convert_ARGB32_BGRA32_C CONVERT_ARGB32_TO(uint8_t, 3, 2, 1, 0, 0, 0, 4)
-#define Convert_ARGB32_BGRX32_C CONVERT_ARGB32_TO(uint8_t, 3, 2, 1, 0, 0, 1, 4)
-#define Convert_ARGB32_RGB32_C CONVERT_ARGB32_TO(uint8_t, 0, 0, 1, 2, 0, 1, 3)
-#define Convert_ARGB32_BGR32_C CONVERT_ARGB32_TO(uint8_t, 0, 2, 1, 0, 0, 1, 3)
+#define Cvrt_ARGB32_XRGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 1, 2, 3, 0, 1, 4)
+#define Cvrt_ARGB32_rgbA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, 1, 0, 4)
+#define Cvrt_ARGB32_RGBA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, 0, 0, 4)
+#define Cvrt_ARGB32_RGBX32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, 0, 1, 4)
+#define Cvrt_ARGB32_bgrA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, 1, 0, 4)
+#define Cvrt_ARGB32_BGRA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, 0, 0, 4)
+#define Cvrt_ARGB32_BGRX32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, 0, 1, 4)
+#define Cvrt_ARGB32_RGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 0, 1, 2, 0, 1, 3)
+#define Cvrt_ARGB32_BGR32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 2, 1, 0, 0, 1, 3)
 
-#define Convert_Argb38_Argb32_C CONVERT_TO_ARGB32(uint16_t, 0, 1, 2, 3, 0, 0, 4)
-#define Convert_Argb38_ARGB32_C \
-  CONVERT_TO_ARGB32(uint16_t, 0, 1, 2, 3, -1, 0, 4)
-#define Convert_Argb32_Argb38_C CONVERT_ARGB32_TO(uint16_t, 0, 1, 2, 3, 0, 0, 4)
-#define Convert_ARGB32_Argb38_C CONVERT_ARGB32_TO(uint16_t, 0, 1, 2, 3, 1, 0, 4)
+#define Cvrt_Argb38_Argb32_C CVRT_TO_ARGB32(uint16_t, 10, 0, 1, 2, 3, 0, 0, 4)
+#define Cvrt_Argb38_ARGB32_C CVRT_TO_ARGB32(uint16_t, 10, 0, 1, 2, 3, -1, 0, 4)
+#define Cvrt_Argb32_Argb38_C CVRT_ARGB32_TO(uint16_t, 10, 0, 1, 2, 3, 0, 0, 4)
+#define Cvrt_ARGB32_Argb38_C CVRT_ARGB32_TO(uint16_t, 10, 0, 1, 2, 3, 1, 0, 4)
+
+#define Cvrt_ARGB64_Argb32_C CVRT_TO_ARGB32(uint16_t, 16, 0, 1, 2, 3, 1, 0, 4)
+#define Cvrt_ARGB64_ARGB32_C CVRT_TO_ARGB32(uint16_t, 16, 0, 1, 2, 3, 0, 0, 4)
+#define Cvrt_Argb32_ARGB64_C CVRT_ARGB32_TO(uint16_t, 16, 0, 1, 2, 3, -1, 0, 4)
+#define Cvrt_ARGB32_ARGB64_C CVRT_ARGB32_TO(uint16_t, 16, 0, 1, 2, 3, 0, 0, 4)
 
 //------------------------------------------------------------------------------
 // SSE4.1 implementation
 
 #if defined(WP2_USE_SSE)
 
-void Premultiply(uint8_t* dst, uint32_t width) {
-  for (uint32_t i = 0; i < width; ++i, dst += 4) Premult(dst[0], dst + 1);
+void PremultiplyARGB32(uint8_t* dst, uint32_t width) {
+  for (uint32_t x = 0; x < width; ++x, dst += 4) {
+    Premult<uint8_t, 255>(*dst, dst[1], dst[2], dst[3]);
+  }
 }
 
 #define PSHUFB_CST32(CST) \
@@ -221,99 +247,105 @@ void Premultiply(uint8_t* dst, uint32_t width) {
     if (x < width) NAME##_C(src + 4 * x, width - x, dst + 4 * x);             \
   }
 
-void Convert_Argb32_Argb32_SSE(const void* src, uint32_t width, void* dst) {
+void Cvrt_Argb32_Argb32_SSE(const void* src, uint32_t width, void* dst) {
   memcpy(dst, src, 4 * width);
 }
 
-CONVERT_32_TO_32_FILL_FUNC(Convert_XRGB32_Argb32, 0x030201ff, 0x000000ffu)
-void Convert_ARGB32_Argb32_SSE(const void* src, uint32_t width, void* dst) {
-  Convert_Argb32_Argb32_SSE(src, width, dst);
-  Premultiply((uint8_t*)dst, width);
+CONVERT_32_TO_32_FILL_FUNC(Cvrt_XRGB32_Argb32, 0x030201ff, 0x000000ffu)
+void Cvrt_ARGB32_Argb32_SSE(const void* src, uint32_t width, void* dst) {
+  Cvrt_Argb32_Argb32_SSE(src, width, dst);  // ARGB32 -> ARGB32
+  PremultiplyARGB32((uint8_t*)dst, width);  // ARGB32 -> Argb32
 }
 
-CONVERT_32_TO_32_FUNC(Convert_rgbA32_Argb32, 0x02010003)
-CONVERT_32_TO_32_FILL_FUNC(Convert_RGBX32_Argb32, 0x020100ff, 0x000000ffu)
-void Convert_RGBA32_Argb32_SSE(const void* src, uint32_t width, void* dst) {
-  Convert_rgbA32_Argb32_SSE(src, width, dst);
-  Premultiply((uint8_t*)dst, width);
+CONVERT_32_TO_32_FUNC(Cvrt_rgbA32_Argb32, 0x02010003)
+CONVERT_32_TO_32_FILL_FUNC(Cvrt_RGBX32_Argb32, 0x020100ff, 0x000000ffu)
+void Cvrt_RGBA32_Argb32_SSE(const void* src, uint32_t width, void* dst) {
+  Cvrt_rgbA32_Argb32_SSE(src, width, dst);  // RGBA32 -> ARGB32
+  PremultiplyARGB32((uint8_t*)dst, width);  // ARGB32 -> Argb32
 }
 
-CONVERT_32_TO_32_FUNC(Convert_bgrA32_Argb32, 0x00010203)
-CONVERT_32_TO_32_FILL_FUNC(Convert_BGRX32_Argb32, 0x000102ff, 0x000000ffu)
-void Convert_BGRA32_Argb32_SSE(const void* src, uint32_t width, void* dst) {
-  Convert_bgrA32_Argb32_SSE(src, width, dst);
-  Premultiply((uint8_t*)dst, width);
+CONVERT_32_TO_32_FUNC(Cvrt_bgrA32_Argb32, 0x00010203)
+CONVERT_32_TO_32_FILL_FUNC(Cvrt_BGRX32_Argb32, 0x000102ff, 0x000000ffu)
+void Cvrt_BGRA32_Argb32_SSE(const void* src, uint32_t width, void* dst) {
+  Cvrt_bgrA32_Argb32_SSE(src, width, dst);  // BGRA32 -> ARGB32
+  PremultiplyARGB32((uint8_t*)dst, width);  // ARGB32 -> Argb32
 }
 
 // ConvertTo
 
-void Unmultiply(uint8_t* const dst, const uint8_t* dst_a, uint32_t width) {
-  for (uint32_t x = 0; x < width; ++x) {
-    Unmult(dst_a[4 * x], dst + 4 * x);
+void Unmultiply8b(const uint8_t* dst_a, uint8_t* dst_rgb, uint32_t width) {
+  for (uint32_t x = 0; x < width; ++x, dst_a += 4, dst_rgb += 4) {
+    Unmult<uint8_t, 255, 255>(dst_a[0], dst_rgb[0], dst_rgb[1], dst_rgb[2]);
   }
 }
-void FillAlpha(uint8_t* dst_a, uint32_t width) {
+void FillAlpha8b(uint8_t* dst_a, uint32_t width) {
   for (uint32_t x = 0; x < width; ++x) {
     dst_a[4 * x] = 255;
   }
 }
 
-void Convert_Argb32_ARGB32_SSE(const void* src, uint32_t width, void* dst) {
-  Convert_Argb32_Argb32_SSE(src, width, dst);
-  Unmultiply((uint8_t*)dst + 1, (uint8_t*)dst + 0, width);
+void Cvrt_Argb32_ARGB32_SSE(const void* src, uint32_t width, void* dst) {
+  Cvrt_Argb32_Argb32_SSE(src, width, dst);  // Argb32 -> Argb32
+  Unmultiply8b(const_cast<const uint8_t*>(reinterpret_cast<uint8_t*>(dst) + 0),
+               reinterpret_cast<uint8_t*>(dst) + 1,
+               width);  // Argb32 -> ARGB32
 }
-void Convert_Argb32_XRGB32_SSE(const void* src, uint32_t width, void* dst) {
-  Convert_Argb32_ARGB32_SSE(src, width, dst);
-  FillAlpha((uint8_t*)dst + 0, width);
-}
-
-CONVERT_32_TO_32_FUNC(Convert_Argb32_rgbA32, 0x00030201)
-void Convert_Argb32_RGBA32_SSE(const void* src, uint32_t width, void* dst) {
-  Convert_Argb32_rgbA32_SSE(src, width, dst);
-  Unmultiply((uint8_t*)dst + 0, (uint8_t*)dst + 3, width);
-}
-void Convert_Argb32_RGBX32_SSE(const void* src, uint32_t width, void* dst) {
-  Convert_Argb32_RGBA32_SSE(src, width, dst);
-  FillAlpha((uint8_t*)dst + 3, width);
+void Cvrt_Argb32_XRGB32_SSE(const void* src, uint32_t width, void* dst) {
+  Cvrt_Argb32_ARGB32_SSE(src, width, dst);                  // Argb32 -> ARGB32
+  FillAlpha8b(reinterpret_cast<uint8_t*>(dst) + 0, width);  // ARGB32 -> XRGB32
 }
 
-CONVERT_32_TO_32_FUNC(Convert_Argb32_bgrA32, 0x00010203)
-void Convert_Argb32_BGRA32_SSE(const void* src, uint32_t width, void* dst) {
-  Convert_Argb32_bgrA32_SSE(src, width, dst);
-  Unmultiply((uint8_t*)dst + 0, (uint8_t*)dst + 3, width);
+CONVERT_32_TO_32_FUNC(Cvrt_Argb32_rgbA32, 0x00030201)
+void Cvrt_Argb32_RGBA32_SSE(const void* src, uint32_t width, void* dst) {
+  Cvrt_Argb32_rgbA32_SSE(src, width, dst);  // Argb32 -> rgbA32
+  Unmultiply8b(const_cast<const uint8_t*>(reinterpret_cast<uint8_t*>(dst) + 3),
+               reinterpret_cast<uint8_t*>(dst) + 0,
+               width);  // rgbA32 -> RGBA32
 }
-void Convert_Argb32_BGRX32_SSE(const void* src, uint32_t width, void* dst) {
-  Convert_Argb32_BGRA32_SSE(src, width, dst);
-  FillAlpha((uint8_t*)dst + 3, width);
+void Cvrt_Argb32_RGBX32_SSE(const void* src, uint32_t width, void* dst) {
+  Cvrt_Argb32_RGBA32_SSE(src, width, dst);                  // Argb32 -> rgbA32
+  FillAlpha8b(reinterpret_cast<uint8_t*>(dst) + 3, width);  // rgbA32 -> RGBX32
+}
+
+CONVERT_32_TO_32_FUNC(Cvrt_Argb32_bgrA32, 0x00010203)
+void Cvrt_Argb32_BGRA32_SSE(const void* src, uint32_t width, void* dst) {
+  Cvrt_Argb32_bgrA32_SSE(src, width, dst);  // Argb32 -> bgrA32
+  Unmultiply8b(const_cast<const uint8_t*>(reinterpret_cast<uint8_t*>(dst) + 3),
+               reinterpret_cast<uint8_t*>(dst) + 0,
+               width);  // bgrA32 -> BGRA32
+}
+void Cvrt_Argb32_BGRX32_SSE(const void* src, uint32_t width, void* dst) {
+  Cvrt_Argb32_BGRA32_SSE(src, width, dst);                  // Argb32 -> bgrA32
+  FillAlpha8b(reinterpret_cast<uint8_t*>(dst) + 3, width);  // bgrA32 -> BGRX32
 }
 
 #undef CONVERT_32_TO_32_FUNC
 #undef PSHUFB_CST32
 
 WP2_TSAN_IGNORE_FUNCTION void ArgbConverterDspInitSSE() {
-  WP2ArgbConvertFrom[WP2_Argb_32] = Convert_Argb32_Argb32_SSE;
-  WP2ArgbConvertFrom[WP2_ARGB_32] = Convert_ARGB32_Argb32_SSE;
-  WP2ArgbConvertFrom[WP2_XRGB_32] = Convert_XRGB32_Argb32_SSE;
+  WP2ArgbConvertFrom[WP2_Argb_32] = Cvrt_Argb32_Argb32_SSE;
+  WP2ArgbConvertFrom[WP2_ARGB_32] = Cvrt_ARGB32_Argb32_SSE;
+  WP2ArgbConvertFrom[WP2_XRGB_32] = Cvrt_XRGB32_Argb32_SSE;
 
-  WP2ArgbConvertFrom[WP2_rgbA_32] = Convert_rgbA32_Argb32_SSE;
-  WP2ArgbConvertFrom[WP2_RGBA_32] = Convert_RGBA32_Argb32_SSE;
-  WP2ArgbConvertFrom[WP2_RGBX_32] = Convert_RGBX32_Argb32_SSE;
+  WP2ArgbConvertFrom[WP2_rgbA_32] = Cvrt_rgbA32_Argb32_SSE;
+  WP2ArgbConvertFrom[WP2_RGBA_32] = Cvrt_RGBA32_Argb32_SSE;
+  WP2ArgbConvertFrom[WP2_RGBX_32] = Cvrt_RGBX32_Argb32_SSE;
 
-  WP2ArgbConvertFrom[WP2_bgrA_32] = Convert_bgrA32_Argb32_SSE;
-  WP2ArgbConvertFrom[WP2_BGRA_32] = Convert_BGRA32_Argb32_SSE;
-  WP2ArgbConvertFrom[WP2_BGRX_32] = Convert_BGRX32_Argb32_SSE;
+  WP2ArgbConvertFrom[WP2_bgrA_32] = Cvrt_bgrA32_Argb32_SSE;
+  WP2ArgbConvertFrom[WP2_BGRA_32] = Cvrt_BGRA32_Argb32_SSE;
+  WP2ArgbConvertFrom[WP2_BGRX_32] = Cvrt_BGRX32_Argb32_SSE;
 
-  WP2ArgbConvertTo[WP2_Argb_32] = Convert_Argb32_Argb32_SSE;
-  WP2ArgbConvertTo[WP2_ARGB_32] = Convert_Argb32_ARGB32_SSE;
-  WP2ArgbConvertTo[WP2_XRGB_32] = Convert_Argb32_XRGB32_SSE;
+  WP2ArgbConvertTo[WP2_Argb_32] = Cvrt_Argb32_Argb32_SSE;
+  WP2ArgbConvertTo[WP2_ARGB_32] = Cvrt_Argb32_ARGB32_SSE;
+  WP2ArgbConvertTo[WP2_XRGB_32] = Cvrt_Argb32_XRGB32_SSE;
 
-  WP2ArgbConvertTo[WP2_rgbA_32] = Convert_Argb32_rgbA32_SSE;
-  WP2ArgbConvertTo[WP2_RGBA_32] = Convert_Argb32_RGBA32_SSE;
-  WP2ArgbConvertTo[WP2_RGBX_32] = Convert_Argb32_RGBX32_SSE;
+  WP2ArgbConvertTo[WP2_rgbA_32] = Cvrt_Argb32_rgbA32_SSE;
+  WP2ArgbConvertTo[WP2_RGBA_32] = Cvrt_Argb32_RGBA32_SSE;
+  WP2ArgbConvertTo[WP2_RGBX_32] = Cvrt_Argb32_RGBX32_SSE;
 
-  WP2ArgbConvertTo[WP2_bgrA_32] = Convert_Argb32_bgrA32_SSE;
-  WP2ArgbConvertTo[WP2_BGRA_32] = Convert_Argb32_BGRA32_SSE;
-  WP2ArgbConvertTo[WP2_BGRX_32] = Convert_Argb32_BGRX32_SSE;
+  WP2ArgbConvertTo[WP2_bgrA_32] = Cvrt_Argb32_bgrA32_SSE;
+  WP2ArgbConvertTo[WP2_BGRA_32] = Cvrt_Argb32_BGRA32_SSE;
+  WP2ArgbConvertTo[WP2_BGRX_32] = Cvrt_Argb32_BGRX32_SSE;
 }
 
 #endif  // WP2_USE_SSE
@@ -336,73 +368,81 @@ static volatile WP2CPUInfo argb_converter_last_cpuinfo_used =
 WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
   if (argb_converter_last_cpuinfo_used == WP2GetCPUInfo) return;
 
-  WP2ArgbConvertFrom[WP2_Argb_32] = Convert_Argb32_Argb32_C;
-  WP2ArgbConvertFrom[WP2_ARGB_32] = Convert_ARGB32_Argb32_C;
-  WP2ArgbConvertFrom[WP2_XRGB_32] = Convert_XRGB32_Argb32_C;
+  WP2ArgbConvertFrom[WP2_Argb_32] = Cvrt_Argb32_Argb32_C;
+  WP2ArgbConvertFrom[WP2_ARGB_32] = Cvrt_ARGB32_Argb32_C;
+  WP2ArgbConvertFrom[WP2_XRGB_32] = Cvrt_XRGB32_Argb32_C;
 
-  WP2ArgbConvertFrom[WP2_rgbA_32] = Convert_rgbA32_Argb32_C;
-  WP2ArgbConvertFrom[WP2_RGBA_32] = Convert_RGBA32_Argb32_C;
-  WP2ArgbConvertFrom[WP2_RGBX_32] = Convert_RGBX32_Argb32_C;
+  WP2ArgbConvertFrom[WP2_rgbA_32] = Cvrt_rgbA32_Argb32_C;
+  WP2ArgbConvertFrom[WP2_RGBA_32] = Cvrt_RGBA32_Argb32_C;
+  WP2ArgbConvertFrom[WP2_RGBX_32] = Cvrt_RGBX32_Argb32_C;
 
-  WP2ArgbConvertFrom[WP2_bgrA_32] = Convert_bgrA32_Argb32_C;
-  WP2ArgbConvertFrom[WP2_BGRA_32] = Convert_BGRA32_Argb32_C;
-  WP2ArgbConvertFrom[WP2_BGRX_32] = Convert_BGRX32_Argb32_C;
+  WP2ArgbConvertFrom[WP2_bgrA_32] = Cvrt_bgrA32_Argb32_C;
+  WP2ArgbConvertFrom[WP2_BGRA_32] = Cvrt_BGRA32_Argb32_C;
+  WP2ArgbConvertFrom[WP2_BGRX_32] = Cvrt_BGRX32_Argb32_C;
 
-  WP2ArgbConvertFrom[WP2_RGB_24] = Convert_RGB32_Argb32_C;
-  WP2ArgbConvertFrom[WP2_BGR_24] = Convert_BGR32_Argb32_C;
+  WP2ArgbConvertFrom[WP2_RGB_24] = Cvrt_RGB32_Argb32_C;
+  WP2ArgbConvertFrom[WP2_BGR_24] = Cvrt_BGR32_Argb32_C;
 
-  WP2ArgbConvertFrom[WP2_Argb_38] = Convert_Argb38_Argb32_C;
+  WP2ArgbConvertFrom[WP2_Argb_38] = Cvrt_Argb38_Argb32_C;
 
-  WP2ArgbConvertTo[WP2_Argb_32] = Convert_Argb32_Argb32_C;
-  WP2ArgbConvertTo[WP2_ARGB_32] = Convert_Argb32_ARGB32_C;
-  WP2ArgbConvertTo[WP2_XRGB_32] = Convert_Argb32_XRGB32_C;
+  WP2ArgbConvertFrom[WP2_ARGB_64] = Cvrt_ARGB64_Argb32_C;
 
-  WP2ArgbConvertTo[WP2_rgbA_32] = Convert_Argb32_rgbA32_C;
-  WP2ArgbConvertTo[WP2_RGBA_32] = Convert_Argb32_RGBA32_C;
-  WP2ArgbConvertTo[WP2_RGBX_32] = Convert_Argb32_RGBX32_C;
+  WP2ArgbConvertTo[WP2_Argb_32] = Cvrt_Argb32_Argb32_C;
+  WP2ArgbConvertTo[WP2_ARGB_32] = Cvrt_Argb32_ARGB32_C;
+  WP2ArgbConvertTo[WP2_XRGB_32] = Cvrt_Argb32_XRGB32_C;
 
-  WP2ArgbConvertTo[WP2_bgrA_32] = Convert_Argb32_bgrA32_C;
-  WP2ArgbConvertTo[WP2_BGRA_32] = Convert_Argb32_BGRA32_C;
-  WP2ArgbConvertTo[WP2_BGRX_32] = Convert_Argb32_BGRX32_C;
+  WP2ArgbConvertTo[WP2_rgbA_32] = Cvrt_Argb32_rgbA32_C;
+  WP2ArgbConvertTo[WP2_RGBA_32] = Cvrt_Argb32_RGBA32_C;
+  WP2ArgbConvertTo[WP2_RGBX_32] = Cvrt_Argb32_RGBX32_C;
 
-  WP2ArgbConvertTo[WP2_RGB_24] = Convert_Argb32_RGB32_C;
-  WP2ArgbConvertTo[WP2_BGR_24] = Convert_Argb32_BGR32_C;
+  WP2ArgbConvertTo[WP2_bgrA_32] = Cvrt_Argb32_bgrA32_C;
+  WP2ArgbConvertTo[WP2_BGRA_32] = Cvrt_Argb32_BGRA32_C;
+  WP2ArgbConvertTo[WP2_BGRX_32] = Cvrt_Argb32_BGRX32_C;
 
-  WP2ArgbConvertTo[WP2_Argb_38] = Convert_Argb32_Argb38_C;
+  WP2ArgbConvertTo[WP2_RGB_24] = Cvrt_Argb32_RGB32_C;
+  WP2ArgbConvertTo[WP2_BGR_24] = Cvrt_Argb32_BGR32_C;
 
-  WP2ARGBConvertFrom[WP2_Argb_32] = Convert_Argb32_ARGB32_C;
-  WP2ARGBConvertFrom[WP2_ARGB_32] = Convert_ARGB32_ARGB32_C;
-  WP2ARGBConvertFrom[WP2_XRGB_32] = Convert_XRGB32_ARGB32_C;
+  WP2ArgbConvertTo[WP2_Argb_38] = Cvrt_Argb32_Argb38_C;
 
-  WP2ARGBConvertFrom[WP2_rgbA_32] = Convert_rgbA32_ARGB32_C;
-  WP2ARGBConvertFrom[WP2_RGBA_32] = Convert_RGBA32_ARGB32_C;
-  WP2ARGBConvertFrom[WP2_RGBX_32] = Convert_RGBX32_ARGB32_C;
+  WP2ArgbConvertTo[WP2_ARGB_64] = Cvrt_Argb32_ARGB64_C;
 
-  WP2ARGBConvertFrom[WP2_bgrA_32] = Convert_bgrA32_ARGB32_C;
-  WP2ARGBConvertFrom[WP2_BGRA_32] = Convert_BGRA32_ARGB32_C;
-  WP2ARGBConvertFrom[WP2_BGRX_32] = Convert_BGRX32_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_Argb_32] = Cvrt_Argb32_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_ARGB_32] = Cvrt_ARGB32_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_XRGB_32] = Cvrt_XRGB32_ARGB32_C;
 
-  WP2ARGBConvertFrom[WP2_RGB_24] = Convert_RGB32_ARGB32_C;
-  WP2ARGBConvertFrom[WP2_BGR_24] = Convert_BGR32_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_rgbA_32] = Cvrt_rgbA32_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_RGBA_32] = Cvrt_RGBA32_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_RGBX_32] = Cvrt_RGBX32_ARGB32_C;
 
-  WP2ARGBConvertFrom[WP2_Argb_38] = Convert_Argb38_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_bgrA_32] = Cvrt_bgrA32_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_BGRA_32] = Cvrt_BGRA32_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_BGRX_32] = Cvrt_BGRX32_ARGB32_C;
 
-  WP2ARGBConvertTo[WP2_Argb_32] = Convert_ARGB32_Argb32_C;
-  WP2ARGBConvertTo[WP2_ARGB_32] = Convert_ARGB32_ARGB32_C;
-  WP2ARGBConvertTo[WP2_XRGB_32] = Convert_ARGB32_XRGB32_C;
+  WP2ARGBConvertFrom[WP2_RGB_24] = Cvrt_RGB32_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_BGR_24] = Cvrt_BGR32_ARGB32_C;
 
-  WP2ARGBConvertTo[WP2_rgbA_32] = Convert_ARGB32_rgbA32_C;
-  WP2ARGBConvertTo[WP2_RGBA_32] = Convert_ARGB32_RGBA32_C;
-  WP2ARGBConvertTo[WP2_RGBX_32] = Convert_ARGB32_RGBX32_C;
+  WP2ARGBConvertFrom[WP2_Argb_38] = Cvrt_Argb38_ARGB32_C;
 
-  WP2ARGBConvertTo[WP2_bgrA_32] = Convert_ARGB32_bgrA32_C;
-  WP2ARGBConvertTo[WP2_BGRA_32] = Convert_ARGB32_BGRA32_C;
-  WP2ARGBConvertTo[WP2_BGRX_32] = Convert_ARGB32_BGRX32_C;
+  WP2ARGBConvertFrom[WP2_ARGB_64] = Cvrt_ARGB64_ARGB32_C;
 
-  WP2ARGBConvertTo[WP2_RGB_24] = Convert_ARGB32_RGB32_C;
-  WP2ARGBConvertTo[WP2_BGR_24] = Convert_ARGB32_BGR32_C;
+  WP2ARGBConvertTo[WP2_Argb_32] = Cvrt_ARGB32_Argb32_C;
+  WP2ARGBConvertTo[WP2_ARGB_32] = Cvrt_ARGB32_ARGB32_C;
+  WP2ARGBConvertTo[WP2_XRGB_32] = Cvrt_ARGB32_XRGB32_C;
 
-  WP2ARGBConvertTo[WP2_Argb_38] = Convert_ARGB32_Argb38_C;
+  WP2ARGBConvertTo[WP2_rgbA_32] = Cvrt_ARGB32_rgbA32_C;
+  WP2ARGBConvertTo[WP2_RGBA_32] = Cvrt_ARGB32_RGBA32_C;
+  WP2ARGBConvertTo[WP2_RGBX_32] = Cvrt_ARGB32_RGBX32_C;
+
+  WP2ARGBConvertTo[WP2_bgrA_32] = Cvrt_ARGB32_bgrA32_C;
+  WP2ARGBConvertTo[WP2_BGRA_32] = Cvrt_ARGB32_BGRA32_C;
+  WP2ARGBConvertTo[WP2_BGRX_32] = Cvrt_ARGB32_BGRX32_C;
+
+  WP2ARGBConvertTo[WP2_RGB_24] = Cvrt_ARGB32_RGB32_C;
+  WP2ARGBConvertTo[WP2_BGR_24] = Cvrt_ARGB32_BGR32_C;
+
+  WP2ARGBConvertTo[WP2_Argb_38] = Cvrt_ARGB32_Argb38_C;
+
+  WP2ARGBConvertTo[WP2_ARGB_64] = Cvrt_ARGB32_ARGB64_C;
 
   if (WP2GetCPUInfo != nullptr) {
 #if defined(WP2_USE_SSE)
@@ -419,20 +459,37 @@ namespace {
 
 template <WP2SampleFormat from, WP2SampleFormat to>
 void WP2ConvertFromTo(const void* src, uint32_t width, void* dst) {
-  static_assert(WP2Formatbpc(from) == 8, "Unimplemented");
-  static_assert(WP2Formatbpc(to) == 8, "Unimplemented");
   const size_t src_bytes_per_pixel =
       WP2FormatBpp(static_cast<WP2SampleFormat>(from));
   const size_t dst_bytes_per_pixel =
       WP2FormatBpp(static_cast<WP2SampleFormat>(to));
 
-  // Use a temporary layout Argb or ARGB to go from SRC to DST.
+  // Use a temporary layout Argb32 or ARGB32 to go from src to dst.
+  // Bit depth changes can only go from 8-bit or to 8-bit.
+  static_assert(WP2Formatbpc(from) == 8 || WP2Formatbpc(to) == 8,
+                "Unimplemented");
+
   // Do not premultiply or unmultiply unless necessary.
-  // The functions below do not work inplace so use a temporary buffer.
+  // Premultiply or unmultiply during the bit depth change if any, to benefit
+  // from the increased precision. The other step of shuffling channels is
+  // lossless.
+  bool tmp_is_premul;
+  if (WP2Formatbpc(static_cast<WP2SampleFormat>(from)) <
+      WP2Formatbpc(static_cast<WP2SampleFormat>(to))) {
+    // For example, for going from 8-bit to 16-bit, it is better to first
+    // shuffle channels losslessly, then change the bit depth and unmul/premul.
+    tmp_is_premul = WP2IsPremultiplied(static_cast<WP2SampleFormat>(from));
+  } else {
+    // For example, for going from 16-bit to 8-bit, it is better to first change
+    // the bit depth and unmul/premul, then shuffle channels losslessly.
+    tmp_is_premul = WP2IsPremultiplied(static_cast<WP2SampleFormat>(to));
+  }
+
+  // The functions below do not work inplace so use an 8-bit temporary buffer.
   uint8_t tmp[128];
   while (width > 0) {
     const uint32_t num_pixels = std::min<uint32_t>(width, sizeof(tmp) / 4);
-    if (WP2IsPremultiplied(static_cast<WP2SampleFormat>(from))) {
+    if (tmp_is_premul) {
       WP2ArgbConvertFrom[from](src, num_pixels, tmp);
       WP2ArgbConvertTo[to](tmp, num_pixels, dst);
     } else {
@@ -447,7 +504,7 @@ void WP2ConvertFromTo(const void* src, uint32_t width, void* dst) {
 }
 
 template <WP2SampleFormat from>
-WP2ArgbConverterF WP2ConvertFromToFunc(WP2SampleFormat to) {
+WP2ArgbConverterF WP2ConvertFromTo8bFunc(WP2SampleFormat to) {
   if (to == WP2_XRGB_32) return WP2ConvertFromTo<from, WP2_XRGB_32>;
   if (to == WP2_rgbA_32) return WP2ConvertFromTo<from, WP2_rgbA_32>;
   if (to == WP2_RGBA_32) return WP2ConvertFromTo<from, WP2_RGBA_32>;
@@ -458,6 +515,13 @@ WP2ArgbConverterF WP2ConvertFromToFunc(WP2SampleFormat to) {
   if (to == WP2_RGB_24) return WP2ConvertFromTo<from, WP2_RGB_24>;
   if (to == WP2_BGR_24) return WP2ConvertFromTo<from, WP2_BGR_24>;
   return nullptr;
+}
+
+template <WP2SampleFormat from>
+WP2ArgbConverterF WP2ConvertFromToFunc(WP2SampleFormat to) {
+  if (to == WP2_Argb_38) return WP2ConvertFromTo<from, WP2_Argb_38>;
+  if (to == WP2_ARGB_64) return WP2ConvertFromTo<from, WP2_ARGB_64>;
+  return WP2ConvertFromTo8bFunc<from>(to);
 }
 
 }  // namespace
@@ -485,6 +549,10 @@ WP2ArgbConverterF WP2ConversionFunction(WP2SampleFormat from,
   if (from == WP2_BGRX_32) return WP2ConvertFromToFunc<WP2_BGRX_32>(to);
   if (from == WP2_RGB_24) return WP2ConvertFromToFunc<WP2_RGB_24>(to);
   if (from == WP2_BGR_24) return WP2ConvertFromToFunc<WP2_BGR_24>(to);
+  if (to < WP2_Argb_38) {
+    if (from == WP2_Argb_38) return WP2ConvertFromTo8bFunc<WP2_Argb_38>(to);
+    if (from == WP2_ARGB_64) return WP2ConvertFromTo8bFunc<WP2_ARGB_64>(to);
+  }
   return nullptr;
 }
 

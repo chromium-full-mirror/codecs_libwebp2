@@ -145,7 +145,6 @@ Argb32b GetAverageColor(const ArgbBuffer& canvas, uint32_t radius,
                           WP2::DivBy255(row[x * 4 + 3] * alpha));
         }
       }
-
     } else {
       assert(WP2IsPremultiplied(canvas.format()));
       const uint16_t* const row = canvas.GetRow16(y);

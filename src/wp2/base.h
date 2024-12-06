@@ -135,7 +135,9 @@ typedef enum {
   // HDR format: 8 bits for A, 10 per RGB.
   WP2_Argb_38,
 
-  // TODO(skal): RGB565_16? rgbA4444_16? RGBA4444_16?
+  // 64b/pixel format: 16 bits for A, 16 per RGB.
+  WP2_ARGB_64,
+
   WP2_FORMAT_NUM
 } WP2SampleFormat;
 
@@ -156,6 +158,7 @@ WP2_EXTERN constexpr uint32_t WP2FormatBpp(WP2SampleFormat format) {
     case WP2_BGR_24:
       return 3;
     case WP2_Argb_38:
+    case WP2_ARGB_64:
       // actually 38 bits, stored as uint16
       return 8;
     case WP2_FORMAT_NUM:
@@ -183,6 +186,8 @@ WP2_EXTERN constexpr uint32_t WP2Formatbpc(WP2SampleFormat format) {
       return 8;
     case WP2_Argb_38:
       return 10;
+    case WP2_ARGB_64:
+      return 16;
     case WP2_FORMAT_NUM:
       assert(false);
       return 0;
@@ -201,6 +206,7 @@ WP2_EXTERN constexpr bool WP2FormatHasAlpha(
     case WP2_Argb_32:
     case WP2_ARGB_32:
     case WP2_Argb_38:
+    case WP2_ARGB_64:
       if (alpha_channel_index != nullptr) *alpha_channel_index = 0;
       return true;
     case WP2_rgbA_32:
@@ -244,6 +250,7 @@ WP2_EXTERN constexpr bool WP2IsPremultiplied(WP2SampleFormat format) {
     case WP2_BGRX_32:
     case WP2_RGB_24:
     case WP2_BGR_24:
+    case WP2_ARGB_64:
       return false;
     case WP2_FORMAT_NUM:
       assert(false);

@@ -19,7 +19,6 @@
 
 #include <cassert>
 #include <cstdint>
-#include <cstring>
 
 #include "src/common/global_params.h"
 #include "src/common/header_enc_dec.h"
@@ -27,7 +26,6 @@
 #include "src/common/lossy/block_size.h"
 #include "src/dec/filters/block_map_filter.h"
 #include "src/dec/tile_dec.h"
-#include "src/dsp/math.h"
 #include "src/utils/data_source.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
@@ -96,40 +94,18 @@ WP2Status TileDecoder::BypassTileDecRgb8b() {
     DataSource::DataHandle handle;
     WP2_CHECK_OK(tile_->input->TryReadNext(bytes_per_row, &handle),
                  WP2_STATUS_NOT_ENOUGH_DATA);
-    if (tile_->rgb_output.format() == WP2_Argb_32 ||
-        tile_->rgb_output.format() == WP2_ARGB_32) {
-      uint8_t* const row = tile_->rgb_output.GetRow8(y);
-      if (gparams_->has_alpha_) {
-        std::memcpy(row, handle.GetBytes(), handle.GetSize());
-      } else {
-        for (uint32_t x = 0; x < tile_->rect.width; ++x) {
-          row[x * 4 + 0] = kAlphaMax;
-          std::memcpy(row + x * 4 + 1, handle.GetBytes() + x * 3, 3);
-        }
-      }
-    } else {
-      assert(tile_->rgb_output.format() == WP2_Argb_38);
-      uint16_t* const row = tile_->rgb_output.GetRow16(y);
-      if (gparams_->has_alpha_) {
-        for (uint32_t x = 0; x < tile_->rect.width; ++x) {
-          row[x * 4 + 0] = handle.GetBytes()[x * 4];
-          const uint8_t* const rgb = handle.GetBytes() + x * 4 + 1;
-          for (uint32_t i : {0, 1, 2}) {
-            row[x * 4 + 1 + i] =
-                ChangePrecision<uint16_t>(rgb[i], /*from=*/8, /*to=*/10);
-          }
-        }
-      } else {
-        for (uint32_t x = 0; x < tile_->rect.width; ++x) {
-          row[x * 4 + 0] = kAlphaMax;
-          const uint8_t* const rgb = handle.GetBytes() + x * 3;
-          for (uint32_t i : {0, 1, 2}) {
-            row[x * 4 + 1 + i] =
-                ChangePrecision<uint16_t>(rgb[i], /*from=*/8, /*to=*/10);
-          }
-        }
-      }
-    }
+    ArgbBuffer raw_row(
+        gparams_->has_alpha_
+            ? (features_->is_premultiplied ? WP2_Argb_32 : WP2_ARGB_32)
+            : WP2_RGB_24);
+    WP2_CHECK_STATUS(raw_row.SetExternal(
+        tile_->rect.width, 1, const_cast<uint8_t*>(handle.GetBytes()),
+        handle.GetSize()));
+
+    ArgbBuffer rgb_output_row(tile_->rgb_output.format());
+    WP2_CHECK_STATUS(rgb_output_row.SetView(tile_->rgb_output,
+                                            {0, y, tile_->rect.width, 1}));
+    WP2_CHECK_STATUS(rgb_output_row.ConvertFrom(raw_row));
     WP2_CHECK_STATUS(tile_->row_progress.AdvanceBy(1.));
   }
   return WP2_STATUS_OK;
@@ -139,6 +115,8 @@ WP2Status TileDecoder::BypassTileDecRgb10b() {
   BitUnpacker bit_unpacker(tile_->input, "raw_pixels");
   const uint32_t num_bits_per_row =
       ((gparams_->has_alpha_ ? kAlphaBits : 0) + 3 * 10) * tile_->rect.width;
+  ArgbBuffer raw_row(WP2_Argb_38);
+  WP2_CHECK_STATUS(raw_row.Resize(tile_->rect.width, 1));
 
   for (tile_->num_decoded_rows = 0;
        tile_->num_decoded_rows < tile_->rect.height;
@@ -150,32 +128,19 @@ WP2Status TileDecoder::BypassTileDecRgb10b() {
                  WP2_STATUS_NOT_ENOUGH_DATA);
 
     const uint32_t y = tile_->num_decoded_rows;
-    if (tile_->rgb_output.format() == WP2_Argb_32 ||
-        tile_->rgb_output.format() == WP2_ARGB_32) {
-      uint8_t* const row = tile_->rgb_output.GetRow8(y);
-      for (uint32_t x = 0; x < tile_->rect.width; ++x) {
-        row[x * 4 + 0] = gparams_->has_alpha_
-                             ? bit_unpacker.ReadBits(kAlphaBits, "alpha")
-                             : kAlphaMax;
-        row[x * 4 + 1] = ChangePrecision(bit_unpacker.ReadBits(10, "red"),
-                                         /*from=*/10, /*to=*/8);
-        row[x * 4 + 2] = ChangePrecision(bit_unpacker.ReadBits(10, "green"),
-                                         /*from=*/10, /*to=*/8);
-        row[x * 4 + 3] = ChangePrecision(bit_unpacker.ReadBits(10, "blue"),
-                                         /*from=*/10, /*to=*/8);
-      }
-    } else {
-      assert(tile_->rgb_output.format() == WP2_Argb_38);
-      uint16_t* const row = tile_->rgb_output.GetRow16(y);
-      for (uint32_t x = 0; x < tile_->rect.width; ++x) {
-        row[x * 4 + 0] = gparams_->has_alpha_
-                             ? bit_unpacker.ReadBits(kAlphaBits, "alpha")
-                             : kAlphaMax;
-        row[x * 4 + 1] = bit_unpacker.ReadBits(10, "red");
-        row[x * 4 + 2] = bit_unpacker.ReadBits(10, "green");
-        row[x * 4 + 3] = bit_unpacker.ReadBits(10, "blue");
-      }
+    uint16_t* raw_pixel = raw_row.GetRow16(0);
+    for (uint32_t x = 0; x < tile_->rect.width; ++x, raw_pixel += 4) {
+      raw_pixel[0] = gparams_->has_alpha_
+                         ? bit_unpacker.ReadBits(kAlphaBits, "alpha")
+                         : kAlphaMax;
+      raw_pixel[1] = bit_unpacker.ReadBits(10, "red");
+      raw_pixel[2] = bit_unpacker.ReadBits(10, "green");
+      raw_pixel[3] = bit_unpacker.ReadBits(10, "blue");
     }
+    ArgbBuffer rgb_output_row(tile_->rgb_output.format());
+    WP2_CHECK_STATUS(rgb_output_row.SetView(tile_->rgb_output,
+                                            {0, y, tile_->rect.width, 1}));
+    WP2_CHECK_STATUS(rgb_output_row.ConvertFrom(raw_row));
     WP2_CHECK_STATUS(tile_->row_progress.AdvanceBy(1.));
   }
 

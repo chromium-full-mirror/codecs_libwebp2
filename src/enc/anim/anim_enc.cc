@@ -192,8 +192,7 @@ WP2Status AnimationEncoder::Encode(Writer* output, const EncoderConfig& config,
   const bool has_trailing_data =
       (metadata.xmp.size > 0) || (metadata.exif.size > 0);
 
-  const uint32_t rgb_bit_depth =
-      (first_frame.rgb_pixels.format() == WP2_Argb_38) ? 10 : 8;
+  const uint32_t rgb_bit_depth = WP2Formatbpc(first_frame.rgb_pixels.format());
   for (const Frame& frame : frames) {
     if (frame.rgb_pixels.format() != first_frame.rgb_pixels.format()) {
       assert(false);

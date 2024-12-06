@@ -172,16 +172,33 @@ inline bool CheckPremultiplied(Argb38b color) {
 
 // Returns the maximum value for a given channel.
 // 'channel' is the index of the channel in order ARGB.
-static inline uint64_t FormatMax(WP2SampleFormat format, uint32_t channel) {
-  if (format == WP2_Argb_32 || channel == 0) {
-    return WP2::kAlphaMax;
-  } else if (format == WP2_ARGB_32) {
-    return 255;
-  } else if (format == WP2_Argb_38) {
-    return (channel == 0) ? WP2::kAlphaMax : 1023;
+static inline uint32_t FormatMax(WP2SampleFormat format, uint32_t channel) {
+  if (channel == 0) {
+    // Alpha
+    switch (format) {
+      case WP2_Argb_32:
+      case WP2_ARGB_32:
+      case WP2_XRGB_32:
+      case WP2_rgbA_32:
+      case WP2_RGBA_32:
+      case WP2_RGBX_32:
+      case WP2_bgrA_32:
+      case WP2_BGRA_32:
+      case WP2_BGRX_32:
+      case WP2_RGB_24:
+      case WP2_BGR_24:
+      case WP2_Argb_38:  // Alpha in WP2_Argb_38 uses only 8 bits.
+        return WP2::kAlphaMax;
+      case WP2_ARGB_64:
+        return 65535;
+      default:
+        assert(false);
+        return 0;
+    }
+  } else {
+    // RGB
+    return (1u << WP2Formatbpc(format)) - 1u;
   }
-  assert(false);
-  return 0;
 }
 
 }  // namespace WP2

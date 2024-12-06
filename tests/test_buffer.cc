@@ -497,11 +497,7 @@ TEST(BufferTest, GetDistortion_BlackSquare) {
       EXPECT_EQ(result[1], 99.f);  // r (or y for PSNRHVS)
       EXPECT_EQ(result[2], 99.f);  // g (or u for PSNRHVS)
       EXPECT_EQ(result[3], 99.f);  // b (or v for PSNRHVS)
-      if (metric == MetricType::PSNR_YUV) {
-        EXPECT_LT(result[4], 60.f);  // all
-      } else {
-        EXPECT_LT(result[4], 50.f);  // all
-      }
+      EXPECT_LT(result[4], 60.f);  // all
       // Not yet implemented.
       if (format == WP2_Argb_38) continue;
       ASSERT_WP2_OK(compressed.GetDistortionBlackOrWhiteBackground(

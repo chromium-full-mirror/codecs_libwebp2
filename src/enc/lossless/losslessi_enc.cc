@@ -27,6 +27,7 @@
 #include <memory>
 #include <string>
 
+#include "src/common/color_precision.h"
 #include "src/common/constants.h"
 #include "src/common/lossless/color_cache.h"
 #include "src/common/progress_watcher.h"
@@ -836,6 +837,7 @@ WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
   if (!can_premultiply) assert(!config.use_premultiplied);
   argb_buffer_.has_alpha = has_alpha_;
   argb_buffer_.channel_bits = WP2Formatbpc(pic_.format());
+  const uint32_t max_value = WP2::FormatMax(pic_.format(), 1);
   for (uint32_t y = 0; y < height; ++y) {
     int16_t* const dst_row = argb_buffer_.GetRow(y);
     if (WP2Formatbpc(pic_.format()) <= 8) {
@@ -849,7 +851,8 @@ WP2Status Encoder::MakeInputImageCopy(const CrunchConfig& config) {
           } else if (config.use_premultiplied) {
             dst_row[4 * x + 0] = a;
             for (uint32_t c = 1; c < 4; ++c) {
-              dst_row[4 * x + c] = WP2::DivBy255(src_row[4 * x + c] * a);
+              dst_row[4 * x + c] = static_cast<int16_t>(
+                  std::min((src_row[4 * x + c] * a + 127u) / 255u, max_value));
             }
           } else {
             std::copy(src_row + 4 * x, src_row + 4 * (x + 1), dst_row + 4 * x);

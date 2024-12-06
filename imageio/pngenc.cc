@@ -182,15 +182,17 @@ void PNGAPI PNGErrorFunction(png_structp png, png_const_charp dummy) {
 WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout, const char*, bool,
                    bool, size_t*) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-  WP2_CHECK_OK(buffer.format() == WP2_Argb_32 || buffer.format() == WP2_ARGB_32,
+  // TODO(yguyon): Allow more formats and convert only when necessary.
+  WP2_CHECK_OK(buffer.format() == WP2_Argb_32 ||
+                   buffer.format() == WP2_ARGB_32 ||
+                   buffer.format() == WP2_ARGB_64,
                WP2_STATUS_UNSUPPORTED_FEATURE);
 
   const uint32_t width = buffer.width();
   const uint32_t height = buffer.height();
-  const bool has_alpha = buffer.HasTransparency();
-  volatile png_bytep row = (png_bytep)buffer.GetRow(0);
-  Vector_u8 ARGB;
-  WP2_CHECK_ALLOC_OK(ARGB.resize(width * (has_alpha ? 4u : 3u)));
+  // Not just HasTransparency() because there is no WP2_RGB_48 for now.
+  const bool has_alpha =
+      buffer.format() == WP2_ARGB_64 || buffer.HasTransparency();
   volatile png_structp png;
   volatile png_infop info;
 
@@ -208,25 +210,40 @@ WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout, const char*, bool,
     return WP2_STATUS_BAD_WRITE;
   }
   png_init_io(png, fout);
-  png_set_IHDR(png, info, width, height, 8,
+  png_set_IHDR(png, info, width, height, WP2Formatbpc(buffer.format()),
                has_alpha ? PNG_COLOR_TYPE_RGBA : PNG_COLOR_TYPE_RGB,
                PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT,
                PNG_FILTER_TYPE_DEFAULT);
   png_write_info(png, info);
+  if (buffer.format() == WP2_ARGB_64) {
+    png_set_swap(png);        // From big-endian to little-endian.
+    png_set_swap_alpha(png);  // From RGBA to ARGB.
+  }
 
-  WP2ArgbConverterInit();
-  for (png_uint_32 y = 0; y < height; ++y) {
-    if (buffer.format() == WP2_Argb_32) {
-      WP2ArgbConvertTo[has_alpha ? WP2_RGBA_32 : WP2_RGB_24](row, width,
-                                                             ARGB.data());
-    } else {
-      assert(buffer.format() == WP2_ARGB_32);
-      WP2ARGBConvertTo[has_alpha ? WP2_RGBA_32 : WP2_RGB_24](row, width,
-                                                             ARGB.data());
+  if (buffer.format() == WP2_Argb_32 || buffer.format() == WP2_ARGB_32) {
+    Vector_u8 ARGB;
+    WP2_CHECK_ALLOC_OK(ARGB.resize(width * WP2FormatBpp(buffer.format())));
+    WP2ArgbConverterInit();
+    for (png_uint_32 y = 0; y < height; ++y) {
+      volatile png_bytep const row = (png_bytep)buffer.GetRow(y);
+      if (buffer.format() == WP2_Argb_32) {
+        WP2ArgbConvertTo[has_alpha ? WP2_RGBA_32 : WP2_RGB_24](row, width,
+                                                               ARGB.data());
+      } else {
+        assert(buffer.format() == WP2_ARGB_32);
+        WP2ARGBConvertTo[has_alpha ? WP2_RGBA_32 : WP2_RGB_24](row, width,
+                                                               ARGB.data());
+      }
+      png_bytep ptr[1] = {ARGB.data()};
+      png_write_rows(png, ptr, 1);
     }
-    png_bytep ptr[1] = {ARGB.data()};
-    png_write_rows(png, ptr, 1);
-    row += buffer.stride();
+  } else {
+    assert(buffer.format() == WP2_ARGB_64);
+    for (png_uint_32 y = 0; y < height; ++y) {
+      volatile png_bytep const row = (png_bytep)buffer.GetRow(y);
+      png_bytep ptr[1] = {row};
+      png_write_rows(png, ptr, 1);
+    }
   }
   png_write_end(png, info);
   png_destroy_write_struct((png_structpp)&png, (png_infopp)&info);

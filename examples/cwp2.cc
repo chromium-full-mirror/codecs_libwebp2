@@ -77,6 +77,7 @@ struct Params {
   WP2::PictureHint pic_hint = WP2::HINT_NONE;
   bool crop = false;
   WP2::Rectangle crop_area;
+  bool downscale_to_8bits = false;
 };
 
 //------------------------------------------------------------------------------
@@ -103,6 +104,8 @@ void HelpLong() {
                   WP2::EncoderConfig::kDefault.alpha_quality));
   opt.Add("-keep_unmultiplied",
           "No premultiplication is done (default when -q 100 -alpha_q 100).");
+  opt.Add("-8bits",
+          "Downscale high bit depth images to 8 bits before encoding.");
   opt.Add("-target_size <int>", "target size (in bytes)");
   opt.Add("-target_psnr <float>", "target PSNR (in dB. typically: 42)");
   opt.Add("-effort <int>",
@@ -328,9 +331,15 @@ WP2Status CompressAnimation(const WP2::FileList& frames,
     WP2::Data data;
     CHECK_STATUS(IoUtilReadFile(file_path, &data),
                  "Error! Cannot open input file '%s'", file_path);
-    CHECK_STATUS(WP2::ReadImage(data.bytes, data.size, rgb_buffer,
-                                WP2::FileFormat::AUTO, params.log_level),
-                 "Error! Cannot read input file '%s'", file_path);
+    WP2::ArgbBuffer rgb_buffer_16(WP2_ARGB_64);
+    CHECK_STATUS(
+        WP2::ReadImage(data.bytes, data.size,
+                       params.downscale_to_8bits ? &rgb_buffer_16 : rgb_buffer,
+                       WP2::FileFormat::AUTO, params.log_level),
+        "Error! Cannot read input file '%s'", file_path);
+    if (params.downscale_to_8bits) {
+      WP2_CHECK_STATUS(rgb_buffer->ConvertFrom(rgb_buffer_16));
+    }
     if (i == 0) {
       swap(metadata, rgb_buffer->metadata_);  // save for later call
     } else if (!rgb_buffer->metadata_.IsEmpty()) {
@@ -375,8 +384,10 @@ WP2Status CompressImage(const char* const file_path, const Params& params,
                         WP2::Writer* const writer) {
   // Read input image.
   double start = GetStopwatchTime();
-  WP2::ImageReader image_reader(file_path, buffer, WP2::FileFormat::AUTO,
-                                params.log_level);
+  WP2::ArgbBuffer buffer_16(WP2_ARGB_64);
+  WP2::ImageReader image_reader(file_path,
+                                params.downscale_to_8bits ? &buffer_16 : buffer,
+                                WP2::FileFormat::AUTO, params.log_level);
   // 'buffer' must not be modified between calls to ReadFrame(), so we use a
   // proxy.
   WP2::ArgbBuffer frame(buffer->format());
@@ -390,7 +401,11 @@ WP2Status CompressImage(const char* const file_path, const Params& params,
                "Error! There are too many frames in '%s'", file_path);
     CHECK_STATUS(image_reader.ReadFrame(&is_last_frame, &duration_ms),
                  "Error! Cannot read input '%s'", file_path);
-    CHECK_STATUS(frame.SetView(*buffer), "Error! Cannot set view.");
+    if (params.downscale_to_8bits) {
+      WP2_CHECK_STATUS(frame.ConvertFrom(buffer_16));
+    } else {
+      CHECK_STATUS(frame.SetView(*buffer), "Error! Cannot set view.");
+    }
     if (i == 0) {
       swap(metadata, buffer->metadata_);  // save for later call
     } else if (!buffer->metadata_.IsEmpty()) {
@@ -601,6 +616,8 @@ int main(int argc, char* argv[]) {
       params.config.alpha_quality = ExUtilGetFloat(argv[++c], &parse_error);
     } else if (!strcmp(argv[c], "-keep_unmultiplied")) {
       params.config.keep_unmultiplied = true;
+    } else if (!strcmp(argv[c], "-8bits")) {
+      params.downscale_to_8bits = true;
     } else if (!strcmp(argv[c], "-csp")) {
       NEED_ARGS(1);
       params.config.csp_type = (WP2::Csp)ExUtilGetInt(argv[++c], &parse_error);

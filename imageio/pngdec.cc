@@ -376,8 +376,9 @@ class ImageReaderPNG : public ImageReader::Impl {
                  WP2_STATUS_BITSTREAM_ERROR);
     WP2_CHECK_STATUS(CheckDimensions((uint32_t)width, (uint32_t)height));
 
-    png_set_strip_16(png);
+    // Use 1 byte per pixel in 1, 2, or 4-bit depth files.
     png_set_packing(png);
+    // Expand data to 24-bit RGB.
     if (color_type == PNG_COLOR_TYPE_PALETTE) {
       png_set_palette_to_rgb(png);
     } else if (color_type == PNG_COLOR_TYPE_GRAY ||
@@ -386,9 +387,30 @@ class ImageReaderPNG : public ImageReader::Impl {
       png_set_gray_to_rgb(png);
     }
 
+    bool has_alpha = color_type & PNG_COLOR_MASK_ALPHA;
     if (png_get_valid(png, head_info, PNG_INFO_tRNS)) {
       png_set_tRNS_to_alpha(png);
+      has_alpha = true;
     }
+    if (has_alpha) {
+      png_set_swap_alpha(png);  // ARGB order is preferred in libwebp2.
+    }
+
+    if (bit_depth <= 8) {
+      bit_depth = 8;
+    } else {
+      WP2_CHECK_OK(bit_depth == 16, WP2_STATUS_UNSUPPORTED_FEATURE);
+      png_set_swap(png);  // From big-endian to little-endian.
+      if (!has_alpha) {
+        // There is no WP2_RGB_48. Make it WP2_ARGB_64.
+        png_set_add_alpha(png, 65535, PNG_FILLER_BEFORE);
+        has_alpha = true;
+      }
+    }
+    // Refuse to decode if the PNG bit depth is greater than the user buffer bit
+    // depth, to avoid silently losing information.
+    WP2_CHECK_OK(static_cast<int>(WP2Formatbpc(buffer_->format())) >= bit_depth,
+                 WP2_STATUS_INVALID_PARAMETER);
 
     // Apply gamma correction if needed.
     double image_gamma = 1 / 2.2;
@@ -421,12 +443,14 @@ class ImageReaderPNG : public ImageReader::Impl {
     png_read_update_info(png, head_info);
 
     const uint32_t num_channels = png_get_channels(png, head_info);
-    if (num_channels != 3 && num_channels != 4) {
-      return WP2_STATUS_BITSTREAM_ERROR;
-    }
-    const uint32_t depth = num_channels * sizeof(*tmp_rgb_);
+    WP2_CHECK_OK((num_channels == 4) == has_alpha,
+                 WP2_STATUS_INVALID_COLORSPACE);
+    // Verify the output is an existing WP2SampleFormat.
+    WP2_CHECK_OK((bit_depth == 8 && num_channels == 3) || num_channels == 4,
+                 WP2_STATUS_UNSUPPORTED_FEATURE);
+    const uint32_t bytes_per_pixel = num_channels * (bit_depth / 8);
     size_t stride = 0;
-    WP2_CHECK_STATUS(MultFitsIn(width, depth, &stride));
+    WP2_CHECK_STATUS(MultFitsIn(width, bytes_per_pixel, &stride));
     // Make sure whole size fits in size_t.
     WP2_CHECK_STATUS(MultFitsIn<size_t>(stride, height));
 
@@ -442,7 +466,9 @@ class ImageReaderPNG : public ImageReader::Impl {
         png_read_row(png, row, NULL);
         if (p == num_passes - 1) {
           WP2_CHECK_STATUS(buffer_->ImportRow(
-              (num_channels == 4) ? WP2_RGBA_32 : WP2_RGB_24, y, row));
+              bit_depth == 8 ? (num_channels == 4 ? WP2_ARGB_32 : WP2_RGB_24)
+                             : WP2_ARGB_64,
+              y, row));
         }
         if (num_passes > 1) row += stride;
       }

@@ -122,6 +122,7 @@ static WP2Status FillBorders(const BitstreamFeatures& features,
       rgb_output->Fill(lft, color);
       rgb_output->Fill(rgt, color);
     } else {
+      assert(WP2Formatbpc(rgb_output->format()) == 10);
       rgb_output->Fill(top, features.background_color);
       rgb_output->Fill(bot, features.background_color);
       rgb_output->Fill(lft, features.background_color);

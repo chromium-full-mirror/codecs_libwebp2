@@ -196,22 +196,30 @@ WP2Status Decoder::ReadANSStats(uint32_t width, uint32_t height,
 template <typename T>
 uint32_t EmitRows(const int16_t* row_in, uint32_t mb_w, uint32_t mb_h,
                   bool has_alpha, bool image_is_premultiplied,
-                  bool tile_is_premultiplied, T* const out,
-                  uint32_t out_stride) {
+                  bool tile_is_premultiplied, T* const out, uint32_t out_stride,
+                  WP2SampleFormat out_format) {
   // If the whole image is expected to be unmultiplied, the lossless compression
   // algorithm cannot have used premultiplied samples.
   if (!image_is_premultiplied) assert(!tile_is_premultiplied);
+  assert(out_format == WP2_Argb_32 || out_format == WP2_ARGB_32 ||
+         out_format == WP2_Argb_38);
+  if (has_alpha) {
+    assert(WP2IsPremultiplied(out_format) == image_is_premultiplied);
+  }
+  const uint32_t max_value = WP2::FormatMax(out_format, 1);
 
   int lines = mb_h;
   T* row_out = out;
   while (lines-- > 0) {
     // TODO(vrabaud) support multiple output color spaces.
     for (uint32_t i = 0; i < 4 * mb_w; i += 4, row_in += 4) {
-      const uint8_t alpha = (uint8_t)row_in[0];
+      const uint8_t alpha = static_cast<uint8_t>(row_in[0]);
       if (!has_alpha) assert(alpha == WP2::kAlphaMax);
       row_out[i] = alpha;
-      if (!image_is_premultiplied || (alpha > 0 && tile_is_premultiplied)) {
-        // Keep unmultiplied or keep premultiplied.
+      if (!image_is_premultiplied || (alpha > 0 && tile_is_premultiplied) ||
+          alpha == WP2::kAlphaMax) {
+        // Keep unmultiplied, or keep premultiplied, or it does not matter
+        // because alpha is fully opaque.
         for (int j = 1; j <= 3; ++j) {
           row_out[i + j] = static_cast<T>(row_in[j]);
         }
@@ -219,7 +227,7 @@ uint32_t EmitRows(const int16_t* row_in, uint32_t mb_w, uint32_t mb_h,
         // Premultiply.
         for (int j = 1; j <= 3; ++j) {
           row_out[i + j] = static_cast<T>(
-              WP2::DivBy255(static_cast<uint32_t>(row_in[j]) * alpha));
+              std::min((row_in[j] * alpha + 127u) / 255u, max_value));
         }
       } else {
         // To optimize encoding, the encoder can store arbitrary rgb values when
@@ -332,12 +340,12 @@ WP2Status Decoder::ProcessRows(uint32_t row) {
       num_rows_out =
           EmitRows(rows_data, buf->width(), num_rows, gparams_->has_alpha_,
                    image_is_premultiplied_, tile_is_premultiplied_,
-                   buf->GetRow8(last_out_row_), buf->stride());
+                   buf->GetRow8(last_out_row_), buf->stride(), buf->format());
     } else {
       num_rows_out =
           EmitRows(rows_data, buf->width(), num_rows, gparams_->has_alpha_,
                    image_is_premultiplied_, tile_is_premultiplied_,
-                   buf->GetRow16(last_out_row_), buf->stride());
+                   buf->GetRow16(last_out_row_), buf->stride(), buf->format());
     }
     // Update 'last_out_row_'.
     last_out_row_ += num_rows_out;

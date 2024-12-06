@@ -631,14 +631,12 @@ void GetARGBRanges(const std::array<TransformHeader,
                    int32_t maxima_range[4], uint32_t num_transforms) {
   Segment segments[4];
   // Define the original range according to the pixel format.
-  // Deal with alpha.
-  segments[0] = {0, ::WP2::kAlphaMax};
   const int32_t num_bits_alpha = ::WP2::kAlphaBits;
-  // Deal with other channels.
-  const int32_t num_bits_non_alpha = (format == WP2_Argb_38) ? 10 : 8;
-  for (uint32_t c = 1; c < 4; ++c) {
-    segments[c] = {0, (1 << num_bits_non_alpha) - 1};
+  const int32_t num_bits_non_alpha = static_cast<int32_t>(WP2Formatbpc(format));
+  for (uint32_t c = 0; c < 4; ++c) {
+    segments[c] = {0, static_cast<int32_t>(WP2::FormatMax(format, c))};
   }
+  assert(segments[0].max == WP2::kAlphaMax);  // WP2_ARGB_64 is unsupported.
   bool do_clamp = true;
   for (uint32_t i = 0; i < num_transforms; ++i) {
     if (headers[i].type == TransformType::kNum) break;

@@ -470,10 +470,11 @@ bool ArgbBuffer::HasTransparency() const {
       if (WP2HasOtherValue8b32b(row, width_, 0xff)) return true;
     }
   } else {
+    const uint32_t alpha_max = FormatMax(format_, 0);
     for (uint32_t y = 0; y < height_; ++y) {
       const uint16_t* const row = GetRow16(y) + alpha_channel_index;
       for (uint32_t x = 0; x < width_; ++x) {
-        if (row[4 * x + 0] != WP2::kAlphaMax) return true;
+        if (row[4 * x + 0] != alpha_max) return true;
       }
     }
   }

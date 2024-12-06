@@ -29,6 +29,7 @@
 #include "src/utils/plane.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
+#include "gtest/gtest.h"
 
 namespace WP2 {
 namespace {
@@ -292,7 +293,36 @@ TEST(ReadImageTest, ChannelOrder) {
 
   // 10-bit is unsupported.
   EXPECT_EQ(TestChannelOrder("source1.png", WP2_Argb_38),
-            WP2_STATUS_INVALID_COLORSPACE);
+            WP2_STATUS_INVALID_PARAMETER);
+
+  // Reading a 16-bit image in a 8-bit buffer is forbidden.
+  EXPECT_EQ(TestChannelOrder("basi0g16.png", WP2_Argb_38),
+            WP2_STATUS_INVALID_PARAMETER);
+}
+
+//------------------------------------------------------------------------------
+
+TEST(ReadWriteRead16bImageTest, LossDueToLowerBitDepth) {
+  for (const std::string prefix : {"gray", "grayalpha", "rgb", "rgba"}) {
+    const std::string path16 = testutil::GetTestDataPath(prefix + "16.png");
+    ArgbBuffer original16(WP2_ARGB_64);
+    ASSERT_WP2_OK(ReadImage(path16.c_str(), &original16));
+
+    // Introduce some loss.
+    ArgbBuffer converted8(WP2_ARGB_32);
+    ASSERT_WP2_OK(converted8.ConvertFrom(original16));
+    ArgbBuffer converted16(original16.format());
+    ASSERT_WP2_OK(converted16.ConvertFrom(converted8));
+
+    EXPECT_TRUE(testutil::Compare(original16, converted16, path16,
+                                  /*expected_distortion=*/40.f));
+
+    // Compare with 8-bit source.
+    const std::string path8 = testutil::GetTestDataPath(prefix + "8.png");
+    ArgbBuffer original8(WP2_ARGB_32);
+    ASSERT_WP2_OK(ReadImage(path8.c_str(), &original8));
+    EXPECT_TRUE(testutil::Compare(original8, converted8, path8));
+  }
 }
 
 //------------------------------------------------------------------------------
