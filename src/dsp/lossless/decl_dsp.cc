@@ -27,6 +27,7 @@
 #include <cstdint>
 
 #include "src/common/lossless/color_cache.h"
+#include "src/common/symbols.h"
 #include "src/dec/lossless/losslessi_dec.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/lossless/dspl.h"
@@ -305,6 +306,55 @@ void ColorSpaceInverseTransform_C(const Transform* const transform, int y_start,
   }
 }
 
+// Color space inverse transform.
+void CrossColorGlobalInverseTransform_C(const Transform* const transform,
+                                        int y_start, int y_end,
+                                        const int16_t* src, int16_t* dst,
+                                        int16_t* predicted) {
+  const uint32_t width = transform->width_pic_;
+  const uint32_t c1 =
+      static_cast<uint32_t>(transform->header_.cc_global_first_channel);
+  const uint32_t c2 =
+      static_cast<uint32_t>(transform->header_.cc_global_second_channel);
+  const uint32_t c3 = 1 + 2 + 3 - c1 - c2;
+  const TransformHeader::CCTransform cc_second_transform =
+      transform->header_.cc_global_second_transform;
+  assert(cc_second_transform != TransformHeader::CCTransform::kSubtractSecond &&
+         cc_second_transform != TransformHeader::CCTransform::kSubtractAverage);
+  const TransformHeader::CCTransform cc_third_transform =
+      transform->header_.cc_global_third_transform;
+
+  for (const int16_t* const src_end = src + 4 * (y_end - y_start) * width;
+       src < src_end; src += 4, dst += 4) {
+    dst[0] = src[0];
+    dst[c1] = src[c1];
+    switch (cc_second_transform) {
+      case TransformHeader::CCTransform::kNothing:
+        dst[c2] = src[c2];
+        break;
+      case TransformHeader::CCTransform::kSubtractFirst:
+        dst[c2] = dst[c1] + src[c2];
+        break;
+      default:
+        assert(false);
+        break;
+    }
+    switch (cc_third_transform) {
+      case TransformHeader::CCTransform::kNothing:
+        dst[c3] = src[c3];
+        break;
+      case TransformHeader::CCTransform::kSubtractFirst:
+        dst[c3] = dst[c1] + src[c3];
+        break;
+      case TransformHeader::CCTransform::kSubtractSecond:
+        dst[c3] = dst[c2] + src[c3];
+        break;
+      case TransformHeader::CCTransform::kSubtractAverage:
+        dst[c3] = (dst[c1] + dst[c2]) / 2 + src[c3];
+    }
+  }
+}
+
 void MapARGB_C(const int16_t* src, const int16_t* const color_map,
                uint32_t color_map_size, uint32_t y_start, uint32_t y_end,
                uint32_t width, int16_t* dst) {
@@ -436,10 +486,14 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
       ColorSpaceInverseTransform_C(transform, row_start, row_end, in, out,
                                    predicted);
       break;
+    case TransformType::kCrossColorGlobal:
+      CrossColorGlobalInverseTransform_C(transform, row_start, row_end, in, out,
+                                         predicted);
+      break;
     case TransformType::kColorIndexing:
       ColorIndexInverseTransform_C(transform, row_start, row_end, in, out);
       break;
-    default:
+    case TransformType::kNum:
       assert(false);
   }
 }

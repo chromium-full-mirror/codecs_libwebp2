@@ -691,6 +691,32 @@ void GetARGBRanges(const std::array<TransformHeader,
         update_min_max(/*c0=*/3, /*c1=*/1, kRedToBlueMax);
         break;
       }
+      case TransformType::kCrossColorGlobal: {
+        const uint32_t c1 =
+            static_cast<uint32_t>(headers[i].cc_global_first_channel);
+        const uint32_t c2 =
+            static_cast<uint32_t>(headers[i].cc_global_second_channel);
+        const Segment& segment1 = segments[c1];
+        Segment& segment2 = segments[c2];
+        if (headers[i].cc_global_third_transform !=
+            TransformHeader::CCTransform::kNothing) {
+          Segment& segment3 = segments[1 + 2 + 3 - c1 - c2];
+          if (headers[i].cc_global_third_transform ==
+              TransformHeader::CCTransform::kSubtractFirst) {
+            segment3 = segment3 - segment1;
+          } else if (headers[i].cc_global_third_transform ==
+                     TransformHeader::CCTransform::kSubtractSecond) {
+            segment3 = segment3 - segment2;
+          } else {
+            segment3 = segment3 - (segment1 + segment2) / 2;
+          }
+        }
+        if (headers[i].cc_global_second_transform !=
+            TransformHeader::CCTransform::kNothing) {
+          segment2 = segment2 - segment1;
+        }
+        break;
+      }
       case TransformType::kYCoCgR: {
         // co: r-b.
         const Segment segment_g = segments[2];

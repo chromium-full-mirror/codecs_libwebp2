@@ -368,6 +368,7 @@ enum class TransformType {
   kPredictor,
   kPredictorWSub,  // predictors with sub-modes (unused)
   kCrossColor,
+  kCrossColorGlobal,
   kYCoCgR,  // reversible YCoCg (unused)
   kSubtractGreen,
   kColorIndexing,
@@ -415,7 +416,10 @@ static constexpr EncodingRecipe kPossibleEncodingRecipes[] = {
     // Triplet.
     {EncodingAlgorithm::kWebP,
      {TransformType::kSubtractGreen, TransformType::kPredictor,
-      TransformType::kCrossColor}}};
+      TransformType::kCrossColor}},
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kSubtractGreen, TransformType::kPredictor,
+      TransformType::kCrossColorGlobal}}};
 static constexpr uint32_t kPossibleEncodingRecipesNum =
     std::extent<decltype(kPossibleEncodingRecipes), 0>::value;
 

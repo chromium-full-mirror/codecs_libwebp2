@@ -25,6 +25,7 @@
 
 #include "src/common/color_precision.h"
 #include "src/common/progress_watcher.h"
+#include "src/common/symbols.h"
 #include "src/dsp/lossless/dspl.h"
 #include "src/dsp/math.h"
 #include "src/enc/lossless/backward_references_enc.h"
@@ -200,6 +201,24 @@ void AddWebPConfig(EntropyMode mode, bool use_premultiplied,
   }
   FindEncodingRecipeImpl(EncodingAlgorithm::kWebP, &c.config, transforms, size);
   configs->push_back_no_resize(c);
+  // TODO(vrabaud): remove when this transform is used by future parts of the
+  // code. It is here for now to go through the test path.
+  // Add global color transforms.
+  if (effort == WP2::kMaxEffort && size == kPossibleTransformCombinationSize &&
+      transforms[size - 1] == TransformType::kCrossColor) {
+    transforms[size - 1] = TransformType::kCrossColorGlobal;
+    FindEncodingRecipeImpl(EncodingAlgorithm::kWebP, &c.config, transforms,
+                           size);
+    c.config.transforms[size - 1].cc_global_first_channel =
+        TransformHeader::Channel::kRed;
+    c.config.transforms[size - 1].cc_global_second_channel =
+        TransformHeader::Channel::kGreen;
+    c.config.transforms[size - 1].cc_global_second_transform =
+        TransformHeader::CCTransform::kSubtractFirst;
+    c.config.transforms[size - 1].cc_global_third_transform =
+        TransformHeader::CCTransform::kSubtractAverage;
+    configs->push_back_no_resize(c);
+  }
 }
 
 // Analyzes the distribution of colors on the image to estimate the best

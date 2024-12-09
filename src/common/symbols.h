@@ -683,6 +683,15 @@ class LosslessSymbolsInfo : public WP2::SymbolsInfo {
 
 // Core information about a transform.
 struct TransformHeader {
+  enum class Channel { kRed = 1, kGreen = 2, kBlue = 3 };
+  // 0 (nothing), 1 (subtract the first color), 2 (subtract the second color),
+  // 3 (subtract the average of the first and second colors).
+  enum class CCTransform {
+    kNothing = 0,
+    kSubtractFirst = 1,
+    kSubtractSecond = 2,
+    kSubtractAverage = 3
+  };
   bool operator==(const TransformHeader& other) const {
     if (type != other.type) return false;
     if (type == TransformType::kColorIndexing) {
@@ -692,6 +701,16 @@ struct TransformHeader {
   };
   TransformType type = TransformType::kNum;
   uint32_t indexing_num_colors = 0;
+  // First and second channels to be compressed. The second channel will have a
+  // transform applied to it. Indices are in ARGB so the indices are in [1-3].
+  Channel cc_global_first_channel;
+  Channel cc_global_second_channel;
+  // Transforms to apply to the second channel. Transforms can be: kNothing,
+  // kSubtractFirst.
+  CCTransform cc_global_second_transform;
+  // Transforms to apply to the third channel. Transforms can be: kNothing,
+  // kSubtractFirst, kSubtractSecond, kSubtractAverage.
+  CCTransform cc_global_third_transform;
 };
 
 // Fills ranges of ARGB symbols according to the transforms applied to the

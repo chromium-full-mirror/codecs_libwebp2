@@ -130,6 +130,12 @@ class Encoder {
   WP2Status ApplyCrossColor(const WP2::ProgressRange& progress,
                             uint32_t ccolor_transform_bits, WP2::ANSEnc* enc,
                             WP2::ANSDictionaries* dicts);
+  WP2Status ApplyCrossColorGlobal(const WP2::ProgressRange& progress,
+                                  TransformHeader::Channel c1,
+                                  TransformHeader::Channel c2,
+                                  TransformHeader::CCTransform second_transform,
+                                  TransformHeader::CCTransform third_transform,
+                                  WP2::ANSEnc* enc);
   WP2Status ApplyColorIndexing(const CrunchConfig& config);
   // Copy the original pic_ when need.
   WP2Status MakeInputImageCopy(const CrunchConfig& config);
@@ -255,6 +261,7 @@ struct CrunchConfig {
   uint32_t transform_bits;
   // Use a MoveToFrontCache in group4 to signal new colors.
   bool group4_use_move_to_front;
+  // How to sort the palette.
   Palette::Sorting palette_sorting_type;
   // Returns whether one of the transforms is kPredictorWSub.
   bool HasSubModes() const {

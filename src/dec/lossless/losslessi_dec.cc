@@ -895,6 +895,23 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       dec_->PopDebugPrefix();
       break;
     }
+    case TransformType::kCrossColorGlobal: {
+      WP2::ANSDebugPrefix prefix(dec_, "cross_color_global");
+      const uint32_t c1 = dec_->ReadRange(1, 3, "first_channel");
+      uint32_t c2 = dec_->ReadRange(1, 2, "second_channel");
+      if (c2 >= c1) ++c2;
+      transform->header_.cc_global_first_channel =
+          static_cast<TransformHeader::Channel>(c1);
+      transform->header_.cc_global_second_channel =
+          static_cast<TransformHeader::Channel>(c2);
+      transform->header_.cc_global_second_transform =
+          static_cast<TransformHeader::CCTransform>(
+              dec_->ReadRange(0, 1, "second_transform"));
+      transform->header_.cc_global_third_transform =
+          static_cast<TransformHeader::CCTransform>(
+              dec_->ReadRange(0, 3, "third_transform"));
+      break;
+    }
     case TransformType::kColorIndexing: {
       WP2_CHECK_STATUS(ReadPalette(transform));
       transform->header_.indexing_num_colors = transform->data_.size() / 4;
@@ -903,7 +920,7 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
     case TransformType::kSubtractGreen:
     case TransformType::kYCoCgR:
       break;
-    default:
+    case TransformType::kNum:
       assert(false);  // can't happen
       break;
   }

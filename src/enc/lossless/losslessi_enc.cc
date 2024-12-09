@@ -718,6 +718,42 @@ WP2Status Encoder::ApplyCrossColor(const ProgressRange& progress,
   return WP2_STATUS_OK;
 }
 
+WP2Status Encoder::ApplyCrossColorGlobal(
+    const ProgressRange& progress, TransformHeader::Channel c1_in,
+    TransformHeader::Channel c2_in,
+    TransformHeader::CCTransform second_transform,
+    TransformHeader::CCTransform third_transform, WP2::ANSEnc* const enc) {
+  const WP2::ANSDebugPrefix prefix(enc, "cross_color_global");
+  const uint32_t c1 = static_cast<uint32_t>(c1_in);
+  const uint32_t c2 = static_cast<uint32_t>(c2_in);
+  enc->PutRange(c1, 1, 3, "first_channel");
+  enc->PutRange(c2 > c1 ? c2 - 1 : c2, 1, 2, "second_channel");
+  enc->PutRange(static_cast<uint32_t>(second_transform), 0, 1,
+                "second_transform");
+  enc->PutRange(static_cast<uint32_t>(third_transform), 0, 3,
+                "third_transform");
+  const uint32_t c3 = 1 + 2 + 3 - c1 - c2;
+  assert(second_transform != TransformHeader::CCTransform::kSubtractSecond &&
+         second_transform != TransformHeader::CCTransform::kSubtractAverage);
+  for (uint32_t y = 0; y < argb_buffer_.height; ++y) {
+    int16_t* const row = argb_buffer_.GetRow(y);
+    for (uint32_t x = 0; x < argb_buffer_.width; ++x) {
+      if (third_transform != TransformHeader::CCTransform::kNothing) {
+        row[4 * x + c3] -=
+            third_transform == TransformHeader::CCTransform::kSubtractFirst
+                ? row[4 * x + c1]
+            : third_transform == TransformHeader::CCTransform::kSubtractSecond
+                ? row[4 * x + c2]
+                : (row[4 * x + c1] + row[4 * x + c2]) / 2;
+      }
+      if (second_transform != TransformHeader::CCTransform::kNothing) {
+        row[4 * x + c2] -= row[4 * x + c1];
+      }
+    }
+  }
+  return WP2_STATUS_OK;
+}
+
 // Note: Expects "enc->palette_" to be set properly.
 WP2Status Encoder::ApplyColorIndexing(const CrunchConfig& config) {
   const WP2Status status = palette_.Apply(pic_, argb_buffer_.data);
@@ -846,21 +882,22 @@ WP2Status Encoder::ApplyAndWriteTransformsImpl(
       (config_prev == nullptr) ? 0 : config_prev->GetNumTransforms();
   assert(config_prev == nullptr || num_transforms_prev < num_transforms);
   for (uint32_t i = 0; i < num_transforms; ++i) {
+    TransformHeader& transform = config->transforms[i];
     if (config_prev != nullptr && i < num_transforms_prev) {
       // Skip transforms that are the same in the previous configuration.
-      assert(config_prev->transforms[i].type == config->transforms[i].type);
+      assert(config_prev->transforms[i].type == transform.type);
       // Make sure to pass along the parameters that have been computed in the
       // previous pass.
-      config->transforms[i] = config_prev->transforms[i];
+      transform = config_prev->transforms[i];
       continue;
     }
-    const TransformType type = config->transforms[i].type;
+    const TransformType type = transform.type;
 
     ProgressRange progress_local(progress,
                                  1. / (num_transforms - num_transforms_prev));
     if (type == TransformType::kColorIndexing) {
       // Encode palette.
-      config->transforms[i].indexing_num_colors = palette_.Size();
+      transform.indexing_num_colors = palette_.Size();
       ProgressRange palette_find(progress_local, 0.5);
       ProgressRange palette_write(progress_local, 0.5);
       WP2_CHECK_STATUS(palette_.FindBestMethod(pic_, palette_find,
@@ -896,6 +933,13 @@ WP2Status Encoder::ApplyAndWriteTransformsImpl(
         case TransformType::kCrossColor:
           WP2_CHECK_STATUS(ApplyCrossColor(progress_local,
                                            config->transform_bits, enc, dicts));
+          break;
+        case TransformType::kCrossColorGlobal:
+          WP2_CHECK_STATUS(ApplyCrossColorGlobal(
+              progress_local, transform.cc_global_first_channel,
+              transform.cc_global_second_channel,
+              transform.cc_global_second_transform,
+              transform.cc_global_third_transform, enc));
           break;
         case TransformType::kColorIndexing:
         case TransformType::kNum:
