@@ -393,6 +393,7 @@ class ImageReaderPNG : public ImageReader::Impl {
     // Apply gamma correction if needed.
     double image_gamma = 1 / 2.2;
     if (png_get_gAMA(png, head_info, &image_gamma)) {
+      int file_srgb_intent;
       png_charp name;
       int compression_type;
 #if LOCAL_PNG_PREREQ(1, 5)
@@ -401,7 +402,8 @@ class ImageReaderPNG : public ImageReader::Impl {
       png_charp profile;
 #endif
       png_uint_32 proflen;
-      if (png_get_iCCP(png, head_info, &name, &compression_type, &profile,
+      if (png_get_sRGB(png, head_info, &file_srgb_intent) ||
+          png_get_iCCP(png, head_info, &name, &compression_type, &profile,
                        &proflen) == PNG_INFO_iCCP) {
         // PNG specification 1.2 Section 4.2.2:
         //   The sRGB and iCCP chunks should not both appear.
