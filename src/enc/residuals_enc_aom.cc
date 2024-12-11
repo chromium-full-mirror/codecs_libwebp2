@@ -19,6 +19,8 @@
 
 #include "src/enc/residuals_enc_aom.h"
 
+#include <cstdlib>
+
 #include "src/enc/wp2_enc_i.h"
 
 namespace WP2 {

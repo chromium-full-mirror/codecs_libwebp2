@@ -110,6 +110,9 @@ WP2Status TileDecoder::Execute() {
                        dec.ReadBool("use_lossless"));
       }
       WP2_CHECK_STATUS(dec.GetStatus());
+      WP2_CHECK_OK(features_->tile_shape != TILE_SHAPE_FULL ||
+                       gparams_->type_ == GlobalParams::GP_LOSSLESS,
+                   WP2_STATUS_BITSTREAM_ERROR);
 
       WP2_CHECK_STATUS(
           is_lossless

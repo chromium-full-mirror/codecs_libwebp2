@@ -18,6 +18,7 @@
 // Author: Skal (pascal.massimino@gmail.com)
 
 #include <cassert>
+#include <cstdlib>
 #include <cstdint>
 #include <string>
 

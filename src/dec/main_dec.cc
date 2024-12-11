@@ -271,6 +271,10 @@ WP2Status InternalDecode(const DecoderConfig& config,
     GlobalParams gparams;
     tiles_layout.gparams = &gparams;
     WP2_CHECK_STATUS(DecodeGLBL(data_source, config, features, &gparams));
+    WP2_CHECK_OK(features.tile_shape != TILE_SHAPE_FULL ||
+                     gparams.type_ == GlobalParams::GP_LOSSLESS,
+                 WP2_STATUS_BITSTREAM_ERROR);
+
     if (csp_transform != nullptr) *csp_transform = gparams.transf_;
     WP2_CHECK_STATUS(FillDecoderInfo(gparams, config));
     const uint32_t padded_frame_width = Pad(frame.window.width, kPredWidth);
