@@ -393,8 +393,26 @@ class ImageReaderPNG : public ImageReader::Impl {
     // Apply gamma correction if needed.
     double image_gamma = 1 / 2.2;
     if (png_get_gAMA(png, head_info, &image_gamma)) {
-      const double screen_gamma = 2.2;
-      png_set_gamma(png, screen_gamma, image_gamma);
+      png_charp name;
+      int compression_type;
+#if LOCAL_PNG_PREREQ(1, 5)
+      png_bytep profile;
+#else  // < libpng 1.5.0
+      png_charp profile;
+#endif
+      png_uint_32 proflen;
+      if (png_get_iCCP(png, head_info, &name, &compression_type, &profile,
+                       &proflen) == PNG_INFO_iCCP) {
+        // PNG specification 1.2 Section 4.2.2:
+        //   The sRGB and iCCP chunks should not both appear.
+        //   When the sRGB / iCCP chunk is present, applications that recognize
+        //   it and are capable of color management must ignore the gAMA and
+        //   cHRM chunks and use the sRGB / iCCP chunk instead.
+      } else {
+        // TODO: b/382677532 - Also check for sRGB chunk.
+        const double screen_gamma = 2.2;
+        png_set_gamma(png, screen_gamma, image_gamma);
+      }
     }
 
     const int num_passes = png_set_interlace_handling(png);
