@@ -20,6 +20,7 @@
 #ifndef WP2_WP2_BASE_H_
 #define WP2_WP2_BASE_H_
 
+#include <limits>
 #define WP2_VERSION 0x000001    // MAJOR(8b) + MINOR(8b) + REVISION(8b)
 #define WP2_ABI_VERSION 0x0001  // MAJOR(8b) + MINOR(8b)
 
@@ -139,20 +140,118 @@ typedef enum {
 } WP2SampleFormat;
 
 // Returns the number of bytes per sample for the given format.
-WP2_EXTERN uint32_t WP2FormatBpp(WP2SampleFormat format);
+WP2_EXTERN constexpr uint32_t WP2FormatBpp(WP2SampleFormat format) {
+  switch (format) {
+    case WP2_Argb_32:
+    case WP2_ARGB_32:
+    case WP2_XRGB_32:
+    case WP2_rgbA_32:
+    case WP2_RGBA_32:
+    case WP2_RGBX_32:
+    case WP2_bgrA_32:
+    case WP2_BGRA_32:
+    case WP2_BGRX_32:
+      return 4;
+    case WP2_RGB_24:
+    case WP2_BGR_24:
+      return 3;
+    case WP2_Argb_38:
+      // actually 38 bits, stored as uint16
+      return 8;
+    case WP2_FORMAT_NUM:
+      assert(false);
+      return 0;
+  }
+  assert(false);
+  return 0;
+}
 
 // Returns the number of bits used per RGB channels internally.
-WP2_EXTERN uint32_t WP2Formatbpc(WP2SampleFormat format);
+WP2_EXTERN constexpr uint32_t WP2Formatbpc(WP2SampleFormat format) {
+  switch (format) {
+    case WP2_Argb_32:
+    case WP2_ARGB_32:
+    case WP2_XRGB_32:
+    case WP2_rgbA_32:
+    case WP2_RGBA_32:
+    case WP2_RGBX_32:
+    case WP2_bgrA_32:
+    case WP2_BGRA_32:
+    case WP2_BGRX_32:
+    case WP2_RGB_24:
+    case WP2_BGR_24:
+      return 8;
+    case WP2_Argb_38:
+      return 10;
+    case WP2_FORMAT_NUM:
+      assert(false);
+      return 0;
+  }
+  assert(false);
+  return 0;
+}
 
 // Returns true if the 'format' has an alpha channel.
 // Also returns its index if 'alpha_channel_index' is not null and there is one
 // or there is a spot for alpha (e.g. RGBX). Otherwise 'alpha_channel_index'
 // is set to WP2FormatBpp(format).
-WP2_EXTERN bool WP2FormatHasAlpha(WP2SampleFormat format,
-                                  uint32_t* alpha_channel_index = nullptr);
+WP2_EXTERN constexpr bool WP2FormatHasAlpha(
+    WP2SampleFormat format, uint32_t* alpha_channel_index = nullptr) {
+  switch (format) {
+    case WP2_Argb_32:
+    case WP2_ARGB_32:
+    case WP2_Argb_38:
+      if (alpha_channel_index != nullptr) *alpha_channel_index = 0;
+      return true;
+    case WP2_rgbA_32:
+    case WP2_RGBA_32:
+    case WP2_bgrA_32:
+    case WP2_BGRA_32:
+      if (alpha_channel_index != nullptr) *alpha_channel_index = 3;
+      return true;
+    case WP2_XRGB_32:
+      if (alpha_channel_index != nullptr) *alpha_channel_index = 0;
+      return false;
+    case WP2_RGBX_32:
+    case WP2_BGRX_32:
+      if (alpha_channel_index != nullptr) *alpha_channel_index = 3;
+      return false;
+    case WP2_RGB_24:
+    case WP2_BGR_24:
+      if (alpha_channel_index != nullptr) {
+        *alpha_channel_index = std::numeric_limits<uint32_t>::max();
+      }
+      return false;
+    case WP2_FORMAT_NUM:
+      return false;
+  }
+  return false;
+}
 
 // Returns true if the format has premultiplied rgb values (rgb = a * RGB).
-WP2_EXTERN bool WP2IsPremultiplied(WP2SampleFormat format);
+WP2_EXTERN constexpr bool WP2IsPremultiplied(WP2SampleFormat format) {
+  switch (format) {
+    case WP2_Argb_32:
+    case WP2_Argb_38:
+    case WP2_rgbA_32:
+    case WP2_bgrA_32:
+      return true;
+    case WP2_ARGB_32:
+    case WP2_XRGB_32:
+    case WP2_RGBA_32:
+    case WP2_RGBX_32:
+    case WP2_BGRA_32:
+    case WP2_BGRX_32:
+    case WP2_RGB_24:
+    case WP2_BGR_24:
+      return false;
+    case WP2_FORMAT_NUM:
+      assert(false);
+      return false;
+  }
+  assert(false);
+  return false;
+}
 
 namespace WP2 {
 

@@ -417,10 +417,10 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
 
 namespace {
 
-template <int from, int to>
+template <WP2SampleFormat from, WP2SampleFormat to>
 void WP2ConvertFromTo(const void* src, uint32_t width, void* dst) {
-  static_assert(from > WP2_ARGB_32 && from <= WP2_BGR_24, "Unimplemented");
-  static_assert(to > WP2_ARGB_32 && to <= WP2_BGR_24, "Unimplemented");
+  static_assert(WP2Formatbpc(from) == 8, "Unimplemented");
+  static_assert(WP2Formatbpc(to) == 8, "Unimplemented");
   const size_t src_bytes_per_pixel =
       WP2FormatBpp(static_cast<WP2SampleFormat>(from));
   const size_t dst_bytes_per_pixel =
@@ -446,7 +446,7 @@ void WP2ConvertFromTo(const void* src, uint32_t width, void* dst) {
   }
 }
 
-template <int from>
+template <WP2SampleFormat from>
 WP2ArgbConverterF WP2ConvertFromToFunc(WP2SampleFormat to) {
   if (to == WP2_XRGB_32) return WP2ConvertFromTo<from, WP2_XRGB_32>;
   if (to == WP2_rgbA_32) return WP2ConvertFromTo<from, WP2_rgbA_32>;

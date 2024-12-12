@@ -29,69 +29,6 @@
 #include "src/wp2/base.h"
 #include "src/wp2/format_constants.h"
 
-uint32_t WP2FormatBpp(WP2SampleFormat format) {
-  if (format <= WP2_BGRX_32) return 4;
-  if (format <= WP2_BGR_24) return 3;
-  assert(format == WP2_Argb_38);
-  return 8;  // actually 38 bits, stored as uint16
-}
-
-uint32_t WP2Formatbpc(WP2SampleFormat format) {
-  if (format < WP2_Argb_38) return 8;
-  assert(format == WP2_Argb_38);
-  return 10;
-}
-
-bool WP2FormatHasAlpha(WP2SampleFormat format, uint32_t* alpha_channel_index) {
-  switch (format) {
-    case WP2_Argb_32:
-    case WP2_ARGB_32:
-    case WP2_Argb_38:
-      if (alpha_channel_index != nullptr) *alpha_channel_index = 0;
-      return true;
-    case WP2_rgbA_32:
-    case WP2_RGBA_32:
-    case WP2_bgrA_32:
-    case WP2_BGRA_32:
-      if (alpha_channel_index != nullptr) *alpha_channel_index = 3;
-      return true;
-    case WP2_XRGB_32:
-      if (alpha_channel_index != nullptr) *alpha_channel_index = 0;
-      return false;
-    case WP2_RGBX_32:
-    case WP2_BGRX_32:
-      if (alpha_channel_index != nullptr) *alpha_channel_index = 3;
-      return false;
-    default:
-      if (alpha_channel_index != nullptr) {
-        *alpha_channel_index = WP2FormatBpp(format);
-      }
-      return false;
-  }
-}
-
-bool WP2IsPremultiplied(WP2SampleFormat format) {
-  switch (format) {
-    case WP2_Argb_32:
-    case WP2_Argb_38:
-    case WP2_rgbA_32:
-    case WP2_bgrA_32:
-      return true;
-    case WP2_ARGB_32:
-    case WP2_XRGB_32:
-    case WP2_RGBA_32:
-    case WP2_RGBX_32:
-    case WP2_BGRA_32:
-    case WP2_BGRX_32:
-    case WP2_RGB_24:
-    case WP2_BGR_24:
-      return false;
-    default:
-      assert(false);
-      return false;
-  }
-}
-
 namespace WP2 {
 
 static WP2Status CheckDimensions(uint32_t width, uint32_t height,
