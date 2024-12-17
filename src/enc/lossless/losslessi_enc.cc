@@ -752,6 +752,7 @@ WP2Status Encoder::ApplyCrossColorGlobal(
       }
     }
   }
+  WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   return WP2_STATUS_OK;
 }
 
