@@ -19,6 +19,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"

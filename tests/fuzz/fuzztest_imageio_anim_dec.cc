@@ -18,6 +18,8 @@
 // Author: Yannis Guyon (yguyon@google.com)
 
 #include <cstdint>
+#include <string>
+#include <string_view>
 
 #include "imageio/anim_image_dec.h"
 #include "imageio/file_format.h"

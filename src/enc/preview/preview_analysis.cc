@@ -21,6 +21,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 #include "src/common/color_precision.h"
 #include "src/common/preview/preview.h"

@@ -18,6 +18,8 @@
 // Author: Skal (pascal.massimino@gmail.com)
 //
 
+#include <algorithm>
+
 #include "src/dsp/dsp.h"
 #include "src/enc/analysis.h"
 #include "src/utils/vector.h"

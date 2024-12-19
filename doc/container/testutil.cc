@@ -15,6 +15,7 @@
 #include "./testutil.h"
 
 #include <fstream>
+#include <ios>
 #include <random>
 #include <string>
 

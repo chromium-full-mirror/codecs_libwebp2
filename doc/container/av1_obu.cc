@@ -19,6 +19,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <ostream>
 #include <sstream>
 #include <string>
 

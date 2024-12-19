@@ -15,6 +15,7 @@
 #ifndef CONTAINER_CONTAINER_H_
 #define CONTAINER_CONTAINER_H_
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>

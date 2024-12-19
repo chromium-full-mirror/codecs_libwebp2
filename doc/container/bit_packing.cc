@@ -16,6 +16,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <string>
 
 namespace container {
 

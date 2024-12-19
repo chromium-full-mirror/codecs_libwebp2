@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <ostream>
 #include <sstream>
 #include <string>
 

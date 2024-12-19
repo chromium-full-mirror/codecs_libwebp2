@@ -21,12 +21,11 @@
 #if defined(_WIN32)
 #include <fcntl.h>  // for _O_BINARY
 #include <io.h>     // for _setmode()
-
-#include <cstdio>
 #endif
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <string>
 
