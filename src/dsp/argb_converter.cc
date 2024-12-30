@@ -73,20 +73,19 @@ void Premult(uint32_t a, Type& r, Type& g, Type& b) {
 
 // Converts 'width' px from 'src_data' of 'SrcType' to 'dst_data' of 'DstType'.
 // Channel ordering is specified by the indices in 'k[Src/Dst][A/R/G/B]'.
-// Positive 'kMult' will premultiply the destination by the source alpha.
-// Negative 'kMult' will unmultiply the destination by the source alpha.
-// 'kFillAlpha' will replace the destination alpha by 255.
-template <typename SrcType, int kSrcDepth, int kSrcA, int kSrcR, int kSrcG,
-          int kSrcB, int kSrcStep, typename DstType, int kDstDepth, int kDstA,
-          int kDstR, int kDstG, int kDstB, int kDstStep, int kMult,
-          bool kFillAlpha>
+// Source samples are considered premultiplied by input alpha if 'kSrcMult'.
+// 'kFillAlpha' will replace the output alpha by 255.
+// Destination samples will be premultiplied by output alpha if 'kDstMult'.
+template <typename SrcType, int kSrcDepth, int kSrcMult, int kSrcA, int kSrcR,
+          int kSrcG, int kSrcB, int kSrcStep, typename DstType, int kDstDepth,
+          int kDstMult, int kDstA, int kDstR, int kDstG, int kDstB,
+          int kDstStep, bool kFillAlpha>
 void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
   static_assert((kSrcDepth == 8 || kSrcDepth == 10 || kSrcDepth == 16) &&
                     (kDstDepth == 8 || kDstDepth == 10 || kDstDepth == 16),
                 "Unimplemented");
 
   constexpr uint32_t kSrcMax = (1u << kSrcDepth) - 1u;
-  constexpr uint32_t kSrcRound = kSrcMax >> 1;
   constexpr uint32_t kDstMax = (1u << kDstDepth) - 1u;
 
   // The alpha channel of WP2_Argb_38 (depth = 10) uses only 8 bits.
@@ -108,95 +107,133 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
             (src[kSrcA] * kDstAlphaMax + kSrcAlphaRound) / kSrcAlphaMax;
       }
     }
-    uint32_t tmp[3] = {src[kSrcR], src[kSrcG], src[kSrcB]};
-    if (kSrcDepth < kDstDepth) {
-      for (uint32_t& channel : tmp) {
-        channel = (channel * kDstMax + kSrcRound) / kSrcMax;
+    if (kSrcDepth == kDstDepth && kSrcMult == kDstMult) {
+      // Just shuffling channels.
+      dst[kDstR] = src[kSrcR];
+      dst[kDstG] = src[kSrcG];
+      dst[kDstB] = src[kSrcB];
+    } else {
+      const uint32_t src_max =
+          kSrcMult
+              ? (kSrcDepth == 10) ? (src[kSrcA] * 1023 + 127) / 255 : src[kSrcA]
+              : kSrcMax;
+      const uint32_t dst_max =
+          kDstMult
+              ? (kDstDepth == 10) ? (dst[kDstA] * 1023 + 127) / 255 : dst[kDstA]
+              : kDstMax;
+      if (src_max == 0 || dst_max == 0) {
+        dst[kDstR] = 0;
+        dst[kDstG] = 0;
+        dst[kDstB] = 0;
+      } else if (src_max == dst_max) {
+        dst[kDstR] = src[kSrcR];
+        dst[kDstG] = src[kSrcG];
+        dst[kDstB] = src[kSrcB];
+      } else {
+        const uint32_t src_round = src_max >> 1;
+        dst[kDstR] = static_cast<DstType>(std::min<uint32_t>(
+            (src[kSrcR] * dst_max + src_round) / src_max, dst_max));
+        dst[kDstG] = static_cast<DstType>(std::min<uint32_t>(
+            (src[kSrcG] * dst_max + src_round) / src_max, dst_max));
+        dst[kDstB] = static_cast<DstType>(std::min<uint32_t>(
+            (src[kSrcB] * dst_max + src_round) / src_max, dst_max));
       }
     }
-    // Premul or unmul by alpha at the highest bit depth to keep accuracy.
-    constexpr uint32_t kTmpMax = kSrcDepth < kDstDepth ? kDstMax : kSrcMax;
-    if (kMult > 0) {
-      Premult<uint32_t, kSrcAlphaMax>(src[kSrcA], tmp[0], tmp[1], tmp[2]);
-    } else if (kMult < 0) {
-      Unmult<uint32_t, kSrcAlphaMax, kTmpMax>(src[kSrcA], tmp[0], tmp[1],
-                                              tmp[2]);
-    }
-    if (kSrcDepth > kDstDepth) {
-      for (uint32_t& channel : tmp) {
-        channel = (channel * kDstMax + kSrcRound) / kSrcMax;
-      }
-    }
-    dst[kDstR] = static_cast<DstType>(tmp[0]);
-    dst[kDstG] = static_cast<DstType>(tmp[1]);
-    dst[kDstB] = static_cast<DstType>(tmp[2]);
   }
 }
 
 // From the specified format to Argb32 or ARGB32.
-#define CVRT_TO_ARGB32(SRC_TYPE, SRC_DEPTH, A, R, G, B, MULT, FILL, SRC_STEP)  \
-  Cvrt_C<SRC_TYPE, SRC_DEPTH, A, R, G, B, SRC_STEP, uint8_t, 8, 0, 1, 2, 3, 4, \
-         MULT, FILL>
+#define CVRT_TO_Argb32(SRC_TYPE, SRC_DEPTH, SRC_MULT, A, R, G, B, FILL, \
+                       SRC_STEP)                                        \
+  Cvrt_C<SRC_TYPE, SRC_DEPTH, SRC_MULT, A, R, G, B, SRC_STEP, uint8_t,  \
+         /*kDstDepth=*/8, /*kDstMult=*/1, /*kDstA=*/0, /*kDstR=*/1,     \
+         /*kDstG=*/2, /*kDstB=*/3, /*kDstStep=*/4, FILL>
+#define CVRT_TO_ARGB32(SRC_TYPE, SRC_DEPTH, SRC_MULT, A, R, G, B, FILL, \
+                       SRC_STEP)                                        \
+  Cvrt_C<SRC_TYPE, SRC_DEPTH, SRC_MULT, A, R, G, B, SRC_STEP, uint8_t,  \
+         /*kDstDepth=*/8, /*kDstMult=*/0, /*kDstA=*/0, /*kDstR=*/1,     \
+         /*kDstG=*/2, /*kDstB=*/3, /*kDstStep=*/4, FILL>
 
 // From the Argb32 or ARGB32 to specified format.
-#define CVRT_ARGB32_TO(DST_TYPE, DST_DEPTH, A, R, G, B, MULT, FILL, DST_STEP)  \
-  Cvrt_C<uint8_t, 8, 0, 1, 2, 3, 4, DST_TYPE, DST_DEPTH, A, R, G, B, DST_STEP, \
-         MULT, FILL>
+#define CVRT_Argb32_TO(DST_TYPE, DST_DEPTH, DST_MULT, A, R, G, B, FILL,      \
+                       DST_STEP)                                             \
+  Cvrt_C<uint8_t, /*kSrcDepth=*/8, /*kSrcMult=*/1, /*kSrcA=*/0, /*kSrcR=*/1, \
+         /*kSrcG=*/2, /*kSrcB=*/3, /*kSrcStep=*/4, DST_TYPE, DST_DEPTH,      \
+         DST_MULT, A, R, G, B, DST_STEP, FILL>
+#define CVRT_ARGB32_TO(DST_TYPE, DST_DEPTH, DST_MULT, A, R, G, B, FILL,      \
+                       DST_STEP)                                             \
+  Cvrt_C<uint8_t, /*kSrcDepth=*/8, /*kSrcMult=*/0, /*kSrcA=*/0, /*kSrcR=*/1, \
+         /*kSrcG=*/2, /*kSrcB=*/3, /*kSrcStep=*/4, DST_TYPE, DST_DEPTH,      \
+         DST_MULT, A, R, G, B, DST_STEP, FILL>
 
-#define Cvrt_Argb32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 1, 2, 3, 0, 0, 4)
-#define Cvrt_ARGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 1, 2, 3, 0, 0, 4)
+//                                                   d
+//                                             t     e  m              f  s
+//                                     src's:  y     p  u              i  t
+//                                             p     t  l   indices    l  e
+//          | src  | dst  |                    e     h  t  A  R  G  B  l  p
 
-#define Cvrt_ARGB32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 1, 2, 3, 1, 0, 4)
-#define Cvrt_XRGB32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 1, 2, 3, 0, 1, 4)
-#define Cvrt_rgbA32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, 0, 0, 4)
-#define Cvrt_RGBA32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, 1, 0, 4)
-#define Cvrt_RGBX32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, 0, 1, 4)
-#define Cvrt_bgrA32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, 0, 0, 4)
-#define Cvrt_BGRA32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, 1, 0, 4)
-#define Cvrt_BGRX32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, 0, 1, 4)
-#define Cvrt_RGB32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 1, 2, 0, 1, 3)
-#define Cvrt_BGR32_Argb32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 2, 1, 0, 0, 1, 3)
+#define Cvrt_Argb32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 1, 0, 1, 2, 3, 0, 4)
+#define Cvrt_ARGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 1, 2, 3, 0, 4)
 
-#define Cvrt_XRGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 1, 2, 3, 0, 1, 4)
-#define Cvrt_rgbA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, -1, 0, 4)
-#define Cvrt_RGBA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, 0, 0, 4)
-#define Cvrt_RGBX32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 0, 1, 2, 0, 1, 4)
-#define Cvrt_bgrA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, -1, 0, 4)
-#define Cvrt_BGRA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, 0, 0, 4)
-#define Cvrt_BGRX32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 3, 2, 1, 0, 0, 1, 4)
-#define Cvrt_RGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 1, 2, 0, 1, 3)
-#define Cvrt_BGR32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 2, 1, 0, 0, 1, 3)
+#define Cvrt_ARGB32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 0, 1, 2, 3, 0, 4)
+#define Cvrt_XRGB32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 0, 1, 2, 3, 1, 4)
+#define Cvrt_rgbA32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGBA32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGBX32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 3, 0, 1, 2, 1, 4)
+#define Cvrt_bgrA32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 1, 3, 2, 1, 0, 0, 4)
+#define Cvrt_BGRA32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 3, 2, 1, 0, 0, 4)
+#define Cvrt_BGRX32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 3, 2, 1, 0, 1, 4)
+#define Cvrt_RGB32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 0, 0, 1, 2, 1, 3)
+#define Cvrt_BGR32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 0, 2, 1, 0, 1, 3)
 
-#define Cvrt_Argb32_ARGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 1, 2, 3, -1, 0, 4)
-#define Cvrt_Argb32_XRGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 1, 2, 3, -1, 1, 4)
-#define Cvrt_Argb32_rgbA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, 0, 0, 4)
-#define Cvrt_Argb32_RGBA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, -1, 0, 4)
-#define Cvrt_Argb32_RGBX32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, -1, 1, 4)
-#define Cvrt_Argb32_bgrA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, 0, 0, 4)
-#define Cvrt_Argb32_BGRA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, -1, 0, 4)
-#define Cvrt_Argb32_BGRX32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, -1, 1, 4)
-#define Cvrt_Argb32_RGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 0, 1, 2, -1, 1, 3)
-#define Cvrt_Argb32_BGR32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 2, 1, 0, -1, 1, 3)
+#define Cvrt_XRGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 1, 2, 3, 1, 4)
+#define Cvrt_rgbA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGBA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGBX32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 3, 0, 1, 2, 1, 4)
+#define Cvrt_bgrA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 1, 3, 2, 1, 0, 0, 4)
+#define Cvrt_BGRA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 3, 2, 1, 0, 0, 4)
+#define Cvrt_BGRX32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 3, 2, 1, 0, 1, 4)
+#define Cvrt_RGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 0, 1, 2, 1, 3)
+#define Cvrt_BGR32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 2, 1, 0, 1, 3)
 
-#define Cvrt_ARGB32_XRGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 1, 2, 3, 0, 1, 4)
-#define Cvrt_ARGB32_rgbA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, 1, 0, 4)
-#define Cvrt_ARGB32_RGBA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, 0, 0, 4)
-#define Cvrt_ARGB32_RGBX32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 0, 1, 2, 0, 1, 4)
-#define Cvrt_ARGB32_bgrA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, 1, 0, 4)
-#define Cvrt_ARGB32_BGRA32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, 0, 0, 4)
-#define Cvrt_ARGB32_BGRX32_C CVRT_ARGB32_TO(uint8_t, 8, 3, 2, 1, 0, 0, 1, 4)
-#define Cvrt_ARGB32_RGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 0, 1, 2, 0, 1, 3)
-#define Cvrt_ARGB32_BGR32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 2, 1, 0, 0, 1, 3)
+#define Cvrt_Argb38_Argb32_C CVRT_TO_Argb32(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
+#define Cvrt_Argb38_ARGB32_C CVRT_TO_ARGB32(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
 
-#define Cvrt_Argb38_Argb32_C CVRT_TO_ARGB32(uint16_t, 10, 0, 1, 2, 3, 0, 0, 4)
-#define Cvrt_Argb38_ARGB32_C CVRT_TO_ARGB32(uint16_t, 10, 0, 1, 2, 3, -1, 0, 4)
-#define Cvrt_Argb32_Argb38_C CVRT_ARGB32_TO(uint16_t, 10, 0, 1, 2, 3, 0, 0, 4)
-#define Cvrt_ARGB32_Argb38_C CVRT_ARGB32_TO(uint16_t, 10, 0, 1, 2, 3, 1, 0, 4)
+#define Cvrt_ARGB64_Argb32_C CVRT_TO_Argb32(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
+#define Cvrt_ARGB64_ARGB32_C CVRT_TO_ARGB32(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
 
-#define Cvrt_ARGB64_Argb32_C CVRT_TO_ARGB32(uint16_t, 16, 0, 1, 2, 3, 1, 0, 4)
-#define Cvrt_ARGB64_ARGB32_C CVRT_TO_ARGB32(uint16_t, 16, 0, 1, 2, 3, 0, 0, 4)
-#define Cvrt_Argb32_ARGB64_C CVRT_ARGB32_TO(uint16_t, 16, 0, 1, 2, 3, -1, 0, 4)
-#define Cvrt_ARGB32_ARGB64_C CVRT_ARGB32_TO(uint16_t, 16, 0, 1, 2, 3, 0, 0, 4)
+//                                                   d
+//                                             t     e  m              f  s
+//                                     dst's:  y     p  u              i  t
+//                                             p     t  l   indices    l  e
+//          | src  | dst  |                    e     h  t  A  R  G  B  l  p
+
+#define Cvrt_Argb32_ARGB32_C CVRT_Argb32_TO(uint8_t, 8, 0, 0, 1, 2, 3, 0, 4)
+#define Cvrt_Argb32_XRGB32_C CVRT_Argb32_TO(uint8_t, 8, 0, 0, 1, 2, 3, 1, 4)
+#define Cvrt_Argb32_rgbA32_C CVRT_Argb32_TO(uint8_t, 8, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_Argb32_RGBA32_C CVRT_Argb32_TO(uint8_t, 8, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_Argb32_RGBX32_C CVRT_Argb32_TO(uint8_t, 8, 0, 3, 0, 1, 2, 1, 4)
+#define Cvrt_Argb32_bgrA32_C CVRT_Argb32_TO(uint8_t, 8, 1, 3, 2, 1, 0, 0, 4)
+#define Cvrt_Argb32_BGRA32_C CVRT_Argb32_TO(uint8_t, 8, 0, 3, 2, 1, 0, 0, 4)
+#define Cvrt_Argb32_BGRX32_C CVRT_Argb32_TO(uint8_t, 8, 0, 3, 2, 1, 0, 1, 4)
+#define Cvrt_Argb32_RGB32_C CVRT_Argb32_TO(uint8_t, 8, 0, 0, 0, 1, 2, 0, 3)
+#define Cvrt_Argb32_BGR32_C CVRT_Argb32_TO(uint8_t, 8, 0, 0, 2, 1, 0, 0, 3)
+
+#define Cvrt_ARGB32_XRGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 0, 1, 2, 3, 1, 4)
+#define Cvrt_ARGB32_rgbA32_C CVRT_ARGB32_TO(uint8_t, 8, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_ARGB32_RGBA32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_ARGB32_RGBX32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 3, 0, 1, 2, 1, 4)
+#define Cvrt_ARGB32_bgrA32_C CVRT_ARGB32_TO(uint8_t, 8, 1, 3, 2, 1, 0, 0, 4)
+#define Cvrt_ARGB32_BGRA32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 3, 2, 1, 0, 0, 4)
+#define Cvrt_ARGB32_BGRX32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 3, 2, 1, 0, 1, 4)
+#define Cvrt_ARGB32_RGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 0, 0, 1, 2, 0, 3)
+#define Cvrt_ARGB32_BGR32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 0, 2, 1, 0, 0, 3)
+
+#define Cvrt_Argb32_Argb38_C CVRT_Argb32_TO(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
+#define Cvrt_ARGB32_Argb38_C CVRT_ARGB32_TO(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
+
+#define Cvrt_Argb32_ARGB64_C CVRT_Argb32_TO(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
+#define Cvrt_ARGB32_ARGB64_C CVRT_ARGB32_TO(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
 
 //------------------------------------------------------------------------------
 // SSE4.1 implementation
@@ -303,8 +340,8 @@ void Cvrt_Argb32_RGBA32_SSE(const void* src, uint32_t width, void* dst) {
                width);  // rgbA32 -> RGBA32
 }
 void Cvrt_Argb32_RGBX32_SSE(const void* src, uint32_t width, void* dst) {
-  Cvrt_Argb32_RGBA32_SSE(src, width, dst);                  // Argb32 -> rgbA32
-  FillAlpha8b(reinterpret_cast<uint8_t*>(dst) + 3, width);  // rgbA32 -> RGBX32
+  Cvrt_Argb32_RGBA32_SSE(src, width, dst);                  // Argb32 -> RGBA32
+  FillAlpha8b(reinterpret_cast<uint8_t*>(dst) + 3, width);  // RGBA32 -> RGBX32
 }
 
 CONVERT_32_TO_32_FUNC(Cvrt_Argb32_bgrA32, 0x00010203)
@@ -315,8 +352,8 @@ void Cvrt_Argb32_BGRA32_SSE(const void* src, uint32_t width, void* dst) {
                width);  // bgrA32 -> BGRA32
 }
 void Cvrt_Argb32_BGRX32_SSE(const void* src, uint32_t width, void* dst) {
-  Cvrt_Argb32_BGRA32_SSE(src, width, dst);                  // Argb32 -> bgrA32
-  FillAlpha8b(reinterpret_cast<uint8_t*>(dst) + 3, width);  // bgrA32 -> BGRX32
+  Cvrt_Argb32_BGRA32_SSE(src, width, dst);                  // Argb32 -> BGRA32
+  FillAlpha8b(reinterpret_cast<uint8_t*>(dst) + 3, width);  // BGRA32 -> BGRX32
 }
 
 #undef CONVERT_32_TO_32_FUNC

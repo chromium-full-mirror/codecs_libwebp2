@@ -331,11 +331,9 @@ class ExhaustiveTest
     if (tmp_is_premul_) {
       // Temp is premultiplied but not src so there is some loss.
       if (tmp_is_38b_) {
-        const uint32_t v_38b = (v * 1023 + 127) / 255;
-        const uint32_t v_premul = (a * v_38b + 127) / 255;
-        const uint32_t v_unmul = std::min(Unmult(a, v_premul), 1023u);
-        const uint32_t v_32b = (v_unmul * 255 + 511) / 1023;
-        return v_32b;
+        const uint32_t a_10b = (a * 1023 + 127) / 255;
+        const uint32_t v_premul_38b = (a_10b * v + 127) / 255;
+        return Unmult(a_10b, v_premul_38b);
       }
       return Unmult(a, (a * v + 127) / 255);
     }
