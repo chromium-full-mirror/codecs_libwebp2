@@ -142,6 +142,9 @@ typedef enum {
   WP2_rgbA_64,
   WP2_RGBA_64,
 
+  WP2_bgrA_64,
+  WP2_BGRA_64,
+
   // 48b/pixel format
   WP2_RGB_48,
 
@@ -165,6 +168,8 @@ WP2_EXTERN constexpr uint32_t WP2FormatNumChannels(WP2SampleFormat format) {
     case WP2_ARGB_64:
     case WP2_rgbA_64:
     case WP2_RGBA_64:
+    case WP2_bgrA_64:
+    case WP2_BGRA_64:
       return 4;
     case WP2_RGB_24:
     case WP2_BGR_24:
@@ -198,6 +203,8 @@ WP2_EXTERN constexpr uint32_t WP2FormatBpp(WP2SampleFormat format) {
     case WP2_ARGB_64:
     case WP2_rgbA_64:
     case WP2_RGBA_64:
+    case WP2_bgrA_64:
+    case WP2_BGRA_64:
       return 8;
     case WP2_RGB_48:
       return 6;
@@ -229,6 +236,8 @@ WP2_EXTERN constexpr uint32_t WP2Formatbpc(WP2SampleFormat format) {
     case WP2_ARGB_64:
     case WP2_rgbA_64:
     case WP2_RGBA_64:
+    case WP2_bgrA_64:
+    case WP2_BGRA_64:
     case WP2_RGB_48:
       return 16;
     case WP2_FORMAT_NUM:
@@ -258,6 +267,8 @@ WP2_EXTERN constexpr bool WP2FormatHasAlpha(
     case WP2_BGRA_32:
     case WP2_rgbA_64:
     case WP2_RGBA_64:
+    case WP2_bgrA_64:
+    case WP2_BGRA_64:
       if (alpha_channel_index != nullptr) *alpha_channel_index = 3;
       return true;
     case WP2_XRGB_32:
@@ -293,6 +304,7 @@ WP2_EXTERN constexpr bool WP2IsPremultiplied(WP2SampleFormat format) {
     case WP2_bgrA_32:
     case WP2_Argb_64:
     case WP2_rgbA_64:
+    case WP2_bgrA_64:
       return true;
     case WP2_ARGB_32:
     case WP2_XRGB_32:
@@ -304,6 +316,7 @@ WP2_EXTERN constexpr bool WP2IsPremultiplied(WP2SampleFormat format) {
     case WP2_BGR_24:
     case WP2_ARGB_64:
     case WP2_RGBA_64:
+    case WP2_BGRA_64:
     case WP2_RGB_48:
       return false;
     case WP2_FORMAT_NUM:
@@ -311,6 +324,60 @@ WP2_EXTERN constexpr bool WP2IsPremultiplied(WP2SampleFormat format) {
   }
   assert(false);
   return false;
+}
+
+// Returns the WP2SampleFormat with the same layout as the given format, but
+// with the given number of bits per sample. Returns WP2_FORMAT_NUM if there is
+// no such format.
+WP2_EXTERN constexpr WP2SampleFormat WP2FormatAtbpc(WP2SampleFormat format,
+                                                    uint32_t bpc) {
+  if (WP2Formatbpc(format) == bpc) return format;
+  if (bpc == 8) {
+    switch (format) {
+      case WP2_Argb_38:
+      case WP2_Argb_64:
+        return WP2_Argb_32;
+      case WP2_ARGB_64:
+        return WP2_ARGB_32;
+      case WP2_rgbA_64:
+        return WP2_rgbA_32;
+      case WP2_RGBA_64:
+        return WP2_RGBA_32;
+      case WP2_BGRA_64:
+        return WP2_BGRA_32;
+      case WP2_RGB_48:
+        return WP2_RGB_24;
+      default:
+        return WP2_FORMAT_NUM;
+    }
+  } else if (bpc == 10) {
+    switch (format) {
+      case WP2_Argb_32:
+      case WP2_Argb_64:
+        return WP2_Argb_38;
+      default:
+        return WP2_FORMAT_NUM;
+    }
+  } else if (bpc == 16) {
+    switch (format) {
+      case WP2_Argb_32:
+      case WP2_Argb_38:
+        return WP2_Argb_64;
+      case WP2_ARGB_32:
+        return WP2_ARGB_64;
+      case WP2_rgbA_32:
+        return WP2_rgbA_64;
+      case WP2_RGBA_32:
+        return WP2_RGBA_64;
+      case WP2_BGRA_32:
+        return WP2_BGRA_64;
+      case WP2_RGB_24:
+        return WP2_RGB_48;
+      default:
+        return WP2_FORMAT_NUM;
+    }
+  }
+  return WP2_FORMAT_NUM;
 }
 
 namespace WP2 {

@@ -78,7 +78,8 @@ TEST(RgbConversionTest, From32bTo32b) {
 
 TEST(RgbConversionTest, From64bTo64b) {
   constexpr WP2SampleFormat kFormats64b[] = {
-      WP2_Argb_64, WP2_ARGB_64, WP2_rgbA_64, WP2_RGBA_64, WP2_RGB_48};
+      WP2_Argb_64, WP2_ARGB_64, WP2_rgbA_64, WP2_RGBA_64,
+      WP2_bgrA_64, WP2_BGRA_64, WP2_RGB_48};
   WP2ArgbConverterInit();
 
   for (WP2SampleFormat from : kFormats64b) {

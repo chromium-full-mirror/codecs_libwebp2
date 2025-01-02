@@ -193,6 +193,8 @@ static inline uint32_t FormatMax(WP2SampleFormat format, uint32_t channel) {
       case WP2_ARGB_64:
       case WP2_rgbA_64:
       case WP2_RGBA_64:
+      case WP2_bgrA_64:
+      case WP2_BGRA_64:
       case WP2_RGB_48:
         return 65535;
       case WP2_FORMAT_NUM:
