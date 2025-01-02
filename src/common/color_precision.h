@@ -191,11 +191,15 @@ static inline uint32_t FormatMax(WP2SampleFormat format, uint32_t channel) {
         return WP2::kAlphaMax;
       case WP2_Argb_64:
       case WP2_ARGB_64:
+      case WP2_rgbA_64:
+      case WP2_RGBA_64:
+      case WP2_RGB_48:
         return 65535;
-      default:
-        assert(false);
-        return 0;
+      case WP2_FORMAT_NUM:
+        break;
     }
+    assert(false);
+    return 0;
   } else {
     // RGB
     return (1u << WP2Formatbpc(format)) - 1u;

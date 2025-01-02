@@ -182,18 +182,11 @@ void PNGAPI PNGErrorFunction(png_structp png, png_const_charp dummy) {
 WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout, const char*, bool,
                    bool, size_t*) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-
-  // Go without an alpha channel if there was no alpha channel to start with or
-  // if all alpha values are to their maximum value, and only if a
-  // WP2SampleFormat exists with the same bit depth and with no alpha channel
-  // (not the case for 16-bit samples because there is no WP2_RGB_48 yet).
-  const bool has_alpha = buffer.format() == WP2_Argb_64 ||
-                         buffer.format() == WP2_ARGB_64 ||
-                         buffer.HasTransparency();
-  const WP2SampleFormat tmp_format = WP2Formatbpc(buffer.format()) == 16
-                                         ? WP2_ARGB_64
-                                     : has_alpha ? WP2_ARGB_32
-                                                 : WP2_RGB_24;
+  const bool has_alpha = buffer.HasTransparency();
+  const WP2SampleFormat tmp_format =
+      WP2Formatbpc(buffer.format()) == 16
+          ? (has_alpha ? WP2_ARGB_64 : WP2_RGB_48)
+          : (has_alpha ? WP2_ARGB_32 : WP2_RGB_24);
   WP2_CHECK_OK(WP2Formatbpc(buffer.format()) == WP2Formatbpc(tmp_format),
                WP2_STATUS_UNSUPPORTED_FEATURE);
 
@@ -220,7 +213,7 @@ WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout, const char*, bool,
       PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT,
       PNG_FILTER_TYPE_DEFAULT);
   png_write_info(png, info);
-  if (buffer.format() == WP2_ARGB_64) {
+  if (WP2Formatbpc(buffer.format()) == 16) {
     png_set_swap(png);  // From big-endian to little-endian.
   }
   if (WP2FormatHasAlpha(tmp_format)) {

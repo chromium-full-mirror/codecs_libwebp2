@@ -135,9 +135,15 @@ typedef enum {
   // HDR format: 8 bits for A, 10 per RGB.
   WP2_Argb_38,
 
-  // 64b/pixel format: 16 bits for A, 16 per RGB.
+  // 64b/pixel formats: 16 bits for A, 16 per RGB.
   WP2_Argb_64,
   WP2_ARGB_64,
+
+  WP2_rgbA_64,
+  WP2_RGBA_64,
+
+  // 48b/pixel format
+  WP2_RGB_48,
 
   WP2_FORMAT_NUM
 } WP2SampleFormat;
@@ -157,13 +163,15 @@ WP2_EXTERN constexpr uint32_t WP2FormatNumChannels(WP2SampleFormat format) {
     case WP2_Argb_38:
     case WP2_Argb_64:
     case WP2_ARGB_64:
+    case WP2_rgbA_64:
+    case WP2_RGBA_64:
       return 4;
     case WP2_RGB_24:
     case WP2_BGR_24:
+    case WP2_RGB_48:
       return 3;
     case WP2_FORMAT_NUM:
-      assert(false);
-      return 0;
+      break;
   }
   assert(false);
   return 0;
@@ -188,10 +196,13 @@ WP2_EXTERN constexpr uint32_t WP2FormatBpp(WP2SampleFormat format) {
     case WP2_Argb_38:  // actually 38 bits, stored as uint16
     case WP2_Argb_64:
     case WP2_ARGB_64:
+    case WP2_rgbA_64:
+    case WP2_RGBA_64:
       return 8;
+    case WP2_RGB_48:
+      return 6;
     case WP2_FORMAT_NUM:
-      assert(false);
-      return 0;
+      break;
   }
   assert(false);
   return 0;
@@ -216,10 +227,12 @@ WP2_EXTERN constexpr uint32_t WP2Formatbpc(WP2SampleFormat format) {
       return 10;
     case WP2_Argb_64:
     case WP2_ARGB_64:
+    case WP2_rgbA_64:
+    case WP2_RGBA_64:
+    case WP2_RGB_48:
       return 16;
     case WP2_FORMAT_NUM:
-      assert(false);
-      return 0;
+      break;
   }
   assert(false);
   return 0;
@@ -243,6 +256,8 @@ WP2_EXTERN constexpr bool WP2FormatHasAlpha(
     case WP2_RGBA_32:
     case WP2_bgrA_32:
     case WP2_BGRA_32:
+    case WP2_rgbA_64:
+    case WP2_RGBA_64:
       if (alpha_channel_index != nullptr) *alpha_channel_index = 3;
       return true;
     case WP2_XRGB_32:
@@ -254,13 +269,18 @@ WP2_EXTERN constexpr bool WP2FormatHasAlpha(
       return false;
     case WP2_RGB_24:
     case WP2_BGR_24:
+    case WP2_RGB_48:
       if (alpha_channel_index != nullptr) {
         *alpha_channel_index = std::numeric_limits<uint32_t>::max();
       }
       return false;
     case WP2_FORMAT_NUM:
-      return false;
+      break;
   }
+  if (alpha_channel_index != nullptr) {
+    *alpha_channel_index = std::numeric_limits<uint32_t>::max();
+  }
+  assert(false);
   return false;
 }
 
@@ -272,6 +292,7 @@ WP2_EXTERN constexpr bool WP2IsPremultiplied(WP2SampleFormat format) {
     case WP2_rgbA_32:
     case WP2_bgrA_32:
     case WP2_Argb_64:
+    case WP2_rgbA_64:
       return true;
     case WP2_ARGB_32:
     case WP2_XRGB_32:
@@ -282,10 +303,11 @@ WP2_EXTERN constexpr bool WP2IsPremultiplied(WP2SampleFormat format) {
     case WP2_RGB_24:
     case WP2_BGR_24:
     case WP2_ARGB_64:
+    case WP2_RGBA_64:
+    case WP2_RGB_48:
       return false;
     case WP2_FORMAT_NUM:
-      assert(false);
-      return false;
+      break;
   }
   assert(false);
   return false;

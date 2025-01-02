@@ -179,6 +179,18 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
          /*kDstDepth=*/16, /*kDstMult=*/0, /*kDstA=*/0, /*kDstR=*/1,    \
          /*kDstG=*/2, /*kDstB=*/3, /*kDstStep=*/4, FILL>
 
+// From Argb64 or ARGB64 to the specified format.
+#define CVRT_Argb64_TO(DST_TYPE, DST_DEPTH, DST_MULT, A, R, G, B, FILL,        \
+                       DST_STEP)                                               \
+  Cvrt_C<uint16_t, /*kSrcDepth=*/16, /*kSrcMult=*/1, /*kSrcA=*/0, /*kSrcR=*/1, \
+         /*kSrcG=*/2, /*kSrcB=*/3, /*kSrcStep=*/4, DST_TYPE, DST_DEPTH,        \
+         DST_MULT, A, R, G, B, DST_STEP, FILL>
+#define CVRT_ARGB64_TO(DST_TYPE, DST_DEPTH, DST_MULT, A, R, G, B, FILL,        \
+                       DST_STEP)                                               \
+  Cvrt_C<uint16_t, /*kSrcDepth=*/16, /*kSrcMult=*/0, /*kSrcA=*/0, /*kSrcR=*/1, \
+         /*kSrcG=*/2, /*kSrcB=*/3, /*kSrcStep=*/4, DST_TYPE, DST_DEPTH,        \
+         DST_MULT, A, R, G, B, DST_STEP, FILL>
+
 //                                                   d
 //                                             t     e  m              f  s
 //                                     src's:  y     p  u              i  t
@@ -186,8 +198,6 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
 //          | src  | dst  |                    e     h  t  A  R  G  B  l  p
 
 #define Cvrt_Argb32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 1, 0, 1, 2, 3, 0, 4)
-#define Cvrt_ARGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 1, 2, 3, 0, 4)
-
 #define Cvrt_ARGB32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 0, 1, 2, 3, 0, 4)
 #define Cvrt_XRGB32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 0, 1, 2, 3, 1, 4)
 #define Cvrt_rgbA32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 1, 3, 0, 1, 2, 0, 4)
@@ -198,7 +208,14 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
 #define Cvrt_BGRX32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 3, 2, 1, 0, 1, 4)
 #define Cvrt_RGB32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 0, 0, 1, 2, 1, 3)
 #define Cvrt_BGR32_Argb32_C CVRT_TO_Argb32(uint8_t, 8, 0, 0, 2, 1, 0, 1, 3)
+#define Cvrt_Argb38_Argb32_C CVRT_TO_Argb32(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
+#define Cvrt_Argb64_Argb32_C CVRT_TO_Argb32(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
+#define Cvrt_ARGB64_Argb32_C CVRT_TO_Argb32(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
+#define Cvrt_rgbA64_Argb32_C CVRT_TO_Argb32(uint16_t, 16, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGBA64_Argb32_C CVRT_TO_Argb32(uint16_t, 16, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGB64_Argb32_C CVRT_TO_Argb32(uint16_t, 16, 0, 0, 0, 1, 2, 1, 3)
 
+#define Cvrt_ARGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 1, 2, 3, 0, 4)
 #define Cvrt_XRGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 1, 2, 3, 1, 4)
 #define Cvrt_rgbA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 1, 3, 0, 1, 2, 0, 4)
 #define Cvrt_RGBA32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 3, 0, 1, 2, 0, 4)
@@ -208,17 +225,22 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
 #define Cvrt_BGRX32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 3, 2, 1, 0, 1, 4)
 #define Cvrt_RGB32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 0, 1, 2, 1, 3)
 #define Cvrt_BGR32_ARGB32_C CVRT_TO_ARGB32(uint8_t, 8, 0, 0, 2, 1, 0, 1, 3)
-
-#define Cvrt_Argb38_Argb32_C CVRT_TO_Argb32(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
 #define Cvrt_Argb38_ARGB32_C CVRT_TO_ARGB32(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
-
-#define Cvrt_Argb64_Argb32_C CVRT_TO_Argb32(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
 #define Cvrt_Argb64_ARGB32_C CVRT_TO_ARGB32(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
-#define Cvrt_ARGB64_Argb32_C CVRT_TO_Argb32(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
 #define Cvrt_ARGB64_ARGB32_C CVRT_TO_ARGB32(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
+#define Cvrt_rgbA64_ARGB32_C CVRT_TO_ARGB32(uint16_t, 16, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGBA64_ARGB32_C CVRT_TO_ARGB32(uint16_t, 16, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGB64_ARGB32_C CVRT_TO_ARGB32(uint16_t, 16, 0, 0, 0, 1, 2, 1, 3)
+
+#define Cvrt_ARGB64_Argb64_C CVRT_TO_Argb64(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
+#define Cvrt_rgbA64_Argb64_C CVRT_TO_Argb64(uint16_t, 16, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGBA64_Argb64_C CVRT_TO_Argb64(uint16_t, 16, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGB64_Argb64_C CVRT_TO_Argb64(uint16_t, 16, 0, 0, 0, 1, 2, 1, 3)
 
 #define Cvrt_Argb64_ARGB64_C CVRT_TO_ARGB64(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
-#define Cvrt_ARGB64_Argb64_C CVRT_TO_Argb64(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
+#define Cvrt_rgbA64_ARGB64_C CVRT_TO_ARGB64(uint16_t, 16, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGBA64_ARGB64_C CVRT_TO_ARGB64(uint16_t, 16, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_RGB64_ARGB64_C CVRT_TO_ARGB64(uint16_t, 16, 0, 0, 0, 1, 2, 1, 3)
 
 //                                                   d
 //                                             t     e  m              f  s
@@ -236,6 +258,12 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
 #define Cvrt_Argb32_BGRX32_C CVRT_Argb32_TO(uint8_t, 8, 0, 3, 2, 1, 0, 1, 4)
 #define Cvrt_Argb32_RGB32_C CVRT_Argb32_TO(uint8_t, 8, 0, 0, 0, 1, 2, 0, 3)
 #define Cvrt_Argb32_BGR32_C CVRT_Argb32_TO(uint8_t, 8, 0, 0, 2, 1, 0, 0, 3)
+#define Cvrt_Argb32_Argb38_C CVRT_Argb32_TO(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
+#define Cvrt_Argb32_Argb64_C CVRT_Argb32_TO(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
+#define Cvrt_Argb32_ARGB64_C CVRT_Argb32_TO(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
+#define Cvrt_Argb32_rgbA64_C CVRT_Argb32_TO(uint16_t, 16, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_Argb32_RGBA64_C CVRT_Argb32_TO(uint16_t, 16, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_Argb32_RGB64_C CVRT_Argb32_TO(uint16_t, 16, 0, 0, 0, 1, 2, 0, 3)
 
 #define Cvrt_ARGB32_XRGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 0, 1, 2, 3, 1, 4)
 #define Cvrt_ARGB32_rgbA32_C CVRT_ARGB32_TO(uint8_t, 8, 1, 3, 0, 1, 2, 0, 4)
@@ -246,14 +274,64 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
 #define Cvrt_ARGB32_BGRX32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 3, 2, 1, 0, 1, 4)
 #define Cvrt_ARGB32_RGB32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 0, 0, 1, 2, 0, 3)
 #define Cvrt_ARGB32_BGR32_C CVRT_ARGB32_TO(uint8_t, 8, 0, 0, 2, 1, 0, 0, 3)
-
-#define Cvrt_Argb32_Argb38_C CVRT_Argb32_TO(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
 #define Cvrt_ARGB32_Argb38_C CVRT_ARGB32_TO(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
-
-#define Cvrt_Argb32_Argb64_C CVRT_Argb32_TO(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
 #define Cvrt_ARGB32_Argb64_C CVRT_ARGB32_TO(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
-#define Cvrt_Argb32_ARGB64_C CVRT_Argb32_TO(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
 #define Cvrt_ARGB32_ARGB64_C CVRT_ARGB32_TO(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
+#define Cvrt_ARGB32_rgbA64_C CVRT_ARGB32_TO(uint16_t, 16, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_ARGB32_RGBA64_C CVRT_ARGB32_TO(uint16_t, 16, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_ARGB32_RGB64_C CVRT_ARGB32_TO(uint16_t, 16, 0, 0, 0, 1, 2, 0, 3)
+
+#define Cvrt_Argb64_rgbA64_C CVRT_Argb64_TO(uint16_t, 16, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_Argb64_RGBA64_C CVRT_Argb64_TO(uint16_t, 16, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_Argb64_RGB64_C CVRT_Argb64_TO(uint16_t, 16, 0, 0, 0, 1, 2, 0, 3)
+
+#define Cvrt_ARGB64_rgbA64_C CVRT_ARGB64_TO(uint16_t, 16, 1, 3, 0, 1, 2, 0, 4)
+#define Cvrt_ARGB64_RGBA64_C CVRT_ARGB64_TO(uint16_t, 16, 0, 3, 0, 1, 2, 0, 4)
+#define Cvrt_ARGB64_RGB64_C CVRT_ARGB64_TO(uint16_t, 16, 0, 0, 0, 1, 2, 0, 3)
+
+// 16-bit to 16-bit not covered by the above.
+
+#define Cvrt_rgbA64_RGBA64_C                                                  \
+  Cvrt_C</*SrcType=*/uint16_t, /*kSrcDepth=*/16, /*kSrcMult=*/1, /*kSrcA=*/3, \
+         /*kSrcR=*/0, /*kSrcG=*/1, /*kSrcB=*/2, /*kSrcStep=*/4,               \
+         /*DstType=*/uint16_t, /*kDstDepth=*/16, /*kDstMult=*/0, /*kDstA=*/3, \
+         /*kDstR=*/0, /*kDstG=*/1, /*kDstB=*/2, /*kDstStep=*/4,               \
+         /*kFillAlpha=*/false>
+
+#define Cvrt_rgbA64_RGB64_C                                                   \
+  Cvrt_C</*SrcType=*/uint16_t, /*kSrcDepth=*/16, /*kSrcMult=*/1, /*kSrcA=*/3, \
+         /*kSrcR=*/0, /*kSrcG=*/1, /*kSrcB=*/2, /*kSrcStep=*/4,               \
+         /*DstType=*/uint16_t, /*kDstDepth=*/16, /*kDstMult=*/0, /*kDstA=*/0, \
+         /*kDstR=*/0, /*kDstG=*/1, /*kDstB=*/2, /*kDstStep=*/3,               \
+         /*kFillAlpha=*/true>
+
+#define Cvrt_RGBA64_rgbA64_C                                                   \
+  Cvrt_C</*SrcType=*/uint16_t, /*kSrcDepth=*/16, /*kSrcMult=*/0, /*kSrcA=*/3, \
+         /*kSrcR=*/0, /*kSrcG=*/1, /*kSrcB=*/2, /*kSrcStep=*/4,               \
+         /*DstType=*/uint16_t, /*kDstDepth=*/16, /*kDstMult=*/1, /*kDstA=*/3, \
+         /*kDstR=*/0, /*kDstG=*/1, /*kDstB=*/2, /*kDstStep=*/4,               \
+         /*kFillAlpha=*/false>
+
+#define Cvrt_RGBA64_RGB64_C                                                   \
+  Cvrt_C</*SrcType=*/uint16_t, /*kSrcDepth=*/16, /*kSrcMult=*/0, /*kSrcA=*/3, \
+         /*kSrcR=*/0, /*kSrcG=*/1, /*kSrcB=*/2, /*kSrcStep=*/4,               \
+         /*DstType=*/uint16_t, /*kDstDepth=*/16, /*kDstMult=*/0, /*kDstA=*/0, \
+         /*kDstR=*/0, /*kDstG=*/1, /*kDstB=*/2, /*kDstStep=*/3,               \
+         /*kFillAlpha=*/true>
+
+#define Cvrt_RGB64_rgbA64_C                                                   \
+  Cvrt_C</*SrcType=*/uint16_t, /*kSrcDepth=*/16, /*kSrcMult=*/0, /*kSrcA=*/0, \
+         /*kSrcR=*/0, /*kSrcG=*/1, /*kSrcB=*/2, /*kSrcStep=*/3,               \
+         /*DstType=*/uint16_t, /*kDstDepth=*/16, /*kDstMult=*/1, /*kDstA=*/3, \
+         /*kDstR=*/0, /*kDstG=*/1, /*kDstB=*/2, /*kDstStep=*/4,               \
+         /*kFillAlpha=*/true>
+
+#define Cvrt_RGB64_RGBA64_C                                                   \
+  Cvrt_C</*SrcType=*/uint16_t, /*kSrcDepth=*/16, /*kSrcMult=*/0, /*kSrcA=*/0, \
+         /*kSrcR=*/0, /*kSrcG=*/1, /*kSrcB=*/2, /*kSrcStep=*/3,               \
+         /*DstType=*/uint16_t, /*kDstDepth=*/16, /*kDstMult=*/0, /*kDstA=*/3, \
+         /*kDstR=*/0, /*kDstG=*/1, /*kDstB=*/2, /*kDstStep=*/4,               \
+         /*kFillAlpha=*/true>
 
 //------------------------------------------------------------------------------
 // SSE4.1 implementation
@@ -444,6 +522,9 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
 
   WP2ArgbConvertFrom[WP2_Argb_64] = Cvrt_Argb64_Argb32_C;
   WP2ArgbConvertFrom[WP2_ARGB_64] = Cvrt_ARGB64_Argb32_C;
+  WP2ArgbConvertFrom[WP2_rgbA_64] = Cvrt_rgbA64_Argb32_C;
+  WP2ArgbConvertFrom[WP2_RGBA_64] = Cvrt_RGBA64_Argb32_C;
+  WP2ArgbConvertFrom[WP2_RGB_48] = Cvrt_RGB64_Argb32_C;
 
   WP2ArgbConvertTo[WP2_Argb_32] = Cvrt_Argb32_Argb32_C;
   WP2ArgbConvertTo[WP2_ARGB_32] = Cvrt_Argb32_ARGB32_C;
@@ -464,6 +545,9 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
 
   WP2ArgbConvertTo[WP2_Argb_64] = Cvrt_Argb32_Argb64_C;
   WP2ArgbConvertTo[WP2_ARGB_64] = Cvrt_Argb32_ARGB64_C;
+  WP2ArgbConvertTo[WP2_rgbA_64] = Cvrt_Argb32_rgbA64_C;
+  WP2ArgbConvertTo[WP2_RGBA_64] = Cvrt_Argb32_RGBA64_C;
+  WP2ArgbConvertTo[WP2_RGB_48] = Cvrt_Argb32_RGB64_C;
 
   WP2ARGBConvertFrom[WP2_Argb_32] = Cvrt_Argb32_ARGB32_C;
   WP2ARGBConvertFrom[WP2_ARGB_32] = Cvrt_ARGB32_ARGB32_C;
@@ -484,6 +568,9 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
 
   WP2ARGBConvertFrom[WP2_Argb_64] = Cvrt_Argb64_ARGB32_C;
   WP2ARGBConvertFrom[WP2_ARGB_64] = Cvrt_ARGB64_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_rgbA_64] = Cvrt_rgbA64_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_RGBA_64] = Cvrt_RGBA64_ARGB32_C;
+  WP2ARGBConvertFrom[WP2_RGB_48] = Cvrt_RGB64_ARGB32_C;
 
   WP2ARGBConvertTo[WP2_Argb_32] = Cvrt_ARGB32_Argb32_C;
   WP2ARGBConvertTo[WP2_ARGB_32] = Cvrt_ARGB32_ARGB32_C;
@@ -504,6 +591,9 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
 
   WP2ARGBConvertTo[WP2_Argb_64] = Cvrt_ARGB32_Argb64_C;
   WP2ARGBConvertTo[WP2_ARGB_64] = Cvrt_ARGB32_ARGB64_C;
+  WP2ARGBConvertTo[WP2_rgbA_64] = Cvrt_ARGB32_rgbA64_C;
+  WP2ARGBConvertTo[WP2_RGBA_64] = Cvrt_ARGB32_RGBA64_C;
+  WP2ARGBConvertTo[WP2_RGB_48] = Cvrt_ARGB32_RGB64_C;
 
   if (WP2GetCPUInfo != nullptr) {
 #if defined(WP2_USE_SSE)
@@ -599,6 +689,7 @@ WP2ArgbConverterF WP2ConversionFunction(WP2SampleFormat from,
   if (from == to) {
     if (WP2FormatBpp(from) == 3) return WP2Copy_C<3>;
     if (WP2FormatBpp(from) == 4) return WP2Copy_C<4>;
+    if (WP2FormatBpp(from) == 6) return WP2Copy_C<6>;
     if (WP2FormatBpp(from) == 8) return WP2Copy_C<8>;
   }
 
@@ -616,11 +707,36 @@ WP2ArgbConverterF WP2ConversionFunction(WP2SampleFormat from,
     if (from == WP2_Argb_64) return WP2ConvertFromTo8bFunc<WP2_Argb_64>(to);
     if (from == WP2_ARGB_64) return WP2ConvertFromTo8bFunc<WP2_ARGB_64>(to);
   }
-  if (from == WP2_ARGB_64 && to == WP2_Argb_64) {
-    return Cvrt_ARGB64_Argb64_C;
+
+  if (from == WP2_Argb_64) {
+    if (to == WP2_ARGB_64) return Cvrt_Argb64_ARGB64_C;
+    if (to == WP2_rgbA_64) return Cvrt_Argb64_rgbA64_C;
+    if (to == WP2_RGBA_64) return Cvrt_Argb64_RGBA64_C;
+    if (to == WP2_RGB_48) return Cvrt_Argb64_RGB64_C;
   }
-  if (from == WP2_Argb_64 && to == WP2_ARGB_64) {
-    return Cvrt_Argb64_ARGB64_C;
+  if (from == WP2_ARGB_64) {
+    if (to == WP2_Argb_64) return Cvrt_ARGB64_Argb64_C;
+    if (to == WP2_rgbA_64) return Cvrt_ARGB64_rgbA64_C;
+    if (to == WP2_RGBA_64) return Cvrt_ARGB64_RGBA64_C;
+    if (to == WP2_RGB_48) return Cvrt_ARGB64_RGB64_C;
+  }
+  if (from == WP2_rgbA_64) {
+    if (to == WP2_Argb_64) return Cvrt_rgbA64_Argb64_C;
+    if (to == WP2_ARGB_64) return Cvrt_rgbA64_ARGB64_C;
+    if (to == WP2_RGBA_64) return Cvrt_rgbA64_RGBA64_C;
+    if (to == WP2_RGB_48) return Cvrt_rgbA64_RGB64_C;
+  }
+  if (from == WP2_RGBA_64) {
+    if (to == WP2_Argb_64) return Cvrt_RGBA64_Argb64_C;
+    if (to == WP2_ARGB_64) return Cvrt_RGBA64_ARGB64_C;
+    if (to == WP2_rgbA_64) return Cvrt_RGBA64_rgbA64_C;
+    if (to == WP2_RGB_48) return Cvrt_RGBA64_RGB64_C;
+  }
+  if (from == WP2_RGB_48) {
+    if (to == WP2_Argb_64) return Cvrt_RGB64_Argb64_C;
+    if (to == WP2_ARGB_64) return Cvrt_RGB64_ARGB64_C;
+    if (to == WP2_rgbA_64) return Cvrt_RGB64_rgbA64_C;
+    if (to == WP2_RGBA_64) return Cvrt_RGB64_RGBA64_C;
   }
   return nullptr;
 }

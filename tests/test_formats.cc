@@ -84,9 +84,7 @@ WP2Status ConvertOutputBackToOriginalFormat(
                WP2_STATUS_INVALID_PARAMETER);
   WP2_CHECK_STATUS(output_in_original_format->ConvertFrom(output));
   const bool orig_premultiplied = WP2IsPremultiplied(original.format());
-  if (output.format() == WP2_RGB_24 || output.format() == WP2_BGR_24 ||
-      output.format() == WP2_XRGB_32 || output.format() == WP2_RGBX_32 ||
-      output.format() == WP2_BGRX_32) {
+  if (!WP2FormatHasAlpha(output.format())) {
     WP2_CHECK_STATUS(
         CopyAlpha(original, output_in_original_format, orig_premultiplied));
   }
