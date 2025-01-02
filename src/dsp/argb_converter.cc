@@ -103,8 +103,9 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
       } else if (kSrcAlphaMax == kDstAlphaMax) {
         dst[kDstA] = src[kSrcA];
       } else {
-        dst[kDstA] =
-            (src[kSrcA] * kDstAlphaMax + kSrcAlphaRound) / kSrcAlphaMax;
+        dst[kDstA] = static_cast<DstType>(std::min<uint32_t>(
+            (src[kSrcA] * kDstAlphaMax + kSrcAlphaRound) / kSrcAlphaMax,
+            kDstAlphaMax));
       }
     }
     if (kSrcDepth == kDstDepth && kSrcMult == kDstMult) {
@@ -154,7 +155,7 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
          /*kDstDepth=*/8, /*kDstMult=*/0, /*kDstA=*/0, /*kDstR=*/1,     \
          /*kDstG=*/2, /*kDstB=*/3, /*kDstStep=*/4, FILL>
 
-// From the Argb32 or ARGB32 to specified format.
+// From Argb32 or ARGB32 to the specified format.
 #define CVRT_Argb32_TO(DST_TYPE, DST_DEPTH, DST_MULT, A, R, G, B, FILL,      \
                        DST_STEP)                                             \
   Cvrt_C<uint8_t, /*kSrcDepth=*/8, /*kSrcMult=*/1, /*kSrcA=*/0, /*kSrcR=*/1, \
@@ -165,6 +166,18 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
   Cvrt_C<uint8_t, /*kSrcDepth=*/8, /*kSrcMult=*/0, /*kSrcA=*/0, /*kSrcR=*/1, \
          /*kSrcG=*/2, /*kSrcB=*/3, /*kSrcStep=*/4, DST_TYPE, DST_DEPTH,      \
          DST_MULT, A, R, G, B, DST_STEP, FILL>
+
+// From the specified format to Argb64 or ARGB64.
+#define CVRT_TO_Argb64(SRC_TYPE, SRC_DEPTH, SRC_MULT, A, R, G, B, FILL, \
+                       SRC_STEP)                                        \
+  Cvrt_C<SRC_TYPE, SRC_DEPTH, SRC_MULT, A, R, G, B, SRC_STEP, uint16_t, \
+         /*kDstDepth=*/16, /*kDstMult=*/1, /*kDstA=*/0, /*kDstR=*/1,    \
+         /*kDstG=*/2, /*kDstB=*/3, /*kDstStep=*/4, FILL>
+#define CVRT_TO_ARGB64(SRC_TYPE, SRC_DEPTH, SRC_MULT, A, R, G, B, FILL, \
+                       SRC_STEP)                                        \
+  Cvrt_C<SRC_TYPE, SRC_DEPTH, SRC_MULT, A, R, G, B, SRC_STEP, uint16_t, \
+         /*kDstDepth=*/16, /*kDstMult=*/0, /*kDstA=*/0, /*kDstR=*/1,    \
+         /*kDstG=*/2, /*kDstB=*/3, /*kDstStep=*/4, FILL>
 
 //                                                   d
 //                                             t     e  m              f  s
@@ -199,8 +212,13 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
 #define Cvrt_Argb38_Argb32_C CVRT_TO_Argb32(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
 #define Cvrt_Argb38_ARGB32_C CVRT_TO_ARGB32(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
 
+#define Cvrt_Argb64_Argb32_C CVRT_TO_Argb32(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
+#define Cvrt_Argb64_ARGB32_C CVRT_TO_ARGB32(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
 #define Cvrt_ARGB64_Argb32_C CVRT_TO_Argb32(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
 #define Cvrt_ARGB64_ARGB32_C CVRT_TO_ARGB32(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
+
+#define Cvrt_Argb64_ARGB64_C CVRT_TO_ARGB64(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
+#define Cvrt_ARGB64_Argb64_C CVRT_TO_Argb64(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
 
 //                                                   d
 //                                             t     e  m              f  s
@@ -232,6 +250,8 @@ void Cvrt_C(const void* src_data, uint32_t width, void* dst_data) {
 #define Cvrt_Argb32_Argb38_C CVRT_Argb32_TO(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
 #define Cvrt_ARGB32_Argb38_C CVRT_ARGB32_TO(uint16_t, 10, 1, 0, 1, 2, 3, 0, 4)
 
+#define Cvrt_Argb32_Argb64_C CVRT_Argb32_TO(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
+#define Cvrt_ARGB32_Argb64_C CVRT_ARGB32_TO(uint16_t, 16, 1, 0, 1, 2, 3, 0, 4)
 #define Cvrt_Argb32_ARGB64_C CVRT_Argb32_TO(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
 #define Cvrt_ARGB32_ARGB64_C CVRT_ARGB32_TO(uint16_t, 16, 0, 0, 1, 2, 3, 0, 4)
 
@@ -422,6 +442,7 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
 
   WP2ArgbConvertFrom[WP2_Argb_38] = Cvrt_Argb38_Argb32_C;
 
+  WP2ArgbConvertFrom[WP2_Argb_64] = Cvrt_Argb64_Argb32_C;
   WP2ArgbConvertFrom[WP2_ARGB_64] = Cvrt_ARGB64_Argb32_C;
 
   WP2ArgbConvertTo[WP2_Argb_32] = Cvrt_Argb32_Argb32_C;
@@ -441,6 +462,7 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
 
   WP2ArgbConvertTo[WP2_Argb_38] = Cvrt_Argb32_Argb38_C;
 
+  WP2ArgbConvertTo[WP2_Argb_64] = Cvrt_Argb32_Argb64_C;
   WP2ArgbConvertTo[WP2_ARGB_64] = Cvrt_Argb32_ARGB64_C;
 
   WP2ARGBConvertFrom[WP2_Argb_32] = Cvrt_Argb32_ARGB32_C;
@@ -460,6 +482,7 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
 
   WP2ARGBConvertFrom[WP2_Argb_38] = Cvrt_Argb38_ARGB32_C;
 
+  WP2ARGBConvertFrom[WP2_Argb_64] = Cvrt_Argb64_ARGB32_C;
   WP2ARGBConvertFrom[WP2_ARGB_64] = Cvrt_ARGB64_ARGB32_C;
 
   WP2ARGBConvertTo[WP2_Argb_32] = Cvrt_ARGB32_Argb32_C;
@@ -479,6 +502,7 @@ WP2_TSAN_IGNORE_FUNCTION void WP2ArgbConverterInit() {
 
   WP2ARGBConvertTo[WP2_Argb_38] = Cvrt_ARGB32_Argb38_C;
 
+  WP2ARGBConvertTo[WP2_Argb_64] = Cvrt_ARGB32_Argb64_C;
   WP2ARGBConvertTo[WP2_ARGB_64] = Cvrt_ARGB32_ARGB64_C;
 
   if (WP2GetCPUInfo != nullptr) {
@@ -557,6 +581,7 @@ WP2ArgbConverterF WP2ConvertFromTo8bFunc(WP2SampleFormat to) {
 template <WP2SampleFormat from>
 WP2ArgbConverterF WP2ConvertFromToFunc(WP2SampleFormat to) {
   if (to == WP2_Argb_38) return WP2ConvertFromTo<from, WP2_Argb_38>;
+  if (to == WP2_Argb_64) return WP2ConvertFromTo<from, WP2_Argb_64>;
   if (to == WP2_ARGB_64) return WP2ConvertFromTo<from, WP2_ARGB_64>;
   return WP2ConvertFromTo8bFunc<from>(to);
 }
@@ -586,9 +611,16 @@ WP2ArgbConverterF WP2ConversionFunction(WP2SampleFormat from,
   if (from == WP2_BGRX_32) return WP2ConvertFromToFunc<WP2_BGRX_32>(to);
   if (from == WP2_RGB_24) return WP2ConvertFromToFunc<WP2_RGB_24>(to);
   if (from == WP2_BGR_24) return WP2ConvertFromToFunc<WP2_BGR_24>(to);
-  if (to < WP2_Argb_38) {
+  if (WP2Formatbpc(to) == 8) {
     if (from == WP2_Argb_38) return WP2ConvertFromTo8bFunc<WP2_Argb_38>(to);
+    if (from == WP2_Argb_64) return WP2ConvertFromTo8bFunc<WP2_Argb_64>(to);
     if (from == WP2_ARGB_64) return WP2ConvertFromTo8bFunc<WP2_ARGB_64>(to);
+  }
+  if (from == WP2_ARGB_64 && to == WP2_Argb_64) {
+    return Cvrt_ARGB64_Argb64_C;
+  }
+  if (from == WP2_Argb_64 && to == WP2_ARGB_64) {
+    return Cvrt_Argb64_ARGB64_C;
   }
   return nullptr;
 }

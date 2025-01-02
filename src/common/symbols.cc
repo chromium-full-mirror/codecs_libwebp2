@@ -636,7 +636,7 @@ void GetARGBRanges(const std::array<TransformHeader,
   for (uint32_t c = 0; c < 4; ++c) {
     segments[c] = {0, static_cast<int32_t>(WP2::FormatMax(format, c))};
   }
-  assert(segments[0].max == WP2::kAlphaMax);  // WP2_ARGB_64 is unsupported.
+  assert(segments[0].max == WP2::kAlphaMax);  // WP2_A***_64 is unsupported.
   bool do_clamp = true;
   for (uint32_t i = 0; i < num_transforms; ++i) {
     if (headers[i].type == TransformType::kNum) break;

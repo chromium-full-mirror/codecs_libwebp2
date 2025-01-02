@@ -587,13 +587,31 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
 
 WP2Status ArgbBuffer::GetDistortionBlackOrWhiteBackground(
     const ArgbBuffer& ref, MetricType metric_type, float* result) const {
-  const bool has_transparency = ref.HasTransparency();
+  WP2_CHECK_OK(format() == ref.format(), WP2_STATUS_INVALID_PARAMETER);
 
   ArgbBuffer this_premultiplied, ref_premultiplied;
-  WP2_CHECK_STATUS((format() == WP2_Argb_32)
+  if (WP2Formatbpc(format()) == 8) {
+    WP2_CHECK_STATUS(this_premultiplied.SetFormat(WP2_Argb_32));
+    WP2_CHECK_STATUS(ref_premultiplied.SetFormat(WP2_Argb_32));
+  } else if (WP2Formatbpc(format()) == 16) {
+    WP2_CHECK_STATUS(this_premultiplied.SetFormat(WP2_Argb_64));
+    WP2_CHECK_STATUS(ref_premultiplied.SetFormat(WP2_Argb_64));
+  } else {
+    return WP2_STATUS_UNSUPPORTED_FEATURE;
+  }
+
+  const bool ref_is_opaque = !ref.HasTransparency();
+  // Check if an early exit is possible (only if it avoids a conversion below).
+  if (format() != this_premultiplied.format() && ref_is_opaque &&
+      !HasTransparency()) {
+    // Nothing to composite.
+    return GetDistortion(ref, metric_type, result);
+  }
+
+  WP2_CHECK_STATUS(format() == this_premultiplied.format()
                        ? this_premultiplied.SetView(*this)
                        : this_premultiplied.ConvertFrom(*this));
-  WP2_CHECK_STATUS((ref.format() == WP2_Argb_32)
+  WP2_CHECK_STATUS(ref.format() == ref_premultiplied.format()
                        ? ref_premultiplied.SetView(ref)
                        : ref_premultiplied.ConvertFrom(ref));
 
@@ -601,24 +619,39 @@ WP2Status ArgbBuffer::GetDistortionBlackOrWhiteBackground(
   // compositing on a black background.
   WP2_CHECK_STATUS(this_premultiplied.GetDistortion(
       ref_premultiplied, metric_type, /*include_alpha_in_all=*/false, result));
-  if (!has_transparency) {
+  if (ref_is_opaque) {
     return WP2_STATUS_OK;
   }
 
   // Composite on a white background.
   // TODO(maryla): we could composite directly inside GetDistortion() to use
   // less memory. Compositing over pure white could also be simplified.
-  ArgbBuffer ref_white(WP2_Argb_32), this_white(WP2_Argb_32);
+  ArgbBuffer ref_white(ref_premultiplied.format());
+  assert(!ref_is_opaque);
   WP2_CHECK_STATUS(ref_white.CopyFrom(ref_premultiplied));
-  WP2_CHECK_STATUS(this_white.CopyFrom(this_premultiplied));
-  WP2_CHECK_STATUS(ref_white.CompositeOver(Argb32b{255, 255, 255, 255}));
-  WP2_CHECK_STATUS(this_white.CompositeOver(Argb32b{255, 255, 255, 255}));
+  if (WP2Formatbpc(format()) == 8) {
+    WP2_CHECK_STATUS(ref_white.CompositeOver(Argb32b{255, 255, 255, 255}));
+  } else {
+    return WP2_STATUS_UNSUPPORTED_FEATURE;
+  }
+  ArgbBuffer this_white(this_premultiplied.format());
+  if (!HasTransparency()) {
+    // Nothing to composite.
+    WP2_CHECK_STATUS(this_white.SetView(this_premultiplied));
+  } else {
+    WP2_CHECK_STATUS(this_white.CopyFrom(this_premultiplied));
+    if (WP2Formatbpc(format()) == 8) {
+      WP2_CHECK_STATUS(this_white.CompositeOver(Argb32b{255, 255, 255, 255}));
+    } else {
+      return WP2_STATUS_UNSUPPORTED_FEATURE;
+    }
+  }
   float result_white_background[5];
   WP2_CHECK_STATUS(this_white.GetDistortion(ref_white, metric_type,
                                             /*include_alpha_in_all=*/false,
                                             result_white_background));
 
-  // Result is the worst of the two.
+  // Result is the worst average of the two.
   if (result_white_background[4] < result[4]) {
     // We intentionally omit copying result_white_background[0] which will be
     // 99 anyway as the image composited to a white background has no alpha.

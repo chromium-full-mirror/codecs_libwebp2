@@ -136,12 +136,40 @@ typedef enum {
   WP2_Argb_38,
 
   // 64b/pixel format: 16 bits for A, 16 per RGB.
+  WP2_Argb_64,
   WP2_ARGB_64,
 
   WP2_FORMAT_NUM
 } WP2SampleFormat;
 
-// Returns the number of bytes per sample for the given format.
+// Returns the number of samples (channels) per pixel for the given format.
+WP2_EXTERN constexpr uint32_t WP2FormatNumChannels(WP2SampleFormat format) {
+  switch (format) {
+    case WP2_Argb_32:
+    case WP2_ARGB_32:
+    case WP2_XRGB_32:
+    case WP2_rgbA_32:
+    case WP2_RGBA_32:
+    case WP2_RGBX_32:
+    case WP2_bgrA_32:
+    case WP2_BGRA_32:
+    case WP2_BGRX_32:
+    case WP2_Argb_38:
+    case WP2_Argb_64:
+    case WP2_ARGB_64:
+      return 4;
+    case WP2_RGB_24:
+    case WP2_BGR_24:
+      return 3;
+    case WP2_FORMAT_NUM:
+      assert(false);
+      return 0;
+  }
+  assert(false);
+  return 0;
+}
+
+// Returns the number of bytes per pixel for the given format.
 WP2_EXTERN constexpr uint32_t WP2FormatBpp(WP2SampleFormat format) {
   switch (format) {
     case WP2_Argb_32:
@@ -157,9 +185,9 @@ WP2_EXTERN constexpr uint32_t WP2FormatBpp(WP2SampleFormat format) {
     case WP2_RGB_24:
     case WP2_BGR_24:
       return 3;
-    case WP2_Argb_38:
+    case WP2_Argb_38:  // actually 38 bits, stored as uint16
+    case WP2_Argb_64:
     case WP2_ARGB_64:
-      // actually 38 bits, stored as uint16
       return 8;
     case WP2_FORMAT_NUM:
       assert(false);
@@ -186,6 +214,7 @@ WP2_EXTERN constexpr uint32_t WP2Formatbpc(WP2SampleFormat format) {
       return 8;
     case WP2_Argb_38:
       return 10;
+    case WP2_Argb_64:
     case WP2_ARGB_64:
       return 16;
     case WP2_FORMAT_NUM:
@@ -206,6 +235,7 @@ WP2_EXTERN constexpr bool WP2FormatHasAlpha(
     case WP2_Argb_32:
     case WP2_ARGB_32:
     case WP2_Argb_38:
+    case WP2_Argb_64:
     case WP2_ARGB_64:
       if (alpha_channel_index != nullptr) *alpha_channel_index = 0;
       return true;
@@ -241,6 +271,7 @@ WP2_EXTERN constexpr bool WP2IsPremultiplied(WP2SampleFormat format) {
     case WP2_Argb_38:
     case WP2_rgbA_32:
     case WP2_bgrA_32:
+    case WP2_Argb_64:
       return true;
     case WP2_ARGB_32:
     case WP2_XRGB_32:

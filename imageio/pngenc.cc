@@ -182,17 +182,21 @@ void PNGAPI PNGErrorFunction(png_structp png, png_const_charp dummy) {
 WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout, const char*, bool,
                    bool, size_t*) {
   WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
-  // TODO(yguyon): Allow more formats and convert only when necessary.
-  WP2_CHECK_OK(buffer.format() == WP2_Argb_32 ||
-                   buffer.format() == WP2_ARGB_32 ||
-                   buffer.format() == WP2_ARGB_64,
+
+  // Go without an alpha channel if there was no alpha channel to start with or
+  // if all alpha values are to their maximum value, and only if a
+  // WP2SampleFormat exists with the same bit depth and with no alpha channel
+  // (not the case for 16-bit samples because there is no WP2_RGB_48 yet).
+  const bool has_alpha = buffer.format() == WP2_Argb_64 ||
+                         buffer.format() == WP2_ARGB_64 ||
+                         buffer.HasTransparency();
+  const WP2SampleFormat tmp_format = WP2Formatbpc(buffer.format()) == 16
+                                         ? WP2_ARGB_64
+                                     : has_alpha ? WP2_ARGB_32
+                                                 : WP2_RGB_24;
+  WP2_CHECK_OK(WP2Formatbpc(buffer.format()) == WP2Formatbpc(tmp_format),
                WP2_STATUS_UNSUPPORTED_FEATURE);
 
-  const uint32_t width = buffer.width();
-  const uint32_t height = buffer.height();
-  // Not just HasTransparency() because there is no WP2_RGB_48 for now.
-  const bool has_alpha =
-      buffer.format() == WP2_ARGB_64 || buffer.HasTransparency();
   volatile png_structp png;
   volatile png_infop info;
 
@@ -210,37 +214,34 @@ WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout, const char*, bool,
     return WP2_STATUS_BAD_WRITE;
   }
   png_init_io(png, fout);
-  png_set_IHDR(png, info, width, height, WP2Formatbpc(buffer.format()),
-               has_alpha ? PNG_COLOR_TYPE_RGBA : PNG_COLOR_TYPE_RGB,
-               PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT,
-               PNG_FILTER_TYPE_DEFAULT);
+  png_set_IHDR(
+      png, info, buffer.width(), buffer.height(), WP2Formatbpc(tmp_format),
+      WP2FormatHasAlpha(tmp_format) ? PNG_COLOR_TYPE_RGBA : PNG_COLOR_TYPE_RGB,
+      PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT,
+      PNG_FILTER_TYPE_DEFAULT);
   png_write_info(png, info);
   if (buffer.format() == WP2_ARGB_64) {
-    png_set_swap(png);        // From big-endian to little-endian.
+    png_set_swap(png);  // From big-endian to little-endian.
+  }
+  if (WP2FormatHasAlpha(tmp_format)) {
     png_set_swap_alpha(png);  // From RGBA to ARGB.
   }
 
-  if (buffer.format() == WP2_Argb_32 || buffer.format() == WP2_ARGB_32) {
-    Vector_u8 ARGB;
-    WP2_CHECK_ALLOC_OK(ARGB.resize(width * WP2FormatBpp(buffer.format())));
-    WP2ArgbConverterInit();
-    for (png_uint_32 y = 0; y < height; ++y) {
+  if (buffer.format() == tmp_format) {
+    for (png_uint_32 y = 0; y < buffer.height(); ++y) {
       volatile png_bytep const row = (png_bytep)buffer.GetRow(y);
-      if (buffer.format() == WP2_Argb_32) {
-        WP2ArgbConvertTo[has_alpha ? WP2_RGBA_32 : WP2_RGB_24](row, width,
-                                                               ARGB.data());
-      } else {
-        assert(buffer.format() == WP2_ARGB_32);
-        WP2ARGBConvertTo[has_alpha ? WP2_RGBA_32 : WP2_RGB_24](row, width,
-                                                               ARGB.data());
-      }
-      png_bytep ptr[1] = {ARGB.data()};
+      png_bytep ptr[1] = {row};
       png_write_rows(png, ptr, 1);
     }
   } else {
-    assert(buffer.format() == WP2_ARGB_64);
-    for (png_uint_32 y = 0; y < height; ++y) {
-      volatile png_bytep const row = (png_bytep)buffer.GetRow(y);
+    ArgbBuffer tmp_row(tmp_format);
+    WP2_CHECK_STATUS(tmp_row.Resize(buffer.width(), 1));
+    for (png_uint_32 y = 0; y < buffer.height(); ++y) {
+      ArgbBuffer src_row(buffer.format());
+      WP2_CHECK_STATUS(src_row.SetView(buffer, {0, y, buffer.width(), 1}));
+      WP2_CHECK_STATUS(tmp_row.ConvertFrom(src_row));
+
+      volatile png_bytep const row = (png_bytep)tmp_row.GetRow(0);
       png_bytep ptr[1] = {row};
       png_write_rows(png, ptr, 1);
     }

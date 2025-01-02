@@ -314,6 +314,7 @@ class ExhaustiveTest
     tmp_is_premul_ = WP2IsPremultiplied(tmp_format);
     tmp_has_alpha_ = WP2FormatHasAlpha(tmp_format);
     tmp_is_38b_ = tmp_format == WP2_Argb_38;
+    tmp_is_64b_ = WP2Formatbpc(tmp_format) == 16;
     convert_to_tmp_ = src_is_premul_ ? WP2ArgbConvertTo[tmp_format]
                                      : WP2ARGBConvertTo[tmp_format];
     convert_from_tmp_ = src_is_premul_ ? WP2ArgbConvertFrom[tmp_format]
@@ -326,6 +327,7 @@ class ExhaustiveTest
     if (src_is_premul_) {
       if (tmp_has_alpha_) return v;
       if (tmp_is_38b_) return std::min(Unmult(a, v), 1023u);
+      if (tmp_is_64b_) return std::min(Unmult(a, v), 65535u);
       return (tmp_has_alpha_ ? v : Unmult(a, v));
     }
     if (tmp_is_premul_) {
@@ -335,12 +337,17 @@ class ExhaustiveTest
         const uint32_t v_premul_38b = (a_10b * v + 127) / 255;
         return Unmult(a_10b, v_premul_38b);
       }
+      if (tmp_is_64b_) {
+        const uint32_t a_16b = (a * 65535 + 127) / 255;
+        const uint32_t v_premul_64b = (a_16b * v + 127) / 255;
+        return Unmult(a_16b, v_premul_64b);
+      }
       return Unmult(a, (a * v + 127) / 255);
     }
     return v;
   }
 
-  bool src_is_premul_, tmp_is_premul_, tmp_has_alpha_, tmp_is_38b_;
+  bool src_is_premul_, tmp_is_premul_, tmp_has_alpha_, tmp_is_38b_, tmp_is_64b_;
   WP2ArgbConverterF convert_to_tmp_, convert_from_tmp_;
 };
 

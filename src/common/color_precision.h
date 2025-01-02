@@ -189,6 +189,7 @@ static inline uint32_t FormatMax(WP2SampleFormat format, uint32_t channel) {
       case WP2_BGR_24:
       case WP2_Argb_38:  // Alpha in WP2_Argb_38 uses only 8 bits.
         return WP2::kAlphaMax;
+      case WP2_Argb_64:
       case WP2_ARGB_64:
         return 65535;
       default:
