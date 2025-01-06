@@ -457,22 +457,23 @@ WP2Status ArgbBuffer::GetDistortion(const ArgbBuffer& ref,
   const uint32_t num_channels = include_alpha ? 4 : 3;
   const uint32_t pix_channel_size = pix_size * num_channels;
   if (metric_type == PSNR) {
-    WP2_CHECK_OK(WP2FormatBpp(format_) == 3 || WP2FormatBpp(format_) == 4 ||
-                     WP2FormatBpp(format_) == 8,
-                 WP2_STATUS_UNSUPPORTED_FEATURE);
     WP2PSNRInit();
-    auto metric_call = (WP2FormatBpp(format_) == 4) ? WP2SumSquaredError4x8u
-                                                    : WP2SumSquaredError3x8u;
     uint64_t result_64b[4] = {0, 0, 0, 0};
     for (uint32_t y = 0; y < height(); ++y) {
       if (WP2Formatbpc(ref.format()) == 8) {
+        const auto metric_call = (WP2FormatBpp(format_) == 4)
+                                     ? WP2SumSquaredError4x8u
+                                     : WP2SumSquaredError3x8u;
         const uint8_t* const ptr1 = GetRow8(y);
         const uint8_t* const ptr2 = ref.GetRow8(y);
         metric_call(ptr1, ptr2, width(), result_64b);
       } else {
+        const auto metric_call = (WP2FormatBpp(format_) == 8)
+                                     ? WP2SumSquaredError4x16u
+                                     : WP2SumSquaredError3x16u;
         const uint16_t* const ptr1 = GetRow16(y);
         const uint16_t* const ptr2 = ref.GetRow16(y);
-        WP2SumSquaredError4x16u(ptr1, ptr2, width(), result_64b);
+        metric_call(ptr1, ptr2, width(), result_64b);
       }
     }
     for (uint32_t c = 0; c < 4; ++c) {

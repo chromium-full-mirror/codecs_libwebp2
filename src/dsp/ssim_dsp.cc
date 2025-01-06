@@ -385,23 +385,13 @@ uint64_t SumSquaredError16s_C(const int16_t* src1, const int16_t* src2,
   return Accumulate(src1, src2, len);
 }
 
-template <int kNumChannels>
-void SumSquaredErrorNx8u_C(const uint8_t* src1, const uint8_t* src2,
-                           uint32_t len, uint64_t result[kNumChannels]) {
+template <typename T, int kNumChannels>
+void SumSquaredError_C(const T* src1, const T* src2, uint32_t len,
+                       uint64_t result[kNumChannels]) {
   for (uint32_t i = 0; i < len; ++i) {
     for (uint32_t c = 0; c < kNumChannels; ++c) {
       const int32_t diff =
           (int32_t)src1[kNumChannels * i + c] - src2[kNumChannels * i + c];
-      result[c] += diff * diff;
-    }
-  }
-}
-
-void SumSquaredError4x16u_C(const uint16_t* src1, const uint16_t* src2,
-                            uint32_t len, uint64_t result[4]) {
-  for (uint32_t i = 0; i < len; ++i) {
-    for (uint32_t c = 0; c < 4; ++c) {
-      const int32_t diff = (int32_t)src1[4 * i + c] - src2[4 * i + c];
       result[c] += diff * diff;
     }
   }
@@ -648,6 +638,8 @@ void (*WP2SumSquaredError3x8u)(const uint8_t* src1, const uint8_t* src2,
                                uint32_t len, uint64_t result[3]) = nullptr;
 void (*WP2SumSquaredError4x16u)(const uint16_t* src1, const uint16_t* src2,
                                 uint32_t len, uint64_t result[4]) = nullptr;
+void (*WP2SumSquaredError3x16u)(const uint16_t* src1, const uint16_t* src2,
+                                uint32_t len, uint64_t result[3]) = nullptr;
 
 uint64_t (*WP2SumSquaredErrorBlock)(const int16_t* src1, uint32_t step1,
                                     const int16_t* src2, uint32_t step2,
@@ -664,9 +656,10 @@ WP2_TSAN_IGNORE_FUNCTION void WP2PSNRInit() {
 
   WP2SumSquaredError8u = SumSquaredError8u_C;
   WP2SumSquaredError16s = SumSquaredError16s_C;
-  WP2SumSquaredError4x8u = SumSquaredErrorNx8u_C<4>;
-  WP2SumSquaredError3x8u = SumSquaredErrorNx8u_C<3>;
-  WP2SumSquaredError4x16u = SumSquaredError4x16u_C;
+  WP2SumSquaredError4x8u = SumSquaredError_C<uint8_t, 4>;
+  WP2SumSquaredError3x8u = SumSquaredError_C<uint8_t, 3>;
+  WP2SumSquaredError4x16u = SumSquaredError_C<uint16_t, 4>;
+  WP2SumSquaredError3x16u = SumSquaredError_C<uint16_t, 3>;
 
   WP2SumSquaredErrorBlock = SumSquaredErrorBlock_C;
   WP2SumSquaredErrorHalfBlock = SumSquaredErrorHalfBlock_C;

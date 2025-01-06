@@ -26,6 +26,7 @@
 
 //------------------------------------------------------------------------------
 
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -247,6 +248,38 @@ WP2_EXTERN constexpr uint32_t WP2Formatbpc(WP2SampleFormat format) {
   return 0;
 }
 
+// Returns the number of bits used by the alpha channel.
+WP2_EXTERN constexpr uint32_t WP2Formatbpalpha(WP2SampleFormat format) {
+  switch (format) {
+    case WP2_RGB_24:
+    case WP2_BGR_24:
+    case WP2_RGB_48:
+      return 0;
+    case WP2_Argb_32:
+    case WP2_ARGB_32:
+    case WP2_XRGB_32:
+    case WP2_rgbA_32:
+    case WP2_RGBA_32:
+    case WP2_RGBX_32:
+    case WP2_bgrA_32:
+    case WP2_BGRA_32:
+    case WP2_BGRX_32:
+    case WP2_Argb_38:
+      return 8;
+    case WP2_Argb_64:
+    case WP2_ARGB_64:
+    case WP2_rgbA_64:
+    case WP2_RGBA_64:
+    case WP2_bgrA_64:
+    case WP2_BGRA_64:
+      return 16;
+    case WP2_FORMAT_NUM:
+      break;
+  }
+  assert(false);
+  return 0;
+}
+
 // Returns true if the 'format' has an alpha channel.
 // Also returns its index if 'alpha_channel_index' is not null and there is one
 // or there is a spot for alpha (e.g. RGBX). Otherwise 'alpha_channel_index'
@@ -293,6 +326,49 @@ WP2_EXTERN constexpr bool WP2FormatHasAlpha(
   }
   assert(false);
   return false;
+}
+
+// Returns the indices of the channels in the format. The fifth element is the
+// step size.
+WP2_EXTERN constexpr std::array<uint32_t, 5> WP2FormatIndices(
+    WP2SampleFormat format) {
+  constexpr uint32_t kInvalid = std::numeric_limits<uint32_t>::max();
+  switch (format) {
+    case WP2_Argb_32:
+    case WP2_ARGB_32:
+    case WP2_Argb_38:
+    case WP2_Argb_64:
+    case WP2_ARGB_64:
+      return {0, 1, 2, 3, 4};
+    case WP2_rgbA_32:
+    case WP2_RGBA_32:
+    case WP2_rgbA_64:
+    case WP2_RGBA_64:
+      return {3, 0, 1, 2, 4};
+    case WP2_bgrA_32:
+    case WP2_BGRA_32:
+    case WP2_bgrA_64:
+    case WP2_BGRA_64:
+      return {3, 2, 1, 0, 4};
+    case WP2_XRGB_32:
+      return {0, 1, 2, 3, 4};
+      // TODO(vrabaud): Should be {kInvalid, 1, 2, 3, 4};
+    case WP2_RGB_24:
+    case WP2_RGB_48:
+      return {kInvalid, 0, 1, 2, 3u};
+    case WP2_RGBX_32:
+      // TODO(vrabaud): Alpha should be kInvalid.
+      return {3, 0, 1, 2, 4u};
+    case WP2_BGRX_32:
+      // TODO(vrabaud): Alpha should be kInvalid.
+      return {3, 2, 1, 0, 4u};
+    case WP2_BGR_24:
+      return {kInvalid, 2, 1, 0, 3u};
+    case WP2_FORMAT_NUM:
+      break;
+  }
+  assert(false);
+  return {kInvalid, kInvalid, kInvalid, kInvalid, kInvalid};
 }
 
 // Returns true if the format has premultiplied rgb values (rgb = a * RGB).
