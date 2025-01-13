@@ -63,11 +63,11 @@ void LimitConfigForBigImages(DataView bitstream, DecoderConfig* config) {
           features.tile_shape, features.raw_width, features.raw_height);
       const uint32_t tile_height = TileHeight(
           features.tile_shape, features.raw_width, features.raw_height);
-      const uint32_t bytes_used_per_tile =
-          tile_width * tile_height * (sizeof(int16_t) * 4) * 16;
+      const uint32_t peak_mem_divided_per_byte_size =
+          kMaxPeakMem / tile_width / tile_height / (sizeof(int16_t) * 4) / 16;
       config->thread_level =
           std::min(config->thread_level,
-                   std::max(kMaxPeakMem / bytes_used_per_tile, 1u) - 1u);
+                   std::max(peak_mem_divided_per_byte_size, 1u) - 1u);
     }
   }
 }
