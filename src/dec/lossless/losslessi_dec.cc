@@ -292,8 +292,8 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
       std::array<TransformHeader, kPossibleTransformCombinationSize> headers;
       for (int i = 0; i < ind; ++i) headers[i] = transforms_[i].header_;
 
-      GetARGBRanges(headers, hdr_.symbols_info_.SampleFormat(), minima_range,
-                    maxima_range, ind);
+      WP2_CHECK_STATUS(GetARGBRanges(headers, hdr_.symbols_info_.SampleFormat(),
+                                     minima_range, maxima_range, ind));
     }
     int16_t* predicted = nullptr;
 #ifndef WP2_REDUCE_BINARY_SIZE
@@ -1112,8 +1112,8 @@ WP2Status Decoder::DecodeHeader() {
       headers[t] = transforms_[t].header_;
     }
 
-    GetARGBRanges(headers, hdr_.symbols_info_.SampleFormat(), minima_range,
-                  maxima_range);
+    WP2_CHECK_STATUS(GetARGBRanges(headers, hdr_.symbols_info_.SampleFormat(),
+                                   minima_range, maxima_range));
     // Read the ARGB ranges. As the encoder tries to reduce the ranges of ARGB
     // values around zero, they are more efficiently stored with prefix coding.
     for (Symbol sym : {kSymbolA, kSymbolR, kSymbolG, kSymbolB}) {

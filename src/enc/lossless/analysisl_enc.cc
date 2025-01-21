@@ -703,6 +703,13 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
     }
     c.lz77s_types_to_try_size = n_lz77s;
   }
+
+  // Add a last chance config that minimizes the range of the residuals by
+  // having no transforms.
+  WP2_CHECK_ALLOC_OK(configs->push_back(configs->back()));
+  for (auto& t : configs->back().transforms) t.type = TransformType::kNum;
+  configs->back().is_skippable = true;
+
   return WP2_STATUS_OK;
 }
 

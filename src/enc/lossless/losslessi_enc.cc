@@ -928,8 +928,9 @@ WP2Status Encoder::ApplyAndWriteTransformsImpl(
         case TransformType::kPredictorWSub:
           // Define the minimum/maximum values before applying the predictors.
           int32_t minima_range[4], maxima_range[4];
-          GetARGBRanges(config->transforms, symbols_info_.SampleFormat(),
-                        minima_range, maxima_range, /*num_transforms=*/i);
+          WP2_CHECK_STATUS(
+              GetARGBRanges(config->transforms, symbols_info_.SampleFormat(),
+                            minima_range, maxima_range, /*num_transforms=*/i));
           WP2_CHECK_STATUS(ApplyPredictor(minima_range, maxima_range,
                                           config->HasSubModes(), progress_local,
                                           config->transform_bits, enc, dicts));
@@ -1073,12 +1074,16 @@ WP2Status Encoder::ApplyAndWriteTransforms(
     }
     // Find the ranges in which they should belong according to the transforms.
     int32_t minima_range[4], maxima_range[4];
-    GetARGBRanges(config->transforms, symbols_info->SampleFormat(),
-                  minima_range, maxima_range);
+    WP2_CHECK_STATUS(GetARGBRanges(config->transforms,
+                                   symbols_info->SampleFormat(), minima_range,
+                                   maxima_range));
     for (uint32_t c = 0; c < 4; ++c) {
-      assert(minima_range[c] <= minima[c]);
       assert(minima[c] <= maxima[c]);
-      assert(minima[c] <= maxima_range[c]);
+      if (minima[c] < minima_range[c] || maxima[c] > maxima_range[c]) {
+        // Invalidate the encoding because it does not fit within the range.
+        enc->Reset();
+        return WP2_STATUS_OK;
+      }
     }
     // Write the ARGB ranges.
     for (Symbol sym : {kSymbolA, kSymbolR, kSymbolG, kSymbolB}) {
@@ -1171,6 +1176,10 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
     const CrunchConfig& config = crunch_configs[i_config];
     const ProgressRange config_progress(full_encode_progress,
                                         1. / crunch_configs.size());
+    if (config.is_skippable && best_cost < std::numeric_limits<float>::max()) {
+      WP2_CHECK_STATUS(config_progress.AdvanceBy(1.));
+      continue;
+    }
     const ProgressRange transforms_progress(config_progress, 0.5);
     const ProgressRange encode_progress(config_progress, 0.5);
 
@@ -1194,6 +1203,12 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
         use_previous_transforms ? &crunch_configs[i_config - 1] : nullptr,
         cache_transforms, transforms_progress, &crunch_configs[i_config],
         &symbols_info, &enc, &dicts));
+    // If enc has been emptied, encoding could not be performed.
+    if (enc.NumTokens() == 0) {
+      use_previous_transforms = false;
+      WP2_CHECK_STATUS(progress.AdvanceBy(1.));
+      continue;
+    }
     use_previous_transforms = cache_transforms;
 
     // -------------------------------------------------------------------------

@@ -263,6 +263,9 @@ struct CrunchConfig {
   bool group4_use_move_to_front;
   // How to sort the palette.
   Palette::Sorting palette_sorting_type;
+  // Whether the config can be skipped if one has already been found to be
+  // valid.
+  bool is_skippable = false;
   // Returns whether one of the transforms is kPredictorWSub.
   bool HasSubModes() const {
     for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {

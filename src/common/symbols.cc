@@ -23,7 +23,6 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
-#include <limits>
 
 #include "src/common/color_precision.h"
 #include "src/common/constants.h"
@@ -612,6 +611,15 @@ struct Segment {
   Segment operator|(const Segment& other) const {
     return Segment{std::min(min, other.min), std::max(max, other.max)};
   }
+  // This is the only operation that can fail, if the two intervals do not
+  // intersect.
+  WP2_NO_DISCARD
+  bool IntersectAndUpdate(const Segment& other) {
+    if (other.min > max || other.max < min) return false;
+    min = std::max(min, other.min);
+    max = std::min(max, other.max);
+    return true;
+  }
   int32_t min, max;
 };
 }  // namespace WP2L
@@ -625,10 +633,11 @@ inline WP2L::Segment RightShiftRound<WP2L::Segment>(WP2L::Segment v,
 }  // namespace WP2
 
 namespace WP2L {
-void GetARGBRanges(const std::array<TransformHeader,
-                                    kPossibleTransformCombinationSize>& headers,
-                   WP2SampleFormat format, int32_t minima_range[4],
-                   int32_t maxima_range[4], uint32_t num_transforms) {
+WP2Status GetARGBRanges(
+    const std::array<TransformHeader, kPossibleTransformCombinationSize>&
+        headers,
+    WP2SampleFormat format, int32_t minima_range[4], int32_t maxima_range[4],
+    uint32_t num_transforms) {
   Segment segments[4];
   // Define the original range according to the pixel format.
   const int32_t num_bits_alpha = ::WP2::kAlphaBits;
@@ -658,13 +667,14 @@ void GetARGBRanges(const std::array<TransformHeader,
                           "invalid kMaxAbsResidual8 value");
             static_assert(2 * kMaxAbsResidual10 + 1 <= ::WP2::kANSMaxRange,
                           "invalid kMaxAbsResidual10 value");
-            segments[c] = Segment{std::max(segments[c].min, -abs_value_max),
-                                  std::min(segments[c].max, abs_value_max)};
+            if (!segments[c].IntersectAndUpdate(
+                    Segment{-abs_value_max, abs_value_max})) {
+              return WP2_STATUS_INVALID_PARAMETER;
+            }
             if (segments[c].min > segments[c].max) {
               // Should not happen.
               assert(false);
-              segments[c].min = segments[c].max =
-                  std::numeric_limits<int32_t>::max();
+              return WP2_STATUS_INVALID_PARAMETER;
             }
           }
         }
@@ -748,11 +758,20 @@ void GetARGBRanges(const std::array<TransformHeader,
         assert(false);
     }
   }
+
+  // Make sure we fit in the ANS ranges [0,(1 << WP2::kANSMaxRangeBits)-1].
+  constexpr int32_t kMaxRange = 1 << WP2::kANSMaxRangeBits;
   for (uint32_t c = 0; c < 4; ++c) {
+    // Assign to the output.
+    if (!segments[c].IntersectAndUpdate(
+            Segment{-kMaxRange / 2, kMaxRange / 2 - 1})) {
+      return WP2_STATUS_INVALID_PARAMETER;
+    }
     minima_range[c] = segments[c].min;
     maxima_range[c] = segments[c].max;
     assert(minima_range[c] <= maxima_range[c]);
   }
+  return WP2_STATUS_OK;
 }
 
 }  // namespace WP2L

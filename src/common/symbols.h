@@ -718,11 +718,11 @@ struct TransformHeader {
 // unused if no color indexing transform is present).
 // If 'transforms' is not one of the official sets of transforms you can specify
 // its length with 'num_transforms'.
-void GetARGBRanges(const std::array<TransformHeader,
-                                    kPossibleTransformCombinationSize>& headers,
-                   WP2SampleFormat format, int32_t minima_range[4],
-                   int32_t maxima_range[4],
-                   uint32_t num_transforms = kPossibleTransformCombinationSize);
+WP2Status GetARGBRanges(
+    const std::array<TransformHeader, kPossibleTransformCombinationSize>&
+        headers,
+    WP2SampleFormat format, int32_t minima_range[4], int32_t maxima_range[4],
+    uint32_t num_transforms = kPossibleTransformCombinationSize);
 
 }  // namespace WP2L
 
