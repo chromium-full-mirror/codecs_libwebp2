@@ -147,9 +147,10 @@ struct EntropyConfig {
 };
 
 // Find the corresponding combination of transforms in the reference table.
-void FindEncodingRecipeImpl(EncodingAlgorithm algorithm, CrunchConfig* config,
-                            const TransformType* const transforms,
-                            uint32_t size) {
+WP2Status FindEncodingRecipeImpl(EncodingAlgorithm algorithm,
+                                 CrunchConfig* config,
+                                 const TransformType* const transforms,
+                                 uint32_t size) {
   assert(size <= kPossibleTransformCombinationSize);
   for (const EncodingRecipe& recipe : kPossibleEncodingRecipes) {
     if (recipe.algorithm != algorithm) continue;
@@ -160,24 +161,26 @@ void FindEncodingRecipeImpl(EncodingAlgorithm algorithm, CrunchConfig* config,
       for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {
         config->transforms[i].type = recipe.transforms[i];
       }
-      return;
+      return WP2_STATUS_OK;
     }
   }
-  assert(false);
+  return WP2_STATUS_INVALID_PARAMETER;
 }
 
 // Find a set of TransformType's into the official list and returns a pointer to
 // it.
 template <typename... Ts>
-void FindEncodingRecipe(EncodingAlgorithm algorithm, CrunchConfig* config,
-                        Ts... args) {
+WP2Status FindEncodingRecipe(EncodingAlgorithm algorithm, CrunchConfig* config,
+                             Ts... args) {
   const TransformType transforms[] = {args..., TransformType::kNum};
-  return FindEncodingRecipeImpl(algorithm, config, transforms, sizeof...(args));
+  WP2_CHECK_STATUS(
+      FindEncodingRecipeImpl(algorithm, config, transforms, sizeof...(args)));
+  return WP2_STATUS_OK;
 }
 
-void AddWebPConfig(EntropyMode mode, bool use_premultiplied,
-                   bool red_and_blue_always_zero, float entropy, int effort,
-                   WP2::Vector<EntropyConfig>* configs) {
+WP2Status AddWebPConfig(EntropyMode mode, bool use_premultiplied,
+                        bool red_and_blue_always_zero, float entropy,
+                        int effort, WP2::Vector<EntropyConfig>& configs) {
   EntropyConfig c;
   c.mode = mode;
   c.entropy = entropy;
@@ -199,16 +202,17 @@ void AddWebPConfig(EntropyMode mode, bool use_premultiplied,
       transforms[size++] = TransformType::kCrossColor;
     }
   }
-  FindEncodingRecipeImpl(EncodingAlgorithm::kWebP, &c.config, transforms, size);
-  configs->push_back_no_resize(c);
+  WP2_CHECK_STATUS(FindEncodingRecipeImpl(EncodingAlgorithm::kWebP, &c.config,
+                                          transforms, size));
+  WP2_CHECK_ALLOC_OK(configs.push_back(c));
   // TODO(vrabaud): remove when this transform is used by future parts of the
   // code. It is here for now to go through the test path.
   // Add global color transforms.
   if (effort == WP2::kMaxEffort && size == kPossibleTransformCombinationSize &&
       transforms[size - 1] == TransformType::kCrossColor) {
     transforms[size - 1] = TransformType::kCrossColorGlobal;
-    FindEncodingRecipeImpl(EncodingAlgorithm::kWebP, &c.config, transforms,
-                           size);
+    WP2_CHECK_STATUS(FindEncodingRecipeImpl(EncodingAlgorithm::kWebP, &c.config,
+                                            transforms, size));
     c.config.transforms[size - 1].cc_global_first_channel =
         TransformHeader::Channel::kRed;
     c.config.transforms[size - 1].cc_global_second_channel =
@@ -217,8 +221,9 @@ void AddWebPConfig(EntropyMode mode, bool use_premultiplied,
         TransformHeader::CCTransform::kSubtractFirst;
     c.config.transforms[size - 1].cc_global_third_transform =
         TransformHeader::CCTransform::kSubtractAverage;
-    configs->push_back_no_resize(c);
+    WP2_CHECK_ALLOC_OK(configs.push_back(c));
   }
+  return WP2_STATUS_OK;
 }
 
 // Analyzes the distribution of colors on the image to estimate the best
@@ -228,7 +233,7 @@ template <typename T>
 WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
                              uint32_t transform_bits, const Encoder& encoder,
                              uint32_t num_configs_max,
-                             WP2::Vector<EntropyConfig>* configs) {
+                             WP2::Vector<EntropyConfig>& configs) {
   assert(num_configs_max >= 1);
   const WP2::ArgbBuffer& pic = encoder.pic_;
   const uint32_t stride = pic.stride(), width = pic.width(),
@@ -241,11 +246,12 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
 
   if (can_use_palette && encoder.palette_.Size() <= 16) {
     // In practice, small palettes are better than any other transform.
-    WP2_CHECK_ALLOC_OK(configs->reserve(1));
+    WP2_CHECK_ALLOC_OK(configs.reserve(1));
     for (EntropyMode mode :
          {EntropyMode::kPalette, EntropyMode::kPaletteSpatial}) {
-      AddWebPConfig(mode, can_premultiply, /*red_and_blue_always_zero=*/true,
-                    /*entropy=*/0.f, effort, configs);
+      WP2_CHECK_STATUS(AddWebPConfig(mode, can_premultiply,
+                                     /*red_and_blue_always_zero=*/true,
+                                     /*entropy=*/0.f, effort, configs));
     }
     return WP2_STATUS_OK;
   }
@@ -284,7 +290,7 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
     histo_len += h.len;
   }
 
-  WP2_CHECK_ALLOC_OK(configs->reserve(2 * (uint32_t)EntropyMode::kNum));
+  WP2_CHECK_ALLOC_OK(configs.reserve(2 * (uint32_t)EntropyMode::kNum));
   for (bool premult : {false, true}) {
     if (!can_premultiply && premult) {
       // No need to test pre-multiply if the format is already pre-multiplied
@@ -388,39 +394,41 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
     }
 
     // Compute the entropy of the different entropy modes.
-    AddWebPConfig(EntropyMode::kDirect, premult,
-                  entropy[kHistoRed] + entropy[kHistoBlue] == 0.f,
-                  entropy[kHistoAlpha] + entropy[kHistoRed] +
-                      entropy[kHistoGreen] + entropy[kHistoBlue],
-                  effort, configs);
-    AddWebPConfig(EntropyMode::kSpatial, premult,
-                  entropy[kHistoRedPred] + entropy[kHistoBluePred] == 0.f,
-                  entropy[kHistoAlphaPred] + entropy[kHistoRedPred] +
-                      entropy[kHistoGreenPred] + entropy[kHistoBluePred],
-                  effort, configs);
-    AddWebPConfig(
+    WP2_CHECK_STATUS(
+        AddWebPConfig(EntropyMode::kDirect, premult,
+                      entropy[kHistoRed] + entropy[kHistoBlue] == 0.f,
+                      entropy[kHistoAlpha] + entropy[kHistoRed] +
+                          entropy[kHistoGreen] + entropy[kHistoBlue],
+                      effort, configs));
+    WP2_CHECK_STATUS(
+        AddWebPConfig(EntropyMode::kSpatial, premult,
+                      entropy[kHistoRedPred] + entropy[kHistoBluePred] == 0.f,
+                      entropy[kHistoAlphaPred] + entropy[kHistoRedPred] +
+                          entropy[kHistoGreenPred] + entropy[kHistoBluePred],
+                      effort, configs));
+    WP2_CHECK_STATUS(AddWebPConfig(
         EntropyMode::kSubGreen, premult,
         entropy[kHistoRedSubGreen] + entropy[kHistoBlueSubGreen] == 0.f,
         entropy[kHistoAlpha] + entropy[kHistoRedSubGreen] +
             entropy[kHistoGreen] + entropy[kHistoBlueSubGreen],
-        effort, configs);
-    AddWebPConfig(
+        effort, configs));
+    WP2_CHECK_STATUS(AddWebPConfig(
         EntropyMode::kSpatialSubGreen, premult,
         entropy[kHistoRedPredSubGreen] + entropy[kHistoBluePredSubGreen] == 0.f,
         entropy[kHistoAlphaPred] + entropy[kHistoRedPredSubGreen] +
             entropy[kHistoGreenPred] + entropy[kHistoBluePredSubGreen],
-        effort, configs);
+        effort, configs));
 
     // Palettes are always premultiplied. It doesn't make sense to look at
     // entropy for unmultiplied palettes, except if the format does not allow
     // it.
     if (analyze_palette) {
-      AddWebPConfig(EntropyMode::kPalette, premult,
-                    /*red_and_blue_always_zero=*/true, entropy[kHistoPalette],
-                    effort, configs);
+      WP2_CHECK_STATUS(AddWebPConfig(EntropyMode::kPalette, premult,
+                                     /*red_and_blue_always_zero=*/true,
+                                     entropy[kHistoPalette], effort, configs));
     }
   }
-  for (const EntropyConfig& c : *configs) {
+  for (const EntropyConfig& c : configs) {
     (void)c;
     if (!can_use_palette) assert(c.mode != EntropyMode::kPalette);
     if (!can_premultiply) assert(!c.config.use_premultiplied);
@@ -428,7 +436,7 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
   // Add extra bit costs.
   const uint32_t transform_image_size = SubSampleSize(width, transform_bits) *
                                         SubSampleSize(height, transform_bits);
-  for (EntropyConfig& c : *configs) {
+  for (EntropyConfig& c : configs) {
     for (uint32_t i = 0; i < c.config.GetNumTransforms(); ++i) {
       if (c.config.transforms[i].type == TransformType::kPredictor) {
         // When including transforms, there is an overhead in bits from
@@ -447,21 +455,20 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
     }
   }
   // Sort the configs.
-  std::stable_sort(configs->begin(), configs->end(),
+  std::stable_sort(configs.begin(), configs.end(),
                    [](const EntropyConfig& c1, const EntropyConfig& c2) {
                      return (c1.entropy < c2.entropy);
                    });
   // Only keep the top num_configs_max ones.
-  configs->resize_no_check(
-      std::min((uint32_t)configs->size(), num_configs_max));
+  configs.resize_no_check(std::min((uint32_t)configs.size(), num_configs_max));
   // In case we have a kColorIndexing transform, also add kColorIndexing +
   // kPredictor.
-  for (const EntropyConfig& c : *configs) {
+  for (const EntropyConfig& c : configs) {
     if (c.config.transforms[0].type == TransformType::kColorIndexing &&
         c.config.GetNumTransforms() == 1) {
-      AddWebPConfig(EntropyMode::kPaletteSpatial, c.config.use_premultiplied,
-                    /*red_and_blue_always_zero=*/true, c.entropy, effort,
-                    configs);
+      WP2_CHECK_STATUS(AddWebPConfig(
+          EntropyMode::kPaletteSpatial, c.config.use_premultiplied,
+          /*red_and_blue_always_zero=*/true, c.entropy, effort, configs));
       break;
     }
   }
@@ -472,7 +479,7 @@ WP2Status AnalyzeEntropyImpl(const T* argb, bool can_use_palette, int effort,
 WP2Status AnalyzeEntropy(bool can_use_palette, int effort,
                          uint32_t transform_bits, const Encoder& encoder,
                          uint32_t num_configs_max,
-                         WP2::Vector<EntropyConfig>* configs) {
+                         WP2::Vector<EntropyConfig>& configs) {
   if (WP2Formatbpc(encoder.pic_.format()) <= 8) {
     WP2_CHECK_STATUS(AnalyzeEntropyImpl(encoder.pic_.GetRow8(0),
                                         can_use_palette, effort, transform_bits,
@@ -541,7 +548,8 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   // Though inefficient, we force the use of LZW if it is requested.
   if (encoder->config_.lossless_algorithm == WP2L::EncodingAlgorithm::kLZW) {
     WP2_CHECK_ALLOC_OK(configs->resize(1));
-    FindEncodingRecipe(EncodingAlgorithm::kLZW, &configs->back());
+    WP2_CHECK_STATUS(
+        FindEncodingRecipe(EncodingAlgorithm::kLZW, &configs->back()));
     configs->back().use_premultiplied = can_premultiply;
     return WP2_STATUS_OK;
   }
@@ -549,7 +557,8 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   // Try LZW within the same palette size range condition as Group4.
   if (encoder->palette_.Size() >= 2 && encoder->palette_.Size() < 256) {
     WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
-    FindEncodingRecipe(EncodingAlgorithm::kLZW, &configs->back());
+    WP2_CHECK_STATUS(
+        FindEncodingRecipe(EncodingAlgorithm::kLZW, &configs->back()));
     configs->back().use_premultiplied = can_premultiply;
   }
 
@@ -558,8 +567,9 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   if (encoder->palette_.Size() >= 2 && encoder->palette_.Size() < 256) {
     // Try group4 for images with a palette.
     WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
-    FindEncodingRecipe(EncodingAlgorithm::kGroup4, &configs->back(),
-                       TransformType::kColorIndexing);
+    WP2_CHECK_STATUS(FindEncodingRecipe(EncodingAlgorithm::kGroup4,
+                                        &configs->back(),
+                                        TransformType::kColorIndexing));
     configs->back().group4_use_move_to_front = false;
     configs->back().use_premultiplied = false;
 
@@ -598,10 +608,11 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
       // AnalyzeEntropy is somewhat slow. 'red_and_blue_always_zero' is unused
       // for effort == 0.
       configs->clear();
-      AddWebPConfig(can_use_palette ? EntropyMode::kPalette
-                                    : EntropyMode::kSpatialSubGreen,
-                    can_premultiply, /*red_and_blue_always_zero=*/false,
-                    /*entropy=*/0.f, effort, &entropy_configs);
+      WP2_CHECK_STATUS(
+          AddWebPConfig(can_use_palette ? EntropyMode::kPalette
+                                        : EntropyMode::kSpatialSubGreen,
+                        can_premultiply, /*red_and_blue_always_zero=*/false,
+                        /*entropy=*/0.f, effort, entropy_configs));
     }
     n_lz77s = 1;
   } else {
@@ -624,7 +635,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
     const uint32_t transform_bits = GetTransformBits(effort, histo_bits);
     WP2_CHECK_STATUS(AnalyzeEntropy(can_use_palette, effort, transform_bits,
                                     *encoder, num_configs_max,
-                                    &entropy_configs));
+                                    entropy_configs));
     if (effort == 5 && entropy_configs[0].mode != EntropyMode::kPalette) {
       // When we have palette as first transform, we also check the second one
       // as it can be better. If the first one is not palette, only focus on the
