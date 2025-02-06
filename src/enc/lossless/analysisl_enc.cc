@@ -205,24 +205,7 @@ WP2Status AddWebPConfig(EntropyMode mode, bool use_premultiplied,
   WP2_CHECK_STATUS(FindEncodingRecipeImpl(EncodingAlgorithm::kWebP, &c.config,
                                           transforms, size));
   WP2_CHECK_ALLOC_OK(configs.push_back(c));
-  // TODO(vrabaud): remove when this transform is used by future parts of the
-  // code. It is here for now to go through the test path.
-  // Add global color transforms.
-  if (effort == WP2::kMaxEffort && size == kPossibleTransformCombinationSize &&
-      transforms[size - 1] == TransformType::kCrossColor) {
-    transforms[size - 1] = TransformType::kCrossColorGlobal;
-    WP2_CHECK_STATUS(FindEncodingRecipeImpl(EncodingAlgorithm::kWebP, &c.config,
-                                            transforms, size));
-    c.config.transforms[size - 1].cc_global_first_channel =
-        TransformHeader::Channel::kRed;
-    c.config.transforms[size - 1].cc_global_second_channel =
-        TransformHeader::Channel::kGreen;
-    c.config.transforms[size - 1].cc_global_second_transform =
-        TransformHeader::CCTransform::kSubtractFirst;
-    c.config.transforms[size - 1].cc_global_third_transform =
-        TransformHeader::CCTransform::kSubtractAverage;
-    WP2_CHECK_ALLOC_OK(configs.push_back(c));
-  }
+
   return WP2_STATUS_OK;
 }
 
@@ -515,38 +498,29 @@ uint32_t GetTransformBits(uint32_t effort, uint32_t histo_bits) {
   return res;
 }
 
-}  // namespace
-
 // Fills in 'crunch_configs' with a set of transforms and LZ77 variants to try
 // based on heuristics. Also initializes the palette in enc->palette_ and
 // sets red_and_blue_always_zero to true if the red and blue components are
 // always zero after applying the best transform.
 // TODO(maryla): the logic for red_and_blue_always_zero seems broken: it's only
 // valid if there's only one transform (effort != 9)
-WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
-                         Encoder* const encoder,
-                         WP2::Vector<CrunchConfig>* const configs) {
-  const WP2::ArgbBuffer& pic = encoder->pic_;
-  const int effort = encoder->config_.effort;
+WP2Status EncoderAnalyzeDefault(const WP2::ProgressRange& progress,
+                                const Encoder& encoder,
+                                WP2::Vector<CrunchConfig>* const configs) {
+  const WP2::ArgbBuffer& pic = encoder.pic_;
+  const int effort = encoder.config_.effort;
   uint32_t n_lz77s;
   assert(!pic.IsEmpty());
 
-  const WP2::ProgressRange palette_progress(progress, 0.5);
-  const WP2::ProgressRange entropy_progress(progress, 0.5);
-
-  WP2_CHECK_STATUS(encoder->palette_.AnalyzeAndCreate(pic));
-  WP2_CHECK_STATUS(encoder->palette_.FindBestMethod(
-      pic, palette_progress, Palette::Sorting::kMinimalSize, effort, encoder));
-
   // Do not use a palette when there is only one color as ANS will optimize it
   // anyway.
-  const bool can_use_palette = (encoder->palette_.Size() > 1);
+  const bool can_use_palette = (encoder.palette_.Size() > 1);
   const bool can_premultiply =
-      (encoder->has_alpha_ && !WP2IsPremultiplied(encoder->pic_.format()) &&
-       !encoder->config_.keep_unmultiplied);
+      (encoder.has_alpha_ && !WP2IsPremultiplied(encoder.pic_.format()) &&
+       !encoder.config_.keep_unmultiplied);
 
   // Though inefficient, we force the use of LZW if it is requested.
-  if (encoder->config_.lossless_algorithm == WP2L::EncodingAlgorithm::kLZW) {
+  if (encoder.config_.lossless_algorithm == WP2L::EncodingAlgorithm::kLZW) {
     WP2_CHECK_ALLOC_OK(configs->resize(1));
     WP2_CHECK_STATUS(
         FindEncodingRecipe(EncodingAlgorithm::kLZW, &configs->back()));
@@ -555,7 +529,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   }
 
   // Try LZW within the same palette size range condition as Group4.
-  if (encoder->palette_.Size() >= 2 && encoder->palette_.Size() < 256) {
+  if (encoder.palette_.Size() >= 2 && encoder.palette_.Size() < 256) {
     WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
     WP2_CHECK_STATUS(
         FindEncodingRecipe(EncodingAlgorithm::kLZW, &configs->back()));
@@ -564,7 +538,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
 
   // Do not use Group4 for big palettes for CPU reasons and also because it is
   // less likely that Group4 will work.
-  if (encoder->palette_.Size() >= 2 && encoder->palette_.Size() < 256) {
+  if (encoder.palette_.Size() >= 2 && encoder.palette_.Size() < 256) {
     // Try group4 for images with a palette.
     WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
     WP2_CHECK_STATUS(FindEncodingRecipe(EncodingAlgorithm::kGroup4,
@@ -573,7 +547,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
     configs->back().group4_use_move_to_front = false;
     configs->back().use_premultiplied = false;
 
-    if (encoder->palette_.Size() > 3 && effort > 0) {
+    if (encoder.palette_.Size() > 3 && effort > 0) {
       WP2_CHECK_ALLOC_OK(configs->resize(configs->size() + 1));
       // Copy the previous config.
       configs->back() = configs->at(configs->size() - 2);
@@ -584,9 +558,9 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   }
 
   // If the encoding algorithm is forced, only keep the corresponding configs.
-  if (encoder->config_.lossless_algorithm == WP2L::EncodingAlgorithm::kGroup4) {
+  if (encoder.config_.lossless_algorithm == WP2L::EncodingAlgorithm::kGroup4) {
     for (size_t i = 0; i < configs->size();) {
-      if ((*configs)[i].algorithm != encoder->config_.lossless_algorithm) {
+      if ((*configs)[i].algorithm != encoder.config_.lossless_algorithm) {
         configs->erase(configs->begin() + i);
       } else {
         ++i;
@@ -598,7 +572,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   }
 
   // The rest is for WebP algorithm.
-  if (encoder->config_.lossless_algorithm == WP2L::EncodingAlgorithm::kWebP) {
+  if (encoder.config_.lossless_algorithm == WP2L::EncodingAlgorithm::kWebP) {
     configs->clear();
   }
   WP2::Vector<EntropyConfig> entropy_configs;
@@ -617,7 +591,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
     n_lz77s = 1;
   } else {
     // Try out multiple LZ77 on images with few colors.
-    n_lz77s = (can_use_palette && encoder->palette_.Size() <= 16) ? 2 : 1;
+    n_lz77s = (can_use_palette && encoder.palette_.Size() <= 16) ? 2 : 1;
     // For effort 5, we ask for 2 so that in case the best one is Palette, we
     // still try a normal configuration because color cache can sometimes be
     // better than palette.
@@ -634,8 +608,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
         GetHistoBits(effort, can_use_palette, pic.width(), pic.height());
     const uint32_t transform_bits = GetTransformBits(effort, histo_bits);
     WP2_CHECK_STATUS(AnalyzeEntropy(can_use_palette, effort, transform_bits,
-                                    *encoder, num_configs_max,
-                                    entropy_configs));
+                                    encoder, num_configs_max, entropy_configs));
     if (effort == 5 && entropy_configs[0].mode != EntropyMode::kPalette) {
       // When we have palette as first transform, we also check the second one
       // as it can be better. If the first one is not palette, only focus on the
@@ -643,7 +616,7 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
       entropy_configs.resize_no_check(1);
     }
   }
-  WP2_CHECK_STATUS(entropy_progress.AdvanceBy(1.));
+  WP2_CHECK_STATUS(progress.AdvanceBy(1.));
   // Remove the internal info.
   for (const EntropyConfig& c : entropy_configs) {
     WP2_CHECK_ALLOC_OK(configs->push_back(c.config));
@@ -724,6 +697,73 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   return WP2_STATUS_OK;
 }
 
+}  // namespace
+
+// Figure out some configurations to try.
+WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
+                         Encoder* const encoder,
+                         WP2::Vector<CrunchConfig>* const configs) {
+  const WP2::ArgbBuffer& pic = encoder->pic_;
+  const int effort = encoder->config_.effort;
+  assert(!pic.IsEmpty());
+
+  const WP2::ProgressRange palette_progress(progress, 0.5);
+  const WP2::ProgressRange analysis_progress(progress, 0.5);
+
+  // Compute the palette.
+  WP2_CHECK_STATUS(encoder->palette_.AnalyzeAndCreate(pic));
+  WP2_CHECK_STATUS(encoder->palette_.FindBestMethod(
+      pic, palette_progress, Palette::Sorting::kMinimalSize, effort, encoder));
+
+  WP2_CHECK_STATUS(EncoderAnalyzeDefault(analysis_progress, *encoder, configs));
+
+  // Make sure all configs are valid.
+  for (CrunchConfig& config : *configs) {
+    // Make sure the config exists.
+    bool config_exists = false;
+    for (const EncodingRecipe& recipe : kPossibleEncodingRecipes) {
+      if (recipe.algorithm != config.algorithm) continue;
+      config_exists = true;
+      for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {
+        config_exists &= config.transforms[i].type == recipe.transforms[i];
+      }
+      if (config_exists) break;
+    }
+    WP2_CHECK_OK(config_exists, WP2_STATUS_INVALID_PARAMETER);
+
+    if (config.algorithm == EncodingAlgorithm::kWebP) {
+      WP2_CHECK_OK(config.lz77s_types_to_try_size >= 1 &&
+                       config.lz77s_types_to_try_size <= kCrunchLZ77Max,
+                   WP2_STATUS_INVALID_PARAMETER);
+    }
+
+    // Verify some properties for some transforms.
+    for (const TransformHeader& transform : config.transforms) {
+      const TransformType type = transform.type;
+      if (type == TransformType::kPredictor ||
+          type == TransformType::kPredictorWSub ||
+          type == TransformType::kCrossColor) {
+        WP2_CHECK_OK(config.transform_bits >= WP2L::kTransformBitsMin &&
+                         config.transform_bits <= WP2L::kTransformBitsMax,
+                     WP2_STATUS_INVALID_PARAMETER);
+        WP2_CHECK_OK(config.histo_bits >= WP2L::kHistogramBitsMin &&
+                         config.histo_bits <= WP2L::kHistogramBitsMax,
+                     WP2_STATUS_INVALID_PARAMETER);
+      }
+      if (type == TransformType::kCrossColorGlobal) {
+        WP2_CHECK_OK(transform.cc_global_first_channel !=
+                         transform.cc_global_second_channel,
+                     WP2_STATUS_INVALID_PARAMETER);
+        WP2_CHECK_OK(transform.cc_global_second_transform ==
+                             TransformHeader::CCTransform::kNothing ||
+                         transform.cc_global_second_transform ==
+                             TransformHeader::CCTransform::kSubtractFirst,
+                     WP2_STATUS_INVALID_PARAMETER);
+      }
+    }
+  }
+  return WP2_STATUS_OK;
+}
 //------------------------------------------------------------------------------
 
 }  // namespace WP2L
