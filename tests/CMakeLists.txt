@@ -285,6 +285,7 @@ if(GTEST_FOUND AND NOT WP2_BUILD_WP2_JS)
   add_wp2_test(lossless/test_lzw_hash_map 1)
   add_wp2_test(lossless/test_palette 1)
   add_wp2_test(lossless/test_segment_cache 1)
+  add_wp2_test(lossless/test_transforms 1)
 
   if(WP2_BUILD_EXTRAS)
     add_wp2_test(test_custom_csp 4 extras)
