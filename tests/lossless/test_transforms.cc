@@ -96,4 +96,35 @@ INSTANTIATE_TEST_SUITE_P(
                         WP2L::TransformHeader::CCTransform::kSubtractSecond,
                         WP2L::TransformHeader::CCTransform::kSubtractAverage)));
 
+TEST(GenericTest, InvalidTransformCombinations) {
+  // Create a 2x2 image with a single color.
+  ArgbBuffer original(WP2_ARGB_32);
+  constexpr uint32_t dim = 2;
+  WP2_ASSERT_STATUS(original.Resize(dim, dim));
+  original.Fill(Argb32b{.a = 255, .r = 26, .g = 4, .b = 79});
+
+  // Create a config with a non-existent recipe.
+  EncoderConfig encoder_config;
+  encoder_config.alpha_quality = 100;
+  encoder_config.quality = 100;
+  encoder_config.lossless_config =
+      std::make_shared<WP2::EncoderConfig::LosslessCrunchConfig>();
+  WP2L::CrunchConfig &config = *encoder_config.lossless_config;
+  config.algorithm = WP2L::EncodingAlgorithm::kGroup4;
+  config.transforms[0].type = WP2L::TransformType::kNum;
+  config.transforms[1].type = WP2L::TransformType::kNum;
+  config.transforms[2].type = WP2L::TransformType::kNum;
+
+  MemoryWriter memory_writer;
+  ASSERT_EQ(Encode(original, &memory_writer, encoder_config),
+            WP2_STATUS_INVALID_CONFIGURATION);
+
+  // Make the recipe valid but that does not work because there is only one
+  // color.
+  config.transforms[0].type = WP2L::TransformType::kColorIndexing;
+
+  ASSERT_EQ(Encode(original, &memory_writer, encoder_config),
+            WP2_STATUS_INVALID_PARAMETER);
+}
+
 }  // namespace WP2

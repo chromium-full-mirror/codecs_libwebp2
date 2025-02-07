@@ -743,17 +743,8 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
 
   // Make sure all configs are valid.
   for (CrunchConfig& config : *configs) {
-    // Make sure the config exists.
-    bool config_exists = false;
-    for (const EncodingRecipe& recipe : kPossibleEncodingRecipes) {
-      if (recipe.algorithm != config.algorithm) continue;
-      config_exists = true;
-      for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {
-        config_exists &= config.transforms[i].type == recipe.transforms[i];
-      }
-      if (config_exists) break;
-    }
-    WP2_CHECK_OK(config_exists, WP2_STATUS_INVALID_PARAMETER);
+    uint32_t index;
+    WP2_CHECK_STATUS(FindEncodingRecipe(config, index));
 
     if (config.algorithm == EncodingAlgorithm::kWebP) {
       WP2_CHECK_OK(config.lz77s_types_to_try_size >= 1 &&
@@ -782,6 +773,12 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
                              TransformHeader::CCTransform::kNothing ||
                          transform.cc_global_second_transform ==
                              TransformHeader::CCTransform::kSubtractFirst,
+                     WP2_STATUS_INVALID_PARAMETER);
+      }
+      // Make sure the palette is not empty if we have a color indexing
+      // transform.
+      if (type == TransformType::kColorIndexing) {
+        WP2_CHECK_OK(encoder->palette_.Size() > 0,
                      WP2_STATUS_INVALID_PARAMETER);
       }
     }

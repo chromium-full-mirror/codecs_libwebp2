@@ -444,6 +444,24 @@ WP2Status EncodeHelperImage(WP2::ANSEncBase* const enc,
   return WP2_STATUS_OK;
 }
 
+WP2Status FindEncodingRecipe(const CrunchConfig& config, uint32_t& index) {
+  for (uint32_t i = 0; i < kPossibleEncodingRecipesNum; ++i) {
+    if (config.algorithm != kPossibleEncodingRecipes[i].algorithm) {
+      continue;
+    }
+    bool config_exists = true;
+    for (uint32_t j = 0; j < kPossibleTransformCombinationSize; ++j) {
+      config_exists &= config.transforms[j].type ==
+                       kPossibleEncodingRecipes[i].transforms[j];
+    }
+    if (config_exists) {
+      index = i;
+      return WP2_STATUS_OK;
+    }
+  }
+  return WP2_STATUS_INVALID_CONFIGURATION;
+}
+
 WP2Status Encoder::EncodeImageInternal(
     const CrunchConfig& config, const ProgressRange& progress,
     const LosslessSymbolsInfo& symbols_info_init, float* const cost_best,
@@ -978,22 +996,9 @@ WP2Status Encoder::ApplyAndWriteTransforms(
   const WP2::ANSDebugPrefix prefix2(enc, "transforms");
 
   // Find the transform combination in the official set and store its index.
-  for (uint32_t index = 0; index < kPossibleEncodingRecipesNum; ++index) {
-    if (config->algorithm != kPossibleEncodingRecipes[index].algorithm) {
-      continue;
-    }
-    bool is_good = true;
-    for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {
-      if (config->transforms[i].type !=
-          kPossibleEncodingRecipes[index].transforms[i]) {
-        is_good = false;
-        break;
-      }
-    }
-    if (!is_good) continue;
-    enc->PutRValue(index, kPossibleEncodingRecipesNum, "index");
-    break;
-  }
+  uint32_t index;
+  WP2_CHECK_STATUS(FindEncodingRecipe(*config, index));
+  enc->PutRValue(index, kPossibleEncodingRecipesNum, "index");
 
   if (config_prev != nullptr) {
     // If we have already computed transforms before, re-use cached data.

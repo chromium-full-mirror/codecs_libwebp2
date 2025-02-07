@@ -168,6 +168,10 @@ WP2Status EncodeHelperImage(WP2::ANSEncBase* enc, WP2::ANSDictionaries* dicts,
                             const LosslessSymbolsInfo& symbols_info, int effort,
                             const WP2::ProgressRange& progress);
 
+// Finds the corresponding recipe in the reference table.
+// Returns an error code if the combination is not found.
+WP2Status FindEncodingRecipe(const CrunchConfig& config, uint32_t& index);
+
 // Optional extra info that can be exported by EncodeImage.
 // Callers should allocate themselves the vectors that they wish filled in.
 // Empty vectors will not be filled in.
