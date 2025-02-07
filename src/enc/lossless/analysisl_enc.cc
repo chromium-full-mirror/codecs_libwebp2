@@ -24,8 +24,8 @@
 #include <limits>
 
 #include "src/common/color_precision.h"
+#include "src/common/lossless/transforms.h"
 #include "src/common/progress_watcher.h"
-#include "src/common/symbols.h"
 #include "src/dsp/lossless/dspl.h"
 #include "src/dsp/math.h"
 #include "src/enc/lossless/backward_references_enc.h"
@@ -616,7 +616,7 @@ WP2Status EncoderAnalyzeDefault(const WP2::ProgressRange& progress,
       entropy_configs.resize_no_check(1);
     }
   }
-  WP2_CHECK_STATUS(progress.AdvanceBy(1.));
+  WP2_CHECK_STATUS(progress.AdvanceBy(1.0));
   // Remove the internal info.
   for (const EntropyConfig& c : entropy_configs) {
     WP2_CHECK_ALLOC_OK(configs->push_back(c.config));
@@ -697,9 +697,21 @@ WP2Status EncoderAnalyzeDefault(const WP2::ProgressRange& progress,
   return WP2_STATUS_OK;
 }
 
+bool ShouldComputePalette(const Encoder& encoder) {
+  if (encoder.config_.lossless_config) {
+    const auto& transforms = encoder.config_.lossless_config->transforms;
+    return std::any_of(transforms.begin(), transforms.end(), [](const auto& t) {
+      return t.type == TransformType::kColorIndexing;
+    });
+  } else {
+    return true;
+  }
+}
+
 }  // namespace
 
-// Figure out some configurations to try.
+// Figure out some configurations to try. If one is imposed by the encoder, use
+// it.
 WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
                          Encoder* const encoder,
                          WP2::Vector<CrunchConfig>* const configs) {
@@ -710,12 +722,24 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
   const WP2::ProgressRange palette_progress(progress, 0.5);
   const WP2::ProgressRange analysis_progress(progress, 0.5);
 
-  // Compute the palette.
-  WP2_CHECK_STATUS(encoder->palette_.AnalyzeAndCreate(pic));
-  WP2_CHECK_STATUS(encoder->palette_.FindBestMethod(
-      pic, palette_progress, Palette::Sorting::kMinimalSize, effort, encoder));
+  // Do not compute the palette if not asked for.
+  if (ShouldComputePalette(*encoder)) {
+    WP2_CHECK_STATUS(encoder->palette_.AnalyzeAndCreate(pic));
+    WP2_CHECK_STATUS(encoder->palette_.FindBestMethod(
+        pic, palette_progress, Palette::Sorting::kMinimalSize, effort,
+        encoder));
+  } else {
+    WP2_CHECK_STATUS(palette_progress.AdvanceBy(1.0));
+  }
 
-  WP2_CHECK_STATUS(EncoderAnalyzeDefault(analysis_progress, *encoder, configs));
+  // Use the imposed config if any.
+  if (encoder->config_.lossless_config) {
+    WP2_CHECK_ALLOC_OK(configs->resize(1));
+    (*configs)[0] = *encoder->config_.lossless_config;
+  } else {
+    WP2_CHECK_STATUS(
+        EncoderAnalyzeDefault(analysis_progress, *encoder, configs));
+  }
 
   // Make sure all configs are valid.
   for (CrunchConfig& config : *configs) {

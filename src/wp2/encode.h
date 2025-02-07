@@ -23,6 +23,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 #include "./base.h"
 #include "./debug.h"
@@ -157,6 +158,9 @@ struct EncoderConfig {
   ProgressHook* progress_hook = nullptr;
 
   EncoderInfo* info = nullptr;  // If not null, report internal stats and info.
+
+  struct LosslessCrunchConfig;
+  std::shared_ptr<LosslessCrunchConfig> lossless_config;
 };
 
 //------------------------------------------------------------------------------

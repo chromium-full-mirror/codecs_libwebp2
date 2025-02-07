@@ -106,19 +106,23 @@ void WriteLZ77PrefixCode(uint32_t sym, uint32_t cluster, int32_t value,
   }
 }
 }  // namespace
+}  // namespace WP2L
+
+namespace WP2 {
 
 // Counts the number of transforms for a combination of transforms from the
 // official table.
-uint32_t CrunchConfig::GetNumTransforms() const {
+uint32_t EncoderConfig::LosslessCrunchConfig::GetNumTransforms() const {
   uint32_t num_transforms = 0;
-  while (num_transforms < kPossibleTransformCombinationSize &&
-         transforms[num_transforms].type != TransformType::kNum) {
+  while (num_transforms < WP2L::kPossibleTransformCombinationSize &&
+         transforms[num_transforms].type != WP2L::TransformType::kNum) {
     ++num_transforms;
   }
   return num_transforms;
 }
 
-bool CrunchConfig::ShouldBeCachedFor(const CrunchConfig& config) const {
+bool EncoderConfig::LosslessCrunchConfig::ShouldBeCachedFor(
+    const EncoderConfig::LosslessCrunchConfig& config) const {
   // First, make sure the encoding algorithm and pre-multiplication are the same
   // and that the set of transforms is a subset.
   if (algorithm != config.algorithm ||
@@ -129,15 +133,18 @@ bool CrunchConfig::ShouldBeCachedFor(const CrunchConfig& config) const {
   }
   // If we have a palette, make sure the type is the same.
   for (uint32_t i = 0; i < GetNumTransforms(); ++i) {
-    if (transforms[i].type == TransformType::kColorIndexing &&
+    if (transforms[i].type == WP2L::TransformType::kColorIndexing &&
         palette_sorting_type != config.palette_sorting_type) {
       return false;
     }
   }
   return true;
 }
+}  // namespace WP2
 
 // -----------------------------------------------------------------------------
+
+namespace WP2L {
 
 // Writes an image in a raw manner.
 static WP2Status WriteRawImage(const int16_t* const argb, uint32_t width,

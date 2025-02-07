@@ -62,7 +62,7 @@ struct Buffer_s16 {
   uint32_t channel_bits;  // number of bits per non-alpha channel
 };
 struct EncodeInfo;
-struct CrunchConfig;
+using CrunchConfig = WP2::EncoderConfig::LosslessCrunchConfig;
 
 class Encoder {
  public:
@@ -248,12 +248,16 @@ WP2Status ColorSpaceTransform(uint32_t bits, int effort, Buffer_s16* buffer,
 
 // Set of parameters to be used in each iteration of the cruncher.
 static constexpr uint32_t kCrunchLZ77Max = 2;
-struct CrunchConfig {
-  uint32_t lz77s_types_to_try[kCrunchLZ77Max];
+}  // namespace WP2L
+
+namespace WP2 {
+struct EncoderConfig::LosslessCrunchConfig {
+  uint32_t lz77s_types_to_try[WP2L::kCrunchLZ77Max];
   uint32_t lz77s_types_to_try_size;
-  EncodingAlgorithm algorithm;
+  WP2L::EncodingAlgorithm algorithm;
   // Image transforms to apply in order. Each transform is only used once.
-  std::array<TransformHeader, kPossibleTransformCombinationSize> transforms;
+  std::array<WP2L::TransformHeader, WP2L::kPossibleTransformCombinationSize>
+      transforms;
   uint32_t GetNumTransforms() const;
   // whether pixels should be encoded premultiplied with the alpha value
   bool use_premultiplied;
@@ -264,14 +268,14 @@ struct CrunchConfig {
   // Use a MoveToFrontCache in group4 to signal new colors.
   bool group4_use_move_to_front;
   // How to sort the palette.
-  Palette::Sorting palette_sorting_type;
+  WP2L::Palette::Sorting palette_sorting_type;
   // Whether the config can be skipped if one has already been found to be
   // valid.
   bool is_skippable = false;
   // Returns whether one of the transforms is kPredictorWSub.
   bool HasSubModes() const {
-    for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {
-      if (transforms[i].type == TransformType::kPredictorWSub) {
+    for (uint32_t i = 0; i < WP2L::kPossibleTransformCombinationSize; ++i) {
+      if (transforms[i].type == WP2L::TransformType::kPredictorWSub) {
         return true;
       }
     }
@@ -279,9 +283,12 @@ struct CrunchConfig {
   }
 
   // Return true if caching the current CrunchConfig results will help 'config'.
-  bool ShouldBeCachedFor(const CrunchConfig& config) const;
+  bool ShouldBeCachedFor(
+      const EncoderConfig::LosslessCrunchConfig& config) const;
 };
+}  // namespace WP2
 
+namespace WP2L {
 WP2Status EncoderAnalyze(const WP2::ProgressRange& progress, Encoder* encoder,
                          WP2::Vector<CrunchConfig>* configs);
 

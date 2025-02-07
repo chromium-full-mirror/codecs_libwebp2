@@ -16,11 +16,13 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
 
 #include "src/common/color_precision.h"
+#include "src/enc/lossless/losslessi_enc.h"
 #include "src/utils/random.h"
 #include "src/utils/utils.h"
 #include "src/wp2/base.h"
@@ -72,7 +74,7 @@ TEST_P(Group4Test, Pattern) {
   const int dim = std::get<2>(GetParam());
   WP2::UniformIntDistribution gen(seed);
 
-  ArgbBuffer original;
+  ArgbBuffer original(WP2_ARGB_32);
   ASSERT_EQ(original.Resize(dim, dim), WP2_STATUS_OK);
 
   // Draw a pattern.
@@ -96,10 +98,10 @@ TEST_P(Group4Test, Pattern) {
     original.Fill(WP2::ToArgb32b(color));
 
     const uint32_t num_circles = gen.Get(1, dim / 10 + 1);
-    for (uint32_t i = 1; i < num_circles; ++i) {
+    for (uint32_t i = 0; i < num_circles; ++i) {
       const int center_x = gen.Get(0, dim - 1);
       const int center_y = gen.Get(0, dim - 1);
-      const int radius = gen.Get(0, dim);
+      const int radius = gen.Get(1, dim / 2);
 
       RandomColor(&gen, color);
 
@@ -116,24 +118,36 @@ TEST_P(Group4Test, Pattern) {
     }
   }
 
-  MemoryWriter memory_writer;
+  // Define the encoder config for Group4.
   EncoderConfig encoder_config;
+  encoder_config.alpha_quality = 100;
   encoder_config.quality = 100;
-  encoder_config.lossless_algorithm = WP2L::EncodingAlgorithm::kGroup4;
+  encoder_config.keep_unmultiplied = true;
+  encoder_config.lossless_config =
+      std::make_shared<WP2::EncoderConfig::LosslessCrunchConfig>();
+  encoder_config.lossless_config->algorithm = WP2L::EncodingAlgorithm::kGroup4;
+  encoder_config.lossless_config->transforms[0].type =
+      WP2L::TransformType::kColorIndexing;
+  encoder_config.lossless_config->transforms[1].type =
+      WP2L::TransformType::kNum;
+  encoder_config.lossless_config->transforms[2].type =
+      WP2L::TransformType::kNum;
+
+  MemoryWriter memory_writer;
   WP2_ASSERT_STATUS(Encode(original, &memory_writer, encoder_config));
 
   DecoderConfig decoder_config;
-  ArgbBuffer decompressed;
+  ArgbBuffer decompressed(WP2_ARGB_32);
   WP2_ASSERT_STATUS(Decode(memory_writer.mem_, memory_writer.size_,
                            &decompressed, decoder_config));
 
   EXPECT_TRUE(
       testutil::Compare(original, decompressed, /*file_name=*/"pattern"))
       << DisplayMask(dim, original) << DisplayMask(dim, decompressed);
-}  // namespace
+}
 
 INSTANTIATE_TEST_SUITE_P(
-    Group4Test, Group4Test,
+    Group4TestInstantation, Group4Test,
     testing::Combine(testing::Values(Type::kCircle, Type::kRandom),  // type
                      testing::Range(0, 20),                          // seed
                      testing::Values(WP2L::kGroup4Window, 101)       // dim
