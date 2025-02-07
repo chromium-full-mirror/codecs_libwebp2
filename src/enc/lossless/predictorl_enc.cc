@@ -18,6 +18,7 @@
 // Authors: Vincent Rabaud (vrabaud@google.com)
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <limits>
@@ -261,11 +262,11 @@ static inline void GetResidual(int width, int16_t* const upper_row,
 // Returns best predictor and updates the accumulated histogram.
 static void GetBestPredictorForTile(
     int tile_x, int tile_y, uint32_t bits, bool exact, bool use_sub_modes,
-    const int32_t min_values[4], const int32_t max_values[4],
-    const Buffer_s16& buffer, const int16_t* const modes,
-    int16_t* const argb_scratch, ChannelVector accumulated[2],
-    ChannelVector tmp_histo[2], Predictor* const pred_best,
-    Predictor* const pred_wsub_best) {
+    const std::array<int32_t, 4>& min_values,
+    const std::array<int32_t, 4>& max_values, const Buffer_s16& buffer,
+    const int16_t* const modes, int16_t* const argb_scratch,
+    ChannelVector accumulated[2], ChannelVector tmp_histo[2],
+    Predictor* const pred_best, Predictor* const pred_wsub_best) {
   const int start_x = tile_x << bits;
   const int start_y = tile_y << bits;
   const int tile_size = 1 << bits;
@@ -284,8 +285,8 @@ static void GetBestPredictorForTile(
   int16_t* upper_row = argb_scratch;
   int16_t* current_row = &upper_row[4 * (width + 1)];
   float best_diff = std::numeric_limits<float>::max();
-  *pred_best =
-      Predictor(/*mode_in=*/0, /*sub_mode_in=*/0, min_values, max_values);
+  *pred_best = Predictor(/*mode_in=*/0, /*sub_mode_in=*/0, min_values.data(),
+                         max_values.data());
   *pred_wsub_best = *pred_best;
   // Need pointers to be able to swap arrays.
   ChannelVector& histo_argb = tmp_histo[0];
@@ -337,7 +338,8 @@ static void GetBestPredictorForTile(
       }
       for (int8_t sub_mode = sub_mode_min; sub_mode <= sub_mode_max;
            ++sub_mode) {
-        const Predictor pred(mode, sub_mode, min_values, max_values);
+        const Predictor pred(mode, sub_mode, min_values.data(),
+                             max_values.data());
         int relative_y;
         for (uint32_t i = 0; i < 4; ++i) {
           std::fill(histo_argb[i].begin(), histo_argb[i].end(), 0);
@@ -378,9 +380,11 @@ static void GetBestPredictorForTile(
           histo_argb.swap(best_histo);
           best_diff = cur_diff;
           if (pass == 0) {
-            *pred_best = Predictor(mode, sub_mode, min_values, max_values);
+            *pred_best =
+                Predictor(mode, sub_mode, min_values.data(), max_values.data());
           } else {
-            *pred_wsub_best = Predictor(mode, sub_mode, min_values, max_values);
+            *pred_wsub_best =
+                Predictor(mode, sub_mode, min_values.data(), max_values.data());
           }
         }
       }
@@ -392,8 +396,8 @@ static void GetBestPredictorForTile(
 
 // Converts pixels of the image to residuals with respect to predictions.
 static void CopyImageWithPrediction(int bits, bool exact,
-                                    const int32_t min_values[4],
-                                    const int32_t max_values[4],
+                                    const std::array<int32_t, 4>& min_values,
+                                    const std::array<int32_t, 4>& max_values,
                                     const int16_t* const modes, int effort,
                                     const WP2::Vector_s8& sub_modes,
                                     int16_t* const argb_scratch,
@@ -416,7 +420,7 @@ static void CopyImageWithPrediction(int bits, bool exact,
       const Predictor pred(
           modes[ind + 2],
           /*sub_mode_in=*/sub_modes.empty() ? 0 : sub_modes[ind + 2],
-          min_values, max_values);
+          min_values.data(), max_values.data());
 
       GetResidual(width, upper_row, current_row, buffer->has_alpha, exact, pred,
                   x, x_end, y, buffer->GetPosition(x, y));
@@ -428,9 +432,9 @@ static void CopyImageWithPrediction(int bits, bool exact,
 // Finds the best predictor for each tile, and converts the image to residuals
 // with respect to predictions.
 WP2Status CreateResidualImage(uint32_t bits, bool exact, bool can_use_sub_modes,
-                              const int32_t min_values[4],
-                              const int32_t max_values[4], int effort,
-                              const WP2::ProgressRange& progress,
+                              const std::array<int32_t, 4>& min_values,
+                              const std::array<int32_t, 4>& max_values,
+                              int effort, const WP2::ProgressRange& progress,
                               Buffer_s16* const buffer,
                               int16_t* const argb_scratch, int16_t* const modes,
                               WP2::Vector_s8* const sub_modes) {
@@ -465,9 +469,10 @@ WP2Status CreateResidualImage(uint32_t bits, bool exact, bool can_use_sub_modes,
         std::fill(histo[j][c].begin(), histo[j][c].end(), 0);
       }
     }
-    Predictor pred(/*mode_in=*/0, /*sub_mode_in=*/0, min_values, max_values);
-    Predictor pred_wsub(/*mode_in=*/0, /*sub_mode_in=*/0, min_values,
-                        max_values);
+    Predictor pred(/*mode_in=*/0, /*sub_mode_in=*/0, min_values.data(),
+                   max_values.data());
+    Predictor pred_wsub(/*mode_in=*/0, /*sub_mode_in=*/0, min_values.data(),
+                        max_values.data());
     WP2::ProgressScale tile_progress(progress, 1.0 / (width * height));
     for (uint32_t tile_y = 0; tile_y < height; ++tile_y) {
       for (uint32_t tile_x = 0; tile_x < width; ++tile_x) {

@@ -24,6 +24,7 @@
 #include <cstdint>
 
 #include "src/common/lossless/color_cache.h"
+#include "src/common/lossless/transforms.h"
 #include "src/common/symbols.h"
 #include "src/dec/symbols_dec.h"
 #include "src/dec/tile_dec.h"

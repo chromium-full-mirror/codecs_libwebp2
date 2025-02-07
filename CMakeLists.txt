@@ -410,6 +410,8 @@ add_library(
   # lossless
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/color_cache.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/color_cache.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/transforms.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/transforms.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/group4_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/losslessi_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/losslessi_dec.h

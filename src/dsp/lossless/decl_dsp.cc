@@ -27,7 +27,7 @@
 #include <cstdint>
 
 #include "src/common/lossless/color_cache.h"
-#include "src/common/symbols.h"
+#include "src/common/lossless/transforms.h"
 #include "src/dec/lossless/losslessi_dec.h"
 #include "src/dsp/dsp.h"
 #include "src/dsp/lossless/dspl.h"

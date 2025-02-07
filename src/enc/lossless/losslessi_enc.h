@@ -23,6 +23,7 @@
 #include <array>
 #include <cstdint>
 
+#include "src/common/lossless/transforms.h"
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/enc/lossless/backward_references_enc.h"
@@ -122,8 +123,9 @@ class Encoder {
   // Implementations of the different transforms.
   void ApplyYCoCgR();
   void ApplySubtractGreen();
-  WP2Status ApplyPredictor(const int32_t min_values[4],
-                           const int32_t max_values[4], bool can_use_sub_modes,
+  WP2Status ApplyPredictor(const std::array<int32_t, 4>& min_values,
+                           const std::array<int32_t, 4>& max_values,
+                           bool can_use_sub_modes,
                            const WP2::ProgressRange& progress,
                            uint32_t pred_bits, WP2::ANSEnc* enc,
                            WP2::ANSDictionaries* dicts);
@@ -233,9 +235,9 @@ WP2Status WriteSubModes(const int16_t* modes, bool needs_shift,
 // and should be tried to find the best predictors.
 // If sub-modes are used, 'sub_modes' is not empty and contains the sub-modes.
 WP2Status CreateResidualImage(uint32_t bits, bool exact, bool can_use_sub_modes,
-                              const int32_t min_values[4],
-                              const int32_t max_values[4], int effort,
-                              const WP2::ProgressRange& progress,
+                              const std::array<int32_t, 4>& min_values,
+                              const std::array<int32_t, 4>& max_values,
+                              int effort, const WP2::ProgressRange& progress,
                               Buffer_s16* buffer, int16_t* argb_scratch,
                               int16_t* modes, WP2::Vector_s8* sub_modes);
 

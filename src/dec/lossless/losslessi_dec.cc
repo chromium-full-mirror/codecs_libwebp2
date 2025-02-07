@@ -29,6 +29,7 @@
 #include "src/common/constants.h"
 #include "src/common/global_params.h"
 #include "src/common/lossless/color_cache.h"
+#include "src/common/lossless/transforms.h"
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/common/vdebug.h"
@@ -285,7 +286,7 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
                      WP2_STATUS_BITSTREAM_ERROR);
       }
     }
-    int32_t minima_range[4], maxima_range[4];
+    std::array<int32_t, 4> minima_range, maxima_range;
     if (transform.header_.type == TransformType::kPredictor ||
         transform.header_.type == TransformType::kPredictorWSub) {
       // Define the minimum/maximum values before applying the predictors.
@@ -307,8 +308,9 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
 #endif
     WP2_CHECK_REDUCED_STATUS(RegisterTransformedRowForVDebug(
         ind, num_rows, /*num_bits=*/8, rows, config_.info));
-    InverseTransform(&transform, start_row, end_row, minima_range, maxima_range,
-                     rows, gparams_->has_alpha_, rows_out, predicted);
+    InverseTransform(&transform, start_row, end_row, minima_range.data(),
+                     maxima_range.data(), rows, gparams_->has_alpha_, rows_out,
+                     predicted);
     WP2_CHECK_REDUCED_STATUS(RegisterPredictedRowForVDebug(
         ind, num_rows, /*num_bits=*/8, predicted, config_.info));
     rows = rows_out;
@@ -1104,7 +1106,7 @@ WP2Status Decoder::DecodeHeader() {
   if (num_transforms == 1 && transforms[0] == TransformType::kColorIndexing) {
     hdr_.symbols_info_.InitAsLabelImage(tile_->rect.GetArea(), num_colors_);
   } else if (num_transforms != 0) {
-    int32_t minima_range[4], maxima_range[4];
+    std::array<int32_t, 4> minima_range, maxima_range;
     // Find the ranges in which the ARGB values are.
 
     std::array<TransformHeader, kPossibleTransformCombinationSize> headers;

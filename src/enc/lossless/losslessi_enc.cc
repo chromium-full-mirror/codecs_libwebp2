@@ -30,6 +30,7 @@
 #include "src/common/color_precision.h"
 #include "src/common/constants.h"
 #include "src/common/lossless/color_cache.h"
+#include "src/common/lossless/transforms.h"
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
 #include "src/dsp/lossless/dspl.h"
@@ -658,8 +659,8 @@ void Encoder::ApplySubtractGreen() {
 // Finds the best spatial predictor for each prediction block (of size
 // 2^(enc->transform_bits_)), saves the residuals in enc->argb_ and writes the
 // transform for each block in the form of an image.
-WP2Status Encoder::ApplyPredictor(const int32_t min_values[4],
-                                  const int32_t max_values[4],
+WP2Status Encoder::ApplyPredictor(const std::array<int32_t, 4>& min_values,
+                                  const std::array<int32_t, 4>& max_values,
                                   bool can_use_sub_modes,
                                   const ProgressRange& progress,
                                   uint32_t pred_bits, WP2::ANSEnc* const enc,
@@ -927,7 +928,7 @@ WP2Status Encoder::ApplyAndWriteTransformsImpl(
         case TransformType::kPredictor:
         case TransformType::kPredictorWSub:
           // Define the minimum/maximum values before applying the predictors.
-          int32_t minima_range[4], maxima_range[4];
+          std::array<int32_t, 4> minima_range, maxima_range;
           WP2_CHECK_STATUS(
               GetARGBRanges(config->transforms, symbols_info_.SampleFormat(),
                             minima_range, maxima_range, /*num_transforms=*/i));
@@ -1073,7 +1074,7 @@ WP2Status Encoder::ApplyAndWriteTransforms(
       }
     }
     // Find the ranges in which they should belong according to the transforms.
-    int32_t minima_range[4], maxima_range[4];
+    std::array<int32_t, 4> minima_range, maxima_range;
     WP2_CHECK_STATUS(GetARGBRanges(config->transforms,
                                    symbols_info->SampleFormat(), minima_range,
                                    maxima_range));
