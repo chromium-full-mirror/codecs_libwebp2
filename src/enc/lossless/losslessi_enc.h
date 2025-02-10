@@ -139,6 +139,9 @@ class Encoder {
                                   TransformHeader::CCTransform third_transform,
                                   WP2::ANSEnc* enc);
   WP2Status ApplyColorIndexing(const CrunchConfig& config);
+  WP2Status ApplyNormalizeChannels(const std::array<int32_t, 4>& minima_range,
+                                   const std::array<int32_t, 4>& maxima_range,
+                                   TransformHeader& header, WP2::ANSEnc& enc);
   // Copy the original pic_ when need.
   WP2Status MakeInputImageCopy(const CrunchConfig& config);
 

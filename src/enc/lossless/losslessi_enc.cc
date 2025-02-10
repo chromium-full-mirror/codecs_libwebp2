@@ -790,6 +790,99 @@ WP2Status Encoder::ApplyColorIndexing(const CrunchConfig& config) {
   return status;
 }
 
+WP2Status Encoder::ApplyNormalizeChannels(
+    const std::array<int32_t, 4>& minima_range,
+    const std::array<int32_t, 4>& maxima_range, TransformHeader& header,
+    WP2::ANSEnc& enc) {
+  const WP2::ANSDebugPrefix prefix(&enc, "normalize_channels");
+  std::array<int16_t, 4> min, max;
+  const uint32_t width = argb_buffer_.width;
+  const uint32_t height = argb_buffer_.height;
+  const int first_channel = has_alpha_ ? 0 : 1;
+  for (int c = first_channel; c < 4; c++) {
+    const int16_t* const row = argb_buffer_.GetRow(0);
+    min[c] = max[c] = row[c];
+  }
+  // Figure out the min and max values.
+  for (uint32_t y = 0; y < height; ++y) {
+    const int16_t* const row = argb_buffer_.GetRow(y);
+    for (uint32_t x = 0; x < width; ++x) {
+      for (int c = first_channel; c < 4; c++) {
+        if (row[4 * x + c] < min[c]) {
+          min[c] = row[4 * x + c];
+        } else if (row[4 * x + c] > max[c]) {
+          max[c] = row[4 * x + c];
+        }
+      }
+    }
+  }
+  // Store the minimum.
+  for (int c = first_channel; c < 4; ++c) {
+    header.normalize_channels_min[c] = min[c];
+    enc.PutRange(min[c], minima_range[c], maxima_range[c], "min");
+    max[c] -= min[c];
+  }
+
+  // TODO(vrabaud) This is a basic heuristic for now.
+  constexpr uint32_t kMinSizeForPalette = 256;
+  header.normalize_channels_has_palette = width * height >= kMinSizeForPalette;
+  if (!enc.PutBool(header.normalize_channels_has_palette, "has_palette")) {
+    // Remove the min value to only have positive values.
+    for (uint32_t y = 0; y < height; ++y) {
+      int16_t* const row = argb_buffer_.GetRow(y);
+      for (uint32_t x = 0; x < width; ++x) {
+        for (int c = first_channel; c < 4; c++) row[x + c] -= min[c];
+      }
+    }
+    return WP2_STATUS_OK;
+  }
+  // Compute whether a value is present.
+  std::array<WP2::Vector_u8, 4> present;
+  for (int c = first_channel; c < 4; ++c) {
+    WP2_CHECK_ALLOC_OK(present[c].resize(max[c] + 1));
+    std::fill(present[c].begin(), present[c].end(), 0);
+    for (uint32_t y = 0; y < height; ++y) {
+      int16_t* const row = argb_buffer_.GetRow(y);
+      for (uint32_t x = 0; x < width; ++x) {
+        row[4 * x + c] -= min[c];
+        present[c][row[4 * x + c]] = 1;
+      }
+    }
+  }
+  // Convert to palette.
+  WP2::Vector_u16 palette;
+  WP2::Vector_u16 mappings;
+  for (int c = first_channel; c < 4; ++c) {
+    WP2_CHECK_ALLOC_OK(palette.resize(max[c] + 1));
+    WP2_CHECK_ALLOC_OK(mappings.resize(max[c] + 1));
+    uint32_t mapping_size = 0;
+    for (uint32_t i = 0; i < present[c].size(); ++i) {
+      if (present[c][i]) {
+        palette[i] = mapping_size;
+        mappings[mapping_size] = i;
+        ++mapping_size;
+      } else {
+        palette[i] = std::numeric_limits<uint16_t>::max();
+      }
+    }
+    // Store the mapping.
+    const uint32_t range = 1 + maxima_range[c] - minima_range[c];
+    enc.PutRange(mapping_size, 1, range, "size");
+    header.normalize_channels_num_colors[c] = mapping_size;
+    WP2::VectorNoCtor<WP2::OptimizeArrayStorageStat> stats;
+    WP2_CHECK_ALLOC_OK(stats.resize(mapping_size));
+    StoreMapping(mappings.data(), mapping_size, range, stats.data(), &enc);
+    // Apply the mapping.
+    for (uint32_t y = 0; y < height; ++y) {
+      int16_t* const row = argb_buffer_.GetRow(y);
+      for (uint32_t x = c; x < 4 * width; x += 4) {
+        row[x] = palette[row[x]];
+      }
+    }
+  }
+  return WP2_STATUS_OK;
+}
+
 // -----------------------------------------------------------------------------
 
 // Allocates the memory for argb (W x H) buffer, 2 rows of context for
@@ -974,6 +1067,16 @@ WP2Status Encoder::ApplyAndWriteTransformsImpl(
             transform.cc_global_second_transform,
             transform.cc_global_third_transform, enc));
         break;
+      case TransformType::kNormalizeChannels: {
+        std::array<int32_t, 4> minima_range, maxima_range;
+        WP2_CHECK_STATUS(
+            GetARGBRanges(config->transforms, symbols_info_.SampleFormat(),
+                          minima_range, maxima_range, /*num_transforms=*/i));
+        WP2_CHECK_STATUS(ApplyNormalizeChannels(minima_range, maxima_range,
+                                                transform, *enc));
+        WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
+        break;
+      }
       case TransformType::kColorIndexing:
       case TransformType::kNum:
         assert(false);

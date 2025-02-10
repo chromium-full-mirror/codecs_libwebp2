@@ -372,6 +372,7 @@ enum class TransformType {
   kYCoCgR,  // reversible YCoCg (unused)
   kSubtractGreen,
   kColorIndexing,
+  kNormalizeChannels,  // maps the channels to a range of [0, num_colors-1]
   kNum
 };
 // Possible image transform combinations that can be applied.
@@ -409,6 +410,9 @@ static constexpr EncodingRecipe kPossibleEncodingRecipes[] = {
       TransformType::kNum}},
     {EncodingAlgorithm::kWebP,
      {TransformType::kColorIndexing, TransformType::kPredictor,
+      TransformType::kNum}},
+    {EncodingAlgorithm::kWebP,
+     {TransformType::kNormalizeChannels, TransformType::kPredictor,
       TransformType::kNum}},
     {EncodingAlgorithm::kWebP,
      {TransformType::kPredictor, TransformType::kCrossColor,

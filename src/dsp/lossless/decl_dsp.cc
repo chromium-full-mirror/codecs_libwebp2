@@ -374,6 +374,28 @@ void ColorIndexInverseTransform_C(const Transform* const transform,
            width, dst);
 }
 
+void NormalizeChannelsInverseTransform_C(const Transform* const transform,
+                                         uint32_t y_start, uint32_t y_end,
+                                         const int16_t* src, int16_t* dst) {
+  const uint32_t width = transform->width_pic_;
+  if (transform->header_.normalize_channels_has_palette) {
+    for (const int16_t* const src_end = src + 4 * (y_end - y_start) * width;
+         src < src_end; src += 4, dst += 4) {
+      for (int c = 0; c < 4; ++c) {
+        dst[c] = transform->header_.normalize_channels_min[c] +
+                 transform->normalize_channels_mapping_[c][src[c]];
+      }
+    }
+  } else {
+    for (const int16_t* const src_end = src + 4 * (y_end - y_start) * width;
+         src < src_end; src += 4, dst += 4) {
+      for (int c = 0; c < 4; ++c) {
+        dst[c] = transform->header_.normalize_channels_min[c] + src[c];
+      }
+    }
+  }
+}
+
 //------------------------------------------------------------------------------
 // SSE version
 
@@ -492,6 +514,10 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
       break;
     case TransformType::kColorIndexing:
       ColorIndexInverseTransform_C(transform, row_start, row_end, in, out);
+      break;
+    case TransformType::kNormalizeChannels:
+      NormalizeChannelsInverseTransform_C(transform, row_start, row_end, in,
+                                          out);
       break;
     case TransformType::kNum:
       assert(false);

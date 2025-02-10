@@ -127,4 +127,48 @@ TEST(GenericTest, InvalidTransformCombinations) {
             WP2_STATUS_INVALID_PARAMETER);
 }
 
+// Tests the cross color global transform.
+TEST(PerChannelIndexingTest, Pattern) {
+  constexpr char kSource1_64x48[] = "source1_64x48.png";
+  ArgbBuffer full_original(WP2_ARGB_32);
+  ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(kSource1_64x48).c_str(),
+                          &full_original));
+  for (int test_case = 0; test_case < 2; ++test_case) {
+    ArgbBuffer original(WP2_ARGB_32);
+    if (test_case == 0) {
+      WP2_ASSERT_STATUS(original.SetView(full_original));
+    } else {
+      // Trigger the non-palette code.
+      WP2_ASSERT_STATUS(
+          original.SetView(full_original, WP2::Rectangle(0, 0, 10, 10)));
+    }
+
+    // Define the encoder config for lossless, including kCrossColorGlobal.
+    EncoderConfig encoder_config;
+    encoder_config.alpha_quality = 100;
+    encoder_config.quality = 100;
+    encoder_config.keep_unmultiplied = true;
+    encoder_config.lossless_config =
+        std::make_shared<WP2::EncoderConfig::LosslessCrunchConfig>();
+    WP2L::CrunchConfig &config = *encoder_config.lossless_config;
+    config.algorithm = WP2L::EncodingAlgorithm::kWebP;
+    config.transform_bits = config.histo_bits = 5;
+    config.lz77s_types_to_try[0] = WP2L::kLZ77Standard;
+    config.lz77s_types_to_try_size = 1;
+    config.transforms[0].type = WP2L::TransformType::kNormalizeChannels;
+    config.transforms[1].type = WP2L::TransformType::kPredictor;
+    config.transforms[2].type = WP2L::TransformType::kNum;
+
+    MemoryWriter memory_writer;
+    WP2_ASSERT_STATUS(Encode(original, &memory_writer, encoder_config));
+
+    DecoderConfig decoder_config;
+    ArgbBuffer decompressed(WP2_ARGB_32);
+    WP2_ASSERT_STATUS(Decode(memory_writer.mem_, memory_writer.size_,
+                             &decompressed, decoder_config));
+
+    EXPECT_TRUE(testutil::Compare(original, decompressed,
+                                  /*file_name=*/"cross_color_global"));
+  }
+}
 }  // namespace WP2

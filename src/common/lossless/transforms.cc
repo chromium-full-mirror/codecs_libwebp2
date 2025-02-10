@@ -201,6 +201,27 @@ WP2Status GetARGBRanges(
         // Only the color index in [0, num_colors-1] is stored in G.
         segments[2] = {0, static_cast<int32_t>(header.indexing_num_colors) - 1};
         break;
+      case TransformType::kNormalizeChannels: {
+        if (header.normalize_channels_has_palette) {
+          for (uint32_t c = 0; c < 4; ++c) {
+            if (header.normalize_channels_num_colors[c] > 0) {
+              segments[c] = {0, static_cast<int32_t>(
+                                    header.normalize_channels_num_colors[c]) -
+                                    1};
+            } else {
+              if (c != 0) return WP2_STATUS_INVALID_PARAMETER;
+              segments[c] = {0, 0};
+            }
+          }
+        } else {
+          for (uint32_t c = 0; c < 4; ++c) {
+            segments[c] =
+                segments[c] + Segment{-header.normalize_channels_min[c],
+                                      -header.normalize_channels_min[c]};
+          }
+        }
+        break;
+      }
       case TransformType::kNum:
         assert(false);
     }

@@ -832,7 +832,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
 }
 
 WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
-                                 TransformType type,
+                                 TransformType type, int index,
                                  Transform* const transform) {
   transform->header_.type = type;
   transform->width_pic_ = width;
@@ -927,6 +927,35 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       transform->header_.indexing_num_colors = transform->data_.size() / 4;
       break;
     }
+    case TransformType::kNormalizeChannels: {
+      WP2::ANSDebugPrefix prefix(dec_, "normalize_channels");
+      std::array<int32_t, 4> minima_range, maxima_range;
+      std::array<TransformHeader, kPossibleTransformCombinationSize> headers;
+      for (int i = 0; i < index; ++i) {
+        headers[i] = transforms_[i].header_;
+      }
+      WP2_CHECK_STATUS(GetARGBRanges(headers, hdr_.symbols_info_.SampleFormat(),
+                                     minima_range, maxima_range, index));
+      for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
+        transform->header_.normalize_channels_min[c] =
+            dec_->ReadRange(minima_range[c], maxima_range[c], "min");
+      }
+      transform->header_.normalize_channels_has_palette =
+          dec_->ReadBool("has_palette");
+      if (transform->header_.normalize_channels_has_palette) {
+        for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
+          const uint32_t range = 1 + maxima_range[c] - minima_range[c];
+          const uint32_t mapping_size = dec_->ReadRange(1, range, "size");
+          transform->header_.normalize_channels_num_colors[c] = mapping_size;
+          WP2_CHECK_ALLOC_OK(
+              transform->normalize_channels_mapping_[c].resize(mapping_size));
+          WP2_CHECK_STATUS(
+              LoadMapping(dec_, mapping_size, range,
+                          transform->normalize_channels_mapping_[c].data()));
+        }
+      }
+      break;
+    }
     case TransformType::kSubtractGreen:
     case TransformType::kYCoCgR:
       break;
@@ -1013,23 +1042,21 @@ WP2Status Decoder::DecodeHeader() {
   dec_->AddDebugPrefix("transforms");
   const uint32_t index = dec_->ReadRValue(kPossibleEncodingRecipesNum, "index");
   encoding_algorithm_ = kPossibleEncodingRecipes[index].algorithm;
-  const TransformType* const transforms =
-      kPossibleEncodingRecipes[index].transforms;
-  uint32_t num_transforms = 0;
-  for (; num_transforms < kPossibleTransformCombinationSize; ++num_transforms) {
-    if (transforms[num_transforms] == TransformType::kNum) {
-      break;
-    }
-  }
 
-  // Deactivate all transforms in case the decoder is re-used.
-  for (Transform& t : transforms_) t.header_.type = TransformType::kNum;
-  for (uint32_t i = 0; i < num_transforms; ++i) {
-    TransformType type = transforms[i];
-    WP2_CHECK_STATUS(ReadTransform(tile_->rect.width, tile_->rect.height, type,
-                                   &transforms_[i]));
-    WP2_CHECK_REDUCED_STATUS(
-        RegisterTransformForVDebug(transforms_[i], config_.info));
+  uint32_t num_transforms = kPossibleTransformCombinationSize;
+  for (uint32_t i = 0; i < kPossibleTransformCombinationSize; ++i) {
+    const TransformType type = kPossibleEncodingRecipes[index].transforms[i];
+    Transform& transform = transforms_[i];
+    if (type == TransformType::kNum) {
+      num_transforms = std::min(num_transforms, i);
+      // Deactivate all transforms in case the decoder is re-used.
+      transform.header_.type = TransformType::kNum;
+    } else {
+      WP2_CHECK_STATUS(ReadTransform(tile_->rect.width, tile_->rect.height,
+                                     type, i, &transform));
+      WP2_CHECK_REDUCED_STATUS(
+          RegisterTransformForVDebug(transform, config_.info));
+    }
   }
 
   // Read headers for specific algorithms.
@@ -1103,7 +1130,8 @@ WP2Status Decoder::DecodeHeader() {
   }
 
   // Modify the main image ranges if we only use the palette.
-  if (num_transforms == 1 && transforms[0] == TransformType::kColorIndexing) {
+  if (num_transforms == 1 &&
+      transforms_[0].header_.type == TransformType::kColorIndexing) {
     hdr_.symbols_info_.InitAsLabelImage(tile_->rect.GetArea(), num_colors_);
   } else if (num_transforms != 0) {
     std::array<int32_t, 4> minima_range, maxima_range;

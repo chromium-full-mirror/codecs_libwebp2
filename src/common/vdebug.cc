@@ -2782,8 +2782,8 @@ WP2Status Decoder::RegisterSymbolForVDebug(
 }
 
 static const char* const kTransformNames[] = {
-    "Predictor", "Predictor with sub", "CrossColor",   "CrossColorGlobal",
-    "YCoCgR",    "SubstractGreen",     "ColorIndexing"};
+    "Predictor", "Predictor with sub", "CrossColor",    "CrossColorGlobal",
+    "YCoCgR",    "SubstractGreen",     "ColorIndexing", "NormalizeChannels"};
 STATIC_ASSERT_ARRAY_SIZE(kTransformNames, (uint32_t)TransformType::kNum);
 static const char* const kPredictorNames[] = {"Black",
                                               "180",

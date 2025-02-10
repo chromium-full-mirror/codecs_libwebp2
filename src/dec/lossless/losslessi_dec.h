@@ -44,12 +44,17 @@ typedef enum { READ_DATA = 0, READ_HDR = 1, READ_DIM = 2 } DecodeState;
 class Transform {
  public:
   TransformHeader header_;  // header.
-  uint32_t bits_ = 0;       // subsampling bits defining transform window.
   uint32_t width_pic_;      // initial picture width
   uint32_t height_pic_;     // initial picture height
-  uint32_t width_ = 0;      // transform width (if any)
-  uint32_t height_ = 0;     // transform height (if any)
-  WP2::Vector_s16 data_;    // transform data.
+
+  // Generic transform parameters.
+  uint32_t bits_ = 0;  // subsampling bits defining transform window.
+  uint32_t width_ = 0;
+  uint32_t height_ = 0;
+  WP2::Vector_s16 data_;
+
+  // Parameters when normalizing channels
+  std::array<WP2::Vector_u16, 4> normalize_channels_mapping_;
 };
 
 class Metadata {
@@ -120,7 +125,7 @@ class Decoder {
                             WP2::Planef* bits_per_pixel);
   // Reads a transform of a certain size from the stream.
   WP2Status ReadTransform(uint32_t width, uint32_t height, TransformType type,
-                          Transform* transform);
+                          int index, Transform* transform);
 
   // Visual debug. 'symbol_type' can be a SymbolType for classical algorithm,
   // a Group4Mode for Group4 algorithm, or 0 for LZW algorithm.
