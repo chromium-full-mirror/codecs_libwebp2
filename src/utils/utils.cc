@@ -23,6 +23,9 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#if defined(WP2_BITTRACE) || defined(WP2_TRACE) || defined(WP2_ENC_DEC_MATCH)
+#include <memory>
+#endif
 
 #include "src/wp2/base.h"
 

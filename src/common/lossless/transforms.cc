@@ -100,6 +100,12 @@ WP2Status GetARGBRanges(
         for (uint32_t c = 0; c < 4; ++c) {
           segments[c] =
               (segments[c] + segments[c]) | (segments[c] - segments[c]);
+          // For alpha and a value of 0, because of the predictor
+          // (kAlphaMax,0,0,0), the residual can be -WP2::kAlphaMax.
+          if (c == 0) {
+            segments[0].min = std::min(segments[0].min,
+                                       -static_cast<int32_t>(WP2::kAlphaMax));
+          }
           if (do_clamp) {
             const uint32_t num_bits =
                 (c == 0) ? num_bits_alpha : num_bits_non_alpha;

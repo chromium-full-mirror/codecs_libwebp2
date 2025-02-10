@@ -936,46 +936,48 @@ WP2Status Encoder::ApplyAndWriteTransformsImpl(
       WP2_CHECK_STATUS(palette_.Write(palette_write, enc, dicts, this));
       WP2_CHECK_STATUS(ApplyColorIndexing(*config));
       need_copy = false;
-    } else {
-      if (need_copy) {
-        WP2_CHECK_STATUS(MakeInputImageCopy(*config));
-        need_copy = false;
+      continue;
+    }
+    if (need_copy) {
+      WP2_CHECK_STATUS(MakeInputImageCopy(*config));
+      need_copy = false;
+    }
+    switch (type) {
+      case TransformType::kYCoCgR:
+        ApplyYCoCgR();
+        WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
+        break;
+      case TransformType::kSubtractGreen:
+        ApplySubtractGreen();
+        WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
+        break;
+      case TransformType::kPredictor:
+      case TransformType::kPredictorWSub: {
+        // Define the minimum/maximum values before applying the predictors.
+        std::array<int32_t, 4> minima_range, maxima_range;
+        WP2_CHECK_STATUS(
+            GetARGBRanges(config->transforms, symbols_info_.SampleFormat(),
+                          minima_range, maxima_range, /*num_transforms=*/i));
+        WP2_CHECK_STATUS(ApplyPredictor(minima_range, maxima_range,
+                                        config->HasSubModes(), progress_local,
+                                        config->transform_bits, enc, dicts));
+        break;
       }
-      switch (type) {
-        case TransformType::kYCoCgR:
-          ApplyYCoCgR();
-          WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
-          break;
-        case TransformType::kSubtractGreen:
-          ApplySubtractGreen();
-          WP2_CHECK_STATUS(progress_local.AdvanceBy(1.));
-          break;
-        case TransformType::kPredictor:
-        case TransformType::kPredictorWSub:
-          // Define the minimum/maximum values before applying the predictors.
-          std::array<int32_t, 4> minima_range, maxima_range;
-          WP2_CHECK_STATUS(
-              GetARGBRanges(config->transforms, symbols_info_.SampleFormat(),
-                            minima_range, maxima_range, /*num_transforms=*/i));
-          WP2_CHECK_STATUS(ApplyPredictor(minima_range, maxima_range,
-                                          config->HasSubModes(), progress_local,
-                                          config->transform_bits, enc, dicts));
-          break;
-        case TransformType::kCrossColor:
-          WP2_CHECK_STATUS(ApplyCrossColor(progress_local,
-                                           config->transform_bits, enc, dicts));
-          break;
-        case TransformType::kCrossColorGlobal:
-          WP2_CHECK_STATUS(ApplyCrossColorGlobal(
-              progress_local, transform.cc_global_first_channel,
-              transform.cc_global_second_channel,
-              transform.cc_global_second_transform,
-              transform.cc_global_third_transform, enc));
-          break;
-        case TransformType::kColorIndexing:
-        case TransformType::kNum:
-          assert(false);
-      }
+      case TransformType::kCrossColor:
+        WP2_CHECK_STATUS(ApplyCrossColor(progress_local, config->transform_bits,
+                                         enc, dicts));
+        break;
+      case TransformType::kCrossColorGlobal:
+        WP2_CHECK_STATUS(ApplyCrossColorGlobal(
+            progress_local, transform.cc_global_first_channel,
+            transform.cc_global_second_channel,
+            transform.cc_global_second_transform,
+            transform.cc_global_third_transform, enc));
+        break;
+      case TransformType::kColorIndexing:
+      case TransformType::kNum:
+        assert(false);
+        return WP2_STATUS_INVALID_PARAMETER;
     }
   }
   if (need_copy) WP2_CHECK_STATUS(MakeInputImageCopy(*config));
@@ -1219,7 +1221,7 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
     // If enc has been emptied, encoding could not be performed.
     if (enc.NumTokens() == 0) {
       use_previous_transforms = false;
-      WP2_CHECK_STATUS(progress.AdvanceBy(1.));
+      WP2_CHECK_STATUS(encode_progress.AdvanceBy(1.));
       continue;
     }
     use_previous_transforms = cache_transforms;
@@ -1250,6 +1252,10 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
       }
     }
   }
+  // In case no encoding could be performed (this can happen in tests if a
+  // configuration is imposed and it does not work out).
+  WP2_CHECK_OK(best_size < std::numeric_limits<uint32_t>::max(),
+               WP2_STATUS_INVALID_PARAMETER);
   WP2::swap(*enc_init, enc_best);
 
   return WP2_STATUS_OK;
