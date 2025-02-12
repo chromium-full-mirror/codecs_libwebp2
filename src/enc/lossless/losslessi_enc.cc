@@ -831,8 +831,12 @@ WP2Status Encoder::ApplyNormalizeChannels(
     for (uint32_t y = 0; y < height; ++y) {
       int16_t* const row = argb_buffer_.GetRow(y);
       for (uint32_t x = 0; x < width; ++x) {
-        for (int c = first_channel; c < 4; c++) row[x + c] -= min[c];
+        for (int c = first_channel; c < 4; c++) row[4 * x + c] -= min[c];
       }
+    }
+    // Store the maximum.
+    for (int c = first_channel; c < 4; ++c) {
+      enc.PutRange(max[c], min[c], maxima_range[c], "max");
     }
     return WP2_STATUS_OK;
   }
@@ -868,7 +872,7 @@ WP2Status Encoder::ApplyNormalizeChannels(
     // Store the mapping.
     const uint32_t range = 1 + maxima_range[c] - minima_range[c];
     enc.PutRange(mapping_size, 1, range, "size");
-    header.normalize_channels_num_colors[c] = mapping_size;
+    header.normalize_channels_max[c] = mapping_size - 1;
     WP2::VectorNoCtor<WP2::OptimizeArrayStorageStat> stats;
     WP2_CHECK_ALLOC_OK(stats.resize(mapping_size));
     StoreMapping(mappings.data(), mapping_size, range, stats.data(), &enc);
@@ -1195,7 +1199,7 @@ WP2Status Encoder::ApplyAndWriteTransforms(
     WP2_CHECK_STATUS(GetARGBRanges(config->transforms,
                                    symbols_info->SampleFormat(), minima_range,
                                    maxima_range));
-    for (uint32_t c = 0; c < 4; ++c) {
+    for (uint32_t c = has_alpha_ ? 0 : 1; c < 4; ++c) {
       assert(minima[c] <= maxima[c]);
       if (minima[c] < minima_range[c] || maxima[c] > maxima_range[c]) {
         // Invalidate the encoding because it does not fit within the range.

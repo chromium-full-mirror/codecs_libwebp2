@@ -374,23 +374,26 @@ void ColorIndexInverseTransform_C(const Transform* const transform,
            width, dst);
 }
 
-void NormalizeChannelsInverseTransform_C(const Transform* const transform,
+void NormalizeChannelsInverseTransform_C(const Transform& transform,
                                          uint32_t y_start, uint32_t y_end,
-                                         const int16_t* src, int16_t* dst) {
-  const uint32_t width = transform->width_pic_;
-  if (transform->header_.normalize_channels_has_palette) {
+                                         bool has_alpha, const int16_t* src,
+                                         int16_t* dst) {
+  const uint32_t width = transform.width_pic_;
+  if (transform.header_.normalize_channels_has_palette) {
     for (const int16_t* const src_end = src + 4 * (y_end - y_start) * width;
          src < src_end; src += 4, dst += 4) {
-      for (int c = 0; c < 4; ++c) {
-        dst[c] = transform->header_.normalize_channels_min[c] +
-                 transform->normalize_channels_mapping_[c][src[c]];
+      if (!has_alpha) dst[0] = WP2::kAlphaMax;
+      for (int c = has_alpha ? 0 : 1; c < 4; ++c) {
+        dst[c] = transform.header_.normalize_channels_min[c] +
+                 transform.normalize_channels_mapping_[c][src[c]];
       }
     }
   } else {
     for (const int16_t* const src_end = src + 4 * (y_end - y_start) * width;
          src < src_end; src += 4, dst += 4) {
-      for (int c = 0; c < 4; ++c) {
-        dst[c] = transform->header_.normalize_channels_min[c] + src[c];
+      if (!has_alpha) dst[0] = WP2::kAlphaMax;
+      for (int c = has_alpha ? 0 : 1; c < 4; ++c) {
+        dst[c] = transform.header_.normalize_channels_min[c] + src[c];
       }
     }
   }
@@ -516,8 +519,8 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
       ColorIndexInverseTransform_C(transform, row_start, row_end, in, out);
       break;
     case TransformType::kNormalizeChannels:
-      NormalizeChannelsInverseTransform_C(transform, row_start, row_end, in,
-                                          out);
+      NormalizeChannelsInverseTransform_C(*transform, row_start, row_end,
+                                          has_alpha, in, out);
       break;
     case TransformType::kNum:
       assert(false);

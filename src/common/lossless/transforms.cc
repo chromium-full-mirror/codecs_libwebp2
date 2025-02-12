@@ -204,13 +204,12 @@ WP2Status GetARGBRanges(
       case TransformType::kNormalizeChannels: {
         if (header.normalize_channels_has_palette) {
           for (uint32_t c = 0; c < 4; ++c) {
-            if (header.normalize_channels_num_colors[c] > 0) {
-              segments[c] = {0, static_cast<int32_t>(
-                                    header.normalize_channels_num_colors[c]) -
-                                    1};
+            if (header.normalize_channels_max[c] > 0) {
+              segments[c] = {
+                  0, static_cast<int32_t>(header.normalize_channels_max[c])};
             } else {
               if (c != 0) return WP2_STATUS_INVALID_PARAMETER;
-              segments[c] = {0, 0};
+              // There is no alpha so leave it as is.
             }
           }
         } else {

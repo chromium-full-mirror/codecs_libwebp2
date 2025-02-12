@@ -38,7 +38,7 @@ class CrossColorGlobalTest
           WP2L::TransformHeader::CCTransform,
           WP2L::TransformHeader::CCTransform>> {};
 
-// Tests the cross color global transform.
+// Tests the kCrossColorGlobal transform.
 TEST_P(CrossColorGlobalTest, Pattern) {
   constexpr char kSource1_64x48[] = "source1_64x48.png";
   // First and second channel have to be different.
@@ -127,23 +127,29 @@ TEST(GenericTest, InvalidTransformCombinations) {
             WP2_STATUS_INVALID_PARAMETER);
 }
 
-// Tests the cross color global transform.
-TEST(PerChannelIndexingTest, Pattern) {
+// Tests the kNormalizeChannels transform.
+TEST(NormalizeChannelsTest, Pattern) {
   constexpr char kSource1_64x48[] = "source1_64x48.png";
   ArgbBuffer full_original(WP2_ARGB_32);
   ASSERT_WP2_OK(ReadImage(testutil::GetTestDataPath(kSource1_64x48).c_str(),
                           &full_original));
-  for (int test_case = 0; test_case < 2; ++test_case) {
+  for (int test_case = 0; test_case < 3; ++test_case) {
     ArgbBuffer original(WP2_ARGB_32);
     if (test_case == 0) {
       WP2_ASSERT_STATUS(original.SetView(full_original));
-    } else {
+    } else if (test_case == 1) {
       // Trigger the non-palette code.
       WP2_ASSERT_STATUS(
           original.SetView(full_original, WP2::Rectangle(0, 0, 10, 10)));
+    } else {
+      // Remove the alpha channel.
+      WP2_ASSERT_STATUS(original.Import(
+          WP2_XRGB_32, 20, 20, full_original.GetRow8(0),
+          full_original.stride()));
+      ASSERT_TRUE(!original.HasTransparency());
     }
 
-    // Define the encoder config for lossless, including kCrossColorGlobal.
+    // Define the encoder config for lossless, including kNormalizeChannels.
     EncoderConfig encoder_config;
     encoder_config.alpha_quality = 100;
     encoder_config.quality = 100;
