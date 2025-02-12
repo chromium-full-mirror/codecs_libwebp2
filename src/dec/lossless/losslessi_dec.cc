@@ -276,14 +276,28 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
   // Inverse transforms.
   for (int ind = num_transforms - 1; ind >= 0; --ind) {
     const Transform& transform = transforms_[ind];
+    // Check that all color map indices are valid here rather than in dsp.
+    // The size(s) of the palette(s) could be deduced from the previous
+    // transforms. Except values could still be negative which seems hard to
+    // impose as a constraint.
+    // The following needs to be checked in case of invalid images.
     if (transform.header_.type == TransformType::kColorIndexing) {
-      // Check that all color map indices are valid here rather than in dsp.
-      // TODO(yguyon): Remove pessimization.
       const int16_t color_map_size = (int16_t)transform.data_.size() / 4;
       const int16_t* const r_end = rows + 4 * num_rows * transform.width_pic_;
       for (const int16_t* r = rows; r < r_end; r += 4) {
         WP2_CHECK_OK(r[2] >= 0 && r[2] < color_map_size,
                      WP2_STATUS_BITSTREAM_ERROR);
+      }
+    } else if (transform.header_.type == TransformType::kNormalizeChannels) {
+      const int16_t* const r_end = rows + 4 * num_rows * transform.width_pic_;
+      for (const int16_t* r = rows; r < r_end; r += 4) {
+        for (uint32_t c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
+          WP2_CHECK_OK(
+              r[c] >= 0 &&
+                  r[c] <= static_cast<int16_t>(
+                              transform.header_.normalize_channels_max[c]),
+              WP2_STATUS_BITSTREAM_ERROR);
+        }
       }
     }
     std::array<int32_t, 4> minima_range, maxima_range;
