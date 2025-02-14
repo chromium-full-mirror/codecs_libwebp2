@@ -62,8 +62,10 @@ struct TransformHeader {
 
   // The following are parameters that also define the transform but after it
   // has been computed on the image. They are necessary for GetARGBRanges.
+  // After normalization that offsets the values by normalize_channels_offset,
+  // the values end up in [0, normalize_channels_max].
   std::array<uint32_t, 4> normalize_channels_max = {0u, 0u, 0u, 0u};
-  std::array<int16_t, 4> normalize_channels_min = {0, 0, 0, 0};
+  std::array<int16_t, 4> normalize_channels_offset = {0, 0, 0, 0};
   bool normalize_channels_has_palette;
 };
 

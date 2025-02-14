@@ -818,8 +818,8 @@ WP2Status Encoder::ApplyNormalizeChannels(
   }
   // Store the minimum.
   for (int c = first_channel; c < 4; ++c) {
-    header.normalize_channels_min[c] = min[c];
-    enc.PutRange(min[c], minima_range[c], maxima_range[c], "min");
+    header.normalize_channels_offset[c] = min[c];
+    enc.PutRange(min[c], minima_range[c], maxima_range[c], "offset");
     max[c] -= min[c];
   }
 
@@ -836,7 +836,7 @@ WP2Status Encoder::ApplyNormalizeChannels(
     }
     // Store the maximum.
     for (int c = first_channel; c < 4; ++c) {
-      enc.PutRange(max[c], min[c], maxima_range[c], "max");
+      enc.PutRValue(max[c], maxima_range[c] + 1, "max");
     }
     return WP2_STATUS_OK;
   }

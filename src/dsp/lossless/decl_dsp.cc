@@ -384,7 +384,7 @@ void NormalizeChannelsInverseTransform_C(const Transform& transform,
          src < src_end; src += 4, dst += 4) {
       if (!has_alpha) dst[0] = WP2::kAlphaMax;
       for (int c = has_alpha ? 0 : 1; c < 4; ++c) {
-        dst[c] = transform.header_.normalize_channels_min[c] +
+        dst[c] = transform.header_.normalize_channels_offset[c] +
                  transform.normalize_channels_mapping_[c][src[c]];
       }
     }
@@ -393,7 +393,7 @@ void NormalizeChannelsInverseTransform_C(const Transform& transform,
          src < src_end; src += 4, dst += 4) {
       if (!has_alpha) dst[0] = WP2::kAlphaMax;
       for (int c = has_alpha ? 0 : 1; c < 4; ++c) {
-        dst[c] = transform.header_.normalize_channels_min[c] + src[c];
+        dst[c] = transform.header_.normalize_channels_offset[c] + src[c];
       }
     }
   }

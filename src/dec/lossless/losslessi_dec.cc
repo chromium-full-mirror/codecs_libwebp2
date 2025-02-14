@@ -951,8 +951,8 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       WP2_CHECK_STATUS(GetARGBRanges(headers, hdr_.symbols_info_.SampleFormat(),
                                      minima_range, maxima_range, index));
       for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
-        transform->header_.normalize_channels_min[c] =
-            dec_->ReadRange(minima_range[c], maxima_range[c], "min");
+        transform->header_.normalize_channels_offset[c] =
+            dec_->ReadRange(minima_range[c], maxima_range[c], "offset");
       }
       transform->header_.normalize_channels_has_palette =
           dec_->ReadBool("has_palette");
@@ -970,8 +970,7 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       } else {
         for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
           transform->header_.normalize_channels_max[c] =
-              dec_->ReadRange(transform->header_.normalize_channels_min[c],
-                              maxima_range[c], "max");
+              dec_->ReadRValue(maxima_range[c] + 1, "max");
         }
       }
       break;
