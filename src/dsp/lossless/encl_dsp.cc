@@ -19,6 +19,7 @@
 
 #include "src/dsp/lossless/encl_dsp.h"
 
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -30,6 +31,28 @@
 #include "src/dsp/math.h"
 
 namespace {
+
+//------------------------------------------------------------------------------
+// Misc
+
+void FindExtrema_C(const int16_t* in, uint32_t width, uint32_t height,
+                   bool has_alpha, std::array<int16_t, 4>& min,
+                   std::array<int16_t, 4>& max) {
+  for (int c = has_alpha ? 0 : 1; c < 4; c++) {
+    min[c] = max[c] = in[c];
+  }
+  // Figure out the min and max values.
+  const size_t num_pixels = static_cast<size_t>(width) * height;
+  for (size_t i = 1; i < num_pixels; ++i) {
+    for (int c = has_alpha ? 0 : 1; c < 4; c++) {
+      if (in[4 * i + c] < min[c]) {
+        min[c] = in[4 * i + c];
+      } else if (in[4 * i + c] > max[c]) {
+        max[c] = in[4 * i + c];
+      }
+    }
+  }
+}
 
 //------------------------------------------------------------------------------
 // Methods to calculate Entropy (Shannon).
@@ -424,6 +447,7 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInitSSE() {
 
 namespace WP2L {
 
+FindExtremaFunc FindExtrema;
 SimpleColorSpaceFunc SubtractGreenFromBlueAndRed;
 SimpleColorSpaceFunc RGB2YCoCgR;
 
@@ -456,6 +480,7 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInit() {
 
   DspInit();
 
+  FindExtrema = FindExtrema_C;
   SubtractGreenFromBlueAndRed = SubtractGreenFromBlueAndRed_C;
   RGB2YCoCgR = RGB2YCoCgR_C;
 

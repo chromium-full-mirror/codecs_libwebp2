@@ -799,23 +799,8 @@ WP2Status Encoder::ApplyNormalizeChannels(
   const uint32_t width = argb_buffer_.width;
   const uint32_t height = argb_buffer_.height;
   const int first_channel = has_alpha_ ? 0 : 1;
-  for (int c = first_channel; c < 4; c++) {
-    const int16_t* const row = argb_buffer_.GetRow(0);
-    min[c] = max[c] = row[c];
-  }
-  // Figure out the min and max values.
-  for (uint32_t y = 0; y < height; ++y) {
-    const int16_t* const row = argb_buffer_.GetRow(y);
-    for (uint32_t x = 0; x < width; ++x) {
-      for (int c = first_channel; c < 4; c++) {
-        if (row[4 * x + c] < min[c]) {
-          min[c] = row[4 * x + c];
-        } else if (row[4 * x + c] > max[c]) {
-          max[c] = row[4 * x + c];
-        }
-      }
-    }
-  }
+  FindExtrema(argb_buffer_.GetRow(0), width, height, has_alpha_, min, max);
+
   // Store the minimum.
   for (int c = first_channel; c < 4; ++c) {
     header.normalize_channels_offset[c] = min[c];
@@ -1180,20 +1165,9 @@ WP2Status Encoder::ApplyAndWriteTransforms(
                                    palette_.Size());
   } else {
     // Find the ranges of the ARGB values in the image.
-    int16_t minima[4], maxima[4];
-    for (uint32_t i = 0; i < 4; ++i) {
-      minima[i] = maxima[i] = argb_buffer_.data[i];
-    }
-    for (uint32_t i = 4; i < 4 * pic_.width() * pic_.height(); i += 4) {
-      for (uint32_t c = 0; c < 4; ++c) {
-        const int16_t val = argb_buffer_.data[i + c];
-        if (val < minima[c]) {
-          minima[c] = val;
-        } else if (val > maxima[c]) {
-          maxima[c] = val;
-        }
-      }
-    }
+    std::array<int16_t, 4> minima, maxima;
+    FindExtrema(argb_buffer_.GetRow(0), pic_.width(), pic_.height(), has_alpha_,
+                minima, maxima);
     // Find the ranges in which they should belong according to the transforms.
     std::array<int32_t, 4> minima_range, maxima_range;
     WP2_CHECK_STATUS(GetARGBRanges(config->transforms,

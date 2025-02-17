@@ -20,6 +20,7 @@
 #ifndef WP2_DSP_LOSSLESS_ENCL_DSP_H_
 #define WP2_DSP_LOSSLESS_ENCL_DSP_H_
 
+#include <array>
 #include <cstdint>
 
 #include "src/dsp/lossless/dspl.h"
@@ -40,6 +41,11 @@ static inline void SubPixels(const int16_t* const a, bool has_alpha,
 //------------------------------------------------------------------------------
 // Encoding
 
+typedef void (*FindExtremaFunc)(const int16_t* in, uint32_t width,
+                                uint32_t height, bool has_alpha,
+                                std::array<int16_t, 4>& min,
+                                std::array<int16_t, 4>& max);
+extern FindExtremaFunc FindExtrema;
 typedef void (*SimpleColorSpaceFunc)(int16_t* dst, uint32_t num_pixels);
 extern SimpleColorSpaceFunc SubtractGreenFromBlueAndRed;
 extern SimpleColorSpaceFunc RGB2YCoCgR;
