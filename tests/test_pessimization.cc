@@ -318,6 +318,8 @@ WP2Status RandomEncodeDecodeTile(uint32_t width, uint32_t height,
     status = LossyDecode(features, config, &tiles_layout, &dec, &tile);
   } else {
     assert(gparams.type_ == GlobalParams::GP_LOSSLESS);
+    WP2_CHECK_STATUS(tile.rgb_output.SetFormat(
+        features.is_premultiplied ? WP2_Argb_32 : WP2_ARGB_32));
     WP2_CHECK_STATUS(tile.rgb_output.Resize(width, height));
     status = LosslessDecode(features, config, gparams, &dec, &tile);
   }
