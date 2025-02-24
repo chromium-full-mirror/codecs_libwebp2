@@ -170,38 +170,54 @@ constexpr void constexpr_for(F&& f) {
   }
 }
 
+template <std::underlying_type_t<WP2SampleFormat> From,
+          std::underlying_type_t<WP2SampleFormat> Start,
+          std::underlying_type_t<WP2SampleFormat> End, class F>
+constexpr void constexpr_for_from(F&& f) {
+  if constexpr (Start < End) {
+    f(std::integral_constant<decltype(From), From>(),
+      std::integral_constant<decltype(Start), Start>());
+    constexpr_for_from<From, Start + 1, End>(f);
+  }
+}
+
 constexpr std::array<std::array<WP2ArgbConverterF, WP2_FORMAT_NUM>,
                      WP2_FORMAT_NUM>
 InitConversion() {
   std::array<std::array<WP2ArgbConverterF, WP2_FORMAT_NUM>, WP2_FORMAT_NUM>
       res = {};
-  constexpr_for<0, static_cast<int>(WP2_FORMAT_NUM)>([&res](auto i_from) {
-    constexpr WP2SampleFormat from = static_cast<WP2SampleFormat>(i_from.value);
-    constexpr_for<0, static_cast<int>(WP2_FORMAT_NUM)>([from, &res](auto i_to) {
-      constexpr WP2SampleFormat to = static_cast<WP2SampleFormat>(i_to.value);
-      if (from == to) {
-        if (WP2FormatBpp(from) == 3) res[from][to] = WP2Copy_C<3>;
-        if (WP2FormatBpp(from) == 4) res[from][to] = WP2Copy_C<4>;
-        if (WP2FormatBpp(from) == 6) res[from][to] = WP2Copy_C<6>;
-        if (WP2FormatBpp(from) == 8) res[from][to] = WP2Copy_C<8>;
-        return;
-      }
-      constexpr int kSrcDepth = WP2Formatbpc(from);
-      constexpr int kDstDepth = WP2Formatbpc(to);
-      if constexpr (kSrcDepth == 8 && kDstDepth == 8) {
-        res[from][to] =
-            Cvrt_C</*SrcType=*/uint8_t, from, /*DstType=*/uint8_t, to>;
-      } else if constexpr (kSrcDepth == 8 && kDstDepth != 8) {
-        res[from][to] =
-            Cvrt_C</*SrcType=*/uint8_t, from, /*DstType=*/uint16_t, to>;
-      } else if constexpr (kSrcDepth != 8 && kDstDepth == 8) {
-        res[from][to] =
-            Cvrt_C</*SrcType=*/uint16_t, from, /*DstType=*/uint8_t, to>;
-      } else {
-        res[from][to] =
-            Cvrt_C</*SrcType=*/uint16_t, from, /*DstType=*/uint16_t, to>;
-      }
-    });
+  constexpr_for<0, static_cast<int>(WP2_FORMAT_NUM)>([&res](auto i_from_outer) {
+    constexpr WP2SampleFormat from_outer =
+        static_cast<WP2SampleFormat>(i_from_outer.value);
+    constexpr_for_from<from_outer, 0, static_cast<int>(WP2_FORMAT_NUM)>(
+        [&res](auto i_from, auto i_to) {
+          constexpr WP2SampleFormat from =
+              static_cast<WP2SampleFormat>(i_from.value);
+          constexpr WP2SampleFormat to =
+              static_cast<WP2SampleFormat>(i_to.value);
+          if (from == to) {
+            if (WP2FormatBpp(from) == 3) res[from][to] = WP2Copy_C<3>;
+            if (WP2FormatBpp(from) == 4) res[from][to] = WP2Copy_C<4>;
+            if (WP2FormatBpp(from) == 6) res[from][to] = WP2Copy_C<6>;
+            if (WP2FormatBpp(from) == 8) res[from][to] = WP2Copy_C<8>;
+            return;
+          }
+          constexpr int kSrcDepth = WP2Formatbpc(from);
+          constexpr int kDstDepth = WP2Formatbpc(to);
+          if constexpr (kSrcDepth == 8 && kDstDepth == 8) {
+            res[from][to] =
+                Cvrt_C</*SrcType=*/uint8_t, from, /*DstType=*/uint8_t, to>;
+          } else if constexpr (kSrcDepth == 8 && kDstDepth != 8) {
+            res[from][to] =
+                Cvrt_C</*SrcType=*/uint8_t, from, /*DstType=*/uint16_t, to>;
+          } else if constexpr (kSrcDepth != 8 && kDstDepth == 8) {
+            res[from][to] =
+                Cvrt_C</*SrcType=*/uint16_t, from, /*DstType=*/uint8_t, to>;
+          } else {
+            res[from][to] =
+                Cvrt_C</*SrcType=*/uint16_t, from, /*DstType=*/uint16_t, to>;
+          }
+        });
   });
   return res;
 }
