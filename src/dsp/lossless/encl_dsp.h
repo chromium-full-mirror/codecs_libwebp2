@@ -61,12 +61,21 @@ typedef bool (*CollectColorBlueTransformsFunc)(
     uint32_t tile_height, int16_t green_to_blue, int16_t red_to_blue,
     uint16_t abs_value_max, uint32_t histo_size, uint32_t* const histo);
 extern CollectColorBlueTransformsFunc CollectColorBlueTransforms;
+bool CollectColorBlueTransforms_C(const int16_t* argb, uint32_t width,
+                                  uint32_t tile_width, uint32_t tile_height,
+                                  int16_t green_to_blue, int16_t red_to_blue,
+                                  uint16_t abs_value_max, uint32_t histo_size,
+                                  uint32_t* histo);
 
 typedef bool (*CollectColorRedTransformsFunc)(
     const int16_t* argb, uint32_t width, uint32_t tile_width,
     uint32_t tile_height, int16_t green_to_red, uint16_t abs_value_max,
     uint32_t histo_size, uint32_t* const histo);
 extern CollectColorRedTransformsFunc CollectColorRedTransforms;
+bool CollectColorRedTransforms_C(const int16_t* argb, uint32_t width,
+                                 uint32_t tile_width, uint32_t tile_height,
+                                 int16_t green_to_red, uint16_t abs_value_max,
+                                 uint32_t histo_size, uint32_t* histo);
 
 // Predictors.
 typedef void (*PredictorNonClampedSubFunc)(const int16_t* in, bool has_alpha,

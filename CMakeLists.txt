@@ -189,10 +189,12 @@ add_library(
   # lossless
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/decl_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/decl_dsp.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/decl_sse.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/dspl.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/dspl.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_dsp.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_dsp.h)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_dsp.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_sse.cc)
 target_include_directories(wp2_dsp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(wp2_dsp PUBLIC ${WP2_DEFINITIONS})
 
