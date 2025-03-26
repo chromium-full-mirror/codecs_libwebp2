@@ -33,6 +33,7 @@
 #include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"
+#include "src/utils/ans_utils.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
@@ -105,9 +106,8 @@ void ANSAdaptiveSymbol::FindBestAdaptationSpeed(
   if (header_bits != nullptr) {
     uint32_t counts[APROBA_MAX_SYMBOL] = {0};
     for (uint32_t s : syms) ++counts[s];
-    float cost = 0.;
-    for (uint32_t c : counts) cost += WP2SLog2m1(c);
-    // fixed probabilities seems better
+    const float cost = ANSCountsCost(counts, APROBA_MAX_SYMBOL);
+    // fixed probabilities seem better
     if (cost + 2.f < best_cost) {  // +2.f = headroom for inaccuracy
       *header_bits = (uint32_t)(best_cost - cost);
     }

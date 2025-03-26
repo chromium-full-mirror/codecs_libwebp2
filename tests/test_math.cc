@@ -164,6 +164,16 @@ TEST(Math, SLog2m1) {
   EXPECT_LT(err, 1.0e-14);
 }
 
+TEST(Math, ShannonEntropy) {
+  WP2MathInit();
+  std::vector<uint32_t> counts(256, 0);
+  ASSERT_EQ(ShannonEntropy(counts.data(), counts.size()), 0.);
+
+  std::fill(counts.begin(), counts.end(), 1);
+  // -sum log2(1/256) = 256*log2(256) = 2048.
+  EXPECT_NEAR(ShannonEntropy(counts.data(), counts.size()), 2048., 1e-14);
+}
+
 TEST(Math, Log2Floor) {
   ASSERT_EQ(WP2Log2Floor_k(0), 0u);
   ASSERT_EQ(WP2Log2Floor_k(1), 0u);

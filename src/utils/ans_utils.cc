@@ -114,23 +114,7 @@ bool ANSCountsQuantize(bool do_expand, uint32_t max_freq, uint32_t size,
 // The bit cost of an element "i" is:
 // log2(1/proba[i]) = log2(sum(counts)/counts[i])
 float ANSCountsCost(const uint32_t* counts, uint32_t size) {
-  uint32_t sum = 0;
-  float cost = 0.f;
-  for (size_t i = 0; i < size; ++i) {
-    if (counts[i] == 0) continue;
-    cost += WP2SLog2m1(counts[i]);
-    sum += counts[i];
-  }
-  if (sum > 0) {
-    const float cost_sum = WP2SLog2m1(sum);
-    if (cost == cost_sum) {
-      // Remove rounding errors when only one count is non-zero.
-      cost = 0.f;
-    } else {
-      cost -= cost_sum;
-    }
-  }
-  return cost;
+  return ShannonEntropy(counts, size);
 }
 
 //------------------------------------------------------------------------------

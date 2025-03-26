@@ -265,6 +265,26 @@ static float Log2Slow_C(uint32_t v) {
 }
 
 namespace {
+float ShannonEntropy_C(const uint32_t* histo, uint32_t n) {
+  float retval = 0.f;
+  uint32_t sum = 0;
+  for (uint32_t i = 0; i < n; ++i) {
+    const uint32_t x = histo[i];
+    if (x != 0) {
+      sum += x;
+      retval += WP2SLog2m1(x);
+    }
+  }
+  float cost_sum = WP2SLog2m1(sum);
+  if (retval == cost_sum) {
+    // Remove rounding errors when only one count is non-zero.
+    retval = 0.f;
+  } else {
+    retval -= cost_sum;
+  }
+  return retval;
+}
+
 int32_t InnerProduct_C(const int16_t* const a, const int16_t* const b,
                        size_t size) {
   return std::inner_product(a, a + size, b, 0);
@@ -413,6 +433,7 @@ int32_t PseudoRNG::Update() {
 
 WP2Log2SlowFunc WP2Log2Slow = nullptr;
 WP2Log2SlowFunc WP2SLog2m1Slow = nullptr;
+WP2::ShannonEntropyFunc WP2::ShannonEntropy = nullptr;
 WP2InnerProductFunc WP2InnerProduct = nullptr;
 
 static volatile WP2CPUInfo math_last_cpuinfo_used =
@@ -423,6 +444,7 @@ WP2_TSAN_IGNORE_FUNCTION void WP2MathInit() {
 
   WP2Log2Slow = Log2Slow_C;
   WP2SLog2m1Slow = SLog2m1Slow_C;
+  WP2::ShannonEntropy = ShannonEntropy_C;
   WP2InnerProduct = InnerProduct_C;
 
   if (WP2GetCPUInfo != nullptr) {

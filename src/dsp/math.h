@@ -116,6 +116,12 @@ static constexpr uint32_t WP2Log2Ceil_k(uint64_t n) {
   return (n <= 1) ? 0 : (1 + WP2Log2Floor_k(n - 1));
 }
 
+namespace WP2 {
+// Computes the Shannon entropy of a histogram.
+typedef float (*ShannonEntropyFunc)(const uint32_t* histo, uint32_t length);
+extern ShannonEntropyFunc ShannonEntropy;
+}  // namespace WP2
+
 // Only use for small values, smaller than 0xffff.
 typedef int32_t (*WP2InnerProductFunc)(const int16_t* const a,
                                        const int16_t* const b, size_t size);
@@ -277,12 +283,8 @@ T SqrtFloor(T v) {
   return lo;
 }
 
-}  // namespace WP2
-
 //------------------------------------------------------------------------------
 // Random generator
-
-namespace WP2 {
 
 class PseudoRNG {
  public:

@@ -782,7 +782,7 @@ void WP2DspReset() {
   WP2Dequantize = nullptr;
 
   WP2Log2Slow = nullptr;
-  WP2SLog2m1Slow = nullptr;
+  WP2::ShannonEntropy = nullptr;
   WP2InnerProduct = nullptr;
 
   // decl_dsp
