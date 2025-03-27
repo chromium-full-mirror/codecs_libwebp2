@@ -23,6 +23,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 #include "src/utils/ans_enc.h"
 #include "src/utils/ans_utils.h"
@@ -95,11 +96,12 @@ class Quantizer {
   // configuration is kept in memory as a starting configuration. It will be
   // updated if a strictly better score is found.
   // 'cost_offset' is the cost that will be added to the Config cost.
-  // 'cost_max' is the cost above which we can give up if
-  // cost_offset + Config cost >= cost_max.
+  // 'cost_threshold' is the cost above which we can give up if
+  // cost_offset + Config cost >= cost_threshold.
   bool Quantize(const uint32_t* histogram, const uint16_t* mapping,
                 size_t size_sparse, uint32_t symbol_range, uint32_t max_count,
-                float cost_max, float cost_offset, int effort);
+                std::optional<float> cost_threshold, float cost_offset,
+                int effort);
 
   // Returns the current best configuration. The best configuration is updated
   // between Quantize calls.
@@ -110,7 +112,7 @@ class Quantizer {
  private:
   // Implementation of the quantization that can call itself to compress its own
   // coefficients.
-  // 'cost_max' is the value above which we can early exit.
+  // 'cost_threshold' is the value above which we can early exit.
   void QuantizeImpl(const uint32_t* histogram, const uint16_t* mapping,
                     size_t size_sparse, uint32_t symbol_range,
                     uint32_t max_count, int effort);

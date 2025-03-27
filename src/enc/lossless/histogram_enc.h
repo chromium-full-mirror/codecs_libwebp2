@@ -20,6 +20,7 @@
 #ifndef WP2_ENC_LOSSLESS_HISTOGRAM_ENC_H_
 #define WP2_ENC_LOSSLESS_HISTOGRAM_ENC_H_
 
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -74,30 +75,29 @@ class Histogram : public CountsBuffer<uint32_t> {
     assert(dst->symbols_info_->MaxRangeSum() == symbols_info_->MaxRangeSum());
     memcpy(dst->buffer_, buffer_,
            sizeof(*buffer_) * symbols_info_->MaxRangeSum());
-    memcpy(dst->trivial_symbols_, trivial_symbols_, sizeof(trivial_symbols_));
-    memcpy(dst->nonzeros_, nonzeros_, sizeof(nonzeros_));
+    dst->infos_ = infos_;
     dst->bit_cost_ = bit_cost_;
     dst->id_ = id_;
-    memcpy(dst->costs_, costs_, sizeof(costs_));
   }
   void Init() noexcept {
     super::Init();
-    memset(trivial_symbols_, 0, sizeof(trivial_symbols_));
-    memset(nonzeros_, 0, sizeof(nonzeros_));
+    infos_.fill(CostInformation());
     bit_cost_ = 0.;
-    memset(costs_, 0, sizeof(costs_));
   }
   void Clear() {
     super::Clear();
-    memset(trivial_symbols_, 0, sizeof(trivial_symbols_));
-    memset(nonzeros_, 0, sizeof(nonzeros_));
-    memset(costs_, 0, sizeof(costs_));
+    infos_.fill(CostInformation());
   }
 
-  uint32_t trivial_symbols_[kSymbolNum];
-  uint32_t nonzeros_[kSymbolNum];
+  struct CostInformation {
+    uint32_t trivial_symbol = 0;  // trivial symbol if nonzeros == 1
+    uint32_t nonzeros = 0;  // number of non-zero elements in the histogram.
+    // Overall bit cost of the symbol histogram (including storage cost).
+    float cost = 0.f;
+  };
+
+  std::array<CostInformation, kSymbolNum> infos_;
   float bit_cost_;           // cached value of bit cost.
-  float costs_[kSymbolNum];  // cached values of entropy costs.
   int16_t id_;               // Unique id in a HistogramSet
 
  private:
@@ -157,7 +157,7 @@ class PopulationAnalyzer {
     WP2_CHECK_STATUS(quantizer_.Allocate(histogram_size_max_));
     return WP2_STATUS_OK;
   }
-  void PopulationCost(const uint32_t* population, uint32_t range,
+  void PopulationCost(const uint32_t* population, uint32_t length,
                       uint32_t* nonzeros, uint32_t* trivial_sym, float* cost);
 
   void GetCombinedEntropy(const uint32_t* X, const uint32_t* Y,
@@ -167,8 +167,8 @@ class PopulationAnalyzer {
 
   // Various histogram combine/cost-eval functions
 
-  int GetCombinedHistogramEntropy(const Histogram& a, const Histogram& b,
-                                  float cost_threshold, float* cost);
+  bool GetCombinedHistogramEntropy(const Histogram& a, const Histogram& b,
+                                   float cost_threshold, float* cost);
 
   // Performs out = a + b, computing the cost C(a+b) - C(a) - C(b) while
   // comparing to the threshold value 'cost_threshold'. The score returned is
@@ -176,14 +176,9 @@ class PopulationAnalyzer {
   // Since the previous score passed is 'cost_threshold', we only need to
   // compare the partial cost against 'cost_threshold + C(a) + C(b)' to possibly
   // bail-out early.
-  float HistogramAddEval(const Histogram& a, const Histogram& b, Histogram* out,
-                         float cost_threshold);
-
-  // Same as HistogramAddEval(), except that the resulting histogram
-  // is not stored. Only the cost C(a+b) - C(a) is evaluated. We omit
-  // the term C(b) which is constant over all the evaluations.
-  float HistogramAddThresh(const Histogram& a, const Histogram& b,
-                           float cost_threshold);
+  // Returns whether the cost is below the threshold.
+  bool HistogramAddEval(const Histogram& a, const Histogram& b, Histogram* out,
+                        float cost_threshold);
 
   // Update the individual/overall bit costs of an histogram.
   void UpdateHistogramCost(Histogram* h);

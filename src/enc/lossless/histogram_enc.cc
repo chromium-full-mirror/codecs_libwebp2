@@ -60,8 +60,8 @@ static inline void CopySubHistogram(const Histogram& a, const uint32_t s,
   const uint32_t size =
       sizeof(out->counts_[s][0]) * a.symbols_info_->GetMaxRange(s);
   memcpy(out->counts_[s], a.counts_[s], size);
-  out->trivial_symbols_[s] = a.trivial_symbols_[s];
-  out->nonzeros_[s] = a.nonzeros_[s];
+  out->infos_[s].trivial_symbol = a.infos_[s].trivial_symbol;
+  out->infos_[s].nonzeros = a.infos_[s].nonzeros;
 }
 
 // Add two histograms, taking into account the number of non-zero elements for
@@ -71,43 +71,43 @@ static void HistogramAdd(const Histogram& a, const Histogram& b,
   assert(a.symbols_info_ == b.symbols_info_);
   if (&b != out) {
     for (uint32_t s = 0; s < kSymbolNum; ++s) {
-      if (a.nonzeros_[s] == 0) {
+      if (a.infos_[s].nonzeros == 0) {
         CopySubHistogram(b, s, out);
-      } else if (b.nonzeros_[s] == 0) {
+      } else if (b.infos_[s].nonzeros == 0) {
         CopySubHistogram(a, s, out);
-      } else if (a.nonzeros_[s] == 1 && b.nonzeros_[s] == 1 &&
-                 a.trivial_symbols_[s] == b.trivial_symbols_[s]) {
-        const auto& trivial_symbol = a.trivial_symbols_[s];
+      } else if (a.infos_[s].nonzeros == 1 && b.infos_[s].nonzeros == 1 &&
+                 a.infos_[s].trivial_symbol == b.infos_[s].trivial_symbol) {
+        const auto& trivial_symbol = a.infos_[s].trivial_symbol;
         const uint32_t size =
             sizeof(out->counts_[s][0]) * a.symbols_info_->GetMaxRange(s);
         memset(out->counts_[s], 0, size);
         out->counts_[s][trivial_symbol] =
             a.counts_[s][trivial_symbol] + b.counts_[s][trivial_symbol];
-        out->trivial_symbols_[s] = trivial_symbol;
-        out->nonzeros_[s] = 1;
+        out->infos_[s].trivial_symbol = trivial_symbol;
+        out->infos_[s].nonzeros = 1;
       } else {
-        out->trivial_symbols_[s] = 0;
+        out->infos_[s].trivial_symbol = 0;
         BufferAdd(a.counts_[s], b.counts_[s], a.symbols_info_->GetMaxRange(s),
-                  out->counts_[s], &out->nonzeros_[s]);
-        assert(out->nonzeros_[s] > 1);
+                  out->counts_[s], &out->infos_[s].nonzeros);
+        assert(out->infos_[s].nonzeros > 1);
       }
     }
   } else {
     for (uint32_t s = 0; s < kSymbolNum; ++s) {
-      if (a.nonzeros_[s] == 0) {
+      if (a.infos_[s].nonzeros == 0) {
         // out is b and no modification is added.
-      } else if (b.nonzeros_[s] == 0) {
+      } else if (b.infos_[s].nonzeros == 0) {
         CopySubHistogram(a, s, out);
-      } else if (a.nonzeros_[s] == 1 && b.nonzeros_[s] == 1 &&
-                 a.trivial_symbols_[s] == b.trivial_symbols_[s]) {
+      } else if (a.infos_[s].nonzeros == 1 && b.infos_[s].nonzeros == 1 &&
+                 a.infos_[s].trivial_symbol == b.infos_[s].trivial_symbol) {
         // a and b are basically the same.
-        out->counts_[s][a.trivial_symbols_[s]] +=
-            a.counts_[s][a.trivial_symbols_[s]];
+        out->counts_[s][a.infos_[s].trivial_symbol] +=
+            a.counts_[s][a.infos_[s].trivial_symbol];
       } else {
-        out->trivial_symbols_[s] = 0;
+        out->infos_[s].trivial_symbol = 0;
         BufferAdd(a.counts_[s], b.counts_[s], a.symbols_info_->GetMaxRange(s),
-                  out->counts_[s], &out->nonzeros_[s]);
-        assert(out->nonzeros_[s] > 1);
+                  out->counts_[s], &out->infos_[s].nonzeros);
+        assert(out->infos_[s].nonzeros > 1);
       }
     }
   }
@@ -145,12 +145,12 @@ PopulationAnalyzer::PopulationAnalyzer(uint32_t image_size)
 }
 
 void PopulationAnalyzer::PopulationCost(const uint32_t* const population,
-                                        uint32_t range,
+                                        uint32_t length,
                                         uint32_t* const nonzeros,
                                         uint32_t* const trivial_sym,
                                         float* cost) {
   uint32_t size = 0;
-  for (uint32_t k = 0; k < range; ++k) {
+  for (uint32_t k = 0; k < length; ++k) {
     if (population[k] == 0) continue;
     histogram_[size] = population[k];
     mapping_[size] = k;
@@ -161,23 +161,20 @@ void PopulationAnalyzer::PopulationCost(const uint32_t* const population,
   //               SymbolWriter::WriteHeader.
   if (size == 0) {
     *cost = WP2Log2(3);
-    return;
-  }
-  if (size == 1) {
+  } else if (size == 1) {
     if (trivial_sym != nullptr) *trivial_sym = mapping_[0];
     // TODO(vrabaud) do in the Quantizer.
-    *cost = WP2Log2(3) + WP2Log2(range);
-    return;
+    *cost = WP2Log2(3) + WP2Log2(length);
+  } else {
+    // TODO(vrabaud) use the 'effort' parameter instead of imposing 0.
+    quantizer_.ResetBest();
+    quantizer_.Quantize(histogram_.data(), mapping_.data(), size, length,
+                        image_size_,
+                        /*cost_threshold=*/std::numeric_limits<float>::max(),
+                        /*cost_offset=*/0.f, /*effort=*/0);
+    *cost = WP2Log2(3) + WP2Log2(std::min(image_size_, length) - 1) +
+            quantizer_.GetBest()->cost;
   }
-
-  // TODO(vrabaud) use the 'effort' parameter instead of imposing 0.
-  quantizer_.ResetBest();
-  quantizer_.Quantize(histogram_.data(), mapping_.data(), size, range,
-                      image_size_,
-                      /*cost_max=*/std::numeric_limits<float>::max(),
-                      /*cost_offset=*/0.f, /*effort=*/0);
-  *cost = WP2Log2(3) + WP2Log2(std::min(image_size_, range) - 1) +
-          quantizer_.GetBest()->cost;
 }
 
 void PopulationAnalyzer::GetCombinedEntropy(
@@ -187,36 +184,31 @@ void PopulationAnalyzer::GetCombinedEntropy(
   // If one of the histograms is basically unused:
   if (X_nonzeros == 0) {
     PopulationCost(Y, length, nullptr, nullptr, cost);
-    return;
-  }
-  if (Y_nonzeros == 0) {
+  } else if (Y_nonzeros == 0) {
     PopulationCost(X, length, nullptr, nullptr, cost);
-    return;
-  }
-  // If they both contain the same element.
-  if (X_nonzeros == 1 && Y_nonzeros == 1 && X_trivial == Y_trivial) {
+  } else if (X_nonzeros == 1 && Y_nonzeros == 1 && X_trivial == Y_trivial) {
+    // If they both contain the same element.
     *cost = WP2Log2(3) + WP2Log2(length);
-    return;
+  } else {
+    BufferAdd(X, Y, length, sum_tmp_.data(), nullptr);
+    PopulationCost(sum_tmp_.data(), length, nullptr, nullptr, cost);
   }
-
-  BufferAdd(X, Y, length, sum_tmp_.data(), nullptr);
-  PopulationCost(sum_tmp_.data(), length, nullptr, nullptr, cost);
 }
 
 // -----------------------------------------------------------------------------
 // Various histogram combine/cost-eval functions
 
-int PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
-                                                    const Histogram& b,
-                                                    float cost_threshold,
-                                                    float* cost) {
+bool PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
+                                                     const Histogram& b,
+                                                     float cost_threshold,
+                                                     float* cost) {
   assert(a.symbols_info_ == b.symbols_info_);
 
   // Deal with the raw bits of length and distance.
   for (const auto& sym : {kSymbolLen, kSymbolDist}) {
     *cost += ExtraCostCombined(a.counts_[sym], b.counts_[sym],
                                a.symbols_info_->GetMaxRange(sym));
-    if (*cost > cost_threshold) return 0;
+    if (*cost > cost_threshold) return false;
   }
 
   bool is_used[kSymbolTypeNum];
@@ -231,14 +223,14 @@ int PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
     }
     if (!WP2L::IsSymbolUsed((Symbol)s, is_used)) continue;
     float tmp;
-    GetCombinedEntropy(a.counts_[s], b.counts_[s], a.nonzeros_[s],
-                       b.nonzeros_[s], a.trivial_symbols_[s],
-                       b.trivial_symbols_[s], a.symbols_info_->GetMaxRange(s),
-                       &tmp);
+    GetCombinedEntropy(a.counts_[s], b.counts_[s], a.infos_[s].nonzeros,
+                       b.infos_[s].nonzeros, a.infos_[s].trivial_symbol,
+                       b.infos_[s].trivial_symbol,
+                       a.symbols_info_->GetMaxRange(s), &tmp);
     *cost += tmp;
-    if (*cost > cost_threshold) return 0;
+    if (*cost > cost_threshold) return false;
   }
-  return 1;
+  return true;
 }
 
 // Performs out = a + b, computing the cost C(a+b) - C(a) - C(b) while comparing
@@ -247,32 +239,19 @@ int PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
 // Since the previous score passed is 'cost_threshold', we only need to compare
 // the partial cost against 'cost_threshold + C(a) + C(b)' to possibly bail-out
 // early.
-float PopulationAnalyzer::HistogramAddEval(const Histogram& a,
-                                           const Histogram& b,
-                                           Histogram* const out,
-                                           float cost_threshold) {
+bool PopulationAnalyzer::HistogramAddEval(const Histogram& a,
+                                          const Histogram& b,
+                                          Histogram* const out,
+                                          float cost_threshold) {
   float cost = 0.f;
   const float sum_cost = a.bit_cost_ + b.bit_cost_;
   cost_threshold += sum_cost;
 
-  if (GetCombinedHistogramEntropy(a, b, cost_threshold, &cost)) {
-    HistogramAdd(a, b, out);
-    out->bit_cost_ = cost;
-    assert(a.symbols_info_ == b.symbols_info_);
-  }
-
-  return cost - sum_cost;
-}
-
-// Same as HistogramAddEval(), except that the resulting histogram
-// is not stored. Only the cost C(a+b) - C(a) is evaluated. We omit
-// the term C(b) which is constant over all the evaluations.
-float PopulationAnalyzer::HistogramAddThresh(const Histogram& a,
-                                             const Histogram& b,
-                                             float cost_threshold) {
-  float cost = -a.bit_cost_;
-  GetCombinedHistogramEntropy(a, b, cost_threshold, &cost);
-  return cost;
+  if (!GetCombinedHistogramEntropy(a, b, cost_threshold, &cost)) return false;
+  HistogramAdd(a, b, out);
+  out->bit_cost_ = cost;
+  assert(a.symbols_info_ == b.symbols_info_);
+  return true;
 }
 
 // -----------------------------------------------------------------------------
@@ -288,25 +267,27 @@ void PopulationAnalyzer::UpdateHistogramCost(Histogram* const h) {
   if (!has_at_least_one_symbol) {
     // If the histogram is completely empty, it contains no information so no
     // cost.
-    std::fill(h->costs_, h->costs_ + kSymbolNum, 0.);
+    for (Histogram::CostInformation& info : h->infos_) info.cost = 0.f;
     return;
   }
   for (uint32_t s = 0; s < kSymbolNum; ++s) {
     const Symbol sym = (Symbol)s;
     if (h->symbols_info_->IsUnused(s) || !IsSymbolUsed(sym, is_used)) {
-      h->costs_[s] = 0.;
+      h->infos_[s].cost = 0.f;
     } else {
       PopulationCost(h->counts_[s], h->symbols_info_->GetMaxRange(sym),
-                     &h->nonzeros_[s], &h->trivial_symbols_[s],
-                     &(h->costs_[s]));
+                     &h->infos_[s].nonzeros, &h->infos_[s].trivial_symbol,
+                     &h->infos_[s].cost);
     }
   }
   for (const auto& sym : {kSymbolLen, kSymbolDist}) {
-    h->costs_[sym] +=
+    h->infos_[sym].cost +=
         ExtraCost(h->counts_[sym], h->symbols_info_->GetMaxRange(sym));
   }
-  // Update the total bit_cost.
-  for (const auto& c : h->costs_) h->bit_cost_ += c;
+  // Update the total bit_cost_
+  for (const Histogram::CostInformation& info : h->infos_) {
+    h->bit_cost_ += info.cost;
+  }
 }
 
 WP2Status BuildHistograms(uint32_t width, uint32_t height, uint32_t histo_bits,
@@ -412,10 +393,10 @@ class BinMerger {
     // Analyze the entropy cost bounds.
     for (const Histogram* h : image_histo.histograms_) {
       for (uint32_t s = 0; s < h->symbols_info_->Size(); ++s) {
-        if (h->costs_[s] < min_costs_[s]) {
-          min_costs_[s] = h->costs_[s];
-        } else if (h->costs_[s] > max_costs_[s]) {
-          max_costs_[s] = h->costs_[s];
+        if (h->infos_[s].cost < min_costs_[s]) {
+          min_costs_[s] = h->infos_[s].cost;
+        } else if (h->infos_[s].cost > max_costs_[s]) {
+          max_costs_[s] = h->infos_[s].cost;
         }
       }
     }
@@ -478,10 +459,9 @@ class BinMerger {
         // try to merge #idx into #first (both share the same bin_id)
         const float bit_cost = histograms[idx]->bit_cost_;
         const float bit_cost_thresh = -bit_cost * combine_cost_factor_;
-        const float curr_cost_diff = analyzer->HistogramAddEval(
-            *histograms[first], *histograms[idx], image_histo->tmp_histo_,
-            bit_cost_thresh);
-        if (curr_cost_diff < bit_cost_thresh) {
+        if (analyzer->HistogramAddEval(*histograms[first], *histograms[idx],
+                                       image_histo->tmp_histo_,
+                                       bit_cost_thresh)) {
           (*segments)[histograms[first]->id_] =
               (*segments)[histograms[idx]->id_] = image_histo->tmp_histo_->id_ =
                   std::min(histograms[first]->id_, histograms[idx]->id_);
@@ -510,9 +490,10 @@ class BinMerger {
       const float range = disparities_[i].first;
       if (range == 0.) break;
       // Fix potential rounding issues.
-      const uint32_t new_bin_id = std::min(
-          (uint32_t)(kNumPartitions * (h.costs_[s] - min_costs_[s]) / range),
-          kNumPartitions - 1);
+      const uint32_t new_bin_id =
+          std::min((uint32_t)(kNumPartitions *
+                              (h.infos_[s].cost - min_costs_[s]) / range),
+                   kNumPartitions - 1);
       bin_id = bin_id * kNumPartitions + new_bin_id;
       assert(bin_id < kBinSizeTot);
     }

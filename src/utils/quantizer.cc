@@ -25,6 +25,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 
 #include "src/dsp/math.h"
 #include "src/utils/ans_enc.h"
@@ -54,7 +55,8 @@ WP2Status Quantizer::Allocate(uint32_t range_max) {
 bool Quantizer::Quantize(const uint32_t* const histogram,
                          const uint16_t* const mapping, size_t size_sparse,
                          uint32_t symbol_range, uint32_t max_count,
-                         float cost_max, float cost_offset, int effort) {
+                         std::optional<float> cost_threshold, float cost_offset,
+                         int effort) {
   assert(effort >= 0 && effort <= 9);
   float cost_best_prev;
   if (config_best_ == nullptr) {
@@ -63,7 +65,9 @@ bool Quantizer::Quantize(const uint32_t* const histogram,
   } else {
     cost_best_prev = config_best_->cost;
   }
-  const float cost_to_beat = std::min(cost_best_prev, cost_max) - cost_offset;
+  const float cost_to_beat =
+      std::min(cost_best_prev, cost_threshold.value_or(cost_best_prev)) -
+      cost_offset;
   // Temporarily switch the best configuration cost as the new cost to beat.
   config_best_->cost = cost_to_beat;
   QuantizeImpl(histogram, mapping, size_sparse, symbol_range, max_count,
