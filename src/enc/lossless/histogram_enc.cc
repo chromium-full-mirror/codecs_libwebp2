@@ -204,13 +204,6 @@ bool PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
                                                      float* cost) {
   assert(a.symbols_info_ == b.symbols_info_);
 
-  // Deal with the raw bits of length and distance.
-  for (const auto& sym : {kSymbolLen, kSymbolDist}) {
-    *cost += ExtraCostCombined(a.counts_[sym], b.counts_[sym],
-                               a.symbols_info_->GetMaxRange(sym));
-    if (*cost > cost_threshold) return false;
-  }
-
   bool is_used[kSymbolTypeNum];
   for (uint32_t i = 0; i < kSymbolTypeNum; ++i) {
     is_used[i] = (a.counts_[kSymbolType][i] + b.counts_[kSymbolType][i] > 0);
@@ -279,10 +272,6 @@ void PopulationAnalyzer::UpdateHistogramCost(Histogram* const h) {
                      &h->infos_[s].nonzeros, &h->infos_[s].trivial_symbol,
                      &h->infos_[s].cost);
     }
-  }
-  for (const auto& sym : {kSymbolLen, kSymbolDist}) {
-    h->infos_[sym].cost +=
-        ExtraCost(h->counts_[sym], h->symbols_info_->GetMaxRange(sym));
   }
   // Update the total bit_cost_
   for (const Histogram::CostInformation& info : h->infos_) {

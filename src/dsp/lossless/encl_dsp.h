@@ -118,8 +118,6 @@ typedef float (*CostCombinedFunc)(const uint32_t* X, const uint32_t* Y,
 typedef float (*CombinedShannonEntropyFunc)(const uint32_t* X,
                                             const uint32_t* Y, uint32_t length);
 
-extern CostFunc ExtraCost;
-extern CostCombinedFunc ExtraCostCombined;
 extern CombinedShannonEntropyFunc CombinedShannonEntropy;
 
 //------------------------------------------------------------------------------

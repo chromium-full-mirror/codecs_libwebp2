@@ -171,22 +171,6 @@ bool CollectColorBlueTransforms_C(const int16_t* argb, uint32_t width,
 //------------------------------------------------------------------------------
 
 namespace {
-float ExtraCost_C(const uint32_t* population, int length) {
-  int i;
-  float cost = 0.f;
-  for (i = 2; i < length - 2; ++i) cost += (i >> 1) * population[i + 2];
-  return cost;
-}
-
-float ExtraCostCombined_C(const uint32_t* X, const uint32_t* Y, int length) {
-  int i;
-  float cost = 0.f;
-  for (i = 2; i < length - 2; ++i) {
-    const int xy = X[i + 2] + Y[i + 2];
-    cost += (i >> 1) * xy;
-  }
-  return cost;
-}
 
 //------------------------------------------------------------------------------
 
@@ -285,8 +269,6 @@ TransformColorFunc TransformColor;
 CollectColorBlueTransformsFunc CollectColorBlueTransforms;
 CollectColorRedTransformsFunc CollectColorRedTransforms;
 
-CostFunc ExtraCost;
-CostCombinedFunc ExtraCostCombined;
 CombinedShannonEntropyFunc CombinedShannonEntropy;
 
 BufferAddFunc BufferAdd;
@@ -320,8 +302,6 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInit() {
   CollectColorBlueTransforms = CollectColorBlueTransforms_C;
   CollectColorRedTransforms = CollectColorRedTransforms_C;
 
-  ExtraCost = ExtraCost_C;
-  ExtraCostCombined = ExtraCostCombined_C;
   CombinedShannonEntropy = CombinedShannonEntropy_C;
 
   BufferAdd = BufferAdd_C;

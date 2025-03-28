@@ -805,8 +805,6 @@ void WP2DspReset() {
   WP2L::TransformColor = nullptr;
   WP2L::CollectColorBlueTransforms = nullptr;
   WP2L::CollectColorRedTransforms = nullptr;
-  WP2L::ExtraCost = nullptr;
-  WP2L::ExtraCostCombined = nullptr;
   WP2L::CombinedShannonEntropy = nullptr;
   WP2L::BufferAdd = nullptr;
   for (auto& p : WP2L::PredictorsNonClampedSub) p = nullptr;
