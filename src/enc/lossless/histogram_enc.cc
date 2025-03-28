@@ -25,6 +25,7 @@
 #include <functional>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <utility>
 
 #include "src/common/symbols.h"
@@ -144,64 +145,71 @@ PopulationAnalyzer::PopulationAnalyzer(uint32_t image_size)
   EncLDspInit();
 }
 
-void PopulationAnalyzer::PopulationCost(const uint32_t* const population,
-                                        uint32_t length,
-                                        uint32_t* const nonzeros,
-                                        uint32_t* const trivial_sym,
-                                        float* cost) {
+std::optional<Histogram::CostInformation> PopulationAnalyzer::PopulationCost(
+    const uint32_t* const population, uint32_t length,
+    std::optional<float> max_cost) {
   uint32_t size = 0;
+  uint32_t trivial_sym = 0;
+  float cost;
   for (uint32_t k = 0; k < length; ++k) {
     if (population[k] == 0) continue;
     histogram_[size] = population[k];
     mapping_[size] = k;
     ++size;
   }
-  if (nonzeros != nullptr) *nonzeros = size;
   // TODO(vrabaud) replace the cost logic below with a proper call to
   //               SymbolWriter::WriteHeader.
   if (size == 0) {
-    *cost = WP2Log2(3);
+    cost = WP2Log2(3);
   } else if (size == 1) {
-    if (trivial_sym != nullptr) *trivial_sym = mapping_[0];
+    trivial_sym = mapping_[0];
     // TODO(vrabaud) do in the Quantizer.
-    *cost = WP2Log2(3) + WP2Log2(length);
+    cost = WP2Log2(3) + WP2Log2(length);
   } else {
     // TODO(vrabaud) use the 'effort' parameter instead of imposing 0.
     quantizer_.ResetBest();
     quantizer_.Quantize(histogram_.data(), mapping_.data(), size, length,
-                        image_size_,
-                        /*cost_threshold=*/std::numeric_limits<float>::max(),
-                        /*cost_offset=*/0.f, /*effort=*/0);
-    *cost = WP2Log2(3) + WP2Log2(std::min(image_size_, length) - 1) +
-            quantizer_.GetBest()->cost;
+                        image_size_, max_cost, /*cost_offset=*/0.f,
+                        /*effort=*/0);
+    cost = WP2Log2(3) + WP2Log2(std::min(image_size_, length) - 1) +
+           quantizer_.GetBest()->cost;
   }
+  if (max_cost && cost >= *max_cost) return std::nullopt;
+
+  return Histogram::CostInformation{
+      .trivial_symbol = trivial_sym, .nonzeros = size, .cost = cost};
 }
 
-void PopulationAnalyzer::GetCombinedEntropy(
+std::optional<float> PopulationAnalyzer::GetCombinedEntropy(
     const uint32_t* const X, const uint32_t* const Y, uint32_t X_nonzeros,
     uint32_t Y_nonzeros, uint32_t X_trivial, uint32_t Y_trivial,
-    uint32_t length, float* cost) {
+    uint32_t length, float max_cost) {
   // If one of the histograms is basically unused:
+  std::optional<Histogram::CostInformation> cost_info;
   if (X_nonzeros == 0) {
-    PopulationCost(Y, length, nullptr, nullptr, cost);
+    cost_info = PopulationCost(Y, length, max_cost);
   } else if (Y_nonzeros == 0) {
-    PopulationCost(X, length, nullptr, nullptr, cost);
+    cost_info = PopulationCost(X, length, max_cost);
   } else if (X_nonzeros == 1 && Y_nonzeros == 1 && X_trivial == Y_trivial) {
     // If they both contain the same element.
-    *cost = WP2Log2(3) + WP2Log2(length);
+    cost_info.emplace(
+        Histogram::CostInformation{.trivial_symbol = X_trivial,
+                                   .nonzeros = 1,
+                                   .cost = WP2Log2(3) + WP2Log2(length)});
   } else {
     BufferAdd(X, Y, length, sum_tmp_.data(), nullptr);
-    PopulationCost(sum_tmp_.data(), length, nullptr, nullptr, cost);
+    cost_info = PopulationCost(sum_tmp_.data(), length, max_cost);
   }
+  if (!cost_info) return std::nullopt;
+
+  return cost_info->cost;
 }
 
 // -----------------------------------------------------------------------------
 // Various histogram combine/cost-eval functions
 
-bool PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
-                                                     const Histogram& b,
-                                                     float cost_threshold,
-                                                     float* cost) {
+std::optional<float> PopulationAnalyzer::GetCombinedHistogramEntropy(
+    const Histogram& a, const Histogram& b, float max_cost) {
   assert(a.symbols_info_ == b.symbols_info_);
 
   bool is_used[kSymbolTypeNum];
@@ -210,39 +218,42 @@ bool PopulationAnalyzer::GetCombinedHistogramEntropy(const Histogram& a,
   }
 
   // Deal with all the symbols.
+  float cost = 0.f;
   for (uint32_t s = 0; s < kSymbolNum; ++s) {
     if (a.symbols_info_->IsUnused(s) || b.symbols_info_->IsUnused(s)) {
       continue;
     }
     if (!WP2L::IsSymbolUsed((Symbol)s, is_used)) continue;
-    float tmp;
-    GetCombinedEntropy(a.counts_[s], b.counts_[s], a.infos_[s].nonzeros,
-                       b.infos_[s].nonzeros, a.infos_[s].trivial_symbol,
-                       b.infos_[s].trivial_symbol,
-                       a.symbols_info_->GetMaxRange(s), &tmp);
-    *cost += tmp;
-    if (*cost > cost_threshold) return false;
+    const auto entropy = GetCombinedEntropy(
+        a.counts_[s], b.counts_[s], a.infos_[s].nonzeros, b.infos_[s].nonzeros,
+        a.infos_[s].trivial_symbol, b.infos_[s].trivial_symbol,
+        a.symbols_info_->GetMaxRange(s), max_cost - cost);
+    if (!entropy) return std::nullopt;
+    cost += *entropy;
+    if (cost >= max_cost) return std::nullopt;
   }
-  return true;
+
+  return cost;
 }
 
 // Performs out = a + b, computing the cost C(a+b) - C(a) - C(b) while comparing
-// to the threshold value 'cost_threshold'. The score returned is
+// to the threshold value 'max_cost'. The score returned is
 //  Score = C(a+b) - C(a) - C(b), where C(a) + C(b) is known and fixed.
-// Since the previous score passed is 'cost_threshold', we only need to compare
-// the partial cost against 'cost_threshold + C(a) + C(b)' to possibly bail-out
+// Since the previous score passed is 'max_cost', we only need to compare
+// the partial cost against 'max_cost + C(a) + C(b)' to possibly bail-out
 // early.
 bool PopulationAnalyzer::HistogramAddEval(const Histogram& a,
                                           const Histogram& b,
                                           Histogram* const out,
-                                          float cost_threshold) {
-  float cost = 0.f;
+                                          float max_cost) {
   const float sum_cost = a.bit_cost_ + b.bit_cost_;
-  cost_threshold += sum_cost;
+  max_cost += sum_cost;
 
-  if (!GetCombinedHistogramEntropy(a, b, cost_threshold, &cost)) return false;
+  const std::optional<float> cost = GetCombinedHistogramEntropy(a, b, max_cost);
+  if (!cost) return false;
+
   HistogramAdd(a, b, out);
-  out->bit_cost_ = cost;
+  out->bit_cost_ = *cost;
   assert(a.symbols_info_ == b.symbols_info_);
   return true;
 }
@@ -268,9 +279,12 @@ void PopulationAnalyzer::UpdateHistogramCost(Histogram* const h) {
     if (h->symbols_info_->IsUnused(s) || !IsSymbolUsed(sym, is_used)) {
       h->infos_[s].cost = 0.f;
     } else {
-      PopulationCost(h->counts_[s], h->symbols_info_->GetMaxRange(sym),
-                     &h->infos_[s].nonzeros, &h->infos_[s].trivial_symbol,
-                     &h->infos_[s].cost);
+      const std::optional<Histogram::CostInformation> info =
+          PopulationCost(h->counts_[s], h->symbols_info_->GetMaxRange(sym),
+                         /*max_cost=*/std::nullopt);
+      h->infos_[s].nonzeros = info->nonzeros;
+      h->infos_[s].trivial_symbol = info->trivial_symbol;
+      h->infos_[s].cost = info->cost;
     }
   }
   // Update the total bit_cost_
@@ -561,14 +575,15 @@ WP2Status HistoQueue::Push(uint16_t idx1, uint16_t idx2, float threshold,
   const Histogram* const h1 = (*histograms_)[idx1];
   const Histogram* const h2 = (*histograms_)[idx2];
   const float sum_cost = h1->bit_cost_ + h2->bit_cost_;
-  pair.cost_combo = 0.;
-  analyzer_->GetCombinedHistogramEntropy(*h1, *h2, sum_cost + threshold,
-                                         &pair.cost_combo);
-  pair.cost_diff = pair.cost_combo - sum_cost;
-
   // Do not even consider the pair if it does not improve the entropy.
-  if (cost_diff != nullptr) *cost_diff = 0;
-  if (pair.cost_diff >= threshold) return WP2_STATUS_OK;
+  const auto cost_combo =
+      analyzer_->GetCombinedHistogramEntropy(*h1, *h2, sum_cost + threshold);
+  if (!cost_combo) {
+    if (cost_diff != nullptr) *cost_diff = 0;
+    return WP2_STATUS_OK;
+  }
+  pair.cost_combo = *cost_combo;
+  pair.cost_diff = pair.cost_combo - sum_cost;
 
   // We cannot add more elements than the capacity.
   assert(queue_.size() < queue_.capacity());

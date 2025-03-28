@@ -24,6 +24,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 
 #include "src/common/progress_watcher.h"
 #include "src/common/symbols.h"
@@ -157,28 +158,37 @@ class PopulationAnalyzer {
     WP2_CHECK_STATUS(quantizer_.Allocate(histogram_size_max_));
     return WP2_STATUS_OK;
   }
-  void PopulationCost(const uint32_t* population, uint32_t length,
-                      uint32_t* nonzeros, uint32_t* trivial_sym, float* cost);
+  // Returns cost information for a histogram population/length.
+  // If max_cost is provided, returns nullopt if the cost is >=.
+  std::optional<Histogram::CostInformation> PopulationCost(
+      const uint32_t* population, uint32_t length,
+      std::optional<float> max_cost);
 
-  void GetCombinedEntropy(const uint32_t* X, const uint32_t* Y,
-                          uint32_t X_nonzeros, uint32_t Y_nonzeros,
-                          uint32_t X_trivial, uint32_t Y_trivial,
-                          uint32_t length, float* cost);
+  std::optional<float> GetCombinedEntropy(const uint32_t* X, const uint32_t* Y,
+                                          uint32_t X_nonzeros,
+                                          uint32_t Y_nonzeros,
+                                          uint32_t X_trivial,
+                                          uint32_t Y_trivial, uint32_t length,
+                                          float max_cost);
 
   // Various histogram combine/cost-eval functions
 
-  bool GetCombinedHistogramEntropy(const Histogram& a, const Histogram& b,
-                                   float cost_threshold, float* cost);
+  // Returns the cost of the combined histogram if it is below the
+  // threshold.
+  WP2_NO_DISCARD
+  std::optional<float> GetCombinedHistogramEntropy(const Histogram& a,
+                                                   const Histogram& b,
+                                                   float max_cost);
 
   // Performs out = a + b, computing the cost C(a+b) - C(a) - C(b) while
-  // comparing to the threshold value 'cost_threshold'. The score returned is
+  // comparing to the threshold value 'max_cost'. The score returned is
   //  Score = C(a+b) - C(a) - C(b), where C(a) + C(b) is known and fixed.
-  // Since the previous score passed is 'cost_threshold', we only need to
-  // compare the partial cost against 'cost_threshold + C(a) + C(b)' to possibly
+  // Since the previous score passed is 'max_cost', we only need to
+  // compare the partial cost against 'max_cost + C(a) + C(b)' to possibly
   // bail-out early.
   // Returns whether the cost is below the threshold.
   bool HistogramAddEval(const Histogram& a, const Histogram& b, Histogram* out,
-                        float cost_threshold);
+                        float max_cost);
 
   // Update the individual/overall bit costs of an histogram.
   void UpdateHistogramCost(Histogram* h);
