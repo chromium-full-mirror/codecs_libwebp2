@@ -75,6 +75,12 @@ inline uint8_t FindLastSet(uint32_t val) {
   return (val == 0) ? 0 : (1 + WP2Log2Floor(val));
 }
 
+// Forward declaration.
+template <typename T, bool USE_NNZ>
+float StoreVectorImpl(const T* vals, uint32_t size, uint32_t nnz,
+                      uint32_t val_upper, OptimizeArrayStorageStat* stats,
+                      ANSEncBase* enc);
+
 // This function efficiently stores a vector of values by splitting it into
 // groups of numbers of similar bit size.
 // val_upper is an upper bound (potentially the max) of the input values.
@@ -88,9 +94,9 @@ inline uint8_t FindLastSet(uint32_t val) {
 template <typename T>
 float StoreVector(const T* const vals, uint32_t size, uint32_t val_upper,
                   OptimizeArrayStorageStat* stats, ANSEncBase* enc) {
-  return StoreVectorImpl(vals, size,
-                         /*nnz=*/std::numeric_limits<uint32_t>::max(),
-                         val_upper, stats, enc);
+  return StoreVectorImpl<T, false>(vals, size,
+                                   /*nnz=*/std::numeric_limits<uint32_t>::max(),
+                                   val_upper, stats, enc);
 }
 
 // Same as StoreVector except that we know the number 'nnz' of
@@ -101,55 +107,85 @@ float StoreVectorNnz(const T* const vals, uint32_t size, uint32_t nnz,
                      ANSEncBase* enc) {
   // Check the number of non-zero elements is correct.
   assert(std::count(vals, vals + size, 0) + nnz == size);
-  return StoreVectorImpl(vals, size, nnz, val_upper, stats, enc);
+  return StoreVectorImpl<T, true>(vals, size, nnz, val_upper, stats, enc);
 }
 
 // Implementation of StoreVector and StoreVectorNnz.
 // If nnz is std::numeric_limits<uint32_t>::max(), the number of non-zero
 // elements is not used.
-template <typename T>
+template <typename T, bool USE_NNZ>
 float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
                       uint32_t val_upper, OptimizeArrayStorageStat* stats,
                       ANSEncBase* enc) {
-  const bool use_nnz = (nnz != std::numeric_limits<uint32_t>::max());
-  if (use_nnz) assert(size > 0 && vals[size - 1] != 0);
-  if (size == 0 || val_upper == 0 || nnz == 0) return 0.f;
+  if (USE_NNZ) assert(size > 0 && vals[size - 1] != 0);
+  if (size == 0 || val_upper == 0 || (USE_NNZ && nnz == 0)) return 0.f;
   WP2MathInit();  // Initialization for WP2Log2.
   if (size <= 2) {
     // For 2 values, storing as ranges is usually more efficient because of the
     // overhead that describes the data.
     if (enc != nullptr) {
-      uint32_t nnz_left = nnz;
-      for (uint32_t i = 0; i < size && nnz_left > 0; ++i) {
-        enc->PutRange(vals[i], i + nnz_left == size ? 1 : 0, val_upper,
-                      "value");
-        if (vals[i] != 0) --nnz_left;
+      if (USE_NNZ) {
+        uint32_t nnz_left = nnz;
+        for (uint32_t i = 0; i < size && nnz_left > 0; ++i) {
+          enc->PutRange(vals[i], i + nnz_left == size ? 1 : 0, val_upper,
+                        "value");
+          if (vals[i] != 0) --nnz_left;
+        }
+      } else {
+        for (uint32_t i = 0; i < size; ++i) {
+          enc->PutRange(vals[i], 0, val_upper, "value");
+        }
       }
     }
     return size * WP2Log2(val_upper + 1);
   }
 
+  // Size of the array where values can be 0.
+  size_t size_maybe_zero;
+  if (USE_NNZ) {
+    for (size_maybe_zero = size; size_maybe_zero > 0; --size_maybe_zero) {
+      if (vals[size_maybe_zero - 1] == 0) break;
+    }
+  } else {
+    size_maybe_zero = size;
+  }
   // Stats contains a list of pairs: number of bits, numbers of consecutive
   // values with that bit depth.
   size_t stats_size = 0;
-  T val_max = 0, val_min = 0;
-  uint32_t nnz_left = nnz;
-  for (size_t i = 0; i < size; ++i) {
-    // If only non-zero elements remain, store them with -1.
-    const T val = (i + nnz_left == size) ? vals[i] - 1 : vals[i];
-    assert(val <= val_upper);
-    // Check if the highest set bit is the same (faster than calling
-    // FindLastSet).
-    if (val < val_max && val >= val_min) {
-      ++stats[stats_size - 1].count;
-    } else {
-      stats[stats_size].count = 1;
-      stats[stats_size].n_bits = FindLastSet(val);
-      val_max = (1u << stats[stats_size].n_bits);
-      val_min = (val_max >> 1);
-      ++stats_size;
+  {
+    T val_max = 0, val_min = 0;
+    size_t i;
+    for (i = 0; i < size_maybe_zero; ++i) {
+      const T val = vals[i];
+      assert(val <= val_upper);
+      // Check if the highest set bit is the same (faster than calling
+      // FindLastSet).
+      if (val >= val_min && val < val_max) {
+        ++stats[stats_size - 1].count;
+      } else {
+        stats[stats_size].count = 1;
+        stats[stats_size].n_bits = FindLastSet(val);
+        val_max = (1u << stats[stats_size].n_bits);
+        val_min = (val_max >> 1);
+        ++stats_size;
+      }
     }
-    if (vals[i] != 0) --nnz_left;
+    // If only non-zero elements remain, store them with -1.
+    for (; i < size; ++i) {
+      const T val = vals[i] - 1;
+      assert(val <= val_upper);
+      // Check if the highest set bit is the same (faster than calling
+      // FindLastSet).
+      if (val >= val_min && val < val_max) {
+        ++stats[stats_size - 1].count;
+      } else {
+        stats[stats_size].count = 1;
+        stats[stats_size].n_bits = FindLastSet(val);
+        val_max = (1u << stats[stats_size].n_bits);
+        val_min = (val_max >> 1);
+        ++stats_size;
+      }
+    }
   }
   // Merge the pairs to give an optimal cost.
   const uint8_t n_bits_max = FindLastSet(val_upper);
@@ -199,8 +235,8 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
   const T* v = vals;
   uint8_t n_bits_prev = 0;
   size_left = size;
-  nnz_left = nnz;
-  for (size_t i = 0; i < stats_size && nnz_left > 0; ++i) {
+  uint32_t nnz_left = nnz;
+  for (size_t i = 0; i < stats_size && (!USE_NNZ || nnz_left > 0); ++i) {
     const OptimizeArrayStorageStat& s = stats[i];
     // The number of bits is in [0:n_bits_max) for the first set.
     if (v == vals) {
@@ -228,7 +264,7 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
       size_left -= s.count;
       // If we have more nnz_left than elements after this segment, the last 0s
       // were actually elements reduced by 1.
-      if (use_nnz && nnz_left >= size_left) nnz_left = size_left;
+      if (USE_NNZ && nnz_left >= size_left) nnz_left = size_left;
     } else if (s.count == 1) {
       // If we only have one number, we don't need to store the high order
       // bit as it's always 1, otherwise it would fit in (n_bits_ - 1).
@@ -236,7 +272,7 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
       // to store anything.
       if (s.n_bits > 1) {
         const uint32_t high_order_bit = 1u << (s.n_bits - 1);
-        const bool subtract_one = (size_left == nnz_left);
+        const bool subtract_one = (USE_NNZ && size_left == nnz_left);
         const uint32_t value_to_code =
             (subtract_one ? *v - 1 : *v) ^ high_order_bit;
         if (use_r_value) {
@@ -248,18 +284,19 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
           enc->PutUValue(value_to_code, s.n_bits - 1, "value");
         }
       }
-      if (*v != 0) --nnz_left;
+      if (USE_NNZ && *v != 0) --nnz_left;
       --size_left;
       ++v;
     } else {
       // Store the values.
-      for (size_t j = 0; j < s.count && nnz_left > 0; ++j, --size_left, ++v) {
+      for (size_t j = 0; j < s.count && (!USE_NNZ || nnz_left > 0);
+           ++j, --size_left, ++v) {
         // Use the fact that the last element is non-zero.
-        if (nnz_left == 1 && size_left > 1) {
+        if (USE_NNZ && nnz_left == 1 && size_left > 1) {
           assert(*v == 0);
           continue;
         }
-        const bool subtract_one = (size_left == nnz_left);
+        const bool subtract_one = (USE_NNZ && size_left == nnz_left);
         if (use_r_value) {
           if (subtract_one) {
             enc->PutRValue(*v - 1, val_upper, "value");
@@ -269,12 +306,12 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
         } else {
           enc->PutUValue(subtract_one ? *v - 1 : *v, s.n_bits, "value");
         }
-        if (*v != 0) --nnz_left;
+        if (USE_NNZ && *v != 0) --nnz_left;
       }
     }
   }
   assert(size_left == 0);
-  if (use_nnz) assert(nnz_left == 0);
+  if (USE_NNZ) assert(nnz_left == 0);
   return cost;
 }
 

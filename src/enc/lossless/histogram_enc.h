@@ -136,12 +136,13 @@ WP2Status BuildHistograms(uint32_t width, uint32_t height, uint32_t histo_bits,
 // Builds the histogram image.
 // 'segments' is an ARGB image where the segment is stored in G and other
 // components are pre-filled with 0.
+// It contains all values in the range [0, *num_segments [.
 WP2Status GetHistoImageSymbols(uint32_t width, uint32_t height,
                                const BackwardRefs& refs, int effort,
                                const WP2::ProgressRange& progress,
                                int histogram_bits,
                                const LosslessSymbolsInfo& symbols_info,
-                               HistogramSet* merged_histo, int16_t* segments);
+                               uint32_t* num_segments, int16_t* segments);
 
 // Class comparing histograms for the sake of merging them.
 // It contains several buffers that speed-up the computation of the different

@@ -504,7 +504,6 @@ WP2Status Encoder::EncodeImageInternal(
   const uint32_t histogram_width = SubSampleSize(width, histogram_bits);
   const uint32_t histogram_height = SubSampleSize(height, histogram_bits);
   const uint32_t num_segments_max = histogram_width * histogram_height;
-  HistogramSet histogram_image;
   WP2::ANSEnc enc_best_tmp, enc_tmp;
   WP2::ANSDictionaries dicts_tmp;
   WP2::SymbolWriter sw;
@@ -569,13 +568,12 @@ WP2Status Encoder::EncodeImageInternal(
         &refs_best));
     symbols_info.SetCacheRange(GetColorCacheRange(cache_config),
                                cache_config.use_segment_cache);
-    WP2_CHECK_ALLOC_OK(
-        histogram_image.Allocate(num_segments_max, symbols_info));
 
     // Build histogram image and symbols from backward references.
+    uint32_t num_segments;
     WP2_CHECK_STATUS(GetHistoImageSymbols(
         width, height, *refs_best, config_.effort, histo_symbols_progress,
-        histogram_bits, symbols_info, &histogram_image, segments.data()));
+        histogram_bits, symbols_info, &num_segments, segments.data()));
 
     // Write the global header
     enc->AddDebugPrefix("GlobalHeader");
@@ -602,7 +600,6 @@ WP2Status Encoder::EncodeImageInternal(
     }
 
     // Histogram image.
-    const uint32_t num_segments = histogram_image.histograms_.size();
     if (num_segments > 1) assert(more_than_one_hist);
     const bool write_histogram_image =
         (more_than_one_hist &&
