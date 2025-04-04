@@ -860,7 +860,8 @@ WP2Status Encoder::ApplyNormalizeChannels(
     header.normalize_channels_max[c] = mapping_size - 1;
     WP2::VectorNoCtor<WP2::OptimizeArrayStorageStat> stats;
     WP2_CHECK_ALLOC_OK(stats.resize(mapping_size));
-    StoreMapping(mappings.data(), mapping_size, range, stats.data(), &enc);
+    StoreMapping(mappings.data(), mapping_size, range, config_.effort,
+                 stats.data(), &enc);
     // Apply the mapping.
     for (uint32_t y = 0; y < height; ++y) {
       int16_t* const row = argb_buffer_.GetRow(y);

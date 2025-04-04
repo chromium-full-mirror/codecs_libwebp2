@@ -55,7 +55,7 @@ WP2Status Quantizer::Allocate(uint32_t range_max) {
 bool Quantizer::Quantize(const uint32_t* const histogram,
                          const uint16_t* const mapping, size_t size_sparse,
                          uint32_t symbol_range, uint32_t max_count,
-                         std::optional<float> cost_threshold, float cost_offset,
+                         std::optional<float> cost_max, float cost_offset,
                          int effort) {
   assert(effort >= 0 && effort <= 9);
   float cost_best_prev;
@@ -66,8 +66,7 @@ bool Quantizer::Quantize(const uint32_t* const histogram,
     cost_best_prev = config_best_->cost;
   }
   const float cost_to_beat =
-      std::min(cost_best_prev, cost_threshold.value_or(cost_best_prev)) -
-      cost_offset;
+      std::min(cost_best_prev, cost_max.value_or(cost_best_prev)) - cost_offset;
   // Temporarily switch the best configuration cost as the new cost to beat.
   config_best_->cost = cost_to_beat;
   QuantizeImpl(histogram, mapping, size_sparse, symbol_range, max_count,
@@ -82,7 +81,7 @@ bool Quantizer::Quantize(const uint32_t* const histogram,
   }
 }
 
-void Quantizer::Config::WriteHistogramHeader(uint32_t symbol_range,
+void Quantizer::Config::WriteHistogramHeader(uint32_t symbol_range, int effort,
                                              OptimizeArrayStorageStat* stats,
                                              uint32_t stats_size,
                                              ANSEncBase* const enc) const {
@@ -93,7 +92,7 @@ void Quantizer::Config::WriteHistogramHeader(uint32_t symbol_range,
       // The diff between two consecutive elements is at most symbol_range -
       // number of symbols.
       assert(histo.nnz <= stats_size);
-      StoreMapping(histo.mapping, histo.nnz, symbol_range, stats, enc);
+      StoreMapping(histo.mapping, histo.nnz, symbol_range, effort, stats, enc);
     } else {
       enc->PutRange(size_to_write, histo.nnz, symbol_range, "histogram_size");
     }
@@ -189,7 +188,7 @@ void Quantizer::QuantizeImpl(const uint32_t* const histogram,
         kSparsity[i] ? size_sparse : mapping[size_sparse - 1] + 1;
     config->param.is_sparse = kSparsity[i];
     WP2::ANSEncCounter counter;
-    config->WriteHistogramHeader(symbol_range, stats_buffer_.data(),
+    config->WriteHistogramHeader(symbol_range, effort, stats_buffer_.data(),
                                  stats_buffer_.size(), &counter);
     cost_header[i] = counter.GetCost();
   }

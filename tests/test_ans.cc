@@ -39,6 +39,7 @@
 #include "src/utils/random.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
 
 namespace WP2 {
 namespace {
@@ -428,7 +429,7 @@ TEST_F(TestANS, Test2) {
         break;
       }
       default:
-        EXPECT_FALSE(true);
+        ADD_FAILURE();
     }
     EXPECT_WP2_OK(dict->ToCodingTable());
     for (uint32_t s : symbols) {
@@ -974,7 +975,7 @@ TEST_P(TestANSBitCounts, Simple) {
     } else if (tok.type == Token::Signed) {
       (void)dec.ReadSUValue(tok.second, "S_value");
     } else {
-      EXPECT_FALSE(true);
+      ADD_FAILURE();
     }
   }
   EXPECT_WP2_OK(dec.GetStatus());
@@ -1273,7 +1274,10 @@ TEST_F(TestANS, TestANSAdaptiveSymbolFromCDF) {
 
 //------------------------------------------------------------------------------
 
-class TestANSMapping : public testing::TestWithParam<uint32_t> {};
+// The following tests are parameterized by the type of mapping to test
+// (0: random mapping, 1: sorted mapping) and the effort.
+class TestANSMapping
+    : public testing::TestWithParam<std::tuple<uint32_t, uint32_t>> {};
 
 TEST_P(TestANSMapping, Simple) {
   ANSInit();
@@ -1282,7 +1286,8 @@ TEST_P(TestANSMapping, Simple) {
   std::vector<OptimizeArrayStorageStat> stats(range);
   std::vector<uint16_t> mapping_ini(range);
   Vector_u16 mapping_res;
-  const uint32_t pattern_type = GetParam();
+  const uint32_t pattern_type = std::get<0>(GetParam());
+  const uint32_t effort = std::get<1>(GetParam());
   for (uint32_t n = 1; n < range; ++n) {
     if (pattern_type == 0) {
       mapping_ini[0] = random.Get(0u, range - n);
@@ -1301,7 +1306,7 @@ TEST_P(TestANSMapping, Simple) {
     }
     // Store the mapping to an encoder.
     ANSEnc enc;
-    StoreMapping(mapping_ini.data(), n, range, stats.data(), &enc);
+    StoreMapping(mapping_ini.data(), n, range, effort, stats.data(), &enc);
     enc.PutRange(31, 0, 263, "verif-bit");
     EXPECT_WP2_OK(enc.AssembleToBitstream());
     // Read back the mapping.
@@ -1319,7 +1324,8 @@ TEST_P(TestANSMapping, Simple) {
 }
 
 INSTANTIATE_TEST_SUITE_P(TestANSMappingInstantiation, TestANSMapping,
-                         testing::Range(0u, 2u));
+                         testing::Combine(testing::Range(0u, 2u),
+                                          testing::Values(0, kMaxEffort)));
 
 //------------------------------------------------------------------------------
 

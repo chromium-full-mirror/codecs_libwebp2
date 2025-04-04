@@ -627,7 +627,7 @@ WP2Status SymbolWriter::CopyFrom(const SymbolWriter& other,
 void SymbolWriter::WriteHistogram(const Quantizer::Config& config,
                                   uint32_t symbol_range, uint32_t max_count,
                                   ANSEncBase* const enc) {
-  config.WriteHistogramHeader(symbol_range, stats_buffer_.data(),
+  config.WriteHistogramHeader(symbol_range, effort_, stats_buffer_.data(),
                               stats_buffer_.size(), enc);
   config.WriteHistogramCounts(symbol_range, max_count, stats_buffer_.data(),
                               stats_buffer_.size(), enc);
@@ -1131,7 +1131,7 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
     }
     // Figure out the cost of using ranges.
     // Cost of mapping + cost of storing each symbol as a range + cost of size.
-    const float cost_range = StoreMapping(mapping_.data(), size, range,
+    const float cost_range = StoreMapping(mapping_.data(), size, range, effort_,
                                           stats_buffer_.data(), nullptr) +
                              counts_total * WP2Log2(size) +
                              WP2Log2(nnz_range - 1);
@@ -1227,7 +1227,8 @@ WP2Status SymbolWriter::WriteHeader(uint32_t sym, uint32_t cluster,
   } else {  // kRange
     enc->PutRange(size, 1, nnz_range, "size");
     // Store the mapping.
-    StoreMapping(mapping_.data(), size, range, stats_buffer_.data(), enc);
+    StoreMapping(mapping_.data(), size, range, effort_, stats_buffer_.data(),
+                 enc);
     // Initialize the SymbolWriter.
     AddRange(sym, cluster, is_symmetric_best, mapping_.data(), size, range);
   }

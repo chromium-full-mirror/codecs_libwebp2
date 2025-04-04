@@ -20,11 +20,13 @@
 #include "src/utils/ans_utils.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <numeric>
+#include <optional>
 
 #include "src/dsp/math.h"
 #include "src/utils/ans.h"
@@ -473,7 +475,9 @@ static uint32_t GetEffectiveRange(const uint16_t* const mapping, uint32_t size,
 static void StoreVectorForMapping(const uint16_t* const mapping, size_t size,
                                   uint32_t range,
                                   const OptimizeArrayStorageStat* const stats,
-                                  uint32_t stats_size, ANSEncBase* const enc) {
+                                  uint32_t stats_size,
+                                  std::optional<float> cost_max,
+                                  ANSEncBase* const enc) {
   assert(size <= range);
   uint32_t n_bits_prev = 0;
   size_t size_left = size;
@@ -542,15 +546,20 @@ static void StoreVectorForMapping(const uint16_t* const mapping, size_t size,
         ++ind;
       }
     }
+    // Early exit if the cost is too high.
+    if (cost_max && enc->GetCost() >= *cost_max) break;
     size_left -= s.count;
   }
 }
 
 // Helper function storing the mapping with one of the different methods.
+// If cost_max is set, it is assumed 'enc' is an ANSEncCounter and there will be
+// an early exit if its cost is greater than cost_max.
 static void StoreMappingHelper(const uint16_t* const mapping, size_t size,
                                uint32_t range,
                                const OptimizeArrayStorageStat* const stats,
                                size_t stats_size, MappingMethod method,
+                               std::optional<float> cost_max,
                                ANSEncBase* const enc) {
   switch (method) {
     case MappingMethod::kRange: {
@@ -575,13 +584,16 @@ static void StoreMappingHelper(const uint16_t* const mapping, size_t size,
           // early-out to avoid empty calls to PutRange()
           if (mapping[i] + num_left + 1 == mapping[j]) break;
         }
+        // Early exit if the cost is too high.
+        if (cost_max && enc->GetCost() >= *cost_max) break;
       }
       break;
     }
     case MappingMethod::kStoreVector: {
       // Store everything as a list of tuples like in StoreVector.
       // This method is usually good for many values in a big range.
-      StoreVectorForMapping(mapping, size, range, stats, stats_size, enc);
+      StoreVectorForMapping(mapping, size, range, stats, stats_size, cost_max,
+                            enc);
       break;
     }
     case MappingMethod::kAdaptativeBit: {
@@ -598,6 +610,8 @@ static void StoreMappingHelper(const uint16_t* const mapping, size_t size,
           // early out to avoid calling PutBit() with proba 0
           if (--num_zeros == 0) break;
         }
+        // Early exit if the cost is too high.
+        if (cost_max && enc->GetCost() >= *cost_max) break;
       }
       break;
     }
@@ -615,6 +629,8 @@ static void StoreMappingHelper(const uint16_t* const mapping, size_t size,
         } else {
           --num_zeros;
         }
+        // Early exit if the cost is too high.
+        if (cost_max && enc->GetCost() >= *cost_max) break;
       }
       break;
     }
@@ -658,7 +674,7 @@ static uint32_t CollectOptimalStats(const uint16_t* const mapping, size_t size,
 }
 
 float StoreMapping(const uint16_t* const mapping, size_t size, uint32_t range,
-                   OptimizeArrayStorageStat* const stats,
+                   int effort, OptimizeArrayStorageStat* const stats,
                    ANSEncBase* const enc) {
   if (size == 0 || size == range) return 0.f;
   // Check whether all is consecutive, starting at 0.
@@ -673,17 +689,22 @@ float StoreMapping(const uint16_t* const mapping, size_t size, uint32_t range,
   // Find the optimal stats[] sequence for the kStoreVector case
   const size_t stats_size = CollectOptimalStats(mapping, size, range, stats);
 
-  // Find most cost-efficient mapping method and finalize bitstream
-  // if enc is non-null. Since kBit cost is easy to compute, use it as
-  // initial value.
+  // Find the most cost-efficient mapping method. Since kBit cost is easy to
+  // compute, use it as initial value.
   float cost_min = GetEffectiveRange(mapping, size, range);
   MappingMethod best_method = MappingMethod::kBit;
-  for (MappingMethod method :
-       {MappingMethod::kRange, MappingMethod::kStoreVector,
-        MappingMethod::kAdaptativeBit}) {
+  constexpr std::array<MappingMethod, 3> methods = {
+      MappingMethod::kRange, MappingMethod::kStoreVector,
+      MappingMethod::kAdaptativeBit};
+  const uint32_t num_extra_methods = effort == 0  ? 0
+                                     : effort < 3 ? 1
+                                     : effort < 6 ? 2
+                                                  : 3;
+  for (uint32_t i = 0; i < num_extra_methods; ++i) {
+    const MappingMethod method = methods[i];
     ANSEncCounter counter;
     StoreMappingHelper(mapping, size, range, stats, stats_size, method,
-                       &counter);
+                       /*cost_max=*/cost_min, &counter);
     const float cost = counter.GetCost();
     if (cost < cost_min) {
       cost_min = cost;
@@ -693,9 +714,10 @@ float StoreMapping(const uint16_t* const mapping, size_t size, uint32_t range,
   cost_tot += cost_min;
 
   if (enc != nullptr) {
+    // Finalize the bitstream.
     enc->PutRValue((uint32_t)best_method, kNumMapping, "method");
     StoreMappingHelper(mapping, size, range, stats, stats_size, best_method,
-                       enc);
+                       /*cost_max=*/std::nullopt, enc);
   }
   cost_tot += WP2Log2(kNumMapping);
 

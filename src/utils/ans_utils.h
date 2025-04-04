@@ -504,7 +504,8 @@ WP2Status LoadMapping(ANSDec* dec, uint32_t size, uint32_t range,
 // Stores a mapping.
 // 'stats' is the same as in StoreVector.
 float StoreMapping(const uint16_t* mapping, size_t size, uint32_t range,
-                   OptimizeArrayStorageStat* stats, ANSEncBase* enc);
+                   int effort, OptimizeArrayStorageStat* stats,
+                   ANSEncBase* enc);
 
 //------------------------------------------------------------------------------
 
