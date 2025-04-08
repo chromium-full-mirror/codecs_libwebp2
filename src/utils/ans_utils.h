@@ -86,9 +86,9 @@ float StoreVectorImpl(const T* vals, uint32_t size, uint32_t nnz,
 // val_upper is an upper bound (potentially the max) of the input values.
 // The size of the array and this 'val_upper' must be stored independently.
 // If no ANS encoder is provided (enc == nullptr), the function can still be
-// used to estimate the resulting size in bits.
-// It stores the array with tuples (number of bits, number of numbers with that
-// bit-size, a list of numbers).
+// used to estimate the resulting size in bits (and it is faster than calling
+// the function with an ANSEncCounter). It stores the array with tuples (number
+// of bits, number of numbers with that bit-size, a list of numbers).
 // 'stats' is a pre-allocated buffer of the same size that will be used for
 // temporary computation.
 template <typename T>
@@ -595,6 +595,8 @@ class ANSEncCounter : public ANSEncBase {
                      const ANSAdaptiveSymbol& asym, WP2_OPT_LABEL) override;
   uint32_t PutUValue(uint32_t value, uint32_t bits, WP2_OPT_LABEL) override;
   uint32_t PutRValue(uint32_t value, uint32_t range, WP2_OPT_LABEL) override;
+  // Adds a fixed cost to the total cost.
+  void AddCost(float cost) { cost_ += cost; }
   // Returns the total cost in bits. Cost of symbols is the cost based on
   // dictionary stats at time of writing.
   float GetCost() const override;
@@ -678,6 +680,8 @@ WP2Status LoadMapping(ANSDec* dec, uint32_t size, uint32_t range,
 
 // Stores a mapping.
 // 'stats' is the same as in StoreVector.
+// Returns the cost of storing the mapping. It is faster to get this value than
+// to call the function with an ANSEncCounter.
 float StoreMapping(const uint16_t* mapping, size_t size, uint32_t range,
                    int effort, OptimizeArrayStorageStat* stats,
                    ANSEncBase* enc);

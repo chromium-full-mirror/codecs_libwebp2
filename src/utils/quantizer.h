@@ -66,9 +66,15 @@ class Quantizer {
     void WriteHistogramHeader(uint32_t symbol_range, int effort,
                               OptimizeArrayStorageStat* stats,
                               uint32_t stats_size, ANSEncBase* enc) const;
+    void WriteHistogramHeader(uint32_t symbol_range, int effort,
+                              OptimizeArrayStorageStat* stats,
+                              uint32_t stats_size, ANSEncCounter* enc) const;
     void WriteHistogramCounts(uint32_t symbol_range, uint32_t max_count,
                               OptimizeArrayStorageStat* stats,
                               uint32_t stats_size, ANSEncBase* enc) const;
+    void WriteHistogramCounts(uint32_t symbol_range, uint32_t max_count,
+                              OptimizeArrayStorageStat* stats,
+                              uint32_t stats_size, ANSEncCounter* enc) const;
 
     ConfigParam param;
     // Histogram to write (which might be different from histo.counts: e.g.,

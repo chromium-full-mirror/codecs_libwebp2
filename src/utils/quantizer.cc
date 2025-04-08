@@ -106,6 +106,23 @@ void Quantizer::Config::WriteHistogramHeader(uint32_t symbol_range, int effort,
   enc->PutBool(param.type == Huffman, "use_huffman");
 }
 
+// This is the same as the function above, but simplified for ANSEncCounter.
+void Quantizer::Config::WriteHistogramHeader(uint32_t symbol_range, int effort,
+                                             OptimizeArrayStorageStat* stats,
+                                             uint32_t stats_size,
+                                             ANSEncCounter* const enc) const {
+  if (histo.nnz < symbol_range) {
+    enc->PutBool(param.is_sparse, "is_sparse");
+    if (param.is_sparse) {
+      enc->AddCost(StoreMapping(histo.mapping, histo.nnz, symbol_range, effort,
+                                stats, /*enc=*/nullptr));
+    } else {
+      enc->PutRange(size_to_write, histo.nnz, symbol_range, "histogram_size");
+    }
+  }
+  enc->PutBool(param.type == Huffman, "use_huffman");
+}
+
 void Quantizer::Config::WriteHistogramCounts(uint32_t symbol_range,
                                              uint32_t max_count,
                                              OptimizeArrayStorageStat* stats,
@@ -132,6 +149,33 @@ void Quantizer::Config::WriteHistogramCounts(uint32_t symbol_range,
     StoreVectorNnz(histogram_to_write, size_to_write, histo.nnz,
                    (1 << param.max_freq_bits) - 1, stats, enc);
   }
+}
+
+// This is the same as the function above, but simplified for ANSEncCounter.
+void Quantizer::Config::WriteHistogramCounts(uint32_t symbol_range,
+                                             uint32_t max_count,
+                                             OptimizeArrayStorageStat* stats,
+                                             uint32_t stats_size,
+                                             ANSEncCounter* const enc) const {
+  const uint32_t max_count_bits =
+      std::min(kMaxFreqBits, 1u + (uint32_t)WP2Log2Floor(max_count));
+  if (param.type == Quantizer::Huffman) {
+    enc->PutRange(param.max_freq_bits, 1, 1 + WP2Log2Floor(max_count_bits),
+                  "max_freq_bits");
+  } else {
+    enc->PutRange(param.max_freq_bits, 1, max_count_bits, "max_freq_bits");
+  }
+  float cost_vector;
+  if (param.is_sparse) {
+    cost_vector =
+        StoreVector(histogram_to_write, size_to_write,
+                    (1 << param.max_freq_bits) - 1, stats, /*enc=*/nullptr);
+  } else {
+    cost_vector = StoreVectorNnz(histogram_to_write, size_to_write, histo.nnz,
+                                 (1 << param.max_freq_bits) - 1, stats,
+                                 /*enc=*/nullptr);
+  }
+  enc->AddCost(cost_vector);
 }
 
 // The quantization implementation uses the Config cache of the class during
