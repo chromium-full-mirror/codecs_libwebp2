@@ -1378,6 +1378,61 @@ TEST(TestANSStoreVector, Simple) {
 
 //------------------------------------------------------------------------------
 
+TEST(TestANSStoreMapping, Cost) {
+  ANSInit();
+  UniformIntDistribution random(kBaseSeed);
+  constexpr uint16_t kRange = 100;
+  std::vector<OptimizeArrayStorageStat> stats(kRange);
+  std::vector<uint16_t> mapping(kRange);
+  for (int effort : {0, kMaxEffort}) {
+    for (uint32_t n = 1; n < kRange; ++n) {
+      mapping[0] = random.Get(0u, kRange - n);
+      for (uint32_t j = 1; j < n; ++j) {
+        mapping[j] = random.Get<uint16_t>(mapping[j - 1] + 1, kRange - (n - j));
+      }
+      ANSEncCounter enc;
+      const float cost =
+          StoreMapping(mapping.data(), n, kRange, effort, stats.data(), &enc);
+      EXPECT_NEAR(cost, enc.GetCost(), 1e-5);
+    }
+  }
+}
+
+TEST(TestANSStoreVector, Cost) {
+  ANSInit();
+  UniformIntDistribution random(kBaseSeed);
+  constexpr uint16_t kRange = 100;
+  std::vector<OptimizeArrayStorageStat> stats(kRange);
+  std::vector<uint16_t> vec(kRange);
+  const std::vector<uint32_t> max_values = {
+      0, 4, 10, 100, std::numeric_limits<uint16_t>::max()};
+  for (uint32_t max_value : max_values) {
+    for (uint32_t n = 0; n < kRange; ++n) {
+      uint32_t nnz = 0, size_nnz = 0;
+      for (uint32_t j = 0; j < n; ++j) {
+        vec[j] = random.Get<uint16_t>(0, max_value);
+        if (vec[j] != 0) {
+          ++nnz;
+          size_nnz = j + 1;
+        }
+      }
+      // The rather large tolerance is due to the difference of computation:
+      // size*cost for estimation, size additions of cost for ANSEncCounter.
+      ANSEncCounter enc;
+      const float cost =
+          StoreVector(vec.data(), n, max_value, stats.data(), &enc);
+      EXPECT_NEAR(cost, enc.GetCost(), 5e-4);
+      // Store the vector knowing the number of non-zero elements.
+      enc.Reset();
+      const float cost_nnz = StoreVectorNnz(vec.data(), size_nnz, nnz,
+                                            max_value, stats.data(), &enc);
+      EXPECT_NEAR(cost_nnz, enc.GetCost(), 4e-4);
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
+
 TEST_F(TestANS, DictionarySymbolCost) {
   ANSDictionary dict;
   EXPECT_NE(dict.Init(0), WP2_STATUS_OK);

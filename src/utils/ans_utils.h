@@ -121,6 +121,8 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
   if (size == 0 || val_upper == 0 || (USE_NNZ && nnz == 0)) return 0.f;
   WP2MathInit();  // Initialization for WP2Log2.
   const uint8_t n_bits_max = FindLastSet(val_upper);
+  const float val_upper_log2 = WP2Log2(val_upper);
+  const float val_upper_plus_one_log2 = WP2Log2(val_upper + 1);
   auto add_value = [enc, val_upper, n_bits_max](T val, uint32_t min) {
     if (val_upper <= kANSMaxRange) {
       enc->PutRange(val, min, val_upper, "value");
@@ -128,28 +130,40 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
       enc->PutUValue(val, n_bits_max, "value");
     }
   };
+  auto add_value_cost = [val_upper, val_upper_log2, val_upper_plus_one_log2,
+                         n_bits_max](uint32_t min) -> float {
+    if (val_upper <= kANSMaxRange) {
+      if (min == 0) return val_upper_plus_one_log2;
+      assert(min == 1);
+      return val_upper_log2;
+    } else {
+      return n_bits_max;
+    }
+  };
   if (USE_NNZ && nnz == 1) {
     // The last value is the non-zero one.
     add_value(vals[size - 1], 1);
-    return 0.f;
+    return add_value_cost(/*min=*/1);
   }
   if (size <= 2) {
     // For 2 values, storing as ranges is usually more efficient because of the
     // overhead that describes the data.
-    if (enc != nullptr) {
-      if (USE_NNZ) {
-        uint32_t nnz_left = nnz;
-        for (uint32_t i = 0; i < size && nnz_left > 0; ++i) {
-          add_value(vals[i], i + nnz_left == size ? 1 : 0);
-          if (vals[i] != 0) --nnz_left;
-        }
-      } else {
-        for (uint32_t i = 0; i < size; ++i) {
-          add_value(vals[i], 0);
-        }
+    if (USE_NNZ) {
+      uint32_t nnz_left = nnz;
+      float cost = 0.f;
+      for (uint32_t i = 0; i < size && nnz_left > 0; ++i) {
+        const uint32_t min = i + nnz_left == size ? 1 : 0;
+        if (enc != nullptr) add_value(vals[i], min);
+        cost += add_value_cost(min);
+        if (vals[i] != 0) --nnz_left;
       }
+      return cost;
+    } else {
+      if (enc != nullptr) {
+        for (uint32_t i = 0; i < size; ++i) add_value(vals[i], 0);
+      }
+      return size * add_value_cost(/*min=*/0);
     }
-    return size * WP2Log2(val_upper + 1);
   }
 
   // When USE_NNZ, there are two optimizations that can be done.
@@ -230,30 +244,82 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
   const float cost1 = WP2Log2Fast(n_bits_max + 1);
   OptimizeArrayStorage(stats, &stats_size, cost0 + WP2Log2(size + 1));
 
-  // Figure out the cost of this storage.
+  // Figure out the cost of this storage. This is a simplified version of the
+  // code below where 'enc' is replaced by 'cost'. Comments have been removed
+  // for simplification.
+  const T* v = vals;
   float cost = cost1;
   size_t size_left = size;
   uint8_t n_bits_max_in_val = 0;
   for (size_t i = 0; i < stats_size; ++i) {
+    if (USE_NNZ && v >= vals + index_skip_zeros) {
+      i = stats_size - 1;
+      v = vals + index_subtract_one;
+      size_left = 1;
+    }
     const OptimizeArrayStorageStat& s = stats[i];
     assert(s.count > 0);
     if (i > 0) cost += cost0;
-    // Add the costs: number of elements + each element.
-    float cost_per_value;
-    if (s.n_bits == n_bits_max && n_bits_max <= kANSMaxRangeBits) {
-      cost_per_value =
-          WP2Log2(val_upper + 1 - (s.count == 1 ? 1 << (n_bits_max - 1) : 0));
+    cost += WP2Log2(size_left);
+    const bool use_r_value =
+        (s.n_bits == n_bits_max) && (n_bits_max <= kANSMaxRangeBits);
+    if (s.n_bits == 0) {
+      v += s.count;
+    } else if (s.count == 1) {
+      if (s.n_bits > 1) {
+        if (use_r_value) {
+          const uint32_t high_order_bit = 1u << (s.n_bits - 1);
+          const bool subtract_one = (USE_NNZ && v >= vals + index_subtract_one);
+          cost += WP2Log2(subtract_one ? val_upper - high_order_bit
+                                       : val_upper + 1 - high_order_bit);
+        } else {
+          cost += s.n_bits - 1;
+        }
+      }
+      ++v;
     } else {
-      cost_per_value = s.n_bits - (s.count == 1 ? 1 : 0);
+      const T* const v_end_count = v + s.count;
+      if (USE_NNZ) {
+        const T* v_end = std::min(
+            {v_end_count, vals + index_subtract_one, vals + index_skip_zeros});
+        cost +=
+            (v_end - v) * (use_r_value ? val_upper_plus_one_log2 : s.n_bits);
+        v = v_end;
+        if (v == vals + index_skip_zeros) v = vals + index_subtract_one;
+        if (v < v_end_count) {
+          cost += (v_end_count - v) * (use_r_value ? val_upper_log2 : s.n_bits);
+        }
+      } else {
+        cost += s.count * (use_r_value ? val_upper_plus_one_log2 : s.n_bits);
+      }
+      v = v_end_count;
     }
-    cost += WP2Log2(size_left) + s.count * cost_per_value;
     size_left -= s.count;
     n_bits_max_in_val = std::max(n_bits_max_in_val, s.n_bits);
   }
 
   // Compute the cost if all values are set to the same bit depth and choose it
-  // accordingly.
-  const float cost_same_depth = cost1 + size * n_bits_max_in_val;
+  // accordingly. This is a simplified version of the code below where 'enc' is
+  // replaced by 'cost', with only one statistic with count == size and n_bits
+  // == n_bits_max_in_val.
+  float cost_same_depth = cost1;
+  {
+    // Whether to write the values as RValue or UValue.
+    const bool use_r_value =
+        (n_bits_max_in_val == n_bits_max) && (n_bits_max <= kANSMaxRangeBits);
+
+    if (USE_NNZ) {
+      cost_same_depth +=
+          std::min({size, index_subtract_one, index_skip_zeros}) *
+          (use_r_value ? val_upper_plus_one_log2 : n_bits_max_in_val);
+      cost_same_depth += (size - index_subtract_one) *
+                         (use_r_value ? val_upper_log2 : n_bits_max_in_val);
+    } else {
+      cost_same_depth +=
+          size * (use_r_value ? val_upper_plus_one_log2 : n_bits_max_in_val);
+    }
+  }
+
   const bool have_same_depth = (cost_same_depth < cost);
   if (have_same_depth) {
     cost = cost_same_depth;
@@ -269,7 +335,7 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
 
   enc->PutBool(have_same_depth, "has_same_depth");
   // Store the optimized version of the array.
-  const T* v = vals;
+  v = vals;
   uint8_t n_bits_prev = 0;
   size_left = size;
   for (size_t i = 0; i < stats_size; ++i) {
