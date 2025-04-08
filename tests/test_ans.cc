@@ -524,14 +524,14 @@ TEST_F(TestANS, Test3) {
     Vector_u32 counts;
     EXPECT_TRUE(counts.resize(kMaxSymbol));
     dec.AddDebugPrefix("vector");
-    ReadVector(&dec, max_freq, counts);
+    LoadVector(&dec, max_freq, counts);
     // Read random vectors.
     for (uint32_t max_nnz = 1; max_nnz <= num_vectors; ++max_nnz) {
       std::array<uint32_t, vector_size> vector_read;
       const uint32_t* const sub_vector = &vector[vector_size * (max_nnz - 1)];
       const uint32_t val_upper =
           *std::max_element(sub_vector, sub_vector + vector_size);
-      ReadVectorNnz(&dec, nnzs[max_nnz - 1], val_upper, vector_read);
+      LoadVectorNnz(&dec, nnzs[max_nnz - 1], val_upper, vector_read);
       EXPECT_TRUE(
           std::equal(sub_vector, sub_vector + vector_size, &vector_read[0]));
     }
@@ -1276,10 +1276,10 @@ TEST_F(TestANS, TestANSAdaptiveSymbolFromCDF) {
 
 // The following tests are parameterized by the type of mapping to test
 // (0: random mapping, 1: sorted mapping) and the effort.
-class TestANSMapping
+class TestANSStoreMapping
     : public testing::TestWithParam<std::tuple<uint32_t, uint32_t>> {};
 
-TEST_P(TestANSMapping, Simple) {
+TEST_P(TestANSStoreMapping, Simple) {
   ANSInit();
   UniformIntDistribution random(kBaseSeed);
   const uint16_t range = random.Get<uint16_t>(1, 100);
@@ -1323,9 +1323,58 @@ TEST_P(TestANSMapping, Simple) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(TestANSMappingInstantiation, TestANSMapping,
+INSTANTIATE_TEST_SUITE_P(TestANSStoreMappingInstantiation, TestANSStoreMapping,
                          testing::Combine(testing::Range(0u, 2u),
                                           testing::Values(0, kMaxEffort)));
+
+// Test for StoreVector and StoreVectorNnz.
+TEST(TestANSStoreVector, Simple) {
+  ANSInit();
+  UniformIntDistribution random(kBaseSeed);
+  constexpr uint16_t kRange = 100;
+  std::vector<OptimizeArrayStorageStat> stats(kRange);
+  std::vector<uint16_t> data_in(kRange);
+  const std::vector<uint32_t> max_values = {
+      0, 4, 10, 100, std::numeric_limits<uint16_t>::max()};
+  for (uint32_t max_value : max_values) {
+    for (uint32_t n = 1; n < kRange; ++n) {
+      uint32_t nnz = 0, size_nnz = 0;
+      for (uint32_t j = 0; j < n; ++j) {
+        data_in[j] = random.Get<uint16_t>(0, max_value);
+        if (data_in[j] != 0) {
+          ++nnz;
+          size_nnz = j + 1;
+        }
+      }
+      // Store the vector to an encoder.
+      ANSEnc enc;
+      StoreVector(data_in.data(), n, max_value, stats.data(), &enc);
+      enc.PutRange(31, 0, 263, "verif_bit1");
+      StoreVectorNnz(data_in.data(), size_nnz, nnz, max_value, stats.data(),
+                     &enc);
+      enc.PutRange(42, 0, 269, "verif_bit2");
+      EXPECT_WP2_OK(enc.AssembleToBitstream());
+      // Read back the mapping.
+      Vector_u8 bits;
+      EXPECT_WP2_OK(enc.WriteBitstreamTo(bits));
+      ExternalDataSource data_source(bits.data(), bits.size());
+      ANSDec dec(&data_source);
+      Vector_u16 data_out;
+      EXPECT_TRUE(data_out.resize(n));
+      LoadVector(&dec, max_value, data_out);
+      for (uint32_t i = 0; i < n; ++i) {
+        EXPECT_EQ(data_out[i], data_in[i]);
+      }
+      EXPECT_EQ(dec.ReadRange(0, 263, "verif_bit1"), 31);
+      EXPECT_TRUE(data_out.resize(size_nnz));
+      LoadVectorNnz(&dec, nnz, max_value, data_out);
+      for (uint32_t i = 0; i < n; ++i) {
+        EXPECT_EQ(data_out[i], data_in[i]);
+      }
+      EXPECT_EQ(dec.ReadRange(0, 269, "verif_bit2"), 42);
+    }
+  }
+}
 
 //------------------------------------------------------------------------------
 

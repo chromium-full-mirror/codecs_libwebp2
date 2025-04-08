@@ -76,10 +76,10 @@ static WP2Status ReadHistogram(uint32_t nnz, uint32_t symbol_range,
     max_freq_bits = dec->ReadRange(1, max_count_bits, "max_freq_bits");
   }
   if (is_sparse) {
-    ReadVector(dec, (1 << max_freq_bits) - 1, counts);
+    LoadVector(dec, (1 << max_freq_bits) - 1, counts);
     for (auto& c : counts) c += 1;
   } else {
-    ReadVectorNnz(dec, nnz, (1 << max_freq_bits) - 1, counts);
+    LoadVectorNnz(dec, nnz, (1 << max_freq_bits) - 1, counts);
   }
 
   // Store everything in the info.

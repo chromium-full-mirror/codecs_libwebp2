@@ -727,7 +727,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
                 !use_opposite_sign);
     } else {
       dec_->AddDebugPrefix("transform_index_signs");
-      WP2::ReadVector(dec_, 1, is_positive[c]);
+      WP2::LoadVector(dec_, 1, is_positive[c]);
       dec_->PopDebugPrefix();
       if (use_opposite_sign) {
         for (auto& is_pos : is_positive[c]) is_pos = !is_pos;
@@ -797,7 +797,7 @@ WP2Status Decoder::ReadPalette(Transform* const transform) {
         WP2::Vector_u16 diffs;
         WP2_CHECK_ALLOC_OK(diffs.resize(num_colors_ - 1));
         dec_->AddDebugPrefix("transform_index_vals");
-        WP2::ReadVector(dec_, channel_max, diffs);
+        WP2::LoadVector(dec_, channel_max, diffs);
         dec_->PopDebugPrefix();
         for (uint32_t i = 1; i < num_colors_; ++i) {
           if (gparams_->has_alpha_) {

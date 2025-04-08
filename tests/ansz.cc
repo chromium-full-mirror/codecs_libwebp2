@@ -159,7 +159,7 @@ static bool Decompress0(ANSDec* const dec, std::string* const out) {
   {
     Vector_u32 counts;
     if (!counts.resize(256)) return false;
-    ReadVector(dec, kMaxFreq, counts);
+    LoadVector(dec, kMaxFreq, counts);
     if (ANSCountsToSpreadTable(counts.data(), 256, ANS_TAB_SIZE, codes) !=
         WP2_STATUS_OK) {
       return false;

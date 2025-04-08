@@ -100,26 +100,39 @@ float StoreVector(const T* const vals, uint32_t size, uint32_t val_upper,
 }
 
 // Same as StoreVector except that we know the number 'nnz' of
-// non-zero values as well as the fact that the last element is non-zero.
+// non-zero values as well as the fact that the last element (if size>0) is
+// non-zero.
 template <typename T>
 float StoreVectorNnz(const T* const vals, uint32_t size, uint32_t nnz,
                      uint32_t val_upper, OptimizeArrayStorageStat* stats,
                      ANSEncBase* enc) {
   // Check the number of non-zero elements is correct.
   assert(std::count(vals, vals + size, 0) + nnz == size);
+  assert(size == 0 || vals[size - 1] != 0);
   return StoreVectorImpl<T, true>(vals, size, nnz, val_upper, stats, enc);
 }
 
 // Implementation of StoreVector and StoreVectorNnz.
-// If nnz is std::numeric_limits<uint32_t>::max(), the number of non-zero
-// elements is not used.
+// If USE_NNZ is false the number of non-zero elements is not used.
 template <typename T, bool USE_NNZ>
 float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
                       uint32_t val_upper, OptimizeArrayStorageStat* stats,
                       ANSEncBase* enc) {
-  if (USE_NNZ) assert(size > 0 && vals[size - 1] != 0);
   if (size == 0 || val_upper == 0 || (USE_NNZ && nnz == 0)) return 0.f;
   WP2MathInit();  // Initialization for WP2Log2.
+  const uint8_t n_bits_max = FindLastSet(val_upper);
+  auto add_value = [enc, val_upper, n_bits_max](T val, uint32_t min) {
+    if (val_upper <= kANSMaxRange) {
+      enc->PutRange(val, min, val_upper, "value");
+    } else {
+      enc->PutUValue(val, n_bits_max, "value");
+    }
+  };
+  if (USE_NNZ && nnz == 1) {
+    // The last value is the non-zero one.
+    add_value(vals[size - 1], 1);
+    return 0.f;
+  }
   if (size <= 2) {
     // For 2 values, storing as ranges is usually more efficient because of the
     // overhead that describes the data.
@@ -127,27 +140,46 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
       if (USE_NNZ) {
         uint32_t nnz_left = nnz;
         for (uint32_t i = 0; i < size && nnz_left > 0; ++i) {
-          enc->PutRange(vals[i], i + nnz_left == size ? 1 : 0, val_upper,
-                        "value");
+          add_value(vals[i], i + nnz_left == size ? 1 : 0);
           if (vals[i] != 0) --nnz_left;
         }
       } else {
         for (uint32_t i = 0; i < size; ++i) {
-          enc->PutRange(vals[i], 0, val_upper, "value");
+          add_value(vals[i], 0);
         }
       }
     }
     return size * WP2Log2(val_upper + 1);
   }
 
-  // Size of the array where values can be 0.
-  size_t size_maybe_zero;
+  // When USE_NNZ, there are two optimizations that can be done.
+  // - all the last values that are > 0 can be encoded -1. index_subtract_one is
+  // the index when such values start.
+  // - if the last value is preceded by a 0, the previous 0s do not need to be
+  // encoded and can be skipped starting at index index_skip_zeros.
+  uint32_t index_subtract_one, index_skip_zeros;
   if (USE_NNZ) {
-    for (size_maybe_zero = size; size_maybe_zero > 0; --size_maybe_zero) {
-      if (vals[size_maybe_zero - 1] == 0) break;
+    for (index_subtract_one = size - 1; index_subtract_one > 0;
+         --index_subtract_one) {
+      if (vals[index_subtract_one - 1] == 0) break;
+    }
+    if (index_subtract_one + 1 == size) {
+      // The only way for index_subtract_one to be 0 here is to have
+      // a single value, because otherwise either
+      // - the last value is not preceded by a 0, so index_subtract_one+1!=size,
+      // or
+      // - the last value is preceded by a 0, so index_subtract_one>0.
+      // And the single value case is handled above as an early exit.
+      assert(index_subtract_one > 0);
+      for (index_skip_zeros = index_subtract_one - 1; index_skip_zeros > 0;
+           --index_skip_zeros) {
+        if (vals[index_skip_zeros - 1] != 0) break;
+      }
+    } else {
+      index_skip_zeros = size;
     }
   } else {
-    size_maybe_zero = size;
+    index_subtract_one = index_skip_zeros = size;
   }
   // Stats contains a list of pairs: number of bits, numbers of consecutive
   // values with that bit depth.
@@ -155,7 +187,7 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
   {
     T val_max = 0, val_min = 0;
     size_t i;
-    for (i = 0; i < size_maybe_zero; ++i) {
+    for (i = 0; i < index_subtract_one && i < index_skip_zeros; ++i) {
       const T val = vals[i];
       assert(val <= val_upper);
       // Check if the highest set bit is the same (faster than calling
@@ -169,6 +201,12 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
         val_min = (val_max >> 1);
         ++stats_size;
       }
+    }
+    if (USE_NNZ && i == index_skip_zeros) {
+      // In the case where the last non-zero value is by itself, merge the
+      // previous 0s in the previous stat.
+      stats[stats_size - 1].count += (size - 1 - index_skip_zeros);
+      i = size - 1;
     }
     // If only non-zero elements remain, store them with -1.
     for (; i < size; ++i) {
@@ -188,7 +226,6 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
     }
   }
   // Merge the pairs to give an optimal cost.
-  const uint8_t n_bits_max = FindLastSet(val_upper);
   const float cost0 = WP2Log2Fast(n_bits_max);
   const float cost1 = WP2Log2Fast(n_bits_max + 1);
   OptimizeArrayStorage(stats, &stats_size, cost0 + WP2Log2(size + 1));
@@ -235,8 +272,13 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
   const T* v = vals;
   uint8_t n_bits_prev = 0;
   size_left = size;
-  uint32_t nnz_left = nnz;
-  for (size_t i = 0; i < stats_size && (!USE_NNZ || nnz_left > 0); ++i) {
+  for (size_t i = 0; i < stats_size; ++i) {
+    if (USE_NNZ && v >= vals + index_skip_zeros) {
+      // Jump to encoding the last non-zero value.
+      i = stats_size - 1;
+      v = vals + index_subtract_one;
+      size_left = 1;
+    }
     const OptimizeArrayStorageStat& s = stats[i];
     // The number of bits is in [0:n_bits_max) for the first set.
     if (v == vals) {
@@ -259,12 +301,9 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
     const bool use_r_value =
         (s.n_bits == n_bits_max) && (n_bits_max <= kANSMaxRangeBits);
 
+    size_left -= s.count;
     if (s.n_bits == 0) {
       v += s.count;
-      size_left -= s.count;
-      // If we have more nnz_left than elements after this segment, the last 0s
-      // were actually elements reduced by 1.
-      if (USE_NNZ && nnz_left >= size_left) nnz_left = size_left;
     } else if (s.count == 1) {
       // If we only have one number, we don't need to store the high order
       // bit as it's always 1, otherwise it would fit in (n_bits_ - 1).
@@ -272,7 +311,7 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
       // to store anything.
       if (s.n_bits > 1) {
         const uint32_t high_order_bit = 1u << (s.n_bits - 1);
-        const bool subtract_one = (USE_NNZ && size_left == nnz_left);
+        const bool subtract_one = (USE_NNZ && v >= vals + index_subtract_one);
         const uint32_t value_to_code =
             (subtract_one ? *v - 1 : *v) ^ high_order_bit;
         if (use_r_value) {
@@ -284,78 +323,109 @@ float StoreVectorImpl(const T* const vals, uint32_t size, uint32_t nnz,
           enc->PutUValue(value_to_code, s.n_bits - 1, "value");
         }
       }
-      if (USE_NNZ && *v != 0) --nnz_left;
-      --size_left;
       ++v;
     } else {
-      // Store the values.
-      for (size_t j = 0; j < s.count && (!USE_NNZ || nnz_left > 0);
-           ++j, --size_left, ++v) {
-        // Use the fact that the last element is non-zero.
-        if (USE_NNZ && nnz_left == 1 && size_left > 1) {
-          assert(*v == 0);
-          continue;
+      // Figure out the end of the segment.
+      const T* const v_end_count = v + s.count;
+      const T* v_end = v_end_count;
+      if (USE_NNZ) {
+        if (vals + index_subtract_one < v_end) {
+          v_end = vals + index_subtract_one;
         }
-        const bool subtract_one = (USE_NNZ && size_left == nnz_left);
+        if (vals + index_skip_zeros < v_end) {
+          v_end = vals + index_skip_zeros;
+        }
+      }
+      for (; v < v_end; ++v) {
         if (use_r_value) {
-          if (subtract_one) {
+          enc->PutRValue(*v, val_upper + 1, "value");
+        } else {
+          enc->PutUValue(*v, s.n_bits, "value");
+        }
+      }
+      if (USE_NNZ) {
+        if (v == vals + index_skip_zeros) {
+          // Skip the last zeros.
+          v = vals + index_subtract_one;
+          assert(v <= v_end_count);
+        }
+        // The last elements can be encoded minus 1.
+        for (; v < v_end_count; ++v) {
+          if (use_r_value) {
             enc->PutRValue(*v - 1, val_upper, "value");
           } else {
-            enc->PutRValue(*v, val_upper + 1, "value");
+            enc->PutUValue(*v - 1, s.n_bits, "value");
           }
-        } else {
-          enc->PutUValue(subtract_one ? *v - 1 : *v, s.n_bits, "value");
         }
-        if (USE_NNZ && *v != 0) --nnz_left;
       }
     }
   }
   assert(size_left == 0);
-  if (USE_NNZ) assert(nnz_left == 0);
   return cost;
 }
+
+// Forward declaration.
+template <typename T, bool USE_NNZ>
+void LoadVectorImpl(ANSDec* dec, size_t nnz, uint32_t val_upper, T& v);
 
 // Reciprocal of the function above to read a stored vector.
 // 'val_upper' is the *inclusive* upper bound expected for the vector's values.
 // The vector must be pre-allocated (with length 'size').
 template <typename T>
-void ReadVector(ANSDec* dec, uint32_t val_upper, T& v) {
-  ReadVectorImpl(dec, /*nnz=*/std::numeric_limits<uint32_t>::max(), val_upper,
-                 v);
+void LoadVector(ANSDec* dec, uint32_t val_upper, T& v) {
+  LoadVectorImpl<T, false>(dec, /*nnz=*/std::numeric_limits<uint32_t>::max(),
+                           val_upper, v);
 }
 
 // Same as above except we are also given the maximum number of non-zero values
 // and we know the last element is non-zero.
 template <typename T>
-void ReadVectorNnz(ANSDec* dec, uint32_t nnz, uint32_t val_upper, T& v) {
-  ReadVectorImpl(dec, nnz, val_upper, v);
+void LoadVectorNnz(ANSDec* dec, uint32_t nnz, uint32_t val_upper, T& v) {
+  LoadVectorImpl<T, true>(dec, nnz, val_upper, v);
 }
 
-template <typename T>
-void ReadVectorImpl(ANSDec* dec, size_t nnz, uint32_t val_upper, T& v) {
+template <typename T, bool USE_NNZ>
+void LoadVectorImpl(ANSDec* dec, size_t nnz, uint32_t val_upper, T& v) {
   uint32_t size = v.size();
   if (size == 0) return;
-  if (val_upper == 0 || nnz == 0) {
-    if (size > 0) std::fill(&v[0], &v[size], 0);
+  if (val_upper == 0 || (USE_NNZ && nnz == 0)) {
+    std::fill(&v[0], &v[size], 0);
+    return;
+  }
+  const uint8_t n_bits_max = FindLastSet(val_upper);
+  auto read_value = [dec, val_upper, n_bits_max](uint32_t min) -> uint32_t {
+    if (val_upper <= kANSMaxRange) {
+      return static_cast<uint32_t>(dec->ReadRange(min, val_upper, "value"));
+    } else {
+      return dec->ReadUValue(n_bits_max, "value");
+    }
+  };
+
+  if (USE_NNZ && nnz == 1) {
+    // The last value is the non-zero one.
+    std::fill(&v[0], &v[size - 1], 0);
+    v[size - 1] = read_value(1);
     return;
   }
   if (size <= 2) {
     uint32_t i = 0;
-    for (; i < size && nnz > 0; ++i) {
-      v[i] = dec->ReadRange(i + nnz == size ? 1 : 0, val_upper, "value");
-      if (v[i] > 0) --nnz;
+    if (USE_NNZ) {
+      for (; i < size; ++i) {
+        v[i] = read_value(i + nnz == size ? 1 : 0);
+        if (v[i] > 0) --nnz;
+      }
+    } else {
+      for (; i < size; ++i) v[i] = read_value(0);
     }
     std::fill(&v[i], &v[size], 0);
     return;
   }
 
-  const uint8_t n_bits_max = FindLastSet(val_upper);
   size_t k = 0;
   int n_bits_prev = -1;
   const bool have_same_depth = dec->ReadBool("has_same_depth");
-  const bool use_nnz = (nnz != std::numeric_limits<uint32_t>::max());
 
-  while (size > 0 && nnz > 0) {
+  while (size > 0) {
     // Figure out the number of bits.
     uint32_t n_bits;
     if (n_bits_prev < 0) {
@@ -370,6 +440,10 @@ void ReadVectorImpl(ANSDec* dec, size_t nnz, uint32_t val_upper, T& v) {
     n_bits_prev = (int)n_bits;
 
     // Figure out the number of elements with that bit depth.
+    if (USE_NNZ && nnz == 1) {
+      // We know we only have zeros until the last value.
+      for (; size > 1; ++k, --size) v[k] = 0;
+    }
     const uint32_t n =
         (have_same_depth) ? size : dec->ReadRange(1, size, "count");
     // Whether to read the values as RValue or UValue.
@@ -383,7 +457,7 @@ void ReadVectorImpl(ANSDec* dec, size_t nnz, uint32_t val_upper, T& v) {
       size -= n;
       // If we have more nnz_left than elements after this segment, the last 0s
       // were actually elements reduced by 1.
-      if (use_nnz && nnz >= size) {
+      if (USE_NNZ && nnz >= size) {
         for (uint32_t i = k - (nnz - size); i < k; ++i) ++v[i];
         nnz = size;
       }
@@ -391,7 +465,7 @@ void ReadVectorImpl(ANSDec* dec, size_t nnz, uint32_t val_upper, T& v) {
       // If we only have one number, we didn't store the high order
       // bit as it's always 1, otherwise it would fit in (n_bits_ - 1).
       uint32_t value;
-      const bool is_nz_for_sure = (size == nnz);
+      const bool add_one = (USE_NNZ && size == nnz);
       if (n_bits == 1) {
         // And if that number is only on one bit to begin with, we didn't
         // store anything.
@@ -400,37 +474,35 @@ void ReadVectorImpl(ANSDec* dec, size_t nnz, uint32_t val_upper, T& v) {
         value = 1u << (n_bits - 1);
         if (use_r_value) {
           value |= dec->ReadRValue(
-              is_nz_for_sure ? val_upper - value : val_upper + 1 - value,
-              "value");
+              add_one ? val_upper - value : val_upper + 1 - value, "value");
         } else {
           value |= dec->ReadUValue(n_bits - 1, "value");
         }
       }
-      v[k] = is_nz_for_sure ? value + 1 : value;
-      if (v[k] != 0) --nnz;
+      v[k] = add_one ? value + 1 : value;
+      if (USE_NNZ && v[k] != 0) --nnz;
       ++k;
       assert(size >= 1);
       size -= 1;
     } else {
-      for (size_t i = 0; i < n && nnz > 0;
-           ++i, ++k, assert(size >= 1), --size) {
+      for (size_t i = 0; i < n; ++i, ++k, assert(size >= 1), --size) {
         // Use the fact that the last element is non-zero.
-        if (nnz == 1 && size > 1) {
+        if (USE_NNZ && nnz == 1 && size > 1) {
           v[k] = 0;
           continue;
         }
-        const bool is_nz_for_sure = (size == nnz);
+        const bool add_one = (USE_NNZ && size == nnz);
         if (use_r_value) {
-          v[k] = dec->ReadRValue(is_nz_for_sure ? val_upper : val_upper + 1,
-                                 "value");
+          v[k] = dec->ReadRValue(add_one ? val_upper : val_upper + 1, "value");
         } else {
           v[k] = dec->ReadUValue(n_bits, "value");
         }
-        if (is_nz_for_sure) ++v[k];
-        if (v[k] > 0) --nnz;
+        if (add_one) ++v[k];
+        if (USE_NNZ && v[k] > 0) --nnz;
       }
     }
   }
+  if (USE_NNZ) assert(nnz == 0);
   if (k < v.size()) std::fill(&v[k], v.end(), 0);
 }
 
