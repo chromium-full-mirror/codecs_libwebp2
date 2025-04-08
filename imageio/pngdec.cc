@@ -331,8 +331,9 @@ class ImageReaderPNG : public ImageReader::Impl {
     }
 #endif
 
-    if ((head_info = png_create_info_struct(png)) == NULL ||
-        (end_info = png_create_info_struct(png)) == NULL) {
+    head_info = png_create_info_struct(png);
+    end_info = png_create_info_struct(png);
+    if (head_info == NULL || end_info == NULL) {
       png_destroy_read_struct((png_structpp)&png, (png_infopp)&head_info,
                               (png_infopp)&end_info);
       return WP2_STATUS_OUT_OF_MEMORY;

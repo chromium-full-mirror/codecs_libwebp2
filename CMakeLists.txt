@@ -14,13 +14,13 @@
 # limitations under the License.
 #
 
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.16)
 project(
   wp2
   LANGUAGES C CXX
   VERSION 0.1.0)
 set(CMAKE_C_STANDARD 99)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 # Force some policies to adopt the new behavior.
 if(POLICY CMP0072)
@@ -31,6 +31,10 @@ if(POLICY CMP0048)
   # Have project manage the version.
   cmake_policy(SET CMP0048 NEW)
 endif(POLICY CMP0048)
+if(POLICY CMP0167)
+  # Use the new FindBoost.
+  cmake_policy(SET CMP0167 NEW)
+endif(POLICY CMP0167)
 
 # Options for coder / decoder executables.
 if(NOT EMSCRIPTEN)
@@ -644,9 +648,9 @@ endif()
 if(WP2_BUILD_EXAMPLES)
   # utils
   # stacktrace_addr2line is more accurate but slower and loses the line numbers.
-  # On Ubuntu, you need to install the libboost-stacktrace-dev package.
-  # If not installed, on platforms where glibc is present, a mangled version
-  # will be used.
+  # On Ubuntu, you need to install the libbacktrace-dev libboost-stacktrace-dev
+  # packages. If not installed, on platforms where glibc is present, a mangled
+  # version will be used.
   find_package(Boost QUIET COMPONENTS stacktrace_backtrace)
   add_library(
     example_utils STATIC
@@ -667,7 +671,7 @@ if(WP2_BUILD_EXAMPLES)
     target_include_directories(example_utils PRIVATE ${Boost_INCLUDE_DIRS})
     target_compile_definitions(example_utils PUBLIC
                                WP2_HAVE_BOOST BOOST_STACKTRACE_USE_BACKTRACE)
-    target_link_libraries(example_utils ${Boost_LIBRARIES} dl)
+    target_link_libraries(example_utils ${Boost_LIBRARIES} backtrace dl)
   else()
     find_package(Backtrace)
     if (Backtrace_FOUND)
