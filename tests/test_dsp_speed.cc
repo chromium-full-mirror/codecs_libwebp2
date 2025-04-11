@@ -14,15 +14,34 @@
 
 // Test speed of some DSP functions
 
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <chrono>  // NOLINT [build/c++11]
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <iostream>
+#include <ratio>  // NOLINT [build/c++11]
+#include <string>
+#include <vector>
 
 #include "include/helpers.h"
 #include "src/dsp/dsp.h"
+#include "src/dsp/lossless/decl_dsp.h"
+#include "src/dsp/lossless/dspl.h"
 #include "src/dsp/lossless/encl_dsp.h"
+#include "src/dsp/math.h"
 #include "src/utils/csp.h"
 #include "src/utils/plane.h"
+#include "src/utils/random.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
+#include "src/wp2/format_constants.h"
+
+// Number of test loops to perform.
+constexpr uint32_t kNumTestsDefault = 100;
 
 namespace WP2 {
 namespace {
@@ -35,6 +54,7 @@ class SpeedTestCpuInfo : public testing::TestWithParam<WP2CPUInfo> {
     WP2EncDspInit();
     WP2SSIMInit();
     WP2PSNRInit();
+    WP2L::DecLDspInit();
     WP2L::EncLDspInit();
   }
 };
@@ -310,6 +330,298 @@ TEST_P(SpeedTestCpuInfo, TestCflPrediction) {
     }
     for (uint32_t l = len; l < kMaxSize; ++l) ASSERT_EQ(out[l], 0);
   }
+}
+
+TEST_P(SpeedTestCpuInfo, Log) {
+  // The bounds are chosen as tight as possible.
+  uint32_t i = 1;
+  // Exact Look-up table.
+  for (; i < kLogLookupIdxMax; ++i) {
+    EXPECT_NEAR(std::log2(i), (double)WP2Log2(i), 3e-7) << i;
+  }
+  // Approximation.
+  // TODO(vrabaud): Enable once backported the integer log from WebP.
+#if 0
+  for (; i < APPROX_LOG_MAX; ++i) {
+    EXPECT_NEAR(std::log2(i), (double)WP2Log2(i) , 2e-2) << i;
+  }
+#endif
+  // Approximation with correction.
+  constexpr uint32_t kApproxLogWithCorrectionMax = 65536;
+  for (; i < kApproxLogWithCorrectionMax; ++i) {
+    EXPECT_NEAR(std::log2(i), (double)WP2Log2(i), 5e-5) << i;
+  }
+  // Exact C++ computation.
+  for (; i < kApproxLogWithCorrectionMax + 100; ++i) {
+    EXPECT_NEAR(std::log2(i), (double)WP2Log2(i), 1e-6) << i;
+  }
+}
+
+//------------------------------------------------------------------------------
+// Lossless DSP tests
+
+void make_color(uint32_t i, int16_t* out) {
+  out[0] = i + 0;
+  out[1] = i + 1;
+  out[2] = i + 2;
+  out[3] = i + 3;
+}
+
+TEST_P(SpeedTestCpuInfo, TestTransformColor) {
+  UniformIntDistribution rnd(301);
+  const int kMaxSize = 2703;
+  std::vector<int16_t> data(4 * kMaxSize);
+  for (int i = 0; i < kMaxSize; ++i) {
+    make_color(i, &data[4 * i]);
+  }
+  std::chrono::duration<double, std::milli> elapsed(0);
+  for (uint32_t k = 0; k < kNumTestsDefault; ++k) {
+    WP2L::Multipliers m;
+    m.green_to_red = rnd.Get(0, 255);
+    m.green_to_blue = rnd.Get(0, 255);
+    m.red_to_blue = rnd.Get(0, 255);
+    const auto start{std::chrono::steady_clock::now()};
+    for (int size = 1; size < kMaxSize; ++size) {
+      WP2L::TransformColor(m, size, &data[0]);
+      WP2L::TransformColorInverse(m, &data[0], size, &data[0],
+                                  /*predicted=*/nullptr);
+    }
+    const auto end{std::chrono::steady_clock::now()};
+    elapsed += end - start;
+  }
+  // Should be idempotent
+  for (int i = 0; i < kMaxSize; ++i) {
+    std::array<int16_t, 4> color_tmp;
+    make_color(i, color_tmp.data());
+    EXPECT_TRUE(
+        std::equal(color_tmp.data(), color_tmp.data() + 4, &data[4 * i]))
+        << " error at position " << i;
+  }
+  std::cout << "TransformColor: " << elapsed.count() << " ms.\n";
+}
+
+TEST_P(SpeedTestCpuInfo, TestAddSubtractGreenFromBlueAndRed) {
+  constexpr int kMaxSize = 2703;
+  constexpr int kNumTests = 5 * kNumTestsDefault;
+  std::vector<int16_t> data(4 * kMaxSize);
+  for (int i = 0; i < kMaxSize; ++i) {
+    make_color(i, &data[4 * i]);
+  }
+  std::chrono::duration<double, std::milli> elapsed(0);
+  for (int k = 0; k < kNumTests; ++k) {
+    const auto start{std::chrono::steady_clock::now()};
+    for (size_t size = 1; size < kMaxSize; ++size) {
+      WP2L::SubtractGreenFromBlueAndRed(&data[0], size);
+      WP2L::AddGreenToBlueAndRed(&data[0], size, &data[0]);
+    }
+    const auto end{std::chrono::steady_clock::now()};
+    elapsed += end - start;
+  }
+  // Should be idempotent
+  for (int i = 0; i < kMaxSize; ++i) {
+    std::array<int16_t, 4> color_tmp;
+    make_color(i, color_tmp.data());
+    EXPECT_TRUE(
+        std::equal(color_tmp.data(), color_tmp.data() + 4, &data[4 * i]))
+        << " error at position " << i;
+  }
+  std::cout << "[Add/Subtract]GreenFromBlueAndRed: " << elapsed.count()
+            << " ms.\n";
+}
+
+//------------------------------------------------------------------------------
+
+TEST_P(SpeedTestCpuInfo, TestCollectColorTransforms) {
+  UniformIntDistribution rnd(15246);
+  const int kMinDim = 256;  // minimum dimension
+  const int extra = 16;
+  const int kMaxW = kMinDim + extra, kMaxH = kMinDim;
+  constexpr int kNumTests = kNumTestsDefault * 30;
+  std::vector<int16_t> data(4 * kMaxW * kMaxH);
+  for (size_t i = 0; i < data.size(); ++i) {
+    data[i] = rnd.Get(0, (1 << 10) - 1);
+  }
+  uint32_t histo[256] = {0};
+  std::chrono::duration<double, std::milli> elapsed(0);
+  for (int k = 0; k < kNumTests; ++k) {
+    const int green_to_red = rnd.Get(0, 255);
+    const int green_to_blue = rnd.Get(0, 255);
+    const int red_to_blue = rnd.Get(0, 255);
+    const auto start{std::chrono::steady_clock::now()};
+    for (size_t h = 1; h * 2 <= kMaxH; h *= 2) {
+      for (size_t w = 1; w * 2 <= kMaxW; w *= 2) {
+        const int test_w = w + (k % extra);  // include some extra pixels
+        WP2L::CollectColorRedTransforms(
+            &data[0], kMaxW, test_w, h, green_to_red,
+            /*abs_value_max=*/(1 << 16) - 1, /*histos_size=*/256, histo);
+        WP2L::CollectColorBlueTransforms(
+            &data[0], kMaxW, test_w, h, green_to_blue, red_to_blue,
+            /*abs_value_max=*/(1 << 16) - 1, /*histos_size=*/256, histo);
+      }
+    }
+    const auto end{std::chrono::steady_clock::now()};
+    elapsed += end - start;
+    if (k == 0) {
+      EXPECT_EQ(testutil::SillyCRC(histo, 256), 862106896u);
+    }
+  }
+  std::cout << "CollectColorTransforms: " << elapsed.count() << " ms.\n";
+}
+
+TEST_P(SpeedTestCpuInfo, TestPredictors) {
+  UniformIntDistribution rnd(15246);
+  const int width = 256, height = 16;  // minimum dimension
+  const int kNumTests = std::max(kNumTestsDefault, 32u);
+
+  std::vector<int16_t> src(4 * width * height), residual(4 * width * height),
+      roundtrip(4 * width * height);
+  for (bool has_alpha : {false, true}) {
+    // Generate random data.
+    constexpr int32_t kMinVal = 0;
+    constexpr int32_t kMaxVal = (1 << 8) - 1;
+    int32_t min_values[4] = {has_alpha ? 0 : static_cast<int32_t>(kAlphaMax),
+                             kMinVal, kMinVal, kMinVal};
+    int32_t max_values[4] = {kAlphaMax, kMaxVal, kMaxVal, kMaxVal};
+    for (size_t i = 0; i < src.size(); i += 4) {
+      src[i + 0] =
+          has_alpha ? rnd.Get(0, static_cast<int32_t>(kAlphaMax)) : kAlphaMax;
+      src[i + 1] = rnd.Get(kMinVal, kMaxVal);
+      src[i + 2] = rnd.Get(kMinVal, kMaxVal);
+      src[i + 3] = rnd.Get(kMinVal, kMaxVal);
+    }
+    // Copy the first row and first column to roundtrip.
+    std::copy(src.data(), src.data() + 4 * width, roundtrip.data());
+    for (int y = 1; y < height; ++y) {
+      std::copy(&src[y * 4 * width], &src[y * 4 * width] + 4,
+                &roundtrip[y * 4 * width]);
+    }
+
+    // Iterate over the three kinds of predictors.
+    int pred_global = 0;
+    for (int pred_type : {0, 1, 2}) {
+      uint32_t num_predictors = 0;
+      std::string log_name;
+      switch (pred_type) {
+        case 0:
+          num_predictors = std::size(WP2L::PredictorsNonClampedAdd);
+          log_name = "PredictorsNonClampedAdd";
+          break;
+        case 1:
+          num_predictors = std::size(WP2L::PredictorsClampedAdd);
+          log_name = "PredictorsClampedAdd";
+          break;
+        case 2:
+          num_predictors = std::size(WP2L::PredictorsAngleAdd);
+          log_name = "PredictorsAngleAdd";
+          break;
+        default:
+          assert(false);
+      }
+      for (uint32_t pred = 0; pred < num_predictors; ++pred, ++pred_global) {
+        std::chrono::duration<double, std::milli> elapsed(0);
+        for (int k = 0; k < kNumTests; ++k) {
+          const int test_width = (k % width) | 1;
+          for (int y = 1; y < height; ++y) {
+            const int16_t* src_row_upper = &src[(y - 1) * 4 * width + 4];
+            const int16_t* src_row = &src[y * 4 * width + 4];
+            int16_t* residual_row = &residual[y * 4 * width + 4];
+            int16_t* round_trip_row_upper = &roundtrip[(y - 1) * 4 * width + 4];
+            int16_t* round_trip_row = &roundtrip[y * 4 * width + 4];
+            // Copy the last source pixel over to deal with predictors using top
+            // left.
+            std::copy(src_row_upper + 4 * (test_width - 1),
+                      src_row_upper + 4 * (test_width - 1) + 4,
+                      round_trip_row_upper + 4 * (test_width - 1));
+            const auto start{std::chrono::steady_clock::now()};
+            // note that these functions expects top[-1] and left
+            // to be readable, hence the +1 offset.
+            switch (pred_type) {
+              case 0:
+                WP2L::PredictorsNonClampedSub[pred](
+                    src_row, has_alpha, src_row_upper, test_width - 1,
+                    residual_row);
+                WP2L::PredictorsNonClampedAdd[pred](
+                    residual_row, has_alpha, round_trip_row_upper,
+                    test_width - 1, round_trip_row,
+                    /*predicted=*/nullptr);
+                break;
+              case 1:
+                WP2L::PredictorsClampedSub[pred](
+                    src_row, has_alpha, src_row_upper, test_width - 1,
+                    min_values, max_values, residual_row);
+                WP2L::PredictorsClampedAdd[pred](
+                    residual_row, has_alpha, round_trip_row_upper,
+                    test_width - 1, min_values, max_values, round_trip_row,
+                    /*predicted=*/nullptr);
+                break;
+              case 2:
+                WP2L::PredictorsAngleSub[pred](0, src_row, has_alpha,
+                                               src_row_upper, test_width - 1,
+                                               residual_row);
+                WP2L::PredictorsAngleAdd[pred](0, residual_row, has_alpha,
+                                               round_trip_row_upper,
+                                               test_width - 1, round_trip_row,
+                                               /*predicted=*/nullptr);
+                break;
+              default:
+                assert(false);
+            }
+            const auto end{std::chrono::steady_clock::now()};
+            elapsed += end - start;
+            // Make sure there is a proper roundtrip.
+            EXPECT_TRUE(std::equal(src_row, src_row + 4 * (test_width - 1),
+                                   round_trip_row));
+          }
+          if (k == 32) {
+            // Check some CRC to have the same results with different CPU
+            // configurations.
+            constexpr std::array<uint32_t, WP2L::kNumPredictorsNonClamped +
+                                               WP2L::kNumPredictorsClamped +
+                                               WP2L::kNumPredictorsAngle>
+                kSignatures[2] = {
+                    {1416161417, 2499242186, 3742251866, 2613952219, 2166140163,
+                     3403556104, 1799690285, 1170760671, 4249830644, 1720724240,
+                     4120478655, 3422855468, 140670846, 2715801296, 1457428115},
+                    {3421461272, 731285504, 4038643838, 808291392, 3498488516,
+                     757034906, 3596014090, 2367981070, 2671350010, 2173971135,
+                     592690447, 3819492863, 3677141788, 3223334342,
+                     2125115676}};
+            EXPECT_EQ(testutil::SillyCRC(residual.data(), residual.size()),
+                      kSignatures[has_alpha][pred_global]);
+          }
+        }
+        std::cout << (has_alpha ? "with" : "without") << " alpha, " << log_name
+                  << "[ " << pred << "]: elapsed " << elapsed.count() << " ms.";
+      }
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
+
+TEST_P(SpeedTestCpuInfo, TestEntropy) {
+  const int kNumTests = kNumTestsDefault;
+  UniformIntDistribution rnd(654216);
+  std::vector<uint32_t> histo1(256), histo2(256);
+  std::vector<int64_t> entropies(kNumTests);
+
+  std::chrono::duration<double, std::milli> elapsed(0);
+  for (int k = 0; k < kNumTests; ++k) {
+    for (size_t i = 0; i < histo1.size(); ++i) {
+      histo1[i] = rnd.Get(0, (1 << 20));
+      histo2[i] = rnd.Get(0, (1 << 20));
+    }
+    const auto start{std::chrono::steady_clock::now()};
+    entropies[k] = WP2L::CombinedShannonEntropy(histo1.data(), histo2.data(),
+                                                histo1.size());
+    const auto end{std::chrono::steady_clock::now()};
+    elapsed += end - start;
+  }
+  const std::uint32_t crc =
+      testutil::SillyCRC(entropies.data(), entropies.size());
+
+  EXPECT_EQ(crc, 89722053u);
+  std::cout << "elapsed " << elapsed.count() << " ms.";
 }
 
 //------------------------------------------------------------------------------

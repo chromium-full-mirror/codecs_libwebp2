@@ -80,14 +80,19 @@ static const WP2CPUInfo GetCPUInfo = WP2GetCPUInfo;
 
 static bool GetCPUInfoNoSSE(WP2CPUFeature feature) {
   if (feature == kSSE4_1 || feature == kSSE4_2 || feature == kSSE ||
-      feature == kAVX) {
+      feature == kAVX || feature == kAVX2) {
     return false;
   }
   return GetCPUInfo(feature);
 }
 
 static bool GetCPUInfoNoAVX(WP2CPUFeature feature) {
-  if (feature == kAVX) return false;
+  if (feature == kAVX || feature == kAVX2) return false;
+  return GetCPUInfo(feature);
+}
+
+static bool GetCPUInfoNoAVX2(WP2CPUFeature feature) {
+  if (feature == kAVX2) return false;
   return GetCPUInfo(feature);
 }
 
@@ -102,20 +107,18 @@ static bool GetCPUInfoOnlyC(WP2CPUFeature feature) { return false; }
 
 // To be used with 'testing::ValuesIn(kWP2CPUInfos)'
 // Warning! No multi-thread safe! don't use in *sharded* tests!
-const WP2CPUInfo kWP2CpuInfos[] = {GetCPUInfoOnlyC, GetCPUInfoForceSlowSSSE3,
-                                   GetCPUInfoNoSSE, GetCPUInfoNoAVX,
-                                   GetCPUInfo};
+const WP2CPUInfo kWP2CpuInfos[] = {GetCPUInfoOnlyC,  GetCPUInfoForceSlowSSSE3,
+                                   GetCPUInfoNoSSE,  GetCPUInfoNoAVX,
+                                   GetCPUInfoNoAVX2, GetCPUInfo};
 
 // Same, but as struct rather than typedef
 static struct WP2CPUInfoStruct {
   const WP2CPUInfo cpu_info;
   const char* const name;
 } const kWP2CpuInfoStructs[] = {
-    {GetCPUInfoOnlyC, "OnlyC"},
-    {GetCPUInfoForceSlowSSSE3, "ForceSlowSSSE3"},
-    {GetCPUInfoNoSSE, "NoSSE"},
-    {GetCPUInfoNoAVX, "NoAVX"},
-    {GetCPUInfo, "Regular GetCPUInfo"},
+    {GetCPUInfoOnlyC, "OnlyC"},   {GetCPUInfoForceSlowSSSE3, "ForceSlowSSSE3"},
+    {GetCPUInfoNoSSE, "NoSSE"},   {GetCPUInfoNoAVX, "NoAVX"},
+    {GetCPUInfoNoAVX2, "NoAVX2"}, {GetCPUInfo, "Regular GetCPUInfo"},
 };
 
 //------------------------------------------------------------------------------
@@ -290,6 +293,14 @@ struct PrecalculatedRandom {
 static inline uint32_t SillyCRC(uint32_t crc, uint32_t v) {
   v += 1;
   return ((crc >> 3) + (17 + v)) ^ ((crc << 5) * (23 + 7 * v));
+}
+
+template <typename T>
+uint32_t SillyCRC(const T* data, uint32_t size) {
+  uint32_t crc = 0;
+  for (uint32_t i = 0; i < size; ++i)
+    crc = SillyCRC(crc, static_cast<uint32_t>(data[i]));
+  return crc;
 }
 
 }  // namespace testutil

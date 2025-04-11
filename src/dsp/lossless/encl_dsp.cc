@@ -204,15 +204,13 @@ void BufferAdd_C(const uint32_t* const a, const uint32_t* const b,
                                      const int16_t* upper,                   \
                                      uint32_t num_pixels, int16_t* out) {    \
     int16_t pred[4];                                                         \
-    if (I != 0) assert(in != nullptr && upper != nullptr);                   \
+    assert(in != nullptr);                                                   \
+    if (I != 0) assert(upper != nullptr);                                    \
     for (const int16_t* const out_end = out + 4 * num_pixels; out < out_end; \
-         out += 4) {                                                         \
+         in += 4, out += 4) {                                                \
       WP2L::PredictorsNonClamped_C[I](in - 4, upper, pred);                  \
       WP2L::SubPixels(in, has_alpha, pred, out);                             \
-      if (I != 0) {                                                          \
-        in += 4;                                                             \
-        upper += 4;                                                          \
-      }                                                                      \
+      if (I != 0) upper += 4;                                                \
     }                                                                        \
   }
 
