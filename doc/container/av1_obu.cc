@@ -24,6 +24,7 @@
 #include <string>
 
 #include "./bit_packing.h"
+#include "./container.h"
 
 namespace container {
 
@@ -204,12 +205,10 @@ void CodeTileInfo(uint32_t width, uint32_t height, ObuFeatures& f,
   // See "AV1 Bitstream & Decoding Process Specification - 5.9.15."
   const uint32_t mi_cols = 2 * ((width + 7) >> 3);
   const uint32_t mi_rows = 2 * ((height + 7) >> 3);
-  const uint32_t sb_cols = f.use_128x128_superblock
-                               ? ((mi_cols + 31) >> 5)
-                               : ((mi_cols + 15) >> 4);
-  const uint32_t sb_rows = f.use_128x128_superblock
-                               ? ((mi_rows + 31) >> 5)
-                               : ((mi_rows + 15) >> 4);
+  const uint32_t sb_cols =
+      f.use_128x128_superblock ? ((mi_cols + 31) >> 5) : ((mi_cols + 15) >> 4);
+  const uint32_t sb_rows =
+      f.use_128x128_superblock ? ((mi_rows + 31) >> 5) : ((mi_rows + 15) >> 4);
   const uint32_t sb_shift = f.use_128x128_superblock ? 5 : 4;
   const uint32_t sb_size = sb_shift + 2;
   const uint32_t max_tile_width_sb = /*MAX_TILE_WIDTH=*/4096 >> sb_size;
@@ -454,9 +453,9 @@ void CodeFrameHeaderObu(uint32_t width, uint32_t height, ObuFeatures& f,
   CodeDeltaLfParams(f, obu);
 
   // Because !segmentation_enabled:
-  bool coded_lossless = (f.base_q_idx == 0 && f.delta_qydc == 0 &&
-                         f.delta_quac == 0 && f.delta_qudc == 0 &&
-                         f.delta_qvac == 0 && f.delta_qvdc == 0);
+  bool coded_lossless =
+      (f.base_q_idx == 0 && f.delta_qydc == 0 && f.delta_quac == 0 &&
+       f.delta_qudc == 0 && f.delta_qvac == 0 && f.delta_qvdc == 0);
   if (!coded_lossless && !f.allow_intrabc) {
     CodeLoopFilterParams(f, obu);
   }
@@ -679,8 +678,9 @@ bool WrapObu(const Image& image, const ObuFeatures& features,
   {
     log += "\nOBU_SEQUENCE_HEADER\n";
     ObuWriter sequence_header(/*obu_type=*/1, data);
-    CodeSequenceHeaderObu(image.width, image.height,
-                          /*high_bitdepth=*/(image.format != Format::kARGB8),
+    const bool high_bitdepth =
+        (image.format != Format::kARGB8 && image.format != Format::kAYUV8);
+    CodeSequenceHeaderObu(image.width, image.height, high_bitdepth,
                           /*twelve_bit=*/(image.format == Format::kAYUV12), f,
                           sequence_header);
     log += sequence_header.GetLog();
@@ -747,8 +747,9 @@ bool UnwrapObu(const uint8_t data[], size_t data_size, const Image& image,
     if (obu_type == /*OBU_SEQUENCE_HEADER=*/1) {
       saw_sequence_header = true;
       ObuReader sequence_header(data + position, obu_payload_size);
-      CodeSequenceHeaderObu(image.width, image.height,
-                            /*high_bitdepth=*/(image.format != Format::kARGB8),
+      const bool high_bitdepth =
+          (image.format != Format::kARGB8 && image.format != Format::kAYUV8);
+      CodeSequenceHeaderObu(image.width, image.height, high_bitdepth,
                             /*twelve_bit=*/(image.format == Format::kAYUV12),
                             features, sequence_header);
       log += sequence_header.GetLog();
@@ -845,8 +846,9 @@ bool WrapStrippedObu(const Image& image, const ObuFeatures& features,
   {
     log += "\nSTRIPPED_OBU\n";
     StrippedObuWriter stripped_obu(data);
-    CodeSequenceHeaderObu(image.width, image.height,
-                          /*high_bitdepth=*/(image.format != Format::kARGB8),
+    const bool high_bitdepth =
+        (image.format != Format::kARGB8 && image.format != Format::kAYUV8);
+    CodeSequenceHeaderObu(image.width, image.height, high_bitdepth,
                           /*twelve_bit=*/(image.format == Format::kAYUV12), f,
                           stripped_obu);
     CodeFrameHeaderObu(image.width, image.height, f, stripped_obu);
@@ -876,8 +878,9 @@ bool UnwrapStrippedObu(const uint8_t data[], size_t data_size,
                        std::string& log) {
   log += "\nSTRIPPED_OBU\n";
   StrippedObuReader stripped_obu(data, data_size);
-  CodeSequenceHeaderObu(image.width, image.height,
-                        /*high_bitdepth=*/(image.format != Format::kARGB8),
+  const bool high_bitdepth =
+      (image.format != Format::kARGB8 && image.format != Format::kAYUV8);
+  CodeSequenceHeaderObu(image.width, image.height, high_bitdepth,
                         /*twelve_bit=*/(image.format == Format::kAYUV12),
                         features, stripped_obu);
   CodeFrameHeaderObu(image.width, image.height, features, stripped_obu);

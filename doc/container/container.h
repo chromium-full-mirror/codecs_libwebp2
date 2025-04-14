@@ -62,7 +62,7 @@ enum class Orientation {
 };
 
 // Describes the channel layout/content and the number of bits per channel.
-enum class Format { kARGB8, kAYUV10, kAYUV12, kUnknown };
+enum class Format { kARGB8, kAYUV8, kAYUV10, kAYUV12 };
 
 struct Image {
   uint32_t width;   // Width in pixels, before applying 'orientation'.

@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <ostream>
 #include <sstream>
@@ -38,7 +39,7 @@ constexpr Orientation kOrientationMapping[4][3] = {
     {Orientation::kOriginal,          // No mirroring.
      Orientation::kFlipTopToBottom,   // Mirror top to bottom.
      Orientation::kFlipLeftToRight},  // Mirror left to right.
-    // 90 degrees counter-clockwise.
+    // 90 degrees counterclockwise.
     {Orientation::k270Clockwise,          // No mirroring.
      Orientation::kFlipBotLeftToTopRgt,   // Mirror top to bottom.
      Orientation::kFlipTopLeftToBotRgt},  // Mirror left to right.
@@ -294,6 +295,27 @@ bool WrapAvif(const Image& image, const uint8_t codec_bytes[],
           pixi.Write<uint8_t>(bit_depth);
           ++num_properties;
         }
+
+        {
+          BoxWriter colr("colr", data);  // ColourInformationProperty
+          colr.WriteStr("nclx");
+          colr.Write<uint16_t>(2);  // colour_primaries (Undefined)
+          colr.Write<uint16_t>(2);  // transfer_characteristics (Undefined)
+          if (image.format == Format::kARGB8) {
+            colr.Write<uint16_t>(0);  // matrix_coefficients (Identity)
+          } else {
+            colr.Write<uint16_t>(2);  // matrix_coefficients (Undefined)
+          }
+          colr.Write<uint8_t>(1 << 7);  // full_range_flag | reserved
+          ++num_properties;
+        }
+
+        if (!image.icc.empty()) {
+          BoxWriter colr("colr", data);  // ColourInformationProperty
+          colr.WriteStr("prof");
+          colr.WriteBytes(image.icc.data(), image.icc.size());
+          ++num_properties;
+        }
       }
 
       {
@@ -331,6 +353,7 @@ namespace {
 bool ParseBoxes(const uint8_t data[], size_t data_size, Image& image,
                 bool& saw_ftyp, const uint8_t*& codec_bytes,
                 size_t& num_codec_bytes, uint32_t& angle, uint32_t& mirror) {
+  uint32_t matrix_coefficients = 2;
   size_t position = 0;
   while (position + 4 <= data_size) {
     const size_t size = ReadBigEndian(data + position, sizeof(uint32_t));
@@ -374,14 +397,37 @@ bool ParseBoxes(const uint8_t data[], size_t data_size, Image& image,
       for (uint32_t i = 0; i < num_channels; ++i) {
         const uint8_t bit_depth = ReadBigEndian(content + 1 + i);
         if (bit_depth == ReadBigEndian(content + 1)) {
-          // Good enough mapping for now.
-          image.format = (bit_depth == 8)    ? Format::kARGB8
+          if (bit_depth != 8 && bit_depth != 10 && bit_depth != 12) {
+            return false;
+          }
+          image.format = (bit_depth == 8)    ? Format::kAYUV8
                          : (bit_depth == 10) ? Format::kAYUV10
-                         : (bit_depth == 12) ? Format::kAYUV12
-                                             : Format::kUnknown;
+                                             : Format::kAYUV12;
         } else {
           return false;
         }
+      }
+    } else if (EqualFourCC(fourcc, "colr")) {
+      if (content_size < 4) return false;
+      if (EqualFourCC(content, "nclx")) {
+        if (content_size < 4 + 7) return false;
+        const uint32_t colour_primaries = ReadBigEndian(content + 4, 2);
+        const uint32_t transfer_characteristics = ReadBigEndian(content + 6, 2);
+        matrix_coefficients = ReadBigEndian(content + 8, 2);
+        const uint32_t full_range_flag = ReadBigEndian(content + 10);
+        if (full_range_flag == 0) return false;  // Unsupported.
+        if (matrix_coefficients != 0 && matrix_coefficients != 2 &&
+            matrix_coefficients != 6) {
+          return false;  // Unsupported.
+        }
+        (void)colour_primaries;          // Could be checked too.
+        (void)transfer_characteristics;  // Could be checked too.
+      }
+      if (EqualFourCC(content, "rICC") || EqualFourCC(content, "prof")) {
+        if (content_size < 4 + 1) return false;  // At least one byte of ICC.
+        if (!image.icc.empty()) return false;    // Only one profile allowed.
+        image.icc.insert(image.icc.end(), content + 4,
+                         content + 4 + content_size - 4);
       }
     } else if (EqualFourCC(fourcc, "stss")) {
       // TODO(yguyon): Read frame durations
@@ -393,7 +439,16 @@ bool ParseBoxes(const uint8_t data[], size_t data_size, Image& image,
     }
     position += size;
   }
-  return (position == data_size);  // No trailing garbage allowed.
+  if (position != data_size) return false;  // No trailing garbage allowed.
+
+  if (matrix_coefficients == 0) {  // Identity matrix coefficients.
+    if (image.format == Format::kAYUV8) {
+      image.format = Format::kARGB8;
+    } else {
+      return false;  // Unsupported.
+    }
+  }
+  return true;
 }
 
 }  // namespace

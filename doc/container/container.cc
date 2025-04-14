@@ -14,8 +14,9 @@
 
 #include "./container.h"
 
-#include <algorithm>
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
 #include <ostream>
 #include <sstream>
 #include <string>
@@ -72,7 +73,7 @@ bool SkipChunk(const uint8_t data[], size_t data_size, uint32_t& data_pos) {
 
 void EncodeRawPixels(const Image& image, Data& data) {
   // TODO(yguyon): Implement if (image.is_animation)
-  if (image.format == Format::kARGB8) {
+  if (image.format == Format::kARGB8 || image.format == Format::kAYUV8) {
     data.insert(data.end(), image.pixels.begin(), image.pixels.end());
   } else {
     abort();  // TODO(yguyon): Implement
@@ -81,7 +82,7 @@ void EncodeRawPixels(const Image& image, Data& data) {
 
 bool DecodeRawPixels(const uint8_t data[], size_t data_size, Image& image) {
   // TODO(yguyon): Implement if (image.is_animation)
-  if (image.format == Format::kARGB8) {
+  if (image.format == Format::kARGB8 || image.format == Format::kAYUV8) {
     if (data_size != image.width * image.height * (image.has_alpha ? 4 : 3)) {
       return false;
     }
@@ -116,8 +117,8 @@ void WrapContainer(const Image& image, const EncoderConfig& config,
   header.EncodeBool(!image.xmp.empty());
   header.EncodeBool(!image.exif.empty());
   header.EncodeUInt((image.format == Format::kARGB8)    ? 0
-                    : (image.format == Format::kAYUV10) ? 1
-                    : (image.format == Format::kAYUV12) ? 2
+                    : (image.format == Format::kAYUV8) ? 1
+                    : (image.format == Format::kAYUV10) ? 2
                                                         : 3,
                     0, 3);
   header.EncodeUInt(kContainerHeaderPaddingValue, 0, 15);
@@ -170,9 +171,9 @@ bool UnwrapContainerHeader(const uint8_t data[], size_t data_size, Image& image,
   has_exif = header.DecodeBool();
   const uint32_t format = header.DecodeUInt(0, 3);
   image.format = (format == 0)   ? Format::kARGB8
-                 : (format == 1) ? Format::kAYUV10
-                 : (format == 2) ? Format::kAYUV12
-                                 : Format::kUnknown;
+                 : (format == 1) ? Format::kAYUV8
+                 : (format == 2) ? Format::kAYUV10
+                                 : Format::kAYUV12;
   if (header.DecodeUInt(0, 15) != kContainerHeaderPaddingValue) return false;
   assert(header.GetNumReadBits() == kContainerHeaderNumBits);
   num_read_bytes = header.GetNumReadBytes();

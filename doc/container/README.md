@@ -1,6 +1,7 @@
 # Custom Simple Container
 
-This repository contains a demo implentation of a strict minimal file structure.
+This repository contains a demo implementation of a strict minimal file
+structure.
 
 ## Objectives
 
