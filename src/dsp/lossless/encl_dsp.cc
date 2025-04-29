@@ -91,12 +91,14 @@ void RGB2YCoCgR_C(int16_t* argb_data, uint32_t num_pixels) {
     argb_data[4 * i + 3] = tmp_cg;
   }
 }
+}  // namespace
 
-void SubtractGreenFromBlueAndRed_C(int16_t* argb_data, uint32_t num_pixels) {
+namespace WP2L {
+void SubtractGreenFromBlueAndRed_C(int16_t* argb, uint32_t num_pixels) {
   for (uint32_t i = 0; i < num_pixels; ++i) {
-    const int16_t green = argb_data[4 * i + 2];
-    argb_data[4 * i + 1] -= green;
-    argb_data[4 * i + 3] -= green;
+    const int16_t green = argb[4 * i + 2];
+    argb[4 * i + 1] -= green;
+    argb[4 * i + 3] -= green;
   }
 }
 
@@ -114,7 +116,9 @@ void TransformColor_C(const WP2L::Multipliers& m, uint32_t num_pixels,
     data[4 * i + 3] = new_blue;
   }
 }
+}  // namespace WP2L
 
+namespace {
 inline int16_t TransformColorRed(int16_t green_to_red,
                                  const int16_t* const argb) {
   const int16_t green = argb[2];

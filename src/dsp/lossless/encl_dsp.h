@@ -48,10 +48,12 @@ typedef void (*FindExtremaFunc)(const int16_t* in, uint32_t width,
 extern FindExtremaFunc FindExtrema;
 typedef void (*SimpleColorSpaceFunc)(int16_t* dst, uint32_t num_pixels);
 extern SimpleColorSpaceFunc SubtractGreenFromBlueAndRed;
+void SubtractGreenFromBlueAndRed_C(int16_t* argb, uint32_t num_pixels);
 extern SimpleColorSpaceFunc RGB2YCoCgR;
 typedef void (*TransformColorFunc)(const Multipliers& m, uint32_t num_pixels,
                                    int16_t* const data);
 extern TransformColorFunc TransformColor;
+void TransformColor_C(const Multipliers& m, uint32_t num_pixels, int16_t* data);
 
 // Functions collecting stats about blue and red transforms. If the transform
 // produces a value bigger (in abs()) than abs_value_max, returns false (meaning
