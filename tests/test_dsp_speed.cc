@@ -521,6 +521,7 @@ TEST_P(SpeedTestCpuInfo, TestPredictors) {
         std::chrono::duration<double, std::milli> elapsed(0);
         for (int k = 0; k < kNumTests; ++k) {
           const int test_width = (k % width) | 1;
+          std::fill(residual.begin(), residual.end(), 0);
           for (int y = 1; y < height; ++y) {
             const int16_t* src_row_upper = &src[(y - 1) * 4 * width + 4];
             const int16_t* src_row = &src[y * 4 * width + 4];
@@ -579,13 +580,13 @@ TEST_P(SpeedTestCpuInfo, TestPredictors) {
                                                WP2L::kNumPredictorsClamped +
                                                WP2L::kNumPredictorsAngle>
                 kSignatures[2] = {
-                    {1416161417, 2499242186, 3742251866, 2613952219, 2166140163,
-                     3403556104, 1799690285, 1170760671, 4249830644, 1720724240,
-                     4120478655, 3422855468, 140670846, 2715801296, 1457428115},
-                    {3421461272, 731285504, 4038643838, 808291392, 3498488516,
-                     757034906, 3596014090, 2367981070, 2671350010, 2173971135,
-                     592690447, 3819492863, 3677141788, 3223334342,
-                     2125115676}};
+                    {1416161417, 2331355479, 2464513494, 3106579089, 759787506,
+                     404901797, 242569032, 2402303123, 1477786744, 2106848854,
+                     3113491561, 3936817605, 4206366414, 1751804805,
+                     1028112093},
+                    {269098433, 3924043544, 1218350053, 4085116641, 2051208882,
+                     1703898273, 2808751332, 666636053, 3459110714, 926937902,
+                     232846866, 3169410793, 384852026, 1660852073, 2651050933}};
             EXPECT_EQ(testutil::SillyCRC(residual.data(), residual.size()),
                       kSignatures[has_alpha][pred_global]);
           }

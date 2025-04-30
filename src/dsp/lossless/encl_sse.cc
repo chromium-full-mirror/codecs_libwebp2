@@ -41,18 +41,19 @@ namespace {
 
 void SubtractGreenFromBlueAndRed_SSE(int16_t* __restrict__ argb,
                                      uint32_t num_pixels) {
-  uint32_t i;
   const __m128i kCstShuffle =
       _mm_set_epi8(13, 12, -1, -1, 13, 12, -1, -1, 5, 4, -1, -1, 5, 4, -1, -1);
-  for (i = 0; i + 2 <= num_pixels; i += 2) {
-    const __m128i in = _mm_loadu_si128((__m128i*)&argb[4 * i]);
+  const int16_t* const argb_end = argb + 4 * num_pixels;
+  for (; argb + 8 <= argb_end; argb += 8) {
+    const __m128i in = _mm_loadu_si128((__m128i*)argb);
     const __m128i in_g0g0 = _mm_shuffle_epi8(in, kCstShuffle);
     const __m128i out = _mm_sub_epi16(in, in_g0g0);
-    _mm_storeu_si128((__m128i*)&argb[4 * i], out);
+    _mm_storeu_si128((__m128i*)argb, out);
   }
   // fallthrough and finish off with plain-C
-  if (i != num_pixels) {
-    SubtractGreenFromBlueAndRed_C(argb + 4 * i, num_pixels - i);
+  const uint32_t remainder = num_pixels % 2;
+  if (remainder > 0) {
+    SubtractGreenFromBlueAndRed_C(argb, remainder);
   }
 }
 

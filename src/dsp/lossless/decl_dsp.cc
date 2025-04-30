@@ -215,6 +215,7 @@ void YCoCgR2RGB_C(const int16_t* src, uint32_t num_pixels, int16_t* dst) {
     dst[3] = tmp_b;
   }
 }
+}  // namespace
 
 // Add green to blue and red channels (i.e. perform the inverse transform of
 // 'subtract green').
@@ -230,12 +231,14 @@ void AddGreenToBlueAndRed_C(const int16_t* src, uint32_t num_pixels,
   }
 }
 
-inline void ColorCodeToMultipliers(const int16_t* const color_code,
-                                   Multipliers* const m) {
+namespace {
+static inline void ColorCodeToMultipliers(const int16_t* const color_code,
+                                          Multipliers* const m) {
   m->green_to_red = color_code[3];
   m->green_to_blue = color_code[2];
   m->red_to_blue = color_code[1];
 }
+}  // namespace
 
 void TransformColorInverse_C(const Multipliers& m, const int16_t* src,
                              uint32_t num_pixels, int16_t* dst,
@@ -266,6 +269,7 @@ void TransformColorInverse_C(const Multipliers& m, const int16_t* src,
   }
 }
 
+namespace {
 // Color space inverse transform.
 void ColorSpaceInverseTransform_C(const Transform* const transform, int y_start,
                                   int y_end, const int16_t* src, int16_t* dst,

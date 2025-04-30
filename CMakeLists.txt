@@ -196,6 +196,7 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/decl_sse.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/dspl.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/dspl.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/dspl_sse.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_dsp.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_dsp.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dsp/lossless/encl_sse.cc)

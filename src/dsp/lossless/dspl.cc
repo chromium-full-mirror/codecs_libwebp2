@@ -37,7 +37,7 @@ namespace {
 
 inline void Average2(const int16_t* const a0, const int16_t* const a1,
                      int16_t* const out) {
-  for (uint32_t i = 0; i < 4; ++i) out[i] = (a0[i] + a1[i]) / 2;
+  for (uint32_t i = 0; i < 4; ++i) out[i] = (a0[i] + a1[i]) >> 1;
 }
 
 inline void Average3(const int16_t* const a0, const int16_t* const a1,
@@ -50,22 +50,22 @@ inline void Average4(const int16_t* const a0, const int16_t* const a1,
                      const int16_t* const a2, const int16_t* const a3,
                      int16_t* const out) {
   for (uint32_t i = 0; i < 4; ++i) {
-    const int16_t tmp0 = (a0[i] + a1[i]) / 2;
-    const int16_t tmp1 = (a2[i] + a3[i]) / 2;
-    out[i] = (tmp0 + tmp1) / 2;
+    const int16_t tmp0 = (a0[i] + a1[i]) >> 1;
+    const int16_t tmp1 = (a2[i] + a3[i]) >> 1;
+    out[i] = (tmp0 + tmp1) >> 1;
   }
 }
 
 inline int AddSubtractComponentFull(int a, int b, int c, int32_t min_value,
                                     int32_t max_value) {
-  return WP2::Clamp(a + b - c, min_value, max_value);
+  return std::clamp(a + b - c, min_value, max_value);
 }
 
 // Same as above but clamped between a and b.
 inline int ClampedAddSubtractComponentFull(int a, int b, int c) {
   const int min = std::min(a, b);
   const int max = std::max(a, b);
-  return WP2::Clamp(a + b - c, min, max);
+  return std::clamp(a + b - c, min, max);
 }
 
 inline void AddSubtractFull(const int16_t* const c0, const int16_t* const c1,
@@ -89,7 +89,7 @@ inline void ClampedAddSubtractFull(const int16_t* const c0,
 
 inline int AddSubtractComponentHalf(int a, int b, int32_t min_value,
                                     int32_t max_value) {
-  return WP2::Clamp(a + (a - b) / 2, min_value, max_value);
+  return std::clamp(a + ((a - b) >> 1), min_value, max_value);
 }
 
 inline void AddSubtractHalf(const int16_t* const c0, const int16_t* const c1,
@@ -237,6 +237,8 @@ PredictorAngleFunc PredictorsAngle[kNumPredictorsAngle];
 PredictorNonClampedFunc PredictorsNonClamped_C[kNumPredictorsNonClamped];
 PredictorClampedFunc PredictorsClamped_C[kNumPredictorsClamped];
 
+extern void DspLDspInitSSE();
+
 static volatile WP2CPUInfo lossless_last_cpuinfo_used =
     (WP2CPUInfo)&lossless_last_cpuinfo_used;
 
@@ -259,7 +261,9 @@ WP2_TSAN_IGNORE_FUNCTION void DspInit() {
 
   // If defined, use CPUInfo() to overwrite some pointers with faster versions.
   if (WP2GetCPUInfo != NULL) {
-    // TODO(skal): SSE2, etc.
+#if defined(WP2_USE_SSE)
+    if (WP2GetCPUInfo(kSSE)) DspLDspInitSSE();
+#endif
   }
   lossless_last_cpuinfo_used = WP2GetCPUInfo;
 }

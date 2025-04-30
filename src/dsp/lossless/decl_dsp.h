@@ -54,6 +54,8 @@ extern PredictorAngleAddFunc PredictorsAngleAdd[kNumPredictorsAngle];
 typedef void (*SimpleColorSpaceInverseFunc)(const int16_t* src,
                                             uint32_t num_pixels, int16_t* dst);
 extern SimpleColorSpaceInverseFunc AddGreenToBlueAndRed;
+void AddGreenToBlueAndRed_C(const int16_t* src, uint32_t num_pixels,
+                            int16_t* dst);
 extern SimpleColorSpaceInverseFunc YCoCgRToRGB;
 
 typedef void (*TransformColorInverseFunc)(const Multipliers& m,
@@ -61,6 +63,9 @@ typedef void (*TransformColorInverseFunc)(const Multipliers& m,
                                           uint32_t num_pixels, int16_t* dst,
                                           int16_t* predicted);
 extern TransformColorInverseFunc TransformColorInverse;
+void TransformColorInverse_C(const Multipliers& m, const int16_t* src,
+                             uint32_t num_pixels, int16_t* dst,
+                             int16_t* predicted);
 
 class Transform;  // Defined in dec/lossless/losslessi_dec.h.
 
