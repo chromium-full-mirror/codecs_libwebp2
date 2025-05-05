@@ -31,7 +31,7 @@ namespace WP2L {
 //------------------------------------------------------------------------------
 // Predictors
 
-// Difference of each component, mod 256.
+// Difference of each component.
 static inline void SubPixels(const int16_t* const a, bool has_alpha,
                              const int16_t* const b, int16_t* const out) {
   out[0] = has_alpha ? a[0] - b[0] : WP2::kAlphaMax;
@@ -100,7 +100,10 @@ extern PredictorClampedSubFunc PredictorsClampedSub_C[kNumPredictorsClamped];
 typedef void (*PredictorAngleSubFunc)(int delta, const int16_t* in,
                                       bool has_alpha, const int16_t* upper,
                                       uint32_t num_pixels, int16_t* out);
-extern PredictorAngleSubFunc PredictorsAngleSub[kNumPredictorsAngle];
+extern std::array<PredictorAngleSubFunc, kNumPredictorsAngle>
+    PredictorsAngleSub;
+extern std::array<PredictorAngleSubFunc, kNumPredictorsAngle>
+    PredictorsAngleSub_C;
 
 extern PredictorNonClampedSubFunc PredictorSubBlack;
 extern PredictorAngleSubFunc PredictorSubTop;

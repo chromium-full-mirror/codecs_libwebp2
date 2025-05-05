@@ -20,6 +20,7 @@
 #ifndef WP2_DSP_LOSSLESS_DECL_DSP_H_
 #define WP2_DSP_LOSSLESS_DECL_DSP_H_
 
+#include <array>
 #include <cstdint>
 
 #include "src/dsp/lossless/dspl.h"
@@ -33,8 +34,10 @@ typedef void (*PredictorNonClampedAddFunc)(const int16_t* in, bool has_alpha,
                                            const int16_t* upper,
                                            uint32_t num_pixels, int16_t* out,
                                            int16_t* predicted);
-extern PredictorNonClampedAddFunc
-    PredictorsNonClampedAdd[kNumPredictorsNonClamped];
+extern std::array<PredictorNonClampedAddFunc, kNumPredictorsNonClamped>
+    PredictorsNonClampedAdd;
+extern std::array<PredictorNonClampedAddFunc, kNumPredictorsNonClamped>
+    PredictorsNonClampedAdd_C;
 
 typedef void (*PredictorClampedAddFunc)(const int16_t* in, bool has_alpha,
                                         const int16_t* upper,
@@ -42,14 +45,20 @@ typedef void (*PredictorClampedAddFunc)(const int16_t* in, bool has_alpha,
                                         const int32_t min_value[4],
                                         const int32_t max_values[4],
                                         int16_t* out, int16_t* predicted);
-extern PredictorClampedAddFunc PredictorsClampedAdd[kNumPredictorsClamped];
+extern std::array<PredictorClampedAddFunc, kNumPredictorsClamped>
+    PredictorsClampedAdd;
+extern std::array<PredictorClampedAddFunc, kNumPredictorsClamped>
+    PredictorsClampedAdd_C;
 
 // 'delta' is an integer in [-3, 3].
 typedef void (*PredictorAngleAddFunc)(int delta, const int16_t* in,
                                       bool has_alpha, const int16_t* upper,
                                       uint32_t num_pixels, int16_t* out,
                                       int16_t* predicted);
-extern PredictorAngleAddFunc PredictorsAngleAdd[kNumPredictorsAngle];
+extern std::array<PredictorAngleAddFunc, kNumPredictorsAngle>
+    PredictorsAngleAdd;
+extern std::array<PredictorAngleAddFunc, kNumPredictorsAngle>
+    PredictorsAngleAdd_C;
 
 typedef void (*SimpleColorSpaceInverseFunc)(const int16_t* src,
                                             uint32_t num_pixels, int16_t* dst);

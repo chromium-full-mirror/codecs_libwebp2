@@ -176,6 +176,60 @@ WP2Status WriteSubModes(const int16_t* const modes, bool needs_shift,
   return WP2_STATUS_OK;
 }
 
+static inline void PredictBatch(const Predictor& pred, int x_start, int y,
+                                int num_pixels, bool has_alpha,
+                                const int16_t* current, const int16_t* upper,
+                                int16_t* out) {
+  PredictorNonClampedSubFunc pred_non_clamped_sub = nullptr;
+  PredictorClampedSubFunc pred_clamped_sub = nullptr;
+  PredictorAngleSubFunc pred_angle_sub = nullptr;
+  switch (pred.type) {
+    case PredictorType::NonClamped:
+      pred_non_clamped_sub = PredictorsNonClampedSub[pred.index];
+      break;
+    case PredictorType::Clamped:
+      pred_clamped_sub = PredictorsClampedSub[pred.index];
+      break;
+    case PredictorType::Angle:
+      pred_angle_sub = PredictorsAngleSub[pred.index];
+      break;
+    default:
+      assert(false);
+  }
+
+  if (x_start == 0) {
+    if (y == 0) {
+      PredictorSubBlack(current, has_alpha, upper, num_pixels, out);
+    } else {
+      PredictorSubTop(/*delta=*/0, current, has_alpha, upper, num_pixels, out);
+    }
+    ++x_start;
+    out += 4;
+    --num_pixels;
+  }
+  current += 4 * x_start;
+  upper += 4 * x_start;
+  if (y == 0) {
+    PredictorSubLeft(/*delta=*/0, current, has_alpha, upper, num_pixels, out);
+  } else {
+    switch (pred.type) {
+      case PredictorType::NonClamped:
+        pred_non_clamped_sub(current, has_alpha, upper, num_pixels, out);
+        break;
+      case PredictorType::Clamped:
+        pred_clamped_sub(current, has_alpha, upper, num_pixels, pred.min_values,
+                         pred.max_values, out);
+        break;
+      case PredictorType::Angle:
+        pred_angle_sub(pred.sub_mode, current, has_alpha, upper, num_pixels,
+                       out);
+        break;
+      default:
+        assert(false);
+    }
+  }
+}
+
 // Stores the difference between the pixel and its prediction in "out".
 // In case of a lossy encoding, updates the source image to avoid propagating
 // the deviation further to pixels which depend on the current pixel for their
@@ -184,6 +238,11 @@ static inline void GetResidual(int width, int16_t* const upper_row,
                                int16_t* const current_row, bool has_alpha,
                                bool exact, const Predictor& pred, int x_start,
                                int x_end, int y, int16_t* const out) {
+  if (exact) {
+    PredictBatch(pred, x_start, y, x_end - x_start, has_alpha, current_row,
+                 upper_row, out);
+    return;
+  }
   PredictorNonClampedFunc pred_non_clamped = nullptr;
   PredictorClampedFunc pred_clamped = nullptr;
   PredictorAngleFunc pred_angle = nullptr;
@@ -233,7 +292,7 @@ static inline void GetResidual(int width, int16_t* const upper_row,
       }
     }
     SubPixels(&current_row[4 * x], has_alpha, predict, residual);
-    if (current_row[4 * x] == 0 && !exact) {
+    if (current_row[4 * x] == 0) {
       // If alpha is 0, cleanup RGB. We can choose the RGB values of the
       // residual for best compression. The prediction of alpha itself can be
       // non-zero and must be kept though. We choose RGB of the residual to be

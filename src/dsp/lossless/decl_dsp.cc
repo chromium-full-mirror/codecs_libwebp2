@@ -22,6 +22,7 @@
 #include "src/dsp/lossless/decl_dsp.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -459,13 +460,15 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
 
 SimpleColorSpaceInverseFunc AddGreenToBlueAndRed;
 SimpleColorSpaceInverseFunc YCoCgRToRGB;
-PredictorNonClampedAddFunc PredictorsNonClampedAdd[kNumPredictorsNonClamped];
-PredictorClampedAddFunc PredictorsClampedAdd[kNumPredictorsClamped];
-PredictorAngleAddFunc PredictorsAngleAdd[kNumPredictorsAngle];
-
-// exposed plain-C implementations
-PredictorNonClampedAddFunc PredictorsNonClampedAdd_C[kNumPredictorsNonClamped];
-PredictorClampedAddFunc PredictorsClampedAdd_C[kNumPredictorsClamped];
+std::array<PredictorNonClampedAddFunc, kNumPredictorsNonClamped>
+    PredictorsNonClampedAdd;
+std::array<PredictorNonClampedAddFunc, kNumPredictorsNonClamped>
+    PredictorsNonClampedAdd_C;
+std::array<PredictorClampedAddFunc, kNumPredictorsClamped> PredictorsClampedAdd;
+std::array<PredictorClampedAddFunc, kNumPredictorsClamped>
+    PredictorsClampedAdd_C;
+std::array<PredictorAngleAddFunc, kNumPredictorsAngle> PredictorsAngleAdd;
+std::array<PredictorAngleAddFunc, kNumPredictorsAngle> PredictorsAngleAdd_C;
 
 TransformColorInverseFunc TransformColorInverse;
 
@@ -492,9 +495,8 @@ WP2_TSAN_IGNORE_FUNCTION void DecLDspInit() {
   PredictorsAngleAdd[4] = PredictorAngleAdd_C<135>;
   PredictorsAngleAdd[5] = PredictorAngleAdd_C<157>;
   PredictorsAngleAdd[6] = PredictorAngleAdd_C<180>;
-  PredictorsAddBlack = PredictorsNonClampedAdd[0];
-  PredictorsAddTop = PredictorsAngleAdd[kPredictorAngleTopIndex];
-  PredictorsAddLeft = PredictorsAngleAdd[kPredictorAngleLeftIndex];
+  std::copy(PredictorsAngleAdd.begin(), PredictorsAngleAdd.end(),
+            PredictorsAngleAdd_C.begin());
 
   AddGreenToBlueAndRed = AddGreenToBlueAndRed_C;
   YCoCgRToRGB = YCoCgR2RGB_C;
@@ -508,6 +510,11 @@ WP2_TSAN_IGNORE_FUNCTION void DecLDspInit() {
     if (WP2GetCPUInfo(kSSE)) DecLDspInitSSE();
 #endif
   }
+
+  PredictorsAddBlack = PredictorsNonClampedAdd[0];
+  PredictorsAddTop = PredictorsAngleAdd[kPredictorAngleTopIndex];
+  PredictorsAddLeft = PredictorsAngleAdd[kPredictorAngleLeftIndex];
+
   lossless_last_cpuinfo_used = WP2GetCPUInfo;
 }
 

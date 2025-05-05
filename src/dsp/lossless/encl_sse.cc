@@ -17,6 +17,8 @@
 //
 // Authors: Vincent Rabaud (vrabaud@google.com)
 
+#include <algorithm>
+
 #include "src/dsp/dsp.h"
 
 #if defined(WP2_USE_SSE)
@@ -39,7 +41,7 @@ namespace {
 //------------------------------------------------------------------------------
 // Subtract-Green Transform
 
-void SubtractGreenFromBlueAndRed_SSE(int16_t* __restrict__ argb,
+void SubtractGreenFromBlueAndRed_SSE(int16_t* WEBP_RESTRICT argb,
                                      uint32_t num_pixels) {
   const __m128i kCstShuffle =
       _mm_set_epi8(13, 12, -1, -1, 13, 12, -1, -1, 5, 4, -1, -1, 5, 4, -1, -1);
@@ -64,7 +66,7 @@ void SubtractGreenFromBlueAndRed_SSE(int16_t* __restrict__ argb,
 #define MK_CST_16(HI, LO) _mm_set_epi32(HI, LO, HI, LO)
 
 void TransformColor_SSE(const Multipliers& m, uint32_t num_pixels,
-                        int16_t* __restrict__ argb) {
+                        int16_t* WEBP_RESTRICT argb) {
   const __m128i mults_rb = MK_CST_16(m.green_to_blue, m.green_to_red);
   const __m128i mults_b2 = MK_CST_16(m.red_to_blue, 0);
   const __m128i kRound = _mm_set1_epi32(1 << kColorTransformBits >> 1);
@@ -262,6 +264,325 @@ float CombinedShannonEntropy_SSE(const uint32_t* X, const uint32_t* Y,
 }
 #undef CSE_CHECK_ZERO
 
+//------------------------------------------------------------------------------
+// Batch version of Predictor Transform subtraction
+
+static inline void Clamp(const __m128i& MIN, const __m128i& MAX, __m128i& A) {
+  const __m128i CLAMPED_MIN = _mm_max_epi16(MIN, A);
+  A = _mm_min_epi16(MAX, CLAMPED_MIN);
+}
+
+static inline void Average2_m128i(const __m128i& A, const __m128i& B,
+                                  __m128i& OUT) {
+  const __m128i C = _mm_add_epi16(A, B);
+  OUT = _mm_srai_epi16(C, 1);
+}
+
+const __m128i kAlphaMax =
+    _mm_set_epi16(0, 0, 0, WP2::kAlphaMax, 0, 0, 0, WP2::kAlphaMax);
+
+// Predictor0: ARGB_BLACK.
+static void PredictorNonClampedSub0_SSE(const int16_t* in, bool has_alpha,
+                                        [[maybe_unused]] const int16_t* upper,
+                                        uint32_t num_pixels, int16_t* out) {
+  if (!has_alpha) {
+    std::copy(in, in + 4 * num_pixels, out);
+    return;
+  }
+  const __m128i kBlack = kAlphaMax;
+  const int16_t* const in_end = in + 4 * num_pixels;
+  for (; in + 8 <= in_end; in += 8, out += 8) {
+    const __m128i IN = _mm_loadu_si128((const __m128i*)in);
+    const __m128i RES = _mm_sub_epi16(IN, kBlack);
+    _mm_storeu_si128((__m128i*)out, RES);
+  }
+  const uint32_t remainder = num_pixels % 2;
+  if (remainder > 0) {
+    PredictorsNonClampedSub_C[0](in, has_alpha, upper, remainder, out);
+  }
+}
+
+static void PredictorNonClampedSub1_SSE(const int16_t* in, bool has_alpha,
+                                        const int16_t* upper,
+                                        uint32_t num_pixels, int16_t* out) {
+  const int16_t* const in_end = in + 4 * num_pixels;
+  for (; in + 8 <= in_end; in += 8, upper += 8, out += 8) {
+    const __m128i L = _mm_loadu_si128((const __m128i*)(in - 4));
+    const __m128i T = _mm_loadu_si128((const __m128i*)upper);
+    const __m128i TR = _mm_loadu_si128((const __m128i*)(upper + 4));
+    __m128i PRED;
+    Average2_m128i(L, TR, PRED);
+    Average2_m128i(PRED, T, PRED);
+    const __m128i IN = _mm_loadu_si128((const __m128i*)in);
+    __m128i RES = _mm_sub_epi16(IN, PRED);
+    if (!has_alpha) {
+      RES = _mm_blend_epi16(RES, kAlphaMax, 0b00010001);
+    }
+    _mm_storeu_si128((__m128i*)out, RES);
+  }
+  const uint32_t remainder = num_pixels % 2;
+  if (remainder > 0) {
+    PredictorsNonClampedSub_C[1](in, has_alpha, upper, remainder, out);
+  }
+}
+
+static void PredictorNonClampedSub2_SSE(const int16_t* in, bool has_alpha,
+                                        const int16_t* upper,
+                                        uint32_t num_pixels, int16_t* out) {
+  const int16_t* const in_end = in + 4 * num_pixels;
+  for (; in + 8 <= in_end; in += 8, upper += 8, out += 8) {
+    const __m128i L = _mm_loadu_si128((const __m128i*)(in - 4));
+    const __m128i T = _mm_loadu_si128((const __m128i*)upper);
+    __m128i PRED;
+    Average2_m128i(L, T, PRED);
+    const __m128i IN = _mm_loadu_si128((const __m128i*)in);
+    __m128i RES = _mm_sub_epi16(IN, PRED);
+    if (!has_alpha) {
+      RES = _mm_blend_epi16(RES, kAlphaMax, 0b00010001);
+    }
+    _mm_storeu_si128((__m128i*)out, RES);
+  }
+  const uint32_t remainder = num_pixels % 2;
+  if (remainder > 0) {
+    PredictorsNonClampedSub_C[2](in, has_alpha, upper, remainder, out);
+  }
+}
+
+static void PredictorNonClampedSub3_SSE(const int16_t* in, bool has_alpha,
+                                        const int16_t* upper,
+                                        uint32_t num_pixels, int16_t* out) {
+  const int16_t* const in_end = in + 4 * num_pixels;
+  for (; in + 8 <= in_end; in += 8, upper += 8, out += 8) {
+    const __m128i L = _mm_loadu_si128((const __m128i*)(in - 4));
+    const __m128i TL = _mm_loadu_si128((const __m128i*)(upper - 4));
+    const __m128i T = _mm_loadu_si128((const __m128i*)upper);
+    const __m128i TR = _mm_loadu_si128((const __m128i*)(upper + 4));
+    __m128i A, B, PRED;
+    Average2_m128i(L, TL, A);
+    Average2_m128i(T, TR, B);
+    Average2_m128i(A, B, PRED);
+    const __m128i IN = _mm_loadu_si128((const __m128i*)in);
+    __m128i RES = _mm_sub_epi16(IN, PRED);
+    if (!has_alpha) {
+      RES = _mm_blend_epi16(RES, kAlphaMax, 0b00010001);
+    }
+    _mm_storeu_si128((__m128i*)out, RES);
+  }
+  const uint32_t remainder = num_pixels % 2;
+  if (remainder > 0) {
+    PredictorsNonClampedSub_C[3](in, has_alpha, upper, remainder, out);
+  }
+}
+
+static void PredictorNonClampedSub4_SSE(const int16_t* in, bool has_alpha,
+                                        const int16_t* upper,
+                                        uint32_t num_pixels, int16_t* out) {
+  const int16_t* const in_end = in + 4 * num_pixels;
+  for (; in + 8 <= in_end; in += 8, upper += 8, out += 8) {
+    const __m128i L = _mm_loadu_si128((const __m128i*)(in - 4));
+    const __m128i T = _mm_loadu_si128((const __m128i*)upper);
+    const __m128i TL = _mm_loadu_si128((const __m128i*)(upper - 4));
+
+    const __m128i TTL0 = _mm_sub_epi16(T, TL);
+    const __m128i LTL0 = _mm_sub_epi16(L, TL);
+    const __m128i TTL = _mm_abs_epi16(TTL0);
+    const __m128i LTL = _mm_abs_epi16(LTL0);
+    const __m128i A = _mm_hadd_epi16(TTL, LTL);
+    const __m128i B = _mm_hadd_epi16(A, A);
+    const __m128i C = _mm_shuffle_epi8(
+        B, _mm_set_epi8(3, 2, 3, 2, 3, 2, 3, 2, 1, 0, 1, 0, 1, 0, 1, 0));
+    const __m128i D = _mm_shuffle_epi8(
+        B, _mm_set_epi8(7, 6, 7, 6, 7, 6, 7, 6, 5, 4, 5, 4, 5, 4, 5, 4));
+    const __m128i MASK = _mm_cmplt_epi16(C, D);
+    const __m128i PRED = _mm_blendv_epi8(T, L, MASK);
+
+    const __m128i IN = _mm_loadu_si128((const __m128i*)in);
+    __m128i RES = _mm_sub_epi16(IN, PRED);
+    if (!has_alpha) {
+      RES = _mm_blend_epi16(RES, kAlphaMax, 0b00010001);
+    }
+    _mm_storeu_si128((__m128i*)out, RES);
+  }
+  const uint32_t remainder = num_pixels % 2;
+  if (remainder > 0) {
+    PredictorsNonClampedSub_C[4](in, has_alpha, upper, remainder, out);
+  }
+}
+
+static void PredictorNonClampedSub5_SSE(const int16_t* in, bool has_alpha,
+                                        const int16_t* upper,
+                                        uint32_t num_pixels, int16_t* out) {
+  const int16_t* const in_end = in + 4 * num_pixels;
+  for (; in + 8 <= in_end; in += 8, upper += 8, out += 8) {
+    const __m128i L = _mm_loadu_si128((const __m128i*)(in - 4));
+    const __m128i T = _mm_loadu_si128((const __m128i*)upper);
+    const __m128i TL = _mm_loadu_si128((const __m128i*)(upper - 4));
+
+    const __m128i A = _mm_add_epi16(L, T);
+    __m128i PRED = _mm_sub_epi16(A, TL);
+    const __m128i MIN = _mm_min_epi16(L, T);
+    const __m128i MAX = _mm_max_epi16(L, T);
+    Clamp(MIN, MAX, PRED);
+
+    const __m128i IN = _mm_loadu_si128((const __m128i*)in);
+    __m128i RES = _mm_sub_epi16(IN, PRED);
+    if (!has_alpha) {
+      RES = _mm_blend_epi16(RES, kAlphaMax, 0b00010001);
+    }
+    _mm_storeu_si128((__m128i*)out, RES);
+  }
+  const uint32_t remainder = num_pixels % 2;
+  if (remainder > 0) {
+    PredictorsNonClampedSub_C[5](in, has_alpha, upper, remainder, out);
+  }
+}
+
+static void PredictorClampedSub0_SSE(const int16_t* in, bool has_alpha,
+                                     const int16_t* upper, uint32_t num_pixels,
+                                     const int32_t min_values[4],
+                                     const int32_t max_values[4],
+                                     int16_t* out) {
+  __m128i MIN = _mm_loadu_si128((const __m128i*)min_values);
+  __m128i MAX = _mm_loadu_si128((const __m128i*)max_values);
+  MIN = _mm_packs_epi32(MIN, MIN);
+  MAX = _mm_packs_epi32(MAX, MAX);
+
+  const int16_t* const in_end = in + 4 * num_pixels;
+  for (; in + 8 <= in_end; in += 8, upper += 8, out += 8) {
+    const __m128i L = _mm_loadu_si128((const __m128i*)(in - 4));
+    const __m128i T = _mm_loadu_si128((const __m128i*)upper);
+    const __m128i TL = _mm_loadu_si128((const __m128i*)(upper - 4));
+
+    const __m128i A = _mm_add_epi16(L, T);
+    __m128i PRED = _mm_sub_epi16(A, TL);
+    Clamp(MIN, MAX, PRED);
+
+    const __m128i IN = _mm_loadu_si128((const __m128i*)in);
+    __m128i RES = _mm_sub_epi16(IN, PRED);
+    if (!has_alpha) {
+      RES = _mm_blend_epi16(RES, kAlphaMax, 0b00010001);
+    }
+    _mm_storeu_si128((__m128i*)out, RES);
+  }
+  const uint32_t remainder = num_pixels % 2;
+  if (remainder > 0) {
+    PredictorsClampedSub_C[0](in, has_alpha, upper, remainder, min_values,
+                              max_values, out);
+  }
+}
+
+static void PredictorClampedSub1_SSE(const int16_t* in, bool has_alpha,
+                                     const int16_t* upper, uint32_t num_pixels,
+                                     const int32_t min_values[4],
+                                     const int32_t max_values[4],
+                                     int16_t* out) {
+  __m128i MIN = _mm_loadu_si128((const __m128i*)min_values);
+  __m128i MAX = _mm_loadu_si128((const __m128i*)max_values);
+  MIN = _mm_packs_epi32(MIN, MIN);
+  MAX = _mm_packs_epi32(MAX, MAX);
+
+  const int16_t* const in_end = in + 4 * num_pixels;
+  for (; in + 8 <= in_end; in += 8, upper += 8, out += 8) {
+    const __m128i L = _mm_loadu_si128((const __m128i*)(in - 4));
+    const __m128i T = _mm_loadu_si128((const __m128i*)upper);
+    const __m128i TL = _mm_loadu_si128((const __m128i*)(upper - 4));
+
+    __m128i A;
+    Average2_m128i(L, T, A);
+    const __m128i B = _mm_sub_epi16(A, TL);
+    const __m128i C = _mm_srai_epi16(B, 1);
+    __m128i PRED = _mm_add_epi16(A, C);
+    Clamp(MIN, MAX, PRED);
+
+    const __m128i IN = _mm_loadu_si128((const __m128i*)in);
+    __m128i RES = _mm_sub_epi16(IN, PRED);
+    if (!has_alpha) {
+      RES = _mm_blend_epi16(RES, kAlphaMax, 0b00010001);
+    }
+    _mm_storeu_si128((__m128i*)out, RES);
+  }
+  const uint32_t remainder = num_pixels % 2;
+  if (remainder > 0) {
+    PredictorsClampedSub_C[1](in, has_alpha, upper, remainder, min_values,
+                              max_values, out);
+  }
+}
+
+template <int MAIN_ANGLE>
+static void AnglePredictorSub_SSE(int delta, const int16_t* in, bool has_alpha,
+                                  const int16_t* upper, uint32_t num_pixels,
+                                  int16_t* out) {
+  if (delta == 0) {
+    const int16_t* const in_end = in + 4 * num_pixels;
+    for (; in + 8 <= in_end; in += 8, out += 8) {
+      // Load the context.
+      [[maybe_unused]] __m128i L;
+      [[maybe_unused]] __m128i TL;
+      [[maybe_unused]] __m128i T;
+      [[maybe_unused]] __m128i TR;
+      if constexpr (MAIN_ANGLE <= 90) {
+        TR = _mm_loadu_si128((const __m128i*)(upper + 4));
+      }
+      if constexpr (MAIN_ANGLE >= 67 && MAIN_ANGLE <= 113) {
+        T = _mm_loadu_si128((const __m128i*)upper);
+      }
+      if constexpr (MAIN_ANGLE >= 113 && MAIN_ANGLE <= 157) {
+        TL = _mm_loadu_si128((const __m128i*)(upper - 4));
+      }
+      if constexpr (MAIN_ANGLE >= 157) {
+        L = _mm_loadu_si128((const __m128i*)(in - 4));
+      }
+      // Compute the prediction.
+      __m128i pred;
+      if constexpr (MAIN_ANGLE == 45) {
+        pred = TR;
+      } else if constexpr (MAIN_ANGLE == 67) {
+        const __m128i A = _mm_add_epi16(T, TR);
+        pred = _mm_srai_epi16(A, 1);
+      } else if constexpr (MAIN_ANGLE == 90) {
+        pred = T;
+      } else if constexpr (MAIN_ANGLE == 113) {
+        const __m128i A = _mm_add_epi16(TL, T);
+        pred = _mm_srai_epi16(A, 1);
+      } else if constexpr (MAIN_ANGLE == 135) {
+        pred = TL;
+      } else if constexpr (MAIN_ANGLE == 157) {
+        const __m128i A = _mm_add_epi16(L, TL);
+        pred = _mm_srai_epi16(A, 1);
+      } else if constexpr (MAIN_ANGLE == 180) {
+        pred = L;
+      }
+      const __m128i src = _mm_loadu_si128((const __m128i*)in);
+      __m128i res = _mm_sub_epi16(src, pred);
+      if (!has_alpha) {
+        res = _mm_blend_epi16(res, kAlphaMax, 0b00010001);
+      }
+      _mm_storeu_si128((__m128i*)out, res);
+      if constexpr (MAIN_ANGLE != 180) upper += 8;
+    }
+    num_pixels = num_pixels % 2;
+  }
+  if (num_pixels != 0) {
+    int mode;
+    if constexpr (MAIN_ANGLE == 45) {
+      mode = 0;
+    } else if constexpr (MAIN_ANGLE == 67) {
+      mode = 1;
+    } else if constexpr (MAIN_ANGLE == 90) {
+      mode = 2;
+    } else if constexpr (MAIN_ANGLE == 113) {
+      mode = 3;
+    } else if constexpr (MAIN_ANGLE == 135) {
+      mode = 4;
+    } else if constexpr (MAIN_ANGLE == 157) {
+      mode = 5;
+    } else if constexpr (MAIN_ANGLE == 180) {
+      mode = 6;
+    }
+    PredictorsAngleSub_C[mode](delta, in, has_alpha, upper, num_pixels, out);
+  }
+}
+
 }  // namespace
 
 extern void EncLDspInitSSE();
@@ -273,6 +594,24 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInitSSE() {
   CollectColorBlueTransforms = CollectColorBlueTransforms_SSE;
   BufferAdd = BufferAdd_SSE;
   CombinedShannonEntropy = CombinedShannonEntropy_SSE;
+
+  PredictorsNonClampedSub[0] = PredictorNonClampedSub0_SSE;
+  PredictorsNonClampedSub[1] = PredictorNonClampedSub1_SSE;
+  PredictorsNonClampedSub[2] = PredictorNonClampedSub2_SSE;
+  PredictorsNonClampedSub[3] = PredictorNonClampedSub3_SSE;
+  PredictorsNonClampedSub[4] = PredictorNonClampedSub4_SSE;
+  PredictorsNonClampedSub[5] = PredictorNonClampedSub5_SSE;
+
+  PredictorsClampedSub[0] = PredictorClampedSub0_SSE;
+  PredictorsClampedSub[1] = PredictorClampedSub1_SSE;
+
+  PredictorsAngleSub[0] = AnglePredictorSub_SSE<45>;
+  PredictorsAngleSub[1] = AnglePredictorSub_SSE<67>;
+  PredictorsAngleSub[2] = AnglePredictorSub_SSE<90>;
+  PredictorsAngleSub[3] = AnglePredictorSub_SSE<113>;
+  PredictorsAngleSub[4] = AnglePredictorSub_SSE<135>;
+  PredictorsAngleSub[5] = AnglePredictorSub_SSE<157>;
+  PredictorsAngleSub[6] = AnglePredictorSub_SSE<180>;
 }
 }  // namespace WP2L
 

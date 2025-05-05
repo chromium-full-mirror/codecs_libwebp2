@@ -19,6 +19,7 @@
 
 #include "src/dsp/lossless/encl_dsp.h"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstddef>
@@ -279,7 +280,8 @@ PredictorNonClampedSubFunc PredictorsNonClampedSub[kNumPredictorsNonClamped];
 PredictorNonClampedSubFunc PredictorsNonClampedSub_C[kNumPredictorsNonClamped];
 PredictorClampedSubFunc PredictorsClampedSub[kNumPredictorsClamped];
 PredictorClampedSubFunc PredictorsClampedSub_C[kNumPredictorsClamped];
-PredictorAngleSubFunc PredictorsAngleSub[kNumPredictorsAngle];
+std::array<PredictorAngleSubFunc, kNumPredictorsAngle> PredictorsAngleSub;
+std::array<PredictorAngleSubFunc, kNumPredictorsAngle> PredictorsAngleSub_C;
 
 PredictorNonClampedSubFunc PredictorSubBlack;
 PredictorAngleSubFunc PredictorSubTop;
@@ -319,15 +321,18 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInit() {
   PredictorsAngleSub[4] = PredictorAngleSub_C<135>;
   PredictorsAngleSub[5] = PredictorAngleSub_C<157>;
   PredictorsAngleSub[6] = PredictorAngleSub_C<180>;
-  PredictorSubBlack = PredictorsNonClampedSub[0];
-  PredictorSubTop = PredictorsAngleSub[kPredictorAngleTopIndex];
-  PredictorSubLeft = PredictorsAngleSub[kPredictorAngleLeftIndex];
+  std::copy(PredictorsAngleSub.begin(), PredictorsAngleSub.end(),
+            PredictorsAngleSub_C.begin());
 
   // If defined, use CPUInfo() to overwrite some pointers with faster versions.
   if (WP2GetCPUInfo != NULL) {
 #if defined(WP2_USE_SSE)
     if (WP2GetCPUInfo(kSSE)) EncLDspInitSSE();
 #endif
+
+    PredictorSubBlack = PredictorsNonClampedSub[0];
+    PredictorSubTop = PredictorsAngleSub[kPredictorAngleTopIndex];
+    PredictorSubLeft = PredictorsAngleSub[kPredictorAngleLeftIndex];
   }
   lossless_enc_last_cpuinfo_used = WP2GetCPUInfo;
 }

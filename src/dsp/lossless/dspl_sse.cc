@@ -34,117 +34,98 @@ namespace {
 //------------------------------------------------------------------------------
 // Predictor Transform
 
-static inline void Clamp(const __m128i* const MIN, const __m128i* const MAX,
-                         __m128i* const A) {
-  const __m128i CLAMPED_MIN = _mm_max_epi16(*MIN, *A);
-  *A = _mm_min_epi16(*MAX, CLAMPED_MIN);
+static inline void Clamp(const __m128i& MIN, const __m128i& MAX, __m128i& A) {
+  const __m128i CLAMPED_MIN = _mm_max_epi16(MIN, A);
+  A = _mm_min_epi16(MAX, CLAMPED_MIN);
 }
 
-static inline void AddSubtractFull_SSE(const int16_t* const a,
-                                       const int16_t* const b,
-                                       const int16_t* const c, __m128i* out) {
-  const __m128i A = _mm_loadu_si64((const __m128i*)a);
-  const __m128i B = _mm_loadu_si64((const __m128i*)b);
-  const __m128i C = _mm_loadu_si64((const __m128i*)c);
-  *out = _mm_add_epi16(A, B);
-  *out = _mm_sub_epi16(*out, C);
-}
-
-static inline void Select_SSE(const int16_t* const a, const int16_t* const b,
-                              const int16_t* const c, int16_t* out) {
-  const __m128i A = _mm_loadu_si64((const __m128i*)a);
-  const __m128i B = _mm_loadu_si64((const __m128i*)b);
-  const __m128i C = _mm_loadu_si64((const __m128i*)c);
-  const __m128i AC0 = _mm_sub_epi16(A, C);
-  const __m128i BC0 = _mm_sub_epi16(B, C);
-  const __m128i AC = _mm_abs_epi16(AC0);
-  const __m128i BC = _mm_abs_epi16(BC0);
-  const __m128i D = _mm_hadd_epi16(AC, BC);
-  int16_t diff[8];
-  _mm_storeu_si128((__m128i*)diff, D);
-  if (diff[4] + diff[5] <= diff[0] + diff[1]) {
-    _mm_storeu_si64((__m128i*)out, A);
-  } else {
-    _mm_storeu_si64((__m128i*)out, B);
-  }
-}
-
-static inline void Average2_SSE(const int16_t* const a, const int16_t* const b,
-                                int16_t* out) {
-  const __m128i A = _mm_loadu_si64((const __m128i*)a);
-  const __m128i B = _mm_loadu_si64((const __m128i*)b);
+static inline void Average2_m128i(const __m128i& A, const __m128i& B,
+                                  __m128i& OUT) {
   const __m128i C = _mm_add_epi16(A, B);
-  const __m128i D = _mm_srai_epi16(C, 1);
-  _mm_storeu_si64((__m128i*)out, D);
-}
-
-static inline void Average3_SSE(const int16_t* const a, const int16_t* const b,
-                                const int16_t* const c, int16_t* out) {
-  Average2_SSE(a, c, out);
-  Average2_SSE(out, b, out);
-}
-
-static inline void Average4_SSE(const int16_t* const a, const int16_t* const b,
-                                const int16_t* const c, const int16_t* const d,
-                                int16_t* out) {
-  const __m128i A = _mm_loadu_si64((const __m128i*)a);
-  const __m128i B = _mm_loadu_si64((const __m128i*)b);
-  const __m128i C = _mm_loadu_si64((const __m128i*)c);
-  const __m128i D = _mm_loadu_si64((const __m128i*)d);
-  const __m128i E = _mm_add_epi16(A, B);
-  const __m128i F = _mm_srai_epi16(E, 1);
-  const __m128i G = _mm_add_epi16(C, D);
-  const __m128i H = _mm_srai_epi16(G, 1);
-  const __m128i I = _mm_add_epi16(F, H);
-  const __m128i J = _mm_srai_epi16(I, 1);
-  _mm_storeu_si64((__m128i*)out, J);
+  OUT = _mm_srai_epi16(C, 1);
 }
 
 static void PredictorNonClamped1_SSE(const int16_t* const left,
                                      const int16_t* const top,
                                      int16_t* const out) {
-  Average3_SSE(left, top, top + 4, out);
+  const __m128i L = _mm_loadu_si64((const __m128i*)left);
+  const __m128i T = _mm_loadu_si64((const __m128i*)top);
+  const __m128i TR = _mm_loadu_si64((const __m128i*)(top + 4));
+  __m128i PRED;
+  Average2_m128i(L, TR, PRED);
+  Average2_m128i(PRED, T, PRED);
+  _mm_storeu_si64((__m128i*)out, PRED);
 }
 
 static void PredictorNonClamped2_SSE(const int16_t* const left,
                                      const int16_t* const top,
                                      int16_t* const out) {
-  Average2_SSE(left, top, out);
+  const __m128i L = _mm_loadu_si64((const __m128i*)left);
+  const __m128i T = _mm_loadu_si64((const __m128i*)top);
+  __m128i PRED;
+  Average2_m128i(L, T, PRED);
+  _mm_storeu_si64((__m128i*)out, PRED);
 }
 
 static void PredictorNonClamped3_SSE(const int16_t* left, const int16_t* top,
                                      int16_t* out) {
-  Average4_SSE(left, top - 4, top, top + 4, out);
+  const __m128i L = _mm_loadu_si64((const __m128i*)left);
+  const __m128i TL = _mm_loadu_si64((const __m128i*)(top - 4));
+  const __m128i T = _mm_loadu_si64((const __m128i*)top);
+  const __m128i TR = _mm_loadu_si64((const __m128i*)(top + 4));
+  __m128i A, B, PRED;
+  Average2_m128i(L, TL, A);
+  Average2_m128i(T, TR, B);
+  Average2_m128i(A, B, PRED);
+  _mm_storeu_si64((__m128i*)out, PRED);
 }
 
 static void PredictorNonClamped4_SSE(const int16_t* left, const int16_t* top,
                                      int16_t* out) {
-  Select_SSE(top, left, top - 4, out);
+  const __m128i T = _mm_loadu_si64((const __m128i*)top);
+  const __m128i L = _mm_loadu_si64((const __m128i*)left);
+  const __m128i TL = _mm_loadu_si64((const __m128i*)(top - 4));
+  const __m128i TTL0 = _mm_sub_epi16(T, TL);
+  const __m128i LTL0 = _mm_sub_epi16(L, TL);
+  const __m128i TTL = _mm_abs_epi16(TTL0);
+  const __m128i LTL = _mm_abs_epi16(LTL0);
+  const __m128i A = _mm_hadd_epi16(TTL, LTL);
+  int16_t diff[8];
+  _mm_storeu_si128((__m128i*)diff, A);
+  if (diff[4] + diff[5] <= diff[0] + diff[1]) {
+    _mm_storeu_si64((__m128i*)out, T);
+  } else {
+    _mm_storeu_si64((__m128i*)out, L);
+  }
 }
 
 static void PredictorNonClamped5_SSE(const int16_t* left, const int16_t* top,
                                      int16_t* out) {
-  const __m128i A = _mm_loadu_si64((const __m128i*)left);
-  const __m128i B = _mm_loadu_si64((const __m128i*)top);
-  __m128i TMP;
-  AddSubtractFull_SSE(left, top, top - 4, &TMP);
-  const __m128i MIN = _mm_min_epi16(A, B);
-  const __m128i MAX = _mm_max_epi16(A, B);
-  Clamp(&MIN, &MAX, &TMP);
-  _mm_storeu_si64((__m128i*)out, TMP);
+  const __m128i L = _mm_loadu_si64((const __m128i*)left);
+  const __m128i T = _mm_loadu_si64((const __m128i*)top);
+  const __m128i TL = _mm_loadu_si64((const __m128i*)(top - 4));
+  const __m128i A = _mm_add_epi16(L, T);
+  __m128i PRED = _mm_sub_epi16(A, TL);
+  const __m128i MIN = _mm_min_epi16(L, T);
+  const __m128i MAX = _mm_max_epi16(L, T);
+  Clamp(MIN, MAX, PRED);
+  _mm_storeu_si64((__m128i*)out, PRED);
 }
 
 static void PredictorClamped0_SSE(const int16_t* left, const int16_t* top,
                                   const int32_t min_values[4],
                                   const int32_t max_values[4], int16_t* out) {
-  __m128i TMP;
-  AddSubtractFull_SSE(left, top, top - 4, &TMP);
+  const __m128i L = _mm_loadu_si64((const __m128i*)left);
+  const __m128i T = _mm_loadu_si64((const __m128i*)top);
+  const __m128i TL = _mm_loadu_si64((const __m128i*)(top - 4));
+  const __m128i A = _mm_add_epi16(L, T);
+  __m128i PRED = _mm_sub_epi16(A, TL);
   __m128i MIN = _mm_loadu_si128((const __m128i*)min_values);
   __m128i MAX = _mm_loadu_si128((const __m128i*)max_values);
   MIN = _mm_packs_epi32(MIN, MIN);
   MAX = _mm_packs_epi32(MAX, MAX);
-  Clamp(&MIN, &MAX, &TMP);
-  _mm_storeu_si64((__m128i*)out, TMP);
+  Clamp(MIN, MAX, PRED);
+  _mm_storeu_si64((__m128i*)out, PRED);
 }
 
 // Disabled for now as it triggers MSAN errors. It seems to be an error
@@ -153,49 +134,43 @@ static void PredictorClamped0_SSE(const int16_t* left, const int16_t* top,
 static void PredictorClamped1_SSE(const int16_t* left, const int16_t* top,
                                   const int32_t min_values[4],
                                   const int32_t max_values[4], int16_t* out) {
-  const __m128i A = _mm_loadu_si64((const __m128i*)left);
-  const __m128i B = _mm_loadu_si64((const __m128i*)top);
-  const __m128i C = _mm_loadu_si64((const __m128i*)top - 4);
-  const __m128i D = _mm_sub_epi16(A, B);
-  const __m128i E = _mm_srai_epi16(D, 1);
-  const __m128i F = _mm_sub_epi16(E, C);
-  const __m128i G = _mm_srai_epi16(F, 1);
-  __m128i H = _mm_add_epi16(E, G);
+  const __m128i L = _mm_loadu_si64((const __m128i*)left);
+  const __m128i T = _mm_loadu_si64((const __m128i*)top);
+  const __m128i TL = _mm_loadu_si64((const __m128i*)top - 4);
+  __m128i A;
+  Average2_m128i(L, T, A);
+  const __m128i B = _mm_sub_epi16(A, TL);
+  const __m128i C = _mm_srai_epi16(B, 1);
+  __m128i PRED = _mm_add_epi16(A, C);
   __m128i MIN = _mm_loadu_si128((const __m128i*)min_values);
   __m128i MAX = _mm_loadu_si128((const __m128i*)max_values);
   MIN = _mm_packs_epi32(MIN, MIN);
   MAX = _mm_packs_epi32(MAX, MAX);
-  Clamp(&MIN, &MAX, &H);
-  _mm_storeu_si64((__m128i*)out, H);
+  Clamp(MIN, MAX, PRED);
+  _mm_storeu_si64((__m128i*)out, PRED);
 }
 #endif
 
-static void AnglePredictor67_SSE(int delta, const int16_t* const left,
-                                 const int16_t* const top, int16_t* const out) {
+template <int MAIN_ANGLE>
+static void AnglePredictor_SSE(int delta, const int16_t* const left,
+                               const int16_t* const top, int16_t* const out) {
   if (delta == 0) {
-    Average2_SSE(top, top + 4, out);
+    __m128i A, B;
+    if constexpr (MAIN_ANGLE == 67) {
+      A = _mm_loadu_si64((const __m128i*)top);
+      B = _mm_loadu_si64((const __m128i*)(top + 4));
+    } else if constexpr (MAIN_ANGLE == 113) {
+      A = _mm_loadu_si64((const __m128i*)(top - 4));
+      B = _mm_loadu_si64((const __m128i*)top);
+    } else if constexpr (MAIN_ANGLE == 157) {
+      A = _mm_loadu_si64((const __m128i*)left);
+      B = _mm_loadu_si64((const __m128i*)(top - 4));
+    }
+    __m128i C;
+    Average2_m128i(A, B, C);
+    _mm_storeu_si64((__m128i*)out, C);
   } else {
-    AnglePredict<67>(delta, left, top, out);
-  }
-}
-
-static void AnglePredictor113_SSE(int delta, const int16_t* const left,
-                                  const int16_t* const top,
-                                  int16_t* const out) {
-  if (delta == 0) {
-    Average2_SSE(top - 4, top, out);
-  } else {
-    AnglePredict<67>(delta, left, top, out);
-  }
-}
-
-static void AnglePredictor157_SSE(int delta, const int16_t* const left,
-                                  const int16_t* const top,
-                                  int16_t* const out) {
-  if (delta == 0) {
-    Average2_SSE(left, top - 4, out);
-  } else {
-    AnglePredict<67>(delta, left, top, out);
+    AnglePredict<MAIN_ANGLE>(delta, left, top, out);
   }
 }
 
@@ -215,9 +190,9 @@ WP2_TSAN_IGNORE_FUNCTION void DspLDspInitSSE() {
   // upstream.
   // PredictorsClamped[1] = PredictorClamped1_SSE;
 
-  PredictorsAngle[1] = AnglePredictor67_SSE;
-  PredictorsAngle[3] = AnglePredictor113_SSE;
-  PredictorsAngle[5] = AnglePredictor157_SSE;
+  PredictorsAngle[1] = AnglePredictor_SSE<67>;
+  PredictorsAngle[3] = AnglePredictor_SSE<113>;
+  PredictorsAngle[5] = AnglePredictor_SSE<157>;
 }
 }  // namespace WP2L
 
