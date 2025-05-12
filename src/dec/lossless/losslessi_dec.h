@@ -24,6 +24,7 @@
 #include <cstdint>
 
 #include "src/common/lossless/color_cache.h"
+#include "src/common/lossless/scp.h"
 #include "src/common/lossless/transforms.h"
 #include "src/common/symbols.h"
 #include "src/dec/symbols_dec.h"
@@ -73,6 +74,19 @@ class Metadata {
   WP2::SymbolReader sr_;
 };
 
+// Global data for the entire image rather than per group
+struct ScpGlobal {
+  std::array<int, 4> min_tpv;
+  std::array<int, 4> max_tpv;
+
+  // Prediction modes for ARGB.
+  std::array<scp::PredictionMode, 4> prediction_modes;
+  uint32_t maxerr_shift;
+  bool use_jxl;
+  int jxl_header_index;
+  scp::JxlHeader jxl_header;
+};
+
 class Decoder {
  public:
   Decoder();
@@ -119,6 +133,11 @@ class Decoder {
   // Decodes a sub-image encoded with the LZW algorithm.
   WP2Status DecodeLZW(uint32_t width, uint32_t last_row,
                       WP2::Planef* bits_per_pixel, int16_t** src_out);
+  // Decodes a sub-image encoded with the SCP algorithm.
+  WP2Status DecodeScpHeader(ScpGlobal* global);
+  WP2Status DecodeScp(uint32_t width, uint32_t last_row,
+                      const ScpGlobal& global, WP2::Planef* bits_per_pixel,
+                      int16_t** src_out);
 
   // Decodes an image, once the pre-processing has been done.
   WP2Status DecodeImageData(uint32_t width, uint32_t height, uint32_t last_row,
@@ -193,6 +212,7 @@ class Decoder {
   bool tile_is_premultiplied_ = false;
   WP2::Vector<ColorSegment> lzw_segments_;  // LZW segments
   ColorSegment lzw_last_seg_;               // last decoded segment
+  ScpGlobal scp_global_;
 };
 
 }  // namespace WP2L

@@ -315,6 +315,12 @@ WP2Status Group4Encode(const Buffer_s16& buffer, uint32_t num_colors,
 WP2Status LZWEncode(const Buffer_s16& input_buffer, const Palette& palette,
                     int effort, WP2::ANSEncBase* enc, EncodeInfo* encode_info);
 
+//------------------------------------------------------------------------------
+// Self-correcting predictor.
+
+WP2Status SCPEncode(const Buffer_s16& img, int effort, WP2::ANSEnc& enc,
+                    EncodeInfo* encode_info);
+
 }  // namespace WP2L
 
 //------------------------------------------------------------------------------

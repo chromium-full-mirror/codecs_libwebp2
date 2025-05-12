@@ -417,12 +417,15 @@ add_library(
   # lossless
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/color_cache.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/color_cache.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/scp.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/scp.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/transforms.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/transforms.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/group4_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/losslessi_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/losslessi_dec.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/lzw_dec.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/dec/lossless/scp_dec.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/analysisl_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/backward_references_cost_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/backward_references_enc.cc
@@ -435,7 +438,8 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/lzw_enc.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/palette.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/palette.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/predictorl_enc.cc)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/predictorl_enc.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/lossless/scp_enc.cc)
 target_include_directories(wp2_enc_dec PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(wp2_enc_dec PUBLIC ${WP2_DEFINITIONS})
 if(AOM_BUILD_PATH

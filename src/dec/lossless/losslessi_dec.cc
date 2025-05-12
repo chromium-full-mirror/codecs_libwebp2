@@ -636,6 +636,9 @@ WP2Status Decoder::DecodeImageData(uint32_t width, uint32_t height,
     WP2_CHECK_STATUS(DecodeGroup4(width, last_row, bits_per_pixel, &src));
   } else if (encoding_algorithm_ == EncodingAlgorithm::kLZW) {
     WP2_CHECK_STATUS(DecodeLZW(width, last_row, bits_per_pixel, &src));
+  } else if (encoding_algorithm_ == EncodingAlgorithm::kSCP) {
+    WP2_CHECK_STATUS(
+        DecodeScp(width, last_row, scp_global_, bits_per_pixel, &src));
   } else {
     WP2_CHECK_STATUS(DecodeAndProcess(width, last_row, /*do_process=*/true,
                                       &pixels_, bits_per_pixel, config_.info,
@@ -1135,6 +1138,22 @@ WP2Status Decoder::DecodeHeader() {
       lzw_segments_[i + 1] = {&palette[4 * i], 1};
     }
     dec_->PopDebugPrefix();
+    return WP2_STATUS_OK;
+  } else if (encoding_algorithm_ == EncodingAlgorithm::kSCP) {
+    for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
+      scp_global_.max_tpv[c] =
+          c == 0 ? WP2::kAlphaMax
+                 : (1 << WP2Formatbpc(tile_->rgb_output.format())) - 1;
+    }
+    for (const Transform& t : transforms_) {
+      if (t.header_.type != TransformType::kNormalizeChannels) continue;
+      for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
+        scp_global_.max_tpv[c] = t.header_.normalize_channels_max[c];
+      }
+    }
+    // Read the other parameters.
+    dec_->PopDebugPrefix();
+    WP2_CHECK_STATUS(DecodeScpHeader(&scp_global_));
     return WP2_STATUS_OK;
   }
 

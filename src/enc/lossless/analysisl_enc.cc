@@ -36,6 +36,7 @@
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
+#include "src/wp2/encode.h"
 #include "src/wp2/format_constants.h"
 
 namespace WP2L {
@@ -509,6 +510,7 @@ WP2Status EncoderAnalyzeDefault(const WP2::ProgressRange& progress,
                                 WP2::Vector<CrunchConfig>* const configs) {
   const WP2::ArgbBuffer& pic = encoder.pic_;
   const int effort = encoder.config_.effort;
+  // Deal with forced lossless methods.
   uint32_t n_lz77s;
   assert(!pic.IsEmpty());
 
@@ -526,6 +528,92 @@ WP2Status EncoderAnalyzeDefault(const WP2::ProgressRange& progress,
         FindEncodingRecipe(EncodingAlgorithm::kLZW, &configs->back()));
     configs->back().use_premultiplied = can_premultiply;
     return WP2_STATUS_OK;
+  }
+
+  if (WP2Formatbpc(pic.format()) == 8 &&
+      !WP2IsPremultiplied(encoder.pic_.format()) &&
+      (encoder.config_.lossless_algorithm == WP2L::EncodingAlgorithm::kSCP ||
+       effort == WP2::kMaxEffort)) {
+    auto ComputeHash = [](TransformHeader::Channel first_channel,
+                          TransformHeader::Channel second_channel,
+                          TransformHeader::CCTransform second_transform,
+                          TransformHeader::CCTransform third_transform) {
+      // A signature is created for each transform. The same signature is given
+      // when there is an RGB permutation or a sign change in the channel
+      // difference.
+      const uint32_t c0 = static_cast<uint32_t>(first_channel) - 1;
+      const uint32_t c1 = static_cast<uint32_t>(second_channel) - 1;
+      const uint32_t c2 = 0 + 1 + 2 - c0 - c1;
+      uint32_t res = 1 << c0;
+      if (second_transform == TransformHeader::CCTransform::kNothing) {
+        res += 1 << c1;
+      } else {
+        res += 1 << (c0 + c1 + 2);
+      }
+      if (third_transform == TransformHeader::CCTransform::kNothing) {
+        res += 1 << c2;
+      } else if (third_transform ==
+                 TransformHeader::CCTransform::kSubtractFirst) {
+        res += 1 << (c0 + c2 + 2);
+      } else if (third_transform ==
+                 TransformHeader::CCTransform::kSubtractSecond) {
+        res += 1 << (c1 + c2 + 2);
+      } else {
+        res += 1 << (6 + c2);
+      }
+      return res;
+    };
+    WP2::Vector_u32 config_hash;
+    for (TransformHeader::Channel first_channel :
+         {TransformHeader::Channel::kRed, TransformHeader::Channel::kGreen,
+          TransformHeader::Channel::kBlue}) {
+      for (TransformHeader::Channel second_channel :
+           {TransformHeader::Channel::kRed, TransformHeader::Channel::kGreen,
+            TransformHeader::Channel::kBlue}) {
+        if (second_channel == first_channel) continue;
+        for (TransformHeader::CCTransform second_transform :
+             {TransformHeader::CCTransform::kNothing,
+              TransformHeader::CCTransform::kSubtractFirst}) {
+          for (TransformHeader::CCTransform third_transform :
+               {TransformHeader::CCTransform::kNothing,
+                TransformHeader::CCTransform::kSubtractFirst,
+                // TransformHeader::CCTransform::kSubtractSecond,
+                TransformHeader::CCTransform::kSubtractAverage}) {
+            const uint32_t hash =
+                ComputeHash(first_channel, second_channel, second_transform,
+                            third_transform);
+            if (std::find(config_hash.begin(), config_hash.end(), hash) !=
+                config_hash.end()) {
+              continue;
+            }
+
+            WP2_CHECK_ALLOC_OK(config_hash.push_back(hash));
+            WP2_CHECK_ALLOC_OK(configs->push_back(CrunchConfig()));
+            auto& config = configs->back();
+            WP2_CHECK_STATUS(
+                FindEncodingRecipe(WP2L::EncodingAlgorithm::kSCP, &config,
+                                   TransformType::kNormalizeChannels,
+                                   TransformType::kCrossColorGlobal));
+            config.transforms[1].cc_global_first_channel = first_channel;
+            config.transforms[1].cc_global_second_channel = second_channel;
+            config.transforms[1].cc_global_second_transform = second_transform;
+            config.transforms[1].cc_global_third_transform = third_transform;
+            config.use_premultiplied = can_premultiply;
+          }
+        }
+      }
+    }
+    // Also add YCgCo.
+    WP2_CHECK_ALLOC_OK(configs->push_back(CrunchConfig()));
+    auto& config = configs->back();
+    WP2_CHECK_STATUS(FindEncodingRecipe(WP2L::EncodingAlgorithm::kSCP, &config,
+                                        TransformType::kNormalizeChannels,
+                                        TransformType::kYCoCgR));
+    config.use_premultiplied = can_premultiply;
+
+    if (encoder.config_.lossless_algorithm == WP2L::EncodingAlgorithm::kSCP) {
+      return WP2_STATUS_OK;
+    }
   }
 
   // Try LZW within the same palette size range condition as Group4.

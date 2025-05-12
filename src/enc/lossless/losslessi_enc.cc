@@ -483,6 +483,14 @@ WP2Status Encoder::EncodeImageInternal(
     return WP2_STATUS_OK;
   }
 
+  // Check if SCP is used.
+  if (config.algorithm == EncodingAlgorithm::kSCP) {
+    WP2_CHECK_STATUS(
+        SCPEncode(argb_buffer_, config_.effort, *enc_init, encode_info));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.));
+    return WP2_STATUS_OK;
+  }
+
   // If using a color cache, do not have it bigger than the number of
   // colors.
   const bool use_palette =
@@ -1142,6 +1150,9 @@ WP2Status Encoder::ApplyAndWriteTransforms(
                   "capacity");
     return WP2_STATUS_OK;
   }
+  if (config->algorithm == EncodingAlgorithm::kSCP) {
+    return WP2_STATUS_OK;
+  }
 
   if (has_alpha_ && image_is_premultiplied_) {
     // The lossless encoder may use unmultiplied samples for better compression,
@@ -1289,8 +1300,7 @@ WP2Status EncodeImage(const WP2::EncoderConfig& encoder_config,
     // configuration has the same first transforms.
     bool cache_transforms = false;
     if (i_config + 1 < crunch_configs.size() &&
-        config.algorithm != EncodingAlgorithm::kGroup4 &&
-        config.algorithm != EncodingAlgorithm::kLZW) {
+        config.algorithm == EncodingAlgorithm::kWebP) {
       cache_transforms = config.ShouldBeCachedFor(crunch_configs[i_config + 1]);
     }
     WP2_CHECK_STATUS(encoder.ApplyAndWriteTransforms(

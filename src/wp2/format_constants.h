@@ -362,7 +362,15 @@ static constexpr uint32_t kRedToBlueMax = 63;
 static constexpr uint32_t kGreenToBlueMax = 127;
 static constexpr uint32_t kGreenToRedMax = 127;
 
-enum class EncodingAlgorithm { kWebP, kGroup4, kLZW, kNum, kDefault = kNum };
+enum class EncodingAlgorithm {
+  kWebP,
+  kGroup4,
+  kLZW,
+  // Self-correcting predictor.
+  kSCP,
+  kNum,
+  kDefault = kNum
+};
 
 enum class TransformType {
   kPredictor,
@@ -390,6 +398,12 @@ static constexpr EncodingRecipe kPossibleEncodingRecipes[] = {
      {TransformType::kNum, TransformType::kNum, TransformType::kNum}},
     {EncodingAlgorithm::kLZW,
      {TransformType::kNum, TransformType::kNum, TransformType::kNum}},
+    {EncodingAlgorithm::kSCP,
+     {TransformType::kNormalizeChannels, TransformType::kYCoCgR,
+      TransformType::kNum}},
+    {EncodingAlgorithm::kSCP,
+     {TransformType::kNormalizeChannels, TransformType::kCrossColorGlobal,
+      TransformType::kNum}},
     // Only one.
     {EncodingAlgorithm::kGroup4,
      {TransformType::kColorIndexing, TransformType::kNum, TransformType::kNum}},
