@@ -2782,8 +2782,9 @@ WP2Status Decoder::RegisterSymbolForVDebug(
 }
 
 static const char* const kTransformNames[] = {
-    "Predictor", "Predictor with sub", "CrossColor",    "CrossColorGlobal",
-    "YCoCgR",    "SubstractGreen",     "ColorIndexing", "NormalizeChannels"};
+    "Predictor",        "Predictor with sub", "CrossColor",
+    "CrossColorGlobal", "SubstractGreen",     "ColorIndexing",
+    "NormalizeChannels"};
 STATIC_ASSERT_ARRAY_SIZE(kTransformNames, (uint32_t)TransformType::kNum);
 static const char* const kPredictorNames[] = {"Black",
                                               "180",
@@ -2942,11 +2943,6 @@ WP2Status Decoder::RegisterTransformedRowForVDebug(
                     /*discard_alpha=*/true, /*duplicate_green=*/true,
                     decoder_info);
     }
-  } else if (transform.header_.type == TransformType::kYCoCgR) {
-    DisplayBuffer(last_row_, num_rows, tile_->rect, transform, rows, num_bits,
-                  /*offset=*/128.f, /*scale=*/1.f,
-                  /*discard_alpha=*/false, /*duplicate_green=*/false,
-                  decoder_info);
   }
 
   if (VDSelected(tile_->rect, config_)) {

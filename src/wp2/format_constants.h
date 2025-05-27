@@ -20,8 +20,10 @@
 #ifndef WP2_WP2_FORMAT_CONSTANTS_H_
 #define WP2_WP2_FORMAT_CONSTANTS_H_
 
+#include <array>
 #include <cstdint>
 #include <type_traits>
+#include <utility>
 
 namespace WP2 {
 
@@ -372,12 +374,17 @@ enum class EncodingAlgorithm {
   kDefault = kNum
 };
 
+// Taken from Table VII in "Multiplierless reversible colour transforms
+// and their automatic selection for image data compression" by Tilo Strutz.
+constexpr std::array<std::pair<uint8_t, uint8_t>, 6> kCommonCrossColorIndices =
+    {{{7, 10}, {4, 10}, {3, 10}, {7, 4}, /*YUVr*/ {7, 1}, /*YCoCg-R*/ {7, 11}}};
+
 enum class TransformType {
   kPredictor,
   kPredictorWSub,  // predictors with sub-modes (unused)
   kCrossColor,
+  // Reversible color space transform, includes YUVr and YCoCg-R.
   kCrossColorGlobal,
-  kYCoCgR,  // reversible YCoCg (unused)
   kSubtractGreen,
   kColorIndexing,
   kNormalizeChannels,  // maps the channels to a range of [0, num_colors-1]
@@ -399,7 +406,7 @@ static constexpr EncodingRecipe kPossibleEncodingRecipes[] = {
     {EncodingAlgorithm::kLZW,
      {TransformType::kNum, TransformType::kNum, TransformType::kNum}},
     {EncodingAlgorithm::kSCP,
-     {TransformType::kNormalizeChannels, TransformType::kYCoCgR,
+     {TransformType::kNormalizeChannels, TransformType::kNum,
       TransformType::kNum}},
     {EncodingAlgorithm::kSCP,
      {TransformType::kNormalizeChannels, TransformType::kCrossColorGlobal,

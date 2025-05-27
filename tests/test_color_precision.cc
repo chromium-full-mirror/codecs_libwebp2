@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <tuple>
 
 #include "src/common/color_precision.h"
 #include "src/dsp/lossless/decl_dsp.h"
@@ -105,19 +106,25 @@ TEST(ColorPrecisionTest, Argb32b_AYCoCg19b) {
 
 //------------------------------------------------------------------------------
 
-TEST(ColorPrecisionTest, TestYCoCgRRoundTrip) {
+class CrossColorRoundTripTest
+    : public testing::TestWithParam<std::tuple<int, int>> {};
+
+TEST_P(CrossColorRoundTripTest, CrossColorRoundTrip) {
   WP2L::DecLDspInit();
   WP2L::EncLDspInit();
+  const uint32_t y_index = std::get<0>(GetParam()),
+                 uv_index = std::get<1>(GetParam());
   for (uint32_t r = 0; r < (1u << 8); ++r) {
     for (uint32_t g = 0; g < (1u << 8); ++g) {
       for (uint32_t b = 0; b < (1u << 8); ++b) {
         int16_t in[4], tmp[4], out[4];
-        in[0] = tmp[0] = 0;
+        in[0] = tmp[0] = 255;
         in[1] = tmp[1] = r;
         in[2] = tmp[2] = g;
         in[3] = tmp[3] = b;
-        WP2L::RGB2YCoCgR(tmp, 1);
-        WP2L::YCoCgRToRGB(tmp, 1, out);
+        WP2L::CrossColorGlobal(tmp, /*num_pixels=*/1, y_index, uv_index);
+        WP2L::CrossColorGlobalInverse(tmp, /*num_pixels=*/1, y_index, uv_index,
+                                      out);
         EXPECT_EQ(in[0], out[0]);
         EXPECT_EQ(in[1], out[1]);
         EXPECT_EQ(in[2], out[2]);
@@ -126,6 +133,11 @@ TEST(ColorPrecisionTest, TestYCoCgRRoundTrip) {
     }
   }
 }
+
+INSTANTIATE_TEST_SUITE_P(CrossColorRoundTripTestInstantiation,
+                         CrossColorRoundTripTest,
+                         testing::Combine(testing::Range(1, 9),
+                                          testing::Range(1, 12)));
 
 //------------------------------------------------------------------------------
 

@@ -45,6 +45,7 @@ struct Segment {
   Segment operator/(int32_t v) const {
     return v > 0 ? Segment{min / v, max / v} : Segment{max / v, min / v};
   }
+  Segment operator>>(int32_t v) const { return Segment{min >> v, max >> v}; }
   Segment operator|(const Segment& other) const {
     return Segment{std::min(min, other.min), std::max(max, other.max)};
   }
@@ -148,40 +149,61 @@ WP2Status GetARGBRanges(
         break;
       }
       case TransformType::kCrossColorGlobal: {
-        const uint32_t c1 =
-            static_cast<uint32_t>(header.cc_global_first_channel);
-        const uint32_t c2 =
-            static_cast<uint32_t>(header.cc_global_second_channel);
-        const Segment& segment1 = segments[c1];
-        Segment& segment2 = segments[c2];
-        if (header.cc_global_third_transform !=
-            TransformHeader::CCTransform::kNothing) {
-          Segment& segment3 = segments[1 + 2 + 3 - c1 - c2];
-          if (header.cc_global_third_transform ==
-              TransformHeader::CCTransform::kSubtractFirst) {
-            segment3 = segment3 - segment1;
-          } else if (header.cc_global_third_transform ==
-                     TransformHeader::CCTransform::kSubtractSecond) {
-            segment3 = segment3 - segment2;
-          } else {
-            segment3 = segment3 - (segment1 + segment2) / 2;
-          }
+        const uint32_t y_index = header.cc_global_y_index;
+        const uint32_t uv_index = header.cc_global_uv_index;
+        Segment r = segments[1], g = segments[2], b = segments[3];
+
+        int16_t alpha1, alpha2;
+        if (y_index == 1) {
+          alpha1 = alpha2 = 0;
+        } else if (y_index == 2) {
+          alpha1 = 4;
+          alpha2 = 0;
+        } else if (y_index == 3) {
+          alpha1 = 0;
+          alpha2 = 4;
+        } else if (y_index == 4) {
+          alpha1 = 2;
+          alpha2 = 0;
+        } else if (y_index == 5) {
+          alpha1 = 0;
+          alpha2 = 2;
+        } else if (y_index == 6) {
+          alpha1 = 2;
+          alpha2 = 2;
+        } else if (y_index == 7) {
+          alpha1 = alpha2 = 1;
+        } else if (y_index == 8) {
+          alpha1 = 2;
+          alpha2 = 1;
+        } else {
+          alpha1 = 1;
+          alpha2 = 2;
         }
-        if (header.cc_global_second_transform !=
-            TransformHeader::CCTransform::kNothing) {
-          segment2 = segment2 - segment1;
+        const int16_t eps = uv_index <= 3 ? 0 : uv_index <= 9 ? 1 : 2;
+
+        if (uv_index == 2 || uv_index == 5) {
+          std::swap(r, g);
+        } else if (uv_index == 3 || uv_index == 6 || uv_index == 11) {
+          std::swap(b, g);
+        } else if (uv_index == 7 || uv_index == 12) {
+          std::swap(r, b);
+        } else if (uv_index == 8) {
+          std::swap(r, b);
+          std::swap(g, r);
+        } else if (uv_index == 9) {
+          std::swap(r, g);
+          std::swap(b, r);
         }
-        break;
-      }
-      case TransformType::kYCoCgR: {
-        // co: r-b.
-        const Segment segment_g = segments[2];
-        segments[2] = segments[1] - segments[3];
-        // tmp = (b + (co / 2)); cg = g - tmp;
-        const Segment segment_tmp = segments[3] + (segments[2] / 2);
-        segments[3] = segment_g - segment_tmp;
-        // y = tmp + (cg / 2);
-        segments[1] = segment_tmp + (segments[3] / 2);
+
+        const Segment v = r - g;
+        const Segment uu = b - g;
+        const Segment u = uu - ((v * eps) >> 2);
+        const Segment y = g + ((v * alpha1 + uu * alpha2) >> 2);
+
+        segments[1] = y;
+        segments[2] = u;
+        segments[3] = v;
         break;
       }
       case TransformType::kSubtractGreen:

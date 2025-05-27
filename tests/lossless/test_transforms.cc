@@ -20,7 +20,6 @@
 #include <tuple>
 
 #include "imageio/image_dec.h"
-#include "src/common/lossless/transforms.h"
 #include "src/enc/lossless/backward_references_enc.h"
 #include "src/enc/lossless/losslessi_enc.h"
 #include "src/utils/utils.h"
@@ -33,16 +32,11 @@
 namespace WP2 {
 
 class CrossColorGlobalTest
-    : public testing::TestWithParam<std::tuple<
-          WP2L::TransformHeader::Channel, WP2L::TransformHeader::Channel,
-          WP2L::TransformHeader::CCTransform,
-          WP2L::TransformHeader::CCTransform>> {};
+    : public testing::TestWithParam<std::tuple<int, int>> {};
 
 // Tests the kCrossColorGlobal transform.
 TEST_P(CrossColorGlobalTest, Pattern) {
   constexpr char kSource1_64x48[] = "source1_64x48.png";
-  // First and second channel have to be different.
-  if (std::get<0>(GetParam()) == std::get<1>(GetParam())) return;
 
   ArgbBuffer original(WP2_ARGB_32);
   ASSERT_WP2_OK(
@@ -63,10 +57,8 @@ TEST_P(CrossColorGlobalTest, Pattern) {
   config.transforms[0].type = WP2L::TransformType::kSubtractGreen;
   config.transforms[1].type = WP2L::TransformType::kPredictor;
   config.transforms[2].type = WP2L::TransformType::kCrossColorGlobal;
-  config.transforms[2].cc_global_first_channel = std::get<0>(GetParam());
-  config.transforms[2].cc_global_second_channel = std::get<1>(GetParam());
-  config.transforms[2].cc_global_second_transform = std::get<2>(GetParam());
-  config.transforms[2].cc_global_third_transform = std::get<3>(GetParam());
+  config.transforms[2].cc_global_y_index = std::get<0>(GetParam());
+  config.transforms[2].cc_global_uv_index = std::get<1>(GetParam());
 
   MemoryWriter memory_writer;
   WP2_ASSERT_STATUS(Encode(original, &memory_writer, encoder_config));
@@ -80,21 +72,9 @@ TEST_P(CrossColorGlobalTest, Pattern) {
                                 /*file_name=*/"cross_color_global"));
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    TransformsTestInstantiation, CrossColorGlobalTest,
-    testing::Combine(
-        testing::Values(WP2L::TransformHeader::Channel::kRed,
-                        WP2L::TransformHeader::Channel::kGreen,
-                        WP2L::TransformHeader::Channel::kBlue),
-        testing::Values(WP2L::TransformHeader::Channel::kRed,
-                        WP2L::TransformHeader::Channel::kGreen,
-                        WP2L::TransformHeader::Channel::kBlue),
-        testing::Values(WP2L::TransformHeader::CCTransform::kNothing,
-                        WP2L::TransformHeader::CCTransform::kSubtractFirst),
-        testing::Values(WP2L::TransformHeader::CCTransform::kNothing,
-                        WP2L::TransformHeader::CCTransform::kSubtractFirst,
-                        WP2L::TransformHeader::CCTransform::kSubtractSecond,
-                        WP2L::TransformHeader::CCTransform::kSubtractAverage)));
+INSTANTIATE_TEST_SUITE_P(TransformsTestInstantiation, CrossColorGlobalTest,
+                         testing::Combine(testing::Range(1, 9),
+                                          testing::Range(1, 12)));
 
 TEST(GenericTest, InvalidTransformCombinations) {
   // Create a 2x2 image with a single color.

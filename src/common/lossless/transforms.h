@@ -31,14 +31,6 @@ namespace WP2L {
 // Information that defines a transform to apply.
 struct TransformHeader {
   enum class Channel { kRed = 1, kGreen = 2, kBlue = 3 };
-  // 0 (nothing), 1 (subtract the first color), 2 (subtract the second color),
-  // 3 (subtract the average of the first and second colors).
-  enum class CCTransform {
-    kNothing = 0,
-    kSubtractFirst = 1,
-    kSubtractSecond = 2,
-    kSubtractAverage = 3
-  };
   bool operator==(const TransformHeader& other) const {
     if (type != other.type) return false;
     if (type == TransformType::kColorIndexing) {
@@ -49,16 +41,11 @@ struct TransformHeader {
 
   TransformType type = TransformType::kNum;
   uint32_t indexing_num_colors = 0;
-  // First and second channels to be compressed. The second channel will have a
-  // transform applied to it. Indices are in ARGB so the indices are in [1-3].
-  Channel cc_global_first_channel;
-  Channel cc_global_second_channel;
-  // Transforms to apply to the second channel. Transforms can be: kNothing,
-  // kSubtractFirst.
-  CCTransform cc_global_second_transform;
-  // Transforms to apply to the third channel. Transforms can be: kNothing,
-  // kSubtractFirst, kSubtractSecond, kSubtractAverage.
-  CCTransform cc_global_third_transform;
+  // y index is in [1-9] and uv index in [1-12] respectively indices in section
+  // A and B of "multiplierless reversible colour transforms and their automatic
+  // selection for image data compression" by Tilo Strutz.
+  uint32_t cc_global_y_index;
+  uint32_t cc_global_uv_index;
 
   // The following are parameters that also define the transform but after it
   // has been computed on the image. They are necessary for GetARGBRanges.

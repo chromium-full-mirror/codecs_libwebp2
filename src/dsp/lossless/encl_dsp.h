@@ -49,7 +49,9 @@ extern FindExtremaFunc FindExtrema;
 typedef void (*SimpleColorSpaceFunc)(int16_t* dst, uint32_t num_pixels);
 extern SimpleColorSpaceFunc SubtractGreenFromBlueAndRed;
 void SubtractGreenFromBlueAndRed_C(int16_t* argb, uint32_t num_pixels);
-extern SimpleColorSpaceFunc RGB2YCoCgR;
+typedef void (*CrossColorGlobalFunc)(int16_t* argb, uint32_t num_pixels,
+                                     uint32_t y_index, uint32_t uv_index);
+extern CrossColorGlobalFunc CrossColorGlobal;
 typedef void (*TransformColorFunc)(const Multipliers& m, uint32_t num_pixels,
                                    int16_t* const data);
 extern TransformColorFunc TransformColor;

@@ -121,7 +121,6 @@ class Encoder {
                                         WP2::ANSEnc* enc,
                                         WP2::ANSDictionaries* dicts);
   // Implementations of the different transforms.
-  void ApplyYCoCgR();
   void ApplySubtractGreen();
   WP2Status ApplyPredictor(const std::array<int32_t, 4>& min_values,
                            const std::array<int32_t, 4>& max_values,
@@ -133,10 +132,7 @@ class Encoder {
                             uint32_t ccolor_transform_bits, WP2::ANSEnc* enc,
                             WP2::ANSDictionaries* dicts);
   WP2Status ApplyCrossColorGlobal(const WP2::ProgressRange& progress,
-                                  TransformHeader::Channel c1,
-                                  TransformHeader::Channel c2,
-                                  TransformHeader::CCTransform second_transform,
-                                  TransformHeader::CCTransform third_transform,
+                                  uint32_t y_index, uint32_t uv_index,
                                   WP2::ANSEnc* enc);
   WP2Status ApplyColorIndexing(const CrunchConfig& config);
   WP2Status ApplyNormalizeChannels(const std::array<int32_t, 4>& minima_range,

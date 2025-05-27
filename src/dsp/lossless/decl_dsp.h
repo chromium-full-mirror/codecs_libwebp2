@@ -65,7 +65,11 @@ typedef void (*SimpleColorSpaceInverseFunc)(const int16_t* src,
 extern SimpleColorSpaceInverseFunc AddGreenToBlueAndRed;
 void AddGreenToBlueAndRed_C(const int16_t* src, uint32_t num_pixels,
                             int16_t* dst);
-extern SimpleColorSpaceInverseFunc YCoCgRToRGB;
+typedef void (*CrossColorGlobalInverseFunc)(const int16_t* src,
+                                            uint32_t num_pixels,
+                                            uint32_t y_index, uint32_t uv_index,
+                                            int16_t* dst);
+extern CrossColorGlobalInverseFunc CrossColorGlobalInverse;
 
 typedef void (*TransformColorInverseFunc)(const Multipliers& m,
                                           const int16_t* src,

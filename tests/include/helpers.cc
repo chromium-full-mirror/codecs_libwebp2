@@ -790,7 +790,7 @@ void WP2DspReset() {
   for (auto& p : WP2L::PredictorsClampedAdd) p = nullptr;
   for (auto& p : WP2L::PredictorsAngleAdd) p = nullptr;
   WP2L::AddGreenToBlueAndRed = nullptr;
-  WP2L::YCoCgRToRGB = nullptr;
+  WP2L::CrossColorGlobalInverse = nullptr;
   WP2L::TransformColorInverse = nullptr;
   WP2L::MapColor = nullptr;
 
@@ -801,7 +801,7 @@ void WP2DspReset() {
 
   // encl_dsp
   WP2L::SubtractGreenFromBlueAndRed = nullptr;
-  WP2L::RGB2YCoCgR = nullptr;
+  WP2L::CrossColorGlobal = nullptr;
   WP2L::TransformColor = nullptr;
   WP2L::CollectColorBlueTransforms = nullptr;
   WP2L::CollectColorRedTransforms = nullptr;

@@ -200,22 +200,6 @@ void PredictorInverseTransform_C(const Transform* const transform, int y_start,
   }
 }
 
-void YCoCgR2RGB_C(const int16_t* src, uint32_t num_pixels, int16_t* dst) {
-  for (const int16_t* const src_end = src + 4 * num_pixels; src < src_end;
-       src += 4, dst += 4) {
-    const int16_t y = src[1];
-    const int16_t co = src[2];
-    const int16_t cg = src[3];
-    const int16_t tmp = y - (cg / 2);
-    const int16_t tmp_g = cg + tmp;
-    const int16_t tmp_b = tmp - (co / 2);
-    const int16_t tmp_r = tmp_b + co;
-    dst[0] = src[0];
-    dst[1] = tmp_r;
-    dst[2] = tmp_g;
-    dst[3] = tmp_b;
-  }
-}
 }  // namespace
 
 // Add green to blue and red channels (i.e. perform the inverse transform of
@@ -312,51 +296,133 @@ void ColorSpaceInverseTransform_C(const Transform* const transform, int y_start,
 }
 
 // Color space inverse transform.
-void CrossColorGlobalInverseTransform_C(const Transform* const transform,
-                                        int y_start, int y_end,
-                                        const int16_t* src, int16_t* dst,
-                                        int16_t* predicted) {
-  const uint32_t width = transform->width_pic_;
-  const uint32_t c1 =
-      static_cast<uint32_t>(transform->header_.cc_global_first_channel);
-  const uint32_t c2 =
-      static_cast<uint32_t>(transform->header_.cc_global_second_channel);
-  const uint32_t c3 = 1 + 2 + 3 - c1 - c2;
-  const TransformHeader::CCTransform cc_second_transform =
-      transform->header_.cc_global_second_transform;
-  assert(cc_second_transform != TransformHeader::CCTransform::kSubtractSecond &&
-         cc_second_transform != TransformHeader::CCTransform::kSubtractAverage);
-  const TransformHeader::CCTransform cc_third_transform =
-      transform->header_.cc_global_third_transform;
 
-  for (const int16_t* const src_end = src + 4 * (y_end - y_start) * width;
-       src < src_end; src += 4, dst += 4) {
+template <int32_t ALPHA1, int32_t ALPHA2, int32_t UV_INDEX>
+void CrossColorGlobalInverseTemplate(const int16_t* src, uint32_t num_pixels,
+                                     int16_t* dst) {
+  int16_t eps;
+  if constexpr (UV_INDEX <= 3) {
+    eps = 0;
+  } else if constexpr (UV_INDEX <= 9) {
+    eps = 1;
+  } else {
+    eps = 2;
+  }
+  for (const int16_t* const src_end = src + 4 * num_pixels; src < src_end;
+       src += 4, dst += 4) {
+    int16_t y = src[1], u = src[2], v = src[3];
+    int16_t r, g, b;
+    const int16_t uu = u + ((eps * v) >> 2);
+    y = y - ((ALPHA1 * v + ALPHA2 * uu) >> 2);
+    u = uu + y;
+    v = v + y;
+    r = v;
+    g = y;
+    b = u;
+
+    if constexpr (UV_INDEX == 2 || UV_INDEX == 5) {
+      std::swap(r, g);
+    } else if constexpr (UV_INDEX == 3 || UV_INDEX == 6 || UV_INDEX == 11) {
+      std::swap(b, g);
+    } else if constexpr (UV_INDEX == 7 || UV_INDEX == 12) {
+      std::swap(r, b);
+    } else if constexpr (UV_INDEX == 8) {
+      std::swap(r, g);
+      std::swap(b, r);
+    } else if constexpr (UV_INDEX == 9) {
+      std::swap(r, b);
+      std::swap(g, r);
+    }
+
     dst[0] = src[0];
-    dst[c1] = src[c1];
-    switch (cc_second_transform) {
-      case TransformHeader::CCTransform::kNothing:
-        dst[c2] = src[c2];
-        break;
-      case TransformHeader::CCTransform::kSubtractFirst:
-        dst[c2] = dst[c1] + src[c2];
-        break;
-      default:
-        assert(false);
-        break;
+    dst[1] = r;
+    dst[2] = g;
+    dst[3] = b;
+  }
+}
+
+void CrossColorGlobalInverse_C(const int16_t* src, uint32_t num_pixels,
+                               uint32_t y_index, uint32_t uv_index,
+                               int16_t* dst) {
+  if (y_index == 7 && uv_index == 10) {
+    return CrossColorGlobalInverseTemplate<1, 1, 10>(src, num_pixels, dst);
+  }
+  if (y_index == 4 && uv_index == 10) {
+    return CrossColorGlobalInverseTemplate<2, 0, 10>(src, num_pixels, dst);
+  }
+  if (y_index == 3 && uv_index == 10) {
+    return CrossColorGlobalInverseTemplate<0, 4, 10>(src, num_pixels, dst);
+  }
+  if (y_index == 7 && uv_index == 4) {
+    return CrossColorGlobalInverseTemplate<1, 1, 4>(src, num_pixels, dst);
+  }
+  if (y_index == 7 && uv_index == 1) {
+    return CrossColorGlobalInverseTemplate<1, 1, 1>(src, num_pixels, dst);
+  }
+  if (y_index == 7 && uv_index == 11) {
+    return CrossColorGlobalInverseTemplate<1, 1, 11>(src, num_pixels, dst);
+  }
+
+  // Generic but slower implementation.
+  int16_t alpha1, alpha2;
+  if (y_index == 1) {
+    alpha1 = alpha2 = 0;
+  } else if (y_index == 2) {
+    alpha1 = 4;
+    alpha2 = 0;
+  } else if (y_index == 3) {
+    alpha1 = 0;
+    alpha2 = 4;
+  } else if (y_index == 4) {
+    alpha1 = 2;
+    alpha2 = 0;
+  } else if (y_index == 5) {
+    alpha1 = 0;
+    alpha2 = 2;
+  } else if (y_index == 6) {
+    alpha1 = 2;
+    alpha2 = 2;
+  } else if (y_index == 7) {
+    alpha1 = alpha2 = 1;
+  } else if (y_index == 8) {
+    alpha1 = 2;
+    alpha2 = 1;
+  } else {
+    alpha1 = 1;
+    alpha2 = 2;
+  }
+  const int16_t eps = uv_index <= 3 ? 0 : uv_index <= 9 ? 1 : 2;
+
+  for (const int16_t* const src_end = src + 4 * num_pixels; src < src_end;
+       src += 4, dst += 4) {
+    int16_t y = src[1], u = src[2], v = src[3];
+    int16_t r, g, b;
+    const int16_t uu = u + ((eps * v) >> 2);
+    y = y - ((alpha1 * v + alpha2 * uu) >> 2);
+    u = uu + y;
+    v = v + y;
+    r = v;
+    g = y;
+    b = u;
+
+    if (uv_index == 2 || uv_index == 5) {
+      std::swap(r, g);
+    } else if (uv_index == 3 || uv_index == 6 || uv_index == 11) {
+      std::swap(b, g);
+    } else if (uv_index == 7 || uv_index == 12) {
+      std::swap(r, b);
+    } else if (uv_index == 8) {
+      std::swap(r, g);
+      std::swap(b, r);
+    } else if (uv_index == 9) {
+      std::swap(r, b);
+      std::swap(g, r);
     }
-    switch (cc_third_transform) {
-      case TransformHeader::CCTransform::kNothing:
-        dst[c3] = src[c3];
-        break;
-      case TransformHeader::CCTransform::kSubtractFirst:
-        dst[c3] = dst[c1] + src[c3];
-        break;
-      case TransformHeader::CCTransform::kSubtractSecond:
-        dst[c3] = dst[c2] + src[c3];
-        break;
-      case TransformHeader::CCTransform::kSubtractAverage:
-        dst[c3] = (dst[c1] + dst[c2]) / 2 + src[c3];
-    }
+
+    dst[0] = src[0];
+    dst[1] = r;
+    dst[2] = g;
+    dst[3] = b;
   }
 }
 
@@ -418,9 +484,6 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
   assert(row_end <= transform->height_pic_);
 
   switch (transform->header_.type) {
-    case TransformType::kYCoCgR:
-      YCoCgRToRGB(in, (row_end - row_start) * width, out);
-      break;
     case TransformType::kSubtractGreen:
       AddGreenToBlueAndRed(in, (row_end - row_start) * width, out);
       break;
@@ -441,8 +504,9 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
                                    predicted);
       break;
     case TransformType::kCrossColorGlobal:
-      CrossColorGlobalInverseTransform_C(transform, row_start, row_end, in, out,
-                                         predicted);
+      CrossColorGlobalInverse_C(in, (row_end - row_start) * width,
+                                transform->header_.cc_global_y_index,
+                                transform->header_.cc_global_uv_index, out);
       break;
     case TransformType::kColorIndexing:
       ColorIndexInverseTransform_C(transform, row_start, row_end, in, out);
@@ -459,7 +523,7 @@ void InverseTransform(const Transform* const transform, uint32_t row_start,
 //------------------------------------------------------------------------------
 
 SimpleColorSpaceInverseFunc AddGreenToBlueAndRed;
-SimpleColorSpaceInverseFunc YCoCgRToRGB;
+CrossColorGlobalInverseFunc CrossColorGlobalInverse;
 std::array<PredictorNonClampedAddFunc, kNumPredictorsNonClamped>
     PredictorsNonClampedAdd;
 std::array<PredictorNonClampedAddFunc, kNumPredictorsNonClamped>
@@ -499,8 +563,7 @@ WP2_TSAN_IGNORE_FUNCTION void DecLDspInit() {
             PredictorsAngleAdd_C.begin());
 
   AddGreenToBlueAndRed = AddGreenToBlueAndRed_C;
-  YCoCgRToRGB = YCoCgR2RGB_C;
-
+  CrossColorGlobalInverse = CrossColorGlobalInverse_C;
   TransformColorInverse = TransformColorInverse_C;
 
   MapColor = MapARGB_C;

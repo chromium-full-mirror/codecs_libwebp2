@@ -18,6 +18,7 @@
 // Author: Vincent Rabaud (vrabaud@google.com)
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -534,81 +535,35 @@ WP2Status EncoderAnalyzeDefault(const WP2::ProgressRange& progress,
       !WP2IsPremultiplied(encoder.pic_.format()) &&
       (encoder.config_.lossless_algorithm == WP2L::EncodingAlgorithm::kSCP ||
        effort == WP2::kMaxEffort)) {
-    auto ComputeHash = [](TransformHeader::Channel first_channel,
-                          TransformHeader::Channel second_channel,
-                          TransformHeader::CCTransform second_transform,
-                          TransformHeader::CCTransform third_transform) {
-      // A signature is created for each transform. The same signature is given
-      // when there is an RGB permutation or a sign change in the channel
-      // difference.
-      const uint32_t c0 = static_cast<uint32_t>(first_channel) - 1;
-      const uint32_t c1 = static_cast<uint32_t>(second_channel) - 1;
-      const uint32_t c2 = 0 + 1 + 2 - c0 - c1;
-      uint32_t res = 1 << c0;
-      if (second_transform == TransformHeader::CCTransform::kNothing) {
-        res += 1 << c1;
-      } else {
-        res += 1 << (c0 + c1 + 2);
-      }
-      if (third_transform == TransformHeader::CCTransform::kNothing) {
-        res += 1 << c2;
-      } else if (third_transform ==
-                 TransformHeader::CCTransform::kSubtractFirst) {
-        res += 1 << (c0 + c2 + 2);
-      } else if (third_transform ==
-                 TransformHeader::CCTransform::kSubtractSecond) {
-        res += 1 << (c1 + c2 + 2);
-      } else {
-        res += 1 << (6 + c2);
-      }
-      return res;
-    };
-    WP2::Vector_u32 config_hash;
-    for (TransformHeader::Channel first_channel :
-         {TransformHeader::Channel::kRed, TransformHeader::Channel::kGreen,
-          TransformHeader::Channel::kBlue}) {
-      for (TransformHeader::Channel second_channel :
-           {TransformHeader::Channel::kRed, TransformHeader::Channel::kGreen,
-            TransformHeader::Channel::kBlue}) {
-        if (second_channel == first_channel) continue;
-        for (TransformHeader::CCTransform second_transform :
-             {TransformHeader::CCTransform::kNothing,
-              TransformHeader::CCTransform::kSubtractFirst}) {
-          for (TransformHeader::CCTransform third_transform :
-               {TransformHeader::CCTransform::kNothing,
-                TransformHeader::CCTransform::kSubtractFirst,
-                // TransformHeader::CCTransform::kSubtractSecond,
-                TransformHeader::CCTransform::kSubtractAverage}) {
-            const uint32_t hash =
-                ComputeHash(first_channel, second_channel, second_transform,
-                            third_transform);
-            if (std::find(config_hash.begin(), config_hash.end(), hash) !=
-                config_hash.end()) {
-              continue;
-            }
-
-            WP2_CHECK_ALLOC_OK(config_hash.push_back(hash));
-            WP2_CHECK_ALLOC_OK(configs->push_back(CrunchConfig()));
-            auto& config = configs->back();
-            WP2_CHECK_STATUS(
-                FindEncodingRecipe(WP2L::EncodingAlgorithm::kSCP, &config,
-                                   TransformType::kNormalizeChannels,
-                                   TransformType::kCrossColorGlobal));
-            config.transforms[1].cc_global_first_channel = first_channel;
-            config.transforms[1].cc_global_second_channel = second_channel;
-            config.transforms[1].cc_global_second_transform = second_transform;
-            config.transforms[1].cc_global_third_transform = third_transform;
-            config.use_premultiplied = can_premultiply;
-          }
-        }
-      }
+    // Add a few more than the predefined ones.
+    std::array<std::array<uint32_t, 2>, kCommonCrossColorIndices.size() + 4>
+        y_uv_indices;
+    for (uint32_t i = 0; i < kCommonCrossColorIndices.size(); ++i) {
+      y_uv_indices[i] = {kCommonCrossColorIndices[i].first,
+                         kCommonCrossColorIndices[i].second};
     }
-    // Also add YCgCo.
+    // Taken from Table VI in "Multiplierless reversible colour transforms
+    // and their automatic selection for image data compression" by Tilo Strutz.
+    y_uv_indices[kCommonCrossColorIndices.size() + 0] = {4, 4};
+    y_uv_indices[kCommonCrossColorIndices.size() + 1] = {7, 7};
+    y_uv_indices[kCommonCrossColorIndices.size() + 2] = {9, 10};
+    y_uv_indices[kCommonCrossColorIndices.size() + 3] = {1, 10};
+
+    for (const auto& indices : y_uv_indices) {
+      WP2_CHECK_ALLOC_OK(configs->push_back(CrunchConfig()));
+      auto& config = configs->back();
+      WP2_CHECK_STATUS(FindEncodingRecipe(
+          WP2L::EncodingAlgorithm::kSCP, &config,
+          TransformType::kNormalizeChannels, TransformType::kCrossColorGlobal));
+      config.transforms[1].cc_global_y_index = indices[0];
+      config.transforms[1].cc_global_uv_index = indices[1];
+      config.use_premultiplied = can_premultiply;
+    }
+    // Add with no channel decorrelation.
     WP2_CHECK_ALLOC_OK(configs->push_back(CrunchConfig()));
     auto& config = configs->back();
     WP2_CHECK_STATUS(FindEncodingRecipe(WP2L::EncodingAlgorithm::kSCP, &config,
-                                        TransformType::kNormalizeChannels,
-                                        TransformType::kYCoCgR));
+                                        TransformType::kNormalizeChannels));
     config.use_premultiplied = can_premultiply;
 
     if (encoder.config_.lossless_algorithm == WP2L::EncodingAlgorithm::kSCP) {
@@ -854,13 +809,11 @@ WP2Status EncoderAnalyze(const WP2::ProgressRange& progress,
                      WP2_STATUS_INVALID_PARAMETER);
       }
       if (type == TransformType::kCrossColorGlobal) {
-        WP2_CHECK_OK(transform.cc_global_first_channel !=
-                         transform.cc_global_second_channel,
+        WP2_CHECK_OK(transform.cc_global_y_index >= 1 &&
+                         transform.cc_global_y_index <= 9,
                      WP2_STATUS_INVALID_PARAMETER);
-        WP2_CHECK_OK(transform.cc_global_second_transform ==
-                             TransformHeader::CCTransform::kNothing ||
-                         transform.cc_global_second_transform ==
-                             TransformHeader::CCTransform::kSubtractFirst,
+        WP2_CHECK_OK(transform.cc_global_uv_index >= 1 &&
+                         transform.cc_global_uv_index <= 12,
                      WP2_STATUS_INVALID_PARAMETER);
       }
       // Make sure the palette is not empty if we have a color indexing

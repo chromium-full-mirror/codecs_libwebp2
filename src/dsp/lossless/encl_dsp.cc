@@ -78,18 +78,123 @@ float CombinedShannonEntropy_C(const uint32_t* X, const uint32_t* Y,
 //------------------------------------------------------------------------------
 // Color transforms.
 
-void RGB2YCoCgR_C(int16_t* argb_data, uint32_t num_pixels) {
-  for (uint32_t i = 0; i < num_pixels; ++i) {
-    const int16_t r = argb_data[4 * i + 1];
-    const int16_t g = argb_data[4 * i + 2];
-    const int16_t b = argb_data[4 * i + 3];
-    const int16_t tmp_co = r - b;
-    const int16_t tmp = (b + (tmp_co / 2));
-    const int16_t tmp_cg = g - tmp;
-    const int16_t tmp_y = tmp + (tmp_cg / 2);
-    argb_data[4 * i + 1] = tmp_y;
-    argb_data[4 * i + 2] = tmp_co;
-    argb_data[4 * i + 3] = tmp_cg;
+template <int32_t ALPHA1, int32_t ALPHA2, int32_t UV_INDEX>
+void CrossColorGlobalTemplate(int16_t* argb, uint32_t num_pixels) {
+  int16_t eps;
+  if constexpr (UV_INDEX <= 3) {
+    eps = 0;
+  } else if constexpr (UV_INDEX <= 9) {
+    eps = 1;
+  } else {
+    eps = 2;
+  }
+  for (int16_t* argb_end = argb + 4 * num_pixels; argb < argb_end; argb += 4) {
+    int16_t r = argb[1];
+    int16_t g = argb[2];
+    int16_t b = argb[3];
+
+    if constexpr (UV_INDEX == 2 || UV_INDEX == 5) {
+      std::swap(r, g);
+    } else if constexpr (UV_INDEX == 3 || UV_INDEX == 6 || UV_INDEX == 11) {
+      std::swap(b, g);
+    } else if constexpr (UV_INDEX == 7 || UV_INDEX == 12) {
+      std::swap(r, b);
+    } else if constexpr (UV_INDEX == 8) {
+      std::swap(r, b);
+      std::swap(g, r);
+    } else if constexpr (UV_INDEX == 9) {
+      std::swap(r, g);
+      std::swap(b, r);
+    }
+
+    const int16_t v = r - g;
+    const int16_t uu = b - g;
+    const int16_t u = uu - ((v * eps) >> 2);
+    const int16_t y = g + ((ALPHA1 * v + ALPHA2 * uu) >> 2);
+
+    argb[1] = y;
+    argb[2] = u;
+    argb[3] = v;
+  }
+}
+void CrossColorGlobal_C(int16_t* argb, uint32_t num_pixels, uint32_t y_index,
+                        uint32_t uv_index) {
+  if (y_index == 7 && uv_index == 10) {
+    return CrossColorGlobalTemplate<1, 1, 10>(argb, num_pixels);
+  }
+  if (y_index == 4 && uv_index == 10) {
+    return CrossColorGlobalTemplate<2, 0, 10>(argb, num_pixels);
+  }
+  if (y_index == 3 && uv_index == 10) {
+    return CrossColorGlobalTemplate<0, 4, 10>(argb, num_pixels);
+  }
+  if (y_index == 7 && uv_index == 4) {
+    return CrossColorGlobalTemplate<1, 1, 4>(argb, num_pixels);
+  }
+  if (y_index == 7 && uv_index == 1) {
+    return CrossColorGlobalTemplate<1, 1, 1>(argb, num_pixels);
+  }
+  if (y_index == 7 && uv_index == 11) {
+    return CrossColorGlobalTemplate<1, 1, 11>(argb, num_pixels);
+  }
+
+  // Generic but slower implementation.
+  int16_t alpha1, alpha2;
+  if (y_index == 1) {
+    alpha1 = alpha2 = 0;
+  } else if (y_index == 2) {
+    alpha1 = 4;
+    alpha2 = 0;
+  } else if (y_index == 3) {
+    alpha1 = 0;
+    alpha2 = 4;
+  } else if (y_index == 4) {
+    alpha1 = 2;
+    alpha2 = 0;
+  } else if (y_index == 5) {
+    alpha1 = 0;
+    alpha2 = 2;
+  } else if (y_index == 6) {
+    alpha1 = 2;
+    alpha2 = 2;
+  } else if (y_index == 7) {
+    alpha1 = alpha2 = 1;
+  } else if (y_index == 8) {
+    alpha1 = 2;
+    alpha2 = 1;
+  } else {
+    alpha1 = 1;
+    alpha2 = 2;
+  }
+  const int16_t eps = uv_index <= 3 ? 0 : uv_index <= 9 ? 1 : 2;
+
+  for (int16_t* argb_end = argb + 4 * num_pixels; argb < argb_end; argb += 4) {
+    int16_t r = argb[1];
+    int16_t g = argb[2];
+    int16_t b = argb[3];
+
+    if (uv_index == 2 || uv_index == 5) {
+      std::swap(r, g);
+    } else if (uv_index == 3 || uv_index == 6 || uv_index == 11) {
+      std::swap(b, g);
+    } else if (uv_index == 7 || uv_index == 12) {
+      std::swap(r, b);
+    } else if (uv_index == 8) {
+      std::swap(r, b);
+      std::swap(g, r);
+    } else if (uv_index == 9) {
+      std::swap(r, g);
+      std::swap(b, r);
+    }
+
+    const int16_t v = r - g;
+    const int16_t uu = b - g;
+    const int16_t u = uu - ((v * eps) >> 2);
+    const int16_t y = g + ((alpha1 * v + alpha2 * uu) >> 2);
+
+    argb[1] = y;
+    argb[2] = u;
+    argb[3] = v;
   }
 }
 }  // namespace
@@ -265,7 +370,7 @@ namespace WP2L {
 
 FindExtremaFunc FindExtrema;
 SimpleColorSpaceFunc SubtractGreenFromBlueAndRed;
-SimpleColorSpaceFunc RGB2YCoCgR;
+CrossColorGlobalFunc CrossColorGlobal;
 
 TransformColorFunc TransformColor;
 
@@ -299,7 +404,7 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInit() {
 
   FindExtrema = FindExtrema_C;
   SubtractGreenFromBlueAndRed = SubtractGreenFromBlueAndRed_C;
-  RGB2YCoCgR = RGB2YCoCgR_C;
+  CrossColorGlobal = CrossColorGlobal_C;
 
   TransformColor = TransformColor_C;
 

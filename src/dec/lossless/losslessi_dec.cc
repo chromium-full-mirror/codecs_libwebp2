@@ -924,19 +924,17 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
     }
     case TransformType::kCrossColorGlobal: {
       WP2::ANSDebugPrefix prefix(dec_, "cross_color_global");
-      const uint32_t c1 = dec_->ReadRange(1, 3, "first_channel");
-      uint32_t c2 = dec_->ReadRange(1, 2, "second_channel");
-      if (c2 >= c1) ++c2;
-      transform->header_.cc_global_first_channel =
-          static_cast<TransformHeader::Channel>(c1);
-      transform->header_.cc_global_second_channel =
-          static_cast<TransformHeader::Channel>(c2);
-      transform->header_.cc_global_second_transform =
-          static_cast<TransformHeader::CCTransform>(
-              dec_->ReadRange(0, 1, "second_transform"));
-      transform->header_.cc_global_third_transform =
-          static_cast<TransformHeader::CCTransform>(
-              dec_->ReadRange(0, 3, "third_transform"));
+      uint32_t y_index, uv_index;
+      const uint32_t pre_defined = dec_->ReadRValue(7, "pre_defined");
+      if (pre_defined < kCommonCrossColorIndices.size()) {
+        y_index = kCommonCrossColorIndices[pre_defined].first;
+        uv_index = kCommonCrossColorIndices[pre_defined].second;
+      } else {
+        y_index = dec_->ReadRange(1, 9, "y_index");
+        uv_index = dec_->ReadRange(1, 12, "uv_index");
+      }
+      transform->header_.cc_global_y_index = y_index;
+      transform->header_.cc_global_uv_index = uv_index;
       break;
     }
     case TransformType::kColorIndexing: {
@@ -979,7 +977,6 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
       break;
     }
     case TransformType::kSubtractGreen:
-    case TransformType::kYCoCgR:
       break;
     case TransformType::kNum:
       assert(false);  // can't happen
