@@ -314,8 +314,10 @@ WP2Status LZWEncode(const Buffer_s16& input_buffer, const Palette& palette,
 //------------------------------------------------------------------------------
 // Self-correcting predictor.
 
-WP2Status SCPEncode(const Buffer_s16& img, int effort, WP2::ANSEnc& enc,
-                    EncodeInfo* encode_info);
+WP2Status SCPEncode(const Buffer_s16& img, int effort,
+                    const std::array<int32_t, 4>& minima_range,
+                    const std::array<int32_t, 4>& maxima_range,
+                    WP2::ANSEnc& enc, EncodeInfo* encode_info);
 
 }  // namespace WP2L
 

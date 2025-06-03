@@ -152,9 +152,13 @@ WP2Status Decompress(const ScpGlobal& global, uint32_t width, uint32_t height,
 }  // namespace scp
 
 WP2Status Decoder::DecodeScpHeader(ScpGlobal* global) {
+  std::array<int32_t, 4> minima_range, maxima_range;
+  WP2_CHECK_STATUS(GetARGBRanges(minima_range, maxima_range));
   for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
-    global->min_tpv[c] = dec_->ReadRange(-1024, 1024, "min_tpv");
-    global->max_tpv[c] = dec_->ReadRange(global->min_tpv[c], 1024, "max_tpv");
+    global->min_tpv[c] =
+        dec_->ReadRange(minima_range[c], maxima_range[c], "min_tpv");
+    global->max_tpv[c] =
+        dec_->ReadRange(global->min_tpv[c], maxima_range[c], "max_tpv");
   }
 
   global->use_jxl = dec_->ReadBool("use_jxl");

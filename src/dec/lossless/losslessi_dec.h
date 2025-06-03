@@ -171,6 +171,12 @@ class Decoder {
   // Visual debug for header info.
   WP2Status HeaderVDebug();
 
+  // Gets the ranges of the ARGB values in the image after applying the 'size'
+  // first transforms_.
+  WP2Status GetARGBRanges(std::array<int32_t, 4>& minima_range,
+                          std::array<int32_t, 4>& maxima_range,
+                          int size = kPossibleTransformCombinationSize);
+
   // Maximum number of rows we can hold in the cache.
   static constexpr uint32_t kNumARGBCacheRows = WP2::kMaxBlockSizePix;
 

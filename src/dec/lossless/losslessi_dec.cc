@@ -304,11 +304,7 @@ WP2Status Decoder::ApplyInverseTransforms(uint32_t num_rows,
     if (transform.header_.type == TransformType::kPredictor ||
         transform.header_.type == TransformType::kPredictorWSub) {
       // Define the minimum/maximum values before applying the predictors.
-      std::array<TransformHeader, kPossibleTransformCombinationSize> headers;
-      for (int i = 0; i < ind; ++i) headers[i] = transforms_[i].header_;
-
-      WP2_CHECK_STATUS(GetARGBRanges(headers, hdr_.symbols_info_.SampleFormat(),
-                                     minima_range, maxima_range, ind));
+      WP2_CHECK_STATUS(GetARGBRanges(minima_range, maxima_range, ind));
     }
     int16_t* predicted = nullptr;
 #ifndef WP2_REDUCE_BINARY_SIZE
@@ -945,12 +941,7 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
     case TransformType::kNormalizeChannels: {
       WP2::ANSDebugPrefix prefix(dec_, "normalize_channels");
       std::array<int32_t, 4> minima_range, maxima_range;
-      std::array<TransformHeader, kPossibleTransformCombinationSize> headers;
-      for (int i = 0; i < index; ++i) {
-        headers[i] = transforms_[i].header_;
-      }
-      WP2_CHECK_STATUS(GetARGBRanges(headers, hdr_.symbols_info_.SampleFormat(),
-                                     minima_range, maxima_range, index));
+      WP2_CHECK_STATUS(GetARGBRanges(minima_range, maxima_range, index));
       for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
         transform->header_.normalize_channels_offset[c] =
             dec_->ReadRange(minima_range[c], maxima_range[c], "offset");
@@ -984,6 +975,18 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
   }
 
   return dec_->GetStatus();
+}
+
+WP2Status Decoder::GetARGBRanges(std::array<int32_t, 4>& minima_range,
+                                 std::array<int32_t, 4>& maxima_range,
+                                 int size) {
+  std::array<TransformHeader, kPossibleTransformCombinationSize> headers;
+  for (int i = 0; i < size; ++i) headers[i] = transforms_[i].header_;
+
+  WP2_CHECK_STATUS(::WP2L::GetARGBRanges(headers,
+                                         hdr_.symbols_info_.SampleFormat(),
+                                         minima_range, maxima_range, size));
+  return WP2_STATUS_OK;
 }
 
 // -----------------------------------------------------------------------------
@@ -1171,14 +1174,7 @@ WP2Status Decoder::DecodeHeader() {
   } else if (num_transforms != 0) {
     std::array<int32_t, 4> minima_range, maxima_range;
     // Find the ranges in which the ARGB values are.
-
-    std::array<TransformHeader, kPossibleTransformCombinationSize> headers;
-    for (uint32_t t = 0; t < kPossibleTransformCombinationSize; ++t) {
-      headers[t] = transforms_[t].header_;
-    }
-
-    WP2_CHECK_STATUS(GetARGBRanges(headers, hdr_.symbols_info_.SampleFormat(),
-                                   minima_range, maxima_range));
+    WP2_CHECK_STATUS(GetARGBRanges(minima_range, maxima_range));
     // Read the ARGB ranges. As the encoder tries to reduce the ranges of ARGB
     // values around zero, they are more efficiently stored with prefix coding.
     for (Symbol sym : {kSymbolA, kSymbolR, kSymbolG, kSymbolB}) {

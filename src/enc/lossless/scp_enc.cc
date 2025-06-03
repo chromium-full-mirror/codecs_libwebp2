@@ -252,10 +252,6 @@ WP2Status Compress(const scp::ImagePlanes& img,
   const int num_tokens_ori = encode_info != nullptr ? enc.NumTokens() : 0;
 
   enc.AddDebugPrefix("GlobalHeader");
-  for (int c = img.has_alpha() ? 0 : 1; c < 4; ++c) {
-    enc.PutRange(min_tpv[c], -1024, 1024, "min_tpv");
-    enc.PutRange(max_tpv[c], min_tpv[c], 1024, "max_tpv");
-  }
   const bool use_jxl = std::is_same<STATE, JXLEncState>::value;
   enc.PutBool(use_jxl, "use_jxl");
   state.EncodeHeader(enc);
@@ -330,8 +326,10 @@ WP2Status Compress(const scp::ImagePlanes& img,
 }
 }  // namespace scp
 
-WP2Status SCPEncode(const Buffer_s16& img, int effort, WP2::ANSEnc& enc,
-                    EncodeInfo* encode_info) {
+WP2Status SCPEncode(const Buffer_s16& img, int effort,
+                    const std::array<int32_t, 4>& minima_range,
+                    const std::array<int32_t, 4>& maxima_range,
+                    WP2::ANSEnc& enc, EncodeInfo* encode_info) {
   if (img.channel_bits != 8) return WP2_STATUS_INVALID_PARAMETER;
 
   const size_t width = img.width;
@@ -350,6 +348,12 @@ WP2Status SCPEncode(const Buffer_s16& img, int effort, WP2::ANSEnc& enc,
   }
   std::array<int16_t, 4> min_tpv, max_tpv;
   FindExtrema(img.GetRow(0), width, height, img.has_alpha, min_tpv, max_tpv);
+  enc.AddDebugPrefix("GlobalHeader");
+  for (int c = img.has_alpha ? 0 : 1; c < 4; ++c) {
+    enc.PutRange(min_tpv[c], minima_range[c], maxima_range[c], "min_tpv");
+    enc.PutRange(max_tpv[c], min_tpv[c], maxima_range[c], "max_tpv");
+  }
+  enc.PopDebugPrefix();
 
   float cost_best = std::numeric_limits<float>::max();
   scp::JXLEncState::Config jxl_config_best, jxl_config;
