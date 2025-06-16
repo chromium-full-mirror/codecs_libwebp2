@@ -332,7 +332,7 @@ class JXLState : public State {
       15,   23,   31,   47,   63,   95,  127, 191, 255, 392, 500};
 
   // Approximates 4+(maxweight<<24)/(x+1), avoiding division
-  inline static constexpr uint32_t ErrorWeight(uint64_t x, uint32_t maxweight) {
+  inline static uint32_t ErrorWeight(uint64_t x, uint32_t maxweight) {
     int shift = static_cast<int>(std::floor(std::log2(x + 1))) - 5;
     if (shift < 0) shift = 0;
     return 4 + ((maxweight * kDivLookup[x >> shift]) >> shift);
