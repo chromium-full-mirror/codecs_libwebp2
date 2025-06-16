@@ -39,11 +39,11 @@
 // pointer aliasing. See also:
 // https://en.cppreference.com/w/c/language/restrict
 #if defined(__GNUC__)
-#define WEBP_RESTRICT __restrict__
+#define WP2_RESTRICT __restrict__
 #elif defined(_MSC_VER)
-#define WEBP_RESTRICT __restrict
+#define WP2_RESTRICT __restrict
 #else
-#define WEBP_RESTRICT
+#define WP2_RESTRICT
 #endif
 
 //------------------------------------------------------------------------------

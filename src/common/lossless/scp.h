@@ -27,6 +27,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "src/dsp/dsp.h"
 #include "src/dsp/math.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
@@ -260,9 +261,9 @@ class State {
   // Beginning of the current and previous row in the temporary buffers.
   size_t cur_row_, prev_row_;
   // The current row of the image for prediction.
-  const int16_t* __restrict__ row_;
+  const int16_t* WP2_RESTRICT row_;
   // Previous rows of the image for prediction.
-  const int16_t* __restrict__ row_p_, * __restrict__ row_pp_;
+  const int16_t *WP2_RESTRICT row_p_, *WP2_RESTRICT row_pp_;
 
   size_t width_, height_;
 

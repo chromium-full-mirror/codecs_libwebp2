@@ -41,7 +41,7 @@ namespace {
 //------------------------------------------------------------------------------
 // Subtract-Green Transform
 
-void SubtractGreenFromBlueAndRed_SSE(int16_t* WEBP_RESTRICT argb,
+void SubtractGreenFromBlueAndRed_SSE(int16_t* WP2_RESTRICT argb,
                                      uint32_t num_pixels) {
   const __m128i kCstShuffle =
       _mm_set_epi8(13, 12, -1, -1, 13, 12, -1, -1, 5, 4, -1, -1, 5, 4, -1, -1);
@@ -66,7 +66,7 @@ void SubtractGreenFromBlueAndRed_SSE(int16_t* WEBP_RESTRICT argb,
 #define MK_CST_16(HI, LO) _mm_set_epi32(HI, LO, HI, LO)
 
 void TransformColor_SSE(const Multipliers& m, uint32_t num_pixels,
-                        int16_t* WEBP_RESTRICT argb) {
+                        int16_t* WP2_RESTRICT argb) {
   const __m128i mults_rb = MK_CST_16(m.green_to_blue, m.green_to_red);
   const __m128i mults_b2 = MK_CST_16(m.red_to_blue, 0);
   const __m128i kRound = _mm_set1_epi32(1 << kColorTransformBits >> 1);

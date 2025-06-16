@@ -28,6 +28,7 @@
 #include "src/common/symbols.h"
 #include "src/dec/lossless/losslessi_dec.h"
 #include "src/dec/symbols_dec.h"
+#include "src/dsp/dsp.h"
 #include "src/utils/ans.h"
 #include "src/utils/plane.h"
 #include "src/utils/utils.h"
@@ -139,7 +140,7 @@ WP2Status Decompress(const ScpGlobal& global, uint32_t width, uint32_t height,
     WP2_CHECK_STATUS(state.DecompressPlane(c, global, sr, img));
     // Copy back.
     for (size_t y = 0; y < height; ++y) {
-      const int16_t* const __restrict__ rowImg = img.PlaneRow(c, y);
+      const int16_t* const WP2_RESTRICT rowImg = img.PlaneRow(c, y);
       for (size_t x = 0; x < width; ++x) {
         out[y * 4 * width + x * 4 + c] = rowImg[x];
       }
