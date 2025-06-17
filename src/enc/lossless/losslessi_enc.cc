@@ -813,7 +813,7 @@ WP2Status Encoder::ApplyNormalizeChannels(
     }
     // Store the maximum.
     for (int c = first_channel; c < 4; ++c) {
-      enc.PutRValue(max[c], maxima_range[c] + 1, "max");
+      enc.PutRValue(max[c], maxima_range[c] - min[c] + 1, "max");
     }
     return WP2_STATUS_OK;
   }
@@ -847,7 +847,7 @@ WP2Status Encoder::ApplyNormalizeChannels(
       }
     }
     // Store the mapping.
-    const uint32_t range = 1 + maxima_range[c] - minima_range[c];
+    const uint32_t range = 1 + maxima_range[c] - min[c];
     enc.PutRange(mapping_size, 1, range, "size");
     header.normalize_channels_max[c] = mapping_size - 1;
     WP2::VectorNoCtor<WP2::OptimizeArrayStorageStat> stats;
