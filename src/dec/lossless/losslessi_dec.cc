@@ -634,7 +634,7 @@ WP2Status Decoder::DecodeImageData(uint32_t width, uint32_t height,
     WP2_CHECK_STATUS(DecodeLZW(width, last_row, bits_per_pixel, &src));
   } else if (encoding_algorithm_ == EncodingAlgorithm::kSCP) {
     WP2_CHECK_STATUS(
-        DecodeScp(width, last_row, scp_global_, bits_per_pixel, &src));
+        DecodePlaneCodec(width, last_row, scp_global_, bits_per_pixel, &src));
   } else {
     WP2_CHECK_STATUS(DecodeAndProcess(width, last_row, /*do_process=*/true,
                                       &pixels_, bits_per_pixel, config_.info,
@@ -1157,7 +1157,7 @@ WP2Status Decoder::DecodeHeader() {
     }
     // Read the other parameters.
     dec_->PopDebugPrefix();
-    WP2_CHECK_STATUS(DecodeScpHeader(&scp_global_));
+    WP2_CHECK_STATUS(DecodePlaneCodecHeader(&scp_global_));
     return WP2_STATUS_OK;
   }
 

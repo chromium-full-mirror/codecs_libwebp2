@@ -24,6 +24,7 @@
 #include <cstdint>
 
 #include "src/common/lossless/color_cache.h"
+#include "src/common/lossless/plane.h"
 #include "src/common/lossless/scp.h"
 #include "src/common/lossless/transforms.h"
 #include "src/common/symbols.h"
@@ -78,11 +79,11 @@ class Metadata {
 struct ScpGlobal {
   std::array<int, 4> min_tpv;
   std::array<int, 4> max_tpv;
+  PlaneCodec::Method method;
 
   // Prediction modes for ARGB.
   std::array<scp::PredictionMode, 4> prediction_modes;
   uint32_t maxerr_shift;
-  bool use_jxl;
   int jxl_header_index;
   scp::JxlHeader jxl_header;
 };
@@ -134,10 +135,10 @@ class Decoder {
   WP2Status DecodeLZW(uint32_t width, uint32_t last_row,
                       WP2::Planef* bits_per_pixel, int16_t** src_out);
   // Decodes a sub-image encoded with the SCP algorithm.
-  WP2Status DecodeScpHeader(ScpGlobal* global);
-  WP2Status DecodeScp(uint32_t width, uint32_t last_row,
-                      const ScpGlobal& global, WP2::Planef* bits_per_pixel,
-                      int16_t** src_out);
+  WP2Status DecodePlaneCodecHeader(ScpGlobal* global);
+  WP2Status DecodePlaneCodec(uint32_t width, uint32_t last_row,
+                             const ScpGlobal& global,
+                             WP2::Planef* bits_per_pixel, int16_t** src_out);
 
   // Decodes an image, once the pre-processing has been done.
   WP2Status DecodeImageData(uint32_t width, uint32_t height, uint32_t last_row,

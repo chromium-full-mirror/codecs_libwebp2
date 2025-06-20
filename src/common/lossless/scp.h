@@ -27,44 +27,13 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "src/dsp/dsp.h"
+#include "src/common/lossless/plane.h"
 #include "src/dsp/math.h"
-#include "src/utils/utils.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
 
 namespace WP2L {
 namespace scp {
-
-////////////////////////////////////////////////////////////////////////////////
-// Data structure that stores pixel information by planes, in order ARGB.
-
-class ImagePlanes {
- public:
-  WP2Status Create(size_t xsize, size_t ysize, bool has_alpha) {
-    width_ = xsize;
-    height_ = ysize;
-    for (uint32_t c = has_alpha ? 0 : 1; c < 4; ++c) {
-      WP2_CHECK_ALLOC_OK(planes_[c].resize(xsize * ysize));
-    }
-    return WP2_STATUS_OK;
-  }
-  int16_t* PlaneRow(uint32_t c, uint32_t y) {
-    return planes_[c].data() + y * width_;
-  }
-  const int16_t* PlaneRow(uint32_t c, uint32_t y) const {
-    return planes_[c].data() + y * width_;
-  }
-  uint32_t width() const { return width_; }
-  uint32_t height() const { return height_; }
-  bool has_alpha() const { return !planes_[0].empty(); }
-
- private:
-  size_t width_;
-  size_t height_;
-  // Planes are in order ARGB.
-  std::array<WP2::Vector_s16, 4> planes_;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 // Constants for the classical Self Correcting Predictor.
@@ -168,7 +137,7 @@ inline constexpr std::array<JxlHeader, 4> kJxlHeaders = {{
 ////////////////////////////////////////////////////////////////////////////////
 // Class that stores the state of the Self Correcting Predictor and is able to
 // do predictions.
-class State {
+class State : public PlaneCodec {
  public:
   WP2Status Init(size_t width, size_t height);
 
@@ -229,11 +198,9 @@ class State {
 
   //////////////////////////////////////////////////////////////////////////////
 
-  inline void StartProcessingLine(size_t y, const int16_t* row) {
+  inline void StartProcessingLine(uint32_t y, const int16_t* row) override {
+    WP2L::PlaneCodec::StartProcessingLine(y, row);
     std::swap(cur_row_, prev_row_);
-    row_pp_ = y == 1 ? row_ : row_p_;
-    row_p_ = row_;
-    row_ = row;
   }
 
   inline int Quantized(int x) const {
@@ -256,16 +223,9 @@ class State {
                                     // even due to quantizedInit()
 
   int16_t min_tpv_, max_tpv_;  // Tpv is truePixelValue, left shifted by PBits
-  size_t last_x_;              // xsize - 1, for prediction borders
 
   // Beginning of the current and previous row in the temporary buffers.
   size_t cur_row_, prev_row_;
-  // The current row of the image for prediction.
-  const int16_t* WP2_RESTRICT row_;
-  // Previous rows of the image for prediction.
-  const int16_t *WP2_RESTRICT row_p_, *WP2_RESTRICT row_pp_;
-
-  size_t width_, height_;
 
  private:
   static inline constexpr size_t kBufferPadding = 2;

@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "src/common/lossless/plane.h"
 #include "src/common/lossless/scp.h"
 #include "src/common/symbols.h"
 #include "src/dec/lossless/losslessi_dec.h"
@@ -152,7 +153,7 @@ WP2Status Decompress(const ScpGlobal& global, uint32_t width, uint32_t height,
 
 }  // namespace scp
 
-WP2Status Decoder::DecodeScpHeader(ScpGlobal* global) {
+WP2Status Decoder::DecodePlaneCodecHeader(ScpGlobal* global) {
   std::array<int32_t, 4> minima_range, maxima_range;
   WP2_CHECK_STATUS(GetARGBRanges(minima_range, maxima_range));
   for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
@@ -162,39 +163,45 @@ WP2Status Decoder::DecodeScpHeader(ScpGlobal* global) {
         dec_->ReadRange(global->min_tpv[c], maxima_range[c], "max_tpv");
   }
 
-  global->use_jxl = dec_->ReadBool("use_jxl");
+  global->method = static_cast<PlaneCodec::Method>(
+      dec_->ReadRValue(static_cast<int>(PlaneCodec::Method::kNum), "method"));
   int num_contexts;
-  if (global->use_jxl) {
-    global->jxl_header_index =
-        dec_->ReadRange(0, scp::kJxlHeaders.size(), "header_index");
-    if (global->jxl_header_index == static_cast<int>(scp::kJxlHeaders.size())) {
-      global->jxl_header.p1c = dec_->ReadRange(0, 40, "p1c");
-      global->jxl_header.p2c = dec_->ReadRange(0, 40, "p2c");
-      global->jxl_header.p3ca = dec_->ReadRange(0, 40, "p3ca");
-      global->jxl_header.p3cb = dec_->ReadRange(0, 40, "p3cb");
-      global->jxl_header.p3cc = dec_->ReadRange(0, 40, "p3cc");
-      global->jxl_header.p3cd = dec_->ReadRange(0, 40, "p3cd");
-      global->jxl_header.p3ce = dec_->ReadRange(0, 40, "p3ce");
-      for (int i = 0; i < 4; ++i) {
-        global->jxl_header.w[i] = dec_->ReadRange(0, 40, "w");
+  switch (global->method) {
+    case PlaneCodec::Method::kScpClassical:
+      global->maxerr_shift = dec_->ReadRValue(5, "maxerrShift");
+      num_contexts = scp::ClassicalState::GetNumContexts(global->maxerr_shift);
+      for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
+        global->prediction_modes[c] =
+            static_cast<scp::PredictionMode>(dec_->ReadRValue(
+                static_cast<int>(scp::PredictionMode::Num), "pred_mode"));
       }
-    }
-    num_contexts = scp::JXLState::GetNumContexts();
-  } else {
-    global->maxerr_shift = dec_->ReadRValue(5, "maxerrShift");
-    num_contexts = scp::ClassicalState::GetNumContexts(global->maxerr_shift);
+      break;
+    case PlaneCodec::Method::kScpJxl:
+      global->jxl_header_index =
+          dec_->ReadRange(0, scp::kJxlHeaders.size(), "header_index");
+      if (global->jxl_header_index ==
+          static_cast<int>(scp::kJxlHeaders.size())) {
+        global->jxl_header.p1c = dec_->ReadRange(0, 40, "p1c");
+        global->jxl_header.p2c = dec_->ReadRange(0, 40, "p2c");
+        global->jxl_header.p3ca = dec_->ReadRange(0, 40, "p3ca");
+        global->jxl_header.p3cb = dec_->ReadRange(0, 40, "p3cb");
+        global->jxl_header.p3cc = dec_->ReadRange(0, 40, "p3cc");
+        global->jxl_header.p3cd = dec_->ReadRange(0, 40, "p3cd");
+        global->jxl_header.p3ce = dec_->ReadRange(0, 40, "p3ce");
+        for (int i = 0; i < 4; ++i) {
+          global->jxl_header.w[i] = dec_->ReadRange(0, 40, "w");
+        }
+      }
+      num_contexts = scp::JXLState::GetNumContexts();
+      break;
+    case PlaneCodec::Method::kNum:
+    default:
+      assert(false);
+      return WP2_STATUS_INVALID_PARAMETER;
   }
 
   WP2::SymbolsInfo symbols_info;
   WP2_CHECK_STATUS(hdr_.sr_.Init(symbols_info, dec_));
-
-  if (!global->use_jxl) {
-    for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
-      global->prediction_modes[c] =
-          static_cast<scp::PredictionMode>(dec_->ReadRValue(
-              static_cast<int>(scp::PredictionMode::Num), "pred_mode"));
-    }
-  }
 
   for (uint32_t c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
     symbols_info.SetInfo(/*sym=*/c, /*min=*/0, /*max=*/1024,
@@ -213,31 +220,41 @@ WP2Status Decoder::DecodeScpHeader(ScpGlobal* global) {
   return WP2_STATUS_OK;
 }
 
-WP2Status Decoder::DecodeScp(uint32_t width, uint32_t last_row,
-                             const ScpGlobal& global,
-                             WP2::Planef* bits_per_pixel, int16_t** src_out) {
+WP2Status Decoder::DecodePlaneCodec(uint32_t width, uint32_t last_row,
+                                    const ScpGlobal& global,
+                                    WP2::Planef* bits_per_pixel,
+                                    int16_t** src_out) {
   int16_t* const data = pixels_.data();
 
   if (last_pixel_ == 0) {
     // Decode everything the first time.
     const int height = tile_->rect.height;
     int16_t* src = data + 4 * last_pixel_;
-    if (global.use_jxl) {
-      scp::JXLDecState state;
-      WP2_CHECK_STATUS(state.Init(width, height));
-      if (global.jxl_header_index ==
-          static_cast<int>(scp::kJxlHeaders.size())) {
-        state.SetHeader(global.jxl_header);
-      } else {
-        state.SetHeaderIndex(global.jxl_header_index);
+    switch (global.method) {
+      case PlaneCodec::Method::kScpClassical: {
+        scp::ClassicalDecState state;
+        WP2_CHECK_STATUS(state.Init(width, height));
+        WP2_CHECK_STATUS(Decompress(global, width, height, gparams_->has_alpha_,
+                                    state, hdr_.sr_, src));
+        break;
       }
-      WP2_CHECK_STATUS(Decompress(global, width, height, gparams_->has_alpha_,
-                                  state, hdr_.sr_, src));
-    } else {
-      scp::ClassicalDecState state;
-      WP2_CHECK_STATUS(state.Init(width, height));
-      WP2_CHECK_STATUS(Decompress(global, width, height, gparams_->has_alpha_,
-                                  state, hdr_.sr_, src));
+      case PlaneCodec::Method::kScpJxl: {
+        scp::JXLDecState state;
+        WP2_CHECK_STATUS(state.Init(width, height));
+        if (global.jxl_header_index ==
+            static_cast<int>(scp::kJxlHeaders.size())) {
+          state.SetHeader(global.jxl_header);
+        } else {
+          state.SetHeaderIndex(global.jxl_header_index);
+        }
+        WP2_CHECK_STATUS(Decompress(global, width, height, gparams_->has_alpha_,
+                                    state, hdr_.sr_, src));
+        break;
+      }
+      case PlaneCodec::Method::kNum:
+        assert(false);
+        return WP2_STATUS_INVALID_PARAMETER;
+        break;
     }
     for (size_t y = 0; y < last_row; ++y) {
       WP2_CHECK_STATUS(ProcessRows(y));

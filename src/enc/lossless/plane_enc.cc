@@ -23,11 +23,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <type_traits>
-#include <utility>
 
+#include "src/common/lossless/plane.h"
 #include "src/common/lossless/scp.h"
 #include "src/dsp/lossless/encl_dsp.h"
 #include "src/enc/lossless/losslessi_enc.h"
@@ -148,13 +149,21 @@ class ClassicalEncState : public ClassicalState {
     }
 
     // output the prediction mode in an unused context
-    encoding->mode = pred_mode;
+    pred_modes_[planeToCompress] = pred_mode;
 
     return WP2_STATUS_OK;
   }
 
   void EncodeHeader(WP2::ANSEncBase& enc) {
     enc.PutRValue(config_.maxerr_shift, 5, "maxerrShift");
+
+    // Store the prediction modes.
+    for (PredictionMode pred_mode : pred_modes_) {
+      if (pred_mode != PredictionMode::Auto) {
+        enc.PutRValue(static_cast<uint32_t>(pred_mode),
+                      static_cast<uint32_t>(PredictionMode::Num), "pred_mode");
+      }
+    }
   }
 
   int GetNumContexts() const {
@@ -163,6 +172,9 @@ class ClassicalEncState : public ClassicalState {
 
  private:
   Config config_;
+  std::array<PredictionMode, 4> pred_modes_ = {
+      PredictionMode::Num, PredictionMode::Num, PredictionMode::Num,
+      PredictionMode::Num};
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -244,7 +256,7 @@ class JXLEncState : public JXLState {
 // Main compression method for a whole image with values between min_tpv and
 // max_tpv inclusive.
 template <typename STATE>
-WP2Status Compress(const scp::ImagePlanes& img,
+WP2Status Compress(const WP2L::ImagePlanes& img,
                    const std::array<int16_t, 4>& min_tpv,
                    const std::array<int16_t, 4>& max_tpv, int effort,
                    WP2::ANSEncBase& enc, STATE& state,
@@ -252,9 +264,10 @@ WP2Status Compress(const scp::ImagePlanes& img,
   const int num_tokens_ori = encode_info != nullptr ? enc.NumTokens() : 0;
 
   enc.AddDebugPrefix("GlobalHeader");
-  const bool use_jxl = std::is_same<STATE, JXLEncState>::value;
-  enc.PutBool(use_jxl, "use_jxl");
-  state.EncodeHeader(enc);
+  enc.PutRValue(std::is_same<STATE, ClassicalEncState>::value ? 0
+                : std::is_same<STATE, JXLEncState>::value     ? 1
+                                                              : 2,
+                static_cast<int>(PlaneCodec::Method::kNum), "method");
 
   // Process the different planes independently.
   std::array<Encoding, 4> encodings;
@@ -264,13 +277,7 @@ WP2Status Compress(const scp::ImagePlanes& img,
         state.CompressPlane(img, c, min_tpv[c], max_tpv[c], &encodings[c]));
   }
 
-  // Store the prediction modes.
-  if (!use_jxl) {
-    for (int c = img.has_alpha() ? 0 : 1; c < 4; ++c) {
-      enc.PutRValue(static_cast<uint32_t>(encodings[c].mode),
-                    static_cast<uint32_t>(PredictionMode::Num), "pred_mode");
-    }
-  }
+  state.EncodeHeader(enc);
 
   // Define the symbols info.
   const int num_contexts = state.GetNumContexts();
@@ -326,17 +333,17 @@ WP2Status Compress(const scp::ImagePlanes& img,
 }
 }  // namespace scp
 
-WP2Status SCPEncode(const Buffer_s16& img, int effort,
-                    const std::array<int32_t, 4>& minima_range,
-                    const std::array<int32_t, 4>& maxima_range,
-                    WP2::ANSEnc& enc, EncodeInfo* encode_info) {
+WP2Status PlaneCodecEncode(const Buffer_s16& img, int effort,
+                           const std::array<int32_t, 4>& minima_range,
+                           const std::array<int32_t, 4>& maxima_range,
+                           WP2::ANSEnc& enc, EncodeInfo* encode_info) {
   if (img.channel_bits != 8) return WP2_STATUS_INVALID_PARAMETER;
 
   const size_t width = img.width;
   const size_t height = img.height;
 
   // The code modifies the image for palette so must copy for now.
-  scp::ImagePlanes img_planes;
+  WP2L::ImagePlanes img_planes;
   WP2_CHECK_STATUS(img_planes.Create(width, height, img.has_alpha));
   for (int c = (img.has_alpha ? 0 : 1); c < 4; c++) {
     for (size_t y = 0; y < height; ++y) {
@@ -356,10 +363,11 @@ WP2Status SCPEncode(const Buffer_s16& img, int effort,
   enc.PopDebugPrefix();
 
   float cost_best = std::numeric_limits<float>::max();
+  WP2::ANSDictionaries dicts;
+
   scp::JXLEncState::Config jxl_config_best, jxl_config;
   scp::ClassicalEncState::Config classical_config_best, classical_config;
   bool config_best_is_jxl = false;
-  WP2::ANSDictionaries dicts;
 
   // Try JXL first.
   scp::JXLEncState jxl_state;

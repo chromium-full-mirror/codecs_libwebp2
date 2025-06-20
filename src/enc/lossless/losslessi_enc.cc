@@ -490,8 +490,9 @@ WP2Status Encoder::EncodeImageInternal(
     WP2_CHECK_STATUS(GetARGBRanges(config.transforms,
                                    symbols_info_init.SampleFormat(),
                                    minima_range, maxima_range));
-    WP2_CHECK_STATUS(SCPEncode(argb_buffer_, config_.effort, minima_range,
-                               maxima_range, *enc_init, encode_info));
+    WP2_CHECK_STATUS(PlaneCodecEncode(argb_buffer_, config_.effort,
+                                      minima_range, maxima_range, *enc_init,
+                                      encode_info));
     WP2_CHECK_STATUS(progress.AdvanceBy(1.));
     return WP2_STATUS_OK;
   }

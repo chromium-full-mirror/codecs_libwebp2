@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "src/common/lossless/plane.h"
 #include "src/dsp/math.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
@@ -49,12 +50,10 @@ namespace WP2L {
 namespace scp {
 
 ////////////////////////////////////////////////////////////////////////////////
-// State.
+// ScpState.
 
 WP2Status State::Init(size_t width, size_t height) {
-  width_ = width;
-  last_x_ = width - 1;
-  height_ = height;
+  WP2_CHECK_STATUS(PlaneCodec::Init(width, height));
 
   WP2_CHECK_STATUS(Reset());
 
@@ -70,6 +69,7 @@ WP2Status State::Init(size_t width, size_t height) {
 }
 
 WP2Status State::Reset() {
+  WP2_CHECK_STATUS(WP2L::PlaneCodec::Reset());
   cur_row_ = 0;
   prev_row_ = width_ + kBufferPadding;
   for (WP2::Vector_u16& pred_error : pred_errors_) {
@@ -80,7 +80,6 @@ WP2Status State::Reset() {
   std::fill(error_.begin(), error_.end(), 0);
   WP2_CHECK_ALLOC_OK(quantized_error_.resize((width_ + kBufferPadding) * 2));
   std::fill(quantized_error_.begin(), quantized_error_.end(), 0);
-  row_ = row_p_ = row_pp_ = nullptr;
   return WP2_STATUS_OK;
 }
 
