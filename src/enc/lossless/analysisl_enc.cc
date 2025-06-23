@@ -531,6 +531,48 @@ WP2Status EncoderAnalyzeDefault(const WP2::ProgressRange& progress,
     return WP2_STATUS_OK;
   }
 
+  // TODO(vrabaud): Enable for all efforts once it gets better.
+  if (WP2Formatbpc(pic.format()) == 8 &&
+      !WP2IsPremultiplied(encoder.pic_.format()) &&
+      encoder.config_.lossless_algorithm == WP2L::EncodingAlgorithm::kCALIC) {
+    // Add a few more than the predefined ones.
+    std::array<std::array<uint32_t, 2>, kCommonCrossColorIndices.size() + 4>
+        y_uv_indices;
+    for (uint32_t i = 0; i < kCommonCrossColorIndices.size(); ++i) {
+      y_uv_indices[i] = {kCommonCrossColorIndices[i].first,
+                         kCommonCrossColorIndices[i].second};
+    }
+    // Taken from Table VI in "Multiplierless reversible colour transforms
+    // and their automatic selection for image data compression" by Tilo Strutz.
+    y_uv_indices[kCommonCrossColorIndices.size() + 0] = {4, 4};
+    y_uv_indices[kCommonCrossColorIndices.size() + 1] = {7, 7};
+    y_uv_indices[kCommonCrossColorIndices.size() + 2] = {9, 10};
+    y_uv_indices[kCommonCrossColorIndices.size() + 3] = {1, 10};
+
+    for (const auto& indices : y_uv_indices) {
+      WP2_CHECK_ALLOC_OK(configs->push_back(CrunchConfig()));
+      auto& config = configs->back();
+      WP2_CHECK_STATUS(FindEncodingRecipe(
+          WP2L::EncodingAlgorithm::kCALIC, &config,
+          TransformType::kCrossColorGlobal, TransformType::kNormalizeChannels));
+      config.transforms[0].cc_global_y_index = indices[0];
+      config.transforms[0].cc_global_uv_index = indices[1];
+      config.use_premultiplied = can_premultiply;
+    }
+    // Add with no channel decorrelation.
+    WP2_CHECK_ALLOC_OK(configs->push_back(CrunchConfig()));
+    auto& config = configs->back();
+    WP2_CHECK_STATUS(FindEncodingRecipe(WP2L::EncodingAlgorithm::kCALIC,
+                                        &config,
+                                        TransformType::kNormalizeChannels));
+    config.use_premultiplied = can_premultiply;
+
+    if (encoder.config_.lossless_algorithm == WP2L::EncodingAlgorithm::kCALIC) {
+      return WP2_STATUS_OK;
+    }
+  }
+
+  // TODO(vrabaud): Disable this once CALIC gets better.
   if (WP2Formatbpc(pic.format()) == 8 &&
       !WP2IsPremultiplied(encoder.pic_.format()) &&
       (encoder.config_.lossless_algorithm == WP2L::EncodingAlgorithm::kSCP ||

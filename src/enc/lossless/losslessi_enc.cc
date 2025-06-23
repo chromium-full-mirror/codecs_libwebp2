@@ -485,14 +485,22 @@ WP2Status Encoder::EncodeImageInternal(
   }
 
   // Check if SCP is used.
+  std::array<int32_t, 4> minima_range, maxima_range;
   if (config.algorithm == EncodingAlgorithm::kSCP) {
-    std::array<int32_t, 4> minima_range, maxima_range;
     WP2_CHECK_STATUS(GetARGBRanges(config.transforms,
                                    symbols_info_init.SampleFormat(),
                                    minima_range, maxima_range));
-    WP2_CHECK_STATUS(PlaneCodecEncode(argb_buffer_, config_.effort,
-                                      minima_range, maxima_range, *enc_init,
-                                      encode_info));
+    WP2_CHECK_STATUS(ScpEncode(argb_buffer_, config_.effort, minima_range,
+                               maxima_range, *enc_init, encode_info));
+    WP2_CHECK_STATUS(progress.AdvanceBy(1.));
+    return WP2_STATUS_OK;
+  }
+  if (config.algorithm == EncodingAlgorithm::kCALIC) {
+    WP2_CHECK_STATUS(GetARGBRanges(config.transforms,
+                                   symbols_info_init.SampleFormat(),
+                                   minima_range, maxima_range));
+    WP2_CHECK_STATUS(CalicEncode(argb_buffer_, config_.effort, minima_range,
+                                 maxima_range, *enc_init, encode_info));
     WP2_CHECK_STATUS(progress.AdvanceBy(1.));
     return WP2_STATUS_OK;
   }
@@ -1133,6 +1141,9 @@ WP2Status Encoder::ApplyAndWriteTransforms(
     return WP2_STATUS_OK;
   }
   if (config->algorithm == EncodingAlgorithm::kSCP) {
+    return WP2_STATUS_OK;
+  }
+  if (config->algorithm == EncodingAlgorithm::kCALIC) {
     return WP2_STATUS_OK;
   }
 

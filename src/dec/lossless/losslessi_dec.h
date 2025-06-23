@@ -23,6 +23,7 @@
 #include <array>
 #include <cstdint>
 
+#include "src/common/lossless/calic.h"
 #include "src/common/lossless/color_cache.h"
 #include "src/common/lossless/plane.h"
 #include "src/common/lossless/scp.h"
@@ -86,6 +87,7 @@ struct ScpGlobal {
   uint32_t maxerr_shift;
   int jxl_header_index;
   scp::JxlHeader jxl_header;
+  calic::CalicState::Quantization calic_quantization;
 };
 
 class Decoder {

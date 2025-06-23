@@ -28,6 +28,7 @@
 #include <limits>
 #include <type_traits>
 
+#include "src/common/lossless/calic.h"
 #include "src/common/lossless/plane.h"
 #include "src/common/lossless/scp.h"
 #include "src/dsp/lossless/encl_dsp.h"
@@ -57,6 +58,76 @@ struct Token {
 struct Encoding {
   void swap(Encoding& encoding) { tokens.swap(encoding.tokens); }
   WP2::Vector<Token> tokens;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+// CALIC based encoder.
+class CalicEncState : public ::WP2L::calic::CalicState {
+ public:
+  struct Config {
+    Quantization quantization = Quantization::kOriginal;
+  };
+
+  void SetConfig(const Config& config) { config_ = config; }
+
+  void EncodeHeader(WP2::ANSEncBase& enc) {
+    enc.PutRValue(static_cast<uint32_t>(config_.quantization),
+                  static_cast<uint32_t>(Quantization::kNum), "quantization");
+  }
+
+  // p = prediction, v = true pixel value, m = maximum true pixel value
+  int16_t CalcDistanceFromPredictionAndTPV(int16_t p,
+                                           bool is_mean_error_negative,
+                                           int16_t v, int16_t min,
+                                           int16_t max) {
+    const int16_t max_signed_error = std::min(max - p, p - min);
+    int16_t res = v - p;
+    int16_t d;
+    if (std::abs(res) <= max_signed_error) {
+      // End of section 5.D: Error Feedback.
+      if (is_mean_error_negative) res = -res;
+      d = res > 0 ? 2 * res - 1 : -2 * res;
+    } else {
+      d = std::abs(res) + max_signed_error;
+    }
+    return d;
+  }
+
+  WP2Status CompressPlane(const ImagePlanes& img, int plane_to_compress,
+                          int16_t min_tpv, int16_t max_tpv,
+                          Encoding* encoding) {
+    encoding->tokens.clear();
+    SetMinMax(min_tpv, max_tpv);
+
+    for (size_t y = 0; y < img.height(); ++y) {
+      const int16_t* row = img.PlaneRow(plane_to_compress, y);
+      StartProcessingLine(y, row);
+
+      for (size_t x = 0; x < img.width(); ++x) {
+        uint8_t ctxt;
+        bool is_mean_error_negative;
+        int16_t prediction;
+        Predict(x, prediction, ctxt, is_mean_error_negative);
+
+        WP2_CHECK_ALLOC_OK(encoding->tokens.push_back(Token(
+            ctxt,
+            CalcDistanceFromPredictionAndTPV(prediction, is_mean_error_negative,
+                                             row[x], min_tpv, max_tpv))));
+
+        Update(x, row[x]);
+      }
+    }
+
+    return WP2_STATUS_OK;
+  }
+
+  int GetNumContexts() const {
+    return calic::CalicState::GetNumContexts(config_.quantization);
+  }
+
+ private:
+  Config config_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -327,19 +398,19 @@ WP2Status Compress(const WP2L::ImagePlanes& img,
 
   return WP2_STATUS_OK;
 }
-}  // namespace scp
 
-WP2Status PlaneCodecEncode(const Buffer_s16& img, int effort,
-                           const std::array<int32_t, 4>& minima_range,
-                           const std::array<int32_t, 4>& maxima_range,
-                           WP2::ANSEnc& enc, EncodeInfo* encode_info) {
+static WP2Status PrepareData(const Buffer_s16& img,
+                             const std::array<int32_t, 4>& minima_range,
+                             const std::array<int32_t, 4>& maxima_range,
+                             std::array<int16_t, 4>& min_tpv,
+                             std::array<int16_t, 4>& max_tpv, WP2::ANSEnc& enc,
+                             WP2L::ImagePlanes& img_planes) {
   if (img.channel_bits != 8) return WP2_STATUS_INVALID_PARAMETER;
 
   const size_t width = img.width;
   const size_t height = img.height;
 
   // The code modifies the image for palette so must copy for now.
-  WP2L::ImagePlanes img_planes;
   WP2_CHECK_STATUS(img_planes.Create(width, height, img.has_alpha));
   for (int c = (img.has_alpha ? 0 : 1); c < 4; c++) {
     for (size_t y = 0; y < height; ++y) {
@@ -349,7 +420,6 @@ WP2Status PlaneCodecEncode(const Buffer_s16& img, int effort,
       }
     }
   }
-  std::array<int16_t, 4> min_tpv, max_tpv;
   FindExtrema(img.GetRow(0), width, height, img.has_alpha, min_tpv, max_tpv);
   enc.AddDebugPrefix("GlobalHeader");
   for (int c = img.has_alpha ? 0 : 1; c < 4; ++c) {
@@ -357,6 +427,23 @@ WP2Status PlaneCodecEncode(const Buffer_s16& img, int effort,
     enc.PutRange(max_tpv[c], min_tpv[c], maxima_range[c], "max_tpv");
   }
   enc.PopDebugPrefix();
+
+  return WP2_STATUS_OK;
+}
+
+}  // namespace scp
+
+WP2Status ScpEncode(const Buffer_s16& img, int effort,
+                    const std::array<int32_t, 4>& minima_range,
+                    const std::array<int32_t, 4>& maxima_range,
+                    WP2::ANSEnc& enc, EncodeInfo* encode_info) {
+  const size_t width = img.width;
+  const size_t height = img.height;
+
+  WP2L::ImagePlanes img_planes;
+  std::array<int16_t, 4> min_tpv, max_tpv;
+  WP2_CHECK_STATUS(scp::PrepareData(img, minima_range, maxima_range, min_tpv,
+                                    max_tpv, enc, img_planes));
 
   float cost_best = std::numeric_limits<float>::max();
   WP2::ANSDictionaries dicts;
@@ -478,6 +565,28 @@ WP2Status PlaneCodecEncode(const Buffer_s16& img, int effort,
                               dicts, encode_info));
   }
 
+  return WP2_STATUS_OK;
+}
+
+WP2Status CalicEncode(const Buffer_s16& img, int effort,
+                      const std::array<int32_t, 4>& minima_range,
+                      const std::array<int32_t, 4>& maxima_range,
+                      WP2::ANSEnc& enc, EncodeInfo* encode_info) {
+  WP2L::ImagePlanes img_planes;
+  std::array<int16_t, 4> min_tpv, max_tpv;
+  WP2_CHECK_STATUS(scp::PrepareData(img, minima_range, maxima_range, min_tpv,
+                                    max_tpv, enc, img_planes));
+  WP2::ANSDictionaries dicts;
+
+  // Encode using CALIC.
+  scp::CalicEncState state;
+  scp::CalicEncState::Config calic_config_best;
+  calic_config_best.quantization = calic::CalicState::Quantization::kOriginal;
+  state.SetConfig(calic_config_best);
+  WP2_CHECK_STATUS(
+      state.Init(img.width, img.height, calic_config_best.quantization));
+  WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort, enc, state,
+                            dicts, encode_info));
   return WP2_STATUS_OK;
 }
 

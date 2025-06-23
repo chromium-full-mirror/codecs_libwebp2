@@ -66,7 +66,7 @@ class ImagePlanes {
 
 class PlaneCodec {
  public:
-  enum class Method { kScpClassical, kScpJxl, kNum };
+  enum class Method { kScpClassical, kScpJxl, kCalic, kNum };
 
   virtual ~PlaneCodec() = default;
 

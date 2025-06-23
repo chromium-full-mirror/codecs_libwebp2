@@ -415,6 +415,8 @@ add_library(
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/trellis.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/enc/writer_enc.cc
   # lossless
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/calic.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/calic.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/color_cache.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/color_cache.h
   ${CMAKE_CURRENT_SOURCE_DIR}/src/common/lossless/scp.cc

@@ -632,7 +632,8 @@ WP2Status Decoder::DecodeImageData(uint32_t width, uint32_t height,
     WP2_CHECK_STATUS(DecodeGroup4(width, last_row, bits_per_pixel, &src));
   } else if (encoding_algorithm_ == EncodingAlgorithm::kLZW) {
     WP2_CHECK_STATUS(DecodeLZW(width, last_row, bits_per_pixel, &src));
-  } else if (encoding_algorithm_ == EncodingAlgorithm::kSCP) {
+  } else if (encoding_algorithm_ == EncodingAlgorithm::kSCP ||
+             encoding_algorithm_ == EncodingAlgorithm::kCALIC) {
     WP2_CHECK_STATUS(
         DecodePlaneCodec(width, last_row, scp_global_, bits_per_pixel, &src));
   } else {
@@ -1143,7 +1144,8 @@ WP2Status Decoder::DecodeHeader() {
     }
     dec_->PopDebugPrefix();
     return WP2_STATUS_OK;
-  } else if (encoding_algorithm_ == EncodingAlgorithm::kSCP) {
+  } else if (encoding_algorithm_ == EncodingAlgorithm::kSCP ||
+             encoding_algorithm_ == EncodingAlgorithm::kCALIC) {
     for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
       scp_global_.max_tpv[c] =
           c == 0 ? WP2::kAlphaMax

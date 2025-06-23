@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "src/common/lossless/calic.h"
 #include "src/common/lossless/plane.h"
 #include "src/common/lossless/scp.h"
 #include "src/common/symbols.h"
@@ -38,6 +39,69 @@
 
 namespace WP2L {
 namespace scp {
+////////////////////////////////////////////////////////////////////////////////
+
+class CalicDecState : public ::WP2L::calic::CalicState {
+ public:
+  int16_t CalcTPVFromPredictionAndDistance(int16_t p,
+                                           bool is_mean_error_negative,
+                                           int16_t d, int16_t min,
+                                           int16_t max) {
+    // Compute the maximum error for which the sign is not forced from the
+    // prediction. E.g., if the prediction is 10 and the value is in [0, 100],
+    // the signed error can only be in [-10, 10]. Beyond that, the error is
+    // positive in [0, 80].
+    const int16_t max_signed_error = std::min(max - p, p - min);
+    int16_t res;
+    if (d <= 2 * max_signed_error) {
+      res = d % 2 == 0 ? -d / 2 : (d + 1) / 2;
+      // End of section 5.D: Error Feedback.
+      if (is_mean_error_negative) res = -res;
+      p += res;
+    } else {
+      res = d - max_signed_error;
+      if (p + res > max) {
+        p -= res;
+      } else {
+        p += res;
+      }
+    }
+    return p;
+  }
+
+  WP2Status DecompressPlane(int plane_to_decompress, const ScpGlobal& global,
+                            WP2::SymbolReader& sr, ImagePlanes& img) {
+    const int16_t min_tpv = global.min_tpv[plane_to_decompress];
+    const int16_t max_tpv = global.max_tpv[plane_to_decompress];
+    SetMinMax(min_tpv, max_tpv);
+
+    for (size_t y = 0; y < img.height(); ++y) {
+      int16_t* row = img.PlaneRow(plane_to_decompress, y);
+      StartProcessingLine(y, row);
+
+      for (size_t x = 0; x < img.width(); ++x) {
+        // Predict.
+        uint8_t ctxt;
+        bool is_mean_error_negative;
+        int16_t prediction;
+        Predict(x, prediction, ctxt, is_mean_error_negative);
+
+        // Compute the true pixel value.
+        const int16_t residual =
+            sr.Read(/*sym=*/plane_to_decompress, ctxt, "sym");
+
+        row[x] = CalcTPVFromPredictionAndDistance(
+            prediction, is_mean_error_negative, residual, min_tpv, max_tpv);
+        WP2_CHECK_OK(row[x] >= min_tpv && row[x] <= max_tpv,
+                     WP2_STATUS_BITSTREAM_ERROR);
+
+        Update(x, row[x]);
+      }
+    }
+
+    return WP2_STATUS_OK;
+  }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -194,6 +258,14 @@ WP2Status Decoder::DecodePlaneCodecHeader(ScpGlobal* global) {
       }
       num_contexts = scp::JXLState::GetNumContexts();
       break;
+    case PlaneCodec::Method::kCalic:
+      global->calic_quantization =
+          static_cast<calic::CalicState::Quantization>(dec_->ReadRValue(
+              static_cast<int>(calic::CalicState::Quantization::kNum),
+              "quantization"));
+      num_contexts =
+          calic::CalicState::GetNumContexts(global->calic_quantization);
+      break;
     case PlaneCodec::Method::kNum:
     default:
       assert(false);
@@ -247,6 +319,13 @@ WP2Status Decoder::DecodePlaneCodec(uint32_t width, uint32_t last_row,
         } else {
           state.SetHeaderIndex(global.jxl_header_index);
         }
+        WP2_CHECK_STATUS(Decompress(global, width, height, gparams_->has_alpha_,
+                                    state, hdr_.sr_, src));
+        break;
+      }
+      case PlaneCodec::Method::kCalic: {
+        scp::CalicDecState state;
+        WP2_CHECK_STATUS(state.Init(width, height, global.calic_quantization));
         WP2_CHECK_STATUS(Decompress(global, width, height, gparams_->has_alpha_,
                                     state, hdr_.sr_, src));
         break;

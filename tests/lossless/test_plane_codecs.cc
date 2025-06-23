@@ -104,7 +104,8 @@ INSTANTIATE_TEST_SUITE_P(
                                      std::array<int, 2>{555, 577},
                                      std::array<int, 2>{577, 555},
                                      std::array<int, 2>{5, 800}),
-                     testing::Values(WP2L::EncodingAlgorithm::kSCP)));
+                     testing::Values(WP2L::EncodingAlgorithm::kSCP,
+                                     WP2L::EncodingAlgorithm::kCALIC)));
 
 class LosslessTestFile : public testing::TestWithParam<
                              std::tuple<std::string, WP2L::EncodingAlgorithm>> {
@@ -126,7 +127,8 @@ INSTANTIATE_TEST_SUITE_P(
     LosslessTestInstantiation, LosslessTestFile,
     testing::Combine(testing::Values("background.png", "logo.png",
                                      "source1_64x48.png"),
-                     testing::Values(WP2L::EncodingAlgorithm::kSCP)));
+                     testing::Values(WP2L::EncodingAlgorithm::kSCP,
+                                     WP2L::EncodingAlgorithm::kCALIC)));
 
 ////////////////////////////////////////////////////////////////////////////////
 

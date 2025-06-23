@@ -370,6 +370,7 @@ enum class EncodingAlgorithm {
   kLZW,
   // Self-correcting predictor.
   kSCP,
+  kCALIC,
   kNum,
   kDefault = kNum
 };
@@ -405,6 +406,12 @@ static constexpr EncodingRecipe kPossibleEncodingRecipes[] = {
      {TransformType::kNum, TransformType::kNum, TransformType::kNum}},
     {EncodingAlgorithm::kLZW,
      {TransformType::kNum, TransformType::kNum, TransformType::kNum}},
+    {EncodingAlgorithm::kCALIC,
+     {TransformType::kCrossColorGlobal, TransformType::kNormalizeChannels,
+      TransformType::kNum}},
+    {EncodingAlgorithm::kCALIC,
+     {TransformType::kNormalizeChannels, TransformType::kNum,
+      TransformType::kNum}},
     {EncodingAlgorithm::kSCP,
      {TransformType::kNormalizeChannels, TransformType::kNum,
       TransformType::kNum}},
