@@ -139,9 +139,9 @@ inline constexpr std::array<JxlHeader, 4> kJxlHeaders = {{
 // do predictions.
 class State : public PlaneCodec {
  public:
-  WP2Status Init(size_t width, size_t height);
+  WP2Status Init(uint32_t width, uint32_t height) override;
 
-  WP2Status Reset();
+  WP2Status Reset() override;
 
  public:  // Only for testing.
   // p = prediction, v = true pixel value, m = inclusive maximum true pixel
@@ -244,7 +244,7 @@ class State : public PlaneCodec {
 class ClassicalState : public State {
  public:
   static int GetNumContexts(int maxerr_shift);
-  WP2Status Init(size_t width, size_t height);
+  WP2Status Init(uint32_t, uint32_t height) override;
 
  protected:
   int16_t PredictY0(size_t x, uint8_t* ctxt);

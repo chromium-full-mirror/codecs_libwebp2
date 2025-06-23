@@ -252,9 +252,9 @@ WP2Status Decoder::DecodePlaneCodec(uint32_t width, uint32_t last_row,
         break;
       }
       case PlaneCodec::Method::kNum:
+      default:
         assert(false);
         return WP2_STATUS_INVALID_PARAMETER;
-        break;
     }
     for (size_t y = 0; y < last_row; ++y) {
       WP2_CHECK_STATUS(ProcessRows(y));

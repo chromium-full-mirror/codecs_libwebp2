@@ -55,11 +55,7 @@ struct Token {
 
 // What defines a plane encoding according to the SCP.
 struct Encoding {
-  void swap(Encoding& encoding) {
-    tokens.swap(encoding.tokens);
-    std::swap(mode, encoding.mode);
-  }
-  PredictionMode mode;  // classical only
+  void swap(Encoding& encoding) { tokens.swap(encoding.tokens); }
   WP2::Vector<Token> tokens;
 };
 

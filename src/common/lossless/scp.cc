@@ -52,7 +52,7 @@ namespace scp {
 ////////////////////////////////////////////////////////////////////////////////
 // ScpState.
 
-WP2Status State::Init(size_t width, size_t height) {
+WP2Status State::Init(uint32_t width, uint32_t height) {
   WP2_CHECK_STATUS(PlaneCodec::Init(width, height));
 
   WP2_CHECK_STATUS(Reset());
@@ -137,7 +137,7 @@ uint8_t State::DiffToError(int16_t tpv, int16_t prediction) const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-WP2Status ClassicalState::Init(size_t width, size_t height) {
+WP2Status ClassicalState::Init(uint32_t width, uint32_t height) {
   WP2_CHECK_STATUS(State::Init(width, height));
 
   // Cache some constants.

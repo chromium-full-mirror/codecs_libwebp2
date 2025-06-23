@@ -57,14 +57,15 @@ WP2::ArgbBuffer GenerateImage(size_t xsize, size_t ysize, bool has_alpha,
 }
 
 // Limit makes it choose fewer values so per-channel palette will be used
-void TestRoundTrip(const WP2::ArgbBuffer& image) {
+void TestRoundTrip(const WP2::ArgbBuffer& image,
+                   WP2L::EncodingAlgorithm algorithm) {
   WP2::Vector_u8 bytes;
 
   MemoryWriter memory_writer;
   EncoderConfig encoder_config;
   encoder_config.quality = 100;
   encoder_config.keep_unmultiplied = true;
-  encoder_config.lossless_algorithm = WP2L::EncodingAlgorithm::kSCP;
+  encoder_config.lossless_algorithm = algorithm;
   WP2_ASSERT_STATUS(Encode(image, &memory_writer, encoder_config));
 
   DecoderConfig decoder_config;
@@ -76,7 +77,8 @@ void TestRoundTrip(const WP2::ArgbBuffer& image) {
 }
 
 class LosslessTestGen
-    : public testing::TestWithParam<std::tuple<int, bool, std::array<int, 2>>> {
+    : public testing::TestWithParam<
+          std::tuple<int, bool, std::array<int, 2>, WP2L::EncodingAlgorithm>> {
 };
 
 TEST_P(LosslessTestGen, RoundTripData) {
@@ -84,10 +86,11 @@ TEST_P(LosslessTestGen, RoundTripData) {
   const bool has_alpha = std::get<1>(GetParam());
   const size_t xsize = std::get<2>(GetParam())[0];
   const size_t ysize = std::get<2>(GetParam())[1];
+  const WP2L::EncodingAlgorithm algorithm = std::get<3>(GetParam());
   bool limit[4] = {false};
   for (int i = 0; i < 4; ++i) limit[i] = static_cast<bool>(val & (1 << i));
   const auto image = GenerateImage(xsize, ysize, has_alpha, limit);
-  TestRoundTrip(image);
+  TestRoundTrip(image, algorithm);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -100,23 +103,30 @@ INSTANTIATE_TEST_SUITE_P(
                                      std::array<int, 2>{256, 256},
                                      std::array<int, 2>{555, 577},
                                      std::array<int, 2>{577, 555},
-                                     std::array<int, 2>{5, 800})));
+                                     std::array<int, 2>{5, 800}),
+                     testing::Values(WP2L::EncodingAlgorithm::kSCP)));
 
-class LosslessTestFile : public testing::TestWithParam<std::string> {};
+class LosslessTestFile : public testing::TestWithParam<
+                             std::tuple<std::string, WP2L::EncodingAlgorithm>> {
+};
 
 TEST_P(LosslessTestFile, RoundTripFile) {
-  const std::string file = GetParam();
+  const std::string file = std::get<0>(GetParam());
+  const WP2L::EncodingAlgorithm algorithm = std::get<1>(GetParam());
+
   WP2::ArgbBuffer image(WP2_ARGB_32);
   ASSERT_EQ(WP2::ReadImage(testutil::GetTestDataPath(file).c_str(), &image),
             WP2_STATUS_OK)
       << testutil::GetTestDataPath(file);
 
-  TestRoundTrip(image);
+  TestRoundTrip(image, algorithm);
 }
 
-INSTANTIATE_TEST_SUITE_P(LosslessTestInstantiation, LosslessTestFile,
-                         testing::Values("background.png", "logo.png",
-                                         "source1_64x48.png"));
+INSTANTIATE_TEST_SUITE_P(
+    LosslessTestInstantiation, LosslessTestFile,
+    testing::Combine(testing::Values("background.png", "logo.png",
+                                     "source1_64x48.png"),
+                     testing::Values(WP2L::EncodingAlgorithm::kSCP)));
 
 ////////////////////////////////////////////////////////////////////////////////
 

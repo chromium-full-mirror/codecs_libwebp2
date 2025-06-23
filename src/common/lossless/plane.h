@@ -70,7 +70,7 @@ class PlaneCodec {
 
   virtual ~PlaneCodec() = default;
 
-  WP2Status Init(size_t width, size_t height) {
+  virtual WP2Status Init(uint32_t width, uint32_t height) {
     width_ = width;
     last_x_ = width - 1;
     height_ = height;
@@ -80,7 +80,7 @@ class PlaneCodec {
     return WP2_STATUS_OK;
   }
 
-  WP2Status Reset() {
+  virtual WP2Status Reset() {
     row_ = row_p_ = row_pp_ = nullptr;
     return WP2_STATUS_OK;
   }
@@ -106,9 +106,9 @@ class PlaneCodec {
   const int16_t *WP2_RESTRICT row_p_, *WP2_RESTRICT row_pp_;
 
   uint32_t y_;
-  size_t last_x_;  // width - 1, for prediction borders
+  uint32_t last_x_;  // width - 1, for prediction borders
 
-  size_t width_, height_;
+  uint32_t width_, height_;
 };
 }  // namespace WP2L
 
