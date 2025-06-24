@@ -595,9 +595,41 @@ WP2Status CalicEncode(const Buffer_s16& img, int effort,
   // Encode using CALIC.
   scp::CalicEncState state;
   WP2_CHECK_STATUS(state.Init(img.width, img.height, img.has_alpha));
-  scp::CalicEncState::Config config;
-  config.quantizations.fill(calic::CalicState::Quantization::kOriginal);
-  state.SetConfig(config);
+  scp::CalicEncState::Config config_best;
+  // TODO(vrabaud) enable once a cruncher effort is introduced.
+#if 0
+  float cost_best = std::numeric_limits<float>::max();
+  for (::WP2L::calic::CalicState::Quantization q1 :
+       {calic::CalicState::Quantization::k18,
+        calic::CalicState::Quantization::k20}) {
+    for (::WP2L::calic::CalicState::Quantization q2 :
+         {calic::CalicState::Quantization::k18,
+          calic::CalicState::Quantization::k20}) {
+      for (::WP2L::calic::CalicState::Quantization q3 :
+           {calic::CalicState::Quantization::k18,
+            calic::CalicState::Quantization::k20}) {
+              scp::CalicEncState::Config config;
+        config.quantizations = {q1, q1, q2, q3};
+        state.SetConfig(config);
+        WP2::ANSEncCounter enc_counter;
+
+        WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort,
+                                  enc_counter, state, dicts, encode_info));
+        const float cost = enc_counter.GetCost(dicts);
+        if (cost < cost_best) {
+          cost_best = cost;
+          config_best = config;
+        }
+      }
+    }
+  }
+#endif
+  // These defaults work well if the last two channels are like chroma.
+  config_best.quantizations = {calic::CalicState::Quantization::kOriginal,
+                               calic::CalicState::Quantization::kOriginal,
+                               calic::CalicState::Quantization::kOriginal,
+                               calic::CalicState::Quantization::kOriginal};
+  state.SetConfig(config_best);
   WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort, enc, state,
                             dicts, encode_info));
   return WP2_STATUS_OK;

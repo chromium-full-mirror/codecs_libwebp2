@@ -26,6 +26,10 @@
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
 
+// Define ORIGINAL_CALIC to get the original version of CALIC, with no
+// enhancement on the coding context.
+#define ORIGINAL_CALIC
+
 namespace WP2L {
 namespace calic {
 
@@ -33,7 +37,11 @@ namespace calic {
 class CalicState : public ::WP2L::PlaneCodec {
  public:
   // This is part of the format.
+#ifdef ORIGINAL_CALIC
   enum class Quantization { kOriginal, kNum };
+#else
+  enum class Quantization { kOriginal, k18, k20, kNum };
+#endif
 
   WP2Status Init(uint32_t width, uint32_t height) override;
   WP2Status Reset() override;

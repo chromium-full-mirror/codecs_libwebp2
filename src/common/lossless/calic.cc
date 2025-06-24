@@ -67,6 +67,22 @@ WP2Status CalicState::SetQuantization(Quantization quantization) {
       quantized_delta_[140] = 7;
       size = ((quantized_delta_.back() + 1) / 2) * (1 << 8);
       break;
+#ifndef ORIGINAL_CALIC
+    case Quantization::k18:
+    case Quantization::k20: {
+      // The scale and log function are totally empirical.
+      size_t i = 1;
+      const float scale = quantization == Quantization::k18 ? 1.8 : 2;
+      while (static_cast<int>(1 + std::log(i) * scale + .5) < max_context) ++i;
+      WP2_CHECK_ALLOC_OK(quantized_delta_.resize(i + 1));
+      quantized_delta_[0] = 0;
+      for (i = 1; i < quantized_delta_.size(); ++i) {
+        quantized_delta_[i] = static_cast<int>(1 + std::log(i) * scale + .5);
+      }
+      size = (max_context + 1) * (1 << 8);
+      break;
+    }
+#endif
     case Quantization::kNum:
     default:
       assert(false);
@@ -92,6 +108,11 @@ uint8_t CalicState::GetNumContextsFromQuantization(Quantization quantization) {
   switch (quantization) {
     case Quantization::kOriginal:
       return 8;
+#ifndef ORIGINAL_CALIC
+    case Quantization::k18:
+    case Quantization::k20:
+      return 12;
+#endif
     case Quantization::kNum:
     default:
       assert(false);
@@ -195,6 +216,12 @@ void CalicState::Predict(uint32_t x, int16_t& prediction, uint8_t& ctxt,
     case Quantization::kOriginal:
       compound_context_ = ((quantized_delta / 2) << 8) | b;
       break;
+#ifndef ORIGINAL_CALIC
+    case Quantization::k18:
+    case Quantization::k20:
+      compound_context_ = (quantized_delta << 8) | b;
+      break;
+#endif
     case Quantization::kNum:
       assert(false);
       return;
@@ -202,12 +229,18 @@ void CalicState::Predict(uint32_t x, int16_t& prediction, uint8_t& ctxt,
 
   // Section 5.D: Error Feedback.
   const auto mean_error = mean_errors_[compound_context_];
-  is_mean_error_negative = mean_error < 0;
   const int16_t rounded_abs_residual =
       WP2::RightShiftRound(std::abs(mean_error), kPrecisionBits);
   prediction =
       pred_ + (mean_error >= 0 ? rounded_abs_residual : -rounded_abs_residual);
   prediction = std::clamp(prediction, min_tpv_, max_tpv_);
+
+#ifdef ORIGINAL_CALIC
+  is_mean_error_negative = mean_error < 0;
+#else
+  // Group on whether to round away from 0 or not.
+  is_mean_error_negative = (mean_error >> (kPrecisionBits - 1)) & 1;
+#endif
 
   ctxt = quantized_delta;
 }
