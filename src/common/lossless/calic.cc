@@ -16,6 +16,7 @@
 // Common CALIC code from "Context-Based, Adaptive, Lossless Image Coding"
 // IEEE TRANSACTIONS ON COMMUNICATIONS, VOL. 45, NO. 4, APRIL 1997
 // by Xiaolin Wu and Nasir Memon
+// https://ieeexplore.ieee.org/document/585919
 //
 // Author: Vincent Rabaud (vrabaud@google.com)
 
@@ -23,6 +24,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 
@@ -34,15 +36,24 @@
 namespace WP2L {
 namespace calic {
 
-WP2Status CalicState::Init(uint32_t width, uint32_t height,
-                           Quantization quantization) {
+WP2Status CalicState::Init(uint32_t width, uint32_t height) {
   WP2_CHECK_STATUS(WP2L::PlaneCodec::Init(width, height));
   WP2_CHECK_ALLOC_OK(curr_diff_col_.resize(width));
   WP2_CHECK_ALLOC_OK(curr_diff_row_.resize(width));
   WP2_CHECK_ALLOC_OK(prev_diff_col_.resize(width));
   WP2_CHECK_ALLOC_OK(prev_diff_row_.resize(width));
 
+  WP2_CHECK_STATUS(Reset());
+
+  return WP2_STATUS_OK;
+}
+
+WP2Status CalicState::SetQuantization(Quantization quantization) {
   // Initialize the quantized delta table.
+  quantization_ = quantization;
+  [[maybe_unused]] const uint8_t max_context =
+      GetNumContextsFromQuantization(quantization) - 1;
+  int size;
   switch (quantization) {
     case Quantization::kOriginal:
       WP2_CHECK_ALLOC_OK(quantized_delta_.resize(141));
@@ -54,19 +65,18 @@ WP2Status CalicState::Init(uint32_t width, uint32_t height,
       std::fill(&quantized_delta_[60], &quantized_delta_[85], 5);
       std::fill(&quantized_delta_[85], &quantized_delta_[140], 6);
       quantized_delta_[140] = 7;
+      size = ((quantized_delta_.back() + 1) / 2) * (1 << 8);
       break;
     case Quantization::kNum:
+    default:
       assert(false);
       return WP2_STATUS_INVALID_PARAMETER;
   }
-  if (quantized_delta_.back() + 1 != GetNumContexts(quantization)) {
-    return WP2_STATUS_INVALID_PARAMETER;
-  }
+  assert(quantized_delta_.back() == max_context);
 
-  const int kSize = ((quantized_delta_.back() + 1) / 2) * (1 << 8);
-  WP2_CHECK_ALLOC_OK(mean_errors_.resize(kSize));
-  WP2_CHECK_ALLOC_OK(s_errors_.resize(kSize));
-  WP2_CHECK_ALLOC_OK(n_errors_.resize(kSize));
+  WP2_CHECK_ALLOC_OK(mean_errors_.resize(size));
+  WP2_CHECK_ALLOC_OK(s_errors_.resize(size));
+  WP2_CHECK_ALLOC_OK(n_errors_.resize(size));
   WP2_CHECK_STATUS(Reset());
 
   return WP2_STATUS_OK;
@@ -78,11 +88,10 @@ void CalicState::SetMinMax(int16_t min_tpv, int16_t max_tpv) {
   default_value_ = (min_tpv + max_tpv + 1) / 2;
 }
 
-uint8_t CalicState::GetNumContexts(Quantization quantization) {
+uint8_t CalicState::GetNumContextsFromQuantization(Quantization quantization) {
   switch (quantization) {
     case Quantization::kOriginal:
       return 8;
-      break;
     case Quantization::kNum:
     default:
       assert(false);
@@ -182,7 +191,14 @@ void CalicState::Predict(uint32_t x, int16_t& prediction, uint8_t& ctxt,
   b |= (ww < pred_) << 5;
   b |= ((2 * n - nn) < pred_) << 6;
   b |= ((2 * w - ww) < pred_) << 7;
-  compound_context_ = ((quantized_delta / 2) << 8) | b;
+  switch (quantization_) {
+    case Quantization::kOriginal:
+      compound_context_ = ((quantized_delta / 2) << 8) | b;
+      break;
+    case Quantization::kNum:
+      assert(false);
+      return;
+  }
 
   // Section 5.D: Error Feedback.
   const auto mean_error = mean_errors_[compound_context_];

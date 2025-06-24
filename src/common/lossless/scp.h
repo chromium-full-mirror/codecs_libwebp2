@@ -243,7 +243,7 @@ class State : public PlaneCodec {
 // State for the classical Self Correcting Predictor.
 class ClassicalState : public State {
  public:
-  static int GetNumContexts(int maxerr_shift);
+  static int GetNumContextsFromErrShift(int maxerr_shift);
   WP2Status Init(uint32_t, uint32_t height) override;
 
  protected:

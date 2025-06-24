@@ -87,7 +87,7 @@ struct ScpGlobal {
   uint32_t maxerr_shift;
   int jxl_header_index;
   scp::JxlHeader jxl_header;
-  calic::CalicState::Quantization calic_quantization;
+  std::array<calic::CalicState::Quantization, 4> calic_quantizations;
 };
 
 class Decoder {

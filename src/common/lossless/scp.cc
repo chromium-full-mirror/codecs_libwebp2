@@ -148,7 +148,7 @@ WP2Status ClassicalState::Init(uint32_t width, uint32_t height) {
   return WP2_STATUS_OK;
 }
 
-int ClassicalState::GetNumContexts(int maxerr_shift) {
+int ClassicalState::GetNumContextsFromErrShift(int maxerr_shift) {
   return ((scp::kNumContexts - 1) >> maxerr_shift) + 1;
 }
 

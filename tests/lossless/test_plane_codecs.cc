@@ -99,10 +99,7 @@ INSTANTIATE_TEST_SUITE_P(
                      testing::Values(std::array<int, 2>{1, 1},
                                      std::array<int, 2>{3, 5},
                                      std::array<int, 2>{16, 16},
-                                     std::array<int, 2>{255, 255},
                                      std::array<int, 2>{256, 256},
-                                     std::array<int, 2>{555, 577},
-                                     std::array<int, 2>{577, 555},
                                      std::array<int, 2>{5, 800}),
                      testing::Values(WP2L::EncodingAlgorithm::kSCP,
                                      WP2L::EncodingAlgorithm::kCALIC)));

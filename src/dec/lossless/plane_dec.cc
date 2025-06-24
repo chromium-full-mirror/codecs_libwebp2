@@ -74,6 +74,8 @@ class CalicDecState : public ::WP2L::calic::CalicState {
     const int16_t min_tpv = global.min_tpv[plane_to_decompress];
     const int16_t max_tpv = global.max_tpv[plane_to_decompress];
     SetMinMax(min_tpv, max_tpv);
+    WP2_CHECK_STATUS(
+        SetQuantization(global.calic_quantizations[plane_to_decompress]));
 
     for (size_t y = 0; y < img.height(); ++y) {
       int16_t* row = img.PlaneRow(plane_to_decompress, y);
@@ -229,11 +231,12 @@ WP2Status Decoder::DecodePlaneCodecHeader(ScpGlobal* global) {
 
   global->method = static_cast<PlaneCodec::Method>(
       dec_->ReadRValue(static_cast<int>(PlaneCodec::Method::kNum), "method"));
-  int num_contexts;
+  std::array<int, 4> num_contexts;
   switch (global->method) {
     case PlaneCodec::Method::kScpClassical:
       global->maxerr_shift = dec_->ReadRValue(5, "maxerrShift");
-      num_contexts = scp::ClassicalState::GetNumContexts(global->maxerr_shift);
+      num_contexts.fill(scp::ClassicalState::GetNumContextsFromErrShift(
+          global->maxerr_shift));
       for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
         global->prediction_modes[c] =
             static_cast<scp::PredictionMode>(dec_->ReadRValue(
@@ -256,15 +259,17 @@ WP2Status Decoder::DecodePlaneCodecHeader(ScpGlobal* global) {
           global->jxl_header.w[i] = dec_->ReadRange(0, 40, "w");
         }
       }
-      num_contexts = scp::JXLState::GetNumContexts();
+      num_contexts.fill(scp::JXLState::GetNumContexts());
       break;
     case PlaneCodec::Method::kCalic:
-      global->calic_quantization =
-          static_cast<calic::CalicState::Quantization>(dec_->ReadRValue(
-              static_cast<int>(calic::CalicState::Quantization::kNum),
-              "quantization"));
-      num_contexts =
-          calic::CalicState::GetNumContexts(global->calic_quantization);
+      for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
+        global->calic_quantizations[c] =
+            static_cast<calic::CalicState::Quantization>(dec_->ReadRValue(
+                static_cast<int>(calic::CalicState::Quantization::kNum),
+                "quantization"));
+        num_contexts[c] = calic::CalicState::GetNumContextsFromQuantization(
+            global->calic_quantizations[c]);
+      }
       break;
     case PlaneCodec::Method::kNum:
     default:
@@ -277,7 +282,7 @@ WP2Status Decoder::DecodePlaneCodecHeader(ScpGlobal* global) {
 
   for (uint32_t c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
     symbols_info.SetInfo(/*sym=*/c, /*min=*/0, /*max=*/1024,
-                         /*num_clusters=*/num_contexts,
+                         /*num_clusters=*/num_contexts[c],
                          WP2::SymbolsInfo::StorageMethod::kAuto);
   }
 
@@ -325,7 +330,7 @@ WP2Status Decoder::DecodePlaneCodec(uint32_t width, uint32_t last_row,
       }
       case PlaneCodec::Method::kCalic: {
         scp::CalicDecState state;
-        WP2_CHECK_STATUS(state.Init(width, height, global.calic_quantization));
+        WP2_CHECK_STATUS(state.Init(width, height));
         WP2_CHECK_STATUS(Decompress(global, width, height, gparams_->has_alpha_,
                                     state, hdr_.sr_, src));
         break;

@@ -66,14 +66,21 @@ struct Encoding {
 class CalicEncState : public ::WP2L::calic::CalicState {
  public:
   struct Config {
-    Quantization quantization = Quantization::kOriginal;
+    std::array<Quantization, 4> quantizations;
   };
 
+  WP2Status Init(uint32_t width, uint32_t height, bool has_alpha) {
+    WP2_CHECK_STATUS(CalicState::Init(width, height));
+    has_alpha_ = has_alpha;
+    return WP2_STATUS_OK;
+  }
   void SetConfig(const Config& config) { config_ = config; }
 
   void EncodeHeader(WP2::ANSEncBase& enc) {
-    enc.PutRValue(static_cast<uint32_t>(config_.quantization),
-                  static_cast<uint32_t>(Quantization::kNum), "quantization");
+    for (int c = has_alpha_ ? 0 : 1; c < 4; ++c) {
+      enc.PutRValue(static_cast<uint32_t>(config_.quantizations[c]),
+                    static_cast<uint32_t>(Quantization::kNum), "quantization");
+    }
   }
 
   // p = prediction, v = true pixel value, m = maximum true pixel value
@@ -98,6 +105,7 @@ class CalicEncState : public ::WP2L::calic::CalicState {
                           int16_t min_tpv, int16_t max_tpv,
                           Encoding* encoding) {
     encoding->tokens.clear();
+    WP2_CHECK_STATUS(SetQuantization(config_.quantizations[plane_to_compress]));
     SetMinMax(min_tpv, max_tpv);
 
     for (size_t y = 0; y < img.height(); ++y) {
@@ -122,12 +130,16 @@ class CalicEncState : public ::WP2L::calic::CalicState {
     return WP2_STATUS_OK;
   }
 
-  int GetNumContexts() const {
-    return calic::CalicState::GetNumContexts(config_.quantization);
+  int GetNumContexts(int c) const {
+    return calic::CalicState::GetNumContextsFromQuantization(
+        config_.quantizations[c]);
   }
 
  private:
+  using calic::CalicState::Init;
+
   Config config_;
+  bool has_alpha_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -233,8 +245,8 @@ class ClassicalEncState : public ClassicalState {
     }
   }
 
-  int GetNumContexts() const {
-    return ClassicalState::GetNumContexts(config_.maxerr_shift);
+  int GetNumContexts(int c) const {
+    return ClassicalState::GetNumContextsFromErrShift(config_.maxerr_shift);
   }
 
  private:
@@ -316,6 +328,8 @@ class JXLEncState : public JXLState {
     }
   }
 
+  int GetNumContexts(int c) const { return JXLState::GetNumContexts(); }
+
  private:
   Config config_;
 };
@@ -347,9 +361,9 @@ WP2Status Compress(const WP2L::ImagePlanes& img,
   state.EncodeHeader(enc);
 
   // Define the symbols info.
-  const int num_contexts = state.GetNumContexts();
   WP2::SymbolsInfo symbols_info;
   for (int c = img.has_alpha() ? 0 : 1; c < 4; ++c) {
+    const int num_contexts = state.GetNumContexts(c);
     symbols_info.SetInfo(/*sym=*/c, /*min=*/0, /*max=*/1024,
                          /*num_clusters=*/num_contexts,
                          WP2::SymbolsInfo::StorageMethod::kAuto);
@@ -580,11 +594,10 @@ WP2Status CalicEncode(const Buffer_s16& img, int effort,
 
   // Encode using CALIC.
   scp::CalicEncState state;
-  scp::CalicEncState::Config calic_config_best;
-  calic_config_best.quantization = calic::CalicState::Quantization::kOriginal;
-  state.SetConfig(calic_config_best);
-  WP2_CHECK_STATUS(
-      state.Init(img.width, img.height, calic_config_best.quantization));
+  WP2_CHECK_STATUS(state.Init(img.width, img.height, img.has_alpha));
+  scp::CalicEncState::Config config;
+  config.quantizations.fill(calic::CalicState::Quantization::kOriginal);
+  state.SetConfig(config);
   WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort, enc, state,
                             dicts, encode_info));
   return WP2_STATUS_OK;
