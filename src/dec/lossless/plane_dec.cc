@@ -73,9 +73,8 @@ class CalicDecState : public ::WP2L::calic::CalicState {
                             WP2::SymbolReader& sr, ImagePlanes& img) {
     const int16_t min_tpv = global.min_tpv[plane_to_decompress];
     const int16_t max_tpv = global.max_tpv[plane_to_decompress];
-    SetMinMax(min_tpv, max_tpv);
-    WP2_CHECK_STATUS(
-        SetQuantization(global.calic_quantizations[plane_to_decompress]));
+    WP2_CHECK_STATUS(SetParameters(
+        global.calic_quantizations[plane_to_decompress], min_tpv, max_tpv));
 
     for (size_t y = 0; y < img.height(); ++y) {
       int16_t* row = img.PlaneRow(plane_to_decompress, y);
@@ -193,6 +192,8 @@ class JXLDecState : public JXLState {
     return WP2_STATUS_OK;
   }
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 // Main function to decompress a buffer using an SCP state.
 template <typename STATE>

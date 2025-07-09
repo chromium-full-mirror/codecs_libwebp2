@@ -105,8 +105,8 @@ class CalicEncState : public ::WP2L::calic::CalicState {
                           int16_t min_tpv, int16_t max_tpv,
                           Encoding* encoding) {
     encoding->tokens.clear();
-    WP2_CHECK_STATUS(SetQuantization(config_.quantizations[plane_to_compress]));
-    SetMinMax(min_tpv, max_tpv);
+    WP2_CHECK_STATUS(SetParameters(config_.quantizations[plane_to_compress],
+                                   min_tpv, max_tpv));
 
     for (size_t y = 0; y < img.height(); ++y) {
       const int16_t* row = img.PlaneRow(plane_to_compress, y);
@@ -345,10 +345,17 @@ WP2Status Compress(const WP2L::ImagePlanes& img,
   const int num_tokens_ori = encode_info != nullptr ? enc.NumTokens() : 0;
 
   enc.AddDebugPrefix("GlobalHeader");
-  enc.PutRValue(std::is_same<STATE, ClassicalEncState>::value ? 0
-                : std::is_same<STATE, JXLEncState>::value     ? 1
-                                                              : 2,
-                static_cast<int>(PlaneCodec::Method::kNum), "method");
+  int method;
+  if constexpr (std::is_same<STATE, ClassicalEncState>::value) {
+    method = 0;
+  } else if constexpr (std::is_same<STATE, JXLEncState>::value) {
+    method = 1;
+  } else if constexpr (std::is_same<STATE, CalicEncState>::value) {
+    method = 2;
+  } else {
+    assert(false);
+  }
+  enc.PutRValue(method, static_cast<int>(PlaneCodec::Method::kNum), "method");
 
   // Process the different planes independently.
   std::array<Encoding, 4> encodings;
@@ -475,8 +482,7 @@ WP2Status ScpEncode(const Buffer_s16& img, int effort,
     jxl_state.SetConfig(jxl_config);
     WP2::ANSEncCounter enc_counter;
     WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort, enc_counter,
-                              jxl_state, dicts,
-                              /*encode_info=*/nullptr));
+                              jxl_state, dicts, /*encode_info=*/nullptr));
 
     const float cost = enc_counter.GetCost(dicts);
     if (cost < cost_best) {
@@ -624,11 +630,16 @@ WP2Status CalicEncode(const Buffer_s16& img, int effort,
     }
   }
 #endif
+
+#ifdef ORIGINAL_CALIC
+  config_best.quantizations.fill(calic::CalicState::Quantization::kOriginal);
+#else
   // These defaults work well if the last two channels are like chroma.
   config_best.quantizations = {calic::CalicState::Quantization::kOriginal,
-                               calic::CalicState::Quantization::kOriginal,
-                               calic::CalicState::Quantization::kOriginal,
-                               calic::CalicState::Quantization::kOriginal};
+                               calic::CalicState::Quantization::k20,
+                               calic::CalicState::Quantization::k18,
+                               calic::CalicState::Quantization::k18};
+#endif
   state.SetConfig(config_best);
   WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort, enc, state,
                             dicts, encode_info));

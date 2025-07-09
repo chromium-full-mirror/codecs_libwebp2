@@ -28,7 +28,7 @@
 
 // Define ORIGINAL_CALIC to get the original version of CALIC, with no
 // enhancement on the coding context.
-#define ORIGINAL_CALIC
+// #define ORIGINAL_CALIC
 
 namespace WP2L {
 namespace calic {
@@ -47,10 +47,10 @@ class CalicState : public ::WP2L::PlaneCodec {
   WP2Status Reset() override;
   void StartProcessingLine(uint32_t y, const int16_t* row) override;
 
-  // Set the quantization type for the plane to compress.
-  WP2Status SetQuantization(Quantization quantization);
-  // Sets the minimum and maximum true pixel inclusive values in the image.
-  void SetMinMax(int16_t min_tpv, int16_t max_tpv);
+  // Set the quantization type for the plane to compress and the minimum and
+  // maximum true pixel inclusive values in the image.
+  WP2Status SetParameters(Quantization quantization, int16_t min_tpv,
+                          int16_t max_tpv);
   // Get the number of contexts for the given quantization method.
   static uint8_t GetNumContextsFromQuantization(Quantization quantization);
   // Predicts the pixel value at position x, as well as the context `ctxt` and

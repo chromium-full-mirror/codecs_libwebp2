@@ -1140,10 +1140,8 @@ WP2Status Encoder::ApplyAndWriteTransforms(
                   "capacity");
     return WP2_STATUS_OK;
   }
-  if (config->algorithm == EncodingAlgorithm::kSCP) {
-    return WP2_STATUS_OK;
-  }
-  if (config->algorithm == EncodingAlgorithm::kCALIC) {
+  if (config->algorithm == EncodingAlgorithm::kSCP ||
+      config->algorithm == EncodingAlgorithm::kCALIC) {
     return WP2_STATUS_OK;
   }
 

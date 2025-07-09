@@ -48,7 +48,8 @@ WP2Status CalicState::Init(uint32_t width, uint32_t height) {
   return WP2_STATUS_OK;
 }
 
-WP2Status CalicState::SetQuantization(Quantization quantization) {
+WP2Status CalicState::SetParameters(Quantization quantization, int16_t min_tpv,
+                                    int16_t max_tpv) {
   // Initialize the quantized delta table.
   quantization_ = quantization;
   [[maybe_unused]] const uint8_t max_context =
@@ -93,15 +94,14 @@ WP2Status CalicState::SetQuantization(Quantization quantization) {
   WP2_CHECK_ALLOC_OK(mean_errors_.resize(size));
   WP2_CHECK_ALLOC_OK(s_errors_.resize(size));
   WP2_CHECK_ALLOC_OK(n_errors_.resize(size));
-  WP2_CHECK_STATUS(Reset());
 
-  return WP2_STATUS_OK;
-}
-
-void CalicState::SetMinMax(int16_t min_tpv, int16_t max_tpv) {
   min_tpv_ = min_tpv;
   max_tpv_ = max_tpv;
   default_value_ = (min_tpv + max_tpv + 1) / 2;
+
+  WP2_CHECK_STATUS(Reset());
+
+  return WP2_STATUS_OK;
 }
 
 uint8_t CalicState::GetNumContextsFromQuantization(Quantization quantization) {
