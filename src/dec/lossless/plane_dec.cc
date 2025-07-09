@@ -205,6 +205,7 @@ WP2Status Decompress(const ScpGlobal& global, uint32_t width, uint32_t height,
   for (uint32_t c = has_alpha ? 0 : 1; c < 4; ++c) {
     WP2_CHECK_STATUS(state.Reset());
     WP2_CHECK_STATUS(state.DecompressPlane(c, global, sr, img));
+    WP2_CHECK_STATUS(sr.dec()->GetStatus());
     // Copy back.
     for (size_t y = 0; y < height; ++y) {
       const int16_t* const WP2_RESTRICT rowImg = img.PlaneRow(c, y);
