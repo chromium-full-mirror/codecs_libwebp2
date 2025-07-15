@@ -83,53 +83,6 @@ WP2Status State::Reset() {
   return WP2_STATUS_OK;
 }
 
-// p = prediction, v = true pixel value, m = maximum true pixel value
-int16_t State::CalcDistanceFromPredictionAndTPV(int16_t p, int16_t v,
-                                                int16_t min, int16_t max) {
-  const int16_t m = max - min;
-  p -= min;
-  v -= min;
-  int16_t d;
-  if (p > (m >> 1)) {
-    if (v >= p)
-      d = (v - p) * 2;
-    else if (v >= p - (m - p))
-      d = (p - v) * 2 - 1;
-    else
-      d = m - v;
-  } else {
-    if (v < p)
-      d = (p - v) * 2 - 1;
-    else if (v <= p * 2)
-      d = (v - p) * 2;
-    else
-      d = v;
-  }
-  return d;
-}
-
-int16_t State::CalcTPVFromPredictionAndDistance(int16_t p, int16_t d,
-                                                int16_t min, int16_t max) {
-  const int16_t m = max - min;
-  p -= min;
-  int16_t v;
-  if (p > (m >> 1)) {
-    if (d % 2 == 0 && (v = d / 2 + p, v <= m && v >= p)) {
-    } else if (d % 2 == 1 &&
-               (v = p - (d + 1) / 2, v <= m && v >= p - (m - p))) {
-    } else {
-      v = m - d;
-    }
-  } else {
-    if (d % 2 == 1 && (v = p - (d + 1) / 2, v >= 0 && v < p)) {
-    } else if (d % 2 == 0 && (v = d / 2 + p, v >= 0 && v <= p * 2)) {
-    } else {
-      v = d;
-    }
-  }
-  return v + min;
-}
-
 uint8_t State::DiffToError(int16_t tpv, int16_t prediction) const {
   const int16_t j = -tpv + ((prediction + kPredictionRound) >> kPredExtraBits);
   return std::min(j < 0 ? -j : j, kMaxError);

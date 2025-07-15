@@ -22,7 +22,8 @@
 #include <tuple>
 
 #include "imageio/image_dec.h"
-#include "src/common/lossless/scp.h"
+#include "src/dec/lossless/losslessi_dec.h"
+#include "src/enc/lossless/losslessi_enc.h"
 #include "src/utils/utils.h"
 #include "src/utils/vector.h"
 #include "src/wp2/base.h"
@@ -131,13 +132,15 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST(Distance, Roundtrip) {
   constexpr int16_t kMin = -10, kMax = -10;
-  for (int16_t v = kMin; v <= kMax; ++v) {
-    for (int16_t p = kMin; p <= kMax; ++p) {
-      const int16_t d =
-          WP2L::scp::State::CalcDistanceFromPredictionAndTPV(p, v, kMin, kMax);
-      const int16_t v_predicted =
-          WP2L::scp::State::CalcTPVFromPredictionAndDistance(p, d, kMin, kMax);
-      EXPECT_EQ(v, v_predicted);
+  for (bool use_opposite_error : {false, true}) {
+    for (int16_t v = kMin; v <= kMax; ++v) {
+      for (int16_t p = kMin; p <= kMax; ++p) {
+        const int16_t d = WP2L::CalcDistanceFromPredictionAndTPV(
+            p, use_opposite_error, v, kMin, kMax);
+        const int16_t v_predicted = WP2L::CalcTPVFromPredictionAndDistance(
+            p, use_opposite_error, d, kMin, kMax);
+        EXPECT_EQ(v, v_predicted);
+      }
     }
   }
 }

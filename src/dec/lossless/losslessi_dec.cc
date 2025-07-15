@@ -947,28 +947,16 @@ WP2Status Decoder::ReadTransform(uint32_t width, uint32_t height,
         transform->header_.normalize_channels_offset[c] =
             dec_->ReadRange(minima_range[c], maxima_range[c], "offset");
       }
-      transform->header_.normalize_channels_has_palette =
-          dec_->ReadBool("has_palette");
-      if (transform->header_.normalize_channels_has_palette) {
-        for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
-          const uint32_t range =
-              1 + maxima_range[c] -
-              transform->header_.normalize_channels_offset[c];
-          const uint32_t mapping_size = dec_->ReadRange(1, range, "size");
-          transform->header_.normalize_channels_max[c] = mapping_size - 1;
-          WP2_CHECK_ALLOC_OK(
-              transform->normalize_channels_mapping_[c].resize(mapping_size));
-          WP2_CHECK_STATUS(
-              LoadMapping(dec_, mapping_size, range,
-                          transform->normalize_channels_mapping_[c].data()));
-        }
-      } else {
-        for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
-          transform->header_.normalize_channels_max[c] = dec_->ReadRValue(
-              maxima_range[c] -
-                  transform->header_.normalize_channels_offset[c] + 1,
-              "max");
-        }
+      for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
+        const uint32_t range = 1 + maxima_range[c] -
+                               transform->header_.normalize_channels_offset[c];
+        const uint32_t mapping_size = dec_->ReadRange(1, range, "size");
+        transform->header_.normalize_channels_max[c] = mapping_size - 1;
+        WP2_CHECK_ALLOC_OK(
+            transform->normalize_channels_mapping_[c].resize(mapping_size));
+        WP2_CHECK_STATUS(
+            LoadMapping(dec_, mapping_size, range,
+                        transform->normalize_channels_mapping_[c].data()));
       }
       break;
     }

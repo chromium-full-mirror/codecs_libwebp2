@@ -416,7 +416,7 @@ static constexpr EncodingRecipe kPossibleEncodingRecipes[] = {
      {TransformType::kNormalizeChannels, TransformType::kNum,
       TransformType::kNum}},
     {EncodingAlgorithm::kSCP,
-     {TransformType::kNormalizeChannels, TransformType::kCrossColorGlobal,
+     {TransformType::kCrossColorGlobal, TransformType::kNormalizeChannels,
       TransformType::kNum}},
     // Only one.
     {EncodingAlgorithm::kGroup4,

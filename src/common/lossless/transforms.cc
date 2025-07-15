@@ -224,17 +224,9 @@ WP2Status GetARGBRanges(
         segments[2] = {0, static_cast<int32_t>(header.indexing_num_colors) - 1};
         break;
       case TransformType::kNormalizeChannels: {
-        if (header.normalize_channels_has_palette) {
-          for (uint32_t c = 0; c < 4; ++c) {
-            segments[c] = {
-                0, static_cast<int32_t>(header.normalize_channels_max[c])};
-          }
-        } else {
-          for (uint32_t c = 0; c < 4; ++c) {
-            segments[c] =
-                segments[c] + Segment{-header.normalize_channels_offset[c],
-                                      -header.normalize_channels_offset[c]};
-          }
+        for (uint32_t c = 0; c < 4; ++c) {
+          segments[c] = {
+              0, static_cast<int32_t>(header.normalize_channels_max[c])};
         }
         break;
       }

@@ -42,6 +42,24 @@
 
 namespace WP2L {
 
+// p = prediction, v = true pixel value, m = maximum true pixel value
+int16_t CalcDistanceFromPredictionAndTPV(int16_t prediction,
+                                         bool use_opposite_error,
+                                         int16_t true_pixel_value, int16_t min,
+                                         int16_t max) {
+  const int16_t max_signed_error = std::min(max - prediction, prediction - min);
+  int16_t res = true_pixel_value - prediction;
+  int16_t d;
+  if (std::abs(res) <= max_signed_error) {
+    // End of section 5.D: Error Feedback.
+    if (use_opposite_error) res = -res;
+    d = res > 0 ? 2 * res - 1 : -2 * res;
+  } else {
+    d = std::abs(res) + max_signed_error;
+  }
+  return d;
+}
+
 namespace scp {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,24 +99,6 @@ class CalicEncState : public ::WP2L::calic::CalicState {
       enc.PutRValue(static_cast<uint32_t>(config_.quantizations[c]),
                     static_cast<uint32_t>(Quantization::kNum), "quantization");
     }
-  }
-
-  // p = prediction, v = true pixel value, m = maximum true pixel value
-  int16_t CalcDistanceFromPredictionAndTPV(int16_t p,
-                                           bool is_mean_error_negative,
-                                           int16_t v, int16_t min,
-                                           int16_t max) {
-    const int16_t max_signed_error = std::min(max - p, p - min);
-    int16_t res = v - p;
-    int16_t d;
-    if (std::abs(res) <= max_signed_error) {
-      // End of section 5.D: Error Feedback.
-      if (is_mean_error_negative) res = -res;
-      d = res > 0 ? 2 * res - 1 : -2 * res;
-    } else {
-      d = std::abs(res) + max_signed_error;
-    }
-    return d;
   }
 
   WP2Status CompressPlane(const ImagePlanes& img, int plane_to_compress,
@@ -219,8 +219,8 @@ class ClassicalEncState : public ClassicalState {
         const int16_t prediction = (this->*func)(x, &ctxt);
         ctxt >>= maxerr_shift;
         assert(0 <= ctxt && ctxt <= kNumContexts - 1);
-        const int q = CalcDistanceFromPredictionAndTPV(prediction, row[x],
-                                                       min_tpv, max_tpv);
+        const int q = ::WP2L::CalcDistanceFromPredictionAndTPV(
+            prediction, /*use_opposite_error=*/false, row[x], min_tpv, max_tpv);
         WP2_CHECK_ALLOC_OK(encoding->tokens.push_back(Token(ctxt, q)));
 
         UpdateErrors</*USE_JXL=*/false>(x, row[x], q);
@@ -292,19 +292,9 @@ class JXLEncState : public JXLState {
       for (size_t x = 0; x < img.width(); ++x) {
         uint8_t ctxt;
         const int16_t guess = (this->*func)(x, &ctxt);
-        // TODO(vrabaud): choose the best one.
-#if 1
-        const int16_t res = row[x] - guess;
-
-        WP2_CHECK_ALLOC_OK(encoding->tokens.push_back(
-            Token(ctxt, res >= 0 ? 2 * res : -2 * res - 1)));
-#else
-        WP2_CHECK_ALLOC_OK(encoding->tokens.push_back(
-            Token(ctx, CalcDistanceFromPredictionAndTPV(guess, row[x], min_tpv,
-                                                        max_tpv))));
-#endif
-        const int q =
-            CalcDistanceFromPredictionAndTPV(guess, row[x], min_tpv, max_tpv);
+        const int q = ::WP2L::CalcDistanceFromPredictionAndTPV(
+            guess, /*use_opposite_error=*/false, row[x], min_tpv, max_tpv);
+        WP2_CHECK_ALLOC_OK(encoding->tokens.push_back(Token(ctxt, q)));
 
         UpdateErrors</*USE_JXL=*/true>(x, row[x], q);
       }
@@ -338,8 +328,8 @@ class JXLEncState : public JXLState {
 // max_tpv inclusive.
 template <typename STATE>
 WP2Status Compress(const WP2L::ImagePlanes& img,
-                   const std::array<int16_t, 4>& min_tpv,
-                   const std::array<int16_t, 4>& max_tpv, int effort,
+                   const std::array<int32_t, 4>& min_tpv,
+                   const std::array<int32_t, 4>& max_tpv, int effort,
                    WP2::ANSEncBase& enc, STATE& state,
                    WP2::ANSDictionaries& dicts, EncodeInfo* encode_info) {
   const int num_tokens_ori = encode_info != nullptr ? enc.NumTokens() : 0;
@@ -371,9 +361,10 @@ WP2Status Compress(const WP2L::ImagePlanes& img,
   WP2::SymbolsInfo symbols_info;
   for (int c = img.has_alpha() ? 0 : 1; c < 4; ++c) {
     const int num_contexts = state.GetNumContexts(c);
-    symbols_info.SetInfo(/*sym=*/c, /*min=*/0, /*max=*/1024,
-                         /*num_clusters=*/num_contexts,
-                         WP2::SymbolsInfo::StorageMethod::kAuto);
+    // CalcDistanceFromPredictionAndTPV gets the residual in [0,max-min+1].
+    symbols_info.SetInfo(
+        /*sym=*/c, /*min=*/0, /*max=*/max_tpv[c] - min_tpv[c] + 1,
+        /*num_clusters=*/num_contexts, WP2::SymbolsInfo::StorageMethod::kAuto);
   }
   WP2::SymbolRecorder recorder;
   WP2_CHECK_STATUS(recorder.Allocate(symbols_info, /*num_records=*/0));
@@ -423,9 +414,7 @@ WP2Status Compress(const WP2L::ImagePlanes& img,
 static WP2Status PrepareData(const Buffer_s16& img,
                              const std::array<int32_t, 4>& minima_range,
                              const std::array<int32_t, 4>& maxima_range,
-                             std::array<int16_t, 4>& min_tpv,
-                             std::array<int16_t, 4>& max_tpv, WP2::ANSEnc& enc,
-                             WP2L::ImagePlanes& img_planes) {
+                             WP2::ANSEnc& enc, WP2L::ImagePlanes& img_planes) {
   if (img.channel_bits != 8) return WP2_STATUS_INVALID_PARAMETER;
 
   const size_t width = img.width;
@@ -441,13 +430,6 @@ static WP2Status PrepareData(const Buffer_s16& img,
       }
     }
   }
-  FindExtrema(img.GetRow(0), width, height, img.has_alpha, min_tpv, max_tpv);
-  enc.AddDebugPrefix("GlobalHeader");
-  for (int c = img.has_alpha ? 0 : 1; c < 4; ++c) {
-    enc.PutRange(min_tpv[c], minima_range[c], maxima_range[c], "min_tpv");
-    enc.PutRange(max_tpv[c], min_tpv[c], maxima_range[c], "max_tpv");
-  }
-  enc.PopDebugPrefix();
 
   return WP2_STATUS_OK;
 }
@@ -462,9 +444,8 @@ WP2Status ScpEncode(const Buffer_s16& img, int effort,
   const size_t height = img.height;
 
   WP2L::ImagePlanes img_planes;
-  std::array<int16_t, 4> min_tpv, max_tpv;
-  WP2_CHECK_STATUS(scp::PrepareData(img, minima_range, maxima_range, min_tpv,
-                                    max_tpv, enc, img_planes));
+  WP2_CHECK_STATUS(
+      scp::PrepareData(img, minima_range, maxima_range, enc, img_planes));
 
   float cost_best = std::numeric_limits<float>::max();
   WP2::ANSDictionaries dicts;
@@ -481,8 +462,9 @@ WP2Status ScpEncode(const Buffer_s16& img, int effort,
     jxl_config.jxl_header_index = jxl_header_index;
     jxl_state.SetConfig(jxl_config);
     WP2::ANSEncCounter enc_counter;
-    WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort, enc_counter,
-                              jxl_state, dicts, /*encode_info=*/nullptr));
+    WP2_CHECK_STATUS(Compress(img_planes, minima_range, maxima_range, effort,
+                              enc_counter, jxl_state, dicts,
+                              /*encode_info=*/nullptr));
 
     const float cost = enc_counter.GetCost(dicts);
     if (cost < cost_best) {
@@ -525,9 +507,9 @@ WP2Status ScpEncode(const Buffer_s16& img, int effort,
                         jxl_state.SetConfig(jxl_config);
 
                         WP2::ANSEncCounter enc_counter;
-                        WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv,
-                                                  effort, enc_counter,
-                                                  jxl_state, dicts,
+                        WP2_CHECK_STATUS(Compress(img_planes, minima_range,
+                                                  maxima_range, effort,
+                                                  enc_counter, jxl_state, dicts,
                                                   /*encode_info=*/nullptr));
 
                         const float cost = enc_counter.GetCost(dicts);
@@ -556,8 +538,8 @@ WP2Status ScpEncode(const Buffer_s16& img, int effort,
           classical_state.SetConfig(classical_config, img_planes);
 
           WP2::ANSEncCounter enc_counter;
-          WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort,
-                                    enc_counter, classical_state, dicts,
+          WP2_CHECK_STATUS(Compress(img_planes, minima_range, maxima_range,
+                                    effort, enc_counter, classical_state, dicts,
                                     /*encode_info=*/nullptr));
 
           const float cost = enc_counter.GetCost(dicts);
@@ -575,14 +557,14 @@ WP2Status ScpEncode(const Buffer_s16& img, int effort,
     scp::JXLEncState state;
     WP2_CHECK_STATUS(state.Init(width, height));
     state.SetConfig(jxl_config_best);
-    WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort, enc, state,
-                              dicts, encode_info));
+    WP2_CHECK_STATUS(Compress(img_planes, minima_range, maxima_range, effort,
+                              enc, state, dicts, encode_info));
   } else {
     scp::ClassicalEncState state;
     WP2_CHECK_STATUS(state.Init(width, height));
     state.SetConfig(classical_config_best, img_planes);
-    WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort, enc, state,
-                              dicts, encode_info));
+    WP2_CHECK_STATUS(Compress(img_planes, minima_range, maxima_range, effort,
+                              enc, state, dicts, encode_info));
   }
 
   return WP2_STATUS_OK;
@@ -593,9 +575,8 @@ WP2Status CalicEncode(const Buffer_s16& img, int effort,
                       const std::array<int32_t, 4>& maxima_range,
                       WP2::ANSEnc& enc, EncodeInfo* encode_info) {
   WP2L::ImagePlanes img_planes;
-  std::array<int16_t, 4> min_tpv, max_tpv;
-  WP2_CHECK_STATUS(scp::PrepareData(img, minima_range, maxima_range, min_tpv,
-                                    max_tpv, enc, img_planes));
+  WP2_CHECK_STATUS(
+      scp::PrepareData(img, minima_range, maxima_range, enc, img_planes));
   WP2::ANSDictionaries dicts;
 
   // Encode using CALIC.
@@ -619,8 +600,9 @@ WP2Status CalicEncode(const Buffer_s16& img, int effort,
         state.SetConfig(config);
         WP2::ANSEncCounter enc_counter;
 
-        WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort,
-                                  enc_counter, state, dicts, encode_info));
+        WP2_CHECK_STATUS(Compress(img_planes, minima_range, maxima_range,
+                                  effort, enc_counter, state, dicts,
+                                  encode_info));
         const float cost = enc_counter.GetCost(dicts);
         if (cost < cost_best) {
           cost_best = cost;
@@ -641,8 +623,8 @@ WP2Status CalicEncode(const Buffer_s16& img, int effort,
                                calic::CalicState::Quantization::k18};
 #endif
   state.SetConfig(config_best);
-  WP2_CHECK_STATUS(Compress(img_planes, min_tpv, max_tpv, effort, enc, state,
-                            dicts, encode_info));
+  WP2_CHECK_STATUS(Compress(img_planes, minima_range, maxima_range, effort, enc,
+                            state, dicts, encode_info));
   return WP2_STATUS_OK;
 }
 

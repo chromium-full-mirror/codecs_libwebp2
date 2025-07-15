@@ -53,7 +53,6 @@ struct TransformHeader {
   // the values end up in [0, normalize_channels_max].
   std::array<uint32_t, 4> normalize_channels_max = {0u, 0u, 0u, 0u};
   std::array<int16_t, 4> normalize_channels_offset = {0, 0, 0, 0};
-  bool normalize_channels_has_palette;
 };
 
 // Fills ranges of ARGB symbols according to the transforms applied to the

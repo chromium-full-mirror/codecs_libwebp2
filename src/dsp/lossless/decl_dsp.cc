@@ -450,22 +450,12 @@ void NormalizeChannelsInverseTransform_C(const Transform& transform,
                                          bool has_alpha, const int16_t* src,
                                          int16_t* dst) {
   const uint32_t width = transform.width_pic_;
-  if (transform.header_.normalize_channels_has_palette) {
-    for (const int16_t* const src_end = src + 4 * (y_end - y_start) * width;
-         src < src_end; src += 4, dst += 4) {
-      if (!has_alpha) dst[0] = WP2::kAlphaMax;
-      for (int c = has_alpha ? 0 : 1; c < 4; ++c) {
-        dst[c] = transform.header_.normalize_channels_offset[c] +
-                 transform.normalize_channels_mapping_[c][src[c]];
-      }
-    }
-  } else {
-    for (const int16_t* const src_end = src + 4 * (y_end - y_start) * width;
-         src < src_end; src += 4, dst += 4) {
-      if (!has_alpha) dst[0] = WP2::kAlphaMax;
-      for (int c = has_alpha ? 0 : 1; c < 4; ++c) {
-        dst[c] = transform.header_.normalize_channels_offset[c] + src[c];
-      }
+  for (const int16_t* const src_end = src + 4 * (y_end - y_start) * width;
+       src < src_end; src += 4, dst += 4) {
+    if (!has_alpha) dst[0] = WP2::kAlphaMax;
+    for (int c = has_alpha ? 0 : 1; c < 4; ++c) {
+      dst[c] = transform.header_.normalize_channels_offset[c] +
+               transform.normalize_channels_mapping_[c][src[c]];
     }
   }
 }

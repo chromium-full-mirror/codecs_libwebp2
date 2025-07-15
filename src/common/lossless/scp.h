@@ -143,15 +143,6 @@ class State : public PlaneCodec {
 
   WP2Status Reset() override;
 
- public:  // Only for testing.
-  // p = prediction, v = true pixel value, m = inclusive maximum true pixel
-  // value
-  static int16_t CalcDistanceFromPredictionAndTPV(int16_t p, int16_t v,
-                                                  int16_t min, int16_t max);
-  // d =distance
-  static int16_t CalcTPVFromPredictionAndDistance(int16_t p, int16_t d,
-                                                  int16_t min, int16_t max);
-
  protected:
   inline constexpr static size_t kNumPredictors = 4;
   // Multiplier (by shift) of pixel, prediction and error values, to perform

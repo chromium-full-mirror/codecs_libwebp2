@@ -809,23 +809,6 @@ WP2Status Encoder::ApplyNormalizeChannels(
     max[c] -= min[c];
   }
 
-  // TODO(vrabaud) This is a basic heuristic for now.
-  constexpr uint32_t kMinSizeForPalette = 256;
-  header.normalize_channels_has_palette = width * height >= kMinSizeForPalette;
-  if (!enc.PutBool(header.normalize_channels_has_palette, "has_palette")) {
-    // Remove the min value to only have positive values.
-    for (uint32_t y = 0; y < height; ++y) {
-      int16_t* const row = argb_buffer_.GetRow(y);
-      for (uint32_t x = 0; x < width; ++x) {
-        for (int c = first_channel; c < 4; c++) row[4 * x + c] -= min[c];
-      }
-    }
-    // Store the maximum.
-    for (int c = first_channel; c < 4; ++c) {
-      enc.PutRValue(max[c], maxima_range[c] - min[c] + 1, "max");
-    }
-    return WP2_STATUS_OK;
-  }
   // Compute whether a value is present.
   std::array<WP2::Vector_u8, 4> present;
   for (int c = first_channel; c < 4; ++c) {

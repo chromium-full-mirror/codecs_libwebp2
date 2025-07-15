@@ -38,37 +38,39 @@
 #include "src/wp2/base.h"
 
 namespace WP2L {
-namespace scp {
+
+int16_t CalcTPVFromPredictionAndDistance(int16_t prediction,
+                                         bool use_opposite_error,
+                                         int16_t distance, int16_t min,
+                                         int16_t max) {
+  // Compute the maximum error for which the sign is not forced from the
+  // prediction. E.g., if the prediction is 10 and the value is in [0, 100],
+  // the signed error can only be in [-10, 10]. Beyond that, the error is
+  // positive in [0, 80].
+  const int16_t max_signed_error = std::min(max - prediction, prediction - min);
+  int16_t res;
+  if (distance <= 2 * max_signed_error) {
+    res = distance % 2 == 0 ? -distance / 2 : (distance + 1) / 2;
+    // End of section 5.D: Error Feedback.
+    if (use_opposite_error) res = -res;
+    prediction += res;
+  } else {
+    res = distance - max_signed_error;
+    if (prediction + res > max) {
+      prediction -= res;
+    } else {
+      prediction += res;
+    }
+  }
+  return prediction;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
+
+namespace scp {
 
 class CalicDecState : public ::WP2L::calic::CalicState {
  public:
-  int16_t CalcTPVFromPredictionAndDistance(int16_t p,
-                                           bool is_mean_error_negative,
-                                           int16_t d, int16_t min,
-                                           int16_t max) {
-    // Compute the maximum error for which the sign is not forced from the
-    // prediction. E.g., if the prediction is 10 and the value is in [0, 100],
-    // the signed error can only be in [-10, 10]. Beyond that, the error is
-    // positive in [0, 80].
-    const int16_t max_signed_error = std::min(max - p, p - min);
-    int16_t res;
-    if (d <= 2 * max_signed_error) {
-      res = d % 2 == 0 ? -d / 2 : (d + 1) / 2;
-      // End of section 5.D: Error Feedback.
-      if (is_mean_error_negative) res = -res;
-      p += res;
-    } else {
-      res = d - max_signed_error;
-      if (p + res > max) {
-        p -= res;
-      } else {
-        p += res;
-      }
-    }
-    return p;
-  }
-
   WP2Status DecompressPlane(int plane_to_decompress, const ScpGlobal& global,
                             WP2::SymbolReader& sr, ImagePlanes& img) {
     const int16_t min_tpv = global.min_tpv[plane_to_decompress];
@@ -141,7 +143,8 @@ class ClassicalDecState : public ClassicalState {
         assert(0 <= ctxt && ctxt <= kNumContexts - 1);
         const int context = ctxt;
         int q = sr.Read(/*sym=*/planeToDecompress, context, "sym");
-        row[x] = CalcTPVFromPredictionAndDistance(prediction, q, min, max);
+        row[x] = CalcTPVFromPredictionAndDistance(
+            prediction, /*use_opposite_error=*/false, q, min, max);
 
         UpdateErrors</*USE_JXL=*/false>(x, row[x], q);
       }
@@ -173,19 +176,13 @@ class JXLDecState : public JXLState {
         int16_t guess = (this->*func)(x, &ctxt);
 
         // Compute the true pixel value.
-        int q = sr.Read(/*sym=*/planeToDecompress, ctxt, "sym");
-#if 1
-        q = q % 2 == 0 ? q / 2 : -(q + 1) / 2;
-        row[x] = guess + q;
+        const int q = sr.Read(/*sym=*/planeToDecompress, ctxt, "sym");
+        row[x] = CalcTPVFromPredictionAndDistance(
+            guess, /*use_opposite_error=*/false, q, min, max);
         // TODO(vrabaud): do not clamp !!! Those are wasted bits.
-        row[x] = std::clamp((int32_t)row[x], min, max);
-        assert(row[x] >= min && row[x] <= max);
-#else
-        row[x] = CalcTPVFromPredictionAndDistance(guess, q, min, max);
-#endif
+        row[x] = std::clamp(static_cast<int32_t>(row[x]), min, max);
 
-        int q2 = CalcDistanceFromPredictionAndTPV(guess, row[x], min, max);
-        UpdateErrors</*USE_JXL=*/true>(x, row[x], q2);
+        UpdateErrors</*USE_JXL=*/true>(x, row[x], q);
       }
     }
 
@@ -222,14 +219,7 @@ WP2Status Decompress(const ScpGlobal& global, uint32_t width, uint32_t height,
 }  // namespace scp
 
 WP2Status Decoder::DecodePlaneCodecHeader(ScpGlobal* global) {
-  std::array<int32_t, 4> minima_range, maxima_range;
-  WP2_CHECK_STATUS(GetARGBRanges(minima_range, maxima_range));
-  for (int c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
-    global->min_tpv[c] =
-        dec_->ReadRange(minima_range[c], maxima_range[c], "min_tpv");
-    global->max_tpv[c] =
-        dec_->ReadRange(global->min_tpv[c], maxima_range[c], "max_tpv");
-  }
+  WP2_CHECK_STATUS(GetARGBRanges(global->min_tpv, global->max_tpv));
 
   global->method = static_cast<PlaneCodec::Method>(
       dec_->ReadRValue(static_cast<int>(PlaneCodec::Method::kNum), "method"));
@@ -283,7 +273,8 @@ WP2Status Decoder::DecodePlaneCodecHeader(ScpGlobal* global) {
   WP2_CHECK_STATUS(hdr_.sr_.Init(symbols_info, dec_));
 
   for (uint32_t c = gparams_->has_alpha_ ? 0 : 1; c < 4; ++c) {
-    symbols_info.SetInfo(/*sym=*/c, /*min=*/0, /*max=*/1024,
+    symbols_info.SetInfo(/*sym=*/c, /*min=*/0,
+                         /*max=*/global->max_tpv[c] - global->min_tpv[c] + 1,
                          /*num_clusters=*/num_contexts[c],
                          WP2::SymbolsInfo::StorageMethod::kAuto);
   }

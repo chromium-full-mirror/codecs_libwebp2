@@ -224,6 +224,16 @@ class Decoder {
   ScpGlobal scp_global_;
 };
 
+//------------------------------------------------------------------------------
+// Public for testing only.
+
+// use_opposite_error: whether to use -(v-p) instead of (v-p) to compute the
+// distance.
+int16_t CalcTPVFromPredictionAndDistance(int16_t prediction,
+                                         bool use_opposite_error,
+                                         int16_t distance, int16_t min,
+                                         int16_t max);
+
 }  // namespace WP2L
 
 #endif /* WP2_DEC_LOSSLESS_LOSSLESSI_DEC_H_ */

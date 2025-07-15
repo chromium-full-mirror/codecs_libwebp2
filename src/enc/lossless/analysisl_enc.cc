@@ -596,9 +596,9 @@ WP2Status EncoderAnalyzeDefault(const WP2::ProgressRange& progress,
       auto& config = configs->back();
       WP2_CHECK_STATUS(FindEncodingRecipe(
           WP2L::EncodingAlgorithm::kSCP, &config,
-          TransformType::kNormalizeChannels, TransformType::kCrossColorGlobal));
-      config.transforms[1].cc_global_y_index = indices[0];
-      config.transforms[1].cc_global_uv_index = indices[1];
+          TransformType::kCrossColorGlobal, TransformType::kNormalizeChannels));
+      config.transforms[0].cc_global_y_index = indices[0];
+      config.transforms[0].cc_global_uv_index = indices[1];
       config.use_premultiplied = can_premultiply;
     }
     // Add with no channel decorrelation.
