@@ -395,7 +395,8 @@ void InitGroup4(uint32_t width, uint32_t num_colors,
       WP2::SymbolsInfo::StorageMethod::kAuto;
   info->SetInfo(kSymbolG4Type, /*min=*/0, /*max=*/2, /*num_clusters=*/1,
                 storage_method);
-  info->SetInfo(kSymbolG4HorizontalDist, /*min=*/0, /*max=*/width,
+  info->SetInfo(kSymbolG4HorizontalDist, /*min=*/0,
+                /*max=*/std::min(width, (1u << WP2::kANSMaxRangeBits) - 1),
                 /*num_clusters=*/2, storage_method);
   info->SetInfo(kSymbolG4VerticalDist, /*min=*/0, /*max=*/2 * kGroup4Window,
                 /*num_clusters=*/1, storage_method);
