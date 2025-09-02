@@ -164,7 +164,7 @@ uint32_t CountColors(const WP2::ArgbBuffer& pic, const T* src,
                         (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
       if (premultiply) {
         for (uint32_t c = 1; c < 4; ++c) {
-          pix[c] = WP2::DivBy255(pix[c] * pix[0]);
+          pix[c] = static_cast<int16_t>((pix[c] * pix[0] + 127) / 255);
         }
       }
       if (ColorEq(pix, prev_pix)) continue;
@@ -235,7 +235,7 @@ void ApplyT(const WP2::ArgbBuffer& pic, const T* src,
                         (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
       if (premultiply) {
         for (uint32_t c = 1; c < 4; ++c) {
-          pix[c] = WP2::DivBy255(pix[c] * pix[0]);
+          pix[c] = static_cast<int16_t>((pix[c] * pix[0] + 127) / 255);
         }
       }
       if (!ColorEq(pix, prev_pix)) {
@@ -414,9 +414,10 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* enc) {
         }
       }
       if (is_stored_as_above_[c][i]) {
-        const uint32_t max = (c > 0 && is_premultiplied)
-                                 ? WP2::DivBy255(channel_max * alpha_value)
-                                 : channel_max;
+        const uint32_t max =
+            (c > 0 && is_premultiplied)
+                ? static_cast<uint16_t>((channel_max * alpha_value + 127) / 255)
+                : channel_max;
         cost_range += WP2Log2(max + 1 - channel_prev);
         assert(channel_prev <= max);
         assert((int)channel_prev + (int)diffs[i] <= (int)channel_max);
@@ -454,9 +455,11 @@ WP2Status InternalParams::WriteAsList(WP2::ANSEncBase* enc) {
           }
         }
         if (is_stored_as_above_[c][i]) {
-          const uint32_t max = (c > 0 && is_premultiplied)
-                                   ? WP2::DivBy255(channel_max * alpha_value)
-                                   : channel_max;
+          const uint32_t max =
+              (c > 0 && is_premultiplied)
+                  ? static_cast<uint16_t>((channel_max * alpha_value + 127) /
+                                          255)
+                  : channel_max;
           enc->PutRValue(diffs[i], (uint32_t)(max + 1 - channel_prev),
                          "store_diff");
           channel_prev += diffs[i];
@@ -732,7 +735,7 @@ WP2Status BuildCoOccurrence(const WP2::ArgbBuffer& pic, const T* src,
                         (int16_t)src[4 * x + 2], (int16_t)src[4 * x + 3]};
       if (premultiply) {
         for (uint32_t c = 1; c < 4; ++c) {
-          pix[c] = WP2::DivBy255(pix[c] * pix[0]);
+          pix[c] = static_cast<int16_t>((pix[c] * pix[0] + 127) / 255);
         }
       }
       if (!ColorEq(pix, prev_pix)) {
