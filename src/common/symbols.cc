@@ -83,7 +83,7 @@ bool SymbolsInfo::SymbolInfo::MinMaxIsValid(int32_t new_min,
   }
   assert(new_min <= new_max);
   const int32_t new_range = new_max - new_min + 1;
-  assert(new_range >= 0 && new_range < (1 << kANSMaxRangeBits));
+  assert(new_range >= 0 && static_cast<uint32_t>(new_range) <= kANSMaxRange);
   switch (storage_method) {
     case SymbolsInfo::StorageMethod::kAuto:
       return ((uint32_t)new_range <= kANSMaxRange);
@@ -396,7 +396,7 @@ void InitGroup4(uint32_t width, uint32_t num_colors,
   info->SetInfo(kSymbolG4Type, /*min=*/0, /*max=*/2, /*num_clusters=*/1,
                 storage_method);
   info->SetInfo(kSymbolG4HorizontalDist, /*min=*/0,
-                /*max=*/std::min(width, (1u << WP2::kANSMaxRangeBits) - 1),
+                /*max=*/std::min(width, WP2::kANSMaxRange - 1),
                 /*num_clusters=*/2, storage_method);
   info->SetInfo(kSymbolG4VerticalDist, /*min=*/0, /*max=*/2 * kGroup4Window,
                 /*num_clusters=*/1, storage_method);
