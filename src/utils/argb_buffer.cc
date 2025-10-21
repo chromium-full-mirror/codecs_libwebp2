@@ -368,14 +368,20 @@ static WP2Status CompositeBuffers(const ArgbBuffer& background,
       for (uint32_t x = 0; x < w.width; ++x) {
         const uint8_t b = kAlphaMax - fg_row[4 * x + 0];  // ~ 255 * (1-alpha)
         const uint8_t fg_alpha = fg_row[4 * x + 0];
-        const uint8_t bg_alpha = bg_row[4 * x + 0];
-        const uint8_t dest_alpha = fg_alpha + DivBy255(b * bg_row[4 * x + 0]);
-        dest_row[4 * x + 0] = dest_alpha;
-        for (uint32_t c = 1; c < 4; ++c) {
-          dest_row[4 * x + c] =
-              DivRound<int32_t>(fg_row[4 * x + c] * fg_alpha +
-                                    DivBy255(b * bg_row[4 * x + c] * bg_alpha),
-                                dest_alpha);
+        if (fg_alpha == 0) {
+          for (uint32_t c = 0; c < 4; ++c) {
+            dest_row[4 * x + c] = bg_row[4 * x + c];
+          }
+        } else {
+          const uint8_t bg_alpha = bg_row[4 * x + 0];
+          const uint8_t dest_alpha = fg_alpha + DivBy255(b * bg_row[4 * x + 0]);
+          dest_row[4 * x + 0] = dest_alpha;
+          for (uint32_t c = 1; c < 4; ++c) {
+            dest_row[4 * x + c] = DivRound<int32_t>(
+                fg_row[4 * x + c] * fg_alpha +
+                    DivBy255(b * bg_row[4 * x + c] * bg_alpha),
+                dest_alpha);
+          }
         }
       }
     }
