@@ -51,7 +51,7 @@ constexpr uint32_t kMaxSize = 1024 * 1024;  // 1 MB
 FUZZ_TEST(ReadAnim, Read)
     .WithDomains(fuzztest::String().WithMaxSize(kMaxSize).WithDictionary(
         ReadDictionaryFromFiles({GetTestAssetPath("fuzz/common_tags.dict")})))
-    .WithSeeds(ReadFilesFromDirectory(GetTestAssetPath("testdata")));
+    .WithSeeds(ReadFilesFromDirectory(GetTestAssetPath("testdata"), kMaxSize));
 
 }  // namespace
 }  // namespace testutil

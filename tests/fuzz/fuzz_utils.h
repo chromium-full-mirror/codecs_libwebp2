@@ -80,9 +80,10 @@ Data ReadTestImage(const std::string& name);
 // 'max_file_size'.
 std::vector<std::string> GetTestImagesContents(size_t max_file_size);
 
-// Same as fuzztest::ReadFilesFromDirectory() but checks for file existence.
+// Same as fuzztest::ReadFilesFromDirectory() but checks for file existence and
+// truncates any file longer than max_file_size.
 std::vector<std::tuple<std::string>> ReadFilesFromDirectory(
-    std::string_view dir);
+    std::string_view dir, size_t max_file_size);
 
 std::vector<std::string> ReadDictionaryFromFiles(
     const std::vector<std::string_view>& file_paths);

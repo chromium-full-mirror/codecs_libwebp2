@@ -150,13 +150,18 @@ std::vector<std::string> GetTestImagesContents(size_t max_file_size) {
 }
 
 std::vector<std::tuple<std::string>> ReadFilesFromDirectory(
-    std::string_view dir_path) {
-  const std::vector<std::tuple<std::string>> files =
+    std::string_view dir_path, size_t max_file_size) {
+  std::vector<std::tuple<std::string>> files =
       fuzztest::ReadFilesFromDirectory(dir_path);
   if (files.empty()) {
     std::cerr << "fuzztest::ReadFilesFromDirectory() failed on " << dir_path
               << std::endl;
     abort();
+  }
+  for (std::tuple<std::string>& file : files) {
+    if (std::get<0>(file).size() > max_file_size) {
+      std::get<0>(file).resize(max_file_size);
+    }
   }
   return files;
 }
