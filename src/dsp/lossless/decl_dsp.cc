@@ -549,8 +549,7 @@ WP2_TSAN_IGNORE_FUNCTION void DecLDspInit() {
   PredictorsAngleAdd[4] = PredictorAngleAdd_C<135>;
   PredictorsAngleAdd[5] = PredictorAngleAdd_C<157>;
   PredictorsAngleAdd[6] = PredictorAngleAdd_C<180>;
-  std::copy(PredictorsAngleAdd.begin(), PredictorsAngleAdd.end(),
-            PredictorsAngleAdd_C.begin());
+  PredictorsAngleAdd_C = PredictorsAngleAdd;
 
   AddGreenToBlueAndRed = AddGreenToBlueAndRed_C;
   CrossColorGlobalInverse = CrossColorGlobalInverse_C;

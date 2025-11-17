@@ -426,8 +426,7 @@ WP2_TSAN_IGNORE_FUNCTION void EncLDspInit() {
   PredictorsAngleSub[4] = PredictorAngleSub_C<135>;
   PredictorsAngleSub[5] = PredictorAngleSub_C<157>;
   PredictorsAngleSub[6] = PredictorAngleSub_C<180>;
-  std::copy(PredictorsAngleSub.begin(), PredictorsAngleSub.end(),
-            PredictorsAngleSub_C.begin());
+  PredictorsAngleSub_C = PredictorsAngleSub;
 
   // If defined, use CPUInfo() to overwrite some pointers with faster versions.
   if (WP2GetCPUInfo != NULL) {
