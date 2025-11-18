@@ -71,6 +71,20 @@ uint32_t DiffScaleChannel(ArgbBuffer* const pic1, const ArgbBuffer* const pic2,
   return max;
 }
 
+WP2Status Read8bitOr16bitImage(const char* file_path, ArgbBuffer* buffer,
+                               size_t* file_size = nullptr) {
+  const WP2Status status = WP2::ReadImage(file_path, buffer, file_size);
+  if (status == WP2_STATUS_INVALID_PARAMETER) {
+    // Maybe it is a 16-bit file and the ImageReaderPNG refused to read it
+    // into an 8-bit buffer. Try again with a 16-bit buffer.
+    const WP2SampleFormat format_64bit =
+        WP2IsPremultiplied(buffer->format()) ? WP2_Argb_64 : WP2_ARGB_64;
+    if (buffer->SetFormat(format_64bit) != WP2_STATUS_OK) assert(false);
+    return WP2::ReadImage(file_path, buffer, file_size);
+  }
+  return status;
+}
+
 void Help() {
   ProgramOptions opt;
   opt.Add("Usage:");
@@ -193,9 +207,9 @@ int main(int argc, char* argv[]) {
   size_t file_size1, file_size2;
   ArgbBuffer pic1_rgb(premultiply ? WP2_Argb_32 : WP2_ARGB_32),
       pic2_rgb(premultiply ? WP2_Argb_32 : WP2_ARGB_32);
-  CHECK_STATUS(WP2::ReadImage(path1, &pic1_rgb, &file_size1),
+  CHECK_STATUS(Read8bitOr16bitImage(path1, &pic1_rgb, &file_size1),
                "Can't decode input file '%s'.", path1);
-  CHECK_STATUS(WP2::ReadImage(path2, &pic2_rgb, &file_size2),
+  CHECK_STATUS(Read8bitOr16bitImage(path2, &pic2_rgb, &file_size2),
                "Can't decode input file '%s'.", path2);
 
   // save original dimensions (before crop) for bpp calculation.
@@ -209,6 +223,10 @@ int main(int argc, char* argv[]) {
                  "Cropping operation failed! Wrong parameters?");
   }
   if (downscale) {
+    CHECK_TRUE(WP2Formatbpc(pic1_rgb.format()) <= 8,
+               "Downscaling is only supported for 8-bit.");
+    CHECK_TRUE(WP2Formatbpc(pic2_rgb.format()) <= 8,
+               "Downscaling is only supported for 8-bit.");
     pic1_rgb.SimpleHalfDownsample();
     pic2_rgb.SimpleHalfDownsample();
   }
@@ -240,6 +258,10 @@ int main(int argc, char* argv[]) {
   printf("\n");
 
   if (output != nullptr) {
+    CHECK_TRUE(WP2Formatbpc(pic1_rgb.format()) <= 8,
+               "Diff map is only supported for 8-bit.");
+    CHECK_TRUE(WP2Formatbpc(pic2_rgb.format()) <= 8,
+               "Diff map is only supported for 8-bit.");
     fprintf(stderr, "max differences per channel: ");
     for (int n = 1; n < 4; ++n) {  // skip the alpha channel
       const int range =
