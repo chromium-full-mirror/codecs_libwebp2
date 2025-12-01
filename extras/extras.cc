@@ -115,7 +115,7 @@ std::string PreviewToBase64(const PreviewData& data) {
   const uint32_t size = bits.size();
   const uint8_t* const buf = bits.data();
   // Base64 converts 3 bytes to 4 ASCII characters, hence the 4/3 size expansion
-  out.reserve(DivCeil(size * 4, 3));
+  out.reserve(DivCeil(size * 4, 3u));
   uint8_t in3[3];
   char out4[4 + 1];
   int i = 0;

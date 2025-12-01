@@ -192,8 +192,9 @@ inline T ChangePrecision(T v, uint32_t from, uint32_t to) {
 }
 
 // Returns ceil(a / b).
-static constexpr uint32_t DivCeil(uint32_t a, uint32_t b) {
-  return (a == 0u) ? 0u : (a - 1u) / b + 1u;
+template <typename T>
+static constexpr T DivCeil(T a, T b) {
+  return (a == 0) ? 0 : (a - 1) / b + 1;
 }
 
 // Returns round(a / b).

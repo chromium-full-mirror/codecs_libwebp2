@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <limits>
 
 #include "src/common/constants.h"
 #include "src/common/global_params.h"
@@ -89,10 +90,11 @@ WP2Status TileDecoder::TryAssignNextTile() {
 
 WP2Status TileDecoder::Execute() {
   while (tile_ != nullptr) {
-    const uint32_t max_num_bytes =
-        GetTileMaxNumBytes(features_->rgb_bit_depth, *gparams_, tile_->rect);
+    const uint32_t max_num_bytes = std::min(
+        GetTileMaxNumBytes(features_->rgb_bit_depth, *gparams_, tile_->rect),
+        kMaxVarInt);
 
-    if (tile_->chunk_size == max_num_bytes) {
+    if (tile_->chunk_size >= max_num_bytes) {
       // Raw samples are expected instead of the regular ANS decoding.
       WP2_CHECK_STATUS(BypassTileDec());
     } else if (gparams_->type_ == GlobalParams::GP_AV1) {
@@ -257,8 +259,11 @@ uint32_t GetTileMaxNumBytes(uint32_t rgb_bit_depth, const GlobalParams& gparams,
       is_rgb ? rgb_bit_depth : gparams.transf_.GetYuvDepth().num_bits;
   const uint32_t num_pixels = tile_rect.width * tile_rect.height;
   const uint32_t alpha_bits = gparams.has_alpha_ ? kAlphaBits : 0;
-  const uint32_t max_num_bits = (alpha_bits + 3 * channel_bits) * num_pixels;
-  return DivCeil(max_num_bits, 8);
+  const uint64_t max_num_bits =
+      static_cast<uint64_t>(alpha_bits + 3 * channel_bits) * num_pixels;
+  const uint64_t max_num_bytes = DivCeil(max_num_bits, uint64_t{8});
+  if (max_num_bytes > std::numeric_limits<uint32_t>::max()) assert(false);
+  return static_cast<uint32_t>(max_num_bytes);
 #endif  // defined(WP2_ENC_DEC_MATCH)
 }
 

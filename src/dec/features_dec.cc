@@ -17,6 +17,7 @@
 //
 // Author: Skal (pascal.massimino@gmail.com)
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -79,8 +80,8 @@ WP2Status DecodeTileChunkSize(uint32_t rgb_bit_depth,
                               const Rectangle& tile_rect,
                               DataSource* const data_source,
                               uint32_t* const tile_chunk_size) {
-  const uint32_t max_num_bytes =
-      GetTileMaxNumBytes(rgb_bit_depth, params, tile_rect);
+  const uint32_t max_num_bytes = std::min(
+      GetTileMaxNumBytes(rgb_bit_depth, params, tile_rect), kMaxVarInt);
   WP2_CHECK_STATUS(
       TryReadVarInt(data_source, 1, max_num_bytes, tile_chunk_size));
   return WP2_STATUS_OK;

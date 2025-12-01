@@ -187,13 +187,13 @@ bool YUVPlane::IsView() const {
 }
 
 uint32_t YUVPlane::GetWidth() const {
-  assert(U.w_ == Y.w_ || U.w_ == DivCeil(Y.w_, 2));  // 4:4:4 or 4:2:0
+  assert(U.w_ == Y.w_ || U.w_ == DivCeil(Y.w_, 2u));  // 4:4:4 or 4:2:0
   assert(V.w_ == U.w_);
   if (!A.IsEmpty()) assert(A.w_ == Y.w_);
   return Y.w_;
 }
 uint32_t YUVPlane::GetHeight() const {
-  assert(U.h_ == Y.h_ || U.h_ == DivCeil(Y.h_, 2));  // 4:4:4 or 4:2:0
+  assert(U.h_ == Y.h_ || U.h_ == DivCeil(Y.h_, 2u));  // 4:4:4 or 4:2:0
   assert(V.h_ == U.h_);
   if (!A.IsEmpty()) assert(A.h_ == Y.h_);
   return Y.h_;

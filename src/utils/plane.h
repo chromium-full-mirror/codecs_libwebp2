@@ -283,7 +283,7 @@ class Plane : public PlaneBase {
       const Plane& src, const SamplingTaps& filter = SamplingTaps::kDownSharp) {
     WP2_CHECK_OK(src.w_ >= 1 && src.h_ >= 1, WP2_STATUS_BAD_DIMENSION);
     WP2_CHECK_OK(filter.IsValid(), WP2_STATUS_INVALID_PARAMETER);
-    WP2_CHECK_STATUS(Resize(DivCeil(src.w_, 2), DivCeil(src.h_, 2)));
+    WP2_CHECK_STATUS(Resize(DivCeil(src.w_, 2u), DivCeil(src.h_, 2u)));
     for (uint32_t y = 0; y < h_; ++y) {
       T* const dst = Row(y);
       for (uint32_t x = 0; x < w_; ++x) {
@@ -306,7 +306,7 @@ class Plane : public PlaneBase {
                          uint32_t to_height,
                          const SamplingTaps& filter = SamplingTaps::kUpSmooth) {
     WP2_CHECK_OK(
-        src.w_ == DivCeil(to_width, 2) && src.h_ == DivCeil(to_height, 2),
+        src.w_ == DivCeil(to_width, 2u) && src.h_ == DivCeil(to_height, 2u),
         WP2_STATUS_BAD_DIMENSION);
     WP2_CHECK_OK(filter.IsValid(), WP2_STATUS_INVALID_PARAMETER);
     const uint32_t half_width = to_width / 2, half_height = to_height / 2;

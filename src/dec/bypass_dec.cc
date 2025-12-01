@@ -18,7 +18,9 @@
 // Author: Yannis Guyon (yguyon@google.com)
 
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
+#include <limits>
 
 #include "src/common/global_params.h"
 #include "src/common/header_enc_dec.h"
@@ -40,7 +42,7 @@ namespace WP2 {
 //------------------------------------------------------------------------------
 
 WP2Status TileDecoder::BypassTileDec() {
-  const uint32_t num_read_bytes_before =
+  const size_t num_read_bytes_before =
       tile_->input->GetNumDiscardedBytes() + tile_->input->GetNumReadBytes();
   if (gparams_->type_ == GlobalParams::GP_LOSSLESS ||
       gparams_->type_ == GlobalParams::GP_AV1) {
@@ -57,20 +59,21 @@ WP2Status TileDecoder::BypassTileDec() {
     assert(!tile_->yuv_output.IsEmpty());
     WP2_CHECK_STATUS(BypassTileDecYuv());
   }
-  const uint32_t num_read_bytes = tile_->input->GetNumDiscardedBytes() +
-                                  tile_->input->GetNumReadBytes() -
-                                  num_read_bytes_before;
-  (void)num_read_bytes;
+  const size_t num_read_bytes_after =
+      tile_->input->GetNumDiscardedBytes() + tile_->input->GetNumReadBytes();
+  assert(num_read_bytes_after >= num_read_bytes_before);
+  const size_t num_read_bytes = num_read_bytes_after - num_read_bytes_before;
+  if (num_read_bytes > std::numeric_limits<uint32_t>::max()) assert(false);
 #if !defined(WP2_ENC_DEC_MATCH)
-  assert(num_read_bytes ==
+  assert(static_cast<uint32_t>(num_read_bytes) ==
          GetTileMaxNumBytes(features_->rgb_bit_depth, *gparams_, tile_->rect));
 #endif
 
 #if defined(WP2_BITTRACE)
   if (config_->info != nullptr) {
     WP2_CHECK_STATUS(tiles_layout_->assignment_lock.Acquire());
-    WP2_CHECK_STATUS(
-        RegisterBitTrace(*config_, num_read_bytes, "BypassPixels"));
+    WP2_CHECK_STATUS(RegisterBitTrace(
+        *config_, static_cast<uint32_t>(num_read_bytes), "BypassPixels"));
     tiles_layout_->assignment_lock.Release();
   }
 #endif
