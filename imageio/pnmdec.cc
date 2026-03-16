@@ -140,7 +140,7 @@ WP2Status ReadPAMFields(PNMInfo* const info, size_t* const data_pos,
       return WP2_STATUS_BITSTREAM_ERROR;
     }
   }
-  if (!(info->seen_flags & ALL_NEEDED_FLAGS)) {
+  if ((info->seen_flags & ALL_NEEDED_FLAGS) != ALL_NEEDED_FLAGS) {
     if (log_level >= WP2::LogLevel::DEFAULT) {
       fprintf(stderr, "PAM header error: missing tags%s%s%s%s\n",
               (info->seen_flags & WIDTH_FLAG) ? "" : " WIDTH",
