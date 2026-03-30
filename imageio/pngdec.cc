@@ -68,6 +68,7 @@ void PNGAPI ErrorFunction(png_structp png, png_const_charp error) {
 }
 
 png_voidp PNGAPI MallocFunction(png_structp png_ptr, LocalPngAllocSize size) {
+  if (size == 0) return nullptr;
   const png_voidp mem = (png_voidp)WP2Malloc(1, (size_t)size);
   if (mem == nullptr) {
     volatile bool* const had_malloc_error =
