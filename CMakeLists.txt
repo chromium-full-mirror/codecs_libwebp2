@@ -529,74 +529,94 @@ add_library(
 target_link_libraries(imageio webp2)
 
 # Find the standard image libraries.
-foreach(I_LIB PNG JPEG jxl TIFF GIF WebP)
-  find_package(${I_LIB} QUIET)
-  set(WP2_HAVE_${I_LIB} ${${I_LIB}_FOUND})
-  if(${I_LIB}_FOUND)
-    if(${I_LIB} STREQUAL "JPEG")
-      target_link_libraries(imageio ${JPEG_LIBRARIES})
-      target_include_directories(imageio PRIVATE ${JPEG_INCLUDE_DIRS})
-    elseif(I_LIB STREQUAL "GIF")
-      if(WP2_HAVE_GIF)
-        # GIF find_package only locates the header and library, it doesn't fail
-        # compile tests when detecting the version, but falls back to 3 (as of
-        # at least cmake 3.7.2). Make sure the library links to avoid incorrect
-        # detection when cross compiling.
-        cmake_push_check_state()
-        set(CMAKE_REQUIRED_LIBRARIES ${GIF_LIBRARIES})
-        set(CMAKE_REQUIRED_INCLUDES ${GIF_INCLUDE_DIR})
-        check_c_source_compiles(
-          "
-          #include <gif_lib.h>
-          int main(void) {
-            (void)DGifOpenFileHandle;
-            return 0;
-          }
-          "
-          GIF_COMPILES)
-        cmake_pop_check_state()
-        if(GIF_COMPILES)
-          target_link_libraries(imageio ${GIF_LIBRARIES})
-          target_include_directories(imageio PRIVATE ${GIF_INCLUDE_DIR})
-        else()
-          unset(WP2_HAVE_GIF)
-        endif()
-      endif()
-    elseif(I_LIB STREQUAL "WebP")
-      if(TARGET WebP::webp)
-        message(STATUS "Found new CMake WebP")
-        target_link_libraries(imageio WebP::webp WebP::webpdemux)
-      else()
-        message(STATUS "Found old CMake WebP")
-        target_link_libraries(imageio ${WEBP_LIBRARIES})
-        target_include_directories(imageio PUBLIC ${WEBP_INCLUDE_DIRS})
-      endif()
-      set(WP2_HAVE_WEBP ${WebP_FOUND})
+find_package(PNG QUIET)
+set(WP2_HAVE_PNG ${PNG_FOUND})
+if(PNG_FOUND)
+  target_link_libraries(imageio PNG::PNG)
+endif()
+
+find_package(JPEG QUIET)
+set(WP2_HAVE_JPEG ${JPEG_FOUND})
+if(JPEG_FOUND)
+  target_link_libraries(imageio ${JPEG_LIBRARIES})
+  target_include_directories(imageio PRIVATE ${JPEG_INCLUDE_DIRS})
+endif()
+
+find_package(jxl QUIET)
+set(WP2_HAVE_jxl ${jxl_FOUND})
+if(jxl_FOUND)
+  target_link_libraries(imageio jxl::jxl)
+endif()
+
+find_package(TIFF QUIET)
+set(WP2_HAVE_TIFF ${TIFF_FOUND})
+if(TIFF_FOUND)
+  target_link_libraries(imageio TIFF::TIFF)
+endif()
+
+find_package(GIF QUIET)
+set(WP2_HAVE_GIF ${GIF_FOUND})
+if(GIF_FOUND)
+  if(WP2_HAVE_GIF)
+    # GIF find_package only locates the header and library, it doesn't fail
+    # compile tests when detecting the version, but falls back to 3 (as of
+    # at least cmake 3.7.2). Make sure the library links to avoid incorrect
+    # detection when cross compiling.
+    cmake_push_check_state()
+    set(CMAKE_REQUIRED_LIBRARIES ${GIF_LIBRARIES})
+    set(CMAKE_REQUIRED_INCLUDES ${GIF_INCLUDE_DIR})
+    check_c_source_compiles(
+      "
+      #include <gif_lib.h>
+      int main(void) {
+        (void)DGifOpenFileHandle;
+        return 0;
+      }
+      "
+      GIF_COMPILES)
+    cmake_pop_check_state()
+    if(GIF_COMPILES)
+      target_link_libraries(imageio ${GIF_LIBRARIES})
+      target_include_directories(imageio PRIVATE ${GIF_INCLUDE_DIR})
     else()
-      target_link_libraries(imageio ${I_LIB}::${I_LIB})
+      unset(WP2_HAVE_GIF)
     endif()
-  elseif(I_LIB STREQUAL "WebP")
-    message(STATUS "Looking for non-CMake WebP")
-    # Find WebP in case it was not found with CMake.
-    find_path(WEBP_INCLUDE_DIR NAMES webp/decode.h)
-    find_path(WEBP_DEMUX_INCLUDE_DIR NAMES webp/demux.h)
-    find_library(WEBP_LIBRARY NAMES webp)
-    find_library(WEBP_DEMUX_LIBRARY NAMES webpdemux)
-    if(WEBP_INCLUDE_DIR
-       AND WEBP_DEMUX_INCLUDE_DIR
-       AND WEBP_LIBRARY
-       AND WEBP_DEMUX_LIBRARY)
-      message(STATUS "Found non-cmake WebP: ${WEBP_LIBRARY}")
-      target_include_directories(
-        imageio
-        PUBLIC ${WEBP_INCLUDE_DIR} ${WEBP_DEMUX_INCLUDE_DIR}
-        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-      target_link_libraries(imageio ${WEBP_LIBRARY} ${WEBP_DEMUX_LIBRARY})
-      set(WebP_FOUND TRUE)
-    endif()
-    set(WP2_HAVE_WEBP ${WebP_FOUND})
   endif()
-endforeach()
+endif()
+
+find_package(WebP QUIET)
+set(WP2_HAVE_WebP ${WebP_FOUND})
+if(WebP_FOUND)
+  if(TARGET WebP::webp)
+    message(STATUS "Found new CMake WebP")
+    target_link_libraries(imageio WebP::webp WebP::webpdemux)
+  else()
+    message(STATUS "Found old CMake WebP")
+    target_link_libraries(imageio ${WEBP_LIBRARIES})
+    target_include_directories(imageio PUBLIC ${WEBP_INCLUDE_DIRS})
+  endif()
+  set(WP2_HAVE_WEBP ${WebP_FOUND})
+else()
+  message(STATUS "Looking for non-CMake WebP")
+  # Find WebP in case it was not found with CMake.
+  find_path(WEBP_INCLUDE_DIR NAMES webp/decode.h)
+  find_path(WEBP_DEMUX_INCLUDE_DIR NAMES webp/demux.h)
+  find_library(WEBP_LIBRARY NAMES webp)
+  find_library(WEBP_DEMUX_LIBRARY NAMES webpdemux)
+  if(WEBP_INCLUDE_DIR
+      AND WEBP_DEMUX_INCLUDE_DIR
+      AND WEBP_LIBRARY
+      AND WEBP_DEMUX_LIBRARY)
+    message(STATUS "Found non-cmake WebP: ${WEBP_LIBRARY}")
+    target_include_directories(
+      imageio
+      PUBLIC ${WEBP_INCLUDE_DIR} ${WEBP_DEMUX_INCLUDE_DIR}
+      PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+    target_link_libraries(imageio ${WEBP_LIBRARY} ${WEBP_DEMUX_LIBRARY})
+    set(WebP_FOUND TRUE)
+  endif()
+  set(WP2_HAVE_WEBP ${WebP_FOUND})
+endif()
 
 target_include_directories(
   imageio PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
