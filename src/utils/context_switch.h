@@ -68,7 +68,7 @@
 #if defined(WP2_USE_CONTEXT_SWITCH) && (WP2_USE_CONTEXT_SWITCH > 0)
 
 #if defined(_WIN32)
-#include <Windows.h>
+#include <windows.h>
 #undef Yield  // Empty macro defined in Windows.h.
 #else
 #if defined(__APPLE__)
