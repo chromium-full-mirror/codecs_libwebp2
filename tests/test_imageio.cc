@@ -257,5 +257,61 @@ TEST(WriteImageTest, NegativeYUVPlane) {
 
 //------------------------------------------------------------------------------
 
+TEST(CompressPNGTest, RoundTrip8b) {
+  for (const char* const file_name :
+       {"source1_1x1.png", "source1_64x48.png", "alpha_ramp.pam"}) {
+    ArgbBuffer original;
+    ASSERT_WP2_OK(
+        ReadImage(testutil::GetTestDataPath(file_name).c_str(), &original));
+
+    MemoryWriter writer;
+    ASSERT_WP2_OK(CompressPNG(original, &writer));
+    EXPECT_GT(writer.size_, 0u);
+
+    ArgbBuffer decompressed;
+    ASSERT_WP2_OK(ReadImage(writer.mem_, writer.size_, &decompressed));
+    EXPECT_TRUE(testutil::Compare(original, decompressed, file_name));
+  }
+}
+
+TEST(CompressPNGTest, RoundTrip16b) {
+  for (const char* const file_name :
+       {"gray16.png", "grayalpha16.png", "rgb16.png", "rgba16.png"}) {
+    ArgbBuffer original(WP2_ARGB_64);
+    ASSERT_WP2_OK(
+        ReadImage(testutil::GetTestDataPath(file_name).c_str(), &original));
+
+    MemoryWriter writer;
+    ASSERT_WP2_OK(CompressPNG(original, &writer));
+    EXPECT_GT(writer.size_, 0u);
+
+    ArgbBuffer decompressed(WP2_ARGB_64);
+    ASSERT_WP2_OK(ReadImage(writer.mem_, writer.size_, &decompressed));
+    EXPECT_TRUE(testutil::Compare(original, decompressed, file_name));
+  }
+}
+
+TEST(CompressPNGTest, Negative) {
+  ArgbBuffer buffer;
+  ASSERT_WP2_OK(buffer.Resize(1, 1));
+  buffer.Fill({0, 0, 1, 1}, Argb32b({0, 0, 0, 0}));
+
+  // Null writer output parameter.
+  EXPECT_EQ(CompressPNG(buffer, nullptr), WP2_STATUS_NULL_PARAMETER);
+
+  // Unsupported format (WP2_Argb_38 is 10-bit).
+  ArgbBuffer buffer_38(WP2_Argb_38);
+  ASSERT_WP2_OK(buffer_38.Resize(1, 1));
+  buffer_38.Fill({0, 0, 1, 1}, Argb38b({0, 0, 0, 0}));
+  MemoryWriter writer;
+  EXPECT_EQ(CompressPNG(buffer_38, &writer), WP2_STATUS_UNSUPPORTED_FEATURE);
+
+  // Empty buffer.
+  ArgbBuffer empty_buffer;
+  EXPECT_NE(CompressPNG(empty_buffer, &writer), WP2_STATUS_OK);
+}
+
+//------------------------------------------------------------------------------
+
 }  // namespace
 }  // namespace WP2

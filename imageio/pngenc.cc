@@ -168,6 +168,10 @@ WP2Status WritePNG(const ArgbBuffer& buffer, FILE*, const char* const file_path,
   return ok ? WP2_STATUS_OK : WP2_STATUS_BAD_WRITE;
 }
 
+WP2Status CompressPNG(const ArgbBuffer&, Writer*) {
+  return WP2_STATUS_UNSUPPORTED_FEATURE;
+}
+
 #elif defined(WP2_HAVE_PNG)  // !HAVE_WINCODEC_H
 
 namespace {
@@ -177,11 +181,36 @@ void PNGAPI PNGErrorFunction(png_structp png, png_const_charp dummy) {
   longjmp(png_jmpbuf(png), 1);
 }
 
+class FileWriter : public Writer {
+ public:
+  explicit FileWriter(FILE* file) : file_(file) {}
+  WP2_NO_DISCARD bool Reserve(size_t size) override { return file_ != nullptr; }
+  WP2_NO_DISCARD bool Append(const void* data, size_t data_size) override {
+    return file_ != nullptr && fwrite(data, 1, data_size, file_) == data_size;
+  }
+
+ private:
+  FILE* file_;
+};
+
+void PNGAPI PNGWriteDataFunction(png_structp png, png_bytep row, size_t size) {
+  Writer* const output = (Writer*)png_get_io_ptr(png);
+  if (output == nullptr || !output->Append(row, size)) {
+    abort();
+  }
+}
+void PNGAPI PNGOutputFlushFunction(png_structp) {}
+
 }  // namespace
 
 WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout, const char*, bool,
                    bool, size_t*) {
-  WP2_CHECK_OK(fout != nullptr, WP2_STATUS_NULL_PARAMETER);
+  FileWriter writer(fout);
+  return CompressPNG(buffer, &writer);
+}
+
+WP2Status CompressPNG(const ArgbBuffer& buffer, Writer* output) {
+  WP2_CHECK_OK(output != nullptr, WP2_STATUS_NULL_PARAMETER);
   const bool has_alpha = buffer.HasTransparency();
   const WP2SampleFormat tmp_format =
       WP2Formatbpc(buffer.format()) == 16
@@ -206,7 +235,7 @@ WP2Status WritePNG(const ArgbBuffer& buffer, FILE* fout, const char*, bool,
     png_destroy_write_struct((png_structpp)&png, (png_infopp)&info);
     return WP2_STATUS_BAD_WRITE;
   }
-  png_init_io(png, fout);
+  png_set_write_fn(png, output, PNGWriteDataFunction, PNGOutputFlushFunction);
   png_set_IHDR(
       png, info, buffer.width(), buffer.height(), WP2Formatbpc(tmp_format),
       WP2FormatHasAlpha(tmp_format) ? PNG_COLOR_TYPE_RGBA : PNG_COLOR_TYPE_RGB,
@@ -254,6 +283,10 @@ WP2Status WritePNG(const ArgbBuffer&, FILE* fout, const char*, bool, bool,
           "PNG support not compiled. Please install the libpng "
           "development package before building.\n");
   fprintf(stderr, "You can run with -ppm flag to decode in PPM format.\n");
+  return WP2_STATUS_UNSUPPORTED_FEATURE;
+}
+
+WP2Status CompressPNG(const ArgbBuffer&, Writer*) {
   return WP2_STATUS_UNSUPPORTED_FEATURE;
 }
 

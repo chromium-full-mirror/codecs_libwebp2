@@ -55,6 +55,9 @@ WP2Status WritePAM(const ArgbBuffer& buffer, FILE* fout);
 WP2Status WritePGM(const ArgbBuffer& buffer, FILE* fout,
                    const CSPTransform& transform = CSPTransform() /*=kYCoCg*/);
 
+// Encode 'buffer' to 'output'. Unsupported if HAVE_WINCODEC_H.
+WP2Status CompressPNG(const ArgbBuffer& buffer, Writer* output);
+
 #ifdef WP2_HAVE_WEBP
 // Encodes 'buffer' as a WebP image with a given 'config' to 'output'.
 WP2Status CompressWebP(const ArgbBuffer& buffer, const WebPConfig& config,
