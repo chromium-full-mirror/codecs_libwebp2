@@ -598,10 +598,10 @@ WP2Status ConfigureCodec(const ParamsAV1& params,
                      codec);
   }
 
-  if (params.quality > 95) {
+  if (params.quality == 100) {
     CHECK_AOM_STATUS(aom_codec_control(codec, AV1E_SET_LOSSLESS, 1), codec);
   } else {
-    const int level = std::lround(63 - params.quality * 63 / 95);
+    const int level = std::lround(63 - params.quality * 63 / 100);
     CHECK_AOM_STATUS(aom_codec_control(codec, AOME_SET_CQ_LEVEL, level), codec);
   }
 
@@ -1021,14 +1021,6 @@ WP2Status DecodeAV1WithLibaom(const std::string&, ArgbBuffer* const) {
 
 #if defined(WP2_HAVE_AVIF)
 
-static float ToAvifQuantizer(float quality) {
-  // Note AVIF_QUANTIZER_LOSSLESS doesn't actually seem lossless.
-  if (quality > 95) return AVIF_QUANTIZER_LOSSLESS;
-  return AVIF_QUANTIZER_WORST_QUALITY +
-         quality *
-             (AVIF_QUANTIZER_BEST_QUALITY - AVIF_QUANTIZER_WORST_QUALITY) / 100;
-}
-
 WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
                        ArgbBuffer* const decoded, std::string* const out,
                        double timing[2]) {
@@ -1091,12 +1083,8 @@ WP2Status CompressAVIF(const ArgbBuffer& ref, const ParamsAV1& params,
   WP2_CHECK_ALLOC_OK(encoder != nullptr);
   Cleaner<avifEncoder> encoder_cleaner(encoder, avifEncoderDestroy);
   encoder->maxThreads = params.threads;
-  // Scale to go from AVIF_QUANTIZER_BEST_QUALITY to
-  // AVIF_QUANTIZER_WORST_QUALITY.
-  encoder->minQuantizer = ToAvifQuantizer(params.quality);
-  encoder->maxQuantizer = ToAvifQuantizer(params.quality);
-  encoder->minQuantizerAlpha = ToAvifQuantizer(params.alpha_quality);
-  encoder->maxQuantizerAlpha = ToAvifQuantizer(params.alpha_quality);
+  encoder->quality = params.quality;
+  encoder->qualityAlpha = params.alpha_quality;
   encoder->speed = (int)AVIF_SPEED_FASTEST +
                    ((int)AVIF_SPEED_SLOWEST - (int)AVIF_SPEED_FASTEST) *
                        (int)params.effort / 9;

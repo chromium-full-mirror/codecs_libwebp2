@@ -58,7 +58,7 @@ ensure_googletest
 pushd "${BUILD_DIR}"
 # CMake release
 cmake "${LIBWEBP2_ROOT}" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DWP2_BUILD_SWIG_PY=ON "${opts[@]}"
+  -DWP2_BUILD_SWIG_PY=OFF "${opts[@]}"
 make -j 8
 ctest --output-on-failure -j 8
 

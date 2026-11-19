@@ -723,9 +723,9 @@ bool UnwrapObu(const uint8_t data[], size_t data_size, const Image& image,
     }
     position += obu_header_size;
 
-    log += "\n";
+    log += '\n';
     log += kObuTypeStr[obu_type];
-    log += "\n";
+    log += '\n';
 
     // See "AV1 Bitstream & Decoding Process Specification - 5.3.1."
     uint32_t num_trailing_bits = 0;

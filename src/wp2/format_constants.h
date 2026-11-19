@@ -453,7 +453,7 @@ static constexpr EncodingRecipe kPossibleEncodingRecipes[] = {
      {TransformType::kSubtractGreen, TransformType::kPredictor,
       TransformType::kCrossColorGlobal}}};
 static constexpr uint32_t kPossibleEncodingRecipesNum =
-    std::extent<decltype(kPossibleEncodingRecipes), 0>::value;
+    std::extent_v<decltype(kPossibleEncodingRecipes), 0>;
 
 }  // namespace WP2L
 

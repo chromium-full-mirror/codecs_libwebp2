@@ -336,11 +336,11 @@ WP2Status Compress(const WP2L::ImagePlanes& img,
 
   enc.AddDebugPrefix("GlobalHeader");
   int method;
-  if constexpr (std::is_same<STATE, ClassicalEncState>::value) {
+  if constexpr (std::is_same_v<STATE, ClassicalEncState>) {
     method = 0;
-  } else if constexpr (std::is_same<STATE, JXLEncState>::value) {
+  } else if constexpr (std::is_same_v<STATE, JXLEncState>) {
     method = 1;
-  } else if constexpr (std::is_same<STATE, CalicEncState>::value) {
+  } else if constexpr (std::is_same_v<STATE, CalicEncState>) {
     method = 2;
   } else {
     assert(false);

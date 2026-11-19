@@ -54,8 +54,8 @@ struct CoordinateFiller {
   template <class T>
   static void Do(const T& cdf_array, uint32_t* const in,
                  uint32_t* const num_extents) {
-    if (U < std::rank<T>::value) {
-      in[U] = std::extent<T, U>::value;
+    if (U < std::rank_v<T>) {
+      in[U] = std::extent_v<T, U>;
     }
     CoordinateFiller<U - 1>::Do(cdf_array, in, num_extents);
   }
@@ -67,9 +67,9 @@ struct CoordinateFiller<0> {
   static void Do(const T& cdf_array, uint32_t* const in,
                  uint32_t* const num_extents) {
     if (num_extents != nullptr) {
-      *num_extents = std::rank<T>::value;
+      *num_extents = std::rank_v<T>;
     }
-    in[0] = std::extent<T, 0>::value;
+    in[0] = std::extent_v<T, 0>;
   }
 };
 
@@ -79,9 +79,9 @@ struct CoordinateFiller<0> {
 // E.g., if we have a uint16_t kCDFs[3][7][10], we convert 15 into (2,1) because
 // cluster 15 = 2 * 7 + 1 represents the CDF: kCDFs[2][1][].
 template <class U>
-std::array<uint32_t, std::rank<U>::value - 1> GetCoordinates(
-    uint32_t cluster, const U& cdf_array) {
-  constexpr uint32_t size = std::rank<U>::value - 1;
+std::array<uint32_t, std::rank_v<U> - 1> GetCoordinates(uint32_t cluster,
+                                                        const U& cdf_array) {
+  constexpr uint32_t size = std::rank_v<U> - 1;
   assert(size <= kCoordMaxSize);
   uint32_t extents[kCoordMaxSize];
   CoordinateFiller<size - 1>::Do(cdf_array, extents, nullptr);
@@ -101,28 +101,28 @@ std::array<uint32_t, std::rank<U>::value - 1> GetCoordinates(
 template <class U>
 static const uint16_t* GetCDFHelper(const std::array<uint32_t, 4>& c,
                                     const U& cdf_array) {
-  static_assert(std::rank<U>::value == 5, "wrong cdf array size");
+  static_assert(std::rank_v<U> == 5, "wrong cdf array size");
   return cdf_array[c[0]][c[1]][c[2]][c[3]];
 }
 
 template <class U>
 static const uint16_t* GetCDFHelper(const std::array<uint32_t, 3>& c,
                                     const U& cdf_array) {
-  static_assert(std::rank<U>::value == 4, "wrong cdf array size");
+  static_assert(std::rank_v<U> == 4, "wrong cdf array size");
   return cdf_array[c[0]][c[1]][c[2]];
 }
 
 template <class U>
 static const uint16_t* GetCDFHelper(const std::array<uint32_t, 2>& c,
                                     const U& cdf_array) {
-  static_assert(std::rank<U>::value == 3, "wrong cdf array size");
+  static_assert(std::rank_v<U> == 3, "wrong cdf array size");
   return cdf_array[c[0]][c[1]];
 }
 
 template <class U>
 static const uint16_t* GetCDFHelper(const std::array<uint32_t, 1>& c,
                                     const U& cdf_array) {
-  static_assert(std::rank<U>::value == 2, "wrong cdf array size");
+  static_assert(std::rank_v<U> == 2, "wrong cdf array size");
   return cdf_array[c[0]];
 }
 
@@ -130,7 +130,7 @@ static const uint16_t* GetCDFHelper(const std::array<uint32_t, 1>& c,
 // SymbolInfo, returns the corresponding CDF.
 template <class U>
 const uint16_t* GetCDF(uint32_t cluster, const U& cdf_array) {
-  constexpr uint32_t size = std::rank<U>::value - 1;
+  constexpr uint32_t size = std::rank_v<U> - 1;
   const std::array<uint32_t, size> c = GetCoordinates(cluster, cdf_array);
   return GetCDFHelper(c, cdf_array);
 }

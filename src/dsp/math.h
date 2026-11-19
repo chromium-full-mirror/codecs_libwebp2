@@ -271,7 +271,7 @@ static inline uint32_t DivBy255(uint32_t v) {
 // Make sure 'v^2' fits in T. Slow func, use sparingly or optimize it.
 template <typename T>
 T SqrtFloor(T v) {
-  static_assert(std::is_integral<T>::value, "SqrtFloor() is only for integers");
+  static_assert(std::is_integral_v<T>, "SqrtFloor() is only for integers");
   T lo = std::max((T)0, std::numeric_limits<T>::min()), hi = v;
   while (lo < hi) {
     const auto mid = (lo + hi + 1) / 2;

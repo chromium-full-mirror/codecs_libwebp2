@@ -202,7 +202,7 @@ void PrintHelpAndExit(int return_code) {
 
 class Task : public Worker {
  public:
-  Task() noexcept {};
+  Task() noexcept = default;
   void Init(const TestParams& params,
             const ArgbBuffer& ref,  // needs to out-live the worker object
             const std::string prefix, StatType type,
